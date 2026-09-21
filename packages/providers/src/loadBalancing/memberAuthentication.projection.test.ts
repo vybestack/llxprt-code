@@ -17,6 +17,10 @@ import type {
 } from './loadBalancerTypes.js';
 
 import { createProviderKeyStorage } from '../runtime/runtimeSettings.js';
+import {
+  isAsyncIterableContents,
+  replayableContents,
+} from '../utils/collectContents.js';
 
 const storedKeys = new Map<string, string>();
 
@@ -67,8 +71,12 @@ function createProjectionFixture(
         legacyEstimate: async () => 1,
       };
     },
-    async *generateChatCompletion(options): AsyncGenerator<IContent> {
-      if (Array.isArray(options)) throw new Error('expected delegate options');
+    async *generateChatCompletion(
+      optionsOrStream: GenerateChatOptions | AsyncIterable<IContent>,
+    ): AsyncGenerator<IContent> {
+      if (isAsyncIterableContents(optionsOrStream))
+        throw new Error('expected delegate options');
+      const options = optionsOrStream;
       if (rotateDuringProjection) {
         expect(options.promptEnvelopeTransportToken).toStrictEqual({
           credential: options.resolved?.authToken,
@@ -116,7 +124,7 @@ function createProjectionFixture(
     member,
     projections,
     options: {
-      contents: [],
+      contents: replayableContents([]),
       settings,
       config,
       runtime,
@@ -219,12 +227,12 @@ describe('load balancer projection credentials', () => {
       });
       await consume(lb, {
         ...options,
-        contents: [
+        contents: replayableContents([
           {
             speaker: 'human',
             blocks: [{ type: 'text', text: 'long prompt '.repeat(1000) }],
           },
-        ],
+        ]),
       });
 
       expect(

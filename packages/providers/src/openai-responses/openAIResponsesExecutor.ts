@@ -38,6 +38,7 @@ import { convertToolsToOpenAIResponses } from './schemaConverter.js';
 import { requireAssembledSystemInstruction } from '../utils/systemPromptPlacement.js';
 import { resolveRuntimeAuthToken } from '../utils/authToken.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
+import { acquireRequestScopedBody } from '../utils/requestScopedBody.js';
 import { isPreviousResponseNotFoundError } from './openAIResponsesStatefulRecovery.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { buildOpenAIResponsesInput } from './OpenAIResponsesInputBuilder.js';
@@ -185,6 +186,22 @@ function resolveInvocationEphemerals(
 }
 
 /**
+ * Resolves the history array a request build consumes. Lazily-wired requests
+ * (issue #854 P05b4) drain the memoized request-scoped source — the first
+ * caller materializes it and every later consumer (projection, recovery
+ * rebuilds, stateless fallbacks) resolves the SAME array, so a one-shot
+ * source is never drained twice.
+ */
+async function resolveRequestContents(
+  options: NormalizedGenerateChatOptions,
+): Promise<IContent[]> {
+  const requestContents = options.requestContents;
+  return requestContents === undefined
+    ? options.contents
+    : requestContents.materialize();
+}
+
+/**
  * Build the finalized Responses request context exactly the way transport
  * does — including the synthetic tool-response patching that precedes it.
  *
@@ -199,7 +216,7 @@ export async function buildResponsesRequestContextForProjection(
   forceParentless = false,
 ): Promise<PreparedResponsesRequestContext> {
   const patchedContent = SyntheticToolResponseHandler.patchMessageHistory(
-    options.contents,
+    await resolveRequestContents(options),
   );
   return buildRequestContext(
     options,
@@ -216,6 +233,70 @@ interface ResponsesExecutionSetup {
   readonly invocationEphemerals: Record<string, unknown>;
   readonly requestContext: RequestContext;
   readonly dumpResult: Awaited<ReturnType<typeof dumpFinalizedRequest>>;
+  /**
+   * Lazily-wired transport only (issue #854 P05b4): fills the request context
+   * from the memoized history source. Invoked at the first pull of the lazy
+   * wire body (or before a WebSocket send), i.e. INSIDE the request-scoped
+   * lease — the transport call is already initiated at that point.
+   */
+  readonly materializeRequestBody?: () => Promise<void>;
+}
+
+/**
+ * Creates the deferred content stage for a lazily-wired transport (issue
+ * #854 P05b4). The request context was built against an empty shell so the
+ * history source stays unpulled while the transport call initiates; this
+ * stage drains the memoized source and applies every content-derived piece
+ * (input, stateful chaining) onto the SAME request object the lease owns.
+ */
+function createRequestContentsFiller(
+  options: NormalizedGenerateChatOptions,
+  deps: ResponsesExecutorDeps,
+  invocationEphemerals: Record<string, unknown>,
+  context: RequestContext,
+): () => Promise<void> {
+  let fill: Promise<void> | undefined;
+  return () => {
+    fill ??= (async () => {
+      const patchedContent = SyntheticToolResponseHandler.patchMessageHistory(
+        await resolveRequestContents(options),
+      );
+      const shape = resolveResponsesRequestShape(
+        options,
+        patchedContent,
+        invocationEphemerals,
+        deps,
+        false,
+        false,
+      );
+      // The shell's media request was registered over an empty history, so
+      // resolve media over the drained shape content — the exact semantics
+      // buildRequestContext applies eagerly — and chain its release onto the
+      // shell's so the request-scoped lease still drops when the transport
+      // call settles.
+      const mediaRequest = await resolveRequestMedia(
+        options.runtime,
+        shape.stateful.content,
+        getRequestSignal(options),
+      );
+      context.mediaRequest.registerCleanup(() => mediaRequest.release());
+      context.request.input = buildInput(
+        options,
+        mediaRequest.withContents((contents) => contents),
+        invocationEphemerals,
+        deps,
+        shape.stateful.parentId !== undefined,
+      );
+      applyStatefulConversation(
+        context.request,
+        shape.stateful,
+        shape.explicitUserStore,
+        shape.isCodex,
+        deps.logger,
+      );
+    })();
+    return fill;
+  };
 }
 
 async function prepareResponsesExecution(
@@ -226,6 +307,51 @@ async function prepareResponsesExecution(
   requireAssembledSystemInstruction(options.systemInstruction);
   const abortSignal = getRequestSignal(options);
   const invocationEphemerals = resolveInvocationEphemerals(options);
+  if (
+    preparedRequestContext === undefined &&
+    options.requestContents !== undefined
+  ) {
+    // Issue #854 P05b4 lazily-wired transport: build a content-free shell so
+    // the history source stays unpulled while the transport initiates; the
+    // filler applies the content-derived pieces inside the request-scoped
+    // lease at the lazy body's first pull.
+    const shell = await buildRequestContext(
+      options,
+      [],
+      invocationEphemerals,
+      deps,
+    );
+    const requestContext = await resolveResponsesTransportContext(
+      options,
+      shell,
+      deps,
+    );
+    try {
+      const dumpResult = await dumpFinalizedRequest(
+        requestContext,
+        invocationEphemerals,
+        deps,
+        options,
+      );
+      return {
+        abortSignal,
+        invocationEphemerals,
+        requestContext,
+        dumpResult,
+        materializeRequestBody: createRequestContentsFiller(
+          options,
+          deps,
+          invocationEphemerals,
+          requestContext,
+        ),
+      };
+    } catch (error) {
+      return finishMediaRequest(requestContext.mediaRequest, {
+        status: 'failed',
+        error,
+      });
+    }
+  }
   const prepared =
     preparedRequestContext ??
     (await buildResponsesRequestContextForProjection(
@@ -259,8 +385,13 @@ export async function* executeOpenAIResponsesRequest(
   deps: ResponsesExecutorDeps,
   preparedRequestContext?: PreparedResponsesRequestContext,
 ): AsyncIterableIterator<IContent> {
-  const { abortSignal, invocationEphemerals, requestContext, dumpResult } =
-    await prepareResponsesExecution(options, deps, preparedRequestContext);
+  const {
+    abortSignal,
+    invocationEphemerals,
+    requestContext,
+    dumpResult,
+    materializeRequestBody,
+  } = await prepareResponsesExecution(options, deps, preparedRequestContext);
   const streamParams: StreamResponsesParams = {
     ...buildStreamParams(
       requestContext,
@@ -269,6 +400,7 @@ export async function* executeOpenAIResponsesRequest(
       options,
       dumpResult,
     ),
+    ...(materializeRequestBody === undefined ? {} : { materializeRequestBody }),
     rebuildStateless: async () => {
       await requestContext.mediaRequest.release();
       return buildStatelessTurn(
@@ -591,11 +723,13 @@ export async function buildRequestContext(
       isCodex,
       deps.logger,
     );
-    mediaRequest.registerCleanup(() => {
-      request.input.splice(0);
-      request.tools?.splice(0);
-      request.include?.splice(0);
-    });
+    // Issue #854 P05b4: one owner for the body arrays — the request-scoped
+    // lease, released by the media request's finish (splicing its arrays).
+    const requestBodyLease = acquireRequestScopedBody(
+      'openai-responses',
+      request,
+    );
+    mediaRequest.registerCleanup(() => void requestBodyLease.release());
     return {
       rawBaseURL,
       isCodex,

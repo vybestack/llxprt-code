@@ -5,7 +5,7 @@
  */
 
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { GenerateChatOptions } from '../IProvider.js';
+import type { MetadataBearingOptions } from '../IProvider.js';
 import { RETRY_REQUEST_CONTEXT_KEY } from '../transportAttemptBudget.js';
 import {
   checkImageDimensionBudget,
@@ -275,7 +275,7 @@ export interface ImageRecoveryRequestState {
 const IMAGE_RECOVERY_KEY = 'anthropicImageRecovery';
 
 function getRetryContext(
-  options: GenerateChatOptions,
+  options: MetadataBearingOptions,
 ): Record<string, unknown> | undefined {
   const metadata = options.metadata;
   if (metadata === undefined) return undefined;
@@ -288,7 +288,7 @@ function getRetryContext(
  * there is no orchestrator context (direct provider call).
  */
 export function getImageRecoveryState(
-  options: GenerateChatOptions,
+  options: MetadataBearingOptions,
 ): ImageRecoveryRequestState | undefined {
   const ctx = getRetryContext(options);
   if (ctx === undefined) return undefined;
@@ -302,7 +302,7 @@ export function getImageRecoveryState(
  * a fresh ephemeral state is returned (not shared across calls).
  */
 export function ensureImageRecoveryState(
-  options: GenerateChatOptions,
+  options: MetadataBearingOptions,
 ): ImageRecoveryRequestState {
   const ctx = getRetryContext(options);
   if (ctx === undefined) {

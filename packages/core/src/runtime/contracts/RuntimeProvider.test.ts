@@ -84,10 +84,18 @@ describe('RuntimeProvider contract', () => {
       { type: 'text', text: ' world' },
     ];
 
+    async function* historyStream(
+      rows: readonly unknown[],
+    ): AsyncIterable<unknown> {
+      for (const row of rows) {
+        yield row;
+      }
+    }
+
     const provider: RuntimeProvider = {
       name: 'test-provider',
       generateChatCompletion(
-        _messages: unknown[],
+        _contents: AsyncIterable<unknown>,
         _tools?: RuntimeToolset[],
         _options?: unknown,
       ): AsyncIterable<unknown> {
@@ -100,7 +108,7 @@ describe('RuntimeProvider contract', () => {
       },
     };
 
-    const stream = provider.generateChatCompletion([], []);
+    const stream = provider.generateChatCompletion(historyStream([]), []);
     const collected: unknown[] = [];
     for await (const chunk of stream as AsyncIterable<unknown>) {
       collected.push(chunk);

@@ -85,7 +85,7 @@ export interface RuntimeProvider {
     options: RuntimeGenerateChatOptions,
   ): AsyncIterableIterator<IContent>;
   generateChatCompletion(
-    content: IContent[],
+    content: AsyncIterable<IContent>,
     tools?: RuntimeProviderToolset,
     signal?: AbortSignal,
   ): AsyncIterableIterator<IContent>;

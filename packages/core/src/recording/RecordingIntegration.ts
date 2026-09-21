@@ -39,8 +39,9 @@ import type {
  * two lanes do not move together.
  *
  * This shrinks a content payload to a comparison key and is never a security
- * boundary. A collision would additionally have to land on the same chronology
- * `seq` before it could suppress anything.
+ * boundary. It is compared only against the journal tail's fingerprint, so a
+ * collision could suppress a re-add only when it also lands on the same
+ * chronology `seq`.
  */
 function fingerprint(value: string): string {
   let low = 0x811c9dc5;
@@ -53,28 +54,8 @@ function fingerprint(value: string): string {
   return `${(low >>> 0).toString(36)}.${(high >>> 0).toString(36)}`;
 }
 
-/**
- * The identity of a content record for duplicate detection: its chronology
- * `seq` paired with a fingerprint of the exact payload.
- *
- * Returns `null` when the content carries no chronology marker. Such content
- * has no identity, so it is always recorded rather than risk suppressing
- * something that was never written.
- *
- * `seq` alone is NOT sufficient. It is unique only within one `HistoryService`
- * instance, `ChronologyStamper.inherit` deliberately gives a replacement entry
- * the replaced entry's marker, and `merge` can import entries from a foreign
- * chronology. Pairing it with the payload fingerprint means suppression can
- * only ever discard content byte-identical to a record already written.
- *
- * @issue #3132
- */
-function contentIdentity(content: IContent): string | null {
-  const seq = content.metadata?.chronology?.seq;
-  if (typeof seq !== 'number') {
-    return null;
-  }
-  return `${seq}:${fingerprint(JSON.stringify(content))}`;
+function payloadFingerprint(content: IContent): string {
+  return fingerprint(JSON.stringify(content));
 }
 
 /**
@@ -89,21 +70,34 @@ export class RecordingIntegration {
   private historySubscription: (() => void) | null = null;
   private compressionInProgress = false;
   /**
-   * Identities of the content records this recording already contains.
+   * Exactly-once watermark for content recording (#3132, P05b3): the journal
+   * tail this recording already contains, expressed as the highest chronology
+   * `seq` seen plus the fingerprint of the payload recorded at that seq.
    *
    * Several production paths rebuild history wholesale by calling
    * `HistoryService.clear()` and then re-`add()`ing the retained entries. Each
-   * re-`add()` emits `contentAdded`, so without this set the rebuild appends a
+   * re-`add()` emits `contentAdded`, so without dedupe the rebuild appends a
    * byte-identical copy of every retained entry to the session file, and
-   * `ReplayEngine` replays those copies into doubled history on resume.
+   * `ReplayEngine` replays those copies into doubled history on resume. A
+   * re-added retained entry keeps its original marker verbatim
+   * (`ChronologyStamper.stamp` preserves existing markers), so it always lands
+   * at or below the watermark: strictly below the tail seq, or exactly at the
+   * tail seq with the tail's own payload. A genuinely new payload at the tail
+   * marker (density and merge hand replacements an existing marker) has a
+   * different fingerprint and is still recorded.
    *
-   * Scoped to the one `SessionRecordingService` this integration wraps, so it
-   * is never reset while that file is open. Bounded by the number of distinct
-   * content records written to the session.
+   * This replaces the former per-record identity Set: two O(1) scalars instead
+   * of a set that grew with every record ever written (P05b3 standing-state
+   * law — nothing retained here may scale with context length).
+   *
+   * Scoped to the one `SessionRecordingService` this integration wraps, and
+   * re-seeded from the journal tail at every subscribe.
    *
    * @issue #3132
+   * @plan PLAN-20260917-ISSUE854.P05b3
    */
-  private readonly recordedIdentities = new Set<string>();
+  private lastJournaledSeq = 0;
+  private journaledTailFingerprint: string | null = null;
   private disposed = false;
   private readonly persistence: SessionPersistenceService | undefined;
   private readonly pendingPersistence = new Map<number, Promise<void>>();
@@ -246,19 +240,23 @@ export class RecordingIntegration {
     // seeded file) or has deliberately excluded, since content added before
     // subscribing is never recorded. Either way a later rebuild must not
     // append it (issue #3132).
-    this.rememberExistingHistory(historyService);
+    this.seedJournalWatermark(historyService);
 
     const onContentAdded = (content: IContent) => {
       if (this.disposed || this.compressionInProgress) {
         return;
       }
-      const identity = contentIdentity(content);
-      if (identity !== null && this.recordedIdentities.has(identity)) {
+      const seq = content.metadata?.chronology?.seq;
+      if (
+        seq !== undefined &&
+        this.isAlreadyJournaled(seq, payloadFingerprint(content))
+      ) {
         return;
       }
       this.recording.recordContent(content);
-      if (identity !== null) {
-        this.recordedIdentities.add(identity);
+      if (seq !== undefined) {
+        this.lastJournaledSeq = seq;
+        this.journaledTailFingerprint = payloadFingerprint(content);
       }
       this.persist(historyService);
     };
@@ -304,16 +302,42 @@ export class RecordingIntegration {
   }
 
   /**
-   * Seed {@link recordedIdentities} from the history that is already present
-   * on the service being subscribed to.
+   * True when content carrying `seq` is already in this recording: strictly
+   * below the journaled tail seq (the tail can only move forward, so an older
+   * marker is a re-add of retained content), or exactly at the tail seq with
+   * the tail's own payload.
    *
    * @issue #3132
+   * @plan PLAN-20260917-ISSUE854.P05b3
    */
-  private rememberExistingHistory(historyService: HistoryService): void {
+  private isAlreadyJournaled(seq: number, contentFingerprint: string): boolean {
+    if (seq < this.lastJournaledSeq) {
+      return true;
+    }
+    return (
+      seq === this.lastJournaledSeq &&
+      this.journaledTailFingerprint === contentFingerprint
+    );
+  }
+
+  /**
+   * Seed the journal-tail watermark from the history that is already present
+   * on the service being subscribed to: the highest chronology `seq` among the
+   * live rows, paired with the payload recorded at that seq (the newest write
+   * at a marker wins). Content without a marker cannot be addressed by the
+   * watermark and is left alone — it is always recorded.
+   *
+   * @issue #3132
+   * @plan PLAN-20260917-ISSUE854.P05b3
+   */
+  private seedJournalWatermark(historyService: HistoryService): void {
+    this.lastJournaledSeq = 0;
+    this.journaledTailFingerprint = null;
     for (const content of historyService.getAll()) {
-      const identity = contentIdentity(content);
-      if (identity !== null) {
-        this.recordedIdentities.add(identity);
+      const seq = content.metadata?.chronology?.seq;
+      if (seq !== undefined && seq >= this.lastJournaledSeq) {
+        this.lastJournaledSeq = seq;
+        this.journaledTailFingerprint = payloadFingerprint(content);
       }
     }
   }

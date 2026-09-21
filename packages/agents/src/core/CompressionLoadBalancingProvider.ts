@@ -5,7 +5,10 @@
  */
 
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
+import type {
+  RuntimeGenerateChatOptions,
+  RuntimeProviderToolset,
+} from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import {
@@ -82,13 +85,18 @@ export class CompressionLoadBalancingProvider implements IProvider {
   generateChatCompletion(
     options: RuntimeGenerateChatOptions,
   ): AsyncIterableIterator<IContent>;
-  generateChatCompletion(content: IContent[]): AsyncIterableIterator<IContent>;
+  generateChatCompletion(
+    content: AsyncIterable<IContent>,
+    tools?: RuntimeProviderToolset,
+    signal?: AbortSignal,
+  ): AsyncIterableIterator<IContent>;
   async *generateChatCompletion(
-    optionsOrContent: RuntimeGenerateChatOptions | IContent[],
+    optionsOrContent: RuntimeGenerateChatOptions | AsyncIterable<IContent>,
   ): AsyncIterableIterator<IContent> {
-    const options = Array.isArray(optionsOrContent)
-      ? { contents: optionsOrContent }
-      : optionsOrContent;
+    const options: RuntimeGenerateChatOptions =
+      Symbol.asyncIterator in optionsOrContent
+        ? { contents: optionsOrContent }
+        : optionsOrContent;
 
     if (this.strategy === 'failover') {
       yield* this.generateWithFailover(options);

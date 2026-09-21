@@ -13,7 +13,10 @@ import {
   type RuntimeInvocationContext,
 } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { MissingProviderRuntimeError } from './errors.js';
-import type { GenerateChatOptions, ProviderToolset } from './IProvider.js';
+import type {
+  MaterializedGenerateChatOptions,
+  ProviderToolset,
+} from './IProvider.js';
 import type {
   BaseProvider,
   NormalizedGenerateChatOptions,
@@ -21,6 +24,13 @@ import type {
 } from './BaseProvider.js';
 import type { ResolvedAuthToken } from './types/providerRuntime.js';
 import { isAbortSignal } from './utils/abortSignal.js';
+import {
+  collectContents,
+  isAsyncIterableContents,
+} from './utils/collectContents.js';
+import { requestScopedContents } from './utils/requestScopedBody.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { GenerateChatOptions } from './IProvider.js';
 
 interface RuntimeGuardInput {
   providerKey: string;
@@ -117,6 +127,35 @@ function resolveRuntimeId(
   return currentRuntimeId?.trim() ? currentRuntimeId : fallback;
 }
 
+/**
+ * Materialize the caller's history source for provider use (issue #854
+ * P05b4). One-shot streams defer the drain to the transport's
+ * request-scoped lease; arrays and replayable streams collect eagerly
+ * (nothing extra is retained; pre-submission validation stays put).
+ */
+export async function materializeCallOptions(
+  contentsOrOptions: AsyncIterable<IContent> | GenerateChatOptions,
+  maybeTools: ProviderToolset | undefined,
+  lazyWireContents: boolean,
+): Promise<MaterializedGenerateChatOptions> {
+  const historySource: AsyncIterable<IContent> = isAsyncIterableContents(
+    contentsOrOptions,
+  )
+    ? contentsOrOptions
+    : contentsOrOptions.contents;
+  const contents = lazyWireContents ? [] : await collectContents(historySource);
+  const providedOptions: MaterializedGenerateChatOptions =
+    isAsyncIterableContents(contentsOrOptions)
+      ? { contents, tools: maybeTools }
+      : { ...contentsOrOptions, contents };
+  if (lazyWireContents) {
+    // The memoized drain is shared by every later consumer (estimation,
+    // projection, retries) so the one-shot source is read exactly once.
+    providedOptions.requestContents = requestScopedContents(historySource);
+  }
+  return providedOptions;
+}
+
 export function assertProviderRuntimeContext(
   input: RuntimeGuardInput,
 ): RuntimeGuardResult {
@@ -158,7 +197,7 @@ export function assertProviderRuntimeContext(
 }
 
 export function resolveGenerateChatSettings(
-  providedOptions: GenerateChatOptions,
+  providedOptions: MaterializedGenerateChatOptions,
   fallbackSettings: SettingsService | undefined,
   providerName: string,
 ): SettingsService {
@@ -178,7 +217,7 @@ export function resolveGenerateChatSettings(
 }
 
 function createResolvedOptions(
-  providedOptions: GenerateChatOptions,
+  providedOptions: MaterializedGenerateChatOptions,
   deps: NormalizationDependencies,
 ): NormalizedGenerateChatOptions['resolved'] {
   return {
@@ -202,7 +241,7 @@ function createResolvedOptions(
 }
 
 function mergeInvocationMetadata(
-  providedOptions: GenerateChatOptions,
+  providedOptions: MaterializedGenerateChatOptions,
 ): Record<string, unknown> {
   return {
     ...(providedOptions.runtime?.metadata ?? {}),
@@ -226,7 +265,7 @@ const INVOCATION_METHODS = [
 
 function isRuntimeInvocationContext(
   value: unknown,
-): value is GenerateChatOptions['invocation'] & RuntimeInvocationContext {
+): value is RuntimeInvocationContext {
   if (value === null || typeof value !== 'object') {
     return false;
   }
@@ -249,7 +288,7 @@ function extractLegacySignal(invocation: unknown): AbortSignal | undefined {
 }
 
 interface InvocationNormalizationInput {
-  providedOptions: GenerateChatOptions;
+  providedOptions: MaterializedGenerateChatOptions;
   normalizedRuntime: ProviderRuntimeContext;
   settings: SettingsService;
   providerName: string;
@@ -313,7 +352,7 @@ function createNormalizedInvocation(
 
 export function normalizeProviderGenerateChatOptions(
   provider: BaseProvider,
-  providedOptions: GenerateChatOptions,
+  providedOptions: MaterializedGenerateChatOptions,
   deps: NormalizationDependencies,
 ): NormalizedGenerateChatOptions {
   const settings = deps.defaultSettingsService;

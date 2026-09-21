@@ -80,6 +80,7 @@ import {
 } from './hookEnvelopeHelpers.js';
 import { canonicalizeToolName } from './toolGovernance.js';
 import { isTerminalRetryError } from './turnAbortHelpers.js';
+import { replayableContents } from '@vybestack/llxprt-code-providers/utils/collectContents.js';
 
 /**
  * Reads the next chunk from the stream iterator, applying idle-timeout
@@ -524,7 +525,9 @@ export class DirectMessageProcessor {
     }
 
     return provider.generateChatCompletion({
-      contents: contentsForApi,
+      // The provider-facing history is a stream (issue #854); re-open the
+      // assembled rows so retry boundaries can re-read them.
+      contents: replayableContents(contentsForApi),
       tools:
         effectiveToolsFromConfig !== undefined &&
         effectiveToolsFromConfig.length > 0

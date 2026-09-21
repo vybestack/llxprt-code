@@ -12,6 +12,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
+import { replayableContents } from '../utils/collectContents.js';
 import { ProviderManager } from '../ProviderManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
@@ -70,9 +71,9 @@ describe('LoadBalancingProvider selection emits a dedicated selection event', ()
     index: number,
   ): Promise<void> {
     const iterator = provider.generateChatCompletion({
-      contents: [
+      contents: replayableContents([
         { speaker: 'human', blocks: [{ type: 'text', text: `m${index}` }] },
-      ],
+      ]),
     });
     for await (const _chunk of iterator) {
       // consume

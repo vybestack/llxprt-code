@@ -54,7 +54,10 @@ export type SessionEventType =
   | 'checkpoint_deleted'
   | 'session_forked'
   | 'session_named'
-  | 'semantic_media_purge';
+  | 'semantic_media_purge'
+  | 'density_mutation'
+  | 'synthetic_insert'
+  | 'compression_detail';
 
 // ---------------------------------------------------------------------------
 // Event envelope
@@ -82,6 +85,13 @@ export interface SessionRecordLine {
 // ---------------------------------------------------------------------------
 
 /**
+ * Lineage recorded on the `session_start` event (#854 P05c): `main` for
+ * ordinary sessions, `subagent` for child journals. Legacy files predate the
+ * field and replay as `main`.
+ */
+export type SessionStartKind = 'main' | 'subagent';
+
+/**
  * Payload for the `session_start` event — always seq=1, first line in file.
  * NOTE: No schema version field here; `v` lives only in the envelope.
  */
@@ -95,6 +105,10 @@ export interface SessionStartPayload {
   model: string;
   /** ISO-8601 timestamp of when the session started. */
   startTime: string;
+  /** Lineage marker; absent on legacy files, which replay as `main`. */
+  kind?: SessionStartKind;
+  /** Parent session id, present only on child journals (`kind: 'subagent'`). */
+  parentSessionId?: string;
 }
 
 /**
@@ -137,6 +151,60 @@ export interface RewindPayload {
    * @issue #2934
    */
   cutSeq?: number;
+}
+
+/**
+ * One replacement record inside a `density_mutation` payload. The replacement
+ * inherits the replaced entry's chronology marker, so the journal identifies
+ * the mutation site by that marker alone.
+ */
+export interface DensityReplacementRecord {
+  /** Chronology `seq` of the destroyed entry whose marker the replacement inherits. */
+  readonly replacedSeq: number;
+  readonly replacement: IContent;
+}
+
+/**
+ * Payload for the `density_mutation` event — a durable journal operation for
+ * density optimization: entries removed outright (by chronology `seq`) plus
+ * each in-place replacement. Resolvers drop the removed rows and yield the
+ * replacement content from the original entry's envelope.
+ *
+ * @issue #854
+ */
+export interface DensityMutationPayload {
+  readonly removedSeqs: readonly number[];
+  readonly replacements: readonly DensityReplacementRecord[];
+}
+
+/**
+ * Payload for the `synthetic_insert` event — a history entry that did not
+ * originate from a model turn (e.g. a synthetic tool response from history
+ * validation), carrying its own chronology marker and the marker of the
+ * entry it anchors after. Resolvers attribute the row to this event's own
+ * envelope and place it in fold order after the anchor.
+ *
+ * @issue #854
+ */
+export interface SyntheticInsertPayload {
+  readonly content: IContent;
+  readonly chronologySeq: number;
+  readonly afterSeq: number;
+}
+
+/**
+ * Payload for the `compression_detail` event — a membership-pinning record
+ * for the destroyed span behind a `compressed` event. Scalars only by
+ * design: the summary content stays in the `compressed` payload, so content
+ * suppression is unchanged. Resolvers fold it as a no-op for rows; a
+ * malformed record is skipped and counted.
+ *
+ * @issue #854
+ */
+export interface CompressionDetailPayload {
+  readonly fromSeq: number;
+  readonly toSeq: number;
+  readonly itemsCompressed: number;
 }
 
 /**
@@ -255,6 +323,36 @@ export interface SessionInfo {
 }
 
 // ---------------------------------------------------------------------------
+// Awaitable commit protocol
+// ---------------------------------------------------------------------------
+
+/**
+ * Ack returned by {@link SessionRecordingService.commit} and
+ * {@link SessionRecordingService.waitForCommit} once a record's bytes are
+ * durably appended to the session JSONL file.
+ *
+ * @plan PLAN-20260917-ISSUE854.P05b2
+ * @requirement G2
+ */
+export interface CommitWatermark {
+  /** Envelope seq of the committed record. */
+  readonly seq: number;
+  /** Exclusive end byte offset of that record's bytes in the journal at commit time. */
+  readonly byteOffset: number;
+}
+
+/**
+ * Injectable write seam over the recorder's appendFile callsite, mirroring
+ * the resolver's `ResolverIo` seam. Defaults to `fs/promises.appendFile`.
+ *
+ * @plan PLAN-20260917-ISSUE854.P05b2
+ * @requirement G2
+ */
+export interface RecordingWriterIo {
+  appendFile(filePath: string, data: string, encoding: 'utf8'): Promise<void>;
+}
+
+// ---------------------------------------------------------------------------
 // Service configuration
 // ---------------------------------------------------------------------------
 
@@ -270,10 +368,19 @@ export interface SessionRecordingServiceConfig {
   cwd?: string;
   provider: string;
   model: string;
-  /** Hard bound for serialized records waiting for durable write. */
+  /** Lineage stamped into the `session_start` payload. Defaults to `main`. */
+  kind?: SessionStartKind;
+  /** Parent session id for child journals (`kind: 'subagent'`). */
+  parentSessionId?: string;
+  /**
+   * Hard bound for serialized records waiting for durable write. Backpressure
+   * (awaiting drain room) applies above it; `Infinity` is the only opt-out.
+   */
   maxQueueBytes?: number;
   /** Project-owned store used to verify referenced media during lifecycle replay. */
   mediaStore?: LocalMediaStore;
+  /** Write seam for journal appends. Defaults to `fs/promises.appendFile`. */
+  readonly io?: RecordingWriterIo;
 }
 
 // ---------------------------------------------------------------------------
@@ -299,6 +406,10 @@ export interface SessionMetadata {
   workspaceDirs: string[];
   cwd?: string;
   startTime: string;
+  /** Lineage; legacy files without the marker replay as `main`. */
+  kind: SessionStartKind;
+  /** Present only on child journals (`kind: 'subagent'`). */
+  parentSessionId?: string;
   title?: string | null;
 }
 
@@ -371,6 +482,12 @@ export interface SessionSummary {
    * Undefined means never named; null means explicitly cleared.
    */
   name?: string | null;
+  /**
+   * Lineage marker from the `session_start` header (#854 P05c). Absent on
+   * summaries built by older callers, which resolve as `main`; discovery
+   * always populates it and excludes `subagent` journals.
+   */
+  kind?: SessionStartKind;
 }
 
 export type ContinueTarget =

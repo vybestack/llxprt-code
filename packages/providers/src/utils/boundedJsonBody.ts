@@ -437,6 +437,7 @@ function createPublicStream(
           controller.error(error);
         }
       },
+
       cancel: dispose,
     },
     { highWaterMark: 0 },
@@ -607,6 +608,105 @@ export class BoundedJsonBody {
   }
 }
 
+/**
+ * A request body whose serialization plan is built lazily, at the first byte
+ * pull of its stream (issue #854 P05b4). `build` resolves the value to
+ * serialize — typically awaiting the transport's request-scoped materialization
+ * of the history source — so the transport call can be initiated before the
+ * source is drained. Once built, the delegate {@link BoundedJsonBody} owns the
+ * usual bounds, chunking, and disposal accounting; disposal before build is a
+ * no-op because nothing was materialized.
+ */
+export class LazyBoundedJsonBody {
+  private delegate: BoundedJsonBody | undefined;
+  private building: Promise<BoundedJsonBody> | undefined;
+
+  constructor(
+    private readonly build: () => Promise<BoundedJsonBody>,
+    private readonly onBuilt?: (body: BoundedJsonBody) => void,
+  ) {}
+
+  /** True once the delegate body has been built (the source was consumed). */
+  get isBuilt(): boolean {
+    return this.delegate !== undefined;
+  }
+
+  /** The built delegate body. Throws if the body was never pulled. */
+  get built(): BoundedJsonBody {
+    const delegate = this.delegate;
+    if (delegate === undefined) {
+      throw new Error('Lazy JSON request body was never materialized');
+    }
+    return delegate;
+  }
+
+  private buildOnce(): Promise<BoundedJsonBody> {
+    this.building ??= this.build().then((body) => {
+      this.delegate = body;
+      this.onBuilt?.(body);
+      return body;
+    });
+    return this.building;
+  }
+
+  /**
+   * Same surface as {@link BoundedJsonBody.createStreamHandle}: the returned
+   * stream's first pull awaits the build, then emits the delegate's chunks.
+   */
+  createStreamHandle(): BoundedJsonStream {
+    const existing = this.delegate;
+    if (existing !== undefined) return existing.createStreamHandle();
+    // Holder instead of a bare let: closure-captured narrowing across await
+    // is unreliable; every reader goes through ensureStreamHandle.
+    const state: { handle?: BoundedJsonStream } = {};
+    const ensureStreamHandle = async (): Promise<BoundedJsonStream> => {
+      const current = state.handle;
+      if (current !== undefined) return current;
+      const built = await this.buildOnce().then((body) =>
+        body.createStreamHandle(),
+      );
+      state.handle = built;
+      return built;
+    };
+    const source = new ReadableStream<Uint8Array>(
+      {
+        pull: async (controller) => {
+          const handle = await ensureStreamHandle();
+          const reader = handle.stream.getReader();
+          try {
+            const next = await reader.read();
+            if (next.done === true) {
+              controller.close();
+              return;
+            }
+            controller.enqueue(next.value);
+          } finally {
+            reader.releaseLock();
+          }
+        },
+        cancel: async (reason) => {
+          const handle = state.handle;
+          if (handle === undefined) {
+            await this.dispose(reason);
+            return;
+          }
+          await handle.dispose(reason);
+        },
+      },
+      { highWaterMark: 0 },
+    );
+    const reader = source.getReader();
+    const dispose = (reason?: unknown): Promise<void> => reader.cancel(reason);
+    return { stream: createPublicStream(reader, dispose), dispose };
+  }
+
+  /** Disposes the delegate body when built; no-op before the first pull. */
+  dispose(reason?: unknown): Promise<void> {
+    const delegate = this.delegate;
+    if (delegate === undefined) return Promise.resolve();
+    return delegate.dispose(reason);
+  }
+}
 export async function withBoundedJsonHttpBody<T>(
   value: unknown,
   consume: (body: BoundedJsonHttpBody) => Promise<T>,

@@ -14,6 +14,7 @@ import {
   type SkillSource,
   type HookRegistryEntry,
 } from '@vybestack/llxprt-code-core';
+import type { RowIdentity } from './utils/rowIdentity.js';
 
 export type { SkillDefinition, SkillSource };
 
@@ -95,6 +96,33 @@ export interface CompressionProps {
 
 export interface HistoryItemBase {
   text?: string; // Text content for user/gemini/info/error messages
+  /**
+   * Chronology seq of the model-context entry this item represents, when the
+   * item maps to exactly one entry. Undefined for UI-only items and span items.
+   *
+   * @plan PLAN-20260917-ISSUE854.P01
+   * @requirement REQ-854-003
+   */
+  chronologySeq?: number;
+  /**
+   * Inclusive chronology seq span for items representing multiple adjacent
+   * entries (tool groups: ai tool_call entry through tool response entry).
+   * When present, {@link chronologySeq} is undefined (span, not point).
+   *
+   * @plan PLAN-20260917-ISSUE854.P01
+   * @requirement REQ-854-003
+   */
+  seqSpan?: readonly [number, number];
+  /**
+   * Stable slot identity for the row: (journal envelope byte offset,
+   * projection discriminator), (legacy local index, discriminator) when the
+   * record has no journal offset, or a pending identity for live rows not yet
+   * committed. Memory-only data (ruling 2) — never persisted.
+   *
+   * @plan PLAN-20260917-ISSUE854.P02b
+   * @requirement G5
+   */
+  rowIdentity?: RowIdentity;
 }
 
 export type HistoryItemUser = HistoryItemBase & {

@@ -25,7 +25,7 @@ import {
   setActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { streamCallOptions } from '../../../test-utils/streamCallOptions.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
 import {
@@ -199,7 +199,7 @@ function createProxyOAuthManager(): OAuthManager {
 }
 
 function createCallOptions(settings: SettingsService, runtimeId: string) {
-  const options = createProviderCallOptions({
+  const options = streamCallOptions({
     providerName: PROVIDER,
     settings,
     runtimeId,

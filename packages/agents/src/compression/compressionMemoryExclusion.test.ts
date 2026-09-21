@@ -319,7 +319,11 @@ describe('Compression memory exclusion (issue #3174)', () => {
       const request = captured[0];
       const sysInstr = request.systemInstruction;
 
-      const requestText = extractText(request.contents);
+      const requestRows: IContent[] = [];
+      for await (const content of request.contents) {
+        requestRows.push(content);
+      }
+      const requestText = extractText(requestRows);
 
       const summarizedHistory =
         result.kind === 'applied' ? result.newHistory : [];

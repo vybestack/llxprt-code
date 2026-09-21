@@ -4,7 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { GenerateChatOptions } from './IProvider.js';
+import type {
+  GenerateChatOptions,
+  MetadataBearingOptions,
+} from './IProvider.js';
 import { attachProviderErrorObservationContext } from './providerErrorObservation.js';
 import type { StreamExposure } from './retryFailureTaxonomy.js';
 import {
@@ -390,7 +393,7 @@ export function markRequestCommitted(
  * (the caller then operates without shared commitment marking).
  */
 export function findRequestCommitState(
-  options: GenerateChatOptions,
+  options: MetadataBearingOptions,
 ): RequestCommitState | undefined {
   const record = options.metadata?.[RETRY_REQUEST_CONTEXT_KEY];
   if (!isMutableRequestCommitState(record)) return undefined;

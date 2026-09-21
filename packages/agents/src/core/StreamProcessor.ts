@@ -453,7 +453,15 @@ export class StreamProcessor {
   ): GenerateChatOptions {
     const userMemory = resolveUserMemory(baseRuntimeContext.config);
     return {
-      contents: requestPayload.contents,
+      // The provider-facing history is a stream (issue #854); re-open the
+      // assembled rows so estimation and transport each get a fresh pass.
+      contents: {
+        async *[Symbol.asyncIterator]() {
+          for (const content of requestPayload.contents) {
+            yield content;
+          }
+        },
+      },
       tools: requestPayload.tools as ProviderToolset | undefined,
       config: runtimeContext.config,
       runtime: runtimeContext,
@@ -478,7 +486,7 @@ export class StreamProcessor {
         this.generationConfig.systemInstruction,
       ),
       systemPromptAssembler: this.generationConfig.systemPromptAssembler,
-    } as GenerateChatOptions;
+    };
   }
 
   private async _sendProviderRequest(

@@ -22,6 +22,8 @@ import {
 import { type IModel } from './IModel.js';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { firstTruthyString } from './utils/falsyFallback.js';
+import { isOneShotContentsSource } from './utils/collectContents.js';
+import { type RequestScopedContents } from './utils/requestScopedBody.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 import {
@@ -45,6 +47,7 @@ import {
 } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
 import {
   assertProviderRuntimeContext,
+  materializeCallOptions,
   normalizeProviderGenerateChatOptions,
   resolveGenerateChatSettings,
 } from './BaseProviderNormalization.js';
@@ -82,7 +85,24 @@ export interface BaseProviderConfig {
   mediaTransportCapabilities?: ProviderMediaTransportCapabilities;
 }
 
-export interface NormalizedGenerateChatOptions extends GenerateChatOptions {
+export interface NormalizedGenerateChatOptions
+  extends Omit<GenerateChatOptions, 'contents'> {
+  /**
+   * Request-scoped materialization of the incoming history stream
+   * (issue #854, PLAN-20260917-ISSUE854.P05b3): normalization collects the
+   * stream once and provider implementations read the plain array.
+   *
+   * Providers that declare {@link BaseProvider.materializesContentsAtTransport}
+   * leave this empty on the wire path and drain
+   * {@link NormalizedGenerateChatOptions.contentsStream} inside their
+   * transport's request-scoped lease instead (issue #854 P05b4).
+   */
+  contents: IContent[];
+  /**
+   * The uncollected one-shot history source, present only when the provider
+   * materializes contents at the transport (issue #854 P05b4).
+   */
+  requestContents?: RequestScopedContents;
   settings: SettingsService;
   config?: Config;
   userMemory?: UserMemoryInput; // @plan PLAN-20251023-STATELESS-HARDENING.P08: User memory from runtime context
@@ -614,16 +634,20 @@ export abstract class BaseProvider implements IProvider {
     options: GenerateChatOptions,
   ): AsyncIterableIterator<IContent>;
   generateChatCompletion(
-    contents: IContent[],
+    contents: AsyncIterable<IContent>,
     tools?: ProviderToolset,
   ): AsyncIterableIterator<IContent>;
   /**
    * @plan PLAN-20251018-STATELESSPROVIDER2.P06
    * @requirement REQ-SP2-001
    * @pseudocode base-provider-call-contract.md lines 1-5
+   *
+   * The positional history is the provider-facing stream (issue #854,
+   * PLAN-20260917-ISSUE854.P05b3); it is collected request-scoped here and
+   * normalization stays array-based until P05b4.
    */
   generateChatCompletion(
-    contentsOrOptions: IContent[] | GenerateChatOptions,
+    contentsOrOptions: AsyncIterable<IContent> | GenerateChatOptions,
     maybeTools?: ProviderToolset,
   ): AsyncIterableIterator<IContent> {
     const normalizedPromise = this.normalizeGenerateChatOptions(
@@ -701,6 +725,16 @@ export abstract class BaseProvider implements IProvider {
   protected abstract generateChatCompletionWithOptions(
     options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent>;
+
+  /**
+   * Whether this provider drains the history source inside its transport's
+   * request-scoped lease instead of at normalization (issue #854 P05b4).
+   * Default false: normalization collects, and provider implementations keep
+   * reading the plain array.
+   */
+  protected materializesContentsAtTransport(): boolean {
+    return false;
+  }
 
   /**
    * Normalize caller-supplied chat options for prompt-envelope projection
@@ -821,15 +855,20 @@ export abstract class BaseProvider implements IProvider {
    * @pseudocode base-provider-call-contract.md lines 1-3
    */
   private async normalizeGenerateChatOptions(
-    contentsOrOptions: IContent[] | GenerateChatOptions,
+    contentsOrOptions: AsyncIterable<IContent> | GenerateChatOptions,
     maybeTools?: ProviderToolset,
     resolveAuthentication: boolean = true,
   ): Promise<NormalizedGenerateChatOptions> {
-    const providedOptions: GenerateChatOptions = Array.isArray(
+    // P05b4: one-shot streams defer the drain to the transport's
+    // request-scoped lease; arrays and replayable streams collect eagerly.
+    const lazyWireContents =
+      this.materializesContentsAtTransport() &&
+      isOneShotContentsSource(contentsOrOptions);
+    const providedOptions = await materializeCallOptions(
       contentsOrOptions,
-    )
-      ? { contents: contentsOrOptions, tools: maybeTools }
-      : contentsOrOptions;
+      maybeTools,
+      lazyWireContents,
+    );
     const settings = resolveGenerateChatSettings(
       providedOptions,
       this.defaultSettingsService,

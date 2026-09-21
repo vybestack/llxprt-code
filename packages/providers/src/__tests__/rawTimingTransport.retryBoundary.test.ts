@@ -42,6 +42,10 @@ import {
   type AttemptLifecycleObserver,
 } from '../logging/attemptLifecycle.js';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
+import {
+  isAsyncIterableContents,
+  replayableContents,
+} from '../utils/collectContents.js';
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -139,7 +143,7 @@ function makeRawTimingProvider(
     getModels: async () => [],
     getDefaultModel: () => 'test-model',
     generateChatCompletion(
-      contentOrOptions: GenerateChatOptions | IContent[],
+      contentOrOptions: GenerateChatOptions | AsyncIterable<IContent>,
     ): AsyncGenerator<IContent, void, unknown> {
       calls++;
       if (calls > plans.length) {
@@ -149,7 +153,9 @@ function makeRawTimingProvider(
           `raw-timing fake provider '${name}' called ${calls} time(s) but only ${plans.length} plan(s) exist`,
         );
       }
-      const options: GenerateChatOptions = Array.isArray(contentOrOptions)
+      const options: GenerateChatOptions = isAsyncIterableContents(
+        contentOrOptions,
+      )
         ? { contents: contentOrOptions }
         : contentOrOptions;
       const plan = plans[calls - 1];
@@ -185,12 +191,12 @@ function makeRecorder(): AttemptRecorder {
 
 function makeRetryOptions(recorder: AttemptRecorder): GenerateChatOptions {
   return {
-    contents: [
+    contents: replayableContents([
       {
         speaker: 'human',
         blocks: [{ type: 'text', text: 'test' }],
       },
-    ],
+    ]),
     metadata: { [ATTEMPT_LIFECYCLE_KEY]: recorder },
   };
 }
@@ -439,12 +445,12 @@ describe('issue #3473 F2: raw timing transport at retry and LB boundaries', () =
     // failover, and leaked to the consumer as a bare chunk.
     const results = await collectResults(
       lb.generateChatCompletion({
-        contents: [
+        contents: replayableContents([
           {
             speaker: 'human',
             blocks: [{ type: 'text', text: 'test' }],
           },
-        ],
+        ]),
         metadata: { [ATTEMPT_LIFECYCLE_KEY]: observer },
       }),
     );
@@ -487,12 +493,12 @@ describe('issue #3473 F2: raw timing transport at retry and LB boundaries', () =
 
     const results = await collectResults(
       lb.generateChatCompletion({
-        contents: [
+        contents: replayableContents([
           {
             speaker: 'human',
             blocks: [{ type: 'text', text: 'test' }],
           },
-        ],
+        ]),
       }),
     );
 

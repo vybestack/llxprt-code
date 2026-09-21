@@ -16,6 +16,7 @@ import type {
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { RuntimeSettingsState } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { replayableContents } from '../utils/collectContents.js';
 
 /** Minimal RuntimeSettingsState for the runtime-context resolver in buildStack. */
 function stubRuntimeSettingsState(): RuntimeSettingsState {
@@ -65,7 +66,7 @@ export function makeOptions(
   contents: IContent[],
 ): GenerateChatOptions {
   return {
-    contents,
+    contents: replayableContents(contents),
     settings: new SettingsService(),
     config,
     resolved: { model: 'test-model' },
@@ -138,7 +139,7 @@ export class SuccessProvider implements IProvider {
     return 'success-model';
   }
   generateChatCompletion(
-    _options: GenerateChatOptions | IContent[],
+    _options: GenerateChatOptions | AsyncIterable<IContent>,
   ): AsyncIterableIterator<IContent> {
     const chunks = this.chunks;
     return (async function* () {
@@ -164,7 +165,7 @@ export class SyncThrowProvider implements IProvider {
     return 'sync-throw-model';
   }
   generateChatCompletion(
-    _options: GenerateChatOptions | IContent[],
+    _options: GenerateChatOptions | AsyncIterable<IContent>,
   ): AsyncIterableIterator<IContent> {
     throw this.error;
   }
@@ -199,7 +200,7 @@ export class FailThenSucceedProvider implements IProvider {
     return 'retry-model';
   }
   generateChatCompletion(
-    _options: GenerateChatOptions | IContent[],
+    _options: GenerateChatOptions | AsyncIterable<IContent>,
   ): AsyncIterableIterator<IContent> {
     this.callCount++;
     if (this.callCount < this.succeedOnCall) {
@@ -243,7 +244,7 @@ export class AlwaysFailProvider implements IProvider {
     return 'error-model';
   }
   generateChatCompletion(
-    _options: GenerateChatOptions | IContent[],
+    _options: GenerateChatOptions | AsyncIterable<IContent>,
   ): AsyncIterableIterator<IContent> {
     const err = this.error;
     return {
@@ -278,7 +279,7 @@ export class ConsumerAbortedProvider implements IProvider {
     return 'abort-model';
   }
   generateChatCompletion(
-    _options: GenerateChatOptions | IContent[],
+    _options: GenerateChatOptions | AsyncIterable<IContent>,
   ): AsyncIterableIterator<IContent> {
     const chunks = this.chunks;
     return (async function* () {
@@ -306,7 +307,7 @@ export class MetadataOnlyProvider implements IProvider {
     return 'metadata-model';
   }
   generateChatCompletion(
-    _options: GenerateChatOptions | IContent[],
+    _options: GenerateChatOptions | AsyncIterable<IContent>,
   ): AsyncIterableIterator<IContent> {
     const usageChunk = this.usageChunk;
     const textChunks = this.textChunks;

@@ -208,6 +208,10 @@
       "bun": "./src/utils/mediaUtils.ts",
       "import": "./dist/src/utils/mediaUtils.js"
     },
+    "./utils/collectContents.js": {
+      "bun": "./src/utils/collectContents.ts",
+      "import": "./dist/src/utils/collectContents.js"
+    },
     "./providerMediaTransportCapabilities.js": {
       "types": "./dist/src/providerMediaTransportCapabilities.d.ts",
       "bun": "./src/providerMediaTransportCapabilities.ts",

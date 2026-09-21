@@ -21,7 +21,10 @@ import type {
   CompressionProviderResult,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
+import type {
+  RuntimeGenerateChatOptions,
+  RuntimeProviderToolset,
+} from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
@@ -125,14 +128,21 @@ class CaptureProvider implements IProvider {
   generateChatCompletion(
     options: RuntimeGenerateChatOptions,
   ): AsyncIterableIterator<IContent>;
-  generateChatCompletion(content: IContent[]): AsyncIterableIterator<IContent>;
+  generateChatCompletion(
+    content: AsyncIterable<IContent>,
+    tools?: RuntimeProviderToolset,
+    signal?: AbortSignal,
+  ): AsyncIterableIterator<IContent>;
   async *generateChatCompletion(
-    optionsOrContent: RuntimeGenerateChatOptions | IContent[],
+    optionsOrContent: RuntimeGenerateChatOptions | AsyncIterable<IContent>,
   ): AsyncIterableIterator<IContent> {
-    const contents = Array.isArray(optionsOrContent)
-      ? optionsOrContent
-      : optionsOrContent.contents;
-    this.capturedRequests.push(...contents);
+    const stream =
+      Symbol.asyncIterator in optionsOrContent
+        ? optionsOrContent
+        : optionsOrContent.contents;
+    for await (const content of stream) {
+      this.capturedRequests.push(content);
+    }
     yield {
       speaker: 'ai' as const,
       blocks: [{ type: 'text' as const, text: this.summaryText }],

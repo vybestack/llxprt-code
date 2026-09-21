@@ -20,7 +20,7 @@ import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { streamCallOptions } from '../test-utils/streamCallOptions.js';
 import { createOpenAIRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
 
 const RELEASE_ERROR = 'Cannot consume media request contents after release';
@@ -116,12 +116,12 @@ describe('OpenAIProvider prompt-envelope retry (@issue:3444)', () => {
 
     const provider = new OpenAIProvider('test-key');
 
-    const callOptions = createProviderCallOptions({
+    const callOptions = streamCallOptions({
       providerName: provider.name,
       contents: mediaMessages(),
       ephemerals: { retries: 2, retrywait: 0 },
       resolved: { model: 'gpt-4o' },
-    } as Parameters<typeof createProviderCallOptions>[0]);
+    });
 
     const projection = await provider.projectPromptEnvelope(callOptions);
     expect(projection.transportToken).toBeDefined();
@@ -162,7 +162,7 @@ describe('OpenAIProvider prompt-envelope retry (@issue:3444)', () => {
     process.env.OPENAI_API_KEY = 'test-key';
     mockChatCompletionsCreate.mockRejectedValueOnce(make429RateLimitError());
     const provider = new OpenAIProvider('test-key');
-    const options = createProviderCallOptions({
+    const options = streamCallOptions({
       providerName: provider.name,
       contents: mediaMessages(),
       ephemerals: { retries: 2, retrywait: 0 },
@@ -202,7 +202,7 @@ describe('OpenAIProvider prompt-envelope retry (@issue:3444)', () => {
       .mockRejectedValueOnce(make429RateLimitError())
       .mockRejectedValueOnce(lastFailure);
     const provider = new OpenAIProvider('test-key');
-    const options = createProviderCallOptions({
+    const options = streamCallOptions({
       providerName: provider.name,
       contents: mediaMessages(),
       ephemerals: { retries: 2, retrywait: 0 },

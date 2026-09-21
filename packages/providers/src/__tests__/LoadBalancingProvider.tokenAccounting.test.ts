@@ -28,8 +28,14 @@ function createTextContent(text: string): IContent {
   return { speaker: 'human', blocks: [{ type: 'text', text }] };
 }
 
-function compressedProjectionEstimate(options: GenerateChatOptions): number {
-  const containsCompressedText = options.contents.some((content) =>
+async function compressedProjectionEstimate(
+  options: GenerateChatOptions,
+): Promise<number> {
+  const rows: IContent[] = [];
+  for await (const content of options.contents) {
+    rows.push(content);
+  }
+  const containsCompressedText = rows.some((content) =>
     content.blocks.some(
       (block) => block.type === 'text' && block.text === 'compressed',
     ),

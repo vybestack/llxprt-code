@@ -120,9 +120,9 @@ function waitForAbort(signal: AbortSignal | undefined): Promise<never> {
 }
 
 function requestAbortSignal(
-  request: GenerateChatOptions | IContent[],
+  request: GenerateChatOptions | AsyncIterable<IContent>,
 ): AbortSignal | undefined {
-  if (Array.isArray(request)) return undefined;
+  if (Symbol.asyncIterator in request) return undefined;
   const signal = request.metadata?.abortSignal;
   return signal instanceof AbortSignal ? signal : undefined;
 }
@@ -183,7 +183,7 @@ async function createFixture(
     getDefaultModel: () => 'turn-media-model',
     getModels: () => Promise.resolve([]),
     generateChatCompletion(
-      request: GenerateChatOptions | IContent[],
+      request: GenerateChatOptions | AsyncIterable<IContent>,
     ): AsyncIterableIterator<IContent> {
       return (async function* (): AsyncIterableIterator<IContent> {
         markProviderStarted();

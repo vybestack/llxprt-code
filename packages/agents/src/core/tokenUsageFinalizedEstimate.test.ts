@@ -138,23 +138,33 @@ function createResponsesProvider(): OpenAIResponsesProvider {
   return new OpenAIResponsesProvider('token-test', 'https://api.openai.com/v1');
 }
 
+function toStream(rows: readonly IContent[]): AsyncIterable<IContent> {
+  return {
+    async *[Symbol.asyncIterator]() {
+      for (const row of rows) {
+        yield row;
+      }
+    },
+  };
+}
+
 async function estimateResponsesPrompt(
   provider: OpenAIResponsesProvider,
   contents: readonly IContent[],
   stateful: boolean,
 ): Promise<PromptEnvelopeEstimate> {
-  const projection = await provider.projectPromptEnvelope(
-    createProviderCallOptions({
+  const projection = await provider.projectPromptEnvelope({
+    ...createProviderCallOptions({
       providerName: provider.name,
       resolved: {
         model: 'gpt-4o',
         baseURL: 'https://api.openai.com/v1',
         telemetry: { providerName: provider.name },
       },
-      contents: [...contents],
       ...(stateful ? { ephemerals: { 'responses-stateful': true } } : {}),
     }),
-  );
+    contents: toStream(contents),
+  });
   return estimatePromptEnvelope(
     provider.name,
     projection,

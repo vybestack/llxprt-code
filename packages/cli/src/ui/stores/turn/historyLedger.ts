@@ -6,6 +6,7 @@
 
 import { Buffer } from 'node:buffer';
 import type { HistoryItem } from '../../types.js';
+import { sameRowIdentity, type RowIdentity } from '../../utils/rowIdentity.js';
 import {
   DEFAULT_HISTORY_MAX_BYTES,
   DEFAULT_HISTORY_MAX_ITEMS,
@@ -235,6 +236,9 @@ function boundHistoryItem(
     id: item.id,
     type: 'info',
     text: DISPLAY_BOUND_NOTICE,
+    ...(item.rowIdentity !== undefined
+      ? { rowIdentity: item.rowIdentity }
+      : {}),
   };
   return estimateHistoryItemBytes(fallback) <= maxBytes ? fallback : undefined;
 }
@@ -306,6 +310,15 @@ export interface HistoryLedger {
   remove: (ids: readonly number[]) => void;
   load: (items: readonly HistoryItem[]) => void;
   clear: () => void;
+  /**
+   * Index of the resident entry carrying `identity`, or -1. Scans only the
+   * resident entries (bounded by the ledger limits), never a session-sized
+   * collection.
+   *
+   * @plan PLAN-20260917-ISSUE854.P02b
+   * @requirement G5
+   */
+  findIndexByIdentity: (identity: RowIdentity) => number;
 }
 
 export function createHistoryLedger(
@@ -340,6 +353,12 @@ export function createHistoryLedger(
     clear: () => {
       apply(EMPTY_HISTORY_STATE);
     },
+    findIndexByIdentity: (identity) =>
+      state.entries.findIndex(
+        (entry) =>
+          entry.item.rowIdentity !== undefined &&
+          sameRowIdentity(entry.item.rowIdentity, identity),
+      ),
   };
 }
 

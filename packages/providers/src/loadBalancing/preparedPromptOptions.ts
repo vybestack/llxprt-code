@@ -16,6 +16,7 @@ import {
   estimateRequestTokens,
   type EstimationResult,
 } from './loadBalancerTokenEstimator.js';
+import { collectContents } from '../utils/collectContents.js';
 import { resolveSubProfileModel } from './subProfileHelpers.js';
 
 export async function estimatePreparedPrompt(
@@ -53,7 +54,7 @@ export async function estimatePreparedPrompt(
     );
   }
   return estimateRequestTokens(
-    options.contents,
+    await collectContents(options.contents),
     subProfile.providerName,
     model,
     { tokenizerFactory },

@@ -81,7 +81,15 @@ export function buildProviderChatOptions(
   systemPromptAssembler?: RuntimeGenerateChatOptions['systemPromptAssembler'],
 ): RuntimeGenerateChatOptions {
   return {
-    contents: requestContents,
+    // The provider-facing history is a stream (issue #854); re-open the
+    // assembled rows so estimation and transport each get a fresh pass.
+    contents: {
+      async *[Symbol.asyncIterator]() {
+        for (const content of requestContents) {
+          yield content;
+        }
+      },
+    },
     tools: tools as RuntimeProviderToolset | undefined,
     config: runtimeContext.config,
     runtime: runtimeContext,

@@ -17,6 +17,7 @@ import type {
   RuntimeGenerateChatOptions as GenerateChatOptions,
   RuntimeProviderToolset as ProviderToolset,
 } from '../runtime/contracts/RuntimeProviderChat.js';
+import type { IContent } from '../services/history/IContent.js';
 import type { Config } from '../config/config.js';
 import {
   createProviderRuntimeContext,
@@ -30,6 +31,23 @@ import { createRuntimeConfigStub } from './runtime.js';
 
 const DEFAULT_RUNTIME_SOURCE = 'test-utils#createProviderCallOptions';
 
+/**
+ * The contract default when a caller passes no rows (issue #854): an empty
+ * async iterable, matching the streaming `contents` shape.
+ */
+function emptyContentStream(): AsyncIterable<IContent> {
+  return {
+    [Symbol.asyncIterator]() {
+      return {
+        next: async (): Promise<IteratorResult<IContent>> => ({
+          done: true,
+          value: undefined,
+        }),
+      };
+    },
+  };
+}
+
 let runtimeSequence = 0;
 
 interface SettingsOverrides {
@@ -39,7 +57,12 @@ interface SettingsOverrides {
 
 export interface ProviderCallOptionsInit {
   providerName: string;
-  contents?: GenerateChatOptions['contents'];
+  /**
+   * The conversation rows. The runtime contract is a stream (issue #854);
+   * eager arrays are still accepted here because tests assemble rows before
+   * the call — they flow through unchanged as the eager case.
+   */
+  contents?: GenerateChatOptions['contents'] | readonly IContent[];
   tools?: ProviderToolset;
   metadata?: Record<string, unknown>;
   userMemory?: GenerateChatOptions['userMemory'];
@@ -213,10 +236,16 @@ function ensureInvocation(
  * Creates GenerateChatOptions with explicit settings/config/runtime bindings.
  * Tests should prefer this helper over calling provider methods directly
  * with ad-hoc option objects to ensure fail-fast coverage remains intact.
+ *
+ * `contents` keeps the caller-supplied shape: the contract type is a stream
+ * (issue #854), and the eager arrays tests assemble are the sanctioned
+ * interim until the agent layer streams.
  */
-export function createProviderCallOptions(
-  init: ProviderCallOptionsInit,
-): GenerateChatOptions & {
+export function createProviderCallOptions(init: ProviderCallOptionsInit): Omit<
+  GenerateChatOptions,
+  'contents'
+> & {
+  contents: GenerateChatOptions['contents'] | readonly IContent[];
   settings: SettingsService;
   config: Config;
   runtime: ProviderRuntimeContext;
@@ -254,7 +283,7 @@ export function createProviderCallOptions(
   );
 
   return {
-    contents: init.contents ?? [],
+    contents: init.contents ?? emptyContentStream(),
     tools: init.tools,
     metadata: mergedMetadata,
     settings,

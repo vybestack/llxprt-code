@@ -199,7 +199,7 @@ describe('Issue #3130 slice 3b — attempt-level token-usage records', () => {
       const logFile = makeTempLogPath();
       let attempt = 0;
       const generateChatCompletionMock = vi.fn(async function* (
-        _options: GenerateChatOptions | IContent[],
+        _options: GenerateChatOptions | AsyncIterable<IContent>,
       ): AsyncGenerator<IContent> {
         attempt++;
         if (attempt === 1) {
@@ -298,7 +298,7 @@ describe('Issue #3130 slice 3b — attempt-level token-usage records', () => {
   it('records attempt_index 0 and attempt_outcome success for a normal turn', async () => {
     const logFile = makeTempLogPath();
     const generateChatCompletionMock = vi.fn(async function* (
-      _options: GenerateChatOptions | IContent[],
+      _options: GenerateChatOptions | AsyncIterable<IContent>,
     ): AsyncGenerator<IContent> {
       yield {
         speaker: 'ai',

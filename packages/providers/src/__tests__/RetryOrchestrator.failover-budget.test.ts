@@ -8,6 +8,7 @@ import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
+import { replayableContents } from '../utils/collectContents.js';
 import { attachTransportAttemptBudget } from '../transportAttemptBudget.js';
 
 function rateLimitError(): Error {
@@ -46,7 +47,7 @@ describe('RetryOrchestrator failover transport budget', () => {
       { maxAttempts: 3, initialDelayMs: 0 },
     );
     const options: GenerateChatOptions = {
-      contents: [],
+      contents: replayableContents([]),
       config: {
         getBucketFailoverHandler: () => ({
           getBuckets: () => ['bucket1', 'bucket2'],
@@ -75,7 +76,10 @@ describe('RetryOrchestrator failover transport budget', () => {
       failingProvider(() => transportCalls++),
       { maxAttempts: 4, initialDelayMs: 0 },
     );
-    const request = attachTransportAttemptBudget({ contents: [] }, 2);
+    const request = attachTransportAttemptBudget(
+      { contents: replayableContents([]) },
+      2,
+    );
 
     try {
       const failure = await consume(
@@ -116,7 +120,7 @@ describe('RetryOrchestrator failover transport budget', () => {
     );
     const consumption = consume(
       orchestrator.generateChatCompletion({
-        contents: [],
+        contents: replayableContents([]),
         config: {
           getBucketFailoverHandler: () => ({
             getBuckets: () => ['bucket1', 'bucket2'],

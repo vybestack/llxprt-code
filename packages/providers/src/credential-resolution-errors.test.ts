@@ -11,12 +11,12 @@ import {
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { AnthropicProvider } from './anthropic/AnthropicProvider.js';
 import { resetFactorySingletons } from './auth/proxy/credential-store-factory.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { NormalizedGenerateChatOptions } from './BaseProvider.js';
+import { streamCallOptions } from './test-utils/streamCallOptions.js';
 import type { IProvider } from './IProvider.js';
 import { OpenAIProvider } from './openai/OpenAIProvider.js';
 import { OpenAIVercelProvider } from './openai-vercel/OpenAIVercelProvider.js';
@@ -48,7 +48,7 @@ function createOptions(providerName: string, settings: SettingsService) {
     metadata: { source: 'credential-resolution-errors.test.ts' },
   });
   setActiveProviderRuntimeContext(runtime);
-  return createProviderCallOptions({
+  return streamCallOptions({
     providerName,
     settings,
     runtime,
@@ -66,9 +66,18 @@ function createNormalizedOptions(
   settings: SettingsService,
   authFailure?: CredentialResolutionError,
 ): NormalizedGenerateChatOptions {
+  const rows: IContent[] = [
+    {
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'test request' }],
+    },
+  ];
   const options = createOptions(providerName, settings);
   return {
     ...options,
+    // Normalization's materialized contract: the collected history array.
+    contents: rows,
+    settings,
     metadata: options.metadata ?? {},
     resolved: {
       model: 'credential-resolution-test-model',

@@ -94,6 +94,16 @@ export abstract class OpenAIResponsesProviderBase extends BaseProvider {
   }
 
   /**
+   * Issue #854 P05b4: this provider drains the one-shot history source inside
+   * its transport's request-scoped lease (the lazy wire body is built at the
+   * first byte pull), so normalization hands the transport a memoized
+   * `requestContents` instead of a pre-collected array.
+   */
+  protected override materializesContentsAtTransport(): boolean {
+    return true;
+  }
+
+  /**
    * Detect if provider is in Codex mode based on baseURL
    * @plan PLAN-20251213-ISSUE160.P03
    */

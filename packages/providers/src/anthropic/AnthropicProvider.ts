@@ -82,10 +82,8 @@ import {
 import { tryConsumeTransportAttempt } from '../transportAttemptBudget.js';
 import { findRequestCommitState } from '../retryRequestContext.js';
 
-import {
-  registerAnthropicRequestCleanup,
-  resolveAnthropicRequestBody,
-} from './AnthropicRequestCleanup.js';
+import { registerAnthropicRequestCleanup } from './AnthropicRequestCleanup.js';
+import { acquireRequestScopedBody } from '../utils/requestScopedBody.js';
 import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import {
   finishMediaRequest,
@@ -420,7 +418,7 @@ export class AnthropicProvider extends BaseProvider {
    * placement policy, not a placement decision made in isolation here.
    */
   getSystemPromptPlacement(
-    options: GenerateChatOptions,
+    options: Pick<GenerateChatOptions, 'resolved'>,
   ): SystemPromptPlacement {
     const resolvedToken = options.resolved?.authToken;
     if (isRuntimeAuthTokenProvider(resolvedToken)) {
@@ -519,6 +517,21 @@ export class AnthropicProvider extends BaseProvider {
    * Detect the appropriate tool format for the current model/configuration
    * @returns The detected tool format
    */
+  private detectToolFormatForModel(modelName: string): ToolFormat {
+    // Check for GLM models which require Qwen handling
+    if (modelName.includes('glm-')) {
+      return 'qwen';
+    }
+
+    // Check for qwen models
+    if (modelName.includes('qwen')) {
+      return 'qwen';
+    }
+
+    // Default to 'anthropic' format
+    return 'anthropic';
+  }
+
   detectToolFormat(): ToolFormat {
     // @plan PLAN-20251023-STATELESS-HARDENING.P08: Don't reference deprecated instance fields
     // Tools format should be derived from runtime context only
@@ -537,40 +550,15 @@ export class AnthropicProvider extends BaseProvider {
       if (toolFormatOverride && toolFormatOverride !== 'auto') {
         return toolFormatOverride;
       }
-
-      // Auto-detect based on model name if set to 'auto' or not set
-      const modelName = this.getCurrentModel().toLowerCase();
-
-      // Check for GLM models which require Qwen handling
-      if (modelName.includes('glm-')) {
-        return 'qwen';
-      }
-
-      // Check for qwen models
-      if (modelName.includes('qwen')) {
-        return 'qwen';
-      }
-
-      // Default to 'anthropic' format
-      return 'anthropic';
     } catch (error) {
       this.getLogger().debug(
         () => `Failed to detect tool format from SettingsService: ${error}`,
       );
-
-      // Fallback detection without SettingsService
-      const modelName = this.getCurrentModel().toLowerCase();
-
-      if (modelName.includes('glm-')) {
-        return 'qwen';
-      }
-
-      if (modelName.includes('qwen')) {
-        return 'qwen';
-      }
-
-      return 'anthropic';
     }
+
+    // Auto-detect based on model name if set to 'auto' or not set; also the
+    // fallback when SettingsService is unavailable.
+    return this.detectToolFormatForModel(this.getCurrentModel().toLowerCase());
   }
 
   private unprefixToolName(name: string, isOAuth: boolean): string {
@@ -635,7 +623,16 @@ export class AnthropicProvider extends BaseProvider {
     const requestContext =
       prepared?.requestContext ??
       (await this.prepareRequestContext(effectiveOptions, isOAuth, authToken));
-    registerAnthropicRequestCleanup(mediaRequest, requestContext.requestBody);
+    // Issue #854 P05b4: the wire body is owned by a request-scoped lease and
+    // the media request's finish releases it, so the body arrays are spliced
+    // once the transport call settles (any outcome) instead of outliving it.
+    const requestBodyLease = acquireRequestScopedBody(
+      'anthropic',
+      requestContext.requestBody,
+    );
+    mediaRequest.registerCleanup(() => {
+      void requestBodyLease.release();
+    });
 
     const customHeaders = this.buildCustomHeaders(requestContext, isOAuth);
     const rateLimitLogger = this.getRateLimitLogger();
@@ -647,11 +644,9 @@ export class AnthropicProvider extends BaseProvider {
 
     // H2: if a prior outer attempt already sanitized this request's images,
     // reuse the sanitized body instead of resending the poisoned original.
-    const effectiveRequestBody = resolveAnthropicRequestBody(
-      mediaRequest,
-      requestContext.requestBody,
-      getImageRecoveryState(effectiveOptions)?.sanitizedBody,
-    );
+    const effectiveRequestBody =
+      getImageRecoveryState(effectiveOptions)?.sanitizedBody ??
+      requestContext.requestBody;
     const apiCallWithResponse = createAnthropicApiCall(
       initialClient,
       effectiveRequestBody,
@@ -797,7 +792,13 @@ export class AnthropicProvider extends BaseProvider {
     if (!tryConsumeTransportAttempt(options)) return undefined;
     state.recoveryUsed = true;
     state.sanitizedBody = sanitized.body;
-    registerAnthropicRequestCleanup(mediaRequest, sanitized.body);
+    const recoveryBodyLease = acquireRequestScopedBody(
+      'anthropic',
+      sanitized.body,
+    );
+    mediaRequest.registerCleanup(() => {
+      void recoveryBodyLease.release();
+    });
     this.getErrorsLogger().debug(
       () =>
         '[AnthropicProvider] Image dimension 400: sanitized oversized image block(s), retrying once',
@@ -831,7 +832,6 @@ export class AnthropicProvider extends BaseProvider {
     // resolved through the shared policy, never re-derived from isOAuth here.
     const placement = resolveSystemPromptPlacement(
       this.getSystemPromptPlacement({
-        ...options,
         resolved: { ...options.resolved, authToken },
       }),
     );

@@ -42,6 +42,10 @@ import {
 } from '../../../contexts/RuntimeContext.js';
 import { useTodoContext } from '../../../contexts/TodoContext.js';
 import { useRecordingInfrastructure } from './useRecordingInfrastructure.js';
+import {
+  useScrollbackBootstrap,
+  type ScrollbackPagerBinding,
+} from './useScrollbackBootstrap.js';
 import { useUpdateAndOAuthBridges } from './useUpdateAndOAuthBridges.js';
 import { useSessionInitialization } from './useSessionInitialization.js';
 import { useTokenMetricsTracking } from './useTokenMetricsTracking.js';
@@ -110,6 +114,13 @@ export interface AppBootstrapResult {
   recordingSwapCallbacks: ReturnType<
     typeof useRecordingInfrastructure
   >['recordingSwapCallbacks'];
+  /**
+   * P02e: pager binding when the boot-time scrollback flag was on and the
+   * session journal resolved; null keeps today's non-pager transcript path.
+   */
+  scrollbackPager: ScrollbackPagerBinding | null;
+  /** P02e: one-line restart prompt when the scrollback flag changed mid-session. */
+  scrollbackRestartNotice: string | null;
   idePromptAnswered: boolean;
   setIdePromptAnswered: React.Dispatch<React.SetStateAction<boolean>>;
   currentIDE: IdeInfo | undefined;
@@ -297,6 +308,11 @@ export function useAppBootstrap(props: AppBootstrapProps): AppBootstrapResult {
   const h = useBootstrapHistory(props);
   const t = useBootstrapTodo();
   const e = useBootstrapEvents(props, h.addItem, h.setUpdateInfo, h.runtime);
+  const sb = useScrollbackBootstrap({
+    settings: props.settings,
+    recordingSwapCallbacks: e.recordingSwapCallbacks,
+    addItem: h.addItem,
+  });
   useEffect(() => {
     props.settingsStore.commands.setRawConsoleMessages(e.consoleMessages);
   }, [props.settingsStore, e.consoleMessages]);
@@ -322,6 +338,8 @@ export function useAppBootstrap(props: AppBootstrapProps): AppBootstrapResult {
     updateTodos: t.updateTodos,
     recordingIntegrationRef: e.recordingIntegrationRef,
     recordingSwapCallbacks: e.recordingSwapCallbacks,
+    scrollbackPager: sb.pager,
+    scrollbackRestartNotice: sb.restartNotice,
     idePromptAnswered: e.idePromptAnswered,
     setIdePromptAnswered: e.setIdePromptAnswered,
     currentIDE: e.currentIDE,

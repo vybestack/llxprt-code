@@ -26,7 +26,7 @@ import {
   setActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { OpenAIProvider } from './OpenAIProvider.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { streamCallOptions } from '../test-utils/streamCallOptions.js';
 
 const originalFetch = global.fetch;
 const mockFetch = vi.fn();
@@ -156,7 +156,7 @@ describe('OpenAIProvider concurrent call-scoped routing isolation @issue:2483', 
       settingsService: proxySettings,
     });
 
-    const canonicalOptions = createProviderCallOptions({
+    const canonicalOptions = streamCallOptions({
       providerName: 'openai',
       settings: canonicalSettings,
       runtime: canonicalRuntime,
@@ -168,7 +168,7 @@ describe('OpenAIProvider concurrent call-scoped routing isolation @issue:2483', 
       contents: [{ speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] }],
     });
 
-    const proxyOptions = createProviderCallOptions({
+    const proxyOptions = streamCallOptions({
       providerName: 'openai',
       settings: proxySettings,
       runtime: proxyRuntime,

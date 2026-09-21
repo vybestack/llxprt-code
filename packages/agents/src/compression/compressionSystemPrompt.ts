@@ -202,7 +202,15 @@ export async function buildCompressionChatOptions(params: {
       );
 
   return {
-    contents: params.contents,
+    // The provider-facing history is a stream (issue #854); re-open the
+    // assembled rows so estimation and transport each get a fresh pass.
+    contents: {
+      async *[Symbol.asyncIterator]() {
+        for (const content of params.contents) {
+          yield content;
+        }
+      },
+    },
     tools: undefined,
     config: config ?? params.providerRuntime.config,
     runtime: params.providerRuntime,

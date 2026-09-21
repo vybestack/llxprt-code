@@ -22,6 +22,10 @@ import { vi, describe, it, expect, afterEach } from 'bun:test';
 import type Anthropic from '@anthropic-ai/sdk';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
+import {
+  replayableContents,
+  isAsyncIterableContents,
+} from '../utils/collectContents.js';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
 import {
   processAnthropicStream,
@@ -176,7 +180,7 @@ function freshRequestContext(): ReturnType<
   typeof resolveRetryRequestContext
 > & { options: GenerateChatOptions } {
   return resolveRetryRequestContext(
-    { contents: [] },
+    { contents: replayableContents([]) },
     {
       maxAttempts: 3,
       initialDelayMs: 1,
@@ -325,9 +329,11 @@ describe('AnthropicStreamProcessor terminal-event validation (issue #2532)', () 
       const provider: IProvider = {
         name: 'anthropic-scripted',
         generateChatCompletion(
-          requestOptions: GenerateChatOptions | IContent[],
+          requestOptions: GenerateChatOptions | AsyncIterable<IContent>,
         ): AsyncIterableIterator<IContent> {
-          const resolved = requestOptions as GenerateChatOptions;
+          const resolved = isAsyncIterableContents(requestOptions)
+            ? ({ contents: requestOptions } as GenerateChatOptions)
+            : requestOptions;
           const script =
             options.scripts[Math.min(calls, options.scripts.length - 1)];
           calls++;
@@ -366,7 +372,9 @@ describe('AnthropicStreamProcessor terminal-event validation (issue #2532)', () 
       });
 
       const { chunks, error } = await collect(
-        orchestrator.generateChatCompletion({ contents: [] }),
+        orchestrator.generateChatCompletion({
+          contents: replayableContents([]),
+        }),
       );
 
       expect(calls()).toBe(1);
@@ -393,7 +401,9 @@ describe('AnthropicStreamProcessor terminal-event validation (issue #2532)', () 
       });
 
       const { chunks, error } = await collect(
-        orchestrator.generateChatCompletion({ contents: [] }),
+        orchestrator.generateChatCompletion({
+          contents: replayableContents([]),
+        }),
       );
 
       expect(calls()).toBe(1);
@@ -412,7 +422,9 @@ describe('AnthropicStreamProcessor terminal-event validation (issue #2532)', () 
       });
 
       const { chunks, error } = await collect(
-        orchestrator.generateChatCompletion({ contents: [] }),
+        orchestrator.generateChatCompletion({
+          contents: replayableContents([]),
+        }),
       );
 
       expect(error).toBeUndefined();
@@ -436,7 +448,9 @@ describe('AnthropicStreamProcessor terminal-event validation (issue #2532)', () 
       });
 
       const { chunks, error } = await collect(
-        orchestrator.generateChatCompletion({ contents: [] }),
+        orchestrator.generateChatCompletion({
+          contents: replayableContents([]),
+        }),
       );
 
       expect(calls()).toBe(1);
@@ -462,7 +476,9 @@ describe('AnthropicStreamProcessor terminal-event validation (issue #2532)', () 
       });
 
       const { chunks, error } = await collect(
-        orchestrator.generateChatCompletion({ contents: [] }),
+        orchestrator.generateChatCompletion({
+          contents: replayableContents([]),
+        }),
       );
 
       expect(calls()).toBe(1);
@@ -484,7 +500,9 @@ describe('AnthropicStreamProcessor terminal-event validation (issue #2532)', () 
       });
 
       const { chunks, error } = await collect(
-        orchestrator.generateChatCompletion({ contents: [] }),
+        orchestrator.generateChatCompletion({
+          contents: replayableContents([]),
+        }),
       );
 
       expect(error).toBeUndefined();
@@ -508,7 +526,9 @@ describe('AnthropicStreamProcessor terminal-event validation (issue #2532)', () 
       });
 
       const { chunks, error } = await collect(
-        orchestrator.generateChatCompletion({ contents: [] }),
+        orchestrator.generateChatCompletion({
+          contents: replayableContents([]),
+        }),
       );
 
       expect(calls()).toBe(1);
@@ -537,7 +557,9 @@ describe('AnthropicStreamProcessor terminal-event validation (issue #2532)', () 
       });
 
       const { chunks, error } = await collect(
-        orchestrator.generateChatCompletion({ contents: [] }),
+        orchestrator.generateChatCompletion({
+          contents: replayableContents([]),
+        }),
       );
 
       expect(calls()).toBe(1);
@@ -566,7 +588,9 @@ describe('AnthropicStreamProcessor terminal-event validation (issue #2532)', () 
       });
 
       const { chunks, error } = await collect(
-        orchestrator.generateChatCompletion({ contents: [] }),
+        orchestrator.generateChatCompletion({
+          contents: replayableContents([]),
+        }),
       );
 
       expect(calls()).toBe(1);
@@ -605,7 +629,9 @@ describe('AnthropicStreamProcessor terminal-event validation (issue #2532)', () 
       });
 
       const { chunks, error } = await collect(
-        orchestrator.generateChatCompletion({ contents: [] }),
+        orchestrator.generateChatCompletion({
+          contents: replayableContents([]),
+        }),
       );
 
       expect(error).toBeUndefined();

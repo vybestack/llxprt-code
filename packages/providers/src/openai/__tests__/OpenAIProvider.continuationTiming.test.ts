@@ -25,7 +25,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { OpenAIProvider } from '../OpenAIProvider.js';
 import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import { resetSettingsService } from '@vybestack/llxprt-code-settings';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { streamCallOptions } from '../../test-utils/streamCallOptions.js';
 import {
   ATTEMPT_LIFECYCLE_KEY,
   type AttemptLifecycleObserver,
@@ -219,7 +219,7 @@ describe('issue #3473: continuation raw-delta timing through the lifecycle notif
 
     const results: IContent[] = [];
     for await (const chunk of provider.generateChatCompletion(
-      createProviderCallOptions({
+      streamCallOptions({
         providerName: provider.name,
         settings: settingsService,
         contents: [

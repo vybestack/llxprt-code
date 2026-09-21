@@ -44,6 +44,7 @@ import {
   createTestProvider,
 } from './behavioral/test-utils.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { replayableContents } from '../../utils/collectContents.js';
 import {
   AuthPrecedenceResolver,
   flushRuntimeAuthScope,
@@ -244,7 +245,7 @@ describe('load balancer member OAuth identity (#2643)', () => {
             modelParams: {},
             auth: { type: 'oauth' },
           },
-          { contents: [], settings, config, runtime },
+          { contents: replayableContents([]), settings, config, runtime },
           {
             lbProfileEphemeralSettings: undefined,
             lbProfileModelParams: undefined,
@@ -354,7 +355,7 @@ describe('load balancer member OAuth identity (#2643)', () => {
     };
 
     const options: GenerateChatOptions = {
-      contents: [],
+      contents: replayableContents([]),
       metadata: {},
     };
 

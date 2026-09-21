@@ -27,6 +27,7 @@ import type {
   AttemptEndInfo,
 } from '../logging/attemptLifecycle.js';
 import { ATTEMPT_LIFECYCLE_KEY } from '../logging/attemptLifecycle.js';
+import { replayableContents } from '../utils/collectContents.js';
 
 /**
  * Captures all onAttemptStart/onAttemptEnd calls in order so tests can
@@ -114,7 +115,7 @@ describe('LoadBalancingProvider lifecycle (finding #2): no phantom starts', () =
 
     const chunks: IContent[] = [];
     for await (const chunk of provider.generateChatCompletion({
-      contents: [],
+      contents: replayableContents([]),
       metadata: {
         [ATTEMPT_LIFECYCLE_KEY]: capture,
       },
@@ -159,7 +160,7 @@ describe('LoadBalancingProvider lifecycle (finding #2): no phantom starts', () =
 
     const chunks: IContent[] = [];
     for await (const chunk of provider.generateChatCompletion({
-      contents: [],
+      contents: replayableContents([]),
       metadata: {
         [ATTEMPT_LIFECYCLE_KEY]: capture,
       },
@@ -198,7 +199,7 @@ describe('LoadBalancingProvider lifecycle (finding #2): no phantom starts', () =
 
     const chunks: IContent[] = [];
     for await (const chunk of provider.generateChatCompletion({
-      contents: [],
+      contents: replayableContents([]),
       metadata: {
         [ATTEMPT_LIFECYCLE_KEY]: capture,
       },
@@ -227,7 +228,7 @@ describe('LoadBalancingProvider lifecycle (finding #2): no phantom starts', () =
     );
 
     for await (const _chunk of provider.generateChatCompletion({
-      contents: [],
+      contents: replayableContents([]),
       metadata: {
         [ATTEMPT_LIFECYCLE_KEY]: capture,
       },

@@ -115,16 +115,30 @@ describe('REQ-003.4 compile-time assignability (no casts needed)', () => {
     expect(result[0].parametersJsonSchema).toStrictEqual({});
   });
 
-  it('IContent[] assigns to ModelGenerationRequest.contents', () => {
+  it('IContent[] assigns to ModelGenerationRequest.contents', async () => {
     // COMPILE-TIME proof: IContent[] is assignable to the request's contents field.
-    const contents: RuntimeContentsLocal = [
+    const contents: IContent[] = [
       { speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] },
       { speaker: 'ai', blocks: [{ type: 'text', text: 'hello' }] },
     ];
+    // COMPILE-TIME proof: the runtime contract carries the rows as a stream
+    // (issue #854) — an async generator over the rows satisfies it with no cast.
+    async function* toStream(rows: IContent[]): RuntimeContentsLocal {
+      for (const row of rows) {
+        yield row;
+      }
+    }
+    const streamed = toStream(contents);
 
     const req: ModelGenerationRequest = { contents };
     expect(req.contents).toBe(contents);
     expect(req.contents).toHaveLength(2);
+
+    const drained: IContent[] = [];
+    for await (const row of streamed) {
+      drained.push(row);
+    }
+    expect(drained).toStrictEqual(contents);
   });
 
   it('a full GenerateChatOptions-shaped object is assignable to ModelGenerationRequest (contents subset)', () => {

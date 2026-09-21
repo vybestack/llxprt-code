@@ -11,6 +11,7 @@ import type { GenerateChatOptions } from '../IProvider.js';
 import { prepareRequest } from './OpenAIRequestPreparation.js';
 import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import type { ProviderMediaTransportCapabilities } from '../providerMediaTransportCapabilities.js';
+import { acquireRequestScopedBody } from '../utils/requestScopedBody.js';
 import {
   finishMediaRequest,
   resolveRequestMedia,
@@ -95,9 +96,15 @@ export function registerOpenAIChatRequestCleanup(
   mediaRequest: ResolvedMediaRequest,
   requestContext: Awaited<ReturnType<typeof prepareRequest>>,
 ): void {
+  // Issue #854 P05b4: the wire body is owned by a request-scoped lease and
+  // the media request's finish releases it, so the body arrays are spliced
+  // once the transport call settles (any outcome) instead of outliving it.
+  const requestBodyLease = acquireRequestScopedBody(
+    'openai',
+    requestContext.requestBody,
+  );
   mediaRequest.registerCleanup(() => {
-    requestContext.requestBody.messages.splice(0);
-    requestContext.requestBody.tools?.splice(0);
+    void requestBodyLease.release();
   });
 }
 

@@ -17,10 +17,8 @@ import {
   createProviderWithRuntime,
   createRuntimeConfigStub,
 } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import {
-  createProviderCallOptions,
-  type ProviderCallOptionsInit,
-} from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { streamCallOptions } from '../test-utils/streamCallOptions.js';
+import type { ProviderCallOptionsInit } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
@@ -175,7 +173,7 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
     contents: IContent[],
     overrides: Omit<ProviderCallOptionsInit, 'providerName' | 'contents'> = {},
   ) =>
-    createProviderCallOptions({
+    streamCallOptions({
       providerName: 'anthropic',
       contents,
       settings: settingsService,

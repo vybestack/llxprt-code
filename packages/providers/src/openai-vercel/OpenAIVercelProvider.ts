@@ -50,6 +50,7 @@ import { convertToVercelMessages } from './messageConversion.js';
 import { getToolIdStrategy } from '@vybestack/llxprt-code-tools/ToolIdStrategy.js';
 import { isQwenBaseURL } from '../utils/qwenEndpoint.js';
 import { isAbortSignal } from '../utils/abortSignal.js';
+import { acquireRequestScopedBody } from '../utils/requestScopedBody.js';
 import { shouldRetryOnStatus } from '../utils/retryStrategy.js';
 import { filterThinkingForContext } from '../reasoning/reasoningUtils.js';
 import { resolveToolFormat } from '../utils/toolFormatDetection.js';
@@ -108,6 +109,23 @@ function resolveAbortSignal(
 ): AbortSignal | undefined {
   const signal = metadata['abortSignal'];
   return isAbortSignal(signal) ? signal : undefined;
+}
+
+/**
+ * Issue #854 P05b4: the wire body is owned by a request-scoped lease and the
+ * media request's finish releases it, so the message arrays are spliced once
+ * the transport call settles (any outcome) instead of outliving it.
+ */
+function registerVercelRequestBodyLease(
+  mediaRequest: ResolvedMediaRequest,
+  materializedMessages: ModelMessage[],
+): void {
+  const requestBodyLease = acquireRequestScopedBody('openai-vercel', {
+    messages: materializedMessages,
+  });
+  mediaRequest.registerCleanup(() => {
+    void requestBodyLease.release();
+  });
 }
 
 export class OpenAIVercelProvider extends BaseProvider implements IProvider {
@@ -231,6 +249,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
 
     const { mediaRequest, effectiveOptions } =
       await this.resolveMediaPreparation(options);
+    registerVercelRequestBodyLease(mediaRequest, materializedMessages);
     let outcome: MediaRequestOutcome = { status: 'succeeded' };
     try {
       const { tools, metadata } = effectiveOptions;
@@ -302,7 +321,6 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     } catch (error) {
       outcome = { status: 'failed', error };
     } finally {
-      materializedMessages.splice(0);
       await finishMediaRequest(mediaRequest, outcome);
     }
   }

@@ -38,6 +38,11 @@ import {
   delay,
 } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { guardStream } from './guardedStream.js';
+import {
+  collectContents,
+  isAsyncIterableContents,
+  replayableContents,
+} from './utils/collectContents.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import {
   claimProviderErrorObservation,
@@ -243,32 +248,41 @@ export class RetryOrchestrator implements IProvider {
   }
 
   /**
+   * Attach the request signal when the caller supplied one (REQ-SP-001).
+   */
+  private toRetryOptions(
+    options: GenerateChatOptions,
+    signal?: AbortSignal,
+  ): GenerateChatOptions {
+    return signal === undefined ? options : withRequestSignal(options, signal);
+  }
+
+  /**
    * Main method with retry orchestration logic
    * Supports both overloaded signatures accepted by the provider contract
    */
   generateChatCompletion(
-    optionsOrContents: GenerateChatOptions | IContent[],
+    optionsOrContents: GenerateChatOptions | AsyncIterable<IContent>,
     tools?: ProviderToolset,
     signal?: AbortSignal,
   ): AsyncIterableIterator<IContent> {
-    // Normalize arguments to GenerateChatOptions
-    let options: GenerateChatOptions;
-
-    if (Array.isArray(optionsOrContents)) {
-      const legacyOptions: GenerateChatOptions = {
-        contents: optionsOrContents,
-        tools,
-      };
-      options =
-        signal === undefined
-          ? legacyOptions
-          : withRequestSignal(legacyOptions, signal);
-    } else {
-      options =
-        signal === undefined
-          ? optionsOrContents
-          : withRequestSignal(optionsOrContents, signal);
-    }
+    // Normalize arguments to GenerateChatOptions. The history is collected
+    // once at the retry boundary (issue #854) and re-opened per attempt, so
+    // every retry streams the same request-scoped contents.
+    const options: GenerateChatOptions | Promise<GenerateChatOptions> =
+      isAsyncIterableContents(optionsOrContents)
+        ? collectContents(optionsOrContents).then((contents) =>
+            this.toRetryOptions(
+              { contents: replayableContents(contents), tools },
+              signal,
+            ),
+          )
+        : collectContents(optionsOrContents.contents).then((contents) =>
+            this.toRetryOptions(
+              { ...optionsOrContents, contents: replayableContents(contents) },
+              signal,
+            ),
+          );
 
     return this.generateChatCompletionWithRetry(options);
   }
@@ -277,8 +291,9 @@ export class RetryOrchestrator implements IProvider {
    * Core retry orchestration logic
    */
   private async *generateChatCompletionWithRetry(
-    options: GenerateChatOptions,
+    optionsOrPromise: GenerateChatOptions | Promise<GenerateChatOptions>,
   ): AsyncIterableIterator<IContent> {
+    const options = await optionsOrPromise;
     if (options.metadata?.loadBalancerDelegate === true) {
       yield* this.wrappedProvider.generateChatCompletion(options);
       return;

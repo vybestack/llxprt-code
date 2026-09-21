@@ -60,6 +60,17 @@ import { OpenAIResponsesProvider } from '@vybestack/llxprt-code-providers';
 import { prepareAtSendSeam } from '../../core/promptEnvelopeSendSeam.js';
 import { ContextOverflowError } from '../contextOverflowError.js';
 
+/** Re-open eager rows as the provider-facing history stream (issue #854). */
+function toStream(rows: readonly IContent[]): AsyncIterable<IContent> {
+  return {
+    async *[Symbol.asyncIterator]() {
+      for (const row of rows) {
+        yield row;
+      }
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Logger stub — DebugLogger surface used by the enforcer
 // ---------------------------------------------------------------------------
@@ -393,9 +404,8 @@ describe('P26: providerContentEnforcement characterization', () => {
       const estimateAtSendSeam = async (
         candidate: IContent[],
       ): Promise<number> => {
-        const prepared = await prepareAtSendSeam(
-          provider,
-          createProviderCallOptions({
+        const prepared = await prepareAtSendSeam(provider, {
+          ...createProviderCallOptions({
             providerName: provider.name,
             settings,
             config,
@@ -405,10 +415,10 @@ describe('P26: providerContentEnforcement characterization', () => {
               baseURL: 'https://api.openai.com/v1',
               telemetry: { providerName: provider.name },
             },
-            contents: candidate,
             ephemerals: { 'responses-stateful': true },
           }),
-        );
+          contents: toStream(candidate),
+        });
         return recordPreparedEstimate(prepared, effectiveEstimates);
       };
       harness.deps.estimateFinalizedPromptTokens = estimateAtSendSeam;
@@ -514,9 +524,8 @@ describe('P26: providerContentEnforcement characterization', () => {
       );
       const estimates: PromptEnvelopeEstimate[] = [];
       harness.deps.estimateFinalizedPromptTokens = async (candidate) => {
-        const prepared = await prepareAtSendSeam(
-          provider,
-          createProviderCallOptions({
+        const prepared = await prepareAtSendSeam(provider, {
+          ...createProviderCallOptions({
             providerName: provider.name,
             settings,
             config,
@@ -526,10 +535,10 @@ describe('P26: providerContentEnforcement characterization', () => {
               baseURL: 'https://api.openai.com/v1',
               telemetry: { providerName: provider.name },
             },
-            contents: candidate,
             ephemerals: { 'responses-stateful': true },
           }),
-        );
+          contents: toStream(candidate),
+        });
         return recordPreparedEstimate(prepared, estimates);
       };
       harness.performCompression.mockResolvedValue(

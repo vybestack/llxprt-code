@@ -24,6 +24,7 @@ import type { RuntimeInvocationContext } from '@vybestack/llxprt-code-core/runti
 import type { StructuredError } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { StreamLivenessEvent } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import type { SystemPromptPlacement } from './utils/systemPromptPlacement.js';
+import type { RequestScopedContents } from './utils/requestScopedBody.js';
 import type {
   ProviderTelemetryContext,
   ResolvedAuthToken,
@@ -52,7 +53,11 @@ export type ProviderToolset = Array<{
  * @pseudocode provider-runtime-handling.md lines 10-16
  */
 export interface GenerateChatOptions {
-  contents: IContent[];
+  /**
+   * The history arrives as a stream (issue #854, PLAN-20260917-ISSUE854.P05b3);
+   * providers collect it request-scoped at the entry point.
+   */
+  contents: AsyncIterable<IContent>;
   tools?: ProviderToolset;
   settings?: SettingsService;
   config?: Config;
@@ -97,6 +102,35 @@ export interface GenerateChatOptions {
 }
 
 /**
+ * Provider call options once the history stream has been collected
+ * request-scoped (issue #854, PLAN-20260917-ISSUE854.P05b3). The wire
+ * contract carries the stream; everything downstream of a collection
+ * point — normalization, request prep, logging, estimation — holds the
+ * plain array. Internal request arrays stay arrays.
+ */
+export interface MaterializedGenerateChatOptions
+  extends Omit<GenerateChatOptions, 'contents'> {
+  contents: IContent[];
+  /**
+   * Memoized request-scoped drain of the one-shot history source, present
+   * when the provider materializes contents at its transport (issue #854
+   * P05b4). Every later consumer resolves the same array.
+   */
+  requestContents?: RequestScopedContents;
+}
+
+/**
+ * Minimal read shape for request-scoped helpers that only attach or read
+ * state through `options.metadata` (retry contexts, transport attempt
+ * budgets, image-recovery state). Both the wire contract
+ * (`GenerateChatOptions`) and the materialized internal shape satisfy it
+ * (issue #854, PLAN-20260917-ISSUE854.P05b3).
+ */
+export interface MetadataBearingOptions {
+  metadata?: Record<string, unknown>;
+}
+
+/**
  * @plan PLAN-20251018-STATELESSPROVIDER2.P06
  * @requirement REQ-SP2-001
  * @pseudocode base-provider-call-contract.md lines 3-5
@@ -115,8 +149,13 @@ export interface IProvider {
   generateChatCompletion(
     options: GenerateChatOptions,
   ): AsyncIterableIterator<IContent>;
+  /**
+   * Legacy positional form. The history arrives as a stream (issue #854,
+   * PLAN-20260917-ISSUE854.P05b3); providers collect it request-scoped at
+   * the entry point.
+   */
   generateChatCompletion(
-    content: IContent[],
+    content: AsyncIterable<IContent>,
     tools?: ProviderToolset,
     signal?: AbortSignal,
   ): AsyncIterableIterator<IContent>;
@@ -156,7 +195,7 @@ export interface IProvider {
    * Claude Code string and the real prompt must go at the top of the context.
    */
   getSystemPromptPlacement?(
-    options: GenerateChatOptions,
+    options: Pick<GenerateChatOptions, 'resolved'>,
   ): SystemPromptPlacement;
   // Methods for updating provider configuration
   getToolFormat?(): string;

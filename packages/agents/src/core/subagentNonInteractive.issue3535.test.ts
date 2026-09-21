@@ -478,9 +478,17 @@ async function runInteractiveDirect(responses: readonly IContent[]): Promise<{
     {},
   );
   await scope.runInteractive(new ContextState());
+  const requestContents: IContent[][] = [];
+  for (const request of requests) {
+    const rows: IContent[] = [];
+    for await (const content of request.contents) {
+      rows.push(content);
+    }
+    requestContents.push(rows);
+  }
   return {
     output: scope.output,
-    requestContents: requests.map((r) => r.contents),
+    requestContents,
   };
 }
 

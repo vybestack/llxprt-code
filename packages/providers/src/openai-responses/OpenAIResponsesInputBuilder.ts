@@ -61,8 +61,11 @@ export function buildOpenAIResponsesInput(
 ): ResponsesInputItem[] {
   const input: ResponsesInputItem[] = [];
   let reasoningIdCounter = 0;
+  // Issue #854 P05b4: synthesized ids must be byte-stable across retry
+  // rebuilds of the same history, so no wall-clock component is allowed;
+  // only the `rs_` prefix matters to the API-side format check.
   const nextReasoningId = () => {
-    const id = `rs_${Date.now()}_${reasoningIdCounter}`;
+    const id = `rs_local_${reasoningIdCounter}`;
     reasoningIdCounter += 1;
     return id;
   };

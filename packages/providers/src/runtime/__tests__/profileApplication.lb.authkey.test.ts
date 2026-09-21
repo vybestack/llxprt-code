@@ -13,6 +13,7 @@ import {
   type ResolvedSubProfile,
 } from '../../loadBalancing/loadBalancerTypes.js';
 import { resolveMemberAuthentication } from '../../loadBalancing/memberAuthentication.js';
+import { replayableContents } from '../../utils/collectContents.js';
 import { buildRoundRobinResolvedOptions } from '../../loadBalancing/resolvedOptionsBuilder.js';
 import { createProviderKeyStorage } from '../../auth/proxy/credential-store-factory.js';
 import {
@@ -72,7 +73,7 @@ async function buildMemberOptions(
   const logger = new DebugLogger('llxprt:test:lb-auth-key');
   return buildRoundRobinResolvedOptions(
     await resolveMemberAuthentication(member, logger),
-    { contents: [] },
+    { contents: replayableContents([]) },
     {
       lbProfileEphemeralSettings: undefined,
       lbProfileModelParams: undefined,

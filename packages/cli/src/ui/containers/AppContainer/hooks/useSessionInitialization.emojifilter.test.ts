@@ -78,8 +78,18 @@ describe('useSessionInitialization emoji filtering (#2888)', () => {
 
     expect(loadHistory).toHaveBeenCalledTimes(1);
     expect(loadHistory).toHaveBeenCalledWith([
-      { id: -1, type: 'user', text: 'nice \u{1F44D}' },
-      { id: -2, type: 'gemini', text: 'Done [OK]' },
+      {
+        id: -1,
+        type: 'user',
+        text: 'nice \u{1F44D}',
+        rowIdentity: { kind: 'legacy', index: 0, discriminator: 'text' },
+      },
+      {
+        id: -2,
+        type: 'gemini',
+        text: 'Done [OK]',
+        rowIdentity: { kind: 'legacy', index: 1, discriminator: 'text' },
+      },
     ]);
   });
 
@@ -87,8 +97,18 @@ describe('useSessionInitialization emoji filtering (#2888)', () => {
     const loadHistory = await seedWith('allowed');
 
     expect(loadHistory).toHaveBeenCalledWith([
-      { id: -1, type: 'user', text: 'nice \u{1F44D}' },
-      { id: -2, type: 'gemini', text: 'Done \u2705' },
+      {
+        id: -1,
+        type: 'user',
+        text: 'nice \u{1F44D}',
+        rowIdentity: { kind: 'legacy', index: 0, discriminator: 'text' },
+      },
+      {
+        id: -2,
+        type: 'gemini',
+        text: 'Done \u2705',
+        rowIdentity: { kind: 'legacy', index: 1, discriminator: 'text' },
+      },
     ]);
   });
 
@@ -96,10 +116,21 @@ describe('useSessionInitialization emoji filtering (#2888)', () => {
     const loadHistory = await seedWith('error');
 
     // The blocked turn replays as the same error item the live path renders;
-    // user text stays verbatim.
+    // user text stays verbatim. The error replacement keeps the source
+    // record's row identity.
     expect(loadHistory).toHaveBeenCalledWith([
-      { id: -1, type: 'user', text: 'nice \u{1F44D}' },
-      { id: -2, type: 'error', text: EMOJI_BLOCKED_ERROR_TEXT },
+      {
+        id: -1,
+        type: 'user',
+        text: 'nice \u{1F44D}',
+        rowIdentity: { kind: 'legacy', index: 0, discriminator: 'text' },
+      },
+      {
+        id: -2,
+        type: 'error',
+        text: EMOJI_BLOCKED_ERROR_TEXT,
+        rowIdentity: { kind: 'legacy', index: 1, discriminator: 'text' },
+      },
     ]);
   });
 
@@ -130,12 +161,18 @@ describe('useSessionInitialization emoji filtering (#2888)', () => {
     const loadHistory = await seedWith('error', withThinking);
 
     expect(loadHistory).toHaveBeenCalledWith([
-      { id: -1, type: 'user', text: 'hi' },
+      {
+        id: -1,
+        type: 'user',
+        text: 'hi',
+        rowIdentity: { kind: 'legacy', index: 0, discriminator: 'text' },
+      },
       {
         id: -2,
         type: 'gemini',
         text: 'Answer',
         thinkingBlocks: [{ type: 'thinking', thought: '' }],
+        rowIdentity: { kind: 'legacy', index: 1, discriminator: 'text' },
       },
     ]);
   });

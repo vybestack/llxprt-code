@@ -7,7 +7,7 @@
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { logApiRequest } from '@vybestack/llxprt-code-core/telemetry/loggers.js';
 import { ApiRequestEvent } from '@vybestack/llxprt-code-core/telemetry/types.js';
-import type { GenerateChatOptions } from '../IProvider.js';
+import type { MaterializedGenerateChatOptions } from '../IProvider.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { sanitizeDiagnosticData } from '../utils/mediaDiagnostics.js';
 
@@ -18,7 +18,7 @@ import { sanitizeDiagnosticData } from '../utils/mediaDiagnostics.js';
  */
 export function logApiRequestTelemetry(
   activeConfig: Config,
-  normalizedOptions: GenerateChatOptions,
+  normalizedOptions: MaterializedGenerateChatOptions,
   promptId: string,
   defaultModelName: string,
   debug: DebugLogger,

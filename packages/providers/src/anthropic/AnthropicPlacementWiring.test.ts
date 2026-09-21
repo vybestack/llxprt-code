@@ -37,7 +37,9 @@ import type {
   RuntimeAuthTokenProvider,
 } from '../types/providerRuntime.js';
 import type { SystemPromptPlacement } from '../utils/systemPromptPlacement.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createAnthropicRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
+import { replayableContents } from '../utils/collectContents.js';
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(async () => 'core-prompt'),
@@ -206,9 +208,12 @@ describe('Anthropic system-prompt placement wiring (issue #3172)', () => {
     authToken: ResolvedAuthToken,
     systemInstruction = ASSEMBLED_PROMPT,
   ) {
-    return createProviderCallOptions({
+    const contents: IContent[] = [
+      { speaker: 'human', blocks: [{ type: 'text', text: 'Hi' }] },
+    ];
+    const options = createProviderCallOptions({
       providerName: 'anthropic',
-      contents: [{ speaker: 'human', blocks: [{ type: 'text', text: 'Hi' }] }],
+      contents,
       settings: settingsService,
       systemInstruction,
       resolved: {
@@ -218,6 +223,8 @@ describe('Anthropic system-prompt placement wiring (issue #3172)', () => {
         telemetry: { providerName: 'anthropic' },
       },
     });
+    // Issue #854: the provider-facing contract is a history stream.
+    return { ...options, contents: replayableContents(contents) };
   }
 
   async function captureWirePayload(

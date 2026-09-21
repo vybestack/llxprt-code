@@ -15,7 +15,7 @@ import {
   setActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { streamCallOptions } from '../../test-utils/streamCallOptions.js';
 
 const originalFetch = global.fetch;
 const mockFetch = vi.fn();
@@ -87,7 +87,7 @@ describe('OpenAIResponsesProvider reasoning.summary @issue:922', () => {
       },
     );
 
-    const options = createProviderCallOptions({
+    const options = streamCallOptions({
       providerName: provider.name,
       settings,
       runtime,
@@ -158,7 +158,7 @@ describe('OpenAIResponsesProvider reasoning.summary @issue:922', () => {
       },
     );
 
-    const options = createProviderCallOptions({
+    const options = streamCallOptions({
       providerName: provider.name,
       settings,
       runtime,
@@ -227,7 +227,7 @@ describe('OpenAIResponsesProvider reasoning.summary @issue:922', () => {
       },
     );
 
-    const options = createProviderCallOptions({
+    const options = streamCallOptions({
       providerName: provider.name,
       settings,
       runtime,
@@ -296,7 +296,7 @@ describe('OpenAIResponsesProvider reasoning.summary @issue:922', () => {
       },
     );
 
-    const options = createProviderCallOptions({
+    const options = streamCallOptions({
       providerName: provider.name,
       settings,
       runtime,
@@ -367,7 +367,7 @@ describe('OpenAIResponsesProvider reasoning.summary @issue:922', () => {
       },
     );
 
-    const options = createProviderCallOptions({
+    const options = streamCallOptions({
       providerName: provider.name,
       settings,
       runtime,
