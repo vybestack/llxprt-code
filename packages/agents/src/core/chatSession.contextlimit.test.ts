@@ -21,7 +21,6 @@ import {
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import * as providerRuntime from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
 describe('ChatSession Context Limit Enforcement', () => {
@@ -89,7 +88,6 @@ describe('ChatSession Context Limit Enforcement', () => {
       ...runtimeSetup.runtime,
       config: mockConfig,
     };
-    providerRuntime.setActiveProviderRuntimeContext(providerRuntimeSnapshot);
 
     // Create mock ContentGenerator
     mockContentGenerator = {

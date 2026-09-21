@@ -11,7 +11,7 @@
  * "options.invocation.getModelBehavior is not a function".
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { describe, expect, it, vi } from 'bun:test';
 import {
   BaseProvider,
   type NormalizedGenerateChatOptions,
@@ -23,10 +23,6 @@ import {
   type RuntimeInvocationContext,
 } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  clearActiveProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 
 const PROVIDER_NAME = 'invocation-safety';
@@ -81,10 +77,6 @@ function createSettings(provider: InvocationSafetyProvider): SettingsService {
   settings.set('model', `${PROVIDER_NAME}-model`);
   settings.setProviderSetting(PROVIDER_NAME, 'model', `${PROVIDER_NAME}-model`);
   const config = createRuntimeConfigStub(settings);
-  setActiveProviderRuntimeContext({
-    settingsService: settings,
-    config,
-  });
   (provider as unknown as { defaultConfig?: unknown }).defaultConfig = config;
   return settings;
 }
@@ -94,14 +86,6 @@ describe('BaseProvider normalization invocation safety', () => {
     speaker: 'human',
     blocks: [{ type: 'text', text: 'hi' }],
   };
-
-  beforeEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
 
   it('replaces a malformed invocation stub carrying only signal with a real RuntimeInvocationContext', async () => {
     const provider = new InvocationSafetyProvider();

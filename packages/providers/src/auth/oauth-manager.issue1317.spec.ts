@@ -20,11 +20,6 @@ import { OAuthManager } from './oauth-manager.js';
 import type { OAuthProvider, OAuthToken, TokenStore } from './types.js';
 import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
 import { createFakeOAuthSettings } from './test-oauth-settings.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  resetSettingsService,
-  registerSettingsService,
-} from '@vybestack/llxprt-code-settings/settings/settingsServiceInstance.js';
 
 /**
  * Mock OAuth provider that tracks whether initiateAuth was called
@@ -213,19 +208,11 @@ describe('Issue #1317: OAuth Token Reuse Bug', () => {
     settings = createLoadedSettings({
       oauthEnabledProviders: { anthropic: true },
     });
-
-    const mockSettingsService = new SettingsService();
-    registerSettingsService(mockSettingsService);
   });
 
   afterEach(() => {
     tokenStore.clear();
     anthropicProvider.reset();
-    try {
-      resetSettingsService();
-    } catch {
-      // Settings service may not be registered
-    }
     vi.restoreAllMocks();
   });
 

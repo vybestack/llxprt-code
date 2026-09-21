@@ -7,7 +7,7 @@
  * Split from AnthropicProvider.thinking.test.ts for max-lines compliance.
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { vi, describe, it, expect, beforeEach } from 'bun:test';
 import type {
   IContent,
   ThinkingBlock,
@@ -18,7 +18,6 @@ import {
   setupThinkingProvider,
   type ThinkingTestSetup,
 } from './test-utils/anthropicThinkingTestSetup.js';
-import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
 describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', () => {
   let provider: ThinkingTestSetup['provider'];
@@ -31,10 +30,6 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
     provider = setup.provider;
     settingsService = setup.settingsService;
     buildCallOptions = setup.buildCallOptions;
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
   });
 
   describe('Thinking Config Tests @requirement:REQ-ANTHROPIC-THINK-001', () => {

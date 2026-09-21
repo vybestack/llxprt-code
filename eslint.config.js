@@ -648,6 +648,18 @@ export default tseslint.config(
   // AST node kinds). Size and complexity limits are relaxed so the scanner
   // can stay in one file for ease of maintenance.
   // ============================================================================
+  // ============================================================================
+  // Issue #2616: the settings-boundary scanner's Check 19 exact-export
+  // matcher for the settingsRuntimeAdapter single-owner seam grew the file
+  // past the 800 effective-line cap. The threshold waiver is registered in
+  // scripts/eslint-guard/ceiling-override-baseline.json per the #3718 policy.
+  // ============================================================================
+  {
+    files: ['scripts/check-settings-boundary.ts'],
+    rules: {
+      'max-lines': ['error', { max: 900, skipBlankLines: true, skipComments: true }],
+    },
+  },
   {
     files: ['scripts/test-audit/scan.ts'],
     rules: {

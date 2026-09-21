@@ -16,12 +16,7 @@ import {
 } from 'bun:test';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-  clearActiveProviderRuntimeContext,
-  ApprovalMode,
-} from '@vybestack/llxprt-code-core';
+import { ApprovalMode } from '@vybestack/llxprt-code-core';
 import { loadCliConfig } from './config.js';
 import { parseArguments } from './cliArgParser.js';
 import type { Settings } from './settings.js';
@@ -309,12 +304,10 @@ describe('defaultDisabledTools', () => {
   beforeEach(() => {
     resetRuntimeSettingsState();
     process.stdin.isTTY = true;
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
   });
 
   afterEach(() => {
     process.stdin.isTTY = originalIsTTY;
-    clearActiveProviderRuntimeContext();
   });
 
   it('should seed tools.disabled with defaultDisabledTools', async () => {

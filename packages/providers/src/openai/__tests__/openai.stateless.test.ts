@@ -2,15 +2,11 @@
  * @plan PLAN-20251018-STATELESSPROVIDER2.P08
  * @requirement REQ-SP2-001
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { OpenAIProvider } from '../OpenAIProvider.js';
 import OpenAI from 'openai';
-import {
-  clearActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import {
@@ -117,16 +113,6 @@ describe('OpenAI provider stateless contract tests', () => {
   beforeEach(() => {
     FakeOpenAIClass.reset();
     // Set up default runtime context for tests
-    setActiveProviderRuntimeContext(
-      createProviderRuntimeContext({
-        settingsService: new SettingsService(),
-        runtimeId: 'openai-stateless-test',
-      }),
-    );
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
   });
 
   it('creates client per runtime @plan:PLAN-20251018-STATELESSPROVIDER2.P08 @requirement:REQ-SP2-001 @pseudocode openai-responses-stateless.md lines 1-4', async () => {

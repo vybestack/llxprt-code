@@ -17,7 +17,6 @@ import {
   getDefaultCliRuntimeId,
   clearDefaultCliRuntimeId,
 } from './runtimeRegistry.js';
-import { peekActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core';
 import { resolveProviderFilePolicy } from '../providerFilePolicy.js';
 
 /**
@@ -409,14 +408,17 @@ describe('runtimeRegistry', () => {
       );
     });
 
-    it('should clear active context if runtimeId matches', async () => {
+    it('removes the registry entry on dispose so nothing resolves the runtime afterwards', async () => {
       const runtimeId = 'test-dispose-3';
       upsertRuntimeEntry(runtimeId, {});
       await disposeCliRuntime(runtimeId);
 
-      // After disposal, the active context should be cleared
-      const activeContext = peekActiveProviderRuntimeContext();
-      expect(activeContext).toBeNull();
+      // Issue #2616: there is no ambient context to clear — the registry
+      // entry is the surviving owner, and disposal must remove it.
+      expect(runtimeRegistry.has(runtimeId)).toBe(false);
+      expect(() => requireRuntimeEntry(runtimeId)).toThrow(
+        /runtime registration/,
+      );
     });
   });
 

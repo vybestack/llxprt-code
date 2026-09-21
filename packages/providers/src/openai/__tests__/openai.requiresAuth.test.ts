@@ -7,11 +7,6 @@ import type { ResolvedAuthToken } from '../../types/providerRuntime.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import OpenAI from 'openai';
 import {
-  clearActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import {
   createProviderCallOptions,
   type ProviderCallOptionsInit,
 } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
@@ -159,17 +154,9 @@ describe('requires-auth setting', () => {
     FakeOpenAIClass.reset();
     setEnv('OPENAI_API_KEY', '');
     setEnv('OPENAI_BASE_URL', '');
-
-    setActiveProviderRuntimeContext(
-      createProviderRuntimeContext({
-        settingsService: new SettingsService(),
-        runtimeId: 'requires-auth-test',
-      }),
-    );
   });
 
   afterEach(() => {
-    clearActiveProviderRuntimeContext();
     restoreEnv();
   });
 

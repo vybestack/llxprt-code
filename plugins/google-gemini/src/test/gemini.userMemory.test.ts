@@ -14,11 +14,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  clearActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -109,23 +105,15 @@ ${TEST_USER_MEMORY}`;
     settingsService.set('activeProvider', 'gemini');
 
     // Create config with userMemory
-    config = createRuntimeConfigStub({
+    config = createRuntimeConfigStub(settingsService, {
       userMemory: TEST_USER_MEMORY,
     });
-
-    // Set up runtime context
-    const runtime = createProviderRuntimeContext({
-      settingsService,
-      config,
-    });
-    setActiveProviderRuntimeContext(runtime);
 
     // Set up Gemini API key for non-OAuth mode
     process.env.GEMINI_API_KEY = 'test-api-key';
   });
 
   afterEach(() => {
-    clearActiveProviderRuntimeContext();
     delete process.env.GEMINI_API_KEY;
   });
 

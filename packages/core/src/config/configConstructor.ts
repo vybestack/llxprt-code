@@ -241,10 +241,9 @@ function applySettingsService(
 ): void {
   // The settings service is supplied explicitly by the composition boundary
   // (or a fresh isolated one is created). Constructing a Config never adopts
-  // ambient global runtime state and never mutates the active runtime context
-  // as a side effect — activating a runtime context is the composition
-  // boundary's job (setCliRuntimeContext / activateSettingsRuntimeContext),
-  // not the constructor's (issue #2300).
+  // ambient global runtime state — activating a runtime context and binding
+  // it to a settings service is the composition boundary's job
+  // (setCliRuntimeContext), not the constructor's (issue #2300).
   config.settingsService =
     params.settingsService ?? createRuntimeSettingsService();
 }
