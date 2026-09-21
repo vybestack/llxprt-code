@@ -8,17 +8,22 @@
  * End-to-end CLI regression for issue #3236 — "Cancelled turn whose provider
  * read never settles blocks follow-up prompts."
  *
- * Composition under test (real engine, one controlled seam):
+ * Composition under test (REAL engine adopted via the public agents root, one
+ * controlled seam at the true provider transport boundary):
  *
  *   REAL useSubmitQuery + REAL useQueuedSubmissions + REAL useCancellation
  *     → REAL useAgentEventStream.runStream
- *       → REAL createAgenticLoop + mapLoopStream (inside agent.stream)
- *         → REAL MessageStreamOrchestrator (with a REAL TodoContinuationService
- *           over a seeded on-disk task store — the reported repro context)
- *           → REAL Turn
- *             → controlled chat seam: turn A streams one content chunk, then
- *               its next provider read NEVER settles — and ignores the abort
- *               signal. B/C turns answer cleanly.
+ *       → REAL Agent facade (fromConfig adoption — public toConfigParameters
+ *         + core Config, per the #3222 boundary doctrine)
+ *         → REAL AgenticLoop + REAL AgentClient + REAL
+ *           MessageStreamOrchestrator + REAL TodoContinuationService over a
+ *           seeded on-disk task store in the isolated test data dir (the
+ *           reported repro context) → REAL Turn/TurnProcessor
+ *             → controlled transport seam: a provider whose turn-A call
+ *               streams one content chunk, then its next read NEVER settles —
+ *               and ignores the abort signal the engine hands it via
+ *               options.metadata.abortSignal / options.invocation.signal.
+ *               B/C turns answer cleanly.
  *
  * The only deferred CLI-side boundary is `recordingIntegration
  * .flushAtTurnBoundary()` for turn A (ancillary persistence, a real injected
@@ -52,6 +57,7 @@ import {
 } from '../useAgentEventStream.js';
 import { useCancellation } from '../useAgentStreamLifecycle.js';
 import { useQueuedSubmissions } from '../useQueuedSubmissions.js';
+import type { QueuedSubmission } from '../types.js';
 import { StreamingState, type HistoryItemWithoutId } from '../../../types.js';
 import { KeypressProvider } from '../../../contexts/KeypressContext.js';
 import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
@@ -63,52 +69,34 @@ import {
 } from './submitQueryTestFixtures.js';
 import type { RecordingIntegration } from '@vybestack/llxprt-code-core';
 import type { AgentRequestInput } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import { StreamEventType } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
-import type { QueuedSubmission } from '../types.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core/core/turn.js';
 import { LocalTodoStore } from '@vybestack/llxprt-code-tools';
-import type { Todo, ToolRegistry } from '@vybestack/llxprt-code-tools';
-import { LoopDetectionService } from '@vybestack/llxprt-code-core/services/loopDetectionService.js';
-import { ComplexityAnalyzer } from '@vybestack/llxprt-code-core/services/complexity-analyzer.js';
-import { TodoReminderService } from '@vybestack/llxprt-code-core/services/todo-reminder-service.js';
+import type { Todo } from '@vybestack/llxprt-code-tools';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
-import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
-import {
-  ApprovalMode,
-  DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
-} from '@vybestack/llxprt-code-core/config/configTypes.js';
-import {
-  getOrCreateScheduler,
-  disposeScheduler,
-  clearAllSchedulers,
-} from '@vybestack/llxprt-code-core/config/schedulerSingleton.js';
+import { clearAllSchedulers } from '@vybestack/llxprt-code-core/config/schedulerSingleton.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { Storage } from '@vybestack/llxprt-code-settings/storage/Storage.js';
+import { createIsolatedRuntimeContext } from '@vybestack/llxprt-code-providers/runtime.js';
+import type { IsolatedRuntimeContextHandle } from '@vybestack/llxprt-code-providers/runtime.js';
 import type {
-  Config,
-  Config as AgentsConfig,
-} from '@vybestack/llxprt-code-core/config/config.js';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+  GenerateChatOptions,
+  IModel,
+  IProvider,
+  ProviderToolset,
+} from '@vybestack/llxprt-code-providers';
+// The agents package is consumed ONLY through its public root (#3222): the
+// engine below is assembled by fromConfig adoption, never by reaching into
+// package internals.
 import {
-  createAgenticLoop,
-  createToolScheduler,
-  mapLoopStream,
+  fromConfig,
+  toConfigParameters,
   type Agent,
-  type AgentInput,
-  type AgentClientContract,
   type AgentEvent,
+  type AgentInput,
 } from '@vybestack/llxprt-code-agents';
-// Engine internals come through the sanctioned low-level subpath barrel
-// (@vybestack/llxprt-code-agents/internals.js), never raw cross-package
-// relative paths — see the precedent in src/integration-tests/test-utils.ts.
-import {
-  MessageStreamOrchestrator,
-  TodoContinuationService,
-  type ChatSession,
-  type StreamEvent,
-} from '@vybestack/llxprt-code-agents/internals.js';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 
 // ─── Module mocks (UI-side only; the engine below is real) ──────────────────
 
@@ -149,39 +137,133 @@ void vi.mock('../streamUtils.js', () => ({
   processSlashCommandResult: vi.fn(),
 }));
 
-// ─── Controlled chat seam (the ONLY controlled engine boundary) ─────────────
+// ─── Controlled transport seam (the ONLY controlled engine boundary) ────────
 
 const PROMPT_A_CONTENT = 'A partial answer before the transport hang';
-type ChunkStreamEvent = Extract<
-  StreamEvent,
-  { type: typeof StreamEventType.CHUNK }
->;
+const SESSION_ID = 'issue3236-cli-session';
+const TEST_DIR = dirname(fileURLToPath(import.meta.url));
+// LLXPRT_FAKE_RESPONSES keeps fromConfig's default provider composition
+// FakeProvider-only (no real network providers, active mirror stays 'fake').
+// The fixture itself is never replayed: the controlled provider below owns
+// the 'fake' name before that composition runs, so its instance is never
+// called. The file must merely exist and parse.
+const FAKE_RESPONSES_FIXTURE = join(
+  TEST_DIR,
+  'fixtures',
+  'providerIgnoreCancel.fake.jsonl',
+);
 
-function chunkEvent(
-  text: string,
-  finishReason?: string,
-): { type: typeof StreamEventType.CHUNK; value: unknown } {
+function aiTextContent(text: string): IContent {
+  return { speaker: 'ai', blocks: [{ type: 'text', text }] };
+}
+
+/**
+ * Stream-seam concurrency probe: `active` counts LIVES of agent streams —
+ * incremented when a stream's iteration starts, decremented in the wrapper
+ * generator's `finally` when iteration ends (exhausted OR abandoned via
+ * return()). maxConcurrent therefore proves agent stream lifetimes never
+ * overlapped: turn A's stream ends when the engine abandons it on abort,
+ * even though the parked provider read never settles. This is the SAME
+ * measurement point the pre-#3222 version of this test had (its
+ * hand-written stream() wrapper tracked active/maxConcurrent around the
+ * loop). The provider's own abort/readSettled bookkeeping is transport-level
+ * and deliberately NOT part of this measurement.
+ */
+interface StreamConcurrencyProbe {
+  onStreamStart(): void;
+  onStreamEnd(): void;
+  maxConcurrent(): number;
+}
+
+function createStreamConcurrencyProbe(): StreamConcurrencyProbe {
+  let active = 0;
+  let peak = 0;
   return {
-    type: StreamEventType.CHUNK,
-    value: {
-      content: { speaker: 'ai', blocks: [{ type: 'text', text }] },
-      ...(finishReason !== undefined
-        ? { finishReason, rawStopReason: finishReason }
-        : {}),
+    onStreamStart: () => {
+      active += 1;
+      if (active > peak) peak = active;
     },
+    onStreamEnd: () => {
+      active -= 1;
+    },
+    maxConcurrent: () => peak,
   };
 }
 
-class ControlledChatSeam {
+/**
+ * Records one prompt per agent.stream() call and wraps the returned stream
+ * with the concurrency probe — the SAME observability points the pre-#3222
+ * version of this test had (its hand-written stream() wrapper pushed the
+ * prompt and tracked active/maxConcurrent before/after driving the loop).
+ * The real engine may issue additional provider calls INSIDE a stream (e.g.
+ * the TodoContinuationService follow-up round for the seeded in_progress
+ * item); those are engine-internal and must not surface as extra prompts or
+ * as separate stream lives.
+ */
+function recordStreamPrompts(
+  agent: Agent,
+  started: string[],
+  concurrency: StreamConcurrencyProbe,
+): Agent {
+  return new Proxy(agent, {
+    get(target, prop) {
+      if (prop === 'stream') {
+        return (
+          input: AgentInput,
+          ...rest: unknown[]
+        ): AsyncIterable<AgentEvent> => {
+          started.push(promptTextOf(input));
+          return trackStreamLifetime(
+            target.stream(
+              input,
+              ...(rest as [options?: Parameters<Agent['stream']>[1]]),
+            ),
+            concurrency,
+          );
+        };
+      }
+      const value: unknown = Reflect.get(target, prop, target);
+      return typeof value === 'function'
+        ? (value as (...fnArgs: unknown[]) => unknown).bind(target)
+        : value;
+    },
+  });
+}
+
+async function* trackStreamLifetime(
+  source: AsyncIterable<AgentEvent>,
+  concurrency: StreamConcurrencyProbe,
+): AsyncIterable<AgentEvent> {
+  concurrency.onStreamStart();
+  try {
+    yield* source;
+  } finally {
+    concurrency.onStreamEnd();
+  }
+}
+
+function transportAbortSignal(
+  options: GenerateChatOptions,
+): AbortSignal | undefined {
+  const fromMetadata = options.metadata?.['abortSignal'];
+  if (fromMetadata instanceof AbortSignal) return fromMetadata;
+  const fromInvocation = options.invocation?.signal;
+  return fromInvocation instanceof AbortSignal ? fromInvocation : undefined;
+}
+
+class ControlledTransportProvider implements IProvider {
+  readonly name = 'fake';
+  readonly isDefault = true;
+  // Satisfies ProviderManager.normalizeRuntimeInputs (baseURL-required check).
+  readonly baseProviderConfig = { baseURL: 'http://fake-provider.local' };
+
   mode: 'turnA' | 'clean' = 'turnA';
-  private aReadCount = 0;
-  private abortObserved = false;
-  private readSettled = false;
+  cleanRequests = 0;
   /** Resolves when the parked second read has registered its abort listener. */
   readonly parkedReadA = createDeferred<void>();
-  /** The abort signal Turn hands the provider via config.abortSignal. */
-  private turnAbortSignal: AbortSignal | undefined;
-  cleanRequests = 0;
+
+  private abortObserved = false;
+  private readSettled = false;
 
   abortObservedByProvider(): boolean {
     return this.abortObserved;
@@ -191,367 +273,168 @@ class ControlledChatSeam {
     return this.readSettled;
   }
 
-  /** Turn shape used by Turn.openResponseStreamIterator. */
-  asChatSession(config: AgentsConfig): ChatSession {
-    // ChatSession is a class with private state, so it is nominally typed —
-    // a structural double cannot satisfy it without this cast. Drift risk is
-    // accepted here deliberately: the double feeds the REAL Turn, whose
-    // runtime consumption of these three members is the contract under test.
-    return {
-      sendMessageStream: async (req: unknown) => {
-        const reqConfig = (req as { config?: { abortSignal?: AbortSignal } })
-          .config;
-        this.turnAbortSignal = reqConfig?.abortSignal;
-        if (this.mode === 'turnA') {
-          return { [Symbol.asyncIterator]: () => this.turnAIterator() };
-        }
-        return { [Symbol.asyncIterator]: () => this.cleanIterator() };
-      },
-      getHistory: () => [],
-      getConfig: () => config,
-      addHistory: () => {},
-    } as unknown as ChatSession;
+  async getAuthToken(): Promise<string> {
+    return 'fake-auth-token';
   }
 
-  /** #3236 transport: one chunk, then a read that parks forever and ignores abort. */
-  private turnAIterator(): AsyncIterator<
-    ChunkStreamEvent | { type: typeof StreamEventType.CHUNK; value: unknown }
-  > {
-    return {
-      next: () => {
-        this.aReadCount += 1;
-        if (this.aReadCount === 1) {
-          return Promise.resolve({
-            done: false,
-            value: chunkEvent(PROMPT_A_CONTENT),
-          } as IteratorResult<never>);
-        }
-        // Second read: parked forever. Observe (but ignore) the turn's own
+  async getModels(): Promise<IModel[]> {
+    return [
+      {
+        id: 'fake-model',
+        name: 'fake-model',
+        provider: 'fake',
+        supportedToolFormats: ['auto'],
+      },
+    ];
+  }
+
+  getDefaultModel(): string {
+    return 'fake-model';
+  }
+
+  getCurrentModel(): string {
+    return 'fake-model';
+  }
+
+  generateChatCompletion(
+    options: GenerateChatOptions,
+  ): AsyncIterableIterator<IContent>;
+  generateChatCompletion(
+    content: IContent[],
+    tools?: ProviderToolset,
+    signal?: AbortSignal,
+  ): AsyncIterableIterator<IContent>;
+  async *generateChatCompletion(
+    optionsOrContent: GenerateChatOptions | IContent[],
+    _tools?: ProviderToolset,
+    _signal?: AbortSignal,
+  ): AsyncIterableIterator<IContent> {
+    const options: GenerateChatOptions = Array.isArray(optionsOrContent)
+      ? { contents: optionsOrContent }
+      : optionsOrContent;
+
+    if (this.mode === 'turnA') {
+      try {
+        yield aiTextContent(PROMPT_A_CONTENT);
+        // Second read: parked forever. Observe (but ignore) the engine's own
         // abort signal — the #3236 provider-ignores-abort transport model.
-        this.turnAbortSignal?.addEventListener('abort', () => {
+        const signal = transportAbortSignal(options);
+        signal?.addEventListener('abort', () => {
           this.abortObserved = true;
         });
-        const parked = new Promise<IteratorResult<never>>(() => {});
+        const parked = new Promise<never>(() => {});
         void parked.then(
           () => void (this.readSettled = true),
           () => void (this.readSettled = true),
         );
         this.parkedReadA.resolve();
-        return parked;
-      },
-      // Cleanup is intentionally uncooperative too; closeIteratorBounded's
-      // internal bound is what caps this.
-      return: () => new Promise<IteratorResult<never>>(() => {}),
-    };
-  }
+        await parked;
+      } finally {
+        // Only reachable if the engine ever managed to close this read.
+        this.readSettled = true;
+      }
+    }
 
-  private cleanIterator(): AsyncIterator<{
-    type: typeof StreamEventType.CHUNK;
-    value: unknown;
-  }> {
     this.cleanRequests += 1;
-    let served = false;
-    return {
-      next: async () => {
-        if (served) return { done: true, value: undefined };
-        served = true;
-        return { done: false, value: chunkEvent('clean answer', 'stop') };
-      },
-      return: async () => ({ done: true, value: undefined }),
-    };
+    yield aiTextContent('clean answer');
   }
 }
 
-// ─── Real engine construction ───────────────────────────────────────────────
+// ─── Real engine construction (fromConfig adoption, public root API) ────────
 
 interface EngineEnv {
-  agent: Agent;
-  chat: ControlledChatSeam;
-  startedPrompts: string[];
-  maxConcurrent: () => number;
-  routedEvents: AgentEvent[];
+  readonly agent: Agent;
+  readonly transport: ControlledTransportProvider;
+  readonly sessionId: string;
+  startedPrompts(): readonly string[];
+  maxConcurrent(): number;
+  readonly routedEvents: AgentEvent[];
+  dispose(): Promise<void>;
 }
 
-function createOrchestratorConfig(sessionId: string): AgentsConfig {
-  return {
-    getEphemeralSetting: () => undefined,
-    getMaxSessionTurns: () => 100,
-    getIdeMode: () => false,
-    getContinueOnFailedApiCall: () => false,
-    getSettingsService: () => ({
-      getCurrentProfileName: () => null,
-      get: () => undefined,
-    }),
-    getSessionId: () => sessionId,
-  } as unknown as AgentsConfig;
-}
+async function createEngineEnv(): Promise<EngineEnv> {
+  const transport = new ControlledTransportProvider();
+  const prevFakeResponses = process.env.LLXPRT_FAKE_RESPONSES;
+  process.env.LLXPRT_FAKE_RESPONSES = FAKE_RESPONSES_FIXTURE;
 
-function createEmptyToolRegistry(): ToolRegistry {
-  return {
-    getToolByName: () => null,
-    getFunctionDeclarations: () => [],
-    getTools: () => [],
-    discoverTools: async () => {},
-    getAllTools: () => [],
-    getAllToolNames: () => [],
-    getToolsByServer: () => [],
-    registerTool: () => {},
-    getToolByDisplayName: () => null,
-    tools: new Map(),
-    discovery: {},
-  } as unknown as ToolRegistry;
-}
-
-function createLoopConfig(options: {
-  messageBus: MessageBus;
-  toolRegistry: ToolRegistry;
-  policyEngine: PolicyEngine;
-}): Config {
-  const { messageBus, toolRegistry, policyEngine } = options;
-  const fixture: Record<string, unknown> = {
-    getSessionId: () => 'issue3236-loop',
-    getUsageStatisticsEnabled: () => false,
-    getDebugMode: () => false,
-    getImagePayloadBudgetBytes: () => DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
-    getApprovalMode: () => ApprovalMode.YOLO,
-    getEphemeralSettings: () => ({}),
-    getEphemeralSetting: () => undefined,
-    getAllowedTools: () => [],
-    getExcludeTools: () => [],
-    getContentGeneratorConfig: () => ({ model: 'test-model' }),
-    getModel: () => 'test-model',
-    getToolRegistry: () => toolRegistry,
-    getMessageBus: () => messageBus,
-    getPolicyEngine: () => policyEngine,
-    getTelemetryLogPromptsEnabled: () => false,
-    isInteractive: () => true,
-    getNonInteractive: () => false,
-    getToolSchedulerFactory: () => createToolScheduler,
-    getOrCreateScheduler: (
-      sessionId: string,
-      callbacks: Parameters<Config['getOrCreateScheduler']>[1],
-      schedulerOptions: Parameters<Config['getOrCreateScheduler']>[2],
-      deps: Parameters<Config['getOrCreateScheduler']>[3],
-    ) => {
-      const schedulerMessageBus = deps?.messageBus;
-      if (!schedulerMessageBus)
-        throw new Error('Test config requires deps.messageBus');
-      return getOrCreateScheduler(
-        fixture as unknown as Config,
-        sessionId,
-        callbacks,
-        schedulerOptions,
-        {
-          messageBus: schedulerMessageBus,
-          toolRegistry: deps.toolRegistry ?? toolRegistry,
-        },
-      );
-    },
-    disposeScheduler: (sessionId: string) => disposeScheduler(sessionId),
+  const restoreEnv = (): void => {
+    if (prevFakeResponses === undefined) {
+      delete process.env.LLXPRT_FAKE_RESPONSES;
+    } else {
+      process.env.LLXPRT_FAKE_RESPONSES = prevFakeResponses;
+    }
   };
-  return fixture as unknown as Config;
-}
 
-function createEngineEnv(options: {
-  sessionId: string;
-  todoDataDir: string;
-}): EngineEnv {
-  const chat = new ControlledChatSeam();
-  const orchestratorConfig = createOrchestratorConfig(options.sessionId);
-  const chatSession = chat.asChatSession(orchestratorConfig);
-
-  const orchestrator = new MessageStreamOrchestrator({
-    config: orchestratorConfig,
-    getChat: () => chatSession,
-    logger: new DebugLogger('issue3236:providerIgnoreCancel'),
-    loopDetector: new LoopDetectionService(orchestratorConfig),
-    todoContinuationService: new TodoContinuationService({
-      config: orchestratorConfig,
-      todoReminderService: new TodoReminderService(),
-      complexitySuggestionCooldown: 300000,
-      todoDataDirResolver: () => options.todoDataDir,
-    }),
-    ideContextTracker: {
-      getContextParts: () => ({ contextParts: [], newIdeContext: undefined }),
-      recordSentContext: () => {},
-    } as never,
-    agentHookManager: {
-      cleanupOldHookState: () => {},
-      fireBeforeAgentHookSafe: async () => undefined,
-      fireAfterAgentHookSafe: async () => undefined,
-    } as never,
-    getEffectiveModelIdentity: () => ({
-      providerName: 'test',
-      model: 'test-model',
-    }),
-    getHistory: async () => [],
-    getSessionTurnCount: () => 1,
-    incrementSessionTurnCount: () => {},
-    lazyInitialize: async () => {},
-    startChat: async () => {
-      throw new Error('startChat must not run');
-    },
-    getPreviousHistory: () => undefined,
-    setChat: () => {},
-    hasChat: () => true,
-    complexityAnalyzer: new ComplexityAnalyzer(),
-    getLastPromptId: () => undefined,
-    setLastPromptId: () => {},
-    resetCurrentSequenceModel: () => {},
-    updateTelemetryTokenCount: () => {},
-    async *sendMessageStream(): AsyncGenerator<never> {},
-  });
-
-  const agentClient = {
-    async initialize() {},
-    isInitialized: () => true,
-    hasChatInitialized: () => true,
-    getChat: () => chatSession,
-    async getHistory() {
-      return [];
-    },
-    getHistoryService: () => null,
-    storeHistoryServiceForReuse: () => {},
-    storeHistoryForLaterUse: async () => {},
-    addHistory: async () => {},
-    async *sendMessageStream(
-      req: AgentRequestInput,
-      signal: AbortSignal,
-      promptId: string,
-    ): AsyncGenerator<unknown> {
-      yield* orchestrator.execute(req, signal, promptId, 25, false);
-    },
-  } as unknown as AgentClientContract;
-
-  const policyEngine = new PolicyEngine({
-    rules: [],
-    defaultDecision: PolicyDecision.ALLOW,
-    nonInteractive: false,
-  });
-  const messageBus = new MessageBus(policyEngine, false);
-  const loopConfig = createLoopConfig({
-    messageBus,
-    toolRegistry: createEmptyToolRegistry(),
-    policyEngine,
-  });
-
-  const startedPrompts: string[] = [];
-  let active = 0;
-  let maxConcurrent = 0;
-  const agent = {
-    async chat() {
-      return { text: '', toolCalls: [], finishReason: 'stop' };
-    },
-    async *stream(
-      input: AgentInput,
-      streamOpts?: {
-        readonly signal?: AbortSignal;
-        readonly promptId?: string;
+  let config: Config | undefined;
+  let handle: IsolatedRuntimeContextHandle | undefined;
+  let agent: Agent | undefined;
+  try {
+    const params = {
+      ...toConfigParameters({
+        provider: 'fake',
+        model: 'fake-model',
+        workingDir: TEST_DIR,
+        sessionId: SESSION_ID,
+      }),
+    };
+    config = new Config(params);
+    const messageBus = new MessageBus(
+      config.getPolicyEngine(),
+      config.getDebugMode(),
+    );
+    handle = createIsolatedRuntimeContext({
+      runtimeId: SESSION_ID,
+      config,
+      messageBus,
+      prepare: (ctx) => {
+        ctx.providerManager.registerProvider(transport);
+        void ctx.providerManager.setActiveProvider(transport.name);
       },
-    ): AsyncIterable<AgentEvent> {
-      const prompt = promptTextOf(input);
-      startedPrompts.push(prompt);
-      active += 1;
-      if (active > maxConcurrent) maxConcurrent = active;
-      try {
-        const loop = createAgenticLoop({
-          agentClient,
-          config: loopConfig,
-          messageBus,
-          interactiveMode: true,
-          displayCallbacks: {},
-        });
-        yield* mapLoopStream(
-          loop.run(
-            input as never,
-            streamOpts?.signal ?? new AbortController().signal,
-            streamOpts?.promptId ?? 'issue3236',
-          ),
-        );
-      } finally {
-        active -= 1;
-      }
-    },
-    getProvider: () => 'test',
-    async setProvider() {
-      return {
-        changed: false,
-        previousProvider: 'test',
-        nextProvider: 'test',
-        infoMessages: [],
-      };
-    },
-    getProviderStatus: () => ({
-      provider: 'test',
-      model: 'test-model',
-      authStatus: 'authenticated',
-    }),
-    getModel: () => 'test-model',
-    async setModel() {},
-    getCurrentSequenceModel: () => null,
-    getApprovalMode: () => ApprovalMode.DEFAULT,
-    setApprovalMode: () => {},
-    getRuntimeId: () => 'issue3236-agent',
-    getEphemeralSetting: () => undefined,
-    setEphemeralSetting: () => {},
-    getEphemeralSettings: () => ({}),
-    getModelParams: () => ({}),
-    setModelParam: () => {},
-    clearModelParam: () => {},
-    tools: {
-      list: () => [],
-      get: () => undefined,
-      async setEnabled() {},
-      onConfirmationRequest: () => () => {},
-      respondToConfirmation: () => {},
-      onToolUpdate: () => () => {},
-      setEditorCallbacks: () => {},
-      setDisplayCallbacks: () => {},
-      recordCompletedToolCalls: () => {},
-    },
-    async getHistory() {
-      return [];
-    },
-    async setHistory() {},
-    async addHistory() {},
-    async restoreHistory() {},
-    async resetChat() {},
-    async updateSystemInstruction() {},
-    async addDirectoryContext() {},
-    async compress() {
-      return { status: 'skipped' };
-    },
-    getStats: () => ({
-      promptTokens: 0,
-      candidateTokens: 0,
-      totalTokens: 0,
-      cachedTokens: 0,
-      contextWindowSize: 0,
-      contextWindowUsed: 0,
-      turnCount: 0,
-    }),
-    onStats: () => () => {},
-    async generate() {
-      return '';
-    },
-    async generateJson() {
-      return {};
-    },
-    async generateEmbedding() {
-      return [];
-    },
-    listProviders: () => [],
-    listTools: () => [],
-    async dispose() {},
-  } as unknown as Agent;
+    });
+    await handle.activate();
+    // No explicit config.initialize() here: fromConfig installs the default
+    // agent runtime factories (agentClientFactory et al.) and runs
+    // ensureInitialized during adoption — the factory-less Config idiom.
+    agent = await fromConfig({
+      config,
+      sessionId: SESSION_ID,
+      messageBus,
+      activation: { provider: 'fake', model: 'fake-model' },
+    });
 
-  return {
-    agent,
-    chat,
-    startedPrompts,
-    maxConcurrent: () => maxConcurrent,
-    routedEvents: [],
-  };
+    const builtConfig = config;
+    const builtHandle = handle;
+    const builtAgent = agent;
+    const startedPrompts: string[] = [];
+    const streamConcurrency = createStreamConcurrencyProbe();
+    const recordingAgent = recordStreamPrompts(
+      builtAgent,
+      startedPrompts,
+      streamConcurrency,
+    );
+    return {
+      agent: recordingAgent,
+      transport,
+      sessionId: builtConfig.getSessionId(),
+      startedPrompts: () => startedPrompts,
+      maxConcurrent: () => streamConcurrency.maxConcurrent(),
+      routedEvents: [],
+      dispose: async (): Promise<void> => {
+        await builtAgent.dispose().catch(() => undefined);
+        await Promise.resolve(builtHandle.cleanup()).catch(() => undefined);
+        await builtConfig.dispose().catch(() => undefined);
+        restoreEnv();
+      },
+    };
+  } catch (error) {
+    await agent?.dispose().catch(() => undefined);
+    if (handle !== undefined) {
+      await Promise.resolve(handle.cleanup()).catch(() => undefined);
+    }
+    await config?.dispose().catch(() => undefined);
+    restoreEnv();
+    throw error;
+  }
 }
 
 // ─── Render harness (REAL queue store + REAL event-stream runner) ───────────
@@ -778,13 +661,14 @@ describe('useSubmitQuery — cancelled turn whose provider read never settles (i
   });
 
   it('ends turn A via the abort race, then drains B and C exactly once, in order', async () => {
-    const dataDir = mkdtempSync(join(tmpdir(), 'issue3236-todos-'));
-    const sessionId = 'issue3236-cli-session';
+    const env = await createEngineEnv();
     try {
-      // Reported repro context: a real active task list on disk.
+      // Reported repro context: a real active task list on disk, seeded into
+      // the SAME store the real engine's TodoContinuationService reads
+      // (isolated test storage roots — no user data dir is touched).
       const todoStore = new LocalTodoStore(
-        sessionId,
-        { dataDirResolver: () => dataDir },
+        env.sessionId,
+        { dataDirResolver: () => Storage.getGlobalDataDir() },
         DEFAULT_AGENT_ID,
       );
       const seededTodo: Todo = {
@@ -794,7 +678,6 @@ describe('useSubmitQuery — cancelled turn whose provider read never settles (i
       };
       await todoStore.writeTodos([seededTodo]);
 
-      const env = createEngineEnv({ sessionId, todoDataDir: dataDir });
       const handles = createTestHandles();
 
       // Real CLI dep boundary: A's turn-boundary recording flush is deferred
@@ -834,18 +717,18 @@ describe('useSubmitQuery — cancelled turn whose provider read never settles (i
           capturePromptAContent(text, buffer, contentEventALatch),
       );
       await contentEventALatch.promise;
-      // ESC must land AFTER the second read parks: the seam's abort listener
-      // (and thus the "provider observed abort" observation under test) is
-      // registered by the parked read itself. Cancelling before the park
-      // exercises the already-aborted fast path instead of the #3236
+      // ESC must land AFTER the second read parks: the transport's abort
+      // listener (and thus the "provider observed abort" observation under
+      // test) is registered by the parked read itself. Cancelling before the
+      // park exercises the already-aborted fast path instead of the #3236
       // read-ignores-abort path.
-      await env.chat.parkedReadA.promise;
+      await env.transport.parkedReadA.promise;
       expect(handleContentEventMock).toHaveBeenCalledWith(
         PROMPT_A_CONTENT,
         '',
         expect.any(Number),
       );
-      expect(env.startedPrompts).toStrictEqual(['A']);
+      expect(env.startedPrompts()).toStrictEqual(['A']);
       rerender({ streamingState: StreamingState.Responding });
 
       // 2. Escape through the real useCancellation path.
@@ -865,11 +748,11 @@ describe('useSubmitQuery — cancelled turn whose provider read never settles (i
       await waitFor(() => expect(flushState.entered).toBe(true), {
         timeout: 5000,
       });
-      expect(env.chat.abortObservedByProvider()).toBe(true);
-      expect(env.chat.providerReadSettled()).toBe(false);
+      expect(env.transport.abortObservedByProvider()).toBe(true);
+      expect(env.transport.providerReadSettled()).toBe(false);
       // A's CLI lifecycle is still inside its deferred turn-boundary flush,
       // so ownership is retained: the queue must not drain.
-      expect(env.startedPrompts).toStrictEqual(['A']);
+      expect(env.startedPrompts()).toStrictEqual(['A']);
 
       // 4. Fresh prompt B while A still owns the turn: #3169 resume branch
       //    front-enqueues it and releases suppression; nothing starts.
@@ -885,18 +768,18 @@ describe('useSubmitQuery — cancelled turn whose provider read never settles (i
         await result.current.submitQuery('C');
       });
       expect(queueTexts(result.current.queue)).toStrictEqual(['B', 'C']);
-      expect(env.startedPrompts).toStrictEqual(['A']);
+      expect(env.startedPrompts()).toStrictEqual(['A']);
 
       // 6. A's CLI lifecycle completes (flush released) → B drains exactly
       //    once. The queue may then drain C immediately after B, so mid-state
       //    snapshots are not asserted here; order, exactly-once, and
       //    serialization are proven from the final state below.
-      env.chat.mode = 'clean';
+      env.transport.mode = 'clean';
       flushState.mode = 'immediate';
       await act(async () => {
         flushGateA.resolve();
       });
-      await waitFor(() => expect(env.startedPrompts).toContain('B'), {
+      await waitFor(() => expect(env.startedPrompts()).toContain('B'), {
         timeout: 5000,
       });
       expect(handles.abortControllerRef.current?.signal).not.toBe(turnASignal);
@@ -905,7 +788,7 @@ describe('useSubmitQuery — cancelled turn whose provider read never settles (i
       // 7-8. C drains automatically after B, in order, exactly once. Final
       //      state: Idle, empty queue, never concurrent, and the provider
       //      read never settled — the CLI recovered without it.
-      await waitFor(() => expect(env.startedPrompts).toContain('C'), {
+      await waitFor(() => expect(env.startedPrompts()).toContain('C'), {
         timeout: 5000,
       });
       await waitFor(
@@ -922,17 +805,17 @@ describe('useSubmitQuery — cancelled turn whose provider read never settles (i
       expect(respondingTransitions[respondingTransitions.length - 1]).toBe(
         false,
       );
-      expect(env.startedPrompts).toStrictEqual(['A', 'B', 'C']);
+      expect(env.startedPrompts()).toStrictEqual(['A', 'B', 'C']);
       expect(env.maxConcurrent()).toBe(1);
-      expect(env.chat.cleanRequests).toBeGreaterThanOrEqual(2);
-      expect(env.chat.providerReadSettled()).toBe(false);
+      expect(env.transport.cleanRequests).toBeGreaterThanOrEqual(2);
+      expect(env.transport.providerReadSettled()).toBe(false);
 
       await settleTurn(turnAPromiseRef.current);
       await act(async () => {
         unmount();
       });
     } finally {
-      rmSync(dataDir, { recursive: true, force: true });
+      await env.dispose();
     }
   });
 });

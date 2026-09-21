@@ -304,6 +304,12 @@ function buildSandboxConfig(): Config {
   return {
     initialize: fn().mockResolvedValue(undefined),
     refreshAuth: fn().mockResolvedValue(undefined),
+    getAgentClientFactory: fn(() => undefined),
+    setAgentClientFactory: fn(),
+    getToolSchedulerFactory: fn(() => undefined),
+    setToolSchedulerFactory: fn(),
+    getTaskToolRegistration: fn(() => undefined),
+    setTaskToolRegistration: fn(),
     getProvider: fn(() => undefined),
     getProviderManager: fn(() => ({
       getActiveProvider: fn().mockReturnValue(null),

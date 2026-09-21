@@ -11,8 +11,6 @@
  */
 
 import { AsyncLocalStorage } from 'node:async_hooks';
-import * as path from 'node:path';
-import { Storage } from '@vybestack/llxprt-code-settings';
 /**
  * @plan:PLAN-20250214-CREDPROXY.P33
  */
@@ -23,14 +21,12 @@ import {
   type RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
 import {
-  Config,
+  type Config,
   createProviderRuntimeContext,
   flushRuntimeAuthScope,
 } from '@vybestack/llxprt-code-core';
-import { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import type { AgentRuntimeFactoryBindings } from '@vybestack/llxprt-code-core';
-import {
+import type {
   ProfileManager,
   SettingsService,
 } from '@vybestack/llxprt-code-settings';
@@ -40,66 +36,6 @@ import { validateRuntimeId } from './runtimeIdValidation.js';
 import type { RuntimeKind } from './runtimeRegistry.js';
 import { createFileOAuthSettingsProvider } from '../auth/file-oauth-settings.js';
 import { registerStandardOAuthProviders } from '../composition/oauth-provider-registration.js';
-
-const DEFAULT_MODEL = 'gemini-1.5-flash';
-const DEFAULT_DEBUG_MODE = false;
-
-/**
- * Dependency-inversion seam for agent runtime factories.
- *
- * The concrete implementations (AgentClient, CoreToolScheduler,
- * createTaskToolRegistration) live in `@vybestack/llxprt-code-agents`, which
- * depends on this package. Importing them here would create a providers→agents
- * dependency cycle. Instead, the composition root (the CLI) registers the
- * concrete factories at bootstrap via `registerAgentRuntimeFactories`.
- */
-export type { AgentRuntimeFactoryBindings } from '@vybestack/llxprt-code-core';
-
-let agentRuntimeFactoryBindings: AgentRuntimeFactoryBindings | null = null;
-
-export function registerAgentRuntimeFactories(
-  bindings: AgentRuntimeFactoryBindings,
-): void {
-  agentRuntimeFactoryBindings = bindings;
-}
-
-export function resetAgentRuntimeFactories(): void {
-  agentRuntimeFactoryBindings = null;
-}
-
-function attachAgentRuntimeFactories(config: Config): void {
-  if (!agentRuntimeFactoryBindings) {
-    // No-op when bindings are unregistered. This is intentional and safe:
-    //   - In production the CLI composition root registers the concrete
-    //     factories at module load (configBuilder.ts) AND passes them directly
-    //     into `new Config({...})`, so this path is always populated.
-    //   - The only callers of `createIsolatedRuntimeContext` that may reach
-    //     here without bindings are providers-side tests, which cannot register
-    //     concrete agent factories without reintroducing a providers→agents
-    //     cycle. Those tests never drive an agent-client/scheduler through this
-    //     Config.
-    //   - If an agent client/scheduler is ever needed without a factory, core
-    //     fails fast at the point of use (Config.requireAgentClientFactory
-    //     throws "agentClientFactory is required ..."), so a missing binding
-    //     surfaces as a clear error rather than silent incorrect behavior.
-    return;
-  }
-  if (config.getToolSchedulerFactory() === undefined) {
-    config.setToolSchedulerFactory(
-      agentRuntimeFactoryBindings.toolSchedulerFactory,
-    );
-  }
-  if (config.getAgentClientFactory() === undefined) {
-    config.setAgentClientFactory(
-      agentRuntimeFactoryBindings.agentClientFactory,
-    );
-  }
-  if (config.getTaskToolRegistration() === undefined) {
-    config.setTaskToolRegistration(
-      agentRuntimeFactoryBindings.taskToolRegistration(),
-    );
-  }
-}
 
 let sharedTokenStore: KeyringTokenStore | null = null;
 let activationBindings: RuntimeActivationBindings | null = null;
@@ -199,12 +135,14 @@ export interface IsolatedRuntimeContextOptions {
   runtimeId?: string;
   runtimeKind?: RuntimeKind;
   metadata?: Record<string, unknown>;
-  settingsService?: SettingsService;
-  config?: Config;
-  profileManager?: ProfileManager;
-  model?: string;
-  debugMode?: boolean;
-  workspaceDir?: string;
+  /**
+   * The caller-supplied Config for this runtime (issue #3222). Providers no
+   * longer constructs a Config on behalf of agent callers — agent-owned
+   * callers (createAgent/fromConfig/subagent orchestrator) build and own
+   * their Config through the agent runtime assembly before calling this
+   * factory. Required; JavaScript callers that omit it fail fast.
+   */
+  config: Config;
   oauthManager?: OAuthManager;
   /**
    * Caller-provided shared MessageBus. When supplied, the runtime uses THIS
@@ -274,50 +212,6 @@ export function registerIsolatedRuntimeBindings(
   bindings: RuntimeActivationBindings,
 ): void {
   activationBindings = bindings;
-}
-
-/** Builds the Config and ensures ProfileManager/SubagentManager are attached. */
-function resolveRuntimeConfig(
-  options: IsolatedRuntimeContextOptions,
-  runtimeId: string,
-  settingsService: SettingsService,
-): Config {
-  const workspaceDir = options.workspaceDir ?? process.cwd();
-  const model = options.model ?? DEFAULT_MODEL;
-  const debugMode = options.debugMode ?? DEFAULT_DEBUG_MODE;
-
-  const config =
-    options.config ??
-    new Config({
-      sessionId: runtimeId,
-      targetDir: workspaceDir,
-      debugMode,
-      cwd: workspaceDir,
-      model,
-      settingsService,
-    });
-
-  // @plan PLAN-20260610-ISSUE1592.P01
-  // @requirement REQ-INV-001, REQ-INV-002, REQ-INV-003
-  // Agent runtime factories are injected via the dependency-inversion seam
-  // (registerAgentRuntimeFactories) to avoid a providers→agents cycle.
-  attachAgentRuntimeFactories(config);
-
-  const llxprtDir = Storage.getGlobalConfigDir();
-  const resolvedProfileManager =
-    options.profileManager ??
-    config.getProfileManager() ??
-    new ProfileManager(path.join(llxprtDir, 'profiles'));
-  const resolvedSubagentManager =
-    config.getSubagentManager() ??
-    new SubagentManager(
-      path.join(llxprtDir, 'subagents'),
-      resolvedProfileManager,
-    );
-
-  config.setProfileManager(resolvedProfileManager);
-  config.setSubagentManager(resolvedSubagentManager);
-  return config;
 }
 
 /** Creates the shared token store and OAuthManager for the runtime. */
@@ -501,36 +395,52 @@ function buildCleanupClosure(
  * @pseudocode multi-runtime-baseline.md lines 2-5
  * Construct an isolated runtime using shared immutable resources and scoped services.
  */
+/**
+ * Resolves the isolated runtime's identity: the caller-supplied runtimeId
+ * when present (validated), else a freshly generated one; plus the base
+ * metadata (caller metadata merged over the factory source tag).
+ */
+function resolveRuntimeIdentity(options: IsolatedRuntimeContextOptions): {
+  runtimeId: string;
+  metadata: Record<string, unknown>;
+} {
+  const runtimeId =
+    options.runtimeId ??
+    `cli-isolated-${Date.now().toString(16)}-${(runtimeCounter += 1).toString(16)}`;
+  validateRuntimeId(runtimeId);
+  const metadata = {
+    source: 'cli-isolated-runtime-factory',
+    ...(options.metadata ?? {}),
+  };
+  return { runtimeId, metadata };
+}
+
 export function createIsolatedRuntimeContext(
-  options: IsolatedRuntimeContextOptions = {},
+  options: IsolatedRuntimeContextOptions,
 ): IsolatedRuntimeContextHandle {
   if (!activationBindings) {
     throw new Error(
       'Isolated runtime activation bindings must be registered before creating contexts.',
     );
   }
+  // Runtime guard for JavaScript callers: the type marks config as required,
+  // but a JS caller can omit it. Read through a generic key lookup so the
+  // presence check does not trip the no-unnecessary-condition lint the
+  // non-optional type would otherwise trigger.
+  if (!hasOptionConfig(options, 'config')) {
+    throw new Error(
+      'createIsolatedRuntimeContext requires a caller-supplied Config: ' +
+        'providers no longer constructs a Config for agent callers — build it ' +
+        'through the agent-owned runtime assembly first (issue #3222).',
+    );
+  }
 
-  const runtimeId =
-    options.runtimeId ??
-    `cli-isolated-${Date.now().toString(16)}-${(runtimeCounter += 1).toString(16)}`;
-  validateRuntimeId(runtimeId);
+  const { runtimeId, metadata: baseMetadata } = resolveRuntimeIdentity(options);
+  const config = options.config;
+  // Single resolution path (#2534 C6): the caller-supplied Config's settings
+  // service IS the runtime's settings service (Config always carries one).
+  const settingsService = config.getSettingsService();
 
-  const baseMetadata = {
-    source: 'cli-isolated-runtime-factory',
-    ...(options.metadata ?? {}),
-  };
-  // Single resolution path (#2534 C6): resolve the settings service exactly
-  // once. When the caller supplies a config its service wins; otherwise an
-  // explicitly provided service is used, and a caller supplying neither
-  // receives a locally constructed one at this composition site — no
-  // ambient read (issue #2616). The built config carries the same instance
-  // — no second read back out of the config.
-  const settingsService =
-    options.config?.getSettingsService() ??
-    options.settingsService ??
-    new SettingsService();
-
-  const config = resolveRuntimeConfig(options, runtimeId, settingsService);
   // @plan:PLAN-20260617-COREAPI.P15
   // @requirement:REQ-001
   // Use the caller-provided bus when present so the context-created
@@ -597,4 +507,18 @@ export function createIsolatedRuntimeContext(
     activate,
     cleanup,
   };
+}
+
+/**
+ * Generic presence check for the required `config` option. The option's type
+ * is non-optional, so a direct `=== undefined` comparison would trip the
+ * no-unnecessary-condition lint; reading through a generic key lookup keeps
+ * the runtime guard for JavaScript callers type-safe.
+ */
+function hasOptionConfig<K extends string>(
+  obj: { readonly [P in K]?: unknown },
+  key: K,
+): boolean {
+  const v: unknown = obj[key];
+  return v !== null && v !== undefined;
 }

@@ -26,6 +26,11 @@ import {
 import { executeProviderActivation } from './providerActivationExecutor.js';
 import { consumeCompletedActivationPreflight } from './activationPreflightState.js';
 import { finalizeAgent, registerProvidersOntoManager } from './createAgent.js';
+import {
+  ensureAgentRuntimeFactories,
+  ensureRuntimeManagers,
+  cleanupFailedRuntimeBootstrap,
+} from './agentRuntimeAssembly.js';
 import { wireMcpHostServices } from './mcpHostWiring.js';
 import { registerActivateSkillTool } from '../skill-tool-registrar.js';
 
@@ -68,12 +73,18 @@ export async function fromConfig(options: FromConfigOptions): Promise<Agent> {
   // @pseudocode line 14: ADOPT — never construct.
   const config: Config = options.config;
 
+  // Agent-owned assembly (issue #3222): install the three agent runtime
+  // factory defaults ONLY where the Config reports absence — caller-supplied
+  // factories always win — plus the runtime managers. Must run BEFORE the
+  // isolated runtime context/activate/resolveActivation because
+  // resolveActivation's refreshAuth path constructs the agent client through
+  // the Config's factory.
+  ensureAgentRuntimeFactories(config);
+  ensureRuntimeManagers(config);
+
   // @pseudocode line 15: runtimeId (sessionId takes precedence; otherwise generate).
   const runtimeId = options.sessionId ?? generateRuntimeId();
   validateAgentRuntimeId(runtimeId);
-
-  // @pseudocode line 16: reach the Config's SettingsService (no second store).
-  const settingsService = config.getSettingsService();
 
   // Adopt an explicit caller bus first, then the Config's assembled runtime bus.
   // Only non-CLI consumers without either seam receive a newly owned bus.
@@ -89,11 +100,9 @@ export async function fromConfig(options: FromConfigOptions): Promise<Agent> {
   // @pseudocode lines 20-28: adopt the runtime context (NOT a second manager).
   const handle = createIsolatedRuntimeContext({
     runtimeId,
-    settingsService,
     config,
     messageBus,
     providerManager: adoptedManager,
-    model: config.getModel(),
     prepare: (ctx) => {
       registerProvidersOntoManager(ctx.providerManager, ctx, ctx.config);
     },
@@ -135,6 +144,22 @@ export async function fromConfig(options: FromConfigOptions): Promise<Agent> {
       await config.refreshSkills();
     }
 
+    // Same already-initialized gap for the shipped task tool: when the
+    // caller initialized the Config themselves, the registry was built while
+    // the registration was still absent, so the field default installed
+    // above was never consumed. Reconcile UNCONDITIONALLY: the core-side
+    // helper (packages/core/src/config/toolRegistryFactory.ts
+    // reconcileTaskToolRegistration) no-ops when ANY task tool already
+    // exists in the registry by either key, so a caller-supplied
+    // registration (consumed at the caller's own construction) is never
+    // overridden — ownership is protected by REGISTRY STATE, not by
+    // provenance classification of the registration field. This also covers
+    // defaults installed by any earlier agent entrypoint (preflight), whose
+    // field-installed registration is indistinguishable from a caller's.
+    // excludeTools remains the exclusion mechanism. On a fresh Config the
+    // registry already carries the tool and this is a no-op.
+    await config.reconcileTaskToolRegistration();
+
     // @plan:PLAN-20270104-ISSUE2374.P03 @requirement:REQ-001
     await resolveActivation(config, options);
 
@@ -165,23 +190,11 @@ export async function fromConfig(options: FromConfigOptions): Promise<Agent> {
       'caller',
     );
   } catch (primaryError) {
-    return cleanupFailedBootstrap(handle, primaryError);
+    // Only the isolated runtime handle is ours to clean up — the caller owns
+    // the Config (REQ-001.3), so no teardown context is passed and it is
+    // never disposed here.
+    return cleanupFailedRuntimeBootstrap(handle, primaryError, 'fromConfig');
   }
-}
-
-async function cleanupFailedBootstrap(
-  handle: IsolatedRuntimeContextHandle,
-  primaryError: unknown,
-): Promise<never> {
-  try {
-    await handle.cleanup();
-  } catch (cleanupError) {
-    throw new AggregateError(
-      [primaryError, cleanupError],
-      'fromConfig bootstrap failed and isolated runtime cleanup also failed',
-    );
-  }
-  throw primaryError;
 }
 
 /**

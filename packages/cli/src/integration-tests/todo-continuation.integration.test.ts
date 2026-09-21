@@ -16,9 +16,9 @@ import {
   type ServerAgentStreamEvent,
 } from '@vybestack/llxprt-code-core';
 import {
-  AgentClient,
-  type Turn,
-} from '@vybestack/llxprt-code-agents/internals.js';
+  createAgentClient,
+  type AgentClientContract,
+} from '@vybestack/llxprt-code-agents';
 import { SettingsService, Storage } from '@vybestack/llxprt-code-settings';
 import {
   createTempDirectory,
@@ -39,7 +39,7 @@ const TITLE_LIST_ITEM_LABEL = 'To' + 'do';
 describe('Task-list Continuation Integration Tests', () => {
   let tempDir: string;
   let config: Config;
-  let agentClient: AgentClient;
+  let agentClient: AgentClientContract;
   let todoStore: TodoStore;
   let sessionId: string;
   let originalHome: string | undefined;
@@ -114,7 +114,7 @@ describe('Task-list Continuation Integration Tests', () => {
       runtimeId: `${sessionId}-todo-runtime`,
     });
 
-    agentClient = new AgentClient(config, runtimeState);
+    agentClient = createAgentClient(config, runtimeState);
   });
 
   afterEach(async () => {
@@ -296,13 +296,13 @@ describe('Task-list Continuation Integration Tests', () => {
 
       const originalSendMessageStream = agentClient.sendMessageStream;
       agentClient.sendMessageStream = vi.fn(async function* (
-        request: Parameters<AgentClient['sendMessageStream']>[0],
+        request: Parameters<AgentClientContract['sendMessageStream']>[0],
         signal: AbortSignal,
         prompt_id: string,
         turns?: number,
         isInvalidStreamRetry?: boolean,
         isPayloadRecoveryRetry?: boolean,
-      ): AsyncGenerator<ServerAgentStreamEvent, Turn> {
+      ): AsyncGenerator<ServerAgentStreamEvent, unknown> {
         capturedMessage =
           typeof request === 'string' ? request : JSON.stringify(request);
         capturedOptions = {
@@ -317,9 +317,7 @@ describe('Task-list Continuation Integration Tests', () => {
           type: 'content',
           value: 'test',
         } as ServerAgentStreamEvent;
-        // Create a mock Turn object
-        const mockTurn = {} as Turn;
-        return mockTurn;
+        return {};
       });
 
       // When: Send ephemeral message

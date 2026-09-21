@@ -19,6 +19,7 @@
 
 import { afterEach, describe, expect, it } from 'bun:test';
 import { type Profile } from '@vybestack/llxprt-code-settings';
+import { Config } from '@vybestack/llxprt-code-core';
 import type { IProvider } from '@vybestack/llxprt-code-providers';
 import {
   activateIsolatedRuntimeContext,
@@ -154,8 +155,15 @@ async function bootstrapRuntimeFixture(options: {
   let providersRegistered = false;
   const handle = createIsolatedRuntimeContext({
     runtimeId: options.runtimeId,
-    workspaceDir: tempDir,
-    model: options.model,
+    // The caller supplies the Config (issue #3222): providers no longer
+    // constructs one for isolated runtimes.
+    config: new Config({
+      sessionId: options.runtimeId,
+      targetDir: tempDir,
+      cwd: tempDir,
+      model: options.model,
+      debugMode: false,
+    }),
     metadata: {
       profileName: options.profileName,
       providerName: options.providerName,

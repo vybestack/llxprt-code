@@ -34,8 +34,6 @@ import type { StreamEvent } from './chatSessionTypes.js';
 import type { Config } from '../config/config.js';
 import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import type { ContentGenerator } from './contentGenerator.js';
-import type { ToolSchedulerFactory } from './toolSchedulerContract.js';
-import type { TaskToolRegistration } from '../config/toolRegistryFactory.js';
 import type { ModelOutput } from '../llm-types/modelEnvelope.js';
 import type { AgentMessageInput } from '../llm-types/agentMessageInput.js';
 
@@ -170,14 +168,3 @@ export type AgentClientFactory = (
   config: Config,
   runtimeState: AgentRuntimeState,
 ) => AgentClientContract;
-
-/**
- * Aggregation of the three agent-runtime factory primitives the composition
- * root wires into Config. Single source of truth — both agents and providers
- * import this from core (no duplicated structural re-declaration).
- */
-export interface AgentRuntimeFactoryBindings {
-  agentClientFactory: AgentClientFactory;
-  toolSchedulerFactory: ToolSchedulerFactory;
-  taskToolRegistration: () => TaskToolRegistration;
-}

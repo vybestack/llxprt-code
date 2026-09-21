@@ -38,12 +38,6 @@ export type {
   IsolatedRuntimeContextOptions,
 } from './runtimeContextFactory.js';
 
-export {
-  registerAgentRuntimeFactories,
-  resetAgentRuntimeFactories,
-} from './runtimeContextFactory.js';
-export type { AgentRuntimeFactoryBindings } from './runtimeContextFactory.js';
-
 // Runtime async-scope helpers (re-exported so consumers reach them via the
 // public runtime.js barrel instead of the deep runtimeContextFactory path).
 export {

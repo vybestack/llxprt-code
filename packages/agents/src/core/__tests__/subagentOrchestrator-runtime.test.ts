@@ -7,14 +7,18 @@
 /**
  * Runtime assembly tests extracted from the original monolithic
  * subagentOrchestrator.test.ts so no file-level max-lines disable is needed.
+ * Load-balancer profile tests live in subagentOrchestrator-runtime.part2.test.ts.
  */
 
 import { describe, expect, it, vi } from 'bun:test';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { SubAgentScope } from '../subagent.js';
 import { type SubAgentScope as SubAgentScopeInstance } from '../subagent.js';
@@ -153,15 +157,17 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const loadProfile = vi.fn().mockResolvedValue(profile);
     const cleanup = vi.fn().mockResolvedValue(undefined);
     const activate = vi.fn().mockResolvedValue(undefined);
+    const isolatedConfigDispose = vi.fn().mockResolvedValue(undefined);
     const createIsolatedRuntimeContextSpy = vi
       .spyOn(runtimeModule, 'createIsolatedRuntimeContext')
       .mockReturnValue({
         runtimeId: 'isolated-runtime',
         metadata: { source: 'test' },
-        // Issue #2616: runtime handles carry an explicit settings service;
-        // production fail-fasts when it is absent.
         settingsService: new SettingsService(),
-        config: makeForegroundConfig(),
+        config: {
+          ...makeForegroundConfig(),
+          dispose: isolatedConfigDispose,
+        } as unknown as Config,
         providerManager: {},
         oauthManager: {},
         activate,
@@ -199,9 +205,112 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       expect(cleanup).toHaveBeenCalledTimes(1);
       expect(activate).toHaveBeenCalledTimes(1);
       expect(executeProviderActivationSpy).toHaveBeenCalledTimes(1);
+      // The orchestrator owns the isolated Config it constructed, so its
+      // teardown disposes it after the handle cleanup (children first).
+      expect(isolatedConfigDispose).toHaveBeenCalledTimes(1);
     } finally {
       createIsolatedRuntimeContextSpy.mockRestore();
       executeProviderActivationSpy.mockRestore();
+    }
+  });
+
+  it('builds the subagent runtime through agent-owned assembly: a Config carrying working agent factories and runtime managers threads the SAME session bus (issue #3222, #2320)', async () => {
+    // RED basis (main @ 5bedbd238): the orchestrator calls
+    // createIsolatedRuntimeContext WITHOUT a config — providers constructs one
+    // and stamps CLI-registered factories onto it, so in a process with no CLI
+    // import the subagent Config carries NO agent factories at all.
+    const isolatedHome = mkdtempSync(join(tmpdir(), 'issue3222-orchestrator-'));
+    const previousConfigHome = process.env.LLXPRT_CONFIG_HOME;
+    process.env.LLXPRT_CONFIG_HOME = isolatedHome;
+
+    const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
+    const loadProfile = vi.fn().mockResolvedValue(profile);
+    const profileManager = { loadProfile } as unknown as ProfileManager;
+    const orchestratorBus = new MessageBus();
+
+    let capturedOptions:
+      | Parameters<typeof runtimeModule.createIsolatedRuntimeContext>[0]
+      | undefined;
+    const isolatedSpy = vi
+      .spyOn(runtimeModule, 'createIsolatedRuntimeContext')
+      .mockImplementation(
+        (
+          options: Parameters<
+            typeof runtimeModule.createIsolatedRuntimeContext
+          >[0],
+        ) => {
+          capturedOptions = options;
+          return {
+            runtimeId: options.runtimeId ?? 'agent-owned-isolated',
+            metadata: options.metadata ?? { source: 'test' },
+            settingsService: options.config.getSettingsService(),
+            config: options.config,
+            providerManager: {},
+            oauthManager: {},
+            activate: vi.fn().mockResolvedValue(undefined),
+            cleanup: vi.fn().mockResolvedValue(undefined),
+          } as unknown as ReturnType<
+            typeof runtimeModule.createIsolatedRuntimeContext
+          >;
+        },
+      );
+    const executeProviderActivationSpy = vi
+      .spyOn(activationExecutor, 'executeProviderActivation')
+      .mockResolvedValue({ authFailed: false, infoMessages: [] });
+
+    const runtimeBundle = createRuntimeBundle('agent-owned-assembly');
+    const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
+    const scope = {
+      runtimeContext: runtimeBundle.runtimeContext,
+      getAgentId: () => 'planner-agent-owned',
+    } as unknown as SubAgentScopeInstance;
+    const scopeFactory = vi
+      .fn<typeof SubAgentScope.create>()
+      .mockResolvedValue(scope);
+
+    try {
+      const orchestrator = new SubagentOrchestrator({
+        subagentManager: { loadSubagent } as unknown as SubagentManager,
+        profileManager,
+        foregroundConfig: makeForegroundConfig(),
+        scopeFactory,
+        runtimeLoader,
+        messageBus: orchestratorBus,
+      });
+
+      const result = await orchestrator.launch({
+        name: subagentConfig.name,
+        runConfig,
+      });
+      await result.dispose();
+
+      expect(capturedOptions).toBeDefined();
+      const options = capturedOptions;
+      // #2320 invariant: the SAME concrete session bus threads to child
+      // scheduling — the orchestrator passes its own bus, nothing else.
+      expect(options?.messageBus).toBe(orchestratorBus);
+      // Agent-owned assembly: the orchestrator hands providers a Config it
+      // built itself, carrying the three agent runtime factories and the
+      // runtime managers.
+      const config = options?.config;
+      expect(config).toBeInstanceOf(Config);
+      expect(typeof config?.getAgentClientFactory()).toBe('function');
+      expect(typeof config?.getToolSchedulerFactory()).toBe('function');
+      const taskRegistration = config?.getTaskToolRegistration();
+      expect(taskRegistration).toBeDefined();
+      expect(taskRegistration?.className).toBe('TaskTool');
+      expect(taskRegistration?.staticName).toBe('task');
+      expect(config?.getProfileManager()).toBe(profileManager);
+      expect(config?.getSubagentManager()).toBeDefined();
+    } finally {
+      isolatedSpy.mockRestore();
+      executeProviderActivationSpy.mockRestore();
+      if (previousConfigHome === undefined) {
+        delete process.env.LLXPRT_CONFIG_HOME;
+      } else {
+        process.env.LLXPRT_CONFIG_HOME = previousConfigHome;
+      }
+      rmSync(isolatedHome, { recursive: true, force: true });
     }
   });
 
@@ -675,229 +784,5 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
 
     expect(disposeSpy).toHaveBeenCalledTimes(1);
     expect(clearSpy).not.toHaveBeenCalled();
-  });
-
-  it('preserves load balancer profile as effective profile for failover (Issue #2410)', async () => {
-    const loadBalancerSubagent: SubagentConfig = {
-      name: 'typescript-helper',
-      profile: 'typescript-lb',
-      systemPrompt: 'Write TypeScript carefully.',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    const loadBalancerProfile: Profile = {
-      version: 1,
-      type: 'loadbalancer',
-      policy: 'failover',
-      profiles: ['anthropic-fast', 'openai-fallback'],
-      provider: 'load-balancer',
-      model: 'claude-sonnet-4',
-      modelParams: {},
-      ephemeralSettings: {
-        'tools.allowed': ['read_file'],
-        'compression-threshold': 0.9,
-      },
-    };
-
-    const anthropicProfile: Profile = {
-      version: 1,
-      provider: 'anthropic',
-      model: 'claude-sonnet-4',
-      modelParams: {
-        temperature: 0.2,
-        top_p: 0.8,
-      },
-      ephemeralSettings: {
-        'auth-key': 'anthropic-key',
-      },
-    };
-
-    const openaiProfile: Profile = {
-      version: 1,
-      provider: 'openai',
-      model: 'gpt-4o',
-      modelParams: {},
-      ephemeralSettings: {
-        'auth-key': 'openai-key',
-      },
-    };
-
-    const loadSubagent = vi.fn().mockResolvedValue(loadBalancerSubagent);
-    const loadProfile = vi.fn(async (profileName: string) => {
-      if (profileName === 'typescript-lb') {
-        return loadBalancerProfile;
-      }
-      if (profileName === 'anthropic-fast') {
-        return anthropicProfile;
-      }
-      if (profileName === 'openai-fallback') {
-        return openaiProfile;
-      }
-      throw new Error(`unexpected profile ${profileName}`);
-    });
-
-    const config = makeForegroundConfig();
-    const runtimeBundle = createRuntimeBundle('load-balancer');
-    const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
-    const scope = {
-      runtimeContext: runtimeBundle.runtimeContext,
-      getAgentId: () => 'typescript-helper-1',
-    } as unknown as SubAgentScopeInstance;
-    const scopeFactory = vi
-      .fn<typeof SubAgentScope.create>()
-      .mockResolvedValue(scope);
-
-    const orchestrator = new SubagentOrchestrator({
-      subagentManager: { loadSubagent } as unknown as SubagentManager,
-      profileManager: { loadProfile } as unknown as ProfileManager,
-      foregroundConfig: config,
-      scopeFactory,
-      runtimeLoader,
-      messageBus: new MessageBus(),
-    });
-
-    const result = await orchestrator.launch({
-      name: loadBalancerSubagent.name,
-    });
-
-    const loaderArgs = runtimeLoader.mock.calls[0][0];
-    const settingsService = loaderArgs.profile.providerRuntime.settingsService;
-
-    // The load-balancer profile is preserved and activated as a real
-    // load-balancer provider, not collapsed to profiles[0].
-    expect(result.profile).toBe(loadBalancerProfile);
-
-    // All referenced sub-profiles are validated and resolved by the isolated
-    // runtime's profile manager while registering the load-balancer provider.
-    expect(loadProfile).toHaveBeenCalledWith('typescript-lb');
-    expect(loadProfile).toHaveBeenCalledWith('anthropic-fast');
-    expect(loadProfile).toHaveBeenCalledWith('openai-fallback');
-
-    expect(loaderArgs.profile.state.provider).toBe('load-balancer');
-    expect(loaderArgs.profile.state.model).toBe('load-balancer');
-    // loadBalancerProfile.modelParams is {}, so the orchestrator applies its
-    // standard runtime defaults for temperature (0.7) and top_p (1).
-    expect(loaderArgs.profile.state.modelParams).toMatchObject({
-      temperature: 0.7,
-      topP: 1,
-    });
-    expect(loaderArgs.profile.settings.compressionThreshold).toBe(0.9);
-    expect(loaderArgs.profile.settings.tools?.allowed).toStrictEqual([
-      'read_file',
-    ]);
-    expect(loaderArgs.profile.contentGeneratorConfig.model).toBe(
-      'load-balancer',
-    );
-    expect(loaderArgs.profile.contentGeneratorConfig.apiKey).toBeUndefined();
-    expect(loaderArgs.profile.contentGeneratorConfig.providerManager).toBe(
-      loaderArgs.profile.providerManager,
-    );
-    expect(loaderArgs.profile.providerManager).toBeDefined();
-    expect(settingsService.getCurrentProfileName()).toBe(
-      loadBalancerSubagent.profile,
-    );
-    expect(settingsService.get('activeProvider')).toBe('load-balancer');
-    expect(settingsService.get('providers.load-balancer.model')).toBe(
-      'load-balancer',
-    );
-  });
-
-  it('rejects load balancer subagent profiles without referenced profiles', async () => {
-    const emptyLoadBalancerSubagent: SubagentConfig = {
-      name: 'empty-lb-helper',
-      profile: 'empty-lb',
-      systemPrompt: 'Do not launch.',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    const emptyLoadBalancerProfile: Profile = {
-      version: 1,
-      type: 'loadbalancer',
-      policy: 'roundrobin',
-      profiles: [],
-      provider: '',
-      model: '',
-      modelParams: {},
-      ephemeralSettings: {},
-    };
-
-    const loadSubagent = vi.fn().mockResolvedValue(emptyLoadBalancerSubagent);
-    const loadProfile = vi.fn().mockResolvedValue(emptyLoadBalancerProfile);
-    const runtimeLoader = vi.fn().mockResolvedValue(createRuntimeBundle());
-    const scopeFactory = vi.fn<typeof SubAgentScope.create>();
-
-    const orchestrator = new SubagentOrchestrator({
-      subagentManager: { loadSubagent } as unknown as SubagentManager,
-      profileManager: { loadProfile } as unknown as ProfileManager,
-      foregroundConfig: makeForegroundConfig(),
-      scopeFactory,
-      runtimeLoader,
-      messageBus: new MessageBus(),
-    });
-
-    await expect(
-      orchestrator.launch({ name: emptyLoadBalancerSubagent.name }),
-    ).rejects.toThrow(/must reference at least one profile/);
-    expect(runtimeLoader).not.toHaveBeenCalled();
-    expect(scopeFactory).not.toHaveBeenCalled();
-  });
-
-  it('rejects nested load balancer profiles for subagent runtime resolution', async () => {
-    const nestedLoadBalancerSubagent: SubagentConfig = {
-      name: 'nested-lb-helper',
-      profile: 'outer-lb',
-      systemPrompt: 'Do not launch.',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    const outerLoadBalancerProfile: Profile = {
-      version: 1,
-      type: 'loadbalancer',
-      policy: 'roundrobin',
-      profiles: ['inner-lb'],
-      provider: '',
-      model: '',
-      modelParams: {},
-      ephemeralSettings: {},
-    };
-    const innerLoadBalancerProfile: Profile = {
-      version: 1,
-      type: 'loadbalancer',
-      policy: 'roundrobin',
-      profiles: ['anthropic-fast'],
-      provider: '',
-      model: '',
-      modelParams: {},
-      ephemeralSettings: {},
-    };
-
-    const loadSubagent = vi.fn().mockResolvedValue(nestedLoadBalancerSubagent);
-    const loadProfile = vi.fn(async (profileName: string) => {
-      if (profileName === 'outer-lb') {
-        return outerLoadBalancerProfile;
-      }
-      if (profileName === 'inner-lb') {
-        return innerLoadBalancerProfile;
-      }
-      throw new Error(`unexpected profile ${profileName}`);
-    });
-    const runtimeLoader = vi.fn().mockResolvedValue(createRuntimeBundle());
-    const scopeFactory = vi.fn<typeof SubAgentScope.create>();
-
-    const orchestrator = new SubagentOrchestrator({
-      subagentManager: { loadSubagent } as unknown as SubagentManager,
-      profileManager: { loadProfile } as unknown as ProfileManager,
-      foregroundConfig: makeForegroundConfig(),
-      scopeFactory,
-      runtimeLoader,
-      messageBus: new MessageBus(),
-    });
-
-    await expect(
-      orchestrator.launch({ name: nestedLoadBalancerSubagent.name }),
-    ).rejects.toThrow(/cannot use nested load balancer profile 'inner-lb'/);
-    expect(runtimeLoader).not.toHaveBeenCalled();
-    expect(scopeFactory).not.toHaveBeenCalled();
   });
 });

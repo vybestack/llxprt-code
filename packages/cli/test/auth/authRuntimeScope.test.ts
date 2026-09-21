@@ -11,6 +11,7 @@ import {
   type OAuthTokenRequestMetadata,
 } from '@vybestack/llxprt-code-auth';
 import { createProviderRuntimeContext } from '../../../core/src/runtime/providerRuntimeContext.js';
+import { Config } from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 const baseConfig: AuthPrecedenceConfig = {
@@ -152,6 +153,15 @@ describe('CLI auth runtime scope gaps', () => {
 
     const handle = createIsolatedRuntimeContext({
       runtimeId: 'cli-runtime-cleanup',
+      // The caller supplies the Config (issue #3222): providers no longer
+      // constructs one for isolated runtimes.
+      config: new Config({
+        sessionId: 'cli-runtime-cleanup',
+        targetDir: process.cwd(),
+        cwd: process.cwd(),
+        model: 'test-model',
+        debugMode: false,
+      }),
     });
 
     await handle.activate();

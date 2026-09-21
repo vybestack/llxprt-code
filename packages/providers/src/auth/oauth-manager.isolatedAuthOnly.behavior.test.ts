@@ -23,6 +23,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { Config } from '@vybestack/llxprt-code-core';
 import { createIsolatedRuntimeContext } from '../runtime/runtimeSettings.js';
 import type { IsolatedRuntimeContextHandle } from '../runtime/runtimeSettings.js';
 
@@ -69,16 +70,18 @@ describe('isolated-runtime OAuthManager honors authOnly through the threaded con
     // file-backed provider the runtime builds WILL report one.
     writeUserSettings({ providerApiKeys: { anthropic: 'sk-test-key' } });
 
-    // The isolated runtime builds its Config on THIS settings service; the
-    // regression was that the factory-built OAuthManager never received that
-    // config, so the authOnly read was skipped and the API key won.
     const settingsService = new SettingsService();
 
     handle = createIsolatedRuntimeContext({
       runtimeId: 'oauth-authonly-isolated',
-      settingsService,
-      workspaceDir: process.cwd(),
-      model: 'auth-only-model',
+      config: new Config({
+        sessionId: 'oauth-authonly-isolated',
+        settingsService,
+        targetDir: tmpConfigHome,
+        cwd: tmpConfigHome,
+        model: 'auth-only-model',
+        debugMode: false,
+      }),
       prepare: async () => {},
     });
 

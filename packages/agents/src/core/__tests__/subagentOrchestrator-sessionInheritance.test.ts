@@ -298,13 +298,13 @@ describe('SubagentOrchestrator — session dumpcontext inheritance (#3151)', () 
             typeof runtimeModule.createIsolatedRuntimeContext
           >[0],
         ) => {
-          const settingsService = options.settingsService ?? foreground;
+          const settingsService = options.config.getSettingsService();
           capturedSettings = settingsService;
           return {
             runtimeId: options.runtimeId ?? 'lb-isolated',
             metadata: options.metadata ?? { source: 'test' },
             settingsService,
-            config: makeConfigWithSettings(settingsService),
+            config: options.config,
             providerManager: {},
             oauthManager: {},
             activate: vi.fn().mockResolvedValue(undefined),
