@@ -102,11 +102,11 @@ function createStore(
     rootDirectory,
     quotaBytes,
     lockTimeoutMs: 2_000,
-    staleLockMs: 30,
     reservationLeaseMs: 30,
     ...(readyPath === undefined || releasePath === undefined
       ? {}
       : {
+          staleLockMs: 30,
           fileOperations: {
             link: async (sourcePath, destinationPath): Promise<void> => {
               const released = waitForPath(releasePath);
