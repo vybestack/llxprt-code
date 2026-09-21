@@ -10,6 +10,7 @@ import type {
   ProviderAliasFactory,
   ProviderContributionOrigin,
   ProviderContributionRegistry,
+  RegisteredMcpAuthFactory,
   RuntimeContributedAlias,
   RuntimeProviderContribution,
 } from './types.js';
@@ -28,6 +29,7 @@ function freezeRegistry(
   providers: ReadonlyMap<string, RegisteredProvider>,
   orderedProviderIds: readonly string[],
   contributedAliases: readonly ContributedAliasRegistration[],
+  mcpAuthFactories: readonly RegisteredMcpAuthFactory[],
 ): ProviderContributionRegistry {
   return Object.freeze({
     getProviderFactory(providerId: string): ProviderAliasFactory | undefined {
@@ -44,6 +46,9 @@ function freezeRegistry(
     },
     getContributedAliases(): readonly ContributedAliasRegistration[] {
       return Object.freeze([...contributedAliases]);
+    },
+    getMcpAuthFactories(): readonly RegisteredMcpAuthFactory[] {
+      return Object.freeze([...mcpAuthFactories]);
     },
   });
 }
@@ -114,8 +119,66 @@ export function buildProviderContributionRegistry(
   }
 
   const contributedAliases = collectPluginAliases(plugins, providers);
+  const mcpAuthFactories = collectPluginMcpAuthFactories(plugins);
 
-  return freezeRegistry(providers, orderedProviderIds, contributedAliases);
+  return freezeRegistry(
+    providers,
+    orderedProviderIds,
+    contributedAliases,
+    mcpAuthFactories,
+  );
+}
+
+/**
+ * Collects plugin-contributed MCP auth factories in plugin order, rejecting
+ * duplicate `authProviderType` keys (case-insensitive, matching the MCP-owned
+ * registry convention) with an error naming the type and the contributing
+ * plugin(s).
+ */
+function collectPluginMcpAuthFactories(
+  plugins: readonly LoadedRuntimePlugin[],
+): RegisteredMcpAuthFactory[] {
+  const mcpAuthFactories: RegisteredMcpAuthFactory[] = [];
+  const firstOwnerByType = new Map<
+    string,
+    { pluginId: string; type: string }
+  >();
+  for (const plugin of plugins) {
+    for (const contribution of plugin.manifest.mcpAuthFactories ?? []) {
+      const key = contribution.authProviderType.toLowerCase();
+      // Errors name the first-registered casing: that is the spelling the
+      // host already honors, which makes the collision actionable.
+      const firstOwner = firstOwnerByType.get(key);
+      if (firstOwner?.pluginId === plugin.manifest.id) {
+        throw new Error(
+          `Duplicate MCP auth factory type '${firstOwner.type}' ` +
+            `within plugin '${plugin.manifest.id}'.`,
+        );
+      }
+      if (firstOwner !== undefined) {
+        throw new Error(
+          `Duplicate MCP auth factory type '${firstOwner.type}' ` +
+            `is contributed by both plugin '${firstOwner.pluginId}' and plugin ` +
+            `'${plugin.manifest.id}'.`,
+        );
+      }
+      firstOwnerByType.set(key, {
+        pluginId: plugin.manifest.id,
+        type: contribution.authProviderType,
+      });
+      mcpAuthFactories.push(
+        Object.freeze({
+          contribution,
+          origin: Object.freeze({
+            kind: 'plugin' as const,
+            pluginId: plugin.manifest.id,
+            specifier: plugin.specifier,
+          }),
+        }),
+      );
+    }
+  }
+  return mcpAuthFactories;
 }
 
 function collectPluginAliases(

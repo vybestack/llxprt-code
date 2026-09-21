@@ -30,6 +30,11 @@
       "types": "./dist/mcp/src/host/hostServices.d.ts",
       "bun": "./src/host/hostServices.ts",
       "import": "./dist/mcp/src/host/hostServices.js"
+    },
+    "./auth/mcp-auth-factory.js": {
+      "types": "./dist/mcp/src/auth/mcp-auth-factory.d.ts",
+      "bun": "./src/auth/mcp-auth-factory.ts",
+      "import": "./dist/mcp/src/auth/mcp-auth-factory.js"
     }
   },
   "scripts": {
@@ -61,7 +66,6 @@
     "@vybestack/llxprt-code-storage": "file:../storage",
     "@vybestack/llxprt-code-telemetry": "file:../telemetry",
     "@vybestack/llxprt-code-tools": "file:../tools",
-    "google-auth-library": "^9.11.0",
     "shell-quote": "^1.10.0",
     "zod": "^3.25.76"
   },

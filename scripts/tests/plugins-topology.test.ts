@@ -50,8 +50,9 @@ const repoRoot = resolve(thisFile, '..', '..', '..');
 /**
  * The runtime (non-host) dependency contract per plugin. Since #2763 the
  * google-gemini plugin is the single home of the Gemini provider, so it owns
- * the `@ai-sdk/google` dependency; google-mcp-auth stays dependency-free.
- * Host packages appear ONLY under peerDependencies — never here, never under
+ * the `@ai-sdk/google` dependency; since #2764 google-mcp-auth owns the
+ * Google MCP auth providers and their `google-auth-library` dependency. Host
+ * packages appear ONLY under peerDependencies — never here, never under
  * devDependencies.
  */
 const EXPECTED_RUNTIME_DEPENDENCIES: Readonly<
@@ -60,8 +61,29 @@ const EXPECTED_RUNTIME_DEPENDENCIES: Readonly<
   '@vybestack/llxprt-plugin-google-gemini': {
     '@ai-sdk/google': '4.0.56',
   },
-  '@vybestack/llxprt-plugin-google-mcp-auth': {},
+  '@vybestack/llxprt-plugin-google-mcp-auth': {
+    'google-auth-library': '^9.11.0',
+  },
 };
+
+/**
+ * The host peer contract per plugin. Each plugin peers on exactly the host
+ * packages it touches: google-gemini on core and providers, google-mcp-auth
+ * on auth, mcp, providers, and telemetry (not core, since #2764).
+ */
+const EXPECTED_PEER_DEPENDENCIES: Readonly<Record<string, readonly string[]>> =
+  {
+    '@vybestack/llxprt-plugin-google-gemini': [
+      '@vybestack/llxprt-code-core',
+      '@vybestack/llxprt-code-providers',
+    ],
+    '@vybestack/llxprt-plugin-google-mcp-auth': [
+      '@vybestack/llxprt-code-auth',
+      '@vybestack/llxprt-code-mcp',
+      '@vybestack/llxprt-code-providers',
+      '@vybestack/llxprt-code-telemetry',
+    ],
+  };
 
 function expectedRuntimeDependencies(
   releaseName: string,
@@ -71,6 +93,17 @@ function expectedRuntimeDependencies(
     throw new Error(
       `no expected runtime-dependency contract for '${releaseName}'; ` +
         'extend EXPECTED_RUNTIME_DEPENDENCIES alongside the release list.',
+    );
+  }
+  return expected;
+}
+
+function expectedPeerDependencies(releaseName: string): readonly string[] {
+  const expected = EXPECTED_PEER_DEPENDENCIES[releaseName];
+  if (expected === undefined) {
+    throw new Error(
+      `no expected peer-dependency contract for '${releaseName}'; ` +
+        'extend EXPECTED_PEER_DEPENDENCIES alongside the release list.',
     );
   }
   return expected;
@@ -181,16 +214,17 @@ describe('each plugin context is a self-contained release unit', () => {
         join(pluginDir(release.dir), 'package.json'),
       ) as PluginManifest;
       const peers = manifest.peerDependencies as Record<string, string>;
-      expect(Object.keys(peers).sort()).toStrictEqual([
-        '@vybestack/llxprt-code-core',
-        '@vybestack/llxprt-code-providers',
-      ]);
-      expect(peers['@vybestack/llxprt-code-core']).toMatch(/^\^0\.12\.0$/);
-      expect(peers['@vybestack/llxprt-code-providers']).toMatch(/^\^0\.12\.0$/);
+      expect(Object.keys(peers).sort()).toStrictEqual(
+        [...expectedPeerDependencies(release.name)].sort(),
+      );
+      for (const hostPackage of expectedPeerDependencies(release.name)) {
+        expect(peers[hostPackage]).toMatch(/^\^0\.12\.0$/);
+      }
       // A non-host runtime dependencies section is part of the contract:
       // google-gemini must ship @ai-sdk/google (it owns the Gemini provider
-      // since #2763), google-mcp-auth must keep the section empty. Either
-      // way, no host package may appear as a runtime dependency.
+      // since #2763), google-mcp-auth must ship google-auth-library (it owns
+      // the Google MCP auth providers since #2764). Either way, no host
+      // package may appear as a runtime dependency.
       const runtimeDeps = (manifest.dependencies ?? {}) as Record<
         string,
         string
@@ -285,7 +319,8 @@ describe('each plugin context is a self-contained release unit', () => {
         'typescript',
       ]);
       // Runtime dependencies in the lock mirror the manifest contract:
-      // google-gemini pins @ai-sdk/google, google-mcp-auth stays empty.
+      // google-gemini pins @ai-sdk/google, google-mcp-auth pins
+      // google-auth-library.
       const rootDeps = (rootEntry?.dependencies ?? {}) as Record<
         string,
         unknown
@@ -298,10 +333,9 @@ describe('each plugin context is a self-contained release unit', () => {
       // (linking hosts re-resolves their unpublished workspace deps and
       // breaks the install).
       const rootPeers = rootEntry?.peerDependencies;
-      expect(Object.keys(rootPeers ?? {}).sort()).toStrictEqual([
-        '@vybestack/llxprt-code-core',
-        '@vybestack/llxprt-code-providers',
-      ]);
+      expect(Object.keys(rootPeers ?? {}).sort()).toStrictEqual(
+        [...expectedPeerDependencies(release.name)].sort(),
+      );
       const packages = (lock.packages ?? {}) as Record<string, unknown>;
       const serialized = JSON.stringify(packages);
       expect(serialized).not.toContain('@vybestack/');
@@ -325,6 +359,11 @@ describe('each plugin context is a self-contained release unit', () => {
           );
         }
         expect(asString(sdkEntry[0])).toBe(`@ai-sdk/google@${pinnedSdk}`);
+      }
+      // Where the manifest declares the Google auth library, the lock
+      // resolves it alongside its transitive packages.
+      if (expectedDeps['google-auth-library'] !== undefined) {
+        expect('google-auth-library' in packages).toBe(true);
       }
     }
   });
@@ -389,19 +428,21 @@ describe('release automation rewrites plugin host peer ranges', () => {
   /**
    * A plugin manifest as the release pipeline sees it right after the
    * `npm version` loop: version already stamped to the release, host peers
-   * still at the stale checked-in caret ranges.
+   * still at the stale checked-in caret ranges. Peers and runtime
+   * dependencies mirror each release's real contract.
    */
   function versionedManifest(
     release: FirstPartyRuntimePluginRelease,
   ): Record<string, unknown> {
+    const peerDependencies: Record<string, string> = {};
+    for (const hostPackage of release.hostPeers) {
+      peerDependencies[hostPackage] = '^0.12.0';
+    }
     return {
       name: release.name,
       version: TARGET_VERSION,
-      peerDependencies: {
-        '@vybestack/llxprt-code-core': '^0.12.0',
-        '@vybestack/llxprt-code-providers': '^0.12.0',
-      },
-      dependencies: { '@ai-sdk/google': '4.0.56' },
+      peerDependencies,
+      dependencies: expectedRuntimeDependencies(release.name),
       devDependencies: { typescript: '5.8.3' },
     };
   }
@@ -433,7 +474,7 @@ describe('release automation rewrites plugin host peer ranges', () => {
     );
   });
 
-  it('rewrites both host peer ranges to the release version and leaves other sections untouched', () => {
+  it('rewrites every host peer range to the release version and leaves other sections untouched', () => {
     const rootDir = mkdtempSync(join(tmpdir(), 'plugin-peer-bind-'));
     try {
       for (const release of FIRST_PARTY_RUNTIME_PLUGIN_RELEASES) {
@@ -448,16 +489,17 @@ describe('release automation rewrites plugin host peer ranges', () => {
       expect(changed).toBe(FIRST_PARTY_RUNTIME_PLUGIN_RELEASES.length);
       for (const release of FIRST_PARTY_RUNTIME_PLUGIN_RELEASES) {
         const pkg = readPluginManifest(rootDir, release);
-        expect(pkg['peerDependencies']).toStrictEqual({
-          '@vybestack/llxprt-code-core': '^0.13.0',
-          '@vybestack/llxprt-code-providers': '^0.13.0',
-        });
+        const expectedPeers: Record<string, string> = {};
+        for (const hostPackage of release.hostPeers) {
+          expectedPeers[hostPackage] = `^${TARGET_VERSION}`;
+        }
+        expect(pkg['peerDependencies']).toStrictEqual(expectedPeers);
         // Only the host peer ranges move; the stamped version and every
         // other manifest section stay exactly as the release wrote them.
         expect(pkg['version']).toBe(TARGET_VERSION);
-        expect(pkg['dependencies']).toStrictEqual({
-          '@ai-sdk/google': '4.0.56',
-        });
+        expect(pkg['dependencies']).toStrictEqual(
+          expectedRuntimeDependencies(release.name),
+        );
         expect(pkg['devDependencies']).toStrictEqual({
           typescript: '5.8.3',
         });

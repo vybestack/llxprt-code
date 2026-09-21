@@ -5,32 +5,33 @@
  */
 
 /**
- * Google MCP auth runtime plugin (issue #2759 reserved stub).
+ * Google MCP auth runtime plugin (#2764).
  *
- * This context is reserved so the Google MCP auth work lands in a prepared
- * package topology instead of being invented later. It intentionally stays a
- * minimal stub for the whole of #2759: the manifest v1 schema requires at
- * least one provider contribution, so the stub contributes a placeholder that
- * fails actionably rather than pretending to provide something.
+ * Hosts the Google ADC (`google_credentials`) and service-account
+ * impersonation (`service_account_impersonation`) MCP auth providers that
+ * used to live in `packages/mcp`. Base installs no longer carry
+ * `google-auth-library`: a server selecting one of these authProviderType
+ * values requires this plugin, and selecting them without it fails with an
+ * actionable install hint rather than falling back to standard OAuth.
  */
-import type {
-  ProviderAliasFactory,
-  RuntimePluginManifest,
-} from '@vybestack/llxprt-code-providers/composition.js';
-
-const createReservedMcpAuthProvider: ProviderAliasFactory = () => {
-  throw new Error(
-    'The @vybestack/llxprt-plugin-google-mcp-auth plugin is a reserved stub; it does not contribute a usable provider yet.',
-  );
-};
+import { AuthProviderType } from '@vybestack/llxprt-code-auth/mcp-auth-provider-type.js';
+import type { RuntimePluginManifest } from '@vybestack/llxprt-code-providers/composition.js';
+import { GoogleCredentialProvider } from './google-auth-provider.js';
+import { ServiceAccountImpersonationProvider } from './sa-impersonation-provider.js';
 
 export const llxprtRuntimePlugin = {
   apiVersion: 1,
   id: '@vybestack/llxprt-plugin-google-mcp-auth',
-  providers: [
+  providers: [],
+  mcpAuthFactories: [
     {
-      providerId: 'google-mcp-auth',
-      createProvider: createReservedMcpAuthProvider,
+      authProviderType: AuthProviderType.GOOGLE_CREDENTIALS,
+      createAuthProvider: (config) => new GoogleCredentialProvider(config),
+    },
+    {
+      authProviderType: AuthProviderType.SERVICE_ACCOUNT_IMPERSONATION,
+      createAuthProvider: (config) =>
+        new ServiceAccountImpersonationProvider(config),
     },
   ],
 } satisfies RuntimePluginManifest;
