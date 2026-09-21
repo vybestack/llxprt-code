@@ -43,6 +43,14 @@ import {
   createAgentRuntimeState,
   type AgentRuntimeState,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { allocateChildSessionId } from '@vybestack/llxprt-code-core/recording/childSessionIds.js';
+import type { ChildSessionJournal } from '@vybestack/llxprt-code-core/recording/childJournal.js';
+import {
+  buildScopeTeardown,
+  openChildSessionJournal,
+  teardownRuntimeArtifacts,
+} from './subagentChildJournal.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import {
   createRuntimeSettingsService,
@@ -68,7 +76,6 @@ import {
 import { applyProfileWithGuards } from '@vybestack/llxprt-code-providers/runtime/profileApplication.js';
 import { registerProvidersOntoManager } from '../api/createAgent.js';
 import { executeProviderActivation } from '../api/providerActivationExecutor.js';
-import { AggregateDisposeError } from '../api/disposeErrors.js';
 
 const LOAD_BALANCER_PROVIDER_NAME = 'load-balancer';
 
@@ -77,6 +84,12 @@ type RuntimeLoader = (
 ) => Promise<AgentRuntimeLoaderResult>;
 
 type ScopeFactory = typeof SubAgentScope.create;
+
+/** The isolated runtime pieces a launch must clean up together. */
+interface RuntimeBundle {
+  runtimeResult: AgentRuntimeLoaderResult;
+  isolatedHandle: IsolatedRuntimeContextHandle;
+}
 
 const createAbortError = (message: string): Error => {
   const error = new Error(message);
@@ -163,28 +176,6 @@ export class SubagentOrchestrator {
     this.idFactory = options.idFactory ?? randomUUID;
   }
 
-  private buildScopeDispose(
-    scope: SubAgentScope,
-    runtimeResult: AgentRuntimeLoaderResult,
-    isolatedHandle: IsolatedRuntimeContextHandle,
-  ): () => Promise<void> {
-    return async () => {
-      const history = firstDefinedHistory(
-        runtimeResult.history,
-        scope.runtimeContext.history,
-      );
-      await runCleanupSteps([
-        () => {
-          if (typeof scope.dispose === 'function') {
-            scope.dispose();
-          }
-        },
-        () => disposeHistoryLike(history),
-        () => isolatedHandle.cleanup(),
-      ]);
-    };
-  }
-
   private async createScopeWithEnvironment(
     subagent: SubagentConfig,
     promptConfig: PromptConfig,
@@ -246,9 +237,9 @@ export class SubagentOrchestrator {
       subagent.systemPrompt,
       request.behaviourPrompts,
     );
-    const modelConfig = this.buildModelConfig(
-      SubagentOrchestrator.getRuntimeStateProfile(runtimeProfile),
-    );
+    const runtimeStateProfile =
+      SubagentOrchestrator.getRuntimeStateProfile(runtimeProfile);
+    const modelConfig = this.buildModelConfig(runtimeStateProfile);
     const runConfig = this.buildResolvedRunConfig(profile, request.runConfig);
     this.throwIfAborted(
       signal,
@@ -256,12 +247,76 @@ export class SubagentOrchestrator {
     );
 
     const agentRuntimeId = this.createRuntimeId(subagent.name);
-    const { runtimeResult, isolatedHandle } = await this.createRuntimeBundle(
-      { subagent, runtimeProfile, modelConfig, agentRuntimeId },
+    // Minted BEFORE any runtime construction: the fs-safe id must exist ahead
+    // of assembly so launch failures clean up deterministically, and the
+    // journal filename prefix is fully random (#854 P05c).
+    const childSessionId = allocateChildSessionId();
+    const childJournal = await openChildSessionJournal({
+      config: this.options.foregroundConfig,
+      childSessionId,
+      parentSessionId: this.baseSessionId(),
+      provider: runtimeStateProfile.provider,
+      model: modelConfig.model,
+    });
+    return this.assembleLaunch({
+      subagent,
+      runtimeProfile,
+      promptConfig,
+      modelConfig,
+      runConfig,
+      request,
+      profile,
+      agentRuntimeId,
+      childSessionId,
+      childJournal,
       signal,
-    );
+    });
+  }
+
+  /**
+   * Assembles the isolated runtime and scope for one prepared launch and owns
+   * the failure cleanup for everything allocated inside it.
+   */
+  private async assembleLaunch(params: {
+    subagent: SubagentConfig;
+    runtimeProfile: RuntimeProfileResolution;
+    promptConfig: PromptConfig;
+    modelConfig: ModelConfig;
+    runConfig: RunConfig;
+    request: SubagentLaunchRequest;
+    profile: Profile;
+    agentRuntimeId: string;
+    childSessionId: string;
+    childJournal: ChildSessionJournal | null;
+    signal?: AbortSignal;
+  }): Promise<SubagentLaunchResult> {
+    const {
+      subagent,
+      runtimeProfile,
+      promptConfig,
+      modelConfig,
+      runConfig,
+      request,
+      profile,
+      agentRuntimeId,
+      childSessionId,
+      childJournal,
+      signal,
+    } = params;
+    let bundle: RuntimeBundle | undefined;
     let scope: SubAgentScopeInstance | undefined;
     try {
+      bundle = await this.createRuntimeBundle(
+        {
+          subagent,
+          runtimeProfile,
+          modelConfig,
+          agentRuntimeId,
+          childSessionId,
+          childJournal,
+        },
+        signal,
+      );
       this.throwIfAborted(
         signal,
         'Subagent launch aborted after runtime assembly completed.',
@@ -273,7 +328,7 @@ export class SubagentOrchestrator {
         modelConfig,
         runConfig,
         request,
-        runtimeResult,
+        bundle.runtimeResult,
         signal,
       );
       this.throwIfAborted(signal, 'Subagent launch aborted before completion.');
@@ -289,30 +344,45 @@ export class SubagentOrchestrator {
         prompt: promptConfig,
         profile,
         config: subagent,
-        runtime: runtimeResult,
-        dispose: this.buildScopeDispose(scope, runtimeResult, isolatedHandle),
+        runtime: bundle.runtimeResult,
+        dispose: buildScopeTeardown({
+          scope,
+          runtimeResult: bundle.runtimeResult,
+          isolatedHandle: bundle.isolatedHandle,
+          childJournal,
+        }),
       };
     } catch (error) {
-      await this.cleanupAfterLaunchFailure(
-        scope,
-        runtimeResult,
-        isolatedHandle,
-      );
+      await this.cleanupAfterLaunchFailure(scope, bundle, childJournal);
       throw error;
     }
   }
 
   private async cleanupAfterLaunchFailure(
     scope: SubAgentScopeInstance | undefined,
-    runtimeResult: AgentRuntimeLoaderResult,
-    isolatedHandle: IsolatedRuntimeContextHandle,
+    bundle: RuntimeBundle | undefined,
+    childJournal: ChildSessionJournal | null,
   ): Promise<void> {
     try {
-      if (scope !== undefined) {
-        await this.buildScopeDispose(scope, runtimeResult, isolatedHandle)();
-      } else {
-        await this.cleanupRuntimeArtifacts(runtimeResult, isolatedHandle);
+      if (bundle === undefined) {
+        // Assembly never started; only the journal (if any) needs teardown.
+        await childJournal?.dispose();
+        return;
       }
+      if (scope !== undefined) {
+        await buildScopeTeardown({
+          scope,
+          runtimeResult: bundle.runtimeResult,
+          isolatedHandle: bundle.isolatedHandle,
+          childJournal,
+        })();
+        return;
+      }
+      await teardownRuntimeArtifacts(
+        bundle.runtimeResult,
+        bundle.isolatedHandle,
+        childJournal,
+      );
     } catch (disposeError) {
       debugLogger.warn(
         `SubagentOrchestrator: cleanup after launch failure also failed: ${
@@ -322,16 +392,6 @@ export class SubagentOrchestrator {
         }`,
       );
     }
-  }
-
-  private async cleanupRuntimeArtifacts(
-    runtimeResult: AgentRuntimeLoaderResult,
-    isolatedHandle: IsolatedRuntimeContextHandle,
-  ): Promise<void> {
-    await runCleanupSteps([
-      () => disposeHistoryLike(runtimeResult.history),
-      () => isolatedHandle.cleanup(),
-    ]);
   }
 
   private async cleanupIsolatedHandleAfterFailure(
@@ -622,8 +682,8 @@ export class SubagentOrchestrator {
     modelConfig: ModelConfig,
     agentRuntimeId: string,
     subagentName: string,
+    childSessionId: string,
   ): AgentRuntimeState {
-    const sessionId = `${this.baseSessionId()}::${agentRuntimeId}`;
     const baseUrl = getStringSetting(profile.ephemeralSettings, ['base-url']);
 
     return createAgentRuntimeState({
@@ -640,7 +700,10 @@ export class SubagentOrchestrator {
         topP: modelConfig.top_p,
         maxTokens: profile.modelParams.max_tokens ?? undefined,
       },
-      sessionId,
+      // The child's own fs-safe session id, allocated before runtime
+      // construction; the derived `${parent}::${runtimeId}` form failed the
+      // safe-session lock grammar and collapsed filename prefixes (#854).
+      sessionId: childSessionId,
       // The foreground agent's runtime id. `resolveRuntimeId` defaults a
       // runtime's id to its session id when no explicit id is supplied
       // (see runtimeStateFactory), which is how the foreground runtime is
@@ -649,6 +712,7 @@ export class SubagentOrchestrator {
       // not carry the caller's runtime context; if that changes, pass the
       // parent runtime id in explicitly rather than re-deriving it here.
       parentRuntimeId: this.baseSessionId(),
+      parentSessionId: this.baseSessionId(),
       subagentName,
     });
   }
@@ -659,12 +723,11 @@ export class SubagentOrchestrator {
       runtimeProfile: RuntimeProfileResolution;
       modelConfig: ModelConfig;
       agentRuntimeId: string;
+      childSessionId: string;
+      childJournal: ChildSessionJournal | null;
     },
     signal?: AbortSignal,
-  ): Promise<{
-    runtimeResult: AgentRuntimeLoaderResult;
-    isolatedHandle: IsolatedRuntimeContextHandle;
-  }> {
+  ): Promise<RuntimeBundle> {
     const { runtimeProfile, modelConfig, agentRuntimeId, subagent } = params;
     const { effectiveProfile } = runtimeProfile;
     const activationProfile =
@@ -682,6 +745,7 @@ export class SubagentOrchestrator {
       modelConfig,
       agentRuntimeId,
       subagent.name,
+      params.childSessionId,
     );
     const settingsService = createRuntimeSettingsService({
       sessionSource: this.options.foregroundConfig.getSettingsService(),
@@ -719,6 +783,7 @@ export class SubagentOrchestrator {
         runtimeStateProfile,
         effectiveProfile,
         modelConfig,
+        childJournal: params.childJournal,
         signal,
       });
       return { runtimeResult, isolatedHandle };
@@ -735,6 +800,7 @@ export class SubagentOrchestrator {
     runtimeStateProfile: Profile;
     effectiveProfile: Profile;
     modelConfig: ModelConfig;
+    childJournal: ChildSessionJournal | null;
     signal?: AbortSignal;
   }): Promise<AgentRuntimeLoaderResult> {
     const providerRuntime = createSettingsProviderRuntimeContext({
@@ -762,6 +828,7 @@ export class SubagentOrchestrator {
       settingsSnapshot,
       providerRuntime,
       contentGeneratorConfig,
+      childJournal: params.childJournal,
       signal: params.signal,
     });
     return runWithRuntimeScope(
@@ -779,6 +846,7 @@ export class SubagentOrchestrator {
     settingsSnapshot: ReadonlySettingsSnapshot;
     providerRuntime: ProviderRuntimeContext;
     contentGeneratorConfig: ContentGeneratorConfig;
+    childJournal: ChildSessionJournal | null;
     signal?: AbortSignal;
   }): AgentRuntimeLoaderOptions {
     const toolRegistry: ToolRegistry | undefined =
@@ -796,6 +864,16 @@ export class SubagentOrchestrator {
         toolRegistry,
         providerManager: params.isolatedHandle.providerManager,
       },
+      // The child's HistoryService is the facade over its own ephemeral
+      // journal instead of a throwaway temp journal (#854 P05c).
+      overrides:
+        params.childJournal === null
+          ? undefined
+          : {
+              historyService: new HistoryService({
+                recording: params.childJournal.recording,
+              }),
+            },
       signal: params.signal,
     };
   }
@@ -897,54 +975,4 @@ export class SubagentOrchestrator {
 
     return handle;
   }
-}
-
-async function runCleanupSteps(
-  steps: ReadonlyArray<() => unknown | Promise<unknown>>,
-): Promise<void> {
-  const errors: unknown[] = [];
-  for (const step of steps) {
-    try {
-      await step();
-    } catch (error) {
-      errors.push(error);
-    }
-  }
-  if (errors.length > 0) {
-    throw new AggregateDisposeError(errors);
-  }
-}
-
-/**
- * Boundary-validation helper: disposes (or clears) a history-like object that
- * may be `undefined`/`null` at runtime. Typed `unknown` so the guards are
- * genuinely necessary (no lint suppression directive needed).
- */
-function disposeHistoryLike(history: unknown): void {
-  if (history === undefined || history === null) {
-    return;
-  }
-  const disposable = (history as { dispose?: () => void }).dispose;
-  if (typeof disposable === 'function') {
-    disposable.call(history);
-    return;
-  }
-  const clearable = history as {
-    clear?: () => void;
-    removeAllListeners?: () => void;
-  };
-  if (typeof clearable.clear === 'function') {
-    clearable.clear();
-    if (typeof clearable.removeAllListeners === 'function') {
-      clearable.removeAllListeners();
-    }
-  }
-}
-
-/**
- * Boundary-validation helper: picks the first defined history source without
- * tripping `no-unnecessary-condition` (both args are statically required).
- */
-function firstDefinedHistory(primary: unknown, fallback: unknown): unknown {
-  return primary ?? fallback;
 }

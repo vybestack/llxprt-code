@@ -53,6 +53,8 @@ import { CommitAckRegistry } from './CommitAckRegistry.js';
 import { diagnoseMissingPath, watchChatsDir } from './ChatsDirWatcher.js';
 import type { LocalMediaStore } from '../storage/local-media-store.js';
 
+export type { SessionRecordingServiceConfig };
+
 export const SESSION_FILE_ID_PREFIX_LENGTH = 12;
 
 /**
@@ -252,6 +254,10 @@ export class SessionRecordingService {
       provider: config.provider,
       model: config.model,
       startTime: new Date().toISOString(),
+      kind: config.kind ?? 'main',
+      ...(config.parentSessionId === undefined
+        ? {}
+        : { parentSessionId: config.parentSessionId }),
     };
     this.bufferPreContent('session_start', startPayload);
   }

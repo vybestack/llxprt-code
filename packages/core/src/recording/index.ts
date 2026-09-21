@@ -34,6 +34,12 @@ export {
   SessionRecordingService,
   SESSION_FILE_ID_PREFIX_LENGTH,
 } from './SessionRecordingService.js';
+export { allocateChildSessionId } from './childSessionIds.js';
+export {
+  createChildSessionJournal,
+  type ChildSessionJournal,
+  type ChildSessionJournalOptions,
+} from './childJournal.js';
 export {
   replaySession,
   readSessionHeader,

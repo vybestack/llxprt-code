@@ -121,7 +121,14 @@ export class SessionDiscovery {
     const summaries: SessionSummary[] = [];
     for (const fileName of sessionFiles) {
       const summary = await readSessionSummary(path.join(chatsDir, fileName));
-      if (summary?.projectHash === projectHash) {
+      // Subagent child journals are never resumable sessions: the filter runs
+      // BEFORE the sort/index so `--continue` latest resolution and every
+      // downstream picker index only main sessions (#854 P05c).
+      if (
+        summary !== null &&
+        summary.projectHash === projectHash &&
+        summary.kind !== 'subagent'
+      ) {
         summaries.push(summary);
       }
     }
@@ -383,8 +390,14 @@ export class SessionDiscovery {
     for (const fileName of sessionFiles) {
       const filePath = path.join(chatsDir, fileName);
       const summary = await readSessionSummary(filePath);
-      if (summary?.projectHash === projectHash) {
-        summaries.push(summary);
+      // Same subagent filter as listSessions, applied BEFORE the sort so
+      // continue targets and the checkpoints folded through them can never
+      // resolve to a child journal (#854 P05c). Children are healthy files,
+      // not corruption, so they do not count as skipped.
+      if (summary !== null && summary.projectHash === projectHash) {
+        if (summary.kind !== 'subagent') {
+          summaries.push(summary);
+        }
       } else if (summary === null) {
         skippedCount++;
       }
@@ -507,6 +520,8 @@ async function readSessionSummary(
     fileSize: stat.size,
     provider: header.provider,
     model: header.model,
+    // Legacy headers predate the lineage marker and read as `main`.
+    kind: header.kind === 'subagent' ? 'subagent' : 'main',
     ...(typeof header.cwd === 'string' ? { cwd: header.cwd } : {}),
     ...(typeof header.startTime === 'string'
       ? { createdAt: header.startTime }

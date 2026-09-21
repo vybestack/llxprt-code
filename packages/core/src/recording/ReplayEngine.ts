@@ -200,6 +200,8 @@ function handleSessionStart(
       warnings: acc.warnings,
     };
   }
+  // Legacy journals predate the lineage marker; absence replays as 'main'
+  // (PLAN-20260917-ISSUE854.P05c).
   acc.metadata = {
     sessionId: startPayload.sessionId,
     projectHash: startPayload.projectHash,
@@ -208,6 +210,10 @@ function handleSessionStart(
     workspaceDirs: resolveWorkspaceDirs(startPayload.workspaceDirs),
     ...(typeof startPayload.cwd === 'string' ? { cwd: startPayload.cwd } : {}),
     startTime: startPayload.startTime,
+    kind: startPayload.kind === 'subagent' ? 'subagent' : 'main',
+    ...(typeof startPayload.parentSessionId === 'string'
+      ? { parentSessionId: startPayload.parentSessionId }
+      : {}),
   };
   return undefined;
 }

@@ -227,6 +227,8 @@ async function materializeChild(
       model: runtime.model,
       workspaceDirs: runtime.workspaceDirs,
       startTime: new Date().toISOString(),
+      // A forked child is a user-visible, resumable session: main lineage.
+      kind: 'main',
     },
   };
 }

@@ -85,6 +85,13 @@ export interface SessionRecordLine {
 // ---------------------------------------------------------------------------
 
 /**
+ * Lineage recorded on the `session_start` event (#854 P05c): `main` for
+ * ordinary sessions, `subagent` for child journals. Legacy files predate the
+ * field and replay as `main`.
+ */
+export type SessionStartKind = 'main' | 'subagent';
+
+/**
  * Payload for the `session_start` event — always seq=1, first line in file.
  * NOTE: No schema version field here; `v` lives only in the envelope.
  */
@@ -98,6 +105,10 @@ export interface SessionStartPayload {
   model: string;
   /** ISO-8601 timestamp of when the session started. */
   startTime: string;
+  /** Lineage marker; absent on legacy files, which replay as `main`. */
+  kind?: SessionStartKind;
+  /** Parent session id, present only on child journals (`kind: 'subagent'`). */
+  parentSessionId?: string;
 }
 
 /**
@@ -357,6 +368,10 @@ export interface SessionRecordingServiceConfig {
   cwd?: string;
   provider: string;
   model: string;
+  /** Lineage stamped into the `session_start` payload. Defaults to `main`. */
+  kind?: SessionStartKind;
+  /** Parent session id for child journals (`kind: 'subagent'`). */
+  parentSessionId?: string;
   /**
    * Hard bound for serialized records waiting for durable write. Backpressure
    * (awaiting drain room) applies above it; `Infinity` is the only opt-out.
@@ -391,6 +406,10 @@ export interface SessionMetadata {
   workspaceDirs: string[];
   cwd?: string;
   startTime: string;
+  /** Lineage; legacy files without the marker replay as `main`. */
+  kind: SessionStartKind;
+  /** Present only on child journals (`kind: 'subagent'`). */
+  parentSessionId?: string;
   title?: string | null;
 }
 
@@ -463,6 +482,12 @@ export interface SessionSummary {
    * Undefined means never named; null means explicitly cleared.
    */
   name?: string | null;
+  /**
+   * Lineage marker from the `session_start` header (#854 P05c). Absent on
+   * summaries built by older callers, which resolve as `main`; discovery
+   * always populates it and excludes `subagent` journals.
+   */
+  kind?: SessionStartKind;
 }
 
 export type ContinueTarget =
