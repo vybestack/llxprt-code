@@ -6,7 +6,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'bun:test';
 import type { OAuthManager } from '../../auth/index.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createOpenAIResponsesAliasProvider } from '../../composition/aliasProviderFactory.js';
 import {

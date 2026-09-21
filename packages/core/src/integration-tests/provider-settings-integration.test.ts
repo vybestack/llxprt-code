@@ -5,7 +5,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { BaseProvider } from '@vybestack/llxprt-code-providers/BaseProvider.js';
-import { createProviderWithRuntime } from '../test-utils/runtime.js';
+import { createProviderWithRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 
 // Mock provider for testing
 class TestProvider extends BaseProvider {

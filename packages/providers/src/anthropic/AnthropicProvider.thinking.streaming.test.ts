@@ -20,7 +20,7 @@ import {
   mockMessagesCreate,
   setupThinkingProvider,
   type ThinkingTestSetup,
-} from './test-utils/anthropicThinkingTestSetup.js';
+} from './__tests__/anthropicThinkingTestSetup.js';
 
 function findThinkingBlock(chunk: IContent): ThinkingBlock {
   const block = chunk.blocks.find(

@@ -24,7 +24,7 @@ import {
   aiTextMsg,
   humanMsgWithMedia,
   testProviderRuntime,
-} from './MiddleOutStrategy-test-helpers.js';
+} from './__tests__/MiddleOutStrategy-test-helpers.js';
 
 /**
  * Type guard for text blocks — used to extract text content from blocks.

@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { act } from 'react';
-import { renderHook } from '../../../../test-utils/render.js';
+import { renderHook } from '../../../../__tests__/render.js';
 import { MessageType } from '../../../types.js';
 import { useMemoryRefreshAction } from './useMemoryRefreshAction.js';
 import { loadHierarchicalLlxprtMemory } from '../../../../config/environmentLoader.js';

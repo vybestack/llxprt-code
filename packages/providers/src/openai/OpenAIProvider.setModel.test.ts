@@ -4,7 +4,7 @@
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createProviderWithRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createProviderWithRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 
 describe('OpenAIProvider model resolution', () => {
   let provider: OpenAIProvider;

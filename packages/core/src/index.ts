@@ -11,7 +11,6 @@ export * from './safety/index.js';
 export * from './config/config.js';
 export * from './config/models.js';
 export * from './config/subagentManager.js';
-export * from './config/schedulerSingleton.js';
 export * from './policy/index.js';
 export { PolicyEngine } from './policy/policy-engine.js';
 export {

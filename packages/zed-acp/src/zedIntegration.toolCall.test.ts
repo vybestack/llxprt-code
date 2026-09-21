@@ -12,7 +12,7 @@ import {
   RecordingConnection,
   createSession,
   runPrompt,
-} from './zed-test-helpers.js';
+} from './__tests__/zed-test-helpers.js';
 
 import type { Session } from './zedIntegration.js';
 

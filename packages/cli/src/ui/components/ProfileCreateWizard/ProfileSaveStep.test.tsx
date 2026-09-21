@@ -15,7 +15,7 @@ import { act } from 'react';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { renderWithProviders, waitFor } from '../../../test-utils/render.js';
+import { renderWithProviders, waitFor } from '../../../__tests__/render.js';
 import { ProfileSaveStep } from './ProfileSaveStep.js';
 import { WizardStep, type WizardState } from './types.js';
 

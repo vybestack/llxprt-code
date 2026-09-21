@@ -16,7 +16,7 @@ import { ShellTool, type IToolMessageBus } from '@vybestack/llxprt-code-tools';
 import { initializeParser, isParserAvailable } from '../utils/shell-parser.js';
 import type { ContentGeneratorConfig } from '../core/contentGenerator.js';
 import type { IContent } from '../services/history/IContent.js';
-import { createTestAgentClient } from '../test-utils/config.js';
+import { createTestAgentClient } from '../__tests__/config-test-helpers.js';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 
 /**

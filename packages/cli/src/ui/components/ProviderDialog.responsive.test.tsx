@@ -5,11 +5,11 @@
  */
 
 import { automock } from '@vybestack/llxprt-code-test-utils';
-import { renderWithProviders as render } from '../../test-utils/render.js';
+import { renderWithProviders as render } from '../../__tests__/render.js';
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { ProviderDialog } from './ProviderDialog.js';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
-import { testRegex } from '../../test-utils/regex.js';
+import { testRegex } from '../../__tests__/regex.js';
 
 const realUseTerminalSizeModule = {
   ...(await import('../hooks/useTerminalSize.js')),

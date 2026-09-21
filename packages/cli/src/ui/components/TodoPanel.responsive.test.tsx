@@ -11,7 +11,7 @@ import { TodoPanel } from './TodoPanel.js';
 import { TodoContext } from '../contexts/TodoContext.js';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
 import type { Todo } from '@vybestack/llxprt-code-core';
-import { testRegex } from '../../test-utils/regex.js';
+import { testRegex } from '../../__tests__/regex.js';
 
 const realUseTerminalSizeModule = {
   ...(await import('../hooks/useTerminalSize.js')),

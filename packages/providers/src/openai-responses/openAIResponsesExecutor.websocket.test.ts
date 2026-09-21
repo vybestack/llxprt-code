@@ -21,7 +21,7 @@ import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import type { WebSocketTransport } from './openAIResponsesWebSocketTransport.js';
 import {
   CODEX_WEBSOCKET_BETA_HEADER,
@@ -37,7 +37,7 @@ import {
   drain as drainHarness,
   frame,
   userTextsOf,
-} from './openAIResponsesWebSocketTransport.test-helpers.js';
+} from './__tests__/openAIResponsesWebSocketTransport.test-helpers.js';
 
 const getCoreSystemPromptAsyncSpy = vi.fn().mockResolvedValue('system prompt');
 

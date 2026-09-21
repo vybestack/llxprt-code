@@ -21,7 +21,7 @@ import {
   ACTION_TIMESTAMP_CAPACITY,
   FRAME_TIMESTAMP_CAPACITY,
 } from './DebugProfiler.js';
-import { render } from '../../test-utils/render.js';
+import { render } from '../../__tests__/render.js';
 import { TerminalProvider } from '../stores/terminal/TerminalContext.js';
 import { createTerminalStore } from '../stores/terminal/terminalStore.js';
 import { FixedDeque } from 'mnemonist';

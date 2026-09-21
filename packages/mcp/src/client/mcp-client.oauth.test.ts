@@ -9,7 +9,7 @@ import {
   createMockTokenStorage,
   createMockedClient,
   silenceConsole,
-} from './mcp-client.oauth.fixtures.js';
+} from './__tests__/mcp-client.oauth.fixtures.js';
 import { automock } from '../../../test-utils/src/automock.js';
 import { waitFor } from '../../../test-utils/src/wait-for.js';
 import * as ClientLib from '@modelcontextprotocol/sdk/client/index.js';
@@ -760,7 +760,7 @@ describe('connectToMcpServer with OAuth', () => {
 
       await expect(
         connectTestServer({ url: SSE_DEPRECATED_URL, type: 'sse' }),
-      ).rejects.toThrow(/https:\/\/mcp\.test-server\.com\/mcp/);
+      ).rejects.toThrow('https://mcp.test-server.com/mcp');
     });
 
     it('should recommend streamable-http type in the error', async () => {

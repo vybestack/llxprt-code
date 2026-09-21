@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { render } from '../../../test-utils/render.js';
+import { render } from '../../../__tests__/render.js';
 import { describe, it, expect } from 'bun:test';
 import { SkillsList } from './SkillsList.js';
 import { type SkillDefinition } from '@vybestack/llxprt-code-core';

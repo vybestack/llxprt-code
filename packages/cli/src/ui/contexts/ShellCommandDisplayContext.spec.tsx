@@ -9,7 +9,7 @@ import { describe, expect, it, vi } from 'bun:test';
 import {
   createMockSettings,
   renderWithProviders,
-} from '../../test-utils/render.js';
+} from '../../__tests__/render.js';
 import { SHELL_NAME } from '../constants.js';
 import type { KeypressHandler } from './KeypressContext.js';
 import { ToolCallStatus } from '../types.js';

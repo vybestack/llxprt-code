@@ -19,7 +19,7 @@ import {
   cleanupTempDirectory,
   createTempKeyfile,
 } from './test-utils.js';
-import { testRegex } from '../test-utils/regex.js';
+import { testRegex } from '../__tests__/regex.js';
 
 interface CliResult {
   stdout: string;

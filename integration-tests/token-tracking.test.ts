@@ -34,7 +34,7 @@ import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { RedactionConfig } from '@vybestack/llxprt-code-core/config/types.js';
 import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { formatSessionTokenUsage } from '../packages/cli/src/ui/utils/tokenFormatters.js';
-import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 
 /**
  * Property-based test helper — a runner-portable replacement for the `itProp`

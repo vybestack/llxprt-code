@@ -25,7 +25,7 @@
 
 import { describe, it, expect, vi } from 'bun:test';
 import { act, type Dispatch, type SetStateAction } from 'react';
-import { renderHook, waitFor } from '../../../../test-utils/render.js';
+import { renderHook, waitFor } from '../../../../__tests__/render.js';
 import { useSubmitQuery, type UseSubmitQueryDeps } from '../useSubmitQuery.js';
 import { StreamingState, type HistoryItemWithoutId } from '../../../types.js';
 import {

@@ -10,7 +10,7 @@ import { OAuthManager } from './oauth-manager.js';
 import {
   makeToken,
   MemoryTokenStore,
-} from './BucketFailoverHandlerImpl.test-helpers.js';
+} from './__tests__/BucketFailoverHandlerImpl.test-helpers.js';
 
 function resolveForegroundAuthBucket(bucket: string | undefined): string {
   return bucket ?? 'default';

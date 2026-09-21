@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi, type Mock } from 'bun:test';
 import { toolsCommand } from './toolsCommand.ts';
-import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { MessageType } from '../types.js';
 import type { Agent, ToolInfo } from '@vybestack/llxprt-code-agents';
 import { SettingsService } from '@vybestack/llxprt-code-settings';

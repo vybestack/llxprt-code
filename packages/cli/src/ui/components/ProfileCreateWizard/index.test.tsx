@@ -12,7 +12,7 @@
 
 import { describe, expect, it, vi } from 'bun:test';
 import { act } from 'react';
-import { renderWithProviders, waitFor } from '../../../test-utils/render.js';
+import { renderWithProviders, waitFor } from '../../../__tests__/render.js';
 
 // ModelSelectStep loads its model list through the runtime API. The runtime is
 // infrastructure here: the holder lets each test decide what the provider

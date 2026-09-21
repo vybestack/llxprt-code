@@ -688,7 +688,8 @@ describe('fromConfig agent-owned assembly @plan:ISSUE-3222 @requirement:REQ-3222
         const config = internalConfig(agent);
 
         const scheduler = await config.getOrCreateScheduler(
-          runtimeId,
+          agent,
+          'session',
           {
             outputUpdateHandler: vi.fn(),
             onAllToolCallsComplete: vi.fn(),

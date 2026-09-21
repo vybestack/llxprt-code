@@ -111,8 +111,8 @@ import type { Config } from '@vybestack/llxprt-code-core';
 import clipboardy from 'clipboardy';
 import * as clipboardUtils from '../utils/clipboardUtils.js';
 import { useMouse, type MouseEvent } from '../hooks/useMouse.js';
-import { assertDefined } from '../../test-utils/assertions.js';
-import { testRegex } from '../../test-utils/regex.js';
+import { assertDefined } from '../../__tests__/assertions.js';
+import { testRegex } from '../../__tests__/regex.js';
 
 // Mock Config
 const mockConfig = {

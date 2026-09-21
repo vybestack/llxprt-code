@@ -23,7 +23,7 @@ import {
   setupAtCommandTest,
   teardownAtCommandTest,
   type AtCommandTestSetup,
-} from './atCommandProcessor-test-helpers.js';
+} from './__tests__/atCommandProcessor-test-helpers.js';
 
 describe('handleAtCommand (filtering)', () => {
   let setup: AtCommandTestSetup;

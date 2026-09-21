@@ -20,14 +20,14 @@ import type {
   ToolRegistryView,
   ReadonlySettingsSnapshot,
 } from './AgentRuntimeContext.js';
-import { getTestRuntimeMessageBus } from '../test-utils/config.js';
+import { getTestRuntimeMessageBus } from '../__tests__/config-test-helpers.js';
 
 import type { AgentRuntimeState } from './AgentRuntimeState.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { Config } from '../config/config.js';
 import { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import { MockTool } from '../test-utils/tools.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/tools.js';
 import type {
   ContentGenerator,
   ContentGeneratorConfig,

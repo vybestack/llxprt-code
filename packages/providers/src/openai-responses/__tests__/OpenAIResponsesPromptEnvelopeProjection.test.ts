@@ -18,7 +18,7 @@
 
 import { describe, expect, it, vi } from 'bun:test';
 import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import {
   estimatePromptEnvelope,
   type PromptEnvelopeEstimate,

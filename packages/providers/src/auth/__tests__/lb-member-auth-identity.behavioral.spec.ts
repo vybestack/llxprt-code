@@ -30,7 +30,7 @@ import { buildRoundRobinResolvedOptions } from '../../loadBalancing/resolvedOpti
 import type { ResolvedSubProfile } from '../../LoadBalancingProvider.js';
 import type { GenerateChatOptions } from '../../IProvider.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import {
   BaseProvider,
   type NormalizedGenerateChatOptions,

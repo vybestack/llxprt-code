@@ -16,10 +16,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createRuntimeConfigStub } from './testSupport.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { GeminiProvider } from '../gemini/GeminiProvider.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { createProviderCallOptions } from './testSupport.js';
 
 const googleGenAIState = {
   instances: [] as Array<{ options: Record<string, unknown> }>,

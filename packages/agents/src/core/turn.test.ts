@@ -14,7 +14,10 @@ import type {
 import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
 import type { ChatSession } from './chatSession.js';
 import { InvalidStreamError, StreamEventType } from './chatSession.js';
-import { type MockedChatInstance, mockChunk } from './turn-test-helpers.js';
+import {
+  type MockedChatInstance,
+  mockChunk,
+} from './__tests__/turn-test-helpers.js';
 import { ContextOverflowError } from '../compression/contextOverflowError.js';
 
 const { mockSendMessageStream, mockGetHistory } = {

@@ -18,7 +18,7 @@ import { tmpdir } from 'node:os';
 import { afterEach, describe, expect, it } from 'bun:test';
 import type React from 'react';
 import { Config } from '@vybestack/llxprt-code-core';
-import { renderHook } from '../../test-utils/render.js';
+import { renderHook } from '../../__tests__/render.js';
 import { LoadedSettings } from '../../config/settings.js';
 import { buildSlashCommandRuntime } from '../cliUiRuntime.js';
 import { useStaticItems } from './DefaultAppLayoutHelpers.js';

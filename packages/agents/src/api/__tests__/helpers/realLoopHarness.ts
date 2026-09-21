@@ -33,11 +33,7 @@ import {
 import type { AgenticLoopEvent } from '../../../core/agenticLoop/types.js';
 import { AgenticLoop } from '../../../core/agenticLoop/AgenticLoop.js';
 import { CoreToolScheduler } from '../../../core/coreToolScheduler.js';
-import {
-  getOrCreateScheduler,
-  disposeScheduler,
-  clearAllSchedulers,
-} from '@vybestack/llxprt-code-core/config/schedulerSingleton.js';
+import { createSchedulerRegistryDelegate } from '../../../core/__tests__/scheduler-registry-test-helpers.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
@@ -45,7 +41,7 @@ import {
   ApprovalMode,
   DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
 } from '@vybestack/llxprt-code-core/config/configTypes.js';
-import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import type {
   AgentClientContract,
   AgentChatContract,
@@ -238,25 +234,22 @@ function createTestConfig(opts: {
         o: ConstructorParameters<typeof CoreToolScheduler>[0],
       ): CoreToolScheduler =>
         new CoreToolScheduler(o),
-    getOrCreateScheduler: (
-      sessionId: string,
-      callbacks: Parameters<Config['getOrCreateScheduler']>[1],
-      schedulerOptions: Parameters<Config['getOrCreateScheduler']>[2],
-      deps: Parameters<Config['getOrCreateScheduler']>[3],
-    ) =>
-      getOrCreateScheduler(
-        narrowConfig(fixture),
-        sessionId,
-        callbacks,
-        schedulerOptions,
-        {
-          messageBus: deps?.messageBus ?? messageBus,
-          toolRegistry: deps?.toolRegistry ?? toolRegistry,
-        },
-      ),
-    disposeScheduler: (sessionId: string) => disposeScheduler(sessionId),
   };
-  return narrowConfig(fixture);
+  const delegate = createSchedulerRegistryDelegate({
+    config: narrowConfig(fixture),
+    messageBus,
+    toolRegistry,
+    createScheduler: async (schedulerOptions) =>
+      fixture.getToolSchedulerFactory()({
+        config: narrowConfig(fixture),
+        messageBus,
+        toolRegistry,
+        toolContextInteractiveMode: schedulerOptions.interactiveMode ?? true,
+        getPreferredEditor: () => undefined,
+        onEditorClose: () => {},
+      }),
+  });
+  return narrowConfig({ ...fixture, ...delegate });
 }
 
 function createToolRegistry(tools: MockTool[]): ToolRegistry {
@@ -305,51 +298,46 @@ function createAllowPolicyEngine(): PolicyEngine {
 export async function runRealLoopExecuteTool(): Promise<
   readonly AgenticLoopEvent[]
 > {
-  clearAllSchedulers();
-  try {
-    const tool = new MockTool({
-      name: 'harness_tool',
-      execute: async () => ({
-        llmContent: 'tool-output',
-        returnDisplay: 'tool-output',
-      }),
-    });
-    tool.shouldConfirm = true;
-    tool.executeFn.mockResolvedValue({
+  const tool = new MockTool({
+    name: 'harness_tool',
+    execute: async () => ({
       llmContent: 'tool-output',
       returnDisplay: 'tool-output',
-    });
-    const toolRegistry = createToolRegistry([tool]);
-    const messageBus = new MessageBus(createAskPolicyEngine(), false);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine: createAskPolicyEngine(),
-    });
-    const approvalHandler: ApprovalHandler = async () => ({
-      outcome: ToolConfirmationOutcome.ProceedOnce,
-    });
-    const { client } = createScriptedAgentClient([
-      [
-        streamToolCallRequest('call-real', 'harness_tool', { x: 1 }),
-        streamFinished(),
-      ],
-      [streamContent('done'), streamFinished()],
-    ]);
-    const loop = new AgenticLoop({
-      agentClient: client,
-      config,
-      messageBus,
-      approvalHandler,
-    });
-    const events: AgenticLoopEvent[] = [];
-    for await (const event of loop.run('go', new AbortController().signal)) {
-      events.push(event);
-    }
-    return events;
-  } finally {
-    clearAllSchedulers();
+    }),
+  });
+  tool.shouldConfirm = true;
+  tool.executeFn.mockResolvedValue({
+    llmContent: 'tool-output',
+    returnDisplay: 'tool-output',
+  });
+  const toolRegistry = createToolRegistry([tool]);
+  const messageBus = new MessageBus(createAskPolicyEngine(), false);
+  const config = createTestConfig({
+    messageBus,
+    toolRegistry,
+    policyEngine: createAskPolicyEngine(),
+  });
+  const approvalHandler: ApprovalHandler = async () => ({
+    outcome: ToolConfirmationOutcome.ProceedOnce,
+  });
+  const { client } = createScriptedAgentClient([
+    [
+      streamToolCallRequest('call-real', 'harness_tool', { x: 1 }),
+      streamFinished(),
+    ],
+    [streamContent('done'), streamFinished()],
+  ]);
+  const loop = new AgenticLoop({
+    agentClient: client,
+    config,
+    messageBus,
+    approvalHandler,
+  });
+  const events: AgenticLoopEvent[] = [];
+  for await (const event of loop.run('go', new AbortController().signal)) {
+    events.push(event);
   }
+  return events;
 }
 
 /**
@@ -358,37 +346,32 @@ export async function runRealLoopExecuteTool(): Promise<
  * without scheduling tools. Returns the collected AgenticLoopEvents.
  */
 export async function runRealLoopAbort(): Promise<readonly AgenticLoopEvent[]> {
-  clearAllSchedulers();
-  try {
-    const tool = new MockTool({ name: 'abort_tool' });
-    const toolRegistry = createToolRegistry([tool]);
-    const messageBus = new MessageBus(createAllowPolicyEngine(), false);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine: createAllowPolicyEngine(),
-    });
-    const controller = new AbortController();
-    const { client } = createScriptedAgentClient([
-      [streamContent('partial...'), streamFinished()],
-    ]);
-    const loop = new AgenticLoop({
-      agentClient: client,
-      config,
-      messageBus,
-    });
-    const events: AgenticLoopEvent[] = [];
-    const iterator = loop.run('go', controller.signal);
-    const first = await iterator.next();
-    if (first.done !== true) {
-      events.push(first.value);
-    }
-    controller.abort();
-    for await (const event of iterator) {
-      events.push(event);
-    }
-    return events;
-  } finally {
-    clearAllSchedulers();
+  const tool = new MockTool({ name: 'abort_tool' });
+  const toolRegistry = createToolRegistry([tool]);
+  const messageBus = new MessageBus(createAllowPolicyEngine(), false);
+  const config = createTestConfig({
+    messageBus,
+    toolRegistry,
+    policyEngine: createAllowPolicyEngine(),
+  });
+  const controller = new AbortController();
+  const { client } = createScriptedAgentClient([
+    [streamContent('partial...'), streamFinished()],
+  ]);
+  const loop = new AgenticLoop({
+    agentClient: client,
+    config,
+    messageBus,
+  });
+  const events: AgenticLoopEvent[] = [];
+  const iterator = loop.run('go', controller.signal);
+  const first = await iterator.next();
+  if (first.done !== true) {
+    events.push(first.value);
   }
+  controller.abort();
+  for await (const event of iterator) {
+    events.push(event);
+  }
+  return events;
 }

@@ -7,7 +7,7 @@
 import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { act, useCallback } from 'react';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { render } from '../../test-utils/render.js';
+import { render } from '../../__tests__/render.js';
 import { useConsoleMessages } from './useConsoleMessages.js';
 
 describe('useConsoleMessages', () => {

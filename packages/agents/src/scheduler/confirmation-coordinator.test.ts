@@ -32,7 +32,7 @@ import {
   makeSchedulerAccessor,
   makeWaitingToolCall,
   createCoordinator,
-} from './confirmation-coordinator-test-helpers.js';
+} from './__tests__/confirmation-coordinator-test-helpers.js';
 
 describe('ConfirmationCoordinator', () => {
   beforeEach(() => {

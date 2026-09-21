@@ -7,8 +7,8 @@
 import { describe, it, expect } from 'bun:test';
 import { editorCommand } from './editorCommand.js';
 // 1. Import the mock context utility
-import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
-import { assertDefined } from '../../test-utils/assertions.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
+import { assertDefined } from '../../__tests__/assertions.js';
 
 describe('editorCommand', () => {
   it('should return a dialog action to open the editor dialog', () => {

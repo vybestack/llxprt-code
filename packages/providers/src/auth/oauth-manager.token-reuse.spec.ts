@@ -21,7 +21,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { OAuthManager } from './oauth-manager.js';
 import type { OAuthProvider, OAuthToken, TokenStore } from './types.js';
 import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
-import { createFakeOAuthSettings } from './test-oauth-settings.js';
+import { createFakeOAuthSettings } from './__tests__/test-oauth-settings.js';
 
 /**
  * Mock OAuth provider that tracks whether initiateAuth was called

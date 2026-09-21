@@ -14,7 +14,7 @@
 
 import { describe, it, expect, vi } from 'bun:test';
 import React, { act } from 'react';
-import { renderHook } from '../../../../test-utils/render.js';
+import { renderHook } from '../../../../__tests__/render.js';
 import { createSlashCommandCancellation } from '../../useSlashCommandCancellation.js';
 import {
   useCancellation,

@@ -15,7 +15,7 @@ import {
   vi,
   type Mock,
 } from 'bun:test';
-import { renderHook } from '../../test-utils/render.js';
+import { renderHook } from '../../__tests__/render.js';
 import { useStdin } from 'ink';
 import { EventEmitter } from 'node:events';
 import {

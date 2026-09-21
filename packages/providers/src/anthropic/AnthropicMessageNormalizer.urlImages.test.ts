@@ -29,7 +29,7 @@ import type {
 import { convertToAnthropicMessages } from './AnthropicMessageNormalizer.js';
 import { prepareAnthropicRequest } from './AnthropicRequestPreparation.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import type { AnthropicMessage } from './AnthropicMessageNormalizer.js';
 
 // Light boundary mock: prepareAnthropicRequest builds the real system prompt

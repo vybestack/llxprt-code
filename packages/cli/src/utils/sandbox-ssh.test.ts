@@ -11,11 +11,11 @@ import * as child_process from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
-import { testRegex } from '../test-utils/regex.js';
+import { testRegex } from '../__tests__/regex.js';
 import {
   createMockTunnelProcess,
   type MockTunnelProcess,
-} from './sandbox-ssh.test-helper.js';
+} from './__tests__/sandbox-ssh.test-helper.js';
 
 const realNodeChildProcessModule = { ...(await import('node:child_process')) };
 

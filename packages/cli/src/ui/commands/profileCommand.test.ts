@@ -6,9 +6,9 @@
 
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { profileCommand } from './profileCommand.js';
-import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import type { CommandContext } from './types.js';
-import { testRegex } from '../../test-utils/regex.js';
+import { testRegex } from '../../__tests__/regex.js';
 
 const runtimeMocks = {
   saveProfileSnapshot: vi.fn(),

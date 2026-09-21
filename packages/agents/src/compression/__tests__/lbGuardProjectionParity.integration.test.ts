@@ -36,7 +36,7 @@ import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtim
 import {
   createChatSessionRuntime,
   createRuntimeConfigStub,
-} from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+} from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   LoadBalancerContextLimitError,

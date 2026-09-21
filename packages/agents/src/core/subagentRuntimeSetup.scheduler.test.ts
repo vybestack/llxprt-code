@@ -224,20 +224,31 @@ describe('createSchedulerConfig — fail-closed empty whitelist (#2069)', () => 
 });
 
 describe('createToolExecutionConfig — scheduler delegation', () => {
-  it('should forward toolRegistry to foregroundConfig.getOrCreateScheduler', async () => {
-    const capturedDeps: Record<string, unknown> = {};
+  it('should forward owner, purpose, callbacks, options, and default dependencies to foregroundConfig.getOrCreateScheduler', async () => {
+    const forwarded: Record<string, unknown> = {};
     const sentinelRegistry = { sentinel: 'subagent-registry' };
+    const sentinelMessageBus = { sentinel: 'message-bus' };
+    const owner = { label: 'scheduler-owner' };
+    const callbacks = {} as never;
+    const options = { interactiveMode: false };
     const runtimeBundle = {
       runtimeContext: { state: { sessionId: 'sess-fwd' } },
     };
     const foregroundConfig = {
       getOrCreateScheduler: (
-        _sid: string,
-        _cb: unknown,
-        _opts: unknown,
-        deps: Record<string, unknown>,
+        fwdOwner: unknown,
+        fwdPurpose: unknown,
+        fwdCallbacks: unknown,
+        fwdOptions: unknown,
+        fwdDeps: Record<string, unknown>,
       ) => {
-        Object.assign(capturedDeps, deps);
+        Object.assign(forwarded, {
+          owner: fwdOwner,
+          purpose: fwdPurpose,
+          callbacks: fwdCallbacks,
+          options: fwdOptions,
+          deps: fwdDeps,
+        });
         return Promise.resolve({});
       },
       disposeScheduler: () => {},
@@ -247,22 +258,30 @@ describe('createToolExecutionConfig — scheduler delegation', () => {
       runtimeBundle,
       sentinelRegistry,
       foregroundConfig,
+      sentinelMessageBus as never,
     );
-    await config.getOrCreateScheduler('sess-fwd', {} as never, undefined, {});
+    await config.getOrCreateScheduler(owner, 'subagent', callbacks, options);
 
-    expect(capturedDeps.toolRegistry).toBe(sentinelRegistry);
+    expect(forwarded.owner).toBe(owner);
+    expect(forwarded.purpose).toBe('subagent');
+    expect(forwarded.callbacks).toBe(callbacks);
+    expect(forwarded.options).toBe(options);
+    expect(forwarded.deps.toolRegistry).toBe(sentinelRegistry);
+    expect(forwarded.deps.messageBus).toBe(sentinelMessageBus);
   });
 
   it('should allow caller to override toolRegistry via dependencies', async () => {
     const capturedDeps: Record<string, unknown> = {};
     const defaultRegistry = { default: true };
     const overrideRegistry = { override: true };
+    const owner = { label: 'override-owner' };
     const runtimeBundle = {
       runtimeContext: { state: { sessionId: 'sess-override' } },
     };
     const foregroundConfig = {
       getOrCreateScheduler: (
-        _sid: string,
+        _owner: object,
+        _purpose: unknown,
         _cb: unknown,
         _opts: unknown,
         deps: Record<string, unknown>,
@@ -278,9 +297,13 @@ describe('createToolExecutionConfig — scheduler delegation', () => {
       defaultRegistry,
       foregroundConfig,
     );
-    await config.getOrCreateScheduler('sess-override', {} as never, undefined, {
-      toolRegistry: overrideRegistry,
-    } as never);
+    await config.getOrCreateScheduler(
+      owner,
+      'subagent',
+      {} as never,
+      undefined,
+      { toolRegistry: overrideRegistry } as never,
+    );
 
     expect(capturedDeps.toolRegistry).toBe(overrideRegistry);
   });
@@ -325,11 +348,13 @@ describe('createSchedulerConfig', () => {
       ...makeForegroundWithDefaults([]),
       getOrCreateScheduler: () => Promise.resolve({}),
     };
-    // Override toolExec to capture options
+    // Override toolExec to capture the options argument (4th of the
+    // 5-arg acquisition contract) on its way to scheduler creation.
     const toolExecWithOptions = {
       ...mockToolExecCtx,
       getOrCreateScheduler: (
-        _sid: string,
+        _owner: object,
+        _purpose: unknown,
         _cb: unknown,
         opts: Record<string, unknown>,
       ) => {
@@ -340,7 +365,7 @@ describe('createSchedulerConfig', () => {
     const config = createSchedulerConfig(toolExecWithOptions, mockForeground, {
       interactive: true,
     });
-    await config.getOrCreateScheduler('test-session', {} as never);
+    await config.getOrCreateScheduler({}, 'subagent', {} as never);
 
     expect(capturedOptions.interactiveMode).toBe(true);
   });

@@ -10,12 +10,12 @@
 
 import { vi, describe, it, expect, beforeEach } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { AnthropicRequestBody } from './test-utils/anthropicTestUtils.js';
+import type { AnthropicRequestBody } from './__tests__/anthropicTestUtils.js';
 import {
   mockMessagesCreate,
   setupThinkingProvider,
   type ThinkingTestSetup,
-} from './test-utils/anthropicThinkingTestSetup.js';
+} from './__tests__/anthropicThinkingTestSetup.js';
 
 function messageTextContent(
   message: AnthropicRequestBody['messages'][number],

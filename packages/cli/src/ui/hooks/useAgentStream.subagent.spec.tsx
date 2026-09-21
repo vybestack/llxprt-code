@@ -7,7 +7,7 @@
 import type { Mock } from 'bun:test';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import React, { act } from 'react';
-import { renderHook, waitFor } from '../../test-utils/render.js';
+import { renderHook, waitFor } from '../../__tests__/render.js';
 import * as ReactDOM from 'react-dom';
 import { useAgentStream } from './agentStream/index.js';
 import { useReactToolScheduler } from './useReactToolScheduler.js';

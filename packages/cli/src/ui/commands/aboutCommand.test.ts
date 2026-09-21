@@ -16,7 +16,7 @@ import {
 } from 'bun:test';
 import { aboutCommand } from './aboutCommand.js';
 import { type CommandContext } from './types.js';
-import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import * as versionUtils from '../../utils/version.js';
 import { MessageType } from '../types.js';
 import {
@@ -27,7 +27,7 @@ import {
 import { USER_SETTINGS_PATH } from '../../config/settings.js';
 
 import type { IdeClient } from '@vybestack/llxprt-code-ide-integration';
-import { assertDefined } from '../../test-utils/assertions.js';
+import { assertDefined } from '../../__tests__/assertions.js';
 
 const runtimeMocks = {
   getRuntimeApiMock: vi.fn(),

@@ -9,7 +9,7 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
 import { toOpenAIResponsesWireEffort } from '../OpenAIResponsesProviderCore.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 
 const originalFetch = global.fetch;
 const mockFetch = vi.fn();

@@ -11,7 +11,7 @@ import {
   settingsZodSchema,
 } from './settings-validation.js';
 import { z } from 'zod';
-import { assertDefined } from '../test-utils/assertions.js';
+import { assertDefined } from '../__tests__/assertions.js';
 
 describe('settings-validation', () => {
   describe('validateSettings - valid settings', () => {

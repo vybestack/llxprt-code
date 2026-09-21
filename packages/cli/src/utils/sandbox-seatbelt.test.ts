@@ -26,7 +26,7 @@ import {
   SEATBELT_HARNESS_TIMEOUT_MS,
   type SeatbeltHarness,
   type SeatbeltHarnessEnvironmentSnapshot,
-} from './sandbox-seatbelt.test-helpers.js';
+} from './__tests__/sandbox-seatbelt.test-helpers.js';
 import { Storage } from '@vybestack/llxprt-code-storage';
 import { FatalSandboxError } from '@vybestack/llxprt-code-core';
 

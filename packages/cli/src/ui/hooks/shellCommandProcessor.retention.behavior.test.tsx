@@ -14,7 +14,7 @@ import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { ShellState, SessionIdentity } from '../cliUiRuntime.js';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import type { HistoryItemWithoutId } from '../types.js';
-import { render } from '../../test-utils/render.js';
+import { render } from '../../__tests__/render.js';
 import { useShellCommandProcessor } from './shellCommandProcessor.js';
 
 /**

@@ -21,7 +21,7 @@ import * as cli from './cli.js';
 import { dynamicSettingsRegistry } from './utils/dynamicSettings.js';
 import type { Config, ResumeResult } from '@vybestack/llxprt-code-core';
 import { OutputFormat } from '@vybestack/llxprt-code-core';
-import { createTestSessionMediaConfig } from './test-utils/sessionMediaConfig.js';
+import { createTestSessionMediaConfig } from './__tests__/sessionMediaConfig.js';
 
 const actual = { ...(await import('./config/settings.js')) };
 void vi.mock('./config/settings.js', () => ({

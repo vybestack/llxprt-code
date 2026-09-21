@@ -24,7 +24,7 @@ import {
   buildFakeAgent,
   RecordingConnection,
   buildMinimalConfig,
-} from './zed-test-helpers.js';
+} from './__tests__/zed-test-helpers.js';
 
 const createdSessions: Session[] = [];
 // Derived from the production buildCommandToExecute so the wrapping format

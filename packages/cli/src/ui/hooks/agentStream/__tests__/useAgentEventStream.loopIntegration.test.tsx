@@ -31,8 +31,8 @@ import type {
  *        (approve via ProceedOnce AND reject via Cancel), NOT via an
  *        approvalHandler — production never wires one.
  */
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
-import { renderHook } from '../../../../test-utils/render.js';
+import { describe, it, expect, vi } from 'bun:test';
+import { renderHook } from '../../../../__tests__/render.js';
 import { act } from 'react';
 import {
   createAgenticLoop,
@@ -44,6 +44,7 @@ import {
   type DisplayCallbacks,
   type AgentClientContract,
 } from '@vybestack/llxprt-code-agents';
+import { createSchedulerRegistryDelegate } from './schedulerRegistryTestHelper.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import {
   AgentEventType,
@@ -62,12 +63,7 @@ import {
   DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
 } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
-import {
-  getOrCreateScheduler,
-  disposeScheduler,
-  clearAllSchedulers,
-} from '@vybestack/llxprt-code-core/config/schedulerSingleton.js';
-import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
   ToolRegistry,
@@ -189,29 +185,22 @@ function createTestConfig(options: {
     isInteractive: () => interactive,
     getNonInteractive: () => !interactive,
     getToolSchedulerFactory: () => createToolScheduler,
-    getOrCreateScheduler: (
-      sessionId: string,
-      callbacks: Parameters<Config['getOrCreateScheduler']>[1],
-      schedulerOptions: Parameters<Config['getOrCreateScheduler']>[2],
-      deps: Parameters<Config['getOrCreateScheduler']>[3],
-    ) => {
-      const schedulerMessageBus = deps?.messageBus;
-      if (!schedulerMessageBus)
-        throw new Error('Test config requires deps.messageBus');
-      return getOrCreateScheduler(
-        fixture as unknown as Config,
-        sessionId,
-        callbacks,
-        schedulerOptions,
-        {
-          messageBus: schedulerMessageBus,
-          toolRegistry: deps.toolRegistry ?? toolRegistry,
-        },
-      );
-    },
-    disposeScheduler: (sessionId: string) => disposeScheduler(sessionId),
   };
-  return fixture as unknown as Config;
+  const delegate = createSchedulerRegistryDelegate({
+    config: fixture as unknown as Config,
+    messageBus,
+    toolRegistry,
+    createScheduler: async (schedulerOptions) =>
+      createToolScheduler({
+        config: fixture as unknown as Config,
+        messageBus,
+        toolRegistry,
+        toolContextInteractiveMode: schedulerOptions.interactiveMode ?? true,
+        getPreferredEditor: () => undefined,
+        onEditorClose: () => {},
+      }),
+  });
+  return { ...fixture, ...delegate } as unknown as Config;
 }
 
 function createToolRegistryForTest(tools: MockTool[]): ToolRegistry {
@@ -489,8 +478,9 @@ type CancellationLoopObservation = CancellationLoopDetails &
   ({ readonly signalAborted: true } | { readonly signalAborted: false });
 
 describe('useAgentEventStream loop integration', () => {
-  beforeEach(clearAllSchedulers);
-  afterEach(clearAllSchedulers);
+  // Each test builds its own fixture and registry delegate inside its
+  // observe helper, so scheduler state is isolated per test with nothing
+  // global left to clear between them.
 
   const observeMultiTurnToolCallContinuation =
     async (): Promise<MultiTurnLoopObservation> => {

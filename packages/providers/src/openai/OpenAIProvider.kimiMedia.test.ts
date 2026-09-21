@@ -9,7 +9,7 @@ import type OpenAI from 'openai';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import { bindProviderAliasIdentity } from '../composition/aliasProviderFactory.js';

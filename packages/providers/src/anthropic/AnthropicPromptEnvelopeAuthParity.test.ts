@@ -18,7 +18,7 @@
  */
 
 import { describe, expect, it, vi } from 'bun:test';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-auth';
 

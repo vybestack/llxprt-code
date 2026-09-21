@@ -16,7 +16,7 @@ import {
 import * as fs from 'fs';
 import * as path from 'path';
 import { initCommand } from './initCommand.js';
-import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { type CommandContext } from './types.js';
 
 // Mock the 'fs' module

@@ -5,13 +5,13 @@
  */
 
 import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
-import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { MessageType } from '../types.js';
 import { extensionsCommand } from './extensionsCommand.js';
 import { type CommandContext } from './types.js';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { type ExtensionUpdateAction } from '../state/extensions.js';
-import { assertDefined } from '../../test-utils/assertions.js';
+import { assertDefined } from '../../__tests__/assertions.js';
 
 void vi.mock('../../config/extensions/update.js', () => ({
   updateExtension: vi.fn(),

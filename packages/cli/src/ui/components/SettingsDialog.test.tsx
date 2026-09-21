@@ -32,7 +32,7 @@ import {
   afterEach,
   type Mock,
 } from 'bun:test';
-import { waitFor } from '../../test-utils/render.js';
+import { waitFor } from '../../__tests__/render.js';
 import { SettingsDialog } from './SettingsDialog.js';
 import { LoadedSettings, SettingScope } from '../../config/settings.js';
 import { VimModeProvider } from '../contexts/VimModeContext.js';
@@ -43,7 +43,7 @@ import {
 import { act } from 'react';
 import { saveModifiedSettings } from '../../utils/settingsUtils.js';
 import { terminalCapabilityManager } from '../utils/terminalCapabilityManager.js';
-import { testRegex } from '../../test-utils/regex.js';
+import { testRegex } from '../../__tests__/regex.js';
 
 const realVimModeContextModule = {
   ...(await import('../contexts/VimModeContext.js')),

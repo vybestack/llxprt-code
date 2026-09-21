@@ -10,7 +10,7 @@ import type React from 'react';
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { Footer } from './Footer.js';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
-import { testRegex } from '../../test-utils/regex.js';
+import { testRegex } from '../../__tests__/regex.js';
 
 const realUseTerminalSizeModule = {
   ...(await import('../hooks/useTerminalSize.js')),

@@ -27,7 +27,7 @@ import {
   type ReadinessGate,
   type SpawnMock,
   type TrackedChild,
-} from './sandbox-launch-release.test-helpers.js';
+} from './__tests__/sandbox-launch-release.test-helpers.js';
 
 function completedEngineProcess(stdout: string): ChildProcess {
   const proc = new EventEmitter() as unknown as ChildProcess;

@@ -20,13 +20,14 @@ import type {
   MessageBus,
   RuntimeProviderManager,
   SchedulerCallbacks,
+  SchedulerHandle,
   SchedulerOptions,
+  SchedulerPurpose,
   ShellExecutionConfig,
   ShellReplacementMode,
   SkillManager,
   TelemetrySettings,
   ToolRegistry,
-  ToolSchedulerContract,
 } from '@vybestack/llxprt-code-core';
 import { LocalMediaStore } from '@vybestack/llxprt-code-core';
 import { SessionPersistenceService } from '@vybestack/llxprt-code-core/storage/SessionPersistenceService.js';
@@ -425,14 +426,24 @@ function makeSchedulerRuntime(
   override: StreamRuntimeTestOverrides['scheduler'],
 ): StreamRuntime['scheduler'] {
   return {
-    disposeScheduler: (sessionId: string) => {
+    disposeScheduler: (
+      owner: object,
+      purpose: SchedulerPurpose,
+      handle?: object,
+    ) => {
       const fn = getMember(source, 'disposeScheduler');
       if (typeof fn === 'function') {
-        (fn as (value: string) => void).call(source, sessionId);
+        (fn as StreamRuntime['scheduler']['disposeScheduler']).call(
+          source,
+          owner,
+          purpose,
+          handle,
+        );
       }
     },
     getOrCreateScheduler: async (
-      sessionId: string,
+      owner: object,
+      purpose: SchedulerPurpose,
       callbacks: SchedulerCallbacks,
       options?: SchedulerOptions,
       dependencies?: {
@@ -444,7 +455,8 @@ function makeSchedulerRuntime(
       if (typeof fn === 'function') {
         return (fn as StreamRuntime['scheduler']['getOrCreateScheduler']).call(
           source,
-          sessionId,
+          owner,
+          purpose,
           callbacks,
           options,
           dependencies,
@@ -453,7 +465,7 @@ function makeSchedulerRuntime(
       return {
         schedule: vi.fn(),
         dispose: vi.fn(),
-      } as unknown as ToolSchedulerContract;
+      } as unknown as SchedulerHandle;
     },
     setInteractiveSubagentSchedulerFactory: (factory) => {
       const fn = getMember(source, 'setInteractiveSubagentSchedulerFactory');

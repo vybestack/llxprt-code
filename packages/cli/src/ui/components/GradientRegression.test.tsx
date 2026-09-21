@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, type Mock } from 'bun:test';
-import { renderWithProviders } from '../../test-utils/render.js';
+import { renderWithProviders } from '../../__tests__/render.js';
 import * as SessionContext from '../contexts/SessionContext.js';
 import type { SessionStatsState } from '../contexts/SessionContext.js';
 import { Footer } from './Footer.js';

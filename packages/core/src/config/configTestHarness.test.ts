@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from 'bun:test';
 import {
   buildEventsMockBody,
   type HoistedConfigMocks,
-} from './configTestHarness.js';
+} from './__tests__/configTestHarness.js';
 import { CoreEventEmitter } from '../utils/events.js';
 
 function createHoistedMocks(): HoistedConfigMocks {

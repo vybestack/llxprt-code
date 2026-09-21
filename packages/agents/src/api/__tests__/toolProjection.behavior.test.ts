@@ -23,7 +23,7 @@
 
 import { describe, it, expect } from 'bun:test';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { AnyDeclarativeTool } from '@vybestack/llxprt-code-tools';
 import { Kind } from '@vybestack/llxprt-code-tools';

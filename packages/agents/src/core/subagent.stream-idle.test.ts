@@ -31,7 +31,7 @@ import {
   type SubAgentRuntimeOverrides,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import { ChatSession, StreamEventType } from './chatSession.js';
-import { mockChunk } from './turn-test-helpers.js';
+import { mockChunk } from './__tests__/turn-test-helpers.js';
 import {
   createContentGenerator,
   type ContentGenerator,
@@ -46,7 +46,7 @@ import { ToolRegistry } from '@vybestack/llxprt-code-tools/tools/tool-registry.j
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
-import { initializeTestConfig } from '@vybestack/llxprt-code-core/test-utils/config.js';
+import { initializeTestConfig } from '@vybestack/llxprt-code-test-utils/core/config.js';
 import {
   waitForCondition,
   waitForConditionInRealTime,

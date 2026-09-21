@@ -19,7 +19,7 @@ import type * as acp from '@agentclientprotocol/sdk';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { Config } from '@vybestack/llxprt-code-core';
 
-import { RecordingConnection } from './zed-test-helpers.js';
+import { RecordingConnection } from './__tests__/zed-test-helpers.js';
 
 const mockFromConfig = vi.fn();
 const mockBuildZedTerminalSetup = vi.fn();
