@@ -157,11 +157,25 @@ export async function preparePromptEnvelopeAfterEnforcement(
     input.buildOptions,
   );
   try {
-    const contents = await input.enforce(
-      input.contents,
-      input.fallbackEstimate,
-    );
+    // Estimate each enforcement candidate with the provider's finalized
+    // envelope projection (tool schemas included) when available, falling
+    // back to the contents-only estimator otherwise. This restores #2817's
+    // original estimator composed with #3199's release machinery so
+    // pre-send enforcement is tool-aware for every projecting provider,
+    // load balancers included (issue #3507).
+    const contents = await input.enforce(input.contents, async (candidate) => {
+      const prepared = await preparer.prepare(candidate);
+      return (
+        prepared.estimate?.estimatedPromptTokens ??
+        input.fallbackEstimate(candidate)
+      );
+    });
     const prepared = await preparer.prepare(contents);
+    // Enforcement-candidate projections are estimate-only and must not
+    // outlive this seam call: release every non-kept candidate now. The
+    // kept projection is the one transport consumes; it is discharged only
+    // by the send-failure paths (issue #3507).
+    await preparer.releaseUnused(prepared);
     return { contents, prepared, preparer };
   } catch (error: unknown) {
     try {

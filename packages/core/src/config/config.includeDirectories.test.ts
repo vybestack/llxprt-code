@@ -17,14 +17,12 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import type { ConfigParameters } from './config.js';
 import { Config } from './config.js';
-import { getSettingsService } from '@vybestack/llxprt-code-settings';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   buildToolsMockBody,
   buildContentGeneratorMockBody,
   buildTelemetryMockBody,
   buildGitServiceMockBody,
-  buildSettingsMockBody,
   buildIdeIntegrationMockBody,
   buildMemoryDiscoveryMockBody,
   buildEventsMockBody,
@@ -62,8 +60,6 @@ void vi.mock('../telemetry/index.js', () => buildTelemetryMockBody());
 
 void vi.mock('../services/gitService.js', () => buildGitServiceMockBody());
 
-void vi.mock('@vybestack/llxprt-code-settings', () => buildSettingsMockBody());
-
 const __actual3 = {
   ...(await import('@vybestack/llxprt-code-ide-integration')),
 };
@@ -83,9 +79,7 @@ void vi.mock('../utils/events.js', () =>
 void vi.mock('../utils/fetch.js', () => buildFetchMockBody(hoistedConfigMocks));
 
 describe('Server Config includeDirectories (real filesystem)', () => {
-  const baseParams = createBaseParams(
-    getSettingsService() as unknown as SettingsService,
-  );
+  const baseParams = createBaseParams(new SettingsService());
 
   beforeEach(() => {
     resetAgentClientMock();

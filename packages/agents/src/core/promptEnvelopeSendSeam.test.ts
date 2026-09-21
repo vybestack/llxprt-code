@@ -61,7 +61,7 @@ describe('bindPreparedTransportSignal', () => {
 });
 
 describe('preparePromptEnvelopeAfterEnforcement', () => {
-  it('estimates candidates without provider preparation and prepares only the selected history', async () => {
+  it('estimates enforcement candidates via the provider projection and prepares only the selected history', async () => {
     const firstCandidate: IContent[] = [
       { speaker: 'human', blocks: [{ type: 'text', text: 'first' }] },
     ];
@@ -90,7 +90,7 @@ describe('preparePromptEnvelopeAfterEnforcement', () => {
           unsupportedMedia: [],
           transportToken: Object.freeze({}),
           finalizedProjection: options.contents,
-          legacyEstimate: () => Promise.resolve(options.contents.length),
+          legacyEstimate: () => Promise.resolve(options.contents.length + 1000),
         });
       },
     };
@@ -109,10 +109,201 @@ describe('preparePromptEnvelopeAfterEnforcement', () => {
       fallbackEstimate: (contents) => Promise.resolve(contents.length),
     });
 
-    expect(candidateEstimates).toStrictEqual([1, 2]);
-    expect(projectedContents).toStrictEqual([selectedCandidate]);
+    // The estimator receives the projection's finalized-envelope estimate
+    // (legacyEstimate 1001/1002), never the contents-only fallback (1/2):
+    // issue #3507 AC2 restores #2817's projection-aware estimator.
+    expect(candidateEstimates).toStrictEqual([1001, 1002]);
+    // Each estimated candidate is projected once; the selected history's
+    // final prepare reuses the cached projection instead of re-projecting.
+    expect(projectedContents).toStrictEqual([
+      firstCandidate,
+      selectedCandidate,
+    ]);
     expect(result.contents).toBe(selectedCandidate);
     expect(result.prepared.options.contents).toBe(selectedCandidate);
+  });
+
+  it('falls back to the contents-only estimator when the provider lacks projectPromptEnvelope', async () => {
+    const candidate: IContent[] = [
+      { speaker: 'human', blocks: [{ type: 'text', text: 'candidate' }] },
+    ];
+    const provider: IProvider = {
+      name: 'no-projection-provider',
+      getModels: () => Promise.resolve([]),
+      getServerTools: () => [],
+      invokeServerTool: () => Promise.resolve(undefined),
+      async *generateChatCompletion(): AsyncIterableIterator<IContent> {
+        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'unused' }] };
+      },
+    };
+    const runtime = createChatSessionRuntime({ provider });
+    const candidateEstimates: number[] = [];
+
+    const result = await preparePromptEnvelopeAfterEnforcement({
+      provider,
+      contents: candidate,
+      buildOptions: (contents) => ({ contents, config: runtime.config }),
+      enforce: async (contents, estimate) => {
+        candidateEstimates.push(await estimate(contents));
+        return contents;
+      },
+      fallbackEstimate: (contents) => Promise.resolve(contents.length + 500),
+    });
+
+    // Fallback-only providers keep the contents-only enforcement estimate
+    // and a null seam estimate (issue #3507 AC2 fallback branch).
+    expect(candidateEstimates).toStrictEqual([501]);
+    expect(result.prepared.estimate).toBeNull();
+  });
+
+  it('falls back to the contents-only estimator when the provider resolves an undefined projection', async () => {
+    const candidate: IContent[] = [
+      { speaker: 'human', blocks: [{ type: 'text', text: 'candidate' }] },
+    ];
+    const provider: IProvider = {
+      name: 'undefined-projection-provider',
+      getModels: () => Promise.resolve([]),
+      getServerTools: () => [],
+      invokeServerTool: () => Promise.resolve(undefined),
+      async *generateChatCompletion(): AsyncIterableIterator<IContent> {
+        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'unused' }] };
+      },
+      projectPromptEnvelope: () => Promise.resolve(undefined),
+    };
+    const runtime = createChatSessionRuntime({ provider });
+    const candidateEstimates: number[] = [];
+
+    const result = await preparePromptEnvelopeAfterEnforcement({
+      provider,
+      contents: candidate,
+      buildOptions: (contents) => ({ contents, config: runtime.config }),
+      enforce: async (contents, estimate) => {
+        candidateEstimates.push(await estimate(contents));
+        return contents;
+      },
+      fallbackEstimate: (contents) => Promise.resolve(contents.length + 900),
+    });
+
+    expect(candidateEstimates).toStrictEqual([901]);
+    expect(result.prepared.estimate).toBeNull();
+  });
+
+  it('releases candidate projections when enforcement rejects', async () => {
+    const candidate: IContent[] = [
+      { speaker: 'human', blocks: [{ type: 'text', text: 'candidate' }] },
+    ];
+    const releasedContents: IContent[][] = [];
+    const provider: IProvider = {
+      name: 'enforcement-release-provider',
+      getModels: () => Promise.resolve([]),
+      getServerTools: () => [],
+      invokeServerTool: () => Promise.resolve(undefined),
+      async *generateChatCompletion(): AsyncIterableIterator<IContent> {
+        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'unused' }] };
+      },
+      projectPromptEnvelope: (options) =>
+        Promise.resolve({
+          model: 'test-model',
+          protocol: 'anthropic-messages',
+          method: 'messages/v1',
+          projectionRevision: 1,
+          unsupportedMedia: [],
+          transportToken: Object.freeze({}),
+          finalizedProjection: options.contents,
+          legacyEstimate: () => Promise.resolve(options.contents.length),
+          releaseIfUnsent: () => {
+            releasedContents.push(options.contents);
+            return Promise.resolve();
+          },
+        }),
+    };
+    const runtime = createChatSessionRuntime({ provider });
+
+    await expect(
+      preparePromptEnvelopeAfterEnforcement({
+        provider,
+        contents: candidate,
+        buildOptions: (contents) => ({ contents, config: runtime.config }),
+        enforce: async (_contents, estimate) => {
+          await estimate(candidate);
+          throw new Error('enforcement failed');
+        },
+        fallbackEstimate: () => Promise.resolve(0),
+      }),
+    ).rejects.toThrow('enforcement failed');
+
+    // The candidate projection created for the estimator is released via the
+    // releaseUnused path when enforcement fails (issue #3507 AC2, preserving
+    // #3199's cleanup machinery).
+    expect(releasedContents).toStrictEqual([candidate]);
+  });
+
+  it('releases non-kept enforcement-candidate projections on success while the kept projection stays reserved for transport', async () => {
+    const fullCandidate: IContent[] = [
+      { speaker: 'human', blocks: [{ type: 'text', text: 'first full item' }] },
+      { speaker: 'ai', blocks: [{ type: 'text', text: 'second full item' }] },
+    ];
+    const reducedCandidate: IContent[] = [
+      { speaker: 'human', blocks: [{ type: 'text', text: 'reduced item' }] },
+    ];
+    const releasedByProjection: boolean[] = [];
+    const provider: IProvider = {
+      name: 'success-release-provider',
+      getModels: () => Promise.resolve([]),
+      getServerTools: () => [],
+      invokeServerTool: () => Promise.resolve(undefined),
+      async *generateChatCompletion(): AsyncIterableIterator<IContent> {
+        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'unused' }] };
+      },
+      projectPromptEnvelope: (options) => {
+        const projectionIndex = releasedByProjection.length;
+        releasedByProjection.push(false);
+        return Promise.resolve({
+          model: 'test-model',
+          protocol: 'anthropic-messages',
+          method: 'messages/v1',
+          projectionRevision: 1,
+          unsupportedMedia: [],
+          transportToken: Object.freeze({ projectionIndex }),
+          finalizedProjection: options.contents,
+          legacyEstimate: () => Promise.resolve(options.contents.length + 1000),
+          releaseIfUnsent: () => {
+            releasedByProjection[projectionIndex] = true;
+            return Promise.resolve();
+          },
+        });
+      },
+    };
+    const runtime = createChatSessionRuntime({ provider });
+    const candidateEstimates: number[] = [];
+
+    const result = await preparePromptEnvelopeAfterEnforcement({
+      provider,
+      contents: fullCandidate,
+      buildOptions: (contents) => ({ contents, config: runtime.config }),
+      enforce: async (_contents, estimate) => {
+        candidateEstimates.push(await estimate(fullCandidate));
+        candidateEstimates.push(await estimate(reducedCandidate));
+        return reducedCandidate;
+      },
+      fallbackEstimate: () => Promise.resolve(0),
+    });
+
+    // The compression ladder estimated two distinct candidates and kept the
+    // reduced one.
+    expect(candidateEstimates).toStrictEqual([1002, 1001]);
+    // On success the non-kept candidate's reservation (projection 0) is
+    // discharged inside the seam, while the kept candidate's stays reserved
+    // because transport consumes it (issue #3507 success-path cleanup).
+    expect(releasedByProjection).toStrictEqual([true, false]);
+    expect(result.contents).toBe(reducedCandidate);
+    // The kept prepared estimate survives the cleanup and stays usable.
+    expect(result.prepared.estimate?.estimatedPromptTokens).toBe(1001);
+    // Transport's first attempt still reuses the reserved projection
+    // instead of re-projecting or finding it already released.
+    const transportPrepared = await result.preparer.prepare(reducedCandidate);
+    expect(transportPrepared).toBe(result.prepared);
+    expect(releasedByProjection).toStrictEqual([true, false]);
   });
 
   it('awaits projection cleanup before an estimation failure escapes', async () => {

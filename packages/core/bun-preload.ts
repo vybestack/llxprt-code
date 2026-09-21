@@ -9,11 +9,13 @@
  *
  * Replicates the behavior of the vitest setupFiles
  * (test-setup-storage-isolation.ts + test-setup.ts) so that Bun test files
- * get the same Storage isolation and provider-runtime bootstrapping without
- * changes to the individual test modules.
+ * get the same Storage isolation and environment guards without changes to
+ * the individual test modules.
+ *
+ * Issue #2616: provider runtimes are constructed explicitly by each test via
+ * createProviderRuntimeContext / test-utils, so this preload no longer
+ * installs or clears any ambient runtime context.
  */
-
-import { beforeAll, beforeEach, afterEach } from 'bun:test';
 
 // Safety: mark environment as CI so that browser-launching code paths
 // (shouldLaunchBrowser) short-circuit. This prevents any test from
@@ -40,29 +42,6 @@ if (process.env.NO_COLOR !== undefined) {
 }
 
 import { setSimulate429 } from './src/utils/testUtils.js';
-import { clearActiveProviderRuntimeContext } from './src/runtime/providerRuntimeContext.js';
-import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 
 // Disable 429 simulation globally for all tests.
 setSimulate429(false);
-
-function bootstrapRuntime(scope: string): void {
-  initializeTestProviderRuntime({
-    runtimeId: `test-global-runtime.${scope}`,
-    metadata: { source: `bun-preload.ts:${scope}` },
-  });
-}
-
-beforeAll(() => {
-  bootstrapRuntime('beforeAll');
-});
-
-// Set up a runtime context for all tests to prevent
-// MissingProviderRuntimeError.
-beforeEach(() => {
-  bootstrapRuntime('beforeEach');
-});
-
-afterEach(() => {
-  clearActiveProviderRuntimeContext();
-});

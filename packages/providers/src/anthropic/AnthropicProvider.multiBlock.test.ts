@@ -1,4 +1,4 @@
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { vi, describe, it, expect, beforeEach } from 'bun:test';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { TEST_PROVIDER_CONFIG } from '../__tests__/providerTestConfig.js';
@@ -12,10 +12,6 @@ import {
 } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  clearActiveProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
 type AnthropicContentBlock =
   | { type: 'text'; text: string }
@@ -150,12 +146,6 @@ describe('AnthropicProvider multi-block human message assembly', () => {
       }
       return settingsService.get(key);
     };
-
-    setActiveProviderRuntimeContext(runtimeContext);
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
   });
 
   it('should concatenate all text blocks in a multi-block human message', async () => {

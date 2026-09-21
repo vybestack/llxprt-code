@@ -16,12 +16,15 @@ import {
   checkCoreDirectiveScopesInConfig,
   checkModuleCentralBypassesInConfig,
   checkModuleDirectiveScopesInConfig,
+  extractConfigCeilingOverrides,
   extractRuleKey,
   extractScopeArray,
   formatViolations,
   hasInlineEslintDirective,
   hasTypeScriptSuppression,
+  parseCeilingOverrideBaseline,
   scanCliProductionTypeEscapes,
+  scanConfigCeilingOverrides,
   scanCoreDirectives,
   scanModuleDirectives,
   scanPackageDirectives,
@@ -8610,5 +8613,204 @@ describe('extractScopeArray default config resolution (#3387)', () => {
     } finally {
       process.chdir(originalCwd);
     }
+  });
+});
+
+// --- #3718: per-file ceiling overrides cannot be waived by comment tags ---
+
+function filesScopedConfigDiff(filesGlob: string, addedLines: string[]) {
+  return [
+    'diff --git a/eslint.config.js b/eslint.config.js',
+    'index 0000000..1111111 100644',
+    '--- a/eslint.config.js',
+    '+++ b/eslint.config.js',
+    '@@ -600,6 +600,' + (7 + addedLines.length) + ' @@',
+    '  {',
+    "    files: ['" + filesGlob + "'],",
+    '    rules: {',
+    ...addedLines.map((line) => '+' + line),
+    '    },',
+    '  },',
+  ].join(String.fromCharCode(10));
+}
+
+describe('eslint-guard ceiling override guard (#3718)', () => {
+  it('rejects a tagged per-file max-lines 900 override despite eslint-policy-allow-off', () => {
+    const diff = filesScopedConfigDiff('packages/core/src/http/big.file.ts', [
+      "      'max-lines': ['error', 900], // eslint-policy-allow-off: #9999",
+    ]);
+    const violations = checkDiff(diff);
+    expect(violations.length).toBe(1);
+    expect(violations[0].message).toContain("'max-lines'");
+    expect(violations[0].message).toContain(
+      'split the file; raising the ceiling is not an accepted fix (#3718)',
+    );
+    // Line numbers come from the hunk's new-file side (600 + three context
+    // lines before the added rule entry).
+    expect(violations[0].lineNumber).toBe(603);
+  });
+
+  it('rejects a tagged multiline per-file max-lines threshold raise', () => {
+    const diff = filesScopedConfigDiff('packages/core/src/http/big.file.ts', [
+      "      'max-lines': [",
+      "        'error',",
+      '        900, // eslint-policy-allow-off: #9999',
+      '      ],',
+    ]);
+    const violations = checkDiff(diff);
+    expect(violations.length).toBe(1);
+    expect(violations[0].message).toContain(
+      'split the file; raising the ceiling is not an accepted fix (#3718)',
+    );
+  });
+
+  it('rejects a tagged inline rules off entry in a files-scoped block', () => {
+    const diff = [
+      'diff --git a/eslint.config.js b/eslint.config.js',
+      'index 0000000..1111111 100644',
+      '--- a/eslint.config.js',
+      '+++ b/eslint.config.js',
+      '@@ -600,4 +600,5 @@',
+      '  {',
+      "    files: ['packages/core/src/inline.case.ts'],",
+      "+    rules: { 'max-lines-per-function': 'off' }, // eslint-policy-allow-off: #9999",
+      '  },',
+    ].join(String.fromCharCode(10));
+    const violations = checkDiff(diff);
+    expect(violations.length).toBe(1);
+    expect(violations[0].message).toContain(
+      'split the file; raising the ceiling is not an accepted fix (#3718)',
+    );
+  });
+
+  it('allows baseline-listed per-file ceiling waivers through the diff check', () => {
+    const diff = filesScopedConfigDiff('scripts/test-audit/scan.ts', [
+      "      complexity: 'off', // eslint-policy-allow-off: #3240",
+    ]);
+    expect(checkDiff(diff)).toEqual([]);
+  });
+
+  it('allows a baseline-listed scripts tests max-lines-per-function waiver', () => {
+    const diff = filesScopedConfigDiff(
+      'scripts/tests/**/*.{ts,tsx,js,mjs,cjs}',
+      [
+        "      'max-lines-per-function': 'off', // eslint-policy-allow-off: #2282",
+      ],
+    );
+    expect(checkDiff(diff)).toEqual([]);
+  });
+
+  it('flags a mixed files array when only one glob is baselined (diff path)', () => {
+    // 'scripts/test-audit/scan.ts' + complexity is baselined, but
+    // 'packages/core/src/huge.ts' + complexity is not; one baselined glob
+    // must not waive the whole files array.
+    const diff = [
+      'diff --git a/eslint.config.js b/eslint.config.js',
+      'index 0000000..1111111 100644',
+      '--- a/eslint.config.js',
+      '+++ b/eslint.config.js',
+      '@@ -600,6 +600,7 @@',
+      '  {',
+      "    files: ['scripts/test-audit/scan.ts', 'packages/core/src/huge.ts'],",
+      '    rules: {',
+      "+      complexity: 'off', // eslint-policy-allow-off: #3240",
+      '    },',
+      '  },',
+    ].join(String.fromCharCode(10));
+    const violations = checkDiff(diff);
+    expect(violations.length).toBe(1);
+    expect(violations[0].message).toContain("'complexity'");
+    expect(violations[0].message).toContain(
+      'split the file; raising the ceiling is not an accepted fix (#3718)',
+    );
+  });
+
+  it('flags an un-baselined per-file ceiling off in current state', () => {
+    const fixture = [
+      'const config = [',
+      '  {',
+      "    files: ['packages/core/src/some/big.file.ts'],",
+      '    rules: {',
+      "      'max-lines': 'off', // eslint-policy-allow-off: #9999",
+      '    },',
+      '  },',
+      '];',
+    ].join(String.fromCharCode(10));
+    const violations = scanConfigCeilingOverrides(fixture);
+    expect(violations.length).toBe(1);
+    expect(violations[0].file).toBe('eslint.config.js');
+    expect(violations[0].lineNumber).toBe(5);
+    expect(violations[0].message).toContain(
+      'split the file; raising the ceiling is not an accepted fix (#3718)',
+    );
+  });
+
+  it('flags a current-state threshold above the repo base in a files-scoped block', () => {
+    const fixture = [
+      'const config = [',
+      '  {',
+      "    files: ['packages/*/src/legacy/**/*.{test,spec,bun}.{ts,tsx}'],",
+      '    rules: {',
+      "      'max-lines-per-function': ['error', 200], // eslint-policy-allow-off: #9999",
+      '    },',
+      '  },',
+      '];',
+    ].join(String.fromCharCode(10));
+    const violations = scanConfigCeilingOverrides(fixture);
+    expect(violations.length).toBe(1);
+    expect(violations[0].message).toContain(
+      'split the file; raising the ceiling is not an accepted fix (#3718)',
+    );
+  });
+
+  it('flags a current-state single-line inline rules off entry in a files-scoped block', () => {
+    // extractRuleKey treats the structural `rules` key as null, so the
+    // single-line `rules: { ... }` form needs inline-entry extraction to be
+    // caught by the current-state scan, like the diff path already does.
+    const fixture = [
+      'const config = [',
+      '  {',
+      "    files: ['packages/core/src/inline/big.file.ts'],",
+      "    rules: { 'max-lines': 'off' }, // eslint-policy-allow-off: #9999",
+      '  },',
+      '];',
+    ].join(String.fromCharCode(10));
+    const violations = scanConfigCeilingOverrides(fixture);
+    expect(violations.length).toBe(1);
+    expect(violations[0].file).toBe('eslint.config.js');
+    expect(violations[0].lineNumber).toBe(4);
+    expect(violations[0].message).toContain("'max-lines'");
+    expect(violations[0].message).toContain(
+      'split the file; raising the ceiling is not an accepted fix (#3718)',
+    );
+  });
+
+  it('produces zero current-state violations for the repository config; the five waivers are baselined', () => {
+    const configSource = readFileSync(
+      join(repoRoot, 'eslint.config.js'),
+      'utf8',
+    );
+    const overrides = extractConfigCeilingOverrides(configSource);
+    expect(
+      overrides.map((override) => override.files + ' ' + override.rule).sort(),
+    ).toEqual([
+      'packages/*/src/**/*.{test,spec,bun}.{ts,tsx} max-lines-per-function',
+      'scripts/check-settings-boundary.ts max-lines',
+      'scripts/test-audit/scan.ts complexity',
+      'scripts/test-audit/scan.ts max-lines',
+      'scripts/test-audit/scan.ts max-lines-per-function',
+      'scripts/test-audit/scan.ts sonarjs/cognitive-complexity',
+      'scripts/tests/**/*.{ts,tsx,js,mjs,cjs} max-lines-per-function',
+      'scripts/tests/eslint-guard.test.ts max-lines',
+    ]);
+    expect(scanConfigCeilingOverrides(configSource)).toEqual([]);
+  });
+
+  it('rejects baseline entries naming non-ceiling rules', () => {
+    expect(() =>
+      parseCeilingOverrideBaseline(
+        '{"issue":3718,"entries":[{"files":"a.ts","rule":"sonarjs/max-lines"}]}',
+      ),
+    ).toThrow(/must be a CEILING_RULES rule id/);
   });
 });

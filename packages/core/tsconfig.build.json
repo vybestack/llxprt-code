@@ -14,7 +14,7 @@
     "**/*.testHelpers.ts",
     "**/*.test-helper.ts",
     "**/*.fixtures.ts",
-    "**/src/test-utils/**",
+    "**/test-utils/**",
     "../settings/src/**/__tests__/**",
     "../settings/src/**/*.test.*",
     "../settings/src/**/*.test-d.*",

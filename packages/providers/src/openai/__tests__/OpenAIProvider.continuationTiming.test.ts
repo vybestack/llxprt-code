@@ -24,7 +24,6 @@ import type OpenAI from 'openai';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { OpenAIProvider } from '../OpenAIProvider.js';
 import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
-import { resetSettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import {
   ATTEMPT_LIFECYCLE_KEY,
@@ -185,7 +184,6 @@ describe('issue #3473: continuation raw-delta timing through the lifecycle notif
   beforeEach(() => {
     vi.clearAllMocks();
     mockChatCompletionsCreate.mockReset();
-    resetSettingsService();
 
     const runtime = initializeTestProviderRuntime({
       runtimeId: `openai-continuation-timing-${Math.random().toString(36).slice(2, 10)}`,

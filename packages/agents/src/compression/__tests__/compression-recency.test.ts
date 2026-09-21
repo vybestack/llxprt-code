@@ -24,7 +24,6 @@ import {
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import * as providerRuntime from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
 void vi.mock('@vybestack/llxprt-code-core/utils/delay.js', () => ({
@@ -114,7 +113,6 @@ describe('CompressionHandler wasRecentlyCompressed (issue #1792)', () => {
       ...runtimeSetup.runtime,
       config: runtimeSetup.config,
     };
-    providerRuntime.setActiveProviderRuntimeContext(providerRuntimeSnapshot);
   });
 
   afterEach(() => {
@@ -264,7 +262,6 @@ describe('CompressionHandler performCompression result (issue #1792)', () => {
       ...runtimeSetup.runtime,
       config: runtimeSetup.config,
     };
-    providerRuntime.setActiveProviderRuntimeContext(providerRuntimeSnapshot);
   });
 
   it('clears cached prompt token baseline after successful compression rewrite', async () => {

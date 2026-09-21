@@ -228,11 +228,29 @@ function renderResult(resultDisplay: string): { frame: string } {
 //   into the seconds, past the test timeout.
 // - one unbroken body while mounted costs 2.20-2.25 MiB, mostly the body
 //   itself; laying it out untrimmed measured 12.45 MiB.
+// - one large { content } object body while mounted costs 2.37-2.49 MiB
+//   (issue #3428); handing MarkdownDisplay the untrimmed body measured
+//   46.14 MB (44.0 MiB) on the same channel.
 const CYCLED_RETENTION_LIMIT_BYTES = 4 * MIB;
 const REPEATED_BODY_RETENTION_LIMIT_BYTES = 1 * MIB;
 const UNBROKEN_RETENTION_LIMIT_BYTES = 4 * MIB;
 const UNBROKEN_REVISIT_LIMIT_BYTES = 2 * MIB;
 const UNBROKEN_MOUNT_LIMIT_BYTES = 6 * MIB;
+const OBJECT_MOUNT_LIMIT_BYTES = 8 * MIB;
+
+function buildObjectResultElement(
+  content: string,
+  terminalWidth = TERMINAL_WIDTH,
+): React.ReactElement {
+  return (
+    <ToolResultDisplay
+      resultDisplay={{ content }}
+      terminalWidth={terminalWidth}
+      availableTerminalHeight={AVAILABLE_HEIGHT}
+      renderOutputAsMarkdown={false}
+    />
+  );
+}
 
 describe('ToolResultDisplay — large results cost only what they display', () => {
   it('does not retain cycled result bodies after unmount', () => {
@@ -309,6 +327,24 @@ describe('ToolResultDisplay — large results cost only what they display', () =
     // of the body is: the visible window keeps the tail, and its last row
     // therefore ends with the body's own final characters.
     expect(frame.trimEnd().endsWith('01ab')).toBe(true);
+  }, 60_000);
+
+  it('bounds what a single large { content } object body costs while mounted', () => {
+    // The object render path feeds the (trimmed) body to the same
+    // full-buffer processors the string path feeds MaxSizedBox, so an
+    // unbounded input would lay out a row per source line of the body.
+    const settled = settledRetainedHeapBytes();
+    const { lastFrame, unmount } = renderWithProviders(
+      buildObjectResultElement(makeResult(1_000_000, 1), 12),
+    );
+    const frame = lastFrame() ?? '';
+    const whileMounted = settledRetainedHeapBytes();
+    unmount();
+    const marginalBytes = whileMounted - settled;
+
+    expect(marginalBytes).toBeLessThan(OBJECT_MOUNT_LIMIT_BYTES);
+    expect(frame).toContain('hidden');
+    expect(frame).toContain('line4999');
   }, 60_000);
 
   it('still shows the end of the output and reports hidden lines', () => {

@@ -22,7 +22,6 @@ import {
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import * as providerRuntime from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
 describe('ChatSession hook execution control', () => {
   let mockHookSystem: HookSystem;
@@ -84,7 +83,6 @@ describe('ChatSession hook execution control', () => {
       ...runtimeSetup.runtime,
       config: mockConfig,
     };
-    providerRuntime.setActiveProviderRuntimeContext(providerRuntimeSnapshot);
 
     // Create mock ContentGenerator
     mockContentGenerator = {

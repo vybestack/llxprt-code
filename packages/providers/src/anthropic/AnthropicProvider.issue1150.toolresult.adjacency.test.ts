@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { vi, describe, it, expect, beforeEach } from 'bun:test';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import type {
   IContent,
@@ -24,10 +24,6 @@ import {
 } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  clearActiveProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type {
   AnthropicContentBlock,
   AnthropicRequestBody,
@@ -175,17 +171,11 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
       return settingsService.get(key);
     };
 
-    setActiveProviderRuntimeContext(runtimeContext);
-
     // Enable extended thinking
     settingsService.set('reasoning.enabled', true);
     settingsService.set('reasoning.budgetTokens', 10000);
     settingsService.set('reasoning.includeInContext', true);
     settingsService.set('reasoning.stripFromContext', 'none');
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
   });
 
   const buildCallOptions = (

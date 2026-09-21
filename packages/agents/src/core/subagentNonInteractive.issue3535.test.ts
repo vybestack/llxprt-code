@@ -179,6 +179,9 @@ function createEmptyRegistryConfig(): Config {
   policyEngine.setApprovalMode(ApprovalMode.YOLO);
   const messageBus = new MessageBus(policyEngine, false);
   const messageBusAdapter = new CoreMessageBusAdapter(messageBus);
+  // Issue #2616: prompt assembly reads settings via config.getSettingsService().
+  // An empty service reproduces the old ambient-absent defaults.
+  const settingsService = new SettingsService();
   const toolRegistry = new ToolRegistry(
     {
       getEphemeralSettings: () => ({}),
@@ -216,6 +219,7 @@ function createEmptyRegistryConfig(): Config {
     getJitMemoryForPath: async () => undefined,
     getMcpInstructions: () => undefined,
     getWorkingDir: () => process.cwd(),
+    getSettingsService: () => settingsService,
     // Forward the options object verbatim, mirroring production
     // (packages/agents/src/api/runtimeFactories.ts). The factory previously
     // cherry-picked constructor args and DROPPED onAllToolCallsComplete /

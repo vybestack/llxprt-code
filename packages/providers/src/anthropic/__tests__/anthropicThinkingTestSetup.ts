@@ -21,7 +21,6 @@ import {
 } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import { setActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createAnthropicRawPostTestAdapter } from '../../__tests__/rawPostTestAdapters.js';
 
 // Mock the prompts module
@@ -62,8 +61,8 @@ export interface ThinkingTestSetup {
 
 /**
  * Creates a provider + runtime context for thinking tests.
- * Must be called inside beforeEach; caller must call
- * clearActiveProviderRuntimeContext() in afterEach.
+ * Issue #2616: the context is handed to the provider explicitly via
+ * buildCallOptions; no ambient install or teardown is needed.
  */
 export function setupThinkingProvider(): ThinkingTestSetup {
   let ephemeralSettingsGetter: () => Record<string, unknown> = () => ({});
@@ -109,8 +108,8 @@ export function setupThinkingProvider(): ThinkingTestSetup {
     return settingsService.get(key);
   };
 
-  setActiveProviderRuntimeContext(runtimeContext);
-
+  // Issue #2616: the runtime context is handed to the provider explicitly via
+  // buildCallOptions; no ambient context is installed.
   const buildCallOptions = (
     contents: IContent[],
     overrides: Omit<ProviderCallOptionsInit, 'providerName' | 'contents'> = {},

@@ -11,7 +11,7 @@
  * streaming (not just at content_block_stop), enabling real-time UI rendering.
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { vi, describe, it, expect, beforeEach } from 'bun:test';
 import type {
   IContent,
   ThinkingBlock,
@@ -21,7 +21,6 @@ import {
   setupThinkingProvider,
   type ThinkingTestSetup,
 } from './__tests__/anthropicThinkingTestSetup.js';
-import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
 function findThinkingBlock(chunk: IContent): ThinkingBlock {
   const block = chunk.blocks.find(
@@ -46,10 +45,6 @@ describe('AnthropicProvider Extended Thinking Streaming (issue #1723)', () => {
     settingsService = setup.settingsService;
     buildCallOptions = setup.buildCallOptions;
     settingsService.setProviderSetting('anthropic', 'streaming', 'enabled');
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
   });
 
   it('should emit thinking deltas during streaming, not just at content_block_stop', async () => {

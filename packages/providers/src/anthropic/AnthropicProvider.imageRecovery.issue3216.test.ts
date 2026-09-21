@@ -11,7 +11,7 @@
  * sanitizer/classifier under test are never mocked; only the SDK transport is.
  */
 
-import { vi, describe, it, expect, afterEach } from 'bun:test';
+import { vi, describe, it, expect } from 'bun:test';
 import { APIError } from '@anthropic-ai/sdk';
 import {
   attachTransportAttemptBudget,
@@ -28,10 +28,6 @@ import {
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  clearActiveProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import sharp from 'sharp';
 import { createAnthropicRawPostTestAdapter } from '../__tests__/rawPostTestAdapters.js';
 
@@ -222,7 +218,6 @@ function setupProvider(
     return svc.get(key);
   };
 
-  setActiveProviderRuntimeContext(runtime);
   return { provider, runtimeContext: runtime, settingsService: svc };
 }
 
@@ -286,10 +281,6 @@ function appendTextChunk(chunks: string[], chunk: IContent): void {
 }
 
 describe('AnthropicProvider image recovery (@issue:3216)', () => {
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
-
   it('proactively sanitizes oversized history images so no 400 is sent', async () => {
     vi.clearAllMocks();
     const big = await pngBase64(3000, 3000);
@@ -586,10 +577,6 @@ describe('AnthropicProvider image recovery (@issue:3216)', () => {
 });
 
 describe('AnthropicProvider image recovery through RetryOrchestrator (@issue:3216 H2)', () => {
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
-
   it('dimension-400 then sanitized retry 429 = exactly two physical calls (budget-exhausted)', async () => {
     vi.clearAllMocks();
     const big = await pngBase64(3000, 3000);

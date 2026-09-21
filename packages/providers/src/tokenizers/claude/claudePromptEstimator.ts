@@ -10,6 +10,7 @@ import type {
 } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import type { RuntimeTokenizer } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizer.js';
 import type { PromptEnvelopeProtocol } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import { estimateImageTokens } from '@vybestack/llxprt-code-tools/utils/imageTokenEstimation.js';
 import type { ProviderFinalizedPromptProjection } from '../../runtime/promptEnvelopeProjections.js';
 import { ModelPromptEstimatorError } from '../ModelPromptEstimatorError.js';
 import type { ModelPromptEstimatorRegistration } from '../ModelPromptEstimatorRegistry.js';
@@ -142,8 +143,20 @@ export async function estimateClaude5Prompt(
     const promptText = projection.promptText;
     const baseTokens = countO200kBaseTokens(encoder, promptText);
     const features = extractFeatures(promptText);
+    let count = applyClaudeCalibration(baseTokens, features, calibration);
+    // Image cost is added post-calibration because the anthropic formula
+    // already returns provider-billed image tokens and the coefficients are
+    // text-fitted; scaling them here would shrink the billed cost (issue
+    // #3663).
+    for (const entry of projection.imageEntries ?? []) {
+      count += estimateImageTokens({
+        provider: request.activeProvider,
+        model: request.canonicalModel,
+        dimensions: entry.dimensions,
+      });
+    }
     return {
-      count: applyClaudeCalibration(baseTokens, features, calibration),
+      count,
       method: 'calibrated',
       family: spec.family,
       estimatorVersion: calibration.estimatorVersion,

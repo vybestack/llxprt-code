@@ -17,13 +17,7 @@
  * configuration.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  clearActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { describe, expect, it, vi } from 'bun:test';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-auth';
@@ -83,19 +77,6 @@ function readPrepared(provider: AnthropicProvider, transportToken: object) {
 }
 
 describe('AnthropicProvider prompt-envelope OAuth parity (issue #2817)', () => {
-  beforeEach(() => {
-    setActiveProviderRuntimeContext(
-      createProviderRuntimeContext({
-        settingsService: new SettingsService(),
-        runtimeId: 'anthropic-auth-parity-test',
-      }),
-    );
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
-
   it('prepares a non-OAuth envelope when the resolved credential is an API key', async () => {
     const provider = new ApiKeyWithOAuthManagerProvider('sk-ant-api03-example');
 

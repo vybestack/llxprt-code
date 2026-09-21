@@ -19,7 +19,6 @@ import { Config } from './config.js';
 import type { LspConfig } from '@vybestack/llxprt-code-ide-integration';
 import { initializeTestConfig } from '../__tests__/config-test-helpers.js';
 
-import { setLlxprtMdFilename as _mockSetLlxprtMdFilename } from '@vybestack/llxprt-code-tools';
 import * as lspServiceClientModule from '@vybestack/llxprt-code-ide-integration';
 import { debugLogger } from '../utils/debugLogger.js';
 
@@ -205,35 +204,11 @@ void vi.mock('../utils/extensionLoader.js', () => ({
 }));
 
 void vi.mock('../runtime/providerRuntimeContext.js', () => ({
-  setProviderRuntimeStateFactory: vi.fn(),
-  setActiveProviderRuntimeContext: vi.fn(),
-  peekActiveProviderRuntimeContext: vi.fn().mockReturnValue(null),
   createProviderRuntimeContext: vi.fn().mockReturnValue({}),
-  getActiveProviderRuntimeContext: vi.fn().mockReturnValue({
-    settingsService: {
-      get: vi.fn(),
-      set: vi.fn(),
-      getAllGlobalSettings: vi.fn().mockReturnValue({}),
-      getProviderSettings: vi.fn().mockReturnValue({}),
-      setProviderSetting: vi.fn(),
-    },
-    config: null,
-    runtimeId: 'test-runtime',
-    metadata: {},
-  }),
 }));
 
 void vi.mock('@vybestack/llxprt-code-settings', () => ({
   ...realLlxprtCodeSettingsModule,
-  getSettingsService: vi.fn().mockReturnValue({
-    get: vi.fn(),
-    set: vi.fn(),
-    getAllGlobalSettings: vi.fn().mockReturnValue({}),
-    getProviderSettings: vi.fn().mockReturnValue({}),
-    setProviderSetting: vi.fn(),
-    clear: vi.fn(),
-  }),
-  registerSettingsService: vi.fn(),
 }));
 
 // Mock MCP SDK Client

@@ -31,7 +31,6 @@ import {
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import * as providerRuntime from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import type {
   GenerateChatOptions,
@@ -118,7 +117,6 @@ function createTestFixture(provider: IProvider): TestFixture {
       promptEnvelopeEstimation: true,
     },
   };
-  providerRuntime.setActiveProviderRuntimeContext(providerRuntimeSnapshot);
 
   return {
     mockConfig,
@@ -165,9 +163,7 @@ describe('ChatSession prompt-envelope estimate on mid-stream failure (issue #281
     vi.clearAllMocks();
   });
 
-  afterEach(() => {
-    providerRuntime.setActiveProviderRuntimeContext(null);
-  });
+  afterEach(() => {});
 
   it('clears the estimate when the stream fails after the first chunk', async () => {
     const fixture = createTestFixture(createMidStreamFailingProvider());

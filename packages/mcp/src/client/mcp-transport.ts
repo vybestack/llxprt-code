@@ -12,9 +12,8 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { AuthProviderType } from '@vybestack/llxprt-code-auth/mcp-auth-provider-type.js';
 import type { MCPServerConfig } from '../config/mcpServerConfig.js';
-import { GoogleCredentialProvider } from '../auth/google-auth-provider.js';
-import { ServiceAccountImpersonationProvider } from '../auth/sa-impersonation-provider.js';
 import type { McpAuthProvider } from '../auth/auth-provider.js';
+import { getRegisteredMcpAuthFactoryRegistry } from '../auth/mcp-auth-factory.js';
 import { MCPOAuthProvider } from '../auth/oauth-provider.js';
 import { MCPOAuthTokenStorage } from '../auth/oauth-token-storage.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
@@ -22,6 +21,10 @@ import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 const debugLogger = DebugLogger.getLogger('llxprt:core:tools:mcp-client');
 
 export const MCP_DEFAULT_TIMEOUT_MSEC = 10 * 60 * 1000; // default to 10 minutes
+
+/** Supplies the Google auth provider types; installed as a runtime plugin. */
+const GOOGLE_MCP_AUTH_PLUGIN_PACKAGE =
+  '@vybestack/llxprt-plugin-google-mcp-auth';
 
 /**
  * Create RequestInit for TransportOptions.
@@ -38,24 +41,109 @@ function createTransportRequestInit(
   };
 }
 
+function isGoogleAuthProviderType(authProviderType: string): boolean {
+  return (
+    authProviderType === AuthProviderType.GOOGLE_CREDENTIALS ||
+    authProviderType === AuthProviderType.SERVICE_ACCOUNT_IMPERSONATION
+  );
+}
+
+function unknownAuthProviderMessage(
+  mcpServerName: string,
+  authProviderType: string,
+): string {
+  const base =
+    `MCP server '${mcpServerName}' selected authProviderType ` +
+    `'${authProviderType}', but no auth provider is registered for it.`;
+  if (isGoogleAuthProviderType(authProviderType)) {
+    return (
+      `${base} Install the '${GOOGLE_MCP_AUTH_PLUGIN_PACKAGE}' runtime ` +
+      `plugin to provide it.`
+    );
+  }
+  return `${base} Custom auth provider types are contributed by runtime plugins.`;
+}
+
+/**
+ * The `OAuthClientProvider` methods every `McpAuthProvider` must implement.
+ * Runtime plugins are loaded JS: the manifest schema proves only that
+ * `createAuthProvider` is a function, not that its return value honors the
+ * interface, so the transport validates the result structurally at the
+ * plugin boundary.
+ */
+const REQUIRED_AUTH_PROVIDER_METHODS = [
+  'clientInformation',
+  'tokens',
+  'saveTokens',
+  'redirectToAuthorization',
+  'saveCodeVerifier',
+  'codeVerifier',
+] as const;
+
+function isMcpAuthProvider(value: unknown): value is McpAuthProvider {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  return REQUIRED_AUTH_PROVIDER_METHODS.every(
+    (method) => typeof candidate[method] === 'function',
+  );
+}
+
 /**
  * Create an AuthProvider for the MCP Transport.
+ *
+ * Standard OAuth (no `authProviderType`, or `dynamic_discovery`) returns
+ * undefined so the caller falls through to the built-in OAuth path. Any other
+ * selected type is dispatched through the registered factory registry; an
+ * unknown type, a failing factory, or a factory whose result does not
+ * implement `McpAuthProvider` is terminal — there is never a silent fallback
+ * to standard OAuth.
  */
 function createAuthProvider(
+  mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
 ): McpAuthProvider | undefined {
+  const authProviderType = mcpServerConfig.authProviderType;
   if (
-    mcpServerConfig.authProviderType ===
-    AuthProviderType.SERVICE_ACCOUNT_IMPERSONATION
+    authProviderType === undefined ||
+    authProviderType === AuthProviderType.DYNAMIC_DISCOVERY
   ) {
-    return new ServiceAccountImpersonationProvider(mcpServerConfig);
+    return undefined;
   }
-  if (
-    mcpServerConfig.authProviderType === AuthProviderType.GOOGLE_CREDENTIALS
-  ) {
-    return new GoogleCredentialProvider(mcpServerConfig);
+
+  const factory =
+    getRegisteredMcpAuthFactoryRegistry().getAuthProviderFactory(
+      authProviderType,
+    );
+  if (factory === undefined) {
+    throw new Error(
+      unknownAuthProviderMessage(mcpServerName, authProviderType),
+    );
   }
-  return undefined;
+
+  let provider: unknown;
+  try {
+    provider = factory(mcpServerConfig);
+  } catch (cause) {
+    throw new Error(
+      `MCP server '${mcpServerName}' failed to create its ` +
+        `'${authProviderType}' auth provider: ${
+          cause instanceof Error ? cause.message : String(cause)
+        }`,
+      { cause },
+    );
+  }
+
+  if (!isMcpAuthProvider(provider)) {
+    throw new Error(
+      `MCP server '${mcpServerName}' failed to create its ` +
+        `'${authProviderType}' auth provider: the runtime plugin factory ` +
+        `returned '${typeof provider}' instead of an McpAuthProvider.`,
+    );
+  }
+
+  return provider;
 }
 
 /**
@@ -196,22 +284,33 @@ export function createSSETransportWithAuth(
   });
 }
 
+/**
+ * Legacy no-URL error messages for the built-in Google auth provider types.
+ * Keyed by string so custom plugin-contributed types fall through to the
+ * generic message below.
+ */
+const LEGACY_NO_URL_MESSAGES: Readonly<Record<string, string | undefined>> = {
+  [AuthProviderType.GOOGLE_CREDENTIALS]:
+    'URL must be provided in the config for Google Credentials provider',
+  [AuthProviderType.SERVICE_ACCOUNT_IMPERSONATION]:
+    'No URL configured for ServiceAccountImpersonation MCP Server',
+};
+
 function validateNoUrlAuthProvider(mcpServerConfig: MCPServerConfig): void {
+  const authProviderType = mcpServerConfig.authProviderType;
   if (
-    mcpServerConfig.authProviderType === AuthProviderType.GOOGLE_CREDENTIALS
+    authProviderType === undefined ||
+    authProviderType === AuthProviderType.DYNAMIC_DISCOVERY
   ) {
-    throw new Error(
-      `URL must be provided in the config for Google Credentials provider`,
-    );
+    return;
   }
-  if (
-    mcpServerConfig.authProviderType ===
-    AuthProviderType.SERVICE_ACCOUNT_IMPERSONATION
-  ) {
-    throw new Error(
-      `No URL configured for ServiceAccountImpersonation MCP Server`,
-    );
+  const legacy = LEGACY_NO_URL_MESSAGES[authProviderType];
+  if (legacy !== undefined) {
+    throw new Error(legacy);
   }
+  throw new Error(
+    `URL must be provided in the config for authProviderType '${authProviderType}'`,
+  );
 }
 
 async function resolveOAuthHeaders(
@@ -221,7 +320,7 @@ async function resolveOAuthHeaders(
   headers: Record<string, string>;
   authProvider: McpAuthProvider | undefined;
 }> {
-  const authProvider = createAuthProvider(mcpServerConfig);
+  const authProvider = createAuthProvider(mcpServerName, mcpServerConfig);
   const headers: Record<string, string> =
     (await authProvider?.getRequestHeaders?.()) ?? {};
 

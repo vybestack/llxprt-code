@@ -77,7 +77,7 @@ On POSIX systems the run directory is created with `0700` permissions and the pr
 
 ## Run a profiled tmux workload
 
-The tmux harness accepts an arbitrary `startCommand`, including the source profiler launcher. `${bun}` resolves to the harness's Bun executable, and `LLXPRT_TMUX_ARTIFACT_DIR` gives the launched command an isolated artifact directory. See `scripts/tmux-script.issue3386-memory-retention.fake.json` for a complete no-network example with fixed terminal dimensions, manual forced-GC checkpoints, `/clear`, and a clean exit.
+The tmux harness accepts an arbitrary `startCommand`, including the source profiler launcher. `${bun}` resolves to the harness's Bun executable, and `LLXPRT_TMUX_ARTIFACT_DIR` gives the launched command an isolated artifact directory. See `scripts/tmux-script.issue3386-memory-retention.fake.json` for a complete no-network example with fixed terminal dimensions, manual forced-GC checkpoints, `/clear`, and a clean exit. `scripts/tmux-script.issue3428-tool-result-retention.fake.json` is the same pattern driving large `run_shell_command` tool results through the fake provider, with a snapshot-diagnostic sibling script for retainer analysis.
 
 Run that scenario with:
 

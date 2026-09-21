@@ -3,7 +3,6 @@ import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import { buildMessagesWithReasoning } from './OpenAIRequestBuilder.js';
 import type { ITool } from '../ITool.js';
-import { resetSettingsService } from '@vybestack/llxprt-code-settings';
 import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -20,7 +19,6 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    resetSettingsService();
     const runtime = initializeTestProviderRuntime({
       runtimeId: `openai-provider.emptyResponseRetry.${Math.random()
         .toString(36)

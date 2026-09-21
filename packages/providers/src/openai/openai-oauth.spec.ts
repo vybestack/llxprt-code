@@ -20,7 +20,6 @@ import { TEST_PROVIDER_CONFIG } from '../__tests__/providerTestConfig.js';
 import { createProviderWithRuntime as createProviderWithRuntimeHelper } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 import { flushRuntimeAuthScope } from '@vybestack/llxprt-code-auth';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 // Skip OAuth tests in CI as they require browser interaction
 const skipInCI = process.env.CI === 'true';
@@ -82,26 +81,6 @@ describe('OpenAI Provider OAuth test registration', () => {
       vi.clearAllMocks();
       originalEnv = { ...process.env };
 
-      // Clear global SettingsService instance to ensure isolation
-      const {
-        createProviderRuntimeContext,
-        setActiveProviderRuntimeContext,
-        clearActiveProviderRuntimeContext,
-      } = await import(
-        '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js'
-      );
-      const { getSettingsService, registerSettingsService: registerSS } =
-        await import('@vybestack/llxprt-code-settings');
-      const tempRuntime = createProviderRuntimeContext({
-        settingsService: new SettingsService(),
-        runtimeId: 'test-global-runtime',
-      });
-      setActiveProviderRuntimeContext(tempRuntime);
-      registerSS(tempRuntime.settingsService);
-      const globalSettingsService = getSettingsService();
-      globalSettingsService.clear();
-      clearActiveProviderRuntimeContext();
-
       // Clear OPENAI_API_KEY for OAuth tests to work properly
       delete process.env.OPENAI_API_KEY;
     });
@@ -110,7 +89,6 @@ describe('OpenAI Provider OAuth test registration', () => {
       // Restore original environment
       process.env = originalEnv;
       flushRuntimeAuthScope('openai.oauth.spec.runtime');
-      flushRuntimeAuthScope('test-global-runtime');
     });
 
     describe('Authentication Precedence', () => {

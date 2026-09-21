@@ -7,13 +7,9 @@
  * Split from AnthropicProvider.test.ts for max-lines compliance.
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { vi, describe, it, expect, beforeEach } from 'bun:test';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import { TEST_PROVIDER_CONFIG } from '../__tests__/providerTestConfig.js';
-import {
-  clearActiveProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
@@ -147,9 +143,6 @@ describe('AnthropicProvider', () => {
     buildCallOptions = setup.buildCallOptions;
   });
 
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
   describe('generateChatCompletion', () => {
     it('should pass custom headers provided via configuration to the Anthropic client', async () => {
       const customHeaders = {
@@ -202,8 +195,6 @@ describe('AnthropicProvider', () => {
         runtimeMetadata: { testCase: 'custom-headers' },
         runtimeId: 'anthropic.customHeaders',
       });
-
-      setActiveProviderRuntimeContext(callOptions.runtime);
 
       const generator = providerWithHeaders.generateChatCompletion(callOptions);
 

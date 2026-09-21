@@ -49,7 +49,6 @@ void vi.mock('../auth/oauth-token-storage.js', () =>
   automock(realOauthTokenStorageModule),
 );
 void vi.mock('../auth/oauth-utils.js', () => automock(realOauthUtilsModule));
-void vi.mock('google-auth-library', () => ({ GoogleAuth: vi.fn() }));
 
 const RESOURCE_LIST_CHANGED_METHOD = 'notifications/resources/list_changed';
 

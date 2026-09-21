@@ -776,10 +776,84 @@ function check18_coreBarrelShim(reportOnly: boolean) {
 }
 
 /**
- * @plan PLAN-20260608-ISSUE1588.P03
- * Check 19: settingsRuntimeAdapter single-owner bridge scan.
+ * The single-owner construction seam that Check 19 requires
+ * settingsRuntimeAdapter.ts to declare exclusively (issue #2616).
+ */
+const SINGLE_OWNER_SEAM_NAME = 'createRuntimeSettingsService';
+
+const SINGLE_OWNER_EXPORT_KINDS = new Set([
+  'function',
+  'const',
+  'let',
+  'var',
+  'class',
+]);
+
+/**
+ * Exact-export match for the single-owner seam: the line must BE the
+ * createRuntimeSettingsService export — a declaration whose exported binding
+ * is the seam, or a brace re-export of exactly the seam. Plain substring
+ * matching let alias re-exports evade (`export {
+ * createRuntimeSettingsService as x }`, an exported
+ * `createRuntimeSettingsServiceXyz` binding).
+ */
+function isSingleOwnerSeamExport(line: string): boolean {
+  const words = line.trim().split(/\s+/);
+  if (words[0] !== 'export') {
+    return false;
+  }
+  if (words[1] === '{') {
+    return (
+      words[2] === SINGLE_OWNER_SEAM_NAME && (words[3] ?? '').startsWith('}')
+    );
+  }
+  const declaredName = (words[2] ?? '').replace(/[^A-Za-z0-9$]/g, '');
+  return (
+    SINGLE_OWNER_EXPORT_KINDS.has(words[1] ?? '') &&
+    declaredName === SINGLE_OWNER_SEAM_NAME
+  );
+}
+
+/**
+ * Check 19: settingsRuntimeAdapter single-owner construction seam (issue #2616).
+ *
+ * The adapter is reduced to `createRuntimeSettingsService` — the sanctioned
+ * construction seam for a fresh runtime SettingsService. Every ambient helper
+ * that used to live beside it (runtime settings resolution, settings runtime
+ * context creation/activation, the provider runtime state factory) and the
+ * settings singleton module (settingsServiceInstance) are DELETED; this check
+ * fails if any of those names reappear in production source, and fails if the
+ * adapter stops being the single pure construction seam.
  */
 function check19_adapterSingleOwner() {
+  const adapterPath = join(
+    ROOT,
+    'packages/core/src/runtime/settingsRuntimeAdapter.ts',
+  );
+  if (!existsSync(adapterPath)) {
+    console.error(
+      'FAIL: adapter-single-owner: settingsRuntimeAdapter.ts is missing',
+    );
+    return false;
+  }
+  const adapterContent = readFileSync(adapterPath, 'utf-8');
+  if (!adapterContent.includes('createRuntimeSettingsService')) {
+    console.error(
+      'FAIL: adapter-single-owner: createRuntimeSettingsService missing from settingsRuntimeAdapter.ts',
+    );
+    return false;
+  }
+  const offendingExports = adapterContent
+    .split('\n')
+    .filter((line) => /^export /.test(line.trim()))
+    .filter((line) => !isSingleOwnerSeamExport(line.trim()));
+  if (offendingExports.length > 0) {
+    console.error(
+      `FAIL: adapter-single-owner: settingsRuntimeAdapter.ts exports more than the single-owner seam:\n${offendingExports.join('\n')}`,
+    );
+    return false;
+  }
+
   const productionPaths = [
     'packages/agents/src',
     'packages/core/src',
@@ -788,33 +862,23 @@ function check19_adapterSingleOwner() {
   ];
   const isAllowed = (line: string) => {
     const file = line.split(':')[0] || '';
-    if (file.includes('settingsRuntimeAdapter.ts')) return true;
-    if (file.includes('providerRuntimeContext.ts')) return true;
-    if (file.includes('/test-utils/')) return true;
     if (file.includes('.test.') || file.includes('.spec.')) return true;
-    if (file.includes('.d.ts')) return true;
     return false;
   };
 
-  const directSettingsOutput = runRg(
-    '(import.*\\b(getSettingsService|registerSettingsService|resetSettingsService)\\b.*@vybestack/llxprt-code-settings|new SettingsService\\()',
-    productionPaths,
-    ['*.ts'],
-  );
-  const directContextOutput = runRg(
-    'import.*\\b(createProviderRuntimeContext|setActiveProviderRuntimeContext|clearActiveProviderRuntimeContext)\\b',
+  const deletedHelperOutput = runRg(
+    '\\b(peekActiveProviderRuntimeContext|setActiveProviderRuntimeContext|clearActiveProviderRuntimeContext|getActiveProviderRuntimeContext|createSettingsProviderRuntimeContext|setSettingsProviderRuntimeContext|clearSettingsProviderRuntimeContext|resolveRuntimeSettingsService|getRuntimeSettingsService|maybeGetRuntimeSettingsService|activateSettingsRuntimeContext|deactivateSettingsRuntimeContext|registerSettingsService|resetSettingsService|setProviderRuntimeStateFactory|settingsServiceInstance)\\b',
     productionPaths,
     ['*.ts'],
   );
 
-  const violations = [directSettingsOutput, directContextOutput]
-    .join('\n')
+  const violations = deletedHelperOutput
     .split('\n')
     .filter((line) => line && !isAllowed(line));
 
   if (violations.length > 0) {
     console.error(
-      `FAIL: adapter-single-owner: direct settings singleton/default construction or provider runtime context imports outside adapter:\n${violations.join('\n')}`,
+      `FAIL: adapter-single-owner: deleted ambient settings/runtime helpers reappeared:\n${violations.join('\n')}`,
     );
     return false;
   }

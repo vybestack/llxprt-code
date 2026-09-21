@@ -16,13 +16,7 @@
  * @requirement:REQ-PE-001 (issue #2817 acceptance A3, A9, A10)
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  clearActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { describe, expect, it, vi } from 'bun:test';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { PROJECTION_REVISION } from '../runtime/promptEnvelopeProjections.js';
 import { AnthropicProvider } from './AnthropicProvider.js';
@@ -71,19 +65,6 @@ function buildCallOptions(
 }
 
 describe('AnthropicProvider.projectPromptEnvelope (issue #2817 A3)', () => {
-  beforeEach(() => {
-    setActiveProviderRuntimeContext(
-      createProviderRuntimeContext({
-        settingsService: new SettingsService(),
-        runtimeId: 'anthropic-envelope-test',
-      }),
-    );
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
-
   it('identifies anthropic-messages protocol, messages/v1 method, and the model', async () => {
     const provider = new TestAnthropicProvider();
     const options = buildCallOptions(provider, {

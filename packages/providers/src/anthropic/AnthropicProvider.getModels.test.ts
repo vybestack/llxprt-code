@@ -7,10 +7,9 @@
  * Split from AnthropicProvider.test.ts for max-lines compliance.
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { vi, describe, it, expect, beforeEach } from 'bun:test';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import { TEST_PROVIDER_CONFIG } from '../__tests__/providerTestConfig.js';
-import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import {
   setupAnthropicProvider,
   type AnthropicTestSetup,
@@ -136,9 +135,6 @@ describe('AnthropicProvider', () => {
     provider = setup.provider;
   });
 
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
   describe('getModels', () => {
     it('should return a list of Anthropic models including latest aliases', async () => {
       const models = await provider.getModels();

@@ -34,7 +34,6 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { GemmaToolCallParser } from '@vybestack/llxprt-code-core/parsers/TextToolCallParser.js';
 import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
-import { resetSettingsService } from '@vybestack/llxprt-code-settings';
 import {
   SessionMetricsAggregator,
   type ApiAttemptRecord,
@@ -330,7 +329,6 @@ describe('issue #3473: OpenAI stream timing at raw token-bearing deltas', () => 
   let config: Config;
 
   beforeEach(() => {
-    resetSettingsService();
     capturedEvents.length = 0;
     const runtime = initializeTestProviderRuntime({
       runtimeId: `openai-stream-timing-${Math.random().toString(36).slice(2, 10)}`,

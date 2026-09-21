@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import { ProviderManager } from '../ProviderManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -6,10 +6,6 @@ import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { BaseProvider } from '../BaseProvider.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
-import {
-  clearActiveProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
 class HarnessProvider extends BaseProvider {
   lastNormalizedOptions?: NormalizedGenerateChatOptions;
@@ -89,10 +85,6 @@ function withProviderBaseUrl(
 }
 
 describe('ProviderManager runtime guard plumbing', () => {
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
-
   it('injects runtime settings into BaseProvider before invocation', async () => {
     // @plan:PLAN-20251023-STATELESS-HARDENING.P04 @requirement:REQ-SP4-004
     const settingsService = new SettingsService();
@@ -107,7 +99,6 @@ describe('ProviderManager runtime guard plumbing', () => {
       config,
       runtime: runtimeContext,
     });
-    setActiveProviderRuntimeContext(runtimeContext);
     const provider = new HarnessProvider(config, settingsService);
     manager.registerProvider(provider);
     settingsService.set('activeProvider', provider.name);
@@ -153,7 +144,6 @@ describe('ProviderManager runtime guard plumbing', () => {
       config,
       runtime: runtimeContext,
     });
-    setActiveProviderRuntimeContext(runtimeContext);
     const provider = new HarnessProvider(config, settingsService);
     manager.registerProvider(provider);
     settingsService.set('activeProvider', provider.name);

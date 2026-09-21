@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'bun:test';
+import { Buffer } from 'node:buffer';
 import type { IContent } from '@vybestack/llxprt-code-core';
 import { ToolCallStatus, type HistoryItemWithoutId } from '../types.js';
 import {
@@ -577,5 +578,126 @@ describe('filterHistoryItems', () => {
       { type: 'gemini', text: 'Done \u2705' },
     ];
     expect(filterHistoryItems(items, undefined)).toBe(items);
+  });
+
+  describe('tool result display retention (issue #3428)', () => {
+    it('caps a large string tool response for display and records retention', () => {
+      const body = 'z'.repeat(2 * 1024 * 1024);
+      const input: IContent[] = [
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'c-big',
+              name: 'read_file',
+              parameters: {},
+            },
+          ],
+        },
+        {
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: 'c-big',
+              toolName: 'read_file',
+              result: body,
+            },
+          ],
+        },
+      ];
+
+      const output = iContentToHistoryItems(input);
+      assertHasType(output[0], 'tool_group');
+      const tool = output[0].tools[0];
+
+      expect(
+        Buffer.byteLength(tool.resultDisplay as string, 'utf8'),
+      ).toBeLessThanOrEqual(64 * 1024);
+      expect(tool.resultDisplay).toContain('session transcript');
+      expect(tool.retention).toStrictEqual({
+        capped: true,
+        originalLength: 2 * 1024 * 1024,
+      });
+      // The recorded history is the model-facing copy; capping must not
+      // touch it.
+      const responseBlock = input[1]?.blocks[0] as { result: unknown };
+      expect(responseBlock.result).toBe(body);
+    });
+
+    it('pretty-prints object tool responses under the retention budget', () => {
+      const value = Object.fromEntries(
+        Array.from({ length: 5000 }, (_, index) => [
+          `key${index}`,
+          `value-${index}-${'v'.repeat(80)}`,
+        ]),
+      );
+      const input: IContent[] = [
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'c-obj',
+              name: 'read_file',
+              parameters: {},
+            },
+          ],
+        },
+        {
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: 'c-obj',
+              toolName: 'read_file',
+              result: value,
+            },
+          ],
+        },
+      ];
+
+      const output = iContentToHistoryItems(input);
+      assertHasType(output[0], 'tool_group');
+      const tool = output[0].tools[0];
+
+      expect(
+        Buffer.byteLength(tool.resultDisplay as string, 'utf8'),
+      ).toBeLessThanOrEqual(64 * 1024);
+      expect(tool.resultDisplay).toContain('"key0"');
+      expect(tool.resultDisplay).toContain('session transcript');
+      expect(tool.retention?.capped).toBe(true);
+      // Small objects still pretty-print exactly as JSON.stringify did.
+      expect(
+        iContentToHistoryItems([
+          {
+            speaker: 'ai',
+            blocks: [
+              { type: 'tool_call', id: 'c-small', name: 't', parameters: {} },
+            ],
+          },
+          {
+            speaker: 'tool',
+            blocks: [
+              {
+                type: 'tool_response',
+                callId: 'c-small',
+                toolName: 't',
+                result: { a: 1 },
+              },
+            ],
+          },
+        ] satisfies IContent[])[0],
+      ).toMatchObject({
+        type: 'tool_group',
+        tools: [
+          {
+            resultDisplay: '{\n  "a": 1\n}',
+            retention: undefined,
+          },
+        ],
+      });
+    });
   });
 });

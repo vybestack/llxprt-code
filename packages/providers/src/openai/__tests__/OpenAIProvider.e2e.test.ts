@@ -14,7 +14,6 @@ import type {
   ToolCallBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
-import { resetSettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type OpenAI from 'openai';
@@ -56,7 +55,6 @@ describe('OpenAIProvider E2E Tests @plan:PLAN-20251202-THINKING.P16', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockChatCompletionsCreate.mockClear();
-    resetSettingsService();
 
     const runtime = initializeTestProviderRuntime({
       runtimeId: `openai-e2e-${Math.random().toString(36).slice(2, 10)}`,

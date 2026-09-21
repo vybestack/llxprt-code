@@ -4,20 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-  beforeAll,
-} from 'bun:test';
+import { describe, it, expect, beforeEach, beforeAll } from 'bun:test';
 import {
   OpenAIProvider,
   ProviderManager,
 } from '@vybestack/llxprt-code-providers';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
-import { resetSettingsService } from '@vybestack/llxprt-code-settings';
 import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -204,7 +196,6 @@ describe('Multi-Provider Integration Tests', () => {
       return;
     }
 
-    resetSettingsService();
     const runtime = initializeTestProviderRuntime({
       runtimeId: `multi-provider.integration.${Math.random()
         .toString(36)
@@ -224,10 +215,6 @@ describe('Multi-Provider Integration Tests', () => {
     runtimeConfig = runtime.config;
     settingsService.set('activeProvider', '');
     manager = new ProviderManager(runtime);
-  });
-
-  afterEach(() => {
-    // Clean up any state if needed
   });
 
   const createOpenAIProvider = (): OpenAIProvider => {
@@ -305,7 +292,6 @@ describe('Multi-Provider Integration Tests', () => {
     });
 
     it('should switch between models within provider', async () => {
-      resetSettingsService();
       const runtime = initializeTestProviderRuntime({
         runtimeId: `multi-provider.integration.model-switch.${Math.random()
           .toString(36)
@@ -514,7 +500,6 @@ describe('Multi-Provider Integration Tests', () => {
     });
 
     it('should work with a specific model', async () => {
-      resetSettingsService();
       const runtime = initializeTestProviderRuntime({
         runtimeId: `multi-provider.integration.model-specific.${Math.random()
           .toString(36)
@@ -646,7 +631,6 @@ describe('Multi-Provider Integration Tests', () => {
   describe('Error Handling', () => {
     describe.skipIf(skipTests)('configured provider behavior', () => {
       it('should handle invalid model gracefully', async () => {
-        resetSettingsService();
         const runtime = initializeTestProviderRuntime({
           runtimeId: `multi-provider.integration.invalid-model.${Math.random()
             .toString(36)

@@ -9,7 +9,7 @@
  * compliance.
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { vi, describe, it, expect, beforeEach } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { AnthropicRequestBody } from './__tests__/anthropicTestUtils.js';
 import {
@@ -17,7 +17,6 @@ import {
   setupThinkingProvider,
   type ThinkingTestSetup,
 } from './__tests__/anthropicThinkingTestSetup.js';
-import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
 describe('AnthropicProvider thinking display field @plan:PLAN-ANTHROPIC-THINKING', () => {
   let provider: ThinkingTestSetup['provider'];
@@ -30,10 +29,6 @@ describe('AnthropicProvider thinking display field @plan:PLAN-ANTHROPIC-THINKING
     provider = setup.provider;
     settingsService = setup.settingsService;
     buildCallOptions = setup.buildCallOptions;
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
   });
 
   function buildMessages(): IContent[] {

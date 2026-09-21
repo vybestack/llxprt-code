@@ -565,10 +565,8 @@
   "files": [
     "index.ts",
     "src",
-    "!**/*.test.ts",
-    "!**/*.test.tsx",
-    "!**/*.spec.ts",
-    "!**/*.spec.tsx",
+    "!**/*.test.*",
+    "!**/*.spec.*",
     "!**/__tests__/**",
     "!**/__snapshots__/**",
     "!**/*.bun.ts",
@@ -577,7 +575,7 @@
     "!**/*.testHelpers.ts",
     "!**/*.test-helper.ts",
     "!**/*.fixtures.ts",
-    "!**/src/test-utils/**",
+    "!**/test-utils/**",
     "dist"
   ],
   "dependencies": {

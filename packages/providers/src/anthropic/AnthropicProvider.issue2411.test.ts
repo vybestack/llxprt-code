@@ -25,7 +25,7 @@
  * it tests the real production code path that the bug traverses.
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { vi, describe, it, expect, beforeEach } from 'bun:test';
 import {
   AnthropicProvider,
   isAnthropicOAuthBaseURL,
@@ -46,10 +46,6 @@ import {
 } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  clearActiveProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createAnthropicRawPostTestAdapter } from '../__tests__/rawPostTestAdapters.js';
 
 void vi.mock('@vybestack/llxprt-code-tools/ToolFormatter.js', () => ({
@@ -219,10 +215,6 @@ describe('Issue #2411: base-URL-aware OAuth eligibility for Anthropic', () => {
     mockMessagesCreate.mockResolvedValue(nonStreamingResponse());
   });
 
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
-
   /**
    * Centralizes the runtime-context wiring shared by buildOAuthOnlyProvider
    * and the inline tests that call createProviderWithRuntime directly:
@@ -243,7 +235,6 @@ describe('Issue #2411: base-URL-aware OAuth eligibility for Anthropic', () => {
       ...settingsService.getAllGlobalSettings(),
       ...settingsService.getProviderSettings('anthropic'),
     });
-    setActiveProviderRuntimeContext(runtimeContext);
   };
 
   /**

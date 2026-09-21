@@ -16,11 +16,6 @@ import {
 } from 'bun:test';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-  clearActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core';
 import { loadCliConfig } from './config.js';
 import { parseArguments } from './cliArgParser.js';
 import type { Settings } from './settings.js';
@@ -370,8 +365,6 @@ describe('when folder is NOT trusted', () => {
 
 describe('parseArguments', () => {
   const originalArgv = process.argv;
-
-  beforeEach(() => resetRuntimeSettingsState());
 
   afterEach(() => {
     process.argv = originalArgv;
@@ -723,24 +716,19 @@ describe('parseArguments', () => {
     const argv = await parseArguments({} as Settings);
     const settings: Settings = {};
 
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
-    try {
-      const config = await loadCliConfig(
-        settings,
-        [],
-        new ExtensionEnablementManager(
-          ExtensionStorage.getUserExtensionsDir(),
-          argv.extensions,
-        ),
-        'test-session',
-        argv,
-      );
+    const config = await loadCliConfig(
+      settings,
+      [],
+      new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        argv.extensions,
+      ),
+      'test-session',
+      argv,
+    );
 
-      expect(config.isContinueSession()).toBe(true);
-      expect(config.getContinueSessionRef()).toBe('__CONTINUE_LATEST__');
-    } finally {
-      clearActiveProviderRuntimeContext();
-    }
+    expect(config.isContinueSession()).toBe(true);
+    expect(config.getContinueSessionRef()).toBe('__CONTINUE_LATEST__');
   });
 
   it('should preserve explicit --continue session id string', async () => {
@@ -801,14 +789,12 @@ describe('loadCliConfig', () => {
     vi.spyOn(process, 'cwd').mockReturnValue(
       path.resolve(path.sep, 'home', 'user', 'project'),
     );
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
   });
 
   afterEach(() => {
     process.argv = originalArgv;
     restoreEnv();
     vi.restoreAllMocks();
-    clearActiveProviderRuntimeContext();
   });
 
   it('should combine and resolve paths from settings and CLI arguments', async () => {

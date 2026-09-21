@@ -51,12 +51,6 @@ export type {
   DirectSettingSpec,
 } from './settings/settingsRegistry.js';
 
-export {
-  getSettingsService,
-  registerSettingsService,
-  resetSettingsService,
-} from './settings/settingsServiceInstance.js';
-
 export { ProfileManager } from './profiles/ProfileManager.js';
 // Cohesive public profile-lock and write API. Internal lock handle/path/read/
 // temp/delete helpers are NOT re-exported. Consumers that need canonical

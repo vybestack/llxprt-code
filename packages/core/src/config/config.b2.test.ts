@@ -8,7 +8,6 @@ import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import type { ConfigParameters } from './config.js';
 import { Config } from './config.js';
 import { DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES } from './configTypes.js';
-import { getSettingsService } from '@vybestack/llxprt-code-settings';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { initializeTestConfig } from '../__tests__/config-test-helpers.js';
 import { createRuntimeSettingsService } from '../runtime/settingsRuntimeAdapter.js';
@@ -20,14 +19,15 @@ import {
   buildContentGeneratorMockBody,
   buildTelemetryMockBody,
   buildGitServiceMockBody,
-  buildSettingsMockBody,
   buildIdeIntegrationMockBody,
   buildMemoryDiscoveryMockBody,
   buildEventsMockBody,
   buildFetchMockBody,
   createBaseParams,
+  createSettingsServiceMock,
   resetAgentClientMock,
   type HoistedConfigMocks,
+  type SettingsServiceMock,
 } from './__tests__/configTestHarness.js';
 
 // Hoisted mocks referenced by mock factories below (vitest hoist-safe).
@@ -64,8 +64,6 @@ void vi.mock('../telemetry/index.js', () => buildTelemetryMockBody());
 
 void vi.mock('../services/gitService.js', () => buildGitServiceMockBody());
 
-void vi.mock('@vybestack/llxprt-code-settings', () => buildSettingsMockBody());
-
 const __actual4 = {
   ...(await import('@vybestack/llxprt-code-ide-integration')),
 };
@@ -85,8 +83,12 @@ void vi.mock('../utils/events.js', () =>
 void vi.mock('../utils/fetch.js', () => buildFetchMockBody(hoistedConfigMocks));
 
 describe('Server Config (config.ts)', () => {
+  // One shared spy-backed service: baseParams and the integration describe
+  // below must observe the same instance (issue #2616 removed the module
+  // singleton that previously guaranteed this identity).
+  const settingsServiceMock = createSettingsServiceMock();
   const baseParams = createBaseParams(
-    getSettingsService() as unknown as SettingsService,
+    settingsServiceMock as unknown as SettingsService,
   );
 
   beforeEach(() => {
@@ -229,7 +231,7 @@ describe('Server Config (config.ts)', () => {
   });
 
   describe('Ephemeral Settings with SettingsService Integration', () => {
-    let mockSettingsService: ReturnType<typeof vi.fn>;
+    let mockSettingsService: SettingsServiceMock;
 
     /**
      * Wire mockSettingsService.get/set to a local Map so tests can verify
@@ -250,7 +252,7 @@ describe('Server Config (config.ts)', () => {
     }
 
     beforeEach(() => {
-      mockSettingsService = getSettingsService() as ReturnType<typeof vi.fn>;
+      mockSettingsService = settingsServiceMock;
       vi.clearAllMocks();
     });
 

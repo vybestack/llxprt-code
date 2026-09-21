@@ -6,13 +6,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { GitStatsTracker } from './git-stats.js';
-import {
-  Config,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-  clearActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { Config } from '@vybestack/llxprt-code-core';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -23,21 +17,9 @@ describe('Git Statistics Tracking', () => {
   beforeEach(() => {
     // Create a unique temp directory for each test
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'git-stats-test-'));
-
-    // Activate a runtime context for Config creation
-    const settingsService = new SettingsService();
-    const runtime = createProviderRuntimeContext({
-      settingsService,
-      runtimeId: 'git-stats-test',
-      metadata: { source: 'git-stats.test.ts' },
-    });
-    setActiveProviderRuntimeContext(runtime);
   });
 
   afterEach(() => {
-    // Clear runtime context
-    clearActiveProviderRuntimeContext();
-
     // Clean up temp directory
     if (fs.existsSync(tempDir)) {
       fs.rmSync(tempDir, { recursive: true, force: true });

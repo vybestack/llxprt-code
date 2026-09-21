@@ -6,11 +6,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { CredentialResolutionError } from '@vybestack/llxprt-code-auth';
-import {
-  clearActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { AnthropicProvider } from './anthropic/AnthropicProvider.js';
@@ -47,7 +43,6 @@ function createOptions(providerName: string, settings: SettingsService) {
     runtimeId: RUNTIME_ID,
     metadata: { source: 'credential-resolution-errors.test.ts' },
   });
-  setActiveProviderRuntimeContext(runtime);
   return createProviderCallOptions({
     providerName,
     settings,
@@ -121,7 +116,6 @@ describe('Provider credential-resolution error surface', () => {
   });
 
   afterEach(() => {
-    clearActiveProviderRuntimeContext();
     resetFactorySingletons();
     if (originalSocket === undefined) {
       delete process.env.LLXPRT_CREDENTIAL_SOCKET;

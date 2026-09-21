@@ -11,9 +11,9 @@ import type {
   OAuthTokens,
 } from '@modelcontextprotocol/sdk/shared/auth.js';
 import { GoogleAuth } from 'google-auth-library';
-import { OAuthUtils, FIVE_MIN_BUFFER_MS } from './oauth-utils.js';
-import type { MCPServerConfig } from '../config/mcpServerConfig.js';
-import type { McpAuthProvider } from './auth-provider.js';
+import { OAuthUtils, FIVE_MIN_BUFFER_MS } from '@vybestack/llxprt-code-mcp';
+import type { MCPServerConfig } from '@vybestack/llxprt-code-mcp/config/mcpServerConfig.js';
+import type { McpAuthProvider } from '@vybestack/llxprt-code-mcp';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry/utils/debugLogger.js';
 
 function createIamApiUrl(targetSA: string): string {

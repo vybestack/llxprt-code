@@ -588,13 +588,8 @@ export type {
 } from '@vybestack/llxprt-code-tools';
 export { ToolFormatter } from '@vybestack/llxprt-code-tools';
 
-export {
-  createProviderRuntimeContext,
-  getActiveProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-  clearActiveProviderRuntimeContext,
-  peekActiveProviderRuntimeContext,
-} from './runtime/providerRuntimeContext.js';
+export { createProviderRuntimeContext } from './runtime/providerRuntimeContext.js';
+export { createRuntimeSettingsService } from './runtime/settingsRuntimeAdapter.js';
 export type {
   ProviderRuntimeContext,
   ProviderRuntimeContextInit,
@@ -639,14 +634,6 @@ export type {
   AgentRuntimeTelemetryAdapter,
 } from './runtime/AgentRuntimeContext.js';
 export { createAgentRuntimeContext } from './runtime/createAgentRuntimeContext.js';
-
-// Export settings runtime adapter helpers so CLI code can resolve/activate the
-// ambient settings runtime context via the public barrel rather than deep
-// imports (#2378).
-export {
-  resolveRuntimeSettingsService,
-  activateSettingsRuntimeContext,
-} from './runtime/settingsRuntimeAdapter.js';
 
 // Export profile contracts and ports
 export * from './profiles/index.js';

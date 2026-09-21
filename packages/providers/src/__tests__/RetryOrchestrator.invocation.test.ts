@@ -11,7 +11,7 @@
  * options.invocation.getModelBehavior.
  */
 
-import { afterEach, describe, expect, it, vi } from 'bun:test';
+import { describe, expect, it, vi } from 'bun:test';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
 import {
   BaseProvider,
@@ -21,10 +21,6 @@ import type { IProvider, GenerateChatOptions } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { IModel } from '../IModel.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  clearActiveProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
 
@@ -94,7 +90,6 @@ function wireProvider(provider: SafetyBaseProvider): SettingsService {
   settings.set('model', `${PROVIDER_NAME}-model`);
   settings.setProviderSetting(PROVIDER_NAME, 'model', `${PROVIDER_NAME}-model`);
   const config = createRuntimeConfigStub(settings);
-  setActiveProviderRuntimeContext({ settingsService: settings, config });
   (provider as unknown as { defaultConfig?: unknown }).defaultConfig = config;
   return settings;
 }
@@ -104,10 +99,6 @@ describe('RetryOrchestrator invocation safety', () => {
     speaker: 'human',
     blocks: [{ type: 'text', text: 'hi' }],
   } as IContent;
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
 
   it('does not crash a wrapped BaseProvider when the legacy signal signature is used', async () => {
     const baseProvider = new SafetyBaseProvider();

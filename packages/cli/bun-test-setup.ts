@@ -29,10 +29,7 @@ import {
   test,
   vi,
 } from 'bun:test';
-import {
-  clearActiveProviderRuntimeContext,
-  DebugLogger,
-} from '@vybestack/llxprt-code-core';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 // ---------------------------------------------------------------------------
 // JSDOM globals for React DOM components
@@ -353,7 +350,6 @@ const { __resetCleanupStateForTesting } = await import(
 // implementations now, before any test file can register a module mock.
 const resetDebugLoggerForTesting =
   DebugLogger.resetForTesting.bind(DebugLogger);
-const clearProviderRuntimeContext = clearActiveProviderRuntimeContext;
 
 const managedProcessEvents = [
   'exit',
@@ -440,6 +436,5 @@ afterEach(async () => {
     },
     () => resetDebugLoggerForTesting(),
     () => __resetCleanupStateForTesting(),
-    () => clearProviderRuntimeContext(),
   ]);
 });

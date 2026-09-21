@@ -42,7 +42,6 @@ import {
   setupAnthropicProvider,
   type AnthropicTestSetup,
 } from './__tests__/anthropicProviderTestSetup.js';
-import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
 const baseProcessorOptions: StreamProcessorOptions = {
   isOAuth: false,
@@ -634,7 +633,6 @@ describe('AnthropicStreamProcessor terminal-event validation (issue #2532)', () 
     }));
 
     afterEach(() => {
-      clearActiveProviderRuntimeContext();
       vi.clearAllMocks();
     });
 

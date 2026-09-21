@@ -8,7 +8,6 @@ import { describe, it, expect, beforeEach } from 'bun:test';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
-import { resetSettingsService } from '@vybestack/llxprt-code-settings';
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL;
@@ -39,7 +38,6 @@ function createIntegrationProvider(
 ): OpenAIProvider | null {
   if (!apiKey) return null;
 
-  resetSettingsService();
   const { settingsService, config } = initializeTestProviderRuntime({
     runtimeId: `openai-provider.integration.${Math.random()
       .toString(36)

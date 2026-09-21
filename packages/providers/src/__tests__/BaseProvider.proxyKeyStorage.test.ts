@@ -17,10 +17,7 @@ import type {
 import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
 import type { IProviderKeyStorage } from '@vybestack/llxprt-code-auth';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
@@ -234,8 +231,6 @@ describe('#2946 BaseProvider proxy-aware key storage', () => {
     const settings = new SettingsService();
     settings.set('activeProvider', 'proxy-aware');
     settings.set('auth-key-name', NAMED_KEY);
-    const config = createRuntimeConfigStub(settings);
-    setActiveProviderRuntimeContext({ settingsService: settings, config });
     provider.setRuntimeSettingsService(settings);
 
     await provider.generateChatCompletion(buildChatOptions(settings)).next();
@@ -262,8 +257,6 @@ describe('#2946 BaseProvider proxy-aware key storage', () => {
     const settings = new SettingsService();
     settings.set('activeProvider', 'proxy-aware');
     settings.set('auth-key-name', NAMED_KEY);
-    const config = createRuntimeConfigStub(settings);
-    setActiveProviderRuntimeContext({ settingsService: settings, config });
     provider.setRuntimeSettingsService(settings);
 
     await provider.generateChatCompletion(buildChatOptions(settings)).next();

@@ -32,7 +32,6 @@ import {
   buildContentGeneratorMockBody,
   buildTelemetryMockBody,
   buildGitServiceMockBody,
-  buildSettingsMockBody,
   buildIdeIntegrationMockBody,
   buildMemoryDiscoveryMockBody,
   buildEventsMockBody,
@@ -41,7 +40,7 @@ import {
   resetAgentClientMock,
   type HoistedConfigMocks,
 } from './__tests__/configTestHarness.js';
-import { getSettingsService } from '@vybestack/llxprt-code-settings';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ApprovalMode, PolicyDecision } from '../policy/types.js';
 import type { PolicyEngineConfig, PolicyRule } from '../policy/types.js';
 import { AUTO_EDIT_TOOLS } from '../policy/config.js';
@@ -79,8 +78,6 @@ void vi.mock('../core/contentGenerator.js', () =>
 void vi.mock('../telemetry/index.js', () => buildTelemetryMockBody());
 
 void vi.mock('../services/gitService.js', () => buildGitServiceMockBody());
-
-void vi.mock('@vybestack/llxprt-code-settings', () => buildSettingsMockBody());
 
 const __actual4 = {
   ...(await import('@vybestack/llxprt-code-ide-integration')),
@@ -150,12 +147,12 @@ function buildTomlStylePolicyConfig(): PolicyEngineConfig {
 }
 
 describe('Config approval-mode policy synchronization (issue #2659)', () => {
-  let settingsService: ReturnType<typeof getSettingsService>;
+  let settingsService: SettingsService;
   let baseParams: ConfigParameters;
 
   beforeEach(() => {
     resetAgentClientMock();
-    settingsService = getSettingsService();
+    settingsService = new SettingsService();
     baseParams = createBaseParams(settingsService);
   });
 

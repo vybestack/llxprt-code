@@ -45,7 +45,10 @@ export const CLAUDE_FABLE_5_ESTIMATOR_FAMILY = 'anthropic-claude-fable-5';
 export const CLAUDE_OPUS_5_CALIBRATION: ClaudeCalibration = Object.freeze({
   canonicalModelFamily: 'claude-opus-5',
   protocol: 'anthropic-messages',
-  estimatorVersion: 'claude-opus-5-o200k-calibrated-2026-08-04-v1',
+  // -v2 signals image-aware estimator behavior for usage-parity logs;
+  // coefficients and held-out metrics are unchanged (the revision-4
+  // canonical text is unchanged and the corpora are text-only).
+  estimatorVersion: 'claude-opus-5-o200k-calibrated-2026-08-04-v2',
   baseCounterAssetRevision: O200K_BASE_ASSET_REVISION,
   projectionRevision: PROJECTION_REVISION,
   intercept: -1649.098251,
@@ -84,7 +87,10 @@ export const CLAUDE_OPUS_5_CALIBRATION: ClaudeCalibration = Object.freeze({
 export const CLAUDE_FABLE_5_CALIBRATION: ClaudeCalibration = Object.freeze({
   canonicalModelFamily: 'claude-fable-5',
   protocol: 'anthropic-messages',
-  estimatorVersion: 'claude-fable-5-o200k-calibrated-2026-08-04-v1',
+  // -v2 signals image-aware estimator behavior for usage-parity logs;
+  // coefficients and held-out metrics are unchanged (the revision-4
+  // canonical text is unchanged and the corpora are text-only).
+  estimatorVersion: 'claude-fable-5-o200k-calibrated-2026-08-04-v2',
   baseCounterAssetRevision: O200K_BASE_ASSET_REVISION,
   projectionRevision: PROJECTION_REVISION,
   intercept: -1658.009406,

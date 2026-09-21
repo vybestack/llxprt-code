@@ -20,10 +20,6 @@ import type {
   OAuthToken,
   TokenStore,
 } from '@vybestack/llxprt-code-core';
-import {
-  clearActiveProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -210,7 +206,6 @@ function createCallOptions(settings: SettingsService, runtimeId: string) {
       },
     ],
   });
-  setActiveProviderRuntimeContext(options.runtime);
   return options;
 }
 
@@ -258,7 +253,6 @@ describe('Provider credential resolution through a sandbox proxy', () => {
   afterEach(async () => {
     const cleanupErrors: unknown[] = [];
     try {
-      clearActiveProviderRuntimeContext();
       resetFactorySingletons();
       runtimeScopedStates.clear();
       for (const proxy of proxies.splice(0)) {

@@ -50,11 +50,7 @@ import type {
 import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
-import {
-  clearActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { OpenAIResponsesProvider } from '@vybestack/llxprt-code-providers';
 import { prepareAtSendSeam } from '../../core/promptEnvelopeSendSeam.js';
@@ -358,116 +354,111 @@ describe('P26: providerContentEnforcement characterization', () => {
       config,
       runtimeId: 'stateful-responses-enforcement',
     });
-    setActiveProviderRuntimeContext(providerRuntime);
 
-    try {
-      const provider = new OpenAIResponsesProvider(
-        'stateful-test-token',
-        'https://api.openai.com/v1',
-      );
-      const harness = buildEnforcerHarness({
-        compressionThreshold: 0.5,
-        contextLimit: 20_000,
-        generationConfig: { maxOutputTokens: 100 },
-      });
-      const retainedParent: IContent = {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'retained answer' }],
-        metadata: {
-          id: 'resp-retained-parent',
-          responsesStored: true,
-          usage: {
-            promptTokens: 12_000,
-            cachedTokens: 11_000,
-            completionTokens: 50,
-            totalTokens: 12_050,
-          },
+    const provider = new OpenAIResponsesProvider(
+      'stateful-test-token',
+      'https://api.openai.com/v1',
+    );
+    const harness = buildEnforcerHarness({
+      compressionThreshold: 0.5,
+      contextLimit: 20_000,
+      generationConfig: { maxOutputTokens: 100 },
+    });
+    const retainedParent: IContent = {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'retained answer' }],
+      metadata: {
+        id: 'resp-retained-parent',
+        responsesStored: true,
+        usage: {
+          promptTokens: 12_000,
+          cachedTokens: 11_000,
+          completionTokens: 50,
+          totalTokens: 12_050,
         },
-      };
-      harness.historyService.add(textContent('human', 'retained question'));
-      harness.historyService.add(retainedParent);
-      await harness.historyService.waitForTokenUpdates();
-      const pending = textContent('human', 'small wire delta');
-      const effectiveEstimates: PromptEnvelopeEstimate[] = [];
+      },
+    };
+    harness.historyService.add(textContent('human', 'retained question'));
+    harness.historyService.add(retainedParent);
+    await harness.historyService.waitForTokenUpdates();
+    const pending = textContent('human', 'small wire delta');
+    const effectiveEstimates: PromptEnvelopeEstimate[] = [];
 
-      const estimateAtSendSeam = async (
-        candidate: IContent[],
-      ): Promise<number> => {
-        const prepared = await prepareAtSendSeam(
-          provider,
-          createProviderCallOptions({
-            providerName: provider.name,
-            settings,
-            config,
-            runtime: providerRuntime,
-            resolved: {
-              model: 'gpt-4o',
-              baseURL: 'https://api.openai.com/v1',
-              telemetry: { providerName: provider.name },
-            },
-            contents: candidate,
-            ephemerals: { 'responses-stateful': true },
-          }),
-        );
-        return recordPreparedEstimate(prepared, effectiveEstimates);
-      };
-      harness.deps.estimateFinalizedPromptTokens = estimateAtSendSeam;
-      harness.performCompression.mockImplementation(async () => {
-        harness.historyService.clear();
-        harness.historyService.add(
-          textContent('human', 'compressed retained summary'),
-        );
-        return PerformCompressionResult.COMPRESSED;
-      });
-
-      const result = await harness.enforcer.enforce(
-        buildEnvelope(harness.historyService.getCuratedForProvider([pending]), [
-          pending,
-        ]),
-        'stateful-effective-threshold',
+    const estimateAtSendSeam = async (
+      candidate: IContent[],
+    ): Promise<number> => {
+      const prepared = await prepareAtSendSeam(
         provider,
+        createProviderCallOptions({
+          providerName: provider.name,
+          settings,
+          config,
+          runtime: providerRuntime,
+          resolved: {
+            model: 'gpt-4o',
+            baseURL: 'https://api.openai.com/v1',
+            telemetry: { providerName: provider.name },
+          },
+          contents: candidate,
+          ephemerals: { 'responses-stateful': true },
+        }),
       );
+      return recordPreparedEstimate(prepared, effectiveEstimates);
+    };
+    harness.deps.estimateFinalizedPromptTokens = estimateAtSendSeam;
+    harness.performCompression.mockImplementation(async () => {
+      harness.historyService.clear();
+      harness.historyService.add(
+        textContent('human', 'compressed retained summary'),
+      );
+      return PerformCompressionResult.COMPRESSED;
+    });
 
-      const initialStateful = requireStatefulEstimate(effectiveEstimates);
-      const finalEstimate = requireLastEstimate(effectiveEstimates);
+    const result = await harness.enforcer.enforce(
+      buildEnvelope(harness.historyService.getCuratedForProvider([pending]), [
+        pending,
+      ]),
+      'stateful-effective-threshold',
+      provider,
+    );
 
-      expect(initialStateful.transmittedTokens).toBeLessThan(10_000);
-      expect(initialStateful).toMatchObject({
-        retainedBaselineTokens: 12_050,
-        effectiveTokens: initialStateful.estimatedPromptTokens,
-        statefulParentUsed: true,
-      });
-      // The wire body carries the system instruction (and tools when
-      // present), but a stateful turn with an observed retained baseline
-      // counts only the new input in the incremental estimate: the re-sent
-      // instructions/tools are retained server-side inside the parent
-      // baseline and are not re-billed, so the incremental is strictly
-      // smaller than the transmitted wire body whenever those keys carry
-      // content (issue #3481).
-      expect(initialStateful.incrementalTokens).toBeLessThan(
-        initialStateful.transmittedTokens,
-      );
-      expect(12_050 + initialStateful.incrementalTokens).toBe(
-        initialStateful.estimatedPromptTokens,
-      );
-      expect(finalEstimate).toMatchObject({
-        transmittedTokens: finalEstimate.estimatedPromptTokens,
-        retainedBaselineTokens: 0,
-        effectiveTokens: finalEstimate.estimatedPromptTokens,
-        statefulParentUsed: false,
-      });
-      expect(finalEstimate.estimatedPromptTokens).toBeLessThan(
-        initialStateful.estimatedPromptTokens,
-      );
-      const resultTexts = result
-        .flatMap((content) => content.blocks)
-        .filter((block): block is TextBlock => block.type === 'text')
-        .map((block) => block.text);
-      expect(resultTexts).toContain('compressed retained summary');
-      expect(resultTexts).toContain('small wire delta');
-    } finally {
-      clearActiveProviderRuntimeContext();
-    }
+    const initialStateful = requireStatefulEstimate(effectiveEstimates);
+    const finalEstimate = requireLastEstimate(effectiveEstimates);
+
+    expect(initialStateful.transmittedTokens).toBeLessThan(10_000);
+    expect(initialStateful).toMatchObject({
+      retainedBaselineTokens: 12_050,
+      effectiveTokens: initialStateful.estimatedPromptTokens,
+      statefulParentUsed: true,
+    });
+    // The wire body carries the system instruction (and tools when
+    // present), but a stateful turn with an observed retained baseline
+    // counts only the new input in the incremental estimate: the re-sent
+    // instructions/tools are retained server-side inside the parent
+    // baseline and are not re-billed, so the incremental is strictly
+    // smaller than the transmitted wire body whenever those keys carry
+    // content (issue #3481).
+    expect(initialStateful.incrementalTokens).toBeLessThan(
+      initialStateful.transmittedTokens,
+    );
+    expect(12_050 + initialStateful.incrementalTokens).toBe(
+      initialStateful.estimatedPromptTokens,
+    );
+    expect(finalEstimate).toMatchObject({
+      transmittedTokens: finalEstimate.estimatedPromptTokens,
+      retainedBaselineTokens: 0,
+      effectiveTokens: finalEstimate.estimatedPromptTokens,
+      statefulParentUsed: false,
+    });
+    expect(finalEstimate.estimatedPromptTokens).toBeLessThan(
+      initialStateful.estimatedPromptTokens,
+    );
+    const resultTexts = result
+      .flatMap((content) => content.blocks)
+      .filter((block): block is TextBlock => block.type === 'text')
+      .map((block) => block.text);
+    expect(resultTexts).toContain('compressed retained summary');
+    expect(resultTexts).toContain('small wire delta');
   });
 
   it('preserves structured overflow metadata when real stateful reprojection remains over limit', async () => {
@@ -481,89 +472,83 @@ describe('P26: providerContentEnforcement characterization', () => {
       config,
       runtimeId: 'stateful-responses-overflow',
     });
-    setActiveProviderRuntimeContext(providerRuntime);
 
-    try {
-      const provider = new OpenAIResponsesProvider(
-        'stateful-overflow-token',
-        'https://api.openai.com/v1',
-      );
-      const harness = buildEnforcerHarness({
-        compressionThreshold: 0.5,
-        contextLimit: 2_000,
-        generationConfig: { maxOutputTokens: 100 },
-      });
-      harness.historyService.add(textContent('human', 'retained question'));
-      harness.historyService.add({
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'retained answer' }],
-        metadata: {
-          id: 'resp-overflow-parent',
-          responsesStored: true,
-          usage: {
-            promptTokens: 700,
-            completionTokens: 20,
-            totalTokens: 720,
-          },
+    const provider = new OpenAIResponsesProvider(
+      'stateful-overflow-token',
+      'https://api.openai.com/v1',
+    );
+    const harness = buildEnforcerHarness({
+      compressionThreshold: 0.5,
+      contextLimit: 2_000,
+      generationConfig: { maxOutputTokens: 100 },
+    });
+    harness.historyService.add(textContent('human', 'retained question'));
+    harness.historyService.add({
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'retained answer' }],
+      metadata: {
+        id: 'resp-overflow-parent',
+        responsesStored: true,
+        usage: {
+          promptTokens: 700,
+          completionTokens: 20,
+          totalTokens: 720,
         },
-      });
-      await harness.historyService.waitForTokenUpdates();
-      const pending = textContent(
-        'human',
-        'Continue the retained analysis with one additional observation.',
+      },
+    });
+    await harness.historyService.waitForTokenUpdates();
+    const pending = textContent(
+      'human',
+      'Continue the retained analysis with one additional observation.',
+    );
+    const estimates: PromptEnvelopeEstimate[] = [];
+    harness.deps.estimateFinalizedPromptTokens = async (candidate) => {
+      const prepared = await prepareAtSendSeam(
+        provider,
+        createProviderCallOptions({
+          providerName: provider.name,
+          settings,
+          config,
+          runtime: providerRuntime,
+          resolved: {
+            model: 'gpt-4o',
+            baseURL: 'https://api.openai.com/v1',
+            telemetry: { providerName: provider.name },
+          },
+          contents: candidate,
+          ephemerals: { 'responses-stateful': true },
+        }),
       );
-      const estimates: PromptEnvelopeEstimate[] = [];
-      harness.deps.estimateFinalizedPromptTokens = async (candidate) => {
-        const prepared = await prepareAtSendSeam(
-          provider,
-          createProviderCallOptions({
-            providerName: provider.name,
-            settings,
-            config,
-            runtime: providerRuntime,
-            resolved: {
-              model: 'gpt-4o',
-              baseURL: 'https://api.openai.com/v1',
-              telemetry: { providerName: provider.name },
-            },
-            contents: candidate,
-            ephemerals: { 'responses-stateful': true },
-          }),
-        );
-        return recordPreparedEstimate(prepared, estimates);
-      };
-      harness.performCompression.mockResolvedValue(
-        PerformCompressionResult.COMPRESSED,
-      );
-      harness.performFallbackCompression.mockResolvedValue(false);
+      return recordPreparedEstimate(prepared, estimates);
+    };
+    harness.performCompression.mockResolvedValue(
+      PerformCompressionResult.COMPRESSED,
+    );
+    harness.performFallbackCompression.mockResolvedValue(false);
 
-      let overflow: unknown;
-      try {
-        await harness.enforcer.enforce(
-          buildEnvelope(
-            harness.historyService.getCuratedForProvider([pending]),
-            [pending],
-          ),
-          'stateful-ineffective-overflow',
-          provider,
-        );
-      } catch (error) {
-        overflow = error;
-      }
-
-      expect(overflow).toBeInstanceOf(ContextOverflowError);
-      const contextOverflow = requireContextOverflow(overflow);
-      const finalEstimate = requireLastEstimate(estimates);
-      expect(contextOverflow.estimatedRequestTokenCount).toBe(
-        finalEstimate.estimatedPromptTokens,
+    let overflow: unknown;
+    try {
+      await harness.enforcer.enforce(
+        buildEnvelope(harness.historyService.getCuratedForProvider([pending]), [
+          pending,
+        ]),
+        'stateful-ineffective-overflow',
+        provider,
       );
-      expect(contextOverflow.remainingTokenCount).toBe(905);
-      expect(contextOverflow.message).toContain(
-        'Last-resort tool-response truncation replaced 0 response(s)',
-      );
-    } finally {
-      clearActiveProviderRuntimeContext();
+    } catch (error) {
+      overflow = error;
     }
+
+    expect(overflow).toBeInstanceOf(ContextOverflowError);
+    const contextOverflow = requireContextOverflow(overflow);
+    const finalEstimate = requireLastEstimate(estimates);
+    expect(contextOverflow.estimatedRequestTokenCount).toBe(
+      finalEstimate.estimatedPromptTokens,
+    );
+    expect(contextOverflow.remainingTokenCount).toBe(905);
+    expect(contextOverflow.message).toContain(
+      'Last-resort tool-response truncation replaced 0 response(s)',
+    );
   });
 
   it('triggers compression when projected tokens exceed the compression threshold', async () => {

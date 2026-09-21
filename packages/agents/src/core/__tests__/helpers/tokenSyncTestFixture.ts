@@ -10,7 +10,6 @@ import { vi } from 'bun:test';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import * as providerRuntime from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 
 export interface MockContentGenerator {
@@ -84,11 +83,13 @@ export function createTokenSyncTestFixture(): TokenSyncTestFixture {
   });
 
   const mockConfig = runtimeSetup.config;
+  // Issue #2616: the snapshot is returned for callers to thread explicitly
+  // (providerRuntime: snapshot in runtime wiring); nothing is installed
+  // ambiently.
   const providerRuntimeSnapshot: ProviderRuntimeContext = {
     ...runtimeSetup.runtime,
     config: mockConfig,
   };
-  providerRuntime.setActiveProviderRuntimeContext(providerRuntimeSnapshot);
 
   const mockContentGenerator: MockContentGenerator = {
     generateContent: vi.fn(),

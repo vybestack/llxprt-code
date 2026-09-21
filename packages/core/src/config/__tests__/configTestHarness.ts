@@ -23,12 +23,10 @@
 
 import { vi } from 'bun:test';
 import type { Mock } from 'bun:test';
-import { createRequire } from 'node:module';
 import type { ConfigParameters, SandboxConfig } from '../config.js';
 import type { ToolSchedulerFactoryOptions } from '../../core/toolSchedulerContract.js';
 import type { AgentClientContract } from '../../core/clientContract.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import type * as SettingsModule from '@vybestack/llxprt-code-settings';
 import type * as IdeIntegrationModule from '@vybestack/llxprt-code-ide-integration';
 
 // NOTE: This module intentionally has NO runtime (value) imports from any
@@ -36,8 +34,10 @@ import type * as IdeIntegrationModule from '@vybestack/llxprt-code-ide-integrati
 // would be evaluated when a `vi.mock` factory does
 // `await import('./__tests__/configTestHarness.js')`, and because that happens during
 // mock resolution it can deadlock if the harness pulls in a mocked module.
-// `getSettingsService` (from the mocked settings package) is therefore passed
-// into `createBaseParams` by each test file instead of being imported here.
+// The settings service each test uses is therefore constructed by the test
+// file itself (real SettingsService or createSettingsServiceMock) and passed
+// into `createBaseParams` — issue #2616 deleted the settings-module singleton
+// this harness used to mock.
 
 // ---------------------------------------------------------------------------
 // Hoisted mock value type aliases (consumers create these via vi.hoisted)
@@ -158,16 +158,26 @@ export function buildGitServiceMockBody() {
   return { GitService: GitServiceMock };
 }
 
-export function buildSettingsMockBody() {
-  // Under Bun's mock.module, factory functions cannot be async (the
-  // microtask queue is not drained inside mock evaluation). Use require()
-  // instead of vi.importActual to load the real module synchronously.
-  // Under Vitest, vi.importActual works normally via the hoisting system.
-  const localRequire = createRequire(import.meta.url);
-  const actual = localRequire(
-    '@vybestack/llxprt-code-settings',
-  ) as typeof SettingsModule;
-  const mockSettingsService = {
+export interface SettingsServiceMock {
+  get: ReturnType<typeof vi.fn>;
+  set: ReturnType<typeof vi.fn>;
+  clear: ReturnType<typeof vi.fn>;
+  on: ReturnType<typeof vi.fn>;
+  off: ReturnType<typeof vi.fn>;
+  emit: ReturnType<typeof vi.fn>;
+  getProviderSettings: ReturnType<typeof vi.fn>;
+  getAllGlobalSettings: ReturnType<typeof vi.fn>;
+}
+
+/**
+ * Builds a spy-backed SettingsService stand-in for tests that assert on the
+ * Config → SettingsService collaboration (call forwarding, argument shapes).
+ * Tests that only need a functioning service construct a real SettingsService
+ * instead — issue #2616 removed the module-singleton bridge this harness
+ * previously mocked.
+ */
+export function createSettingsServiceMock(): SettingsServiceMock {
+  return {
     get: vi.fn(),
     set: vi.fn(),
     clear: vi.fn(),
@@ -176,12 +186,6 @@ export function buildSettingsMockBody() {
     emit: vi.fn(),
     getProviderSettings: vi.fn(() => ({})),
     getAllGlobalSettings: vi.fn(() => ({})),
-  };
-  return {
-    ...actual,
-    getSettingsService: vi.fn(() => mockSettingsService),
-    resetSettingsService: vi.fn(),
-    registerSettingsService: vi.fn(),
   };
 }
 

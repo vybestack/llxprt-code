@@ -21,7 +21,6 @@ import {
 } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import { setActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 export { createAnthropicRawPostTestAdapter } from '../../__tests__/rawPostTestAdapters.js';
 
 export type AnthropicContentBlock =
@@ -110,8 +109,8 @@ export function setupAnthropicProvider(): AnthropicTestSetup {
     return settingsService.get(key);
   };
 
-  setActiveProviderRuntimeContext(runtimeContext);
-
+  // Issue #2616: the runtime context is handed to the provider explicitly via
+  // buildCallOptions; no ambient context is installed.
   const buildCallOptions = (
     contents: IContent[],
     overrides: Omit<ProviderCallOptionsInit, 'providerName' | 'contents'> = {},
