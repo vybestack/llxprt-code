@@ -269,17 +269,6 @@ export class Config extends ConfigBase {
     void this._modelSwitchedDuringSession;
   }
 
-  private getAgentClientIfReady(): AgentClientContract | undefined {
-    const client = this.agentClient as AgentClientContract | undefined;
-    if (client === undefined) {
-      return undefined;
-    }
-    if (!client.isInitialized()) {
-      return undefined;
-    }
-    return client;
-  }
-
   /**
    * Creates a detached agent client with a fresh runtime state, isolated
    * from the session's primary agent client and with its tool set cleared.

@@ -20,6 +20,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { Config } from '@vybestack/llxprt-code-core';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import type { IsolatedRuntimeContextHandle } from './runtimeSettings.js';
 import { ProviderManager } from '../ProviderManager.js';
@@ -50,8 +51,13 @@ describe('runtime context activation wires setRuntimeContext @requirement:REQ-SP
       | undefined;
     handle = createIsolatedRuntimeContext({
       runtimeId: 'setRuntimeContext-scoped',
-      workspaceDir: process.cwd(),
-      model: 'scoped-model',
+      config: new Config({
+        sessionId: 'setRuntimeContext-scoped',
+        targetDir: process.cwd(),
+        cwd: process.cwd(),
+        model: 'scoped-model',
+        debugMode: false,
+      }),
       metadata: { source: 'setRuntimeContext-wiring' },
       prepare: async ({ providerManager }) => {
         capturedManager = providerManager;
@@ -95,8 +101,14 @@ describe('runtime context activation wires setRuntimeContext @requirement:REQ-SP
     // so the afterEach hook owns cleanup even if activation throws.
     handle = createIsolatedRuntimeContext({
       runtimeId: 'setRuntimeContext-adopted',
-      workspaceDir: process.cwd(),
-      model: 'adopted-model',
+      config: new Config({
+        sessionId: 'setRuntimeContext-adopted',
+        targetDir: process.cwd(),
+        cwd: process.cwd(),
+        model: 'adopted-model',
+        debugMode: false,
+        settingsService,
+      }),
       providerManager: adoptedManager,
       prepare: async () => {},
     });

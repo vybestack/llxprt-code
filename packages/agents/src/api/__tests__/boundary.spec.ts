@@ -13,9 +13,12 @@
  * they import ONLY the public root entry, documented app-service subpaths, test
  * framework, node builtins, or relative harness scaffolding that stays within
  * __tests__. Files under __tests__/helpers/ are excluded from the
- * consumer-facing forbidden-deep-import rule (they may import ./internals.js for
- * fixture construction only). This is an honest guard: if the harness is clean it
- * PASSES; it is never forced to fail artificially.
+ * consumer-facing forbidden-deep-import rule because they construct in-package
+ * fixtures and may import deep core paths; they remain covered by the absolute
+ * no-retired-subpath rule in boundary.no-internals-subpath.test.ts (issue
+ * #3222: every agents-package import must be the bare root or an exports-map
+ * subpath — no exemptions anywhere). This is an honest guard: if the harness is
+ * clean it PASSES; it is never forced to fail artificially.
  */
 
 import { describe, it, expect } from 'bun:test';
@@ -31,7 +34,6 @@ const PACKAGE_SRC_DIR = normalize(join(TESTS_DIR, '../../'));
 
 const PUBLIC_ROOT = '@vybestack/llxprt-code-agents';
 const APP_SERVICE_SUBPATH = '@vybestack/llxprt-code-agents/app-service.js';
-const INTERNALS_SUBPATH = '@vybestack/llxprt-code-agents/internals.js';
 
 const FORBIDDEN_DEEP_PREFIXES: readonly string[] = [
   '@vybestack/llxprt-code-core/',
@@ -342,9 +344,8 @@ function isAllowed(specifier: string, fromAbs: string): boolean {
   if (specifier === APP_SERVICE_SUBPATH) {
     return true;
   }
-  if (specifier === INTERNALS_SUBPATH) {
-    return false;
-  }
+  // Any other agents-package subpath — the retired low-level barrel included
+  // — is forbidden (issue #3222 absolute rule).
   if (specifier.startsWith('@vybestack/llxprt-code-agents/')) {
     return false;
   }

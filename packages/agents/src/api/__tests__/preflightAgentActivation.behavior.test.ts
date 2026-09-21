@@ -22,6 +22,13 @@
  * These assertions exercise a REAL CLI-style Config wired to the FakeProvider
  * (buildCliStyleConfig) and observe RESULTING STATE (active provider, authFailed
  * flag, config auth surface) — never mock call counts.
+ *
+ * Issue #3222 coverage: preflight is an agent-owned runtime-factory assembly
+ * entrypoint. The Config arrives before fromConfig/createAgent install the
+ * agent runtime factories, and the activation primitive (config.refreshAuth)
+ * requires the agent client factory — so preflight installs agent-owned
+ * defaults per field when absent, and a factory-less Config must NOT surface
+ * that internal requirement as a fatal auth outcome.
  */
 
 import { describe, it, expect } from 'bun:test';
@@ -127,6 +134,74 @@ describe('preflightAgentActivation @plan:PLAN-20270110-ISSUE2378.P05 @requiremen
       expect(adopt.authFailed).toBe(false);
       expect(configActiveProvider(built.config)).toBe('fake');
       expect(built.config.getEphemeralSetting('auth-key')).toBe('sk-test-key');
+    } finally {
+      await built.cleanup();
+    }
+  });
+});
+
+describe('preflight agent-owned runtime factory assembly @plan:ISSUE-3222 @requirement:REQ-3222-AC2', () => {
+  it('installs the agent-owned runtime factories on a factory-less Config and does NOT surface the missing factory as a fatal auth outcome', async () => {
+    const built = await buildCliStyleConfig('plain-text.jsonl');
+    try {
+      // The CLI-at-preflight state (#3222): a fully-wired Config whose three
+      // agent runtime factories were never injected — the CLI stopped
+      // injecting them, and fromConfig installs them only AFTER preflight.
+      built.config.setAgentClientFactory(undefined);
+      built.config.setToolSchedulerFactory(undefined);
+      built.config.setTaskToolRegistration(undefined);
+      expect(built.config.getAgentClientFactory()).toBeUndefined();
+      expect(built.config.getToolSchedulerFactory()).toBeUndefined();
+      expect(built.config.getTaskToolRegistration()).toBeUndefined();
+
+      // The 'fake' provider otherwise activates. Before preflight owned the
+      // assembly, refreshAuth's agentClientFactory requirement threw inside
+      // the no-throw preflight and was converted to authFailed — the CLI
+      // mapped that to a silent FATAL_AUTHENTICATION_ERROR (exit 41).
+      const intent: ProviderActivationIntent = {
+        provider: 'fake',
+        cliOverrides: { key: 'sk-test-key' },
+        authMode: 'auto',
+      };
+      const result: AgentActivationPreflightResult =
+        await preflightAgentActivation(built.config, intent);
+
+      expect(result.authFailed).toBe(false);
+      expect(result.activeProvider).toBe('fake');
+
+      // Preflight installed the agent-owned factory defaults per field.
+      expect(built.config.getAgentClientFactory()).toBeDefined();
+      expect(built.config.getToolSchedulerFactory()).toBeDefined();
+      expect(built.config.getTaskToolRegistration()).toBeDefined();
+    } finally {
+      await built.cleanup();
+    }
+  });
+
+  it('keeps caller-supplied factories (only-if-absent ensure contract)', async () => {
+    const built = await buildCliStyleConfig('plain-text.jsonl');
+    try {
+      const callerClientFactory = built.config.getAgentClientFactory();
+      const callerSchedulerFactory = built.config.getToolSchedulerFactory();
+      expect(callerClientFactory).toBeDefined();
+      expect(callerSchedulerFactory).toBeDefined();
+
+      const intent: ProviderActivationIntent = {
+        provider: 'fake',
+        cliOverrides: { key: 'sk-test-key' },
+        authMode: 'auto',
+      };
+      const result: AgentActivationPreflightResult =
+        await preflightAgentActivation(built.config, intent);
+
+      expect(result.authFailed).toBe(false);
+      // Pre-present factories are never replaced; the absent task-tool
+      // registration (buildCliStyleConfig does not inject one) is installed.
+      expect(built.config.getAgentClientFactory()).toBe(callerClientFactory);
+      expect(built.config.getToolSchedulerFactory()).toBe(
+        callerSchedulerFactory,
+      );
+      expect(built.config.getTaskToolRegistration()).toBeDefined();
     } finally {
       await built.cleanup();
     }

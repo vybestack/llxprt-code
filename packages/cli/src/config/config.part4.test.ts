@@ -120,8 +120,6 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
     } as unknown as ServerConfig.RuntimeProviderManager);
 
   return {
-    registerAgentRuntimeFactories: vi.fn(),
-    resetAgentRuntimeFactories: vi.fn(),
     ephemeralSettingHelp: actual.ephemeralSettingHelp,
     parseEphemeralSettingValue: vi.fn(actual.parseEphemeralSettingValue),
     applyCliSetArguments: vi.fn(actual.applyCliSetArguments),

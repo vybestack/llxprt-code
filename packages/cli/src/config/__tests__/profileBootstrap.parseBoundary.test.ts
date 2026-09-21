@@ -26,8 +26,6 @@ import { profileCommand } from '../../ui/commands/profileCommand.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 
 void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
-  registerAgentRuntimeFactories: vi.fn(),
-  resetAgentRuntimeFactories: vi.fn(),
   registerCliProviderInfrastructure: vi.fn(),
 }));
 

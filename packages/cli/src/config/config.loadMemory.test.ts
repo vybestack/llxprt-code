@@ -217,8 +217,6 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
     settingsService: runtimeStateRef.value.runtime.settingsService,
   }));
   return {
-    registerAgentRuntimeFactories: vi.fn(),
-    resetAgentRuntimeFactories: vi.fn(),
     ephemeralSettingHelp: {},
     parseEphemeralSettingValue: vi.fn((_key: string, rawValue: string) => ({
       success: true,

@@ -13,7 +13,6 @@
 import { describe, expect, it } from 'bun:test';
 
 import * as root from '@vybestack/llxprt-code-agents';
-import * as internals from '@vybestack/llxprt-code-agents/internals.js';
 
 describe('REQ-006: agents public export surface is non-breaking', () => {
   it('Test A: curated root barrel exposes the expected public value exports', () => {
@@ -36,17 +35,15 @@ describe('REQ-006: agents public export surface is non-breaking', () => {
     }
   });
 
-  it('Test B: internals.js value exports (AgentClient, PostTurnAction) remain intact', () => {
-    // REQ-004.1: the concrete AgentClient class stays on the internals subpath.
-    expect(typeof internals.AgentClient).toBe('function');
-    // P05: the root no longer re-exports internals, so root.AgentClient is
-    // undefined (deny). The class is sourced exclusively from the internals
-    // subpath now.
+  it('Test B (REQ-004.1, issue #3222): root denies the concrete AgentClient class — the retired internals subpath is gone', () => {
+    // The concrete AgentClient class must NOT surface on the root barrel:
+    // consumers construct clients through the public createAgentClient
+    // factory. The low-level subpath that used to carry the class is retired
+    // (issue #3222), so the root deny is now the whole contract.
     expect(root.AgentClient).toBeUndefined();
-    // PostTurnAction is a value (enum/const) re-exported from internals.
-    expect(
-      Object.prototype.hasOwnProperty.call(internals, 'PostTurnAction'),
-    ).toBe(true);
+    expect(Object.prototype.hasOwnProperty.call(root, 'AgentClient')).toBe(
+      false,
+    );
   });
 
   it('Test C (REQ-004.2): curated barrel adds NO runtime value named AgentClientContract', () => {

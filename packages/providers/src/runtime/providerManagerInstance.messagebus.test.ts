@@ -5,7 +5,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { MessageBus } from '@vybestack/llxprt-code-core';
+import { MessageBus, Config } from '@vybestack/llxprt-code-core';
 import {
   createProviderManager,
   getOAuthManager,
@@ -36,8 +36,13 @@ describe('getProviderManager runtime OAuth MessageBus composition', () => {
   it('preserves the session MessageBus when the provider-manager singleton is registered from the explicit composition root', async () => {
     const runtimeHandle = createIsolatedRuntimeContext({
       runtimeId: 'provider-manager-runtime-seam',
-      workspaceDir: process.cwd(),
-      model: 'provider-manager-runtime-model',
+      config: new Config({
+        sessionId: 'provider-manager-runtime-seam',
+        targetDir: process.cwd(),
+        cwd: process.cwd(),
+        model: 'provider-manager-runtime-model',
+        debugMode: false,
+      }),
       metadata: { source: 'phase-07-provider-test' },
       prepare: async () => {},
     });

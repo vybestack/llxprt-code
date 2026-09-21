@@ -34,7 +34,7 @@ import * as fc from 'fast-check';
 import { MessageBus } from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ProviderManager } from '../../ProviderManager.js';
 import type { IProvider } from '../../IProvider.js';
 import type { IsolatedRuntimeContextHandle } from '../runtimeSettings.js';
@@ -96,6 +96,20 @@ function buildSeededManager(): {
 }
 
 /**
+ * Minimal caller-supplied Config for the isolated runtime (issue #3222):
+ * providers no longer constructs one on the caller's behalf.
+ */
+function buildIsolatedTestConfig(runtimeId: string, model: string): Config {
+  return new Config({
+    sessionId: runtimeId,
+    targetDir: process.cwd(),
+    cwd: process.cwd(),
+    model,
+    debugMode: false,
+  });
+}
+
+/**
  * Counts real ProviderManager constructions WITHOUT replacing the constructor.
  * The spy wraps the original so the real object is still built; we only tally
  * invocations as a numeric count (asserted with `toBe`, never via the banned
@@ -149,8 +163,7 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
     const pm = buildRealManager();
     const handle: IsolatedRuntimeContextHandle = createIsolatedRuntimeContext({
       runtimeId: 'p04-pm-identity',
-      workspaceDir: process.cwd(),
-      model: 'p04-identity-model',
+      config: buildIsolatedTestConfig('p04-pm-identity', 'p04-identity-model'),
       providerManager: pm,
       prepare: async () => {},
     });
@@ -175,8 +188,7 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
     const callerHeld = buildRealManager();
     const handle: IsolatedRuntimeContextHandle = createIsolatedRuntimeContext({
       runtimeId: 'p04-pm-default',
-      workspaceDir: process.cwd(),
-      model: 'p04-default-model',
+      config: buildIsolatedTestConfig('p04-pm-default', 'p04-default-model'),
       prepare: async () => {},
     });
 
@@ -202,8 +214,10 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
     const { manager: pm, provider } = buildSeededManager();
     const handle: IsolatedRuntimeContextHandle = createIsolatedRuntimeContext({
       runtimeId: 'p04-pm-adopted-activation',
-      workspaceDir: process.cwd(),
-      model: 'p04-adopted-model',
+      config: buildIsolatedTestConfig(
+        'p04-pm-adopted-activation',
+        'p04-adopted-model',
+      ),
       providerManager: pm,
       prepare: async () => {},
     });
@@ -244,8 +258,10 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
 
     const handle: IsolatedRuntimeContextHandle = createIsolatedRuntimeContext({
       runtimeId: 'p04-pm-no-second',
-      workspaceDir: process.cwd(),
-      model: 'p04-no-second-model',
+      config: buildIsolatedTestConfig(
+        'p04-pm-no-second',
+        'p04-no-second-model',
+      ),
       providerManager: pm,
       prepare: async () => {},
     });
@@ -274,8 +290,10 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
     const pm = buildRealManager();
     const handle: IsolatedRuntimeContextHandle = createIsolatedRuntimeContext({
       runtimeId: 'p04-pm-independent',
-      workspaceDir: process.cwd(),
-      model: 'p04-independent-model',
+      config: buildIsolatedTestConfig(
+        'p04-pm-independent',
+        'p04-independent-model',
+      ),
       messageBus: providedBus,
       providerManager: pm,
       prepare: async () => {},
@@ -306,8 +324,7 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
     let captured: { providerManager: unknown } | undefined;
     const handle: IsolatedRuntimeContextHandle = createIsolatedRuntimeContext({
       runtimeId: 'p04-pm-cleanup',
-      workspaceDir: process.cwd(),
-      model: 'p04-cleanup-model',
+      config: buildIsolatedTestConfig('p04-pm-cleanup', 'p04-cleanup-model'),
       providerManager: pm,
       prepare: async () => {},
       onCleanup: (ctx) => {
@@ -355,8 +372,10 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
           const handle: IsolatedRuntimeContextHandle =
             createIsolatedRuntimeContext({
               runtimeId: `p04-prop-${runtimeId}`,
-              workspaceDir: process.cwd(),
-              model: 'p04-prop-model',
+              config: buildIsolatedTestConfig(
+                `p04-prop-${runtimeId}`,
+                'p04-prop-model',
+              ),
               providerManager: pm,
               prepare: async () => {},
             });
@@ -390,8 +409,10 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
           const handle: IsolatedRuntimeContextHandle =
             createIsolatedRuntimeContext({
               runtimeId: `p04-prop-omit-${runtimeId}`,
-              workspaceDir: process.cwd(),
-              model: 'p04-prop-omit-model',
+              config: buildIsolatedTestConfig(
+                `p04-prop-omit-${runtimeId}`,
+                'p04-prop-omit-model',
+              ),
               prepare: async () => {},
             });
 
@@ -422,8 +443,7 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
           const handle: IsolatedRuntimeContextHandle =
             createIsolatedRuntimeContext({
               runtimeId: 'p04-prop-model-var',
-              workspaceDir: process.cwd(),
-              model,
+              config: buildIsolatedTestConfig('p04-prop-model-var', model),
               providerManager: pm,
               prepare: async () => {},
             });
@@ -455,15 +475,19 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
           const handleA: IsolatedRuntimeContextHandle =
             createIsolatedRuntimeContext({
               runtimeId: `p04-prop-distinct-${idA}`,
-              workspaceDir: process.cwd(),
-              model: 'p04-prop-distinct',
+              config: buildIsolatedTestConfig(
+                `p04-prop-distinct-${idA}`,
+                'p04-prop-distinct',
+              ),
               prepare: async () => {},
             });
           const handleB: IsolatedRuntimeContextHandle =
             createIsolatedRuntimeContext({
               runtimeId: `p04-prop-distinct-${idB}`,
-              workspaceDir: process.cwd(),
-              model: 'p04-prop-distinct',
+              config: buildIsolatedTestConfig(
+                `p04-prop-distinct-${idB}`,
+                'p04-prop-distinct',
+              ),
               prepare: async () => {},
             });
 
