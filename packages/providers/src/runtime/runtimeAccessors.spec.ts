@@ -32,7 +32,6 @@ import type {
 } from '@vybestack/llxprt-code-core';
 import type { OAuthManager } from '../auth/index.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
 import {
   getCliRuntimeServices,
@@ -71,7 +70,6 @@ describe('runtimeAccessors', () => {
   beforeEach(() => {
     resetCliRuntimeRegistryForTesting();
     configureCliStatelessHardening(null);
-    clearActiveProviderRuntimeContext();
 
     // Create mock instances
     mockConfig = {
@@ -124,7 +122,6 @@ describe('runtimeAccessors', () => {
   afterEach(() => {
     resetCliRuntimeRegistryForTesting();
     configureCliStatelessHardening(null);
-    clearActiveProviderRuntimeContext();
   });
 
   // Helper to set up a complete runtime context with provider manager

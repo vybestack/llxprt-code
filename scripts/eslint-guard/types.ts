@@ -84,6 +84,10 @@ export interface DiffState {
   ruleEntryDepth: number | null;
   expectingFirstSeverityElement: boolean;
   expectingCeilingThreshold: boolean;
+  // #3718: files globs of the config block enclosing the current rules block,
+  // tracked so per-file ceiling overrides can be checked against the baseline.
+  currentFilesGlobs: string[];
+  filesArrayBracketDepth: number | null;
   removedRulesBraceDepth: number | null;
   removedCurrentRuleKey: string | null;
   removedCurrentCeilingRuleKey: string | null;

@@ -18,7 +18,8 @@ import type { ISettingsService } from './settings-service.js';
  * Includes metadata field per P02b remediation (C-CB-06 alignment).
  *
  * The injected function `getActiveRuntimeContext?: () => IProviderRuntimeContext | null`
- * replaces the static `getActiveProviderRuntimeContext()` import from core.
+ * lets the caller hand over whatever context it already owns explicitly;
+ * core exports no ambient accessor for this (issue #2616 deleted it).
  *
  * @plan:PLAN-20260608-ISSUE1586.P06
  * @requirement:REQ-INTF-001.5
@@ -32,8 +33,8 @@ export interface IProviderRuntimeContext {
 
 /**
  * Factory type for obtaining the active runtime context.
- * Injected into AuthPrecedenceResolver via DI to decouple from
- * core's getActiveProviderRuntimeContext static import.
+ * Injected into AuthPrecedenceResolver via DI so the caller decides which
+ * context applies — there is no module-level accessor to import (issue #2616).
  *
  * @plan:PLAN-20260608-ISSUE1586.P06
  * @requirement:REQ-INTF-001.5

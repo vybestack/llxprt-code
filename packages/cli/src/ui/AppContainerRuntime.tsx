@@ -57,6 +57,8 @@ import {
   AppCommandsProvider,
   type AppCommandBindings,
 } from './contexts/AppCommandsContext.js';
+import { ToolResultExpansionProvider } from './contexts/ToolResultExpansionContext.js';
+import type { RecordingSwapCallbacks } from '../services/performResume.js';
 import { useRef, useMemo } from 'react';
 
 const debug = new DebugLogger('llxprt:ui:appcontainer');
@@ -160,6 +162,41 @@ function useAppDialogsRuntime(
     suppressStartupWelcome: props.suppressStartupWelcome,
     shouldShowIdePrompt: bootstrap.shouldShowIdePrompt,
     currentIDE: bootstrap.currentIDE,
+  });
+}
+
+/** Input runtime: wiring only; every param is bootstrap/store-owned. */
+function useAppInputRuntime(
+  props: AppContainerRuntimeProps,
+  bootstrap: AppBootstrapResult,
+  dialogStore: DialogStore,
+  dialogOpeners: DialogOpeners,
+  terminalStore: TerminalStore,
+  turnStore: TurnStore,
+  settingsStore: SettingsProfileStore,
+): AppInputResult {
+  return useAppInput({
+    uiRuntime: props.uiRuntime,
+    streamRuntime: bootstrap.streamRuntime,
+    slashCommandRuntime: props.slashCommandRuntime,
+    agent: props.agent,
+    settings: props.settings,
+    runtime: bootstrap.runtime,
+    subagentManager: props.uiRuntime.app.getSubagentManager(),
+    turnStore,
+    recordingIntegrationRef: bootstrap.recordingIntegrationRef,
+    recordingSwapCallbacks: bootstrap.recordingSwapCallbacks,
+    recordingIntegration: props.recordingIntegration,
+    runtimeMessageBus: props.runtimeMessageBus,
+    setIdePromptAnswered: bootstrap.setIdePromptAnswered,
+    setLlxprtMdFileCount: bootstrap.setLlxprtMdFileCount,
+    dialogs: dialogOpeners,
+    store: dialogStore,
+    terminalStore,
+    settingsStore,
+    appState: props.appState,
+    appDispatch: props.appDispatch,
+    operationLifecycle: props.operationLifecycle,
   });
 }
 
@@ -280,29 +317,15 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
     settingsStore,
     turnStore,
   );
-  const input = useAppInput({
-    uiRuntime: props.uiRuntime,
-    streamRuntime: bootstrap.streamRuntime,
-    slashCommandRuntime: props.slashCommandRuntime,
-    agent: props.agent,
-    settings: props.settings,
-    runtime: bootstrap.runtime,
-    subagentManager: props.uiRuntime.app.getSubagentManager(),
-    turnStore,
-    recordingIntegrationRef: bootstrap.recordingIntegrationRef,
-    recordingSwapCallbacks: bootstrap.recordingSwapCallbacks,
-    recordingIntegration: props.recordingIntegration,
-    runtimeMessageBus: props.runtimeMessageBus,
-    setIdePromptAnswered: bootstrap.setIdePromptAnswered,
-    setLlxprtMdFileCount: bootstrap.setLlxprtMdFileCount,
-    dialogs: dialogOpeners,
-    store: dialogStore,
+  const input = useAppInputRuntime(
+    props,
+    bootstrap,
+    dialogStore,
+    dialogOpeners,
     terminalStore,
+    turnStore,
     settingsStore,
-    appState: props.appState,
-    appDispatch: props.appDispatch,
-    operationLifecycle: props.operationLifecycle,
-  });
+  );
   const layout = useAppLayout({
     uiRuntime: bootstrap.uiRuntime,
     settings: props.settings,
@@ -333,6 +356,7 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
       terminalStore={terminalStore}
       turnStore={turnStore}
       settingsStore={settingsStore}
+      recordingSwapCallbacks={bootstrap.recordingSwapCallbacks}
     />
   );
 };
@@ -343,6 +367,7 @@ interface AppRuntimeViewProps extends DefaultAppLayoutProps {
   terminalStore: TerminalStore;
   turnStore: TurnStore;
   settingsStore: SettingsProfileStore;
+  recordingSwapCallbacks: RecordingSwapCallbacks;
 }
 
 function AppRuntimeView({
@@ -351,18 +376,26 @@ function AppRuntimeView({
   terminalStore,
   turnStore,
   settingsStore,
+  recordingSwapCallbacks,
   ...layoutProps
 }: AppRuntimeViewProps): React.ReactNode {
   return (
     <TerminalProvider store={terminalStore}>
       <TurnProvider store={turnStore}>
-        <SettingsProfileProvider store={settingsStore}>
-          <DialogProvider store={dialogStore}>
-            <AppCommandsProvider value={appCommands}>
-              <DefaultAppLayout {...layoutProps} />
-            </AppCommandsProvider>
-          </DialogProvider>
-        </SettingsProfileProvider>
+        <ToolResultExpansionProvider
+          getTranscriptFilePath={() =>
+            recordingSwapCallbacks.getCurrentRecording()?.getFilePath() ??
+            undefined
+          }
+        >
+          <SettingsProfileProvider store={settingsStore}>
+            <DialogProvider store={dialogStore}>
+              <AppCommandsProvider value={appCommands}>
+                <DefaultAppLayout {...layoutProps} />
+              </AppCommandsProvider>
+            </DialogProvider>
+          </SettingsProfileProvider>
+        </ToolResultExpansionProvider>
       </TurnProvider>
     </TerminalProvider>
   );

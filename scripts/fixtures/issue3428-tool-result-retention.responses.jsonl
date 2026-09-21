@@ -1,0 +1,34 @@
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_3428_ck_base","name":"run_shell_command","parameters":{"command":"bun scripts/memory/request-cli.ts --dir \"$LLXPRT_TMUX_ARTIFACT_DIR/memprofile\" --wait"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"LLXPRT3428_CK_BASE_END"}],"metadata":{"usage":{"promptTokens":1,"completionTokens":1,"totalTokens":2},"stopReason":"stop"}}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_3428_s1","name":"run_shell_command","parameters":{"command":"bun scripts/memory/output-generator.ts --seed s3428-s1 --lines 20 --width 200"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"LLXPRT3428_S1_END"}],"metadata":{"usage":{"promptTokens":1,"completionTokens":1,"totalTokens":2},"stopReason":"stop"}}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_3428_s2","name":"run_shell_command","parameters":{"command":"bun scripts/memory/output-generator.ts --seed s3428-s2 --lines 20 --width 200"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"LLXPRT3428_S2_END"}],"metadata":{"usage":{"promptTokens":1,"completionTokens":1,"totalTokens":2},"stopReason":"stop"}}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_3428_s3","name":"run_shell_command","parameters":{"command":"bun scripts/memory/output-generator.ts --seed s3428-s3 --lines 20 --width 200"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"LLXPRT3428_S3_END"}],"metadata":{"usage":{"promptTokens":1,"completionTokens":1,"totalTokens":2},"stopReason":"stop"}}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_3428_ck_small","name":"run_shell_command","parameters":{"command":"bun scripts/memory/request-cli.ts --dir \"$LLXPRT_TMUX_ARTIFACT_DIR/memprofile\" --wait"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"LLXPRT3428_CK_SMALL_END"}],"metadata":{"usage":{"promptTokens":1,"completionTokens":1,"totalTokens":2},"stopReason":"stop"}}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_3428_l1","name":"run_shell_command","parameters":{"command":"bun scripts/memory/output-generator.ts --seed s3428-l1 --lines 1310 --width 800"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"LLXPRT3428_L1_END"}],"metadata":{"usage":{"promptTokens":1,"completionTokens":1,"totalTokens":2},"stopReason":"stop"}}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_3428_l2","name":"run_shell_command","parameters":{"command":"bun scripts/memory/output-generator.ts --seed s3428-l2 --lines 1310 --width 800"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"LLXPRT3428_L2_END"}],"metadata":{"usage":{"promptTokens":1,"completionTokens":1,"totalTokens":2},"stopReason":"stop"}}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_3428_l3","name":"run_shell_command","parameters":{"command":"bun scripts/memory/output-generator.ts --seed s3428-l3 --lines 1310 --width 800"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"LLXPRT3428_L3_END"}],"metadata":{"usage":{"promptTokens":1,"completionTokens":1,"totalTokens":2},"stopReason":"stop"}}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_3428_ck_big","name":"run_shell_command","parameters":{"command":"bun scripts/memory/request-cli.ts --dir \"$LLXPRT_TMUX_ARTIFACT_DIR/memprofile\" --wait"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"LLXPRT3428_CK_BIG_END"}],"metadata":{"usage":{"promptTokens":1,"completionTokens":1,"totalTokens":2},"stopReason":"stop"}}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_3428_x1","name":"run_shell_command","parameters":{"command":"bun scripts/memory/output-generator.ts --seed s3428-x1 --lines 2620 --width 800"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"LLXPRT3428_X1_END"}],"metadata":{"usage":{"promptTokens":1,"completionTokens":1,"totalTokens":2},"stopReason":"stop"}}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_3428_x2","name":"run_shell_command","parameters":{"command":"bun scripts/memory/output-generator.ts --seed s3428-x2 --lines 2620 --width 800"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"LLXPRT3428_X2_END"}],"metadata":{"usage":{"promptTokens":1,"completionTokens":1,"totalTokens":2},"stopReason":"stop"}}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_3428_x3","name":"run_shell_command","parameters":{"command":"bun scripts/memory/output-generator.ts --seed s3428-x3 --lines 2620 --width 800"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"LLXPRT3428_X3_END"}],"metadata":{"usage":{"promptTokens":1,"completionTokens":1,"totalTokens":2},"stopReason":"stop"}}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_3428_ck_huge","name":"run_shell_command","parameters":{"command":"bun scripts/memory/request-cli.ts --dir \"$LLXPRT_TMUX_ARTIFACT_DIR/memprofile\" --wait"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"LLXPRT3428_CK_HUGE_END"}],"metadata":{"usage":{"promptTokens":1,"completionTokens":1,"totalTokens":2},"stopReason":"stop"}}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_3428_x4","name":"run_shell_command","parameters":{"command":"bun scripts/memory/output-generator.ts --seed s3428-x4 --lines 2620 --width 800"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"LLXPRT3428_X4_END"}],"metadata":{"usage":{"promptTokens":1,"completionTokens":1,"totalTokens":2},"stopReason":"stop"}}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_3428_x5","name":"run_shell_command","parameters":{"command":"bun scripts/memory/output-generator.ts --seed s3428-x5 --lines 2620 --width 800"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"LLXPRT3428_X5_END"}],"metadata":{"usage":{"promptTokens":1,"completionTokens":1,"totalTokens":2},"stopReason":"stop"}}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_3428_x6","name":"run_shell_command","parameters":{"command":"bun scripts/memory/output-generator.ts --seed s3428-x6 --lines 2620 --width 800"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"LLXPRT3428_X6_END"}],"metadata":{"usage":{"promptTokens":1,"completionTokens":1,"totalTokens":2},"stopReason":"stop"}}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"call_3428_ck_huge2","name":"run_shell_command","parameters":{"command":"bun scripts/memory/request-cli.ts --dir \"$LLXPRT_TMUX_ARTIFACT_DIR/memprofile\" --wait && echo MEMPROFILE_CK_HUGE2_DONE"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"MEMPROFILE_CK_HUGE2_DONE"}],"metadata":{"usage":{"promptTokens":1,"completionTokens":1,"totalTokens":2},"stopReason":"stop"}}]}

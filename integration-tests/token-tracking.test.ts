@@ -21,7 +21,7 @@
  * cuts that per-leg cost rather than relocating it.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import * as fc from 'fast-check';
 import { ProviderManager } from '@vybestack/llxprt-code-providers/ProviderManager.js';
 import { ProviderPerformanceTracker } from '@vybestack/llxprt-code-providers/logging/ProviderPerformanceTracker.js';
@@ -35,8 +35,6 @@ import type { RedactionConfig } from '@vybestack/llxprt-code-core/config/types.j
 import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { formatSessionTokenUsage } from '../packages/cli/src/ui/utils/tokenFormatters.js';
 import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { resetSettingsService } from '@vybestack/llxprt-code-settings/settings/settingsServiceInstance.js';
 
 /**
  * Property-based test helper — a runner-portable replacement for the `itProp`
@@ -128,7 +126,6 @@ function useProviderManager(suite: string): {
   let providerConfig: Config;
 
   beforeEach(() => {
-    resetSettingsService();
     const runtimeId = `${suite}.${Math.random().toString(36).slice(2, 10)}`;
     const { runtime: testRuntime } = initializeTestProviderRuntime({
       runtimeId,
@@ -151,10 +148,6 @@ function useProviderManager(suite: string): {
     providerManager = new ProviderManager(testRuntime);
     providerManager.setConfig(providerConfig);
     providerConfig.setProviderManager(providerManager);
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
   });
 
   return {

@@ -24,7 +24,12 @@
  *                              the `gemini` provider id as plugin-origin, and
  *                              contributes the `gemini` builtin alias with
  *                              the exact config the base used to ship.
- *   base + google-mcp-auth   → same, for the reserved stub context.
+ *   base + google-mcp-auth   → the installed package is discovered and the
+ *                              real loader validates its manifest and
+ *                              registers exactly its two MCP auth factories
+ *                              (google_credentials,
+ *                              service_account_impersonation) — no provider
+ *                              (the plugin stopped shipping a stub in #2764).
  *   base + malformed plugin  → a discovered plugin exporting an incompatible
  *                              manifest fails actionably, never silently.
  *
@@ -170,12 +175,18 @@ function copyPluginSourceTree(sourceDir: string, destDir: string): void {
 /**
  * Host packages the plugin's module graph resolves against. In a real global
  * install the host provides the plugin's peer dependencies at the top-level
- * node_modules; the fixture mirrors that shape.
+ * node_modules; the fixture mirrors that shape. Since #2764 the
+ * google-mcp-auth plugin resolves auth, mcp, and telemetry directly (not
+ * only through core/providers), so the fixture links every host package the
+ * plugin contexts import.
  */
 const HOST_PEER_PACKAGES = [
+  '@vybestack/llxprt-code-auth',
   '@vybestack/llxprt-code-core',
+  '@vybestack/llxprt-code-mcp',
   '@vybestack/llxprt-code-providers',
   '@vybestack/llxprt-code-settings',
+  '@vybestack/llxprt-code-telemetry',
 ] as const;
 
 function linkHostPeerPackages(nodeModules: string): void {
@@ -537,27 +548,33 @@ describe('base + @vybestack/llxprt-plugin-google-gemini install', () => {
 describe('base + @vybestack/llxprt-plugin-google-mcp-auth install', () => {
   const release = releaseByDir('google-mcp-auth');
 
-  it('discovers exactly the reserved stub by its manifest marker', () => {
+  it('discovers exactly the installed plugin by its manifest marker', () => {
     withInstalledFixture(['google-mcp-auth'], (root) => {
       const discovered = discoverRuntimePluginPackages(discoveryDeps(root));
       expect(discovered).toStrictEqual([release.name]);
     });
   });
 
-  it('loads the reserved stub and registers its factory as plugin-origin', async () => {
+  it('loads the installed package and registers its MCP auth factories as plugin-origin', async () => {
     await withInstalledFixtureAsync(['google-mcp-auth'], async (root) => {
       const discovered = discoverRuntimePluginPackages(discoveryDeps(root));
       const registry = await loadRuntimePlugins(discovered, {
         importModule: fixtureImporter(root),
       });
-      expect(registry.getProviderFactory('google-mcp-auth')).toBeTypeOf(
-        'function',
-      );
-      expect(registry.getProviderOrigin('google-mcp-auth')).toStrictEqual({
-        kind: 'plugin',
-        pluginId: release.name,
-        specifier: release.name,
-      });
+      // #2764: the plugin contributes MCP auth factories, not a provider.
+      expect(registry.getProviderFactory('google-mcp-auth')).toBeUndefined();
+      const factories = registry.getMcpAuthFactories();
+      expect(
+        factories.map((factory) => factory.contribution.authProviderType),
+      ).toStrictEqual(['google_credentials', 'service_account_impersonation']);
+      for (const factory of factories) {
+        expect(factory.contribution.createAuthProvider).toBeTypeOf('function');
+        expect(factory.origin).toStrictEqual({
+          kind: 'plugin',
+          pluginId: release.name,
+          specifier: release.name,
+        });
+      }
     });
   });
 });

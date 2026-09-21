@@ -15,10 +15,6 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { IModel } from './IModel.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { createProviderWithRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import {
-  setActiveProviderRuntimeContext,
-  clearActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 
 const asContent = (text: string): IContent => ({
@@ -118,12 +114,7 @@ describe('generateChatCompletion contract', () => {
 
     runtime.config ??= fakeConfig;
 
-    setActiveProviderRuntimeContext(runtime);
-    try {
-      await provider.generateChatCompletion(options).next();
-    } finally {
-      clearActiveProviderRuntimeContext();
-    }
+    await provider.generateChatCompletion(options).next();
 
     expect(provider.lastOptions?.settings).toBe(customSettings);
     expect(provider.lastOptions?.config).toBe(fakeConfig);

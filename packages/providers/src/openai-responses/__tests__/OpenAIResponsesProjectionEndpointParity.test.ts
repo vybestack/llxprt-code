@@ -20,15 +20,10 @@
  * @requirement:REQ-PE-001 (issue #2817 acceptance A5)
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { describe, expect, it, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { OpenAIProvider } from '../../openai/OpenAIProvider.js';
 import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
-import {
-  clearActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import type { GenerateChatOptions } from '../../IProvider.js';
 
@@ -47,7 +42,6 @@ void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(async () => 'core-prompt'),
 }));
 
-const AMBIENT_BASE_URL = 'https://ambient.example/v1';
 const PER_CALL_BASE_URL = 'https://per-call.example/v1';
 
 class TestOpenAIProvider extends OpenAIProvider {
@@ -163,20 +157,7 @@ async function sendPreparedEnvelope(
 }
 
 describe('Responses projection endpoint parity (issue #2817)', () => {
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
-
   describe('per-call settings resolve no endpoint while ambient settings do', () => {
-    beforeEach(() => {
-      setActiveProviderRuntimeContext(
-        createProviderRuntimeContext({
-          settingsService: buildSettings('openai', AMBIENT_BASE_URL),
-          runtimeId: 'openai-endpoint-parity-test',
-        }),
-      );
-    });
-
     it('prepares the canonical endpoint transport will use, not the ambient one', async () => {
       const provider = new TestOpenAIProvider();
       const options = buildCallOptions(
@@ -237,15 +218,6 @@ describe('Responses projection endpoint parity (issue #2817)', () => {
       create: () => new TestResponsesProvider(),
     },
   ])('$providerName per-call endpoint override', ({ providerName, create }) => {
-    beforeEach(() => {
-      setActiveProviderRuntimeContext(
-        createProviderRuntimeContext({
-          settingsService: buildSettings(providerName, AMBIENT_BASE_URL),
-          runtimeId: `${providerName}-endpoint-override-test`,
-        }),
-      );
-    });
-
     it('prepares and sends the per-call endpoint', async () => {
       const provider = create();
       const options = buildCallOptions(

@@ -30,20 +30,27 @@ Package names are `@vybestack/llxprt-plugin-*`:
 ## Host contract
 
 Each plugin declares the host packages it compiles against as
-`peerDependencies` (`@vybestack/llxprt-code-core`,
-`@vybestack/llxprt-code-providers`) with caret ranges matching the workspace
-version. Plugins never bundle host code: source imports from host packages are
-type-only, and the published `files` allow-list is `dist` + `README.md`.
+`peerDependencies` with caret ranges matching the workspace version. The set
+is per plugin — `google-gemini` peers on `@vybestack/llxprt-code-core` and
+`@vybestack/llxprt-code-providers`; `google-mcp-auth` peers on
+`@vybestack/llxprt-code-auth`, `@vybestack/llxprt-code-mcp`,
+`@vybestack/llxprt-code-providers`, and
+`@vybestack/llxprt-code-telemetry` (issue #2764) — and release binding
+rewrites exactly the declared set (`scripts/bind-plugin-peers.ts`, driven by
+`scripts/utils/release-packages.ts`). Plugins never bundle host code: source
+imports resolve against the host install at runtime, and the published
+`files` allow-list is `dist` + `README.md`.
 
 Typecheck and test resolve the host packages through tsconfig `paths` entries
 pointing at the in-repo host sources, so no host package is ever installed.
-The plugin lockfile records only toolchain dependencies (`@types/bun`,
-`@types/node`, `typescript`), which keeps a plugin install small, fast, and
-deterministic. This is deliberate: linking the host packages with `file:`
-dependencies would make each plugin install re-resolve the entire monorepo
-dependency graph (the host packages themselves interlink via relative `file:`
-dependencies), and the resulting lockfile goes stale every time a host
-package's dependencies change.
+The plugin lockfile records the toolchain (`@types/bun`, `@types/node`,
+`typescript`) plus each plugin's own runtime dependencies (`@ai-sdk/google`
+for google-gemini, `google-auth-library` for google-mcp-auth), which keeps a
+plugin install small, fast, and deterministic. This is deliberate: linking the
+host packages with `file:` dependencies would make each plugin install
+re-resolve the entire monorepo dependency graph (the host packages themselves
+interlink via relative `file:` dependencies), and the resulting lockfile goes
+stale every time a host package's dependencies change.
 
 ## Flows (run from inside a plugin directory)
 

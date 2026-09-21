@@ -25,10 +25,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import {
-  clearActiveProviderRuntimeContext,
-  Config,
-} from '@vybestack/llxprt-code-core';
+import { Config } from '@vybestack/llxprt-code-core';
 import {
   ProviderKeyStorage,
   SecureStore,
@@ -217,7 +214,6 @@ describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURE
       await Promise.resolve(cleanupHandle()).catch(() => {});
       cleanupHandle = null;
     }
-    clearActiveProviderRuntimeContext();
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
   });
 
@@ -494,7 +490,6 @@ describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURE
         await Promise.resolve(cleanupHandle()).catch(() => {});
         cleanupHandle = null;
       }
-      clearActiveProviderRuntimeContext();
       await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
     });
 

@@ -16,7 +16,7 @@
  * and RetryOrchestrator under test are real.
  */
 
-import { vi, describe, it, expect, afterEach } from 'bun:test';
+import { vi, describe, it, expect } from 'bun:test';
 import { APIError } from '@anthropic-ai/sdk';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
@@ -29,10 +29,6 @@ import {
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  clearActiveProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import sharp from 'sharp';
 import { createAnthropicRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
 
@@ -156,7 +152,6 @@ function setupProvider(): {
     return svc.get(key);
   };
 
-  setActiveProviderRuntimeContext(runtime);
   return { provider, runtimeContext: runtime, settingsService: svc };
 }
 
@@ -182,10 +177,6 @@ function errorMessage(error: unknown): string {
 }
 
 describe('AnthropicProvider prompt-envelope retry (@issue:3444)', () => {
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
-
   it('retries a projected media turn with a fresh envelope instead of the spent token', async () => {
     vi.clearAllMocks();
     // Leftover mock*Once queue entries leak across tests (a failed prep

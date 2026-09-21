@@ -36,9 +36,6 @@ import {
   ShellTool,
   EditTool,
   WriteFileTool,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-  clearActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core';
 import * as ServerConfig from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -348,7 +345,6 @@ describe('toolGovernanceParity: interactive mode', () => {
       true,
     );
     process.stdin.isTTY = true;
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
     runtimeSettingsState.context = null;
     runtimeSettingsState.providerManager = null;
     runtimeSettingsState.oauthManager = null;
@@ -365,7 +361,6 @@ describe('toolGovernanceParity: interactive mode', () => {
     process.stdin.isTTY = originalIsTTY;
     restoreEnv();
     vi.restoreAllMocks();
-    clearActiveProviderRuntimeContext();
   });
 
   it('interactive mode: no tools excluded by default (DEFAULT approval)', async () => {
@@ -414,7 +409,6 @@ describe('toolGovernanceParity: non-interactive mode', () => {
       true,
     );
     process.stdin.isTTY = false;
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
     runtimeSettingsState.context = null;
     runtimeSettingsState.providerManager = null;
     runtimeSettingsState.oauthManager = null;
@@ -431,7 +425,6 @@ describe('toolGovernanceParity: non-interactive mode', () => {
     process.stdin.isTTY = originalIsTTY;
     restoreEnv();
     vi.restoreAllMocks();
-    clearActiveProviderRuntimeContext();
   });
 
   it('non-interactive DEFAULT mode: excludes ShellTool, EditTool, WriteFileTool', async () => {
@@ -523,7 +516,6 @@ describe('toolGovernanceParity: tool policy - non-interactive allowed sets', () 
       true,
     );
     process.stdin.isTTY = false;
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
     runtimeSettingsState.context = null;
     runtimeSettingsState.providerManager = null;
     runtimeSettingsState.oauthManager = null;
@@ -540,7 +532,6 @@ describe('toolGovernanceParity: tool policy - non-interactive allowed sets', () 
     process.stdin.isTTY = originalIsTTY;
     restoreEnv();
     vi.restoreAllMocks();
-    clearActiveProviderRuntimeContext();
   });
 
   it('non-interactive DEFAULT: allowed tools include all READ_ONLY_TOOL_NAMES', async () => {

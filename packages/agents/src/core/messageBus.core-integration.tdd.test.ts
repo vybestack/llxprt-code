@@ -16,10 +16,6 @@ import {
 import { IdeClient } from '@vybestack/llxprt-code-ide-integration';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 import {
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import {
   BaseDeclarativeTool,
   BaseToolInvocation,
   Kind,
@@ -132,7 +128,6 @@ class Phase04BusAwareTool extends BaseDeclarativeTool<
 describe('MessageBus core integration TDD', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
   });
 
   it('uses the same injected MessageBus across scheduler, registry, and invocation paths', async () => {

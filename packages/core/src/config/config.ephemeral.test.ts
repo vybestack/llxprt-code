@@ -4,23 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { Config } from './config.js';
-import {
-  registerSettingsService,
-  resetSettingsService,
-} from '@vybestack/llxprt-code-settings';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { clearActiveProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 
 describe('Config - Ephemeral Settings', () => {
   let config: Config;
 
   beforeEach(() => {
-    // Reset SettingsService singleton to ensure clean state between tests
-    resetSettingsService();
-    registerSettingsService(new SettingsService());
-
     config = new Config({
       model: 'test-model',
       question: 'test question',
@@ -31,10 +21,6 @@ describe('Config - Ephemeral Settings', () => {
       debugMode: false,
       cwd: '.',
     });
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
   });
 
   describe('task-continuation setting', () => {

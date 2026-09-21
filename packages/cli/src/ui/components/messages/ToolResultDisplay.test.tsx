@@ -197,7 +197,7 @@ describe('<ToolResultDisplay />', () => {
     });
 
     it('omits the marker and keeps the last line when content fits', () => {
-      // @plan PLAN-20260824-ISSUE2021.P06 @requirement REQ-2021.6
+      // @plan PLAN-20260824-ISSUE2021.P06 @requirement REQ-2021-6
       const { lastFrame } = renderWithProviders(
         <ToolResultDisplay
           resultDisplay={longResultDisplay}
@@ -209,6 +209,65 @@ describe('<ToolResultDisplay />', () => {
 
       expect(lastFrame()).not.toContain('lines hidden');
       expect(lastFrame()).toContain('line-59');
+    });
+  });
+
+  // @plan issue #3428 section C: the { content } object render path gets the
+  // same pre-layout bound the string path got in #3426, so a large structured
+  // result costs what its visible window costs instead of its full body.
+  describe('object content truncation (issue #3428)', () => {
+    const longObjectContent = {
+      content: Array.from({ length: 60 }, (_, i) => `oline-${i}`).join(
+        String.fromCharCode(10),
+      ),
+    };
+
+    it('bounds the { content } body to the visible window and reports hidden lines', () => {
+      const { lastFrame } = renderWithProviders(
+        <ToolResultDisplay
+          resultDisplay={longObjectContent}
+          availableTerminalHeight={10}
+          terminalWidth={80}
+          renderOutputAsMarkdown={false}
+        />,
+      );
+
+      expect(lastFrame()).toContain('lines hidden');
+      expect(lastFrame()).toContain('oline-59');
+      expect(lastFrame()).not.toContain('oline-0 ');
+    });
+
+    it('leaves object content that fits entirely visible', () => {
+      const { lastFrame } = renderWithProviders(
+        <ToolResultDisplay
+          resultDisplay={{
+            content: ['oalpha', 'obravo', 'ocharlie'].join(
+              String.fromCharCode(10),
+            ),
+          }}
+          availableTerminalHeight={80}
+          terminalWidth={80}
+          renderOutputAsMarkdown={false}
+        />,
+      );
+
+      expect(lastFrame()).toContain('oalpha');
+      expect(lastFrame()).toContain('ocharlie');
+      expect(lastFrame()).not.toContain('lines hidden');
+    });
+
+    it('does not bound the { content } body when no height constraint exists', () => {
+      const { lastFrame } = renderWithProviders(
+        <ToolResultDisplay
+          resultDisplay={longObjectContent}
+          terminalWidth={80}
+          renderOutputAsMarkdown={false}
+        />,
+      );
+
+      expect(lastFrame()).toContain('oline-0');
+      expect(lastFrame()).toContain('oline-59');
+      expect(lastFrame()).not.toContain('lines hidden');
     });
   });
 });

@@ -4,16 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { Config } from './config.js';
-import {
-  registerSettingsService,
-  resetSettingsService,
-  SettingsService,
-} from '@vybestack/llxprt-code-settings';
-import { clearActiveProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { initializeTestConfig } from '../test-utils/config.js';
 import {
   ACTIVATE_MCP_SERVER_TOOL_NAME,
@@ -202,8 +197,6 @@ describe('Config.refreshMcpContext — MCP lazy tool synchronization', () => {
   let config: Config;
 
   beforeEach(async () => {
-    resetSettingsService();
-    registerSettingsService(new SettingsService());
     config = new Config({
       model: 'test-model',
       question: 'test',
@@ -215,11 +208,6 @@ describe('Config.refreshMcpContext — MCP lazy tool synchronization', () => {
       cwd: '.',
     });
     await initializeTestConfig(config);
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-    resetSettingsService();
   });
 
   it('registers activation tool when deferred servers exist, absent when off (D2)', async () => {
@@ -272,7 +260,6 @@ describe('Config.refreshMcpContext — MCP lazy tool synchronization', () => {
   it('nested profile-like mcp settings make activation behavior available (D2)', async () => {
     const profileSettings = new SettingsService();
     profileSettings.set('mcp.lazy', true);
-    registerSettingsService(profileSettings);
     const nestedConfig = new Config({
       model: 'test-model',
       question: 'test',

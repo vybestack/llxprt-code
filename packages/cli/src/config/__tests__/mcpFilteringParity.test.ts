@@ -31,11 +31,6 @@ import {
 } from 'bun:test';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-  clearActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core';
 import * as ServerConfig from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderManager } from '@vybestack/llxprt-code-providers';
@@ -372,7 +367,6 @@ describe('mcpFilteringParity: MCP server filtering', () => {
     );
     setEnv('GEMINI_API_KEY', 'test-api-key');
     process.argv = ['node', 'script.js'];
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
     runtimeSettingsState.context = null;
     runtimeSettingsState.providerManager = null;
     runtimeSettingsState.oauthManager = null;
@@ -383,7 +377,6 @@ describe('mcpFilteringParity: MCP server filtering', () => {
     process.argv = originalArgv;
     restoreEnv();
     vi.restoreAllMocks();
-    clearActiveProviderRuntimeContext();
   });
 
   it('all servers visible when no filtering configured', async () => {

@@ -14,8 +14,6 @@ import type { SessionRecordingService } from '../recording/SessionRecordingServi
 import type { vi as ViNamespace } from 'bun:test';
 import {
   createProviderRuntimeContext,
-  peekActiveProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
   type ProviderRuntimeContext,
 } from '../runtime/providerRuntimeContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -80,9 +78,9 @@ interface ProviderWithRuntimeResult<P> {
 }
 
 /**
- * Creates a provider instance while binding it to a fresh runtime context.
- * The runtime is only active during instantiation so the provider captures
- * the injected settings service without polluting global state.
+ * Creates a provider instance alongside a fresh explicit runtime context.
+ * Issue #2616: no ambient context is installed — callers hand the returned
+ * runtime/settings to the provider (constructor or call options) explicitly.
  */
 export function createProviderWithRuntime<P>(
   factory: (context: {
@@ -91,7 +89,6 @@ export function createProviderWithRuntime<P>(
   }) => P,
   options: ProviderRuntimeOptions = {},
 ): ProviderWithRuntimeResult<P> {
-  const previousContext = peekActiveProviderRuntimeContext();
   const settingsService = options.settingsService ?? new SettingsService();
   const runtime = createProviderRuntimeContext({
     settingsService,
@@ -103,13 +100,8 @@ export function createProviderWithRuntime<P>(
     },
   });
 
-  setActiveProviderRuntimeContext(runtime);
-  try {
-    const provider = factory({ runtime, settingsService });
-    return { provider, runtime, settingsService };
-  } finally {
-    setActiveProviderRuntimeContext(previousContext ?? null);
-  }
+  const provider = factory({ runtime, settingsService });
+  return { provider, runtime, settingsService };
 }
 
 /**
@@ -181,7 +173,8 @@ interface TestRuntimeInitOptions {
 
 /**
  * Initializes a lightweight provider runtime context for test environments.
- * Returns the created settings service, config stub, and runtime context.
+ * Returns the created settings service, config stub, and runtime context;
+ * callers thread them explicitly (issue #2616: no ambient install).
  */
 export function initializeTestProviderRuntime(
   options: TestRuntimeInitOptions = {},
@@ -206,7 +199,6 @@ export function initializeTestProviderRuntime(
     },
   });
 
-  setActiveProviderRuntimeContext(runtime);
   return { settingsService, config, runtime };
 }
 

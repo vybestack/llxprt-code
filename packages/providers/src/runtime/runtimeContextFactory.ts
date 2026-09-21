@@ -22,16 +22,14 @@ import {
 } from '@vybestack/llxprt-code-core';
 import {
   type Config,
+  createProviderRuntimeContext,
   flushRuntimeAuthScope,
-  peekActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import {
-  clearSettingsProviderRuntimeContext,
-  createSettingsProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
-import type { ProfileManager } from '@vybestack/llxprt-code-settings';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import type {
+  ProfileManager,
+  SettingsService,
+} from '@vybestack/llxprt-code-settings';
 import { ProviderManager } from '../ProviderManager.js';
 import { OAuthManager, createTokenStore } from '../auth/index.js';
 import { validateRuntimeId } from './runtimeIdValidation.js';
@@ -220,6 +218,7 @@ export function registerIsolatedRuntimeBindings(
 function resolveOAuthManager(
   sessionMessageBus: MessageBus,
   optionsOAuthManager: OAuthManager | undefined,
+  config: Config,
 ): OAuthManager {
   // @plan:PLAN-20250214-CREDPROXY.P33
   const tokenStore =
@@ -232,6 +231,7 @@ function resolveOAuthManager(
   const oauthSettings = createFileOAuthSettingsProvider();
   const oauthManager = new OAuthManager(tokenStore, oauthSettings, {
     messageBus: sessionMessageBus,
+    config,
   });
   registerStandardOAuthProviders(oauthManager, tokenStore);
   return oauthManager;
@@ -283,7 +283,7 @@ function buildActivateClosure(
     enterRuntimeScope(scope);
 
     await runWithRuntimeScope(scope, async () => {
-      const scopedRuntime = createSettingsProviderRuntimeContext({
+      const scopedRuntime = createProviderRuntimeContext({
         settingsService: resolvedSettingsService,
         config,
         runtimeId: state.currentRuntimeId,
@@ -362,10 +362,6 @@ function buildCleanupClosure(
         await Promise.resolve(
           bindings.resetInfrastructure(state.currentRuntimeId),
         );
-      }
-      const activeContext = peekActiveProviderRuntimeContext();
-      if (activeContext?.runtimeId === state.currentRuntimeId) {
-        clearSettingsProviderRuntimeContext();
       }
 
       const revocation: RuntimeAuthScopeFlushResult = flushRuntimeAuthScope(
@@ -455,9 +451,10 @@ export function createIsolatedRuntimeContext(
   const oauthManager = resolveOAuthManager(
     sessionMessageBus,
     options.oauthManager,
+    config,
   );
 
-  const initialRuntimeContext = createSettingsProviderRuntimeContext({
+  const initialRuntimeContext = createProviderRuntimeContext({
     settingsService,
     config,
     runtimeId,

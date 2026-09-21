@@ -19,7 +19,7 @@
  *
  * These tests document the exact bugs that need to be fixed.
  */
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { vi, describe, it, expect, beforeEach } from 'bun:test';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import type {
   IContent,
@@ -38,10 +38,6 @@ import {
 } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  clearActiveProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type {
   AnthropicContentBlock,
   AnthropicMessage,
@@ -128,17 +124,11 @@ describe('AnthropicProvider Issue #1150: API Shape Validation', () => {
       return settingsService.get(key);
     };
 
-    setActiveProviderRuntimeContext(runtimeContext);
-
     // Enable extended thinking
     settingsService.set('reasoning.enabled', true);
     settingsService.set('reasoning.budgetTokens', 10000);
     settingsService.set('reasoning.includeInContext', true);
     settingsService.set('reasoning.stripFromContext', 'none');
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
   });
 
   const buildCallOptions = (

@@ -4,15 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { ProviderManager } from '@vybestack/llxprt-code-providers/ProviderManager.js';
 import type { IProvider } from '@vybestack/llxprt-code-providers/IProvider.js';
 import { ContentGeneratorRole } from '@vybestack/llxprt-code-providers/ContentGeneratorRole.js';
-import {
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-  clearActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { GeminiProvider } from '../gemini/GeminiProvider.js';
 import { OpenAIProvider } from '@vybestack/llxprt-code-providers/openai/OpenAIProvider.js';
@@ -32,7 +28,6 @@ describe('ProviderManager - Gemini switching', () => {
       settingsService: new SettingsService(),
       runtimeId: 'test-runtime',
     });
-    setActiveProviderRuntimeContext(runtime);
     manager = new ProviderManager(runtime);
     mockProvider = {
       name: 'openai',
@@ -43,10 +38,6 @@ describe('ProviderManager - Gemini switching', () => {
         yield { role: ContentGeneratorRole.ASSISTANT, content: 'test' };
       },
     };
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
   });
 
   it('should start with no active provider', () => {
@@ -120,7 +111,6 @@ describe('ProviderManager - Gemini switching', () => {
         settingsService: settings,
         runtimeId: 'gemini-roundtrip',
       });
-      setActiveProviderRuntimeContext(runtime);
       const roundtripManager = new ProviderManager(runtime);
       // Config first so registerProvider applies the full production
       // wrapping (RetryOrchestrator + LoggingProviderWrapper).

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { describe, expect, it, vi } from 'bun:test';
 import {
   BaseProvider,
   type NormalizedGenerateChatOptions,
@@ -6,10 +6,6 @@ import {
 import type { GenerateChatOptions } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  clearActiveProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
 class HarnessProvider extends BaseProvider {
   lastNormalizedOptions: NormalizedGenerateChatOptions | undefined;
@@ -43,14 +39,6 @@ describe('BaseProvider runtime guard', () => {
     speaker: 'human',
     blocks: [],
   };
-
-  beforeEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
 
   it('raises MissingProviderRuntimeError when settings are not supplied', async () => {
     // @plan:PLAN-20251023-STATELESS-HARDENING.P04 @requirement:REQ-SP4-001
@@ -119,9 +107,6 @@ describe('BaseProvider runtime guard', () => {
     };
 
     const settings = new SettingsService();
-    setActiveProviderRuntimeContext({
-      settingsService: settings,
-    });
 
     const iterator = provider.generateChatCompletion({
       contents: [prompt],

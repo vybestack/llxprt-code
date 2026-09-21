@@ -205,6 +205,37 @@ const RENAMED_DESTINATION_OVERRIDES = new Map<string, string>([
     'packages/core/src/providers/openai-responses/__tests__/OpenAIResponsesProvider.ephemerals.toolOutput.test.ts',
     'packages/providers/src/openai-responses/__tests__/OpenAIResponsesProvider.toolIdNormalization.test.ts',
   ],
+  // #3639: deleted toolNameUtils.ts, dead module with zero production
+  // importers whose helpers fabricated stand-in tool names
+  // (tool_name_not_found_*, missing_tool_name). The live streaming path is
+  // ToolCallPipeline, which passes raw model-emitted names through with only
+  // trim/lowercase normalization; the override maps to that surviving sibling
+  // so the move-map assertion still resolves.
+  [
+    'packages/core/src/providers/openai/toolNameUtils.ts',
+    'packages/providers/src/openai/ToolCallPipeline.ts',
+  ],
+  // #3639: deleted toolNameUtils.test.ts, dedicated tests of the deleted
+  // fabrication module; the raw-name passthrough contract is now pinned by
+  // ToolCallPipeline.rawToolName.issue3639.test.ts.
+  [
+    'packages/core/src/providers/openai/toolNameUtils.test.ts',
+    'packages/providers/src/openai/ToolCallPipeline.rawToolName.issue3639.test.ts',
+  ],
+  // #3639: deleted ToolNameValidator.ts, dead case/partial name "correction"
+  // validator with zero production importers; wiring it into the live path
+  // would add provider-side name matching the live path deliberately avoids.
+  // The override maps to the surviving pipeline sibling.
+  [
+    'packages/core/src/providers/openai/ToolNameValidator.ts',
+    'packages/providers/src/openai/ToolCallPipeline.ts',
+  ],
+  // #3639: deleted __tests__/ToolNameValidator.test.ts, dedicated tests of
+  // the deleted validator.
+  [
+    'packages/core/src/providers/openai/__tests__/ToolNameValidator.test.ts',
+    'packages/providers/src/openai/ToolCallPipeline.rawToolName.issue3639.test.ts',
+  ],
 ]);
 const AGENT_OWNED_DESTINATION_OVERRIDES = new Map<string, string>([
   [

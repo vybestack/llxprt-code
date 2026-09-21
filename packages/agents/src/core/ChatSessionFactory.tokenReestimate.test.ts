@@ -51,7 +51,6 @@ void vi.mock(
 void vi.mock(
   '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js',
   () => ({
-    setProviderRuntimeStateFactory: vi.fn(),
     createProviderRuntimeContext: vi.fn().mockReturnValue({}),
   }),
 );

@@ -34,15 +34,9 @@ import { AuthPrecedenceResolver } from '@vybestack/llxprt-code-auth/precedence.j
 import { createProviderKeyStorage } from './auth/proxy/credential-store-factory.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { type IProviderConfig } from './types/IProviderConfig.js';
-import { peekActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { RuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  createSettingsProviderRuntimeContext,
-  resolveRuntimeSettingsService,
-  setSettingsProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   assertProviderRuntimeContext,
   normalizeProviderGenerateChatOptions,
@@ -148,8 +142,7 @@ export abstract class BaseProvider implements IProvider {
         conservativeMediaTransportCapabilities(),
     );
 
-    const fallbackSettingsService =
-      resolveRuntimeSettingsService(settingsService);
+    const fallbackSettingsService = settingsService ?? new SettingsService();
 
     this.defaultSettingsService = fallbackSettingsService;
 
@@ -630,7 +623,6 @@ export abstract class BaseProvider implements IProvider {
       contentsOrOptions,
       maybeTools,
     );
-    const previousRuntimeContext = peekActiveProviderRuntimeContext();
 
     let preparedIteratorPromise: Promise<void> | null = null;
     let normalizedOptions: NormalizedGenerateChatOptions | undefined;
@@ -639,10 +631,8 @@ export abstract class BaseProvider implements IProvider {
     const prepareIterator = async (): Promise<void> => {
       preparedIteratorPromise ??= (async () => {
         normalizedOptions = await normalizedPromise;
-        underlyingIterator = this.invokeWithNormalizedOptions(
-          normalizedOptions,
-          previousRuntimeContext ?? null,
-        );
+        underlyingIterator =
+          this.invokeWithNormalizedOptions(normalizedOptions);
       })();
       await preparedIteratorPromise;
     };
@@ -749,63 +739,25 @@ export abstract class BaseProvider implements IProvider {
    * @plan PLAN-20251018-STATELESSPROVIDER2.P06
    * @requirement REQ-SP2-001
    * @pseudocode base-provider-call-contract.md lines 3-5
+   *
+   * Issue #2616 PR A: the module-level runtime-context swap around each
+   * provider call is deleted. The call-scoped context is carried by
+   * NormalizedGenerateChatOptions and by the instance-owned
+   * activeCallContext AsyncLocalStorage; outside readers receive their
+   * collaborators explicitly.
    */
   private invokeWithNormalizedOptions(
     normalized: NormalizedGenerateChatOptions,
-    previousContext: ProviderRuntimeContext | null,
   ): AsyncIterableIterator<IContent> {
-    const needsContextSwap: boolean =
-      !previousContext ||
-      previousContext.settingsService !== normalized.settings ||
-      Boolean(
-        normalized.config && previousContext.config !== normalized.config,
-      );
-
-    const mergedMetadata: Record<string, unknown> = normalized.runtime
-      ? {
-          ...(normalized.runtime.metadata ?? {}),
-          ...normalized.metadata,
-        }
-      : {
-          ...(previousContext?.metadata ?? {}),
-          ...normalized.metadata,
-        };
-
-    if (!('source' in mergedMetadata)) {
-      mergedMetadata.source = 'BaseProvider.generateChatCompletion';
-    }
-
-    const runtimeContext: ProviderRuntimeContext =
-      createSettingsProviderRuntimeContext({
-        ...(normalized.runtime ?? {}),
-        settingsService: normalized.settings,
-        config:
-          normalized.config ??
-          normalized.runtime?.config ??
-          previousContext?.config,
-        runtimeId:
-          normalized.runtime?.runtimeId ??
-          previousContext?.runtimeId ??
-          'base-provider.normalized-call',
-        metadata: mergedMetadata,
-      });
-
     return async function* (
       this: BaseProvider,
     ): AsyncIterableIterator<IContent> {
-      if (needsContextSwap === true) {
-        setSettingsProviderRuntimeContext(runtimeContext);
-      }
-
       try {
         const iterator = this.generateChatCompletionWithOptions(normalized);
         for await (const chunk of iterator) {
           yield chunk;
         }
       } finally {
-        if (needsContextSwap === true) {
-          setSettingsProviderRuntimeContext(previousContext ?? null);
-        }
         normalized.resolved.authToken = '';
         delete normalized.resolved.authFailure;
         this.authResolver.setSettingsService(this.defaultSettingsService);
@@ -844,8 +796,7 @@ export abstract class BaseProvider implements IProvider {
     let authFailure: CredentialResolutionError | undefined;
     const runtimeId =
       providedOptions.runtime?.runtimeId ??
-      providedOptions.invocation?.runtimeId ??
-      peekActiveProviderRuntimeContext()?.runtimeId;
+      providedOptions.invocation?.runtimeId;
     if (resolveAuthentication) {
       const { authIntent, profileId } = providedOptions.metadata ?? {};
       const authResult = await this.authResolver.resolveAuthenticationResult({
