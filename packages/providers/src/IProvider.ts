@@ -24,6 +24,7 @@ import type { RuntimeInvocationContext } from '@vybestack/llxprt-code-core/runti
 import type { StructuredError } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { StreamLivenessEvent } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import type { SystemPromptPlacement } from './utils/systemPromptPlacement.js';
+import type { RequestScopedContents } from './utils/requestScopedBody.js';
 import type {
   ProviderTelemetryContext,
   ResolvedAuthToken,
@@ -110,6 +111,12 @@ export interface GenerateChatOptions {
 export interface MaterializedGenerateChatOptions
   extends Omit<GenerateChatOptions, 'contents'> {
   contents: IContent[];
+  /**
+   * Memoized request-scoped drain of the one-shot history source, present
+   * when the provider materializes contents at its transport (issue #854
+   * P05b4). Every later consumer resolves the same array.
+   */
+  requestContents?: RequestScopedContents;
 }
 
 /**

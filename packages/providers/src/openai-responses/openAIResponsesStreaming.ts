@@ -39,6 +39,10 @@ export async function* streamResponses(
 ): AsyncIterableIterator<IContent> {
   const transport = deps.getWebSocketTransport?.();
   if (params.isCodex && transport !== undefined) {
+    // Lazily-wired request (issue #854 P05b4): the WebSocket send carries the
+    // request object directly, so the history source must be drained (inside
+    // the request-scoped lease) before the first frame goes out.
+    await params.materializeRequestBody?.();
     yield* streamOverWebSocketWithRenewal(params, deps, transport);
     return;
   }

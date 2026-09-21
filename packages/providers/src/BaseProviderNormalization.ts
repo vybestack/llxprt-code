@@ -24,6 +24,13 @@ import type {
 } from './BaseProvider.js';
 import type { ResolvedAuthToken } from './types/providerRuntime.js';
 import { isAbortSignal } from './utils/abortSignal.js';
+import {
+  collectContents,
+  isAsyncIterableContents,
+} from './utils/collectContents.js';
+import { requestScopedContents } from './utils/requestScopedBody.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { GenerateChatOptions } from './IProvider.js';
 
 interface RuntimeGuardInput {
   providerKey: string;
@@ -118,6 +125,35 @@ function resolveRuntimeId(
   const currentRuntimeId =
     typeof metadata.runtimeId === 'string' ? metadata.runtimeId : undefined;
   return currentRuntimeId?.trim() ? currentRuntimeId : fallback;
+}
+
+/**
+ * Materialize the caller's history source for provider use (issue #854
+ * P05b4). One-shot streams defer the drain to the transport's
+ * request-scoped lease; arrays and replayable streams collect eagerly
+ * (nothing extra is retained; pre-submission validation stays put).
+ */
+export async function materializeCallOptions(
+  contentsOrOptions: AsyncIterable<IContent> | GenerateChatOptions,
+  maybeTools: ProviderToolset | undefined,
+  lazyWireContents: boolean,
+): Promise<MaterializedGenerateChatOptions> {
+  const historySource: AsyncIterable<IContent> = isAsyncIterableContents(
+    contentsOrOptions,
+  )
+    ? contentsOrOptions
+    : contentsOrOptions.contents;
+  const contents = lazyWireContents ? [] : await collectContents(historySource);
+  const providedOptions: MaterializedGenerateChatOptions =
+    isAsyncIterableContents(contentsOrOptions)
+      ? { contents, tools: maybeTools }
+      : { ...contentsOrOptions, contents };
+  if (lazyWireContents) {
+    // The memoized drain is shared by every later consumer (estimation,
+    // projection, retries) so the one-shot source is read exactly once.
+    providedOptions.requestContents = requestScopedContents(historySource);
+  }
+  return providedOptions;
 }
 
 export function assertProviderRuntimeContext(

@@ -50,6 +50,9 @@ export function isAsyncIterableContents(
  * once and hand each consumer its own single-consumption view instead of
  * sharing one exhaustible iterator.
  */
+/** Marks streams that re-open a resident array (replayable, not one-shot). */
+const replayableContentsMarker = Symbol.for('llxprt.replayableContents');
+
 export function replayableContents(
   contents: readonly IContent[],
 ): AsyncIterable<IContent> {
@@ -59,5 +62,45 @@ export function replayableContents(
         yield content;
       }
     },
-  };
+    [replayableContentsMarker]: true,
+  } as AsyncIterable<IContent>;
+}
+
+/**
+ * True when the iterable re-opens a resident array (every iterator start is a
+ * fresh pass over the same rows). Issue #854 P05b4: replayable sources may be
+ * collected eagerly at normalization — nothing extra is retained — while
+ * one-shot sources defer the drain to the transport's request-scoped lease.
+ */
+export function isReplayableContents(value: AsyncIterable<IContent>): boolean {
+  const marked = (value as unknown as Record<symbol, unknown>)[
+    replayableContentsMarker
+  ];
+  return marked === true;
+}
+
+/**
+ * True when a generate-chat call supplies its history as a one-shot stream —
+ * either the bare-stream form or an options object whose `contents` is a
+ * non-replayable stream (issue #854 P05b4). Materialized arrays and
+ * replayable streams over resident rows return false: collecting them
+ * eagerly retains nothing and preserves pre-submission validation.
+ */
+export function isOneShotContentsSource(
+  value: AsyncIterable<IContent> | object,
+): boolean {
+  let source: AsyncIterable<IContent> | undefined;
+  if (isAsyncIterableContents(value)) {
+    source = value;
+  } else {
+    const field = (value as { contents?: unknown }).contents;
+    if (
+      typeof field === 'object' &&
+      field !== null &&
+      isAsyncIterableContents(field)
+    ) {
+      source = field;
+    }
+  }
+  return source !== undefined && !isReplayableContents(source);
 }
