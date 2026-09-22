@@ -3,8 +3,21 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { afterEach, describe, expect, it, spyOn, mock } from 'bun:test';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  spyOn,
+  mock,
+} from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import {
+  saveProviderEnvCredentials,
+  restoreProviderEnvCredentials,
+  clearProviderEnvCredentials,
+} from './providerEnvCredentials.test-helpers.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
@@ -60,9 +73,20 @@ async function generate(
 }
 
 describe('provider-selected Codex semantics', () => {
+  let savedProviderEnvCredentials: ReturnType<
+    typeof saveProviderEnvCredentials
+  >;
+
+  beforeEach(() => {
+    savedProviderEnvCredentials = saveProviderEnvCredentials();
+    clearProviderEnvCredentials();
+  });
+
   afterEach(() => {
+    restoreProviderEnvCredentials(savedProviderEnvCredentials);
     mock.restore();
   });
+
   for (const [baseURL, effectiveURL] of [
     [
       'http://127.0.0.1:18443/backend-api/codex',
