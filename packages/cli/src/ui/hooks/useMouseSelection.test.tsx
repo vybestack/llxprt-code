@@ -9,7 +9,7 @@ import { useEffect, useRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { Box, Text, useApp, type DOMElement, type Selection } from 'ink';
 import { EventEmitter } from 'node:events';
-import { render } from '../../test-utils/render.js';
+import { render } from '../../__tests__/render.js';
 import { Colors } from '../colors.js';
 import { MouseProvider } from '../contexts/MouseContext.js';
 import { ScrollProvider } from '../contexts/ScrollProvider.js';

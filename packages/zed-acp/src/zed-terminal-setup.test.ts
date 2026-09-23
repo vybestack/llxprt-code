@@ -23,7 +23,7 @@ import {
   DEFAULT_ACQUISITION_BUDGET_BYTES,
 } from '@vybestack/llxprt-code-tools/acquisition.js';
 import { buildZedTerminalSetup } from './zed-terminal-setup.js';
-import { RecordingConnection } from './zed-test-helpers.js';
+import { RecordingConnection } from './__tests__/zed-test-helpers.js';
 
 function configFixture(outputLimit?: number): Config {
   // #2534 D2: ToolRegistry receives the settings service as a direct

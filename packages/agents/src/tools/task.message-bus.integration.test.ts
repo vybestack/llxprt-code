@@ -22,8 +22,8 @@ import {
   type ToolPolicyRejection,
 } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
-import { getTestRuntimeMessageBus } from '@vybestack/llxprt-code-core/test-utils/config.js';
-import { MockTool } from '@vybestack/llxprt-code-core/test-utils/tools.js';
+import { getTestRuntimeMessageBus } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/tools.js';
 import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
 import { CoreToolScheduler } from '../core/coreToolScheduler.js';
 import { ChatSession } from '../core/chatSession.js';
@@ -33,7 +33,7 @@ import {
   createMockStream,
   createStatelessRuntimeBundle,
   disposeMockConfig,
-} from '../core/subagent-test-helpers.js';
+} from '../core/__tests__/subagent-test-helpers.js';
 import { TaskTool } from './task.js';
 
 const actualTools = { ...(await import('@vybestack/llxprt-code-tools')) };

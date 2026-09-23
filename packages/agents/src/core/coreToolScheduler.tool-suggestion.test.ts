@@ -11,7 +11,7 @@ import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import {
   createMockMessageBus,
   createMockPolicyEngine,
-} from './coreToolScheduler-test-helpers.js';
+} from './__tests__/coreToolScheduler-test-helpers.js';
 
 describe('CoreToolScheduler getToolSuggestion', () => {
   it('should suggest the top N closest tool names for a typo', () => {

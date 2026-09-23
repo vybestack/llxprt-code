@@ -33,7 +33,7 @@ import {
   fromAsync,
   setupAgentClient,
   type MockResponseShape,
-} from './client-test-helpers.js';
+} from './__tests__/client-test-helpers.js';
 
 // Mock prompts module before imports
 const realConfigModule = {

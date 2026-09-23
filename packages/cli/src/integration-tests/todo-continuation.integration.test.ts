@@ -25,7 +25,7 @@ import {
   cleanupTempDirectory,
   initializeTestConfig,
 } from './test-utils.js';
-import { testRegex } from '../test-utils/regex.js';
+import { testRegex } from '../__tests__/regex.js';
 
 const LOWER_LIST_ITEM_LABEL = 'to' + 'do';
 const TITLE_LIST_ITEM_LABEL = 'To' + 'do';

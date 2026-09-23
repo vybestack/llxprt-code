@@ -30,7 +30,7 @@ import type {
   ToolConfirmationOutcome,
   ToolConfirmationPayload,
 } from '@vybestack/llxprt-code-tools';
-import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import type { AnyDeclarativeTool } from '@vybestack/llxprt-code-tools';
 import type { EditorCallbacks } from '../../config-types.js';
 import type { ToolControlDeps } from '../../control/toolControl.js';

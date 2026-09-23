@@ -4,10 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect } from 'bun:test';
 import { AgenticLoop } from '../AgenticLoop.js';
-import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
-import { clearAllSchedulers } from '@vybestack/llxprt-code-core/config/schedulerSingleton.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import {
@@ -22,13 +21,6 @@ import {
 } from './agenticLoop-test-helpers.js';
 
 describe('AgenticLoop promptId correlation', () => {
-  beforeEach(() => {
-    clearAllSchedulers();
-  });
-  afterEach(() => {
-    clearAllSchedulers();
-  });
-
   it('threads the caller-provided promptId into the FIRST model turn and uses a distinct generated id for continuation turns', async () => {
     const tool = new MockTool({ name: 'corr_tool' });
     tool.executeFn.mockResolvedValue({

@@ -26,7 +26,7 @@ import {
   collectRequestBody,
   createKeyStorage,
   createLoopbackHarness,
-} from '../test-utils/loopback-test-helpers.js';
+} from '../__tests__/loopback-test-helpers.js';
 
 const EXA_ORIGIN = 'https://mcp.exa.ai';
 const TRANSPORT_SETTLEMENT_TIMEOUT_MS = 5000;

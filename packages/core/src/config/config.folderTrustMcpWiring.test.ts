@@ -59,7 +59,7 @@ void vi.mock('../hooks/hookSystem.js', () => ({
 
 import type { ConfigParameters } from './config.js';
 import { ApprovalMode, Config } from './config.js';
-import { initializeTestConfig } from '../test-utils/config.js';
+import { initializeTestConfig } from '../__tests__/config-test-helpers.js';
 
 const FAILED_TRANSITION_COUNT = 101;
 

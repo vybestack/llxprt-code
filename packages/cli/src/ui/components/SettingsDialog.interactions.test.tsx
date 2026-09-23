@@ -24,13 +24,13 @@
 import { waitFor as waitForCondition } from '@vybestack/llxprt-code-test-utils';
 import { render } from 'ink-testing-library';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
-import { waitFor } from '../../test-utils/render.js';
+import { waitFor } from '../../__tests__/render.js';
 import { SettingsDialog } from './SettingsDialog.js';
 import { LoadedSettings } from '../../config/settings.js';
 import { KeypressProvider } from '../contexts/KeypressContext.js';
 import { act } from 'react';
 import { terminalCapabilityManager } from '../utils/terminalCapabilityManager.js';
-import { testRegex } from '../../test-utils/regex.js';
+import { testRegex } from '../../__tests__/regex.js';
 
 const realVimModeContextModule = {
   ...(await import('../contexts/VimModeContext.js')),

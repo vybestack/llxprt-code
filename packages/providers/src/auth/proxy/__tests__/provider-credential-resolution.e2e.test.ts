@@ -21,7 +21,7 @@ import type {
   TokenStore,
 } from '@vybestack/llxprt-code-core';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
 import {

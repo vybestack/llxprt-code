@@ -15,7 +15,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { LoadedSettings, SettingScope } from '../../config/settings.js';
-import { renderWithProviders, waitFor } from '../../test-utils/render.js';
+import { renderWithProviders, waitFor } from '../../__tests__/render.js';
 
 const mockGetAuthStatus = vi.fn();
 const mockAuthenticate = vi.fn();

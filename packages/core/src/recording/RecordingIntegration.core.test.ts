@@ -40,7 +40,7 @@ import { HistoryService } from '../services/history/HistoryService.js';
 import { type IContent } from '../services/history/IContent.js';
 import { RecordingIntegration } from './RecordingIntegration.js';
 import { replaySession } from './ReplayEngine.js';
-import { assertReplayOk } from './replay-test-helpers.js';
+import { assertReplayOk } from './__tests__/replay-test-helpers.js';
 import { SessionRecordingService } from './SessionRecordingService.js';
 import {
   type ContentPayload,

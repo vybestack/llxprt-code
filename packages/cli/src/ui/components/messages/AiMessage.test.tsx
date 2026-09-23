@@ -9,7 +9,7 @@ import { Text } from 'ink';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { AiMessage } from './AiMessage.js';
 import { StreamingState } from '../../types.js';
-import { renderWithProviders } from '../../../test-utils/render.js';
+import { renderWithProviders } from '../../../__tests__/render.js';
 import type { ThinkingBlock } from '@vybestack/llxprt-code-core';
 import { Colors } from '../../colors.js';
 

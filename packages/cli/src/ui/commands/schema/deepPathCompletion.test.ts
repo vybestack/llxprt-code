@@ -6,7 +6,7 @@
 
 import { describe, it, expect } from 'bun:test';
 import { createCompletionHandler } from './index.js';
-import { createMockCommandContext } from '../../../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
 import type {
   CommandArgumentSchema,
   LiteralArgument,

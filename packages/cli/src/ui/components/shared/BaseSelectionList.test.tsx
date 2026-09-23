@@ -6,7 +6,7 @@
 
 import { automock } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
-import { renderWithProviders, waitFor } from '../../../test-utils/render.js';
+import { renderWithProviders, waitFor } from '../../../__tests__/render.js';
 import {
   BaseSelectionList,
   type BaseSelectionListProps,
@@ -14,7 +14,7 @@ import {
 } from './BaseSelectionList.js';
 import { useSelectionList } from '../../hooks/useSelectionList.js';
 import { Text } from 'ink';
-import { testRegex } from '../../../test-utils/regex.js';
+import { testRegex } from '../../../__tests__/regex.js';
 
 const realUseSelectionListModule = {
   ...(await import('../../hooks/useSelectionList.js')),

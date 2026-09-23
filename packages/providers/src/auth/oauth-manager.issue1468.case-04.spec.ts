@@ -11,7 +11,7 @@ import {
   mockGetCurrentProfileName,
   createIssue1468Fixture,
   mockLoadProfile,
-} from './oauth-manager.issue1468.test-helpers.js';
+} from './__tests__/oauth-manager.issue1468.test-helpers.js';
 
 async function loadCaseFourProfile(profileName: string) {
   if (profileName === 'foreground-profile') {

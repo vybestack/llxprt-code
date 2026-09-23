@@ -13,8 +13,8 @@ import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js'
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
 import { type ToolConfirmationPayload } from '@vybestack/llxprt-code-tools';
-import { MockModifiableTool } from '@vybestack/llxprt-code-core/test-utils/tools.js';
-import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
+import { MockModifiableTool } from '@vybestack/llxprt-code-test-utils/core/tools.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 import {
   createMockMessageBus,
@@ -22,7 +22,7 @@ import {
   waitForStatus,
   DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD,
   DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES,
-} from './coreToolScheduler-test-helpers.js';
+} from './__tests__/coreToolScheduler-test-helpers.js';
 
 describe('CoreToolScheduler with payload', () => {
   it('should update args and diff and execute tool when payload is provided', async () => {

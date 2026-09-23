@@ -10,7 +10,7 @@
 import { vi, describe, it, expect, beforeEach } from 'bun:test';
 import { diagnosticsCommand } from './diagnosticsCommand.js';
 import { type CommandContext } from './types.js';
-import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import type { MessageActionReturn } from '@vybestack/llxprt-code-core';
 import type { LoadedSettings } from '../../config/settings.js';
 

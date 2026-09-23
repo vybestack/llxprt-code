@@ -27,7 +27,7 @@ import {
   parseShellCommandForLanguage,
 } from './shell-parser.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
-import { resolvePwshTestPolicyFromEnv } from '../test-utils/pwsh-test-policy.js';
+import { resolvePwshTestPolicyFromEnv } from '@vybestack/llxprt-code-test-utils/core/pwsh-test-policy.js';
 
 let parserInitialized = await initializeParser();
 const pwshPolicy = resolvePwshTestPolicyFromEnv(

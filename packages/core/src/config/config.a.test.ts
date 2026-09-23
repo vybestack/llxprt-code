@@ -11,7 +11,7 @@ import { Config } from './config.js';
 import { GitService } from '../services/gitService.js';
 import { ResourceRegistry } from '../resources/resource-registry.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { initializeTestConfig } from '../test-utils/config.js';
+import { initializeTestConfig } from '../__tests__/config-test-helpers.js';
 import {
   buildFsMockBody,
   buildToolsMockBody,
@@ -25,7 +25,7 @@ import {
   createBaseParams,
   resetAgentClientMock,
   type HoistedConfigMocks,
-} from './configTestHarness.js';
+} from './__tests__/configTestHarness.js';
 
 // Hoisted mocks referenced by mock factories below (vitest hoist-safe).
 const hoistedConfigMocks = {

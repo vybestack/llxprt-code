@@ -7,7 +7,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { act } from 'react';
-import { renderHook, waitFor } from '../../test-utils/render.js';
+import { renderHook, waitFor } from '../../__tests__/render.js';
 import {
   useGitBranchInfo,
   FETCH_DEBOUNCE_MS,

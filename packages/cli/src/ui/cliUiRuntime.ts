@@ -27,7 +27,9 @@ import type {
   RuntimeProviderManager,
   SandboxConfig,
   SchedulerCallbacks,
+  SchedulerHandle,
   SchedulerOptions,
+  SchedulerPurpose,
   SessionPersistenceService,
   SessionRecordingService,
   ShellExecutionConfig,
@@ -37,7 +39,6 @@ import type {
   TelemetrySettings,
   ToolRegistry,
   ImageOperationRunner,
-  ToolSchedulerContract,
 } from '@vybestack/llxprt-code-core';
 import type {
   DiscoveredMCPPrompt,
@@ -282,16 +283,26 @@ export interface SettingsTelemetryState {
  * {@link AgenticLoopRuntime} contract from the agents package.
  */
 export interface SchedulerRuntime {
-  disposeScheduler(sessionId: string): void;
+  /**
+   * Releases a scheduler acquisition. Callers holding their acquired
+   * scheduler handle should pass it so a stale release cannot dispose a
+   * replacement entry installed under the same owner/purpose.
+   */
+  disposeScheduler(
+    owner: object,
+    purpose: SchedulerPurpose,
+    handle?: object,
+  ): void;
   getOrCreateScheduler(
-    sessionId: string,
+    owner: object,
+    purpose: SchedulerPurpose,
     callbacks: SchedulerCallbacks,
     options?: SchedulerOptions,
     dependencies?: {
       messageBus?: MessageBus;
       toolRegistry?: ToolRegistry;
     },
-  ): Promise<ToolSchedulerContract>;
+  ): Promise<SchedulerHandle>;
   setInteractiveSubagentSchedulerFactory(
     factory: SubagentSchedulerFactory | undefined,
   ): void;
@@ -677,9 +688,16 @@ function buildSchedulerRuntime(
   source: StreamRuntimeBareSource,
 ): SchedulerRuntime {
   return {
-    disposeScheduler: (sessionId) => source.disposeScheduler(sessionId),
-    getOrCreateScheduler: (sessionId, callbacks, options, dependencies) =>
-      source.getOrCreateScheduler(sessionId, callbacks, options, dependencies),
+    disposeScheduler: (owner, purpose, handle) =>
+      source.disposeScheduler(owner, purpose, handle),
+    getOrCreateScheduler: (owner, purpose, callbacks, options, dependencies) =>
+      source.getOrCreateScheduler(
+        owner,
+        purpose,
+        callbacks,
+        options,
+        dependencies,
+      ),
     setInteractiveSubagentSchedulerFactory: (factory) =>
       source.setInteractiveSubagentSchedulerFactory(factory),
   };

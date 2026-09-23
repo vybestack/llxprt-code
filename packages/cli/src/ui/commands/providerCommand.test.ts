@@ -16,7 +16,7 @@ import {
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import type {
   Agent,
   AgentProviderSwitchOptions,
@@ -93,7 +93,7 @@ void vi.mock('../contexts/RuntimeContext.js', () => ({
 
 // Import after mocks are set up
 import { providerCommand } from './providerCommand.js';
-import { assertDefined } from '../../test-utils/assertions.js';
+import { assertDefined } from '../../__tests__/assertions.js';
 
 function baseUrlSetting(key: string, baseUrl: string): string | undefined {
   return key === 'base-url' ? baseUrl : undefined;

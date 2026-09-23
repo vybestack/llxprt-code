@@ -8,9 +8,9 @@ import { restoreEnv } from '@vybestack/llxprt-code-test-utils';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { createDocsCommand } from './docsCommand.js';
 import { type CommandContext, type SlashCommand } from './types.js';
-import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { MessageType } from '../types.js';
-import { assertDefined } from '../../test-utils/assertions.js';
+import { assertDefined } from '../../__tests__/assertions.js';
 
 const docsUrl =
   'https://github.com/vybestack/llxprt-code/blob/main/docs/index.md';

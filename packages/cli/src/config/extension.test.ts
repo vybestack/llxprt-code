@@ -33,7 +33,7 @@ import {
 import { execSync } from 'node:child_process';
 import { SettingScope } from './settings.js';
 import { isWorkspaceTrusted } from './trustedFolders.js';
-import { createExtension } from '../test-utils/createExtension.js';
+import { createExtension } from '../__tests__/createExtension.js';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
 
 const mockGit = {

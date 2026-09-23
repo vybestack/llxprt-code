@@ -26,7 +26,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
-import { renderHook } from '../../../../test-utils/render.js';
+import { renderHook } from '../../../../__tests__/render.js';
 import { act } from 'react';
 import type { AgentEvent, Agent } from '@vybestack/llxprt-code-agents';
 import type { ContentBlock, IContent } from '@vybestack/llxprt-code-core';

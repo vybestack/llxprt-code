@@ -22,7 +22,7 @@ import type { Todo } from '@vybestack/llxprt-code-core';
 import { themeManager } from '../themes/theme-manager.js';
 import { DefaultDark } from '../themes/default.js';
 import { DefaultLight } from '../themes/default-light.js';
-import { testRegex } from '../../test-utils/regex.js';
+import { testRegex } from '../../__tests__/regex.js';
 
 const realUseTerminalSizeModule = {
   ...(await import('../hooks/useTerminalSize.js')),

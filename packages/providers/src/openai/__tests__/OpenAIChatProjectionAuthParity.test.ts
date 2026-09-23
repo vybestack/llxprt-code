@@ -22,7 +22,7 @@
 import { describe, expect, it, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { OpenAIProvider } from '../OpenAIProvider.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import type OpenAI from 'openai';
 import type { IProviderConfig } from '../../types/IProviderConfig.js';
 import type { NormalizedGenerateChatOptions } from '../../BaseProvider.js';

@@ -48,14 +48,14 @@ void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
 import type OpenAI from 'openai';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { MockFileSystem } from '../composition/IFileSystem.js';
 import { setFileSystem } from '../composition/providerManagerInstance.js';
 import { createHeadlessProviderManager } from '../composition/headlessFactory.js';
 import { OpenAIProvider } from '../openai/OpenAIProvider.js';
 import type { IProvider, GenerateChatOptions } from '../IProvider.js';
 import type { IModel } from '../IModel.js';
-import { createOpenAIRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
+import { createOpenAIRawPostTestAdapter } from '../__tests__/rawPostTestAdapters.js';
 
 describe('headless provider-manager construction (issue #1594)', () => {
   let mockFileSystem: MockFileSystem;

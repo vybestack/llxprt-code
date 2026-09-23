@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { render } from '../../test-utils/render.js';
+import { render } from '../../__tests__/render.js';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import type { Mock } from 'bun:test';
 import { act } from 'react';
@@ -68,7 +68,7 @@ void vi.mock('../contexts/RuntimeContext.js', () => ({
 }));
 
 import { useResponsive } from '../hooks/useResponsive.js';
-import { testRegex } from '../../test-utils/regex.js';
+import { testRegex } from '../../__tests__/regex.js';
 
 const mockUseResponsive = useResponsive as Mock<typeof useResponsive>;
 

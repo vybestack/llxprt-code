@@ -11,7 +11,7 @@ import {
   REQUIRED_DIRECTORIES,
   MissingBaseDirError,
 } from './prompt-installer.js';
-import { matchesBackupPath } from './prompt-installer.test-helpers.js';
+import { matchesBackupPath } from './__tests__/prompt-installer.test-helpers.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';

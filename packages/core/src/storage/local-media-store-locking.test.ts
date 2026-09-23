@@ -304,6 +304,9 @@ describe('local-media-store-locking', () => {
           quotaBytes: 3,
         });
 
+        expect([first, second]).toContainEqual(
+          expect.objectContaining({ exitCode: 0 }),
+        );
         expect(successes).toHaveLength(1);
         expect(failures).toHaveLength(1);
         expect(failures[0]?.stderr).toContain('quota');

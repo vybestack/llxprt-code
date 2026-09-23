@@ -15,7 +15,7 @@ import {
   type PolicyEngineConfig,
 } from '@vybestack/llxprt-code-core/policy/types.js';
 import { CoreMessageBusAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreMessageBusAdapter.js';
-import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { ToolRegistry } from '@vybestack/llxprt-code-tools/tools/tool-registry.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
@@ -26,7 +26,7 @@ import type {
   WaitingToolCall,
 } from './coreToolScheduler.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
-import { createMockConfig } from './coreToolScheduler-test-helpers.js';
+import { createMockConfig } from './__tests__/coreToolScheduler-test-helpers.js';
 
 interface SchedulerHarness {
   readonly scheduler: CoreToolScheduler;

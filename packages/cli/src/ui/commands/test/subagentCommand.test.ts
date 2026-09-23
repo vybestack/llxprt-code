@@ -70,7 +70,7 @@ import type {
 } from '../types.js';
 import type { LoadedSettings } from '../../../config/settings.js';
 import type { SessionStatsState } from '../../contexts/SessionContext.js';
-import { testRegex } from '../../../test-utils/regex.js';
+import { testRegex } from '../../../__tests__/regex.js';
 
 let subagentCommand: typeof import('../subagentCommand.js').subagentCommand;
 

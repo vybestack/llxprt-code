@@ -15,12 +15,12 @@ import type {
 import type {
   AnthropicContentBlock,
   AnthropicRequestBody,
-} from './test-utils/anthropicTestUtils.js';
+} from './__tests__/anthropicTestUtils.js';
 import {
   mockMessagesCreate,
   setupThinkingProvider,
   type ThinkingTestSetup,
-} from './test-utils/anthropicThinkingTestSetup.js';
+} from './__tests__/anthropicThinkingTestSetup.js';
 
 function isAssistantMessageWithToolUse(
   message: AnthropicRequestBody['messages'][number],

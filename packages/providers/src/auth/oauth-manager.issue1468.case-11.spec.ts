@@ -11,7 +11,7 @@ import {
   createIssue1468Fixture,
   mockLoadProfile,
   mockFetchAnthropicUsage,
-} from './oauth-manager.issue1468.test-helpers.js';
+} from './__tests__/oauth-manager.issue1468.test-helpers.js';
 
 describe('Issue #1468 getProfileBuckets case 11', () => {
   it('falls back to the unscoped foreground session bucket for anthropic usage lookups when no scoped bucket exists', async () => {

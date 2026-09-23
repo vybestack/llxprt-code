@@ -10,7 +10,7 @@ import {
   createIssue1468Fixture,
   mockGetCurrentProfileName,
   mockLoadProfile,
-} from './oauth-manager.issue1468.test-helpers.js';
+} from './__tests__/oauth-manager.issue1468.test-helpers.js';
 
 function registerProvider(
   manager: ReturnType<typeof createIssue1468Fixture>['manager'],

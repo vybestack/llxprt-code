@@ -16,7 +16,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { assertTruthy } from '../test-utils/assertions.js';
+import { assertTruthy } from '../__tests__/assertions.js';
 import { performResume } from '../services/performResume.js';
 import {
   cleanupSessionBrowserTestState,

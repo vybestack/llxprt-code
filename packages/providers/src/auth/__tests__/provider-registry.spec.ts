@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { ProviderRegistry } from '../provider-registry.js';
 import type { OAuthProvider, OAuthToken } from '../types.js';
 import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
-import { createFakeOAuthSettings } from '../test-oauth-settings.js';
+import { createFakeOAuthSettings } from './test-oauth-settings.js';
 
 /**
  * Mock OAuth provider for testing

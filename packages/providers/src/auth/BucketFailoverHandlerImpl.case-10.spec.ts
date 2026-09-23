@@ -9,7 +9,7 @@ import { BucketFailoverHandlerImpl } from './BucketFailoverHandlerImpl.js';
 import {
   createBucketFailoverFixture,
   makeToken,
-} from './BucketFailoverHandlerImpl.test-helpers.js';
+} from './__tests__/BucketFailoverHandlerImpl.test-helpers.js';
 
 describe('BucketFailoverHandlerImpl #10', () => {
   it('resetSession() allows fresh failover after session ends', async () => {

@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
-import { renderHook } from '../../test-utils/render.js';
+import { renderHook } from '../../__tests__/render.js';
 import { useFlickerDetector } from './useFlickerDetector.js';
 import { measureElement, type DOMElement } from 'ink';
 import { appEvents, AppEvent } from '../../utils/events.js';

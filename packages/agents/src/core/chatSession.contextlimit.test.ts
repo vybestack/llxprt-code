@@ -9,7 +9,7 @@ import { ChatSession } from './chatSession.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { DEFAULT_TOKEN_LIMIT } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 import * as tokenLimitsModule from '@vybestack/llxprt-code-core/core/tokenLimits.js';
-import { createChatSessionRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import {
   createAgentRuntimeState,
   type AgentRuntimeState,

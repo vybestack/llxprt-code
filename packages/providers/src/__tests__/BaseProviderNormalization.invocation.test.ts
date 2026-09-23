@@ -23,7 +23,7 @@ import {
   type RuntimeInvocationContext,
 } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 
 const PROVIDER_NAME = 'invocation-safety';
 
@@ -161,7 +161,7 @@ describe('BaseProvider normalization invocation safety', () => {
 
   it('uses a metadata signal when a valid invocation has no signal', async () => {
     const { createProviderCallOptions } = await import(
-      '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js'
+      '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js'
     );
     const provider = new InvocationSafetyProvider();
     wireProviderWithAuth(provider);
@@ -188,7 +188,7 @@ describe('BaseProvider normalization invocation safety', () => {
 
   it('uses an invocation signal ahead of a metadata signal', async () => {
     const { createProviderCallOptions } = await import(
-      '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js'
+      '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js'
     );
     const provider = new InvocationSafetyProvider();
     wireProviderWithAuth(provider);
@@ -225,7 +225,7 @@ describe('BaseProvider normalization invocation safety', () => {
 
   it('keeps a valid RuntimeInvocationContext coherent while refreshing current ephemerals', async () => {
     const { createProviderCallOptions } = await import(
-      '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js'
+      '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js'
     );
 
     const provider = new InvocationSafetyProvider();

@@ -29,7 +29,7 @@ import {
   type OutputObject,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { dispatch } from './subagent-tool-processing-test-helpers.js';
+import { dispatch } from './__tests__/subagent-tool-processing-test-helpers.js';
 import { DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES } from '@vybestack/llxprt-code-core/config/configTypes.js';
 
 describe('fatal tool flag transitions', () => {

@@ -24,7 +24,7 @@ import { buildRuntimeContext } from '../../core/__tests__/chatSession-density-he
 import {
   createCaptureProvider,
   testProviderRuntime,
-} from '../MiddleOutStrategy-test-helpers.js';
+} from './MiddleOutStrategy-test-helpers.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 
 // ---------------------------------------------------------------------------

@@ -9,7 +9,7 @@ import {
   mockGetCurrentProfileName,
   createIssue1468Fixture,
   mockLoadProfile,
-} from './oauth-manager.issue1468.test-helpers.js';
+} from './__tests__/oauth-manager.issue1468.test-helpers.js';
 
 describe('Issue #1468 getProfileBuckets case 8', () => {
   it('marks the current profile scoped session bucket as active in auth status', async () => {

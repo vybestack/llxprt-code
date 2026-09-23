@@ -9,7 +9,7 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { renderHook } from '../../test-utils/render.js';
+import { renderHook } from '../../__tests__/render.js';
 import { TrustLevel } from '../../config/trustedFolders.js';
 import { MessageType } from '../types.js';
 import { TrustFormAction } from '../trustDialogHelpers.js';

@@ -9,7 +9,7 @@ import type { ConfigParameters } from './config.js';
 import { Config } from './config.js';
 import { DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES } from './configTypes.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import { initializeTestConfig } from '../test-utils/config.js';
+import { initializeTestConfig } from '../__tests__/config-test-helpers.js';
 import { createRuntimeSettingsService } from '../runtime/settingsRuntimeAdapter.js';
 
 import { ShellTool, ReadFileTool } from '@vybestack/llxprt-code-tools';
@@ -28,7 +28,7 @@ import {
   resetAgentClientMock,
   type HoistedConfigMocks,
   type SettingsServiceMock,
-} from './configTestHarness.js';
+} from './__tests__/configTestHarness.js';
 
 // Hoisted mocks referenced by mock factories below (vitest hoist-safe).
 const hoistedConfigMocks = {

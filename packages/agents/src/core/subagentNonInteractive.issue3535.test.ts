@@ -21,7 +21,7 @@
  */
 
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import type {
   ContentBlock,
   IContent,
@@ -29,10 +29,6 @@ import type {
 import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import { GemmaToolCallParser } from '@vybestack/llxprt-code-core/parsers/TextToolCallParser.js';
-import {
-  getOrCreateScheduler,
-  disposeScheduler,
-} from '@vybestack/llxprt-code-core/config/schedulerSingleton.js';
 import { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
@@ -145,6 +141,7 @@ import {
   getScopeLocalFuncDefs,
   createToolExecutionConfig,
 } from './subagentRuntimeSetup.js';
+import { createSchedulerRegistryDelegate } from './__tests__/scheduler-registry-test-helpers.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
 import { SubAgentScope } from './subagent.js';
 import { classifyToolCompletions } from './subagentToolProcessing.js';
@@ -152,7 +149,7 @@ import {
   createStatelessRuntimeBundle,
   defaultModelConfig,
   defaultRunConfig,
-} from './subagent-test-helpers.js';
+} from './__tests__/subagent-test-helpers.js';
 
 const { readTodos, TodoStoreMock } = (() => {
   const readTodos = vi.fn(async () => []);
@@ -172,11 +169,10 @@ const OUTPUT_CONFIG: OutputConfig = {
   },
 };
 
-// Issue #3535: each run needs a FRESH session. The scheduler singleton keys its
-// entries by sessionId and tracks seenCallIds per session, so reusing a fixed id
-// lets state leak between tests and masks the missing onAllToolCallsComplete wiring.
+// Issue #3535: each run needs a FRESH session id so run-scoped state (seen
+// call ids, scheduler callbacks) can never leak between tests through a
+// reused session label.
 let sessionCounter = 0;
-let lastSessionId = '';
 
 function createEmptyRegistryConfig(): Config {
   const policyEngine = new PolicyEngine({});
@@ -196,7 +192,6 @@ function createEmptyRegistryConfig(): Config {
     new SettingsService(),
   );
   const sessionId = `issue-3535-session-${sessionCounter++}`;
-  lastSessionId = sessionId;
   const fixture = {
     getSessionId: () => sessionId,
     getUsageStatisticsEnabled: () => false,
@@ -233,39 +228,22 @@ function createEmptyRegistryConfig(): Config {
     getToolSchedulerFactory:
       () => (options: ConstructorParameters<typeof CoreToolScheduler>[0]) =>
         new CoreToolScheduler(options),
-    getOrCreateScheduler: (
-      _sessionId: string,
-      callbacks: Parameters<Config['getOrCreateScheduler']>[1],
-      schedulerOptions: Parameters<Config['getOrCreateScheduler']>[2],
-      deps: Parameters<Config['getOrCreateScheduler']>[3],
-    ) => {
-      const schedulerMessageBus = deps?.messageBus;
-      if (!schedulerMessageBus) {
-        throw new Error(
-          'test config requires an explicit scheduler MessageBus',
-        );
-      }
-      return getOrCreateScheduler(
-        fixture as unknown as Config,
-        _sessionId,
-        callbacks,
-        schedulerOptions,
-        {
-          messageBus: schedulerMessageBus,
-          toolRegistry: deps.toolRegistry ?? toolRegistry,
-        },
-      );
-    },
-    disposeScheduler: (sessionId: string) => disposeScheduler(sessionId),
   };
-  return fixture as unknown as Config;
-}
-
-function disposeLastScheduler(): void {
-  if (lastSessionId) {
-    disposeScheduler(lastSessionId);
-    lastSessionId = '';
-  }
+  const delegate = createSchedulerRegistryDelegate({
+    config: fixture as unknown as Config,
+    messageBus,
+    toolRegistry,
+    createScheduler: async (schedulerOptions) =>
+      fixture.getToolSchedulerFactory()({
+        config: fixture as unknown as Config,
+        messageBus,
+        toolRegistry,
+        toolContextInteractiveMode: schedulerOptions.interactiveMode ?? true,
+        getPreferredEditor: () => undefined,
+        onEditorClose: () => {},
+      }),
+  });
+  return { ...fixture, ...delegate } as unknown as Config;
 }
 
 function toolCallBlock(
@@ -492,12 +470,6 @@ describe('issue 3535 fatal-tool-error termination semantics', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     readTodos.mockResolvedValue([]);
-  });
-
-  afterEach(() => {
-    // Issue #3535: drop the scheduler singleton entry for this run so a fresh
-    // session never inherits stale callbacks or seenCallIds.
-    disposeLastScheduler();
   });
 
   it('skips unresolved scheduler IDs without inventing recovery', () => {

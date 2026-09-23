@@ -5,7 +5,7 @@
  */
 
 import { act, type ReactNode } from 'react';
-import { hasDialogRequest } from '../../test-utils/dialogStore.js';
+import { hasDialogRequest } from '../../__tests__/dialogStore.js';
 import { vi, type Mock } from 'bun:test';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -15,13 +15,13 @@ import {
   annotateActiveExtensions,
   loadExtension,
 } from '../../config/extension.js';
-import { createExtension } from '../../test-utils/createExtension.js';
+import { createExtension } from '../../__tests__/createExtension.js';
 import { useExtensionUpdates } from './useExtensionUpdates.js';
 import {
   LLXPRT_CONFIG_DIR,
   type LlxprtExtension,
 } from '@vybestack/llxprt-code-core';
-import { renderHook, waitFor } from '../../test-utils/render.js';
+import { renderHook, waitFor } from '../../__tests__/render.js';
 import { createDialogStore } from '../stores/dialog/dialogStore.js';
 import { MessageType } from '../types.js';
 import { ExtensionEnablementManager } from '../../config/extensions/extensionEnablement.js';

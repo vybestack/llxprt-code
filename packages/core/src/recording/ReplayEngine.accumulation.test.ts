@@ -23,7 +23,7 @@ import {
   rewindLine,
   writeJsonlFile,
   createValidFile,
-} from './replay-test-helpers.js';
+} from './__tests__/replay-test-helpers.js';
 import { type IContent } from '../services/history/IContent.js';
 
 describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {

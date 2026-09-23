@@ -6,7 +6,7 @@
 
 import { automock } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
-import { renderHook } from '../../test-utils/render.js';
+import { renderHook } from '../../__tests__/render.js';
 import { useResponsive } from './useResponsive.js';
 import { useTerminalSize } from './useTerminalSize.js';
 

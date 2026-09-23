@@ -20,7 +20,7 @@ import {
   collectRequestBody,
   createKeyStorage,
   createLoopbackHarness,
-} from '../test-utils/loopback-test-helpers.js';
+} from '../__tests__/loopback-test-helpers.js';
 
 const loopback = createLoopbackHarness('https://mcp.exa.ai');
 

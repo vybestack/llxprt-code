@@ -62,6 +62,22 @@ export interface ToolSchedulerFactoryOptions {
 }
 
 /**
+ * Callback refresh payload for ToolSchedulerContract.setCallbacks. Only
+ * the five UI callbacks (plus the config identity) can be swapped after
+ * construction; the messageBus and toolRegistry construction deps are
+ * bound at creation time and cannot be refreshed here.
+ */
+export interface ToolSchedulerCallbackPayload {
+  config: Config;
+  outputUpdateHandler?: OutputUpdateHandler;
+  onAllToolCallsComplete?: AllToolCallsCompleteHandler;
+  onToolCallsUpdate?: ToolCallsUpdateHandler;
+  getPreferredEditor: () => EditorType | undefined;
+  onEditorClose: () => void;
+  onEditorOpen?: () => void;
+}
+
+/**
  * Structural contract for the tool scheduler.
  * Core-owned; the concrete CoreToolScheduler class implements this.
  * @plan PLAN-20260610-ISSUE1592.P01
@@ -74,17 +90,7 @@ export interface ToolSchedulerContract {
   ): Promise<void>;
   cancelAll(): void;
   dispose(): void;
-  setCallbacks(options: {
-    config: Config;
-    messageBus: MessageBus;
-    toolRegistry: ToolRegistry;
-    outputUpdateHandler?: OutputUpdateHandler;
-    onAllToolCallsComplete?: AllToolCallsCompleteHandler;
-    onToolCallsUpdate?: ToolCallsUpdateHandler;
-    getPreferredEditor: () => EditorType | undefined;
-    onEditorClose: () => void;
-    onEditorOpen?: () => void;
-  }): void;
+  setCallbacks(options: ToolSchedulerCallbackPayload): void;
   handleConfirmationResponse(
     callId: string,
     originalOnConfirm: (

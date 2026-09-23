@@ -34,7 +34,7 @@ import {
   completingScript,
   drain as drainHarness,
   userTextsOf,
-} from '../openAIResponsesWebSocketTransport.test-helpers.js';
+} from './openAIResponsesWebSocketTransport.test-helpers.js';
 import { createCodexResponsesWebSocketTransport } from '../openAIResponsesWebSocketTransport.js';
 import { executeOpenAIResponsesRequest } from '../openAIResponsesExecutor.js';
 import {
@@ -44,8 +44,8 @@ import {
   drain,
   errorResponse,
   sseResponse,
-} from '../codexStateful.test-helpers.js';
-import { readRawPostTestBody } from '../../test-utils/rawPostTestAdapters.js';
+} from './codexStateful.test-helpers.js';
+import { readRawPostTestBody } from '../../__tests__/rawPostTestAdapters.js';
 
 describe('OpenAIResponsesProvider Codex stateful — parent rejection recovery and endpoint scoping @issue:3134', () => {
   describe('Fix 1 — one-shot recovery when previous_response_id is rejected', () => {

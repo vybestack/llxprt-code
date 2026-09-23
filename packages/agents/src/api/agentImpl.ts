@@ -1335,7 +1335,8 @@ export class AgentImpl implements Agent {
     // a single handle whose `disposed` flag covers both — so each is disposed
     // exactly ONCE here (no double-dispose). The caller-owned factory FUNCTION is
     // never disposed. Per-turn loop schedulers stay owned + disposed by
-    // AgenticLoop (config.disposeScheduler) — dispose() does NOT touch them. A
+    // AgenticLoop through config.disposeScheduler under the loop's own
+    // registry owner, so dispose() does NOT touch them. A
     // failing handle's rejection is collected into errors → AggregateDisposeError.
     for (const handle of ownership.injectedSchedulerHandles) {
       await this.safe(errors, () => handle.dispose());

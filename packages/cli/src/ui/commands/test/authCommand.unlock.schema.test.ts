@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'bun:test';
 import { createCompletionHandler } from '../schema/index.js';
 import { authCommand } from '../authCommand.js';
-import { createMockCommandContext } from '../../../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
 import type {
   CommandArgumentSchema,
   CompletionResult,

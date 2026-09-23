@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { render } from '../../test-utils/render.js';
+import { render } from '../../__tests__/render.js';
 import { Table } from './Table.js';
 import { Text } from 'ink';
 

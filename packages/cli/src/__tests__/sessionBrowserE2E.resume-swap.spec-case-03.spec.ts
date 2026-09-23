@@ -16,7 +16,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { assertTrue } from '../test-utils/assertions.js';
+import { assertTrue } from '../__tests__/assertions.js';
 import * as fs from 'node:fs/promises';
 import { performResume } from '../services/performResume.js';
 import {

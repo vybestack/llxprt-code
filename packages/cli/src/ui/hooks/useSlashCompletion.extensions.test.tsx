@@ -15,13 +15,13 @@
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'bun:test';
-import { renderHook, waitFor } from '../../test-utils/render.js';
+import { renderHook, waitFor } from '../../__tests__/render.js';
 import { useSlashCompletion } from './useSlashCompletion.js';
 import type { CommandContext, SlashCommand } from '../commands/types.js';
 import { CommandKind } from '../commands/types.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { useTextBuffer } from '../components/shared/text-buffer.js';
-import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 
 describe('Tab Completion Extension Filtering (Phase 3 TDD)', () => {
   let mockCommandContext: CommandContext;

@@ -25,7 +25,7 @@ import {
   createMockSettings,
   renderWithProviders,
   waitFor,
-} from '../../../test-utils/render.js';
+} from '../../../__tests__/render.js';
 import { StreamingState, ToolCallStatus } from '../../types.js';
 import { StreamingContext } from '../../contexts/StreamingContext.js';
 import { ToolResultExpansionProvider } from '../../contexts/ToolResultExpansionContext.js';

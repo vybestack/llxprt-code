@@ -16,8 +16,8 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { OpenAIProvider } from './OpenAIProvider.js';
-import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
-import { createProviderWithRuntime as createProviderWithRuntimeHelper } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { TEST_PROVIDER_CONFIG } from '../__tests__/providerTestConfig.js';
+import { createProviderWithRuntime as createProviderWithRuntimeHelper } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 import { flushRuntimeAuthScope } from '@vybestack/llxprt-code-auth';
 
