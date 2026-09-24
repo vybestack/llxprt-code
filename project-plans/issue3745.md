@@ -1,4 +1,6 @@
-# Issue 3745: Codex through Praxis
+# Codex through Praxis (tracking issue #3753)
+
+This work was originally planned under issue 3745. That issue became inaccessible when its authoring account was flagged, so the tracking issue was recreated as #3753. This plan file and the `tmp/issue3745/` evidence directory keep their original issue-3745 naming for continuity with the recorded evidence paths.
 
 Provider identity determines Codex request, authentication, account-header and transport behavior independently of the configured endpoint. The alias factory previously set identity after construction, while Responses construction and execution inferred Codex from the URL.
 
