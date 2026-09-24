@@ -18,8 +18,8 @@ import {
   restoreProviderEnvCredentials,
   clearProviderEnvCredentials,
 } from './providerEnvCredentials.test-helpers.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { createOpenAIResponsesAliasProvider } from './aliasProviderFactory.js';
@@ -27,7 +27,7 @@ import { OpenAIResponsesProvider } from '../openai-responses/OpenAIResponsesProv
 import {
   buildCodexOAuthManager,
   sseResponse,
-} from '../openai-responses/codexStateful.test-helpers.js';
+} from '../openai-responses/__tests__/codexStateful.test-helpers.js';
 import type { OpenAIResponsesRequest } from '../openai-responses/OpenAIResponsesTypes.js';
 import type { StreamResponseOptions } from '../openai-responses/openAIResponsesWebSocketTransport.js';
 import * as webSocketTransport from '../openai-responses/openAIResponsesWebSocketTransport.js';
