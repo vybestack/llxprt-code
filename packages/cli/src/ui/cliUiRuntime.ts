@@ -9,7 +9,6 @@ import type {
   AgentClientContract,
   AgentClientFactory,
   ApprovalMode,
-  AsyncTaskManager,
   BucketFailoverHandler,
   ContextManager,
   FileDiscoveryService,
@@ -31,7 +30,6 @@ import type {
   SchedulerOptions,
   SchedulerPurpose,
   SessionPersistenceService,
-  SessionRecordingService,
   ShellExecutionConfig,
   ShellReplacementMode,
   SkillManager,
@@ -53,6 +51,12 @@ import type { GitHubBrokerClient } from '@vybestack/llxprt-code-tools';
 import type { EventEmitter } from 'node:events';
 import { AppEvent, appEvents, type AppEvents } from '../utils/events.js';
 import type { PerfSnapshotCapability } from './commands/perfCommand.js';
+import type { Agent } from '@vybestack/llxprt-code-agents';
+
+type SchedulerAgent = Pick<
+  Agent,
+  'agentClient' | 'scheduler' | 'getMessageBus'
+>;
 
 export interface RefreshMemoryResult {
   memoryContent: string;
@@ -148,7 +152,6 @@ export interface SessionIdentity {
   getWorkingDir(): string;
   getProjectTempDir(): string;
   getLocalMediaStore(): LocalMediaStore;
-  getSessionRecordingService?(): SessionRecordingService | undefined;
   getSessionRecordingQueueByteLimit(): number;
   createSessionPersistenceService(sessionId: string): SessionPersistenceService;
   getLlxprtDir(): string;
@@ -245,6 +248,10 @@ export interface HookSkillState {
   getSkillManager(): SkillManager;
 }
 
+interface HookSkillSource extends Omit<HookSkillState, 'reloadSkills'> {
+  reloadSkills(messageBus: MessageBus): Promise<void>;
+}
+
 /**
  * MCP read-model for MCP server, client, prompt, and resource consumers.
  */
@@ -325,17 +332,6 @@ export interface UiToolRegistryInfo {
 export interface ToolRuntime {
   getToolRegistry(): ToolRegistry;
   getToolRegistryInfo(): UiToolRegistryInfo;
-}
-
-/**
- * Async-task capability for background task auto-trigger and cancellation.
- */
-export interface AsyncTaskRuntime {
-  getAsyncTaskManager(): AsyncTaskManager | undefined;
-  setupAsyncTaskAutoTrigger(
-    isAgentBusy: () => boolean,
-    triggerAgentTurn: (message: string) => Promise<void>,
-  ): () => void;
 }
 
 /**
@@ -467,7 +463,6 @@ export interface StreamRuntime {
   mcp: McpState;
   settings: SettingsTelemetryState;
   scheduler: SchedulerRuntime;
-  asyncTasks: AsyncTaskRuntime;
   events: AppEventRuntime;
   bucketFailover: BucketFailoverRuntime;
   checkpoint: CheckpointRuntime;
@@ -508,13 +503,11 @@ export interface StreamRuntimeBareSource
     FileWorkspaceState,
     MemoryState,
     IdeState,
-    HookSkillState,
+    HookSkillSource,
     McpState,
     McpDiscoveryRuntime,
     SettingsTelemetryState,
     ToolRuntime,
-    SchedulerRuntime,
-    AsyncTaskRuntime,
     AppEventSource,
     BucketFailoverRuntime,
     CheckpointRuntime,
@@ -546,7 +539,6 @@ function buildSessionRuntime(source: StreamRuntimeBareSource): SessionIdentity {
     getWorkingDir: () => source.getWorkingDir(),
     getProjectTempDir: () => source.getProjectTempDir(),
     getLocalMediaStore: () => source.getLocalMediaStore(),
-    getSessionRecordingService: () => source.getSessionRecordingService?.(),
     getSessionRecordingQueueByteLimit: () =>
       source.getSessionRecordingQueueByteLimit(),
     createSessionPersistenceService: (sessionId) =>
@@ -567,9 +559,10 @@ function buildModelRuntime(source: StreamRuntimeBareSource): ModelState {
 
 function buildAgentClientSource(
   source: StreamRuntimeBareSource,
+  agent: SchedulerAgent,
 ): AgentClientSource {
   const base: AgentClientSource = {
-    getAgentClient: () => source.getAgentClient(),
+    getAgentClient: () => agent.agentClient,
     getAgentClientFactory: () => source.getAgentClientFactory?.(),
   };
   if (source.createDetachedAgentClient) {
@@ -640,7 +633,10 @@ function buildIdeRuntime(source: StreamRuntimeBareSource): IdeState {
   };
 }
 
-function buildHooksRuntime(source: StreamRuntimeBareSource): HookSkillState {
+function buildHooksRuntime(
+  source: StreamRuntimeBareSource,
+  agent: SchedulerAgent,
+): HookSkillState {
   return {
     getHookSystem: () => source.getHookSystem(),
     getEnableHooks: () => source.getEnableHooks(),
@@ -648,7 +644,7 @@ function buildHooksRuntime(source: StreamRuntimeBareSource): HookSkillState {
     setDisabledHooks: (hooks) => source.setDisabledHooks(hooks),
     isSkillsSupportEnabled: () => source.isSkillsSupportEnabled(),
     getEnableHooksUI: () => source.getEnableHooksUI(),
-    reloadSkills: () => source.reloadSkills(),
+    reloadSkills: () => source.reloadSkills(agent.getMessageBus()),
     getSkillManager: () => source.getSkillManager(),
   };
 }
@@ -686,30 +682,20 @@ function buildSettingsRuntime(
 
 function buildSchedulerRuntime(
   source: StreamRuntimeBareSource,
+  agent: SchedulerAgent,
 ): SchedulerRuntime {
   return {
-    disposeScheduler: (owner, purpose, handle) =>
-      source.disposeScheduler(owner, purpose, handle),
+    disposeScheduler: (owner, purpose, handle) => {
+      if (!handle) throw new Error('Agent scheduler handle is required');
+      agent.scheduler.release(owner, purpose, handle);
+    },
     getOrCreateScheduler: (owner, purpose, callbacks, options, dependencies) =>
-      source.getOrCreateScheduler(
-        owner,
-        purpose,
-        callbacks,
-        options,
-        dependencies,
-      ),
+      agent.scheduler.acquire(owner, purpose, callbacks, options, {
+        messageBus: dependencies?.messageBus ?? agent.getMessageBus(),
+        toolRegistry: dependencies?.toolRegistry ?? source.getToolRegistry(),
+      }),
     setInteractiveSubagentSchedulerFactory: (factory) =>
-      source.setInteractiveSubagentSchedulerFactory(factory),
-  };
-}
-
-function buildAsyncTaskRuntime(
-  source: StreamRuntimeBareSource,
-): AsyncTaskRuntime {
-  return {
-    getAsyncTaskManager: () => source.getAsyncTaskManager(),
-    setupAsyncTaskAutoTrigger: (isAgentBusy, triggerAgentTurn) =>
-      source.setupAsyncTaskAutoTrigger(isAgentBusy, triggerAgentTurn),
+      agent.scheduler.setInteractiveSubagentSchedulerFactory(factory),
   };
 }
 
@@ -732,20 +718,20 @@ function buildAppEventRuntime(
  */
 function buildStreamRuntimeFromSource(
   source: StreamRuntimeBareSource,
+  agent: SchedulerAgent,
 ): StreamRuntime {
   return {
     session: buildSessionRuntime(source),
     model: buildModelRuntime(source),
-    agentClientSource: buildAgentClientSource(source),
+    agentClientSource: buildAgentClientSource(source, agent),
     shell: buildShellRuntime(source),
     files: buildFilesRuntime(source),
     memory: buildMemoryRuntime(source),
     ide: buildIdeRuntime(source),
-    hooks: buildHooksRuntime(source),
+    hooks: buildHooksRuntime(source, agent),
     mcp: buildMcpRuntime(source),
     settings: buildSettingsRuntime(source),
-    scheduler: buildSchedulerRuntime(source),
-    asyncTasks: buildAsyncTaskRuntime(source),
+    scheduler: buildSchedulerRuntime(source, agent),
     events: buildAppEventRuntime(source),
     bucketFailover: {
       getBucketFailoverHandler: () => source.getBucketFailoverHandler(),
@@ -765,11 +751,19 @@ function buildStreamRuntimeFromSource(
   };
 }
 
+function assertSessionAgent(value: unknown): asserts value is SchedulerAgent {
+  if (value === undefined || value === null) {
+    throw new Error('Agent session is required');
+  }
+}
+
 export function buildUiRuntimeFromSource(
   source: UiRuntimeBareSource,
+  agent: SchedulerAgent,
 ): UiRuntime {
+  assertSessionAgent(agent);
   return {
-    ...buildStreamRuntimeFromSource(source),
+    ...buildStreamRuntimeFromSource(source, agent),
     approval: {
       getApprovalMode: () => source.getApprovalMode(),
       setApprovalMode: (mode) => source.setApprovalMode(mode),
@@ -828,6 +822,7 @@ export type SlashCommandRuntime = CliUiRuntime;
  */
 export function buildSlashCommandRuntime(
   source: UiRuntimeBareSource,
+  agent: SchedulerAgent,
   perfSnapshotCapability?: PerfSnapshotCapability | null,
 ): CliUiRuntime {
   // Non-slice members must be destructured out and re-attached explicitly.
@@ -835,7 +830,7 @@ export function buildSlashCommandRuntime(
   // value is a bare function (or any non-object) contributes no own enumerable
   // properties to Object.assign and would be dropped silently.
   const { storage, getRunImageOperation, ...capabilities } =
-    buildUiRuntimeFromSource(source);
+    buildUiRuntimeFromSource(source, agent);
   // This flattening assumes every capability object exposes unique property
   // names. If a future capability overlaps an existing one, Object.assign will
   // keep the last value silently, so add an explicit test when adding slices.

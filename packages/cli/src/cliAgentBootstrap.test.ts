@@ -114,8 +114,8 @@ describe('createForegroundAgent @plan:PLAN-20270110-ISSUE2378.P01 @requirement:R
     vi.restoreAllMocks();
   });
 
-  it('calls fromConfig exactly once with the existing config and an activation intent, and NO caller messageBus (the Agent owns its bus)', async () => {
-    await createForegroundAgent({ config });
+  it('passes the existing config, CLI runtime bus, and activation intent to fromConfig exactly once', async () => {
+    await createForegroundAgent({ config, messageBus: bus });
 
     expect(fromConfigMock).toHaveBeenCalledTimes(1);
     const options = fromConfigMock.mock.calls[0][0] as {
@@ -124,9 +124,7 @@ describe('createForegroundAgent @plan:PLAN-20270110-ISSUE2378.P01 @requirement:R
       activation: unknown;
     };
     expect(options.config).toBe(config);
-    // #2378: the foreground helper never threads a caller-constructed bus —
-    // fromConfig builds the single session bus from the Config's policy engine.
-    expect(options.messageBus).toBeUndefined();
+    expect(options.messageBus).toBe(bus);
     expect(options.activation).toStrictEqual({
       provider: undefined,
       model: 'gemini-2.5-pro',
@@ -135,7 +133,7 @@ describe('createForegroundAgent @plan:PLAN-20270110-ISSUE2378.P01 @requirement:R
   });
 
   it('returns the agent produced by fromConfig and it is disposed on cleanup', async () => {
-    const agent = await createForegroundAgent({ config });
+    const agent = await createForegroundAgent({ config, messageBus: bus });
 
     // Observable outcome: the exact fakeAgent instance is returned (not a
     // wrapper), and it is registered for cleanup so runExitCleanup disposes it.
@@ -146,7 +144,7 @@ describe('createForegroundAgent @plan:PLAN-20270110-ISSUE2378.P01 @requirement:R
   });
 
   it('disposes the agent on normal exit alongside the interactive UI cleanup', async () => {
-    await createForegroundAgent({ config });
+    await createForegroundAgent({ config, messageBus: bus });
 
     const uiCleanup = vi.fn();
     registerCleanup(uiCleanup);
@@ -160,7 +158,7 @@ describe('createForegroundAgent @plan:PLAN-20270110-ISSUE2378.P01 @requirement:R
   });
 
   it('disposes the agent when startup is interrupted before the UI registers cleanup', async () => {
-    await createForegroundAgent({ config });
+    await createForegroundAgent({ config, messageBus: bus });
 
     await runExitCleanup();
 
@@ -172,7 +170,9 @@ describe('createForegroundAgent @plan:PLAN-20270110-ISSUE2378.P01 @requirement:R
     fromConfigMock.mockReset();
     fromConfigMock.mockRejectedValue(failure);
 
-    await expect(createForegroundAgent({ config })).rejects.toThrow(failure);
+    await expect(
+      createForegroundAgent({ config, messageBus: bus }),
+    ).rejects.toThrow(failure);
 
     await runExitCleanup();
 
@@ -180,7 +180,7 @@ describe('createForegroundAgent @plan:PLAN-20270110-ISSUE2378.P01 @requirement:R
   });
 
   it('forwards the exact existing Config to fromConfig (no duplicate runtime construction)', async () => {
-    await createForegroundAgent({ config });
+    await createForegroundAgent({ config, messageBus: bus });
 
     const options = fromConfigMock.mock.calls[0][0] as {
       config: Config;
@@ -190,7 +190,7 @@ describe('createForegroundAgent @plan:PLAN-20270110-ISSUE2378.P01 @requirement:R
 
   it('declares the configured provider and model in the activation intent', async () => {
     useFixture({ provider: 'glm', model: 'glm-4' });
-    await createForegroundAgent({ config });
+    await createForegroundAgent({ config, messageBus: bus });
 
     const options = fromConfigMock.mock.calls[0][0] as {
       activation: { provider?: string; model?: string; authMode: string };
@@ -204,7 +204,7 @@ describe('createForegroundAgent @plan:PLAN-20270110-ISSUE2378.P01 @requirement:R
 
   it('omits the model from the intent when the config model is the placeholder', async () => {
     useFixture({ provider: 'glm', model: 'placeholder-model' });
-    await createForegroundAgent({ config });
+    await createForegroundAgent({ config, messageBus: bus });
 
     const options = fromConfigMock.mock.calls[0][0] as {
       activation: { provider?: string; model?: string; authMode: string };
@@ -226,7 +226,7 @@ describe('createForegroundAgent @plan:PLAN-20270110-ISSUE2378.P01 @requirement:R
       PolicyDecision.ASK_USER,
     );
 
-    await createForegroundAgent({ config });
+    await createForegroundAgent({ config, messageBus: bus });
 
     bus.publish({
       type: MessageBusType.UPDATE_POLICY,

@@ -27,6 +27,7 @@ import type { LoopHolder, RebuildLoopDeps } from '../../loop/rebuildLoop.js';
 import type { AgenticLoop } from '../../../core/agenticLoop/AgenticLoop.js';
 import type { AgenticLoopOptions } from '../../../core/agenticLoop/types.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { createSessionSchedulerOwner } from '../../agentRuntimeAssembly.js';
 
 export { createLoopHolder };
 export type { LoopHolder };
@@ -74,6 +75,9 @@ export function createRebuildLoopProbe(): RebuildLoopProbe {
     resolveClient: () => client,
     config,
     messageBus,
+    schedulerOwner: createSessionSchedulerOwner(config, () => {
+      throw new Error('Probe does not schedule tools');
+    }),
     AgenticLoopCtor: FakeAgenticLoop as unknown as typeof AgenticLoop,
   };
 

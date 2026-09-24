@@ -12,13 +12,12 @@
 import {
   awaitMcpDiscoveryGate,
   mcpRuntimeStatus,
-  refreshMcpServers,
+  refreshMcpServers as refreshMcpServersRuntime,
   type McpRuntimeStatus,
 } from './configMcpRuntime.js';
 import * as path from 'node:path';
 import { ConfigMediaDefaults } from './configMediaDefaults.js';
 import type { EventEmitter } from 'node:events';
-import type { SubagentSchedulerFactory } from '../core/subagentTypes.js';
 import type {
   ContentGenerator,
   ContentGeneratorConfig,
@@ -27,7 +26,6 @@ import type {
   AgentClientContract,
   AgentClientFactory,
 } from '../core/clientContract.js';
-import type { ToolSchedulerFactory } from '../core/toolSchedulerContract.js';
 import type { TaskToolRegistration } from './toolRegistryFactory.js';
 import type { ToolRecord } from './toolRegistryFactory.js';
 import type { PromptRegistry } from '../prompts/prompt-registry.js';
@@ -38,7 +36,6 @@ import type {
 } from '@vybestack/llxprt-code-tools';
 import type { McpClientManager } from '@vybestack/llxprt-code-mcp';
 import { LLXPRT_CONFIG_DIR as LLXPRT_DIR } from '@vybestack/llxprt-code-tools';
-import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-auth';
 import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import type { HookDefinition, HookEventName } from '../hooks/types.js';
@@ -46,12 +43,7 @@ import type { HookSystem } from '../hooks/hookSystem.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import type { GitService } from '../services/gitService.js';
 import type { ContextManager } from '../services/contextManager.js';
-import type { SessionRecordingService } from '../recording/SessionRecordingService.js';
 import { sessionMediaServices } from '../storage/session-media-service-factories.js';
-import type { AsyncTaskManager } from '../services/asyncTaskManager.js';
-import type { ShellJobManager } from '../services/shellJobManager.js';
-import type { AsyncTaskReminderService } from '../services/asyncTaskReminderService.js';
-import type { AsyncTaskAutoTrigger } from '../services/asyncTaskAutoTrigger.js';
 import type { FileSystemService } from '../services/fileSystemService.js';
 import type { EnvironmentSanitizationConfig } from '../services/environmentSanitization.js';
 import type { OutputFormat } from '../utils/output-format.js';
@@ -148,18 +140,9 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
   protected alwaysAllowedCommands: Set<string> = new Set();
   protected fileDiscoveryService: FileDiscoveryService | null = null;
   protected gitService: GitService | undefined = undefined;
-  protected sessionRecordingService: SessionRecordingService | undefined =
-    undefined;
   private readonly sessionMedia = sessionMediaServices(this);
   readonly getLocalMediaStore = this.sessionMedia.store;
   readonly createSessionPersistenceService = this.sessionMedia.persistence;
-  // @plan PLAN-20260130-ASYNCTASK.P09
-  protected asyncTaskManager: AsyncTaskManager | undefined = undefined;
-  // #1995 slice 2 — session-owned background shell jobs
-  protected shellJobManager: ShellJobManager | undefined = undefined;
-  // @plan PLAN-20260130-ASYNCTASK.P22
-  protected asyncTaskReminderService?: AsyncTaskReminderService;
-  protected asyncTaskAutoTrigger?: AsyncTaskAutoTrigger;
   protected readonly checkpointing!: boolean;
   protected readonly dumpOnError!: boolean;
   protected readonly proxy: string | undefined;
@@ -192,7 +175,6 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
   protected tokenizerFactory?: RuntimeTokenizerFactory;
   protected profileManager?: ProfileManager;
   protected subagentManager?: SubagentManager;
-  protected subagentSchedulerFactory?: SubagentSchedulerFactory;
   protected bucketFailoverHandler?: BucketFailoverHandler;
   protected onAuthErrorHandler?: OnAuthErrorHandler;
   // Track all potential tools for settings UI
@@ -274,20 +256,6 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
   protected hookSystem: HookSystem | undefined;
   /**
    * @plan PLAN-20260610-ISSUE1592.P01
-   * @requirement REQ-INV-002
-   */
-  getToolSchedulerFactory(): ToolSchedulerFactory | undefined {
-    return this.toolSchedulerFactory;
-  }
-  /**
-   * @plan PLAN-20260610-ISSUE1592.P01
-   * @requirement REQ-INV-002
-   */
-  setToolSchedulerFactory(factory: ToolSchedulerFactory | undefined): void {
-    this.toolSchedulerFactory = factory;
-  }
-  /**
-   * @plan PLAN-20260610-ISSUE1592.P01
    * @requirement REQ-INV-003
    * Public typed setter so the runtime composition root can inject the
    * agent client factory without mutating a protected field via a cast.
@@ -338,11 +306,6 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
   protected agentClientFactory: AgentClientFactory | undefined;
   /**
    * @plan PLAN-20260610-ISSUE1592.P01
-   * @requirement REQ-INV-002
-   */
-  protected toolSchedulerFactory: ToolSchedulerFactory | undefined;
-  /**
-   * @plan PLAN-20260610-ISSUE1592.P01
    * @requirement REQ-INV-003
    */
   protected taskToolRegistration: TaskToolRegistration | undefined;
@@ -357,7 +320,6 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
     | PostSkillDiscoveryToolRegistrar
     | undefined;
   protected initialized = false;
-  private runtimeMessageBus: MessageBus | undefined;
   private runtimeOAuthManager: OAuthManager | undefined;
 
   // ---- Simple field accessors ----
@@ -367,12 +329,6 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
   }
   getProviderManager(): RuntimeProviderManager | undefined {
     return this.providerManager;
-  }
-  setRuntimeMessageBus(messageBus: MessageBus): void {
-    this.runtimeMessageBus = messageBus;
-  }
-  getRuntimeMessageBus(): MessageBus | undefined {
-    return this.runtimeMessageBus;
   }
   /**
    * Associates the exact assembled OAuthManager with this Config's runtime
@@ -461,42 +417,6 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
   getOnAuthErrorHandler(): OnAuthErrorHandler | undefined {
     return this.onAuthErrorHandler;
   }
-  /**
-   * Set the session recording service for hooks to access transcript path
-   * @plan PLAN-20250219-GMERGE022.B2
-   * @requirement R1
-   */
-  setSessionRecordingService(
-    service: SessionRecordingService | undefined,
-  ): void {
-    this.sessionRecordingService = service;
-  }
-  /**
-   * Get the session recording service
-   * @plan PLAN-20250219-GMERGE022.B2
-   * @requirement R1
-   */
-  getSessionRecordingService(): SessionRecordingService | undefined {
-    return this.sessionRecordingService;
-  }
-  /**
-   * Never constructs a manager; read-only paths (exit-time shutdown notice)
-   * must use it so a job-free session does not build one and mkdtemp its log directory.
-   */
-  peekShellJobManager(): ShellJobManager | undefined {
-    return this.shellJobManager;
-  }
-  setInteractiveSubagentSchedulerFactory(
-    factory: SubagentSchedulerFactory | undefined,
-  ): void {
-    this.subagentSchedulerFactory = factory;
-  }
-  getInteractiveSubagentSchedulerFactory():
-    | SubagentSchedulerFactory
-    | undefined {
-    return this.subagentSchedulerFactory;
-  }
-
   isContinueSession(): boolean {
     return Boolean(this.continueSession);
   }
@@ -587,8 +507,15 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
   getMcpRuntimeStatus(): McpRuntimeStatus | undefined {
     return mcpRuntimeStatus(this.mcpClientManager);
   }
-  async refreshMcpServers(server?: string): Promise<void> {
-    await refreshMcpServers(this.mcpClientManager, server);
+  protected async refreshMcpServersWithContext(
+    refreshContext: () => Promise<void>,
+    server?: string,
+  ): Promise<void> {
+    await refreshMcpServersRuntime(
+      this.mcpClientManager,
+      refreshContext,
+      server,
+    );
   }
   async awaitMcpDiscoveryGate(): Promise<ReadonlyMap<string, string>> {
     return awaitMcpDiscoveryGate(this.mcpClientManager);

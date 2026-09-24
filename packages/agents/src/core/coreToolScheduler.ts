@@ -210,6 +210,7 @@ export class CoreToolScheduler implements ToolSchedulerContract {
    * Call this when the scheduler is no longer needed.
    */
   dispose(): void {
+    this.cancelAll();
     this.confirmationCoordinator.dispose();
     this.seenCallIds.clear();
   }

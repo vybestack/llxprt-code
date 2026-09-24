@@ -32,6 +32,7 @@ import { triggerPreCompressHook } from '@vybestack/llxprt-code-core/core/lifecyc
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { isThinkingSupported } from './clientHelpers.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { RecordingPort } from '@vybestack/llxprt-code-core/session/sessionExecutionServices.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { TodoContinuationService } from './TodoContinuationService.js';
 import { resolvePromptMemory } from './promptMemoryPolicy.js';
@@ -159,6 +160,7 @@ export async function buildSystemInstruction(
 
 export interface CreateChatSessionDeps {
   config: Config;
+  readRecording?: () => RecordingPort | undefined;
   runtimeState: AgentRuntimeState;
   contentGenerator: ContentGenerator;
   storedHistoryService: HistoryService | undefined;
@@ -263,6 +265,7 @@ function buildGenerateContentConfig(
  */
 async function buildChatFromRuntime(
   config: Config,
+  readRecording: () => RecordingPort | undefined,
   runtimeState: AgentRuntimeState,
   contentGenerator: ContentGenerator,
   historyService: HistoryService,
@@ -319,6 +322,7 @@ async function buildChatFromRuntime(
     [],
     triggerPreCompressHook,
     systemPromptAssembler,
+    readRecording,
   );
 
   chat.setActiveTodosProvider(async () => {
@@ -328,7 +332,7 @@ async function buildChatFromRuntime(
     return active.map((t) => `- [${t.status}] ${t.content}`).join('\n');
   });
 
-  chat.setTranscriptPathProvider(() => resolveTranscriptPath(config));
+  chat.setTranscriptPathProvider(() => resolveTranscriptPath(readRecording));
 
   return chat;
 }
@@ -337,14 +341,18 @@ async function buildChatFromRuntime(
  * Where the session journal for this session is being written, or undefined
  * when there is nothing to point at (issue #2933).
  *
- * Read off Config on every call rather than captured once: recording is
+ * Read from the injected session owner on every call rather than captured once: recording is
  * optional, can be enabled part way through a session, and is replaced with a
  * different service by a resume. A recorder that has stopped — disposed, or
  * deactivated by a write failure — still remembers the path it used, so
  * liveness is decided by `isActive()`, not by the path alone.
  */
-export function resolveTranscriptPath(config: Config): string | undefined {
-  const recording = config.getSessionRecordingService();
+export function resolveTranscriptPath(
+  readRecording: () =>
+    | Pick<RecordingPort, 'isActive' | 'getFilePath'>
+    | undefined,
+): string | undefined {
+  const recording = readRecording();
   if (!recording) {
     return undefined;
   }
@@ -421,6 +429,7 @@ async function buildAdmittedChatSession(
 ): Promise<ChatSession> {
   const {
     config,
+    readRecording = () => undefined,
     runtimeState,
     contentGenerator,
     storedHistoryService,
@@ -478,6 +487,7 @@ async function buildAdmittedChatSession(
 
   const chat = await buildChatFromRuntime(
     config,
+    readRecording,
     runtimeState,
     contentGenerator,
     historyService,

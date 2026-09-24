@@ -30,6 +30,7 @@ import type {
 import { AgentClient } from '../core/client.js';
 import { CoreToolScheduler } from '../core/coreToolScheduler.js';
 import { TaskTool } from '../tools/task.js';
+import type { SessionSchedulerOwner } from './agentRuntimeAssembly.js';
 import { AgenticLoop } from '../core/agenticLoop/index.js';
 import type {
   AgenticLoopMessage,
@@ -79,18 +80,41 @@ export function createToolScheduler(
  * imported the internal `createTaskToolRegistration` symbol call this helper
  * instead (#2204).
  */
-export function createTaskRegistration(): TaskToolRegistration {
+export function createTaskRegistration(
+  schedulerOwner?: SessionSchedulerOwner,
+): TaskToolRegistration {
   return {
     toolClass: TaskTool,
     className: 'TaskTool',
     staticName: TaskTool.Name,
     buildArgs(config: unknown, taskToolArgs: TaskToolArgs): unknown[] {
       assertConfig(config, 'TaskToolRegistration.buildArgs');
-      return [config, taskToolArgs];
+      return [
+        config,
+        {
+          ...taskToolArgs,
+          ...(schedulerOwner === undefined
+            ? {}
+            : {
+                schedulerOwner,
+                schedulerFactoryProvider: () =>
+                  schedulerOwner.getInteractiveSubagentSchedulerFactory(),
+              }),
+        },
+      ];
     },
     create(config: unknown, taskToolArgs: TaskToolArgs) {
       assertConfig(config, 'TaskToolRegistration.create');
-      return new TaskTool(config, taskToolArgs);
+      return new TaskTool(config, {
+        ...taskToolArgs,
+        ...(schedulerOwner === undefined
+          ? {}
+          : {
+              schedulerOwner,
+              schedulerFactoryProvider: () =>
+                schedulerOwner.getInteractiveSubagentSchedulerFactory(),
+            }),
+      });
     },
   };
 }

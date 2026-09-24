@@ -71,6 +71,7 @@ describe('AgenticLoop pause loop-break (issue #2653)', () => {
     const loop = new AgenticLoop({
       agentClient: client,
       config,
+      schedulerOwner: config.schedulerOwner,
       messageBus,
       interactiveMode: true,
     });
@@ -121,6 +122,7 @@ describe('AgenticLoop pause loop-break (issue #2653)', () => {
     const loop = new AgenticLoop({
       agentClient: client,
       config,
+      schedulerOwner: config.schedulerOwner,
       messageBus,
       interactiveMode: true,
     });
@@ -178,6 +180,7 @@ describe('AgenticLoop pause loop-break (issue #2653)', () => {
     const loop = new AgenticLoop({
       agentClient: client,
       config,
+      schedulerOwner: config.schedulerOwner,
       messageBus,
       interactiveMode: true,
     });
@@ -222,6 +225,7 @@ describe('AgenticLoop pause loop-break (issue #2653)', () => {
     const loop = new AgenticLoop({
       agentClient: client,
       config,
+      schedulerOwner: config.schedulerOwner,
       messageBus,
       interactiveMode: true,
     });
@@ -294,6 +298,7 @@ describe('AgenticLoop pause loop-break (issue #2653)', () => {
       const loop = new AgenticLoop({
         agentClient: client,
         config,
+        schedulerOwner: config.schedulerOwner,
         messageBus,
         interactiveMode: true,
       });

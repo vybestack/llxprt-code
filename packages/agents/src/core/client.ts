@@ -18,6 +18,7 @@ import type { Turn } from './turn.js';
 import { type ServerAgentStreamEvent } from './turn.js';
 
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { RecordingPort } from '@vybestack/llxprt-code-core/session/sessionExecutionServices.js';
 import {
   buildToolDeclarationsFromView,
   getEnabledToolNamesForPrompt,
@@ -80,6 +81,7 @@ import {
 } from './retainedHistoryAdmissions.js';
 
 export class AgentClient implements AgentClientContract {
+  private readRecording: () => RecordingPort | undefined = () => undefined;
   private chat?: ChatSession;
   private contentGenerator?: ContentGenerator;
   private embeddingModel: string;
@@ -205,6 +207,10 @@ export class AgentClient implements AgentClientContract {
       CoreEvent.ModelProfileChanged,
       this.handleModelProfileChanged,
     );
+  }
+
+  setRecordingReader(readRecording: () => RecordingPort | undefined): void {
+    this.readRecording = readRecording;
   }
 
   private _buildOrchestratorDeps(
@@ -796,6 +802,7 @@ export class AgentClient implements AgentClientContract {
     let chat: ChatSession;
     try {
       chat = await createChatSessionSafe({
+        readRecording: this.readRecording,
         config: this.config,
         runtimeState: this.runtimeState,
         contentGenerator: this.getContentGenerator(),

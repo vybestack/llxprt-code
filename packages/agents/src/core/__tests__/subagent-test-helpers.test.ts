@@ -6,6 +6,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { getTestRuntimeMessageBus } from '@vybestack/llxprt-code-test-utils/core/config.js';
 import { DiscoveredMCPTool } from '@vybestack/llxprt-code-mcp';
 import {
   ACTIVATE_MCP_SERVER_TOOL_NAME,
@@ -82,7 +83,7 @@ describe('createMockConfig MCP lifecycle', () => {
         );
 
         releaseRefresh?.();
-        await config.refreshMcpContext();
+        await config.refreshMcpContext(getTestRuntimeMessageBus(config));
 
         return { created, config };
       } finally {

@@ -59,7 +59,7 @@ import { SubagentManager } from './subagentManager.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import type { SubagentSchedulerFactory } from '../core/subagentTypes.js';
 import type { AsyncTaskManager } from '../services/asyncTaskManager.js';
-import type { ShellJobManager } from '../services/shellJobManager.js';
+import type { ShellJobPort } from '../session/sessionExecutionServices.js';
 import { AsyncWorkFacade } from '../services/asyncWorkFacade.js';
 import type { AnyDeclarativeTool } from '@vybestack/llxprt-code-tools';
 import type { Config } from './config.js';
@@ -104,11 +104,11 @@ export interface TaskToolArgs {
   profileManager: ProfileManager | undefined;
   subagentManager: SubagentManager | undefined;
   schedulerFactoryProvider: () => SubagentSchedulerFactory | undefined;
-  getAsyncTaskManager: () => AsyncTaskManager | undefined;
+  getTaskManager: () => AsyncTaskManager | undefined;
   /**
    * Required session/runtime MessageBus threaded into the SubagentOrchestrator so
    * non-interactive subagent tool execution can satisfy
-   * Config.getOrCreateScheduler's explicit MessageBus dependency (Issue #2312).
+   * the session scheduler owner's explicit MessageBus dependency (Issue #2312).
    */
   messageBus: MessageBus;
 }
@@ -132,11 +132,6 @@ export interface ToolRegistryHost {
   setProfileManager(pm: ProfileManager): void;
   getSubagentManager(): SubagentManager | undefined;
   setSubagentManager(sm: SubagentManager): void;
-  getInteractiveSubagentSchedulerFactory():
-    | SubagentSchedulerFactory
-    | undefined;
-  getAsyncTaskManager(): AsyncTaskManager | undefined;
-  getShellJobManager(): ShellJobManager | undefined;
   /**
    * @plan PLAN-20260610-ISSUE1592.P01
    * @requirement REQ-INV-003
@@ -359,6 +354,7 @@ function registerStandardTools(
   config: Config,
   host: ToolRegistryHost,
   messageBus: MessageBus,
+  getShellJobs: () => ShellJobPort | undefined,
 ): void {
   const toolHostAdapter = new CoreToolHostAdapter(config);
   const ideServiceAdapter = new CoreIdeServiceAdapter(config);
@@ -406,7 +402,7 @@ function registerStandardTools(
   registerIdeLspTool(ApplyPatchTool);
   registerCoreTool(
     ShellTool,
-    new CoreShellToolHostAdapter(config),
+    new CoreShellToolHostAdapter(config, getShellJobs),
     messageBusAdapter,
   );
   registerCoreTool(MemoryTool, {
@@ -518,6 +514,8 @@ function registerAgentTools(
   registry: ToolRegistry,
   effectiveCoreTools: string[] | undefined,
   messageBus: MessageBus,
+  getTaskManager: () => AsyncTaskManager | undefined,
+  getShellJobs: () => ShellJobPort | undefined,
 ): void {
   // @plan PLAN-20260610-ISSUE1592.P03
   // @requirement REQ-INV-003
@@ -537,9 +535,8 @@ function registerAgentTools(
     const taskToolArgs = {
       profileManager,
       subagentManager,
-      schedulerFactoryProvider: () =>
-        host.getInteractiveSubagentSchedulerFactory(),
-      getAsyncTaskManager: () => host.getAsyncTaskManager(),
+      schedulerFactoryProvider: () => undefined,
+      getTaskManager,
       messageBus,
     };
 
@@ -583,12 +580,79 @@ function registerAgentTools(
 
   // @plan PLAN-20260130-ASYNCTASK.P14
   // #1995 slice 3 — facade aggregates both managers
-  const asyncWorkFacade = new AsyncWorkFacade(
-    () => host.getAsyncTaskManager(),
-    () => host.getShellJobManager(),
-  );
+  const asyncWorkFacade = new AsyncWorkFacade(getTaskManager, getShellJobs);
   const checkAsyncTasksArgs = new CoreAsyncTaskServiceAdapter(asyncWorkFacade);
   registerCoreTool(CheckAsyncTasksTool, checkAsyncTasksArgs);
+}
+
+/** Rebind a pre-initialized shell tool to the adopting session's jobs. */
+export function rebindShellTool(
+  config: Config,
+  registry: ToolRegistry,
+  messageBus: MessageBus,
+  getShellJobs: () => ShellJobPort | undefined,
+): boolean {
+  const existing = registry.getTool(ShellTool.Name);
+  if (!(existing instanceof ShellTool)) return false;
+  registry.unregisterTool(ShellTool.Name);
+  registry.registerTool(
+    new ShellTool(
+      new CoreShellToolHostAdapter(config, getShellJobs),
+      new CoreMessageBusAdapter(messageBus),
+    ),
+  );
+  return true;
+}
+
+/** Rebind only the shipped status tool on an adopted, already-built registry. */
+export function rebindCheckAsyncTasksTool(
+  host: ToolRegistryHost,
+  registry: ToolRegistry,
+  getTaskManager: () => AsyncTaskManager | undefined,
+  getShellJobs: () => ShellJobPort | undefined,
+): boolean {
+  const existing = registry.getTool(CheckAsyncTasksTool.Name);
+  if (!(existing instanceof CheckAsyncTasksTool)) return false;
+  const service = new CoreAsyncTaskServiceAdapter(
+    new AsyncWorkFacade(getTaskManager, getShellJobs),
+  );
+  registry.unregisterTool(CheckAsyncTasksTool.Name);
+  registry.registerTool(new CheckAsyncTasksTool(service));
+  return true;
+}
+
+/** Refresh an agent-installed task tool when its Config is adopted again. */
+export function rebindAgentTaskTool(
+  host: ToolRegistryHost,
+  config: ConfigBaseCore,
+  registry: ToolRegistry,
+  allPotentialTools: ToolRecord[],
+  messageBus: MessageBus,
+  getTaskManager: () => AsyncTaskManager | undefined,
+): boolean {
+  const registration = host.getTaskToolRegistration();
+  if (registration === undefined) return false;
+  const existing = registry.getTool(registration.staticName);
+  if (existing === undefined || !(existing instanceof registration.toolClass)) {
+    return false;
+  }
+  const taskToolArgs: TaskToolArgs = {
+    profileManager: host.getProfileManager(),
+    subagentManager: host.getSubagentManager(),
+    schedulerFactoryProvider: () => undefined,
+    getTaskManager,
+    messageBus,
+  };
+  const replacement = registration.create(config, taskToolArgs);
+  registry.unregisterTool(registration.staticName);
+  registry.registerTool(replacement);
+  const record = allPotentialTools.find(
+    (item) => item.toolName === registration.className && item.isRegistered,
+  );
+  if (record !== undefined) {
+    record.args = registration.buildArgs(config, taskToolArgs);
+  }
+  return true;
 }
 
 /**
@@ -617,6 +681,7 @@ export function reconcileTaskToolRegistration(
   registry: ToolRegistry,
   allPotentialTools: ToolRecord[],
   messageBus: MessageBus,
+  getTaskManager: () => AsyncTaskManager | undefined,
 ): boolean {
   const registration = host.getTaskToolRegistration();
   if (registration === undefined) {
@@ -660,9 +725,8 @@ export function reconcileTaskToolRegistration(
   const taskToolArgs: TaskToolArgs = {
     profileManager,
     subagentManager,
-    schedulerFactoryProvider: () =>
-      host.getInteractiveSubagentSchedulerFactory(),
-    getAsyncTaskManager: () => host.getAsyncTaskManager(),
+    schedulerFactoryProvider: () => undefined,
+    getTaskManager,
     messageBus,
   };
 
@@ -696,6 +760,8 @@ export async function createToolRegistry(
   host: ToolRegistryHost,
   config: ConfigBaseCore,
   messageBus: MessageBus,
+  getTaskManager: () => AsyncTaskManager | undefined,
+  getShellJobs: () => ShellJobPort | undefined,
 ): Promise<{ registry: ToolRegistry; allPotentialTools: ToolRecord[] }> {
   const registry = new ToolRegistry(
     new CoreToolRegistryHostAdapter(config as Config),
@@ -723,7 +789,13 @@ export async function createToolRegistry(
     allPotentialTools,
   );
 
-  registerStandardTools(registerCoreTool, config as Config, host, messageBus);
+  registerStandardTools(
+    registerCoreTool,
+    config as Config,
+    host,
+    messageBus,
+    getShellJobs,
+  );
 
   const { profileManager, subagentManager } = resolveManagers(host);
 
@@ -737,6 +809,8 @@ export async function createToolRegistry(
     registry,
     effectiveCoreTools,
     messageBus,
+    getTaskManager,
+    getShellJobs,
   );
 
   await registry.discoverAllTools();

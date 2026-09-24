@@ -26,7 +26,10 @@ import {
   checkGoalCompletion,
   type ExecutionLoopContext,
 } from './subagentExecution.js';
-import { getScopeLocalFuncDefs } from './subagentRuntimeSetup.js';
+import {
+  createToolExecutionConfig,
+  getScopeLocalFuncDefs,
+} from './subagentRuntimeSetup.js';
 import {
   createMockConfig,
   createStatelessRuntimeBundle,
@@ -145,7 +148,11 @@ async function runDirectNonInteractive(params: {
       config,
       runConfig: defaultRunConfig,
       outputConfig: params.outputConfig,
-      toolExecutorContext: config,
+      toolExecutorContext: createToolExecutionConfig(
+        baseBundle,
+        config.getToolRegistry(),
+        config,
+      ),
     },
     () => undefined,
   );

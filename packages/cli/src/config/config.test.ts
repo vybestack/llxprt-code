@@ -299,7 +299,7 @@ describe('when folder is NOT trusted', () => {
   it('should override --approval-mode=yolo to DEFAULT', async () => {
     process.argv = ['node', 'script.js', '--approval-mode', 'yolo'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       {},
       [],
       new ExtensionEnablementManager(
@@ -315,7 +315,7 @@ describe('when folder is NOT trusted', () => {
   it('should override --approval-mode=auto_edit to DEFAULT', async () => {
     process.argv = ['node', 'script.js', '--approval-mode', 'auto_edit'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       {},
       [],
       new ExtensionEnablementManager(
@@ -331,7 +331,7 @@ describe('when folder is NOT trusted', () => {
   it('should override --yolo flag to DEFAULT', async () => {
     process.argv = ['node', 'script.js', '--yolo'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       {},
       [],
       new ExtensionEnablementManager(
@@ -347,7 +347,7 @@ describe('when folder is NOT trusted', () => {
   it('should remain DEFAULT when --approval-mode=default', async () => {
     process.argv = ['node', 'script.js', '--approval-mode', 'default'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       {},
       [],
       new ExtensionEnablementManager(
@@ -714,7 +714,7 @@ describe('parseArguments', () => {
     const argv = await parseArguments({} as Settings);
     const settings: Settings = {};
 
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       settings,
       [],
       new ExtensionEnablementManager(
@@ -814,7 +814,7 @@ describe('loadCliConfig', () => {
         jitContext: false,
       },
     };
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       settings,
       [],
       new ExtensionEnablementManager(

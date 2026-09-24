@@ -142,6 +142,8 @@ import {
   createToolExecutionConfig,
 } from './subagentRuntimeSetup.js';
 import { createSchedulerRegistryDelegate } from './__tests__/scheduler-registry-test-helpers.js';
+import { createSessionSchedulerOwner } from '../api/agentRuntimeAssembly.js';
+import type { ToolSchedulerFactory } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
 import { SubAgentScope } from './subagent.js';
 import { classifyToolCompletions } from './subagentToolProcessing.js';
@@ -173,6 +175,9 @@ const OUTPUT_CONFIG: OutputConfig = {
 // call ids, scheduler callbacks) can never leak between tests through a
 // reused session label.
 let sessionCounter = 0;
+
+const createToolScheduler: ToolSchedulerFactory = (options) =>
+  new CoreToolScheduler(options);
 
 function createEmptyRegistryConfig(): Config {
   const policyEngine = new PolicyEngine({});
@@ -225,16 +230,13 @@ function createEmptyRegistryConfig(): Config {
     // cherry-picked constructor args and DROPPED onAllToolCallsComplete /
     // onToolCallsUpdate / outputUpdateHandler, so a scheduler born in a fresh
     // session never fired onAllToolCallsComplete (test deadlock, issue #3535).
-    getToolSchedulerFactory:
-      () => (options: ConstructorParameters<typeof CoreToolScheduler>[0]) =>
-        new CoreToolScheduler(options),
   };
   const delegate = createSchedulerRegistryDelegate({
     config: fixture as unknown as Config,
     messageBus,
     toolRegistry,
     createScheduler: async (schedulerOptions) =>
-      fixture.getToolSchedulerFactory()({
+      createToolScheduler({
         config: fixture as unknown as Config,
         messageBus,
         toolRegistry,
@@ -326,29 +328,47 @@ async function runDirectNonInteractive(
     },
   } as unknown as ChatSession;
 
-  await executeNonInteractiveRun(
-    chat,
-    [...getScopeLocalFuncDefs(options.outputConfig)],
-    new AbortController(),
-    [{ speaker: 'human', blocks: [{ type: 'text', text: 'start' }] }],
-    Date.now(),
-    execCtx,
-    {
-      output,
-      subagentId: 'direct-issue3535-agent',
-      name: 'direct-issue3535-agent',
-      runtimeContext: baseBundle.runtimeContext,
-      logger,
-      config,
-      runConfig: defaultRunConfig,
-      outputConfig: options.outputConfig,
-      toolExecutorContext: config,
-      messageBus: (
-        config as unknown as { getMessageBus: () => MessageBus }
-      ).getMessageBus(),
-    },
-    () => undefined,
+  const schedulerOwner = createSessionSchedulerOwner(
+    config,
+    createToolScheduler,
   );
+  try {
+    await executeNonInteractiveRun(
+      chat,
+      [...getScopeLocalFuncDefs(options.outputConfig)],
+      new AbortController(),
+      [{ speaker: 'human', blocks: [{ type: 'text', text: 'start' }] }],
+      Date.now(),
+      execCtx,
+      {
+        output,
+        subagentId: 'direct-issue3535-agent',
+        name: 'direct-issue3535-agent',
+        runtimeContext: baseBundle.runtimeContext,
+        logger,
+        config,
+        runConfig: defaultRunConfig,
+        outputConfig: options.outputConfig,
+        toolExecutorContext: createToolExecutionConfig(
+          baseBundle,
+          config.getToolRegistry(),
+          config,
+          (
+            config as unknown as { getMessageBus: () => MessageBus }
+          ).getMessageBus(),
+          undefined,
+          undefined,
+          schedulerOwner,
+        ),
+        messageBus: (
+          config as unknown as { getMessageBus: () => MessageBus }
+        ).getMessageBus(),
+      },
+      () => undefined,
+    );
+  } finally {
+    await schedulerOwner.dispose();
+  }
 
   return { output, requestCount, requestContents };
 }
@@ -434,11 +454,18 @@ async function runInteractiveDirect(responses: readonly IContent[]): Promise<{
     providerAdapter,
   });
   const toolRegistry = config.getToolRegistry();
+  const schedulerOwner = createSessionSchedulerOwner(
+    config,
+    createToolScheduler,
+  );
   const toolExecutorContext = createToolExecutionConfig(
     bundle,
     toolRegistry,
     config,
     (config as unknown as { getMessageBus: () => MessageBus }).getMessageBus(),
+    undefined,
+    undefined,
+    schedulerOwner,
   );
   const scope = new (SubAgentScope as unknown as new (
     ...args: unknown[]
@@ -459,11 +486,15 @@ async function runInteractiveDirect(responses: readonly IContent[]): Promise<{
     undefined,
     {},
   );
-  await scope.runInteractive(new ContextState());
-  return {
-    output: scope.output,
-    requestContents: requests.map((r) => r.contents),
-  };
+  try {
+    await scope.runInteractive(new ContextState());
+    return {
+      output: scope.output,
+      requestContents: requests.map((r) => r.contents),
+    };
+  } finally {
+    await schedulerOwner.dispose();
+  }
 }
 
 describe('issue 3535 fatal-tool-error termination semantics', () => {

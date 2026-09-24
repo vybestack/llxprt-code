@@ -92,7 +92,7 @@ interface CoreSubagentServiceAdapterOptions {
   orchestratorFactory?: () => CoreSubagentLauncher;
   isInteractiveEnvironment?: () => boolean;
   getSchedulerFactory?: () => unknown;
-  getAsyncTaskManager?: () => AsyncTaskManager | undefined;
+  getTaskManager?: () => AsyncTaskManager | undefined;
 }
 
 /**
@@ -122,7 +122,7 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
   private readonly orchestratorFactory?: () => CoreSubagentLauncher;
   private readonly isInteractiveEnvironment?: () => boolean;
   private readonly getSchedulerFactory?: () => unknown;
-  private readonly getAsyncTaskManager?: () => AsyncTaskManager | undefined;
+  private readonly getTaskManager?: () => AsyncTaskManager | undefined;
 
   constructor(
     optionsOrManagerProvider:
@@ -142,7 +142,7 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
     this.isInteractiveEnvironment =
       optionsOrManagerProvider.isInteractiveEnvironment;
     this.getSchedulerFactory = optionsOrManagerProvider.getSchedulerFactory;
-    this.getAsyncTaskManager = optionsOrManagerProvider.getAsyncTaskManager;
+    this.getTaskManager = optionsOrManagerProvider.getTaskManager;
   }
 
   async executeSubagent(
@@ -584,7 +584,7 @@ export class CoreSubagentServiceAdapter implements ISubagentService {
       return settingsCheck;
     }
 
-    const asyncTaskManager = this.getAsyncTaskManager?.();
+    const asyncTaskManager = this.getTaskManager?.();
     if (asyncTaskManager === undefined) {
       return createAsyncNotConfiguredResult();
     }

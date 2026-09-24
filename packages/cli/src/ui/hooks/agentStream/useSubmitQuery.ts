@@ -343,7 +343,8 @@ function useSubmitQueryEffects(
   submitQuery: ReturnType<typeof useSubmitQueryCallback>,
   scheduleNextQueuedSubmission: () => void,
 ) {
-  const { submitQueryRef, streamingState, runtime, enqueueSubmission } = deps;
+  const { agent, submitQueryRef, streamingState, runtime, enqueueSubmission } =
+    deps;
   useEffect(() => {
     submitQueryRef.current = submitQuery;
   }, [submitQuery, submitQueryRef]);
@@ -372,7 +373,7 @@ function useSubmitQueryEffects(
       scheduleNextQueuedSubmission();
     };
 
-    const unsubscribe = runtime.asyncTasks.setupAsyncTaskAutoTrigger(
+    const unsubscribe = agent.tasks.setupAutoTrigger(
       isAgentBusy,
       triggerAgentTurn,
     );
@@ -381,6 +382,7 @@ function useSubmitQueryEffects(
       unsubscribe();
     };
   }, [
+    agent,
     runtime,
     streamingState,
     scheduleNextQueuedSubmission,

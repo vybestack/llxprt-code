@@ -10,3 +10,4 @@
 - Check the current year before each new file you create, do not stamp last year on a new file's copyright.
 - Use the PR-creator skill when creating PRs if you have it available.
 - For Claude Code (Anthropic OAuth), the Claude Code-required prompt must remain in the system prompt.
+- GitHub identity for this repo: use acoliver for agent GitHub actions and pushes; GitHub suspended the llxprt machine account. This replaces prior instructions to use llxprt. Verify gh api user reports acoliver before posting or pushing. Never merge a PR without Andrew's explicit instruction.

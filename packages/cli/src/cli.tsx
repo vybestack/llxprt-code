@@ -52,6 +52,7 @@ import { parseArguments } from './config/cliArgParser.js';
 import { loadSettings, type LoadedSettings } from './config/settings.js';
 import {
   type Config,
+  type MessageBus,
   patchStdio,
   ExitCodes,
 } from '@vybestack/llxprt-code-core';
@@ -96,6 +97,7 @@ import {
   prepareTerminalSession,
 } from './cliTerminalSession.js';
 import { maybeHopIntoSandbox } from './cliSandbox.js';
+import { registerShellJobShutdownNotice } from './utils/shellJobShutdownNotice.js';
 import {
   bootstrapRuntimeAndConfig,
   setupSessionRecording,
@@ -194,12 +196,12 @@ function hasExplicitProviderProfileSelector(argv: ParsedCliArgs): boolean {
 /**
  * Construct the SINGLE foreground Agent (#2378) and dispatch the interactive or
  * non-interactive session. The spinner wraps agent construction, which (via
- * fromConfig) owns Config.initialize() and the one session MessageBus. IDE
- * connection and session recording run AFTER because they depend on the
- * initialize() the Agent performs.
+ * fromConfig) initializes Config with the CLI runtime's explicit bus. IDE
+ * connection and session recording run after the Agent initializes Config.
  */
 async function constructForegroundAgentAndDispatch(
   config: Config,
+  messageBus: MessageBus,
   settings: LoadedSettings,
   argv: ParsedCliArgs,
   workspaceRoot: string,
@@ -214,15 +216,18 @@ async function constructForegroundAgentAndDispatch(
   configureUnicodeSupport(settings.merged.ui.unicode ?? 'auto');
   const agent = await constructAgentWithSpinner(
     config,
+    messageBus,
     providerActivation.token,
     providerActivation.intent,
   );
+  registerShellJobShutdownNotice(agent.tasks);
   await connectIdeClientIfEnabled(config);
 
   const recording = await setupSessionRecording(
     config,
     argv,
     bootstrapSelection,
+    agent.agentClient,
   );
 
   await dispatchInteractiveOrNonInteractive({
@@ -378,11 +383,8 @@ export async function main() {
   throwIfSettingsErrors(settings);
   redirectConsoleForAcp(argv);
 
-  const { config, runtimeSettingsService } = await bootstrapRuntimeAndConfig(
-    settings,
-    argv,
-    workspaceRoot,
-  );
+  const { config, messageBus, runtimeSettingsService } =
+    await bootstrapRuntimeAndConfig(settings, argv, workspaceRoot);
 
   await rejectPromptInteractiveWithPipedStdin(argv);
 
@@ -451,6 +453,7 @@ export async function main() {
 
   await constructForegroundAgentAndDispatch(
     config,
+    messageBus,
     settings,
     argv,
     workspaceRoot,

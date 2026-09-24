@@ -88,6 +88,9 @@ import { StreamProcessor } from './StreamProcessor.js';
 import { DirectMessageProcessor } from './DirectMessageProcessor.js';
 import type { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
 import { createSemanticMediaPurgeSession } from './chatSessionMediaLifecycle.js';
+import type { RecordingPort } from '@vybestack/llxprt-code-core/session/sessionExecutionServices.js';
+type RecordingReader = () => RecordingPort | undefined;
+const noRecording = (): undefined => undefined;
 import type { TokenUsageLogger } from './TokenUsageLogger.js';
 import { ANTHROPIC_DEFAULT_BASE_URL } from '@vybestack/llxprt-code-providers';
 import {
@@ -233,11 +236,12 @@ export class ChatSession {
 
   constructor(
     private readonly runtimeContext: AgentRuntimeContext,
-    contentGenerator: ContentGenerator,
+    _contentGenerator: ContentGenerator,
     generationConfig: ChatSessionConfig = {},
     initialHistory: readonly IContent[] = [],
     triggerCompressionHook: typeof triggerPreCompressHook = triggerPreCompressHook,
     systemPromptAssembler?: SystemPromptAssembler,
+    private readonly readRecording: RecordingReader = noRecording,
   ) {
     this.runtimeState = this.runtimeContext.state;
     this.historyService = this.runtimeContext.history;
@@ -251,13 +255,9 @@ export class ChatSession {
     if (systemPromptAssembler !== undefined) {
       this.generationConfig.systemPromptAssembler = systemPromptAssembler;
     }
-    void contentGenerator;
-
     // Wire density-dirty tracking on historyService.add
     this._installDensityWrapper();
-
     validateHistory(initialHistory);
-
     const model = this.runtimeState.model;
     this.logger.debug('ChatSession initialized:', {
       model,
@@ -265,7 +265,6 @@ export class ChatSession {
       hasHistoryService: true,
       hasRuntimeState: true,
     });
-
     // Create composed modules
     const providerResolver = (ctx: string) =>
       this.resolveProviderForRuntime(ctx);
@@ -337,6 +336,7 @@ export class ChatSession {
     return createSemanticMediaPurgeSession(
       this.runtimeContext,
       this.historyService,
+      this.readRecording,
     );
   }
 

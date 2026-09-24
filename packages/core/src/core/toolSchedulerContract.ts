@@ -106,7 +106,7 @@ export interface ToolSchedulerContract {
 
 /**
  * Factory type for creating ToolScheduler instances.
- * Injected into Config via ConfigParameters.toolSchedulerFactory.
+ * Supplied by the agent composition root when constructing a session scheduler owner.
  * @plan PLAN-20260610-ISSUE1592.P01
  * @requirement REQ-INV-002
  */

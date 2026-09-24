@@ -57,6 +57,7 @@ describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
     const loop = new AgenticLoop({
       agentClient: client,
       config,
+      schedulerOwner: config.schedulerOwner,
       messageBus,
     });
 
@@ -130,6 +131,7 @@ describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
       const loop = new AgenticLoop({
         agentClient: client,
         config,
+        schedulerOwner: config.schedulerOwner,
         messageBus,
       });
 
@@ -140,11 +142,13 @@ describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
         owner: object;
         purpose: SchedulerPurpose;
       }> = [];
-      const originalDisposeScheduler = config.disposeScheduler.bind(config);
-      vi.spyOn(config, 'disposeScheduler').mockImplementation(
-        (owner, purpose) => {
+      const originalRelease = config.schedulerOwner.release.bind(
+        config.schedulerOwner,
+      );
+      vi.spyOn(config.schedulerOwner, 'release').mockImplementation(
+        (owner, purpose, handle) => {
           disposedEntries.push({ owner, purpose });
-          originalDisposeScheduler(owner, purpose);
+          originalRelease(owner, purpose, handle);
         },
       );
 
@@ -173,7 +177,7 @@ describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
       // Fresh owner object: the loop released its own entry, so this proves
       // the registry hands out a working scheduler for a new acquisition.
       const freshOwner = { label: 'post-abort-scheduler' };
-      const fresh = await config.getOrCreateScheduler(
+      const fresh = await config.schedulerOwner.acquire(
         freshOwner,
         'session',
         {
@@ -185,7 +189,7 @@ describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
         { messageBus, toolRegistry },
       );
 
-      config.disposeScheduler(freshOwner, 'session');
+      config.schedulerOwner.release(freshOwner, 'session', fresh);
 
       return { toolUpdates, fresh, loop, disposedEntries };
     };
@@ -228,6 +232,7 @@ describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
       const loop = new AgenticLoop({
         agentClient: client,
         config,
+        schedulerOwner: config.schedulerOwner,
         messageBus,
       });
 
@@ -238,11 +243,13 @@ describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
         owner: object;
         purpose: SchedulerPurpose;
       }> = [];
-      const originalDisposeScheduler = config.disposeScheduler.bind(config);
-      vi.spyOn(config, 'disposeScheduler').mockImplementation(
-        (owner, purpose) => {
+      const originalRelease = config.schedulerOwner.release.bind(
+        config.schedulerOwner,
+      );
+      vi.spyOn(config.schedulerOwner, 'release').mockImplementation(
+        (owner, purpose, handle) => {
           disposedEntries.push({ owner, purpose });
-          originalDisposeScheduler(owner, purpose);
+          originalRelease(owner, purpose, handle);
         },
       );
 
@@ -275,7 +282,7 @@ describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
       // Fresh owner object: the loop released its own entry, so this proves
       // the registry hands out a working scheduler for a new acquisition.
       const freshOwner = { label: 'post-abort-scheduler' };
-      const fresh = await config.getOrCreateScheduler(
+      const fresh = await config.schedulerOwner.acquire(
         freshOwner,
         'session',
         {
@@ -287,7 +294,7 @@ describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
         { messageBus, toolRegistry },
       );
 
-      config.disposeScheduler(freshOwner, 'session');
+      config.schedulerOwner.release(freshOwner, 'session', fresh);
 
       return { sawTool, fresh, termination, loop, disposedEntries };
     };
@@ -339,6 +346,7 @@ describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
         const loop = new AgenticLoop({
           agentClient: client,
           config,
+          schedulerOwner: config.schedulerOwner,
           messageBus,
           approvalHandler,
         });
@@ -386,11 +394,13 @@ describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
         approvalMode: ApprovalMode.YOLO,
       });
       const disposedOwners: object[] = [];
-      const originalDisposeScheduler = config.disposeScheduler.bind(config);
-      vi.spyOn(config, 'disposeScheduler').mockImplementation(
-        (owner, purpose) => {
+      const originalRelease = config.schedulerOwner.release.bind(
+        config.schedulerOwner,
+      );
+      vi.spyOn(config.schedulerOwner, 'release').mockImplementation(
+        (owner, purpose, handle) => {
           disposedOwners.push(owner);
-          originalDisposeScheduler(owner, purpose);
+          originalRelease(owner, purpose, handle);
         },
       );
 
@@ -400,7 +410,12 @@ describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
           finishedEvent(),
         ],
       ]);
-      const loop = new AgenticLoop({ agentClient: client, config, messageBus });
+      const loop = new AgenticLoop({
+        agentClient: client,
+        config,
+        schedulerOwner: config.schedulerOwner,
+        messageBus,
+      });
       const iterator = loop.run('go', new AbortController().signal);
 
       let sawRunningTool = false;
@@ -454,6 +469,7 @@ describe('AgenticLoop integration - Cancellation via AbortSignal', () => {
     const loop = new AgenticLoop({
       agentClient: client,
       config,
+      schedulerOwner: config.schedulerOwner,
       messageBus,
     });
 

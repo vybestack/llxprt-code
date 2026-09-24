@@ -12,6 +12,7 @@
  */
 
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { SkillDefinition } from '@vybestack/llxprt-code-core/skills/skillLoader.js';
 import type { AgentSkillsControl, SkillInfo } from '../agent.js';
 import { createControlError } from './errorUtils.js';
@@ -23,6 +24,7 @@ import { createControlError } from './errorUtils.js';
  */
 export interface SkillsControlDeps {
   readonly config: Config;
+  readonly messageBus: MessageBus;
 }
 
 /** Projects a raw SkillDefinition onto the public SkillInfo shape. */
@@ -57,7 +59,7 @@ export class SkillsControl implements AgentSkillsControl {
 
   async reload(): Promise<void> {
     try {
-      await this.deps.config.reloadSkills();
+      await this.deps.config.reloadSkills(this.deps.messageBus);
     } catch (err) {
       throw createControlError('Failed to reload skills', err);
     }

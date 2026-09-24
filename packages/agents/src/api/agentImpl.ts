@@ -10,8 +10,8 @@
  * @requirement:REQ-003
  * @requirement:REQ-017
  */
-
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -66,8 +66,7 @@ import { buildMcpControlDeps } from './control/mcpControlWiring.js';
 import { AuthControl } from './control/authControl.js';
 import { IdeControl } from './control/ideControl.js';
 import type { IdeControlDeps } from './control/ideControl.js';
-import { HookControl } from './control/hooks.js';
-import type { HookControlDeps } from './control/hooks.js';
+import type { HookControl } from './control/hooks.js';
 import { PolicyControl } from './control/policyControl.js';
 import type { PolicyControlDeps } from './control/policyControl.js';
 import { TasksControl } from './control/tasksControl.js';
@@ -77,8 +76,20 @@ import type { SessionControlDeps } from './control/sessionControl.js';
 import { ProfilesControl } from './control/profilesControl.js';
 import { buildNewControls } from './control/newControls.js';
 import type { NewControls } from './control/newControls.js';
+import type {
+  SessionTaskServices,
+  SessionSchedulerOwner,
+} from './agentRuntimeAssembly.js';
 import type { LoopHolder, RebuildLoopDeps } from './loop/rebuildLoop.js';
-import { resolveLoopOrError } from './loop/rebuildLoop.js';
+import {
+  resolveLoopOrError,
+  restoreChatVisibility,
+} from './loop/rebuildLoop.js';
+import {
+  bindClientRecording,
+  createSessionHookControl,
+  scopeSessionHookRecording,
+} from './loop/sessionRecordingWiring.js';
 import type {
   ApprovalHandler,
   DisplayCallbacks,
@@ -97,7 +108,6 @@ import {
   drainToResult,
   buildAgentResult,
   buildProviderInfos,
-  buildToolInfosFromRegistry,
   toPartListUnion,
   type OwnershipRecord,
   type StableDisplayCallbacksHolder,
@@ -115,13 +125,10 @@ import {
   projectSessionStats,
   readCompressionTokenCount,
 } from './agentStatsProjector.js';
-import {
-  disposeOAuthManager,
-  collectActiveExtensions,
-  unloadExtensionSafely,
-} from './agentDisposeHelpers.js';
+import { releaseAgentOwnedResources } from './agentDisposeHelpers.js';
 
 import { AggregateDisposeError } from './disposeErrors.js';
+import { SessionLifecycle } from './sessionLifecycle.js';
 
 /**
  * The bootstrap dependency bundle injected into AgentImpl by buildAgent.
@@ -133,6 +140,9 @@ export interface AgentDeps {
   readonly oauthManager: OAuthManager;
   readonly settingsService: SettingsService;
   readonly runtimeId: string;
+  readonly taskServices: SessionTaskServices;
+  readonly schedulerOwner: SessionSchedulerOwner;
+  readonly sessionClient?: AgentClientContract;
   readonly runtimeHandle: {
     cleanup: () => Promise<void> | void;
   };
@@ -213,11 +223,14 @@ export class AgentImpl implements Agent {
   readonly policy: PolicyControl;
   /** @plan:PLAN-20260622-COREAPIGAP.P08 @requirement:REQ-003 */
   readonly tasks: TasksControl;
+  readonly scheduler: Agent['scheduler'];
   readonly memory: AgentMemoryControl;
   readonly skills: AgentSkillsControl;
   readonly workspace: AgentWorkspaceControl;
   readonly lsp: AgentLspControl;
   private readonly newControls: NewControls;
+  private readonly lifecycle: SessionLifecycle;
+  private readonly activeStreams = new Set<AsyncIterator<AgentEvent>>();
 
   /** @pseudocode createAgent.md steps 150-160 */
   readonly ownership: OwnershipRecord;
@@ -298,7 +311,7 @@ export class AgentImpl implements Agent {
     // scheduler/coordinator the facade owns so the T13 disposal probe reads the
     // genuine live objects dispose() tears down (no second bus, no clones).
     this.messageBus = deps.messageBus;
-    this.agentClient = deps.config.getAgentClient();
+    this.agentClient = deps.sessionClient ?? deps.config.getAgentClient();
     const rs = deps.runtimeState;
     this.providerState = {
       provider: rs.provider,
@@ -318,6 +331,7 @@ export class AgentImpl implements Agent {
     this.tools = new ToolControl({
       messageBus: deps.messageBus,
       config: deps.config,
+      getToolRegistry: () => this.getToolRegistry(),
       editorCallbacksHolder: this.editorCallbacksHolder,
       displayCallbacksHolder: this.displayCallbacksHolder,
       resolveClient: () => this.deps.resolveClient(),
@@ -340,14 +354,34 @@ export class AgentImpl implements Agent {
     this.mcp = this.buildMcpControl();
     this.ide = this.buildIdeControl();
     this.session = this.buildSessionControl();
-    this.hooks = this.buildHookControl();
+    bindClientRecording(this.agentClient, () =>
+      this.session.getActiveRecording(),
+    );
+    this.hooks = createSessionHookControl(deps, this.session);
     this.policy = this.buildPolicyControl();
     this.tasks = this.buildTasksControl();
-    this.newControls = buildNewControls(this.deps.config);
+    this.scheduler = {
+      acquire: async (owner, purpose, callbacks, options, dependencies) => {
+        this.lifecycle.assertAccepting();
+        return deps.schedulerOwner.acquire(
+          owner,
+          purpose,
+          callbacks,
+          options,
+          dependencies,
+        );
+      },
+      release: (owner, purpose, handle) =>
+        deps.schedulerOwner.release(owner, purpose, handle),
+      setInteractiveSubagentSchedulerFactory: (factory) =>
+        deps.schedulerOwner.setInteractiveSubagentSchedulerFactory(factory),
+    };
+    this.newControls = buildNewControls(this.deps.config, this.deps.messageBus);
     this.memory = this.newControls.memory;
     this.skills = this.newControls.skills;
     this.workspace = this.newControls.workspace;
     this.lsp = this.newControls.lsp;
+    this.lifecycle = this.buildLifecycle();
     registerInternalConfig(this, this.deps.config);
   }
 
@@ -360,6 +394,42 @@ export class AgentImpl implements Agent {
       getModel: () => this.providerState.model,
     };
     return new SessionControl(sessionDeps);
+  }
+
+  private buildLifecycle(): SessionLifecycle {
+    return new SessionLifecycle({
+      stopAdmissions: [
+        () => {
+          this.ownership.disposed = true;
+        },
+        () => this.deps.taskServices.stopAdmissions(),
+      ],
+      abortActiveAndPending: [
+        () => this.hooks.triggerSessionEnd(),
+        () => this.deps.loopHolder.activeRunController?.abort(),
+        () => this.auth.dispose(),
+      ],
+      cancelAndJoinOwnedWork: [
+        () => this.closeActiveStreams(),
+        () => this.deps.taskServices.dispose(),
+        () => this.deps.schedulerOwner.cancelAll(),
+      ],
+      flushRecording: [() => this.session.dispose()],
+      releaseResources: [
+        () => this.deps.sessionClient?.dispose(),
+        () =>
+          releaseAgentOwnedResources({
+            ownership: this.ownership,
+            loopHolder: this.deps.loopHolder,
+            hooks: this.hooks,
+            controls: this.newControls,
+            schedulerOwner: this.deps.schedulerOwner,
+            runtimeHandle: this.deps.runtimeHandle,
+            config: this.deps.config,
+            oauthManager: this.deps.oauthManager,
+          }),
+      ],
+    });
   }
 
   /**
@@ -389,24 +459,6 @@ export class AgentImpl implements Agent {
    */
   get injectedFactoryCoordinator(): AgentSchedulerHandle | undefined {
     return this.ownership.injectedSchedulerHandles[0];
-  }
-
-  /**
-   * Builds the HookControl wired to the live Config (HookSystem + enable flag)
-   * and the SHARED MessageBus, so onHookExecution observes bus-mediated hook
-   * executions and triggerSessionStart/triggerSessionEnd fire the real
-   * lifecycle hooks.
-   * @plan:PLAN-20260617-COREAPI.P23
-   * @requirement:REQ-015
-   */
-  private buildHookControl(): HookControl {
-    const hookDeps: HookControlDeps = {
-      config: this.deps.config,
-      messageBus: this.deps.messageBus,
-      sessionId: () => this.deps.runtimeId,
-      cwd: () => this.deps.config.getTargetDir(),
-    };
-    return new HookControl(hookDeps);
   }
 
   /**
@@ -493,6 +545,7 @@ export class AgentImpl implements Agent {
     // @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006 @pseudocode Dependencies/buildMcpControl
     const mcpDeps: McpControlDeps = buildMcpControlDeps({
       config: this.deps.config,
+      messageBus: this.deps.messageBus,
       isMcpAuthenticated: (server) => this.authState.mcpAuth.has(server),
       markAuthenticated: (server) => {
         this.authState.mcpAuth.add(server);
@@ -535,8 +588,10 @@ export class AgentImpl implements Agent {
    */
   private buildTasksControl(): TasksControl {
     const tasksDeps: TasksControlDeps = {
-      getManager: () => this.deps.config.getAsyncTaskManager(),
-      getShellJobManager: () => this.deps.config.getShellJobManager(),
+      getManager: () => this.deps.taskServices.manager,
+      getShellJobManager: () => this.deps.taskServices.shellJobs,
+      setupAutoTrigger: (isAgentBusy, triggerAgentTurn) =>
+        this.deps.taskServices.setupAutoTrigger(isAgentBusy, triggerAgentTurn),
     };
     return new TasksControl(tasksDeps);
   }
@@ -578,6 +633,25 @@ export class AgentImpl implements Agent {
    * @pseudocode createAgent.md steps 130-148 (loop drives the turn)
    */
   async *stream(
+    input: AgentInput,
+    opts?: TurnOptions,
+  ): AsyncIterable<AgentEvent> {
+    this.lifecycle.assertAccepting();
+    const iterator = this.streamInternal(input, opts)[Symbol.asyncIterator]();
+    this.activeStreams.add(iterator);
+    try {
+      for (;;) {
+        const result = await iterator.next();
+        if (result.done === true) return;
+        yield result.value;
+      }
+    } finally {
+      this.activeStreams.delete(iterator);
+      await iterator.return?.();
+    }
+  }
+
+  private async *streamInternal(
     input: AgentInput,
     opts?: TurnOptions,
   ): AsyncIterable<AgentEvent> {
@@ -623,13 +697,19 @@ export class AgentImpl implements Agent {
     }
     const loop = init.loop;
     const message = toPartListUnion(input);
-    const effectiveSignal =
-      opts?.signal ??
-      this.deps.loopHolder.activeRunController?.signal ??
-      new AbortController().signal;
+    const ownedSignal = this.deps.loopHolder.activeRunController?.signal;
+    let effectiveSignal = opts?.signal ?? ownedSignal;
+    if (opts?.signal !== undefined && ownedSignal !== undefined) {
+      effectiveSignal = AbortSignal.any([opts.signal, ownedSignal]);
+    }
+    effectiveSignal ??= new AbortController().signal;
     const loopEvents = loop.run(message, effectiveSignal, opts?.promptId);
-    const mapped = mapLoopStream(loopEvents);
-    for await (const event of mapped) {
+    const events = scopeSessionHookRecording(
+      mapLoopStream(loopEvents),
+      this.deps.config.getHookSystem(),
+      () => this.session.getActiveRecording(),
+    );
+    for await (const event of events) {
       // @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006
       // Tap the public stream so ToolControl fires onConfirmationRequest
       // (with details from the awaiting_approval ToolCall) and onToolUpdate
@@ -755,7 +835,8 @@ export class AgentImpl implements Agent {
     }
     await setActiveModel(model);
     await this.deps.config.initializeContentGeneratorConfig();
-    await this.restoreChatVisibility();
+    this.bindRecordingReader();
+    await restoreChatVisibility(this.deps.resolveClient);
     this.rebuild();
     this.providerState.model = model;
   }
@@ -799,6 +880,10 @@ export class AgentImpl implements Agent {
    */
   getMessageBus(): MessageBus {
     return this.deps.messageBus;
+  }
+
+  getToolRegistry(): ToolRegistry {
+    return this.deps.schedulerOwner.getToolRegistry();
   }
 
   /** @plan:PLAN-20260621-COREAPIREMED.P12 @requirement:REQ-002 @pseudocode lines 20-22 */
@@ -972,10 +1057,11 @@ export class AgentImpl implements Agent {
     const promptId = opts?.promptId ?? `compress-${Date.now()}`;
     // Ensure the chat is initialized before accessing it: setHistory can run
     // before the first turn (startChat is otherwise lazy on first turn).
-    await this.restoreChatVisibility();
-    const chat = this.deps.resolveClient().getChat();
+    await restoreChatVisibility(this.deps.resolveClient);
     const originalTokenCount = readCompressionTokenCount(this.historyService);
-    const raw = await chat.performCompression(promptId);
+    const raw = await this.hooks.withRecording(() =>
+      this.deps.resolveClient().getChat().performCompression(promptId),
+    );
     if (raw === PerformCompressionResult.COMPRESSED) {
       const newTokenCount = readCompressionTokenCount(this.historyService);
       return {
@@ -1041,7 +1127,9 @@ export class AgentImpl implements Agent {
     const client = this.deps.resolveClient();
     const message = toPartListUnion(input);
     const promptId = opts?.promptId ?? `generate-${Date.now()}`;
-    const response = await client.generateDirectMessage({ message }, promptId);
+    const response = await this.hooks.withRecording(() =>
+      client.generateDirectMessage({ message }, promptId),
+    );
     return getResponseTextFromBlocks(response.content.blocks) ?? '';
   }
 
@@ -1097,11 +1185,7 @@ export class AgentImpl implements Agent {
 
   /** Projects the enriched ToolInfo[] from the registry (added by #2376). */
   listTools(): readonly ToolInfo[] {
-    const registry = this.deps.config.getToolRegistry();
-    return buildToolInfosFromRegistry(
-      registry.getAllTools(),
-      new Set(registry.getEnabledTools().map((t) => t.name)),
-    );
+    return this.tools.list();
   }
 
   /**
@@ -1181,7 +1265,8 @@ export class AgentImpl implements Agent {
         await setActiveModel(model);
         await this.deps.config.initializeContentGeneratorConfig();
       }
-      await this.restoreChatVisibility();
+      this.bindRecordingReader();
+      await restoreChatVisibility(this.deps.resolveClient);
     } else if (model !== undefined && model !== this.providerState.model) {
       // Same provider, different model — apply the model to the runtime
       // without reinitializing the content generator (the provider did not
@@ -1208,26 +1293,6 @@ export class AgentImpl implements Agent {
   }
 
   /**
-   * After a client-rebinding mutation, the new client's chat is not yet
-   * initialized. The prior conversation is carried onto the new client by
-   * transferHistoryToNewClient (as history content) and surfaced by the new
-   * client's getHistory() before its chat exists. Seeding startChat() with that
-   * carried-over history makes the chat visible WITHOUT dropping prior context,
-   * preserving the conversation across the rebind for REQ-005.
-   * @plan:PLAN-20260617-COREAPI.P16
-   * @requirement:REQ-005
-   */
-  private async restoreChatVisibility(): Promise<void> {
-    const client = this.deps.resolveClient();
-    if (!client.hasChatInitialized()) {
-      const carriedHistory = await client.getHistory();
-      await client.startChat(
-        carriedHistory.length > 0 ? carriedHistory : undefined,
-      );
-    }
-  }
-
-  /**
    * Applies a profile's modelParams onto the live agent via the lazy runtime
    * mutators and updates the per-agent map (used by profiles.apply).
    * @plan:PLAN-20260617-COREAPI.P16
@@ -1241,19 +1306,21 @@ export class AgentImpl implements Agent {
     }
   }
 
-  /**
-   * Rebuilds the cached AgenticLoop bound to the CURRENT client (AgenticLoop
-   * caches its constructor client and never re-resolves).
-   * @plan:PLAN-20260617-COREAPI.P16
-   * @requirement:REQ-004
-   * @pseudocode switch-rebind.md steps 10-26 (rebuildLoop call)
-   */
+  private bindRecordingReader(): void {
+    bindClientRecording(this.deps.resolveClient(), () =>
+      this.session.getActiveRecording(),
+    );
+  }
+
+  /** Rebuilds the AgenticLoop against the current client. @requirement:REQ-004 */
   private rebuild(): void {
+    this.bindRecordingReader();
     this.deps.rebuildLoop({
       loopHolder: this.deps.loopHolder,
       resolveClient: this.deps.resolveClient,
       config: this.deps.config,
       messageBus: this.deps.messageBus,
+      schedulerOwner: this.deps.schedulerOwner,
       approvalHandler: this.deps.approvalHandler,
       displayCallbacks: this.deps.displayCallbacks,
     });
@@ -1308,157 +1375,22 @@ export class AgentImpl implements Agent {
    * @requirement:REQ-015
    * @pseudocode dispose.md 10-14, 20, 30, 40-47, 50-52, 55, 60, 70, 80-83, 90-92, 100-102
    */
-  async dispose(): Promise<void> {
-    const ownership = this.ownership;
-    // @pseudocode dispose.md 11-13: idempotency guard.
-    if (ownership.disposed) {
-      return;
-    }
-    ownership.disposed = true;
-    // @pseudocode dispose.md 14: error accumulator (collect, never short-circuit).
-    const errors: unknown[] = [];
-    const holder = this.deps.loopHolder;
+  dispose(): Promise<void> {
+    return this.lifecycle.dispose();
+  }
 
-    // @pseudocode dispose.md 20: REQ-015 SessionEnd-on-dispose lifecycle hook.
-    await this.safe(errors, () => this.hooks.triggerSessionEnd());
-
-    // @pseudocode dispose.md 30: abort the facade-owned active-run controller
-    // (its .signal was passed to loop.run; AgenticLoop self-cleans in finally).
-    await this.safe(errors, () => {
-      holder.activeRunController?.abort();
-    });
-
-    // @pseudocode dispose.md 40-47: CONDITIONAL T19 teardown. Dispose every
-    // scheduler handle created via the caller-injected toolSchedulerFactory and
-    // retained by the facade. Each handle backs BOTH the conceptual scheduler
-    // (40-42) and coordinator (45-47) rows — the injected recording fake exposes
-    // a single handle whose `disposed` flag covers both — so each is disposed
-    // exactly ONCE here (no double-dispose). The caller-owned factory FUNCTION is
-    // never disposed. Per-turn loop schedulers stay owned + disposed by
-    // AgenticLoop through config.disposeScheduler under the loop's own
-    // registry owner, so dispose() does NOT touch them. A
-    // failing handle's rejection is collected into errors → AggregateDisposeError.
-    for (const handle of ownership.injectedSchedulerHandles) {
-      await this.safe(errors, () => handle.dispose());
-    }
-
-    // @pseudocode dispose.md 50-52: unsubscribe every recorded bus subscription
-    // and detach the hooks control's shared-MessageBus subscriptions, driving
-    // the bus emitter's listener tally to its post-dispose baseline (zero).
-    this.safeSync(errors, () => {
-      this.hooks.detach();
-    });
-    this.safeSync(errors, () => {
-      this.newControls.dispose();
-    });
-    const subs = holder.subscriptions;
-    if (subs !== undefined) {
-      for (const unsubscribe of subs) {
-        this.safeSync(errors, () => {
-          unsubscribe();
-        });
-      }
-    }
-
-    // @pseudocode dispose.md 55: runtimeHandle.cleanup() unregisters the runtime
-    // context (and tears down OAuth infra within).
-    await this.safe(errors, () => this.deps.runtimeHandle.cleanup());
-
-    // @pseudocode dispose.md 60: config.dispose() disposes agentClient
-    // (_unsubscribe → undefined) and stops mcpClientManager.
-    // @plan:PLAN-20260621-COREAPIREMED.P09 @requirement:REQ-001.3
-    // SKIP when the Config is caller-owned (fromConfig): the caller retains the
-    // Config lifecycle and disposes it. An agent-owned Config (createAgent) is
-    // torn down here as before.
-    if (ownership.configOwnership !== 'caller') {
-      await this.safe(errors, () => this.deps.config.dispose());
-    }
-
-    // @pseudocode dispose.md 70: NET-NEW LSP shutdown wiring. shutdownLspService
-    // exists on Config but Config.dispose() does not call it; wire it here and
-    // set the completion marker AFTER the await succeeds (T13 observable).
-    // @plan:PLAN-20260621-COREAPIREMED.P09 @requirement:REQ-001.3
-    // SKIP the caller-owned Config's LSP service too (the caller owns it).
-    if (ownership.configOwnership !== 'caller') {
-      await this.safe(errors, async () => {
-        await this.deps.config.shutdownLspService();
-        ownership.lspShutDown = true;
-      });
-    }
-
-    // @plan:PLAN-20260617-COREAPI.P24 @requirement:REQ-016
-    // @pseudocode dispose.md 80: NET-NEW extensions teardown. The pseudocode's
-    // `extensionsManager.dispose()` does not exist; the real Config-owned seam is
-    // the ExtensionLoader reachable via ownership.config.getExtensionLoader().
-    // Tear down every active extension via its documented dynamic-unload path
-    // (ExtensionLoader.unloadExtension), collecting any failing unload into
-    // errors[] via safe(), then set the completion marker AFTER the awaited loop
-    // (T13 observable). Headless agents have zero active extensions, so the loop
-    // is vacuously empty while remaining a genuine awaited teardown call-path.
-    const activeExtensions = collectActiveExtensions(
-      ownership.config.getExtensionLoader(),
+  private async closeActiveStreams(): Promise<void> {
+    const active = [...this.activeStreams];
+    const results = await Promise.allSettled(
+      active.map(async (iterator) => {
+        await iterator.return?.();
+      }),
     );
-    for (const extension of activeExtensions) {
-      await this.safe(errors, () =>
-        unloadExtensionSafely(ownership.config.getExtensionLoader(), extension),
-      );
-    }
-    ownership.extensionsDisposed = true;
-
-    // @pseudocode dispose.md 81-83: NET-NEW session-lock release. Release every
-    // facade-owned lock, then set the completion marker AFTER the loop completes
-    // (vacuously true with zero locks in headless mode; T13 observable).
-    for (const lock of ownership.sessionLocks) {
-      await this.safe(errors, () => lock.release());
-    }
-    ownership.sessionLocksReleased = true;
-
-    // @pseudocode dispose.md 81-83 (REQ-010): release SessionControl-owned
-    // resources — the active recording service and the on-disk session lock a
-    // resume acquired — so neither leaks past agent teardown. Guarded via safe()
-    // so a failing release is collected into errors[] rather than swallowed.
-    await this.safe(errors, () => this.session.dispose());
-
-    // @pseudocode dispose.md 90-92: defensive OAuth teardown (runtimeHandle.cleanup
-    // at line 55 should already have disposed it).
-    await this.safe(errors, () => disposeOAuthManager(this.deps.oauthManager));
-
-    // @pseudocode dispose.md 100-102: surface collected failures (do not swallow).
+    const errors = results.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
+    );
     if (errors.length > 0) {
       throw new AggregateDisposeError(errors);
-    }
-  }
-
-  /**
-   * Awaits fn and pushes any throw/rejection into the errors accumulator so the
-   * teardown continues. Never rethrows mid-teardown.
-   * @plan:PLAN-20260617-COREAPI.P24
-   * @requirement:REQ-016
-   * @pseudocode dispose.md 110-113
-   */
-  private async safe(
-    errors: unknown[],
-    fn: () => Promise<void> | void,
-  ): Promise<void> {
-    try {
-      await fn();
-    } catch (e: unknown) {
-      errors.push(e);
-    }
-  }
-
-  /**
-   * Synchronous variant of {@link safe} for non-awaitable teardown steps
-   * (unsubscribe / detach). Pushes any throw into the errors accumulator.
-   * @plan:PLAN-20260617-COREAPI.P24
-   * @requirement:REQ-016
-   * @pseudocode dispose.md 110-113
-   */
-  private safeSync(errors: unknown[], fn: () => void): void {
-    try {
-      fn();
-    } catch (e: unknown) {
-      errors.push(e);
     }
   }
 }

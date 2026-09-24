@@ -7,7 +7,7 @@
 import { DebugLogger } from '../debug/DebugLogger.js';
 import { GitService } from '../services/gitService.js';
 import type { AsyncTaskManager } from '../services/asyncTaskManager.js';
-import type { ShellJobManager } from '../services/shellJobManager.js';
+import type { ShellJobPort } from '../session/sessionExecutionServices.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { assertSessionScopedKey } from '@vybestack/llxprt-code-settings';
 import { createToolRegistry as _createToolRegistry } from './toolRegistryFactory.js';
@@ -22,24 +22,16 @@ import {
   normalizeContextLimit,
 } from './ephemeralSettingsHelpers.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
-import type { SchedulerPurpose } from '../session/sessionSchedulerRegistry.js';
-import type { SessionSchedulerRegistry } from '../session/sessionSchedulerRegistry.js';
 import {
   type ShellReplacementMode,
   normalizeShellReplacement,
 } from './configTypes.js';
 import { ConfigBaseCore } from './configBaseCore.js';
-import {
-  normalizeMaxAsyncTasks,
-  normalizeShellMaxBackgroundJobs,
-} from './asyncTaskServices.js';
 
 export abstract class ConfigBase extends ConfigBaseCore {
   // Abstract methods implemented by Config subclass
   abstract initializeContentGeneratorConfig: () => Promise<void>;
   abstract getExcludeTools(): string[] | undefined;
-  abstract getAsyncTaskManager(): AsyncTaskManager | undefined;
-  abstract getShellJobManager(): ShellJobManager | undefined;
 
   async refreshAuth(authMethod?: string) {
     const logger = new DebugLogger('llxprt:config:refreshAuth');
@@ -159,8 +151,18 @@ export abstract class ConfigBase extends ConfigBaseCore {
    * @requirement REQ-D01-003
    * @pseudocode lines 122-133
    */
-  async createToolRegistry(messageBus: MessageBus): Promise<ToolRegistry> {
-    const result = await _createToolRegistry(this, this, messageBus);
+  async createToolRegistry(
+    messageBus: MessageBus,
+    getTaskManager: () => AsyncTaskManager | undefined,
+    getShellJobs: () => ShellJobPort | undefined,
+  ): Promise<ToolRegistry> {
+    const result = await _createToolRegistry(
+      this,
+      this,
+      messageBus,
+      getTaskManager,
+      getShellJobs,
+    );
     this.allPotentialTools = result.allPotentialTools;
     return result.registry;
   }
@@ -179,17 +181,17 @@ export abstract class ConfigBase extends ConfigBaseCore {
    * pushes the updated declarations to a ready agent client, mirroring
    * Config.refreshSkills.
    */
-  async reconcileTaskToolRegistration(): Promise<void> {
-    const messageBus = this.getRuntimeMessageBus();
-    if (messageBus === undefined) {
-      return;
-    }
+  async reconcileTaskToolRegistration(
+    messageBus: MessageBus,
+    getTaskManager: () => AsyncTaskManager | undefined,
+  ): Promise<void> {
     const registered = _reconcileTaskToolRegistration(
       this,
       this,
       this.getToolRegistry(),
       this.allPotentialTools,
       messageBus,
+      getTaskManager,
     );
     if (!registered) {
       return;
@@ -218,27 +220,6 @@ export abstract class ConfigBase extends ConfigBaseCore {
     }
     return client;
   }
-
-  disposeScheduler(
-    owner: object,
-    purpose: SchedulerPurpose,
-    handle?: object,
-  ): void {
-    // No lazy creation here: disposing before any acquisition is a no-op,
-    // matching the unknown-key release semantics of the registry itself.
-    this.schedulerRegistry?.release(owner, purpose, handle);
-  }
-
-  /**
-   * TEMPORARY (#2615 slice E): per-Config scheduler registry backing the
-   * getOrCreateScheduler/disposeScheduler delegates. DELETION CRITERION: the
-   * E-wave PR that lands SessionRuntime ownership of the registry deletes
-   * this field and both Config delegate methods. Instance state, not a
-   * module global; the process-global scheduler maps died with the deleted
-   * scheduler singleton module. The lazy getter lives on Config next to
-   * getOrCreateScheduler.
-   */
-  protected schedulerRegistry: SessionSchedulerRegistry | undefined;
 
   setDisabledHooks(hooks: string[]): void {
     this.disabledHooks = hooks;
@@ -360,26 +341,6 @@ export abstract class ConfigBase extends ConfigBaseCore {
     }
 
     this.settingsService.set(key, settingValue);
-
-    // @plan PLAN-20260130-ASYNCTASK.P21
-    // @requirement REQ-ASYNC-012
-    // Propagate task-max-async changes to AsyncTaskManager
-    if (key === 'task-max-async') {
-      const normalizedValue = normalizeMaxAsyncTasks(settingValue);
-      const asyncTaskManager = this.getAsyncTaskManager();
-      if (asyncTaskManager) {
-        asyncTaskManager.setMaxAsyncTasks(normalizedValue);
-      }
-    }
-
-    // #1995 slice 2 — propagate shell job settings
-    if (key === 'shell-max-background-jobs') {
-      const shellJobManager = this.getShellJobManager();
-      if (shellJobManager) {
-        const normalized = normalizeShellMaxBackgroundJobs(settingValue);
-        shellJobManager.setMaxBackgroundJobs(normalized);
-      }
-    }
 
     // Clear provider caches when auth settings or base-url change
     const cacheClearKeys = new Set([

@@ -56,7 +56,7 @@ describe('AgenticLoop scheduler isolation', () => {
     const mainOwner = { label: 'main-scheduler' };
 
     const mainCompletions: CompletedToolCall[][] = [];
-    const mainScheduler = await config.getOrCreateScheduler(
+    const mainScheduler = await config.schedulerOwner.acquire(
       mainOwner,
       'session',
       {
@@ -74,7 +74,12 @@ describe('AgenticLoop scheduler isolation', () => {
       [toolCallRequestEvent('loop_tool', 'call-loop'), finishedEvent()],
       [contentEvent('done'), finishedEvent()],
     ]);
-    const loop = new AgenticLoop({ agentClient: client, config, messageBus });
+    const loop = new AgenticLoop({
+      agentClient: client,
+      config,
+      schedulerOwner: config.schedulerOwner,
+      messageBus,
+    });
     const events = await collectEvents(
       loop,
       'go',
@@ -105,6 +110,6 @@ describe('AgenticLoop scheduler isolation', () => {
     expect(lastMainCompletion?.[0]?.request.callId).toBe('main-call');
     expect(lastMainCompletion?.[0]?.status).toBe('success');
 
-    config.disposeScheduler(mainOwner, 'session');
+    config.schedulerOwner.release(mainOwner, 'session', mainScheduler);
   });
 });

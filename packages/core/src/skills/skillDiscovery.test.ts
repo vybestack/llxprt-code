@@ -10,12 +10,10 @@
  *
  * BEHAVIORAL tests for {@link discoverSkillsForConfig} (#2378).
  *
- * The CLI `skills list` command previously constructed a session MessageBus and
- * called `Config.initialize({ messageBus })` by hand — a runtime-assembly seam
- * that must live behind a public core API (the CLI is a client, not a co-owner
- * of runtime assembly). `discoverSkillsForConfig` OWNS that assembly: it builds
- * the one session bus internally (from the Config's policy engine) and drives
- * initialization so skill discovery runs, then returns the discovered skills.
+ * The CLI `skills list` command delegates Config initialization and discovery
+ * to `discoverSkillsForConfig` while retaining ownership of the explicit
+ * command-scoped MessageBus. The helper drives initialization so skill discovery
+ * runs, then returns the discovered skills.
  *
  * These assertions exercise a REAL Config with a REAL on-disk project skills
  * directory (no mock theater): the observable outcome is the set of discovered
@@ -29,6 +27,7 @@ import * as path from 'node:path';
 import { Config } from '../config/config.js';
 import type { ConfigParameters } from '../config/configTypes.js';
 import { attachTestAgentFactories } from '../__tests__/config-test-helpers.js';
+import { MessageBus } from '../confirmation-bus/message-bus.js';
 import { discoverSkillsForConfig } from './skillDiscovery.js';
 
 async function writeProjectSkill(
@@ -80,6 +79,9 @@ describe('discoverSkillsForConfig @plan:PLAN-20270110-ISSUE2378.P03 @requirement
     attachTestAgentFactories(config);
     return config;
   }
+  function messageBusFor(config: Config): MessageBus {
+    return new MessageBus(config.getPolicyEngine(), config.getDebugMode());
+  }
 
   it('discovers on-disk project skills through the owned initialization path', async () => {
     const projectSkillsDir = path.join(workspaceDir, '.llxprt', 'skills');
@@ -98,7 +100,7 @@ describe('discoverSkillsForConfig @plan:PLAN-20270110-ISSUE2378.P03 @requirement
 
     const config = buildConfig(true);
 
-    const skills = await discoverSkillsForConfig(config);
+    const skills = await discoverSkillsForConfig(config, messageBusFor(config));
 
     const names = skills.map((s) => s.name).sort();
     expect(names).toContain('alpha-skill');
@@ -120,7 +122,7 @@ describe('discoverSkillsForConfig @plan:PLAN-20270110-ISSUE2378.P03 @requirement
 
     const config = buildConfig(false);
 
-    const skills = await discoverSkillsForConfig(config);
+    const skills = await discoverSkillsForConfig(config, messageBusFor(config));
 
     expect(skills).toStrictEqual([]);
   });
@@ -134,13 +136,13 @@ describe('discoverSkillsForConfig @plan:PLAN-20270110-ISSUE2378.P03 @requirement
     );
     const config = buildConfig(true);
 
-    const first = await discoverSkillsForConfig(config);
+    const first = await discoverSkillsForConfig(config, messageBusFor(config));
     expect(first.map((s) => s.name)).toContain('alpha-skill');
 
     // A second call must NOT throw "Config was already initialized"; the API
     // owns the initialize lifecycle idempotently and re-reads the discovered
     // skills from the already-initialized skill manager.
-    const second = await discoverSkillsForConfig(config);
+    const second = await discoverSkillsForConfig(config, messageBusFor(config));
     expect(second.map((s) => s.name)).toContain('alpha-skill');
   });
 });

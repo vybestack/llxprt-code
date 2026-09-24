@@ -42,7 +42,13 @@ function makeConfig(settings: Record<string, number>): Config {
 describe('Issue #3031 — async task timeout observability', () => {
   it('the async launch result carries clamp metadata + notice for -1 under a finite max', async () => {
     const launchMock = mockLaunchCompleting();
-    const mockAsyncTaskManager = makeMockAsyncTaskManager();
+    const manager = new AsyncTaskManager();
+    const completed = new Promise<void>((resolve) => {
+      const unsubscribe = manager.onTaskCompleted(() => {
+        unsubscribe();
+        resolve();
+      });
+    });
     const tool = new TaskTool(
       makeConfig({
         'task-default-timeout-seconds': 60,
@@ -52,8 +58,7 @@ describe('Issue #3031 — async task timeout observability', () => {
         messageBus: new MessageBus(),
         orchestratorFactory: () =>
           ({ launch: launchMock }) as unknown as SubagentOrchestrator,
-        getAsyncTaskManager: () =>
-          mockAsyncTaskManager.manager as unknown as AsyncTaskManager,
+        getTaskManager: () => manager,
         isInteractiveEnvironment: () => false,
       },
     );
@@ -66,8 +71,9 @@ describe('Issue #3031 — async task timeout observability', () => {
     });
 
     const result = await invocation.execute(new AbortController().signal);
-    // Allow the background run to settle.
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await completed;
+    await manager.close();
+    expect(manager.getTask('agent-async-3031')?.status).toBe('completed');
 
     // The launch result must carry the clamp metadata (Finding 1).
     expect(result.metadata?.timeoutClamped).toBe(true);
@@ -92,7 +98,7 @@ describe('Issue #3031 — async task timeout observability', () => {
         messageBus: new MessageBus(),
         orchestratorFactory: () =>
           ({ launch: launchMock }) as unknown as SubagentOrchestrator,
-        getAsyncTaskManager: () => manager,
+        getTaskManager: () => manager,
         isInteractiveEnvironment: () => false,
       },
     );
@@ -143,7 +149,7 @@ describe('Issue #3031 — async task timeout observability', () => {
         messageBus: new MessageBus(),
         orchestratorFactory: () =>
           ({ launch: launchMock }) as unknown as SubagentOrchestrator,
-        getAsyncTaskManager: () => manager,
+        getTaskManager: () => manager,
         isInteractiveEnvironment: () => false,
       },
     );
@@ -203,30 +209,6 @@ function mockLaunchHangingUntilAbort() {
       scope,
       dispose: async () => {},
     };
-  };
-}
-
-interface MockAsyncTaskManager {
-  manager: {
-    canLaunchAsync: () => { allowed: boolean };
-    tryReserveAsyncSlot: () => string;
-    registerTask: () => void;
-    completeTask: () => void;
-    failTask: () => void;
-    getTask: () => { status: string } | undefined;
-  };
-}
-
-function makeMockAsyncTaskManager(): MockAsyncTaskManager {
-  return {
-    manager: {
-      canLaunchAsync: () => ({ allowed: true }),
-      tryReserveAsyncSlot: () => 'booking-1',
-      registerTask: () => {},
-      completeTask: () => {},
-      failTask: () => {},
-      getTask: () => ({ status: 'running' }),
-    },
   };
 }
 

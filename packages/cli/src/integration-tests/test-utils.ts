@@ -13,7 +13,6 @@ import type { Profile } from '@vybestack/llxprt-code-settings';
 import { MessageBus } from '@vybestack/llxprt-code-core';
 import {
   createAgentClient,
-  createToolScheduler,
   createTaskRegistration,
 } from '@vybestack/llxprt-code-agents';
 
@@ -51,10 +50,6 @@ function attachTestAgentFactories(config: Config): void {
   Object.defineProperties(config, {
     agentClientFactory: {
       value: createAgentClient,
-      configurable: true,
-    },
-    toolSchedulerFactory: {
-      value: createToolScheduler,
       configurable: true,
     },
     taskToolRegistration: {

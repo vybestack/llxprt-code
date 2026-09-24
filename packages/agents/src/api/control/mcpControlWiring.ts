@@ -10,6 +10,7 @@
  */
 
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import {
   MCPOAuthProvider,
@@ -29,6 +30,7 @@ import {
  */
 export interface McpControlWiringArgs {
   readonly config: Config;
+  readonly messageBus: MessageBus;
   readonly isMcpAuthenticated: (server: string) => boolean;
   readonly markAuthenticated: (server: string) => void;
   readonly resolveClient: () => AgentClientContract;
@@ -48,7 +50,13 @@ export interface McpControlWiringArgs {
 export function buildMcpControlDeps(
   args: McpControlWiringArgs,
 ): McpControlDeps {
-  const { config, isMcpAuthenticated, markAuthenticated, resolveClient } = args;
+  const {
+    config,
+    messageBus,
+    isMcpAuthenticated,
+    markAuthenticated,
+    resolveClient,
+  } = args;
   // @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-003,REQ-004 @pseudocode agents-projection.md lines 86-92 — one per-server requires-OAuth predicate feeding BOTH getRequiresAuth and the getOAuthStatus hint so a server that requires auth can never resolve to 'not-required'.
   const requiresOAuth = (server: string): boolean =>
     config.getMcpServers()?.[server]?.oauth?.enabled === true ||
@@ -57,7 +65,8 @@ export function buildMcpControlDeps(
     isMcpAuthenticated,
     markAuthenticated,
     getMcpRuntimeStatus: () => config.getMcpRuntimeStatus(),
-    refreshMcpServers: (server?: string) => config.refreshMcpServers(server),
+    refreshMcpServers: (server?: string) =>
+      config.refreshMcpServers(messageBus, server),
     // @plan:ISSUE-2376 — project the real registry tools (AnyDeclarativeTool)
     // into the McpToolRegistryView element shape by reusing
     // projectRegistryTool (the same helper toolControl.ts list() uses), so
@@ -91,7 +100,7 @@ export function buildMcpControlDeps(
       getAllResources: () => config.getResourceRegistry().getAllResources(),
     }),
     refreshClientTools: () => resolveClient().setTools(),
-    reloadMcpServers: () => config.reloadMcpServers(),
+    reloadMcpServers: () => config.reloadMcpServers(messageBus),
     performOAuth: async (server, oauthConfig, mcpServerUrl) => {
       await MCPOAuthProvider.authenticate(
         server,

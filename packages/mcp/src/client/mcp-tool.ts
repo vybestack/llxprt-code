@@ -250,6 +250,7 @@ export class DiscoveredMCPTool extends BaseDeclarativeTool<
     readonly trust?: boolean,
     nameOverride?: string,
     private readonly cliConfig?: McpTrustConfig,
+    messageBus?: IToolMessageBus,
   ) {
     super(
       nameOverride ?? generateMcpToolName(serverName, serverToolName),
@@ -259,6 +260,21 @@ export class DiscoveredMCPTool extends BaseDeclarativeTool<
       parameterSchema,
       true, // isOutputMarkdown
       false, // canUpdateOutput
+      messageBus,
+    );
+  }
+
+  forSession(messageBus: IToolMessageBus): DiscoveredMCPTool {
+    return new DiscoveredMCPTool(
+      this.mcpTool,
+      this.serverName,
+      this.serverToolName,
+      this.description,
+      this.parameterSchema,
+      this.trust,
+      this.name,
+      this.cliConfig,
+      messageBus,
     );
   }
 

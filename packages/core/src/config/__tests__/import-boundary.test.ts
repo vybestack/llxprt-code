@@ -21,6 +21,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const configTsPath = join(__dirname, '..', 'config.ts');
+const configBaseTsPath = join(__dirname, '..', 'configBase.ts');
 const providerRegistryPath = join(
   __dirname,
   '..',
@@ -76,9 +77,15 @@ describe('import boundary guards @issue:2417', () => {
 
       expect(referencingLines).toHaveLength(0);
     });
+  });
+
+  describe('configBase.ts', () => {
+    const source = readFileSync(configBaseTsPath, 'utf-8');
 
     it('allows type-only imports from @vybestack/llxprt-code-tools', () => {
       // type-only imports are fine — they are elided at runtime.
+      // The live ToolRegistry type import now lives in configBase.ts
+      // (ConfigBase), not config.ts.
       const lines = source.split('\n');
       const typeImportLines = lines.filter(isTypeImportFromTools);
 

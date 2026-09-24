@@ -181,7 +181,7 @@ export async function maybeHopIntoSandbox(
   }
 
   const sandboxMemoryArgs = computeSandboxMemoryArgsFromEnv(config, settings);
-  const partialConfig = await loadCliConfig(
+  const { config: partialConfig } = await loadCliConfig(
     settings.merged,
     [],
     new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir()),

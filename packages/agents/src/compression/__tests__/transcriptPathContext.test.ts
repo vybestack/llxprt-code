@@ -31,7 +31,6 @@ import type {
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { buildRuntimeContext } from '../../core/__tests__/chatSession-density-helpers.js';
 import { CompressionHandler } from '../CompressionHandler.js';
 import { resolveTranscriptPath } from '../../core/ChatSessionFactory.js';
@@ -129,10 +128,9 @@ describe('CompressionHandler transcriptPath wiring (#2933)', () => {
    * exercise the same code the factory wires rather than a copy of it.
    */
   function installLiveProvider(): void {
-    const config = {
-      getSessionRecordingService: () => installed,
-    } as unknown as Config;
-    handler.setTranscriptPathProvider(() => resolveTranscriptPath(config));
+    handler.setTranscriptPathProvider(() =>
+      resolveTranscriptPath(() => installed),
+    );
   }
 
   it('omits transcriptPath entirely when no provider is injected', async () => {

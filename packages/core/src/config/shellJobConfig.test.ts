@@ -11,10 +11,11 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 import { ShellJobManager } from '../services/shellJobManager.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   normalizeShellMaxBackgroundJobs,
   normalizeShellLogMaxBytes,
-  getOrCreateShellJobManager,
+  resolveShellJobSettings,
 } from './asyncTaskServices.js';
 import { isPidAliveWindows } from '../../test/utils/shellJobTestCleanup.js';
 
@@ -67,19 +68,6 @@ function echoByeCommand(): string {
   return os.platform() === 'win32' ? 'Write-Output bye' : 'echo bye';
 }
 
-function makeFakeSettingsService(values: Record<string, unknown> = {}): {
-  get: (key: string) => unknown;
-  set: (key: string, value: unknown) => void;
-} {
-  const store = new Map<string, unknown>(Object.entries(values));
-  return {
-    get: (key: string) => store.get(key),
-    set: (key: string, value: unknown) => {
-      store.set(key, value);
-    },
-  };
-}
-
 describe('Shell job config wiring', () => {
   describe('normalizeShellMaxBackgroundJobs', () => {
     it('returns the number when valid positive integer', () => {
@@ -129,49 +117,15 @@ describe('Shell job config wiring', () => {
     });
   });
 
-  describe('getOrCreateShellJobManager', () => {
-    it('lazily creates a ShellJobManager with resolved settings', () => {
-      let stored: ShellJobManager | undefined;
-      const settings = makeFakeSettingsService({
-        'shell-max-background-jobs': 7,
-        'shell-background-log-max-bytes': 4194304,
+  describe('resolveShellJobSettings', () => {
+    it('resolves shell job limits from settings', () => {
+      const settings = new SettingsService();
+      settings.set('shell-max-background-jobs', 7);
+      settings.set('shell-background-log-max-bytes', 4194304);
+      expect(resolveShellJobSettings(settings)).toStrictEqual({
+        maxBackgroundJobs: 7,
+        logMaxBytes: 4194304,
       });
-
-      const manager = getOrCreateShellJobManager(
-        settings,
-        () => stored,
-        (m) => {
-          stored = m;
-        },
-      );
-
-      expect(manager).toBeDefined();
-      expect(manager.getMaxBackgroundJobs()).toBe(7);
-
-      // Second call returns the same instance
-      const manager2 = getOrCreateShellJobManager(
-        settings,
-        () => stored,
-        (m) => {
-          stored = m;
-        },
-      );
-      expect(manager2).toBe(manager);
-    });
-
-    it('uses defaults when settings absent', () => {
-      let stored: ShellJobManager | undefined;
-      const settings = makeFakeSettingsService({});
-
-      const manager = getOrCreateShellJobManager(
-        settings,
-        () => stored,
-        (m) => {
-          stored = m;
-        },
-      );
-
-      expect(manager.getMaxBackgroundJobs()).toBe(10);
     });
   });
 
@@ -183,7 +137,7 @@ describe('Shell job config wiring', () => {
       });
       expect(manager.getMaxBackgroundJobs()).toBe(5);
 
-      // Simulate what configBase.setEphemeralSetting does
+      // SessionTaskServices applies normalized settings to its owned manager.
       manager.setMaxBackgroundJobs(normalizeShellMaxBackgroundJobs(3));
       expect(manager.getMaxBackgroundJobs()).toBe(3);
 

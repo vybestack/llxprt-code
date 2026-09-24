@@ -11,6 +11,8 @@
 
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { taskCommand, tasksCommands } from './tasksCommand.js';
+import { TasksControl } from '../../../../agents/src/api/control/tasksControl.js';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { CommandContext } from './types.js';
 import {
   AsyncTaskManager,
@@ -34,10 +36,13 @@ describe('tasksCommand', () => {
     context = {
       signal: new AbortController().signal,
       services: {
-        config: {
-          getAsyncTaskManager: () => asyncTaskManager,
-        } as unknown as Config,
-        agent: null,
+        config: {} as Config,
+        agent: {
+          tasks: new TasksControl({
+            getManager: () => asyncTaskManager,
+            setupAutoTrigger: () => () => {},
+          }),
+        } as unknown as Agent,
         settings: {} as unknown as LoadedSettings,
         git: undefined,
         logger: {} as unknown as Logger,
@@ -79,6 +84,22 @@ describe('tasksCommand', () => {
   });
 
   describe('/task list', () => {
+    it('never reads task history from Config when there is no agent session', () => {
+      asyncTaskManager.registerTask({
+        id: 'unowned',
+        subagentName: 'worker',
+        goalPrompt: 'not in this session',
+        abortController: new AbortController(),
+      });
+      context.services.agent = null;
+      const list = taskCommand.subCommands?.find((c) => c.name === 'list');
+      void list?.action?.(context, '');
+      expect(addItemMock).toHaveBeenCalledWith(
+        { type: MessageType.ERROR, text: 'No active agent session.' },
+        expect.any(Number),
+      );
+    });
+
     it('should return "No async tasks" when there are no tasks', () => {
       const listSubCommand = taskCommand.subCommands?.find(
         (c) => c.name === 'list',
@@ -155,7 +176,7 @@ describe('tasksCommand', () => {
   });
 
   describe('/task end', () => {
-    it('should cancel task with valid ID', () => {
+    it('should cancel task with valid ID', async () => {
       asyncTaskManager.registerTask({
         id: 'task-789',
         subagentName: 'codereviewer',
@@ -166,7 +187,7 @@ describe('tasksCommand', () => {
       const endSubCommand = taskCommand.subCommands?.find(
         (c) => c.name === 'end',
       );
-      void endSubCommand?.action?.(context, 'task-789');
+      await endSubCommand?.action?.(context, 'task-789');
 
       expect(addItemMock).toHaveBeenCalledWith(
         {
@@ -177,7 +198,7 @@ describe('tasksCommand', () => {
       );
     });
 
-    it('should cancel task with prefix', () => {
+    it('should cancel task with prefix', async () => {
       asyncTaskManager.registerTask({
         id: 'task-abc123',
         subagentName: 'researcher',
@@ -188,7 +209,7 @@ describe('tasksCommand', () => {
       const endSubCommand = taskCommand.subCommands?.find(
         (c) => c.name === 'end',
       );
-      void endSubCommand?.action?.(context, 'task-abc');
+      await endSubCommand?.action?.(context, 'task-abc');
 
       expect(addItemMock).toHaveBeenCalledWith(
         {

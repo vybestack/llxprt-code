@@ -32,6 +32,7 @@ import {
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as ServerConfig from '@vybestack/llxprt-code-core';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { loadCliConfig } from '../config.js';
@@ -317,15 +318,17 @@ async function loadMcpConfig(
   process.argv = ['node', 'script.js', ...cliArgs];
   const argv = await parseArguments(settings);
   const runtimeSettingsService = new SettingsService();
-  return loadCliConfig(
-    settings,
-    [],
-    makeExtMgr(),
-    'test-session',
-    argv,
-    undefined,
-    { settingsService: runtimeSettingsService },
-  );
+  return (
+    await loadCliConfig(
+      settings,
+      [],
+      makeExtMgr(),
+      'test-session',
+      argv,
+      undefined,
+      { settingsService: runtimeSettingsService },
+    )
+  ).config;
 }
 
 async function getMcpServers(
@@ -343,7 +346,7 @@ async function getBlockedMcpServers(
   process.argv = ['node', 'script.js', ...cliArgs];
   const argv = await parseArguments(settings);
   const runtimeSettingsService = new SettingsService();
-  const config = await loadCliConfig(
+  const { config } = await loadCliConfig(
     settings,
     [],
     makeExtMgr(),
@@ -560,7 +563,9 @@ describe('mcpFilteringParity: MCP server filtering', () => {
       allowMCPServers: ['allowed'],
     };
 
-    await config.reloadMcpServers();
+    await config.reloadMcpServers(
+      new MessageBus(config.getPolicyEngine(), config.getDebugMode()),
+    );
 
     expect(Object.keys(config.getMcpServers()!)).toStrictEqual(['allowed']);
     expect(config.getBlockedMcpServers()).toStrictEqual([
@@ -578,7 +583,9 @@ describe('mcpFilteringParity: MCP server filtering', () => {
       rejected: { command: 'rejected' },
     });
 
-    await config.reloadMcpServers();
+    await config.reloadMcpServers(
+      new MessageBus(config.getPolicyEngine(), config.getDebugMode()),
+    );
 
     expect(config.getMcpServers()).toStrictEqual({
       allowed: { command: 'updated' },
@@ -594,7 +601,9 @@ describe('mcpFilteringParity: MCP server filtering', () => {
       added: { command: 'added' },
     });
 
-    await config.reloadMcpServers();
+    await config.reloadMcpServers(
+      new MessageBus(config.getPolicyEngine(), config.getDebugMode()),
+    );
 
     expect(config.getMcpServers()).toStrictEqual({});
     expect(config.getBlockedMcpServers()).toStrictEqual([]);

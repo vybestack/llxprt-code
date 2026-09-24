@@ -25,6 +25,7 @@ import { ShellExecutionService } from '../services/shellExecutionService.js';
 import type { ShellOutputEvent } from '../services/shellExecutionService.js';
 import type { ShellJob } from '../services/shellJobManager.js';
 import { validatePathWithinWorkspace } from '../safety/index.js';
+import type { ShellJobPort } from '../session/sessionExecutionServices.js';
 import {
   getCommandRoots,
   getShellConfiguration,
@@ -39,7 +40,11 @@ import { limitOutputTokens } from '../utils/toolOutputLimiter.js';
 import { summarizeToolOutput } from '../utils/summarizer.js';
 
 export class CoreShellToolHostAdapter implements IShellToolHost {
-  constructor(private readonly config: Config) {}
+  constructor(
+    private readonly config: Config,
+    private readonly getShellJobs: () => ShellJobPort | undefined = () =>
+      undefined,
+  ) {}
 
   getTargetDir(): string {
     return this.config.getTargetDir();
@@ -238,7 +243,7 @@ export class CoreShellToolHostAdapter implements IShellToolHost {
     command: string;
     cwd: string;
   }): ToolsShellJobInfo {
-    const manager = this.config.getShellJobManager();
+    const manager = this.getShellJobs();
     if (manager === undefined) {
       throw new Error(
         'Background jobs are not available (ShellJobManager is not configured).',
@@ -249,7 +254,7 @@ export class CoreShellToolHostAdapter implements IShellToolHost {
   }
 
   tailBackgroundJob(id: string): ToolsShellJobTailResult {
-    const manager = this.config.getShellJobManager();
+    const manager = this.getShellJobs();
     if (manager === undefined) {
       throw new Error(
         'Background jobs are not available (ShellJobManager is not configured).',

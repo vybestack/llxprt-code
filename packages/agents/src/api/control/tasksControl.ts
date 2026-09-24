@@ -20,6 +20,7 @@ import type {
   AsyncTaskInfo,
   ShellJobManager,
   ShellJob,
+  ShellJobPort,
 } from '@vybestack/llxprt-code-core';
 
 /**
@@ -29,6 +30,10 @@ import type {
 export interface TasksControlDeps {
   readonly getManager: () => AsyncTaskManager | undefined;
   readonly getShellJobManager?: () => ShellJobManager | undefined;
+  readonly setupAutoTrigger: (
+    isAgentBusy: () => boolean,
+    triggerAgentTurn: (message: string) => Promise<void>,
+  ) => () => void;
 }
 
 /**
@@ -37,6 +42,14 @@ export interface TasksControlDeps {
  */
 export class TasksControl implements AgentTasksControl {
   constructor(private readonly deps: TasksControlDeps) {}
+
+  shellJobs(): ShellJobPort {
+    const manager = this.deps.getShellJobManager?.();
+    if (manager === undefined) {
+      throw new Error('Session shell jobs are not configured');
+    }
+    return manager;
+  }
 
   /** @requirement:REQ-003 @pseudocode lines 1-13 */
   private project(task: AsyncTaskInfo): AgentSubagentTaskInfo {
@@ -162,5 +175,12 @@ export class TasksControl implements AgentTasksControl {
       }
     }
     return count;
+  }
+
+  setupAutoTrigger(
+    isAgentBusy: () => boolean,
+    triggerAgentTurn: (message: string) => Promise<void>,
+  ): () => void {
+    return this.deps.setupAutoTrigger(isAgentBusy, triggerAgentTurn);
   }
 }

@@ -134,9 +134,6 @@ describe('generateDynamicToolSettings', () => {
       getCoreTools: vi.fn(() => ['ReadFile', 'WriteFile', 'Shell', 'Edit']), // Include core tools
       getProfileManager: vi.fn(() => ({ some: 'manager' })),
       getSubagentManager: vi.fn(() => ({ some: 'subagent' })),
-      getInteractiveSubagentSchedulerFactory: vi.fn(() => ({
-        some: 'factory',
-      })),
       // Add new method for our implementation
       getToolRegistryInfo: vi.fn(() => ({
         registered: mockCoreTools.map((tool) => ({

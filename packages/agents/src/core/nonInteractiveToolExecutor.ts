@@ -10,6 +10,12 @@ import {
 } from '@vybestack/llxprt-code-core/core/turn.js';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import type {
+  SchedulerCallbacks,
+  SchedulerOptions,
+  SchedulerPurpose,
+} from '@vybestack/llxprt-code-core/session/sessionSchedulerRegistry.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { type Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SchedulerHandle } from '@vybestack/llxprt-code-core/session/sessionExecutionServices.js';
 import { toolFailureMarker } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
@@ -29,17 +35,28 @@ export type ToolExecutionConfig = Pick<
   | 'getExcludeTools'
   | 'getSessionId'
   | 'getTelemetryLogPromptsEnabled'
-  | 'getOrCreateScheduler'
-  | 'disposeScheduler'
 > &
-  Partial<Pick<Config, 'getAllowedTools' | 'getApprovalMode'>>;
+  Partial<Pick<Config, 'getAllowedTools' | 'getApprovalMode'>> & {
+    acquireScheduler: (
+      owner: object,
+      purpose: SchedulerPurpose,
+      callbacks: SchedulerCallbacks,
+      options?: SchedulerOptions,
+      dependencies?: { messageBus?: MessageBus; toolRegistry?: ToolRegistry },
+    ) => Promise<SchedulerHandle>;
+    releaseScheduler: (
+      owner: object,
+      purpose: SchedulerPurpose,
+      handle: object,
+    ) => void;
+  };
 
 /**
  * Executes a single tool call non-interactively by acquiring the shared
  * CoreToolScheduler from the session scheduler registry.
  *
  * This wrapper:
- * 1. Acquires the registry scheduler (via config.getOrCreateScheduler) with
+ * 1. Acquires the session-owned registry scheduler with
  *    interactiveMode: false under the caller-supplied owner object and the
  *    'subagent' purpose
  * 2. Schedules the tool call
@@ -50,7 +67,7 @@ export type ToolExecutionConfig = Pick<
  * - No live output updates are provided
  *
  * Benefits of sharing one scheduler per owner:
- * - Scheduler is acquired from the per-Config registry per call and disposed when the acquisition count reaches zero, so no scheduler or subscription outlives its users
+ * - Scheduler is acquired from the session registry per call and disposed when the acquisition count reaches zero, so no scheduler or subscription outlives its users
  * - Proper refcount-based lifecycle management
  * - Consistent tool governance path with interactive mode
  *
@@ -63,7 +80,7 @@ async function createScheduler(
   completionResolver: ((calls: CompletedToolCall[]) => void) | null,
   dependencies?: { messageBus?: MessageBus },
 ): Promise<SchedulerHandle> {
-  return config.getOrCreateScheduler(
+  return config.acquireScheduler(
     owner,
     'subagent',
     {
@@ -182,7 +199,7 @@ export async function executeToolCall(
     }
     // Pass the acquired handle so a release racing a disposeAll sweep can
     // never dispose a replacement entry it did not acquire.
-    config.disposeScheduler(owner, 'subagent', scheduler);
+    config.releaseScheduler(owner, 'subagent', scheduler);
   }
 }
 

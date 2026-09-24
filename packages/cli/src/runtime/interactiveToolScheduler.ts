@@ -12,8 +12,8 @@
  * `useReactToolScheduler`; this module owns the core-scheduler primitives it
  * consumes via `SchedulerRefs` (a display-callback surface the hook supplies).
  *
- * Behavior is byte-for-byte identical to the previous in-hook implementation;
- * this is a mechanical relocation, not a redesign.
+ * Scheduler acquisition and release are forwarded through the session Agent
+ * by the UI runtime adapter; the subagent retains its own registry owner key.
  */
 
 import {
@@ -31,6 +31,7 @@ import {
   DEFAULT_AGENT_ID,
   type LiveOutputUpdate,
   type MessageBus,
+  type ToolRegistry,
 } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { useCallback, useEffect, useState } from 'react';
@@ -38,8 +39,8 @@ import type React from 'react';
 
 /**
  * The explicit-message-bus getOrCreateScheduler shape the interactive path
- * relies on. It documents the exact scheduler surface we depend on and is
- * shared by both the main runtime access and the subagent scheduler factory.
+ * relies on. The runtime adapter binds these methods to the foreground
+ * Agent's session owner for both main and interactive subagent acquisitions.
  *
  * The registry key is the owner object supplied by the caller paired with a
  * purpose; no session-id string participates.
@@ -73,6 +74,7 @@ export interface ExplicitMessageBusScheduler {
     options?: Record<string, unknown>,
     dependencies?: {
       messageBus?: MessageBus;
+      toolRegistry?: ToolRegistry;
     },
   ): Promise<SchedulerHandle>;
   setInteractiveSubagentSchedulerFactory(
@@ -361,6 +363,7 @@ export function useScheduler(
  * Hook that creates the external scheduler factory.
  */
 function useExternalSchedulerFactoryCreator(
+  scheduler: ExplicitMessageBusScheduler,
   refs: SchedulerRefs,
   runtimeMessageBus: MessageBus | undefined,
 ): SubagentSchedulerFactory {
@@ -372,23 +375,25 @@ function useExternalSchedulerFactoryCreator(
       // factory, so acquisition and its dispose closure release the same
       // 'subagent' entry even when two subagents share a session id string.
       const owner = args.schedulerConfig;
-      const instance = await args.schedulerConfig.getOrCreateScheduler(
+      const instance = await scheduler.getOrCreateScheduler(
         owner,
         'subagent',
         createSubagentCallbacks(schedulerId, refs, args),
         undefined,
-        { messageBus: runtimeMessageBus },
+        {
+          messageBus: runtimeMessageBus,
+          toolRegistry: args.schedulerConfig.getToolRegistry(),
+        },
       );
       return {
         schedule: (
           request: ToolCallRequestInfo | ToolCallRequestInfo[],
           signal: AbortSignal,
         ) => instance.schedule(request, signal),
-        dispose: () =>
-          args.schedulerConfig.disposeScheduler(owner, 'subagent', instance),
+        dispose: () => scheduler.disposeScheduler(owner, 'subagent', instance),
       };
     },
-    [refs, runtimeMessageBus],
+    [scheduler, refs, runtimeMessageBus],
   );
   return factory;
 }
@@ -427,6 +432,7 @@ export function useExternalSchedulerRegistration(
   setExternalSchedulerRegistered: (registered: boolean) => void,
 ): void {
   const createExternalScheduler = useExternalSchedulerFactoryCreator(
+    runtime.scheduler,
     refs,
     runtimeMessageBus,
   );

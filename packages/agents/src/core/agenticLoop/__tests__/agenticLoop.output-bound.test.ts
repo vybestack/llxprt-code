@@ -84,7 +84,12 @@ describe('AgenticLoop live-output acquisition bound', () => {
       ]);
 
       const events = await collectEvents(
-        new AgenticLoop({ agentClient: client, config, messageBus }),
+        new AgenticLoop({
+          agentClient: client,
+          config,
+          schedulerOwner: config.schedulerOwner,
+          messageBus,
+        }),
         'go',
         new AbortController().signal,
       );

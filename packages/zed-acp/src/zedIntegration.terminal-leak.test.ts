@@ -17,7 +17,15 @@
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import type * as acp from '@agentclientprotocol/sdk';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import type { Config } from '@vybestack/llxprt-code-core';
+import {
+  CoreMessageBusAdapter,
+  CoreToolRegistryHostAdapter,
+  MessageBus,
+  ShellJobManager,
+  type Config,
+} from '@vybestack/llxprt-code-core';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { ToolRegistry } from '@vybestack/llxprt-code-tools';
 
 import { RecordingConnection } from './__tests__/zed-test-helpers.js';
 
@@ -58,11 +66,6 @@ function buildBaseConfig(): Config {
     getProjectRoot: () => '/project',
     getMaxSessionTurns: () => 50,
     getModel: () => 'test-model',
-    getSessionRecordingService: () => ({
-      isActive: () => false,
-      recordSessionMetadata: () => undefined,
-      getSessionMetadataTitle: () => undefined,
-    }),
     getToolRegistry: () => ({ getAllTools: () => [] }),
     storage: {
       getProjectTempDir: () => '/tmp',
@@ -83,8 +86,15 @@ describe('ZedAgent.buildSessionAgent disposal on terminal-setup failure', () => 
 
   it('disposes the already-built agent when buildZedTerminalSetup throws', async () => {
     const dispose = vi.fn(async () => undefined);
+    const config = buildBaseConfig();
+    const registry = new ToolRegistry(
+      new CoreToolRegistryHostAdapter(config),
+      new CoreMessageBusAdapter(new MessageBus()),
+      new SettingsService(),
+    );
     const agent = {
       getApprovalMode: () => 'default',
+      getToolRegistry: () => registry,
       setApprovalMode: vi.fn(),
       dispose,
       getHistory: vi.fn(async () => []),
@@ -92,6 +102,7 @@ describe('ZedAgent.buildSessionAgent disposal on terminal-setup failure', () => 
         yield { type: 'done', reason: 'stop' };
       },
       getMessageBus: () => ({}),
+      tasks: { shellJobs: () => new ShellJobManager() },
       tools: { respondToConfirmation: vi.fn() },
     } as unknown as Agent;
     mockFromConfig.mockResolvedValue(agent);
@@ -101,7 +112,7 @@ describe('ZedAgent.buildSessionAgent disposal on terminal-setup failure', () => 
 
     const mod = await import('./zedIntegration.js');
     const zedAgent = new mod.ZedAgent(
-      buildBaseConfig(),
+      config,
       new RecordingConnection() as unknown as acp.AgentSideConnection,
     );
     await zedAgent.initialize(buildTerminalCapableInit());

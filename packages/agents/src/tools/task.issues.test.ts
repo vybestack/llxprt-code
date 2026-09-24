@@ -258,21 +258,7 @@ describe('TaskTool', () => {
     });
 
     it('should send opening and closing XML tags for async tasks', async () => {
-      let resolveBackgroundExecution: (() => void) | undefined;
-      const backgroundExecutionPromise = new Promise<void>((resolve) => {
-        resolveBackgroundExecution = resolve;
-      });
-
-      const completeTaskMock = vi.fn(() => {
-        resolveBackgroundExecution?.();
-      });
-      const mockAsyncTaskManager = {
-        canLaunchAsync: () => ({ allowed: true }),
-        tryReserveAsyncSlot: () => 'booking-1',
-        registerTask: vi.fn(),
-        completeTask: completeTaskMock,
-        failTask: vi.fn(),
-      };
+      const taskManager = new AsyncTaskManager();
       const updateOutput = vi.fn();
       const launchMock = vi.fn().mockResolvedValue({
         agentId: 'async-xml-agent',
@@ -289,8 +275,7 @@ describe('TaskTool', () => {
         messageBus: new MessageBus(),
         orchestratorFactory: () =>
           ({ launch: launchMock }) as unknown as SubagentOrchestrator,
-        getAsyncTaskManager: () =>
-          mockAsyncTaskManager as unknown as AsyncTaskManager,
+        getTaskManager: () => taskManager,
         isInteractiveEnvironment: () => false,
       });
       const params: TaskToolParams = {
@@ -308,8 +293,9 @@ describe('TaskTool', () => {
         data: '<subagent name="async-helper" id="async-xml-agent">\n',
       });
 
-      // Wait for background execution to complete and emit closing tag
-      await backgroundExecutionPromise;
+      // Closing waits for the tracked background execution.
+      await taskManager.close();
+      expect(taskManager.getTask('async-xml-agent')?.status).toBe('completed');
       expect(updateOutput).toHaveBeenLastCalledWith({
         mode: 'append',
         data: '</subagent name="async-helper" id="async-xml-agent">\n',

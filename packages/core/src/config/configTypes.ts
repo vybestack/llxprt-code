@@ -40,7 +40,6 @@ import type {
 } from '@vybestack/llxprt-code-tools';
 import type { LspConfig } from '@vybestack/llxprt-code-ide-integration';
 import type { AgentClientFactory } from '../core/clientContract.js';
-import type { ToolSchedulerFactory } from '../core/toolSchedulerContract.js';
 import type { TaskToolRegistration } from './toolRegistryFactory.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 
@@ -492,15 +491,6 @@ export interface ConfigParameters {
    * never at Config construction time.
    */
   agentClientFactory?: AgentClientFactory;
-
-  /**
-   * @plan PLAN-20260610-ISSUE1592.P01
-   * @requirement REQ-INV-002
-   * Factory for creating CoreToolScheduler instances. Injected by composition roots.
-   * Absence is an error at USE time (getOrCreateScheduler),
-   * never at Config construction time.
-   */
-  toolSchedulerFactory?: ToolSchedulerFactory;
 
   /**
    * @plan PLAN-20260610-ISSUE1592.P01

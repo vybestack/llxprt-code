@@ -104,6 +104,7 @@ describe('AgenticLoop integration - terminal outcomes and bus scoping', () => {
       const loop = new AgenticLoop({
         agentClient: client,
         config,
+        schedulerOwner: config.schedulerOwner,
         messageBus,
       });
 
@@ -147,6 +148,7 @@ describe('AgenticLoop integration - terminal outcomes and bus scoping', () => {
     const loop = new AgenticLoop({
       agentClient: client,
       config,
+      schedulerOwner: config.schedulerOwner,
       messageBus,
       displayCallbacks: {
         onToolCallsUpdate: (toolCalls) => {
@@ -209,7 +211,12 @@ describe('AgenticLoop integration - terminal outcomes and bus scoping', () => {
       ],
       [contentEvent('denied'), finishedEvent()],
     ]);
-    const loop = new AgenticLoop({ agentClient: client, config, messageBus });
+    const loop = new AgenticLoop({
+      agentClient: client,
+      config,
+      schedulerOwner: config.schedulerOwner,
+      messageBus,
+    });
 
     const events = await collectEvents(
       loop,
@@ -248,7 +255,12 @@ describe('AgenticLoop integration - terminal outcomes and bus scoping', () => {
         finishedEvent(),
       ],
     ]);
-    const loop = new AgenticLoop({ agentClient: client, config, messageBus });
+    const loop = new AgenticLoop({
+      agentClient: client,
+      config,
+      schedulerOwner: config.schedulerOwner,
+      messageBus,
+    });
 
     const events = await collectEvents(
       loop,
@@ -294,6 +306,7 @@ describe('AgenticLoop integration - terminal outcomes and bus scoping', () => {
       const loop = new AgenticLoop({
         agentClient: client,
         config,
+        schedulerOwner: config.schedulerOwner,
         messageBus,
         approvalHandler,
       });

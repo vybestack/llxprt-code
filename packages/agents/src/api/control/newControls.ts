@@ -5,6 +5,7 @@
  */
 
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type {
   AgentMemoryControl,
   AgentSkillsControl,
@@ -24,11 +25,14 @@ export interface NewControls {
   dispose(): void;
 }
 
-export function buildNewControls(config: Config): NewControls {
+export function buildNewControls(
+  config: Config,
+  messageBus: MessageBus,
+): NewControls {
   const memory = new MemoryControl({ config });
   return {
     memory,
-    skills: new SkillsControl({ config }),
+    skills: new SkillsControl({ config, messageBus }),
     workspace: new WorkspaceControl({ config }),
     lsp: new LspControl({ config }),
     dispose: () => memory.dispose(),

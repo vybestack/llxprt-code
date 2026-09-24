@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { AsyncLocalStorage } from 'node:async_hooks';
 
 /**
  * @plan:PLAN-20260216-HOOKSYSTEMREWRITE.P03
@@ -15,7 +16,10 @@ import { HookRegistry, type HookRegistryEntry } from './hookRegistry.js';
 import { HookPlanner } from './hookPlanner.js';
 import { HookRunner } from './hookRunner.js';
 import { HookAggregator, type AggregatedHookResult } from './hookAggregator.js';
-import { HookEventHandler } from './hookEventHandler.js';
+import {
+  HookEventHandler,
+  type HookRecordingReader,
+} from './hookEventHandler.js';
 import { HookSystemNotInitializedError } from './errors.js';
 import { DebugLogger } from '../debug/index.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
@@ -54,6 +58,8 @@ export class HookSystem {
   private readonly runner: HookRunner;
   private readonly aggregator: HookAggregator;
   private eventHandler: HookEventHandler | null = null;
+  private readonly sessionRecording =
+    new AsyncLocalStorage<HookRecordingReader>();
   private initializationPromise: Promise<void> | undefined;
   private initializationGeneration = 0;
   private readonly initializationSignals = new Map<
@@ -93,6 +99,10 @@ export class HookSystem {
     this.planner = new HookPlanner(this.registry);
     this.runner = new HookRunner(config);
     this.aggregator = new HookAggregator();
+  }
+
+  runWithRecordingReader<T>(reader: HookRecordingReader, action: () => T): T {
+    return this.sessionRecording.run(reader, action);
   }
 
   /**
@@ -173,6 +183,7 @@ export class HookSystem {
       this.aggregator,
       this.messageBus,
       this.injectedDebugLogger,
+      () => this.sessionRecording.getStore()?.(),
     );
 
     const totalHooks = this.registry.getAllHooks().length;

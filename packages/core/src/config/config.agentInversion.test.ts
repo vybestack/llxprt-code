@@ -12,7 +12,6 @@ import type {
 import { Config, type ConfigParameters } from './config.js';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 import type { AgentClientContract } from '../core/clientContract.js';
-import type { ToolSchedulerContract } from '../core/toolSchedulerContract.js';
 import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import type { ContentGeneratorConfig } from '../core/contentGenerator.js';
 import {
@@ -171,60 +170,6 @@ describe('P01 construction inversion contracts', () => {
     expect(fakeClient.isInitialized()).toBe(false);
   });
 
-  it('creates schedulers through the injected factory and preserves per-session singleton reuse', async () => {
-    const fakeClient = createFakeAgentClient();
-    const scheduler: ToolSchedulerContract = {
-      schedule: vi.fn(async () => {}),
-      cancelAll: vi.fn(),
-      dispose: vi.fn(),
-      setCallbacks: vi.fn(),
-      handleConfirmationResponse: vi.fn(async () => {}),
-    };
-    const schedulerFactory = vi.fn(() => scheduler);
-    const config = new Config(
-      baseParams({
-        agentClientFactory: () => fakeClient,
-        toolSchedulerFactory: schedulerFactory,
-      }),
-    );
-    const messageBus = new MessageBus(
-      config.getPolicyEngine(),
-      config.getDebugMode(),
-    );
-    await config.initialize({ messageBus });
-    const callbacks = {
-      outputUpdateHandler: vi.fn(),
-      onAllToolCallsComplete: vi.fn(async () => {}),
-      onToolCallsUpdate: vi.fn(),
-      getPreferredEditor: () => undefined,
-      onEditorClose: vi.fn(),
-    };
-
-    const schedulerOwner = { sessionId: 'p01-scheduler-owner' };
-    const first = await config.getOrCreateScheduler(
-      schedulerOwner,
-      'session',
-      callbacks,
-      undefined,
-      {
-        messageBus,
-      },
-    );
-    const second = await config.getOrCreateScheduler(
-      schedulerOwner,
-      'session',
-      callbacks,
-      undefined,
-      {
-        messageBus,
-      },
-    );
-
-    expect(first).toBe(scheduler);
-    expect(second).toBe(scheduler);
-    expect(schedulerFactory).toHaveBeenCalledTimes(1);
-  });
-
   it('uses injected TaskToolRegistration metadata instead of the concrete class name', async () => {
     const registeredTools: unknown[] = [];
     const registration: TaskToolRegistration = {
@@ -243,9 +188,6 @@ describe('P01 construction inversion contracts', () => {
       setProfileManager: vi.fn(),
       getSubagentManager: () => ({}) as never,
       setSubagentManager: vi.fn(),
-      getInteractiveSubagentSchedulerFactory: () => undefined,
-      getAsyncTaskManager: () => undefined,
-      getShellJobManager: () => undefined,
       getTaskToolRegistration: () => registration,
     };
     const config = new Config(baseParams());
@@ -261,6 +203,8 @@ describe('P01 construction inversion contracts', () => {
       host,
       config,
       messageBus,
+      () => undefined,
+      () => undefined,
     );
     registeredTools.push(...registry.getAllTools());
 
@@ -314,9 +258,6 @@ describe('P01 construction inversion contracts', () => {
       setProfileManager: vi.fn(),
       getSubagentManager: () => ({}) as never,
       setSubagentManager: vi.fn(),
-      getInteractiveSubagentSchedulerFactory: () => undefined,
-      getAsyncTaskManager: () => undefined,
-      getShellJobManager: () => undefined,
       getTaskToolRegistration: () => undefined,
     };
     const config = new Config(baseParams());
@@ -332,6 +273,8 @@ describe('P01 construction inversion contracts', () => {
       host,
       config,
       messageBus,
+      () => undefined,
+      () => undefined,
     );
 
     const taskRecord = allPotentialTools.find(

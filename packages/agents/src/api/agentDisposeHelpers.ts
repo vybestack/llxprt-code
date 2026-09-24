@@ -6,15 +6,23 @@
 
 /**
  * Dispose-time teardown helpers extracted from agentImpl.ts to keep that module
- * under the project's max-lines limit. These are pure structural guards over
- * the OAuthManager and the Config-owned extension loader; they hold no state.
+ * under the project's max-lines limit. Config owns extension teardown; adopting
+ * sessions release only their own resources.
  *
  * @plan:PLAN-20260617-COREAPI.P24
  * @requirement:REQ-016
  */
 
-import type { LlxprtExtension } from '@vybestack/llxprt-code-core/config/config.js';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import type { OwnershipRecord } from './agentBootstrap.js';
+import type { SessionSchedulerOwner } from './agentRuntimeAssembly.js';
+import type { NewControls } from './control/newControls.js';
+import type { HookControl } from './control/hooks.js';
+import type { LoopHolder } from './loop/rebuildLoop.js';
+import { AggregateDisposeError } from './disposeErrors.js';
+
+type CleanupAction = () => void | Promise<void>;
 
 /**
  * Defensively disposes an OAuthManager if it exposes a dispose method. The
@@ -35,52 +43,76 @@ export async function disposeOAuthManager(
   }
 }
 
-/**
- * Structural view of the Config-owned extension loader's teardown surface. The
- * real ExtensionLoader (core/utils/extensionLoader.ts) exposes both methods;
- * this optional-method shape mirrors the disposeOAuthManager runtime-guard idiom
- * so a loader that does not surface them is skipped rather than crashing.
- * @plan:PLAN-20260617-COREAPI.P24
- * @requirement:REQ-016
- */
-interface ExtensionTeardownSurface {
-  getExtensions?: () => LlxprtExtension[];
-  unloadExtension?: (extension: LlxprtExtension) => Promise<void> | void;
-}
-
-/**
- * Returns the active extensions known to the Config-owned loader. Defensively
- * guards the loader's getExtensions surface (mirroring disposeOAuthManager) and
- * filters to active extensions, since only active ones have started teardownable
- * MCP servers/context/commands/subagents (dispose.md line 80).
- * @plan:PLAN-20260617-COREAPI.P24
- * @requirement:REQ-016
- * @pseudocode dispose.md 80
- */
-export function collectActiveExtensions(loader: unknown): LlxprtExtension[] {
-  const surface = loader as ExtensionTeardownSurface;
-  if (typeof surface.getExtensions !== 'function') {
-    return [];
-  }
-  return surface.getExtensions().filter((extension) => extension.isActive);
-}
-
-/**
- * Unloads a single extension through the loader's documented dynamic-unload path
- * (ExtensionLoader.unloadExtension), which stops the extension's MCP servers,
- * context, custom commands, and subagents. Defensively guards the unloadExtension
- * surface (mirroring disposeOAuthManager). A thrown unload propagates so the
- * caller's safe() collects it into errors[] (dispose.md line 80).
- * @plan:PLAN-20260617-COREAPI.P24
- * @requirement:REQ-016
- * @pseudocode dispose.md 80
- */
-export async function unloadExtensionSafely(
-  loader: unknown,
-  extension: LlxprtExtension,
+async function captureFailure(
+  errors: unknown[],
+  action: CleanupAction,
 ): Promise<void> {
-  const surface = loader as ExtensionTeardownSurface;
-  if (typeof surface.unloadExtension === 'function') {
-    await surface.unloadExtension(extension);
+  try {
+    await action();
+  } catch (error: unknown) {
+    errors.push(error);
+  }
+}
+
+function captureSynchronousFailure(
+  errors: unknown[],
+  action: () => void,
+): void {
+  try {
+    action();
+  } catch (error: unknown) {
+    errors.push(error);
+  }
+}
+
+export interface AgentOwnedResourceReleaseInput {
+  readonly ownership: OwnershipRecord;
+  readonly loopHolder: LoopHolder;
+  readonly hooks: Pick<HookControl, 'detach'>;
+  readonly controls: Pick<NewControls, 'dispose'>;
+  readonly schedulerOwner: SessionSchedulerOwner;
+  readonly runtimeHandle: { cleanup: CleanupAction };
+  readonly config: Config;
+  readonly oauthManager: OAuthManager;
+}
+
+/** Releases every facade-owned resource without allowing one failure to skip another. */
+export async function releaseAgentOwnedResources(
+  input: AgentOwnedResourceReleaseInput,
+): Promise<void> {
+  const errors: unknown[] = [];
+  const { ownership } = input;
+
+  for (const handle of ownership.injectedSchedulerHandles) {
+    await captureFailure(errors, () => handle.dispose());
+  }
+  captureSynchronousFailure(errors, () => input.hooks.detach());
+  captureSynchronousFailure(errors, () => input.controls.dispose());
+  for (const unsubscribe of input.loopHolder.subscriptions ?? []) {
+    captureSynchronousFailure(errors, unsubscribe);
+  }
+
+  await captureFailure(errors, () => input.schedulerOwner.dispose());
+  captureSynchronousFailure(errors, () => ownership.approvalBus.dispose());
+  await captureFailure(errors, () => input.runtimeHandle.cleanup());
+
+  if (ownership.configOwnership !== 'caller') {
+    await captureFailure(errors, () => input.config.dispose());
+    await captureFailure(errors, async () => {
+      await input.config.shutdownLspService();
+      ownership.lspShutDown = true;
+    });
+
+    ownership.extensionsDisposed = true;
+  }
+
+  for (const lock of ownership.sessionLocks) {
+    await captureFailure(errors, () => lock.release());
+  }
+  ownership.sessionLocksReleased = true;
+  await captureFailure(errors, () => disposeOAuthManager(input.oauthManager));
+
+  if (errors.length > 0) {
+    throw new AggregateDisposeError(errors);
   }
 }

@@ -5,7 +5,11 @@
  */
 
 import { writeFileSync } from 'node:fs';
-import { type Config, OutputFormat } from '@vybestack/llxprt-code-core';
+import {
+  type Config,
+  type MessageBus,
+  OutputFormat,
+} from '@vybestack/llxprt-code-core';
 import {
   uiTelemetryService,
   debugLogger,
@@ -20,7 +24,6 @@ import { setupTerminalAndTheme } from './utils/terminalTheme.js';
 import { drainStdinBuffer } from './ui/utils/terminalContract.js';
 import { StdinRawModeManager } from './utils/stdinSafety.js';
 import { registerCleanup, runExitCleanup } from './utils/cleanup.js';
-import { registerShellJobShutdownNotice } from './utils/shellJobShutdownNotice.js';
 import { appEvents, AppEvent } from './utils/events.js';
 import type { LoadedSettings } from './config/settings.js';
 import type { ParsedCliArgs } from './cliBootstrap.js';
@@ -114,6 +117,7 @@ async function renderInitializingSpinner(initialTotal: number): Promise<
  */
 export async function constructAgentWithSpinner(
   config: Config,
+  messageBus: MessageBus,
   activationPreflightToken?: ActivationPreflightToken,
   activationPreflightIntent?: ProviderActivationIntent,
 ): Promise<Agent> {
@@ -131,6 +135,7 @@ export async function constructAgentWithSpinner(
   try {
     const agent = await createForegroundAgent({
       config,
+      messageBus,
       activationPreflightToken,
       activationPreflightIntent,
     });
@@ -175,16 +180,14 @@ function patchConsoleForRun(config: Config): void {
 /**
  * Prepare the interactive terminal session: enable raw mode when needed, set up
  * the terminal title/theme, register the session-summary writer, and patch the
- * console for the run. Registering the shutdown notice here — once, before any
- * signal handler or UI path can exit — covers SIGTERM, SIGINT, and the quit
- * path uniformly via the process `exit` event.
+ * console for the run. The shell shutdown notice is registered once the
+ * foreground Agent exists so it reads that session's running tasks.
  */
 export async function prepareTerminalSession(
   config: Config,
   settings: LoadedSettings,
   argv: ParsedCliArgs,
 ): Promise<void> {
-  registerShellJobShutdownNotice(config);
   const wasRaw = process.stdin.isRaw;
   const stdinManager = new StdinRawModeManager({
     debug: config.getDebugMode(),

@@ -20,7 +20,11 @@ import type { ConfigParameters } from './config.js';
 import { Config } from './config.js';
 import type { SkillDefinition } from '../skills/skillLoader.js';
 import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
-import { initializeTestConfig } from '../__tests__/config-test-helpers.js';
+import {
+  getTestRuntimeMessageBus,
+  initializeTestConfig,
+} from '../__tests__/config-test-helpers.js';
+import { MessageBus } from '../confirmation-bus/message-bus.js';
 import {
   buildFsMockBody,
   buildToolsMockBody,
@@ -156,9 +160,38 @@ describe('reloadSkills refreshes the model-facing skill surface @issue:3379', ()
     ]);
     observations.length = 0;
 
-    await config.reloadSkills();
+    await config.reloadSkills(getTestRuntimeMessageBus(config));
 
     expect(observations).toStrictEqual([{ skills: ['alpha', 'beta'] }]);
+  });
+
+  it('routes same-label reloads for one Config through each explicit session bus', async () => {
+    const routedBuses: MessageBus[] = [];
+    const config = new Config(
+      buildParams({
+        sessionId: 'shared-label',
+        postSkillDiscoveryToolRegistrar: (_registry, _skillService, bus) => {
+          routedBuses.push(bus);
+        },
+      }),
+    );
+    await initializeTestConfig(config);
+    const skillManager = config.getSkillManager();
+    vi.spyOn(skillManager, 'discoverSkills').mockResolvedValue(undefined);
+    const firstSessionBus = new MessageBus(
+      config.getPolicyEngine(),
+      config.getDebugMode(),
+    );
+    const secondSessionBus = new MessageBus(
+      config.getPolicyEngine(),
+      config.getDebugMode(),
+    );
+    routedBuses.length = 0;
+
+    await config.reloadSkills(firstSessionBus);
+    await config.reloadSkills(secondSessionBus);
+
+    expect(routedBuses).toStrictEqual([firstSessionBus, secondSessionBus]);
   });
 
   it('rebuilds the activation tool even when no skills remain', async () => {
@@ -179,7 +212,7 @@ describe('reloadSkills refreshes the model-facing skill surface @issue:3379', ()
     vi.spyOn(skillManager, 'getSkills').mockReturnValue([]);
     observations.length = 0;
 
-    await config.reloadSkills();
+    await config.reloadSkills(getTestRuntimeMessageBus(config));
 
     expect(observations).toStrictEqual([{ skills: [] }]);
   });
@@ -201,7 +234,7 @@ describe('reloadSkills refreshes the model-facing skill surface @issue:3379', ()
     const skillManager = config.getSkillManager();
     vi.spyOn(skillManager, 'discoverSkills').mockResolvedValue(undefined);
 
-    await config.reloadSkills();
+    await config.reloadSkills(getTestRuntimeMessageBus(config));
 
     expect(observations).toStrictEqual([]);
   });
@@ -231,7 +264,7 @@ describe('reloadSkills refreshes the model-facing skill surface @issue:3379', ()
     });
     observations.length = 0;
 
-    await config.reloadSkills();
+    await config.reloadSkills(getTestRuntimeMessageBus(config));
 
     // Guard: the stand-in above depends on getAllSkills exposing the live
     // store. If that ever returns a copy, the manager stays empty and the
@@ -269,7 +302,7 @@ describe('reloadSkills refreshes the model-facing skill surface @issue:3379', ()
     );
     sequence.length = 0;
 
-    await config.reloadSkills();
+    await config.reloadSkills(getTestRuntimeMessageBus(config));
 
     expect(sequence).toStrictEqual(['registrar', 'setTools']);
   });
@@ -286,7 +319,9 @@ describe('reloadSkills refreshes the model-facing skill surface @issue:3379', ()
     vi.spyOn(skillManager, 'discoverSkills').mockResolvedValue(undefined);
     vi.spyOn(config.getAgentClient(), 'isInitialized').mockReturnValue(false);
 
-    await expect(config.reloadSkills()).resolves.toBeUndefined();
+    await expect(
+      config.reloadSkills(getTestRuntimeMessageBus(config)),
+    ).resolves.toBeUndefined();
   });
 
   it('propagates a rebuild failure instead of reporting a successful reload', async () => {
@@ -306,6 +341,8 @@ describe('reloadSkills refreshes the model-facing skill surface @issue:3379', ()
     const skillManager = config.getSkillManager();
     vi.spyOn(skillManager, 'discoverSkills').mockResolvedValue(undefined);
 
-    await expect(config.reloadSkills()).rejects.toThrow('registration failed');
+    await expect(
+      config.reloadSkills(getTestRuntimeMessageBus(config)),
+    ).rejects.toThrow('registration failed');
   });
 });

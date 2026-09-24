@@ -11,6 +11,7 @@ import {
   buildUiRuntimeFromSource,
   type UiRuntimeBareSource,
 } from '../cliUiRuntime.js';
+import { createRuntimeAgent } from './runtimeAgentFixture.js';
 import { AppEvent, appEvents } from '../../utils/events.js';
 
 /**
@@ -34,24 +35,50 @@ function createProxySource(
   }) as unknown as UiRuntimeBareSource;
 }
 
+describe('session ownership at runtime construction', () => {
+  it('rejects an omitted Agent before either public builder can expose a bootstrap client', () => {
+    const source = createProxySource({
+      getAgentClient: () => ({ id: 'bootstrap-client' }),
+    });
+
+    expect(() =>
+      Reflect.apply(buildUiRuntimeFromSource, undefined, [source]),
+    ).toThrow('Agent session is required');
+    expect(() =>
+      Reflect.apply(buildSlashCommandRuntime, undefined, [source]),
+    ).toThrow('Agent session is required');
+  });
+});
+
 describe('buildSlashCommandRuntime', () => {
+  it('uses the active Agent session client instead of the Config bootstrap client', () => {
+    const configClient = createRuntimeAgent().agentClient;
+    const agent = createRuntimeAgent();
+    const source = createProxySource({ getAgentClient: () => configClient });
+
+    const runtime = buildSlashCommandRuntime(source, agent);
+
+    expect(runtime.getAgentClient()).toBe(agent.agentClient);
+    expect(runtime.getAgentClient()).not.toBe(configClient);
+  });
+
   it('breaks identity: the adapter is not the same object as the source', () => {
     const source = createProxySource();
-    const adapter = buildSlashCommandRuntime(source);
+    const adapter = buildSlashCommandRuntime(source, createRuntimeAgent());
 
     expect(adapter).not.toBe(source);
   });
 
   it('produces a plain object (not a Config subclass instance)', () => {
     const source = createProxySource();
-    const adapter = buildSlashCommandRuntime(source);
+    const adapter = buildSlashCommandRuntime(source, createRuntimeAgent());
 
     expect(Object.getPrototypeOf(adapter)).toBe(Object.prototype);
   });
 
   it('delegates method calls through to the source across capability slices', () => {
     const source = createProxySource();
-    const adapter = buildSlashCommandRuntime(source);
+    const adapter = buildSlashCommandRuntime(source, createRuntimeAgent());
 
     expect((adapter.getSessionId as () => string)()).toBe(
       'delegated:getSessionId',
@@ -73,7 +100,7 @@ describe('buildSlashCommandRuntime', () => {
 
   it('preserves the storage property reference', () => {
     const source = createProxySource();
-    const adapter = buildSlashCommandRuntime(source);
+    const adapter = buildSlashCommandRuntime(source, createRuntimeAgent());
 
     expect(
       (adapter as unknown as Record<string, unknown>).storage,
@@ -84,7 +111,7 @@ describe('buildSlashCommandRuntime', () => {
 
   it('preserves the extensionEnablementManager property reference', () => {
     const source = createProxySource();
-    const adapter = buildSlashCommandRuntime(source);
+    const adapter = buildSlashCommandRuntime(source, createRuntimeAgent());
 
     expect(
       (adapter as unknown as Record<string, unknown>)
@@ -94,7 +121,7 @@ describe('buildSlashCommandRuntime', () => {
 
   it('supports absent optional agent-client factory helpers', () => {
     const source = createProxySource({ getAgentClientFactory: undefined });
-    const adapter = buildSlashCommandRuntime(source);
+    const adapter = buildSlashCommandRuntime(source, createRuntimeAgent());
 
     expect(adapter.getAgentClientFactory?.()).toBeUndefined();
   });
@@ -116,7 +143,7 @@ describe('buildSlashCommandRuntime image capability', () => {
       getRunImageOperation: () => runner,
     });
 
-    const adapter = buildSlashCommandRuntime(source);
+    const adapter = buildSlashCommandRuntime(source, createRuntimeAgent());
 
     expect(typeof adapter.getRunImageOperation).toBe('function');
     expect(adapter.getRunImageOperation?.()).toBe(
@@ -127,18 +154,118 @@ describe('buildSlashCommandRuntime image capability', () => {
 
   it('omits getRunImageOperation when the source does not expose it', () => {
     const source = createProxySource({ getRunImageOperation: undefined });
-    const adapter = buildSlashCommandRuntime(source);
+    const adapter = buildSlashCommandRuntime(source, createRuntimeAgent());
 
     expect(adapter.getRunImageOperation).toBeUndefined();
   });
 });
 
 describe('buildUiRuntimeFromSource', () => {
+  it('uses the active Agent session client instead of the Config bootstrap client', () => {
+    const configClient = createRuntimeAgent().agentClient;
+    const agent = createRuntimeAgent();
+    const source = createProxySource({ getAgentClient: () => configClient });
+
+    const runtime = buildUiRuntimeFromSource(source, agent);
+
+    expect(runtime.agentClientSource.getAgentClient()).toBe(agent.agentClient);
+    expect(runtime.agentClientSource.getAgentClient()).not.toBe(configClient);
+  });
+
+  it('routes interactive acquisitions through the supplied Agent owner with explicit dependencies', async () => {
+    const bus = { id: 'caller-bus' };
+    const registry = { id: 'caller-registry' };
+    const handle = { id: 'agent-handle' };
+    const acquisitions: unknown[] = [];
+    const releases: unknown[] = [];
+    const source = createProxySource({
+      getToolRegistry: () => registry,
+      getOrCreateScheduler: () => {
+        throw new Error('Config scheduler used');
+      },
+      disposeScheduler: () => {
+        throw new Error('Config scheduler used');
+      },
+    });
+    const owner = { label: 'foreground' };
+    const agent = {
+      getMessageBus: () => bus,
+      scheduler: {
+        acquire: async (...args: unknown[]) => {
+          acquisitions.push(args);
+          return handle;
+        },
+        release: (...args: unknown[]) => {
+          releases.push(args);
+        },
+      },
+    };
+    const callbacks = {
+      getPreferredEditor: () => undefined,
+      onEditorClose: () => {},
+    };
+    const runtime = buildUiRuntimeFromSource(
+      source,
+      agent as unknown as Parameters<typeof buildUiRuntimeFromSource>[1],
+    );
+    const acquired = await runtime.scheduler.getOrCreateScheduler(
+      owner,
+      'session',
+      callbacks,
+      { interactiveMode: true },
+      {
+        messageBus: bus as unknown as ReturnType<
+          NonNullable<
+            Parameters<typeof buildUiRuntimeFromSource>[1]
+          >['getMessageBus']
+        >,
+      },
+    );
+    runtime.scheduler.disposeScheduler(owner, 'session', acquired);
+    expect(acquired).toBe(handle as unknown as typeof acquired);
+    expect(acquisitions).toStrictEqual([
+      [
+        owner,
+        'session',
+        callbacks,
+        { interactiveMode: true },
+        { messageBus: bus, toolRegistry: registry },
+      ],
+    ]);
+    expect(releases).toStrictEqual([[owner, 'session', handle]]);
+  });
+  it('registers the interactive factory on the active agent, not the Config-shaped source', () => {
+    const registrations: unknown[] = [];
+    const source = createProxySource({
+      setInteractiveSubagentSchedulerFactory: () => {
+        throw new Error('Config scheduler factory used');
+      },
+    });
+    const agent = {
+      getMessageBus: () => ({ id: 'session-bus' }),
+      scheduler: {
+        acquire: async () => ({ schedule: () => {} }),
+        release: () => {},
+        setInteractiveSubagentSchedulerFactory: (factory: unknown) => {
+          registrations.push(factory);
+        },
+      },
+    };
+    const runtime = buildUiRuntimeFromSource(
+      source,
+      agent as unknown as Parameters<typeof buildUiRuntimeFromSource>[1],
+    );
+    const factory = () => ({ schedule: () => {} });
+    runtime.scheduler.setInteractiveSubagentSchedulerFactory(factory);
+    runtime.scheduler.setInteractiveSubagentSchedulerFactory(undefined);
+    expect(registrations).toStrictEqual([factory, undefined]);
+  });
+
   it('uses the application event singleton when the source has no emitter', () => {
     const source = createProxySource({
       getExtensionEvents: () => undefined,
     });
-    const runtime = buildUiRuntimeFromSource(source);
+    const runtime = buildUiRuntimeFromSource(source, createRuntimeAgent());
     let notifications = 0;
     const unsubscribe = runtime.events.onMcpClientUpdate(() => {
       notifications += 1;

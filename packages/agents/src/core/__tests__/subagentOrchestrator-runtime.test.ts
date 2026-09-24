@@ -290,12 +290,10 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       // scheduling — the orchestrator passes its own bus, nothing else.
       expect(options?.messageBus).toBe(orchestratorBus);
       // Agent-owned assembly: the orchestrator hands providers a Config it
-      // built itself, carrying the three agent runtime factories and the
-      // runtime managers.
+      // built itself, carrying the client factory and runtime managers.
       const config = options?.config;
       expect(config).toBeInstanceOf(Config);
       expect(typeof config?.getAgentClientFactory()).toBe('function');
-      expect(typeof config?.getToolSchedulerFactory()).toBe('function');
       const taskRegistration = config?.getTaskToolRegistration();
       expect(taskRegistration).toBeDefined();
       expect(taskRegistration?.className).toBe('TaskTool');

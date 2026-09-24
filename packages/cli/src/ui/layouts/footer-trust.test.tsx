@@ -26,6 +26,9 @@ const { Config, coreEvents } = await import('@vybestack/llxprt-code-core');
 const { buildSlashCommandRuntime, buildUiRuntimeFromSource } = await import(
   '../cliUiRuntime.js'
 );
+const { createRuntimeAgent } = await import(
+  '../__tests__/runtimeAgentFixture.js'
+);
 const { createSettingsProfileStore } = await import(
   '../stores/settings/settingsStore.js'
 );
@@ -50,8 +53,9 @@ function mountFooter(trustedFolder = true) {
   const settingsStore = createSettingsProfileStore();
   const store = createDialogStore();
   const dialogs = createDialogOpeners(store);
-  const uiRuntime = buildUiRuntimeFromSource(config);
-  const slashCommandRuntime = buildSlashCommandRuntime(config);
+  const agent = createRuntimeAgent();
+  const uiRuntime = buildUiRuntimeFromSource(config, agent);
+  const slashCommandRuntime = buildSlashCommandRuntime(config, agent);
   let ownerRenders = 0;
   function Owner() {
     ownerRenders++;
