@@ -397,6 +397,14 @@
       "bun": "./src/config/subagentManager.ts",
       "import": "./dist/src/config/subagentManager.js"
     },
+    "./config/asyncTaskServices.js": {
+      "bun": "./src/config/asyncTaskServices.ts",
+      "import": "./dist/src/config/asyncTaskServices.js"
+    },
+    "./config/mcp-lazy-tool-sync.js": {
+      "bun": "./src/config/mcp-lazy-tool-sync.ts",
+      "import": "./dist/src/config/mcp-lazy-tool-sync.js"
+    },
     "./config/toolRegistryFactory.js": {
       "bun": "./src/config/toolRegistryFactory.ts",
       "import": "./dist/src/config/toolRegistryFactory.js"
@@ -488,6 +496,14 @@
     "./services/asyncTaskManager.js": {
       "bun": "./src/services/asyncTaskManager.ts",
       "import": "./dist/src/services/asyncTaskManager.js"
+    },
+    "./services/shellJobManager.js": {
+      "bun": "./src/services/shellJobManager.ts",
+      "import": "./dist/src/services/shellJobManager.js"
+    },
+    "./services/shellNotificationAdapter.js": {
+      "bun": "./src/services/shellNotificationAdapter.ts",
+      "import": "./dist/src/services/shellNotificationAdapter.js"
     },
     "./services/complexity-analyzer.js": {
       "bun": "./src/services/complexity-analyzer.ts",

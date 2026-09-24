@@ -227,6 +227,7 @@ async function constructForegroundAgentAndDispatch(
     config,
     argv,
     bootstrapSelection,
+    agent.agentClient,
   );
 
   await dispatchInteractiveOrNonInteractive({

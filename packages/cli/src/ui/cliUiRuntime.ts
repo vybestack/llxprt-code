@@ -53,7 +53,10 @@ import { AppEvent, appEvents, type AppEvents } from '../utils/events.js';
 import type { PerfSnapshotCapability } from './commands/perfCommand.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 
-type SchedulerAgent = Pick<Agent, 'scheduler' | 'getMessageBus'>;
+type SchedulerAgent = Pick<
+  Agent,
+  'agentClient' | 'scheduler' | 'getMessageBus'
+>;
 
 export interface RefreshMemoryResult {
   memoryContent: string;
@@ -556,9 +559,10 @@ function buildModelRuntime(source: StreamRuntimeBareSource): ModelState {
 
 function buildAgentClientSource(
   source: StreamRuntimeBareSource,
+  agent: SchedulerAgent,
 ): AgentClientSource {
   const base: AgentClientSource = {
-    getAgentClient: () => source.getAgentClient(),
+    getAgentClient: () => agent.agentClient,
     getAgentClientFactory: () => source.getAgentClientFactory?.(),
   };
   if (source.createDetachedAgentClient) {
@@ -631,7 +635,7 @@ function buildIdeRuntime(source: StreamRuntimeBareSource): IdeState {
 
 function buildHooksRuntime(
   source: StreamRuntimeBareSource,
-  agent?: SchedulerAgent,
+  agent: SchedulerAgent,
 ): HookSkillState {
   return {
     getHookSystem: () => source.getHookSystem(),
@@ -640,12 +644,7 @@ function buildHooksRuntime(
     setDisabledHooks: (hooks) => source.setDisabledHooks(hooks),
     isSkillsSupportEnabled: () => source.isSkillsSupportEnabled(),
     getEnableHooksUI: () => source.getEnableHooksUI(),
-    reloadSkills: () => {
-      if (agent === undefined) {
-        throw new Error('Skill reload requires an Agent session MessageBus.');
-      }
-      return source.reloadSkills(agent.getMessageBus());
-    },
+    reloadSkills: () => source.reloadSkills(agent.getMessageBus()),
     getSkillManager: () => source.getSkillManager(),
   };
 }
@@ -683,31 +682,20 @@ function buildSettingsRuntime(
 
 function buildSchedulerRuntime(
   source: StreamRuntimeBareSource,
-  agent?: SchedulerAgent,
+  agent: SchedulerAgent,
 ): SchedulerRuntime {
   return {
     disposeScheduler: (owner, purpose, handle) => {
-      if (!agent || !handle)
-        throw new Error('Agent scheduler handle is required');
+      if (!handle) throw new Error('Agent scheduler handle is required');
       agent.scheduler.release(owner, purpose, handle);
     },
-    getOrCreateScheduler: (
-      owner,
-      purpose,
-      callbacks,
-      options,
-      dependencies,
-    ) => {
-      if (!agent) throw new Error('Agent scheduler is required');
-      return agent.scheduler.acquire(owner, purpose, callbacks, options, {
+    getOrCreateScheduler: (owner, purpose, callbacks, options, dependencies) =>
+      agent.scheduler.acquire(owner, purpose, callbacks, options, {
         messageBus: dependencies?.messageBus ?? agent.getMessageBus(),
         toolRegistry: dependencies?.toolRegistry ?? source.getToolRegistry(),
-      });
-    },
-    setInteractiveSubagentSchedulerFactory: (factory) => {
-      if (!agent) throw new Error('Agent scheduler is required');
-      agent.scheduler.setInteractiveSubagentSchedulerFactory(factory);
-    },
+      }),
+    setInteractiveSubagentSchedulerFactory: (factory) =>
+      agent.scheduler.setInteractiveSubagentSchedulerFactory(factory),
   };
 }
 
@@ -730,12 +718,12 @@ function buildAppEventRuntime(
  */
 function buildStreamRuntimeFromSource(
   source: StreamRuntimeBareSource,
-  agent?: SchedulerAgent,
+  agent: SchedulerAgent,
 ): StreamRuntime {
   return {
     session: buildSessionRuntime(source),
     model: buildModelRuntime(source),
-    agentClientSource: buildAgentClientSource(source),
+    agentClientSource: buildAgentClientSource(source, agent),
     shell: buildShellRuntime(source),
     files: buildFilesRuntime(source),
     memory: buildMemoryRuntime(source),
@@ -763,10 +751,17 @@ function buildStreamRuntimeFromSource(
   };
 }
 
+function assertSessionAgent(value: unknown): asserts value is SchedulerAgent {
+  if (value === undefined || value === null) {
+    throw new Error('Agent session is required');
+  }
+}
+
 export function buildUiRuntimeFromSource(
   source: UiRuntimeBareSource,
-  agent?: SchedulerAgent,
+  agent: SchedulerAgent,
 ): UiRuntime {
+  assertSessionAgent(agent);
   return {
     ...buildStreamRuntimeFromSource(source, agent),
     approval: {
@@ -827,6 +822,7 @@ export type SlashCommandRuntime = CliUiRuntime;
  */
 export function buildSlashCommandRuntime(
   source: UiRuntimeBareSource,
+  agent: SchedulerAgent,
   perfSnapshotCapability?: PerfSnapshotCapability | null,
 ): CliUiRuntime {
   // Non-slice members must be destructured out and re-attached explicitly.
@@ -834,7 +830,7 @@ export function buildSlashCommandRuntime(
   // value is a bare function (or any non-object) contributes no own enumerable
   // properties to Object.assign and would be dropped silently.
   const { storage, getRunImageOperation, ...capabilities } =
-    buildUiRuntimeFromSource(source);
+    buildUiRuntimeFromSource(source, agent);
   // This flattening assumes every capability object exposes unique property
   // names. If a future capability overlaps an existing one, Object.assign will
   // keep the last value silently, so add an explicit test when adding slices.

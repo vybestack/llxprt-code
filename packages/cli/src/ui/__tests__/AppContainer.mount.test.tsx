@@ -375,6 +375,7 @@ import { AppContainer } from '../AppContainer.js';
 import { initialAppState } from '../reducers/appReducer.js';
 import type { Config, IContent } from '@vybestack/llxprt-code-core';
 import { createMockAgent } from '../../__tests__/mockAgent.js';
+import { createRuntimeAgent } from './runtimeAgentFixture.js';
 import {
   buildSlashCommandRuntime,
   buildUiRuntimeFromSource,
@@ -463,14 +464,20 @@ describe('AppContainer.mount', () => {
   describe('component mounting', () => {
     it('should mount without throwing errors', () => {
       // Arrange: All dependencies mocked
+      const agent = Object.assign(
+        createMockAgent(mockConfig as unknown as Config),
+        createRuntimeAgent(),
+      );
       const props = {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
+          agent,
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
+          agent,
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        agent,
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -485,14 +492,20 @@ describe('AppContainer.mount', () => {
 
     it('should render with provider contexts active', () => {
       // Arrange
+      const agent = Object.assign(
+        createMockAgent(mockConfig as unknown as Config),
+        createRuntimeAgent(),
+      );
       const props = {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
+          agent,
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
+          agent,
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        agent,
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -512,14 +525,20 @@ describe('AppContainer.mount', () => {
 
     it('should render DefaultAppLayout', () => {
       // Arrange
+      const agent = Object.assign(
+        createMockAgent(mockConfig as unknown as Config),
+        createRuntimeAgent(),
+      );
       const props = {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
+          agent,
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
+          agent,
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        agent,
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -542,14 +561,20 @@ describe('AppContainer.mount', () => {
         { speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] },
         { speaker: 'ai', blocks: [{ type: 'text', text: 'Hi there!' }] },
       ];
+      const agent = Object.assign(
+        createMockAgent(mockConfig as unknown as Config),
+        createRuntimeAgent(),
+      );
       const props = {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
+          agent,
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
+          agent,
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        agent,
         settings: mockSettings,
         version: '1.0.0-test',
         resumedHistory,
@@ -568,14 +593,20 @@ describe('AppContainer.mount', () => {
     it('should mount with startupWarnings without errors', () => {
       // Arrange
       const startupWarnings = ['Warning 1', 'Warning 2'];
+      const agent = Object.assign(
+        createMockAgent(mockConfig as unknown as Config),
+        createRuntimeAgent(),
+      );
       const props = {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
+          agent,
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
+          agent,
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        agent,
         settings: mockSettings,
         version: '1.0.0-test',
         startupWarnings,
@@ -593,14 +624,20 @@ describe('AppContainer.mount', () => {
   describe('unmount behavior', () => {
     it('should unmount without errors', () => {
       // Arrange
+      const agent = Object.assign(
+        createMockAgent(mockConfig as unknown as Config),
+        createRuntimeAgent(),
+      );
       const props = {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
+          agent,
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
+          agent,
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        agent,
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,

@@ -25,6 +25,7 @@ import {
   type KeyBinding,
 } from '../../config/keyBindings.js';
 import { createMockAgent } from '../../__tests__/mockAgent.js';
+import { createRuntimeAgent } from './runtimeAgentFixture.js';
 import {
   buildSlashCommandRuntime,
   buildUiRuntimeFromSource,
@@ -509,14 +510,20 @@ describe('AppContainer.keybindings', () => {
 
   describe('keybinding behavior', () => {
     it('should mount component with keybinding handlers active', () => {
+      const agent = Object.assign(
+        createMockAgent(mockConfig as unknown as Config),
+        createRuntimeAgent(),
+      );
       const props = {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
+          agent,
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
+          agent,
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        agent,
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -532,14 +539,20 @@ describe('AppContainer.keybindings', () => {
     });
 
     it('should have copy mode toggle available when using alternate buffer', () => {
+      const agent = Object.assign(
+        createMockAgent(mockConfig as unknown as Config),
+        createRuntimeAgent(),
+      );
       const props = {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
+          agent,
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
+          agent,
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        agent,
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -560,14 +573,20 @@ describe('AppContainer.keybindings', () => {
         getEnableInteractiveShell: vi.fn(() => true),
       });
 
+      const agent = Object.assign(
+        createMockAgent(mockConfig as unknown as Config),
+        createRuntimeAgent(),
+      );
       const props = {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
+          agent,
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
+          agent,
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        agent,
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,

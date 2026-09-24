@@ -8,6 +8,7 @@ import { loadCliConfig } from './config/config.js';
 import chalk from 'chalk';
 import type { LoadedSettings } from './config/settings.js';
 import {
+  type AgentClientContract,
   type Config,
   type MessageBus,
   SessionRecordingService,
@@ -291,6 +292,7 @@ export async function setupSessionRecording(
   config: Config,
   argv: ParsedCliArgs,
   bootstrapSelection: BootstrapSelection | null,
+  agentClient: Pick<AgentClientContract, 'resetChat' | 'restoreHistory'>,
 ): Promise<SessionRecordingSetup> {
   const projectHash = getProjectHash(config.getProjectRoot());
   const chatsDir = join(config.getProjectTempDir(), 'chats');
@@ -311,7 +313,6 @@ export async function setupSessionRecording(
   let didFallback = false;
 
   if (resumedHistory && resumedHistory.length > 0) {
-    const agentClient = config.getAgentClient();
     try {
       await agentClient.restoreHistory(resumedHistory);
       // Adoption happens here — AFTER a successful restoreHistory — so a

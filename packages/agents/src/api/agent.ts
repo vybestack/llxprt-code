@@ -32,6 +32,7 @@ import type { McpOAuthStatus } from '@vybestack/llxprt-code-core';
 import type { EditorCallbacks } from './config-types.js';
 import type { SessionSchedulerOwner } from './agentRuntimeAssembly.js';
 import type {
+  AgentClientContract,
   ShellJobPort,
   SessionRecordingService,
 } from '@vybestack/llxprt-code-core';
@@ -1029,6 +1030,11 @@ export interface Agent {
    * @requirement:REQ-2378-001
    */
   getMessageBus(): MessageBus;
+  /**
+   * Returns the live client owned by this Agent session. Callers that adopt a
+   * Config must use this client rather than the Config bootstrap client.
+   */
+  readonly agentClient: AgentClientContract;
   /** Tool registry owned by this agent's session execution. */
   getToolRegistry(): ToolRegistry;
   /** @plan:PLAN-20260621-COREAPIREMED.P10 @requirement:REQ-002 */

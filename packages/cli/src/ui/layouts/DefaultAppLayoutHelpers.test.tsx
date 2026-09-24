@@ -21,6 +21,7 @@ import { Config } from '@vybestack/llxprt-code-core';
 import { renderHook } from '../../__tests__/render.js';
 import { LoadedSettings } from '../../config/settings.js';
 import { buildSlashCommandRuntime } from '../cliUiRuntime.js';
+import { createRuntimeAgent } from '../__tests__/runtimeAgentFixture.js';
 import { useStaticItems } from './DefaultAppLayoutHelpers.js';
 import { AppHeader } from '../components/AppHeader.js';
 import { HistoryItemDisplay } from '../components/HistoryItemDisplay.js';
@@ -36,6 +37,7 @@ const config = buildSlashCommandRuntime(
     debugMode: false,
     model: 'test-model',
   }),
+  createRuntimeAgent(),
 );
 
 const settings = new LoadedSettings(

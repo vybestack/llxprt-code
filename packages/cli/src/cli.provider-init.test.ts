@@ -85,6 +85,11 @@ void vi.mock('./utils/cleanup.js', () => ({
   runExitCleanup: vi.fn(),
 }));
 
+const foregroundAgentClient = {
+  restoreHistory: vi.fn(),
+  resetChat: vi.fn(),
+};
+
 // Agent creation has its own dedicated behavioral coverage in
 // cliAgentBootstrap.test.ts (and the single-call wiring is asserted in
 // cli.test.tsx). These provider-init tests exercise the --continue /
@@ -92,6 +97,7 @@ void vi.mock('./utils/cleanup.js', () => ({
 // boundary to keep the narrow mock Config focused on session restore.
 void vi.mock('./cliAgentBootstrap.js', () => ({
   createForegroundAgent: vi.fn(async () => ({
+    agentClient: foregroundAgentClient,
     dispose: vi.fn().mockResolvedValue(undefined),
     getMessageBus: vi.fn(() => ({ kind: 'session-bus' })),
   })),
@@ -211,6 +217,10 @@ describe('cli main provider initialization', () => {
     dynamicSettingsRegistry.reset();
     process.stdin.isTTY = true;
     vi.restoreAllMocks();
+    foregroundAgentClient.restoreHistory.mockReset();
+    foregroundAgentClient.resetChat.mockReset();
+    const { resumeSession } = await import('@vybestack/llxprt-code-core');
+    (resumeSession as Mock<typeof resumeSession>).mockReset();
   });
 
   afterEach(async () => {
@@ -338,11 +348,9 @@ describe('cli main provider initialization', () => {
       setActiveProvider: vi.fn().mockReturnValue(undefined),
     };
 
-    const restoreHistory = vi
-      .fn()
-      .mockRejectedValue(new Error('restore failed on purpose'));
-    const resetChat = vi.fn().mockResolvedValue(undefined);
-    const getAgentClient = vi.fn(() => ({ restoreHistory, resetChat }));
+    const { restoreHistory, resetChat } = foregroundAgentClient;
+    restoreHistory.mockRejectedValue(new Error('restore failed on purpose'));
+    resetChat.mockResolvedValue(undefined);
 
     const adoptSessionId = vi.fn();
     const mockConfig = {
@@ -382,7 +390,6 @@ describe('cli main provider initialization', () => {
       getScreenReader: vi.fn(() => false),
       getTerminalBackground: vi.fn(() => undefined),
 
-      getAgentClient,
       setTerminalBackground: vi.fn(),
       getPolicyEngine: vi.fn(() => null),
       getTelemetrySettings: vi.fn(() => ({
@@ -480,7 +487,6 @@ describe('cli main provider initialization', () => {
     // items persist into the fresh session.
     expect(behaviorResult.resetChat).toHaveBeenCalledTimes(1);
 
-    behaviorResult.resumeSessionMock.mockReset();
     behaviorResult.exitSpy.mockRestore();
     behaviorResult.consoleWarnSpy.mockRestore();
     behaviorResult.consoleErrorSpy.mockRestore();
@@ -495,9 +501,9 @@ describe('cli main provider initialization', () => {
       setActiveProvider: vi.fn().mockReturnValue(undefined),
     };
 
-    const restoreHistory = vi.fn().mockResolvedValue(undefined);
-    const resetChat = vi.fn().mockResolvedValue(undefined);
-    const getAgentClient = vi.fn(() => ({ restoreHistory, resetChat }));
+    const { restoreHistory, resetChat } = foregroundAgentClient;
+    restoreHistory.mockResolvedValue(undefined);
+    resetChat.mockResolvedValue(undefined);
 
     const adoptSessionId = vi.fn();
     const mockConfig = {
@@ -537,7 +543,6 @@ describe('cli main provider initialization', () => {
       getScreenReader: vi.fn(() => false),
       getTerminalBackground: vi.fn(() => undefined),
 
-      getAgentClient,
       setTerminalBackground: vi.fn(),
       getPolicyEngine: vi.fn(() => null),
       getTelemetrySettings: vi.fn(() => ({
@@ -626,7 +631,6 @@ describe('cli main provider initialization', () => {
     expect(behaviorResult.recordingDisposeSpy).not.toHaveBeenCalled();
     expect(behaviorResult.lockReleaseSpy).not.toHaveBeenCalled();
 
-    behaviorResult.resumeSessionMock.mockReset();
     behaviorResult.exitSpy.mockRestore();
     behaviorResult.consoleWarnSpy.mockRestore();
     behaviorResult.consoleErrorSpy.mockRestore();

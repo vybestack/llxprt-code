@@ -13,6 +13,7 @@ import { LoadedSettings } from '../../config/settings.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { renderWithProviders } from '../../__tests__/render.js';
 import { buildSlashCommandRuntime } from '../cliUiRuntime.js';
+import { createRuntimeAgent } from '../__tests__/runtimeAgentFixture.js';
 import { StreamingState } from '../types.js';
 import { StreamingContext } from '../contexts/StreamingContext.js';
 import { AppCommandsProvider } from '../contexts/AppCommandsContext.js';
@@ -102,6 +103,7 @@ function createProps(): InlineContentProps {
         debugMode: false,
         model: 'test-model',
       }),
+      createRuntimeAgent(),
     ),
     showToolDescriptions: false,
     showAutoAcceptIndicator: ApprovalMode.DEFAULT,

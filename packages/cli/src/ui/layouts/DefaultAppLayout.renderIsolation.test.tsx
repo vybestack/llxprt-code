@@ -61,6 +61,9 @@ const { DefaultAppLayout } = await import('./DefaultAppLayout.js');
 const { buildSlashCommandRuntime, buildUiRuntimeFromSource } = await import(
   '../cliUiRuntime.js'
 );
+const { createRuntimeAgent } = await import(
+  '../__tests__/runtimeAgentFixture.js'
+);
 const { Config, MessageBus, MessageBusType, PolicyEngine } = await import(
   '@vybestack/llxprt-code-core'
 );
@@ -95,11 +98,12 @@ function mountLayout(runtimeMessageBus?: InstanceType<typeof MessageBus>) {
     debugMode: false,
     model: 'test-model',
   });
+  const agent = createRuntimeAgent();
   const layout = (
     <DefaultAppLayout
       runtimeMessageBus={runtimeMessageBus}
-      uiRuntime={buildUiRuntimeFromSource(config)}
-      slashCommandRuntime={buildSlashCommandRuntime(config)}
+      uiRuntime={buildUiRuntimeFromSource(config, agent)}
+      slashCommandRuntime={buildSlashCommandRuntime(config, agent)}
       settings={settings}
       startupWarnings={[]}
       version="test"
