@@ -153,10 +153,22 @@ describe('OpenAI Responses unallowed model parameters', () => {
     const codexEntry = findCodexAlias();
     const provider = createCodexProvider({
       ...codexEntry,
-      alias: 'construction-rules-codex',
+      config: {
+        ...codexEntry.config,
+        modelDefaults: [
+          {
+            pattern: '^construction-rules-model$',
+            ephemeralSettings: {},
+            unallowedParameters: Object.keys(SAMPLING_PARAMETERS),
+          },
+        ],
+      },
     });
 
-    const body = await captureSerializedRequest(provider, 'gpt-5.6-sol');
+    const body = await captureSerializedRequest(
+      provider,
+      'construction-rules-model',
+    );
 
     for (const parameter of Object.keys(SAMPLING_PARAMETERS)) {
       expect(body).not.toHaveProperty(parameter);
