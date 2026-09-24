@@ -9,10 +9,15 @@ import {
   createSessionScopedConfig,
   parseZedAuthMethodId,
 } from './zedIntegration.js';
-import type {
-  Config,
-  RuntimeProviderManager,
+import {
+  CoreMessageBusAdapter,
+  CoreToolRegistryHostAdapter,
+  MessageBus,
+  type Config,
+  type RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { ToolRegistry } from '@vybestack/llxprt-code-tools';
 
 const mockFromConfig = vi.fn();
 const mockLoadProfileByName = vi.fn<(name: string) => Promise<void>>();
@@ -174,11 +179,20 @@ describe('ZedAgent.newSession', () => {
       async (options: { config: Config; sessionId?: string }) => {
         capturedOptions.push(options);
         capturedConfigs.push(options.config);
+        const messageBus = new MessageBus();
+        const registry = new ToolRegistry(
+          new CoreToolRegistryHostAdapter(options.config),
+          new CoreMessageBusAdapter(messageBus),
+          options.config.getSettingsService(),
+        );
         return {
           getApprovalMode: () => 'default',
+          getMessageBus: () => messageBus,
+          getToolRegistry: () => registry,
           setApprovalMode: vi.fn(),
           dispose: vi.fn().mockResolvedValue(undefined),
           async *stream() {},
+          session: { getActiveRecording: () => undefined },
           tools: { respondToConfirmation: vi.fn() },
         };
       },
@@ -202,8 +216,10 @@ describe('ZedAgent.newSession', () => {
       setProviderManager: vi.fn(),
       getProfileManager: () => undefined,
       getEphemeralSetting: () => undefined,
+      getSettingsService: () => new SettingsService(),
+      getToolRegistry: () =>
+        ({ getAllTools: () => [] }) as unknown as ToolRegistry,
       getTargetDir: () => '/project',
-      getSessionRecordingService: () => undefined,
     } as unknown as Config;
     const connection = {
       readTextFile: vi.fn(async (_params: { sessionId: string }) => ({

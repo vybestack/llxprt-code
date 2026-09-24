@@ -154,7 +154,7 @@ export class FakeMcpTool extends BaseDeclarativeTool<
 
   constructor(
     serverName: string,
-    toolName: string,
+    private readonly toolName: string,
     description: string,
     private readonly isAuthorized: () => boolean,
   ) {
@@ -168,6 +168,15 @@ export class FakeMcpTool extends BaseDeclarativeTool<
       false,
     );
     this.serverName = serverName;
+  }
+
+  forSession(): FakeMcpTool {
+    return new FakeMcpTool(
+      this.serverName,
+      this.toolName,
+      this.description,
+      this.isAuthorized,
+    );
   }
 
   protected createInvocation(

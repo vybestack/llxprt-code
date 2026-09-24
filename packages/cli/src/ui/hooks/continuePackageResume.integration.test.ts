@@ -116,13 +116,6 @@ async function createConfig(
     provider: 'resume-test-provider',
     interactive: true,
     agentClientFactory: () => client,
-    toolSchedulerFactory: () => ({
-      schedule: async () => {},
-      cancelAll: () => {},
-      dispose: () => {},
-      setCallbacks: () => {},
-      handleConfirmationResponse: async () => {},
-    }),
   });
   await config.initialize({
     messageBus: new MessageBus(config.getPolicyEngine(), false),

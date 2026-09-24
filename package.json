@@ -100,6 +100,7 @@
     "lint:eslint-guard": "bun scripts/check-eslint-guard.ts",
     "lint:cli-boundary": "bun scripts/check-cli-import-boundary.ts",
     "lint:runtime-deps": "bun scripts/check-runtime-dependency-declarations.ts",
+    "lint:session-config-boundary": "bun scripts/check-session-config-boundary.ts",
     "lint:a2a-boundary": "bun scripts/check-a2a-import-boundary.ts",
     "lint:gemini-containment": "bun scripts/check-gemini-containment.ts",
     "lint:legacy-paths": "bun scripts/check-legacy-paths.ts",

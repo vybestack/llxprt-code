@@ -110,7 +110,6 @@ function makeConfig(hooksOverride?: Record<string, unknown>): Config {
     getSessionId: vi.fn().mockReturnValue('integration-test-session'),
     getTargetDir: vi.fn().mockReturnValue('/test/project'),
     getEnableHooks: vi.fn().mockReturnValue(true),
-    getSessionRecordingService: vi.fn().mockReturnValue(undefined),
     isTrustedFolder: vi.fn().mockReturnValue(true),
     getProjectHooks: vi.fn().mockReturnValue(null),
     getSanitizationConfig: vi.fn().mockReturnValue({

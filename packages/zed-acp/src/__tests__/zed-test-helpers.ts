@@ -39,6 +39,7 @@ export function buildScriptedAgent(
     getApprovalMode: (): ApprovalMode => 'default' as ApprovalMode,
     setApprovalMode: vi.fn(),
     dispose: vi.fn().mockResolvedValue(undefined),
+    session: { getActiveRecording: () => undefined },
     tools: {
       get: (name: string) =>
         Object.hasOwn(toolKinds, name) ? { kind: toolKinds[name] } : undefined,
@@ -101,6 +102,7 @@ export function buildBlockingScriptedAgent(
     getApprovalMode: (): ApprovalMode => 'default' as ApprovalMode,
     setApprovalMode: vi.fn(),
     dispose: vi.fn().mockResolvedValue(undefined),
+    session: { getActiveRecording: () => undefined },
     tools: {
       get: (name: string) =>
         Object.hasOwn(toolKinds, name) ? { kind: toolKinds[name] } : undefined,
@@ -552,7 +554,6 @@ export function buildMinimalConfig(): Config {
     // window via resolveEffectiveContextLimit(model, userLimit, providerLimit).
     getModel: () => 'test-model',
     getContentGeneratorConfig: () => undefined,
-    getSessionRecordingService: () => undefined,
   } as unknown as Config;
 }
 

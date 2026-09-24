@@ -73,6 +73,8 @@ export interface AuthControlDeps {
  */
 export class AuthControl implements AgentAuthControl {
   readonly keys: AgentAuthKeysControl;
+  private readonly pendingPrompts = new Set<AbortController>();
+  private disposed = false;
 
   constructor(private readonly deps: AuthControlDeps) {
     this.keys = new AuthKeysControl(deps.keysDeps);
@@ -97,6 +99,7 @@ export class AuthControl implements AgentAuthControl {
    * @requirement:REQ-008
    */
   async enableOAuth(provider: string): Promise<void> {
+    this.assertAccepting();
     this.deps.authState.oauthEnabled.add(provider);
   }
 
@@ -106,6 +109,7 @@ export class AuthControl implements AgentAuthControl {
    * @requirement:REQ-008
    */
   async disableOAuth(provider: string): Promise<void> {
+    this.assertAccepting();
     this.deps.authState.oauthEnabled.delete(provider);
     this.deps.authState.oauthAuthenticated.delete(provider);
   }
@@ -124,6 +128,7 @@ export class AuthControl implements AgentAuthControl {
     provider: string,
     opts?: { readonly bucket?: string },
   ): Promise<void> {
+    this.assertAccepting();
     const handler = this.deps.onOAuthPrompt;
     if (handler === undefined) {
       throw new Error(
@@ -131,7 +136,28 @@ export class AuthControl implements AgentAuthControl {
       );
     }
     const authUrl = `https://auth.llxprt.dev/${encodeURIComponent(provider)}/oauth`;
-    const accepted = await handler({ url: authUrl, provider });
+    const controller = new AbortController();
+    this.pendingPrompts.add(controller);
+    const cancelled = new Promise<never>((_resolve, reject) => {
+      controller.signal.addEventListener(
+        'abort',
+        () =>
+          reject(
+            new Error('OAuth login cancelled because the agent was disposed'),
+          ),
+        { once: true },
+      );
+    });
+    let accepted: boolean;
+    try {
+      accepted = await Promise.race([
+        Promise.resolve().then(() => handler({ url: authUrl, provider })),
+        cancelled,
+      ]);
+    } finally {
+      this.pendingPrompts.delete(controller);
+    }
+    this.assertAccepting();
     if (!accepted) {
       throw new Error('OAuth login was declined');
     }
@@ -156,6 +182,7 @@ export class AuthControl implements AgentAuthControl {
     provider: string,
     opts?: { readonly bucket?: string; readonly all?: boolean },
   ): Promise<void> {
+    this.assertAccepting();
     this.deps.authState.oauthAuthenticated.delete(provider);
     if (opts?.all === true) {
       this.deps.authState.buckets.delete(provider);
@@ -193,6 +220,7 @@ export class AuthControl implements AgentAuthControl {
    * @requirement:REQ-008
    */
   async switchBucket(provider: string, bucket: string): Promise<void> {
+    this.assertAccepting();
     const existing = this.deps.authState.buckets.get(provider) ?? [];
     const hasBucket = existing.some((b) => b.name === bucket);
     const updated: AuthBucket[] = existing.map((b) => ({
@@ -211,6 +239,7 @@ export class AuthControl implements AgentAuthControl {
    * @requirement:REQ-008
    */
   async mcpLogin(server: string): Promise<void> {
+    this.assertAccepting();
     this.deps.authState.mcpAuth.add(server);
   }
 
@@ -225,6 +254,7 @@ export class AuthControl implements AgentAuthControl {
     baseUrl: string | null,
     opts?: { readonly provider?: string },
   ): Promise<void> {
+    this.assertAccepting();
     // setBaseUrl mutates the CURRENT provider context only. If a different
     // provider is requested, throw rather than silently updating the wrong one.
     if (opts?.provider !== undefined) {
@@ -308,5 +338,20 @@ export class AuthControl implements AgentAuthControl {
       expiry: b.expiry,
       isSessionBucket: b.isSessionBucket,
     }));
+  }
+
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    for (const controller of this.pendingPrompts) {
+      controller.abort();
+    }
+    this.pendingPrompts.clear();
+  }
+
+  private assertAccepting(): void {
+    if (this.disposed) {
+      throw new Error('Auth control is disposed');
+    }
   }
 }

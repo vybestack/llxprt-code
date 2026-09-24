@@ -273,7 +273,6 @@ async function setupRuntimeContext(
   runtimeState.oauthManager = finalRuntime.oauthManager;
   runtimeState.runtimeMessageBus = finalRuntime.runtimeMessageBus;
   config.setProviderManager(finalRuntime.providerManager);
-  config.setRuntimeMessageBus(finalRuntime.runtimeMessageBus);
   // Associate the exact assembled OAuthManager with the Config's runtime bundle
   // (#2378 Finding 3). fromConfig adopts THIS manager by reference, so the
   // OAuthManager the Agent sees is the exact one assembled on the same bus — no

@@ -10,7 +10,6 @@ import path from 'node:path';
 import os from 'node:os';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 import { AsyncTaskManager } from '../services/asyncTaskManager.js';
-import type { ShellJobManager } from '../services/shellJobManager.js';
 import { DiscoveredTool, TodoWrite } from '@vybestack/llxprt-code-tools';
 import {
   createToolRegistry,
@@ -24,8 +23,6 @@ import type { SubagentManager } from './subagentManager.js';
 
 function createHost(
   options: {
-    asyncTaskManager?: AsyncTaskManager;
-    shellJobManager?: ShellJobManager;
     subagentManager?: SubagentManager;
     profileManager?: ProfileManager;
     noCoreTools?: boolean;
@@ -37,12 +34,11 @@ function createHost(
     taskToolRegistration?: TaskToolRegistration;
   } = {},
 ): ToolRegistryHost {
-  const { asyncTaskManager, shellJobManager, noCoreTools } = options;
   let { profileManager, subagentManager } = options;
   const getImageBackendResolver = options.getImageBackendResolver;
   return {
     getCoreTools: () =>
-      noCoreTools === true
+      options.noCoreTools === true
         ? undefined
         : [
             'TaskTool',
@@ -60,9 +56,6 @@ function createHost(
     setSubagentManager: (sm: SubagentManager) => {
       subagentManager = sm;
     },
-    getInteractiveSubagentSchedulerFactory: () => undefined,
-    getAsyncTaskManager: () => asyncTaskManager,
-    getShellJobManager: () => shellJobManager,
     getTaskToolRegistration: () => options.taskToolRegistration,
     ...(getImageBackendResolver !== undefined
       ? { getImageBackendResolver }
@@ -112,6 +105,8 @@ describe('toolRegistryFactory adapter-backed runtime tools', () => {
       }),
       createConfigBoundary(),
       new MessageBus(),
+      () => undefined,
+      () => undefined,
     );
 
     const tool = registry.getTool('list_subagents');
@@ -133,9 +128,11 @@ describe('toolRegistryFactory adapter-backed runtime tools', () => {
     });
 
     const { registry } = await createToolRegistry(
-      createHost({ asyncTaskManager }),
+      createHost(),
       createConfigBoundary(),
       new MessageBus(),
+      () => asyncTaskManager,
+      () => undefined,
     );
 
     const tool = registry.getTool('check_async_tasks');
@@ -163,6 +160,8 @@ describe('toolRegistryFactory adapter-backed runtime tools', () => {
       }),
       configBoundary,
       new MessageBus(),
+      () => undefined,
+      () => undefined,
     );
   }
 
@@ -397,6 +396,8 @@ describe('toolRegistryFactory generate_image lazy resolver timing and persistenc
       host,
       configBoundary,
       new MessageBus(),
+      () => undefined,
+      () => undefined,
     );
 
     // Now inject the resolver (lazy: read at invocation time, not registration).
@@ -445,6 +446,8 @@ describe('toolRegistryFactory generate_image lazy resolver timing and persistenc
         host,
         configBoundary,
         new MessageBus(),
+        () => undefined,
+        () => undefined,
       );
 
       const tool = registry.getTool('generate_image');
@@ -490,8 +493,6 @@ describe('reconcileTaskToolRegistration returns actual registration (#3222)', ()
   }
 
   function reconcileHostOptions(): {
-    asyncTaskManager?: AsyncTaskManager;
-    shellJobManager?: ShellJobManager;
     subagentManager?: SubagentManager;
     profileManager?: ProfileManager;
     noCoreTools?: boolean;
@@ -520,6 +521,8 @@ describe('reconcileTaskToolRegistration returns actual registration (#3222)', ()
       createHost(options),
       createConfigBoundary(),
       new MessageBus(),
+      () => undefined,
+      () => undefined,
     );
     expect(registry.getTool('task')).toBeUndefined();
 
@@ -534,6 +537,7 @@ describe('reconcileTaskToolRegistration returns actual registration (#3222)', ()
       registry,
       allPotentialTools,
       new MessageBus(),
+      () => undefined,
     );
 
     // RED against the unconditional `return true`: the tool never reached
@@ -555,6 +559,8 @@ describe('reconcileTaskToolRegistration returns actual registration (#3222)', ()
       createHost(options),
       createConfigBoundary(),
       new MessageBus(),
+      () => undefined,
+      () => undefined,
     );
     expect(registry.getTool('task')).toBeUndefined();
 
@@ -566,6 +572,7 @@ describe('reconcileTaskToolRegistration returns actual registration (#3222)', ()
       registry,
       allPotentialTools,
       new MessageBus(),
+      () => undefined,
     );
 
     // Positive control: a registration that actually reached the registry

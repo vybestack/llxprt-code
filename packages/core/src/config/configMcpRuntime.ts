@@ -27,14 +27,15 @@ export function mcpRuntimeStatus(
 
 export async function refreshMcpServers(
   manager: McpClientManager | undefined,
+  refreshContext: () => Promise<void>,
   server?: string,
 ): Promise<void> {
   if (manager === undefined) return;
   if (server === undefined) {
-    await manager.restart();
+    await manager.restart(refreshContext);
     return;
   }
-  await manager.restartServer(server);
+  await manager.restartServer(server, refreshContext);
 }
 
 export async function awaitMcpDiscoveryGate(

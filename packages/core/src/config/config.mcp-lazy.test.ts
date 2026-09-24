@@ -9,7 +9,10 @@ import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { Config } from './config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { initializeTestConfig } from '../__tests__/config-test-helpers.js';
+import {
+  getTestRuntimeMessageBus,
+  initializeTestConfig,
+} from '../__tests__/config-test-helpers.js';
 import {
   ACTIVATE_MCP_SERVER_TOOL_NAME,
   ActivateMcpServerTool,
@@ -215,11 +218,11 @@ describe('Config.refreshMcpContext — MCP lazy tool synchronization', () => {
     registry.registerTool(mcpTool('mcp__alpha__search', 'alpha'));
 
     config.setEphemeralSetting('mcp.lazy', true);
-    await config.refreshMcpContext();
+    await config.refreshMcpContext(getTestRuntimeMessageBus(config));
     expect(findActivationTool(registry)).toBeDefined();
 
     config.setEphemeralSetting('mcp.lazy', false);
-    await config.refreshMcpContext();
+    await config.refreshMcpContext(getTestRuntimeMessageBus(config));
     expect(findActivationTool(registry)).toBeUndefined();
   }, 15_000);
 
@@ -228,7 +231,7 @@ describe('Config.refreshMcpContext — MCP lazy tool synchronization', () => {
     const registry: ToolRegistry = config.getToolRegistry();
     registry.registerTool(mcpTool('mcp__alpha__search', 'alpha'));
 
-    await config.refreshMcpContext();
+    await config.refreshMcpContext(getTestRuntimeMessageBus(config));
     const initialEnum = extractNameEnum(
       findActivationTool(registry)?.schema.parametersJsonSchema,
     );
@@ -236,7 +239,7 @@ describe('Config.refreshMcpContext — MCP lazy tool synchronization', () => {
     expect(initialEnum).not.toContain('beta');
 
     registry.registerTool(mcpTool('mcp__beta__lookup', 'beta'));
-    await config.refreshMcpContext();
+    await config.refreshMcpContext(getTestRuntimeMessageBus(config));
     const rebuiltEnum = extractNameEnum(
       findActivationTool(registry)?.schema.parametersJsonSchema,
     );
@@ -249,12 +252,20 @@ describe('Config.refreshMcpContext — MCP lazy tool synchronization', () => {
     const registry: ToolRegistry = config.getToolRegistry();
     registry.registerTool(mcpTool('mcp__alpha__search', 'alpha'));
 
-    await config.refreshMcpContext();
+    await config.refreshMcpContext(getTestRuntimeMessageBus(config));
     expect(findActivationTool(registry)).toBeDefined();
 
     config.setEphemeralSetting('mcp.eagerServers', ['alpha']);
-    await config.refreshMcpContext();
+    await config.refreshMcpContext(getTestRuntimeMessageBus(config));
     expect(findActivationTool(registry)).toBeUndefined();
+  });
+
+  it('rejects a missing explicit bus instead of falling back to Config state', async () => {
+    await expect(
+      Reflect.apply(config.refreshMcpContext, config, []),
+    ).rejects.toThrow(
+      'Config.refreshMcpContext requires an explicit session/runtime MessageBus dependency.',
+    );
   });
 
   it('nested profile-like mcp settings make activation behavior available (D2)', async () => {
@@ -275,7 +286,9 @@ describe('Config.refreshMcpContext — MCP lazy tool synchronization', () => {
 
     const registry: ToolRegistry = nestedConfig.getToolRegistry();
     registry.registerTool(mcpTool('mcp__alpha__search', 'alpha'));
-    await nestedConfig.refreshMcpContext();
+    await nestedConfig.refreshMcpContext(
+      getTestRuntimeMessageBus(nestedConfig),
+    );
 
     expect(findActivationTool(registry)).toBeDefined();
     expect(registry.listDeferredMcpServers()).toContain('alpha');

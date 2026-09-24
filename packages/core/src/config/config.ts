@@ -8,39 +8,23 @@ import process from 'node:process';
 import path from 'node:path';
 import { PromptRegistry } from '../prompts/prompt-registry.js';
 import { ResourceRegistry } from '../resources/resource-registry.js';
-import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { DebugLogger } from '../debug/DebugLogger.js';
 import { getErrorMessage } from '../utils/errors.js';
 import { initializeParser } from '../utils/shell-parser.js';
+import { unloadActiveExtensions } from '../utils/extensionLoader.js';
 
 import type { AgentClientContract } from '../core/clientContract.js';
 import { HookSystem } from '../hooks/hookSystem.js';
 import { ContextManager } from '../services/contextManager.js';
 import type { AsyncTaskManager } from '../services/asyncTaskManager.js';
-import type { AsyncTaskReminderService } from '../services/asyncTaskReminderService.js';
-import type { ShellJobManager } from '../services/shellJobManager.js';
+import type { ShellJobPort } from '../session/sessionExecutionServices.js';
 import {
   loadServerHierarchicalMemory,
   loadJitSubdirectoryMemory,
 } from '../utils/memoryDiscovery.js';
 import { IdeClient } from '@vybestack/llxprt-code-ide-integration';
 import { ideContext } from '@vybestack/llxprt-code-ide-integration';
-import { type SchedulerHandle } from '../session/sessionExecutionServices.js';
-import type { SchedulerPurpose } from '../session/sessionSchedulerRegistry.js';
-import {
-  acquireScheduler,
-  type SchedulerCallbacks,
-  type SchedulerOptions,
-} from './schedulerRegistryAccess.js';
-
-// Re-export the scheduler acquisition types (moved to schedulerRegistryAccess)
-// so consumers importing them from this module or the package barrel are
-// unaffected.
-export type {
-  SchedulerCallbacks,
-  SchedulerOptions,
-} from './schedulerRegistryAccess.js';
 import { initializeLsp } from './lspIntegration.js';
 import * as configConstructor from './configConstructor.js';
 import { ConfigBase } from './configBase.js';
@@ -53,13 +37,6 @@ import {
 } from './agentClientLifecycle.js';
 import { syncActivateMcpServerTool } from './mcp-lazy-tool-sync.js';
 import { syncSkillActivationTool } from './skill-tool-sync.js';
-import {
-  getOrCreateAsyncTaskManager,
-  getOrCreateAsyncTaskReminderService,
-  getOrCreateShellJobManager,
-  disposeShellJobManager,
-  setupAsyncTaskAutoTrigger,
-} from './asyncTaskServices.js';
 import { LiveTrustTransitionLifecycle } from './liveTrustTransitionLifecycle.js';
 import { parseSettingsSubagentDefinitions } from './subagentSettingsParser.js';
 
@@ -114,6 +91,7 @@ import type { MessageBus } from '../confirmation-bus/message-bus.js';
 
 import { coreEvents, CoreEvent } from '../utils/events.js';
 import { McpClientManager } from '@vybestack/llxprt-code-mcp';
+import type { McpHostConfig } from '@vybestack/llxprt-code-mcp/host/hostInterfaces.js';
 import { getCoreVersion } from '../utils/version.js';
 import {
   buildMcpTrustedRules,
@@ -121,6 +99,33 @@ import {
 } from '../policy/config.js';
 
 import type { ShellExecutionConfig } from '../services/shellExecutionService.js';
+
+function createMcpHostConfig(config: Config): McpHostConfig {
+  return {
+    refreshMcpContext: () => config.refreshDiscoveredMcpMetadata(),
+    getAllowedMcpServers: () => config.getAllowedMcpServers(),
+    getBlockedMcpServers: () => config.getBlockedMcpServers(),
+    getMcpServers: () => config.getMcpServers(),
+    getMcpServerCommand: () => config.getMcpServerCommand(),
+    getPromptRegistry: () => config.getPromptRegistry(),
+    getResourceRegistry: () => config.getResourceRegistry(),
+    getWorkspaceContext: () => config.getWorkspaceContext(),
+    getDebugMode: () => config.getDebugMode(),
+    getExtensions: () => config.getExtensions(),
+    isTrustedFolder: () => config.isTrustedFolder(),
+  };
+}
+
+function requireMessageBus(
+  messageBus: MessageBus | undefined,
+  operation: string,
+): asserts messageBus is MessageBus {
+  if (messageBus === undefined) {
+    throw new Error(
+      `${operation} requires an explicit session/runtime MessageBus dependency.`,
+    );
+  }
+}
 
 export class Config extends ConfigBase {
   private static readonly logger = new DebugLogger('llxprt:config');
@@ -167,11 +172,17 @@ export class Config extends ConfigBase {
   // startup is not blocked. Awaited in dispose() to avoid tearing down servers
   // mid-discovery.
   private mcpDiscoveryPromise: Promise<void> | undefined;
+  private readonly skillSurfaceSubscribers = new Set<() => Promise<void>>();
+  private readonly mcpSurfaceSubscribers = new Set<() => Promise<void>>();
 
   private initializationPromise: Promise<void> | undefined;
 
   /** Must only be called once; use ensureInitialized for idempotent adoption. */
-  initialize(dependencies?: { messageBus?: MessageBus }): Promise<void> {
+  initialize(dependencies?: {
+    messageBus?: MessageBus;
+    taskManager?: AsyncTaskManager;
+    shellJobs?: ShellJobPort;
+  }): Promise<void> {
     if (this.initializationPromise !== undefined) {
       throw Error('Config was already initialized');
     }
@@ -188,8 +199,16 @@ export class Config extends ConfigBase {
    */
   ensureInitialized(
     dependencies?:
-      | { messageBus?: MessageBus }
-      | (() => { messageBus: MessageBus }),
+      | {
+          messageBus?: MessageBus;
+          taskManager?: AsyncTaskManager;
+          shellJobs?: ShellJobPort;
+        }
+      | (() => {
+          messageBus: MessageBus;
+          taskManager?: AsyncTaskManager;
+          shellJobs?: ShellJobPort;
+        }),
   ): Promise<void> {
     if (this.initializationPromise === undefined) {
       const resolvedDependencies =
@@ -202,6 +221,8 @@ export class Config extends ConfigBase {
 
   private async performInitialization(dependencies?: {
     messageBus?: MessageBus;
+    taskManager?: AsyncTaskManager;
+    shellJobs?: ShellJobPort;
   }): Promise<void> {
     const initializationMessageBus = dependencies?.messageBus;
     if (!initializationMessageBus) {
@@ -213,7 +234,6 @@ export class Config extends ConfigBase {
       this.agentClientFactory,
       'initialize',
     );
-    this.setRuntimeMessageBus(initializationMessageBus);
     this.cachedEffectiveTrust = this.isTrustedFolder();
     this.ideClient = await IdeClient.getInstance();
     // Initialize centralized FileDiscoveryService
@@ -224,11 +244,17 @@ export class Config extends ConfigBase {
     this.promptRegistry = new PromptRegistry();
     this.resourceRegistry = new ResourceRegistry();
     await initializeParser();
-    this.toolRegistry = await this.createToolRegistry(initializationMessageBus);
+    const taskManager = dependencies.taskManager;
+    const shellJobs = dependencies.shellJobs;
+    this.toolRegistry = await this.createToolRegistry(
+      initializationMessageBus,
+      () => taskManager,
+      () => shellJobs,
+    );
     this.mcpClientManager = new McpClientManager(
       await getCoreVersion(),
       this.toolRegistry,
-      this,
+      createMcpHostConfig(this),
       this.eventEmitter,
     );
     this.registerIdeTrustListener();
@@ -237,7 +263,9 @@ export class Config extends ConfigBase {
     // Tools are gated before model turns via McpClientManager.whenDiscoverySettled().
     this.mcpDiscoveryPromise =
       this.mcpClientManager.startConfiguredMcpServers();
-    await this.getExtensionLoader().start(this);
+    await this.getExtensionLoader().start(this, () =>
+      this.refreshExtensionSkills(),
+    );
 
     await initializeLsp(this._lspState, this);
 
@@ -248,7 +276,7 @@ export class Config extends ConfigBase {
         this.getExtensions(),
       );
       this.getSkillManager().setDisabledSkills(this.disabledSkills);
-      syncSkillActivationTool(this);
+      syncSkillActivationTool(this, initializationMessageBus);
     }
 
     // Register subagents (after skill discovery, before AgentClient creation)
@@ -416,16 +444,40 @@ export class Config extends ConfigBase {
     );
   }
 
+  async refreshMcpServers(
+    messageBus: MessageBus,
+    server?: string,
+  ): Promise<void> {
+    requireMessageBus(messageBus, 'Config.refreshMcpServers');
+    await this.refreshMcpServersWithContext(
+      () => this.refreshMcpContext(messageBus),
+      server,
+    );
+  }
+
   /**
    * Refreshes the MCP context, including memory, tools, and system instructions.
    * Preserved from gmerge branch for compatibility with McpClientManager.
    */
-  async refreshMcpContext(): Promise<void> {
+  subscribeMcpSurface(subscriber: () => Promise<void>): () => void {
+    this.mcpSurfaceSubscribers.add(subscriber);
+    return () => {
+      this.mcpSurfaceSubscribers.delete(subscriber);
+    };
+  }
+
+  async refreshDiscoveredMcpMetadata(): Promise<void> {
     await this.refreshMemory();
-    await syncActivateMcpServerTool(
-      this.getToolRegistry(),
-      this.getRuntimeMessageBus(),
-      () => this.refreshMcpContext(),
+    for (const subscriber of this.mcpSurfaceSubscribers) {
+      await subscriber();
+    }
+  }
+
+  async refreshMcpContext(messageBus: MessageBus): Promise<void> {
+    requireMessageBus(messageBus, 'Config.refreshMcpContext');
+    await this.refreshMemory();
+    await syncActivateMcpServerTool(this.getToolRegistry(), messageBus, () =>
+      this.refreshMcpContext(messageBus),
     );
     const client = this.getAgentClientIfReady();
     if (client) {
@@ -434,7 +486,7 @@ export class Config extends ConfigBase {
     }
   }
 
-  async reloadMcpServers(): Promise<void> {
+  async reloadMcpServers(messageBus: MessageBus): Promise<void> {
     if (this._onReloadMcpServers === undefined) {
       throw new Error(
         'MCP server reload is not available in this composition.',
@@ -452,7 +504,9 @@ export class Config extends ConfigBase {
         this.policyEngine.addRule(rule);
       }
     }
-    await this.mcpClientManager?.reconcileConfiguredMcpServers();
+    await this.mcpClientManager?.reconcileConfiguredMcpServers(() =>
+      this.refreshMcpContext(messageBus),
+    );
   }
 
   /**
@@ -464,21 +518,38 @@ export class Config extends ConfigBase {
    * unloaded (issue #3383). `reloadSkills` is the variant to use when the user
    * asked for a reload and settings should be re-read too.
    */
-  async refreshSkills(): Promise<void> {
+  subscribeSkillSurface(subscriber: () => Promise<void>): () => void {
+    this.skillSurfaceSubscribers.add(subscriber);
+    return () => {
+      this.skillSurfaceSubscribers.delete(subscriber);
+    };
+  }
+
+  private async refreshExtensionSkills(): Promise<void> {
     await this.skillManager.discoverSkills(this.storage, this.getExtensions());
     this.skillManager.setDisabledSkills(this.disabledSkills);
+    for (const subscriber of this.skillSurfaceSubscribers) {
+      await subscriber();
+    }
+  }
 
-    syncSkillActivationTool(this);
-
-    // Registry changes do not reach the model on their own: the chat session
-    // caches the declarations it was last given.
+  async publishSkillSurface(messageBus: MessageBus): Promise<void> {
+    requireMessageBus(messageBus, 'Config.publishSkillSurface');
+    syncSkillActivationTool(this, messageBus);
     const client = this.getAgentClientIfReady();
     if (client) {
       await client.setTools();
     }
   }
 
-  async reloadSkills(): Promise<void> {
+  async refreshSkills(messageBus: MessageBus): Promise<void> {
+    await this.skillManager.discoverSkills(this.storage, this.getExtensions());
+    this.skillManager.setDisabledSkills(this.disabledSkills);
+    await this.publishSkillSurface(messageBus);
+    for (const subscriber of this.skillSurfaceSubscribers) await subscriber();
+  }
+
+  async reloadSkills(messageBus: MessageBus): Promise<void> {
     if (this._onReload) {
       const result = await this._onReload();
       if (result.disabledSkills) {
@@ -489,7 +560,7 @@ export class Config extends ConfigBase {
         this.skillManager.setAdminSettings(this.adminSkillsEnabled);
       }
     }
-    await this.refreshSkills();
+    await this.refreshSkills(messageBus);
   }
 
   /**
@@ -725,67 +796,6 @@ export class Config extends ConfigBase {
       .join('\n\n');
   }
 
-  /**
-   * Get the AsyncTaskManager instance
-   * @plan PLAN-20260130-ASYNCTASK.P09
-   */
-  getAsyncTaskManager(): AsyncTaskManager | undefined {
-    return getOrCreateAsyncTaskManager(
-      this.getSettingsService(),
-      () => this.asyncTaskManager,
-      (manager) => (this.asyncTaskManager = manager),
-    );
-  }
-
-  getShellJobManager(): ShellJobManager | undefined {
-    return getOrCreateShellJobManager(
-      this.getSettingsService(),
-      () => this.shellJobManager,
-      (m) => (this.shellJobManager = m),
-    );
-  }
-
-  /**
-   * Get the AsyncTaskReminderService instance
-   * @plan PLAN-20260130-ASYNCTASK.P22
-   */
-  getAsyncTaskReminderService(): AsyncTaskReminderService | undefined {
-    return getOrCreateAsyncTaskReminderService(
-      this.getSettingsService(),
-      () => this.asyncTaskManager,
-      (manager) => (this.asyncTaskManager = manager),
-      () => this.asyncTaskReminderService,
-      (service) => (this.asyncTaskReminderService = service),
-    );
-  }
-
-  /**
-   * Set up AsyncTaskAutoTrigger with client callbacks
-   * @plan PLAN-20260130-ASYNCTASK.P22
-   * @param isAgentBusy Function to check if the agent is busy
-   * @param triggerAgentTurn Function to trigger an agent turn with a message
-   * @returns Cleanup function to unsubscribe from auto-trigger
-   */
-  setupAsyncTaskAutoTrigger(
-    isAgentBusy: () => boolean,
-    triggerAgentTurn: (message: string) => Promise<void>,
-  ): () => void {
-    return setupAsyncTaskAutoTrigger(
-      this.getSettingsService(),
-      {
-        getManager: () => this.asyncTaskManager,
-        setManager: (manager) => (this.asyncTaskManager = manager),
-        getReminder: () => this.asyncTaskReminderService,
-        setReminder: (service) => (this.asyncTaskReminderService = service),
-        getAutoTrigger: () => this.asyncTaskAutoTrigger,
-        setAutoTrigger: (trigger) => (this.asyncTaskAutoTrigger = trigger),
-        getShellJobManager: () => this.getShellJobManager(),
-      },
-      isAgentBusy,
-      triggerAgentTurn,
-    );
-  }
-
   async refreshMemory(): Promise<{
     memoryContent: string;
     fileCount: number;
@@ -827,36 +837,6 @@ export class Config extends ConfigBase {
     });
 
     return { memoryContent, fileCount, filePaths };
-  }
-
-  /**
-   * TEMPORARY delegate (#2615 slice E, see ConfigBase.schedulerRegistry).
-   * Owner is an object whose identity keys the scheduler entry (never a
-   * string): two consumers with colliding labels get distinct schedulers.
-   * Each acquisition supplies its own messageBus and toolRegistry
-   * construction deps: the acquisition that starts an entry fixes them at
-   * construction time, and later acquisitions reuse the entry as built
-   * while still refreshing the five UI callbacks through setCallbacks.
-   * Registry construction and acquisition live in schedulerRegistryAccess.ts.
-   */
-  async getOrCreateScheduler(
-    owner: object,
-    purpose: SchedulerPurpose,
-    callbacks: SchedulerCallbacks,
-    options?: SchedulerOptions,
-    dependencies?: {
-      messageBus?: MessageBus;
-      toolRegistry?: ToolRegistry;
-    },
-  ): Promise<SchedulerHandle> {
-    return acquireScheduler(
-      this,
-      owner,
-      purpose,
-      callbacks,
-      options,
-      dependencies,
-    );
   }
 
   /**
@@ -938,7 +918,14 @@ export class Config extends ConfigBase {
     });
   }
 
-  async dispose(): Promise<void> {
+  private disposalPromise: Promise<void> | undefined;
+
+  dispose(): Promise<void> {
+    this.disposalPromise ??= this.performDisposal();
+    return this.disposalPromise;
+  }
+
+  private async performDisposal(): Promise<void> {
     const failures: unknown[] = [];
     try {
       this.liveTrustTransitionLifecycle.beginDisposal();
@@ -962,6 +949,13 @@ export class Config extends ConfigBase {
     const stopPromise = this.mcpClientManager?.stop();
     try {
       await this.whenTrustTransitionSettled();
+    } catch (error) {
+      failures.push(error);
+    }
+    try {
+      failures.push(
+        ...(await unloadActiveExtensions(this.getExtensionLoader())),
+      );
     } catch (error) {
       failures.push(error);
     }
@@ -998,8 +992,6 @@ export class Config extends ConfigBase {
         failures.push(error);
       }
     }
-    await disposeShellJobManager(this.shellJobManager, failures);
-    this.shellJobManager = undefined;
     throwFailures(failures);
   }
 }

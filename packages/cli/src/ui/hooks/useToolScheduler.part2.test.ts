@@ -42,6 +42,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { createReactToolSchedulerRuntimeForTest } from './agentStream/__tests__/streamRuntimeTestHelper.js';
+import type { StreamRuntime } from '../cliUiRuntime.js';
 import type { HistoryItemWithoutId } from '../types.js';
 
 type OnCompleteFn = (
@@ -433,7 +434,6 @@ const mockConfig = {
     scheduler?.dispose();
     createdSchedulers.delete(owner);
   }),
-  setInteractiveSubagentSchedulerFactory: vi.fn(),
 } as unknown as Config;
 
 const mockTool = new MockTool({
@@ -467,11 +467,15 @@ const renderScheduler = (
   onComplete: Mock<OnCompleteFn>,
   mockConfig: Partial<Config>,
   setPendingHistoryItem: Mock<SetPendingHistoryItemFn>,
+  runtime: Pick<
+    StreamRuntime,
+    'scheduler' | 'session'
+  > = createReactToolSchedulerRuntimeForTest(mockConfig),
 ) =>
   renderHook(() =>
     useReactToolScheduler(
       onComplete,
-      createReactToolSchedulerRuntimeForTest(mockConfig),
+      runtime,
       setPendingHistoryItem,
       () => undefined,
       () => {},
@@ -548,15 +552,18 @@ describe('useReactToolScheduler (split)', () => {
 
   it('reports interactive runtime ready after main scheduler and subagent scheduler factory are registered', async () => {
     vi.useRealTimers();
-    (
-      mockConfig.setInteractiveSubagentSchedulerFactory as Mock<
-        typeof mockConfig.setInteractiveSubagentSchedulerFactory
-      >
-    ).mockClear();
+    const registration =
+      vi.fn<
+        StreamRuntime['scheduler']['setInteractiveSubagentSchedulerFactory']
+      >();
+    const runtime = createReactToolSchedulerRuntimeForTest(mockConfig, {
+      scheduler: { setInteractiveSubagentSchedulerFactory: registration },
+    });
     const { result } = renderScheduler(
       onComplete,
       mockConfig,
       setPendingHistoryItem,
+      runtime,
     );
 
     expect(result.current[5]).toBe(false);
@@ -565,9 +572,47 @@ describe('useReactToolScheduler (split)', () => {
       interval: 10,
       timeout: 5000,
     });
-    expect(
-      mockConfig.setInteractiveSubagentSchedulerFactory,
-    ).toHaveBeenCalledWith(expect.any(Function));
+    expect(registration).toHaveBeenCalledWith(expect.any(Function));
+  });
+
+  it('acquires interactive subagent schedulers through the session runtime', async () => {
+    vi.useRealTimers();
+    const registration =
+      vi.fn<
+        StreamRuntime['scheduler']['setInteractiveSubagentSchedulerFactory']
+      >();
+    const runtime = createReactToolSchedulerRuntimeForTest(mockConfig, {
+      scheduler: { setInteractiveSubagentSchedulerFactory: registration },
+    });
+    const { result } = renderScheduler(
+      onComplete,
+      mockConfig,
+      setPendingHistoryItem,
+      runtime,
+    );
+    await waitFor(() => expect(result.current[5]).toBe(true));
+    const factory = registration.mock.calls.find(
+      ([candidate]) => candidate !== undefined,
+    )?.[0];
+    if (factory === undefined)
+      throw new Error('Subagent scheduler factory was not registered');
+    const schedulerConfig = {
+      getToolRegistry: () => mockToolRegistry,
+      getOrCreateScheduler: () => {
+        throw new Error('Config scheduler used');
+      },
+      disposeScheduler: () => {
+        throw new Error('Config scheduler used');
+      },
+    } as unknown as Config;
+    const handle = await factory({
+      schedulerConfig,
+      onAllToolCallsComplete: async () => {},
+      outputUpdateHandler: () => {},
+    });
+    expect(createdSchedulers.has(schedulerConfig)).toBe(true);
+    handle.dispose?.();
+    expect(createdSchedulers.has(schedulerConfig)).toBe(false);
   });
 
   it('should schedule and execute a tool call successfully', async () => {

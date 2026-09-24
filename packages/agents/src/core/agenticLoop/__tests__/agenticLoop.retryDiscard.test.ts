@@ -58,6 +58,7 @@ describe('AgenticLoop discards abandoned tool-call requests on Retry (issue 3048
     const loop = new AgenticLoop({
       agentClient: scripted.client,
       config,
+      schedulerOwner: config.schedulerOwner,
       messageBus,
     });
     return { loop, ...scripted };

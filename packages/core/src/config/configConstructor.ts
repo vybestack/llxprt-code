@@ -70,7 +70,6 @@ import type { RuntimeProviderManager } from '../runtime/contracts/RuntimeProvide
 import type { EventEmitter } from 'node:events';
 import type { Config } from './config.js';
 import type { AgentClientFactory } from '../core/clientContract.js';
-import type { ToolSchedulerFactory } from '../core/toolSchedulerContract.js';
 import type { TaskToolRegistration } from './toolRegistryFactory.js';
 import type { PostSkillDiscoveryToolRegistrar } from './configTypes.js';
 
@@ -219,11 +218,6 @@ export interface ConfigConstructorTarget {
    * @requirement REQ-INV-001
    */
   agentClientFactory: AgentClientFactory | undefined;
-  /**
-   * @plan PLAN-20260610-ISSUE1592.P01
-   * @requirement REQ-INV-002
-   */
-  toolSchedulerFactory: ToolSchedulerFactory | undefined;
   /**
    * @plan PLAN-20260610-ISSUE1592.P01
    * @requirement REQ-INV-003
@@ -631,9 +625,8 @@ function applyPolicyAndLifecycle(
   config.useWriteTodos = params.useWriteTodos ?? true;
 
   // @plan PLAN-20260610-ISSUE1592.P01
-  // @requirement REQ-INV-001, REQ-INV-002, REQ-INV-003
+  // @requirement REQ-INV-001, REQ-INV-003
   config.agentClientFactory = params.agentClientFactory;
-  config.toolSchedulerFactory = params.toolSchedulerFactory;
   config.taskToolRegistration = params.taskToolRegistration;
   config.postSkillDiscoveryToolRegistrar =
     params.postSkillDiscoveryToolRegistrar;

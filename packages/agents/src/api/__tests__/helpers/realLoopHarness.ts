@@ -34,6 +34,7 @@ import type { AgenticLoopEvent } from '../../../core/agenticLoop/types.js';
 import { AgenticLoop } from '../../../core/agenticLoop/AgenticLoop.js';
 import { CoreToolScheduler } from '../../../core/coreToolScheduler.js';
 import { createSchedulerRegistryDelegate } from '../../../core/__tests__/scheduler-registry-test-helpers.js';
+import { createSessionSchedulerOwner } from '../../agentRuntimeAssembly.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
@@ -208,7 +209,9 @@ function createTestConfig(opts: {
   messageBus: MessageBus;
   toolRegistry: ToolRegistry;
   policyEngine: PolicyEngine;
-}): Config {
+}): Config & {
+  schedulerOwner: ReturnType<typeof createSessionSchedulerOwner>;
+} {
   const { messageBus, toolRegistry, policyEngine } = opts;
   const fixture = {
     getSessionId: () => 'p10-harness-session',
@@ -249,7 +252,13 @@ function createTestConfig(opts: {
         onEditorClose: () => {},
       }),
   });
-  return narrowConfig({ ...fixture, ...delegate });
+  const config = narrowConfig({ ...fixture, ...delegate });
+  return Object.assign(config, {
+    schedulerOwner: createSessionSchedulerOwner(
+      config,
+      fixture.getToolSchedulerFactory(),
+    ),
+  });
 }
 
 function createToolRegistry(tools: MockTool[]): ToolRegistry {
@@ -330,6 +339,7 @@ export async function runRealLoopExecuteTool(): Promise<
   const loop = new AgenticLoop({
     agentClient: client,
     config,
+    schedulerOwner: config.schedulerOwner,
     messageBus,
     approvalHandler,
   });
@@ -361,6 +371,7 @@ export async function runRealLoopAbort(): Promise<readonly AgenticLoopEvent[]> {
   const loop = new AgenticLoop({
     agentClient: client,
     config,
+    schedulerOwner: config.schedulerOwner,
     messageBus,
   });
   const events: AgenticLoopEvent[] = [];

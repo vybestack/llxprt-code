@@ -134,6 +134,95 @@ describe('buildSlashCommandRuntime image capability', () => {
 });
 
 describe('buildUiRuntimeFromSource', () => {
+  it('routes interactive acquisitions through the supplied Agent owner with explicit dependencies', async () => {
+    const bus = { id: 'caller-bus' };
+    const registry = { id: 'caller-registry' };
+    const handle = { id: 'agent-handle' };
+    const acquisitions: unknown[] = [];
+    const releases: unknown[] = [];
+    const source = createProxySource({
+      getToolRegistry: () => registry,
+      getOrCreateScheduler: () => {
+        throw new Error('Config scheduler used');
+      },
+      disposeScheduler: () => {
+        throw new Error('Config scheduler used');
+      },
+    });
+    const owner = { label: 'foreground' };
+    const agent = {
+      getMessageBus: () => bus,
+      scheduler: {
+        acquire: async (...args: unknown[]) => {
+          acquisitions.push(args);
+          return handle;
+        },
+        release: (...args: unknown[]) => {
+          releases.push(args);
+        },
+      },
+    };
+    const callbacks = {
+      getPreferredEditor: () => undefined,
+      onEditorClose: () => {},
+    };
+    const runtime = buildUiRuntimeFromSource(
+      source,
+      agent as unknown as Parameters<typeof buildUiRuntimeFromSource>[1],
+    );
+    const acquired = await runtime.scheduler.getOrCreateScheduler(
+      owner,
+      'session',
+      callbacks,
+      { interactiveMode: true },
+      {
+        messageBus: bus as unknown as ReturnType<
+          NonNullable<
+            Parameters<typeof buildUiRuntimeFromSource>[1]
+          >['getMessageBus']
+        >,
+      },
+    );
+    runtime.scheduler.disposeScheduler(owner, 'session', acquired);
+    expect(acquired).toBe(handle as unknown as typeof acquired);
+    expect(acquisitions).toStrictEqual([
+      [
+        owner,
+        'session',
+        callbacks,
+        { interactiveMode: true },
+        { messageBus: bus, toolRegistry: registry },
+      ],
+    ]);
+    expect(releases).toStrictEqual([[owner, 'session', handle]]);
+  });
+  it('registers the interactive factory on the active agent, not the Config-shaped source', () => {
+    const registrations: unknown[] = [];
+    const source = createProxySource({
+      setInteractiveSubagentSchedulerFactory: () => {
+        throw new Error('Config scheduler factory used');
+      },
+    });
+    const agent = {
+      getMessageBus: () => ({ id: 'session-bus' }),
+      scheduler: {
+        acquire: async () => ({ schedule: () => {} }),
+        release: () => {},
+        setInteractiveSubagentSchedulerFactory: (factory: unknown) => {
+          registrations.push(factory);
+        },
+      },
+    };
+    const runtime = buildUiRuntimeFromSource(
+      source,
+      agent as unknown as Parameters<typeof buildUiRuntimeFromSource>[1],
+    );
+    const factory = () => ({ schedule: () => {} });
+    runtime.scheduler.setInteractiveSubagentSchedulerFactory(factory);
+    runtime.scheduler.setInteractiveSubagentSchedulerFactory(undefined);
+    expect(registrations).toStrictEqual([factory, undefined]);
+  });
+
   it('uses the application event singleton when the source has no emitter', () => {
     const source = createProxySource({
       getExtensionEvents: () => undefined,

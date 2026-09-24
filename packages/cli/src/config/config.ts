@@ -11,6 +11,7 @@ import type {
   ApprovalMode,
   PolicyEngineConfig,
   Config,
+  MessageBus,
   LlxprtExtension,
   SandboxConfig,
   MCPServerConfig,
@@ -363,7 +364,7 @@ export async function loadCliConfig(
   argv: CliArgs,
   cwd: string = process.cwd(),
   runtimeOverrides: CliRuntimeOverrides = {},
-): Promise<Config> {
+): Promise<{ config: Config; messageBus: MessageBus }> {
   loadEnvironment();
   const { bootstrapArgs, runtimeState, profileResult, effectiveOverrides } =
     await bootstrapAndLoadProfile(settings, argv, runtimeOverrides);
@@ -389,7 +390,7 @@ export async function loadCliConfig(
     requireBootstrapSettingsService(runtimeState),
   );
 
-  return finalizeConfig({
+  await finalizeConfig({
     config,
     runtimeState,
     bootstrapArgs,
@@ -403,4 +404,5 @@ export async function loadCliConfig(
     approvalMode: pieces.approvalMode,
     interactive: pieces.context.interactive,
   });
+  return { config, messageBus: runtimeState.runtimeMessageBus };
 }

@@ -4,7 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type Config, PLACEHOLDER_MODEL } from '@vybestack/llxprt-code-core';
+import {
+  type Config,
+  type MessageBus,
+  PLACEHOLDER_MODEL,
+} from '@vybestack/llxprt-code-core';
 import {
   fromConfig,
   type Agent,
@@ -21,6 +25,7 @@ import {
 
 export interface ForegroundAgentOptions {
   config: Config;
+  messageBus: MessageBus;
   activationPreflightToken?: ActivationPreflightToken;
   activationPreflightIntent?: ProviderActivationIntent;
 }
@@ -29,11 +34,9 @@ export interface ForegroundAgentOptions {
  * Single creation point for the interactive CLI Agent.
  *
  * Adopts the already-built {@link Config} through the public {@link fromConfig}
- * entrypoint. Per #2378 Phase A the Agent now OWNS the single session
- * {@link MessageBus} and {@link Config.initialize}: `createForegroundAgent`
- * does NOT construct or thread a session bus — `fromConfig` builds exactly one
- * bus from the Config's policy engine and exposes it via
- * `agent.getMessageBus()`. No second ProviderManager/MessageBus is constructed.
+ * entrypoint. The CLI runtime supplies its bus explicitly to fromConfig so
+ * provider events, OAuth, policy updates, and tool approvals use the same bus.
+ * The Agent borrows this bus and does not close it on disposal.
  * `fromConfig` keeps `configOwnership` caller-owned (its default), which means
  * the returned Agent's `dispose()` deliberately SKIPS `config.dispose()` —
  * recording/Config teardown remains owned by the existing bootstrap.
@@ -48,6 +51,7 @@ export interface ForegroundAgentOptions {
  */
 export async function createForegroundAgent({
   config,
+  messageBus,
   activationPreflightToken,
   activationPreflightIntent,
 }: ForegroundAgentOptions): Promise<Agent> {
@@ -71,6 +75,7 @@ export async function createForegroundAgent({
 
   const agent = await fromConfig({
     config,
+    messageBus,
     activation: activationPreflightIntent ?? activation,
     activationPreflightToken,
   });

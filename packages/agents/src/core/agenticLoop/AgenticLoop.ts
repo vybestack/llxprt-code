@@ -157,6 +157,7 @@ function wrapCompletionTask(
 export class AgenticLoop {
   private readonly agentClient: AgenticLoopOptions['agentClient'];
   private readonly config: AgenticLoopOptions['config'];
+  private readonly schedulerOwner: AgenticLoopOptions['schedulerOwner'];
   private readonly messageBus: AgenticLoopOptions['messageBus'];
   private readonly approvalHandler?: AgenticLoopOptions['approvalHandler'];
   private readonly interactiveMode: boolean;
@@ -174,6 +175,7 @@ export class AgenticLoop {
   constructor(options: AgenticLoopOptions) {
     this.agentClient = options.agentClient;
     this.config = options.config;
+    this.schedulerOwner = options.schedulerOwner;
     this.messageBus = options.messageBus;
     this.approvalHandler = options.approvalHandler;
     this.interactiveMode = options.interactiveMode ?? false;
@@ -578,7 +580,7 @@ export class AgenticLoop {
       // Pass the loop's cached handle: after a disposeAll sweep that
       // replaced this key's entry, a bare-key release could otherwise
       // decrement a scheduler this loop never acquired.
-      this.config.disposeScheduler(this, 'agentic-loop', scheduler);
+      this.schedulerOwner.release(this, 'agentic-loop', scheduler);
     }
   }
 
@@ -627,14 +629,12 @@ export class AgenticLoop {
     // the CLI main scheduler ('session' purpose) even though both live on the
     // same Config, and the loop's setCallbacks can never clobber the main
     // scheduler's callbacks.
-    return this.config.getOrCreateScheduler(
+    return this.schedulerOwner.acquire(
       this,
       'agentic-loop',
       {
         outputUpdateHandler: (callId, update) => {
-          if (!forwardingState.active) {
-            return;
-          }
+          if (!forwardingState.active) return;
           if (
             update.mode === 'append' &&
             !pushQueueEvent({
@@ -648,9 +648,7 @@ export class AgenticLoop {
           display?.outputUpdateHandler?.(callId, update);
         },
         onToolCallsUpdate: (toolCalls) => {
-          if (!forwardingState.active) {
-            return;
-          }
+          if (!forwardingState.active) return;
           if (toolCalls.length > 0) {
             markAcceptedUpdate();
           }
@@ -680,7 +678,10 @@ export class AgenticLoop {
         onEditorClose: display?.onEditorClose ?? (() => {}),
       },
       { interactiveMode: this.interactiveMode },
-      { messageBus: this.messageBus },
+      {
+        messageBus: this.messageBus,
+        toolRegistry: this.config.getToolRegistry(),
+      },
     );
   }
 

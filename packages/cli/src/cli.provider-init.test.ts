@@ -20,7 +20,11 @@ import { join } from 'node:path';
 import * as cli from './cli.js';
 import { dynamicSettingsRegistry } from './utils/dynamicSettings.js';
 import type { Config, ResumeResult } from '@vybestack/llxprt-code-core';
-import { OutputFormat } from '@vybestack/llxprt-code-core';
+import {
+  MessageBus,
+  PolicyEngine,
+  OutputFormat,
+} from '@vybestack/llxprt-code-core';
 import { createTestSessionMediaConfig } from './__tests__/sessionMediaConfig.js';
 
 const actual = { ...(await import('./config/settings.js')) };
@@ -275,9 +279,10 @@ describe('cli main provider initialization', () => {
 
     const { loadCliConfig } = await import('./config/config.js');
     const { parseArguments } = await import('./config/cliArgParser.js');
-    (loadCliConfig as Mock<typeof loadCliConfig>).mockResolvedValueOnce(
-      mockConfig,
-    );
+    (loadCliConfig as Mock<typeof loadCliConfig>).mockResolvedValueOnce({
+      config: mockConfig,
+      messageBus: new MessageBus(new PolicyEngine(), false),
+    });
     (parseArguments as Mock<typeof parseArguments>).mockResolvedValueOnce({
       promptInteractive: undefined,
       prompt: undefined,
@@ -401,9 +406,10 @@ describe('cli main provider initialization', () => {
 
     const { loadCliConfig } = await import('./config/config.js');
     const { parseArguments } = await import('./config/cliArgParser.js');
-    (loadCliConfig as Mock<typeof loadCliConfig>).mockResolvedValueOnce(
-      mockConfig,
-    );
+    (loadCliConfig as Mock<typeof loadCliConfig>).mockResolvedValueOnce({
+      config: mockConfig,
+      messageBus: new MessageBus(new PolicyEngine(), false),
+    });
     (parseArguments as Mock<typeof parseArguments>).mockResolvedValueOnce({
       promptInteractive: undefined,
       prompt: undefined,
@@ -555,9 +561,10 @@ describe('cli main provider initialization', () => {
 
     const { loadCliConfig } = await import('./config/config.js');
     const { parseArguments } = await import('./config/cliArgParser.js');
-    (loadCliConfig as Mock<typeof loadCliConfig>).mockResolvedValueOnce(
-      mockConfig,
-    );
+    (loadCliConfig as Mock<typeof loadCliConfig>).mockResolvedValueOnce({
+      config: mockConfig,
+      messageBus: new MessageBus(new PolicyEngine(), false),
+    });
     (parseArguments as Mock<typeof parseArguments>).mockResolvedValueOnce({
       promptInteractive: undefined,
       prompt: undefined,

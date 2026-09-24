@@ -6,18 +6,19 @@
 
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { RecordingPort } from '@vybestack/llxprt-code-core/session/sessionExecutionServices.js';
 import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
 
 export function createSemanticMediaPurgeSession(
   runtimeContext: AgentRuntimeContext,
   history: HistoryService,
+  readRecording: () => RecordingPort | undefined,
 ): SemanticMediaPurgeSession {
   return new SemanticMediaPurgeSession({
     history,
     mode: () => runtimeContext.ephemerals.semanticMediaPurge(),
     persist: async (candidateHistory, frontier) => {
-      const config = runtimeContext.providerRuntime.config;
-      const recording = config?.getSessionRecordingService();
+      const recording = readRecording();
       if (recording?.isActive() !== true) {
         throw new Error(
           'Semantic media purge requires an active session recording',

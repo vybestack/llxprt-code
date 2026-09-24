@@ -17,7 +17,6 @@ import type {
   ToolCall,
 } from '@vybestack/llxprt-code-core/scheduler/types.js';
 import type { LiveOutputUpdate } from '@vybestack/llxprt-code-core';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ServerAgentStreamEvent } from '@vybestack/llxprt-code-core/core/turn.js';
 import {
   type ApprovalHandler,
@@ -108,6 +107,7 @@ describe('AgenticLoop with caller display callbacks', () => {
       const loop = new AgenticLoop({
         agentClient: client,
         config,
+        schedulerOwner: config.schedulerOwner,
         messageBus,
         displayCallbacks: {
           onToolCallsUpdate: (toolCalls) => {
@@ -201,6 +201,7 @@ describe('AgenticLoop with caller display callbacks', () => {
     const loop = new AgenticLoop({
       agentClient: client,
       config,
+      schedulerOwner: config.schedulerOwner,
       messageBus,
       interactiveMode: true,
     });
@@ -251,25 +252,17 @@ describe('AgenticLoop with caller display callbacks', () => {
       interactive: true,
       approvalMode: ApprovalMode.DEFAULT,
     });
-    const config: Config = {
-      ...baseConfig,
-      getOrCreateScheduler: async (
-        owner: object,
-        purpose: Parameters<Config['getOrCreateScheduler']>[1],
-        callbacks: Parameters<Config['getOrCreateScheduler']>[2],
-        schedulerOptions: Parameters<Config['getOrCreateScheduler']>[3],
-        deps: Parameters<Config['getOrCreateScheduler']>[4],
+    const config = baseConfig;
+    const schedulerOwner = {
+      ...baseConfig.schedulerOwner,
+      acquire: async (
+        ...args: Parameters<typeof baseConfig.schedulerOwner.acquire>
       ) => {
+        const callbacks = args[2];
         capturedGetPreferredEditor = callbacks.getPreferredEditor;
         capturedOnEditorOpen = callbacks.onEditorOpen;
         capturedOnEditorClose = callbacks.onEditorClose;
-        return baseConfig.getOrCreateScheduler(
-          owner,
-          purpose,
-          callbacks,
-          schedulerOptions,
-          deps,
-        );
+        return baseConfig.schedulerOwner.acquire(...args);
       },
     };
 
@@ -291,6 +284,7 @@ describe('AgenticLoop with caller display callbacks', () => {
     const loop = new AgenticLoop({
       agentClient: client,
       config,
+      schedulerOwner,
       messageBus,
       approvalHandler,
       interactiveMode: true,
@@ -359,6 +353,7 @@ describe('AgenticLoop with caller display callbacks', () => {
     const loop = new AgenticLoop({
       agentClient: client,
       config,
+      schedulerOwner: config.schedulerOwner,
       messageBus,
       displayCallbacks: {
         onAllToolCallsComplete: (completed) => {
@@ -423,6 +418,7 @@ describe('AgenticLoop with caller display callbacks', () => {
     const loop = new AgenticLoop({
       agentClient: client,
       config,
+      schedulerOwner: config.schedulerOwner,
       messageBus,
       displayCallbacks: {
         onAllToolCallsComplete: () => {
@@ -483,6 +479,7 @@ describe('AgenticLoop with caller display callbacks', () => {
     const loop = new AgenticLoop({
       agentClient: client,
       config,
+      schedulerOwner: config.schedulerOwner,
       messageBus,
       displayCallbacks: {
         onAllToolCallsComplete: async () => {
@@ -566,6 +563,7 @@ describe('AgenticLoop with caller display callbacks', () => {
       const loop = new AgenticLoop({
         agentClient: client,
         config,
+        schedulerOwner: config.schedulerOwner,
         messageBus,
         displayCallbacks: {
           onToolCallsUpdate: (toolCalls) => {

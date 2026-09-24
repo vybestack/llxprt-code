@@ -261,8 +261,6 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
       getContentGeneratorConfig: vi
         .fn()
         .mockReturnValue(contentGeneratorConfig),
-      // Mock setupAsyncTaskAutoTrigger to return a no-op unsubscribe function
-      setupAsyncTaskAutoTrigger: vi.fn(() => () => {}),
     } as unknown as Config;
 
     mockSettings = {

@@ -20,16 +20,12 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
 import { SubagentTerminateMode } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import type { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
+import { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
 
 interface AsyncStreamingHarness {
   tool: TaskTool;
-  mockAsyncTaskManager: Record<string, ReturnType<typeof vi.fn>>;
-  /**
-   * Resolves when completeTask or failTask is invoked by the background
-   * execution path. Await via {@link expectCompletionWithin} to guard against
-   * indefinite hangs if the wiring regresses.
-   */
+  taskManager: AsyncTaskManager;
+  /** Resolves after the task finishes and its tracked execution is joined. */
   completionPromise: Promise<void>;
 }
 
@@ -71,7 +67,7 @@ function expectCompletionWithin(
 
 /**
  * Builds a TaskTool configured for async execution with a fake orchestrator
- * and fake AsyncTaskManager. The scope's runNonInteractive performs the
+ * and real AsyncTaskManager. The scope's runNonInteractive performs the
  * supplied emission logic — this is real background execution through the
  * genuine async wiring, not a mock of it.
  */
@@ -84,19 +80,15 @@ function createAsyncStreamingHarness(
 ): AsyncStreamingHarness {
   const agentId = options.agentId ?? 'async-stream-agent';
 
-  let resolveCompletion: (() => void) | undefined;
-  const completionPromise = new Promise<void>(
-    (resolve) => (resolveCompletion = resolve),
-  );
-
-  const mockAsyncTaskManager = {
-    canLaunchAsync: vi.fn(() => ({ allowed: true })),
-    tryReserveAsyncSlot: vi.fn(() => 'booking-1'),
-    registerTask: vi.fn(),
-    completeTask: vi.fn(() => resolveCompletion?.()),
-    failTask: vi.fn(() => resolveCompletion?.()),
-    getTask: vi.fn(() => ({ status: 'running' })),
-  };
+  const taskManager = new AsyncTaskManager();
+  const completionPromise = new Promise<void>((resolve) => {
+    const unsubscribe = taskManager.onTaskCompleted((task) => {
+      if (task.id === agentId) {
+        unsubscribe();
+        resolve();
+      }
+    });
+  }).then(() => taskManager.close());
 
   const scope: {
     output: {
@@ -133,13 +125,12 @@ function createAsyncStreamingHarness(
       messageBus: new MessageBus(),
       orchestratorFactory: () =>
         ({ launch }) as unknown as SubagentOrchestrator,
-      getAsyncTaskManager: () =>
-        mockAsyncTaskManager as unknown as AsyncTaskManager,
+      getTaskManager: () => taskManager,
       isInteractiveEnvironment: () => false,
     },
   );
 
-  return { tool, mockAsyncTaskManager, completionPromise };
+  return { tool, taskManager, completionPromise };
 }
 
 /** Asserts the exact XML wrapper tags then returns the interior deltas only. */
@@ -158,7 +149,7 @@ function extractMessageDeltas(
 
 describe('TaskTool async streaming through real async path', () => {
   it('streams the exact issue sequence with lossless standalone newlines', async () => {
-    const { tool, mockAsyncTaskManager, completionPromise } =
+    const { tool, taskManager, completionPromise } =
       createAsyncStreamingHarness(async (scope) => {
         scope.onMessage?.('Analyzing the codebase...');
         scope.onMessage?.('\n');
@@ -185,8 +176,7 @@ describe('TaskTool async streaming through real async path', () => {
     expect(accumulated).toBe(
       'Analyzing the codebase...\nFound 3 issues:\n1. Missing import',
     );
-    // The background task was marked complete via the real async wiring.
-    expect(mockAsyncTaskManager.completeTask).toHaveBeenCalledTimes(1);
+    expect(taskManager.getTask('async-stream-agent')?.status).toBe('completed');
   });
 
   it('preserves standalone spaces, tabs, and normalizes CR/CRLF through the async path', async () => {

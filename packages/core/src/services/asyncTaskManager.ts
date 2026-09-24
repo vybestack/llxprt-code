@@ -44,16 +44,79 @@ interface PendingReservation {
   expiresAt: number;
 }
 
+interface TrackedExecutionResult {
+  readonly error?: unknown;
+}
+
 export class AsyncTaskManager {
   private readonly tasks: Map<string, AsyncTaskInfo> = new Map();
+  private readonly executions = new Map<
+    string,
+    Promise<TrackedExecutionResult>
+  >();
   private readonly emitter: EventEmitter;
   private maxAsyncTasks: number;
+  private closed = false;
+  private disposal: Promise<void> | undefined;
   private pendingReservations: Map<string, PendingReservation> = new Map();
 
   constructor(maxAsyncTasks: number = 5) {
     this.maxAsyncTasks = maxAsyncTasks;
     this.emitter = new EventEmitter();
     this.emitter.setMaxListeners(50);
+  }
+
+  trackExecution(id: string, execution: Promise<void>): void {
+    if (this.closed) {
+      throw new Error('Async task manager is closed');
+    }
+    const tracked = execution
+      .then<TrackedExecutionResult>(() => ({}))
+      .catch<TrackedExecutionResult>((error: unknown) => ({ error }));
+    this.executions.set(id, tracked);
+    void tracked.finally(() => {
+      if (this.executions.get(id) === tracked) {
+        this.executions.delete(id);
+      }
+    });
+  }
+
+  stopAdmissions(): void {
+    this.closed = true;
+    this.pendingReservations.clear();
+  }
+
+  close(): Promise<void> {
+    if (this.disposal !== undefined) return this.disposal;
+    this.stopAdmissions();
+    let resolveDisposal: (() => void) | undefined;
+    let rejectDisposal: ((error: unknown) => void) | undefined;
+    this.disposal = new Promise<void>((resolve, reject) => {
+      resolveDisposal = resolve;
+      rejectDisposal = reject;
+    });
+    const failures: unknown[] = [];
+    for (const task of this.getRunningTasks()) {
+      try {
+        this.cancelTask(task.id);
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    const executions = [...this.executions.values()];
+    void Promise.all(executions).then((results) => {
+      for (const result of results) {
+        if ('error' in result) failures.push(result.error);
+      }
+      if (failures.length > 0) {
+        rejectDisposal?.(
+          new AggregateError(failures, 'Async task shutdown failed'),
+        );
+      } else {
+        resolveDisposal?.();
+      }
+    });
+    return this.disposal;
   }
 
   /**
@@ -82,6 +145,9 @@ export class AsyncTaskManager {
    * @pseudocode lines 058-078
    */
   canLaunchAsync(): { allowed: boolean; reason?: string } {
+    if (this.closed) {
+      return { allowed: false, reason: 'Async task manager is closed' };
+    }
     this.cleanupExpiredReservations();
 
     // Line 060-062: Unlimited mode
@@ -146,6 +212,9 @@ export class AsyncTaskManager {
    * @pseudocode lines 084-097
    */
   registerTask(input: RegisterTaskInput, bookingId?: string): AsyncTaskInfo {
+    if (this.closed) {
+      throw new Error('Async task manager is closed');
+    }
     // If a bookingId is provided, consume that reservation
     if (bookingId) {
       const reservation = this.pendingReservations.get(bookingId);

@@ -193,7 +193,6 @@ function createConfigWithHook(options: {
     getExtensions: () => [],
     getDisabledHooks: () => [],
     getModel: () => 'test-model',
-    getSessionRecordingService: () => undefined,
     isInteractive: () => true,
     isTrustedFolder: () => true,
     getProjectHooks: () => null,

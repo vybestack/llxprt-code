@@ -72,7 +72,7 @@ describe('MCP discovery @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-013 @re
       },
     });
     try {
-      // the agent discovers tools from the fake infra
+      await agent.chat('wait for MCP discovery');
       const tools = agent.listTools();
 
       // MCP entries are present in the discovered set: each fake tool is

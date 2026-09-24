@@ -12,7 +12,7 @@
  * createSessionSchedulerRegistry, and real schedulers are built through
  * the fixture's own factory. The adapter adds only the per-acquisition
  * callback refresh through handle.setCallbacks (last writer wins),
- * mirroring Config.getOrCreateScheduler. Each fixture builds its own
+ * mirroring session scheduler acquisition. Each fixture builds its own
  * delegate, so there is no cross-test shared registry state to clear.
  */
 
@@ -24,6 +24,7 @@ import {
   type SchedulerPurpose,
 } from '@vybestack/llxprt-code-core';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import { createToolScheduler, type Agent } from '@vybestack/llxprt-code-agents';
 
 /**
  * The setCallbacks payload the acquired scheduler expects. The config field
@@ -66,6 +67,37 @@ export interface SchedulerRegistryDelegate {
   ): void;
 }
 
+export function createLoopSchedulerOwnerForTest(
+  config: SchedulerRegistryDelegateOptions['config'],
+  messageBus: MessageBus,
+): Agent['scheduler'] {
+  const registry = createSessionSchedulerRegistry({
+    createScheduler: async (options) =>
+      createToolScheduler({
+        config,
+        messageBus: options.messageBus ?? messageBus,
+        toolRegistry: options.toolRegistry ?? config.getToolRegistry(),
+        toolContextInteractiveMode: options.interactiveMode ?? true,
+        getPreferredEditor: () => undefined,
+        onEditorClose: () => {},
+      }),
+  });
+  return {
+    async acquire(owner, purpose, callbacks, options, dependencies) {
+      const handle = await registry.getOrCreate(owner, purpose, {
+        ...options,
+        ...dependencies,
+      });
+      handle.setCallbacks({ config, ...callbacks });
+      return handle;
+    },
+    release(owner, purpose, handle) {
+      registry.release(owner, purpose, handle);
+    },
+    setInteractiveSubagentSchedulerFactory: () => {},
+  };
+}
+
 export function createSchedulerRegistryDelegate(
   deps: SchedulerRegistryDelegateOptions,
 ): SchedulerRegistryDelegate {
@@ -81,7 +113,7 @@ export function createSchedulerRegistryDelegate(
       dependencies,
     ) {
       // Construction deps flow through the acquisition that starts the
-      // entry (same shape as Config.getOrCreateScheduler); the fallbacks
+      // entry (same shape as session acquisition); the fallbacks
       // only cover acquisitions that supply none.
       const handle = await registry.getOrCreate(owner, purpose, {
         ...options,

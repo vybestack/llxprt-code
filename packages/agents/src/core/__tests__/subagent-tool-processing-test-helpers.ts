@@ -26,6 +26,7 @@ import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message
 import { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
 import { CoreToolScheduler } from '../coreToolScheduler.js';
 import { createToolExecutionConfig } from '../subagentRuntimeSetup.js';
+import { createSessionSchedulerOwner } from '../../api/agentRuntimeAssembly.js';
 import { createStatelessRuntimeBundle } from './subagent-test-helpers.js';
 import { processFunctionCalls } from '../subagentToolProcessing.js';
 
@@ -86,7 +87,6 @@ export async function dispatch(
     debugMode: false,
     model: 'test-model',
     approvalMode: ApprovalMode.YOLO,
-    toolSchedulerFactory: (options) => new CoreToolScheduler(options),
   });
   const policy = new PolicyEngine({});
   policy.setApprovalMode(ApprovalMode.YOLO);
@@ -97,11 +97,18 @@ export async function dispatch(
     new SettingsService(),
   );
   registry.registerTool(new DivideTool());
+  const schedulerOwner = createSessionSchedulerOwner(
+    config,
+    (options) => new CoreToolScheduler(options),
+  );
   const toolExecutorContext = createToolExecutionConfig(
     createStatelessRuntimeBundle(),
     registry,
     config,
     messageBus,
+    undefined,
+    undefined,
+    schedulerOwner,
   );
   // The processing context object is the scheduler registry owner for this
   // run: executeNonInteractiveTool acquires the 'subagent' entry keyed on it,
@@ -122,10 +129,8 @@ export async function dispatch(
       processingContext,
     );
   } finally {
-    // disposeScheduler is synchronous (void); guard only against a sync throw
-    // so config.dispose() always runs.
     try {
-      toolExecutorContext.disposeScheduler(processingContext, 'subagent');
+      await schedulerOwner.dispose();
     } finally {
       await config.dispose();
     }

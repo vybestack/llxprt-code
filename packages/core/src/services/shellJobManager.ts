@@ -153,6 +153,7 @@ export class ShellJobManager {
    * the check and the assignment.
    */
   private disposalPromise: Promise<void> | null = null;
+  private admissionsClosed = false;
 
   constructor(options?: {
     maxBackgroundJobs?: number;
@@ -178,6 +179,10 @@ export class ShellJobManager {
     return this.budget.getMax();
   }
 
+  stopAdmissions(): void {
+    this.admissionsClosed = true;
+  }
+
   /**
    * Launch a background shell job. Reserves a budget slot atomically before
    * any I/O, opens the log file exclusively, spawns detached, attaches
@@ -185,7 +190,7 @@ export class ShellJobManager {
    * failure, or spawn-setup failure.
    */
   launch(input: ShellJobLaunchInput): ShellJob {
-    if (this.disposalPromise !== null) {
+    if (this.admissionsClosed || this.disposalPromise !== null) {
       throw new Error(
         'Cannot launch a background job: ShellJobManager is disposing or disposed.',
       );
@@ -677,6 +682,7 @@ export class ShellJobManager {
     if (this.disposalPromise !== null) {
       return this.disposalPromise;
     }
+    this.stopAdmissions();
     this.disposalPromise = this.disposeInternal();
     return this.disposalPromise;
   }

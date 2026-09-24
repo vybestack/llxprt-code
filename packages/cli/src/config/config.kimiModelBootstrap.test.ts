@@ -31,7 +31,7 @@ describe('loadCliConfig provider alias model bootstrap', () => {
     process.argv = ['node', 'script.js', '--provider', 'kimi'];
     const argv = await parseArguments({} as Settings);
 
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       {},
       [],
       new ExtensionEnablementManager(

@@ -5,7 +5,7 @@
  */
 
 import type { AsyncTaskManager, AsyncTaskInfo } from './asyncTaskManager.js';
-import type { ShellJobManager } from './shellJobManager.js';
+import type { ShellJobPort } from '../session/sessionExecutionServices.js';
 import type { ShellJob } from './shellJobTypes.js';
 
 export type AsyncWorkKind = 'subagent' | 'shell';
@@ -89,7 +89,7 @@ function jobToInfo(job: ShellJob): FacadeWorkInfo {
 export class AsyncWorkFacade {
   constructor(
     private readonly taskManagerProvider: () => AsyncTaskManager | undefined,
-    private readonly jobManagerProvider: () => ShellJobManager | undefined,
+    private readonly jobManagerProvider: () => ShellJobPort | undefined,
   ) {}
 
   /**

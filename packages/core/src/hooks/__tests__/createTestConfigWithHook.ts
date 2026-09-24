@@ -92,7 +92,6 @@ export function createTestConfigWithHook(options: TestHookOptions): Config {
     getExtensions: () => [],
     getDisabledHooks: () => [],
     getModel: () => 'test-model',
-    getSessionRecordingService: () => undefined,
     isTrustedFolder: () => true,
     getSanitizationConfig: () => ({
       enableEnvironmentVariableRedaction: false,
@@ -125,7 +124,6 @@ export function createTestConfigWithHooksDisabled(): Config {
     getExtensions: () => [],
     getDisabledHooks: () => [],
     getModel: () => 'test-model',
-    getSessionRecordingService: () => undefined,
     isTrustedFolder: () => false,
     getSanitizationConfig: () => ({
       enableEnvironmentVariableRedaction: false,

@@ -80,6 +80,7 @@ export interface HookControlDeps {
   readonly sessionId: () => string;
   /** Resolves the agent working directory used to populate the hook input. */
   readonly cwd: () => string;
+  readonly readRecording?: () => { getFilePath(): string | null } | undefined;
 }
 
 type SessionStartResult = {
@@ -144,9 +145,8 @@ export class HookControl implements AgentHookControl {
 
   private async fireSessionStart(): Promise<SessionStartResult> {
     const input = this.buildSessionStartInput();
-    const result = await triggerSessionStartHook(
-      this.deps.config,
-      SessionStartSource.Startup,
+    const result = await this.withRecording(() =>
+      triggerSessionStartHook(this.deps.config, SessionStartSource.Startup),
     );
     const output = this.toHookOutput(HookEventName.SessionStart, result);
     this.emit(HookEventName.SessionStart, input, output);
@@ -171,12 +171,19 @@ export class HookControl implements AgentHookControl {
    */
   async triggerSessionEnd(): Promise<void> {
     const input = this.buildSessionEndInput();
-    const result = await triggerSessionEndHook(
-      this.deps.config,
-      SessionEndReason.Exit,
+    const result = await this.withRecording(() =>
+      triggerSessionEndHook(this.deps.config, SessionEndReason.Exit),
     );
     const output = this.toHookOutput(HookEventName.SessionEnd, result);
     this.emit(HookEventName.SessionEnd, input, output);
+  }
+
+  withRecording<T>(action: () => T): T {
+    const system = this.deps.config.getHookSystem();
+    const reader = this.deps.readRecording;
+    return system && reader
+      ? system.runWithRecordingReader(reader, action)
+      : action();
   }
 
   /**

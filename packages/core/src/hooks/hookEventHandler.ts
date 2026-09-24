@@ -47,6 +47,10 @@ import { HookCallEvent } from '../telemetry/types.js';
 import { MessageBusType } from '../confirmation-bus/types.js';
 import type { HookExecutionResponse } from './hookBusContracts.js';
 
+export type HookRecordingReader = () =>
+  | { getFilePath(): string | null }
+  | undefined;
+
 const moduleDebugLogger = DebugLogger.getLogger(
   'llxprt:core:hooks:eventHandler',
 );
@@ -171,6 +175,7 @@ export class HookEventHandler {
     aggregator: HookAggregator,
     messageBus?: MessageBus,
     injectedDebugLogger?: DebugLogger,
+    private readonly readRecording: HookRecordingReader = () => undefined,
   ) {
     this.config = config;
     this.planner = planner;
@@ -201,9 +206,7 @@ export class HookEventHandler {
    * @requirement R2
    */
   private buildBaseInput(eventName: string): HookInput {
-    // Get transcript path from SessionRecordingService if available
-    const recordingService = this.config.getSessionRecordingService();
-    const transcriptPath = recordingService?.getFilePath() ?? '';
+    const transcriptPath = this.readRecording()?.getFilePath() ?? '';
 
     return {
       session_id: this.config.getSessionId(),

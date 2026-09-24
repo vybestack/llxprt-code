@@ -521,7 +521,7 @@ export async function commitInteractiveStartup(
 
   try {
     const renderOptions = ports.renderOptions(args.config, args.settings);
-    const uiRuntime = ports.buildUiRuntime(args.config);
+    const uiRuntime = ports.buildUiRuntime(args.config, args.agent);
     const slashCommandRuntime = ports.buildSlashRuntime(
       args.config,
       args.perfOwner?.snapshotCapability ?? null,

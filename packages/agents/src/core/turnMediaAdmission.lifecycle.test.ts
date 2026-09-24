@@ -237,13 +237,6 @@ async function createFixture(
   }
   const setup = createChatSessionRuntime({
     provider,
-    ...(recording === undefined
-      ? {}
-      : {
-          configOverrides: {
-            getSessionRecordingService: () => recording,
-          },
-        }),
   });
   if (recording !== undefined) {
     setup.settingsService.set('media.semantic-purge', 'remove');
@@ -287,7 +280,15 @@ async function createFixture(
     embedContent: vi.fn(),
   };
   return {
-    chat: new ChatSession(runtime, contentGenerator, {}, []),
+    chat: new ChatSession(
+      runtime,
+      contentGenerator,
+      {},
+      [],
+      undefined,
+      undefined,
+      () => recording,
+    ),
     store,
     rootDirectory,
     providerStarted,

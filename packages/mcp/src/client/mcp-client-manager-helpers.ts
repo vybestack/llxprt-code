@@ -9,10 +9,11 @@ import type {
   McpExtensionConfig,
 } from '../config/mcpServerConfig.js';
 import type {
+  McpHostConfig,
   McpPromptRegistry,
   McpResourceRegistry,
 } from '../host/hostInterfaces.js';
-import type { McpClient } from './mcp-client.js';
+import { populateMcpServerCommand, type McpClient } from './mcp-client.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { isDeepStrictEqual } from 'node:util';
 import { appendFailures } from './trust-revocation-errors.js';
@@ -139,6 +140,22 @@ export function getConfiguredMcpReconciliation(
     },
   );
   return { removals, discoveries, configuredNames };
+}
+
+export function getHostMcpServers(
+  hostConfig: McpHostConfig,
+): Record<string, MCPServerConfig> {
+  return populateMcpServerCommand(
+    hostConfig.getMcpServers() ?? {},
+    hostConfig.getMcpServerCommand(),
+  );
+}
+
+export function getHostMcpReconciliation(
+  clients: ReadonlyMap<string, McpClient>,
+  hostConfig: McpHostConfig,
+): ConfiguredMcpReconciliation {
+  return getConfiguredMcpReconciliation(clients, getHostMcpServers(hostConfig));
 }
 
 export async function removeAndDisconnectMcpClient({

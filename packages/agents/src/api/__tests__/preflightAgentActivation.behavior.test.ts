@@ -144,14 +144,11 @@ describe('preflight agent-owned runtime factory assembly @plan:ISSUE-3222 @requi
   it('installs the agent-owned runtime factories on a factory-less Config and does NOT surface the missing factory as a fatal auth outcome', async () => {
     const built = await buildCliStyleConfig('plain-text.jsonl');
     try {
-      // The CLI-at-preflight state (#3222): a fully-wired Config whose three
-      // agent runtime factories were never injected — the CLI stopped
-      // injecting them, and fromConfig installs them only AFTER preflight.
+      // Before preflight, this fixture has no client factory or task tool
+      // registration; scheduler construction belongs to the agent.
       built.config.setAgentClientFactory(undefined);
-      built.config.setToolSchedulerFactory(undefined);
       built.config.setTaskToolRegistration(undefined);
       expect(built.config.getAgentClientFactory()).toBeUndefined();
-      expect(built.config.getToolSchedulerFactory()).toBeUndefined();
       expect(built.config.getTaskToolRegistration()).toBeUndefined();
 
       // The 'fake' provider otherwise activates. Before preflight owned the
@@ -169,9 +166,8 @@ describe('preflight agent-owned runtime factory assembly @plan:ISSUE-3222 @requi
       expect(result.authFailed).toBe(false);
       expect(result.activeProvider).toBe('fake');
 
-      // Preflight installed the agent-owned factory defaults per field.
+      // Preflight installed the client and task registration defaults.
       expect(built.config.getAgentClientFactory()).toBeDefined();
-      expect(built.config.getToolSchedulerFactory()).toBeDefined();
       expect(built.config.getTaskToolRegistration()).toBeDefined();
     } finally {
       await built.cleanup();
@@ -182,9 +178,7 @@ describe('preflight agent-owned runtime factory assembly @plan:ISSUE-3222 @requi
     const built = await buildCliStyleConfig('plain-text.jsonl');
     try {
       const callerClientFactory = built.config.getAgentClientFactory();
-      const callerSchedulerFactory = built.config.getToolSchedulerFactory();
       expect(callerClientFactory).toBeDefined();
-      expect(callerSchedulerFactory).toBeDefined();
 
       const intent: ProviderActivationIntent = {
         provider: 'fake',
@@ -198,9 +192,6 @@ describe('preflight agent-owned runtime factory assembly @plan:ISSUE-3222 @requi
       // Pre-present factories are never replaced; the absent task-tool
       // registration (buildCliStyleConfig does not inject one) is installed.
       expect(built.config.getAgentClientFactory()).toBe(callerClientFactory);
-      expect(built.config.getToolSchedulerFactory()).toBe(
-        callerSchedulerFactory,
-      );
       expect(built.config.getTaskToolRegistration()).toBeDefined();
     } finally {
       await built.cleanup();

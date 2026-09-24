@@ -226,6 +226,17 @@ async function reloadAction(
     );
     return;
   }
+  const agent = context.services.agent;
+  if (!agent) {
+    context.ui.addItem(
+      {
+        type: MessageType.ERROR,
+        text: 'Could not retrieve the active agent session.',
+      },
+      Date.now(),
+    );
+    return;
+  }
 
   const skillManager = config.getSkillManager();
   const beforeNames = new Set(skillManager.getSkills().map((s) => s.name));
@@ -241,7 +252,7 @@ async function reloadAction(
   }, 100);
 
   try {
-    await config.reloadSkills();
+    await config.reloadSkills(agent.getMessageBus());
 
     clearTimeout(pendingTimeout);
     if (pendingState.itemSet) {

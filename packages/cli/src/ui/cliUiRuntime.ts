@@ -9,7 +9,6 @@ import type {
   AgentClientContract,
   AgentClientFactory,
   ApprovalMode,
-  AsyncTaskManager,
   BucketFailoverHandler,
   ContextManager,
   FileDiscoveryService,
@@ -31,7 +30,6 @@ import type {
   SchedulerOptions,
   SchedulerPurpose,
   SessionPersistenceService,
-  SessionRecordingService,
   ShellExecutionConfig,
   ShellReplacementMode,
   SkillManager,
@@ -53,6 +51,9 @@ import type { GitHubBrokerClient } from '@vybestack/llxprt-code-tools';
 import type { EventEmitter } from 'node:events';
 import { AppEvent, appEvents, type AppEvents } from '../utils/events.js';
 import type { PerfSnapshotCapability } from './commands/perfCommand.js';
+import type { Agent } from '@vybestack/llxprt-code-agents';
+
+type SchedulerAgent = Pick<Agent, 'scheduler' | 'getMessageBus'>;
 
 export interface RefreshMemoryResult {
   memoryContent: string;
@@ -148,7 +149,6 @@ export interface SessionIdentity {
   getWorkingDir(): string;
   getProjectTempDir(): string;
   getLocalMediaStore(): LocalMediaStore;
-  getSessionRecordingService?(): SessionRecordingService | undefined;
   getSessionRecordingQueueByteLimit(): number;
   createSessionPersistenceService(sessionId: string): SessionPersistenceService;
   getLlxprtDir(): string;
@@ -245,6 +245,10 @@ export interface HookSkillState {
   getSkillManager(): SkillManager;
 }
 
+interface HookSkillSource extends Omit<HookSkillState, 'reloadSkills'> {
+  reloadSkills(messageBus: MessageBus): Promise<void>;
+}
+
 /**
  * MCP read-model for MCP server, client, prompt, and resource consumers.
  */
@@ -325,17 +329,6 @@ export interface UiToolRegistryInfo {
 export interface ToolRuntime {
   getToolRegistry(): ToolRegistry;
   getToolRegistryInfo(): UiToolRegistryInfo;
-}
-
-/**
- * Async-task capability for background task auto-trigger and cancellation.
- */
-export interface AsyncTaskRuntime {
-  getAsyncTaskManager(): AsyncTaskManager | undefined;
-  setupAsyncTaskAutoTrigger(
-    isAgentBusy: () => boolean,
-    triggerAgentTurn: (message: string) => Promise<void>,
-  ): () => void;
 }
 
 /**
@@ -467,7 +460,6 @@ export interface StreamRuntime {
   mcp: McpState;
   settings: SettingsTelemetryState;
   scheduler: SchedulerRuntime;
-  asyncTasks: AsyncTaskRuntime;
   events: AppEventRuntime;
   bucketFailover: BucketFailoverRuntime;
   checkpoint: CheckpointRuntime;
@@ -508,13 +500,11 @@ export interface StreamRuntimeBareSource
     FileWorkspaceState,
     MemoryState,
     IdeState,
-    HookSkillState,
+    HookSkillSource,
     McpState,
     McpDiscoveryRuntime,
     SettingsTelemetryState,
     ToolRuntime,
-    SchedulerRuntime,
-    AsyncTaskRuntime,
     AppEventSource,
     BucketFailoverRuntime,
     CheckpointRuntime,
@@ -546,7 +536,6 @@ function buildSessionRuntime(source: StreamRuntimeBareSource): SessionIdentity {
     getWorkingDir: () => source.getWorkingDir(),
     getProjectTempDir: () => source.getProjectTempDir(),
     getLocalMediaStore: () => source.getLocalMediaStore(),
-    getSessionRecordingService: () => source.getSessionRecordingService?.(),
     getSessionRecordingQueueByteLimit: () =>
       source.getSessionRecordingQueueByteLimit(),
     createSessionPersistenceService: (sessionId) =>
@@ -640,7 +629,10 @@ function buildIdeRuntime(source: StreamRuntimeBareSource): IdeState {
   };
 }
 
-function buildHooksRuntime(source: StreamRuntimeBareSource): HookSkillState {
+function buildHooksRuntime(
+  source: StreamRuntimeBareSource,
+  agent?: SchedulerAgent,
+): HookSkillState {
   return {
     getHookSystem: () => source.getHookSystem(),
     getEnableHooks: () => source.getEnableHooks(),
@@ -648,7 +640,12 @@ function buildHooksRuntime(source: StreamRuntimeBareSource): HookSkillState {
     setDisabledHooks: (hooks) => source.setDisabledHooks(hooks),
     isSkillsSupportEnabled: () => source.isSkillsSupportEnabled(),
     getEnableHooksUI: () => source.getEnableHooksUI(),
-    reloadSkills: () => source.reloadSkills(),
+    reloadSkills: () => {
+      if (agent === undefined) {
+        throw new Error('Skill reload requires an Agent session MessageBus.');
+      }
+      return source.reloadSkills(agent.getMessageBus());
+    },
     getSkillManager: () => source.getSkillManager(),
   };
 }
@@ -686,30 +683,31 @@ function buildSettingsRuntime(
 
 function buildSchedulerRuntime(
   source: StreamRuntimeBareSource,
+  agent?: SchedulerAgent,
 ): SchedulerRuntime {
   return {
-    disposeScheduler: (owner, purpose, handle) =>
-      source.disposeScheduler(owner, purpose, handle),
-    getOrCreateScheduler: (owner, purpose, callbacks, options, dependencies) =>
-      source.getOrCreateScheduler(
-        owner,
-        purpose,
-        callbacks,
-        options,
-        dependencies,
-      ),
-    setInteractiveSubagentSchedulerFactory: (factory) =>
-      source.setInteractiveSubagentSchedulerFactory(factory),
-  };
-}
-
-function buildAsyncTaskRuntime(
-  source: StreamRuntimeBareSource,
-): AsyncTaskRuntime {
-  return {
-    getAsyncTaskManager: () => source.getAsyncTaskManager(),
-    setupAsyncTaskAutoTrigger: (isAgentBusy, triggerAgentTurn) =>
-      source.setupAsyncTaskAutoTrigger(isAgentBusy, triggerAgentTurn),
+    disposeScheduler: (owner, purpose, handle) => {
+      if (!agent || !handle)
+        throw new Error('Agent scheduler handle is required');
+      agent.scheduler.release(owner, purpose, handle);
+    },
+    getOrCreateScheduler: (
+      owner,
+      purpose,
+      callbacks,
+      options,
+      dependencies,
+    ) => {
+      if (!agent) throw new Error('Agent scheduler is required');
+      return agent.scheduler.acquire(owner, purpose, callbacks, options, {
+        messageBus: dependencies?.messageBus ?? agent.getMessageBus(),
+        toolRegistry: dependencies?.toolRegistry ?? source.getToolRegistry(),
+      });
+    },
+    setInteractiveSubagentSchedulerFactory: (factory) => {
+      if (!agent) throw new Error('Agent scheduler is required');
+      agent.scheduler.setInteractiveSubagentSchedulerFactory(factory);
+    },
   };
 }
 
@@ -732,6 +730,7 @@ function buildAppEventRuntime(
  */
 function buildStreamRuntimeFromSource(
   source: StreamRuntimeBareSource,
+  agent?: SchedulerAgent,
 ): StreamRuntime {
   return {
     session: buildSessionRuntime(source),
@@ -741,11 +740,10 @@ function buildStreamRuntimeFromSource(
     files: buildFilesRuntime(source),
     memory: buildMemoryRuntime(source),
     ide: buildIdeRuntime(source),
-    hooks: buildHooksRuntime(source),
+    hooks: buildHooksRuntime(source, agent),
     mcp: buildMcpRuntime(source),
     settings: buildSettingsRuntime(source),
-    scheduler: buildSchedulerRuntime(source),
-    asyncTasks: buildAsyncTaskRuntime(source),
+    scheduler: buildSchedulerRuntime(source, agent),
     events: buildAppEventRuntime(source),
     bucketFailover: {
       getBucketFailoverHandler: () => source.getBucketFailoverHandler(),
@@ -767,9 +765,10 @@ function buildStreamRuntimeFromSource(
 
 export function buildUiRuntimeFromSource(
   source: UiRuntimeBareSource,
+  agent?: SchedulerAgent,
 ): UiRuntime {
   return {
-    ...buildStreamRuntimeFromSource(source),
+    ...buildStreamRuntimeFromSource(source, agent),
     approval: {
       getApprovalMode: () => source.getApprovalMode(),
       setApprovalMode: (mode) => source.setApprovalMode(mode),

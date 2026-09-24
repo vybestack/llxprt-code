@@ -9,26 +9,36 @@
  */
 
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import { createAgentRuntimeStateFromConfig } from '@vybestack/llxprt-code-core/runtime/runtimeStateFactory.js';
 import { createIsolatedRuntimeContext } from '@vybestack/llxprt-code-providers/runtime.js';
 import type { IsolatedRuntimeContextHandle } from '@vybestack/llxprt-code-providers/runtime.js';
 import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 import type { FromConfigOptions } from './config-types.js';
 import { FromConfigValidatableSchema } from './config-types.js';
 import type { Agent } from './agent.js';
 import {
-  generateRuntimeId,
+  resolveAgentRuntimeId,
   AgentBootstrapError,
-  validateAgentRuntimeId,
 } from './agentBootstrap.js';
 import { executeProviderActivation } from './providerActivationExecutor.js';
 import { consumeCompletedActivationPreflight } from './activationPreflightState.js';
-import { finalizeAgent, registerProvidersOntoManager } from './createAgent.js';
+import {
+  finalizeAgent,
+  registerProvidersOntoManager,
+  requirePostAuthClient,
+} from './createAgent.js';
 import {
   ensureAgentRuntimeFactories,
   ensureRuntimeManagers,
+  createAgentSessionExecution,
+  createSessionApprovalBus,
+  bindSessionTaskTools,
+  createSessionAgentClient,
+  bindSessionSurfaceUpdates,
+  type SessionTaskServices,
+  type SessionSchedulerOwner,
   cleanupFailedRuntimeBootstrap,
 } from './agentRuntimeAssembly.js';
 import { wireMcpHostServices } from './mcpHostWiring.js';
@@ -73,95 +83,41 @@ export async function fromConfig(options: FromConfigOptions): Promise<Agent> {
   // @pseudocode line 14: ADOPT — never construct.
   const config: Config = options.config;
 
-  // Agent-owned assembly (issue #3222): install the three agent runtime
-  // factory defaults ONLY where the Config reports absence — caller-supplied
-  // factories always win — plus the runtime managers. Must run BEFORE the
-  // isolated runtime context/activate/resolveActivation because
-  // resolveActivation's refreshAuth path constructs the agent client through
-  // the Config's factory.
+  // Agent-owned assembly (issue #3222): install the client and task
+  // registration defaults only where absent, plus the runtime managers.
+  // The client factory must be present before activation/refreshAuth. The
+  // scheduler factory is passed directly to session execution below.
   ensureAgentRuntimeFactories(config);
   ensureRuntimeManagers(config);
 
   // @pseudocode line 15: runtimeId (sessionId takes precedence; otherwise generate).
-  const runtimeId = options.sessionId ?? generateRuntimeId();
-  validateAgentRuntimeId(runtimeId);
+  const runtimeId = resolveAgentRuntimeId(options.sessionId);
 
-  // Adopt an explicit caller bus first, then the Config's assembled runtime bus.
-  // Only non-CLI consumers without either seam receive a newly owned bus.
-  const messageBus = resolveMessageBus(
-    options.messageBus ?? config.getRuntimeMessageBus(),
-    config,
-  );
-
-  // @pseudocode line 18 (CRIT-1): adopt the Config's existing manager.
-  const adoptedManager: RuntimeProviderManager | undefined =
-    config.getProviderManager();
+  // Borrow the explicit caller bus, or create a bus owned by this Agent.
+  const approvalBus = createSessionApprovalBus(config, options.messageBus);
+  const { messageBus } = approvalBus;
 
   // @pseudocode lines 20-28: adopt the runtime context (NOT a second manager).
-  const handle = createIsolatedRuntimeContext({
-    runtimeId,
+  const handle = adoptRuntimeContext(config, runtimeId, messageBus);
+  const { tasks: taskServices, schedulerOwner } = createAgentSessionExecution(
     config,
-    messageBus,
-    providerManager: adoptedManager,
-    prepare: (ctx) => {
-      registerProvidersOntoManager(ctx.providerManager, ctx, ctx.config);
-    },
-  });
+    handle.settingsService,
+    options.toolSchedulerFactory,
+  );
+  let sessionClient: AgentClientContract | undefined;
 
   try {
-    // @pseudocode line 29: activate so getCliRuntimeServices() resolves THESE.
     await handle.activate();
-
-    // @pseudocode line 37-48 (createAgent.ts:178-180 mirror): derive managers.
-    const manager = handle.providerManager;
-    const oauthManager = resolveOAuthManager(config, handle);
-    const sharedSettingsService = handle.settingsService;
-
-    // @plan:PLAN-20270110-ISSUE2378.P02 @requirement:REQ-2378-002
-    // The adopted Config's SettingsService is carried by the isolated runtime
-    // handle; every consumer below reads it from that explicit owner.
-
-    // The caller built this Config, so it may not have wired the hook that
-    // lets core build the skill activation tool (issue #2417 forbids core
-    // constructing it directly). Without a hook the tool is never registered
-    // and the model is told nothing about skills, which is the same
-    // composition failure #3382 fixed in createAgent. A registrar the caller
-    // supplied deliberately is left alone.
-    const callerSuppliedRegistrar =
-      config.getPostSkillDiscoveryToolRegistrar() !== undefined;
-    if (!callerSuppliedRegistrar) {
-      config.setPostSkillDiscoveryToolRegistrar(registerActivateSkillTool);
-    }
-
-    // @pseudocode lines 31-35: initialize once or adopt the original result.
-    await config.ensureInitialized({ messageBus });
-
-    // ensureInitialized is a no-op for a Config the caller already
-    // initialized, so a registrar installed above would never run. Reconcile
-    // whenever we installed one. On a fresh Config this repeats one discovery,
-    // which is a better trade than leaving the model with no skill tool.
-    if (!callerSuppliedRegistrar) {
-      await config.refreshSkills();
-    }
-
-    // Same already-initialized gap for the shipped task tool: when the
-    // caller initialized the Config themselves, the registry was built while
-    // the registration was still absent, so the field default installed
-    // above was never consumed. Reconcile UNCONDITIONALLY: the core-side
-    // helper (packages/core/src/config/toolRegistryFactory.ts
-    // reconcileTaskToolRegistration) no-ops when ANY task tool already
-    // exists in the registry by either key, so a caller-supplied
-    // registration (consumed at the caller's own construction) is never
-    // overridden — ownership is protected by REGISTRY STATE, not by
-    // provenance classification of the registration field. This also covers
-    // defaults installed by any earlier agent entrypoint (preflight), whose
-    // field-installed registration is indistinguishable from a caller's.
-    // excludeTools remains the exclusion mechanism. On a fresh Config the
-    // registry already carries the tool and this is a no-op.
-    await config.reconcileTaskToolRegistration();
+    await initializeAdoptedConfig(
+      config,
+      messageBus,
+      taskServices,
+      schedulerOwner,
+    );
 
     // @plan:PLAN-20270104-ISSUE2374.P03 @requirement:REQ-001
     await resolveActivation(config, options);
+    requirePostAuthClient(config);
 
     // @pseudocode lines 37-48 (Mismatch 1): synthesize parsed + resolvedAuth.
     const parsed = buildParsedConfig(config, options);
@@ -169,6 +125,18 @@ export async function fromConfig(options: FromConfigOptions): Promise<Agent> {
       .getTokenizerFactory()
       ?.prepareTokenizer?.(parsed.provider, parsed.model);
     const resolvedAuth = { baseUrl: undefined };
+    sessionClient = await createSessionAgentClient(
+      config,
+      schedulerOwner.getToolRegistry(),
+      createAgentRuntimeStateFromConfig(config, { runtimeId }),
+    );
+    bindSessionSurfaceUpdates(
+      config,
+      messageBus,
+      taskServices,
+      schedulerOwner,
+      sessionClient,
+    );
 
     // @pseudocode lines 37-48: SHARED finalize (CRIT-4: single finalize path).
     // The 17th positional arg 'caller' threads REQ-001.3 ownership so dispose()
@@ -177,9 +145,9 @@ export async function fromConfig(options: FromConfigOptions): Promise<Agent> {
       parsed,
       resolvedAuth,
       config,
-      manager,
-      oauthManager,
-      sharedSettingsService,
+      handle.providerManager,
+      resolveOAuthManager(config, handle),
+      handle.settingsService,
       runtimeId,
       handle,
       messageBus,
@@ -188,13 +156,66 @@ export async function fromConfig(options: FromConfigOptions): Promise<Agent> {
       options.editorCallbacks,
       [],
       'caller',
+      taskServices,
+      schedulerOwner,
+      approvalBus,
+      sessionClient,
     );
   } catch (primaryError) {
-    // Only the isolated runtime handle is ours to clean up — the caller owns
-    // the Config (REQ-001.3), so no teardown context is passed and it is
-    // never disposed here.
-    return cleanupFailedRuntimeBootstrap(handle, primaryError, 'fromConfig');
+    // Release the session-owned runtime and task services while preserving the
+    // adopted Config, which remains the caller's responsibility (REQ-001.3).
+    return cleanupFailedRuntimeBootstrap(handle, primaryError, 'fromConfig', {
+      taskServices,
+      schedulerOwner,
+      approvalBus,
+      ...(sessionClient !== undefined ? { sessionClient } : {}),
+    });
   }
+}
+
+function adoptRuntimeContext(
+  config: Config,
+  runtimeId: string,
+  messageBus: MessageBus,
+): IsolatedRuntimeContextHandle {
+  return createIsolatedRuntimeContext({
+    runtimeId,
+    config,
+    messageBus,
+    providerManager: config.getProviderManager(),
+    prepare: (ctx) =>
+      registerProvidersOntoManager(ctx.providerManager, ctx, ctx.config),
+  });
+}
+
+async function initializeAdoptedConfig(
+  config: Config,
+  messageBus: MessageBus,
+  taskServices: SessionTaskServices,
+  schedulerOwner: SessionSchedulerOwner,
+): Promise<void> {
+  const hadRegistrar = Boolean(config.getPostSkillDiscoveryToolRegistrar());
+  if (!hadRegistrar) {
+    config.setPostSkillDiscoveryToolRegistrar(registerActivateSkillTool);
+  }
+  await config.ensureInitialized({
+    messageBus,
+    taskManager: taskServices.manager,
+    shellJobs: taskServices.shellJobs,
+  });
+  if (!hadRegistrar) {
+    await config
+      .getSkillManager()
+      .discoverSkills(config.storage, config.getExtensions());
+  }
+  await config.refreshMemory();
+  await bindSessionTaskTools(
+    config,
+    messageBus,
+    taskServices.manager,
+    schedulerOwner,
+    taskServices.shellJobs,
+  );
 }
 
 /**
@@ -286,25 +307,6 @@ function hasConfig<K extends string>(
   }
   const v: unknown = obj[key];
   return v !== null && v !== undefined;
-}
-
-/**
- * Adopts the caller-supplied bus when present; otherwise builds ONE bus from
- * the Config's policy engine exactly as createAgent does today. NEVER reads a
- * bus back off the Config (it has no getMessageBus accessor — CRIT-2).
- *
- * @plan:PLAN-20260621-COREAPIREMED.P09
- * @requirement:REQ-001,REQ-005
- * @pseudocode lines 63-72
- */
-function resolveMessageBus(
-  callerBus: MessageBus | undefined,
-  config: Config,
-): MessageBus {
-  if (callerBus !== undefined) {
-    return callerBus;
-  }
-  return new MessageBus(config.getPolicyEngine(), config.getDebugMode());
 }
 
 /**

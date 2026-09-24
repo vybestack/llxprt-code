@@ -38,7 +38,7 @@
  * makes every case pass with no rewrite.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { afterEach, describe, it, expect } from 'bun:test';
 import * as fc from 'fast-check';
 import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
 import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
@@ -47,6 +47,13 @@ import { createLoopHolder } from '../loop/rebuildLoop.js';
 import { recordOwnership } from '../agentBootstrap.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import {
+  SessionTaskServices,
+  createSessionSchedulerOwner,
+} from '../agentRuntimeAssembly.js';
+import { CoreToolScheduler } from '../../core/coreToolScheduler.js';
+
+const taskServicesToDispose = new Set<SessionTaskServices>();
 
 // ─── Fake client carrying a chosen sequence-model value ─────────────────────
 //
@@ -88,10 +95,13 @@ function assembleDeps(
     model: config.getModel(),
   });
   const loopHolder = createLoopHolder();
+  const taskServices = new SessionTaskServices(config.getSettingsService());
+  taskServicesToDispose.add(taskServices);
   const ownership = recordOwnership({
     runtimeHandle: { cleanup: () => undefined },
     config,
     messageBus: built.messageBus,
+    approvalBus: { dispose: () => {} },
     loopHolder,
     runtimeState,
     injectedSchedulerHandles: [],
@@ -105,6 +115,11 @@ function assembleDeps(
     oauthManager: {} as unknown as AgentDeps['oauthManager'],
     settingsService: config.getSettingsService(),
     runtimeId: 'seq-test',
+    taskServices,
+    schedulerOwner: createSessionSchedulerOwner(
+      config,
+      (options) => new CoreToolScheduler(options),
+    ),
     runtimeHandle: { cleanup: () => undefined },
     messageBus: built.messageBus,
     loopHolder,
@@ -122,6 +137,13 @@ function assembleDeps(
 }
 
 describe('getCurrentSequenceModel delegation @plan:PLAN-20260621-COREAPIREMED.P13 @requirement:REQ-003', () => {
+  afterEach(async () => {
+    await Promise.all(
+      [...taskServicesToDispose].map((services) => services.dispose()),
+    );
+    taskServicesToDispose.clear();
+  });
+
   it('T9a client reports "gpt-4o" → agent.getCurrentSequenceModel() === "gpt-4o" @requirement:REQ-003 @scenario:positive-delegation @given:an agent whose resolveClient returns a client reporting "gpt-4o" @when:agent.getCurrentSequenceModel() @then:returns "gpt-4o"', async () => {
     const built = await buildCliStyleConfig('plain-text.jsonl');
     try {

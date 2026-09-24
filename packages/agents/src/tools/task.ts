@@ -13,11 +13,16 @@ import {
   type IToolMessageBus,
 } from '@vybestack/llxprt-code-tools';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ToolSchedulerFactory } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
 import {
   SubagentOrchestrator,
   type SubagentLaunchRequest,
 } from '../core/subagentOrchestrator.js';
 import type { SubAgentScope } from '../core/subagent.js';
+import {
+  createSessionSchedulerOwner,
+  type SessionSchedulerOwner,
+} from '../api/agentRuntimeAssembly.js';
 import { ContextState } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import type { SubagentSchedulerFactory } from '../core/subagentScheduler.js';
 import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
@@ -96,16 +101,18 @@ export interface TaskToolDependencies {
   /**
    * Required session/runtime MessageBus threaded into the
    * SubagentOrchestrator so non-interactive subagent tool execution can satisfy
-   * Config.getOrCreateScheduler's explicit MessageBus dependency
+   * the session scheduler owner's explicit MessageBus dependency
    * (Issue #2312).
    */
   messageBus: MessageBus;
+  schedulerOwner?: SessionSchedulerOwner;
+  toolSchedulerFactory?: ToolSchedulerFactory;
   orchestratorFactory?: (messageBus: MessageBus) => SubagentOrchestrator;
   profileManager?: ProfileManager;
   subagentManager?: SubagentManager;
   schedulerFactoryProvider?: () => SubagentSchedulerFactory | undefined;
   isInteractiveEnvironment?: () => boolean;
-  getAsyncTaskManager?: () => AsyncTaskManager | undefined;
+  getTaskManager?: () => AsyncTaskManager | undefined;
 }
 function launchRequestName(
   launchResult: Awaited<ReturnType<SubagentOrchestrator['launch']>>,
@@ -118,7 +125,7 @@ interface TaskToolInvocationDeps {
   getToolRegistry?: () => ToolRegistry | undefined;
   getSchedulerFactory?: () => SubagentSchedulerFactory | undefined;
   isInteractiveEnvironment?: () => boolean;
-  getAsyncTaskManager?: () => AsyncTaskManager | undefined;
+  getTaskManager?: () => AsyncTaskManager | undefined;
 }
 
 class TaskToolInvocation extends BaseToolInvocation<
@@ -704,7 +711,7 @@ class TaskToolInvocation extends BaseToolInvocation<
         normalized: this.normalized,
         params: this.params,
         createOrchestrator: () => this.deps.createOrchestrator(),
-        getAsyncTaskManager: this.deps.getAsyncTaskManager,
+        getTaskManager: this.deps.getTaskManager,
         isInteractiveEnvironment: this.deps.isInteractiveEnvironment,
         getSchedulerFactory: this.deps.getSchedulerFactory,
         buildLaunchRequest: (timeoutMs?: number) =>
@@ -727,8 +734,25 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
   static readonly Name = 'task';
 
   private readonly config: Config;
-  private readonly dependencies: TaskToolDependencies;
-
+  private dependencies: TaskToolDependencies;
+  private localSchedulerOwner?: SessionSchedulerOwner;
+  getSessionSchedulerOwner = (): SessionSchedulerOwner | undefined =>
+    this.dependencies.schedulerOwner;
+  getSessionTaskManager = (): AsyncTaskManager | undefined =>
+    this.dependencies.getTaskManager?.();
+  bindSessionExecution(
+    owner: SessionSchedulerOwner,
+    messageBus: MessageBus,
+    getTaskManager: () => AsyncTaskManager | undefined,
+  ): void {
+    Object.assign(this.dependencies, {
+      schedulerOwner: owner,
+      messageBus,
+      getTaskManager,
+      schedulerFactoryProvider:
+        owner.getInteractiveSubagentSchedulerFactory.bind(owner),
+    });
+  }
   constructor(config: Config, dependencies: TaskToolDependencies);
   constructor(
     config: Config,
@@ -761,19 +785,14 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
 
   override validateToolParams(params: TaskToolParams): string | null {
     const spellingError = validateCanonicalTaskParamSpellings(params);
-    if (spellingError !== null) {
-      return spellingError;
-    }
-    return super.validateToolParams(params);
+    return spellingError ?? super.validateToolParams(params);
   }
 
   protected override validateToolParamValues(
     params: TaskToolParams,
   ): string | null {
     const spellingError = validateCanonicalTaskParamSpellings(params);
-    if (spellingError !== null) {
-      return spellingError;
-    }
+    if (spellingError !== null) return spellingError;
     const subagentName = params.subagent_name;
     if (!subagentName || subagentName.trim().length === 0) {
       return 'Task tool requires a subagent_name.';
@@ -825,7 +844,7 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
         isInteractiveEnvironment:
           this.dependencies.isInteractiveEnvironment ??
           (() => this.config.isInteractive()),
-        getAsyncTaskManager: this.dependencies.getAsyncTaskManager,
+        getTaskManager: this.dependencies.getTaskManager,
       },
       toolMessageBus,
     );
@@ -853,11 +872,30 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
       );
     }
 
+    if (
+      this.dependencies.schedulerOwner === undefined &&
+      this.localSchedulerOwner === undefined
+    ) {
+      const factory = this.dependencies.toolSchedulerFactory;
+      if (factory === undefined)
+        throw new Error(
+          'Task tool requires a session scheduler owner or factory',
+        );
+      this.localSchedulerOwner = createSessionSchedulerOwner(
+        this.config,
+        factory,
+      );
+    }
+    const schedulerOwner =
+      this.dependencies.schedulerOwner ?? this.localSchedulerOwner;
+    if (schedulerOwner === undefined)
+      throw new Error('Task tool requires a scheduler owner');
     return new SubagentOrchestrator({
       subagentManager,
       profileManager,
       foregroundConfig: this.config,
       messageBus,
+      schedulerOwner,
     });
   }
 }

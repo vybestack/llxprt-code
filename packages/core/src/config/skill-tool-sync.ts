@@ -5,6 +5,7 @@
  */
 
 import { CoreSkillServiceAdapter } from '../tools-adapters/CoreSkillServiceAdapter.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import type { Config } from './config.js';
 
 /**
@@ -23,13 +24,15 @@ import type { Config } from './config.js';
  * invoked even when no skills are available: that is how a stale registration
  * gets removed.
  */
-export function syncSkillActivationTool(config: Config): void {
+export function syncSkillActivationTool(
+  config: Config,
+  messageBus: MessageBus,
+): void {
   if (!config.isSkillsSupportEnabled()) {
     return;
   }
   const registrar = config.getPostSkillDiscoveryToolRegistrar();
-  const messageBus = config.getRuntimeMessageBus();
-  if (!registrar || !messageBus) {
+  if (!registrar) {
     return;
   }
   registrar(

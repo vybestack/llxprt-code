@@ -10,7 +10,8 @@ import os from 'node:os';
 import { Config } from '../config/config.js';
 import { CoreShellToolHostAdapter } from './CoreShellToolHostAdapter.js';
 import { debugLogger } from '../utils/debugLogger.js';
-import type { ShellJob, ShellJobManager } from '../services/shellJobManager.js';
+import { ShellJobManager } from '../services/shellJobManager.js';
+import type { ShellJob } from '../services/shellJobManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ShellTool, type IToolMessageBus } from '@vybestack/llxprt-code-tools';
 import { initializeParser, isParserAvailable } from '../utils/shell-parser.js';
@@ -32,6 +33,8 @@ import { MessageBus } from '../confirmation-bus/message-bus.js';
  * fail (no job created, no process spawned, no terminal transition, empty tail).
  */
 
+const shellManagers = new WeakMap<Config, ShellJobManager>();
+
 let sessionIdCounter = 0;
 
 function makeAdapter(): {
@@ -50,7 +53,14 @@ function makeAdapter(): {
     cwd: os.tmpdir(),
     settingsService: new SettingsService(),
   });
-  const adapter = new CoreShellToolHostAdapter(config);
+  const adapter = new CoreShellToolHostAdapter(config, () => {
+    let manager = shellManagers.get(config);
+    if (manager === undefined) {
+      manager = new ShellJobManager();
+      shellManagers.set(config, manager);
+    }
+    return manager;
+  });
   return { config, adapter };
 }
 
@@ -98,7 +108,7 @@ function waitForTerminal(
  * asserting) also preserves the precise TypeScript narrowing the caller needs.
  */
 function requireManager(config: Config): ShellJobManager {
-  const manager = config.getShellJobManager();
+  const manager = shellManagers.get(config);
   if (manager === undefined) {
     throw new Error('ShellJobManager was not created by the adapter');
   }
@@ -162,7 +172,7 @@ describe('CoreShellToolHostAdapter', () => {
       });
 
       afterEach(async () => {
-        const manager = config.getShellJobManager();
+        const manager = shellManagers.get(config);
         if (manager !== undefined) {
           // dispose() rejects by design when Windows survivors are retained.
           // Catch so teardown does not mask real test results or leak processes.

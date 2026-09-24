@@ -8,40 +8,99 @@
  * @plan:PLAN-20260622-COREAPIGAP.P07
  * @requirement:REQ-003
  *
- * BEHAVIORAL RED suite for the `agent.tasks` sub-controller
- * (AgentTasksControl). Drives through the PUBLIC ROOT via the buildAgent
- * harness (helpers/agentHarness.ts:79). The REAL AsyncTaskManager is seeded
- * through the public config path with ZERO mocking:
- *   internalConfig(agent).getAsyncTaskManager() (config.ts:601)
- *   → the SAME lazily-created AsyncTaskManager the control resolves
- *   → mgr.registerTask(RegisterTaskInput) (asyncTaskManager.ts:148) marks
- *     the task 'running'.
- *
- * Reads go through `agent.tasks.list()/listRunning()/get(id)/cancel(id)/
- * cancelAllRunning()` — the SAME manager the control closes over, so the
- * read-path is causally real (no stub).
- *
- * At RED (before P08): `agent.tasks` is undefined on the Agent interface, so
- * every public-harness positive (T7/T8/T10) FAILS with a behavioral TypeError
- * (missing-property → "Cannot read properties of undefined"). The T9
- * undefined-safe case dynamically imports the not-yet-created control module,
- * so its failure at RED is an isolated module-resolution error INSIDE that one
- * test — the whole file still PARSES and the positives drive the behavioral RED.
- *
- * At GREEN (P08): the TasksControl delegates to Config.getAsyncTaskManager()
- * per call, projects each core AsyncTaskInfo to a public AgentTaskInfo that
- * OMITS abortController, and is undefined-safe on every method.
+ * Exercises the public agent.tasks control against the real task manager
+ * bound to the registered TaskTool. This tests both the projection and the
+ * session-owned tool/control identity without seeding a Config-owned manager.
  */
 
 import { describe, it, expect } from 'bun:test';
 import fc from 'fast-check';
 import { buildAgent, internalConfig } from './helpers/agentHarness.js';
+import { AsyncTaskManager } from '@vybestack/llxprt-code-core';
+import type { Agent } from '@vybestack/llxprt-code-agents';
+
+function internalTaskManager(agent: Agent): AsyncTaskManager {
+  const record = internalConfig(agent)
+    .getToolRegistryInfo()
+    .registered.find((item) => item.toolName === 'TaskTool');
+  const candidate: unknown = record?.args[1];
+  if (
+    candidate === null ||
+    typeof candidate !== 'object' ||
+    !('getTaskManager' in candidate) ||
+    typeof candidate.getTaskManager !== 'function'
+  ) {
+    throw new Error('Registered task tool has no task manager dependency');
+  }
+  const manager: unknown = candidate.getTaskManager();
+  if (!(manager instanceof AsyncTaskManager)) {
+    throw new Error('Registered task tool has no session task manager');
+  }
+  return manager;
+}
 
 describe('agent.tasks undefined-safe async-task control @plan:PLAN-20260622-COREAPIGAP.P07 @requirement:REQ-003', () => {
-  it('T7 seed N running tasks on the real manager, cancelAllRunning returns N and leaves listRunning empty @requirement:REQ-003 @scenario:cancel-all-count @given:a real manager seeded with 2 running tasks via internalConfig(agent).getAsyncTaskManager().registerTask @when:agent.tasks.cancelAllRunning() is called @then:the returned count === 2 AND a subsequent agent.tasks.listRunning() has length 0 (terminal idempotent state)', async () => {
+  it('updates the session manager when task-max-async changes and stops observing after disposal', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
-      const mgr = internalConfig(agent).getAsyncTaskManager()!;
+      const manager = internalTaskManager(agent);
+      const settings = internalConfig(agent).getSettingsService();
+      settings.set('task-max-async', 2);
+      expect(manager.canLaunchAsync().allowed).toBe(true);
+      manager.registerTask({
+        id: 'capacity-a',
+        subagentName: 'worker',
+        goalPrompt: 'first',
+        abortController: new AbortController(),
+      });
+      manager.registerTask({
+        id: 'capacity-b',
+        subagentName: 'worker',
+        goalPrompt: 'second',
+        abortController: new AbortController(),
+      });
+      expect(manager.canLaunchAsync().allowed).toBe(false);
+      await agent.dispose();
+      settings.set('task-max-async', 3);
+      expect(manager.getMaxAsyncTasks()).toBe(2);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('cancels running session tasks and rejects new admissions on agent disposal', async () => {
+    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+    try {
+      const manager = internalTaskManager(agent);
+      const controller = new AbortController();
+      manager.registerTask({
+        id: 'dispose-session-task',
+        subagentName: 'worker',
+        goalPrompt: 'unfinished work',
+        abortController: controller,
+      });
+      await agent.dispose();
+      expect(controller.signal.aborted).toBe(true);
+      expect(manager.getRunningTasks()).toHaveLength(0);
+      expect(manager.canLaunchAsync().allowed).toBe(false);
+      expect(manager.tryReserveAsyncSlot()).toBeNull();
+      expect(() =>
+        manager.registerTask({
+          id: 'late-task',
+          subagentName: 'worker',
+          goalPrompt: 'must not launch',
+          abortController: new AbortController(),
+        }),
+      ).toThrow('closed');
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('T7 seed N running tasks on the real manager, cancelAllRunning returns N and leaves listRunning empty @requirement:REQ-003 @scenario:cancel-all-count @given:a real manager seeded with 2 running tasks via the registered TaskTool manager @when:agent.tasks.cancelAllRunning() is called @then:the returned count === 2 AND a subsequent agent.tasks.listRunning() has length 0 (terminal idempotent state)', async () => {
+    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+    try {
+      const mgr = internalTaskManager(agent);
       expect(mgr).toBeDefined();
       const ids = ['t7-a', 't7-b'];
       for (const id of ids) {
@@ -54,6 +113,15 @@ describe('agent.tasks undefined-safe async-task control @plan:PLAN-20260622-CORE
       }
       // Both tasks are 'running' before the call.
       expect(agent.tasks.listRunning()).toHaveLength(2);
+      const checkTool = internalConfig(agent)
+        .getToolRegistry()
+        .getTool('check_async_tasks');
+      expect(checkTool).toBeDefined();
+      const summary = await checkTool!
+        .build({})
+        .execute(new AbortController().signal);
+      expect(summary.llmContent).toContain('t7-a');
+      expect(summary.llmContent).toContain('t7-b');
       const cancelled = await agent.tasks.cancelAllRunning();
       expect(cancelled).toBe(2);
       // Idempotent terminal state: no running tasks remain.
@@ -66,7 +134,7 @@ describe('agent.tasks undefined-safe async-task control @plan:PLAN-20260622-CORE
   it('T8 projection strips abortController from the public view of a running task @requirement:REQ-003 @scenario:no-abortController @given:a real manager seeded with 1 running task that carries an AbortController on the core manager @when:agent.tasks.list() is called @then:the projected view does NOT include an abortController key (Object.keys(view) omits it AND "abortController" in view === false)', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
-      const mgr = internalConfig(agent).getAsyncTaskManager()!;
+      const mgr = internalTaskManager(agent);
       const ac = new AbortController();
       mgr.registerTask({
         id: 't8-x',
@@ -94,7 +162,10 @@ describe('agent.tasks undefined-safe async-task control @plan:PLAN-20260622-CORE
     // module). The public-harness positives (T7/T8/T10) drive the behavioral
     // RED; this test's RED failure is an isolated module-resolution error.
     const { TasksControl } = await import('../control/tasksControl.js');
-    const control = new TasksControl({ getManager: () => undefined });
+    const control = new TasksControl({
+      getManager: () => undefined,
+      setupAutoTrigger: () => () => {},
+    });
     expect(control.list()).toStrictEqual([]);
     expect(control.listRunning()).toStrictEqual([]);
     expect(control.get('x')).toBeUndefined();
@@ -105,7 +176,7 @@ describe('agent.tasks undefined-safe async-task control @plan:PLAN-20260622-CORE
   it('T10 list/listRunning/get/cancel fidelity over a mix of running, completed, and cancelled tasks @requirement:REQ-003 @scenario:fidelity @given:a real manager seeded with 2 running tasks where 1 is then completed @when:list/listRunning/get(knownId)/get(missing)/cancel(knownId)/cancel(missing) are called @then:list() length === 2 (both tasks remain in history); listRunning() length === 1; get(knownId) returns the projected view with matching id; get(missing) === undefined; cancel(knownId) === true; cancel(missing) === false', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
-      const mgr = internalConfig(agent).getAsyncTaskManager()!;
+      const mgr = internalTaskManager(agent);
       mgr.registerTask({
         id: 't10-run',
         subagentName: 's',
@@ -149,7 +220,7 @@ describe('agent.tasks undefined-safe async-task control @plan:PLAN-20260622-CORE
   it('T11 completed/failed projection: terminal tasks carry completedAt, failed tasks carry error, running tasks omit BOTH @requirement:REQ-003 @scenario:optional-field-projection @given:a real manager seeded with 3 running tasks (t11-run stays running, t11-done is completed, t11-fail is failed) @when:agent.tasks.get() is called for each terminal task @then:the completed view has completedAt:number>0 AND has NO error key; the failed view has error===the seed AND completedAt:number>0; the running view OMITS both completedAt and error keys', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
-      const mgr = internalConfig(agent).getAsyncTaskManager()!;
+      const mgr = internalTaskManager(agent);
       for (const id of ['t11-run', 't11-done', 't11-fail']) {
         mgr.registerTask({
           id,
@@ -265,7 +336,7 @@ describe('agent.tasks undefined-safe async-task control @plan:PLAN-20260622-CORE
           async (kind, suffix) => {
             const { agent, cleanup } = await buildAgent('plain-text.jsonl');
             try {
-              const mgr = internalConfig(agent).getAsyncTaskManager()!;
+              const mgr = internalTaskManager(agent);
               const termId = `prop-term-${suffix}`;
               const controlId = `prop-ctrl-${suffix}`;
               for (const id of [termId, controlId]) {
@@ -345,7 +416,7 @@ describe('agent.tasks undefined-safe async-task control @plan:PLAN-20260622-CORE
         async (tasks) => {
           const { agent, cleanup } = await buildAgent('plain-text.jsonl');
           try {
-            const mgr = internalConfig(agent).getAsyncTaskManager()!;
+            const mgr = internalTaskManager(agent);
             for (const t of tasks) {
               mgr.registerTask({
                 id: t.id,
@@ -385,7 +456,7 @@ describe('agent.tasks undefined-safe async-task control @plan:PLAN-20260622-CORE
         async (n, ids) => {
           const { agent, cleanup } = await buildAgent('plain-text.jsonl');
           try {
-            const mgr = internalConfig(agent).getAsyncTaskManager()!;
+            const mgr = internalTaskManager(agent);
             // Use exactly n ids from the generated pool (trim/pad not needed —
             // uniqueArray with minLength:0, maxLength:5 yields distinct ids).
             const chosen = ids.slice(0, n);
