@@ -12,8 +12,8 @@ import {
   renderHook,
   createMockSettings,
   waitFor,
-} from '../test-utils/render.js';
-import { createMockCommandContext } from '../test-utils/mockCommandContext.js';
+} from '../__tests__/render.js';
+import { createMockCommandContext } from '../__tests__/mockCommandContext.js';
 import { buildAppCommands, useAppStores } from './AppContainerRuntime.js';
 import {
   AppCommandsProvider,

@@ -17,7 +17,7 @@
  * and (for wiring) the real AnthropicProvider. No unit under test is mocked.
  */
 
-import { createAnthropicRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
+import { createAnthropicRawPostTestAdapter } from '../__tests__/rawPostTestAdapters.js';
 import { vi, describe, it, expect, afterEach } from 'bun:test';
 import type Anthropic from '@anthropic-ai/sdk';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -41,7 +41,7 @@ import { isTerminalRetryError } from '../retryErrorClassification.js';
 import {
   setupAnthropicProvider,
   type AnthropicTestSetup,
-} from './test-utils/anthropicProviderTestSetup.js';
+} from './__tests__/anthropicProviderTestSetup.js';
 
 const baseProcessorOptions: StreamProcessorOptions = {
   isOAuth: false,

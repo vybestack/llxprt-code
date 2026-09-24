@@ -26,7 +26,7 @@ import { ideContext } from '@vybestack/llxprt-code-ide-integration';
 import {
   setupAgentClient,
   type MockResponseShape,
-} from './client-test-helpers.js';
+} from './__tests__/client-test-helpers.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 // Mock prompts module before imports

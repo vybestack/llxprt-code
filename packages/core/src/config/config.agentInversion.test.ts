@@ -200,8 +200,10 @@ describe('P01 construction inversion contracts', () => {
       onEditorClose: vi.fn(),
     };
 
+    const schedulerOwner = { sessionId: 'p01-scheduler-owner' };
     const first = await config.getOrCreateScheduler(
-      'p01-session',
+      schedulerOwner,
+      'session',
       callbacks,
       undefined,
       {
@@ -209,7 +211,8 @@ describe('P01 construction inversion contracts', () => {
       },
     );
     const second = await config.getOrCreateScheduler(
-      'p01-session',
+      schedulerOwner,
+      'session',
       callbacks,
       undefined,
       {

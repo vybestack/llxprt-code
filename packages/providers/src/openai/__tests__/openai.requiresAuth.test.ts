@@ -9,8 +9,8 @@ import OpenAI from 'openai';
 import {
   createProviderCallOptions,
   type ProviderCallOptionsInit,
-} from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
-import { createOpenAIRawPostTestAdapter } from '../../test-utils/rawPostTestAdapters.js';
+} from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { createOpenAIRawPostTestAdapter } from '../../__tests__/rawPostTestAdapters.js';
 import { CredentialResolutionError } from '@vybestack/llxprt-code-auth';
 
 void vi.mock('openai', () => {

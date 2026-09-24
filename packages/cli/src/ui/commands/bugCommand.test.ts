@@ -20,7 +20,7 @@ import {
 } from 'bun:test';
 import { createBugCommand } from './bugCommand.js';
 import type { SlashCommand } from './types.js';
-import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { getCliVersion } from '../../utils/version.js';
 import { formatMemoryUsage } from '../utils/formatters.js';
 

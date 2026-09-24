@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { AnthropicProvider } from './AnthropicProvider.js';
-import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
-import { createProviderWithRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { TEST_PROVIDER_CONFIG } from '../__tests__/providerTestConfig.js';
+import { createProviderWithRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 
 function isOptionalObject(value: unknown): boolean {
   return value === undefined || typeof value === 'object';

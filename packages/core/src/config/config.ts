@@ -26,11 +26,21 @@ import {
 } from '../utils/memoryDiscovery.js';
 import { IdeClient } from '@vybestack/llxprt-code-ide-integration';
 import { ideContext } from '@vybestack/llxprt-code-ide-integration';
+import { type SchedulerHandle } from '../session/sessionExecutionServices.js';
+import type { SchedulerPurpose } from '../session/sessionSchedulerRegistry.js';
 import {
-  getOrCreateScheduler as _getOrCreateScheduler,
+  acquireScheduler,
   type SchedulerCallbacks,
   type SchedulerOptions,
-} from './schedulerSingleton.js';
+} from './schedulerRegistryAccess.js';
+
+// Re-export the scheduler acquisition types (moved to schedulerRegistryAccess)
+// so consumers importing them from this module or the package barrel are
+// unaffected.
+export type {
+  SchedulerCallbacks,
+  SchedulerOptions,
+} from './schedulerRegistryAccess.js';
 import { initializeLsp } from './lspIntegration.js';
 import * as configConstructor from './configConstructor.js';
 import { ConfigBase } from './configBase.js';
@@ -111,7 +121,6 @@ import {
 } from '../policy/config.js';
 
 import type { ShellExecutionConfig } from '../services/shellExecutionService.js';
-import type { ToolSchedulerContract } from '../core/toolSchedulerContract.js';
 
 export class Config extends ConfigBase {
   private static readonly logger = new DebugLogger('llxprt:config');
@@ -821,30 +830,33 @@ export class Config extends ConfigBase {
   }
 
   /**
-   * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P05
-   * @requirement REQ-D01-001.1
-   * @requirement REQ-D01-001.2
-   * @pseudocode lines 56-72
+   * TEMPORARY delegate (#2615 slice E, see ConfigBase.schedulerRegistry).
+   * Owner is an object whose identity keys the scheduler entry (never a
+   * string): two consumers with colliding labels get distinct schedulers.
+   * Each acquisition supplies its own messageBus and toolRegistry
+   * construction deps: the acquisition that starts an entry fixes them at
+   * construction time, and later acquisitions reuse the entry as built
+   * while still refreshing the five UI callbacks through setCallbacks.
+   * Registry construction and acquisition live in schedulerRegistryAccess.ts.
    */
   async getOrCreateScheduler(
-    sessionId: string,
+    owner: object,
+    purpose: SchedulerPurpose,
     callbacks: SchedulerCallbacks,
     options?: SchedulerOptions,
     dependencies?: {
       messageBus?: MessageBus;
       toolRegistry?: ToolRegistry;
     },
-  ): Promise<ToolSchedulerContract> {
-    const schedulerMessageBus = dependencies?.messageBus;
-    if (!schedulerMessageBus) {
-      throw new Error(
-        'Config.getOrCreateScheduler requires an explicit session/runtime MessageBus dependency.',
-      );
-    }
-    return _getOrCreateScheduler(this, sessionId, callbacks, options, {
-      messageBus: schedulerMessageBus,
-      toolRegistry: dependencies.toolRegistry ?? this.getToolRegistry(),
-    });
+  ): Promise<SchedulerHandle> {
+    return acquireScheduler(
+      this,
+      owner,
+      purpose,
+      callbacks,
+      options,
+      dependencies,
+    );
   }
 
   /**
@@ -1000,6 +1012,3 @@ function throwFailures(failures: unknown[]): void {
     throw new AggregateError(failures, 'Config disposal failed');
   }
 }
-
-// Re-export scheduler types for external use
-export { type SchedulerCallbacks, type SchedulerOptions };

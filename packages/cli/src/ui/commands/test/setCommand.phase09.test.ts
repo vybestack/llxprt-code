@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import * as fc from 'fast-check';
 import { createCompletionHandler } from '../schema/index.js';
 import type { CommandContext } from '../types.js';
-import { createMockCommandContext } from '../../../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 
 const mockRuntime = {
@@ -33,7 +33,7 @@ void vi.mock('../../contexts/RuntimeContext.js', () => ({
   getRuntimeApi: () => mockRuntime,
 }));
 import { setCommand } from '../setCommand.js';
-import { assertDefined } from '../../../test-utils/assertions.js';
+import { assertDefined } from '../../../__tests__/assertions.js';
 
 /**
  * @plan:PLAN-20251013-AUTOCOMPLETE.P09

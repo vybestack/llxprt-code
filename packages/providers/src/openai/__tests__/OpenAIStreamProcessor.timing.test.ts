@@ -33,7 +33,7 @@ import type { ApiResponseEvent } from '@vybestack/llxprt-code-core/telemetry/typ
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { GemmaToolCallParser } from '@vybestack/llxprt-code-core/parsers/TextToolCallParser.js';
-import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import {
   SessionMetricsAggregator,
   type ApiAttemptRecord,

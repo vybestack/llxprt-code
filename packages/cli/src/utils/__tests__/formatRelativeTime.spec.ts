@@ -14,7 +14,7 @@
 import { describe, it, expect } from 'bun:test';
 import fc from 'fast-check';
 import { formatRelativeTime } from '../formatRelativeTime.js';
-import { testRegex } from '../../test-utils/regex.js';
+import { testRegex } from '../../__tests__/regex.js';
 
 // Fixed reference time for deterministic tests
 const NOW = new Date('2026-02-16T12:00:00.000Z');

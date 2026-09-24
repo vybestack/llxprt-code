@@ -15,12 +15,12 @@ import type {
 import type {
   AnthropicContentBlock,
   AnthropicRequestBody,
-} from './test-utils/anthropicTestUtils.js';
+} from './__tests__/anthropicTestUtils.js';
 import {
   mockMessagesCreate,
   setupThinkingProvider,
   type ThinkingTestSetup,
-} from './test-utils/anthropicThinkingTestSetup.js';
+} from './__tests__/anthropicThinkingTestSetup.js';
 
 describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', () => {
   let provider: ThinkingTestSetup['provider'];

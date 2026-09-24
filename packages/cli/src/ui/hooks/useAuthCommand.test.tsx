@@ -6,8 +6,8 @@
 
 import { act } from 'react';
 import { describe, expect, it } from 'bun:test';
-import { renderHook } from '../../test-utils/render.js';
-import { hasDialogRequest } from '../../test-utils/dialogStore.js';
+import { renderHook } from '../../__tests__/render.js';
+import { hasDialogRequest } from '../../__tests__/dialogStore.js';
 import { AppDispatchProvider } from '../contexts/AppDispatchContext.js';
 import {
   appReducer,

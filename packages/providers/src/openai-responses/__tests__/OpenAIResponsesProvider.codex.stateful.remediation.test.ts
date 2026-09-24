@@ -34,7 +34,7 @@ import {
   completingScript,
   drain as drainHarness,
   userTextsOf,
-} from '../openAIResponsesWebSocketTransport.test-helpers.js';
+} from './openAIResponsesWebSocketTransport.test-helpers.js';
 import { createCodexResponsesWebSocketTransport } from '../openAIResponsesWebSocketTransport.js';
 import type {
   StreamResponseOptions,
@@ -42,9 +42,9 @@ import type {
 } from '../openAIResponsesWebSocketTransport.js';
 import type { OpenAIResponsesRequest } from '../OpenAIResponsesTypes.js';
 import { executeOpenAIResponsesRequest } from '../openAIResponsesExecutor.js';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import {
   CODEX_BASE_URL,
   TEST_RUNTIME_ID,
@@ -52,7 +52,7 @@ import {
   buildDeps,
   buildOptions,
   metadataOf,
-} from '../codexStateful.test-helpers.js';
+} from './codexStateful.test-helpers.js';
 
 interface FunctionItem {
   readonly type?: string;

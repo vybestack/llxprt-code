@@ -20,7 +20,7 @@ import {
   defaultRunConfig,
   createStatelessRuntimeBundle,
   createRuntimeOverrides,
-} from './subagent-test-helpers.js';
+} from './__tests__/subagent-test-helpers.js';
 
 const actual = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
 void vi.mock('@vybestack/llxprt-code-ide-integration', () => ({

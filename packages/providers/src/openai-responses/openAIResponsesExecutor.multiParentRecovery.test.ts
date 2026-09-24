@@ -15,7 +15,7 @@ import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { createCodexResponsesWebSocketTransport } from './openAIResponsesWebSocketTransport.js';
 import { declaredMediaTransportCapabilities } from '../providerMediaTransportCapabilities.js';
 import {
@@ -25,7 +25,7 @@ import {
   drain as drainHarness,
   frame,
   userTextsOf,
-} from './openAIResponsesWebSocketTransport.test-helpers.js';
+} from './__tests__/openAIResponsesWebSocketTransport.test-helpers.js';
 
 const CODEX_BASE_URL = 'https://chatgpt.com/backend-api/codex';
 

@@ -12,7 +12,7 @@ import {
   HttpBodyTooLargeError,
   type BoundedFetchResponse,
 } from './bounded-http-response.js';
-import { createLoopbackHarness } from '../test-utils/loopback-test-helpers.js';
+import { createLoopbackHarness } from '../__tests__/loopback-test-helpers.js';
 
 const loopback = createLoopbackHarness();
 

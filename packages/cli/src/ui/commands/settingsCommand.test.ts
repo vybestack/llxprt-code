@@ -7,8 +7,8 @@
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { settingsCommand } from './settingsCommand.js';
 import { type CommandContext } from './types.js';
-import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
-import { assertDefined } from '../../test-utils/assertions.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
+import { assertDefined } from '../../__tests__/assertions.js';
 
 describe('settingsCommand', () => {
   let mockContext: CommandContext;

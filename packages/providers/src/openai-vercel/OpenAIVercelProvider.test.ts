@@ -21,11 +21,11 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
 import { BaseProvider } from '../BaseProvider.js';
 import type { IProvider } from '../IProvider.js';
-import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
-import { createProviderWithRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { TEST_PROVIDER_CONFIG } from '../__tests__/providerTestConfig.js';
+import { createProviderWithRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { CredentialResolutionError } from '@vybestack/llxprt-code-auth';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 /**

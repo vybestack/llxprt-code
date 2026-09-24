@@ -6,7 +6,7 @@
 
 import { act } from 'react';
 import { describe, expect, it } from 'bun:test';
-import { renderHook } from '../test-utils/render.js';
+import { renderHook } from '../__tests__/render.js';
 import { useTextBuffer } from './components/shared/text-buffer.js';
 
 describe('useTextBuffer IME input', () => {

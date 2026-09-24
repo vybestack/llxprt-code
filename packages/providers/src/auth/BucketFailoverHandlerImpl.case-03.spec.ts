@@ -11,7 +11,7 @@ import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-core';
 import {
   createBucketFailoverFixture,
   makeToken,
-} from './BucketFailoverHandlerImpl.test-helpers.js';
+} from './__tests__/BucketFailoverHandlerImpl.test-helpers.js';
 
 describe('BucketFailoverHandlerImpl #3', () => {
   it('uses scoped session buckets when initialized with request metadata', async () => {

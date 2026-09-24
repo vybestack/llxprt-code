@@ -29,7 +29,7 @@ import {
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 
 const originalConfigHome = process.env['LLXPRT_CONFIG_HOME'];
 const originalCacheHome = process.env['LLXPRT_CACHE_HOME'];

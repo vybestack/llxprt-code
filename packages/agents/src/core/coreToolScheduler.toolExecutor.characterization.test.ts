@@ -16,8 +16,8 @@ import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, type Mock } from 'bun:test';
 import type { ToolCall } from './coreToolScheduler.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
-import { expectSuccessful } from './coreToolScheduler-test-helpers.js';
-import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
+import { expectSuccessful } from './__tests__/coreToolScheduler-test-helpers.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 
 // Helper function to create a mock MessageBus

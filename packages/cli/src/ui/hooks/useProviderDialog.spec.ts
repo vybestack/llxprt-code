@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { hasDialogRequest } from '../../test-utils/dialogStore.js';
+import { hasDialogRequest } from '../../__tests__/dialogStore.js';
 
 // Enable React's act() environment so hook state updates are flushed.
 (
@@ -13,7 +13,7 @@ import { hasDialogRequest } from '../../test-utils/dialogStore.js';
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { act } from 'react';
-import { renderHook } from '../../test-utils/render.js';
+import { renderHook } from '../../__tests__/render.js';
 import { MessageType } from '../types.js';
 import { NO_ACTIVE_PROVIDER_ERROR_MESSAGE } from '@vybestack/llxprt-code-providers/runtime.js';
 import type { AgentProviderSwitchResult } from '@vybestack/llxprt-code-agents';

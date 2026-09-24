@@ -19,7 +19,7 @@ import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { keyCommand, invalidateKeyCompletionCache } from './keyCommand.js';
-import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import type { CommandContext, MessageActionReturn } from './types.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import {

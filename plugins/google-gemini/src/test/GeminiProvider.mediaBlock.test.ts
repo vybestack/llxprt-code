@@ -14,11 +14,10 @@
  * limitations under the License.
  */
 
-import { assertInstanceOf } from '@vybestack/llxprt-code-test-utils/index.js';
+import { assertInstanceOf, createProviderCallOptions } from './testSupport.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { GeminiProvider } from '../gemini/GeminiProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import type {
   RequestMediaResolutionService,
   ResolvedMediaRequest,

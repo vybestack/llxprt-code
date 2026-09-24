@@ -40,7 +40,6 @@
       "policy",
       "providers",
       "settings",
-      "test-utils",
       "tools"
     ],
     "auth": [],
@@ -54,7 +53,6 @@
       "settings",
       "storage",
       "telemetry",
-      "test-utils",
       "tools",
       "zed-acp"
     ],
@@ -84,18 +82,19 @@
     "settings": ["storage"],
     "storage": [],
     "telemetry": ["storage"],
-    "test-utils": [],
+    "test-utils": ["core", "settings", "tools"],
     "tools": [],
     "vscode-ide-companion": ["ide-integration"],
     "zed-acp": ["agents", "core", "providers", "storage", "telemetry", "tools"]
   },
   "testOnlyEdges": {
-    "agents": ["storage"],
+    "agents": ["storage", "test-utils"],
     "auth": ["test-utils"],
     "core": ["providers", "test-utils"],
     "providers": ["test-utils"],
     "tools": ["settings", "storage", "test-utils"],
-    "zed-acp": ["settings", "test-utils"]
+    "zed-acp": ["settings", "test-utils"],
+    "cli": ["test-utils"]
   },
   "observers": {
     "agents": [

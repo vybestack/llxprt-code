@@ -39,7 +39,7 @@ import {
   processSlashCommand,
   type SlashCommandHandlerDeps,
 } from './slashCommandHandlers.js';
-import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import type { RecordingSwapCallbacks } from '../../services/performResume.js';
 import type { Message } from '../types.js';
 

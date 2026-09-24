@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { Config } from './config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { initializeTestConfig } from '../test-utils/config.js';
+import { initializeTestConfig } from '../__tests__/config-test-helpers.js';
 import {
   ACTIVATE_MCP_SERVER_TOOL_NAME,
   ActivateMcpServerTool,

@@ -9,11 +9,11 @@ import { buildSlashCommandRuntime } from '../cliUiRuntime.js';
 import { DialogManager } from './DialogManager.js';
 import { DialogProvider } from '../stores/dialog/DialogContext.js';
 import { AppCommandsProvider } from '../contexts/AppCommandsContext.js';
-import { createAppCommandBindings } from '../../test-utils/appCommandBindings.js';
-import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { createAppCommandBindings } from '../../__tests__/appCommandBindings.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { useTextBuffer } from './shared/text-buffer.js';
 
-import { hasDialogRequest } from '../../test-utils/dialogStore.js';
+import { hasDialogRequest } from '../../__tests__/dialogStore.js';
 
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import {
@@ -21,7 +21,7 @@ import {
   waitFor,
   renderWithProviders,
   createMockSettings,
-} from '../../test-utils/render.js';
+} from '../../__tests__/render.js';
 import type { HydratedModel } from '@vybestack/llxprt-code-core';
 
 // Mock the providers runtime barrel to avoid the broken dist dependency chain.

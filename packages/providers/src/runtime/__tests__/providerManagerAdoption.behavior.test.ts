@@ -33,7 +33,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import * as fc from 'fast-check';
 import { MessageBus } from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ProviderManager } from '../../ProviderManager.js';
 import type { IProvider } from '../../IProvider.js';

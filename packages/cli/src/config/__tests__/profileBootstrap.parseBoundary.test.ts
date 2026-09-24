@@ -23,7 +23,7 @@ import {
   ProfileManager,
 } from '@vybestack/llxprt-code-settings';
 import { profileCommand } from '../../ui/commands/profileCommand.js';
-import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 
 void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
   registerCliProviderInfrastructure: vi.fn(),

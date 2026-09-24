@@ -12,7 +12,7 @@
 import { vi, describe, it, expect, type Mock } from 'bun:test';
 import { dumpcontextCommand } from './dumpcontextCommand.js';
 import { type CommandContext } from './types.js';
-import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 
 const actual = { ...(await import('@vybestack/llxprt-code-providers')) };
 void vi.mock('@vybestack/llxprt-code-providers', () => ({
@@ -33,7 +33,7 @@ void vi.mock('../contexts/RuntimeContext.js', () => ({
   })),
 }));
 
-import { assertDefined } from '../../test-utils/assertions.js';
+import { assertDefined } from '../../__tests__/assertions.js';
 
 const dumpcontextAction = dumpcontextCommand.action;
 assertDefined(dumpcontextAction);

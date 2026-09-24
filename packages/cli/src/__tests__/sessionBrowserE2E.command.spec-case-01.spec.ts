@@ -16,7 +16,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { assertHasType } from '../test-utils/assertions.js';
+import { assertHasType } from '../__tests__/assertions.js';
 import { continueCommand } from '../ui/commands/continueCommand.js';
 import type {
   CommandContext,

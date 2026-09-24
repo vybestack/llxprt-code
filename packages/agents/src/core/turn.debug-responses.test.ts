@@ -21,7 +21,7 @@ import {
   type MockedChatInstance,
   findFinishedEvent,
   mockChunk,
-} from './turn-test-helpers.js';
+} from './__tests__/turn-test-helpers.js';
 
 const { mockSendMessageStream, mockGetHistory } = {
   mockSendMessageStream: vi.fn(),

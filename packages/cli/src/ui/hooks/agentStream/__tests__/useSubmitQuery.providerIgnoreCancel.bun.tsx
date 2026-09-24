@@ -43,13 +43,13 @@
  *    an empty queue — and the provider read never settled.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import React, { act, useRef, type Dispatch, type SetStateAction } from 'react';
-import { renderHook } from '../../../../test-utils/render.js';
-// Act-aware waitFor: the plain poll in test-utils/render.js lets React state
+import { renderHook } from '../../../../__tests__/render.js';
+// Act-aware waitFor: the plain poll in __tests__/render.js lets React state
 // updates land outside act(), which floods CI output with act() warnings for
 // this test's long post-release drain sequence.
-import { waitFor } from '../../../../test-utils/async.js';
+import { waitFor } from '../../../../__tests__/async.js';
 import { useSubmitQuery, type UseSubmitQueryDeps } from '../useSubmitQuery.js';
 import {
   useAgentEventStream,
@@ -73,7 +73,6 @@ import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core/core/turn.js';
 import { LocalTodoStore } from '@vybestack/llxprt-code-tools';
 import type { Todo } from '@vybestack/llxprt-code-tools';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import { clearAllSchedulers } from '@vybestack/llxprt-code-core/config/schedulerSingleton.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { Storage } from '@vybestack/llxprt-code-settings/storage/Storage.js';
@@ -652,12 +651,9 @@ describe('useSubmitQuery — cancelled turn whose provider read never settles (i
     // Module-level mock call histories must not leak between tests, or a
     // second test's waitFor(...).toHaveBeenCalledWith gates would pass
     // vacuously on stale history (sibling useAgentEventStream.bun.tsx
-    // convention).
+    // convention). Each engine fixture owns its Config and scheduler
+    // registry, so scheduler state is already isolated per test.
     vi.clearAllMocks();
-    clearAllSchedulers();
-  });
-  afterEach(() => {
-    clearAllSchedulers();
   });
 
   it('ends turn A via the abort race, then drains B and C exactly once, in order', async () => {

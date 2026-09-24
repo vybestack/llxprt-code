@@ -12,7 +12,7 @@ import {
   mockLoadProfile,
   clearIssue1468Fixture,
   type MockTokenStore,
-} from './oauth-manager.issue1468.test-helpers.js';
+} from './__tests__/oauth-manager.issue1468.test-helpers.js';
 import type { OAuthManager } from './oauth-manager.js';
 import type { OAuthToken } from './types.js';
 import {

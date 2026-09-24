@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { setCommand } from '../ui/commands/setCommand.js';
-import { createMockCommandContext } from '../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../__tests__/mockCommandContext.js';
 import type { CommandContext } from '../ui/commands/types.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 

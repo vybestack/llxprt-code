@@ -33,7 +33,7 @@ import {
   PROJECT_HASH,
   assertReplayError,
   assertReplayOk,
-} from './replay-test-helpers.js';
+} from './__tests__/replay-test-helpers.js';
 
 const tempDirs: string[] = [];
 const services: SessionRecordingService[] = [];

@@ -17,10 +17,9 @@
  * `tools_complete`, and the ordering of yielded stream events.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect } from 'bun:test';
 import { AgenticLoop } from '../AgenticLoop.js';
-import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
-import { clearAllSchedulers } from '@vybestack/llxprt-code-core/config/schedulerSingleton.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import {
@@ -44,13 +43,6 @@ function retryEvent(): ServerAgentStreamEvent {
 }
 
 describe('AgenticLoop discards abandoned tool-call requests on Retry (issue 3048)', () => {
-  beforeEach(() => {
-    clearAllSchedulers();
-  });
-  afterEach(() => {
-    clearAllSchedulers();
-  });
-
   function buildLoop(scripts: ServerAgentStreamEvent[][]) {
     const tool = new MockTool({ name: 'echo' });
     const toolRegistry = createToolRegistryForTest([tool]);

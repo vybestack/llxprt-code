@@ -7,10 +7,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { hooksCommand } from './hooksCommand.js';
 import { MessageType } from '../types.js';
-import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import type { CommandContext } from './types.js';
 import type { Config, HookRegistryEntry } from '@vybestack/llxprt-code-core';
-import { assertDefined } from '../../test-utils/assertions.js';
+import { assertDefined } from '../../__tests__/assertions.js';
 import {
   HookType,
   HookEventName,

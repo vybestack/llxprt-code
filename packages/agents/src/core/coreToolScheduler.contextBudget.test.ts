@@ -23,7 +23,7 @@ import {
   type ToolResult,
 } from '@vybestack/llxprt-code-tools';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
-import { getTestRuntimeMessageBus } from '@vybestack/llxprt-code-core/test-utils/config.js';
+import { getTestRuntimeMessageBus } from '@vybestack/llxprt-code-test-utils/core/config.js';
 
 // Helper function to create a mock MessageBus
 function createMockMessageBus() {

@@ -14,8 +14,8 @@ import {
   replaySession,
   type IContent,
 } from '@vybestack/llxprt-code-core';
-import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
-import { assertDefined } from '../../test-utils/assertions.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
+import { assertDefined } from '../../__tests__/assertions.js';
 import { chatCommand } from './chatCommand.js';
 import { createCompletionHandler } from './schema/index.js';
 import type { CommandContext, SlashCommand } from './types.js';

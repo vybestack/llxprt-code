@@ -9,7 +9,7 @@ import { BucketFailoverHandlerImpl } from './BucketFailoverHandlerImpl.js';
 import {
   createBucketFailoverFixture,
   makeToken,
-} from './BucketFailoverHandlerImpl.test-helpers.js';
+} from './__tests__/BucketFailoverHandlerImpl.test-helpers.js';
 
 describe('BucketFailoverHandlerImpl #9', () => {
   it('prevents infinite cycling when all buckets have valid tokens', async () => {

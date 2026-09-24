@@ -13,7 +13,7 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   createAnthropicRawPostTestAdapter,
   type RawPostTestHandler,
-} from '../test-utils/rawPostTestAdapters.js';
+} from '../__tests__/rawPostTestAdapters.js';
 
 function createAnthropicDumpClient(handler: RawPostTestHandler): object {
   return {

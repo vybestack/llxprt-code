@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import { createProviderCallOptions } from './testSupport.js';
 import * as dumpSDKContextModule from '@vybestack/llxprt-code-providers/utils/dumpSDKContext.js';
 import * as geminiGenerationExecutionModule from '../gemini/geminiGenerationExecution.js';
 import type { GeminiGenerationSetup } from '../gemini/geminiGenerationSetup.js';
@@ -252,9 +253,6 @@ describe('Gemini non-OAuth non-streaming generate separate dump', () => {
     const generationSpy = vi
       .spyOn(geminiGenerationExecutionModule, 'executeNonOAuthGeneration')
       .mockResolvedValue({ stream: null, emitted: false });
-    const { createProviderCallOptions } = await import(
-      '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js'
-    );
     const { GeminiProvider } = await import('../gemini/GeminiProvider.js');
     const provider = new GeminiProvider('test-api-key');
 

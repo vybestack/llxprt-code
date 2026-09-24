@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { renderHook } from '../../test-utils/render.js';
+import { renderHook } from '../../__tests__/render.js';
 import { act } from 'react';
 import { vi, describe, it, expect, beforeEach } from 'bun:test';
 import { useInputHistoryStore } from './useInputHistoryStore.js';

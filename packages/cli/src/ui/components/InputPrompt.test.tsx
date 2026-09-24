@@ -5,8 +5,8 @@
  */
 
 import { automock } from '@vybestack/llxprt-code-test-utils';
-import { renderWithProviders } from '../../test-utils/render.js';
-import { waitFor } from '../../test-utils/async.js';
+import { renderWithProviders } from '../../__tests__/render.js';
+import { waitFor } from '../../__tests__/async.js';
 import { act } from 'react';
 import { FAST_RETURN_TIMEOUT } from '../contexts/KeypressContext.js';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
@@ -28,7 +28,7 @@ import { useInputHistory } from '../hooks/useInputHistory.js';
 import type { UseReverseSearchCompletionReturn } from '../hooks/useReverseSearchCompletion.js';
 import { useReverseSearchCompletion } from '../hooks/useReverseSearchCompletion.js';
 import * as clipboardUtils from '../utils/clipboardUtils.js';
-import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { StreamingState } from '../types.js';
 import { terminalCapabilityManager } from '../utils/terminalCapabilityManager.js';
 

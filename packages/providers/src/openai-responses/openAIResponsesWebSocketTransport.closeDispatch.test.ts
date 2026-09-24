@@ -19,7 +19,7 @@ import {
   options,
   request,
   textContent,
-} from './openAIResponsesWebSocketTransport.test-helpers.js';
+} from './__tests__/openAIResponsesWebSocketTransport.test-helpers.js';
 
 // Focused companion to the main transport suite. Kept separate so the main
 // file stays within the max-lines budget while this pins invariants that were

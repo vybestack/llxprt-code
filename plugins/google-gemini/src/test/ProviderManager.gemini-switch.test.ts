@@ -12,7 +12,7 @@ import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtim
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { GeminiProvider } from '../gemini/GeminiProvider.js';
 import { OpenAIProvider } from '@vybestack/llxprt-code-providers/openai/OpenAIProvider.js';
-import { makeFakeConfig } from '@vybestack/llxprt-code-core/test-utils/config.js';
+import { makeFakeConfig } from './testSupport.js';
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('system prompt'),

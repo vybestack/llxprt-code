@@ -27,7 +27,7 @@ import {
   createCaptureProvider,
   generateHistory,
   testProviderRuntime,
-} from '../MiddleOutStrategy-test-helpers.js';
+} from './MiddleOutStrategy-test-helpers.js';
 
 const JOURNAL_PATH = '/tmp/llxprt-chats/session-2026-08-22-abcd1234.jsonl';
 

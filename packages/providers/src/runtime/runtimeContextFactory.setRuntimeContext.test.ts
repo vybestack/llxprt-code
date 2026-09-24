@@ -21,7 +21,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { Config } from '@vybestack/llxprt-code-core';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import type { IsolatedRuntimeContextHandle } from './runtimeSettings.js';
 import { ProviderManager } from '../ProviderManager.js';
 import {

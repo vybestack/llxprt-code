@@ -41,7 +41,7 @@ import {
   completingScript,
   drain as drainHarness,
   userTextsOf,
-} from '../openAIResponsesWebSocketTransport.test-helpers.js';
+} from './openAIResponsesWebSocketTransport.test-helpers.js';
 import { createCodexResponsesWebSocketTransport } from '../openAIResponsesWebSocketTransport.js';
 import { executeOpenAIResponsesRequest } from '../openAIResponsesExecutor.js';
 import {
@@ -49,7 +49,7 @@ import {
   buildDeps,
   buildOptions,
   metadataOf,
-} from '../codexStateful.test-helpers.js';
+} from './codexStateful.test-helpers.js';
 
 const PROJECT_HASH = 'issue3160projecthash';
 

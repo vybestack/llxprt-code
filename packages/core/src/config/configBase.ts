@@ -21,8 +21,9 @@ import {
   normalizeStreamingValue,
   normalizeContextLimit,
 } from './ephemeralSettingsHelpers.js';
-import { disposeScheduler as _disposeScheduler } from './schedulerSingleton.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
+import type { SchedulerPurpose } from '../session/sessionSchedulerRegistry.js';
+import type { SessionSchedulerRegistry } from '../session/sessionSchedulerRegistry.js';
 import {
   type ShellReplacementMode,
   normalizeShellReplacement,
@@ -218,9 +219,26 @@ export abstract class ConfigBase extends ConfigBaseCore {
     return client;
   }
 
-  disposeScheduler(sessionId: string): void {
-    _disposeScheduler(sessionId);
+  disposeScheduler(
+    owner: object,
+    purpose: SchedulerPurpose,
+    handle?: object,
+  ): void {
+    // No lazy creation here: disposing before any acquisition is a no-op,
+    // matching the unknown-key release semantics of the registry itself.
+    this.schedulerRegistry?.release(owner, purpose, handle);
   }
+
+  /**
+   * TEMPORARY (#2615 slice E): per-Config scheduler registry backing the
+   * getOrCreateScheduler/disposeScheduler delegates. DELETION CRITERION: the
+   * E-wave PR that lands SessionRuntime ownership of the registry deletes
+   * this field and both Config delegate methods. Instance state, not a
+   * module global; the process-global scheduler maps died with the deleted
+   * scheduler singleton module. The lazy getter lives on Config next to
+   * getOrCreateScheduler.
+   */
+  protected schedulerRegistry: SessionSchedulerRegistry | undefined;
 
   setDisabledHooks(hooks: string[]): void {
     this.disabledHooks = hooks;

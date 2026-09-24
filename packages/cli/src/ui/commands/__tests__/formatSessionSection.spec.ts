@@ -16,7 +16,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { formatSessionSection } from '../formatSessionSection.js';
 import type { SessionRecordingMetadata } from '../../types/SessionRecordingMetadata.js';
-import { testRegex } from '../../../test-utils/regex.js';
+import { testRegex } from '../../../__tests__/regex.js';
 
 function resumedLabel(isResumed: boolean): 'yes' | 'no' {
   return isResumed ? 'yes' : 'no';

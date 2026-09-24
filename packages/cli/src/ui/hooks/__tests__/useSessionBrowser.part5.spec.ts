@@ -40,7 +40,7 @@ import {
   type SessionRecordingServiceConfig,
 } from '@vybestack/llxprt-code-core';
 
-import { renderHook, waitFor } from '../../../test-utils/render.js';
+import { renderHook, waitFor } from '../../../__tests__/render.js';
 import {
   useSessionBrowser,
   type UseSessionBrowserProps,

@@ -13,7 +13,7 @@ import {
   setupAnthropicProvider,
   type AnthropicMessage,
   type AnthropicTestSetup,
-} from './test-utils/anthropicProviderTestSetup.js';
+} from './__tests__/anthropicProviderTestSetup.js';
 
 function isAnthropicMessageContent(value: unknown): boolean {
   return typeof value === 'string' || Array.isArray(value);
@@ -21,7 +21,7 @@ function isAnthropicMessageContent(value: unknown): boolean {
 
 // Shared mock instance for messages.create - using vi.hoisted so it's
 // available when vi.mock factories run.
-import { createAnthropicRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
+import { createAnthropicRawPostTestAdapter } from '../__tests__/rawPostTestAdapters.js';
 
 const mockMessagesCreate = vi.fn();
 

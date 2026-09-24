@@ -9,7 +9,7 @@ import { act } from 'react';
 import { beforeEach, describe, expect, it, vi, type Mock } from 'bun:test';
 import { useStdin } from 'ink';
 import { EventEmitter } from 'node:events';
-import { renderHook } from '../../test-utils/render.js';
+import { renderHook } from '../../__tests__/render.js';
 import { MouseProvider, useMouseContext } from './MouseContext.js';
 import { useMouse } from '../hooks/useMouse.js';
 import type { MouseEvent } from '../utils/mouse.js';
