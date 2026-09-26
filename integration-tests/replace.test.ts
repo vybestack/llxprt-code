@@ -9,7 +9,7 @@ import { env } from 'node:process';
 import { TestRig } from './test-helper.js';
 
 const localModelPilot = env['LLXPRT_LOCAL_MODEL_PILOT'] === 'true';
-const replaceTestOptions = localModelPilot ? { timeout: 1_200_000 } : {};
+const replaceTestOptions = localModelPilot ? { timeout: 1_500_000 } : {};
 
 describe('replace', () => {
   let rig: TestRig;
@@ -40,7 +40,7 @@ describe('replace', () => {
 
       await rig.run({
         args: `Use the replace tool on '${filePath}' to replace the exact text 'foo content' with 'bar content'. Do not add any whitespace.`,
-        timeoutMs: localModelPilot ? 900_000 : undefined,
+        timeoutMs: localModelPilot ? 1_200_000 : undefined,
       });
 
       const foundToolCall = await rig.waitForToolCall('replace');

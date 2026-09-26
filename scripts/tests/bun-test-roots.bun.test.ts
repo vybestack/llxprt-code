@@ -101,7 +101,7 @@ describe('BUN_TEST_ROOTS structural guarantees', () => {
         '/repo/integration-tests/run_shell_command.test.ts',
       ),
     ).toBe(false);
-    expect(overrides[0]?.timeout).toBe(1_200_000);
+    expect(overrides[0]?.timeout).toBe(1_500_000);
   });
 
   it('has exactly the expected set of root tokens', () => {

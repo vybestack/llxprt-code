@@ -220,9 +220,10 @@ without discarding file changes. The runtime archive is pinned to 0.31.1;
 its CUDA and Vulkan libraries are excluded during extraction, and the downloaded
 archive is removed afterward. Ollama is limited to one concurrent context. The
 manual pilot configures both Ollama and LLxprt with a 32,768-token context and
-reserves 8,192 tokens for model output. The real replace invocation has a
-900,000 ms `TestRig` deadline, its Bun file has a 1,200,000 ms timeout, and each
-sandbox job has a 90-minute bound. These larger deadlines apply only when
+reserves 8,192 tokens for model output. The pilot profile allows 600,000 ms
+for the first model response. The real replace invocation has a 1,200,000 ms
+`TestRig` deadline, its Bun file has a 1,500,000 ms timeout, and each sandbox
+job has a 90-minute bound. These larger deadlines apply only when
 `LLXPRT_LOCAL_MODEL_PILOT=true`; normal integration-test deadlines are unchanged.
 
 To reproduce the two real-model canaries without using an existing Ollama daemon,
@@ -281,6 +282,13 @@ Docker server), and the uploaded Ollama server log and real-model ledger. Check
 the model digest and SHA-256 result in each job log. Both canaries and the budget
 check need repeated passes before considering any required-coverage change.
 A local Apple Silicon result cannot substitute for Linux CPU and Docker measurements.
+
+Hosted run [`36276039788`](https://github.com/vybestack/llxprt-code/actions/runs/36276039788)
+passed shell in both legs but failed replace in all three attempts per leg.
+Four replace attempts hit the CLI's default 300,000 ms first-response watchdog;
+the remaining host attempt hit the 900,000 ms `TestRig` deadline. Both diagnostic
+artifacts uploaded. The pilot-only first-response and replace deadlines above
+were increased in response; this does not establish a passing hosted run.
 
 #### Local measurements (September 26, 2026)
 

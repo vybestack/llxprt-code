@@ -153,7 +153,7 @@ export function integrationTestTimeoutOverrides(
   if (environment['LLXPRT_LOCAL_MODEL_PILOT'] !== 'true') {
     return [];
   }
-  return [{ pattern: /replace\.test\.ts$/, timeout: 1_200_000 }];
+  return [{ pattern: /replace\.test\.ts$/, timeout: 1_500_000 }];
 }
 
 export const BUN_TEST_ROOTS: readonly BunTestRoot[] = [

@@ -60,6 +60,7 @@ describe('TestRig setup and cleanup behavior', () => {
 
   it('writes bounded context and output settings into an opt-in test profile', () => {
     createRoot();
+    setEnv('LLXPRT_LOCAL_MODEL_PILOT', 'true');
     setEnv('LLXPRT_TEST_PROFILE', 'local-model-pilot');
     setEnv('LLXPRT_DEFAULT_PROVIDER', 'openai');
     setEnv('LLXPRT_DEFAULT_MODEL', 'qwen3.5:2b');
@@ -82,8 +83,29 @@ describe('TestRig setup and cleanup behavior', () => {
       ephemeralSettings: {
         'context-limit': 32768,
         maxOutputTokens: 8192,
+        'stream-first-response-timeout-ms': 600_000,
       },
     });
+  });
+
+  it('leaves the ordinary test profile first-response deadline unchanged', () => {
+    createRoot();
+    setEnv('LLXPRT_LOCAL_MODEL_PILOT', undefined);
+    setEnv('LLXPRT_TEST_PROFILE', 'ordinary-profile');
+    const rig = new TestRig();
+
+    rig.setup('ordinary profile');
+
+    const testDir = requireTestDir(rig.testDir);
+    const profile = JSON.parse(
+      readFileSync(
+        join(testDir, '.llxprt', 'profiles', 'ordinary-profile.json'),
+        'utf8',
+      ),
+    );
+    expect(profile.ephemeralSettings).not.toHaveProperty(
+      'stream-first-response-timeout-ms',
+    );
   });
 
   it('loads the generated local pilot profile in the real CLI without a global profile', async () => {
