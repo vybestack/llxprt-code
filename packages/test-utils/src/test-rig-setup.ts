@@ -216,6 +216,14 @@ function collectEphemeralEntries(): Array<[string, unknown]> {
     }
   }
 
+  const maxOutputTokens = env['LLXPRT_MAX_OUTPUT_TOKENS'];
+  if (maxOutputTokens !== undefined) {
+    const parsedMaxOutputTokens = Number(maxOutputTokens);
+    if (Number.isFinite(parsedMaxOutputTokens) && parsedMaxOutputTokens > 0) {
+      entries.push(['maxOutputTokens', parsedMaxOutputTokens]);
+    }
+  }
+
   return entries;
 }
 

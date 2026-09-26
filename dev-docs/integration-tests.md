@@ -219,8 +219,11 @@ ran unrelated Git commands and made an unintended local commit; it was removed
 without discarding file changes. The runtime archive is pinned to 0.31.1;
 its CUDA and Vulkan libraries are excluded during extraction, and the downloaded
 archive is removed afterward. Ollama is limited to one concurrent context. The
-262,144-token context uses more memory than a smaller window; local 32,768-token
-runs did not reliably complete the replace task.
+manual pilot configures both Ollama and LLxprt with a 32,768-token context and
+reserves 8,192 tokens for model output. The real replace invocation has a
+900,000 ms `TestRig` deadline, its Bun file has a 1,200,000 ms timeout, and each
+sandbox job has a 90-minute bound. These larger deadlines apply only when
+`LLXPRT_LOCAL_MODEL_PILOT=true`; normal integration-test deadlines are unchanged.
 
 To reproduce the two real-model canaries without using an existing Ollama daemon,
 run these commands from the repository root. Choose a free port if 12644 is in
@@ -232,7 +235,7 @@ ignored `tmp/` tree:
 mkdir -p tmp/verify3764/models
 OLLAMA_HOST=127.0.0.1:12644 \
   OLLAMA_MODELS="$PWD/tmp/verify3764/models" \
-  OLLAMA_CONTEXT_LENGTH=262144 OLLAMA_NUM_PARALLEL=1 \
+  OLLAMA_CONTEXT_LENGTH=32768 OLLAMA_NUM_PARALLEL=1 \
   ollama serve >tmp/verify3764/ollama-local.log 2>&1 &
 OLLAMA_HOST=127.0.0.1:12644 \
   OLLAMA_MODELS="$PWD/tmp/verify3764/models" ollama pull qwen3.5:2b
@@ -241,6 +244,8 @@ CI=true KEEP_OUTPUT=true VERBOSE=true \
   LLXPRT_DEFAULT_PROVIDER=openai LLXPRT_DEFAULT_MODEL=qwen3.5:2b \
   OPENAI_API_KEY=ollama-local-only \
   OPENAI_BASE_URL=http://127.0.0.1:12644/v1 LLXPRT_AUTH_TYPE=provider \
+  LLXPRT_TEST_PROFILE=local-qwen35-pilot LLXPRT_CONTEXT_LIMIT=32768 \
+  LLXPRT_MAX_OUTPUT_TOKENS=8192 LLXPRT_LOCAL_MODEL_PILOT=true \
   LLXPRT_FORCE_FILE_STORAGE=true \
   LLXPRT_E2E_MODEL_LEDGER="$PWD/tmp/verify3764/ledger.jsonl" \
   GIT_CEILING_DIRECTORIES="$PWD/.integration-tests" \

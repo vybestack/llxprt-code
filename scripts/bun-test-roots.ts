@@ -147,6 +147,15 @@ export function getErrorCode(error: unknown): string | undefined {
 // Root table
 // ---------------------------------------------------------------------------
 
+export function integrationTestTimeoutOverrides(
+  environment: Readonly<NodeJS.ProcessEnv>,
+): readonly BunTestTimeoutOverride[] {
+  if (environment['LLXPRT_LOCAL_MODEL_PILOT'] !== 'true') {
+    return [];
+  }
+  return [{ pattern: /replace\.test\.ts$/, timeout: 1_200_000 }];
+}
+
 export const BUN_TEST_ROOTS: readonly BunTestRoot[] = [
   {
     root: 'a2a-server',
@@ -258,6 +267,7 @@ export const BUN_TEST_ROOTS: readonly BunTestRoot[] = [
     timeout: 300_000,
     retries: 2,
     credentialed: true,
+    timeoutOverrides: integrationTestTimeoutOverrides(process.env),
   },
 ];
 

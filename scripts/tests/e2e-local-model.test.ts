@@ -86,6 +86,7 @@ describe('optional local-model E2E pilot', () => {
       'inputs.pilot_local_model == true',
     );
     expect(job.permissions).toEqual({ contents: 'read' });
+    expect(job['timeout-minutes']).toBe(90);
     expect(asRecord(job.strategy).matrix).toEqual({
       sandbox: ['sandbox:none', 'sandbox:docker'],
       include: [
@@ -141,7 +142,7 @@ describe('optional local-model E2E pilot', () => {
     const server = step('Start local Qwen3.5 model');
     const start = asString(server.run);
     const env = asOptionalRecord(server.env);
-    expect(env?.OLLAMA_CONTEXT_LENGTH).toBe('262144');
+    expect(env?.OLLAMA_CONTEXT_LENGTH).toBe('32768');
     expect(env?.OLLAMA_NUM_PARALLEL).toBe('1');
     expect(env?.OLLAMA_HOST).toBe('127.0.0.1:12644');
     expect(start).toContain('jq -e \'.version == "0.31.1"\'');
@@ -162,6 +163,16 @@ describe('optional local-model E2E pilot', () => {
     expect(env?.LLXPRT_DEFAULT_PROVIDER).toBe('openai');
     expect(env?.LLXPRT_DEFAULT_MODEL).toBe('qwen3.5:2b');
     expect(env?.OPENAI_API_KEY).toBe('ollama-local-only');
+    expect(env?.LLXPRT_TEST_PROFILE).toBe('local-qwen35-pilot');
+    expect(env?.LLXPRT_CONTEXT_LIMIT).toBe('32768');
+    expect(env?.LLXPRT_MAX_OUTPUT_TOKENS).toBe('8192');
+    expect(env?.LLXPRT_LOCAL_MODEL_PILOT).toBe('true');
+    expect(Number(env?.LLXPRT_CONTEXT_LIMIT)).toBe(
+      Number(step('Start local Qwen3.5 model').env?.OLLAMA_CONTEXT_LENGTH),
+    );
+    expect(Number(env?.LLXPRT_MAX_OUTPUT_TOKENS)).toBeLessThan(
+      Number(env?.LLXPRT_CONTEXT_LIMIT),
+    );
     expect(env?.GIT_CEILING_DIRECTORIES).toBe(
       '${{ github.workspace }}/.integration-tests',
     );

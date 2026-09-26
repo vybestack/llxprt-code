@@ -4,8 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
+import { createServer } from 'node:http';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { restoreEnv, setEnv } from './env-test-helpers.js';
@@ -50,6 +57,100 @@ describe('TestRig setup and cleanup behavior', () => {
     expect(rig.fakeResponsesPath).toBe(firstCopiedPath);
     expect(rig.originalFakeResponsesPath).toBe(fakeResponsesPath);
   });
+
+  it('writes bounded context and output settings into an opt-in test profile', () => {
+    createRoot();
+    setEnv('LLXPRT_TEST_PROFILE', 'local-model-pilot');
+    setEnv('LLXPRT_DEFAULT_PROVIDER', 'openai');
+    setEnv('LLXPRT_DEFAULT_MODEL', 'qwen3.5:2b');
+    setEnv('LLXPRT_CONTEXT_LIMIT', '32768');
+    setEnv('LLXPRT_MAX_OUTPUT_TOKENS', '8192');
+    const rig = new TestRig();
+
+    rig.setup('local model pilot profile');
+
+    const testDir = requireTestDir(rig.testDir);
+    const profile = JSON.parse(
+      readFileSync(
+        join(testDir, '.llxprt', 'profiles', 'local-model-pilot.json'),
+        'utf8',
+      ),
+    );
+    expect(profile).toMatchObject({
+      provider: 'openai',
+      model: 'qwen3.5:2b',
+      ephemeralSettings: {
+        'context-limit': 32768,
+        maxOutputTokens: 8192,
+      },
+    });
+  });
+
+  it('loads the generated local pilot profile in the real CLI without a global profile', async () => {
+    const root = createRoot();
+    setEnv('LLXPRT_CONFIG_HOME', join(root, 'global-config'));
+    setEnv('LLXPRT_LOCAL_MODEL_PILOT', 'true');
+    setEnv('LLXPRT_TEST_PROFILE', 'local-model-pilot');
+    setEnv('LLXPRT_DEFAULT_PROVIDER', 'openai');
+    setEnv('LLXPRT_DEFAULT_MODEL', 'qwen3.5:2b');
+    setEnv('OPENAI_API_KEY', 'local-test-only');
+    setEnv('LLXPRT_CONTEXT_LIMIT', '32768');
+    setEnv('LLXPRT_MAX_OUTPUT_TOKENS', '8192');
+
+    const requests: Array<{ path: string | undefined; body: string }> = [];
+    const server = createServer((request, response) => {
+      const chunks: Buffer[] = [];
+      request.on('data', (chunk: Buffer) => chunks.push(chunk));
+      request.on('end', () => {
+        requests.push({
+          path: request.url,
+          body: Buffer.concat(chunks).toString(),
+        });
+        const chunk = JSON.stringify({
+          id: 'chatcmpl-local-profile-test',
+          object: 'chat.completion.chunk',
+          choices: [
+            {
+              delta: { content: 'OK' },
+              index: 0,
+              finish_reason: 'stop',
+            },
+          ],
+        });
+        response.writeHead(200, { 'content-type': 'text/event-stream' });
+        response.end(`data: ${chunk}\n\ndata: [DONE]\n\n`);
+      });
+    });
+    server.listen(0, '127.0.0.1');
+    try {
+      const address = server.address();
+      if (address === null || typeof address === 'string') {
+        throw new Error('Local test server has no TCP port');
+      }
+      setEnv('OPENAI_BASE_URL', `http://127.0.0.1:${address.port}/v1`);
+      const rig = new TestRig();
+      rig.setup('real CLI local pilot profile');
+
+      await rig.run({ args: 'Respond with OK', timeoutMs: 20_000 });
+
+      const completionRequest = requests.find(
+        (request) => request.path === '/v1/chat/completions',
+      );
+      expect({
+        path: completionRequest?.path,
+        model:
+          completionRequest === undefined
+            ? undefined
+            : JSON.parse(completionRequest.body).model,
+      }).toStrictEqual({
+        path: '/v1/chat/completions',
+        model: 'qwen3.5:2b',
+      });
+    } finally {
+      server.closeAllConnections();
+      server.close();
+    }
+  }, 30_000);
 
   it('cleans test directories when KEEP_OUTPUT is unset or empty', async () => {
     createRoot();
@@ -170,5 +271,33 @@ describe('TestRig setup and cleanup behavior', () => {
     await rig.run({ args: 'test prompt' }).catch(() => {});
 
     expect(existsSync(ledgerPath)).toBe(false);
+  });
+
+  it('uses a per-run deadline without changing the default TestRig timeout', async () => {
+    const root = createRoot();
+    const fixturePath = join(root, 'fake.jsonl');
+    const fixture = JSON.stringify({
+      chunks: [
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'OK' }],
+          metadata: {
+            usage: {
+              promptTokens: 1,
+              completionTokens: 1,
+              totalTokens: 2,
+            },
+          },
+        },
+      ],
+    });
+    writeFileSync(fixturePath, `${fixture}\n`);
+    setEnv('LLXPRT_TEST_PROFILE', undefined);
+    const rig = new TestRig();
+    rig.setup('scoped run timeout', { fakeResponsesPath: fixturePath });
+
+    await expect(
+      rig.run({ args: 'test prompt', timeoutMs: 1 }),
+    ).rejects.toThrow('TestRig.run() timed out after 1ms');
   });
 });

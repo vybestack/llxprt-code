@@ -355,7 +355,7 @@ jobs:
     permissions:
       contents: read
     runs-on: 'ubuntu-latest'
-    timeout-minutes: 60
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -415,7 +415,7 @@ jobs:
         shell: 'bash'
         env:
           OLLAMA_HOST: '127.0.0.1:12644'
-          OLLAMA_CONTEXT_LENGTH: '262144'
+          OLLAMA_CONTEXT_LENGTH: '32768'
           OLLAMA_NUM_PARALLEL: '1'
           OLLAMA_MODELS: '${{ runner.temp }}/ollama-models'
         run: |
@@ -441,6 +441,10 @@ jobs:
           LLXPRT_DEFAULT_MODEL: 'qwen3.5:2b'
           LLXPRT_DEFAULT_PROVIDER: 'openai'
           LLXPRT_AUTH_TYPE: 'provider'
+          LLXPRT_TEST_PROFILE: 'local-qwen35-pilot'
+          LLXPRT_CONTEXT_LIMIT: '32768'
+          LLXPRT_MAX_OUTPUT_TOKENS: '8192'
+          LLXPRT_LOCAL_MODEL_PILOT: 'true'
           GIT_CEILING_DIRECTORIES: '${{ github.workspace }}/.integration-tests'
           SANDBOX_FLAGS: "${{ matrix.sandbox == 'sandbox:docker' && '--network host' || '' }}"
           KEEP_OUTPUT: 'true'
