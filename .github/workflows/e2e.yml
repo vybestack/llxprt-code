@@ -362,6 +362,11 @@ jobs:
         sandbox:
           - 'sandbox:none'
           - 'sandbox:docker'
+        include:
+          - sandbox: 'sandbox:none'
+            artifact_id: 'none'
+          - sandbox: 'sandbox:docker'
+            artifact_id: 'docker'
     steps:
       - name: 'Checkout'
         uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
@@ -485,7 +490,11 @@ jobs:
         if: always()
         uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # ratchet:actions/upload-artifact@v7
         with:
-          name: 'local-qwen35-pilot-${{ matrix.sandbox }}'
+          name: 'local-qwen35-pilot-${{ matrix.artifact_id }}'
+          if-no-files-found: error
+          include-hidden-files: true
           path: |
             ${{ runner.temp }}/ollama-server.log
             ${{ runner.temp }}/e2e-model-ledger.jsonl
+            ${{ github.workspace }}/.integration-tests/*/*/telemetry.log
+            ${{ github.workspace }}/.integration-tests/*/*/harness-diagnostics.log

@@ -88,7 +88,38 @@ describe('optional local-model E2E pilot', () => {
     expect(job.permissions).toEqual({ contents: 'read' });
     expect(asRecord(job.strategy).matrix).toEqual({
       sandbox: ['sandbox:none', 'sandbox:docker'],
+      include: [
+        { sandbox: 'sandbox:none', artifact_id: 'none' },
+        { sandbox: 'sandbox:docker', artifact_id: 'docker' },
+      ],
     });
+  });
+
+  it('gives every sandbox a distinct artifact name without forbidden characters', () => {
+    const matrix = asRecord(
+      asRecord(workflowJob(pilot, 'local_model_canaries').strategy).matrix,
+    );
+    const sandboxes = matrix.sandbox;
+    expect(sandboxes).toEqual(['sandbox:none', 'sandbox:docker']);
+    const entries = matrix.include;
+    expect(Array.isArray(entries)).toBe(true);
+    if (!Array.isArray(entries))
+      throw new Error('Pilot matrix include is required');
+    const name = asString(
+      asOptionalRecord(step('Upload local model diagnostics').with)?.name,
+    );
+    expect(name).toBe('local-qwen35-pilot-${{ matrix.artifact_id }}');
+    const resolvedNames = entries.map((entry) => {
+      const row = asRecord(entry);
+      expect(sandboxes).toContain(row.sandbox);
+      const id = asString(row.artifact_id);
+      expect(id).toMatch(/^[a-z0-9-]+$/);
+      return name.replace('${{ matrix.artifact_id }}', id);
+    });
+    expect(new Set(resolvedNames).size).toBe(sandboxes.length);
+    expect(
+      resolvedNames.every((resolved) => !/[\\/:*?"<>|\r\n]/.test(resolved)),
+    ).toBe(true);
   });
 
   it('downloads a pinned Ollama runtime and verifies its archive before extraction', () => {
@@ -154,6 +185,10 @@ describe('optional local-model E2E pilot', () => {
     expect(env?.SANDBOX_FLAGS).toBe(
       "${{ matrix.sandbox == 'sandbox:docker' && '--network host' || '' }}",
     );
+    expect(env?.KEEP_OUTPUT).toBe('true');
+    expect(env?.LLXPRT_E2E_MODEL_LEDGER).toBe(
+      '${{ runner.temp }}/e2e-model-ledger.jsonl',
+    );
     const report = step('Report local model resources');
     const upload = step('Upload local model diagnostics');
     expect(report.if).toBe('always()');
@@ -161,6 +196,16 @@ describe('optional local-model E2E pilot', () => {
     expect(asString(report.run)).toContain('free -h');
     expect(asString(report.run)).toContain('df -h');
     expect(upload.if).toBe('always()');
-    expect(asOptionalRecord(upload.with)?.path).toContain('ollama-server.log');
+    const paths = asString(asOptionalRecord(upload.with)?.path).split('\n');
+    expect(paths).toContain('${{ runner.temp }}/ollama-server.log');
+    expect(paths).toContain('${{ runner.temp }}/e2e-model-ledger.jsonl');
+    expect(paths).toContain(
+      '${{ github.workspace }}/.integration-tests/*/*/telemetry.log',
+    );
+    expect(paths).toContain(
+      '${{ github.workspace }}/.integration-tests/*/*/harness-diagnostics.log',
+    );
+    expect(asOptionalRecord(upload.with)?.['if-no-files-found']).toBe('error');
+    expect(asOptionalRecord(upload.with)?.['include-hidden-files']).toBe(true);
   });
 });
