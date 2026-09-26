@@ -22,6 +22,91 @@ function getLineCountCommand(): { command: string; tool: string } {
   }
 }
 
+function isExpectedEchoCommand(args: string): boolean {
+  const request: unknown = JSON.parse(args);
+  if (
+    typeof request !== 'object' ||
+    request === null ||
+    !('command' in request)
+  ) {
+    return false;
+  }
+  const command = request.command;
+  return (
+    typeof command === 'string' &&
+    new Set([
+      'echo hello-world',
+      'echo "hello-world"',
+      "echo 'hello-world'",
+    ]).has(command)
+  );
+}
+
+function isExpectedShellTrace(
+  logs: ReadonlyArray<{
+    toolRequest: { name: string; args: string; success?: boolean };
+  }>,
+): boolean {
+  return (
+    logs.length > 0 &&
+    logs.every(
+      ({ toolRequest }) =>
+        toolRequest.name === 'run_shell_command' &&
+        isExpectedEchoCommand(toolRequest.args) &&
+        toolRequest.success === true,
+    )
+  );
+}
+
+describe('shell canary command validation', () => {
+  it('accepts equivalent literal echo commands but not other shell expressions', () => {
+    for (const command of [
+      'echo hello-world',
+      'echo "hello-world"',
+      "echo 'hello-world'",
+    ]) {
+      expect(isExpectedEchoCommand(JSON.stringify({ command }))).toBe(true);
+    }
+    expect(
+      isExpectedEchoCommand(JSON.stringify({ command: 'echo goodbye' })),
+    ).toBe(false);
+    expect(
+      isExpectedEchoCommand(
+        JSON.stringify({ command: 'echo hello-world; git commit -am oops' }),
+      ),
+    ).toBe(false);
+  });
+
+  it('rejects wrong or additional tools even when the echo succeeded', () => {
+    const echo = {
+      toolRequest: {
+        name: 'run_shell_command',
+        args: JSON.stringify({ command: 'echo hello-world' }),
+        success: true,
+      },
+    };
+    expect(isExpectedShellTrace([echo])).toBe(true);
+    expect(
+      isExpectedShellTrace([
+        echo,
+        { toolRequest: { name: 'read_file', args: '{}', success: true } },
+      ]),
+    ).toBe(false);
+    expect(
+      isExpectedShellTrace([
+        echo,
+        {
+          toolRequest: {
+            name: 'run_shell_command',
+            args: JSON.stringify({ command: 'git status' }),
+            success: true,
+          },
+        },
+      ]),
+    ).toBe(false);
+  });
+});
+
 describe('run_shell_command', () => {
   let rig: TestRig;
 
@@ -35,9 +120,13 @@ describe('run_shell_command', () => {
       settings: { tools: { core: ['run_shell_command'] } },
     });
 
-    const prompt = `Please run the command "echo hello-world" and show me the output`;
+    const prompt = `Use the run_shell_command tool to execute exactly "echo hello-world". Show me the output.`;
 
-    const result = await rig.run({ args: prompt });
+    const result = await rig.run({
+      args: ['--allowed-tools=run_shell_command(echo)'],
+      stdin: prompt,
+      yolo: false,
+    });
 
     const foundToolCall = await rig.waitForToolCall('run_shell_command');
 
@@ -53,6 +142,11 @@ describe('run_shell_command', () => {
       foundToolCall,
       'Expected to find a run_shell_command tool call',
     ).toBeTruthy();
+    expect(
+      isExpectedShellTrace(rig.readToolLogs()),
+      'Expected only successful echo hello-world shell invocations',
+    ).toBe(true);
+    expect(result).toContain('hello-world');
 
     // Validate model output - will throw if no output, warn if missing expected content
     // Model often reports exit code instead of showing output

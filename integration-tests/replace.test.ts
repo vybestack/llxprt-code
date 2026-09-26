@@ -17,21 +17,34 @@ describe('replace', () => {
   afterEach(async () => await rig.cleanup());
   it('should be able to replace content in a file', async () => {
     await rig.setup('should be able to replace content in a file', {
-      settings: { tools: { core: ['replace', 'read_file'] } },
+      settings: {
+        tools: {
+          core: ['replace', 'read_file'],
+          exclude: ['run_shell_command'],
+        },
+      },
     });
 
     const fileName = 'file_to_replace.txt';
     const originalContent = 'foo content';
     const expectedContent = 'bar content';
 
-    rig.createFile(fileName, originalContent);
+    const filePath = rig.createFile(fileName, originalContent);
 
     await rig.run({
-      args: `Replace 'foo' with 'bar' in the file 'file_to_replace.txt'`,
+      args: `Use the replace tool on '${filePath}' to replace the exact text 'foo content' with 'bar content'. Do not add any whitespace.`,
     });
 
     const foundToolCall = await rig.waitForToolCall('replace');
     expect(foundToolCall, 'Expected to find a replace tool call').toBeTruthy();
+    expect(
+      rig
+        .readToolLogs()
+        .filter(
+          (log) => !['replace', 'read_file'].includes(log.toolRequest.name),
+        ),
+      'Text replacement must not invoke unrelated tools',
+    ).toHaveLength(0);
 
     expect(rig.readFile(fileName)).toBe(expectedContent);
   });

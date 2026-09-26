@@ -23,6 +23,11 @@ on:
         required: true
         default: 'main'
         type: 'string'
+      pilot_local_model:
+        description: 'Run local Qwen3.5 canaries instead of credentialed E2E'
+        required: false
+        default: false
+        type: 'boolean'
 
 # Event-type isolation prevents pull_request_target from cancelling pull_request
 # work and keeps merge_group out of PR-keyed groups. Label isolation prevents an
@@ -171,6 +176,7 @@ jobs:
       needs.skip_check.result == 'success' &&
       !(needs.e2e_doc_change_filter.result == 'success' && needs.e2e_doc_change_filter.outputs.docs_only == 'true') &&
       needs.skip_check.outputs.should_skip != 'true' &&
+      !(github.event_name == 'workflow_dispatch' && inputs.pilot_local_model == true) &&
       (
         (
           (
@@ -342,3 +348,144 @@ jobs:
         shell: 'bash'
         run: |-
           bun scripts/check-e2e-model-budget.ts --ledger "$LLXPRT_E2E_MODEL_LEDGER"
+
+  local_model_canaries:
+    name: 'Local Qwen3.5 pilot - ${{ matrix.sandbox }}'
+    if: github.event_name == 'workflow_dispatch' && inputs.pilot_local_model == true
+    permissions:
+      contents: read
+    runs-on: 'ubuntu-latest'
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        sandbox:
+          - 'sandbox:none'
+          - 'sandbox:docker'
+    steps:
+      - name: 'Checkout'
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: 'Set up Node.js'
+        uses: 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020' # ratchet:actions/setup-node@v7
+        with:
+          node-version: '24.x'
+
+      - name: 'Setup Bun'
+        uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6' # ratchet:oven-sh/setup-bun@v2
+        with:
+          bun-version-file: '.bun-version'
+
+      - name: 'Install dependencies'
+        run: 'npm ci'
+
+      - name: 'Build project'
+        run: 'npm run build'
+
+      - name: 'Set up Docker'
+        if: "matrix.sandbox == 'sandbox:docker'"
+        uses: 'docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c' # ratchet:docker/setup-buildx-action@v4
+
+      - name: 'Install Ollama CPU runtime'
+        shell: 'bash'
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/ollama"
+          curl --fail --show-error --location --retry 3 \
+            'https://ollama.com/download/ollama-linux-amd64.tar.zst?version=0.31.1' \
+            -o "$RUNNER_TEMP/ollama-linux-amd64.tar.zst"
+          printf '%s  %s\n' 'd297381efc136451f6fabb9dd644a67f70fe51c16815a0c4a95ff0e327a3afb4' "$RUNNER_TEMP/ollama-linux-amd64.tar.zst" | sha256sum --check -
+          tar --zstd \
+            --exclude='lib/ollama/cuda_v12/*' \
+            --exclude='lib/ollama/cuda_v13/*' \
+            --exclude='lib/ollama/vulkan/*' \
+            -xf "$RUNNER_TEMP/ollama-linux-amd64.tar.zst" -C "$RUNNER_TEMP/ollama"
+          rm "$RUNNER_TEMP/ollama-linux-amd64.tar.zst"
+          echo "$RUNNER_TEMP/ollama/bin" >>"$GITHUB_PATH"
+          "$RUNNER_TEMP/ollama/bin/ollama" --version
+
+      - name: 'Start local Qwen3.5 model'
+        shell: 'bash'
+        env:
+          OLLAMA_HOST: '127.0.0.1:12644'
+          OLLAMA_CONTEXT_LENGTH: '262144'
+          OLLAMA_NUM_PARALLEL: '1'
+          OLLAMA_MODELS: '${{ runner.temp }}/ollama-models'
+        run: |
+          set -euo pipefail
+          mkdir -p "$OLLAMA_MODELS"
+          nohup ollama serve >"$RUNNER_TEMP/ollama-server.log" 2>&1 &
+          for _ in {1..60}; do
+            if curl --fail --silent "http://$OLLAMA_HOST/api/version"; then
+              break
+            fi
+            sleep 2
+          done
+          curl --fail --silent "http://$OLLAMA_HOST/api/version" | jq -e '.version == "0.31.1"'
+          ollama pull qwen3.5:2b
+          curl --fail --silent "http://$OLLAMA_HOST/api/tags" |
+            jq -e '.models[] | select(.name == "qwen3.5:2b" and .digest == "324d162be6ca5629ae4517c8710434d0bd2d665bc94dbad46e9af8fbf8a2f0df")'
+          df -h "$RUNNER_TEMP"
+
+      - name: 'Run local-model canaries'
+        env:
+          OPENAI_API_KEY: 'ollama-local-only'
+          OPENAI_BASE_URL: 'http://127.0.0.1:12644/v1'
+          LLXPRT_DEFAULT_MODEL: 'qwen3.5:2b'
+          LLXPRT_DEFAULT_PROVIDER: 'openai'
+          LLXPRT_AUTH_TYPE: 'provider'
+          GIT_CEILING_DIRECTORIES: '${{ github.workspace }}/.integration-tests'
+          SANDBOX_FLAGS: "${{ matrix.sandbox == 'sandbox:docker' && '--network host' || '' }}"
+          KEEP_OUTPUT: 'true'
+          VERBOSE: 'true'
+          LLXPRT_FORCE_FILE_STORAGE: 'true'
+          LLXPRT_E2E_MODEL_LEDGER: '${{ runner.temp }}/e2e-model-ledger.jsonl'
+        shell: 'bash'
+        run: |
+          set -euo pipefail
+          if [[ "${{ matrix.sandbox }}" == "sandbox:docker" ]]; then
+            npm run test:integration:sandbox:docker -- \
+              integration-tests/run_shell_command.test.ts \
+              integration-tests/replace.test.ts \
+              --testNamePattern="should be able to run a shell command$|should be able to replace content in a file$"
+          else
+            npm run test:integration:sandbox:none -- \
+              integration-tests/run_shell_command.test.ts \
+              integration-tests/replace.test.ts \
+              --testNamePattern="should be able to run a shell command$|should be able to replace content in a file$"
+          fi
+
+      - name: 'Check E2E real-model budget (issue #2278)'
+        if: success()
+        env:
+          LLXPRT_E2E_MODEL_LEDGER: '${{ runner.temp }}/e2e-model-ledger.jsonl'
+        shell: 'bash'
+        run: |-
+          bun scripts/check-e2e-model-budget.ts --ledger "$LLXPRT_E2E_MODEL_LEDGER"
+
+      - name: 'Report local model resources'
+        if: always()
+        shell: 'bash'
+        run: |
+          if curl --fail --silent http://127.0.0.1:12644/api/ps; then
+            echo
+          else
+            echo 'Local Ollama server is unavailable'
+          fi
+          free -h
+          df -h "$RUNNER_TEMP"
+          du -sh "$RUNNER_TEMP/ollama-models" "$RUNNER_TEMP/ollama" 2>/dev/null || true
+          if [[ "${{ matrix.sandbox }}" == 'sandbox:docker' ]]; then
+            docker info --format 'Docker server: {{.ServerVersion}}'
+          fi
+
+      - name: 'Upload local model diagnostics'
+        if: always()
+        uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # ratchet:actions/upload-artifact@v7
+        with:
+          name: 'local-qwen35-pilot-${{ matrix.sandbox }}'
+          path: |
+            ${{ runner.temp }}/ollama-server.log
+            ${{ runner.temp }}/e2e-model-ledger.jsonl
