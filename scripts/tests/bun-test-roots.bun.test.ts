@@ -26,6 +26,7 @@ import {
   discoverTestFilesInDirectory,
   getErrorCode,
   isTestFileName,
+  integrationTestTimeoutOverrides,
   resolveBunTestFiles,
   resolveRoot,
   resolveRootCwd,
@@ -82,6 +83,25 @@ describe('BUN_TEST_ROOTS structural guarantees', () => {
         `root "${root.root}" must not declare files/include/exclude`,
       ).toBe(false);
     }
+  });
+
+  it('extends only the replace file timeout for the opt-in local-model pilot', () => {
+    expect(integrationTestTimeoutOverrides({})).toEqual([]);
+
+    const overrides = integrationTestTimeoutOverrides({
+      LLXPRT_LOCAL_MODEL_PILOT: 'true',
+    });
+
+    expect(overrides).toHaveLength(1);
+    expect(
+      overrides[0]?.pattern.test('/repo/integration-tests/replace.test.ts'),
+    ).toBe(true);
+    expect(
+      overrides[0]?.pattern.test(
+        '/repo/integration-tests/run_shell_command.test.ts',
+      ),
+    ).toBe(false);
+    expect(overrides[0]?.timeout).toBe(1_200_000);
   });
 
   it('has exactly the expected set of root tokens', () => {

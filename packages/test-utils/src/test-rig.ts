@@ -87,6 +87,7 @@ interface RunMethodOptions {
   stdin?: string;
   stdinDoesNotEnd?: boolean;
   yolo?: boolean;
+  timeoutMs?: number;
 }
 
 /**
@@ -226,7 +227,7 @@ export class TestRig {
       const commandArgs = [...initialArgs];
 
       appendUserArgs(commandArgs, options.args);
-      appendProfileFlag(commandArgs);
+      appendProfileFlag(commandArgs, this.testDir as string);
 
       const childEnv = buildChildEnv(
         this.testDir as string,
@@ -254,7 +255,7 @@ export class TestRig {
         options,
         isJsonOutput,
         transform,
-        getDefaultTimeout() * 4,
+        options.timeoutMs ?? getDefaultTimeout() * 4,
         (capture) => {
           this._lastRunCapture = capture;
           this._lastRunStdout = capture.stdout;
@@ -508,7 +509,7 @@ export class TestRig {
     const commandArgs = [...initialArgs];
 
     appendInteractiveArgs(commandArgs, options?.args);
-    appendProfileFlag(commandArgs);
+    appendProfileFlag(commandArgs, this.testDir as string);
 
     const childEnv = buildChildEnv(
       this.testDir as string,
@@ -598,16 +599,24 @@ function appendUserArgs(
 }
 
 /**
- * Append the `--profile-load` flag when a test profile is configured.
+ * Append the configured test profile, using inline JSON for the local pilot.
  */
-function appendProfileFlag(commandArgs: string[]): void {
+function appendProfileFlag(commandArgs: string[], testDir: string): void {
   const profileName = getProfileName();
   if (profileName === undefined) {
     return;
   }
   const ideFlagIndex = commandArgs.indexOf('--ide-mode');
   const insertionIndex = ideFlagIndex >= 0 ? ideFlagIndex : commandArgs.length;
-  commandArgs.splice(insertionIndex, 0, '--profile-load', profileName);
+  if (env['LLXPRT_LOCAL_MODEL_PILOT'] === 'true') {
+    const profileJson = readFileSync(
+      join(testDir, '.llxprt', 'profiles', `${profileName}.json`),
+      'utf8',
+    );
+    commandArgs.splice(insertionIndex, 0, '--profile', profileJson);
+  } else {
+    commandArgs.splice(insertionIndex, 0, '--profile-load', profileName);
+  }
 }
 
 /**
