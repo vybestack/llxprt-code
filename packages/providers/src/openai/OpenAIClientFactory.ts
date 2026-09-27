@@ -229,12 +229,25 @@ export function instantiateClient(
   baseURL?: string,
   agents?: { httpAgent: http.Agent; httpsAgent: https.Agent },
   headers?: Record<string, string>,
-  transport?: { headersTimeoutMs?: number; fetch?: typeof fetch },
+  transport?: {
+    headersTimeoutMs?: number;
+    requestTimeoutMs?: number;
+    fetch?: typeof fetch;
+  },
 ): OpenAI {
   const clientOptions: Record<string, unknown> = {
     apiKey: authToken || '',
     maxRetries: 0,
   };
+  if (transport?.requestTimeoutMs !== undefined) {
+    if (
+      !Number.isSafeInteger(transport.requestTimeoutMs) ||
+      transport.requestTimeoutMs <= 0
+    ) {
+      throw new Error('openai-request-timeout-ms must be a positive integer');
+    }
+    clientOptions.timeout = transport.requestTimeoutMs;
+  }
 
   const scopedFetch =
     transport?.headersTimeoutMs === undefined

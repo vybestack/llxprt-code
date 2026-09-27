@@ -284,6 +284,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       headersTimeoutMs: agentSettings['openai-headers-timeout-ms'] as
         | number
         | undefined,
+      requestTimeoutMs: agentSettings['openai-request-timeout-ms'] as
+        | number
+        | undefined,
     });
   }
 

@@ -230,6 +230,7 @@ function collectEphemeralEntries(): Array<[string, unknown]> {
 
   if (env['LLXPRT_LOCAL_MODEL_PILOT'] === 'true') {
     entries.push(['stream-first-response-timeout-ms', 750_000]);
+    entries.push(['openai-request-timeout-ms', 850_000]);
     entries.push(['openai-headers-timeout-ms', 900_000]);
   }
 
