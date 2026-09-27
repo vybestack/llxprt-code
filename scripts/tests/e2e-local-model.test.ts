@@ -138,6 +138,41 @@ describe('optional local-model E2E pilot', () => {
     expect(install).toContain('rm "$RUNNER_TEMP/ollama-linux-amd64.tar.zst"');
   });
 
+  it('restricts the CPU-backend A/B to the Intel Docker pilot and proves AVX2 without AVX-512 or AMX from the model-load log', () => {
+    const select = step('Select pilot CPU backend on Intel Docker');
+    expect(select.if).toBe("matrix.sandbox == 'sandbox:docker'");
+    const script = asString(select.run);
+    expect(script).toContain('set -euo pipefail');
+    expect(script).toContain('/proc/cpuinfo');
+    expect(script).toContain('GenuineIntel');
+    expect(script).toContain('libggml-cpu-haswell.so');
+    expect(script).toContain('libggml-cpu-*.so');
+    expect(script).not.toContain('OLLAMA_LLM_LIBRARY');
+    expect(steps.indexOf(select)).toBeGreaterThan(
+      steps.indexOf(step('Install Ollama CPU runtime')),
+    );
+    expect(steps.indexOf(select)).toBeLessThan(
+      steps.indexOf(step('Start local Gemma 4 E2B model')),
+    );
+    const verify = step('Verify Intel Docker CPU backend warm-up');
+    expect(verify.if).toBe("matrix.sandbox == 'sandbox:docker'");
+    expect(asString(verify.run)).toContain(
+      'http://127.0.0.1:12644/api/generate',
+    );
+    expect(asString(verify.run)).toContain('ollama-server.log');
+    expect(asString(verify.run)).toContain('/proc/$pid/maps');
+    expect(asString(verify.run)).toContain('libggml-cpu-haswell.so');
+    expect(asString(verify.run)).toContain('AVX2 = 1');
+    expect(asString(verify.run)).toContain('AVX512 = 0');
+    expect(asString(verify.run)).toContain('AMX_INT8 = 0');
+    expect(steps.indexOf(verify)).toBeGreaterThan(
+      steps.indexOf(step('Start local Gemma 4 E2B model')),
+    );
+    expect(steps.indexOf(verify)).toBeLessThan(
+      steps.indexOf(step('Run local-model canaries')),
+    );
+  });
+
   it('checks model version and digest before running either canary', () => {
     const server = step('Start local Gemma 4 E2B model');
     const start = asString(server.run);

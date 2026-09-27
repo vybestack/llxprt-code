@@ -411,6 +411,30 @@ jobs:
           echo "$RUNNER_TEMP/ollama/bin" >>"$GITHUB_PATH"
           "$RUNNER_TEMP/ollama/bin/ollama" --version
 
+      - name: 'Select pilot CPU backend on Intel Docker'
+        if: "matrix.sandbox == 'sandbox:docker'"
+        shell: 'bash'
+        run: |
+          set -euo pipefail
+          if ! grep -qm1 '^vendor_id[[:space:]]*: GenuineIntel$' /proc/cpuinfo; then
+            echo 'Docker pilot host is not Intel; leaving Ollama CPU variants untouched'
+            exit 0
+          fi
+          libdir="$RUNNER_TEMP/ollama/lib/ollama"
+          test -f "$libdir/libggml-cpu-haswell.so"
+          shopt -s nullglob
+          variants=("$libdir"/libggml-cpu-*.so)
+          (( ${#variants[@]} > 1 )) || { echo 'Expected multiple CPU variants in pinned Ollama runtime' >&2; exit 1; }
+          mkdir -p "$RUNNER_TEMP/ollama-disabled-cpu-backends"
+          for library in "${variants[@]}"; do
+            if [[ "$library" != "$libdir/libggml-cpu-haswell.so" ]]; then
+              mv "$library" "$RUNNER_TEMP/ollama-disabled-cpu-backends/"
+            fi
+          done
+          echo 'Intel Docker pilot: CPU variants visible to llama-server:'
+          printf '%s\n' "$libdir"/libggml-cpu-*.so
+          test "$(find "$libdir" -maxdepth 1 -name 'libggml-cpu-*.so' | wc -l)" -eq 1
+
       - name: 'Start local Gemma 4 E2B model'
         shell: 'bash'
         env:
@@ -433,6 +457,36 @@ jobs:
           curl --fail --silent "http://$OLLAMA_HOST/api/tags" |
             jq -e '.models[] | select(.name == "gemma4:e2b-it-qat" and .digest == "07ea59a474013479c8b6b802bef095c40e964a1d776ba02f264c0e30e1aede0c")'
           df -h "$RUNNER_TEMP"
+
+      - name: 'Verify Intel Docker CPU backend warm-up'
+        if: "matrix.sandbox == 'sandbox:docker'"
+        shell: 'bash'
+        env:
+          OLLAMA_HOST: '127.0.0.1:12644'
+        run: |
+          set -euo pipefail
+          if ! grep -qm1 '^vendor_id[[:space:]]*: GenuineIntel$' /proc/cpuinfo; then
+            echo 'Docker pilot host is not Intel; CPU backend A/B not exercised'
+            exit 0
+          fi
+          curl --fail --show-error --silent --max-time 300 \
+            "http://127.0.0.1:12644/api/generate" \
+            -H 'Content-Type: application/json' \
+            -d '{"model":"gemma4:e2b-it-qat","prompt":"Hello","stream":false,"options":{"num_ctx":32768,"num_predict":1}}' \
+            | jq -e '.done == true and .error == null'
+          info="$(grep 'system_info:.*CPU :' "$RUNNER_TEMP/ollama-server.log" | tail -1)"
+          echo "$info"
+          [[ "$info" == *'AVX2 = 1'* && "$info" == *'AVX512 = 0'* && "$info" == *'AMX_INT8 = 0'* ]] || {
+            echo 'Pinned llama-server did not select the AVX2-only CPU backend' >&2
+            exit 1
+          }
+          pid="$(pgrep -f "^$RUNNER_TEMP/ollama/lib/ollama/llama-server --model " | head -1)"
+          backend="$(grep -Eo '/[^ ]+/libggml-cpu-[^ ]+\.so' "/proc/$pid/maps" | sort -u)"
+          echo "Loaded CPU backend: $backend"
+          [[ "$backend" == "$RUNNER_TEMP/ollama/lib/ollama/libggml-cpu-haswell.so" ]] || {
+            echo 'Unexpected mapped llama-server CPU library' >&2
+            exit 1
+          }
 
       - name: 'Run local-model canaries'
         env:
