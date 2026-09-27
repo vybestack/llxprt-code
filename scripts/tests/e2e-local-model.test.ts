@@ -40,11 +40,22 @@ function runBackendVerifier(
   const procRoot = resolve(fixture, 'proc');
   const bin = resolve(fixture, 'bin');
   const processDir = resolve(procRoot, '4242');
+  const parentDir = resolve(procRoot, '4200');
   const ollamaDir = resolve(runnerTemp, 'ollama/lib/ollama');
   mkdirSync(bin, { recursive: true });
   mkdirSync(processDir, { recursive: true });
+  mkdirSync(parentDir, { recursive: true });
   mkdirSync(ollamaDir, { recursive: true });
   writeFileSync(resolve(procRoot, 'cpuinfo'), 'vendor_id : GenuineIntel\n');
+  writeFileSync(
+    resolve(processDir, 'cmdline'),
+    `${resolve(ollamaDir, 'llama-server')}\0--model\0gemma\0`,
+  );
+  writeFileSync(
+    resolve(processDir, 'status'),
+    'Name:\tllama-server\nPPid:\t4200\n',
+  );
+  writeFileSync(resolve(parentDir, 'cmdline'), 'ollama\0serve\0');
   writeFileSync(
     resolve(processDir, 'maps'),
     maps.replaceAll('/runner-temp', runnerTemp),
@@ -62,7 +73,7 @@ function runBackendVerifier(
   executable('curl', `printf '%s\\n' '{"done":true,"error":null}'`);
   executable('jq', 'cat >/dev/null; exit 0');
   executable('pgrep', livePid ? `printf '%s\\n' 4242` : 'exit 1');
-  const script = asString(step('Verify Intel Docker CPU backend warm-up').run);
+  const script = asString(step('Verify Intel CPU backend warm-up').run);
   const result = spawnSync('bash', ['-c', script], {
     encoding: 'utf8',
     env: {
@@ -198,8 +209,8 @@ describe('optional local-model E2E pilot', () => {
   });
 
   it('restricts the CPU-backend A/B to the Intel Docker pilot and structurally checks live backend verification', () => {
-    const select = step('Select pilot CPU backend on Intel Docker');
-    expect(select.if).toBe("matrix.sandbox == 'sandbox:docker'");
+    const select = step('Select pilot CPU backend on Intel');
+    expect(select.if).toBeUndefined();
     const script = asString(select.run);
     expect(script).toContain('set -euo pipefail');
     expect(script).toContain('grep -qm1');
@@ -213,15 +224,20 @@ describe('optional local-model E2E pilot', () => {
     expect(steps.indexOf(select)).toBeLessThan(
       steps.indexOf(step('Start local Gemma 4 E2B model')),
     );
-    const verify = step('Verify Intel Docker CPU backend warm-up');
-    expect(verify.if).toBe("matrix.sandbox == 'sandbox:docker'");
+    const verify = step('Verify Intel CPU backend warm-up');
+    expect(verify.if).toBeUndefined();
     expect(asString(verify.run)).toContain(
       'http://127.0.0.1:12644/api/generate',
     );
     expect(asString(verify.run)).toContain('ollama-server.log');
     expect(asString(verify.run)).toContain('LLXPRT_PROC_ROOT:-/proc');
     expect(asString(verify.run)).toContain('libggml-cpu-haswell.so');
+    expect(verify.if).toBeUndefined();
     expect(asString(verify.run)).toContain('pgrep -f');
+    expect(asString(verify.run)).toContain('/cmdline');
+    expect(asString(verify.run)).toContain('/status');
+    expect(asString(verify.run)).toContain('parent cmdline');
+    expect(asString(verify.run)).not.toContain('-s \"$maps');
     expect(steps.indexOf(verify)).toBeGreaterThan(
       steps.indexOf(step('Start local Gemma 4 E2B model')),
     );
@@ -356,6 +372,10 @@ describe('workflow backend verification behavior', () => {
     const result = runBackendVerifier(mapping(haswell));
     expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
     expect(result.stdout).toContain('Loaded CPU backends:');
+    expect(result.stdout).toContain('llama-server cmdline:');
+    expect(result.stdout).toContain(
+      'llama-server PPid: 4200; parent cmdline: ollama serve',
+    );
   });
 
   it('fails when the live process is absent even though the log reports AVX2', () => {

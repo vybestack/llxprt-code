@@ -411,13 +411,12 @@ jobs:
           echo "$RUNNER_TEMP/ollama/bin" >>"$GITHUB_PATH"
           "$RUNNER_TEMP/ollama/bin/ollama" --version
 
-      - name: 'Select pilot CPU backend on Intel Docker'
-        if: "matrix.sandbox == 'sandbox:docker'"
+      - name: 'Select pilot CPU backend on Intel'
         shell: 'bash'
         run: |
           set -euo pipefail
           if ! grep -qm1 '^vendor_id[[:space:]]*: GenuineIntel$' /proc/cpuinfo; then
-            echo 'Docker pilot host is not Intel; leaving Ollama CPU variants untouched'
+            echo 'Pilot host is not Intel; leaving Ollama CPU variants untouched'
             exit 0
           fi
           libdir="$RUNNER_TEMP/ollama/lib/ollama"
@@ -458,8 +457,7 @@ jobs:
             jq -e '.models[] | select(.name == "gemma4:e2b-it-qat" and .digest == "07ea59a474013479c8b6b802bef095c40e964a1d776ba02f264c0e30e1aede0c")'
           df -h "$RUNNER_TEMP"
 
-      - name: 'Verify Intel Docker CPU backend warm-up'
-        if: "matrix.sandbox == 'sandbox:docker'"
+      - name: 'Verify Intel CPU backend warm-up'
         shell: 'bash'
         env:
           OLLAMA_HOST: '127.0.0.1:12644'
@@ -467,7 +465,7 @@ jobs:
           set -euo pipefail
           proc_root="${LLXPRT_PROC_ROOT:-/proc}"
           if ! grep -qm1 '^vendor_id[[:space:]]*: GenuineIntel$' "$proc_root/cpuinfo"; then
-            echo 'Docker pilot host is not Intel; CPU backend A/B not exercised'
+            echo 'Pilot host is not Intel; CPU backend A/B not exercised'
             exit 0
           fi
           curl --fail --show-error --silent --max-time 300 \
@@ -480,9 +478,27 @@ jobs:
           pid="$(pgrep -f "^$process --model " | head -1)" || true
           [[ -n "$pid" ]] || { echo 'Live llama-server process not found' >&2; exit 1; }
           maps="$proc_root/$pid/maps"
-          [[ -r "$maps" && -s "$maps" ]] || { echo 'Live llama-server maps are unavailable or empty' >&2; exit 1; }
+          [[ -r "$maps" ]] || { echo "Live llama-server maps are unavailable: $maps" >&2; exit 1; }
+          cmdline="$proc_root/$pid/cmdline"
+          status="$proc_root/$pid/status"
+          [[ -r "$cmdline" && -r "$status" ]] || { echo 'Live llama-server process evidence disappeared' >&2; exit 1; }
+          printf 'llama-server cmdline: '
+          tr '\0' ' ' <"$cmdline"
+          echo
+          command_line="$(tr '\0' ' ' <"$cmdline")"
+          [[ "$command_line" == "$process --model "* ]] || { echo 'Matched PID is not the expected llama-server process' >&2; exit 1; }
+          ppid="$(awk '$1 == "PPid:" { print $2 }' "$status")"
+          [[ "$ppid" =~ ^[0-9]+$ && "$ppid" != 0 ]] || { echo 'llama-server parent PID is missing' >&2; exit 1; }
+          parent_cmdline="$proc_root/$ppid/cmdline"
+          [[ -r "$parent_cmdline" ]] || { echo 'llama-server parent process disappeared' >&2; exit 1; }
+          printf 'llama-server PPid: %s; parent cmdline: ' "$ppid"
+          tr '\0' ' ' <"$parent_cmdline"
+          echo
           expected="$RUNNER_TEMP/ollama/lib/ollama/libggml-cpu-haswell.so"
-          backends="$(grep -Eo '/[^ ]+/libggml-cpu-[^ ]+\.so( \(deleted\))?' "$maps" | sort -u || true)"
+          maps_snapshot="$RUNNER_TEMP/llama-server-$pid.maps"
+          cat "$maps" >"$maps_snapshot" || { echo 'llama-server maps disappeared while being read' >&2; exit 1; }
+          cat "$maps_snapshot"
+          backends="$(grep -Eo '/[^ ]+/libggml-cpu-[^ ]+\.so( \(deleted\))?' "$maps_snapshot" | sort -u || true)"
           echo "Loaded CPU backends: ${backends:-none}"
           [[ -n "$backends" ]] || { echo 'No mapped llama-server CPU backend' >&2; exit 1; }
           while IFS= read -r backend; do
