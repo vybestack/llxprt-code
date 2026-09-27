@@ -188,8 +188,8 @@ The credentialed full-platform E2E matrix also remains in
 `.github/workflows/nightly.yml`.
 
 With `pilot_local_model=true`, the pilot starts Ollama 0.31.1 on
-`127.0.0.1:12644` and pulls `qwen3.5:2b` (Q8_0, digest
-`324d162be6ca5629ae4517c8710434d0bd2d665bc94dbad46e9af8fbf8a2f0df`).
+`127.0.0.1:12644` and pulls `gemma4:e2b-it-qat` (Q4_0, digest
+`07ea59a474013479c8b6b802bef095c40e964a1d776ba02f264c0e30e1aede0c`).
 It verifies the downloaded Linux runtime archive's SHA-256 digest
 (`d297381efc136451f6fabb9dd644a67f70fe51c16815a0c4a95ff0e327a3afb4`)
 before extraction, then checks the runtime version and model digest before testing.
@@ -229,7 +229,7 @@ job has a 90-minute bound. These larger deadlines apply only when
 To reproduce the two real-model canaries without using an existing Ollama daemon,
 run these commands from the repository root. Choose a free port if 12644 is in
 use and change both URLs accordingly. Install Ollama 0.31.1 first and ensure the
-`qwen3.5:2b` digest above matches. Store all evidence in the repository's
+`gemma4:e2b-it-qat` digest above matches. Store all evidence in the repository's
 ignored `tmp/` tree:
 
 ```bash
@@ -239,13 +239,13 @@ OLLAMA_HOST=127.0.0.1:12644 \
   OLLAMA_CONTEXT_LENGTH=32768 OLLAMA_NUM_PARALLEL=1 \
   ollama serve >tmp/verify3764/ollama-local.log 2>&1 &
 OLLAMA_HOST=127.0.0.1:12644 \
-  OLLAMA_MODELS="$PWD/tmp/verify3764/models" ollama pull qwen3.5:2b
-curl -fsS http://127.0.0.1:12644/api/tags | jq '.models[] | select(.name == "qwen3.5:2b") | {digest, size, details}'
+  OLLAMA_MODELS="$PWD/tmp/verify3764/models" ollama pull gemma4:e2b-it-qat
+curl -fsS http://127.0.0.1:12644/api/tags | jq '.models[] | select(.name == "gemma4:e2b-it-qat") | {digest, size, details}'
 CI=true KEEP_OUTPUT=true VERBOSE=true \
-  LLXPRT_DEFAULT_PROVIDER=openai LLXPRT_DEFAULT_MODEL=qwen3.5:2b \
+  LLXPRT_DEFAULT_PROVIDER=openai LLXPRT_DEFAULT_MODEL=gemma4:e2b-it-qat \
   OPENAI_API_KEY=ollama-local-only \
   OPENAI_BASE_URL=http://127.0.0.1:12644/v1 LLXPRT_AUTH_TYPE=provider \
-  LLXPRT_TEST_PROFILE=local-qwen35-pilot LLXPRT_CONTEXT_LIMIT=32768 \
+  LLXPRT_TEST_PROFILE=local-gemma4-pilot LLXPRT_CONTEXT_LIMIT=32768 \
   LLXPRT_MAX_OUTPUT_TOKENS=8192 LLXPRT_LOCAL_MODEL_PILOT=true \
   LLXPRT_FORCE_FILE_STORAGE=true \
   LLXPRT_E2E_MODEL_LEDGER="$PWD/tmp/verify3764/ledger.jsonl" \
@@ -257,9 +257,8 @@ bun scripts/check-e2e-model-budget.ts --ledger "$PWD/tmp/verify3764/ledger.jsonl
 curl -fsS http://127.0.0.1:12644/api/ps | jq '.models[] | {name, size, context_length}'
 ```
 
-Qwen lists the 2B and 4B releases on March 2, 2026 in its
-[release list](https://github.com/QwenLM/Qwen3.5); Ollama publishes the
-[quantized tags](https://ollama.com/library/qwen3.5). The
+Google [released Gemma 4 E2B on April 2, 2026](https://blog.google/innovation-and-ai/technology/developers-tools/gemma-4/);
+Ollama publishes the [QAT tag](https://ollama.com/library/gemma4/tags). The
 [GitHub-hosted runner specifications](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
 list 4 CPU, 16 GB RAM and 14 GB SSD for public `ubuntu-latest` jobs. The
 macOS Apple Silicon measurements below do not establish CPU-only x64 speed,
@@ -289,6 +288,31 @@ Four replace attempts hit the CLI's default 300,000 ms first-response watchdog;
 the remaining host attempt hit the 900,000 ms `TestRig` deadline. Both diagnostic
 artifacts uploaded. The pilot-only first-response and replace deadlines above
 were increased in response; this does not establish a passing hosted run.
+
+Hosted [run 36278157447](https://github.com/vybestack/llxprt-code/actions/runs/36278157447)
+confirmed why that increase did not work. The test rig generated a profile with
+`stream-first-response-timeout-ms: 600000`, but also passed `--provider openai`.
+`applyGlobalAndProfileEphemeralSettings` deliberately skips profile ephemerals
+when the provider is explicit. The stream guard therefore used its 300000 ms
+default. The pilot now relies on its inline profile for provider, model,
+credentials and timeout instead of supplying conflicting CLI flags. A real-CLI
+test uses a stalled local HTTP server and a shortened profile threshold to
+verify that the guard reads the profile setting. This changes neither regular
+E2E provider flags nor the default watchdog.
+
+Both hosted artifacts include `telemetry.log` with the original user prompt:
+`Use the replace tool on '<absolute test file>' to replace the exact text 'foo
+content' with 'bar content'. Do not add any whitespace.` On the Docker leg,
+the model first tried `read_file` with a space inserted into the checkout path,
+then called `replace` twice after dropping one `llxprt-code` path component.
+It subsequently called `glob`, `list_directory`, `direct_web_fetch` and
+`run_shell_command`; none repaired the file. On the host leg, a retry read the
+correct file but passed tool-result formatting and patch fragments as the
+`old_string` to `ast_edit` instead of making the requested replacement. Other
+attempts hit the guard or TestRig deadline. The target files existed, observed
+prompts fit within 32,768 tokens, and the model chose incorrect tools or paths.
+The assertions still require the `replace` call, no unrelated tools and exact
+`bar content`.
 
 #### Local measurements (September 26, 2026)
 
@@ -327,3 +351,20 @@ reported five replace and seven shell invocations including retries. No local
 model/configuration tested here passed repeat suites consistently, so the pilot
 is non-required. The three 4B suite logs likewise show only one complete passing
 suite, with replace exhausting all retries in two.
+
+#### Gemma 4 pilot candidate (September 26, 2026)
+
+The official `gemma4:e2b-it-qat` artifact is 4,336,358,185 bytes, with the
+digest pinned above. Ollama 0.31.1 reported a 3,784,551,955-byte loaded model
+at 32,768 context on the local M4 Max. Three separate full `TestRig` suites
+passed both the shell and exact replacement canaries on the first file-level
+attempt, six tests in total. The three per-suite budget checks each passed at
+four recorded requests across two distinct tests. See
+`tmp/verify3764/canaries-gemma4-e2b-{1,2,3}.log` and `gemma-budget.log` for
+local evidence. The strict unrelated-tool and exact-content assertions were
+unchanged. Qwen3.5:4b Q4_K_M also passed shell but failed replace in a further
+complete suite despite retrying three times. Disabling thinking for 4B did not
+fix the unrelated-tool failure in its first complete suite; its next run was
+stopped to avoid competing with the Gemma measurements. The earlier 2B hosted
+failures remain as recorded above. These are local GPU measurements, not proof
+that Gemma completes inside the hosted CPU, memory or Docker limits.

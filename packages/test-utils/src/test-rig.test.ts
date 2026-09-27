@@ -116,6 +116,7 @@ describe('TestRig setup and cleanup behavior', () => {
     setEnv('LLXPRT_DEFAULT_PROVIDER', 'openai');
     setEnv('LLXPRT_DEFAULT_MODEL', 'qwen3.5:2b');
     setEnv('OPENAI_API_KEY', 'local-test-only');
+    setEnv('LLXPRT_LOCAL_MODEL_THINKING', 'none');
     setEnv('LLXPRT_CONTEXT_LIMIT', '32768');
     setEnv('LLXPRT_MAX_OUTPUT_TOKENS', '8192');
 
@@ -164,15 +165,62 @@ describe('TestRig setup and cleanup behavior', () => {
           completionRequest === undefined
             ? undefined
             : JSON.parse(completionRequest.body).model,
+        reasoningEffort:
+          completionRequest === undefined
+            ? undefined
+            : JSON.parse(completionRequest.body).reasoning_effort,
       }).toStrictEqual({
         path: '/v1/chat/completions',
         model: 'qwen3.5:2b',
+        reasoningEffort: 'none',
       });
     } finally {
       server.closeAllConnections();
       server.close();
     }
   }, 30_000);
+
+  it('applies the generated profile first-response watchdog in the real CLI', async () => {
+    const root = createRoot();
+    setEnv('LLXPRT_CONFIG_HOME', join(root, 'global-config'));
+    setEnv('LLXPRT_LOCAL_MODEL_PILOT', 'true');
+    setEnv('LLXPRT_TEST_PROFILE', 'local-model-pilot');
+    setEnv('LLXPRT_DEFAULT_PROVIDER', 'openai');
+    setEnv('LLXPRT_DEFAULT_MODEL', 'qwen3.5:4b');
+    setEnv('OPENAI_API_KEY', 'local-test-only');
+
+    const server = createServer((_request, _response) => {
+      // Keep the first response pending so only the CLI watchdog can end it.
+    });
+    server.listen(0, '127.0.0.1');
+    try {
+      const address = server.address();
+      if (address === null || typeof address === 'string') {
+        throw new Error('Local test server has no TCP port');
+      }
+      setEnv('OPENAI_BASE_URL', `http://127.0.0.1:${address.port}/v1`);
+      const rig = new TestRig();
+      rig.setup('local profile watchdog');
+      const profilePath = join(
+        requireTestDir(rig.testDir),
+        '.llxprt',
+        'profiles',
+        'local-model-pilot.json',
+      );
+      const profile = JSON.parse(readFileSync(profilePath, 'utf8'));
+      profile.ephemeralSettings['stream-first-response-timeout-ms'] = 100;
+      writeFileSync(profilePath, JSON.stringify(profile));
+
+      await expect(
+        rig.run({ args: 'Respond with OK', timeoutMs: 15_000 }),
+      ).rejects.toThrow(
+        /threshold 100ms\) from stream-first-response-timeout-ms/,
+      );
+    } finally {
+      server.closeAllConnections();
+      server.close();
+    }
+  }, 20_000);
 
   it('cleans test directories when KEEP_OUTPUT is unset or empty', async () => {
     createRoot();

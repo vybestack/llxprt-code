@@ -74,6 +74,30 @@ describe('cli-args helpers', () => {
     ]);
   });
 
+  it('uses only the generated profile to configure the local model pilot', () => {
+    setEnv('LLXPRT_LOCAL_MODEL_PILOT', 'true');
+    setEnv('LLXPRT_TEST_PROFILE', 'local-qwen35-pilot');
+    setEnv('LLXPRT_DEFAULT_PROVIDER', 'openai');
+    setEnv('LLXPRT_DEFAULT_MODEL', 'qwen3.5:4b');
+    setEnv('OPENAI_BASE_URL', 'http://127.0.0.1:12644/v1');
+    setEnv('OPENAI_API_KEY', 'local-only');
+
+    expect(buildExtraArgs(undefined, true)).toStrictEqual([
+      '--yolo',
+      '--ide-mode',
+      'disable',
+    ]);
+  });
+
+  it('rejects a local pilot without a profile', () => {
+    setEnv('LLXPRT_LOCAL_MODEL_PILOT', 'true');
+    setEnv('LLXPRT_TEST_PROFILE', undefined);
+
+    expect(() => buildExtraArgs(undefined, true)).toThrow(
+      'LLXPRT_TEST_PROFILE is required for the local model pilot',
+    );
+  });
+
   it('builds child env without IDE detection variables and with fake response path', () => {
     setEnv('TERM_PROGRAM', 'vscode');
     setEnv('TERM_PROGRAM_VERSION', '1.0.0');

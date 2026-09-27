@@ -80,7 +80,7 @@ describe('optional local-model E2E pilot', () => {
       'local_model_canaries',
     ]);
     const job = workflowJob(pilot, 'local_model_canaries');
-    expect(job.name).toContain('Local Qwen3.5 pilot');
+    expect(job.name).toContain('Local Gemma 4 E2B pilot');
     expect(job.name).not.toContain('E2E Test (Linux)');
     expect(asString(job.if ?? '')).toContain(
       'inputs.pilot_local_model == true',
@@ -109,7 +109,7 @@ describe('optional local-model E2E pilot', () => {
     const name = asString(
       asOptionalRecord(step('Upload local model diagnostics').with)?.name,
     );
-    expect(name).toBe('local-qwen35-pilot-${{ matrix.artifact_id }}');
+    expect(name).toBe('local-gemma4-pilot-${{ matrix.artifact_id }}');
     const resolvedNames = entries.map((entry) => {
       const row = asRecord(entry);
       expect(sandboxes).toContain(row.sandbox);
@@ -139,16 +139,16 @@ describe('optional local-model E2E pilot', () => {
   });
 
   it('checks model version and digest before running either canary', () => {
-    const server = step('Start local Qwen3.5 model');
+    const server = step('Start local Gemma 4 E2B model');
     const start = asString(server.run);
     const env = asOptionalRecord(server.env);
     expect(env?.OLLAMA_CONTEXT_LENGTH).toBe('32768');
     expect(env?.OLLAMA_NUM_PARALLEL).toBe('1');
     expect(env?.OLLAMA_HOST).toBe('127.0.0.1:12644');
     expect(start).toContain('jq -e \'.version == "0.31.1"\'');
-    expect(start).toContain('ollama pull qwen3.5:2b');
+    expect(start).toContain('ollama pull gemma4:e2b-it-qat');
     expect(start).toContain(
-      '324d162be6ca5629ae4517c8710434d0bd2d665bc94dbad46e9af8fbf8a2f0df',
+      '07ea59a474013479c8b6b802bef095c40e964a1d776ba02f264c0e30e1aede0c',
     );
     expect(steps.indexOf(server)).toBeLessThan(
       steps.indexOf(step('Run local-model canaries')),
@@ -161,14 +161,14 @@ describe('optional local-model E2E pilot', () => {
     const env = asOptionalRecord(run.env);
     expect(env?.OPENAI_BASE_URL).toBe('http://127.0.0.1:12644/v1');
     expect(env?.LLXPRT_DEFAULT_PROVIDER).toBe('openai');
-    expect(env?.LLXPRT_DEFAULT_MODEL).toBe('qwen3.5:2b');
+    expect(env?.LLXPRT_DEFAULT_MODEL).toBe('gemma4:e2b-it-qat');
     expect(env?.OPENAI_API_KEY).toBe('ollama-local-only');
-    expect(env?.LLXPRT_TEST_PROFILE).toBe('local-qwen35-pilot');
+    expect(env?.LLXPRT_TEST_PROFILE).toBe('local-gemma4-pilot');
     expect(env?.LLXPRT_CONTEXT_LIMIT).toBe('32768');
     expect(env?.LLXPRT_MAX_OUTPUT_TOKENS).toBe('8192');
     expect(env?.LLXPRT_LOCAL_MODEL_PILOT).toBe('true');
     expect(Number(env?.LLXPRT_CONTEXT_LIMIT)).toBe(
-      Number(step('Start local Qwen3.5 model').env?.OLLAMA_CONTEXT_LENGTH),
+      Number(step('Start local Gemma 4 E2B model').env?.OLLAMA_CONTEXT_LENGTH),
     );
     expect(Number(env?.LLXPRT_MAX_OUTPUT_TOKENS)).toBeLessThan(
       Number(env?.LLXPRT_CONTEXT_LIMIT),

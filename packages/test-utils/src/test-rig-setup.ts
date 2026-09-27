@@ -175,7 +175,11 @@ function buildProfile(): Record<string, unknown> {
     version: 1,
     provider: profileProvider,
     model: profileModel,
-    modelParams: {},
+    modelParams:
+      env['LLXPRT_LOCAL_MODEL_PILOT'] === 'true' &&
+      env['LLXPRT_LOCAL_MODEL_THINKING'] === 'none'
+        ? { reasoning_effort: 'none' }
+        : {},
     ephemeralSettings: Object.fromEntries(
       ephemeralEntries.filter(([, value]) => value !== undefined),
     ),

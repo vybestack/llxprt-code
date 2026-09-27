@@ -24,7 +24,7 @@ on:
         default: 'main'
         type: 'string'
       pilot_local_model:
-        description: 'Run local Qwen3.5 canaries instead of credentialed E2E'
+        description: 'Run local Gemma 4 E2B canaries instead of credentialed E2E'
         required: false
         default: false
         type: 'boolean'
@@ -350,7 +350,7 @@ jobs:
           bun scripts/check-e2e-model-budget.ts --ledger "$LLXPRT_E2E_MODEL_LEDGER"
 
   local_model_canaries:
-    name: 'Local Qwen3.5 pilot - ${{ matrix.sandbox }}'
+    name: 'Local Gemma 4 E2B pilot - ${{ matrix.sandbox }}'
     if: github.event_name == 'workflow_dispatch' && inputs.pilot_local_model == true
     permissions:
       contents: read
@@ -411,7 +411,7 @@ jobs:
           echo "$RUNNER_TEMP/ollama/bin" >>"$GITHUB_PATH"
           "$RUNNER_TEMP/ollama/bin/ollama" --version
 
-      - name: 'Start local Qwen3.5 model'
+      - name: 'Start local Gemma 4 E2B model'
         shell: 'bash'
         env:
           OLLAMA_HOST: '127.0.0.1:12644'
@@ -429,19 +429,19 @@ jobs:
             sleep 2
           done
           curl --fail --silent "http://$OLLAMA_HOST/api/version" | jq -e '.version == "0.31.1"'
-          ollama pull qwen3.5:2b
+          ollama pull gemma4:e2b-it-qat
           curl --fail --silent "http://$OLLAMA_HOST/api/tags" |
-            jq -e '.models[] | select(.name == "qwen3.5:2b" and .digest == "324d162be6ca5629ae4517c8710434d0bd2d665bc94dbad46e9af8fbf8a2f0df")'
+            jq -e '.models[] | select(.name == "gemma4:e2b-it-qat" and .digest == "07ea59a474013479c8b6b802bef095c40e964a1d776ba02f264c0e30e1aede0c")'
           df -h "$RUNNER_TEMP"
 
       - name: 'Run local-model canaries'
         env:
           OPENAI_API_KEY: 'ollama-local-only'
           OPENAI_BASE_URL: 'http://127.0.0.1:12644/v1'
-          LLXPRT_DEFAULT_MODEL: 'qwen3.5:2b'
+          LLXPRT_DEFAULT_MODEL: 'gemma4:e2b-it-qat'
           LLXPRT_DEFAULT_PROVIDER: 'openai'
           LLXPRT_AUTH_TYPE: 'provider'
-          LLXPRT_TEST_PROFILE: 'local-qwen35-pilot'
+          LLXPRT_TEST_PROFILE: 'local-gemma4-pilot'
           LLXPRT_CONTEXT_LIMIT: '32768'
           LLXPRT_MAX_OUTPUT_TOKENS: '8192'
           LLXPRT_LOCAL_MODEL_PILOT: 'true'
@@ -494,7 +494,7 @@ jobs:
         if: always()
         uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # ratchet:actions/upload-artifact@v7
         with:
-          name: 'local-qwen35-pilot-${{ matrix.artifact_id }}'
+          name: 'local-gemma4-pilot-${{ matrix.artifact_id }}'
           if-no-files-found: error
           include-hidden-files: true
           path: |
