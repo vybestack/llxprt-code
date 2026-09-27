@@ -173,19 +173,25 @@ The workflow runs the tests in different sandboxing environments to ensure LLxpr
 - `sandbox:docker`: Runs the tests in a Docker container.
 - `sandbox:podman`: Runs the tests in a Podman container.
 
-### Manual local-model E2E pilot (issue #3764)
+### Runner-local model E2E (issue #3764)
 
-The existing `.github/workflows/e2e.yml` runs credentialed provider E2E for
-internal PRs, main pushes, merge groups and approved labeled reruns. Its required
-job names, quota selection, event filtering, full test coverage and budget guard
-remain unchanged. The local-model experiment is a separate job in that same
-workflow. It runs only on `workflow_dispatch` with the boolean
-`pilot_local_model=true`; that dispatch skips the credentialed E2E matrix.
-Dispatch without the pilot flag still runs the regular credentialed matrix.
-Pilot jobs have distinct, non-required check names and cannot block ordinary
-required PR CI. The pilot does not replace any third-party-model E2E coverage.
-The credentialed full-platform E2E matrix also remains in
-`.github/workflows/nightly.yml`.
+The required `e2e_linux` job uses runner-local Ollama and Gemma 4 E2B on
+ordinary internal pull requests, merge groups, main pushes, approved labeled
+internal target reruns and manual dispatch without the pilot flag. It sends no
+third-party model credentials to the checked-out PR code. The Linux host and
+Docker check names, duplicate/doc-only/mergeability gates, main-push host-only
+rule, selected integration invocations, assertions, retries and real-model
+budget guard remain in place. Fork PR heads do not execute in privileged
+`pull_request_target` jobs; fork PRs remain excluded from this E2E job.
+The checkout uses the PR merge ref for internal `pull_request`, an approved
+internal head SHA for labeled `pull_request_target`, `github.ref` for push and
+merge groups, and `branch_ref` for dispatch, always with
+`persist-credentials: false`.
+
+The separate `local_model_canaries` job runs only when explicitly opted in with
+`workflow_dispatch` and `pilot_local_model=true`; that dispatch skips the
+regular E2E matrix. Its check names remain distinct. Credentialed full-platform
+E2E remains in `.github/workflows/nightly.yml` without changes.
 
 With `pilot_local_model=true`, the pilot starts Ollama 0.31.1 on
 `127.0.0.1:12644` and pulls `gemma4:e2b-it-qat` (Q4_0, digest
@@ -194,19 +200,19 @@ It verifies the downloaded Linux runtime archive's SHA-256 digest
 (`d297381efc136451f6fabb9dd644a67f70fe51c16815a0c4a95ff0e327a3afb4`)
 before extraction, then checks the runtime version and model digest before testing.
 The OpenAI provider uses Ollama's `/v1` compatibility API and a local placeholder
-key, with no remote inference service or provider secret. Each sandbox leg now
-runs the credentialed Linux job's first full integration invocation, excluding
+key, with no remote inference service or provider secret. Each sandbox leg
+runs the regular Linux job's first full integration invocation, excluding
 only `todo-continuation.e2e.test.ts` and `run_shell_command.test.ts` (31 of 33
 selected integration test files), followed by the same three named shell cases
-from the credentialed job. The shell step exits on a failed suite. The existing
+from the regular job. The shell step exits on a failed suite. The existing
 real-model budget guard remains enabled and the ledger reports retries
-separately without counting their actual model requests. This expanded local
-pilot does not validate hosted CPU performance or replace required credentialed
-E2E coverage.
+separately without counting their actual model requests. This selection was
+validated on hosted x64 runners before its promotion to required Linux E2E;
+nightly still covers credentialed full-platform tests.
 
 On Linux, the Docker test leg sets `SANDBOX_FLAGS='--network host'` so the
 sandboxed CLI reaches the host's loopback Ollama endpoint. This networking choice
-applies only to the Docker leg. The pilot job supplies no provider credentials.
+applies only to the Docker leg. Neither Linux job supplies provider credentials.
 `GIT_CEILING_DIRECTORIES` prevents Git's implicit parent-repository search from
 finding the source checkout from a TestRig test directory. The Docker launcher
 passes the ceiling into the container, where Git tests verify its effect across
@@ -220,9 +226,9 @@ path or a generally enabled shell tool. During local evaluation, before this exc
 ran unrelated Git commands and made an unintended local commit; it was removed
 without discarding file changes. The runtime archive is pinned to 0.31.1;
 its CUDA and Vulkan libraries are excluded during extraction, and the downloaded
-archive is removed afterward. Ollama is limited to one concurrent context. The
-manual pilot configures both Ollama and LLxprt with a 32,768-token context and
-reserves 8,192 tokens for model output. The pilot profile allows 750,000 ms
+archive is removed afterward. Ollama is limited to one concurrent context.
+Both Linux jobs configure Ollama and LLxprt with a 32,768-token context and
+reserve 8,192 tokens for model output. The pilot profile allows 750,000 ms
 for the first model response and sets `openai-headers-timeout-ms` to 900,000 ms
 on its OpenAI SDK transport. The latter exceeds Undici's ordinary 300,000 ms
 response-headers limit without changing the dispatcher for other requests. On
@@ -232,8 +238,8 @@ so the pilot shell invocation has a 360,000 ms `TestRig` deadline and a
 450,000 ms Bun file timeout to leave room for its tool round trip. The real
 replace invocation has a 1,200,000 ms `TestRig` deadline, its Bun file has a
 1,500,000 ms timeout, and each sandbox job has a 90-minute bound. These larger
-deadlines apply only when `LLXPRT_LOCAL_MODEL_PILOT=true`; normal integration-test
-deadlines are unchanged.
+deadlines apply only when `LLXPRT_LOCAL_MODEL_PILOT=true`, set by both Linux
+model jobs; local and nightly integration-test deadlines are unchanged.
 
 To reproduce the expanded real-model test selection without using an existing
 Ollama daemon, run these commands from the repository root. Choose a free port
@@ -282,27 +288,16 @@ curl -fsS http://127.0.0.1:12644/api/ps | jq '.models[] | {name, size, context_l
 Google [released Gemma 4 E2B on April 2, 2026](https://blog.google/innovation-and-ai/technology/developers-tools/gemma-4/);
 Ollama publishes the [QAT tag](https://ollama.com/library/gemma4/tags). The
 [GitHub-hosted runner specifications](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
-list 4 CPU, 16 GB RAM and 14 GB SSD for public `ubuntu-latest` jobs. The
-macOS Apple Silicon measurements below do not establish CPU-only x64 speed,
-Linux container networking, or the total runtime and disk use of a hosted
-Docker E2E leg. Those require an actual Actions run before treating this change
-as validated on GitHub's runners. The existing E2E workflow is registered on
-the default branch, so after pushing the pilot branch it can be dispatched with
-`gh workflow run e2e.yml --ref issue3764 -f branch_ref=issue3764 -f pilot_local_model=true`.
-The `--ref` selects the branch version of the workflow and the pilot's checkout;
-`branch_ref` identifies the branch for dispatch grouping (and is retained for
-normal credentialed reruns). Do not dispatch the new workflow file: GitHub does
-not register a new `workflow_dispatch` workflow until it reaches the default
-branch. An ordinary `gh workflow run e2e.yml --ref issue3764 -f branch_ref=issue3764`
-still runs the credentialed matrix. Local tests validate workflow structure,
-but cannot establish hosted-runner performance. Inspect the pilot jobs for both
-`sandbox:none` and `sandbox:docker`: job
-conclusions, step durations (build, archive download, model pull, E2E), the
-`Report local model resources` step (RAM, free disk, model/runtime disk usage,
-Docker server), and the uploaded Ollama server log and real-model ledger. Check
-the model digest and SHA-256 result in each job log. Both canaries and the budget
-check need repeated passes before considering any required-coverage change.
-A local Apple Silicon result cannot substitute for Linux CPU and Docker measurements.
+list 4 CPU, 16 GB RAM and 14 GB SSD for public `ubuntu-latest` jobs. The macOS
+Apple Silicon measurements below alone did not establish CPU-only x64
+performance. Hosted x64 evidence is recorded below. For an opt-in rerun,
+use `gh workflow run e2e.yml --ref issue3764 -f branch_ref=issue3764 -f pilot_local_model=true`.
+A dispatch without the pilot flag runs the regular local-model job. Do not
+start a second dispatch while a run on the same branch is active: the workflow
+cancels in-progress jobs on that branch. Inspect both sandbox legs, SHA and
+model digest verification, mapped CPU backend, E2E outputs, budget and uploaded
+diagnostics. The regular PR checks must pass on the pushed commit before
+considering the migration verified.
 
 Hosted run [`36276039788`](https://github.com/vybestack/llxprt-code/actions/runs/36276039788)
 passed shell in both legs but failed replace in all three attempts per leg.
@@ -319,8 +314,8 @@ when the provider is explicit. The stream guard therefore used its 300000 ms
 default. The pilot now relies on its inline profile for provider, model,
 credentials and timeout instead of supplying conflicting CLI flags. A real-CLI
 test uses a stalled local HTTP server and a shortened profile threshold to
-verify that the guard reads the profile setting. This changes neither regular
-E2E provider flags nor the default watchdog.
+verify that the guard reads the profile setting. The required Linux job now
+uses that same inline profile; the default watchdog is unchanged.
 
 Both hosted artifacts include `telemetry.log` with the original user prompt:
 `Use the replace tool on '<absolute test file>' to replace the exact text 'foo
@@ -362,9 +357,9 @@ include retries and failed suites (`tmp/verify3764/budget-2b-tuned.log`). A
 final combined suite with the shell validator accepting only equivalent literal
 `echo hello-world` commands passed both canaries, with one shell retry
 (`tmp/verify3764/canaries-2b-final.log`). These are local GPU results. The
-failed suite and unmeasured hosted-runner CPU/Docker performance mean this
-workflow is not yet validated for PR gating. During remediation, the first two
-repeat runs failed because the non-interactive shell canary was initially passed
+failed suite and then-unmeasured hosted-runner CPU/Docker performance meant
+the pilot was not ready for PR gating at that stage. During remediation, the
+first two repeat runs failed because the non-interactive shell canary was initially passed
 an option array without stdin; that test setup was corrected before the third
 run. In that third genuine suite, the shell canary passed, but replace failed
 three of three file-level attempts (`tmp/verify3764/canaries-remediation-2b-3.log`).
@@ -388,5 +383,25 @@ unchanged. Qwen3.5:4b Q4_K_M also passed shell but failed replace in a further
 complete suite despite retrying three times. Disabling thinking for 4B did not
 fix the unrelated-tool failure in its first complete suite; its next run was
 stopped to avoid competing with the Gemma measurements. The earlier 2B hosted
-failures remain as recorded above. These are local GPU measurements, not proof
-that Gemma completes inside the hosted CPU, memory or Docker limits.
+failures remain as recorded above. These were local GPU measurements; hosted
+Gemma results are recorded below.
+
+#### Hosted x64 evidence (September 27, 2026)
+
+Two full hosted Linux pilot runs passed both legs:
+[36342130687](https://github.com/vybestack/llxprt-code/actions/runs/36342130687)
+used an Intel Docker runner with the Haswell CPU library pinned and a native AMD
+host runner; [36344243429](https://github.com/vybestack/llxprt-code/actions/runs/36344243429)
+used AMD for both legs. Each leg verified the Ollama 0.31.1 archive SHA-256,
+Gemma model digest, live mapped CPU backend and CPU-only inference. Each ran the
+same 31 selected integration files plus three named shell cases, produced the
+exact `bar content` replacement, and passed the 4/4 real-model budget check.
+These successes are specific to hosted x64 CPUs and the pinned model/runtime.
+The ARM pilot [36341146657](https://github.com/vybestack/llxprt-code/actions/runs/36341146657)
+failed preflight inference in both legs: Ollama returned `done:true` with an
+empty `response` and `done_reason:length` after 16 generated tokens. No selected
+E2E files or budget guard ran on those ARM legs. The required job checks
+`x86_64` and rejects other architectures rather than silently switching backend.
+Earlier x64 pilot failures and their observed model/tool issues remain documented
+above. The hosted pilots did not themselves
+exercise the required PR check names; inspect the ordinary PR run separately.

@@ -366,7 +366,7 @@ describe('E2E mergeability gate wiring (.github/workflows/e2e.yml)', () => {
   });
 
   it('bounds the Linux job while preserving concurrency and matrix', () => {
-    expect(linuxJob?.['timeout-minutes']).toBe(60);
+    expect(linuxJob?.['timeout-minutes']).toBe(90);
     const linuxConcurrency = asOptionalRecord(linuxJob?.concurrency);
     expect(linuxConcurrency?.['cancel-in-progress']).toBe(true);
     expect(linuxConcurrency?.group).toContain('${{ matrix.sandbox }}');

@@ -252,7 +252,7 @@ describe('optional local-model E2E pilot', () => {
     );
   });
 
-  it('leaves required provider E2E events, check names, quota selection and budget unchanged', () => {
+  it('keeps required E2E events, check names and budget while running without provider credentials', () => {
     expect(required.on).toHaveProperty('pull_request');
     expect(required.on).toHaveProperty('push');
     expect(required.on).toHaveProperty('merge_group');
@@ -262,12 +262,43 @@ describe('optional local-model E2E pilot', () => {
     );
     expect(requiredText).not.toContain('Block unqualified local-model gating');
     const requiredSteps = workflowJob(required, 'e2e_linux').steps ?? [];
-    expect(requiredSteps.map((candidate) => candidate.name)).toContain(
+    expect(requiredSteps.map((candidate) => candidate.name)).not.toContain(
       'Check API quota and select optimal key',
     );
     expect(requiredSteps.map((candidate) => candidate.name)).toContain(
       'Check E2E real-model budget (issue #2278)',
     );
+    const linuxText = JSON.stringify(workflowJob(required, 'e2e_linux'));
+    expect(linuxText).not.toContain('secrets[');
+    expect(linuxText).not.toContain('vars.');
+    expect(linuxText).not.toContain('ci-quota-check');
+  });
+
+  it('runs the same pinned local runtime, backend checks, inference and selected suites in required E2E', () => {
+    const linux = workflowJob(required, 'e2e_linux');
+    const linuxSteps = linux.steps ?? [];
+    for (const name of [
+      'Install Ollama CPU runtime',
+      'Select pilot CPU backend on Intel',
+      'Start local Gemma 4 E2B model',
+      'Verify CPU backend warm-up',
+      'Verify CPU-only model inference',
+      'Check E2E real-model budget (issue #2278)',
+    ]) {
+      const actual = linuxSteps.find((candidate) => candidate.name === name);
+      expect(actual, name).toEqual(step(name));
+    }
+    const run = linuxSteps.find(
+      (candidate) => candidate.name === 'Run E2E tests',
+    );
+    expect(run?.env).toEqual(step('Run local-model canaries').env);
+    expect(run?.run).toBe(step('Run local-model canaries').run);
+    expect(linux['timeout-minutes']).toBe(90);
+    expect(
+      linuxSteps.find(
+        (candidate) => candidate.name === 'Upload local model diagnostics',
+      )?.if,
+    ).toBe('always()');
   });
 
   it('only runs on explicit dispatch and uses distinct non-required check names', () => {
