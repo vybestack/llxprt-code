@@ -221,10 +221,17 @@ its CUDA and Vulkan libraries are excluded during extraction, and the downloaded
 archive is removed afterward. Ollama is limited to one concurrent context. The
 manual pilot configures both Ollama and LLxprt with a 32,768-token context and
 reserves 8,192 tokens for model output. The pilot profile allows 600,000 ms
-for the first model response. The real replace invocation has a 1,200,000 ms
-`TestRig` deadline, its Bun file has a 1,500,000 ms timeout, and each sandbox
-job has a 90-minute bound. These larger deadlines apply only when
-`LLXPRT_LOCAL_MODEL_PILOT=true`; normal integration-test deadlines are unchanged.
+for the first model response and sets `openai-headers-timeout-ms` to 900,000 ms
+on its OpenAI SDK transport. The latter exceeds Undici's ordinary 300,000 ms
+response-headers limit without changing the dispatcher for other requests. On
+hosted CPU, a 15,200-token replace prompt was still being evaluated at 300 s
+when that limit aborted it. The Docker shell model response took about 238 s,
+so the pilot shell invocation has a 360,000 ms `TestRig` deadline and a
+450,000 ms Bun file timeout to leave room for its tool round trip. The real
+replace invocation has a 1,200,000 ms `TestRig` deadline, its Bun file has a
+1,500,000 ms timeout, and each sandbox job has a 90-minute bound. These larger
+deadlines apply only when `LLXPRT_LOCAL_MODEL_PILOT=true`; normal integration-test
+deadlines are unchanged.
 
 To reproduce the two real-model canaries without using an existing Ollama daemon,
 run these commands from the repository root. Choose a free port if 12644 is in

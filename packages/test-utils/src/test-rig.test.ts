@@ -84,6 +84,7 @@ describe('TestRig setup and cleanup behavior', () => {
         'context-limit': 32768,
         maxOutputTokens: 8192,
         'stream-first-response-timeout-ms': 600_000,
+        'openai-headers-timeout-ms': 900_000,
       },
     });
   });
@@ -105,6 +106,9 @@ describe('TestRig setup and cleanup behavior', () => {
     );
     expect(profile.ephemeralSettings).not.toHaveProperty(
       'stream-first-response-timeout-ms',
+    );
+    expect(profile.ephemeralSettings).not.toHaveProperty(
+      'openai-headers-timeout-ms',
     );
   });
 
@@ -174,6 +178,56 @@ describe('TestRig setup and cleanup behavior', () => {
         model: 'qwen3.5:2b',
         reasoningEffort: 'none',
       });
+    } finally {
+      server.closeAllConnections();
+      server.close();
+    }
+  }, 30_000);
+
+  it('applies the pilot transport headers deadline in the real CLI', async () => {
+    const root = createRoot();
+    setEnv('LLXPRT_CONFIG_HOME', join(root, 'global-config'));
+    setEnv('LLXPRT_LOCAL_MODEL_PILOT', 'true');
+    setEnv('LLXPRT_TEST_PROFILE', 'local-model-pilot');
+    setEnv('LLXPRT_DEFAULT_PROVIDER', 'openai');
+    setEnv('LLXPRT_DEFAULT_MODEL', 'local-test-model');
+    setEnv('OPENAI_API_KEY', 'local-test-only');
+
+    const server = createServer((_request, response) => {
+      setTimeout(() => {
+        response.writeHead(200, { 'content-type': 'text/event-stream' });
+        response.end(
+          'data: {"id":"delayed","choices":[{"index":0,"delta":{"content":"OK"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
+        );
+      }, 1_500);
+    });
+    server.listen(0, '127.0.0.1');
+    try {
+      const address = server.address();
+      if (address === null || typeof address === 'string') {
+        throw new Error('Local test server has no TCP port');
+      }
+      setEnv('OPENAI_BASE_URL', `http://127.0.0.1:${address.port}/v1`);
+      const rig = new TestRig();
+      rig.setup('local profile headers deadline');
+      const profilePath = join(
+        requireTestDir(rig.testDir),
+        '.llxprt',
+        'profiles',
+        'local-model-pilot.json',
+      );
+      const profile = JSON.parse(readFileSync(profilePath, 'utf8'));
+      profile.ephemeralSettings['openai-headers-timeout-ms'] = 100;
+      writeFileSync(profilePath, JSON.stringify(profile));
+      await expect(
+        rig.run({ args: 'Respond with OK', timeoutMs: 12_000 }),
+      ).rejects.toThrow(/Request timed out/);
+
+      profile.ephemeralSettings['openai-headers-timeout-ms'] = 4_000;
+      writeFileSync(profilePath, JSON.stringify(profile));
+      expect(
+        await rig.run({ args: 'Respond with OK', timeoutMs: 12_000 }),
+      ).toContain('OK');
     } finally {
       server.closeAllConnections();
       server.close();

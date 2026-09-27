@@ -6,10 +6,18 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { join } from 'node:path';
+import { env } from 'node:process';
 import { TestRig, printDebugInfo, validateModelOutput } from './test-helper.js';
 import { getShellConfiguration } from '../packages/core/src/utils/shell-utils.js';
 
 const { shell } = getShellConfiguration();
+const localModelPilot = env['LLXPRT_LOCAL_MODEL_PILOT'] === 'true';
+
+function shellCanaryRunTimeoutMs(pilot: boolean): number | undefined {
+  // Docker's observed 238s model response leaves no room for a tool round trip
+  // under the original 240s TestRig deadline.
+  return pilot ? 360_000 : undefined;
+}
 
 function getLineCountCommand(): { command: string; tool: string } {
   switch (shell) {
@@ -59,6 +67,11 @@ function isExpectedShellTrace(
 }
 
 describe('shell canary command validation', () => {
+  it('extends only the pilot shell run deadline for the CPU tool round trip', () => {
+    expect(shellCanaryRunTimeoutMs(true)).toBe(360_000);
+    expect(shellCanaryRunTimeoutMs(false)).toBeUndefined();
+  });
+
   it('accepts equivalent literal echo commands but not other shell expressions', () => {
     for (const command of [
       'echo hello-world',
@@ -115,47 +128,52 @@ describe('run_shell_command', () => {
   });
 
   afterEach(async () => await rig.cleanup());
-  it('should be able to run a shell command', async () => {
-    await rig.setup('should be able to run a shell command', {
-      settings: { tools: { core: ['run_shell_command'] } },
-    });
-
-    const prompt = `Use the run_shell_command tool to execute exactly "echo hello-world". Show me the output.`;
-
-    const result = await rig.run({
-      args: ['--allowed-tools=run_shell_command(echo)'],
-      stdin: prompt,
-      yolo: false,
-    });
-
-    const foundToolCall = await rig.waitForToolCall('run_shell_command');
-
-    // Add debugging information
-    if (!foundToolCall || !result.includes('hello-world')) {
-      printDebugInfo(rig, result, {
-        'Found tool call': foundToolCall,
-        'Contains hello-world': result.includes('hello-world'),
+  it(
+    'should be able to run a shell command',
+    { timeout: localModelPilot ? 450_000 : undefined },
+    async () => {
+      await rig.setup('should be able to run a shell command', {
+        settings: { tools: { core: ['run_shell_command'] } },
       });
-    }
 
-    expect(
-      foundToolCall,
-      'Expected to find a run_shell_command tool call',
-    ).toBeTruthy();
-    expect(
-      isExpectedShellTrace(rig.readToolLogs()),
-      'Expected only successful echo hello-world shell invocations',
-    ).toBe(true);
-    expect(result).toContain('hello-world');
+      const prompt = `Use the run_shell_command tool to execute exactly "echo hello-world". Show me the output.`;
 
-    // Validate model output - will throw if no output, warn if missing expected content
-    // Model often reports exit code instead of showing output
-    validateModelOutput(
-      result,
-      ['hello-world', 'exit code 0'],
-      'Shell command test',
-    );
-  });
+      const result = await rig.run({
+        args: ['--allowed-tools=run_shell_command(echo)'],
+        stdin: prompt,
+        yolo: false,
+        timeoutMs: shellCanaryRunTimeoutMs(localModelPilot),
+      });
+
+      const foundToolCall = await rig.waitForToolCall('run_shell_command');
+
+      // Add debugging information
+      if (!foundToolCall || !result.includes('hello-world')) {
+        printDebugInfo(rig, result, {
+          'Found tool call': foundToolCall,
+          'Contains hello-world': result.includes('hello-world'),
+        });
+      }
+
+      expect(
+        foundToolCall,
+        'Expected to find a run_shell_command tool call',
+      ).toBeTruthy();
+      expect(
+        isExpectedShellTrace(rig.readToolLogs()),
+        'Expected only successful echo hello-world shell invocations',
+      ).toBe(true);
+      expect(result).toContain('hello-world');
+
+      // Validate model output - will throw if no output, warn if missing expected content
+      // Model often reports exit code instead of showing output
+      validateModelOutput(
+        result,
+        ['hello-world', 'exit code 0'],
+        'Shell command test',
+      );
+    },
+  );
 
   it('should be able to run a shell command via stdin', async () => {
     await rig.setup('should be able to run a shell command via stdin', {
