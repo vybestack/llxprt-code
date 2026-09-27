@@ -522,8 +522,12 @@ jobs:
           curl --fail --show-error --silent --max-time 300 \
             "http://$OLLAMA_HOST/api/generate" \
             -H 'Content-Type: application/json' \
-            -d '{"model":"gemma4:e2b-it-qat","prompt":"Reply with one word.","stream":false,"options":{"num_ctx":32768,"num_predict":1}}' \
-            | jq -e '.done == true and .error == null and (.response | length > 0)'
+            -d '{"model":"gemma4:e2b-it-qat","prompt":"Reply with one word.","stream":false,"options":{"num_ctx":32768,"num_predict":16}}' \
+            -o "$RUNNER_TEMP/ollama-inference.json"
+          jq -e '.done == true and .error == null and (.response | length > 0)' "$RUNNER_TEMP/ollama-inference.json" || {
+            cat "$RUNNER_TEMP/ollama-inference.json" >&2
+            exit 1
+          }
           curl --fail --show-error --silent "http://$OLLAMA_HOST/api/ps" | \
             jq -e '.models[] | select(.name == "gemma4:e2b-it-qat" and .size_vram == 0)'
 
@@ -598,6 +602,7 @@ jobs:
           include-hidden-files: true
           path: |
             ${{ runner.temp }}/ollama-server.log
+            ${{ runner.temp }}/ollama-inference.json
             ${{ runner.temp }}/e2e-model-ledger.jsonl
             ${{ github.workspace }}/.integration-tests/*/*/telemetry.log
             ${{ github.workspace }}/.integration-tests/*/*/harness-diagnostics.log

@@ -642,3 +642,112 @@ describe('workflow backend verification behavior', () => {
     );
   });
 });
+
+describe('workflow CPU inference warm-up behavior', () => {
+  function runInference(
+    generated: { done: boolean; error: string | null; response: string },
+    vram: number,
+  ): { result: BackendVerifierResult; request: unknown; diagnostic: string } {
+    const fixture = resolve(
+      root,
+      `tmp/verify3764/inference-${fixtureCounter++}`,
+    );
+    const bin = resolve(fixture, 'bin');
+    mkdirSync(bin, { recursive: true });
+    const generation = JSON.stringify(generated);
+    const ps = JSON.stringify({
+      models: [{ name: 'gemma4:e2b-it-qat', size_vram: vram }],
+    });
+    writeExecutable(
+      bin,
+      'curl',
+      `while (( $# )); do
+  case "$1" in
+    */api/generate) endpoint=generate ;;
+    */api/ps) endpoint=ps ;;
+    -d) printf '%s' "$2" >"$RUNNER_TEMP/request.json"; shift ;;
+    -o) output="$2"; shift ;;
+  esac
+  shift
+done
+if [[ "$endpoint" == generate ]]; then
+  if [[ -n "\${output:-}" ]]; then
+    printf '%s\\n' '${generation}' >"$output"
+  else
+    printf '%s\\n' '${generation}'
+  fi
+else
+  printf '%s\\n' '${ps}'
+fi`,
+    );
+    const script = asString(step('Verify CPU-only model inference').run);
+    const executed = spawnSync('bash', ['-c', script], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        PATH: `${bin}:${process.env.PATH ?? ''}`,
+        RUNNER_TEMP: fixture,
+        OLLAMA_HOST: '127.0.0.1:12644',
+      },
+    });
+    const request = JSON.parse(
+      readFileSync(resolve(fixture, 'request.json'), 'utf8'),
+    );
+    const diagnostic = readFileSync(
+      resolve(fixture, 'ollama-inference.json'),
+      'utf8',
+    );
+    rmSync(fixture, { recursive: true, force: true });
+    return {
+      result: {
+        status: executed.status ?? 1,
+        stdout: executed.stdout,
+        stderr: executed.stderr,
+      },
+      request,
+      diagnostic,
+    };
+  }
+
+  it('requests sixteen tokens and retains the raw generation response on success', () => {
+    const output = runInference(
+      { done: true, error: null, response: 'Hello' },
+      0,
+    );
+    expect(output.result.status, output.result.stderr).toBe(0);
+    expect(output.request).toMatchObject({ options: { num_predict: 16 } });
+    expect(JSON.parse(output.diagnostic)).toEqual({
+      done: true,
+      error: null,
+      response: 'Hello',
+    });
+  });
+
+  it('reports raw JSON and rejects empty text or unsuccessful completion', () => {
+    for (const generated of [
+      { done: true, error: null, response: '' },
+      { done: false, error: null, response: 'Hello' },
+      { done: true, error: 'failure', response: 'Hello' },
+    ]) {
+      const output = runInference(generated, 0);
+      expect(output.result.status).not.toBe(0);
+      expect(output.result.stderr).toContain(JSON.stringify(generated));
+      expect(output.diagnostic.trim()).toBe(JSON.stringify(generated));
+    }
+  });
+
+  it('rejects nonzero VRAM despite successful generation', () => {
+    const output = runInference(
+      { done: true, error: null, response: 'Hello' },
+      1,
+    );
+    expect(output.result.status).not.toBe(0);
+  });
+
+  it('uploads the raw inference JSON alongside the existing diagnostics', () => {
+    const paths = asString(
+      asOptionalRecord(step('Upload local model diagnostics').with)?.path,
+    ).split('\n');
+    expect(paths).toContain('${{ runner.temp }}/ollama-inference.json');
+  });
+});
