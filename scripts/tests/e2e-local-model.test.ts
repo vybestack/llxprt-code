@@ -190,7 +190,7 @@ function runLiveLinuxProcVerifier(): BackendVerifierResult {
     const script = asString(
       step('Verify Intel CPU backend warm-up').run,
     ).replace('"$proc_root/cpuinfo"', `'${resolve(fixture, 'cpuinfo')}'`);
-    writeFileSync(resolve(fixture, 'cpuinfo'), 'vendor_id : GenuineIntel\\n');
+    writeFileSync(resolve(fixture, 'cpuinfo'), 'vendor_id : GenuineIntel\n');
     const result = spawnSync('bash', ['-c', script], {
       encoding: 'utf8',
       env: {
