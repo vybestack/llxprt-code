@@ -37,6 +37,18 @@ type BackendVerifierResult = {
 };
 
 let fixtureCounter = 0;
+
+function writeExecutable(bin: string, name: string, body: string): void {
+  const path = resolve(bin, name);
+  writeFileSync(
+    path,
+    `#!/bin/bash
+${body}
+`,
+  );
+  Bun.spawnSync(['chmod', '+x', path]);
+}
+
 function runBackendVerifier(
   maps: string,
   livePid = true,
@@ -93,21 +105,15 @@ function runBackendVerifier(
     'cmn  common_param: system_info: n_threads = 2 (n_threads_batch = 2) / 4 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | LLAMAFILE = 1 | REPACK = 1 | \n',
   );
   writeFileSync(resolve(ollamaDir, 'llama-server'), 'fixture process');
-  const executable = (name: string, body: string): void => {
-    const path = resolve(bin, name);
-    writeFileSync(path, `#!/bin/bash\n${body}\n`);
-    Bun.spawnSync(['chmod', '+x', path]);
-  };
-  executable('curl', `printf '%s\\n' '{"done":true,"error":null}'`);
-  executable('jq', 'cat >/dev/null; exit 0');
-  executable(
-    'pgrep',
-    options.mapsDisappearAfterPgrep
-      ? `rm -rf '${processDir}'; printf '%s\\n' 4242`
-      : livePid
-        ? `printf '%s\\n' 4242`
-        : 'exit 1',
-  );
+  writeExecutable(bin, 'curl', `printf '%s\\n' '{"done":true,"error":null}'`);
+  writeExecutable(bin, 'jq', 'cat >/dev/null; exit 0');
+  let pgrepBody = 'exit 1';
+  if (options.mapsDisappearAfterPgrep) {
+    pgrepBody = `rm -rf '${processDir}'; printf '%s\\n' 4242`;
+  } else if (livePid) {
+    pgrepBody = `printf '%s\\n' 4242`;
+  }
+  writeExecutable(bin, 'pgrep', pgrepBody);
   const script = asString(step('Verify Intel CPU backend warm-up').run);
   const result = spawnSync('bash', ['-c', script], {
     encoding: 'utf8',
@@ -156,13 +162,8 @@ function runLiveLinuxProcVerifier(): BackendVerifierResult {
   if (compiledServer.status !== 0) {
     throw new Error(`${compiledServer.stdout}\n${compiledServer.stderr}`);
   }
-  const executableScript = (name: string, body: string): void => {
-    const path = resolve(bin, name);
-    writeFileSync(path, `#!/bin/bash\n${body}\n`);
-    Bun.spawnSync(['chmod', '+x', path]);
-  };
-  executableScript('curl', `printf '%s\\n' '{"done":true,"error":null}'`);
-  executableScript('jq', 'cat >/dev/null; exit 0');
+  writeExecutable(bin, 'curl', `printf '%s\\n' '{"done":true,"error":null}'`);
+  writeExecutable(bin, 'jq', 'cat >/dev/null; exit 0');
   writeFileSync(
     resolve(runnerTemp, 'ollama-server.log'),
     'system_info: CPU : AVX2 = 1\n',
@@ -356,7 +357,7 @@ describe('optional local-model E2E pilot', () => {
     expect(asString(verify.run)).toContain('/cmdline');
     expect(asString(verify.run)).toContain('/status');
     expect(asString(verify.run)).toContain('parent cmdline');
-    expect(asString(verify.run)).not.toContain('-s \"$maps');
+    expect(asString(verify.run)).not.toContain('-s "$maps');
     expect(steps.indexOf(verify)).toBeGreaterThan(
       steps.indexOf(step('Start local Gemma 4 E2B model')),
     );
