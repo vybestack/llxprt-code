@@ -354,7 +354,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && inputs.pilot_local_model == true
     permissions:
       contents: read
-    runs-on: 'ubuntu-latest'
+    runs-on: 'ubuntu-24.04-arm'
     timeout-minutes: 90
     strategy:
       fail-fast: false
@@ -397,17 +397,18 @@ jobs:
         shell: 'bash'
         run: |
           set -euo pipefail
+          test "$(uname -m)" = 'aarch64'
           mkdir -p "$RUNNER_TEMP/ollama"
           curl --fail --show-error --location --retry 3 \
-            'https://ollama.com/download/ollama-linux-amd64.tar.zst?version=0.31.1' \
-            -o "$RUNNER_TEMP/ollama-linux-amd64.tar.zst"
-          printf '%s  %s\n' 'd297381efc136451f6fabb9dd644a67f70fe51c16815a0c4a95ff0e327a3afb4' "$RUNNER_TEMP/ollama-linux-amd64.tar.zst" | sha256sum --check -
+            'https://ollama.com/download/ollama-linux-arm64.tar.zst?version=0.31.1' \
+            -o "$RUNNER_TEMP/ollama-linux-arm64.tar.zst"
+          printf '%s  %s\n' '47c82a67e59e060a735d1cb50a2acf020126a3a4be3f6847d5b58b7dd59620b6' "$RUNNER_TEMP/ollama-linux-arm64.tar.zst" | sha256sum --check -
           tar --zstd \
             --exclude='lib/ollama/cuda_v12/*' \
             --exclude='lib/ollama/cuda_v13/*' \
             --exclude='lib/ollama/vulkan/*' \
-            -xf "$RUNNER_TEMP/ollama-linux-amd64.tar.zst" -C "$RUNNER_TEMP/ollama"
-          rm "$RUNNER_TEMP/ollama-linux-amd64.tar.zst"
+            -xf "$RUNNER_TEMP/ollama-linux-arm64.tar.zst" -C "$RUNNER_TEMP/ollama"
+          rm "$RUNNER_TEMP/ollama-linux-arm64.tar.zst"
           echo "$RUNNER_TEMP/ollama/bin" >>"$GITHUB_PATH"
           "$RUNNER_TEMP/ollama/bin/ollama" --version
 
@@ -511,6 +512,20 @@ jobs:
             echo 'Expected haswell CPU library is not mapped' >&2
             exit 1
           }
+
+      - name: 'Verify CPU-only model inference'
+        shell: 'bash'
+        env:
+          OLLAMA_HOST: '127.0.0.1:12644'
+        run: |
+          set -euo pipefail
+          curl --fail --show-error --silent --max-time 300 \
+            "http://$OLLAMA_HOST/api/generate" \
+            -H 'Content-Type: application/json' \
+            -d '{"model":"gemma4:e2b-it-qat","prompt":"Reply with one word.","stream":false,"options":{"num_ctx":32768,"num_predict":1}}' \
+            | jq -e '.done == true and .error == null and (.response | length > 0)'
+          curl --fail --show-error --silent "http://$OLLAMA_HOST/api/ps" | \
+            jq -e '.models[] | select(.name == "gemma4:e2b-it-qat" and .size_vram == 0)'
 
       - name: 'Run local-model canaries'
         env:

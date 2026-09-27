@@ -277,6 +277,7 @@ describe('optional local-model E2E pilot', () => {
     );
     expect(job.permissions).toEqual({ contents: 'read' });
     expect(job['timeout-minutes']).toBe(90);
+    expect(job['runs-on']).toBe('ubuntu-24.04-arm');
     expect(asRecord(job.strategy).matrix).toEqual({
       sandbox: ['sandbox:none', 'sandbox:docker'],
       include: [
@@ -315,9 +316,11 @@ describe('optional local-model E2E pilot', () => {
 
   it('downloads a pinned Ollama runtime and verifies its archive before extraction', () => {
     const install = asString(step('Install Ollama CPU runtime').run);
-    expect(install).toContain('ollama-linux-amd64.tar.zst?version=0.31.1');
+    expect(install).toContain('uname -m');
+    expect(install).toContain('aarch64');
+    expect(install).toContain('ollama-linux-arm64.tar.zst?version=0.31.1');
     expect(install).toContain(
-      `printf '%s  %s\\n' 'd297381efc136451f6fabb9dd644a67f70fe51c16815a0c4a95ff0e327a3afb4' "$RUNNER_TEMP/ollama-linux-amd64.tar.zst" | sha256sum --check -`,
+      `printf '%s  %s\\n' '47c82a67e59e060a735d1cb50a2acf020126a3a4be3f6847d5b58b7dd59620b6' "$RUNNER_TEMP/ollama-linux-arm64.tar.zst" | sha256sum --check -`,
     );
     expect(install.indexOf('sha256sum --check')).toBeLessThan(
       install.indexOf('tar --zstd'),
@@ -325,7 +328,7 @@ describe('optional local-model E2E pilot', () => {
     expect(install).toContain("--exclude='lib/ollama/cuda_v12/*'");
     expect(install).toContain("--exclude='lib/ollama/cuda_v13/*'");
     expect(install).toContain("--exclude='lib/ollama/vulkan/*'");
-    expect(install).toContain('rm "$RUNNER_TEMP/ollama-linux-amd64.tar.zst"');
+    expect(install).toContain('rm "$RUNNER_TEMP/ollama-linux-arm64.tar.zst"');
   });
 
   it('restricts the CPU-backend A/B to the Intel Docker pilot and structurally checks live backend verification', () => {
@@ -378,7 +381,20 @@ describe('optional local-model E2E pilot', () => {
     expect(start).toContain(
       '07ea59a474013479c8b6b802bef095c40e964a1d776ba02f264c0e30e1aede0c',
     );
-    expect(steps.indexOf(server)).toBeLessThan(
+    const inference = step('Verify CPU-only model inference');
+    const inferenceScript = asString(inference.run);
+    expect(inferenceScript).toContain('/api/ps');
+    expect(inferenceScript).toContain('.size_vram == 0');
+    expect(inferenceScript).toContain('/api/generate');
+    expect(inferenceScript.indexOf('/api/generate')).toBeLessThan(
+      inferenceScript.indexOf('/api/ps'),
+    );
+    expect(asString(inference.run)).toContain(
+      '.done == true and .error == null',
+    );
+    expect(inference.env?.OLLAMA_HOST).toBe('127.0.0.1:12644');
+    expect(steps.indexOf(server)).toBeLessThan(steps.indexOf(inference));
+    expect(steps.indexOf(inference)).toBeLessThan(
       steps.indexOf(step('Run local-model canaries')),
     );
   });
