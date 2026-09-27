@@ -5,7 +5,13 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import {
@@ -34,8 +40,14 @@ let fixtureCounter = 0;
 function runBackendVerifier(
   maps: string,
   livePid = true,
+  options: {
+    cmdline?: string;
+    mapsFifo?: boolean;
+    mapsDisappearAfterPgrep?: boolean;
+  } = {},
 ): BackendVerifierResult {
   const fixture = resolve(root, `tmp/verify3764/behavior-${fixtureCounter++}`);
+  rmSync(fixture, { recursive: true, force: true });
   const runnerTemp = resolve(fixture, 'runner-temp');
   const procRoot = resolve(fixture, 'proc');
   const bin = resolve(fixture, 'bin');
@@ -49,17 +61,33 @@ function runBackendVerifier(
   writeFileSync(resolve(procRoot, 'cpuinfo'), 'vendor_id : GenuineIntel\n');
   writeFileSync(
     resolve(processDir, 'cmdline'),
-    `${resolve(ollamaDir, 'llama-server')}\0--model\0gemma\0`,
+    options.cmdline ??
+      `${resolve(ollamaDir, 'llama-server')}\0--model\0gemma\0`,
   );
   writeFileSync(
     resolve(processDir, 'status'),
     'Name:\tllama-server\nPPid:\t4200\n',
   );
   writeFileSync(resolve(parentDir, 'cmdline'), 'ollama\0serve\0');
-  writeFileSync(
-    resolve(processDir, 'maps'),
-    maps.replaceAll('/runner-temp', runnerTemp),
-  );
+  const mapsPath = resolve(processDir, 'maps');
+  if (options.mapsFifo) {
+    const fifo = spawnSync('mkfifo', [mapsPath]);
+    if (fifo.status !== 0) throw new Error(fifo.stderr);
+    if (statSync(mapsPath).size !== 0) {
+      throw new Error('FIFO maps fixture must report zero stat size');
+    }
+    const writer = Bun.spawn([
+      'bash',
+      '-c',
+      'printf %s "$1" > "$2"',
+      '--',
+      maps.replaceAll('/runner-temp', runnerTemp),
+      mapsPath,
+    ]);
+    writer.unref();
+  } else {
+    writeFileSync(mapsPath, maps.replaceAll('/runner-temp', runnerTemp));
+  }
   writeFileSync(
     resolve(runnerTemp, 'ollama-server.log'),
     'cmn  common_param: system_info: n_threads = 2 (n_threads_batch = 2) / 4 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | LLAMAFILE = 1 | REPACK = 1 | \n',
@@ -72,7 +100,14 @@ function runBackendVerifier(
   };
   executable('curl', `printf '%s\\n' '{"done":true,"error":null}'`);
   executable('jq', 'cat >/dev/null; exit 0');
-  executable('pgrep', livePid ? `printf '%s\\n' 4242` : 'exit 1');
+  executable(
+    'pgrep',
+    options.mapsDisappearAfterPgrep
+      ? `rm -rf '${processDir}'; printf '%s\\n' 4242`
+      : livePid
+        ? `printf '%s\\n' 4242`
+        : 'exit 1',
+  );
   const script = asString(step('Verify Intel CPU backend warm-up').run);
   const result = spawnSync('bash', ['-c', script], {
     encoding: 'utf8',
@@ -90,6 +125,90 @@ function runBackendVerifier(
     stderr: result.stderr,
     status: result.status ?? 1,
   };
+}
+
+function runLiveLinuxProcVerifier(): BackendVerifierResult {
+  const fixture = resolve(root, `tmp/verify3764/live-proc-${fixtureCounter++}`);
+  const runnerTemp = resolve(fixture, 'runner-temp');
+  const bin = resolve(fixture, 'bin');
+  const ollamaDir = resolve(runnerTemp, 'ollama/lib/ollama');
+  mkdirSync(bin, { recursive: true });
+  mkdirSync(ollamaDir, { recursive: true });
+  const library = resolve(ollamaDir, 'libggml-cpu-haswell.so');
+  const executable = resolve(ollamaDir, 'llama-server');
+  const compiledLibrary = spawnSync(
+    'cc',
+    ['-shared', '-fPIC', '-x', 'c', '-o', library, '-'],
+    { input: 'int haswell_fixture(void) { return 1; }', encoding: 'utf8' },
+  );
+  if (compiledLibrary.status !== 0) {
+    throw new Error(`${compiledLibrary.stdout}\n${compiledLibrary.stderr}`);
+  }
+  const compiledServer = spawnSync(
+    'cc',
+    ['-x', 'c', '-o', executable, '-', '-ldl'],
+    {
+      input:
+        '#include <dlfcn.h>\n#include <unistd.h>\nint main(int argc, char **argv) { if (argc < 4 || !dlopen(argv[3], RTLD_NOW)) return 2; for (;;) pause(); }',
+      encoding: 'utf8',
+    },
+  );
+  if (compiledServer.status !== 0) {
+    throw new Error(`${compiledServer.stdout}\n${compiledServer.stderr}`);
+  }
+  const executableScript = (name: string, body: string): void => {
+    const path = resolve(bin, name);
+    writeFileSync(path, `#!/bin/bash\n${body}\n`);
+    Bun.spawnSync(['chmod', '+x', path]);
+  };
+  executableScript('curl', `printf '%s\\n' '{"done":true,"error":null}'`);
+  executableScript('jq', 'cat >/dev/null; exit 0');
+  writeFileSync(
+    resolve(runnerTemp, 'ollama-server.log'),
+    'system_info: CPU : AVX2 = 1\n',
+  );
+  const server = Bun.spawn([executable, '--model', 'gemma', library], {
+    stdout: 'ignore',
+    stderr: 'ignore',
+  });
+  try {
+    const mapsPath = `/proc/${server.pid}/maps`;
+    let maps = '';
+    for (let attempt = 0; attempt < 100; attempt++) {
+      try {
+        maps = readFileSync(mapsPath, 'utf8');
+      } catch {
+        maps = '';
+      }
+      if (maps.includes(library)) break;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+    }
+    if (!maps.includes(library))
+      throw new Error('live helper did not map the haswell fixture library');
+    if (statSync(mapsPath).size !== 0)
+      throw new Error('Linux proc maps fixture must report zero stat size');
+    const script = asString(
+      step('Verify Intel CPU backend warm-up').run,
+    ).replace('"$proc_root/cpuinfo"', `'${resolve(fixture, 'cpuinfo')}'`);
+    writeFileSync(resolve(fixture, 'cpuinfo'), 'vendor_id : GenuineIntel\\n');
+    const result = spawnSync('bash', ['-c', script], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        PATH: `${bin}:${process.env.PATH ?? ''}`,
+        RUNNER_TEMP: runnerTemp,
+        OLLAMA_HOST: '127.0.0.1:12644',
+      },
+    });
+    return {
+      stdout: result.stdout,
+      stderr: result.stderr,
+      status: result.status ?? 1,
+    };
+  } finally {
+    server.kill();
+    rmSync(fixture, { recursive: true, force: true });
+  }
 }
 
 const steps = workflowJob(pilot, 'local_model_canaries').steps ?? [];
@@ -363,10 +482,82 @@ describe('optional local-model E2E pilot', () => {
   });
 });
 
+describe('workflow CPU variant selection behavior', () => {
+  const runSelection = (intel: boolean, variants: string[]): string[] => {
+    const fixture = resolve(
+      root,
+      `tmp/verify3764/selection-${fixtureCounter++}`,
+    );
+    const temp = resolve(fixture, 'temp');
+    const libdir = resolve(temp, 'ollama/lib/ollama');
+    mkdirSync(libdir, { recursive: true });
+    mkdirSync(temp, { recursive: true });
+    for (const variant of variants)
+      writeFileSync(resolve(libdir, variant), 'variant');
+    const cpuinfo = resolve(fixture, 'cpuinfo');
+    writeFileSync(
+      cpuinfo,
+      intel ? 'vendor_id : GenuineIntel\n' : 'vendor_id : AuthenticAMD\n',
+    );
+    const script = asString(
+      step('Select pilot CPU backend on Intel').run,
+    ).replace('/proc/cpuinfo', cpuinfo);
+    const result = spawnSync('bash', ['-c', script], {
+      encoding: 'utf8',
+      env: { ...process.env, RUNNER_TEMP: temp },
+    });
+    if (result.status !== 0)
+      throw new Error(`${result.stdout}\n${result.stderr}`);
+    const selected = Bun.spawnSync([
+      'find',
+      libdir,
+      '-maxdepth',
+      '1',
+      '-type',
+      'f',
+      '-name',
+      'libggml-cpu-*.so',
+    ]);
+    const files = selected.stdout
+      .toString()
+      .trim()
+      .split('\n')
+      .filter(Boolean)
+      .map((path) => path.slice(libdir.length + 1))
+      .sort();
+    rmSync(fixture, { recursive: true, force: true });
+    return files;
+  };
+
+  it('forces haswell in each Intel matrix leg and leaves AMD variants unchanged', () => {
+    const variants = [
+      'libggml-cpu-haswell.so',
+      'libggml-cpu-avx512.so',
+      'libggml-cpu-amx.so',
+    ];
+    for (const _matrixLeg of ['sandbox:none', 'sandbox:docker']) {
+      expect(runSelection(true, variants)).toEqual(['libggml-cpu-haswell.so']);
+    }
+    expect(runSelection(false, variants)).toEqual(variants.sort());
+  });
+});
+
 describe('workflow backend verification behavior', () => {
   const haswell = '/runner-temp/ollama/lib/ollama/libggml-cpu-haswell.so';
   const mapping = (path: string): string =>
     `7f000000-7f100000 r-xp 00000000 08:01 42 ${path}\n`;
+
+  it.skipIf(process.platform !== 'linux')(
+    'accepts the sole haswell mapping from a live stat-zero Linux proc maps file',
+    () => {
+      const result = runLiveLinuxProcVerifier();
+      expect(result.status, `${result.stdout}\\n${result.stderr}`).toBe(0);
+      expect(result.stdout).toContain('Loaded CPU backends:');
+      expect(result.stdout).toContain('llama-server cmdline:');
+      expect(result.stdout).toContain('llama-server PPid:');
+    },
+    15_000,
+  );
 
   it('accepts the exact sole haswell mapping when the incident log omits AVX512 and AMX fields', () => {
     const result = runBackendVerifier(mapping(haswell));
@@ -380,8 +571,16 @@ describe('workflow backend verification behavior', () => {
 
   it('fails when the live process is absent even though the log reports AVX2', () => {
     const result = runBackendVerifier(mapping(haswell), false);
-    expect(result.status, `${result.stdout}\n${result.stderr}`).not.toBe(0);
+    expect(result.status, `${result.stdout}\\n${result.stderr}`).not.toBe(0);
     expect(result.stderr).toContain('Live llama-server process not found');
+  });
+
+  it('fails explicitly when the PID vanishes after pgrep returns it', () => {
+    const result = runBackendVerifier(mapping(haswell), true, {
+      mapsDisappearAfterPgrep: true,
+    });
+    expect(result.status, `${result.stdout}\\n${result.stderr}`).not.toBe(0);
+    expect(result.stderr).toContain('Live llama-server maps are unavailable');
   });
 
   it('fails specifically when readable live-process maps contain no CPU backend despite an AVX2 log', () => {
@@ -395,13 +594,34 @@ describe('workflow backend verification behavior', () => {
     for (const maps of [
       `${mapping(haswell)}${mapping('/other/libggml-cpu-avx512.so')}`,
       mapping('/runner-temp/ollama/lib/ollama/libggml-cpu-skylake.so'),
+      mapping('/runner-temp/ollama/lib/ollama/libggml-cpu-avx512-vnni.so'),
+      mapping('/runner-temp/ollama/lib/ollama/libggml-cpu-amx.so'),
+      mapping('/runner-temp/ollama/lib/ollama/libggml-cpu-sapphirerapids.so'),
       mapping(`${haswell} (deleted)`),
     ]) {
       const result = runBackendVerifier(maps);
-      expect(result.status, `${result.stdout}\n${result.stderr}`).not.toBe(0);
+      expect(result.status, `${result.stdout}\\n${result.stderr}`).not.toBe(0);
       expect(result.stderr).toContain(
         'Unexpected mapped llama-server CPU library',
       );
     }
+  }, 15_000);
+
+  it('reads nonempty maps from a zero-size-reported FIFO', () => {
+    const result = runBackendVerifier(mapping(haswell), true, {
+      mapsFifo: true,
+    });
+    expect(result.status, `${result.stdout}\\n${result.stderr}`).toBe(0);
+    expect(result.stdout).toContain('Loaded CPU backends:');
+  }, 15_000);
+
+  it('rejects a process whose cmdline does not match the expected server', () => {
+    const result = runBackendVerifier(mapping(haswell), true, {
+      cmdline: 'spoofed\\0--model\\0gemma\\0',
+    });
+    expect(result.status, `${result.stdout}\\n${result.stderr}`).not.toBe(0);
+    expect(result.stderr).toContain(
+      'Matched PID is not the expected llama-server process',
+    );
   });
 });
