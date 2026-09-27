@@ -5,7 +5,8 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import {
   asOptionalRecord,
@@ -22,6 +23,64 @@ const requiredText = readFileSync(
 );
 const required = parseWorkflowYaml(requiredText);
 const pilot = required;
+
+type BackendVerifierResult = {
+  stdout: string;
+  stderr: string;
+  status: number;
+};
+
+let fixtureCounter = 0;
+function runBackendVerifier(
+  maps: string,
+  livePid = true,
+): BackendVerifierResult {
+  const fixture = resolve(root, `tmp/verify3764/behavior-${fixtureCounter++}`);
+  const runnerTemp = resolve(fixture, 'runner-temp');
+  const procRoot = resolve(fixture, 'proc');
+  const bin = resolve(fixture, 'bin');
+  const processDir = resolve(procRoot, '4242');
+  const ollamaDir = resolve(runnerTemp, 'ollama/lib/ollama');
+  mkdirSync(bin, { recursive: true });
+  mkdirSync(processDir, { recursive: true });
+  mkdirSync(ollamaDir, { recursive: true });
+  writeFileSync(resolve(procRoot, 'cpuinfo'), 'vendor_id : GenuineIntel\n');
+  writeFileSync(
+    resolve(processDir, 'maps'),
+    maps.replaceAll('/runner-temp', runnerTemp),
+  );
+  writeFileSync(
+    resolve(runnerTemp, 'ollama-server.log'),
+    'cmn  common_param: system_info: n_threads = 2 (n_threads_batch = 2) / 4 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | LLAMAFILE = 1 | REPACK = 1 | \n',
+  );
+  writeFileSync(resolve(ollamaDir, 'llama-server'), 'fixture process');
+  const executable = (name: string, body: string): void => {
+    const path = resolve(bin, name);
+    writeFileSync(path, `#!/bin/bash\n${body}\n`);
+    Bun.spawnSync(['chmod', '+x', path]);
+  };
+  executable('curl', `printf '%s\\n' '{"done":true,"error":null}'`);
+  executable('jq', 'cat >/dev/null; exit 0');
+  executable('pgrep', livePid ? `printf '%s\\n' 4242` : 'exit 1');
+  const script = asString(step('Verify Intel Docker CPU backend warm-up').run);
+  const result = spawnSync('bash', ['-c', script], {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      PATH: `${bin}:${process.env.PATH ?? ''}`,
+      RUNNER_TEMP: runnerTemp,
+      LLXPRT_PROC_ROOT: procRoot,
+      OLLAMA_HOST: '127.0.0.1:12644',
+    },
+  });
+  rmSync(fixture, { recursive: true, force: true });
+  return {
+    stdout: result.stdout,
+    stderr: result.stderr,
+    status: result.status ?? 1,
+  };
+}
+
 const steps = workflowJob(pilot, 'local_model_canaries').steps ?? [];
 
 function step(name: string) {
@@ -138,12 +197,12 @@ describe('optional local-model E2E pilot', () => {
     expect(install).toContain('rm "$RUNNER_TEMP/ollama-linux-amd64.tar.zst"');
   });
 
-  it('restricts the CPU-backend A/B to the Intel Docker pilot and proves AVX2 without AVX-512 or AMX from the model-load log', () => {
+  it('restricts the CPU-backend A/B to the Intel Docker pilot and structurally checks live backend verification', () => {
     const select = step('Select pilot CPU backend on Intel Docker');
     expect(select.if).toBe("matrix.sandbox == 'sandbox:docker'");
     const script = asString(select.run);
     expect(script).toContain('set -euo pipefail');
-    expect(script).toContain('/proc/cpuinfo');
+    expect(script).toContain('grep -qm1');
     expect(script).toContain('GenuineIntel');
     expect(script).toContain('libggml-cpu-haswell.so');
     expect(script).toContain('libggml-cpu-*.so');
@@ -160,11 +219,9 @@ describe('optional local-model E2E pilot', () => {
       'http://127.0.0.1:12644/api/generate',
     );
     expect(asString(verify.run)).toContain('ollama-server.log');
-    expect(asString(verify.run)).toContain('/proc/$pid/maps');
+    expect(asString(verify.run)).toContain('LLXPRT_PROC_ROOT:-/proc');
     expect(asString(verify.run)).toContain('libggml-cpu-haswell.so');
-    expect(asString(verify.run)).toContain('AVX2 = 1');
-    expect(asString(verify.run)).toContain('AVX512 = 0');
-    expect(asString(verify.run)).toContain('AMX_INT8 = 0');
+    expect(asString(verify.run)).toContain('pgrep -f');
     expect(steps.indexOf(verify)).toBeGreaterThan(
       steps.indexOf(step('Start local Gemma 4 E2B model')),
     );
@@ -287,5 +344,44 @@ describe('optional local-model E2E pilot', () => {
     );
     expect(asOptionalRecord(upload.with)?.['if-no-files-found']).toBe('error');
     expect(asOptionalRecord(upload.with)?.['include-hidden-files']).toBe(true);
+  });
+});
+
+describe('workflow backend verification behavior', () => {
+  const haswell = '/runner-temp/ollama/lib/ollama/libggml-cpu-haswell.so';
+  const mapping = (path: string): string =>
+    `7f000000-7f100000 r-xp 00000000 08:01 42 ${path}\n`;
+
+  it('accepts the exact sole haswell mapping when the incident log omits AVX512 and AMX fields', () => {
+    const result = runBackendVerifier(mapping(haswell));
+    expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+    expect(result.stdout).toContain('Loaded CPU backends:');
+  });
+
+  it('fails when the live process is absent even though the log reports AVX2', () => {
+    const result = runBackendVerifier(mapping(haswell), false);
+    expect(result.status, `${result.stdout}\n${result.stderr}`).not.toBe(0);
+    expect(result.stderr).toContain('Live llama-server process not found');
+  });
+
+  it('fails specifically when readable live-process maps contain no CPU backend despite an AVX2 log', () => {
+    const result = runBackendVerifier(mapping('/usr/lib/libc.so.6'));
+    expect(result.status, `${result.stdout}\n${result.stderr}`).not.toBe(0);
+    expect(result.stderr).toContain('No mapped llama-server CPU backend');
+    expect(result.stderr).not.toContain('maps are unavailable or empty');
+  });
+
+  it('rejects additional and alternative mapped CPU library variants', () => {
+    for (const maps of [
+      `${mapping(haswell)}${mapping('/other/libggml-cpu-avx512.so')}`,
+      mapping('/runner-temp/ollama/lib/ollama/libggml-cpu-skylake.so'),
+      mapping(`${haswell} (deleted)`),
+    ]) {
+      const result = runBackendVerifier(maps);
+      expect(result.status, `${result.stdout}\n${result.stderr}`).not.toBe(0);
+      expect(result.stderr).toContain(
+        'Unexpected mapped llama-server CPU library',
+      );
+    }
   });
 });

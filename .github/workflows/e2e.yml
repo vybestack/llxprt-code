@@ -465,7 +465,8 @@ jobs:
           OLLAMA_HOST: '127.0.0.1:12644'
         run: |
           set -euo pipefail
-          if ! grep -qm1 '^vendor_id[[:space:]]*: GenuineIntel$' /proc/cpuinfo; then
+          proc_root="${LLXPRT_PROC_ROOT:-/proc}"
+          if ! grep -qm1 '^vendor_id[[:space:]]*: GenuineIntel$' "$proc_root/cpuinfo"; then
             echo 'Docker pilot host is not Intel; CPU backend A/B not exercised'
             exit 0
           fi
@@ -474,17 +475,24 @@ jobs:
             -H 'Content-Type: application/json' \
             -d '{"model":"gemma4:e2b-it-qat","prompt":"Hello","stream":false,"options":{"num_ctx":32768,"num_predict":1}}' \
             | jq -e '.done == true and .error == null'
-          info="$(grep 'system_info:.*CPU :' "$RUNNER_TEMP/ollama-server.log" | tail -1)"
-          echo "$info"
-          [[ "$info" == *'AVX2 = 1'* && "$info" == *'AVX512 = 0'* && "$info" == *'AMX_INT8 = 0'* ]] || {
-            echo 'Pinned llama-server did not select the AVX2-only CPU backend' >&2
-            exit 1
-          }
-          pid="$(pgrep -f "^$RUNNER_TEMP/ollama/lib/ollama/llama-server --model " | head -1)"
-          backend="$(grep -Eo '/[^ ]+/libggml-cpu-[^ ]+\.so' "/proc/$pid/maps" | sort -u)"
-          echo "Loaded CPU backend: $backend"
-          [[ "$backend" == "$RUNNER_TEMP/ollama/lib/ollama/libggml-cpu-haswell.so" ]] || {
-            echo 'Unexpected mapped llama-server CPU library' >&2
+          grep 'system_info:.*CPU :' "$RUNNER_TEMP/ollama-server.log" | tail -1 || true
+          process="$RUNNER_TEMP/ollama/lib/ollama/llama-server"
+          pid="$(pgrep -f "^$process --model " | head -1)" || true
+          [[ -n "$pid" ]] || { echo 'Live llama-server process not found' >&2; exit 1; }
+          maps="$proc_root/$pid/maps"
+          [[ -r "$maps" && -s "$maps" ]] || { echo 'Live llama-server maps are unavailable or empty' >&2; exit 1; }
+          expected="$RUNNER_TEMP/ollama/lib/ollama/libggml-cpu-haswell.so"
+          backends="$(grep -Eo '/[^ ]+/libggml-cpu-[^ ]+\.so( \(deleted\))?' "$maps" | sort -u || true)"
+          echo "Loaded CPU backends: ${backends:-none}"
+          [[ -n "$backends" ]] || { echo 'No mapped llama-server CPU backend' >&2; exit 1; }
+          while IFS= read -r backend; do
+            [[ "$backend" == "$expected" ]] || {
+              echo "Unexpected mapped llama-server CPU library: $backend" >&2
+              exit 1
+            }
+          done <<< "$backends"
+          grep -Fxq "$expected" <<< "$backends" || {
+            echo 'Expected haswell CPU library is not mapped' >&2
             exit 1
           }
 
