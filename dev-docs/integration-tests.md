@@ -220,7 +220,7 @@ without discarding file changes. The runtime archive is pinned to 0.31.1;
 its CUDA and Vulkan libraries are excluded during extraction, and the downloaded
 archive is removed afterward. Ollama is limited to one concurrent context. The
 manual pilot configures both Ollama and LLxprt with a 32,768-token context and
-reserves 8,192 tokens for model output. The pilot profile allows 600,000 ms
+reserves 8,192 tokens for model output. The pilot profile allows 750,000 ms
 for the first model response and sets `openai-headers-timeout-ms` to 900,000 ms
 on its OpenAI SDK transport. The latter exceeds Undici's ordinary 300,000 ms
 response-headers limit without changing the dispatcher for other requests. On

@@ -83,7 +83,7 @@ describe('TestRig setup and cleanup behavior', () => {
       ephemeralSettings: {
         'context-limit': 32768,
         maxOutputTokens: 8192,
-        'stream-first-response-timeout-ms': 600_000,
+        'stream-first-response-timeout-ms': 750_000,
         'openai-headers-timeout-ms': 900_000,
       },
     });
