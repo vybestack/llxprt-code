@@ -456,14 +456,20 @@ jobs:
           set -euo pipefail
           if [[ "${{ matrix.sandbox }}" == "sandbox:docker" ]]; then
             npm run test:integration:sandbox:docker -- \
+              --exclude="**/todo-continuation.e2e.test.ts" \
+              --exclude="**/run_shell_command.test.ts"
+            npm run test:integration:sandbox:docker -- \
+              --exclude="**/todo-continuation.e2e.test.ts" \
               integration-tests/run_shell_command.test.ts \
-              integration-tests/replace.test.ts \
-              --testNamePattern="should be able to run a shell command$|should be able to replace content in a file$"
+              --testNamePattern="should be able to run a shell command|should be able to run a shell command via stdin|should run a platform-specific file listing command"
           else
             npm run test:integration:sandbox:none -- \
+              --exclude="**/todo-continuation.e2e.test.ts" \
+              --exclude="**/run_shell_command.test.ts"
+            npm run test:integration:sandbox:none -- \
+              --exclude="**/todo-continuation.e2e.test.ts" \
               integration-tests/run_shell_command.test.ts \
-              integration-tests/replace.test.ts \
-              --testNamePattern="should be able to run a shell command$|should be able to replace content in a file$"
+              --testNamePattern="should be able to run a shell command|should be able to run a shell command via stdin|should run a platform-specific file listing command"
           fi
 
       - name: 'Check E2E real-model budget (issue #2278)'

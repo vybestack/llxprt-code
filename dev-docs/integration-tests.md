@@ -194,13 +194,15 @@ It verifies the downloaded Linux runtime archive's SHA-256 digest
 (`d297381efc136451f6fabb9dd644a67f70fe51c16815a0c4a95ff0e327a3afb4`)
 before extraction, then checks the runtime version and model digest before testing.
 The OpenAI provider uses Ollama's `/v1` compatibility API and a local placeholder
-key, with no remote inference service or provider secret. Only the shell and
-replace canaries run: both are real `TestRig` tests with tool-choice assertions,
-the shell test checks command and tool success, and the replace test checks the
-file's exact new contents. The shell step exits on a failed suite. The pilot
-retains the four-request ledger budget check for two distinct real-model tests;
-the ledger reports retries separately without counting their actual model
-requests.
+key, with no remote inference service or provider secret. Each sandbox leg now
+runs the credentialed Linux job's first full integration invocation, excluding
+only `todo-continuation.e2e.test.ts` and `run_shell_command.test.ts` (31 of 33
+selected integration test files), followed by the same three named shell cases
+from the credentialed job. The shell step exits on a failed suite. The existing
+real-model budget guard remains enabled and the ledger reports retries
+separately without counting their actual model requests. This expanded local
+pilot does not validate hosted CPU performance or replace required credentialed
+E2E coverage.
 
 On Linux, the Docker test leg sets `SANDBOX_FLAGS='--network host'` so the
 sandboxed CLI reaches the host's loopback Ollama endpoint. This networking choice
@@ -233,11 +235,11 @@ replace invocation has a 1,200,000 ms `TestRig` deadline, its Bun file has a
 deadlines apply only when `LLXPRT_LOCAL_MODEL_PILOT=true`; normal integration-test
 deadlines are unchanged.
 
-To reproduce the two real-model canaries without using an existing Ollama daemon,
-run these commands from the repository root. Choose a free port if 12644 is in
-use and change both URLs accordingly. Install Ollama 0.31.1 first and ensure the
-`gemma4:e2b-it-qat` digest above matches. Store all evidence in the repository's
-ignored `tmp/` tree:
+To reproduce the expanded real-model test selection without using an existing
+Ollama daemon, run these commands from the repository root. Choose a free port
+if 12644 is in use and change both URLs accordingly. Install Ollama 0.31.1 first
+and ensure the `gemma4:e2b-it-qat` digest above matches. Store all evidence in
+the repository's ignored `tmp/` tree:
 
 ```bash
 mkdir -p tmp/verify3764/models
@@ -258,8 +260,21 @@ CI=true KEEP_OUTPUT=true VERBOSE=true \
   LLXPRT_E2E_MODEL_LEDGER="$PWD/tmp/verify3764/ledger.jsonl" \
   GIT_CEILING_DIRECTORIES="$PWD/.integration-tests" \
   bun scripts/run_bun_tests.ts --root integration-tests \
-    integration-tests/run_shell_command.test.ts integration-tests/replace.test.ts \
-    --testNamePattern='should be able to run a shell command$|should be able to replace content in a file'
+    --exclude='**/todo-continuation.e2e.test.ts' \
+    --exclude='**/run_shell_command.test.ts'
+CI=true KEEP_OUTPUT=true VERBOSE=true \
+  LLXPRT_DEFAULT_PROVIDER=openai LLXPRT_DEFAULT_MODEL=gemma4:e2b-it-qat \
+  OPENAI_API_KEY=ollama-local-only \
+  OPENAI_BASE_URL=http://127.0.0.1:12644/v1 LLXPRT_AUTH_TYPE=provider \
+  LLXPRT_TEST_PROFILE=local-gemma4-pilot LLXPRT_CONTEXT_LIMIT=32768 \
+  LLXPRT_MAX_OUTPUT_TOKENS=8192 LLXPRT_LOCAL_MODEL_PILOT=true \
+  LLXPRT_FORCE_FILE_STORAGE=true \
+  LLXPRT_E2E_MODEL_LEDGER="$PWD/tmp/verify3764/ledger.jsonl" \
+  GIT_CEILING_DIRECTORIES="$PWD/.integration-tests" \
+  bun scripts/run_bun_tests.ts --root integration-tests \
+    --exclude='**/todo-continuation.e2e.test.ts' \
+    integration-tests/run_shell_command.test.ts \
+    --testNamePattern='should be able to run a shell command|should be able to run a shell command via stdin|should run a platform-specific file listing command'
 bun scripts/check-e2e-model-budget.ts --ledger "$PWD/tmp/verify3764/ledger.jsonl"
 curl -fsS http://127.0.0.1:12644/api/ps | jq '.models[] | {name, size, context_length}'
 ```

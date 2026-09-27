@@ -155,9 +155,43 @@ describe('optional local-model E2E pilot', () => {
     );
   });
 
-  it('runs only real shell and replace TestRig canaries without provider secrets', () => {
+  it('matches the required Linux E2E test invocations in both sandbox legs without provider secrets', () => {
     const job = workflowJob(pilot, 'local_model_canaries');
     const run = step('Run local-model canaries');
+    const command = asString(run.run);
+    const requiredRun = asString(
+      (workflowJob(required, 'e2e_linux').steps ?? []).find(
+        (candidate) => candidate.name === 'Run E2E tests',
+      )?.run,
+    );
+    const normalize = (script: string): string =>
+      script.replace(/\\\s*/g, ' ').replace(/\s+/g, ' ');
+    const fullArgs =
+      '--exclude="**/todo-continuation.e2e.test.ts" --exclude="**/run_shell_command.test.ts"';
+    const shellArgs =
+      'integration-tests/run_shell_command.test.ts --testNamePattern="should be able to run a shell command|should be able to run a shell command via stdin|should run a platform-specific file listing command"';
+    const normalizedRequired = normalize(requiredRun);
+    const normalizedCommand = normalize(command);
+    for (const sandbox of ['sandbox:none', 'sandbox:docker']) {
+      const fullInvocation = `npm run test:integration:${sandbox} -- ${fullArgs}`;
+      const firstInvocationPattern = new RegExp(
+        `npm run test:integration:${sandbox} -- (.*?) npm run test:integration:${sandbox} --`,
+      );
+      const requiredFirstInvocation = normalizedRequired.match(
+        firstInvocationPattern,
+      );
+      const pilotFirstInvocation = normalizedCommand.match(
+        firstInvocationPattern,
+      );
+      expect(requiredFirstInvocation?.[1]).toBe(fullArgs);
+      expect(pilotFirstInvocation?.[1]).toBe(fullArgs);
+      expect(normalizedRequired).toContain(fullInvocation);
+      expect(normalizedCommand).toContain(fullInvocation);
+      const shellInvocation = `npm run test:integration:${sandbox} -- --exclude="**/todo-continuation.e2e.test.ts" ${shellArgs}`;
+      expect(normalizedRequired).toContain(shellInvocation);
+      expect(normalizedCommand).toContain(shellInvocation);
+    }
+    expect(command.match(/--exclude=/g)).toHaveLength(6);
     const env = asOptionalRecord(run.env);
     expect(env?.OPENAI_BASE_URL).toBe('http://127.0.0.1:12644/v1');
     expect(env?.LLXPRT_DEFAULT_PROVIDER).toBe('openai');
@@ -180,15 +214,15 @@ describe('optional local-model E2E pilot', () => {
     expect(asString(run.run)).toContain(
       'integration-tests/run_shell_command.test.ts',
     );
-    expect(asString(run.run)).toContain('integration-tests/replace.test.ts');
-    expect(asString(run.run)).toContain(
-      'should be able to replace content in a file',
-    );
-    expect(asString(run.run)).toContain(
-      'should be able to run a shell command',
-    );
-    expect(asString(run.run)).not.toContain('--exclude=');
     expect(JSON.stringify(job)).not.toMatch(/\bsecrets(?:\.|\[)/);
+    const budget = step('Check E2E real-model budget (issue #2278)');
+    expect(budget.if).toBe('success()');
+    expect(asString(budget.run).trim()).toBe(
+      'bun scripts/check-e2e-model-budget.ts --ledger "$LLXPRT_E2E_MODEL_LEDGER"',
+    );
+    expect(asOptionalRecord(budget.env)?.LLXPRT_E2E_MODEL_LEDGER).toBe(
+      '${{ runner.temp }}/e2e-model-ledger.jsonl',
+    );
   });
 
   it('uses host networking only for the Docker leg, and retains diagnostics on failure', () => {
