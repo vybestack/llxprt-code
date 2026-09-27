@@ -54,6 +54,7 @@ function runBackendVerifier(
   livePid = true,
   options: {
     cmdline?: string;
+    vendor?: string;
     mapsFifo?: boolean;
     mapsDisappearAfterPgrep?: boolean;
   } = {},
@@ -70,7 +71,10 @@ function runBackendVerifier(
   mkdirSync(processDir, { recursive: true });
   mkdirSync(parentDir, { recursive: true });
   mkdirSync(ollamaDir, { recursive: true });
-  writeFileSync(resolve(procRoot, 'cpuinfo'), 'vendor_id : GenuineIntel\n');
+  writeFileSync(
+    resolve(procRoot, 'cpuinfo'),
+    `vendor_id : ${options.vendor ?? 'GenuineIntel'}\n`,
+  );
   writeFileSync(
     resolve(processDir, 'cmdline'),
     options.cmdline ??
@@ -105,7 +109,11 @@ function runBackendVerifier(
     'cmn  common_param: system_info: n_threads = 2 (n_threads_batch = 2) / 4 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | LLAMAFILE = 1 | REPACK = 1 | \n',
   );
   writeFileSync(resolve(ollamaDir, 'llama-server'), 'fixture process');
-  writeExecutable(bin, 'curl', `printf '%s\\n' '{"done":true,"error":null}'`);
+  writeExecutable(
+    bin,
+    'curl',
+    `printf '%s\\n' '{"done":true,"error":null,"response":"Hello"}'`,
+  );
   writeExecutable(bin, 'jq', 'cat >/dev/null; exit 0');
   let pgrepBody = 'exit 1';
   if (options.mapsDisappearAfterPgrep) {
@@ -114,7 +122,7 @@ function runBackendVerifier(
     pgrepBody = `printf '%s\\n' 4242`;
   }
   writeExecutable(bin, 'pgrep', pgrepBody);
-  const script = asString(step('Verify Intel CPU backend warm-up').run);
+  const script = asString(step('Verify CPU backend warm-up').run);
   const result = spawnSync('bash', ['-c', script], {
     encoding: 'utf8',
     env: {
@@ -188,9 +196,10 @@ function runLiveLinuxProcVerifier(): BackendVerifierResult {
       throw new Error('live helper did not map the haswell fixture library');
     if (statSync(mapsPath).size !== 0)
       throw new Error('Linux proc maps fixture must report zero stat size');
-    const script = asString(
-      step('Verify Intel CPU backend warm-up').run,
-    ).replace('"$proc_root/cpuinfo"', `'${resolve(fixture, 'cpuinfo')}'`);
+    const script = asString(step('Verify CPU backend warm-up').run).replace(
+      '"$proc_root/cpuinfo"',
+      `'${resolve(fixture, 'cpuinfo')}'`,
+    );
     writeFileSync(resolve(fixture, 'cpuinfo'), 'vendor_id : GenuineIntel\n');
     const result = spawnSync('bash', ['-c', script], {
       encoding: 'utf8',
@@ -277,7 +286,7 @@ describe('optional local-model E2E pilot', () => {
     );
     expect(job.permissions).toEqual({ contents: 'read' });
     expect(job['timeout-minutes']).toBe(90);
-    expect(job['runs-on']).toBe('ubuntu-24.04-arm');
+    expect(job['runs-on']).toBe('ubuntu-latest');
     expect(asRecord(job.strategy).matrix).toEqual({
       sandbox: ['sandbox:none', 'sandbox:docker'],
       include: [
@@ -317,10 +326,10 @@ describe('optional local-model E2E pilot', () => {
   it('downloads a pinned Ollama runtime and verifies its archive before extraction', () => {
     const install = asString(step('Install Ollama CPU runtime').run);
     expect(install).toContain('uname -m');
-    expect(install).toContain('aarch64');
-    expect(install).toContain('ollama-linux-arm64.tar.zst?version=0.31.1');
+    expect(install).toContain('x86_64');
+    expect(install).toContain('ollama-linux-amd64.tar.zst?version=0.31.1');
     expect(install).toContain(
-      `printf '%s  %s\\n' '47c82a67e59e060a735d1cb50a2acf020126a3a4be3f6847d5b58b7dd59620b6' "$RUNNER_TEMP/ollama-linux-arm64.tar.zst" | sha256sum --check -`,
+      `printf '%s  %s\\n' 'd297381efc136451f6fabb9dd644a67f70fe51c16815a0c4a95ff0e327a3afb4' "$RUNNER_TEMP/ollama-linux-amd64.tar.zst" | sha256sum --check -`,
     );
     expect(install.indexOf('sha256sum --check')).toBeLessThan(
       install.indexOf('tar --zstd'),
@@ -328,16 +337,17 @@ describe('optional local-model E2E pilot', () => {
     expect(install).toContain("--exclude='lib/ollama/cuda_v12/*'");
     expect(install).toContain("--exclude='lib/ollama/cuda_v13/*'");
     expect(install).toContain("--exclude='lib/ollama/vulkan/*'");
-    expect(install).toContain('rm "$RUNNER_TEMP/ollama-linux-arm64.tar.zst"');
+    expect(install).toContain('rm "$RUNNER_TEMP/ollama-linux-amd64.tar.zst"');
   });
 
-  it('restricts the CPU-backend A/B to the Intel Docker pilot and structurally checks live backend verification', () => {
+  it('pins Intel backend selection before startup and verifies live mapped backends', () => {
     const select = step('Select pilot CPU backend on Intel');
     expect(select.if).toBeUndefined();
     const script = asString(select.run);
     expect(script).toContain('set -euo pipefail');
     expect(script).toContain('grep -qm1');
     expect(script).toContain('GenuineIntel');
+    expect(script).toContain('Pilot host CPU vendor:');
     expect(script).toContain('libggml-cpu-haswell.so');
     expect(script).toContain('libggml-cpu-*.so');
     expect(script).not.toContain('OLLAMA_LLM_LIBRARY');
@@ -347,15 +357,16 @@ describe('optional local-model E2E pilot', () => {
     expect(steps.indexOf(select)).toBeLessThan(
       steps.indexOf(step('Start local Gemma 4 E2B model')),
     );
-    const verify = step('Verify Intel CPU backend warm-up');
+    const verify = step('Verify CPU backend warm-up');
     expect(verify.if).toBeUndefined();
     expect(asString(verify.run)).toContain(
       'http://127.0.0.1:12644/api/generate',
     );
     expect(asString(verify.run)).toContain('ollama-server.log');
+    expect(asString(verify.run)).toContain('"think":false');
+    expect(asString(verify.run)).toContain('(.response | length > 0)');
     expect(asString(verify.run)).toContain('LLXPRT_PROC_ROOT:-/proc');
     expect(asString(verify.run)).toContain('libggml-cpu-haswell.so');
-    expect(verify.if).toBeUndefined();
     expect(asString(verify.run)).toContain('pgrep -f');
     expect(asString(verify.run)).toContain('/cmdline');
     expect(asString(verify.run)).toContain('/status');
@@ -518,7 +529,7 @@ describe('workflow CPU variant selection behavior', () => {
     );
     const script = asString(
       step('Select pilot CPU backend on Intel').run,
-    ).replace('/proc/cpuinfo', cpuinfo);
+    ).replaceAll('/proc/cpuinfo', cpuinfo);
     const result = spawnSync('bash', ['-c', script], {
       encoding: 'utf8',
       env: { ...process.env, RUNNER_TEMP: temp },
@@ -560,6 +571,17 @@ describe('workflow CPU variant selection behavior', () => {
 });
 
 describe('workflow backend verification behavior', () => {
+  it('reports the mapped native backend on AMD without imposing the Intel Haswell pin', () => {
+    const result = runBackendVerifier(
+      '7f000000-7f100000 r-xp 00000000 08:01 42 /runner-temp/ollama/lib/ollama/libggml-cpu-avx2.so\n',
+      true,
+      { vendor: 'AuthenticAMD' },
+    );
+    expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+    expect(result.stdout).toContain('Pilot host CPU vendor: AuthenticAMD');
+    expect(result.stdout).toContain('libggml-cpu-avx2.so');
+  });
+
   const haswell = '/runner-temp/ollama/lib/ollama/libggml-cpu-haswell.so';
   const mapping = (path: string): string =>
     `7f000000-7f100000 r-xp 00000000 08:01 42 ${path}\n`;
@@ -709,13 +731,17 @@ fi`,
     };
   }
 
-  it('requests sixteen tokens and retains the raw generation response on success', () => {
+  it('disables thinking, requests sixteen tokens and retains the raw generation response on success', () => {
     const output = runInference(
       { done: true, error: null, response: 'Hello' },
       0,
     );
     expect(output.result.status, output.result.stderr).toBe(0);
-    expect(output.request).toMatchObject({ options: { num_predict: 16 } });
+    expect(output.request).toMatchObject({
+      model: 'gemma4:e2b-it-qat',
+      think: false,
+      options: { num_predict: 16 },
+    });
     expect(JSON.parse(output.diagnostic)).toEqual({
       done: true,
       error: null,

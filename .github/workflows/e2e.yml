@@ -354,7 +354,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && inputs.pilot_local_model == true
     permissions:
       contents: read
-    runs-on: 'ubuntu-24.04-arm'
+    runs-on: 'ubuntu-latest'
     timeout-minutes: 90
     strategy:
       fail-fast: false
@@ -397,18 +397,18 @@ jobs:
         shell: 'bash'
         run: |
           set -euo pipefail
-          test "$(uname -m)" = 'aarch64'
+          test "$(uname -m)" = 'x86_64'
           mkdir -p "$RUNNER_TEMP/ollama"
           curl --fail --show-error --location --retry 3 \
-            'https://ollama.com/download/ollama-linux-arm64.tar.zst?version=0.31.1' \
-            -o "$RUNNER_TEMP/ollama-linux-arm64.tar.zst"
-          printf '%s  %s\n' '47c82a67e59e060a735d1cb50a2acf020126a3a4be3f6847d5b58b7dd59620b6' "$RUNNER_TEMP/ollama-linux-arm64.tar.zst" | sha256sum --check -
+            'https://ollama.com/download/ollama-linux-amd64.tar.zst?version=0.31.1' \
+            -o "$RUNNER_TEMP/ollama-linux-amd64.tar.zst"
+          printf '%s  %s\n' 'd297381efc136451f6fabb9dd644a67f70fe51c16815a0c4a95ff0e327a3afb4' "$RUNNER_TEMP/ollama-linux-amd64.tar.zst" | sha256sum --check -
           tar --zstd \
             --exclude='lib/ollama/cuda_v12/*' \
             --exclude='lib/ollama/cuda_v13/*' \
             --exclude='lib/ollama/vulkan/*' \
-            -xf "$RUNNER_TEMP/ollama-linux-arm64.tar.zst" -C "$RUNNER_TEMP/ollama"
-          rm "$RUNNER_TEMP/ollama-linux-arm64.tar.zst"
+            -xf "$RUNNER_TEMP/ollama-linux-amd64.tar.zst" -C "$RUNNER_TEMP/ollama"
+          rm "$RUNNER_TEMP/ollama-linux-amd64.tar.zst"
           echo "$RUNNER_TEMP/ollama/bin" >>"$GITHUB_PATH"
           "$RUNNER_TEMP/ollama/bin/ollama" --version
 
@@ -416,6 +416,8 @@ jobs:
         shell: 'bash'
         run: |
           set -euo pipefail
+          echo "Pilot host architecture: $(uname -m)"
+          echo "Pilot host CPU vendor: $(awk -F: '/^vendor_id[[:space:]]*:/ { gsub(/[[:space:]]/, "", $2); print $2; exit }' /proc/cpuinfo)"
           if ! grep -qm1 '^vendor_id[[:space:]]*: GenuineIntel$' /proc/cpuinfo; then
             echo 'Pilot host is not Intel; leaving Ollama CPU variants untouched'
             exit 0
@@ -431,7 +433,7 @@ jobs:
               mv "$library" "$RUNNER_TEMP/ollama-disabled-cpu-backends/"
             fi
           done
-          echo 'Intel Docker pilot: CPU variants visible to llama-server:'
+          echo 'Intel pilot Haswell pin: CPU variants visible to llama-server:'
           printf '%s\n' "$libdir"/libggml-cpu-*.so
           test "$(find "$libdir" -maxdepth 1 -name 'libggml-cpu-*.so' | wc -l)" -eq 1
 
@@ -458,22 +460,21 @@ jobs:
             jq -e '.models[] | select(.name == "gemma4:e2b-it-qat" and .digest == "07ea59a474013479c8b6b802bef095c40e964a1d776ba02f264c0e30e1aede0c")'
           df -h "$RUNNER_TEMP"
 
-      - name: 'Verify Intel CPU backend warm-up'
+      - name: 'Verify CPU backend warm-up'
         shell: 'bash'
         env:
           OLLAMA_HOST: '127.0.0.1:12644'
         run: |
           set -euo pipefail
           proc_root="${LLXPRT_PROC_ROOT:-/proc}"
-          if ! grep -qm1 '^vendor_id[[:space:]]*: GenuineIntel$' "$proc_root/cpuinfo"; then
-            echo 'Pilot host is not Intel; CPU backend A/B not exercised'
-            exit 0
-          fi
+          vendor="$(awk -F: '/^vendor_id[[:space:]]*:/ { gsub(/[[:space:]]/, "", $2); print $2; exit }' "$proc_root/cpuinfo")"
+          echo "Pilot host CPU vendor: $vendor"
+          [[ "$vendor" == GenuineIntel || "$vendor" == AuthenticAMD ]] || { echo "Unsupported CPU vendor: $vendor" >&2; exit 1; }
           curl --fail --show-error --silent --max-time 300 \
             "http://127.0.0.1:12644/api/generate" \
             -H 'Content-Type: application/json' \
-            -d '{"model":"gemma4:e2b-it-qat","prompt":"Hello","stream":false,"options":{"num_ctx":32768,"num_predict":1}}' \
-            | jq -e '.done == true and .error == null'
+            -d '{"model":"gemma4:e2b-it-qat","prompt":"Hello","stream":false,"think":false,"options":{"num_ctx":32768,"num_predict":16}}' \
+            | jq -e '.done == true and .error == null and (.response | length > 0)'
           grep 'system_info:.*CPU :' "$RUNNER_TEMP/ollama-server.log" | tail -1 || true
           process="$RUNNER_TEMP/ollama/lib/ollama/llama-server"
           pid="$(pgrep -f "^$process --model " | head -1)" || true
@@ -499,9 +500,13 @@ jobs:
           maps_snapshot="$RUNNER_TEMP/llama-server-$pid.maps"
           cat "$maps" >"$maps_snapshot" || { echo 'llama-server maps disappeared while being read' >&2; exit 1; }
           cat "$maps_snapshot"
-          backends="$(grep -Eo '/[^ ]+/libggml-cpu-[^ ]+\.so( \(deleted\))?' "$maps_snapshot" | sort -u || true)"
+          backends="$(grep -Eo '/[^ ]+/libggml-cpu(-[^ ]+)?\.so( \(deleted\))?' "$maps_snapshot" | sort -u || true)"
           echo "Loaded CPU backends: ${backends:-none}"
           [[ -n "$backends" ]] || { echo 'No mapped llama-server CPU backend' >&2; exit 1; }
+          if [[ "$vendor" == AuthenticAMD ]]; then
+            echo 'AMD pilot: native Ollama CPU backend (variants untouched)'
+            exit 0
+          fi
           while IFS= read -r backend; do
             [[ "$backend" == "$expected" ]] || {
               echo "Unexpected mapped llama-server CPU library: $backend" >&2
@@ -522,7 +527,7 @@ jobs:
           curl --fail --show-error --silent --max-time 300 \
             "http://$OLLAMA_HOST/api/generate" \
             -H 'Content-Type: application/json' \
-            -d '{"model":"gemma4:e2b-it-qat","prompt":"Reply with one word.","stream":false,"options":{"num_ctx":32768,"num_predict":16}}' \
+            -d '{"model":"gemma4:e2b-it-qat","prompt":"Reply with one word.","stream":false,"think":false,"options":{"num_ctx":32768,"num_predict":16}}' \
             -o "$RUNNER_TEMP/ollama-inference.json"
           jq -e '.done == true and .error == null and (.response | length > 0)' "$RUNNER_TEMP/ollama-inference.json" || {
             cat "$RUNNER_TEMP/ollama-inference.json" >&2
