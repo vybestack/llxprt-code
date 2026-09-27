@@ -542,7 +542,11 @@ describe('optional local-model E2E pilot', () => {
 });
 
 describe('workflow CPU variant selection behavior', () => {
-  const runSelection = (intel: boolean, variants: string[]): string[] => {
+  const runSelection = (
+    intel: boolean,
+    variants: string[],
+    cpuinfoName = 'cpuinfo',
+  ): string[] => {
     const fixture = resolve(
       root,
       `tmp/verify3764/selection-${fixtureCounter++}`,
@@ -553,17 +557,17 @@ describe('workflow CPU variant selection behavior', () => {
     mkdirSync(temp, { recursive: true });
     for (const variant of variants)
       writeFileSync(resolve(libdir, variant), 'variant');
-    const cpuinfo = resolve(fixture, 'cpuinfo');
+    const cpuinfo = resolve(fixture, cpuinfoName);
     writeFileSync(
       cpuinfo,
       intel ? 'vendor_id : GenuineIntel\n' : 'vendor_id : AuthenticAMD\n',
     );
     const script = asString(
       step('Select pilot CPU backend on Intel').run,
-    ).replaceAll('/proc/cpuinfo', cpuinfo);
+    ).replaceAll('/proc/cpuinfo', '"$LLXPRT_TEST_CPUINFO"');
     const result = spawnSync('bash', ['-c', script], {
       encoding: 'utf8',
-      env: { ...process.env, RUNNER_TEMP: temp },
+      env: { ...process.env, RUNNER_TEMP: temp, LLXPRT_TEST_CPUINFO: cpuinfo },
     });
     if (result.status !== 0)
       throw new Error(`${result.stdout}\n${result.stderr}`);
@@ -598,6 +602,18 @@ describe('workflow CPU variant selection behavior', () => {
       expect(runSelection(true, variants)).toEqual(['libggml-cpu-haswell.so']);
     }
     expect(runSelection(false, variants)).toEqual(variants.sort());
+  });
+
+  it('selects Intel and AMD variants with shell syntax in the CPU fixture path', () => {
+    const variants = ['libggml-cpu-haswell.so', 'libggml-cpu-avx512.so'];
+    const cpuinfoName = "cpu info '$(printf injected)'";
+    expect(runSelection(true, variants, cpuinfoName)).toEqual([
+      'libggml-cpu-haswell.so',
+    ]);
+    expect(runSelection(false, variants, cpuinfoName)).toEqual([
+      'libggml-cpu-avx512.so',
+      'libggml-cpu-haswell.so',
+    ]);
   });
 });
 
