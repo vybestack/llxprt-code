@@ -4,8 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
+import { createServer } from 'node:http';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { restoreEnv, setEnv } from './env-test-helpers.js';
@@ -50,6 +57,278 @@ describe('TestRig setup and cleanup behavior', () => {
     expect(rig.fakeResponsesPath).toBe(firstCopiedPath);
     expect(rig.originalFakeResponsesPath).toBe(fakeResponsesPath);
   });
+
+  it('writes bounded context and output settings into an opt-in test profile', () => {
+    createRoot();
+    setEnv('LLXPRT_LOCAL_MODEL_E2E', 'true');
+    setEnv('LLXPRT_TEST_PROFILE', 'local-model-e2e');
+    setEnv('LLXPRT_DEFAULT_PROVIDER', 'openai');
+    setEnv('LLXPRT_DEFAULT_MODEL', 'qwen3.5:2b');
+    setEnv('LLXPRT_CONTEXT_LIMIT', '32768');
+    setEnv('LLXPRT_MAX_OUTPUT_TOKENS', '8192');
+    const rig = new TestRig();
+
+    rig.setup('local model E2E profile');
+
+    const testDir = requireTestDir(rig.testDir);
+    const profile = JSON.parse(
+      readFileSync(
+        join(testDir, '.llxprt', 'profiles', 'local-model-e2e.json'),
+        'utf8',
+      ),
+    );
+    expect(profile).toMatchObject({
+      provider: 'openai',
+      model: 'qwen3.5:2b',
+      ephemeralSettings: {
+        'context-limit': 32768,
+        maxOutputTokens: 8192,
+        'stream-first-response-timeout-ms': 750_000,
+        'openai-request-timeout-ms': 850_000,
+        'openai-headers-timeout-ms': 900_000,
+      },
+    });
+  });
+
+  it('leaves the ordinary test profile first-response deadline unchanged', () => {
+    createRoot();
+    setEnv('LLXPRT_LOCAL_MODEL_E2E', undefined);
+    setEnv('LLXPRT_TEST_PROFILE', 'ordinary-profile');
+    const rig = new TestRig();
+
+    rig.setup('ordinary profile');
+
+    const testDir = requireTestDir(rig.testDir);
+    const profile = JSON.parse(
+      readFileSync(
+        join(testDir, '.llxprt', 'profiles', 'ordinary-profile.json'),
+        'utf8',
+      ),
+    );
+    expect(profile.ephemeralSettings).not.toHaveProperty(
+      'stream-first-response-timeout-ms',
+    );
+    expect(profile.ephemeralSettings).not.toHaveProperty(
+      'openai-headers-timeout-ms',
+    );
+    expect(profile.ephemeralSettings).not.toHaveProperty(
+      'openai-request-timeout-ms',
+    );
+  });
+
+  it('loads the generated local model E2E profile in the real CLI without a global profile', async () => {
+    const root = createRoot();
+    setEnv('LLXPRT_CONFIG_HOME', join(root, 'global-config'));
+    setEnv('LLXPRT_LOCAL_MODEL_E2E', 'true');
+    setEnv('LLXPRT_TEST_PROFILE', 'local-model-e2e');
+    setEnv('LLXPRT_DEFAULT_PROVIDER', 'openai');
+    setEnv('LLXPRT_DEFAULT_MODEL', 'qwen3.5:2b');
+    setEnv('OPENAI_API_KEY', 'local-test-only');
+    setEnv('LLXPRT_LOCAL_MODEL_THINKING', 'none');
+    setEnv('LLXPRT_CONTEXT_LIMIT', '32768');
+    setEnv('LLXPRT_MAX_OUTPUT_TOKENS', '8192');
+
+    const requests: Array<{ path: string | undefined; body: string }> = [];
+    const server = createServer((request, response) => {
+      const chunks: Buffer[] = [];
+      request.on('data', (chunk: Buffer) => chunks.push(chunk));
+      request.on('end', () => {
+        requests.push({
+          path: request.url,
+          body: Buffer.concat(chunks).toString(),
+        });
+        const chunk = JSON.stringify({
+          id: 'chatcmpl-local-profile-test',
+          object: 'chat.completion.chunk',
+          choices: [
+            {
+              delta: { content: 'OK' },
+              index: 0,
+              finish_reason: 'stop',
+            },
+          ],
+        });
+        response.writeHead(200, { 'content-type': 'text/event-stream' });
+        response.end(`data: ${chunk}\n\ndata: [DONE]\n\n`);
+      });
+    });
+    server.listen(0, '127.0.0.1');
+    try {
+      const address = server.address();
+      if (address === null || typeof address === 'string') {
+        throw new Error('Local test server has no TCP port');
+      }
+      setEnv('OPENAI_BASE_URL', `http://127.0.0.1:${address.port}/v1`);
+      const rig = new TestRig();
+      rig.setup('real CLI local model E2E profile');
+
+      await rig.run({ args: 'Respond with OK', timeoutMs: 20_000 });
+
+      const completionRequest = requests.find(
+        (request) => request.path === '/v1/chat/completions',
+      );
+      expect({
+        path: completionRequest?.path,
+        model:
+          completionRequest === undefined
+            ? undefined
+            : JSON.parse(completionRequest.body).model,
+        reasoningEffort:
+          completionRequest === undefined
+            ? undefined
+            : JSON.parse(completionRequest.body).reasoning_effort,
+      }).toStrictEqual({
+        path: '/v1/chat/completions',
+        model: 'qwen3.5:2b',
+        reasoningEffort: 'none',
+      });
+    } finally {
+      server.closeAllConnections();
+      server.close();
+    }
+  }, 30_000);
+
+  it('applies the local model E2E transport headers deadline in the real CLI', async () => {
+    const root = createRoot();
+    setEnv('LLXPRT_CONFIG_HOME', join(root, 'global-config'));
+    setEnv('LLXPRT_LOCAL_MODEL_E2E', 'true');
+    setEnv('LLXPRT_TEST_PROFILE', 'local-model-e2e');
+    setEnv('LLXPRT_DEFAULT_PROVIDER', 'openai');
+    setEnv('LLXPRT_DEFAULT_MODEL', 'local-test-model');
+    setEnv('OPENAI_API_KEY', 'local-test-only');
+
+    const server = createServer((_request, response) => {
+      setTimeout(() => {
+        response.writeHead(200, { 'content-type': 'text/event-stream' });
+        response.end(
+          'data: {"id":"delayed","choices":[{"index":0,"delta":{"content":"OK"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
+        );
+      }, 1_500);
+    });
+    server.listen(0, '127.0.0.1');
+    try {
+      const address = server.address();
+      if (address === null || typeof address === 'string') {
+        throw new Error('Local test server has no TCP port');
+      }
+      setEnv('OPENAI_BASE_URL', `http://127.0.0.1:${address.port}/v1`);
+      const rig = new TestRig();
+      rig.setup('local profile headers deadline');
+      const profilePath = join(
+        requireTestDir(rig.testDir),
+        '.llxprt',
+        'profiles',
+        'local-model-e2e.json',
+      );
+      const profile = JSON.parse(readFileSync(profilePath, 'utf8'));
+      profile.ephemeralSettings['openai-headers-timeout-ms'] = 100;
+      writeFileSync(profilePath, JSON.stringify(profile));
+      await expect(
+        rig.run({ args: 'Respond with OK', timeoutMs: 12_000 }),
+      ).rejects.toThrow(/Request timed out/);
+
+      profile.ephemeralSettings['openai-headers-timeout-ms'] = 4_000;
+      writeFileSync(profilePath, JSON.stringify(profile));
+      expect(
+        await rig.run({ args: 'Respond with OK', timeoutMs: 12_000 }),
+      ).toContain('OK');
+    } finally {
+      server.closeAllConnections();
+      server.close();
+    }
+  }, 30_000);
+
+  it('applies the local model E2E SDK request deadline in the real CLI', async () => {
+    const root = createRoot();
+    setEnv('LLXPRT_CONFIG_HOME', join(root, 'global-config'));
+    setEnv('LLXPRT_LOCAL_MODEL_E2E', 'true');
+    setEnv('LLXPRT_TEST_PROFILE', 'local-model-e2e');
+    setEnv('LLXPRT_DEFAULT_PROVIDER', 'openai');
+    setEnv('LLXPRT_DEFAULT_MODEL', 'local-test-model');
+    setEnv('OPENAI_API_KEY', 'local-test-only');
+
+    const server = createServer((_request, response) => {
+      setTimeout(() => {
+        response.writeHead(200, { 'content-type': 'text/event-stream' });
+        response.end(
+          'data: {"id":"delayed","choices":[{"index":0,"delta":{"content":"OK"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
+        );
+      }, 1_500);
+    });
+    server.listen(0, '127.0.0.1');
+    try {
+      const address = server.address();
+      if (address === null || typeof address === 'string') {
+        throw new Error('Local test server has no TCP port');
+      }
+      setEnv('OPENAI_BASE_URL', `http://127.0.0.1:${address.port}/v1`);
+      const rig = new TestRig();
+      rig.setup('local profile SDK deadline');
+      const profilePath = join(
+        requireTestDir(rig.testDir),
+        '.llxprt',
+        'profiles',
+        'local-model-e2e.json',
+      );
+      const profile = JSON.parse(readFileSync(profilePath, 'utf8'));
+      profile.ephemeralSettings['openai-request-timeout-ms'] = 100;
+      writeFileSync(profilePath, JSON.stringify(profile));
+      await expect(
+        rig.run({ args: 'Respond with OK', timeoutMs: 12_000 }),
+      ).rejects.toThrow(/Request timed out/);
+
+      profile.ephemeralSettings['openai-request-timeout-ms'] = 4_000;
+      writeFileSync(profilePath, JSON.stringify(profile));
+      expect(
+        await rig.run({ args: 'Respond with OK', timeoutMs: 12_000 }),
+      ).toContain('OK');
+    } finally {
+      server.closeAllConnections();
+      server.close();
+    }
+  }, 30_000);
+
+  it('applies the generated profile first-response watchdog in the real CLI', async () => {
+    const root = createRoot();
+    setEnv('LLXPRT_CONFIG_HOME', join(root, 'global-config'));
+    setEnv('LLXPRT_LOCAL_MODEL_E2E', 'true');
+    setEnv('LLXPRT_TEST_PROFILE', 'local-model-e2e');
+    setEnv('LLXPRT_DEFAULT_PROVIDER', 'openai');
+    setEnv('LLXPRT_DEFAULT_MODEL', 'qwen3.5:4b');
+    setEnv('OPENAI_API_KEY', 'local-test-only');
+
+    const server = createServer((_request, _response) => {
+      // Keep the first response pending so only the CLI watchdog can end it.
+    });
+    server.listen(0, '127.0.0.1');
+    try {
+      const address = server.address();
+      if (address === null || typeof address === 'string') {
+        throw new Error('Local test server has no TCP port');
+      }
+      setEnv('OPENAI_BASE_URL', `http://127.0.0.1:${address.port}/v1`);
+      const rig = new TestRig();
+      rig.setup('local profile watchdog');
+      const profilePath = join(
+        requireTestDir(rig.testDir),
+        '.llxprt',
+        'profiles',
+        'local-model-e2e.json',
+      );
+      const profile = JSON.parse(readFileSync(profilePath, 'utf8'));
+      profile.ephemeralSettings['stream-first-response-timeout-ms'] = 100;
+      writeFileSync(profilePath, JSON.stringify(profile));
+
+      await expect(
+        rig.run({ args: 'Respond with OK', timeoutMs: 15_000 }),
+      ).rejects.toThrow(
+        /threshold 100ms\) from stream-first-response-timeout-ms/,
+      );
+    } finally {
+      server.closeAllConnections();
+      server.close();
+    }
+  }, 20_000);
 
   it('cleans test directories when KEEP_OUTPUT is unset or empty', async () => {
     createRoot();
@@ -170,5 +449,33 @@ describe('TestRig setup and cleanup behavior', () => {
     await rig.run({ args: 'test prompt' }).catch(() => {});
 
     expect(existsSync(ledgerPath)).toBe(false);
+  });
+
+  it('uses a per-run deadline without changing the default TestRig timeout', async () => {
+    const root = createRoot();
+    const fixturePath = join(root, 'fake.jsonl');
+    const fixture = JSON.stringify({
+      chunks: [
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'OK' }],
+          metadata: {
+            usage: {
+              promptTokens: 1,
+              completionTokens: 1,
+              totalTokens: 2,
+            },
+          },
+        },
+      ],
+    });
+    writeFileSync(fixturePath, `${fixture}\n`);
+    setEnv('LLXPRT_TEST_PROFILE', undefined);
+    const rig = new TestRig();
+    rig.setup('scoped run timeout', { fakeResponsesPath: fixturePath });
+
+    await expect(
+      rig.run({ args: 'test prompt', timeoutMs: 1 }),
+    ).rejects.toThrow('TestRig.run() timed out after 1ms');
   });
 });

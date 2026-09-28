@@ -175,7 +175,11 @@ function buildProfile(): Record<string, unknown> {
     version: 1,
     provider: profileProvider,
     model: profileModel,
-    modelParams: {},
+    modelParams:
+      env['LLXPRT_LOCAL_MODEL_E2E'] === 'true' &&
+      env['LLXPRT_LOCAL_MODEL_THINKING'] === 'none'
+        ? { reasoning_effort: 'none' }
+        : {},
     ephemeralSettings: Object.fromEntries(
       ephemeralEntries.filter(([, value]) => value !== undefined),
     ),
@@ -214,6 +218,20 @@ function collectEphemeralEntries(): Array<[string, unknown]> {
     if (Number.isFinite(parsedLimit) && parsedLimit > 0) {
       entries.push(['context-limit', parsedLimit]);
     }
+  }
+
+  const maxOutputTokens = env['LLXPRT_MAX_OUTPUT_TOKENS'];
+  if (maxOutputTokens !== undefined) {
+    const parsedMaxOutputTokens = Number(maxOutputTokens);
+    if (Number.isFinite(parsedMaxOutputTokens) && parsedMaxOutputTokens > 0) {
+      entries.push(['maxOutputTokens', parsedMaxOutputTokens]);
+    }
+  }
+
+  if (env['LLXPRT_LOCAL_MODEL_E2E'] === 'true') {
+    entries.push(['stream-first-response-timeout-ms', 750_000]);
+    entries.push(['openai-request-timeout-ms', 850_000]);
+    entries.push(['openai-headers-timeout-ms', 900_000]);
   }
 
   return entries;

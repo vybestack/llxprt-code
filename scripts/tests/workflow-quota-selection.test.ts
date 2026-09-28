@@ -46,78 +46,37 @@ function stepNamed(steps: WorkflowStep[], name: string): WorkflowStep {
 
 type WorkflowStep = TypedWorkflowStep;
 
-/**
- * Structurally verifies the trusted-ref and PR-code-checkout steps for a
- * single E2E job. The trusted checkout ref must cover BOTH pull_request
- * and pull_request_target. After quota selection, the PR code must be
- * checked out via two mutually-exclusive conditional steps — internal target
- * head for pull_request_target and merge ref for pull_request — each with
- * persist-credentials:false. Fork target heads must never be checked out.
- */
-function assertJobCheckoutSecurity(
-  steps: WorkflowStep[],
-  quotaName: string,
-  quotaId: string,
-): void {
-  const trustedCheckout = stepNamed(steps, 'Checkout trusted quota selector');
-  const quota = stepNamed(steps, quotaName);
-  const targetCheckout = stepNamed(steps, 'Checkout PR head (internal target)');
-  const internalCheckout = stepNamed(steps, 'Checkout PR merge ref (internal)');
-
-  expect(quota.id).toBe(quotaId);
-  expect(quota.shell).toBe('bash');
-  const quotaRun = asString(quota.run);
-  expect(quotaRun).toContain('quota_selectors=(scripts/ci-quota-check.*)');
-  expect(quotaRun).toContain('${#quota_selectors[@]} != 1');
-  expect(quotaRun).toContain('[[ ! -f "${quota_selectors[0]}" ]]');
-  expect(quotaRun).toContain('bun "${quota_selectors[0]}"');
-  expect(quotaRun).not.toContain('ci-quota-check.js');
-  expect(quotaRun).toContain('awk \'!/^OPENAI_API_KEY=/\' "$GITHUB_ENV"');
-  expect(asString(quota.run)).toContain(
-    'grep -Eq \'^selected_key=(primary|secondary)$\' "$GITHUB_OUTPUT"',
+/** Verify checkout refs without giving PR code a persistent checkout credential. */
+function assertJobCheckoutSecurity(steps: WorkflowStep[]): void {
+  const checkout = stepNamed(steps, 'Checkout');
+  const target = stepNamed(steps, 'Checkout PR head (internal target)');
+  const merge = stepNamed(steps, 'Checkout PR merge ref (internal)');
+  expect(checkout.if).toBe(
+    "github.event_name != 'pull_request_target' && github.event_name != 'pull_request'",
   );
-  expect(asString(quota.run)).toContain(
-    '[[ "${KEY_VAR_NAME:-}" == *SYNTHETIC* ]]',
+  const ref = asString(asRecord(checkout.with).ref);
+  expect(ref).toBe(
+    "${{ github.event_name == 'workflow_dispatch' && inputs.branch_ref || github.ref }}",
   );
-  expect(asString(quota.run)).toContain(
-    'echo \'selected_key=primary\' >>"$GITHUB_OUTPUT"',
-  );
-
-  // Trusted checkout ref must use base.sha for BOTH PR event types.
-  const trustedRef = asString(asRecord(trustedCheckout.with).ref);
-  expect(trustedRef).toContain("github.event_name == 'pull_request'");
-  expect(trustedRef).toContain("github.event_name == 'pull_request_target'");
-  expect(trustedRef).toContain('github.event.pull_request.base.sha');
-  // Non-PR events must fall back to dispatch input or github.ref.
-  expect(trustedRef).toContain('github.event.inputs.branch_ref');
-  expect(trustedRef).toContain('github.ref');
-
-  expect(targetCheckout.if).toBe(
+  expect(asRecord(checkout.with)['persist-credentials']).toBe(false);
+  expect(target.if).toBe(
     "github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name == github.repository",
   );
-  expect(asRecord(targetCheckout.with).ref).toBe(
+  expect(asRecord(target.with).ref).toBe(
     '${{ github.event.pull_request.head.sha }}',
   );
-  expect(asRecord(targetCheckout.with).repository).toBe(
-    '${{ github.repository }}',
+  expect(asRecord(target.with).repository).toBe('${{ github.repository }}');
+  expect(asRecord(target.with)['persist-credentials']).toBe(false);
+  expect(merge.if).toBe("github.event_name == 'pull_request'");
+  expect(asRecord(merge.with).ref).toBe('${{ github.ref }}');
+  expect(asRecord(merge.with)['persist-credentials']).toBe(false);
+  expect(asRecord(merge.with).clean).toBe(false);
+  expect(steps.indexOf(target)).toBeLessThan(
+    steps.indexOf(stepNamed(steps, 'Build project')),
   );
-  expect(asRecord(targetCheckout.with)['persist-credentials']).toBe(false);
-
-  // Internal PR merge-ref checkout: only for pull_request.
-  expect(internalCheckout.if).toBe("github.event_name == 'pull_request'");
-  expect(asRecord(internalCheckout.with).ref).toBe('${{ github.ref }}');
-  expect(asRecord(internalCheckout.with)['persist-credentials']).toBe(false);
-  expect(asRecord(internalCheckout.with).clean).toBe(false);
-
-  // Ordering: trusted → quota → target/internal checkouts.
-  const idxTrusted = steps.indexOf(trustedCheckout);
-  const idxQuota = steps.indexOf(quota);
-  const idxTarget = steps.indexOf(targetCheckout);
-  const idxInternal = steps.indexOf(internalCheckout);
-
-  expect(idxTrusted).toBeLessThan(idxQuota);
-  expect(idxQuota).toBeLessThan(idxTarget);
-  expect(idxQuota).toBeLessThan(idxInternal);
+  expect(steps.indexOf(merge)).toBeLessThan(
+    steps.indexOf(stepNamed(steps, 'Build project')),
+  );
 }
 
 /** Bun's `expect` has no `fail`; throw so the expression stays `never`. */
@@ -126,67 +85,28 @@ function raiseMissing(message: string): never {
 }
 
 describe('quota-selected workflow credentials', () => {
-  it('maps Linux E2E quota outputs into validation and test steps', () => {
+  it('runs regular Linux E2E with only a local model and no provider credentials', () => {
     const workflow = readWorkflow('e2e.yml');
     expect(workflow.permissions).toEqual({
       actions: 'read',
       contents: 'read',
       'pull-requests': 'read',
     });
-    const jobs = workflow.jobs;
-    if (!jobs) throw new Error('e2e.yml must define jobs');
-    const e2eLinux = jobs.e2e_linux;
-    if (!e2eLinux) throw new Error('e2e.yml must define e2e_linux');
-    expect(hasSecret(e2eLinux.env ?? {})).toBe(false);
-    const cases: Array<{
-      steps: WorkflowStep[];
-      quotaName: string;
-      quotaId: string;
-      validationName: string;
-      testName: string;
-    }> = [
-      {
-        steps: jobSteps(workflowJobOptional(workflow, 'e2e_linux')),
-        quotaName: 'Check API quota and select optimal key',
-        quotaId: 'quota',
-        validationName: 'Validate E2E provider environment (Linux)',
-        testName: 'Run E2E tests',
-      },
-    ];
-
-    for (const testCase of cases) {
-      assertJobCheckoutSecurity(
-        testCase.steps,
-        testCase.quotaName,
-        testCase.quotaId,
-      );
-
-      const quota = stepNamed(testCase.steps, testCase.quotaName);
-      const validation = stepNamed(testCase.steps, testCase.validationName);
-      const tests = stepNamed(testCase.steps, testCase.testName);
-
-      expect(asRecord(validation.env).OPENAI_API_KEY).toBe(
-        selectedKeyExpression(testCase.quotaId),
-      );
-      expect(asRecord(tests.env).OPENAI_API_KEY).toBe(
-        selectedKeyExpression(testCase.quotaId),
-      );
-      expect(asRecord(validation.env).OPENAI_API_KEY_2).toBeUndefined();
-      expect(asRecord(tests.env).OPENAI_API_KEY_2).toBeUndefined();
-      expect(testCase.steps.filter(hasSecret)).toEqual([
-        quota,
-        validation,
-        tests,
-      ]);
-
-      // Quota must precede validation and test steps.
-      expect(testCase.steps.indexOf(quota)).toBeLessThan(
-        testCase.steps.indexOf(validation),
-      );
-      expect(testCase.steps.indexOf(quota)).toBeLessThan(
-        testCase.steps.indexOf(tests),
-      );
-    }
+    const job = workflowJobOptional(workflow, 'e2e_linux');
+    const steps = jobSteps(job);
+    assertJobCheckoutSecurity(steps);
+    expect(hasSecret(job)).toBe(false);
+    expect(JSON.stringify(job)).not.toContain('vars.');
+    expect(JSON.stringify(job)).not.toContain('ci-quota-check');
+    expect(steps.map((step) => step.name)).not.toContain(
+      'Check API quota and select optimal key',
+    );
+    const tests = stepNamed(steps, 'Run E2E tests');
+    expect(asRecord(tests.env).OPENAI_API_KEY).toBe('ollama-local-only');
+    expect(asRecord(tests.env).OPENAI_BASE_URL).toBe(
+      'http://127.0.0.1:12644/v1',
+    );
+    expect(asRecord(tests.env).LLXPRT_DEFAULT_MODEL).toBe('gemma4:e2b-it-qat');
   });
 
   it('maps only the selected PR-review key into the walkthrough invocation', () => {
