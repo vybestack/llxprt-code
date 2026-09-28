@@ -84,7 +84,14 @@ class TestableCodexProvider extends OpenAIResponsesProvider {
   readonly recordingTransport = new RecordingTransport();
 
   constructor(oauthManager: object) {
-    super('codex-api-key', CODEX_BASE_URL, undefined, oauthManager);
+    super(
+      'codex-api-key',
+      CODEX_BASE_URL,
+      undefined,
+      oauthManager,
+      undefined,
+      'codex',
+    );
   }
 
   protected override createWebSocketTransport(): WebSocketTransport {

@@ -186,7 +186,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       logger: new DebugLogger('llxprt:provider:openai'),
       getProviderBaseURL: (options) => this.resolveEffectiveBaseURL(options),
       getCustomHeaders: (options) => this.getCustomHeaders(options),
-      isCodexBaseURL: () => false,
+      isCodexMode: () => false,
       getCodexAccountId: async () => {
         throw new Error('Codex account ID not available for OpenAIProvider');
       },
@@ -280,7 +280,14 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     // based on User-Agent, which must be sent as a real HTTP header.
     const headers = mergeInvocationHeaders(options);
 
-    return instantiateClient(authToken, baseURL, agents, headers);
+    return instantiateClient(authToken, baseURL, agents, headers, {
+      headersTimeoutMs: agentSettings['openai-headers-timeout-ms'] as
+        | number
+        | undefined,
+      requestTimeoutMs: agentSettings['openai-request-timeout-ms'] as
+        | number
+        | undefined,
+    });
   }
 
   /**

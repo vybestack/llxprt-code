@@ -26,6 +26,8 @@ function buildProviderWithOAuth() {
     'https://chatgpt.com/backend-api/codex',
     undefined,
     oauthManager as unknown as object,
+    undefined,
+    'codex',
   );
 }
 

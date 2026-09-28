@@ -72,8 +72,9 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
     config?: IProviderConfig,
     oauthManager?: OAuthManager,
     modelDefaultRules: readonly ModelDefaultRule[] = [],
+    providerName = 'openai-responses',
   ) {
-    super(apiKey, baseURL, config, oauthManager);
+    super(apiKey, baseURL, config, oauthManager, providerName);
 
     this.getUnallowedModelParameters =
       createUnallowedModelParametersResolver(modelDefaultRules);
@@ -85,7 +86,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       logger: this.logger,
       getProviderBaseURL: (options) => this.resolveEffectiveBaseURL(options),
       getCustomHeaders: (options) => this.getCustomHeaders(options),
-      isCodexBaseURL: (baseURL) => this.isCodexMode(baseURL),
+      isCodexMode: () => this.isCodexMode(),
       getCodexAccountId: () => this.getCodexAccountId(),
       resolveAuthTokenForPrompt: () => this.getAuthTokenForPrompt(),
       shouldRetryOnError: (error) => this.shouldRetryOnError(error),
@@ -102,7 +103,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       // to trim history. Mirrors resolveWebSocketTransport's predicate without
       // constructing a socket.
       isWebSocketTransportActive: () =>
-        this.isCodexMode(this.getBaseURL()) && !this.webSocketStickToHttp,
+        this.isCodexMode() && !this.webSocketStickToHttp,
       onWebSocketFallback: () => {
         // One pre-output failure still serves THIS request over HTTP (an
         // invisible in-turn recovery); only a sustained run of them sticks.
@@ -126,7 +127,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
   }
 
   private resolveWebSocketTransport(): WebSocketTransport | undefined {
-    if (!this.isCodexMode(this.getBaseURL())) {
+    if (!this.isCodexMode()) {
       this.webSocketTransport?.close();
       this.webSocketTransport = undefined;
       return undefined;

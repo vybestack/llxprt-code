@@ -160,7 +160,7 @@ export function resolveResponsesRequestShape(
   forceParentless = false,
 ): ResponsesRequestShape {
   const rawBaseURL = resolveResponsesBaseURL(options, deps);
-  const isCodex = deps.isCodexBaseURL(rawBaseURL);
+  const isCodex = deps.isCodexMode();
   const requestOverrides = buildRequestOverrides(options, deps);
   const explicitUserStore = resolveExplicitUserStore(requestOverrides);
   const statefulTransportSupported = supportsStatefulResponsesTransport(
