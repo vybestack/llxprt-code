@@ -11,12 +11,12 @@ import { TestRig, printDebugInfo, validateModelOutput } from './test-helper.js';
 import { getShellConfiguration } from '../packages/core/src/utils/shell-utils.js';
 
 const { shell } = getShellConfiguration();
-const localModelPilot = env['LLXPRT_LOCAL_MODEL_PILOT'] === 'true';
+const localModelE2E = env['LLXPRT_LOCAL_MODEL_E2E'] === 'true';
 
-function shellCanaryRunTimeoutMs(pilot: boolean): number | undefined {
+function shellE2ERunTimeoutMs(localModelE2E: boolean): number | undefined {
   // Docker's observed 238s model response leaves no room for a tool round trip
   // under the original 240s TestRig deadline.
-  return pilot ? 360_000 : undefined;
+  return localModelE2E ? 360_000 : undefined;
 }
 
 function getLineCountCommand(): { command: string; tool: string } {
@@ -66,10 +66,10 @@ function isExpectedShellTrace(
   );
 }
 
-describe('shell canary command validation', () => {
-  it('extends only the pilot shell run deadline for the CPU tool round trip', () => {
-    expect(shellCanaryRunTimeoutMs(true)).toBe(360_000);
-    expect(shellCanaryRunTimeoutMs(false)).toBeUndefined();
+describe('local-model E2E shell command validation', () => {
+  it('extends only the local model E2E shell run deadline for the CPU tool round trip', () => {
+    expect(shellE2ERunTimeoutMs(true)).toBe(360_000);
+    expect(shellE2ERunTimeoutMs(false)).toBeUndefined();
   });
 
   it('accepts equivalent literal echo commands but not other shell expressions', () => {
@@ -130,7 +130,7 @@ describe('run_shell_command', () => {
   afterEach(async () => await rig.cleanup());
   it(
     'should be able to run a shell command',
-    { timeout: localModelPilot ? 450_000 : undefined },
+    { timeout: localModelE2E ? 450_000 : undefined },
     async () => {
       await rig.setup('should be able to run a shell command', {
         settings: { tools: { core: ['run_shell_command'] } },
@@ -142,7 +142,7 @@ describe('run_shell_command', () => {
         args: ['--allowed-tools=run_shell_command(echo)'],
         stdin: prompt,
         yolo: false,
-        timeoutMs: shellCanaryRunTimeoutMs(localModelPilot),
+        timeoutMs: shellE2ERunTimeoutMs(localModelE2E),
       });
 
       const foundToolCall = await rig.waitForToolCall('run_shell_command');

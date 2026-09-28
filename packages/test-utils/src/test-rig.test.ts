@@ -60,20 +60,20 @@ describe('TestRig setup and cleanup behavior', () => {
 
   it('writes bounded context and output settings into an opt-in test profile', () => {
     createRoot();
-    setEnv('LLXPRT_LOCAL_MODEL_PILOT', 'true');
-    setEnv('LLXPRT_TEST_PROFILE', 'local-model-pilot');
+    setEnv('LLXPRT_LOCAL_MODEL_E2E', 'true');
+    setEnv('LLXPRT_TEST_PROFILE', 'local-model-e2e');
     setEnv('LLXPRT_DEFAULT_PROVIDER', 'openai');
     setEnv('LLXPRT_DEFAULT_MODEL', 'qwen3.5:2b');
     setEnv('LLXPRT_CONTEXT_LIMIT', '32768');
     setEnv('LLXPRT_MAX_OUTPUT_TOKENS', '8192');
     const rig = new TestRig();
 
-    rig.setup('local model pilot profile');
+    rig.setup('local model E2E profile');
 
     const testDir = requireTestDir(rig.testDir);
     const profile = JSON.parse(
       readFileSync(
-        join(testDir, '.llxprt', 'profiles', 'local-model-pilot.json'),
+        join(testDir, '.llxprt', 'profiles', 'local-model-e2e.json'),
         'utf8',
       ),
     );
@@ -92,7 +92,7 @@ describe('TestRig setup and cleanup behavior', () => {
 
   it('leaves the ordinary test profile first-response deadline unchanged', () => {
     createRoot();
-    setEnv('LLXPRT_LOCAL_MODEL_PILOT', undefined);
+    setEnv('LLXPRT_LOCAL_MODEL_E2E', undefined);
     setEnv('LLXPRT_TEST_PROFILE', 'ordinary-profile');
     const rig = new TestRig();
 
@@ -116,11 +116,11 @@ describe('TestRig setup and cleanup behavior', () => {
     );
   });
 
-  it('loads the generated local pilot profile in the real CLI without a global profile', async () => {
+  it('loads the generated local model E2E profile in the real CLI without a global profile', async () => {
     const root = createRoot();
     setEnv('LLXPRT_CONFIG_HOME', join(root, 'global-config'));
-    setEnv('LLXPRT_LOCAL_MODEL_PILOT', 'true');
-    setEnv('LLXPRT_TEST_PROFILE', 'local-model-pilot');
+    setEnv('LLXPRT_LOCAL_MODEL_E2E', 'true');
+    setEnv('LLXPRT_TEST_PROFILE', 'local-model-e2e');
     setEnv('LLXPRT_DEFAULT_PROVIDER', 'openai');
     setEnv('LLXPRT_DEFAULT_MODEL', 'qwen3.5:2b');
     setEnv('OPENAI_API_KEY', 'local-test-only');
@@ -160,7 +160,7 @@ describe('TestRig setup and cleanup behavior', () => {
       }
       setEnv('OPENAI_BASE_URL', `http://127.0.0.1:${address.port}/v1`);
       const rig = new TestRig();
-      rig.setup('real CLI local pilot profile');
+      rig.setup('real CLI local model E2E profile');
 
       await rig.run({ args: 'Respond with OK', timeoutMs: 20_000 });
 
@@ -188,11 +188,11 @@ describe('TestRig setup and cleanup behavior', () => {
     }
   }, 30_000);
 
-  it('applies the pilot transport headers deadline in the real CLI', async () => {
+  it('applies the local model E2E transport headers deadline in the real CLI', async () => {
     const root = createRoot();
     setEnv('LLXPRT_CONFIG_HOME', join(root, 'global-config'));
-    setEnv('LLXPRT_LOCAL_MODEL_PILOT', 'true');
-    setEnv('LLXPRT_TEST_PROFILE', 'local-model-pilot');
+    setEnv('LLXPRT_LOCAL_MODEL_E2E', 'true');
+    setEnv('LLXPRT_TEST_PROFILE', 'local-model-e2e');
     setEnv('LLXPRT_DEFAULT_PROVIDER', 'openai');
     setEnv('LLXPRT_DEFAULT_MODEL', 'local-test-model');
     setEnv('OPENAI_API_KEY', 'local-test-only');
@@ -218,7 +218,7 @@ describe('TestRig setup and cleanup behavior', () => {
         requireTestDir(rig.testDir),
         '.llxprt',
         'profiles',
-        'local-model-pilot.json',
+        'local-model-e2e.json',
       );
       const profile = JSON.parse(readFileSync(profilePath, 'utf8'));
       profile.ephemeralSettings['openai-headers-timeout-ms'] = 100;
@@ -238,11 +238,11 @@ describe('TestRig setup and cleanup behavior', () => {
     }
   }, 30_000);
 
-  it('applies the pilot SDK request deadline in the real CLI', async () => {
+  it('applies the local model E2E SDK request deadline in the real CLI', async () => {
     const root = createRoot();
     setEnv('LLXPRT_CONFIG_HOME', join(root, 'global-config'));
-    setEnv('LLXPRT_LOCAL_MODEL_PILOT', 'true');
-    setEnv('LLXPRT_TEST_PROFILE', 'local-model-pilot');
+    setEnv('LLXPRT_LOCAL_MODEL_E2E', 'true');
+    setEnv('LLXPRT_TEST_PROFILE', 'local-model-e2e');
     setEnv('LLXPRT_DEFAULT_PROVIDER', 'openai');
     setEnv('LLXPRT_DEFAULT_MODEL', 'local-test-model');
     setEnv('OPENAI_API_KEY', 'local-test-only');
@@ -268,7 +268,7 @@ describe('TestRig setup and cleanup behavior', () => {
         requireTestDir(rig.testDir),
         '.llxprt',
         'profiles',
-        'local-model-pilot.json',
+        'local-model-e2e.json',
       );
       const profile = JSON.parse(readFileSync(profilePath, 'utf8'));
       profile.ephemeralSettings['openai-request-timeout-ms'] = 100;
@@ -291,8 +291,8 @@ describe('TestRig setup and cleanup behavior', () => {
   it('applies the generated profile first-response watchdog in the real CLI', async () => {
     const root = createRoot();
     setEnv('LLXPRT_CONFIG_HOME', join(root, 'global-config'));
-    setEnv('LLXPRT_LOCAL_MODEL_PILOT', 'true');
-    setEnv('LLXPRT_TEST_PROFILE', 'local-model-pilot');
+    setEnv('LLXPRT_LOCAL_MODEL_E2E', 'true');
+    setEnv('LLXPRT_TEST_PROFILE', 'local-model-e2e');
     setEnv('LLXPRT_DEFAULT_PROVIDER', 'openai');
     setEnv('LLXPRT_DEFAULT_MODEL', 'qwen3.5:4b');
     setEnv('OPENAI_API_KEY', 'local-test-only');
@@ -313,7 +313,7 @@ describe('TestRig setup and cleanup behavior', () => {
         requireTestDir(rig.testDir),
         '.llxprt',
         'profiles',
-        'local-model-pilot.json',
+        'local-model-e2e.json',
       );
       const profile = JSON.parse(readFileSync(profilePath, 'utf8'));
       profile.ephemeralSettings['stream-first-response-timeout-ms'] = 100;

@@ -599,7 +599,7 @@ function appendUserArgs(
 }
 
 /**
- * Append the configured test profile, using inline JSON for the local pilot.
+ * Append the configured test profile, using inline JSON for the local model E2E.
  */
 function appendProfileFlag(commandArgs: string[], testDir: string): void {
   const profileName = getProfileName();
@@ -608,7 +608,7 @@ function appendProfileFlag(commandArgs: string[], testDir: string): void {
   }
   const ideFlagIndex = commandArgs.indexOf('--ide-mode');
   const insertionIndex = ideFlagIndex >= 0 ? ideFlagIndex : commandArgs.length;
-  if (env['LLXPRT_LOCAL_MODEL_PILOT'] === 'true') {
+  if (env['LLXPRT_LOCAL_MODEL_E2E'] === 'true') {
     const profileJson = readFileSync(
       join(testDir, '.llxprt', 'profiles', `${profileName}.json`),
       'utf8',

@@ -150,7 +150,7 @@ export function getErrorCode(error: unknown): string | undefined {
 export function integrationTestTimeoutOverrides(
   environment: Readonly<NodeJS.ProcessEnv>,
 ): readonly BunTestTimeoutOverride[] {
-  if (environment['LLXPRT_LOCAL_MODEL_PILOT'] !== 'true') {
+  if (environment['LLXPRT_LOCAL_MODEL_E2E'] !== 'true') {
     return [];
   }
   return [{ pattern: /replace\.test\.ts$/, timeout: 1_500_000 }];

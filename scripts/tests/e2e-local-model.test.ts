@@ -28,7 +28,6 @@ const requiredText = readFileSync(
   'utf8',
 );
 const required = parseWorkflowYaml(requiredText);
-const pilot = required;
 
 type BackendVerifierResult = {
   stdout: string;
@@ -221,34 +220,34 @@ function runLiveLinuxProcVerifier(): BackendVerifierResult {
   }
 }
 
-const steps = workflowJob(pilot, 'local_model_canaries').steps ?? [];
+const steps = workflowJob(required, 'e2e_linux').steps ?? [];
 
 function step(name: string) {
   const found = steps.find((candidate) => candidate.name === name);
-  if (!found) throw new Error(`Missing pilot step: ${name}`);
+  if (!found) throw new Error(`Missing local model E2E step: ${name}`);
   return found;
 }
 
-describe('optional local-model E2E pilot', () => {
-  it('dispatches the default-branch workflow against a selected ref with explicit opt-in', () => {
+describe('ordinary local-model E2E', () => {
+  it('dispatches the selected branch through the ordinary E2E job with no extra input', () => {
     const dispatch = asRecord(required.on?.workflow_dispatch);
-    const inputs = asRecord(dispatch.inputs);
-    expect(asRecord(inputs.branch_ref)).toEqual({
-      description: 'Branch to run on',
-      required: true,
-      default: 'main',
-      type: 'string',
+    expect(asRecord(dispatch.inputs)).toEqual({
+      branch_ref: {
+        description: 'Branch to run on',
+        required: true,
+        default: 'main',
+        type: 'string',
+      },
     });
-    expect(asRecord(inputs.pilot_local_model)).toMatchObject({
-      required: false,
-      default: false,
-      type: 'boolean',
-    });
-    expect(asString(workflowJob(pilot, 'local_model_canaries').if)).toContain(
-      "github.event_name == 'workflow_dispatch' && inputs.pilot_local_model == true",
-    );
-    expect(asString(workflowJob(required, 'e2e_linux').if)).toContain(
-      "!(github.event_name == 'workflow_dispatch' && inputs.pilot_local_model == true)",
+    expect(Object.keys(required.jobs ?? {})).toEqual([
+      'skip_check',
+      'mergeability-gate',
+      'e2e_doc_change_filter',
+      'e2e_linux',
+    ]);
+    const checkout = step('Checkout');
+    expect(asOptionalRecord(checkout.with)?.ref).toBe(
+      "${{ github.event_name == 'workflow_dispatch' && inputs.branch_ref || github.ref }}",
     );
   });
 
@@ -274,84 +273,37 @@ describe('optional local-model E2E pilot', () => {
     expect(linuxText).not.toContain('ci-quota-check');
   });
 
-  it('runs the same pinned local runtime, backend checks, inference and selected suites in required E2E', () => {
+  it('runs the pinned local runtime and both E2E legs in one required job', () => {
     const linux = workflowJob(required, 'e2e_linux');
-    const linuxSteps = linux.steps ?? [];
+    expect(linux['timeout-minutes']).toBe(90);
+    expect(asRecord(asRecord(linux.strategy).matrix).sandbox).toBe(
+      '${{ fromJSON(github.event_name == \'push\' && \'["sandbox:none"]\' || \'["sandbox:none","sandbox:docker"]\') }}',
+    );
     for (const name of [
       'Install Ollama CPU runtime',
-      'Select pilot CPU backend on Intel',
+      'Select CPU backend on Intel',
       'Start local Gemma 4 E2B model',
       'Verify CPU backend warm-up',
       'Verify CPU-only model inference',
+      'Run E2E tests',
       'Check E2E real-model budget (issue #2278)',
+      'Upload local model diagnostics',
     ]) {
-      const actual = linuxSteps.find((candidate) => candidate.name === name);
-      expect(actual, name).toEqual(step(name));
+      expect(step(name).name).toBe(name);
     }
-    const run = linuxSteps.find(
-      (candidate) => candidate.name === 'Run E2E tests',
-    );
-    expect(run?.env).toEqual(step('Run local-model canaries').env);
-    expect(run?.run).toBe(step('Run local-model canaries').run);
-    expect(linux['timeout-minutes']).toBe(90);
-    expect(
-      linuxSteps.find(
-        (candidate) => candidate.name === 'Upload local model diagnostics',
-      )?.if,
-    ).toBe('always()');
+    expect(step('Upload local model diagnostics').if).toBe('always()');
   });
 
-  it('only runs on explicit dispatch and uses distinct non-required check names', () => {
-    expect(Object.keys(pilot.jobs ?? {})).toEqual([
-      'skip_check',
-      'mergeability-gate',
-      'e2e_doc_change_filter',
-      'e2e_linux',
-      'local_model_canaries',
-    ]);
-    const job = workflowJob(pilot, 'local_model_canaries');
-    expect(job.name).toContain('Local Gemma 4 E2B pilot');
-    expect(job.name).not.toContain('E2E Test (Linux)');
-    expect(asString(job.if ?? '')).toContain(
-      'inputs.pilot_local_model == true',
-    );
-    expect(job.permissions).toEqual({ contents: 'read' });
-    expect(job['timeout-minutes']).toBe(90);
-    expect(job['runs-on']).toBe('ubuntu-latest');
-    expect(asRecord(job.strategy).matrix).toEqual({
-      sandbox: ['sandbox:none', 'sandbox:docker'],
-      include: [
-        { sandbox: 'sandbox:none', artifact_id: 'none' },
-        { sandbox: 'sandbox:docker', artifact_id: 'docker' },
-      ],
-    });
-  });
-
-  it('gives every sandbox a distinct artifact name without forbidden characters', () => {
-    const matrix = asRecord(
-      asRecord(workflowJob(pilot, 'local_model_canaries').strategy).matrix,
-    );
-    const sandboxes = matrix.sandbox;
-    expect(sandboxes).toEqual(['sandbox:none', 'sandbox:docker']);
-    const entries = matrix.include;
-    expect(Array.isArray(entries)).toBe(true);
-    if (!Array.isArray(entries))
-      throw new Error('Pilot matrix include is required');
+  it('names distinct safe diagnostic artifacts for host and Docker', () => {
     const name = asString(
       asOptionalRecord(step('Upload local model diagnostics').with)?.name,
     );
-    expect(name).toBe('local-gemma4-pilot-${{ matrix.artifact_id }}');
-    const resolvedNames = entries.map((entry) => {
-      const row = asRecord(entry);
-      expect(sandboxes).toContain(row.sandbox);
-      const id = asString(row.artifact_id);
-      expect(id).toMatch(/^[a-z0-9-]+$/);
-      return name.replace('${{ matrix.artifact_id }}', id);
-    });
-    expect(new Set(resolvedNames).size).toBe(sandboxes.length);
-    expect(
-      resolvedNames.every((resolved) => !/[\\/:*?"<>|\r\n]/.test(resolved)),
-    ).toBe(true);
+    expect(name).toBe(
+      "local-gemma4-e2e-${{ matrix.sandbox == 'sandbox:docker' && 'docker' || 'none' }}",
+    );
+    for (const sandbox of ['none', 'docker']) {
+      expect(`local-gemma4-e2e-${sandbox}`).not.toMatch(/[\\/:*?"<>|\r\n]/);
+    }
   });
 
   it('downloads a pinned Ollama runtime and verifies its archive before extraction', () => {
@@ -372,13 +324,13 @@ describe('optional local-model E2E pilot', () => {
   });
 
   it('pins Intel backend selection before startup and verifies live mapped backends', () => {
-    const select = step('Select pilot CPU backend on Intel');
+    const select = step('Select CPU backend on Intel');
     expect(select.if).toBeUndefined();
     const script = asString(select.run);
     expect(script).toContain('set -euo pipefail');
     expect(script).toContain('grep -qm1');
     expect(script).toContain('GenuineIntel');
-    expect(script).toContain('Pilot host CPU vendor:');
+    expect(script).toContain('Host CPU vendor:');
     expect(script).toContain('libggml-cpu-haswell.so');
     expect(script).toContain('libggml-cpu-*.so');
     expect(script).not.toContain('OLLAMA_LLM_LIBRARY');
@@ -407,11 +359,11 @@ describe('optional local-model E2E pilot', () => {
       steps.indexOf(step('Start local Gemma 4 E2B model')),
     );
     expect(steps.indexOf(verify)).toBeLessThan(
-      steps.indexOf(step('Run local-model canaries')),
+      steps.indexOf(step('Run E2E tests')),
     );
   });
 
-  it('checks model version and digest before running either canary', () => {
+  it('checks model version and digest before running integration tests', () => {
     const server = step('Start local Gemma 4 E2B model');
     const start = asString(server.run);
     const env = asOptionalRecord(server.env);
@@ -437,44 +389,30 @@ describe('optional local-model E2E pilot', () => {
     expect(inference.env?.OLLAMA_HOST).toBe('127.0.0.1:12644');
     expect(steps.indexOf(server)).toBeLessThan(steps.indexOf(inference));
     expect(steps.indexOf(inference)).toBeLessThan(
-      steps.indexOf(step('Run local-model canaries')),
+      steps.indexOf(step('Run E2E tests')),
     );
   });
 
   it('matches the required Linux E2E test invocations in both sandbox legs without provider secrets', () => {
-    const job = workflowJob(pilot, 'local_model_canaries');
-    const run = step('Run local-model canaries');
+    const job = workflowJob(required, 'e2e_linux');
+    const run = step('Run E2E tests');
     const command = asString(run.run);
-    const requiredRun = asString(
-      (workflowJob(required, 'e2e_linux').steps ?? []).find(
-        (candidate) => candidate.name === 'Run E2E tests',
-      )?.run,
-    );
     const normalize = (script: string): string =>
       script.replace(/\\\s*/g, ' ').replace(/\s+/g, ' ');
     const fullArgs =
       '--exclude="**/todo-continuation.e2e.test.ts" --exclude="**/run_shell_command.test.ts"';
     const shellArgs =
       'integration-tests/run_shell_command.test.ts --testNamePattern="should be able to run a shell command|should be able to run a shell command via stdin|should run a platform-specific file listing command"';
-    const normalizedRequired = normalize(requiredRun);
     const normalizedCommand = normalize(command);
     for (const sandbox of ['sandbox:none', 'sandbox:docker']) {
       const fullInvocation = `npm run test:integration:${sandbox} -- ${fullArgs}`;
       const firstInvocationPattern = new RegExp(
         `npm run test:integration:${sandbox} -- (.*?) npm run test:integration:${sandbox} --`,
       );
-      const requiredFirstInvocation = normalizedRequired.match(
-        firstInvocationPattern,
-      );
-      const pilotFirstInvocation = normalizedCommand.match(
-        firstInvocationPattern,
-      );
-      expect(requiredFirstInvocation?.[1]).toBe(fullArgs);
-      expect(pilotFirstInvocation?.[1]).toBe(fullArgs);
-      expect(normalizedRequired).toContain(fullInvocation);
+      const firstInvocation = normalizedCommand.match(firstInvocationPattern);
+      expect(firstInvocation?.[1]).toBe(fullArgs);
       expect(normalizedCommand).toContain(fullInvocation);
       const shellInvocation = `npm run test:integration:${sandbox} -- --exclude="**/todo-continuation.e2e.test.ts" ${shellArgs}`;
-      expect(normalizedRequired).toContain(shellInvocation);
       expect(normalizedCommand).toContain(shellInvocation);
     }
     expect(command.match(/--exclude=/g)).toHaveLength(6);
@@ -483,10 +421,10 @@ describe('optional local-model E2E pilot', () => {
     expect(env?.LLXPRT_DEFAULT_PROVIDER).toBe('openai');
     expect(env?.LLXPRT_DEFAULT_MODEL).toBe('gemma4:e2b-it-qat');
     expect(env?.OPENAI_API_KEY).toBe('ollama-local-only');
-    expect(env?.LLXPRT_TEST_PROFILE).toBe('local-gemma4-pilot');
+    expect(env?.LLXPRT_TEST_PROFILE).toBe('local-gemma4-e2e');
     expect(env?.LLXPRT_CONTEXT_LIMIT).toBe('32768');
     expect(env?.LLXPRT_MAX_OUTPUT_TOKENS).toBe('8192');
-    expect(env?.LLXPRT_LOCAL_MODEL_PILOT).toBe('true');
+    expect(env?.LLXPRT_LOCAL_MODEL_E2E).toBe('true');
     expect(Number(env?.LLXPRT_CONTEXT_LIMIT)).toBe(
       Number(step('Start local Gemma 4 E2B model').env?.OLLAMA_CONTEXT_LENGTH),
     );
@@ -512,7 +450,7 @@ describe('optional local-model E2E pilot', () => {
   });
 
   it('uses host networking only for the Docker leg, and retains diagnostics on failure', () => {
-    const env = asOptionalRecord(step('Run local-model canaries').env);
+    const env = asOptionalRecord(step('Run E2E tests').env);
     expect(env?.SANDBOX_FLAGS).toBe(
       "${{ matrix.sandbox == 'sandbox:docker' && '--network host' || '' }}",
     );
@@ -562,9 +500,10 @@ describe('workflow CPU variant selection behavior', () => {
       cpuinfo,
       intel ? 'vendor_id : GenuineIntel\n' : 'vendor_id : AuthenticAMD\n',
     );
-    const script = asString(
-      step('Select pilot CPU backend on Intel').run,
-    ).replaceAll('/proc/cpuinfo', '"$LLXPRT_TEST_CPUINFO"');
+    const script = asString(step('Select CPU backend on Intel').run).replaceAll(
+      '/proc/cpuinfo',
+      '"$LLXPRT_TEST_CPUINFO"',
+    );
     const result = spawnSync('bash', ['-c', script], {
       encoding: 'utf8',
       env: { ...process.env, RUNNER_TEMP: temp, LLXPRT_TEST_CPUINFO: cpuinfo },
@@ -625,7 +564,7 @@ describe('workflow backend verification behavior', () => {
       { vendor: 'AuthenticAMD' },
     );
     expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
-    expect(result.stdout).toContain('Pilot host CPU vendor: AuthenticAMD');
+    expect(result.stdout).toContain('Host CPU vendor: AuthenticAMD');
     expect(result.stdout).toContain('libggml-cpu-avx2.so');
   });
 

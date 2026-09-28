@@ -53,12 +53,12 @@ export function buildExtraArgs(
     return extraArgs;
   }
 
-  // The inline pilot profile owns provider, credentials and runtime ephemerals.
+  // The inline local model E2E profile owns provider, credentials and runtime ephemerals.
   // An explicit --provider prevents the CLI from applying those ephemerals.
-  if (env['LLXPRT_LOCAL_MODEL_PILOT'] === 'true') {
+  if (env['LLXPRT_LOCAL_MODEL_E2E'] === 'true') {
     if (getProfileName() === undefined) {
       throw new Error(
-        'LLXPRT_TEST_PROFILE is required for the local model pilot',
+        'LLXPRT_TEST_PROFILE is required for the local model E2E',
       );
     }
     return extraArgs;

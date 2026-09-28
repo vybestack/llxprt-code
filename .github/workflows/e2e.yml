@@ -23,11 +23,6 @@ on:
         required: true
         default: 'main'
         type: 'string'
-      pilot_local_model:
-        description: 'Run the separate local Gemma 4 E2B pilot instead of regular E2E'
-        required: false
-        default: false
-        type: 'boolean'
 
 # Event-type isolation prevents pull_request_target from cancelling pull_request
 # work and keeps merge_group out of PR-keyed groups. Label isolation prevents an
@@ -176,7 +171,6 @@ jobs:
       needs.skip_check.result == 'success' &&
       !(needs.e2e_doc_change_filter.result == 'success' && needs.e2e_doc_change_filter.outputs.docs_only == 'true') &&
       needs.skip_check.outputs.should_skip != 'true' &&
-      !(github.event_name == 'workflow_dispatch' && inputs.pilot_local_model == true) &&
       (
         (
           (
@@ -201,14 +195,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        sandbox:
-          - 'sandbox:none'
-          - 'sandbox:docker'
+        sandbox: ${{ fromJSON(github.event_name == 'push' && '["sandbox:none"]' || '["sandbox:none","sandbox:docker"]') }}
         node-version:
           - '24.x'
-        exclude:
-          # On push to main, only run sandbox:none (skip docker)
-          - sandbox: ${{ github.event_name == 'push' && 'sandbox:docker' || 'NEVER_MATCH' }}
 
     steps:
       - name: 'Checkout'
@@ -273,14 +262,14 @@ jobs:
           echo "$RUNNER_TEMP/ollama/bin" >>"$GITHUB_PATH"
           "$RUNNER_TEMP/ollama/bin/ollama" --version
 
-      - name: 'Select pilot CPU backend on Intel'
+      - name: 'Select CPU backend on Intel'
         shell: 'bash'
         run: |
           set -euo pipefail
-          echo "Pilot host architecture: $(uname -m)"
-          echo "Pilot host CPU vendor: $(awk -F: '/^vendor_id[[:space:]]*:/ { gsub(/[[:space:]]/, "", $2); print $2; exit }' /proc/cpuinfo)"
+          echo "Host architecture: $(uname -m)"
+          echo "Host CPU vendor: $(awk -F: '/^vendor_id[[:space:]]*:/ { gsub(/[[:space:]]/, "", $2); print $2; exit }' /proc/cpuinfo)"
           if ! grep -qm1 '^vendor_id[[:space:]]*: GenuineIntel$' /proc/cpuinfo; then
-            echo 'Pilot host is not Intel; leaving Ollama CPU variants untouched'
+            echo 'Host is not Intel; leaving Ollama CPU variants untouched'
             exit 0
           fi
           libdir="$RUNNER_TEMP/ollama/lib/ollama"
@@ -294,7 +283,7 @@ jobs:
               mv "$library" "$RUNNER_TEMP/ollama-disabled-cpu-backends/"
             fi
           done
-          echo 'Intel pilot Haswell pin: CPU variants visible to llama-server:'
+          echo 'Intel Haswell pin: CPU variants visible to llama-server:'
           printf '%s\n' "$libdir"/libggml-cpu-*.so
           test "$(find "$libdir" -maxdepth 1 -name 'libggml-cpu-*.so' | wc -l)" -eq 1
 
@@ -329,7 +318,7 @@ jobs:
           set -euo pipefail
           proc_root="${LLXPRT_PROC_ROOT:-/proc}"
           vendor="$(awk -F: '/^vendor_id[[:space:]]*:/ { gsub(/[[:space:]]/, "", $2); print $2; exit }' "$proc_root/cpuinfo")"
-          echo "Pilot host CPU vendor: $vendor"
+          echo "Host CPU vendor: $vendor"
           [[ "$vendor" == GenuineIntel || "$vendor" == AuthenticAMD ]] || { echo "Unsupported CPU vendor: $vendor" >&2; exit 1; }
           curl --fail --show-error --silent --max-time 300 \
             "http://127.0.0.1:12644/api/generate" \
@@ -365,7 +354,7 @@ jobs:
           echo "Loaded CPU backends: ${backends:-none}"
           [[ -n "$backends" ]] || { echo 'No mapped llama-server CPU backend' >&2; exit 1; }
           if [[ "$vendor" == AuthenticAMD ]]; then
-            echo 'AMD pilot: native Ollama CPU backend (variants untouched)'
+            echo 'AMD: native Ollama CPU backend (variants untouched)'
             exit 0
           fi
           while IFS= read -r backend; do
@@ -404,10 +393,10 @@ jobs:
           LLXPRT_DEFAULT_MODEL: 'gemma4:e2b-it-qat'
           LLXPRT_DEFAULT_PROVIDER: 'openai'
           LLXPRT_AUTH_TYPE: 'provider'
-          LLXPRT_TEST_PROFILE: 'local-gemma4-pilot'
+          LLXPRT_TEST_PROFILE: 'local-gemma4-e2e'
           LLXPRT_CONTEXT_LIMIT: '32768'
           LLXPRT_MAX_OUTPUT_TOKENS: '8192'
-          LLXPRT_LOCAL_MODEL_PILOT: 'true'
+          LLXPRT_LOCAL_MODEL_E2E: 'true'
           GIT_CEILING_DIRECTORIES: '${{ github.workspace }}/.integration-tests'
           SANDBOX_FLAGS: "${{ matrix.sandbox == 'sandbox:docker' && '--network host' || '' }}"
           KEEP_OUTPUT: 'true'
@@ -464,269 +453,6 @@ jobs:
         uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # ratchet:actions/upload-artifact@v7
         with:
           name: "local-gemma4-e2e-${{ matrix.sandbox == 'sandbox:docker' && 'docker' || 'none' }}"
-          if-no-files-found: error
-          include-hidden-files: true
-          path: |
-            ${{ runner.temp }}/ollama-server.log
-            ${{ runner.temp }}/ollama-inference.json
-            ${{ runner.temp }}/e2e-model-ledger.jsonl
-            ${{ github.workspace }}/.integration-tests/*/*/telemetry.log
-            ${{ github.workspace }}/.integration-tests/*/*/harness-diagnostics.log
-
-  local_model_canaries:
-    name: 'Local Gemma 4 E2B pilot - ${{ matrix.sandbox }}'
-    if: github.event_name == 'workflow_dispatch' && inputs.pilot_local_model == true
-    permissions:
-      contents: read
-    runs-on: 'ubuntu-latest'
-    timeout-minutes: 90
-    strategy:
-      fail-fast: false
-      matrix:
-        sandbox:
-          - 'sandbox:none'
-          - 'sandbox:docker'
-        include:
-          - sandbox: 'sandbox:none'
-            artifact_id: 'none'
-          - sandbox: 'sandbox:docker'
-            artifact_id: 'docker'
-    steps:
-      - name: 'Checkout'
-        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      - name: 'Set up Node.js'
-        uses: 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020' # ratchet:actions/setup-node@v7
-        with:
-          node-version: '24.x'
-
-      - name: 'Setup Bun'
-        uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6' # ratchet:oven-sh/setup-bun@v2
-        with:
-          bun-version-file: '.bun-version'
-
-      - name: 'Install dependencies'
-        run: 'npm ci'
-
-      - name: 'Build project'
-        run: 'npm run build'
-
-      - name: 'Set up Docker'
-        if: "matrix.sandbox == 'sandbox:docker'"
-        uses: 'docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c' # ratchet:docker/setup-buildx-action@v4
-
-      - name: 'Install Ollama CPU runtime'
-        shell: 'bash'
-        run: |
-          set -euo pipefail
-          test "$(uname -m)" = 'x86_64'
-          mkdir -p "$RUNNER_TEMP/ollama"
-          curl --fail --show-error --location --retry 3 \
-            'https://ollama.com/download/ollama-linux-amd64.tar.zst?version=0.31.1' \
-            -o "$RUNNER_TEMP/ollama-linux-amd64.tar.zst"
-          printf '%s  %s\n' 'd297381efc136451f6fabb9dd644a67f70fe51c16815a0c4a95ff0e327a3afb4' "$RUNNER_TEMP/ollama-linux-amd64.tar.zst" | sha256sum --check -
-          tar --zstd \
-            --exclude='lib/ollama/cuda_v12/*' \
-            --exclude='lib/ollama/cuda_v13/*' \
-            --exclude='lib/ollama/vulkan/*' \
-            -xf "$RUNNER_TEMP/ollama-linux-amd64.tar.zst" -C "$RUNNER_TEMP/ollama"
-          rm "$RUNNER_TEMP/ollama-linux-amd64.tar.zst"
-          echo "$RUNNER_TEMP/ollama/bin" >>"$GITHUB_PATH"
-          "$RUNNER_TEMP/ollama/bin/ollama" --version
-
-      - name: 'Select pilot CPU backend on Intel'
-        shell: 'bash'
-        run: |
-          set -euo pipefail
-          echo "Pilot host architecture: $(uname -m)"
-          echo "Pilot host CPU vendor: $(awk -F: '/^vendor_id[[:space:]]*:/ { gsub(/[[:space:]]/, "", $2); print $2; exit }' /proc/cpuinfo)"
-          if ! grep -qm1 '^vendor_id[[:space:]]*: GenuineIntel$' /proc/cpuinfo; then
-            echo 'Pilot host is not Intel; leaving Ollama CPU variants untouched'
-            exit 0
-          fi
-          libdir="$RUNNER_TEMP/ollama/lib/ollama"
-          test -f "$libdir/libggml-cpu-haswell.so"
-          shopt -s nullglob
-          variants=("$libdir"/libggml-cpu-*.so)
-          (( ${#variants[@]} > 1 )) || { echo 'Expected multiple CPU variants in pinned Ollama runtime' >&2; exit 1; }
-          mkdir -p "$RUNNER_TEMP/ollama-disabled-cpu-backends"
-          for library in "${variants[@]}"; do
-            if [[ "$library" != "$libdir/libggml-cpu-haswell.so" ]]; then
-              mv "$library" "$RUNNER_TEMP/ollama-disabled-cpu-backends/"
-            fi
-          done
-          echo 'Intel pilot Haswell pin: CPU variants visible to llama-server:'
-          printf '%s\n' "$libdir"/libggml-cpu-*.so
-          test "$(find "$libdir" -maxdepth 1 -name 'libggml-cpu-*.so' | wc -l)" -eq 1
-
-      - name: 'Start local Gemma 4 E2B model'
-        shell: 'bash'
-        env:
-          OLLAMA_HOST: '127.0.0.1:12644'
-          OLLAMA_CONTEXT_LENGTH: '32768'
-          OLLAMA_NUM_PARALLEL: '1'
-          OLLAMA_MODELS: '${{ runner.temp }}/ollama-models'
-        run: |
-          set -euo pipefail
-          mkdir -p "$OLLAMA_MODELS"
-          nohup ollama serve >"$RUNNER_TEMP/ollama-server.log" 2>&1 &
-          for _ in {1..60}; do
-            if curl --fail --silent "http://$OLLAMA_HOST/api/version"; then
-              break
-            fi
-            sleep 2
-          done
-          curl --fail --silent "http://$OLLAMA_HOST/api/version" | jq -e '.version == "0.31.1"'
-          ollama pull gemma4:e2b-it-qat
-          curl --fail --silent "http://$OLLAMA_HOST/api/tags" |
-            jq -e '.models[] | select(.name == "gemma4:e2b-it-qat" and .digest == "07ea59a474013479c8b6b802bef095c40e964a1d776ba02f264c0e30e1aede0c")'
-          df -h "$RUNNER_TEMP"
-
-      - name: 'Verify CPU backend warm-up'
-        shell: 'bash'
-        env:
-          OLLAMA_HOST: '127.0.0.1:12644'
-        run: |
-          set -euo pipefail
-          proc_root="${LLXPRT_PROC_ROOT:-/proc}"
-          vendor="$(awk -F: '/^vendor_id[[:space:]]*:/ { gsub(/[[:space:]]/, "", $2); print $2; exit }' "$proc_root/cpuinfo")"
-          echo "Pilot host CPU vendor: $vendor"
-          [[ "$vendor" == GenuineIntel || "$vendor" == AuthenticAMD ]] || { echo "Unsupported CPU vendor: $vendor" >&2; exit 1; }
-          curl --fail --show-error --silent --max-time 300 \
-            "http://127.0.0.1:12644/api/generate" \
-            -H 'Content-Type: application/json' \
-            -d '{"model":"gemma4:e2b-it-qat","prompt":"Hello","stream":false,"think":false,"options":{"num_ctx":32768,"num_predict":16}}' \
-            | jq -e '.done == true and .error == null and (.response | length > 0)'
-          grep 'system_info:.*CPU :' "$RUNNER_TEMP/ollama-server.log" | tail -1 || true
-          process="$RUNNER_TEMP/ollama/lib/ollama/llama-server"
-          pid="$(pgrep -f "^$process --model " | head -1)" || true
-          [[ -n "$pid" ]] || { echo 'Live llama-server process not found' >&2; exit 1; }
-          maps="$proc_root/$pid/maps"
-          [[ -r "$maps" ]] || { echo "Live llama-server maps are unavailable: $maps" >&2; exit 1; }
-          cmdline="$proc_root/$pid/cmdline"
-          status="$proc_root/$pid/status"
-          [[ -r "$cmdline" && -r "$status" ]] || { echo 'Live llama-server process evidence disappeared' >&2; exit 1; }
-          printf 'llama-server cmdline: '
-          tr '\0' ' ' <"$cmdline"
-          echo
-          command_line="$(tr '\0' ' ' <"$cmdline")"
-          [[ "$command_line" == "$process --model "* ]] || { echo 'Matched PID is not the expected llama-server process' >&2; exit 1; }
-          ppid="$(awk '$1 == "PPid:" { print $2 }' "$status")"
-          [[ "$ppid" =~ ^[0-9]+$ && "$ppid" != 0 ]] || { echo 'llama-server parent PID is missing' >&2; exit 1; }
-          parent_cmdline="$proc_root/$ppid/cmdline"
-          [[ -r "$parent_cmdline" ]] || { echo 'llama-server parent process disappeared' >&2; exit 1; }
-          printf 'llama-server PPid: %s; parent cmdline: ' "$ppid"
-          tr '\0' ' ' <"$parent_cmdline"
-          echo
-          expected="$RUNNER_TEMP/ollama/lib/ollama/libggml-cpu-haswell.so"
-          maps_snapshot="$RUNNER_TEMP/llama-server-$pid.maps"
-          cat "$maps" >"$maps_snapshot" || { echo 'llama-server maps disappeared while being read' >&2; exit 1; }
-          cat "$maps_snapshot"
-          backends="$(grep -Eo '/[^ ]+/libggml-cpu(-[^ ]+)?\.so( \(deleted\))?' "$maps_snapshot" | sort -u || true)"
-          echo "Loaded CPU backends: ${backends:-none}"
-          [[ -n "$backends" ]] || { echo 'No mapped llama-server CPU backend' >&2; exit 1; }
-          if [[ "$vendor" == AuthenticAMD ]]; then
-            echo 'AMD pilot: native Ollama CPU backend (variants untouched)'
-            exit 0
-          fi
-          while IFS= read -r backend; do
-            [[ "$backend" == "$expected" ]] || {
-              echo "Unexpected mapped llama-server CPU library: $backend" >&2
-              exit 1
-            }
-          done <<< "$backends"
-          grep -Fxq "$expected" <<< "$backends" || {
-            echo 'Expected haswell CPU library is not mapped' >&2
-            exit 1
-          }
-
-      - name: 'Verify CPU-only model inference'
-        shell: 'bash'
-        env:
-          OLLAMA_HOST: '127.0.0.1:12644'
-        run: |
-          set -euo pipefail
-          curl --fail --show-error --silent --max-time 300 \
-            "http://$OLLAMA_HOST/api/generate" \
-            -H 'Content-Type: application/json' \
-            -d '{"model":"gemma4:e2b-it-qat","prompt":"Reply with one word.","stream":false,"think":false,"options":{"num_ctx":32768,"num_predict":16}}' \
-            -o "$RUNNER_TEMP/ollama-inference.json"
-          jq -e '.done == true and .error == null and (.response | length > 0)' "$RUNNER_TEMP/ollama-inference.json" || {
-            cat "$RUNNER_TEMP/ollama-inference.json" >&2
-            exit 1
-          }
-          curl --fail --show-error --silent "http://$OLLAMA_HOST/api/ps" | \
-            jq -e '.models[] | select(.name == "gemma4:e2b-it-qat" and .size_vram == 0)'
-
-      - name: 'Run local-model canaries'
-        env:
-          OPENAI_API_KEY: 'ollama-local-only'
-          OPENAI_BASE_URL: 'http://127.0.0.1:12644/v1'
-          LLXPRT_DEFAULT_MODEL: 'gemma4:e2b-it-qat'
-          LLXPRT_DEFAULT_PROVIDER: 'openai'
-          LLXPRT_AUTH_TYPE: 'provider'
-          LLXPRT_TEST_PROFILE: 'local-gemma4-pilot'
-          LLXPRT_CONTEXT_LIMIT: '32768'
-          LLXPRT_MAX_OUTPUT_TOKENS: '8192'
-          LLXPRT_LOCAL_MODEL_PILOT: 'true'
-          GIT_CEILING_DIRECTORIES: '${{ github.workspace }}/.integration-tests'
-          SANDBOX_FLAGS: "${{ matrix.sandbox == 'sandbox:docker' && '--network host' || '' }}"
-          KEEP_OUTPUT: 'true'
-          VERBOSE: 'true'
-          LLXPRT_FORCE_FILE_STORAGE: 'true'
-          LLXPRT_E2E_MODEL_LEDGER: '${{ runner.temp }}/e2e-model-ledger.jsonl'
-        shell: 'bash'
-        run: |
-          set -euo pipefail
-          if [[ "${{ matrix.sandbox }}" == "sandbox:docker" ]]; then
-            npm run test:integration:sandbox:docker -- \
-              --exclude="**/todo-continuation.e2e.test.ts" \
-              --exclude="**/run_shell_command.test.ts"
-            npm run test:integration:sandbox:docker -- \
-              --exclude="**/todo-continuation.e2e.test.ts" \
-              integration-tests/run_shell_command.test.ts \
-              --testNamePattern="should be able to run a shell command|should be able to run a shell command via stdin|should run a platform-specific file listing command"
-          else
-            npm run test:integration:sandbox:none -- \
-              --exclude="**/todo-continuation.e2e.test.ts" \
-              --exclude="**/run_shell_command.test.ts"
-            npm run test:integration:sandbox:none -- \
-              --exclude="**/todo-continuation.e2e.test.ts" \
-              integration-tests/run_shell_command.test.ts \
-              --testNamePattern="should be able to run a shell command|should be able to run a shell command via stdin|should run a platform-specific file listing command"
-          fi
-
-      - name: 'Check E2E real-model budget (issue #2278)'
-        if: success()
-        env:
-          LLXPRT_E2E_MODEL_LEDGER: '${{ runner.temp }}/e2e-model-ledger.jsonl'
-        shell: 'bash'
-        run: |-
-          bun scripts/check-e2e-model-budget.ts --ledger "$LLXPRT_E2E_MODEL_LEDGER"
-
-      - name: 'Report local model resources'
-        if: always()
-        shell: 'bash'
-        run: |
-          if curl --fail --silent http://127.0.0.1:12644/api/ps; then
-            echo
-          else
-            echo 'Local Ollama server is unavailable'
-          fi
-          free -h
-          df -h "$RUNNER_TEMP"
-          du -sh "$RUNNER_TEMP/ollama-models" "$RUNNER_TEMP/ollama" 2>/dev/null || true
-          if [[ "${{ matrix.sandbox }}" == 'sandbox:docker' ]]; then
-            docker info --format 'Docker server: {{.ServerVersion}}'
-          fi
-
-      - name: 'Upload local model diagnostics'
-        if: always()
-        uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # ratchet:actions/upload-artifact@v7
-        with:
-          name: 'local-gemma4-pilot-${{ matrix.artifact_id }}'
           if-no-files-found: error
           include-hidden-files: true
           path: |

@@ -85,11 +85,11 @@ describe('BUN_TEST_ROOTS structural guarantees', () => {
     }
   });
 
-  it('extends only the replace file timeout for the opt-in local-model pilot', () => {
+  it('extends only the replace file timeout for local-model E2E', () => {
     expect(integrationTestTimeoutOverrides({})).toEqual([]);
 
     const overrides = integrationTestTimeoutOverrides({
-      LLXPRT_LOCAL_MODEL_PILOT: 'true',
+      LLXPRT_LOCAL_MODEL_E2E: 'true',
     });
 
     expect(overrides).toHaveLength(1);

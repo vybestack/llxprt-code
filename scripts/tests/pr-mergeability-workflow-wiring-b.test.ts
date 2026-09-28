@@ -69,7 +69,6 @@ interface E2eContextParams {
   gateResult?: string;
   shouldRun?: string;
   cancelled?: boolean;
-  pilotLocalModel?: boolean;
 }
 
 function e2eContext({
@@ -85,11 +84,9 @@ function e2eContext({
   gateResult = 'skipped',
   shouldRun,
   cancelled = false,
-  pilotLocalModel = false,
 }: E2eContextParams) {
   return {
     cancelled,
-    inputs: { pilot_local_model: pilotLocalModel },
     github: {
       event_name: eventName,
       event: {
@@ -116,7 +113,6 @@ function e2eContext({
 describe('E2E mergeability gate wiring (.github/workflows/e2e.yml)', () => {
   let parsed: Record<string, unknown>;
   let linuxJob: Record<string, unknown> | undefined;
-  let pilotJob: Record<string, unknown> | undefined;
   let gateJob: Record<string, unknown> | undefined;
   let docFilterJob: Record<string, unknown> | undefined;
 
@@ -125,7 +121,6 @@ describe('E2E mergeability gate wiring (.github/workflows/e2e.yml)', () => {
     parsed = wf.parsed;
     const jobs = wf.jobs;
     linuxJob = asRecord(jobs?.e2e_linux ?? undefined);
-    pilotJob = asRecord(jobs?.local_model_canaries ?? undefined);
     gateJob = asRecord(jobs?.['mergeability-gate'] ?? undefined);
     docFilterJob = asRecord(jobs?.e2e_doc_change_filter ?? undefined);
   });
@@ -179,12 +174,6 @@ describe('E2E mergeability gate wiring (.github/workflows/e2e.yml)', () => {
       name: 'manual dispatch with intentionally skipped gate',
       eventName: 'workflow_dispatch',
       linux: true,
-    },
-    {
-      name: 'explicitly opted-in pilot dispatch skips credentialed E2E',
-      eventName: 'workflow_dispatch',
-      pilotLocalModel: true,
-      linux: false,
     },
     {
       name: 'internal pull request with intentionally skipped gate',
@@ -308,13 +297,6 @@ describe('E2E mergeability gate wiring (.github/workflows/e2e.yml)', () => {
       expect(
         Boolean(evaluateE2ECondition(asString(linuxJob?.if), context)),
       ).toBe(scenario.linux);
-      expect(
-        Boolean(evaluateE2ECondition(asString(pilotJob?.if), context)),
-      ).toBe(
-        scenario.eventName === 'workflow_dispatch' &&
-          'pilotLocalModel' in scenario &&
-          scenario.pilotLocalModel === true,
-      );
     });
   }
 

@@ -8,8 +8,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { env } from 'node:process';
 import { TestRig } from './test-helper.js';
 
-const localModelPilot = env['LLXPRT_LOCAL_MODEL_PILOT'] === 'true';
-const replaceTestOptions = localModelPilot ? { timeout: 1_500_000 } : {};
+const localModelE2E = env['LLXPRT_LOCAL_MODEL_E2E'] === 'true';
+const replaceTestOptions = localModelE2E ? { timeout: 1_500_000 } : {};
 
 describe('replace', () => {
   let rig: TestRig;
@@ -40,7 +40,7 @@ describe('replace', () => {
 
       await rig.run({
         args: `Use the replace tool on '${filePath}' to replace the exact text 'foo content' with 'bar content'. Do not add any whitespace.`,
-        timeoutMs: localModelPilot ? 1_200_000 : undefined,
+        timeoutMs: localModelE2E ? 1_200_000 : undefined,
       });
 
       const foundToolCall = await rig.waitForToolCall('replace');

@@ -176,7 +176,7 @@ function buildProfile(): Record<string, unknown> {
     provider: profileProvider,
     model: profileModel,
     modelParams:
-      env['LLXPRT_LOCAL_MODEL_PILOT'] === 'true' &&
+      env['LLXPRT_LOCAL_MODEL_E2E'] === 'true' &&
       env['LLXPRT_LOCAL_MODEL_THINKING'] === 'none'
         ? { reasoning_effort: 'none' }
         : {},
@@ -228,7 +228,7 @@ function collectEphemeralEntries(): Array<[string, unknown]> {
     }
   }
 
-  if (env['LLXPRT_LOCAL_MODEL_PILOT'] === 'true') {
+  if (env['LLXPRT_LOCAL_MODEL_E2E'] === 'true') {
     entries.push(['stream-first-response-timeout-ms', 750_000]);
     entries.push(['openai-request-timeout-ms', 850_000]);
     entries.push(['openai-headers-timeout-ms', 900_000]);

@@ -35,6 +35,24 @@ describe('cli-args helpers', () => {
     ]);
   });
 
+  it('uses fake responses without provider credentials even with local E2E selected', () => {
+    setEnv('LLXPRT_LOCAL_MODEL_E2E', 'true');
+    setEnv('LLXPRT_TEST_PROFILE', undefined);
+    setEnv('LLXPRT_DEFAULT_PROVIDER', undefined);
+    setEnv('OPENAI_API_KEY', undefined);
+    const fakePath = path.join(os.tmpdir(), 'fake-responses.json');
+
+    expect(() => assertProviderConfig(fakePath)).not.toThrow();
+    expect(buildExtraArgs(fakePath, false)).toStrictEqual([
+      '--ide-mode',
+      'disable',
+      '--provider',
+      'fake',
+      '--model',
+      'fake-model',
+    ]);
+  });
+
   it('requires non-empty provider configuration without fake responses', () => {
     setEnv('LLXPRT_DEFAULT_PROVIDER', '');
     setEnv('LLXPRT_DEFAULT_MODEL', 'model');
@@ -74,9 +92,9 @@ describe('cli-args helpers', () => {
     ]);
   });
 
-  it('uses only the generated profile to configure the local model pilot', () => {
-    setEnv('LLXPRT_LOCAL_MODEL_PILOT', 'true');
-    setEnv('LLXPRT_TEST_PROFILE', 'local-qwen35-pilot');
+  it('uses only the generated profile to configure the local model E2E', () => {
+    setEnv('LLXPRT_LOCAL_MODEL_E2E', 'true');
+    setEnv('LLXPRT_TEST_PROFILE', 'local-qwen35-e2e');
     setEnv('LLXPRT_DEFAULT_PROVIDER', 'openai');
     setEnv('LLXPRT_DEFAULT_MODEL', 'qwen3.5:4b');
     setEnv('OPENAI_BASE_URL', 'http://127.0.0.1:12644/v1');
@@ -89,12 +107,12 @@ describe('cli-args helpers', () => {
     ]);
   });
 
-  it('rejects a local pilot without a profile', () => {
-    setEnv('LLXPRT_LOCAL_MODEL_PILOT', 'true');
+  it('rejects a local model E2E without a profile', () => {
+    setEnv('LLXPRT_LOCAL_MODEL_E2E', 'true');
     setEnv('LLXPRT_TEST_PROFILE', undefined);
 
     expect(() => buildExtraArgs(undefined, true)).toThrow(
-      'LLXPRT_TEST_PROFILE is required for the local model pilot',
+      'LLXPRT_TEST_PROFILE is required for the local model E2E',
     );
   });
 
