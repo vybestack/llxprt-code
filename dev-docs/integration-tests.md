@@ -165,10 +165,81 @@ This structure makes it easy to locate the artifacts for a specific test run, fi
 
 ## Continuous integration
 
-To ensure the integration tests are always run, a GitHub Actions workflow is defined in `.github/workflows/e2e.yml`. This workflow automatically runs the integrations tests for pull requests against the `main` branch, or when a pull request is added to a merge queue.
+`.github/workflows/e2e.yml` runs integration tests for internal pull requests against `main`, `release/**` and `dev/**`, and for merge groups.
 
 The workflow runs the tests in different sandboxing environments to ensure LLxprt Code is tested across each:
 
 - `sandbox:none`: Runs the tests without any sandboxing.
 - `sandbox:docker`: Runs the tests in a Docker container.
-- `sandbox:podman`: Runs the tests in a Podman container.
+
+### Runner-local model E2E (issue #3764)
+
+`.github/workflows/e2e.yml` runs one required Linux x64 job with runner-local
+Ollama 0.31.1 and `gemma4:e2b-it-qat`. Internal PRs, merge groups and manual
+`workflow_dispatch` run both host (`sandbox:none`) and Docker
+(`sandbox:docker`) legs; pushes to main run only the host leg. Dispatch accepts
+`branch_ref` and runs the same job. Pull requests check out their merge ref,
+approved labeled internal `pull_request_target` runs check out the head SHA,
+and manual runs check out `branch_ref`; checkout never persists credentials.
+Fork PR heads do not run under the privileged target event or receive this E2E
+job. Duplicate and doc-only filters and the internal-target mergeability gate
+remain in effect. Credentialed full-platform E2E remains in `nightly.yml`.
+
+The workflow verifies the x64 Ollama archive SHA-256
+`d297381efc136451f6fabb9dd644a67f70fe51c16815a0c4a95ff0e327a3afb4`,
+Ollama version 0.31.1 and Gemma digest
+`07ea59a474013479c8b6b802bef095c40e964a1d776ba02f264c0e30e1aede0c`.
+On Intel it exposes only the Haswell CPU backend before startup and verifies
+that library in the live llama-server process mapping. On AMD it retains the
+native Ollama backend and verifies a mapped CPU library. A warm-up and a second
+CPU-only inference check require a nonempty response and zero VRAM usage.
+The Docker leg uses host networking to reach the Ollama loopback endpoint.
+No third-party model credentials are available: the OpenAI-compatible `/v1`
+endpoint uses a local placeholder key.
+
+Each leg runs the selected integration suite excluding
+`todo-continuation.e2e.test.ts` and `run_shell_command.test.ts`, followed by
+exactly three named shell cases. The shell assertion permits only successful
+literal `echo hello-world` commands; replace requires the `replace` tool,
+exact `bar content`, and no unrelated tools. File-level retries stay enabled.
+`GIT_CEILING_DIRECTORIES` prevents incidental parent repository discovery in
+TestRig workspaces, but does not prevent a model given an explicit path from
+accessing it. The real-model ledger enforces a four-request ceiling
+across two distinct tests; retries are reported separately. Logs,
+telemetry, inference JSON and ledger are uploaded even on failure.
+
+The local-model E2E profile sets a 32,768-token context and reserves 8,192
+output tokens. Only when `LLXPRT_LOCAL_MODEL_E2E=true`, the generated inline
+profile extends first-response, SDK request and transport headers deadlines
+to 750,000, 850,000 and 900,000 ms respectively. The shell case has a
+360,000 ms TestRig deadline and 450,000 ms Bun timeout; replace has a
+1,200,000 ms TestRig deadline and 1,500,000 ms Bun timeout. Each job has a
+90-minute bound. Other providers, local runs and nightly E2E keep their
+ordinary deadlines. The inline profile controls provider selection so explicit
+`--provider` flags cannot bypass its timeout settings.
+
+To reproduce a run on a branch, use
+`gh workflow run e2e.yml --ref issue3764 -f branch_ref=issue3764`.
+Do not dispatch while another run on that branch is active: branch concurrency
+cancels an earlier run. Verify both sandbox check names, runtime and model
+pins, CPU mapping, selected suites, budget and diagnostics. To reproduce the
+test selection locally, set `OPENAI_BASE_URL` to a private Ollama 0.31.1
+instance, `OPENAI_API_KEY=ollama-local-only`,
+`LLXPRT_DEFAULT_PROVIDER=openai`,
+`LLXPRT_DEFAULT_MODEL=gemma4:e2b-it-qat`,
+`LLXPRT_TEST_PROFILE=local-gemma4-e2e`, `LLXPRT_CONTEXT_LIMIT=32768`,
+`LLXPRT_MAX_OUTPUT_TOKENS=8192`, and `LLXPRT_LOCAL_MODEL_E2E=true`.
+Run `npm run test:integration:sandbox:none --
+--exclude="**/todo-continuation.e2e.test.ts"
+--exclude="**/run_shell_command.test.ts"` and then the three named shell
+cases with the same invocations as the workflow. Keep local evidence under the
+repository's ignored `tmp/` directory.
+
+Earlier local and hosted trials with smaller models did not consistently
+produce the required exact replacement. An ARM trial returned an empty
+response after its first 16 generated tokens. Two hosted x64 Gemma runs
+[36342130687](https://github.com/vybestack/llxprt-code/actions/runs/36342130687)
+and [36344243429](https://github.com/vybestack/llxprt-code/actions/runs/36344243429)
+passed both legs with the selected files, shell cases, CPU verification and
+budget. These results are specific to the pinned x64 runtime and model; they
+do not establish equivalence with the credentialed nightly full-platform suite.

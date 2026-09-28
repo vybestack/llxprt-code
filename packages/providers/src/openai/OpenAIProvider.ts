@@ -280,7 +280,14 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     // based on User-Agent, which must be sent as a real HTTP header.
     const headers = mergeInvocationHeaders(options);
 
-    return instantiateClient(authToken, baseURL, agents, headers);
+    return instantiateClient(authToken, baseURL, agents, headers, {
+      headersTimeoutMs: agentSettings['openai-headers-timeout-ms'] as
+        | number
+        | undefined,
+      requestTimeoutMs: agentSettings['openai-request-timeout-ms'] as
+        | number
+        | undefined,
+    });
   }
 
   /**

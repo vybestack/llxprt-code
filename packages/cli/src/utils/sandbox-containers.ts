@@ -272,6 +272,7 @@ const RESERVED_SANDBOX_ENV_KEYS = new Set([
   // marker gate) at attacker-chosen paths inside the container.
   'LLXPRT_SANDBOX_PROJECT_KEY',
   'LLXPRT_SANDBOX_CHECKPOINT_STORE',
+  'GIT_CEILING_DIRECTORIES',
 ]);
 
 function parseSandboxEnvVars(): string[] {
@@ -340,6 +341,11 @@ export function addContainerEnvVars(
     GEMINI_MODEL: process.env.GEMINI_MODEL,
     TERM: process.env.TERM,
     COLORTERM: process.env.COLORTERM,
+    GIT_CEILING_DIRECTORIES: process.env.GIT_CEILING_DIRECTORIES?.split(
+      path.delimiter,
+    )
+      .map(getContainerPath)
+      .join(':'),
   };
   for (const [key, val] of Object.entries(envMap)) {
     if (val !== undefined) {

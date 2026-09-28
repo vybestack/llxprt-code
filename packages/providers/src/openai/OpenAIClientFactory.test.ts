@@ -15,8 +15,12 @@
  */
 
 import { describe, it, expect } from 'bun:test';
+import { createServer } from 'node:http';
 import * as http from 'http';
 import * as https from 'https';
+import { createRequire } from 'node:module';
+import type * as Undici from 'undici';
+import type { Agent as UndiciAgent } from 'undici';
 import {
   createHttpAgents,
   extractModelParamsFromOptions,
@@ -25,6 +29,11 @@ import {
   mergeInvocationHeaders,
 } from './OpenAIClientFactory.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
+
+const undiciRequire = createRequire(
+  createRequire(import.meta.url).resolve('undici/package.json'),
+);
+const { Agent, fetch: undiciFetch } = undiciRequire('./') as typeof Undici;
 
 function getMaxOutputTokens(key: string): number | undefined {
   return key === 'maxOutputTokens' ? 2000 : undefined;
@@ -323,6 +332,80 @@ describe('OpenAIClientFactory', () => {
         ._options as Record<string, unknown>;
       expect(opts).toBeDefined();
       expect(opts.defaultHeaders).toBeUndefined();
+    });
+
+    it('keeps the ordinary headers deadline while a scoped extension lets the SDK stream delayed headers', async () => {
+      const server = createServer((_request, response) => {
+        setTimeout(() => {
+          response.writeHead(200, { 'content-type': 'text/event-stream' });
+          response.end(
+            'data: {"id":"delayed","choices":[{"index":0,"delta":{"content":"ready"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
+          );
+        }, 1_500);
+      });
+      const defaultDispatcher = new Agent({ headersTimeout: 100 });
+      const testFetch: typeof fetch = async (input, init) => {
+        const requestInit = init as RequestInit & { dispatcher?: UndiciAgent };
+        const response = await undiciFetch(String(input), {
+          ...requestInit,
+          dispatcher: requestInit.dispatcher ?? defaultDispatcher,
+        } as Parameters<typeof undiciFetch>[1]);
+        return response as unknown as Response;
+      };
+      await new Promise<void>((resolve) => {
+        server.listen(0, '127.0.0.1', resolve);
+      });
+      try {
+        const address = server.address();
+        if (address === null || typeof address === 'string') {
+          throw new Error('Missing local server port');
+        }
+        const baseURL = `http://127.0.0.1:${address.port}/v1`;
+        const request = { model: 'local', messages: [], stream: true as const };
+        const consume = async (
+          client: ReturnType<typeof instantiateClient>,
+        ): Promise<Array<string | null | undefined>> => {
+          const chunks = [];
+          for await (const chunk of await client.chat.completions.create(
+            request,
+          )) {
+            chunks.push(chunk.choices[0]?.delta.content);
+          }
+          return chunks;
+        };
+        const ordinary = instantiateClient(
+          'test-token',
+          baseURL,
+          undefined,
+          undefined,
+          {
+            fetch: testFetch,
+          },
+        );
+        await expect(consume(ordinary)).rejects.toThrow('Request timed out.');
+
+        const shortPilot = instantiateClient(
+          'test-token',
+          baseURL,
+          undefined,
+          undefined,
+          { headersTimeoutMs: 100 },
+        );
+        await expect(consume(shortPilot)).rejects.toThrow('Request timed out.');
+
+        const pilot = instantiateClient(
+          'test-token',
+          baseURL,
+          undefined,
+          undefined,
+          { headersTimeoutMs: 4_000 },
+        );
+        expect(await consume(pilot)).toStrictEqual(['ready']);
+      } finally {
+        server.closeAllConnections();
+        server.close();
+        await defaultDispatcher.close();
+      }
     });
   });
 
