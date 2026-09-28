@@ -79,7 +79,7 @@ function buildDeps(
     logger: { debug: vi.fn() } as unknown as ResponsesExecutorDeps['logger'],
     getProviderBaseURL: () => CODEX_BASE_URL,
     getCustomHeaders: () => ({ 'X-Provider': 'p' }),
-    isCodexBaseURL: (url) => (url ?? '').includes('backend-api/codex'),
+    isCodexMode: () => true,
     getCodexAccountId: async () => 'codex-account',
     resolveAuthTokenForPrompt: async () => 'codex-token',
     shouldRetryOnError: () => false,
