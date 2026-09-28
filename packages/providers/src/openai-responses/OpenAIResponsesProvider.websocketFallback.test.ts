@@ -62,7 +62,14 @@ class TestableCodexProvider extends OpenAIResponsesProvider {
     private readonly script: WebSocketScript,
     oauthManager: object,
   ) {
-    super('codex-api-key', CODEX_BASE_URL, undefined, oauthManager);
+    super(
+      'codex-api-key',
+      CODEX_BASE_URL,
+      undefined,
+      oauthManager,
+      undefined,
+      'codex',
+    );
   }
 
   protected override createWebSocketTransport(): WebSocketTransport {

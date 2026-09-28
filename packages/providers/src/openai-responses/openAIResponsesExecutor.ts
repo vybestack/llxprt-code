@@ -92,8 +92,8 @@ export interface ResponsesExecutorDeps {
   readonly getCustomHeaders: (
     options?: NormalizedGenerateChatOptions,
   ) => Record<string, string> | undefined;
-  /** True when the base URL points at the Codex (ChatGPT) backend. */
-  readonly isCodexBaseURL: (baseURL: string | undefined) => boolean;
+  /** Whether the selected provider uses the Codex protocol. */
+  readonly isCodexMode: () => boolean;
   /** Resolve the Codex account ID for OAuth headers (Codex mode only). */
   readonly getCodexAccountId: () => Promise<string>;
   /**
@@ -634,7 +634,7 @@ async function resolveResponsesTransportContext(
     }
     return {
       ...prepared,
-      apiKey: await resolveApiKey(options, prepared.rawBaseURL, deps),
+      apiKey: await resolveApiKey(options, deps),
       baseURL: normalizeBaseURL(prepared.rawBaseURL),
     };
   } catch (error) {
@@ -647,7 +647,6 @@ async function resolveResponsesTransportContext(
 
 async function resolveApiKey(
   options: NormalizedGenerateChatOptions,
-  effectiveBaseURL: string,
   deps: ResponsesExecutorDeps,
 ): Promise<string> {
   const promptAuthToken = await deps.resolveAuthTokenForPrompt();
@@ -666,7 +665,7 @@ async function resolveApiKey(
     return runtimeToken;
   }
 
-  const isCodex = deps.isCodexBaseURL(effectiveBaseURL);
+  const isCodex = deps.isCodexMode();
   throw new Error(
     isCodex
       ? 'Codex authentication required. Run /auth codex enable to authenticate.'

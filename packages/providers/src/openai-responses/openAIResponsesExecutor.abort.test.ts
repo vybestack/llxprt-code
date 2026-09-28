@@ -99,7 +99,7 @@ function buildDeps(
     logger: { debug: vi.fn() } as unknown as ResponsesExecutorDeps['logger'],
     getProviderBaseURL: () => 'https://api.openai.com/v1',
     getCustomHeaders: () => undefined,
-    isCodexBaseURL: () => false,
+    isCodexMode: () => false,
     getCodexAccountId: async () => 'codex-account',
     resolveAuthTokenForPrompt: async () => '',
     shouldRetryOnError: () => true,

@@ -75,6 +75,10 @@ describe('OpenAIResponsesProvider - Model Listing', () => {
       const provider = new OpenAIResponsesProvider(
         'test-api-key',
         CODEX_BASE_URL,
+        undefined,
+        undefined,
+        undefined,
+        'codex',
       );
       const defaultModel = provider.getDefaultModel();
       expect(defaultModel).toBe('gpt-5.6-sol');

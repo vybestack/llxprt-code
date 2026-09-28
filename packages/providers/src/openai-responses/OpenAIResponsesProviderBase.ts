@@ -42,7 +42,6 @@ import { isQuotaExhaustionError } from '../utils/quotaExhaustion.js';
 
 export abstract class OpenAIResponsesProviderBase extends BaseProvider {
   protected logger: DebugLogger;
-  protected _isCodexMode: boolean;
   // @plan:PLAN-20251023-STATELESS-HARDENING.P08
   // @requirement:REQ-SP4-002/REQ-SP4-003
   // Removed static cache scope and conversation cache dependencies to achieve stateless operation
@@ -52,20 +51,18 @@ export abstract class OpenAIResponsesProviderBase extends BaseProvider {
     baseURL?: string,
     config?: IProviderConfig,
     oauthManager?: OAuthManager,
+    providerName = 'openai-responses',
   ) {
-    // Detect Codex mode from baseURL at construction time
-    const isCodex = baseURL?.includes('chatgpt.com/backend-api/codex') ?? false;
+    const isCodex = providerName === 'codex';
 
     const baseConfig: BaseProviderConfig = {
-      name: 'openai-responses',
+      name: providerName,
       apiKey,
       baseURL: baseURL ?? 'https://api.openai.com/v1',
       envKeyNames: ['OPENAI_API_KEY'],
       isOAuthEnabled: isCodex && !!oauthManager,
       oauthProvider: isCodex ? 'codex' : undefined,
       oauthManager: isCodex ? oauthManager : undefined,
-      // Must set supportsOAuth here because supportsOAuth() is called in super()
-      // before _isCodexMode is set
       supportsOAuth: isCodex,
       mediaTransportCapabilities: declaredMediaTransportCapabilities(
         isCodex ? 'codex' : 'openai-responses',
@@ -74,7 +71,6 @@ export abstract class OpenAIResponsesProviderBase extends BaseProvider {
 
     super(baseConfig, config);
 
-    this._isCodexMode = isCodex;
     this.logger = new DebugLogger('llxprt:providers:openai-responses');
     this.logger.debug(
       () =>
@@ -82,23 +78,12 @@ export abstract class OpenAIResponsesProviderBase extends BaseProvider {
     );
   }
 
-  /**
-   * OAuth is supported in Codex mode
-   * Check baseURL directly to avoid timing issues with instance properties
-   * @plan PLAN-20251213-ISSUE160.P03
-   */
   protected supportsOAuth(): boolean {
-    // Check baseURL directly - don't rely on _isCodexMode which may not be set yet
-    const baseURL = this.getBaseURL();
-    return this.isCodexMode(baseURL);
+    return this.isCodexMode();
   }
 
-  /**
-   * Detect if provider is in Codex mode based on baseURL
-   * @plan PLAN-20251213-ISSUE160.P03
-   */
-  protected isCodexMode(baseURL: string | undefined): boolean {
-    return baseURL?.includes('chatgpt.com/backend-api/codex') ?? false;
+  protected isCodexMode(): boolean {
+    return this.baseProviderConfig.oauthProvider === 'codex';
   }
 
   /**
@@ -216,8 +201,7 @@ export abstract class OpenAIResponsesProviderBase extends BaseProvider {
   override getDefaultModel(): string {
     // @plan PLAN-20251213-ISSUE160.P04
     // Return gpt-5.6-sol as default when in Codex mode (issue #2483)
-    const baseURL = this.getBaseURL();
-    if (this.isCodexMode(baseURL)) {
+    if (this.isCodexMode()) {
       return 'gpt-5.6-sol';
     }
     // Return the default model for responses API
