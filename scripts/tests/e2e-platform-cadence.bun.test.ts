@@ -18,9 +18,8 @@
  * YAML helpers and assert the approved split:
  *
  * - e2e.yml defines no e2e_mac job and allocates no E2E job to a macOS or
- *   Windows runner. The Linux PR matrix retains exactly sandbox:none and
- *   sandbox:docker, with a single exclusion that drops sandbox:docker only on
- *   push to main.
+ *   Windows runner. The Linux PR matrix selects sandbox:none and sandbox:docker;
+ *   push to main selects sandbox:none only.
  * - nightly.yml retains the e2e_full rows for Ubuntu none, Ubuntu Docker,
  *   macOS none, and Windows none; both schedule and workflow_dispatch
  *   triggers exercise the matrix; the matrix is non-fail-fast; E2E failures
@@ -102,27 +101,18 @@ describe('e2e.yml: macOS E2E is off the PR feedback path (issue #3189)', () => {
     expect(jobRunsOn(linux)).toBe('ubuntu-latest');
     const strategy = asOptionalRecord(linux.strategy);
     const matrix = asOptionalRecord(strategy?.matrix);
-    const sandbox = asStringArray(matrix?.sandbox);
-    expect(sandbox).toEqual(['sandbox:none', 'sandbox:docker']);
+    expect(asString(matrix?.sandbox)).toContain('sandbox:none');
+    expect(asString(matrix?.sandbox)).toContain('sandbox:docker');
   });
 
-  it('excludes only sandbox:docker on push, leaving both legs for all other events', () => {
-    const linux = workflowJob(workflow, 'e2e_linux');
-    const strategy = asOptionalRecord(linux.strategy);
-    const matrix = asOptionalRecord(strategy?.matrix);
-    const exclude = asArray(matrix?.exclude).map((row) => {
-      const rec = asRecord(row);
-      return { sandbox: asString(rec.sandbox) };
-    });
-    // Exactly one exclusion: drop sandbox:docker only when the event is push.
-    // pull_request, approved pull_request_target, merge_group, and
-    // workflow_dispatch all receive both Linux sandbox legs.
-    expect(exclude).toEqual([
-      {
-        sandbox:
-          "${{ github.event_name == 'push' && 'sandbox:docker' || 'NEVER_MATCH' }}",
-      },
-    ]);
+  it('selects only the host on push and both legs on other events without a placeholder row', () => {
+    const matrix = asOptionalRecord(
+      asOptionalRecord(workflowJob(workflow, 'e2e_linux').strategy)?.matrix,
+    );
+    expect(matrix?.exclude).toBeUndefined();
+    expect(matrix?.sandbox).toBe(
+      '${{ fromJSON(github.event_name == \'push\' && \'["sandbox:none"]\' || \'["sandbox:none","sandbox:docker"]\') }}',
+    );
   });
 
   it('wires the Linux E2E real-model budget ledger and enforcement step', () => {
