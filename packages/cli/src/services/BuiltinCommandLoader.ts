@@ -213,7 +213,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
     if (this.config?.isSkillsSupportEnabled() !== true) {
       return [];
     }
-    if (this.config.getSkillManager().isAdminEnabled() === false) {
+    if (!this.config.isAdminSkillsEnabled()) {
       return [
         {
           name: 'skills',

@@ -25,7 +25,6 @@ import {
 } from '../utils/memoryDiscovery.js';
 import { IdeClient } from '@vybestack/llxprt-code-ide-integration';
 import { ideContext } from '@vybestack/llxprt-code-ide-integration';
-import { initializeLsp } from './lspIntegration.js';
 import * as configConstructor from './configConstructor.js';
 import { ConfigBase } from './configBase.js';
 import {
@@ -91,7 +90,11 @@ import type { MessageBus } from '../confirmation-bus/message-bus.js';
 
 import { coreEvents, CoreEvent } from '../utils/events.js';
 import { McpClientManager } from '@vybestack/llxprt-code-mcp';
-import type { McpHostConfig } from '@vybestack/llxprt-code-mcp/host/hostInterfaces.js';
+import type { McpHostServices } from '@vybestack/llxprt-code-mcp/host/hostServices.js';
+import {
+  createMcpHostConfig,
+  createMcpHostServices,
+} from './configMcpHostAdapter.js';
 import { getCoreVersion } from '../utils/version.js';
 import {
   buildMcpTrustedRules,
@@ -99,22 +102,6 @@ import {
 } from '../policy/config.js';
 
 import type { ShellExecutionConfig } from '../services/shellExecutionService.js';
-
-function createMcpHostConfig(config: Config): McpHostConfig {
-  return {
-    refreshMcpContext: () => config.refreshDiscoveredMcpMetadata(),
-    getAllowedMcpServers: () => config.getAllowedMcpServers(),
-    getBlockedMcpServers: () => config.getBlockedMcpServers(),
-    getMcpServers: () => config.getMcpServers(),
-    getMcpServerCommand: () => config.getMcpServerCommand(),
-    getPromptRegistry: () => config.getPromptRegistry(),
-    getResourceRegistry: () => config.getResourceRegistry(),
-    getWorkspaceContext: () => config.getWorkspaceContext(),
-    getDebugMode: () => config.getDebugMode(),
-    getExtensions: () => config.getExtensions(),
-    isTrustedFolder: () => config.isTrustedFolder(),
-  };
-}
 
 function requireMessageBus(
   messageBus: MessageBus | undefined,
@@ -131,9 +118,11 @@ export class Config extends ConfigBase {
   private static readonly logger = new DebugLogger('llxprt:config');
 
   private readonly liveTrustTransitionLifecycle: LiveTrustTransitionLifecycle;
+  private readonly mcpHostServices: Readonly<McpHostServices>;
 
   constructor(params: ConfigParameters) {
     super();
+    this.mcpHostServices = createMcpHostServices(params);
     configConstructor.applyConfigParams(
       this as unknown as configConstructor.ConfigConstructorTarget,
       params,
@@ -167,6 +156,8 @@ export class Config extends ConfigBase {
       emitTrustChanged: (trusted) => coreEvents.emitFolderTrustChanged(trusted),
     });
   }
+
+  getMcpHostServices = (): Readonly<McpHostServices> => this.mcpHostServices;
 
   // Issue #2325: Background MCP discovery promise started in initialize() so
   // startup is not blocked. Awaited in dispose() to avoid tearing down servers
@@ -244,18 +235,20 @@ export class Config extends ConfigBase {
     this.promptRegistry = new PromptRegistry();
     this.resourceRegistry = new ResourceRegistry();
     await initializeParser();
-    const taskManager = dependencies.taskManager;
-    const shellJobs = dependencies.shellJobs;
+    const { taskManager, shellJobs } = dependencies;
     this.toolRegistry = await this.createToolRegistry(
       initializationMessageBus,
       () => taskManager,
       () => shellJobs,
     );
+    this.toolRegistry.bindWorkspaceAuthority(() => this.isTrustedFolder());
     this.mcpClientManager = new McpClientManager(
       await getCoreVersion(),
       this.toolRegistry,
       createMcpHostConfig(this),
       this.eventEmitter,
+      undefined,
+      this.mcpHostServices,
     );
     this.registerIdeTrustListener();
     this.initialized = true;
@@ -266,8 +259,6 @@ export class Config extends ConfigBase {
     await this.getExtensionLoader().start(this, () =>
       this.refreshExtensionSkills(),
     );
-
-    await initializeLsp(this._lspState, this);
 
     // Discover skills if enabled
     if (this.skillsSupport) {

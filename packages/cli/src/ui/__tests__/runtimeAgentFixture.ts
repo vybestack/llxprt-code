@@ -11,6 +11,9 @@ type RuntimeAgent = Parameters<typeof buildUiRuntimeFromSource>[1];
 /** Session owner for tests that only read borrowed Config-backed UI slices. */
 export function createRuntimeAgent(): RuntimeAgent {
   return {
+    lsp: {
+      status: async () => ({ disabled: true, servers: [] }),
+    },
     agentClient: {
       hasChatInitialized: () => false,
       getHistoryService: () => null,

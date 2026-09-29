@@ -44,6 +44,7 @@ import { resolveImageDimensionBudget } from '@vybestack/llxprt-code-tools/utils/
 import { CoreToolHostAdapter } from '../tools-adapters/CoreToolHostAdapter.js';
 import { CoreIdeServiceAdapter } from '../tools-adapters/CoreIdeServiceAdapter.js';
 import { CoreLspServiceAdapter } from '../tools-adapters/CoreLspServiceAdapter.js';
+import type { WorkspaceLspPort } from './lspIntegration.js';
 import { CoreToolKeyStorageAdapter } from '../tools-adapters/CoreToolKeyStorageAdapter.js';
 import { coreStorageServiceAdapter } from '../tools-adapters/CoreStorageServiceAdapter.js';
 import { CoreMessageBusAdapter } from '../tools-adapters/CoreMessageBusAdapter.js';
@@ -124,6 +125,14 @@ export interface ToolRecord {
 }
 
 /** Narrow interface for tool registry creation — avoids circular Config import */
+export interface WorkspaceToolAccess {
+  getDirectories(): string[];
+  isPathWithinWorkspace(path: string): boolean;
+  getFileSystemService(): ReturnType<
+    CoreToolHostAdapter['getFileSystemService']
+  >;
+}
+
 export interface ToolRegistryHost {
   getCoreTools(): string[] | undefined;
   getExcludeTools(): string[] | undefined;
@@ -355,10 +364,12 @@ function registerStandardTools(
   host: ToolRegistryHost,
   messageBus: MessageBus,
   getShellJobs: () => ShellJobPort | undefined,
+  lsp: WorkspaceLspPort | undefined,
+  workspace: WorkspaceToolAccess | undefined,
 ): void {
-  const toolHostAdapter = new CoreToolHostAdapter(config);
+  const toolHostAdapter = new CoreToolHostAdapter(config, workspace);
   const ideServiceAdapter = new CoreIdeServiceAdapter(config);
-  const lspServiceAdapter = new CoreLspServiceAdapter(config);
+  const lspServiceAdapter = new CoreLspServiceAdapter(lsp);
   const toolKeyStorageAdapter = new CoreToolKeyStorageAdapter();
   const settingsService = config.getSettingsService();
   const storageServiceAdapter = coreStorageServiceAdapter;
@@ -402,7 +413,7 @@ function registerStandardTools(
   registerIdeLspTool(ApplyPatchTool);
   registerCoreTool(
     ShellTool,
-    new CoreShellToolHostAdapter(config, getShellJobs),
+    new CoreShellToolHostAdapter(config, getShellJobs, workspace),
     messageBusAdapter,
   );
   registerCoreTool(MemoryTool, {
@@ -762,6 +773,8 @@ export async function createToolRegistry(
   messageBus: MessageBus,
   getTaskManager: () => AsyncTaskManager | undefined,
   getShellJobs: () => ShellJobPort | undefined,
+  lsp?: WorkspaceLspPort,
+  workspace?: WorkspaceToolAccess,
 ): Promise<{ registry: ToolRegistry; allPotentialTools: ToolRecord[] }> {
   const registry = new ToolRegistry(
     new CoreToolRegistryHostAdapter(config as Config),
@@ -795,6 +808,8 @@ export async function createToolRegistry(
     host,
     messageBus,
     getShellJobs,
+    lsp,
+    workspace,
   );
 
   const { profileManager, subagentManager } = resolveManagers(host);

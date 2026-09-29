@@ -37,7 +37,12 @@ export function syncSkillActivationTool(
   }
   registrar(
     config.getToolRegistry(),
-    new CoreSkillServiceAdapter(config),
+    new CoreSkillServiceAdapter(
+      config.getSkillManager(),
+      config.storage,
+      () => config.getExtensions(),
+      config.getWorkspaceContext(),
+    ),
     messageBus,
   );
 }

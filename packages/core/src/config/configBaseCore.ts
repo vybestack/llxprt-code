@@ -63,7 +63,7 @@ import type { SubagentManager } from './subagentManager.js';
 import type { FileExclusions } from '../utils/ignorePatterns.js';
 import type { PolicyEngine } from '../policy/policy-engine.js';
 import type { SkillManager } from '../skills/skillManager.js';
-import type { LspState } from './lspIntegration.js';
+import type { LspConfig } from '@vybestack/llxprt-code-ide-integration';
 import type { PostSkillDiscoveryToolRegistrar } from './configTypes.js';
 import type { ApprovalMode, MCPServerConfig } from './configTypes.js';
 import type { ImageOperationRunner } from '../services/image/imageCapability.js';
@@ -110,7 +110,7 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
    * @plan PLAN-20250212-LSP.P33
    * @requirement REQ-CFG-010, REQ-CFG-015, REQ-CFG-070
    */
-  protected readonly _lspState: LspState = {};
+  lspConfig: LspConfig | undefined;
   protected readonly coreTools: string[] | undefined;
   protected readonly allowedTools: string[] | undefined;
   protected readonly excludeTools: string[] | undefined;
@@ -470,6 +470,12 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
   }
   getSkillManager(): SkillManager {
     return this.skillManager;
+  }
+  getDisabledSkillNames(): readonly string[] {
+    return this.disabledSkills;
+  }
+  isAdminSkillsEnabled(): boolean {
+    return this.adminSkillsEnabled;
   }
   getDebugMode(): boolean {
     return this.debugMode;

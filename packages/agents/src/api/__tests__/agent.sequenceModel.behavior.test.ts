@@ -52,6 +52,7 @@ import {
   createSessionSchedulerOwner,
 } from '../agentRuntimeAssembly.js';
 import { CoreToolScheduler } from '../../core/coreToolScheduler.js';
+import { WorkspaceSkillSurface } from '../workspace-skill-surface.js';
 
 const taskServicesToDispose = new Set<SessionTaskServices>();
 
@@ -95,7 +96,16 @@ function assembleDeps(
     model: config.getModel(),
   });
   const loopHolder = createLoopHolder();
-  const taskServices = new SessionTaskServices(config.getSettingsService());
+  const taskServices = new SessionTaskServices(
+    config.getSettingsService(),
+    new WorkspaceSkillSurface(
+      config.storage,
+      () => config.getExtensions(),
+      () => [],
+      () => true,
+      config.getWorkspaceContext(),
+    ),
+  );
   taskServicesToDispose.add(taskServices);
   const ownership = recordOwnership({
     runtimeHandle: { cleanup: () => undefined },

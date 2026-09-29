@@ -5,6 +5,7 @@
  */
 
 import { KeychainTokenStorage } from './token-storage/keychain-token-storage.js';
+import type { McpHostServices } from '../host/hostServices.js';
 import type {
   OAuthCredentials,
   OAuthToken,
@@ -246,4 +247,18 @@ export class MCPOAuthTokenStorage implements TokenStorage {
       updatedAt: Date.now(),
     };
   }
+}
+
+/** Bind persistence feedback to the owner of this OAuth flow. */
+export function createMcpOAuthTokenStorage(
+  hostServices?: Readonly<McpHostServices>,
+): MCPOAuthTokenStorage {
+  return hostServices
+    ? new MCPOAuthTokenStorage(
+        new KeychainTokenStorage(
+          DEFAULT_SERVICE_NAME,
+          hostServices.emitFeedback,
+        ),
+      )
+    : new MCPOAuthTokenStorage();
 }

@@ -48,7 +48,12 @@ export function buildZedSessionToolRegistry(
   if (registry.getTool(ActivateSkillTool.Name) instanceof ActivateSkillTool) {
     config.getPostSkillDiscoveryToolRegistrar()?.(
       registry,
-      new CoreSkillServiceAdapter(config),
+      new CoreSkillServiceAdapter(
+        config.getSkillManager(),
+        config.storage,
+        () => config.getExtensions(),
+        config.getWorkspaceContext(),
+      ),
       messageBus,
     );
   }

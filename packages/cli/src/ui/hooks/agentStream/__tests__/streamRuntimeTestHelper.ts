@@ -329,7 +329,7 @@ function makeIdeRuntime(
     setIdeClientDisconnected: () =>
       delegateVoid(source, 'setIdeClientDisconnected'),
     getLspConfig: () => call(source, 'getLspConfig', undefined),
-    getLspServiceClient: () => call(source, 'getLspServiceClient', undefined),
+    lsp: { status: async () => ({ disabled: true, servers: [] }) },
     ...override,
   };
 }
@@ -346,6 +346,7 @@ function makeHooksRuntime(
     setDisabledHooks: (disabledHooks) =>
       delegateVoid(source, 'setDisabledHooks', disabledHooks),
     isSkillsSupportEnabled: () => call(source, 'isSkillsSupportEnabled', false),
+    isAdminSkillsEnabled: () => call(source, 'isAdminSkillsEnabled', true),
     getEnableHooksUI: () => call(source, 'getEnableHooksUI', false),
     reloadSkills: () => {
       const fn = getMember(source, 'reloadSkills');

@@ -12,9 +12,13 @@ import {
   UnauthorizedError,
 } from '@vybestack/llxprt-code-tools/utils/errors.js';
 import { MCPOAuthProvider } from '../auth/oauth-provider.js';
-import { MCPOAuthTokenStorage } from '../auth/oauth-token-storage.js';
+import { createMcpOAuthTokenStorage } from '../auth/oauth-token-storage.js';
 import { OAuthUtils } from '../auth/oauth-utils.js';
-import { emitHostFeedback } from '../host/hostServices.js';
+import {
+  defaultHostServices,
+  deliverHostFeedback,
+  type McpHostServices,
+} from '../host/hostServices.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import {
   createSSETransportWithAuth,
@@ -39,7 +43,10 @@ const debugLogger = DebugLogger.getLogger('llxprt:core:tools:mcp-client');
  * (realm, scope, nonce) that vary between requests for the same server,
  * which would prevent dedup if included.
  */
-const inFlightAuthentications = new Map<string, Promise<boolean>>();
+const inFlightAuthentications = new WeakMap<
+  Readonly<McpHostServices>,
+  Map<string, Promise<boolean>>
+>();
 
 /**
  * Server-side message fragments signalling that the SSE transport has been
@@ -215,12 +222,17 @@ export async function handleAutomaticOAuth(
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
   wwwAuthenticate: string,
+  hostServices: Readonly<McpHostServices> = defaultHostServices,
 ): Promise<boolean> {
+  const pending =
+    inFlightAuthentications.get(hostServices) ??
+    new Map<string, Promise<boolean>>();
+  inFlightAuthentications.set(hostServices, pending);
   const guardKey = JSON.stringify([
     mcpServerName,
     mcpServerConfig.httpUrl ?? mcpServerConfig.url ?? '',
   ]);
-  const existing = inFlightAuthentications.get(guardKey);
+  const existing = pending.get(guardKey);
   if (existing) {
     debugLogger.log(
       `'${mcpServerName}' OAuth already in progress, reusing existing flow`,
@@ -232,6 +244,7 @@ export async function handleAutomaticOAuth(
     mcpServerName,
     mcpServerConfig,
     wwwAuthenticate,
+    hostServices,
   );
 
   // Mutable holder so the timeout closure (defined below) can check
@@ -246,8 +259,8 @@ export async function handleAutomaticOAuth(
       debugLogger.warn(
         `OAuth flow for '${mcpServerName}' timed out after ${OAUTH_FLOW_TIMEOUT_MS}ms, clearing in-flight guard`,
       );
-      if (inFlightAuthentications.get(guardKey) === promiseRef.current) {
-        inFlightAuthentications.delete(guardKey);
+      if (pending.get(guardKey) === promiseRef.current) {
+        pending.delete(guardKey);
       }
       resolve(false);
     }, OAUTH_FLOW_TIMEOUT_MS);
@@ -255,13 +268,13 @@ export async function handleAutomaticOAuth(
 
   const raced = Promise.race([authPromise, timeoutPromise]).finally(() => {
     if (timeoutId !== undefined) clearTimeout(timeoutId);
-    if (inFlightAuthentications.get(guardKey) === promiseRef.current) {
-      inFlightAuthentications.delete(guardKey);
+    if (pending.get(guardKey) === promiseRef.current) {
+      pending.delete(guardKey);
     }
   });
 
   promiseRef.current = raced;
-  inFlightAuthentications.set(guardKey, raced);
+  pending.set(guardKey, raced);
   return raced;
 }
 
@@ -269,6 +282,7 @@ async function doHandleAutomaticOAuth(
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
   wwwAuthenticate: string,
+  hostServices: Readonly<McpHostServices>,
 ): Promise<boolean> {
   try {
     debugLogger.log(`🔐 '${mcpServerName}' requires OAuth authentication`);
@@ -308,6 +322,8 @@ async function doHandleAutomaticOAuth(
       mcpServerName,
       oauthAuthConfig,
       serverUrl,
+      undefined,
+      hostServices,
     );
 
     debugLogger.log(
@@ -346,15 +362,16 @@ export async function connectWithSSETransport(
  */
 export async function showAuthRequiredMessage(
   serverName: string,
+  hostServices: Readonly<McpHostServices> = defaultHostServices,
 ): Promise<never> {
-  const storedToken = await getStoredOAuthToken(serverName);
+  const storedToken = await getStoredOAuthToken(serverName, hostServices);
   let message: string;
   if (storedToken) {
     message = `Stored OAuth token for server '${serverName}' was rejected. Please re-authenticate using: /mcp auth ${serverName}`;
   } else {
     message = `Server '${serverName}' requires OAuth authentication. Please authenticate using: /mcp auth ${serverName}`;
   }
-  emitHostFeedback('error', message);
+  deliverHostFeedback(hostServices.emitFeedback, 'error', message);
   throw new UnauthorizedError(message);
 }
 
@@ -453,12 +470,13 @@ export async function connectWithOAuthToken(
   mcpClient: Client,
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
+  hostServices: Readonly<McpHostServices> = defaultHostServices,
 ): Promise<Client> {
   debugLogger.log(
     `Retrying connection to '${mcpServerName}' with OAuth token...`,
   );
 
-  const tokenStorage = new MCPOAuthTokenStorage();
+  const tokenStorage = createMcpOAuthTokenStorage(hostServices);
   const credentials = await tokenStorage.getCredentials(mcpServerName);
   if (!credentials) {
     debugLogger.error(
@@ -469,9 +487,13 @@ export async function connectWithOAuthToken(
     );
   }
 
-  const accessToken = await MCPOAuthProvider.getValidToken(mcpServerName, {
-    clientId: credentials.clientId,
-  });
+  const accessToken = await MCPOAuthProvider.getValidToken(
+    mcpServerName,
+    {
+      clientId: credentials.clientId,
+    },
+    hostServices,
+  );
   if (!accessToken) {
     debugLogger.error(
       `Failed to get OAuth token for server '${mcpServerName}'`,

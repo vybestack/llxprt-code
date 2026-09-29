@@ -30,6 +30,7 @@ import type { PolicyDecision } from '@vybestack/llxprt-code-core';
 // @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-004 @pseudocode agents-projection.md line 95
 import type { McpOAuthStatus } from '@vybestack/llxprt-code-core';
 import type { EditorCallbacks } from './config-types.js';
+import type { FileSystemService } from '@vybestack/llxprt-code-core/services/fileSystemService.js';
 import type { SessionSchedulerOwner } from './agentRuntimeAssembly.js';
 import type {
   AgentClientContract,
@@ -936,6 +937,7 @@ export interface AgentSkillsControl {
  */
 export interface AgentWorkspaceControl {
   getDirectories(): readonly string[];
+  getFileSystemService(): FileSystemService;
   addDirectory(path: string): void;
   getWorkingDirectory(): string;
   getProjectRoot(): string;

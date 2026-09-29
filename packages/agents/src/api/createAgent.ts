@@ -12,6 +12,7 @@
  */
 
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { openBrowserSecurely } from '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js';
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
@@ -51,7 +52,7 @@ import {
   wrapRegistryWithConfirmation,
   injectConfirmationForcingPolicy,
 } from './confirmationForcing.js';
-import { wireMcpHostServices } from './mcpHostWiring.js';
+import { agentMcpFeedback } from './mcpHostWiring.js';
 import {
   rebuildLoop,
   createLoopHolder,
@@ -72,6 +73,7 @@ import {
   type SessionSchedulerOwner,
 } from './agentRuntimeAssembly.js';
 import { PLACEHOLDER_MODEL, UNCONFIGURED_PROVIDER } from './constants.js';
+import type { WorkspaceToolAuthority } from './workspace-tool-authority.js';
 import {
   resolveAuthType,
   resolveAgentRuntimeId,
@@ -91,7 +93,6 @@ import {
  * @pseudocode createAgent.md steps 10-176
  */
 export async function createAgent(rawConfig: AgentConfig): Promise<Agent> {
-  wireMcpHostServices();
   // @pseudocode createAgent.md steps 10-13: validate config, resolve auth, runtimeId
   // STRICT-SCHEMA HAZARD: destructure callbacks off the input BEFORE parsing —
   // AgentConfigSchema is .strict() and rejects function-typed fields.
@@ -147,7 +148,7 @@ export async function createAgent(rawConfig: AgentConfig): Promise<Agent> {
   // after activation). The prepare callback registers providers (including
   // FakeProvider under LLXPRT_FAKE_RESPONSES) onto the isolated manager.
   const runtime = assembleOwnedRuntime(config, runtimeId, messageBus, factory);
-  const { handle, tasks, schedulerOwner } = runtime;
+  const { handle, tasks, schedulerOwner, workspaceAuthority } = runtime;
 
   // Set once finalizeAgent succeeds: a failure AFTER that point (e.g.
   // session-start) prefers the facade's own idempotent dispose() as the
@@ -162,6 +163,7 @@ export async function createAgent(rawConfig: AgentConfig): Promise<Agent> {
       messageBus,
       tasks,
       schedulerOwner,
+      workspaceAuthority,
     );
 
     // @pseudocode createAgent.md steps 105-166: finalize agent (runtime state,
@@ -219,6 +221,7 @@ async function activateOwnedSession(
   messageBus: MessageBus,
   tasks: SessionTaskServices,
   schedulerOwner: SessionSchedulerOwner,
+  workspaceAuthority: WorkspaceToolAuthority,
 ): ReturnType<typeof applyActivation> {
   await handle.activate();
   const result = await applyActivation(
@@ -228,6 +231,7 @@ async function activateOwnedSession(
     messageBus,
     tasks,
     schedulerOwner,
+    workspaceAuthority,
   );
   bindSessionSurfaceUpdates(
     config,
@@ -248,6 +252,7 @@ function assembleOwnedRuntime(
   handle: IsolatedRuntimeContextHandle;
   tasks: SessionTaskServices;
   schedulerOwner: SessionSchedulerOwner;
+  workspaceAuthority: WorkspaceToolAuthority;
 } {
   const handle = createIsolatedRuntimeContext({
     runtimeId,
@@ -256,13 +261,14 @@ function assembleOwnedRuntime(
     prepare: (ctx) =>
       registerProvidersOntoManager(ctx.providerManager, ctx, ctx.config),
   });
-  const { tasks, schedulerOwner } = createAgentSessionExecution(
-    config,
-    handle.settingsService,
-    schedulerFactory,
-  );
+  const { tasks, schedulerOwner, workspaceAuthority } =
+    createAgentSessionExecution(
+      config,
+      handle.settingsService,
+      schedulerFactory,
+    );
   config.setTaskToolRegistration(createTaskRegistration(schedulerOwner));
-  return { handle, tasks, schedulerOwner };
+  return { handle, tasks, schedulerOwner, workspaceAuthority };
 }
 
 /**
@@ -522,7 +528,11 @@ function initializeConfigAndMessageBus(
   parsed: { readonly harness?: AgentConfig['harness'] },
   forceConfirmations: boolean,
 ): { readonly config: Config; readonly approvalBus: SessionApprovalBus } {
-  const config = new Config(params);
+  const config = new Config({
+    ...params,
+    mcpFeedback: agentMcpFeedback,
+    mcpBrowser: openBrowserSecurely,
+  });
   // Ensure the process working directory is a valid workspace root so that
   // fixture paths using {{CWD}} resolve within the workspace boundary. The
   // harness.includeProcessCwd gate (default true) lets production callers
@@ -590,6 +600,7 @@ async function applyActivation(
   messageBus: MessageBus,
   tasks: SessionTaskServices,
   schedulerOwner: SessionSchedulerOwner,
+  workspaceAuthority: WorkspaceToolAuthority,
 ): Promise<{ readonly provider: string; readonly model: string }> {
   const intent: ProviderActivationIntent = parsed.activation ?? {
     provider: parsed.provider,
@@ -628,6 +639,8 @@ async function applyActivation(
     tasks.manager,
     schedulerOwner,
     tasks.shellJobs,
+    workspaceAuthority,
+    tasks,
   );
   // Explicit intents report the activated provider; legacy inputs retain their
   // public provider label when fake responses or an unconfigured start are used.

@@ -17,7 +17,11 @@
 import * as crypto from 'node:crypto';
 import { BaseTokenStorage } from './base-token-storage.js';
 import type { OAuthCredentials } from './types.js';
-import { emitHostFeedback } from '../../host/hostServices.js';
+import {
+  defaultFeedbackSink,
+  deliverHostFeedback,
+  type HostFeedbackSink,
+} from '../../host/hostServices.js';
 import { createDefaultKeyringAdapter } from '@vybestack/llxprt-code-storage/storage/secure-store.js';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry/utils/debugLogger.js';
 
@@ -89,6 +93,13 @@ export function resetKeytarLoader(): void {
 }
 
 export class KeychainTokenStorage extends BaseTokenStorage {
+  constructor(
+    serviceName: string,
+    private readonly feedback: HostFeedbackSink = defaultFeedbackSink,
+  ) {
+    super(serviceName);
+  }
+
   private keychainAvailable: boolean | null = null;
   private keytarModule: Keytar | null = null;
   private keytarLoadAttempted = false;
@@ -211,7 +222,12 @@ export class KeychainTokenStorage extends BaseTokenStorage {
         .filter((cred) => !cred.account.startsWith(KEYCHAIN_TEST_PREFIX))
         .map((cred: { account: string }) => cred.account);
     } catch (error) {
-      emitHostFeedback('error', 'Failed to list servers from keychain', error);
+      deliverHostFeedback(
+        this.feedback,
+        'error',
+        'Failed to list servers from keychain',
+        error,
+      );
       return [];
     }
   }
@@ -238,7 +254,8 @@ export class KeychainTokenStorage extends BaseTokenStorage {
           this.validateCredentials(data);
           result.set(cred.account, data);
         } catch (error) {
-          emitHostFeedback(
+          deliverHostFeedback(
+            this.feedback,
             'error',
             `Failed to parse credentials for ${cred.account}`,
             error,
@@ -246,7 +263,8 @@ export class KeychainTokenStorage extends BaseTokenStorage {
         }
       }
     } catch (error) {
-      emitHostFeedback(
+      deliverHostFeedback(
+        this.feedback,
         'error',
         'Failed to get all credentials from keychain',
         error,

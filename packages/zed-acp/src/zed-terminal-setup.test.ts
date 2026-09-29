@@ -17,6 +17,10 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { MessageBusType } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
 import type { SkillDefinition } from '@vybestack/llxprt-code-core/skills/skillLoader.js';
+import {
+  SimpleExtensionLoader,
+  type LlxprtExtension,
+} from '@vybestack/llxprt-code-core';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
@@ -80,12 +84,25 @@ function configFixture(outputLimit?: number): Config {
   } as unknown as Config;
 }
 
+function skillExtension(skill: SkillDefinition): LlxprtExtension {
+  return {
+    name: skill.name,
+    version: '1.0',
+    path: `/skills/${skill.name}`,
+    isActive: true,
+    contextFiles: [],
+    skills: [skill],
+  };
+}
+
 describe('Zed per-session activation tool ownership', () => {
   it('refreshes a Zed session skill before its first model turn', async () => {
+    const loader = new SimpleExtensionLoader([]);
     const built = await buildFactoryLessConfig(
       'plain-text.jsonl',
       {},
       { skillsSupport: true },
+      { enableExtensionReloading: true, extensionLoader: loader },
     );
     const sessionConfig = createSessionScopedConfig(
       built.config,
@@ -104,12 +121,7 @@ describe('Zed per-session activation tool ownership', () => {
         body: 'Cold skill instructions',
         source: 'project',
       };
-      const skillManager = built.config.getSkillManager();
-      vi.spyOn(skillManager, 'discoverSkills').mockResolvedValue(undefined);
-      vi.spyOn(skillManager, 'getSkills').mockReturnValue([skill]);
-      vi.spyOn(skillManager, 'getSkill').mockReturnValue(skill);
-
-      await built.config.refreshSkills(agent.getMessageBus());
+      await loader.loadExtension(skillExtension(skill));
 
       expect(
         agent.getToolRegistry().getTool('activate_skill')?.schema.description,
@@ -121,10 +133,23 @@ describe('Zed per-session activation tool ownership', () => {
   });
 
   it('reloads B and C on the cold surviving same-label Zed session after its peer closes', async () => {
+    const skill = (name: string): SkillDefinition => ({
+      name,
+      description: `Use ${name} on the surviving session`,
+      location: `/skills/${name}/SKILL.md`,
+      body: `${name} instructions`,
+      source: 'extension',
+    });
+    const skillA = skill('skill-a');
+    const skillB = skill('skill-b');
+    const skillC = skill('skill-c');
+    const extensionA = skillExtension(skillA);
+    const loader = new SimpleExtensionLoader([extensionA]);
     const built = await buildFactoryLessConfig(
       'plain-text.jsonl',
       {},
       { skillsSupport: true },
+      { enableExtensionReloading: true, extensionLoader: loader },
     );
     let firstAgent: Agent | undefined;
     let secondAgent: Agent | undefined;
@@ -142,27 +167,7 @@ describe('Zed per-session activation tool ownership', () => {
       built.config.getTargetDir(),
       () => secondRegistry,
     );
-    const skill = (name: string): SkillDefinition => ({
-      name,
-      description: `Use ${name} on the surviving session`,
-      location: `/skills/${name}/SKILL.md`,
-      body: `${name} instructions`,
-      source: 'project',
-    });
-    const skillA = skill('skill-a');
-    const skillB = skill('skill-b');
-    const skillC = skill('skill-c');
-    let availableSkills = [skillA];
     try {
-      const skillManager = built.config.getSkillManager();
-      vi.spyOn(skillManager, 'discoverSkills').mockResolvedValue(undefined);
-      vi.spyOn(skillManager, 'getSkills').mockImplementation(
-        () => availableSkills,
-      );
-      vi.spyOn(skillManager, 'getSkill').mockImplementation(
-        (name) =>
-          availableSkills.find((candidate) => candidate.name === name) ?? null,
-      );
       firstAgent = await fromConfig({
         config: firstConfig,
         sessionId: 'shared-zed-skill-label',
@@ -210,8 +215,9 @@ describe('Zed per-session activation tool ownership', () => {
         policyUpdates.push(update);
       });
 
-      availableSkills = [skillB, skillC];
-      await built.config.refreshSkills(firstAgent.getMessageBus());
+      await loader.unloadExtension(extensionA);
+      await loader.loadExtension(skillExtension(skillB));
+      await loader.loadExtension(skillExtension(skillC));
       expect(secondAgent.agentClient.isInitialized()).toBe(false);
       const refreshedTool = secondAgent
         .getToolRegistry()

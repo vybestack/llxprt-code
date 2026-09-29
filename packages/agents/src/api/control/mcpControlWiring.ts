@@ -107,6 +107,7 @@ export function buildMcpControlDeps(
         oauthConfig,
         mcpServerUrl,
         undefined,
+        config.getMcpHostServices(),
       );
     },
     // @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-003 @pseudocode agents-projection.md lines 86-88

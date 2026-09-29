@@ -84,6 +84,7 @@ export class ZedPathResolver {
   constructor(
     private readonly config: Config,
     private readonly debug: DebugFn,
+    private readonly sessionFileSystem?: FileSystemService,
   ) {}
 
   async resolvePrompt(
@@ -481,7 +482,8 @@ export class ZedPathResolver {
     processedQueryParts: ResolverPart[],
   ): Promise<void> {
     const targetDir = this.config.getTargetDir();
-    const fileSystemService = this.config.getFileSystemService();
+    const fileSystemService =
+      this.sessionFileSystem ?? this.config.getFileSystemService();
     processedQueryParts.push({
       type: 'text',
       text: '\n--- Content from referenced files ---',

@@ -37,7 +37,8 @@ import {
 } from './configTypes.js';
 import { DEFAULT_FILE_FILTERING_OPTIONS } from './constants.js';
 import { UNCONFIGURED_PROVIDER } from './models.js';
-import { parseLspConfig, type LspState } from './lspIntegration.js';
+import { parseLspConfig } from './lspIntegration.js';
+import type { LspConfig } from '@vybestack/llxprt-code-ide-integration';
 import { WorkspaceContext } from '../utils/workspaceContext.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { FileExclusions } from '../utils/ignorePatterns.js';
@@ -108,8 +109,8 @@ export interface ConfigConstructorTarget {
   allowedMcpServers: string[];
   blockedMcpServers: Array<{ name: string; extensionName: string }>;
 
-  // LSP
-  _lspState: LspState;
+  // LSP settings (no live service lifetime on Config)
+  lspConfig: LspConfig | undefined;
 
   // Memory and context
   userMemory: string;
@@ -275,7 +276,7 @@ function applyToolGovernance(
   config.mcpServers = params.mcpServers;
   config.allowedMcpServers = params.allowedMcpServers ?? [];
   config.blockedMcpServers = params.blockedMcpServers ?? [];
-  config._lspState.lspConfig = parseLspConfig(params.lsp);
+  config.lspConfig = parseLspConfig(params.lsp);
 }
 
 function applyTelemetryAndMemory(

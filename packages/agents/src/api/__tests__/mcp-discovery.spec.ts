@@ -25,12 +25,18 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
+import { randomUUID } from 'node:crypto';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   buildAgent,
   drain,
   isDoneEvent,
   isErrorEvent,
   isNoticeEvent,
+  isToolCallEvent,
+  isToolResultEvent,
+  scriptToolCallFixture,
 } from './helpers/agentHarness.js';
 import {
   createFakeMcpRegistry,
@@ -40,10 +46,11 @@ import {
   type FakeMcpServerHandle,
 } from './helpers/fakeMcpServer.js';
 import { McpControl } from '../control/mcpControl.js';
+import { fromConfig } from '../fromConfig.js';
+import { buildFactoryLessConfig } from './helpers/buildCliStyleConfig.js';
 import {
   createFakeMcpDeps,
   fakeServerConfig,
-  setServerStatus,
   MCPServerStatus,
   MCPDiscoveryState,
 } from './helpers/fakeMcpManager.js';
@@ -269,6 +276,44 @@ describe('MCP discovery @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-013 @re
     }
   });
 
+  it('keeps a healthy MCP server usable when a sibling fails discovery, emits an advisory notice, and completes the turn', async () => {
+    const healthy = registry.registerServer(
+      'healthy',
+      stdioFakeConfig('fake-healthy-mcp'),
+    );
+    healthy.setTools([{ name: 'search', enabled: true }]);
+    const broken = registry.registerServer(
+      'broken',
+      stdioFakeConfig('fake-broken-mcp'),
+    );
+    broken.failDiscovery('connection refused');
+
+    const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
+      mcpServers: { healthy: healthy.config, broken: broken.config },
+    });
+    try {
+      const events = await drain(agent.stream('continue despite failure'));
+      expect(events.filter(isErrorEvent)).toHaveLength(0);
+      expect(events.filter(isDoneEvent)).toHaveLength(1);
+      expect(events.filter(isDoneEvent)[0].reason).toBe('stop');
+      expect(events.filter(isNoticeEvent)).toStrictEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            message: expect.stringContaining('broken'),
+          }),
+        ]),
+      );
+      expect(agent.listTools()).toStrictEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ server: 'healthy', enabled: true }),
+        ]),
+      );
+      expect(agent.mcp.discoveryState()).toBe('partial');
+    } finally {
+      await cleanup();
+    }
+  });
+
   it('T20 mcp.status/listTools remain callable while discovery is pending (non-blocking) @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-013', async () => {
     const server: FakeMcpServerHandle = registry.registerServer(
       'pending-tools',
@@ -290,6 +335,136 @@ describe('MCP discovery @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-013 @re
       expect(Array.isArray(tools)).toBe(true);
     } finally {
       await cleanup();
+    }
+  });
+
+  it('keeps a borrowed Config and its healthy MCP tool usable after a sibling Agent is disposed', async () => {
+    const healthy = registry.registerServer(
+      'shared-healthy',
+      stdioFakeConfig('fake-shared-healthy'),
+    );
+    healthy.setTools([{ name: 'search', enabled: true }]);
+    const broken = registry.registerServer(
+      'shared-broken',
+      stdioFakeConfig('fake-shared-broken'),
+    );
+    broken.failDiscovery('connection refused');
+    const fixtureDir = resolve(
+      import.meta.dir,
+      '../../../../../tmp/issue2615-mcp-lifetime',
+    );
+    mkdirSync(fixtureDir, { recursive: true });
+    const fixture = resolve(fixtureDir, `shared-mcp-${randomUUID()}.jsonl`);
+    writeFileSync(
+      fixture,
+      scriptToolCallFixture('mcp__shared-healthy__search', {}),
+    );
+    const built = await buildFactoryLessConfig(
+      fixture,
+      {},
+      {
+        mcpServers: {
+          'shared-healthy': healthy.config,
+          'shared-broken': broken.config,
+        },
+      },
+    );
+    const first = await fromConfig({ config: built.config });
+    try {
+      const second = await fromConfig({ config: built.config });
+      try {
+        await first.dispose();
+        const events = await drain(second.stream('continue with healthy tool'));
+        expect(events.filter(isErrorEvent)).toHaveLength(0);
+        expect(events.filter(isDoneEvent)).toStrictEqual([
+          expect.objectContaining({ reason: 'stop' }),
+        ]);
+        expect(events.filter(isNoticeEvent)).toStrictEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              message: expect.stringContaining('shared-broken'),
+            }),
+          ]),
+        );
+        expect(second.listTools()).toStrictEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              server: 'shared-healthy',
+              enabled: true,
+            }),
+          ]),
+        );
+        const calls = events.filter(isToolCallEvent);
+        expect(calls).toStrictEqual([
+          expect.objectContaining({
+            call: expect.objectContaining({
+              name: 'mcp__shared-healthy__search',
+            }),
+          }),
+        ]);
+        const results = events.filter(isToolResultEvent);
+        expect(results).toStrictEqual([
+          expect.objectContaining({
+            result: expect.objectContaining({
+              id: calls[0].call.id,
+              name: 'mcp__shared-healthy__search',
+              isError: false,
+              output: [
+                {
+                  type: 'tool_response',
+                  toolName: 'mcp__shared-healthy__search',
+                  callId: calls[0].call.id,
+                  result: { output: '' },
+                },
+              ],
+            }),
+          }),
+        ]);
+        expect(
+          built.config
+            .getMcpClientManager()
+            ?.getClient('shared-healthy')
+            ?.getStatus(),
+        ).toBe(MCPServerStatus.CONNECTED);
+      } finally {
+        await second.dispose();
+      }
+    } finally {
+      await first.dispose();
+      await built.cleanup();
+      rmSync(fixture);
+    }
+  });
+
+  it('keeps the same-named MCP server connected on an independent Agent after the other host stops', async () => {
+    const server = registry.registerServer(
+      'shared-name',
+      stdioFakeConfig('fake-shared-mcp'),
+    );
+    server.setTools([{ name: 'search', enabled: true }]);
+    const first = await buildAgent('plain-text.jsonl', {
+      mcpServers: { 'shared-name': server.config },
+    });
+    try {
+      const second = await buildAgent('plain-text.jsonl', {
+        mcpServers: { 'shared-name': server.config },
+      });
+      try {
+        expect((await first.agent.chat('first')).finishReason).toBe('stop');
+        expect((await second.agent.chat('second')).finishReason).toBe('stop');
+        expect(second.agent.mcp.discoveryState()).toBe('ready');
+        await first.agent.dispose();
+        expect(second.agent.mcp.listServers()[0].status).toBe('connected');
+        expect(second.agent.listTools()).toStrictEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ server: 'shared-name', enabled: true }),
+          ]),
+        );
+      } finally {
+        await second.cleanup();
+      }
+    } finally {
+      await first.cleanup();
     }
   });
 });
@@ -327,6 +502,24 @@ describe('McpControl projection @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ
     expect(control.discoveryState()).toBe('ready');
   });
 
+  it('projects independent statuses for same-named servers on separate hosts', () => {
+    const first = createFakeMcpDeps({
+      servers: { shared: fakeServerConfig() },
+    });
+    const second = createFakeMcpDeps({
+      servers: { shared: fakeServerConfig() },
+    });
+    first.manager.setServerStatus('shared', MCPServerStatus.DISCONNECTED);
+    second.manager.setServerStatus('shared', MCPServerStatus.CONNECTED);
+
+    expect(new McpControl(first.deps).listServers()[0].status).toBe(
+      'disconnected',
+    );
+    expect(new McpControl(second.deps).listServers()[0].status).toBe(
+      'connected',
+    );
+  });
+
   it('discoveryState() COMPLETED with a failure → failed when no server is connected, partial when one is @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ-013', () => {
     const { deps, manager } = createFakeMcpDeps({
       servers: { alpha: fakeServerConfig(), beta: fakeServerConfig() },
@@ -335,13 +528,13 @@ describe('McpControl projection @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ
     manager.setDiscoveryState(MCPDiscoveryState.COMPLETED);
 
     // a failure with NO connected server → 'failed'
-    setServerStatus('alpha', MCPServerStatus.DISCONNECTED);
-    setServerStatus('beta', MCPServerStatus.DISCONNECTED);
+    manager.setServerStatus('alpha', MCPServerStatus.DISCONNECTED);
+    manager.setServerStatus('beta', MCPServerStatus.DISCONNECTED);
     manager.setFailure('alpha', 'connection refused');
     expect(control.discoveryState()).toBe('failed');
 
     // the SAME failure alongside a connected sibling → 'partial'
-    setServerStatus('beta', MCPServerStatus.CONNECTED);
+    manager.setServerStatus('beta', MCPServerStatus.CONNECTED);
     expect(control.discoveryState()).toBe('partial');
   });
 
@@ -357,10 +550,10 @@ describe('McpControl projection @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ
     const control = new McpControl(deps);
     manager.setDiscoveryState(MCPDiscoveryState.COMPLETED);
 
-    setServerStatus('conn', MCPServerStatus.CONNECTED);
-    setServerStatus('connecting', MCPServerStatus.CONNECTING);
-    setServerStatus('down', MCPServerStatus.DISCONNECTED);
-    setServerStatus('broken', MCPServerStatus.CONNECTED);
+    manager.setServerStatus('conn', MCPServerStatus.CONNECTED);
+    manager.setServerStatus('connecting', MCPServerStatus.CONNECTING);
+    manager.setServerStatus('down', MCPServerStatus.DISCONNECTED);
+    manager.setServerStatus('broken', MCPServerStatus.CONNECTED);
     manager.setFailure('broken', 'boom');
 
     const servers = control.listServers();
@@ -386,8 +579,8 @@ describe('McpControl projection @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ
     });
     const control = new McpControl(deps);
     manager.setDiscoveryState(MCPDiscoveryState.COMPLETED);
-    setServerStatus('withtools', MCPServerStatus.CONNECTED);
-    setServerStatus('empty', MCPServerStatus.CONNECTED);
+    manager.setServerStatus('withtools', MCPServerStatus.CONNECTED);
+    manager.setServerStatus('empty', MCPServerStatus.CONNECTED);
 
     const servers = control.listServers();
     const withtools = servers.find((s) => s.name === 'withtools');
@@ -440,7 +633,7 @@ describe('McpControl projection @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ
     const control = new McpControl(deps);
     manager.setDiscoveryState(MCPDiscoveryState.COMPLETED);
     manager.clearFailures();
-    setServerStatus('only', MCPServerStatus.CONNECTED);
+    manager.setServerStatus('only', MCPServerStatus.CONNECTED);
 
     const status = control.status();
     expect(status.discoveryState).toBe('ready');

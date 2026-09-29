@@ -14,6 +14,8 @@ import {
   type SandboxConfig,
   type PolicyEngineConfig,
   type MCPServerConfig,
+  coreEvents,
+  openBrowserSecurely,
 } from '@vybestack/llxprt-code-core';
 import { registerActivateSkillTool } from '@vybestack/llxprt-code-agents';
 import { getEnableHooks, getEnableHooksUI } from './settingsSchema.js';
@@ -26,6 +28,10 @@ import type { ContextResolutionResult } from './interactiveContext.js';
 import type { ProviderModelResult } from './providerModelResolver.js';
 import { firstNonEmptyString } from '../utils/coalesce.js';
 import { createGitHubBrokerClient } from './githubBrokerClient.js';
+import type { HostFeedbackSink } from '@vybestack/llxprt-code-mcp/host/hostServices.js';
+
+const cliMcpFeedback: HostFeedbackSink = (...args) =>
+  coreEvents.emitFeedback(...args);
 
 // ─── DTOs ───────────────────────────────────────────────────────────────────
 
@@ -305,6 +311,8 @@ function buildFeatureArgs(
     enablePromptCompletion:
       profileSettingsWithTools.enablePromptCompletion ?? false,
     eventEmitter: appEvents,
+    mcpFeedback: cliMcpFeedback,
+    mcpBrowser: openBrowserSecurely,
     continueSession:
       argv.continue === '' || argv.continue === true
         ? true

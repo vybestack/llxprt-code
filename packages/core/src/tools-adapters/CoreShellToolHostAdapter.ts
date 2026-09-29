@@ -44,6 +44,10 @@ export class CoreShellToolHostAdapter implements IShellToolHost {
     private readonly config: Config,
     private readonly getShellJobs: () => ShellJobPort | undefined = () =>
       undefined,
+    private readonly workspace?: {
+      getDirectories(): string[];
+      isPathWithinWorkspace(path: string): boolean;
+    },
   ) {}
 
   getTargetDir(): string {
@@ -54,7 +58,8 @@ export class CoreShellToolHostAdapter implements IShellToolHost {
     getDirectories(): string[];
     isPathWithinWorkspace(resolvedPath: string): boolean;
   } {
-    const workspaceContext = this.config.getWorkspaceContext();
+    const workspaceContext =
+      this.workspace ?? this.config.getWorkspaceContext();
     return {
       getDirectories: () => [...workspaceContext.getDirectories()],
       isPathWithinWorkspace: (resolvedPath: string) =>
@@ -196,7 +201,7 @@ export class CoreShellToolHostAdapter implements IShellToolHost {
     label: string,
   ): string | null {
     return validatePathWithinWorkspace(
-      this.config.getWorkspaceContext(),
+      this.workspace ?? this.config.getWorkspaceContext(),
       dirPath,
       label,
     );

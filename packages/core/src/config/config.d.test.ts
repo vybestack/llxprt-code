@@ -11,7 +11,7 @@ import { Config, ApprovalMode } from './config.js';
 import type { HookDefinition } from '../hooks/types.js';
 import { HookType, HookEventName } from '../hooks/types.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
+import { MCPDiscoveryState, MCPServerStatus } from '@vybestack/llxprt-code-mcp';
 import {
   getTestRuntimeMessageBus,
   initializeTestConfig,
@@ -65,6 +65,7 @@ const mockCoreEvents = hoistedConfigMocks.coreEvents;
 
 const mcpInstances: Array<{
   getMcpServers: ReturnType<typeof vi.fn>;
+  getClient: ReturnType<typeof vi.fn>;
   getDiscoveryFailures: ReturnType<typeof vi.fn>;
   getDiscoveryState: ReturnType<typeof vi.fn>;
   whenDiscoverySettled: ReturnType<typeof vi.fn>;
@@ -87,6 +88,7 @@ void vi.mock('@vybestack/llxprt-code-mcp', () => {
     McpClientManager: vi.fn().mockImplementation(() => {
       const mock = {
         getMcpServers: vi.fn().mockReturnValue({}),
+        getClient: vi.fn(),
         getDiscoveryFailures: vi
           .fn()
           .mockReturnValue(new Map<string, string>()),
@@ -875,12 +877,16 @@ describe('Config MCP runtime capabilities (agents boundary)', () => {
       const manager = mcpInstances[0];
       const failures = new Map<string, string>([['srv', 'boom']]);
       manager.getMcpServers.mockReturnValue({ srv: { command: 'run' } });
+      manager.getClient.mockReturnValue({
+        getStatus: () => MCPServerStatus.CONNECTED,
+      });
       manager.getDiscoveryFailures.mockReturnValue(failures);
       manager.getDiscoveryState.mockReturnValue(MCPDiscoveryState.COMPLETED);
 
       const status = config.getMcpRuntimeStatus();
       expect(status).toStrictEqual({
         servers: { srv: { command: 'run' } },
+        serverStatuses: new Map([['srv', MCPServerStatus.CONNECTED]]),
         discoveryFailures: failures,
         discoveryState: MCPDiscoveryState.COMPLETED,
       });

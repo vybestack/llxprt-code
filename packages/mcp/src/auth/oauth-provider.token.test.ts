@@ -42,10 +42,6 @@ import {
   mockTokenResponse,
   setupOAuthTestSpies,
 } from './__tests__/oauthProviderTestSetup.js';
-import { registerMcpHostServices } from '../host/hostServices.js';
-
-// Exercises the real host seam instead of mocking a module (#3305).
-registerMcpHostServices({ openBrowser: mockOpenBrowserSecurely });
 
 function createIssuerMetadataDiscovery(
   matchingIssuer: string,
@@ -53,6 +49,14 @@ function createIssuerMetadataDiscovery(
 ): typeof OAuthUtils.discoverAuthorizationServerMetadata {
   return async (issuer) => (issuer === matchingIssuer ? metadata : null);
 }
+
+const authenticateWithBrowser = (
+  ...args: Parameters<typeof MCPOAuthProvider.authenticate>
+): ReturnType<typeof MCPOAuthProvider.authenticate> =>
+  MCPOAuthProvider.authenticate(args[0], args[1], args[2], args[3], {
+    emitFeedback: () => {},
+    openBrowser: mockOpenBrowserSecurely,
+  });
 
 describe('MCPOAuthProvider', () => {
   let saveTokenSpy: ReturnType<typeof vi.spyOn>;
@@ -324,7 +328,7 @@ describe('MCPOAuthProvider', () => {
         }),
       );
 
-      await MCPOAuthProvider.authenticate('test-server', mockConfig);
+      await authenticateWithBrowser('test-server', mockConfig);
 
       expect(crypto.randomBytes).toHaveBeenCalledWith(64); // code verifier
       expect(crypto.randomBytes).toHaveBeenCalledWith(16); // state
@@ -375,7 +379,7 @@ describe('MCPOAuthProvider', () => {
         }),
       );
 
-      await MCPOAuthProvider.authenticate(
+      await authenticateWithBrowser(
         'test-server',
         mockConfig,
         'https://auth.example.com',
@@ -438,7 +442,7 @@ describe('MCPOAuthProvider', () => {
         authorizationUrl: 'https://auth.example.com/authorize?audience=1234',
       };
 
-      await MCPOAuthProvider.authenticate('test-server', configWithParamsInUrl);
+      await authenticateWithBrowser('test-server', configWithParamsInUrl);
 
       const url = new URL(capturedUrl!);
       expect(url.searchParams.get('audience')).toBe('1234');
@@ -493,7 +497,7 @@ describe('MCPOAuthProvider', () => {
         authorizationUrl: 'https://auth.example.com/authorize#login',
       };
 
-      await MCPOAuthProvider.authenticate('test-server', configWithFragment);
+      await authenticateWithBrowser('test-server', configWithFragment);
 
       const url = new URL(capturedUrl!);
       expect(url.searchParams.get('client_id')).toBe('test-client-id');
@@ -580,7 +584,7 @@ describe('MCPOAuthProvider', () => {
         }),
       );
 
-      await MCPOAuthProvider.authenticate(
+      await authenticateWithBrowser(
         'test-server',
         configWithUserScopes,
         'https://api.example.com',
@@ -670,7 +674,7 @@ describe('MCPOAuthProvider', () => {
         }),
       );
 
-      await MCPOAuthProvider.authenticate(
+      await authenticateWithBrowser(
         'test-server',
         configWithoutScopes,
         'https://api.example.com',

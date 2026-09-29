@@ -22,6 +22,10 @@ import type { SkillDefinition } from '../skills/skillManager.js';
 import type { BucketFailureReason } from '../runtime/contracts/BucketFailureReason.js';
 import type { MCPOAuthConfig } from '@vybestack/llxprt-code-mcp';
 import type { MCPServerConfig } from '@vybestack/llxprt-code-mcp/config/mcpServerConfig.js';
+import type {
+  HostBrowserLauncher,
+  HostFeedbackSink,
+} from '@vybestack/llxprt-code-mcp/host/hostServices.js';
 import type { OutputFormat } from '../utils/output-format.js';
 import type { FileFilteringOptions } from './constants.js';
 import type { EventEmitter } from 'node:events';
@@ -377,6 +381,8 @@ export interface ConfigParameters {
   toolCallCommand?: string;
   mcpServerCommand?: string;
   mcpServers?: Record<string, MCPServerConfig>;
+  mcpFeedback?: HostFeedbackSink;
+  mcpBrowser?: HostBrowserLauncher;
   lsp?: LspConfig | boolean;
   userMemory?: string;
   llxprtMdFileCount?: number;

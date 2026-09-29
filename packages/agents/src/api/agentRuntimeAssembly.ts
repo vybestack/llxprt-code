@@ -19,7 +19,6 @@
 import * as path from 'node:path';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { createToolRegistry } from '@vybestack/llxprt-code-core/config/toolRegistryFactory.js';
-import { CoreSkillServiceAdapter } from '@vybestack/llxprt-code-core';
 import type { AnyDeclarativeTool } from '@vybestack/llxprt-code-tools';
 import { ActivateMcpServerTool } from '@vybestack/llxprt-code-tools';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
@@ -58,6 +57,12 @@ import { TaskTool } from '../tools/task.js';
 import { registerActivateSkillTool } from '../skill-tool-registrar.js';
 import { syncActivateMcpServerTool } from '@vybestack/llxprt-code-core/config/mcp-lazy-tool-sync.js';
 import type { Agent } from './agent.js';
+import { WorkspaceToolAuthority } from './workspace-tool-authority.js';
+import { WorkspaceSkillSurface } from './workspace-skill-surface.js';
+import { WorkspaceLspLifetime } from './workspace-lsp-lifetime.js';
+import { WorkspaceFileAccess } from './workspace-file-access.js';
+import { WorkspaceContext } from '@vybestack/llxprt-code-core/utils/workspaceContext.js';
+import type { FileSystemService } from '@vybestack/llxprt-code-core/services/fileSystemService.js';
 
 const DEFAULT_MODEL = 'gemini-1.5-flash';
 const DEFAULT_DEBUG_MODE = false;
@@ -196,6 +201,21 @@ export function createSessionSchedulerOwner(
   };
 }
 
+export function createAgentSchedulerControl(
+  owner: SessionSchedulerOwner,
+  assertAccepting: () => void,
+): Agent['scheduler'] {
+  return {
+    acquire: async (agent, purpose, callbacks, options, dependencies) => {
+      assertAccepting();
+      return owner.acquire(agent, purpose, callbacks, options, dependencies);
+    },
+    release: (agent, purpose, handle) => owner.release(agent, purpose, handle),
+    setInteractiveSubagentSchedulerFactory: (factory) =>
+      owner.setInteractiveSubagentSchedulerFactory(factory),
+  };
+}
+
 export async function createSessionAgentClient(
   config: Config,
   registry: ToolRegistry,
@@ -238,33 +258,45 @@ export async function bindSessionTaskTools(
   taskManager: AsyncTaskManager,
   schedulerOwner: SessionSchedulerOwner,
   shellJobs: ShellJobManager,
+  workspaceAuthority: WorkspaceToolAuthority,
+  tasks: SessionTaskServices,
 ): Promise<void> {
   const source = config.getToolRegistry();
+  const lsp = tasks.workspaceLsp;
   const { registry } = await createToolRegistry(
     config,
     config,
     messageBus,
     () => taskManager,
     () => shellJobs,
+    lsp,
+    tasks.workspaceFiles,
   );
+  tasks.bindLspRegistry(registry, messageBus);
   const task = registry.getTool(TaskTool.Name);
   if (task instanceof TaskTool) {
     task.bindSessionExecution(schedulerOwner, messageBus, () => taskManager);
   }
   schedulerOwner.setToolRegistry(registry, source);
-  publishSessionSkills(config, registry, messageBus);
+  if (config.isSkillsSupportEnabled()) {
+    await tasks.workspaceSkills.refresh();
+    publishSessionSkills(config, registry, messageBus, tasks.workspaceSkills);
+  }
   await refreshSessionMcpTools(source, registry, messageBus);
+  await lsp.start();
+  workspaceAuthority.publish(registry);
 }
 
 function publishSessionSkills(
   config: Config,
   registry: ToolRegistry,
   messageBus: MessageBus,
+  workspaceSkills: WorkspaceSkillSurface,
 ): void {
   if (!config.isSkillsSupportEnabled()) return;
   (config.getPostSkillDiscoveryToolRegistrar() ?? registerActivateSkillTool)(
     registry,
-    new CoreSkillServiceAdapter(config),
+    workspaceSkills.service(),
     messageBus,
   );
 }
@@ -289,7 +321,11 @@ export async function refreshSessionMcpTools(
   const discovered = source.getAllTools().filter(isMcpTool);
   const names = new Set(discovered.map((tool) => tool.name));
   for (const tool of registry.getAllTools()) {
-    if (isMcpTool(tool) && !names.has(tool.name)) {
+    if (
+      isMcpTool(tool) &&
+      tool.serverName !== 'lsp-navigation' &&
+      !names.has(tool.name)
+    ) {
       registry.unregisterTool(tool.name);
     }
   }
@@ -317,11 +353,13 @@ export function bindSessionSurfaceUpdates(
 ): void {
   const source = config.getToolRegistry();
   tasks.registerCleanup(
-    config.subscribeSkillSurface(async () => {
+    tasks.workspaceSkills.subscribe(async () => {
+      if (!config.isSkillsSupportEnabled()) return;
       publishSessionSkills(
         config,
         schedulerOwner.getToolRegistry(),
         messageBus,
+        tasks.workspaceSkills,
       );
       if (client.isInitialized()) {
         await client.setTools();
@@ -335,8 +373,10 @@ export function bindSessionSurfaceUpdates(
         schedulerOwner.getToolRegistry(),
         messageBus,
       );
-      await client.setTools();
-      await client.updateSystemInstruction();
+      if (client.isInitialized()) {
+        await client.setTools();
+        await client.updateSystemInstruction();
+      }
     }),
   );
 }
@@ -349,7 +389,11 @@ export function createShellJobManager(
 
 export class SessionTaskServices {
   readonly manager: AsyncTaskManager;
+  readonly workspaceFiles: WorkspaceFileAccess | undefined;
   readonly shellJobs: ShellJobManager;
+  readonly workspaceLsp: WorkspaceLspLifetime;
+  private lspRegistry: ToolRegistry | undefined;
+  private lspMessageBus: MessageBus | undefined;
   private readonly reminder: AsyncTaskReminderService;
   private autoTrigger: AsyncTaskAutoTrigger | undefined;
   private readonly subscriptions = new Set<() => void>();
@@ -358,7 +402,27 @@ export class SessionTaskServices {
   private disposal: Promise<void> | undefined;
   private readonly onSettingsChanged: (event: { key: string }) => void;
 
-  constructor(private readonly settings: SettingsService) {
+  constructor(
+    private readonly settings: SettingsService,
+    private readonly skills?: WorkspaceSkillSurface,
+    lspConfig?: Pick<
+      Config,
+      'getLspConfig' | 'getTargetDir' | 'isTrustedFolder'
+    >,
+    workspaceFiles?: WorkspaceFileAccess,
+  ) {
+    this.workspaceFiles = workspaceFiles;
+    this.workspaceLsp = new WorkspaceLspLifetime(lspConfig?.getLspConfig(), {
+      getTargetDir: () => lspConfig?.getTargetDir() ?? process.cwd(),
+      getToolRegistry: () => {
+        if (this.lspRegistry === undefined) {
+          throw new Error('Workspace LSP registry is not bound');
+        }
+        return this.lspRegistry;
+      },
+      isTrustedFolder: () => lspConfig?.isTrustedFolder() ?? false,
+      getNavigationMessageBus: () => this.lspMessageBus,
+    });
     this.manager = new AsyncTaskManager(resolveMaxAsyncTasks(settings));
     this.shellJobs = createShellJobManager(resolveShellJobSettings(settings));
     this.reminder = new AsyncTaskReminderService(this.manager);
@@ -377,6 +441,21 @@ export class SessionTaskServices {
       }
     };
     this.settings.on('change', this.onSettingsChanged);
+  }
+
+  get workspaceSkills(): WorkspaceSkillSurface {
+    if (this.skills === undefined) {
+      throw new Error('Workspace skills were not bound to this session');
+    }
+    return this.skills;
+  }
+
+  bindLspRegistry(registry: ToolRegistry, messageBus: MessageBus): void {
+    if (this.lspRegistry !== undefined) {
+      throw new Error('Workspace LSP registry was already bound');
+    }
+    this.lspRegistry = registry;
+    this.lspMessageBus = messageBus;
   }
 
   registerCleanup(cleanup: () => void): void {
@@ -453,6 +532,7 @@ export class SessionTaskServices {
     };
     start(() => this.manager.close());
     start(() => this.shellJobs.dispose());
+    start(() => this.workspaceLsp.dispose());
     for (const unsubscribe of [...this.subscriptions]) {
       try {
         unsubscribe();
@@ -490,8 +570,64 @@ export class SessionTaskServices {
 
 export function createSessionTaskServices(
   settings: SettingsService,
+  skills?: WorkspaceSkillSurface,
+  lspConfig?: Pick<Config, 'getLspConfig' | 'getTargetDir' | 'isTrustedFolder'>,
+  workspaceFiles?: WorkspaceFileAccess,
 ): SessionTaskServices {
-  return new SessionTaskServices(settings);
+  return new SessionTaskServices(settings, skills, lspConfig, workspaceFiles);
+}
+
+interface SharedSkillOwner {
+  readonly surface: WorkspaceSkillSurface;
+  readonly context: WorkspaceContext;
+  readonly release: () => void;
+}
+
+const workspaceSkillOwners = new WeakMap<
+  Config,
+  {
+    surface: WorkspaceSkillSurface;
+    context: WorkspaceContext;
+    borrowers: number;
+    unsubscribe: () => void;
+  }
+>();
+
+function borrowWorkspaceSkills(config: Config): SharedSkillOwner {
+  let owner = workspaceSkillOwners.get(config);
+  if (owner === undefined) {
+    const context = config.getWorkspaceContext();
+    const surface = new WorkspaceSkillSurface(
+      config.storage,
+      () => config.getExtensions(),
+      () => [...config.getDisabledSkillNames()],
+      () => config.isAdminSkillsEnabled(),
+      context,
+    );
+    owner = {
+      surface,
+      context,
+      borrowers: 0,
+      unsubscribe: config.subscribeSkillSurface(() => surface.refresh(true)),
+    };
+    workspaceSkillOwners.set(config, owner);
+  }
+  const shared = owner;
+  shared.borrowers++;
+  let released = false;
+  return {
+    surface: shared.surface,
+    context: shared.context,
+    release: () => {
+      if (released) return;
+      released = true;
+      shared.borrowers--;
+      if (shared.borrowers === 0) {
+        shared.unsubscribe();
+        workspaceSkillOwners.delete(config);
+      }
+    },
+  };
 }
 
 /** Assemble the two per-agent services before activation or adoption. */
@@ -499,12 +635,44 @@ export function createAgentSessionExecution(
   config: Config,
   settings: SettingsService,
   factory?: ToolSchedulerFactory,
+  workspace?: {
+    readonly context?: WorkspaceContext;
+    readonly fileSystem: FileSystemService;
+  },
 ): {
   tasks: SessionTaskServices;
   schedulerOwner: SessionSchedulerOwner;
+  workspaceAuthority: WorkspaceToolAuthority;
 } {
+  const skills = borrowWorkspaceSkills(config);
+  let context = workspace?.context ?? skills.context;
+  if (
+    workspace !== undefined &&
+    workspace.context === undefined &&
+    config.getTargetDir() !== skills.context.getDirectories()[0]
+  ) {
+    context = new WorkspaceContext(config.getTargetDir(), [
+      ...config.getConfiguredIncludeDirectories(),
+    ]);
+  }
+  const workspaceFiles =
+    workspace === undefined
+      ? undefined
+      : new WorkspaceFileAccess(context, workspace.fileSystem, () =>
+          config.isTrustedFolder(),
+        );
+  const tasks = createSessionTaskServices(
+    settings,
+    skills.surface,
+    config,
+    workspaceFiles,
+  );
+  tasks.registerCleanup(skills.release);
   return {
-    tasks: createSessionTaskServices(settings),
+    tasks,
+    workspaceAuthority: new WorkspaceToolAuthority(() =>
+      config.isTrustedFolder(),
+    ),
     schedulerOwner: createSessionSchedulerOwner(
       config,
       factory ?? ((options) => new CoreToolScheduler(options)),
@@ -653,10 +821,6 @@ async function cleanupPartialBootstrap(
   await attemptBootstrapCleanup(() => handle.cleanup(), failures);
   if (ownedConfig !== undefined) {
     await attemptBootstrapCleanup(() => ownedConfig.dispose(), failures);
-    await attemptBootstrapCleanup(
-      () => ownedConfig.shutdownLspService(),
-      failures,
-    );
   }
 }
 

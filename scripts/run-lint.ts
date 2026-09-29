@@ -385,6 +385,10 @@ async function runLint(): Promise<void> {
     cwd: repoRoot,
     stdio: 'inherit',
   });
+  await execa(process.execPath, ['run', 'lint:workspace-config-boundary'], {
+    cwd: repoRoot,
+    stdio: 'inherit',
+  });
 }
 
 /** Maps a signal name to its POSIX number, or undefined when unknown. */

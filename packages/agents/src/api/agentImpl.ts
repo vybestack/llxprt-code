@@ -76,6 +76,7 @@ import type { SessionControlDeps } from './control/sessionControl.js';
 import { ProfilesControl } from './control/profilesControl.js';
 import { buildNewControls } from './control/newControls.js';
 import type { NewControls } from './control/newControls.js';
+import { createAgentSchedulerControl } from './agentRuntimeAssembly.js';
 import type {
   SessionTaskServices,
   SessionSchedulerOwner,
@@ -354,29 +355,22 @@ export class AgentImpl implements Agent {
     this.mcp = this.buildMcpControl();
     this.ide = this.buildIdeControl();
     this.session = this.buildSessionControl();
-    bindClientRecording(this.agentClient, () =>
-      this.session.getActiveRecording(),
-    );
+    const recording = this.session.getActiveRecording.bind(this.session);
+    bindClientRecording(this.agentClient, recording);
     this.hooks = createSessionHookControl(deps, this.session);
     this.policy = this.buildPolicyControl();
     this.tasks = this.buildTasksControl();
-    this.scheduler = {
-      acquire: async (owner, purpose, callbacks, options, dependencies) => {
-        this.lifecycle.assertAccepting();
-        return deps.schedulerOwner.acquire(
-          owner,
-          purpose,
-          callbacks,
-          options,
-          dependencies,
-        );
-      },
-      release: (owner, purpose, handle) =>
-        deps.schedulerOwner.release(owner, purpose, handle),
-      setInteractiveSubagentSchedulerFactory: (factory) =>
-        deps.schedulerOwner.setInteractiveSubagentSchedulerFactory(factory),
-    };
-    this.newControls = buildNewControls(this.deps.config, this.deps.messageBus);
+    this.scheduler = createAgentSchedulerControl(deps.schedulerOwner, () =>
+      this.lifecycle.assertAccepting(),
+    );
+    const skills = deps.taskServices.workspaceSkills;
+    this.newControls = buildNewControls(
+      deps.config,
+      deps.messageBus,
+      skills,
+      deps.taskServices.workspaceLsp,
+      deps.taskServices.workspaceFiles,
+    );
     this.memory = this.newControls.memory;
     this.skills = this.newControls.skills;
     this.workspace = this.newControls.workspace;
@@ -411,7 +405,10 @@ export class AgentImpl implements Agent {
       ],
       cancelAndJoinOwnedWork: [
         () => this.closeActiveStreams(),
-        () => this.deps.taskServices.dispose(),
+        async () => {
+          await this.deps.taskServices.dispose();
+          this.ownership.lspShutDown = true;
+        },
         () => this.deps.schedulerOwner.cancelAll(),
       ],
       flushRecording: [() => this.session.dispose()],

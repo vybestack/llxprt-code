@@ -11,8 +11,11 @@ import type {
   SkillInfo,
   SkillManager as ToolsSkillManager,
 } from '@vybestack/llxprt-code-tools';
-import type { Config } from '../config/config.js';
+import type { Storage } from '@vybestack/llxprt-code-settings';
+import type { LlxprtExtension } from '../config/configTypes.js';
 import type { SkillDefinition } from '../skills/skillLoader.js';
+import type { SkillManager } from '../skills/skillManager.js';
+import type { WorkspaceContext } from '../utils/workspaceContext.js';
 
 function toSkillInfo(skill: SkillDefinition): SkillInfo {
   return {
@@ -23,26 +26,30 @@ function toSkillInfo(skill: SkillDefinition): SkillInfo {
 }
 
 export class CoreSkillServiceAdapter implements ISkillService {
-  constructor(private readonly config: Config) {}
+  constructor(
+    private readonly skillManager: SkillManager,
+    private readonly storage: Storage,
+    private readonly extensions: () => LlxprtExtension[],
+    private readonly workspace: Pick<WorkspaceContext, 'addDirectory'>,
+  ) {}
 
   async activateSkill(name: string): Promise<SkillActivationResult> {
-    const skillManager = this.config.getSkillManager();
-    const skill = skillManager.getSkill(name);
+    const skill = this.skillManager.getSkill(name);
 
     if (!skill) {
       return {
         success: false,
-        error: `Skill "${name}" not found. Available skills are: ${skillManager
+        error: `Skill "${name}" not found. Available skills are: ${this.skillManager
           .getSkills()
           .map((s) => s.name)
           .join(', ')}`,
-        availableSkills: skillManager.getSkills().map((s) => s.name),
+        availableSkills: this.skillManager.getSkills().map((s) => s.name),
       };
     }
 
-    skillManager.activateSkill(name);
+    this.skillManager.activateSkill(name);
     const resourceDirectory = path.dirname(skill.location);
-    this.config.getWorkspaceContext().addDirectory(resourceDirectory);
+    this.workspace.addDirectory(resourceDirectory);
 
     return {
       success: true,
@@ -54,27 +61,23 @@ export class CoreSkillServiceAdapter implements ISkillService {
   }
 
   getSkillManager(): ToolsSkillManager {
-    const skillManager = this.config.getSkillManager();
     return {
       discoverSkills: async () => {
-        await skillManager.discoverSkills(
-          this.config.storage,
-          this.config.getExtensions(),
-        );
+        await this.skillManager.discoverSkills(this.storage, this.extensions());
       },
       getSkills: () => this.listSkills(),
       getSkill: (name: string) => this.getSkill(name),
       setDisabledSkills: (names: string[]) =>
-        skillManager.setDisabledSkills(names),
+        this.skillManager.setDisabledSkills(names),
     };
   }
 
   listSkills(): SkillInfo[] {
-    return this.config.getSkillManager().getSkills().map(toSkillInfo);
+    return this.skillManager.getSkills().map(toSkillInfo);
   }
 
   getSkill(name: string): SkillInfo | null {
-    const skill = this.config.getSkillManager().getSkill(name);
+    const skill = this.skillManager.getSkill(name);
     return skill ? toSkillInfo(skill) : null;
   }
 }

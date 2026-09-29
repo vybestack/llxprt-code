@@ -30,6 +30,11 @@
       "bun": "./src/config/config.ts",
       "import": "./dist/src/config/config.js"
     },
+    "./config/lspIntegration.js": {
+      "types": "./dist/src/config/lspIntegration.d.ts",
+      "bun": "./src/config/lspIntegration.ts",
+      "import": "./dist/src/config/lspIntegration.js"
+    },
     "./config/configBaseCore.js": {
       "bun": "./src/config/configBaseCore.ts",
       "import": "./dist/src/config/configBaseCore.js"

@@ -14,8 +14,6 @@ import { createToolRegistry as _createToolRegistry } from './toolRegistryFactory
 import { reconcileTaskToolRegistration as _reconcileTaskToolRegistration } from './toolRegistryFactory.js';
 import type { AgentClientContract } from '../core/clientContract.js';
 import { TELEMETRY_OUTFILE_BOUND_DEFAULTS } from './configConstructor.js';
-import { shutdownLsp } from './lspIntegration.js';
-import type { LspServiceClient } from '@vybestack/llxprt-code-ide-integration';
 import type { LspConfig } from '@vybestack/llxprt-code-ide-integration';
 import {
   normalizeStreamingValue,
@@ -228,27 +226,13 @@ export abstract class ConfigBase extends ConfigBaseCore {
   }
 
   /**
-   * Get LSP service client if available.
-   * @plan PLAN-20250212-LSP.P33
-   * @requirement REQ-DIAG-010, REQ-CFG-010, REQ-CFG-015, REQ-CFG-020
-   * @returns LspServiceClient instance or undefined if not initialized or disabled
-   */
-  getLspServiceClient(): LspServiceClient | undefined {
-    return this._lspState.lspServiceClient;
-  }
-
-  /**
    * Get LSP configuration.
    * @plan PLAN-20250212-LSP.P33
    * @requirement REQ-DIAG-010, REQ-CFG-010, REQ-CFG-015, REQ-CFG-020
    * @returns LspConfig or undefined (undefined means LSP disabled)
    */
   getLspConfig(): LspConfig | undefined {
-    return this._lspState.lspConfig;
-  }
-
-  async shutdownLspService(): Promise<void> {
-    await shutdownLsp(this._lspState, this.toolRegistry);
+    return this.lspConfig;
   }
 
   // ---- Ephemeral settings ----

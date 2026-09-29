@@ -15,6 +15,7 @@ import {
 import { debugLogger, DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type * as acp from '@agentclientprotocol/sdk';
 import { type Agent, type AgentEvent } from '@vybestack/llxprt-code-agents';
+import type { FileSystemService } from '@vybestack/llxprt-code-storage';
 import { randomUUID } from 'crypto';
 import {
   buildAvailableModes,
@@ -119,6 +120,7 @@ export class ZedAgent {
       const {
         agent,
         config: sessionConfig,
+        fileSystem,
         terminals,
       } = await buildZedSessionAgent(
         this.config,
@@ -140,6 +142,7 @@ export class ZedAgent {
           agent,
           sessionConfig,
           terminals,
+          fileSystem,
         );
       } catch (error) {
         await agent.dispose().catch(() => undefined);
@@ -187,6 +190,7 @@ export class ZedAgent {
     agent: Agent,
     config: Config,
     terminals: TerminalManager | null,
+    fileSystem: FileSystemService,
   ) {
     return buildZedSession(
       agent,
@@ -198,6 +202,7 @@ export class ZedAgent {
           this.connection,
           this.supportsConfigOptions(),
           terminals,
+          fileSystem,
         ),
       (error) => this.logger.debug(() => `Session cleanup failed: ${error}`),
     );
@@ -309,6 +314,7 @@ export class ZedAgent {
     const {
       agent,
       config: sessionConfig,
+      fileSystem,
       terminals,
     } = await buildZedSessionAgent(
       this.config,
@@ -332,6 +338,7 @@ export class ZedAgent {
         this.connection,
         this.supportsConfigOptions(),
         terminals,
+        fileSystem,
       );
       return { session, history };
     } catch (error) {
@@ -405,10 +412,13 @@ export class Session {
     private readonly connection: acp.AgentSideConnection,
     configOptionsEnabled = false,
     terminals: TerminalManager | null = null,
+    sessionFileSystem?: FileSystemService,
   ) {
     this.terminals = terminals;
-    this.pathResolver = new ZedPathResolver(this.config, (msg) =>
-      this.debug(msg),
+    this.pathResolver = new ZedPathResolver(
+      this.config,
+      (msg) => this.debug(msg),
+      sessionFileSystem,
     );
     const recordedTitle = this.agent.session
       .getActiveRecording()

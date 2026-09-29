@@ -98,11 +98,6 @@ export async function releaseAgentOwnedResources(
 
   if (ownership.configOwnership !== 'caller') {
     await captureFailure(errors, () => input.config.dispose());
-    await captureFailure(errors, async () => {
-      await input.config.shutdownLspService();
-      ownership.lspShutDown = true;
-    });
-
     ownership.extensionsDisposed = true;
   }
 

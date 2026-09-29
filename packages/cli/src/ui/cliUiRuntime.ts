@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { McpHostServices } from '@vybestack/llxprt-code-mcp/host/hostServices.js';
 
 import type {
   AccessibilitySettings,
@@ -43,19 +44,16 @@ import type {
   MCPDiscoveryState,
 } from '@vybestack/llxprt-code-mcp';
 import type { SettingsService, Storage } from '@vybestack/llxprt-code-settings';
-import type {
-  LspConfig,
-  LspServiceClient,
-} from '@vybestack/llxprt-code-ide-integration';
+import type { LspConfig } from '@vybestack/llxprt-code-ide-integration';
+import type { Agent, AgentLspControl } from '@vybestack/llxprt-code-agents';
 import type { GitHubBrokerClient } from '@vybestack/llxprt-code-tools';
 import type { EventEmitter } from 'node:events';
 import { AppEvent, appEvents, type AppEvents } from '../utils/events.js';
 import type { PerfSnapshotCapability } from './commands/perfCommand.js';
-import type { Agent } from '@vybestack/llxprt-code-agents';
 
 type SchedulerAgent = Pick<
   Agent,
-  'agentClient' | 'scheduler' | 'getMessageBus'
+  'agentClient' | 'scheduler' | 'getMessageBus' | 'lsp'
 >;
 
 export interface RefreshMemoryResult {
@@ -231,7 +229,6 @@ export interface IdeState {
   setIdeClientConnected(): void;
   setIdeClientDisconnected(): void;
   getLspConfig(): LspConfig | undefined;
-  getLspServiceClient(): LspServiceClient | undefined;
 }
 
 /**
@@ -243,6 +240,7 @@ export interface HookSkillState {
   getDisabledHooks(): string[];
   setDisabledHooks(hooks: string[]): void;
   isSkillsSupportEnabled(): boolean;
+  isAdminSkillsEnabled(): boolean;
   getEnableHooksUI(): boolean;
   reloadSkills(): Promise<void>;
   getSkillManager(): SkillManager;
@@ -256,6 +254,7 @@ interface HookSkillSource extends Omit<HookSkillState, 'reloadSkills'> {
  * MCP read-model for MCP server, client, prompt, and resource consumers.
  */
 export interface McpState {
+  getMcpHostServices?(): Readonly<McpHostServices>;
   getMcpServers(): Record<string, MCPServerConfig> | undefined;
   getMcpServerCommand(): string | undefined;
   getMcpClientManager(): UiMcpClientManager | undefined;
@@ -458,7 +457,7 @@ export interface StreamRuntime {
   shell: ShellState;
   files: FileWorkspaceState;
   memory: MemoryState;
-  ide: IdeState;
+  ide: IdeState & { readonly lsp: AgentLspControl };
   hooks: HookSkillState;
   mcp: McpState;
   settings: SettingsTelemetryState;
@@ -621,7 +620,10 @@ function buildMemoryRuntime(source: StreamRuntimeBareSource): MemoryState {
   };
 }
 
-function buildIdeRuntime(source: StreamRuntimeBareSource): IdeState {
+function buildIdeRuntime(
+  source: StreamRuntimeBareSource,
+  agent: SchedulerAgent,
+): IdeState & { readonly lsp: AgentLspControl } {
   return {
     getIdeClient: () => source.getIdeClient(),
     getIdeMode: () => source.getIdeMode(),
@@ -629,7 +631,7 @@ function buildIdeRuntime(source: StreamRuntimeBareSource): IdeState {
     setIdeClientConnected: () => source.setIdeClientConnected(),
     setIdeClientDisconnected: () => source.setIdeClientDisconnected(),
     getLspConfig: () => source.getLspConfig(),
-    getLspServiceClient: () => source.getLspServiceClient(),
+    lsp: agent.lsp,
   };
 }
 
@@ -643,6 +645,7 @@ function buildHooksRuntime(
     getDisabledHooks: () => source.getDisabledHooks(),
     setDisabledHooks: (hooks) => source.setDisabledHooks(hooks),
     isSkillsSupportEnabled: () => source.isSkillsSupportEnabled(),
+    isAdminSkillsEnabled: () => source.isAdminSkillsEnabled(),
     getEnableHooksUI: () => source.getEnableHooksUI(),
     reloadSkills: () => source.reloadSkills(agent.getMessageBus()),
     getSkillManager: () => source.getSkillManager(),
@@ -650,7 +653,11 @@ function buildHooksRuntime(
 }
 
 function buildMcpRuntime(source: StreamRuntimeBareSource): McpState {
+  const getMcpHostServices = source.getMcpHostServices;
   return {
+    ...(getMcpHostServices !== undefined
+      ? { getMcpHostServices: () => getMcpHostServices.call(source) }
+      : {}),
     getMcpServers: () => source.getMcpServers(),
     getMcpServerCommand: () => source.getMcpServerCommand(),
     getMcpClientManager: () => source.getMcpClientManager(),
@@ -727,7 +734,7 @@ function buildStreamRuntimeFromSource(
     shell: buildShellRuntime(source),
     files: buildFilesRuntime(source),
     memory: buildMemoryRuntime(source),
-    ide: buildIdeRuntime(source),
+    ide: buildIdeRuntime(source, agent),
     hooks: buildHooksRuntime(source, agent),
     mcp: buildMcpRuntime(source),
     settings: buildSettingsRuntime(source),
@@ -850,6 +857,7 @@ export function buildSlashCommandRuntime(
  * auth commands actually need.
  */
 export interface McpCommandRuntime {
+  getMcpHostServices?(): Readonly<McpHostServices>;
   getMcpServers(): Record<string, MCPServerConfig> | undefined;
   getBlockedMcpServers():
     | Array<{ name: string; extensionName: string }>

@@ -41,8 +41,8 @@ import {
   type SessionSchedulerOwner,
   cleanupFailedRuntimeBootstrap,
 } from './agentRuntimeAssembly.js';
-import { wireMcpHostServices } from './mcpHostWiring.js';
 import { registerActivateSkillTool } from '../skill-tool-registrar.js';
+import type { WorkspaceToolAuthority } from './workspace-tool-authority.js';
 
 /**
  * Adopts an existing caller-supplied Config and returns a ready Agent.
@@ -67,7 +67,6 @@ import { registerActivateSkillTool } from '../skill-tool-registrar.js';
  * @pseudocode lines 10-48
  */
 export async function fromConfig(options: FromConfigOptions): Promise<Agent> {
-  wireMcpHostServices();
   // @pseudocode lines 11-13: validate presence + the small validatable portion.
   // The FromConfigOptions type marks config as required, but at runtime callers
   // may omit it (T1d); read through a generic presence check so the lint
@@ -99,10 +98,15 @@ export async function fromConfig(options: FromConfigOptions): Promise<Agent> {
 
   // @pseudocode lines 20-28: adopt the runtime context (NOT a second manager).
   const handle = adoptRuntimeContext(config, runtimeId, messageBus);
-  const { tasks: taskServices, schedulerOwner } = createAgentSessionExecution(
+  const {
+    tasks: taskServices,
+    schedulerOwner,
+    workspaceAuthority: authority,
+  } = createAgentSessionExecution(
     config,
     handle.settingsService,
     options.toolSchedulerFactory,
+    options.workspace,
   );
   let sessionClient: AgentClientContract | undefined;
 
@@ -113,6 +117,7 @@ export async function fromConfig(options: FromConfigOptions): Promise<Agent> {
       messageBus,
       taskServices,
       schedulerOwner,
+      authority,
     );
 
     // @plan:PLAN-20270104-ISSUE2374.P03 @requirement:REQ-001
@@ -125,17 +130,12 @@ export async function fromConfig(options: FromConfigOptions): Promise<Agent> {
       .getTokenizerFactory()
       ?.prepareTokenizer?.(parsed.provider, parsed.model);
     const resolvedAuth = { baseUrl: undefined };
-    sessionClient = await createSessionAgentClient(
+    sessionClient = await createAdoptedSessionClient(
       config,
-      schedulerOwner.getToolRegistry(),
-      createAgentRuntimeStateFromConfig(config, { runtimeId }),
-    );
-    bindSessionSurfaceUpdates(
-      config,
+      runtimeId,
       messageBus,
       taskServices,
       schedulerOwner,
-      sessionClient,
     );
 
     // @pseudocode lines 37-48: SHARED finalize (CRIT-4: single finalize path).
@@ -172,6 +172,32 @@ export async function fromConfig(options: FromConfigOptions): Promise<Agent> {
     });
   }
 }
+async function createAdoptedSessionClient(
+  config: Config,
+  runtimeId: string,
+  messageBus: MessageBus,
+  taskServices: SessionTaskServices,
+  schedulerOwner: SessionSchedulerOwner,
+): Promise<AgentClientContract> {
+  const client = await createSessionAgentClient(
+    config,
+    schedulerOwner.getToolRegistry(),
+    createAgentRuntimeStateFromConfig(config, { runtimeId }),
+  );
+  try {
+    bindSessionSurfaceUpdates(
+      config,
+      messageBus,
+      taskServices,
+      schedulerOwner,
+      client,
+    );
+    return client;
+  } catch (error) {
+    await client.dispose();
+    throw error;
+  }
+}
 
 function adoptRuntimeContext(
   config: Config,
@@ -193,9 +219,9 @@ async function initializeAdoptedConfig(
   messageBus: MessageBus,
   taskServices: SessionTaskServices,
   schedulerOwner: SessionSchedulerOwner,
+  workspaceAuthority: WorkspaceToolAuthority,
 ): Promise<void> {
-  const hadRegistrar = Boolean(config.getPostSkillDiscoveryToolRegistrar());
-  if (!hadRegistrar) {
+  if (!config.getPostSkillDiscoveryToolRegistrar()) {
     config.setPostSkillDiscoveryToolRegistrar(registerActivateSkillTool);
   }
   await config.ensureInitialized({
@@ -203,11 +229,6 @@ async function initializeAdoptedConfig(
     taskManager: taskServices.manager,
     shellJobs: taskServices.shellJobs,
   });
-  if (!hadRegistrar) {
-    await config
-      .getSkillManager()
-      .discoverSkills(config.storage, config.getExtensions());
-  }
   await config.refreshMemory();
   await bindSessionTaskTools(
     config,
@@ -215,6 +236,8 @@ async function initializeAdoptedConfig(
     taskServices.manager,
     schedulerOwner,
     taskServices.shellJobs,
+    workspaceAuthority,
+    taskServices,
   );
 }
 

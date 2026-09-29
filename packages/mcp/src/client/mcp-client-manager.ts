@@ -23,8 +23,10 @@ import {
 } from '@vybestack/llxprt-code-tools/utils/errors.js';
 import type { EventEmitter } from 'node:events';
 import {
-  emitHostFeedback,
+  defaultHostServices,
+  deliverHostFeedback,
   MCP_CLIENT_UPDATE_EVENT,
+  type McpHostServices,
 } from '../host/hostServices.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry/utils/debugLogger.js';
@@ -100,6 +102,7 @@ export class McpClientManager {
     private readonly cliConfig: McpHostConfig,
     private readonly eventEmitter?: EventEmitter,
     private readonly settleTimeoutMs: number = DEFAULT_MCP_DISCOVERY_SETTLE_TIMEOUT_MS,
+    private readonly hostServices: Readonly<McpHostServices> = defaultHostServices,
   ) {}
   private readonly refreshContext = (): Promise<void> =>
     this.cliConfig.refreshMcpContext();
@@ -263,7 +266,8 @@ export class McpClientManager {
           this.pendingDiscoveryServers.delete(name);
           if (!isAuthenticationError(error)) {
             this.discoveryFailures.set(name, getErrorMessage(error));
-            emitHostFeedback(
+            deliverHostFeedback(
+              this.hostServices.emitFeedback,
               'error',
               `Error during discovery for server '${name}': ${getErrorMessage(
                 error,
@@ -304,6 +308,7 @@ export class McpClientManager {
         debugLogger.log('Tools changed, updating agent context...');
         await this.scheduleMcpContextRefresh();
       },
+      this.hostServices,
     );
     this.clientDisconnections.activate(client);
     return client;
@@ -422,7 +427,8 @@ export class McpClientManager {
       // when the settle timeout fired is not left with a bogus "Timed out".
       if (!isAuthenticationError(error)) {
         this.discoveryFailures.set(name, getErrorMessage(error));
-        emitHostFeedback(
+        deliverHostFeedback(
+          this.hostServices.emitFeedback,
           'error',
           `Error during discovery for server '${name}': ${getErrorMessage(
             error,

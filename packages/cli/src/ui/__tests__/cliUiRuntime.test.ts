@@ -62,6 +62,37 @@ describe('buildSlashCommandRuntime', () => {
     expect(runtime.getAgentClient()).not.toBe(configClient);
   });
 
+  it('routes MCP host feedback through the owning slash-command runtime', () => {
+    const noticesA: string[] = [];
+    const noticesB: string[] = [];
+    const first = buildSlashCommandRuntime(
+      createProxySource({
+        getMcpHostServices: () => ({
+          emitFeedback: (_severity: string, message: string) =>
+            noticesA.push(message),
+          openBrowser: async () => {},
+        }),
+      }),
+      createRuntimeAgent(),
+    );
+    const second = buildSlashCommandRuntime(
+      createProxySource({
+        getMcpHostServices: () => ({
+          emitFeedback: (_severity: string, message: string) =>
+            noticesB.push(message),
+          openBrowser: async () => {},
+        }),
+      }),
+      createRuntimeAgent(),
+    );
+
+    first.getMcpHostServices?.().emitFeedback('info', 'first');
+    second.getMcpHostServices?.().emitFeedback('info', 'second');
+
+    expect(noticesA).toStrictEqual(['first']);
+    expect(noticesB).toStrictEqual(['second']);
+  });
+
   it('breaks identity: the adapter is not the same object as the source', () => {
     const source = createProxySource();
     const adapter = buildSlashCommandRuntime(source, createRuntimeAgent());

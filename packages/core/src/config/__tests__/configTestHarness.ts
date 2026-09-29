@@ -94,6 +94,8 @@ export function buildToolsMockBody(actual: unknown) {
     getTool = getToolMock;
     getFunctionDeclarations = getFunctionDeclarationsMock;
     listDeferredMcpServers = listDeferredMcpServersMock;
+    bindWorkspaceAuthority = vi.fn();
+    removeMcpToolsByServer = vi.fn();
   }
   return {
     ...(actual as object),

@@ -47,7 +47,6 @@ if (wantWarningSuppression && !process.env.NODE_NO_WARNINGS) {
   });
 }
 
-import { wireMcpHostServices } from './mcpHostWiring.js';
 import { parseArguments } from './config/cliArgParser.js';
 import { loadSettings, type LoadedSettings } from './config/settings.js';
 import {
@@ -358,7 +357,6 @@ export async function main() {
   // startup. No file I/O; resolved later, validated at observation setup.
   const capturedEnvPath = captureBootstrapEnvPath();
 
-  wireMcpHostServices();
   configureEarlyDebugLogging();
 
   await handleVersionAndHelpFlags(process.argv.slice(2));

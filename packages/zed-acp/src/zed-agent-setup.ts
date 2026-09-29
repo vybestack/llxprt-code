@@ -8,6 +8,7 @@ import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
 import type { Config } from '@vybestack/llxprt-code-core';
 import type { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import type { FileSystemService } from '@vybestack/llxprt-code-storage';
 import type * as acp from '@agentclientprotocol/sdk';
 import { AcpFileSystemService } from './fileSystemService.js';
 import {
@@ -28,6 +29,7 @@ export async function buildZedSessionAgent(
 ): Promise<{
   agent: Agent;
   config: Config;
+  fileSystem: FileSystemService;
   terminals: TerminalManager | null;
 }> {
   const baseFileSystemService = config.getFileSystemService();
@@ -49,7 +51,11 @@ export async function buildZedSessionAgent(
   );
   let agent: Agent | undefined;
   try {
-    agent = await fromConfig({ config: sessionConfig, sessionId });
+    agent = await fromConfig({
+      config: sessionConfig,
+      sessionId,
+      workspace: { fileSystem: sessionFileSystemService },
+    });
     if (capabilities?.terminal === true) {
       terminalSetup = buildZedTerminalSetup(
         sessionId,
@@ -75,6 +81,7 @@ export async function buildZedSessionAgent(
   return {
     agent,
     config: sessionConfig,
+    fileSystem: sessionFileSystemService,
     terminals: terminalSetup?.terminals ?? null,
   };
 }

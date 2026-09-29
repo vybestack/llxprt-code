@@ -8,6 +8,7 @@
  */
 
 import { automock } from '../../../test-utils/src/automock.js';
+import { waitFor } from '../../../test-utils/src/wait-for.js';
 import { vi, type Mock } from 'bun:test';
 
 const realNodeCryptoModule = { ...(await import('node:crypto')) };
@@ -35,10 +36,14 @@ import {
   mockTokenResponse,
   setupOAuthTestSpies,
 } from './__tests__/oauthProviderTestSetup.js';
-import { registerMcpHostServices } from '../host/hostServices.js';
 
-// Exercises the real host seam instead of mocking a module (#3305).
-registerMcpHostServices({ openBrowser: mockOpenBrowserSecurely });
+const authenticateWithBrowser = (
+  ...args: Parameters<typeof MCPOAuthProvider.authenticate>
+): ReturnType<typeof MCPOAuthProvider.authenticate> =>
+  MCPOAuthProvider.authenticate(args[0], args[1], args[2], args[3], {
+    emitFeedback: () => {},
+    openBrowser: mockOpenBrowserSecurely,
+  });
 
 function runOAuthTimeoutImmediately(
   callback: () => void,
@@ -64,6 +69,69 @@ describe('MCPOAuthProvider', () => {
   });
 
   describe('authenticate', () => {
+    it('keeps concurrent browser challenges on their initiating host when one settles first', async () => {
+      const callbacks: Array<(request: unknown, response: unknown) => void> =
+        [];
+      (http.createServer as Mock<typeof http.createServer>).mockImplementation(
+        (handler) => {
+          callbacks.push(
+            handler as (request: unknown, response: unknown) => void,
+          );
+          return mockHttpServer as unknown as http.Server;
+        },
+      );
+      mockHttpServer.listen.mockImplementation((_port, callback) => {
+        callback?.();
+      });
+
+      const openedA: string[] = [];
+      const openedB: string[] = [];
+      const hostA = {
+        emitFeedback: () => {},
+        openBrowser: async (url: string): Promise<void> => {
+          openedA.push(url);
+        },
+      };
+      const hostB = {
+        emitFeedback: () => {},
+        openBrowser: async (url: string): Promise<void> => {
+          openedB.push(url);
+        },
+      };
+      const first = MCPOAuthProvider.authenticate(
+        'host-a',
+        mockConfig,
+        undefined,
+        undefined,
+        hostA,
+      );
+      const second = MCPOAuthProvider.authenticate(
+        'host-b',
+        { ...mockConfig, scopes: ['host-b'] },
+        undefined,
+        undefined,
+        hostB,
+      );
+      await waitFor(() => {
+        expect(openedA).toHaveLength(1);
+        expect(openedB).toHaveLength(1);
+      });
+      const respondWithDenial = (index: number): void => {
+        const url = new URL(index === 0 ? openedA[0] : openedB[0]);
+        const request = {
+          url: `/oauth/callback?error=access_denied&state=${url.searchParams.get('state')}`,
+        };
+        callbacks[index](request, { writeHead: vi.fn(), end: vi.fn() });
+      };
+      respondWithDenial(1);
+      await expect(second).rejects.toThrow('access_denied');
+      expect(openedA).toHaveLength(1);
+      respondWithDenial(0);
+      await expect(first).rejects.toThrow('access_denied');
+      expect(openedB).toHaveLength(1);
+      expect(openedA[0]).not.toBe(openedB[0]);
+    });
+
     it('should perform complete OAuth flow with PKCE', async () => {
       // Mock HTTP server callback
       let callbackHandler: unknown;
@@ -102,10 +170,7 @@ describe('MCPOAuthProvider', () => {
         }),
       );
 
-      const result = await MCPOAuthProvider.authenticate(
-        'test-server',
-        mockConfig,
-      );
+      const result = await authenticateWithBrowser('test-server', mockConfig);
 
       expect(result).toStrictEqual({
         accessToken: 'access_token_123',
@@ -209,7 +274,7 @@ describe('MCPOAuthProvider', () => {
         }),
       );
 
-      const result = await MCPOAuthProvider.authenticate(
+      const result = await authenticateWithBrowser(
         'test-server',
         configWithoutAuth,
         'https://api.example.com',
@@ -288,7 +353,7 @@ describe('MCPOAuthProvider', () => {
         }),
       );
 
-      const result = await MCPOAuthProvider.authenticate(
+      const result = await authenticateWithBrowser(
         'test-server',
         configWithoutClient,
       );
@@ -377,7 +442,7 @@ describe('MCPOAuthProvider', () => {
         }),
       );
 
-      const result = await MCPOAuthProvider.authenticate(
+      const result = await authenticateWithBrowser(
         'test-server',
         configWithoutClient,
       );
@@ -488,7 +553,7 @@ describe('MCPOAuthProvider', () => {
         }),
       );
 
-      const result = await MCPOAuthProvider.authenticate(
+      const result = await authenticateWithBrowser(
         'test-server',
         configWithoutClientAndAuthorizationUrl,
         'https://api.example.com',
@@ -531,7 +596,7 @@ describe('MCPOAuthProvider', () => {
       });
 
       await expect(
-        MCPOAuthProvider.authenticate('test-server', mockConfig),
+        authenticateWithBrowser('test-server', mockConfig),
       ).rejects.toThrow('OAuth error: access_denied');
     });
 
@@ -562,7 +627,7 @@ describe('MCPOAuthProvider', () => {
       });
 
       await expect(
-        MCPOAuthProvider.authenticate('test-server', mockConfig),
+        authenticateWithBrowser('test-server', mockConfig),
       ).rejects.toThrow('State mismatch - possible CSRF attack');
     });
 
@@ -602,7 +667,7 @@ describe('MCPOAuthProvider', () => {
       );
 
       await expect(
-        MCPOAuthProvider.authenticate('test-server', mockConfig),
+        authenticateWithBrowser('test-server', mockConfig),
       ).rejects.toThrow('Token exchange failed: invalid_grant - Invalid grant');
     });
 
@@ -623,7 +688,7 @@ describe('MCPOAuthProvider', () => {
       ) as unknown as typeof setTimeout;
 
       await expect(
-        MCPOAuthProvider.authenticate('test-server', mockConfig),
+        authenticateWithBrowser('test-server', mockConfig),
       ).rejects.toThrow('OAuth callback timeout');
 
       global.setTimeout = originalSetTimeout;
@@ -674,7 +739,7 @@ describe('MCPOAuthProvider', () => {
         }),
       );
 
-      await MCPOAuthProvider.authenticate('test-server', configWithPort);
+      await authenticateWithBrowser('test-server', configWithPort);
 
       expect(mockHttpServer.listen).toHaveBeenCalledWith(
         12345,
@@ -722,7 +787,7 @@ describe('MCPOAuthProvider', () => {
         }),
       );
 
-      await MCPOAuthProvider.authenticate('test-server', configWithInvalidPort);
+      await authenticateWithBrowser('test-server', configWithInvalidPort);
 
       // Should be called with 0 (OS assigned) because the port was invalid
       expect(mockHttpServer.listen).toHaveBeenCalledWith(
@@ -771,7 +836,7 @@ describe('MCPOAuthProvider', () => {
         }),
       );
 
-      await MCPOAuthProvider.authenticate('test-server', configNoPort);
+      await authenticateWithBrowser('test-server', configNoPort);
 
       // Should be called with 0 (OS assigned), not 80
       expect(mockHttpServer.listen).toHaveBeenCalledWith(
