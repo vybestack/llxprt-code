@@ -101,6 +101,7 @@ describe('createTurnStore', () => {
       history: [],
       pendingHistoryItems: [],
       streamingState: StreamingState.Idle,
+      loadingState: StreamingState.Idle,
       thought: null,
       queuedSubmissions: [],
       elapsedTime: 0,
@@ -306,6 +307,19 @@ describe('createTurnStore', () => {
       commands.setPendingHistoryItems(pending);
 
       expect(store.getState().pendingHistoryItems).toBe(pending);
+    });
+
+    it('keeps display-only command progress separate from the model stream', () => {
+      const { store, commands } = createTurnStore();
+      commands.setLoadingState(StreamingState.Responding);
+      expect(store.getState().loadingState).toBe(StreamingState.Responding);
+      expect(store.getState().streamingState).toBe(StreamingState.Idle);
+      commands.setStreamingState(StreamingState.WaitingForConfirmation);
+      expect(store.getState().loadingState).toBe(StreamingState.Responding);
+      commands.setLoadingState(StreamingState.Idle);
+      expect(store.getState().streamingState).toBe(
+        StreamingState.WaitingForConfirmation,
+      );
     });
 
     it('setStreamingState writes the streaming phase', () => {

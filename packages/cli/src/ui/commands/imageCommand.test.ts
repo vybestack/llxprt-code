@@ -354,3 +354,9 @@ describe('imageCommand', () => {
     expect(infoCall).toBeDefined();
   });
 });
+
+describe('imageCommand progress', () => {
+  it('opts generation and editing into shared slash-command progress', () => {
+    expect(imageCommand.showProgress).toBe(true);
+  });
+});

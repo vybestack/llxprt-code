@@ -8,7 +8,8 @@ import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { renderHook } from '../../test-utils/render.js';
 import { act } from 'react';
-import { useLoadingIndicator } from './useLoadingIndicator.js';
+import { getLoadingState, useLoadingIndicator } from './useLoadingIndicator.js';
+import { useSlashCommandCancellation } from './useSlashCommandCancellation.js';
 import { StreamingState } from '../types.js';
 import { PHRASE_CHANGE_INTERVAL_MS } from './usePhraseCycler.js';
 import { LLXPRT_PHRASES } from '../constants/phrasesCollections.js';
@@ -21,6 +22,51 @@ describe('useLoadingIndicator', () => {
   afterEach(async () => {
     vi.useRealTimers(); // Restore real timers after each test
     await act(() => vi.runOnlyPendingTimers);
+  });
+
+  it('uses the standard elapsed timer for slash commands and stops on cancellation', async () => {
+    const { result } = renderHook(() => {
+      const commands = useSlashCommandCancellation();
+      const loadingState = getLoadingState(
+        StreamingState.Idle,
+        commands.isSlashCommandRunning,
+      );
+      return {
+        ...commands,
+        loadingState,
+        ...useLoadingIndicator(loadingState),
+      };
+    });
+    expect(result.current.loadingState).toBe(StreamingState.Idle);
+    let controller!: AbortController;
+    act(() => {
+      controller = result.current.beginSlashCommandAction(true);
+    });
+    expect(result.current.loadingState).toBe(StreamingState.Responding);
+    await act(async () => advanceTimersByTimeAsync(3000));
+    expect(result.current.elapsedTime).toBe(3);
+    act(() => {
+      result.current.cancelActiveSlashCommand();
+    });
+    expect(result.current.loadingState).toBe(StreamingState.Idle);
+    await act(async () => advanceTimersByTimeAsync(2000));
+    expect(result.current.elapsedTime).toBe(0);
+    act(() => {
+      result.current.endSlashCommandAction(controller);
+    });
+    expect(result.current.isSlashCommandRunning).toBe(false);
+  });
+
+  it('does not override model streaming or confirmation state with command progress', () => {
+    expect(getLoadingState(StreamingState.Responding, true)).toBe(
+      StreamingState.Responding,
+    );
+    expect(getLoadingState(StreamingState.WaitingForConfirmation, true)).toBe(
+      StreamingState.WaitingForConfirmation,
+    );
+    expect(getLoadingState(StreamingState.Idle, false)).toBe(
+      StreamingState.Idle,
+    );
   });
 
   it('should initialize with default values when Idle', () => {

@@ -7,6 +7,8 @@
 import { render } from 'ink-testing-library';
 import { describe, it, expect, vi } from 'bun:test';
 import { Text } from '../../../test-utils/real-ink.js';
+import { StreamingState } from '../types.js';
+import { useStreamingContext } from '../contexts/StreamingContext.js';
 
 // Unmock ink to use real Ink with ink-testing-library
 // The global mock in test-setup.ts conflicts with renderer behavior here.
@@ -72,7 +74,12 @@ void vi.mock('../components/BucketAuthConfirmation.js', () => ({
   BucketAuthConfirmation: () => null,
 }));
 void vi.mock('../components/LoadingIndicator.js', () => ({
-  LoadingIndicator: () => null,
+  LoadingIndicator: () => {
+    const state = useStreamingContext();
+    return state === StreamingState.Responding ? (
+      <Text color="white">slash-command-busy</Text>
+    ) : null;
+  },
 }));
 void vi.mock('../components/AutoAcceptIndicator.js', () => ({
   AutoAcceptIndicator: () => null,
@@ -234,11 +241,13 @@ function openStoreDialog(store: DialogStore, kind: DialogKind): void {
 interface RenderLayoutOptions {
   settings?: ReturnType<typeof createSettingsStub>;
   store?: DialogStore;
+  turnStore?: ReturnType<typeof createTurnStore>;
 }
 
 function renderDefaultAppLayout({
   settings = createSettingsStub(),
   store = createDialogStore(),
+  turnStore = createTurnStore(),
 }: RenderLayoutOptions = {}): ReturnType<typeof render> {
   const config = createConfigStub() as never;
 
@@ -276,7 +285,7 @@ function renderDefaultAppLayout({
     <SettingsProfileProvider store={createSettingsProfileStore()}>
       <VimModeProvider settings={settings as never}>
         <TerminalProvider store={terminalStore}>
-          <TurnProvider store={createTurnStore()}>
+          <TurnProvider store={turnStore}>
             <DialogProvider store={store}>{inner}</DialogProvider>
           </TurnProvider>
         </TerminalProvider>
@@ -286,6 +295,16 @@ function renderDefaultAppLayout({
 }
 
 describe('DefaultAppLayout', () => {
+  it('renders busy command progress while the model stream remains idle', () => {
+    const turnStore = createTurnStore();
+    turnStore.commands.setLoadingState(StreamingState.Responding);
+    const rendered = renderDefaultAppLayout({ turnStore });
+    expect(rendered.lastFrame()).toContain('slash-command-busy');
+    expect(rendered.lastFrame()).toContain(COMPOSER_SENTINEL);
+    expect(turnStore.store.getState().streamingState).toBe(StreamingState.Idle);
+    rendered.unmount();
+  });
+
   it('keeps the store-driven dialog table aligned with DIALOG_PRIORITY', () => {
     // useHasActiveDialog reads only the DialogStore; the drift risk is a new
     // store kind missing from this table, so guard against DIALOG_PRIORITY.
