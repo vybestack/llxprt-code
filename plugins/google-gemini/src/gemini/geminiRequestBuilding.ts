@@ -58,7 +58,7 @@ export function buildGeminiTools(
       }
       let parameters = cleanGeminiSchema(schema);
       const parametersRecord = parameters as Record<string, unknown>;
-      if (!('type' in parametersRecord)) {
+      if (!('type' in parametersRecord) && !('anyOf' in parametersRecord)) {
         parameters = { type: SchemaType.OBJECT, ...parameters };
       }
       return {
