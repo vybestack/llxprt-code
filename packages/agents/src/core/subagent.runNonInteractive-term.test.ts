@@ -118,6 +118,30 @@ import { waitForCondition } from '../test-utils/eventLoop.js';
  */
 const CONDITION_WAIT_TURNS = 200_000;
 
+async function awaitBoundedSettlement<T>(promise: Promise<T>): Promise<T> {
+  let settled = false;
+  let result!: T;
+  let rejection: unknown;
+  let rejected = false;
+  promise.then(
+    (value) => {
+      result = value;
+      settled = true;
+    },
+    (error: unknown) => {
+      rejection = error;
+      rejected = true;
+      settled = true;
+    },
+  );
+  expect(await waitForCondition(() => settled, CONDITION_WAIT_TURNS)).toBe(true);
+  if (rejected) {
+    throw rejection;
+  }
+  return result!;
+}
+
+
 describe('subagent.ts', () => {
   let mockSendMessageStream: Mock;
 
@@ -281,7 +305,7 @@ describe('subagent.ts', () => {
         resolveStream!(createMockStream(['stop'])());
         streamResolved = true;
 
-        await runPromise;
+        await awaitBoundedSettlement(runPromise);
 
         expect(scope.output.terminate_reason).toBe(
           SubagentTerminateMode.TIMEOUT,
@@ -385,7 +409,7 @@ describe('subagent.ts', () => {
 
           await advanceTimersByTimeAsync(testTimeoutMs + 1_000);
 
-          const abortError = await runRejection;
+          const abortError = await awaitBoundedSettlement(runRejection);
 
           const abortedObservation = capturedSignal?.aborted;
           return { signalObserved, scope, abortedObservation, abortError };
@@ -497,7 +521,7 @@ describe('subagent.ts', () => {
           );
           await advanceTimersByTimeAsync(100);
 
-          const abortError = await runRejection;
+          const abortError = await awaitBoundedSettlement(runRejection);
 
           const abortedObservation = capturedSignal?.aborted;
           return { signalObserved, scope, abortedObservation, abortError };
@@ -588,7 +612,7 @@ describe('subagent.ts', () => {
         ).toBe(true);
         await advanceTimersByTimeAsync(100);
 
-        await runRejection;
+        await awaitBoundedSettlement(runRejection);
         expect(scope.output.terminate_reason).toBe(
           SubagentTerminateMode.TIMEOUT,
         );
@@ -823,7 +847,7 @@ describe('subagent.ts', () => {
 
           await advanceTimersByTimeAsync(100);
 
-          const abortError = await runRejection;
+          const abortError = await awaitBoundedSettlement(runRejection);
 
           return { modelCallObserved, scope, abortError };
         } finally {
@@ -1035,7 +1059,7 @@ describe('subagent.ts', () => {
           await waitForCondition(() => settled, CONDITION_WAIT_TURNS),
         ).toBe(true);
 
-        const runError = await runRejection;
+        const runError = await awaitBoundedSettlement(runRejection);
         expect(runError).toMatchObject({ name: 'AbortError' });
       } finally {
         vi.useRealTimers();
