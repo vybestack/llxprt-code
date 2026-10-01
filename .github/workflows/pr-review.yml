@@ -2,15 +2,20 @@ name: 'LLxprt PR Review'
 
 on:
   pull_request_target:
-    types:
-      - opened
-      - reopened
-      - synchronize
-      - ready_for_review
-      - edited
+    types: [opened, reopened, synchronize, ready_for_review, edited]
+  workflow_call:
+    inputs:
+      pull_request_number:
+        description: 'PR to review as data using this trusted workflow revision'
+        required: false
+        type: string
+      expected_head_sha:
+        description: 'Expected immutable PR head SHA'
+        required: false
+        type: string
 
 concurrency:
-  group: 'llxprt-pr-review-${{ github.event.pull_request.number }}'
+  group: 'llxprt-pr-review-${{ inputs.pull_request_number || github.event.pull_request.number }}'
   cancel-in-progress: true
 
 permissions:
@@ -24,7 +29,6 @@ defaults:
     shell: bash
 
 env:
-  KEY_VAR_NAME: '${{ vars.KEY_VAR_NAME }}'
   REPO: '${{ github.repository }}'
 
 jobs:
@@ -33,8 +37,8 @@ jobs:
     uses: './.github/workflows/_pr-mergeability-gate.yml'
     with:
       check-mergeability: true
-      pull-request-number: "${{ format('{0}', github.event.pull_request.number) }}"
-      expected-head-sha: '${{ github.event.pull_request.head.sha }}'
+      pull-request-number: "${{ inputs.pull_request_number || format('{0}', github.event.pull_request.number) }}"
+      expected-head-sha: '${{ inputs.expected_head_sha || github.event.pull_request.head.sha }}'
 
   review:
     name: 'Run LLxprt review'
@@ -44,21 +48,15 @@ jobs:
     runs-on: 'ubuntu-latest'
     timeout-minutes: 60
     env:
-      PR_NUMBER: '${{ github.event.pull_request.number }}'
+      PR_NUMBER: '${{ inputs.pull_request_number || github.event.pull_request.number }}'
       GH_TOKEN: '${{ github.token }}'
       GITHUB_TOKEN: '${{ github.token }}'
-      OPENAI_BASE_URL: '${{ vars.OPENAI_BASE_URL }}'
-      LLXPRT_DEFAULT_MODEL: '${{ vars.LLXPRT_DEFAULT_MODEL }}'
-      LLXPRT_STRONG_MODEL: '${{ vars.LLXPRT_STRONG_MODEL || vars.LLXPRT_DEFAULT_MODEL }}'
-      LLXPRT_DEFAULT_PROVIDER: '${{ vars.LLXPRT_DEFAULT_PROVIDER }}'
-      LLXPRT_CONTEXT_LIMIT: "${{ vars.LLXPRT_CONTEXT_LIMIT || '256000' }}"
-      LLXPRT_DEBUG: "${{ vars.DEBUG_NAMESPACES || 'llxprt:*' }}"
       DEBUG_OUTPUT: 'stderr'
     steps:
       - name: 'Checkout base revision'
         uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
         with:
-          ref: '${{ github.event.pull_request.base.sha }}'
+          ref: "${{ github.event_name == 'workflow_dispatch' && github.sha || github.event.pull_request.base.sha }}"
           fetch-depth: 0
 
       - name: 'Setup Bun'
@@ -78,30 +76,45 @@ jobs:
           mkdir -p review/issues
           : > review/comment.md
 
+      - name: 'Resolve validation metadata'
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          EXPECTED_HEAD_SHA: '${{ inputs.expected_head_sha }}'
+        run: |
+          set -euo pipefail
+          [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]]
+          [[ "$EXPECTED_HEAD_SHA" =~ ^[a-f0-9]{40}$ ]]
+          gh api "repos/$REPO/pulls/$PR_NUMBER" > review/validation-pr.json
+          current_head="$(jq -r '.head.sha' review/validation-pr.json)"
+          [[ "$current_head" == "$EXPECTED_HEAD_SHA" ]] || { echo 'Validation head changed' >&2; exit 1; }
+          base_revision="$(jq -r '.base.sha' review/validation-pr.json)"
+          [[ "$base_revision" =~ ^[a-f0-9]{40}$ ]]
+          {
+            echo "VALIDATION_BASE_SHA=$base_revision"
+            echo "VALIDATION_HEAD_REF=$(jq -r '.head.ref' review/validation-pr.json)"
+            echo "VALIDATION_HEAD_REPO=$(jq -r '.head.repo.full_name' review/validation-pr.json)"
+          } >> "$GITHUB_ENV"
+
       - name: 'Fetch pull request head'
         id: 'fetch_head'
         env:
-          HEAD_REF_VALUE: '${{ github.event.pull_request.head.ref }}'
-          HEAD_REPO_VALUE: '${{ github.event.pull_request.head.repo.full_name }}'
-          EXPECTED_HEAD_SHA: '${{ github.event.pull_request.head.sha }}'
+          HEAD_REF_VALUE: '${{ env.VALIDATION_HEAD_REF || github.event.pull_request.head.ref }}'
+          HEAD_REPO_VALUE: '${{ env.VALIDATION_HEAD_REPO || github.event.pull_request.head.repo.full_name }}'
+          EXPECTED_HEAD_SHA: '${{ inputs.expected_head_sha || github.event.pull_request.head.sha }}'
+          BASE_REVISION: '${{ env.VALIDATION_BASE_SHA || github.event.pull_request.base.sha }}'
         run: |
           set -euo pipefail
           pr_ref="refs/pr/${PR_NUMBER}"
-          head_repo="${HEAD_REPO_VALUE:-${REPO}}"
           head_ref="${HEAD_REF_VALUE:-}"
           if [[ -z "$head_ref" ]]; then
             echo "Head ref is unavailable for PR ${PR_NUMBER}; aborting." >&2
             exit 1
           fi
 
-          if [[ "${head_repo}" == "${REPO}" ]]; then
-            git fetch --no-tags --prune origin "${head_ref}:${pr_ref}"
-          else
-            git remote add pr "https://x-access-token:${GITHUB_TOKEN}@github.com/${head_repo}.git"
-            git fetch --no-tags --prune pr "${head_ref}:${pr_ref}"
-          fi
+          git fetch --no-tags origin "pull/${PR_NUMBER}/head:${pr_ref}"
 
-          base_sha='${{ github.event.pull_request.base.sha }}'
+          base_sha="$BASE_REVISION"
+          git fetch --no-tags origin "$base_sha"
           head_sha="$(git rev-parse "${pr_ref}")"
           if [[ "${head_sha}" != "${EXPECTED_HEAD_SHA}" ]]; then
             echo "Fetched PR head changed from event SHA ${EXPECTED_HEAD_SHA} to ${head_sha}; aborting." >&2
@@ -195,22 +208,6 @@ jobs:
             esac
           done < "${diff_list}"
           echo "DOCS_ONLY=${docs_only}" >> "$GITHUB_ENV"
-
-      - name: 'Install LLxprt CLI nightly'
-        if: steps.issue_gate.outputs.should_review == 'true'
-        id: 'install'
-        continue-on-error: true
-        run: npm install -g @vybestack/llxprt-code@nightly
-
-      - name: 'Check API quota and select optimal key'
-        if: steps.issue_gate.outputs.should_review == 'true'
-        id: 'quota'
-        continue-on-error: true
-        run: bun scripts/ci-quota-check.ts
-        env:
-          KEY_VAR_NAME: '${{ vars.KEY_VAR_NAME }}'
-          OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}'
-          OPENAI_API_KEY_2: '${{ secrets[vars.KEY_VAR_NAME_2] }}'
 
       - name: 'Capture LLxprt Code CI status'
         if: steps.issue_gate.outputs.should_review == 'true'
@@ -377,19 +374,207 @@ jobs:
           fs.writeFileSync("review/context.md", context);
           '
 
+      - name: 'Install Ollama CPU runtime'
+        id: 'install'
+        if: ${{ steps.issue_gate.outputs.should_review == 'true' }}
+        continue-on-error: true
+        shell: 'bash'
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = 'x86_64'
+          mkdir -p "$RUNNER_TEMP/ollama"
+          curl --fail --show-error --location --retry 3 \
+            'https://ollama.com/download/ollama-linux-amd64.tar.zst?version=0.31.1' \
+            -o "$RUNNER_TEMP/ollama-linux-amd64.tar.zst"
+          printf '%s  %s\n' 'd297381efc136451f6fabb9dd644a67f70fe51c16815a0c4a95ff0e327a3afb4' "$RUNNER_TEMP/ollama-linux-amd64.tar.zst" | sha256sum --check -
+          tar --zstd \
+            --exclude='lib/ollama/cuda_v12/*' \
+            --exclude='lib/ollama/cuda_v13/*' \
+            --exclude='lib/ollama/vulkan/*' \
+            -xf "$RUNNER_TEMP/ollama-linux-amd64.tar.zst" -C "$RUNNER_TEMP/ollama"
+          rm "$RUNNER_TEMP/ollama-linux-amd64.tar.zst"
+          echo "$RUNNER_TEMP/ollama/bin" >>"$GITHUB_PATH"
+          "$RUNNER_TEMP/ollama/bin/ollama" --version
+
+      - name: 'Select CPU backend on Intel'
+        id: 'backend'
+        if: ${{ steps.issue_gate.outputs.should_review == 'true' && steps.install.outcome == 'success' }}
+        continue-on-error: true
+        shell: 'bash'
+        run: |
+          set -euo pipefail
+          echo "Host architecture: $(uname -m)"
+          echo "Host CPU vendor: $(awk -F: '/^vendor_id[[:space:]]*:/ { gsub(/[[:space:]]/, "", $2); print $2; exit }' /proc/cpuinfo)"
+          if ! grep -qm1 '^vendor_id[[:space:]]*: GenuineIntel$' /proc/cpuinfo; then
+            echo 'Host is not Intel; leaving Ollama CPU variants untouched'
+            exit 0
+          fi
+          libdir="$RUNNER_TEMP/ollama/lib/ollama"
+          test -f "$libdir/libggml-cpu-haswell.so"
+          shopt -s nullglob
+          variants=("$libdir"/libggml-cpu-*.so)
+          (( ${#variants[@]} > 1 )) || { echo 'Expected multiple CPU variants in pinned Ollama runtime' >&2; exit 1; }
+          mkdir -p "$RUNNER_TEMP/ollama-disabled-cpu-backends"
+          for library in "${variants[@]}"; do
+            if [[ "$library" != "$libdir/libggml-cpu-haswell.so" ]]; then
+              mv "$library" "$RUNNER_TEMP/ollama-disabled-cpu-backends/"
+            fi
+          done
+          echo 'Intel Haswell pin: CPU variants visible to llama-server:'
+          printf '%s\n' "$libdir"/libggml-cpu-*.so
+          test "$(find "$libdir" -maxdepth 1 -name 'libggml-cpu-*.so' | wc -l)" -eq 1
+
+      - name: 'Start pinned local Qwen model'
+        id: 'model'
+        if: ${{ steps.issue_gate.outputs.should_review == 'true' && steps.install.outcome == 'success' }}
+        continue-on-error: true
+        shell: 'bash'
+        env:
+          OLLAMA_HOST: '127.0.0.1:12644'
+          OLLAMA_CONTEXT_LENGTH: '32768'
+          OLLAMA_NUM_PARALLEL: '1'
+          OLLAMA_NO_CLOUD: '1'
+          CUDA_VISIBLE_DEVICES: '-1'
+          ROCR_VISIBLE_DEVICES: '-1'
+          LLAMA_ARG_CACHE_RAM: '1024'
+          OLLAMA_MODELS: '${{ runner.temp }}/ollama-models'
+        run: |
+          set -euo pipefail
+          if ss -ltn | grep -q ":12644 "; then echo "Local model port already occupied" >&2; exit 1; fi
+          mkdir -p "$OLLAMA_MODELS"
+          nohup env -u GH_TOKEN -u GITHUB_TOKEN ollama serve >"$RUNNER_TEMP/ollama-server.log" 2>&1 &
+          echo $! >"$RUNNER_TEMP/ollama-server.pid"
+          for _ in {1..60}; do
+            if curl --fail --silent "http://$OLLAMA_HOST/api/version"; then
+              break
+            fi
+            sleep 2
+          done
+          curl --fail --silent "http://$OLLAMA_HOST/api/version" | jq -e '.version == "0.31.1"'
+          ollama pull qwen3.5:4b
+          curl --fail --silent "http://$OLLAMA_HOST/api/tags" |
+            jq -e '.models[] | select(.name == "qwen3.5:4b" and .digest == "2a654d98e6fba55d452b7043684e9b57a947e393bbffa62485a7aac05ee4eefd")'
+          df -h "$RUNNER_TEMP"
+
+      - name: 'Verify CPU backend warm-up'
+        id: 'warmup'
+        if: ${{ steps.issue_gate.outputs.should_review == 'true' && steps.install.outcome == 'success' && steps.model.outcome == 'success' }}
+        continue-on-error: true
+        shell: 'bash'
+        env:
+          OLLAMA_HOST: '127.0.0.1:12644'
+        run: |
+          set -euo pipefail
+          proc_root="${LLXPRT_PROC_ROOT:-/proc}"
+          vendor="$(awk -F: '/^vendor_id[[:space:]]*:/ { gsub(/[[:space:]]/, "", $2); print $2; exit }' "$proc_root/cpuinfo")"
+          echo "Host CPU vendor: $vendor"
+          [[ "$vendor" == GenuineIntel || "$vendor" == AuthenticAMD ]] || { echo "Unsupported CPU vendor: $vendor" >&2; exit 1; }
+          curl --fail --show-error --silent --max-time 300 \
+            "http://127.0.0.1:12644/api/generate" \
+            -H 'Content-Type: application/json' \
+            -d '{"model":"qwen3.5:4b","prompt":"Hello","stream":false,"think":false,"options":{"num_ctx":32768,"num_predict":16}}' \
+            | jq -e '.done == true and .error == null and (.response | length > 0)'
+          grep 'system_info:.*CPU :' "$RUNNER_TEMP/ollama-server.log" | tail -1 || true
+          process="$RUNNER_TEMP/ollama/lib/ollama/llama-server"
+          pid="$(pgrep -f "^$process --model " | head -1)" || true
+          [[ -n "$pid" ]] || { echo 'Live llama-server process not found' >&2; exit 1; }
+          maps="$proc_root/$pid/maps"
+          [[ -r "$maps" ]] || { echo "Live llama-server maps are unavailable: $maps" >&2; exit 1; }
+          cmdline="$proc_root/$pid/cmdline"
+          status="$proc_root/$pid/status"
+          [[ -r "$cmdline" && -r "$status" ]] || { echo 'Live llama-server process evidence disappeared' >&2; exit 1; }
+          printf 'llama-server cmdline: '
+          tr '\0' ' ' <"$cmdline"
+          echo
+          command_line="$(tr '\0' ' ' <"$cmdline")"
+          [[ "$command_line" == "$process --model "* ]] || { echo 'Matched PID is not the expected llama-server process' >&2; exit 1; }
+          ppid="$(awk '$1 == "PPid:" { print $2 }' "$status")"
+          [[ "$ppid" =~ ^[0-9]+$ && "$ppid" != 0 ]] || { echo 'llama-server parent PID is missing' >&2; exit 1; }
+          parent_cmdline="$proc_root/$ppid/cmdline"
+          [[ -r "$parent_cmdline" ]] || { echo 'llama-server parent process disappeared' >&2; exit 1; }
+          printf 'llama-server PPid: %s; parent cmdline: ' "$ppid"
+          tr '\0' ' ' <"$parent_cmdline"
+          echo
+          expected="$RUNNER_TEMP/ollama/lib/ollama/libggml-cpu-haswell.so"
+          maps_snapshot="$RUNNER_TEMP/llama-server-$pid.maps"
+          cat "$maps" >"$maps_snapshot" || { echo 'llama-server maps disappeared while being read' >&2; exit 1; }
+          cat "$maps_snapshot"
+          backends="$(grep -Eo '/[^ ]+/libggml-cpu(-[^ ]+)?\.so( \(deleted\))?' "$maps_snapshot" | sort -u || true)"
+          echo "Loaded CPU backends: ${backends:-none}"
+          [[ -n "$backends" ]] || { echo 'No mapped llama-server CPU backend' >&2; exit 1; }
+          if [[ "$vendor" == AuthenticAMD ]]; then
+            echo 'AMD: native Ollama CPU backend (variants untouched)'
+            exit 0
+          fi
+          while IFS= read -r backend; do
+            [[ "$backend" == "$expected" ]] || {
+              echo "Unexpected mapped llama-server CPU library: $backend" >&2
+              exit 1
+            }
+          done <<< "$backends"
+          grep -Fxq "$expected" <<< "$backends" || {
+            echo 'Expected haswell CPU library is not mapped' >&2
+            exit 1
+          }
+
+      - name: 'Verify CPU-only model inference'
+        id: 'quota'
+        if: ${{ steps.issue_gate.outputs.should_review == 'true' && steps.install.outcome == 'success' && steps.model.outcome == 'success' }}
+        continue-on-error: true
+        shell: 'bash'
+        env:
+          OLLAMA_HOST: '127.0.0.1:12644'
+        run: |
+          set -euo pipefail
+          curl --fail --show-error --silent --max-time 300 \
+            "http://$OLLAMA_HOST/api/generate" \
+            -H 'Content-Type: application/json' \
+            -d '{"model":"qwen3.5:4b","prompt":"Reply with one word.","stream":false,"think":false,"options":{"num_ctx":32768,"num_predict":16}}' \
+            -o "$RUNNER_TEMP/ollama-inference.json"
+          jq -e '.done == true and .error == null and (.response | length > 0)' "$RUNNER_TEMP/ollama-inference.json" || {
+            cat "$RUNNER_TEMP/ollama-inference.json" >&2
+            exit 1
+          }
+          curl --fail --show-error --silent "http://$OLLAMA_HOST/api/ps" | \
+            jq -e '.models[] | select(.name == "qwen3.5:4b" and .size_vram == 0 and .context_length == 32768)'
+
+      - name: 'Discover verified related issues and PRs'
+        if: steps.issue_gate.outputs.should_review == 'true'
+        continue-on-error: true
+        run: bun scripts/pr-review-related.ts
+
+      - name: 'Collect static source context'
+        if: steps.issue_gate.outputs.should_review == 'true'
+        run: bun scripts/pr-review-source-context.ts
+
       - name: 'Run walkthrough pipeline'
-        if: ${{ steps.issue_gate.outputs.should_review == 'true' && steps.install.outcome == 'success' && steps.quota.outcome == 'success' }}
+        if: ${{ steps.issue_gate.outputs.should_review == 'true' && steps.install.outcome == 'success' && steps.backend.outcome == 'success' && steps.model.outcome == 'success' && steps.warmup.outcome == 'success' && steps.quota.outcome == 'success' }}
         id: 'walkthrough'
         continue-on-error: true
-        env:
-          OPENAI_API_KEY: ${{ steps.quota.outputs.selected_key == 'primary' && secrets[vars.KEY_VAR_NAME] || steps.quota.outputs.selected_key == 'secondary' && secrets[vars.KEY_VAR_NAME_2] || '' }}
         run: |
           set -euo pipefail
           # The orchestrator writes its own generic fallback comment to
           # review/comment.md on failure. Redirect stderr to a log artifact
           # only — never into the comment (would leak sanitized secrets or
           # internal diagnostics to the public PR).
-          bun scripts/pr-review-walkthrough.ts 2> >(tee review/walkthrough-error.log >&2)
+          env -u GH_TOKEN -u GITHUB_TOKEN bun scripts/pr-review-walkthrough.ts 2> >(tee review/walkthrough-error.log >&2)
+
+      - name: 'Capture local run resources'
+        if: always() && steps.model.outcome == 'success'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          curl --fail --silent --max-time 15 'http://127.0.0.1:12644/api/ps' > review/local-resources.json
+          cat review/local-resources.json
+          worker="$RUNNER_TEMP/ollama/lib/ollama/llama-server"
+          pid="$(pgrep -f "^$worker --model " | head -1)" || true
+          if [[ -n "$pid" && -r "/proc/$pid/status" ]]; then
+            grep -E '^(VmRSS|VmHWM):' "/proc/$pid/status" | tee review/local-memory.txt
+          fi
+          if compgen -G 'review/inference/*.json' > /dev/null; then
+            jq --slurp '[.[] | {phase, elapsedMs, inputBytes, httpStatus}]' review/inference/*.json > review/local-timings.json
+            cat review/local-timings.json
+          fi
 
       - name: 'Upload walkthrough diagnostics'
         if: always()
@@ -399,10 +584,41 @@ jobs:
           name: 'walkthrough-diagnostics-${{ github.run_attempt }}'
           path: |
             review/walkthrough-error.log
+            review/result.json
+            review/related.json
+            review/local-resources.json
+            review/local-memory.txt
+            review/local-timings.json
+            review/summaries/
+            review/inference/
+            ${{ runner.temp }}/ollama-server.log
+            ${{ runner.temp }}/ollama-inference.json
             review/parse-failure-raw-*.txt
             review/parse-failure-info-*.json
           if-no-files-found: 'ignore'
           retention-days: 3
+
+      - name: 'Stop owned local model server'
+        if: always()
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          if [[ -f "$RUNNER_TEMP/ollama-server.pid" ]]; then
+            OLLAMA_HOST=127.0.0.1:12644 timeout 30 ollama stop qwen3.5:4b || true
+            read -r server_pid < "$RUNNER_TEMP/ollama-server.pid"
+            [[ "$server_pid" =~ ^[1-9][0-9]*$ ]]
+            kill "$server_pid" || true
+            for _ in {1..30}; do
+              if ! kill -0 "$server_pid" 2>/dev/null; then break; fi
+              sleep 1
+            done
+            if kill -0 "$server_pid" 2>/dev/null; then echo 'Owned server still running' >&2; exit 1; fi
+            if ss -ltn | grep -q ':12644 '; then echo 'Local inference port still listening' >&2; exit 1; fi
+            echo 'Local inference port is closed'
+          fi
+          rm -rf -- "$RUNNER_TEMP/ollama-models" "$RUNNER_TEMP/ollama" "$RUNNER_TEMP/ollama-disabled-cpu-backends"
+          test ! -d "$RUNNER_TEMP/ollama-models"
+          echo 'Owned server and model store cleaned up'
 
       - name: 'Ensure fallback comment'
         if: always()
@@ -426,6 +642,7 @@ jobs:
         env:
           COMMENT_FILE: 'review/comment.md'
           COMMENT_MARKER: '<!-- llxprt-walkthrough -->'
+          EXPECTED_HEAD_SHA: '${{ inputs.expected_head_sha || github.event.pull_request.head.sha }}'
         with:
           github-token: '${{ github.token }}'
           script: |
@@ -441,12 +658,26 @@ jobs:
               core.info('No comment marker set; skipping comment post.');
               return;
             }
-            const number = context.issue.number;
+            const number = context.issue.number || Number(process.env.PR_NUMBER);
             if (!number) {
               core.info('No issue/PR number in context; skipping comment post.');
               return;
             }
             try {
+              const expectedHead = process.env.EXPECTED_HEAD_SHA;
+              if (!expectedHead) {
+                core.info('Expected head SHA unavailable; skipping comment post.');
+                return;
+              }
+              const { data: currentPr } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: number,
+              });
+              if (currentPr.head.sha !== expectedHead) {
+                core.info('PR head changed; suppressing stale walkthrough.');
+                return;
+              }
               const comments = await github.paginate(
                 github.rest.issues.listComments,
                 {
@@ -456,7 +687,9 @@ jobs:
                   per_page: 100,
                 },
               );
-              const existing = comments.find((c) => c.body && c.body.includes(marker));
+              const { data: beforePost } = await github.rest.pulls.get({ owner: context.repo.owner, repo: context.repo.repo, pull_number: number });
+              if (beforePost.head.sha !== expectedHead) { core.info('PR head changed before publication; suppressing stale walkthrough.'); return; }
+              const existing = comments.find((c) => c.user?.login === 'github-actions[bot]' && c.body && c.body.includes(marker));
               if (existing) {
                 try {
                   await github.rest.issues.updateComment({

@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { spawnSync } from 'node:child_process';
 import * as nodeFs from 'node:fs';
 import * as nodeOs from 'node:os';
 import * as nodePath from 'node:path';
@@ -18,9 +17,17 @@ import {
   validateGroupThemes,
   escapeMarkdownTableCell,
   MAX_DIFF_BYTES,
+  runPipeline,
 } from '../pr-review-walkthrough.ts';
 import { buildArtifactContext } from '../pr-review-artifacts.ts';
-import { asString, parseJsonObject } from './typed-test-helpers.ts';
+import {
+  asString,
+  asArray,
+  asRecord,
+  parseJsonObject,
+} from './typed-test-helpers.ts';
+
+import { createLocalReviewRunner } from '../pr-review-local.ts';
 
 const BACKSLASH = String.fromCharCode(92);
 describe('parseMapResponse', () => {
@@ -559,267 +566,172 @@ describe('mapWithConcurrency', () => {
   });
 });
 
-const WALKTHROUGH_SCRIPT = nodePath.resolve(
-  import.meta.dirname,
-  '..',
-  'pr-review-walkthrough.ts',
-);
-
-const PHASE_TIMEOUT = 60000;
-
-function makeFakeLlxprtScript(counterDir: string): string {
-  return [
-    '#!/usr/bin/env node',
-    'const fs = require("fs");',
-    'const path = require("path");',
-    'const args = process.argv.slice(2);',
-    'const promptIndex = args.indexOf("--prompt");',
-    'const prompt = promptIndex >= 0 ? args[promptIndex + 1] : "";',
-    'let phase = "unknown";',
-    'let response = "{}";',
-    'if (prompt.includes("analyzing a single changed file")) {',
-    '  phase = "map";',
-    '  response = JSON.stringify({summary:"changed file",signature:"foo()",triage:"fix"});',
-    '} else if (prompt.includes("grouping changed files")) {',
-    '  phase = "group";',
-    '  response = JSON.stringify({themes:[{layer:"core",files:["packages/a/src/index.ts","packages/b/src/index.ts"],summary:"cross-package change"}]});',
-    '} else if (prompt.includes("writing a walkthrough")) {',
-    '  phase = "synthesis";',
-    '  response = JSON.stringify({walkthrough:"before after",release_notes:"## Release Notes\\n- change"});',
-    '} else if (prompt.includes("drawing a runtime sequence diagram")) {',
-    '  phase = "diagram";',
-    '  response = "[\\"non-object\\"]";',
-    '} else if (prompt.includes("finding issues and PRs semantically related")) {',
-    '  phase = "related";',
-    '  response = "[\\"non-object\\"]";',
-    '} else if (prompt.includes("evaluating a PR against pre-merge")) {',
-    '  phase = "pre-merge";',
-    '  response = JSON.stringify({title:{ok:true,note:"clear"},description:{ok:true,note:"ok"},linked_issues:{ok:true,note:"ok"},out_of_scope:{note:"none"}});',
-    '}',
-    'fs.writeFileSync(path.join(' +
-      JSON.stringify(counterDir) +
-      ', phase + "-" + process.pid), "1");',
-    'process.stdout.write(response);',
-  ].join('\n');
+function fixturePhase(prompt: string): string {
+  const stages = [
+    ['analyzing a single changed file', 'map'],
+    ['grouping changed files', 'group'],
+    ['writing a walkthrough', 'synthesis'],
+    ['drawing a runtime sequence diagram', 'diagram'],
+    ['semantically related', 'related'],
+    ['pre-merge', 'pre-merge'],
+  ];
+  return stages.find(([phrase]) => prompt.includes(phrase))?.[1] ?? 'unknown';
 }
-
-function setupReviewWorkspace(): {
-  workspace: string;
-  reviewDir: string;
-  binDir: string;
-  counterDir: string;
-  pathWithFake: string;
-} {
-  const workspace = nodeFs.mkdtempSync(
-    nodePath.join(nodeOs.tmpdir(), 'walkthrough-2777-'),
-  );
-  const reviewDir = nodePath.join(workspace, 'review');
-  const binDir = nodePath.join(workspace, 'bin');
-  const counterDir = nodePath.join(workspace, 'counts');
-  nodeFs.mkdirSync(reviewDir, { recursive: true });
-  nodeFs.mkdirSync(binDir, { recursive: true });
-  nodeFs.mkdirSync(counterDir, { recursive: true });
-
-  nodeFs.writeFileSync(
-    nodePath.join(reviewDir, 'pr.json'),
-    JSON.stringify({
-      number: 2777,
-      title: 'Parse reliability for walkthrough',
-      body: 'test body',
-      baseRefName: 'main',
-      headRefName: 'issue2777',
-      additions: 100,
-      deletions: 10,
-      changedFiles: 2,
-      commits: [{ oid: 'abc1234', message: 'initial commit' }],
-    }),
-  );
-
-  const issuesDir = nodePath.join(reviewDir, 'issues');
-  nodeFs.mkdirSync(issuesDir, { recursive: true });
-  nodeFs.writeFileSync(
-    nodePath.join(issuesDir, '2777.json'),
-    JSON.stringify({
-      number: 2777,
-      title: 'Parse reliability',
-      body: '## Acceptance Criteria\n- [ ] item 1\n- [ ] item 2',
-    }),
-  );
-
-  const diffsDir = nodePath.join(reviewDir, 'diffs');
-  nodeFs.mkdirSync(diffsDir, { recursive: true });
-  const diffA = 'packages__a__src__index.ts.diff';
-  const diffB = 'packages__b__src__index.ts.diff';
-  nodeFs.writeFileSync(
-    nodePath.join(diffsDir, diffA),
-    'diff --git a/packages/a/src/index.ts b/packages/a/src/index.ts\n+added',
-  );
-  nodeFs.writeFileSync(
-    nodePath.join(diffsDir, diffB),
-    'diff --git a/packages/b/src/index.ts b/packages/b/src/index.ts\n+added',
-  );
-
-  nodeFs.writeFileSync(
-    nodePath.join(reviewDir, 'diff-manifest.txt'),
-    `${diffA}\tpackages/a/src/index.ts\n${diffB}\tpackages/b/src/index.ts\n`,
-  );
-
-  nodeFs.writeFileSync(
-    nodePath.join(reviewDir, 'numstat.txt'),
-    '50\t5\tpackages/a/src/index.ts\n50\t5\tpackages/b/src/index.ts\n',
-  );
-
-  const isWindows = process.platform === 'win32';
-  const fakeName = isWindows ? 'llxprt.cmd' : 'llxprt';
-  const fakePath = nodePath.join(binDir, fakeName);
-  if (isWindows) {
-    nodeFs.writeFileSync(
-      fakePath,
-      `@echo off\r\nnode "${nodePath.join(binDir, 'llxprt-fake.js')}" %*\r\n`,
-    );
-  } else {
-    nodeFs.writeFileSync(fakePath, makeFakeLlxprtScript(counterDir), {
-      mode: 0o755,
-    });
-  }
-  if (isWindows) {
-    nodeFs.writeFileSync(
-      nodePath.join(binDir, 'llxprt-fake.js'),
-      makeFakeLlxprtScript(counterDir).replace('#!/usr/bin/env node\n', ''),
-    );
-  }
-
-  const pathWithFake = process.env.PATH
-    ? `${binDir}${nodePath.delimiter}${process.env.PATH}`
-    : binDir;
-  return { workspace, reviewDir, binDir, counterDir, pathWithFake };
-}
-
-function countPhaseCalls(counterDir: string, phase: string): number {
-  return nodeFs
-    .readdirSync(counterDir)
-    .filter((file) => file.startsWith(`${phase}-`)).length;
+function fixtureResponse(phase: string, paths: string[]): unknown {
+  if (phase === 'map')
+    return { summary: 'changed file', signature: 'foo()', triage: 'fix' };
+  if (phase === 'group')
+    return {
+      themes: [
+        { layer: 'core', files: paths, summary: 'cross-package change' },
+      ],
+    };
+  if (phase === 'synthesis')
+    return {
+      walkthrough: 'before after',
+      release_notes: '## Release Notes\n- change',
+    };
+  if (phase === 'pre-merge')
+    return {
+      title: { ok: true, note: 'clear' },
+      description: { ok: true, note: 'ok' },
+      linked_issues: { ok: true, note: 'ok' },
+      out_of_scope: { note: 'none' },
+    };
+  return ['non-object'];
 }
 
 describe('private optional-stage retry and diagnostics', () => {
-  it(
-    'exhausts optional stages without failing or rendering their content',
-    () => {
-      const { workspace, reviewDir, counterDir, pathWithFake } =
-        setupReviewWorkspace();
-      try {
-        const result = spawnSync(process.execPath, [WALKTHROUGH_SCRIPT], {
-          cwd: workspace,
-          encoding: 'utf8',
-          timeout: PHASE_TIMEOUT,
-          env: {
-            ...process.env,
-            PATH: pathWithFake,
-            LLXPRT_DEFAULT_PROVIDER: 'fake',
-            OPENAI_API_KEY: 'test-key',
-            OPENAI_BASE_URL: 'http://localhost',
-            LLXPRT_DEFAULT_MODEL: 'test-model',
-            LLXPRT_STRONG_MODEL: 'test-strong',
-          },
+  it('exhausts optional stages without failing the advisory process or rendering their raw content', async () => {
+    const workspace = nodeFs.mkdtempSync(
+      nodePath.join(nodeOs.tmpdir(), 'walkthrough-3781-'),
+    );
+    const reviewDir = nodePath.join(workspace, 'review');
+    nodeFs.mkdirSync(nodePath.join(reviewDir, 'issues'), { recursive: true });
+    nodeFs.mkdirSync(nodePath.join(reviewDir, 'diffs'), { recursive: true });
+    nodeFs.writeFileSync(
+      nodePath.join(reviewDir, 'pr.json'),
+      JSON.stringify({
+        number: 2777,
+        title: 'Parse reliability',
+        body: 'test body',
+        changedFiles: 2,
+      }),
+    );
+    nodeFs.writeFileSync(
+      nodePath.join(reviewDir, 'issues/2777.json'),
+      JSON.stringify({
+        number: 2777,
+        title: 'Parse reliability',
+        body: 'Acceptance criteria',
+      }),
+    );
+    const paths = ['packages/a/src/index.ts', 'packages/b/src/index.ts'];
+    for (const [index, filePath] of paths.entries())
+      nodeFs.writeFileSync(
+        nodePath.join(reviewDir, 'diffs', index + '.diff'),
+        'diff --git a/' + filePath + ' b/' + filePath + '\n+added',
+      );
+    nodeFs.writeFileSync(
+      nodePath.join(reviewDir, 'diff-manifest.txt'),
+      paths.map((p, i) => i + '.diff\t' + p + '\n').join(''),
+    );
+    nodeFs.writeFileSync(
+      nodePath.join(reviewDir, 'numstat.txt'),
+      paths.map((p) => '50\t5\t' + p + '\n').join(''),
+    );
+    const counts: Record<string, number> = {};
+    const server = Bun.serve({
+      hostname: '127.0.0.1',
+      port: 0,
+      fetch: async (request) => {
+        const body: unknown = await request.json();
+        const data = parseJsonObject(JSON.stringify(body));
+        const messages = asArray(data.messages);
+        const prompt = asString(asRecord(messages[0]).content);
+        const phase = fixturePhase(prompt);
+        counts[phase] = (counts[phase] ?? 0) + 1;
+        const value = fixtureResponse(phase, paths);
+        return Response.json({
+          done: true,
+          done_reason: 'stop',
+          message: { content: JSON.stringify(value) },
+          prompt_eval_count: 100,
+          eval_count: 20,
         });
-        if (result.error) {
-          throw new Error(
-            `Failed to spawn walkthrough script: ${result.error.message}`,
-          );
-        }
-        const comment = nodeFs.readFileSync(
-          nodePath.join(reviewDir, 'comment.md'),
-          'utf8',
-        );
-        const walkthrough = nodeFs.readFileSync(
-          nodePath.join(reviewDir, 'walkthrough.md'),
-          'utf8',
-        );
-        const files = nodeFs.readdirSync(reviewDir);
-        const diagramRaw = files.find((file) =>
-          file.startsWith('parse-failure-raw-diagram-'),
-        );
-        const relatedRaw = files.find((file) =>
-          file.startsWith('parse-failure-raw-related-'),
-        );
-        const infoFiles = files.filter((file) =>
-          file.startsWith('parse-failure-info-'),
-        );
-        if (!diagramRaw || !relatedRaw || infoFiles.length !== 2) {
-          throw new Error('Expected distinct diagram and related diagnostics');
-        }
-        const metadata = infoFiles
-          .map((file) =>
-            parseJsonObject(
-              nodeFs.readFileSync(nodePath.join(reviewDir, file), 'utf8'),
-            ),
-          )
-          .sort((left, right) =>
-            asString(left.phase).localeCompare(asString(right.phase)),
-          );
-        expect({
-          status: result.status,
-          outputMatches: walkthrough === comment,
-          hasMarker: comment.includes('<!-- llxprt-walkthrough -->'),
-          hasDiagram: comment.includes('## Sequence Diagram'),
-          hasRelated: comment.includes('## Related'),
-          hasEmptyRelated: comment.includes('No related items found.'),
-          calls: {
-            map: countPhaseCalls(counterDir, 'map'),
-            group: countPhaseCalls(counterDir, 'group'),
-            synthesis: countPhaseCalls(counterDir, 'synthesis'),
-            diagram: countPhaseCalls(counterDir, 'diagram'),
-            related: countPhaseCalls(counterDir, 'related'),
-            preMerge: countPhaseCalls(counterDir, 'pre-merge'),
-            unknown: countPhaseCalls(counterDir, 'unknown'),
-          },
-          raw: [diagramRaw, relatedRaw]
-            .map((file) =>
-              nodeFs.readFileSync(nodePath.join(reviewDir, file), 'utf8'),
-            )
-            .sort(),
-          metadata: metadata.map((info) => ({
-            phase: info.phase,
-            hasPromptLength:
-              typeof info.promptLength === 'number' && info.promptLength > 0,
-            rawLength: info.rawLength,
-          })),
-        }).toEqual({
-          status: 0,
-          outputMatches: true,
-          hasMarker: true,
-          hasDiagram: false,
-          hasRelated: true,
-          hasEmptyRelated: true,
-          calls: {
-            map: 2,
-            group: 1,
-            synthesis: 1,
-            diagram: 3,
-            related: 3,
-            preMerge: 1,
-            unknown: 0,
-          },
-          raw: ['["non-object"]', '["non-object"]'],
-          metadata: [
-            {
-              phase: 'diagram',
-              hasPromptLength: true,
-              rawLength: '["non-object"]'.length,
-            },
-            {
-              phase: 'related',
-              hasPromptLength: true,
-              rawLength: '["non-object"]'.length,
-            },
-          ],
-        });
-      } finally {
-        nodeFs.rmSync(workspace, { recursive: true, force: true });
-      }
-    },
-    PHASE_TIMEOUT,
-  );
+      },
+    });
+    try {
+      await runPipeline(
+        reviewDir,
+        createLocalReviewRunner({
+          endpoint: 'http://127.0.0.1:' + server.port,
+        }),
+      );
+      const comment = nodeFs.readFileSync(
+        nodePath.join(reviewDir, 'comment.md'),
+        'utf8',
+      );
+      const files = nodeFs.readdirSync(reviewDir);
+      const rawFiles = files.filter((file) =>
+        file.startsWith('parse-failure-raw-'),
+      );
+      const metadata = files
+        .filter((file) => file.startsWith('parse-failure-info-'))
+        .map((file) =>
+          parseJsonObject(
+            nodeFs.readFileSync(nodePath.join(reviewDir, file), 'utf8'),
+          ),
+        )
+        .sort((a, b) => asString(a.phase).localeCompare(asString(b.phase)));
+      expect(
+        nodeFs.readFileSync(nodePath.join(reviewDir, 'walkthrough.md'), 'utf8'),
+      ).toBe(comment);
+      expect(comment).toContain('<!-- llxprt-walkthrough -->');
+      expect(comment).toContain('Review incomplete');
+      expect(comment).not.toContain('## Sequence Diagram');
+      expect(comment).toContain('## Related');
+      expect(comment).toContain('Related assessment unavailable.');
+      expect(comment).not.toContain('No related items found.');
+      expect(comment).not.toContain('non-object');
+      expect(rawFiles).toHaveLength(2);
+      expect(
+        rawFiles.map((file) =>
+          nodeFs.readFileSync(nodePath.join(reviewDir, file), 'utf8'),
+        ),
+      ).toEqual(['["non-object"]', '["non-object"]']);
+      expect(
+        metadata.map((info) => ({
+          phase: info.phase,
+          hasPromptLength:
+            typeof info.promptLength === 'number' && info.promptLength > 0,
+          rawLength: info.rawLength,
+        })),
+      ).toEqual([
+        {
+          phase: 'diagram',
+          hasPromptLength: true,
+          rawLength: '["non-object"]'.length,
+        },
+        {
+          phase: 'related',
+          hasPromptLength: true,
+          rawLength: '["non-object"]'.length,
+        },
+      ]);
+      expect(counts).toEqual({
+        map: 2,
+        group: 1,
+        synthesis: 1,
+        diagram: 2,
+        related: 2,
+        'pre-merge': 1,
+      });
+    } finally {
+      server.stop(true);
+      nodeFs.rmSync(workspace, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('buildArtifactContext commits normalization (gh CLI shape)', () => {

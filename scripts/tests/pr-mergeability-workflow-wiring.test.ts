@@ -452,7 +452,7 @@ describe('PR Review mergeability gate wiring (.github/workflows/pr-review.yml)',
     expect(asStringArray(prt?.types)).toContain('edited');
     const concurrency = asOptionalRecord(parsed.concurrency);
     expect(concurrency?.group).toContain(
-      'llxprt-pr-review-${{ github.event.pull_request.number }}',
+      'llxprt-pr-review-${{ inputs.pull_request_number || github.event.pull_request.number }}',
     );
     expect(concurrency?.['cancel-in-progress']).toBe(true);
   });
@@ -466,10 +466,10 @@ describe('PR Review mergeability gate wiring (.github/workflows/pr-review.yml)',
     const withInputs = asRecord(gateJob?.with);
     expect(withInputs['check-mergeability']).toBe(true);
     expect(withInputs['pull-request-number']).toBe(
-      "${{ format('{0}', github.event.pull_request.number) }}",
+      "${{ inputs.pull_request_number || format('{0}', github.event.pull_request.number) }}",
     );
     expect(withInputs['expected-head-sha']).toBe(
-      '${{ github.event.pull_request.head.sha }}',
+      '${{ inputs.expected_head_sha || github.event.pull_request.head.sha }}',
     );
   });
 
@@ -505,7 +505,7 @@ merge_base=${result.baseSha}
     );
 
     expect(asRecord(fetchStep?.env)?.EXPECTED_HEAD_SHA).toBe(
-      '${{ github.event.pull_request.head.sha }}',
+      '${{ inputs.expected_head_sha || github.event.pull_request.head.sha }}',
     );
 
     const result = runFetchHeadStepWithRealRepository(asRecord(fetchStep), {
@@ -533,27 +533,20 @@ merge_base=${result.baseSha}
     );
   });
 
-  it('keeps provider secrets out of the gate and scopes them to the quota and walkthrough steps', () => {
+  it('keeps provider secrets out of the gate and every local inference step', () => {
     const reviewSteps = asRecordArray(reviewJob?.steps);
-    const quotaStep = reviewSteps.find(({ id }) => id === 'quota');
-    const step = reviewSteps.find(
+    const inferenceStep = reviewSteps.find(
       ({ name }) => name === 'Run walkthrough pipeline',
     );
-    if (quotaStep === undefined || step === undefined) {
-      throw new Error('expected quota and walkthrough steps to exist');
-    }
-
     expect(hasSecret(gateJob)).toBe(false);
     expect(hasSecret(reviewJob?.env)).toBe(false);
-    expect(quotaStep?.env).toEqual({
-      KEY_VAR_NAME: '${{ vars.KEY_VAR_NAME }}',
-      OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}',
-      OPENAI_API_KEY_2: '${{ secrets[vars.KEY_VAR_NAME_2] }}',
-    });
-    expect(step?.env).toEqual({
-      OPENAI_API_KEY:
-        "${{ steps.quota.outputs.selected_key == 'primary' && secrets[vars.KEY_VAR_NAME] || steps.quota.outputs.selected_key == 'secondary' && secrets[vars.KEY_VAR_NAME_2] || '' }}",
-    });
-    expect(reviewSteps.filter(hasSecret)).toEqual([quotaStep, step]);
+    expect(hasSecret(reviewJob)).toBe(false);
+    expect(reviewSteps.filter(hasSecret)).toEqual([]);
+    expect(asString(inferenceStep?.run)).toContain(
+      'env -u GH_TOKEN -u GITHUB_TOKEN',
+    );
+    expect(asString(inferenceStep?.run)).toContain(
+      'bun scripts/pr-review-walkthrough.ts',
+    );
   });
 });

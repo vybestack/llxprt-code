@@ -160,7 +160,7 @@ describe('runLlxprtPromptWithParse', () => {
     });
   });
 
-  it('preserves the immediate default retry behavior', async () => {
+  it('waits for the default backoff before retrying', async () => {
     vi.useFakeTimers();
     try {
       let calls = 0;
@@ -176,8 +176,14 @@ describe('runLlxprtPromptWithParse', () => {
       );
 
       await advanceTimersByTimeAsync(0);
-      expect(vi.getTimerCount()).toBe(0);
+      expect(vi.getTimerCount()).toBe(1);
+      expect(calls).toBe(1);
+      await advanceTimersByTimeAsync(999);
+      expect(calls).toBe(1);
+      await advanceTimersByTimeAsync(1);
       await expect(resultPromise).resolves.toMatchObject({ summary: 'ok' });
+      expect(calls).toBe(2);
+      expect(vi.getTimerCount()).toBe(0);
     } finally {
       vi.useRealTimers();
     }
@@ -350,8 +356,10 @@ describe('DEFAULT_MAX_TOKENS and DEFAULT_CONTEXT_LIMIT', () => {
     expect(DEFAULT_CONTEXT_LIMIT).toBeGreaterThan(0);
   });
 
-  it('DEFAULT_MAX_TOKENS is 16384 (16k — large enough for JSON walkthrough output without being wasteful)', () => {
-    expect(DEFAULT_MAX_TOKENS).toBe(16384);
+  it('reserves bounded output inside the local CPU model context', () => {
+    expect(DEFAULT_MAX_TOKENS).toBe(8192);
+    expect(DEFAULT_CONTEXT_LIMIT).toBe(32768);
+    expect(DEFAULT_CONTEXT_LIMIT - DEFAULT_MAX_TOKENS).toBe(24576);
   });
 });
 

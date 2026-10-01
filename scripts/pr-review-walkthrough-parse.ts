@@ -148,7 +148,11 @@ export function parseMapResponse(rawText: string): {
   const parsed = extractJsonObject(rawText);
   const summary = parsed.summary;
   const triageRaw = parsed.triage;
-  if (typeof summary !== 'string' || typeof triageRaw !== 'string') {
+  if (
+    typeof summary !== 'string' ||
+    !summary.trim() ||
+    typeof triageRaw !== 'string'
+  ) {
     throw new Error('Invalid map response: missing summary or triage');
   }
   const triage = TRIAGE_TAGS.includes(triageRaw) ? triageRaw : 'chore';
@@ -311,9 +315,9 @@ function renderPreMergeChecks(checks: unknown): string {
   const rows = [
     '| Check | Status | Note |',
     '| --- | --- | --- |',
-    `| Title | ${c.title?.ok ? ok : no} | ${esc(c.title?.note)} |`,
-    `| Description | ${c.description?.ok ? ok : no} | ${esc(c.description?.note)} |`,
-    `| Linked Issues | ${c.linked_issues?.ok ? ok : no} | ${esc(c.linked_issues?.note)} |`,
+    `| Title | ${c.title?.ok === true ? ok : no} | ${esc(c.title?.note)} |`,
+    `| Description | ${c.description?.ok === true ? ok : no} | ${esc(c.description?.note)} |`,
+    `| Linked Issues | ${c.linked_issues?.ok === true ? ok : no} | ${esc(c.linked_issues?.note)} |`,
     `| Out of Scope | \u2014 | ${esc(c.out_of_scope?.note)} |`,
   ];
   return `## Pre-merge Checks\n${rows.join('\n')}`;
@@ -389,7 +393,13 @@ export function gateSequenceDiagram(
   const runtimeLayerCount = themes.filter((t) =>
     RUNTIME_LAYERS.has(String(t.layer).toLowerCase()),
   ).length;
-  return runtimeLayerCount >= 2;
+  const runtimeFiles = changedFiles.filter(
+    (file) =>
+      /^packages\/[^/]+\/src\/.*\.(ts|tsx)$/.test(file) &&
+      !/(?:__tests__|fixtures)\//.test(file) &&
+      !/\.(?:test|spec)\./.test(file),
+  );
+  return runtimeLayerCount >= 2 || runtimeFiles.length >= 2;
 }
 
 /**
@@ -525,19 +535,45 @@ export function sanitizeSequenceDiagram(diagram: string): string {
   const fenceMatch = trimmed.match(
     /^```(?:mermaid)?[^\S\n]*\n([\s\S]*?)\n```[^\S\n]*$/,
   );
+  if (!fenceMatch && /`{3,}|~{3,}/.test(trimmed)) return '';
   const inner = fenceMatch ? fenceMatch[1] : trimmed;
-  const directive = 'sequenceDiagram';
-  const isSequenceDiagram = inner.split('\n').some((line) => {
-    const stripped = line.trim();
-    if (!stripped.startsWith(directive)) {
-      return false;
-    }
-    const next = stripped[directive.length];
-    return next === undefined || /\s/.test(next);
-  });
-  if (!isSequenceDiagram) {
-    return '';
+  if (/`{3,}|~{3,}/.test(inner)) return '';
+  const lines = inner
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith('%%'));
+  if (lines[0] !== 'sequenceDiagram') return '';
+  const blocks: string[] = [];
+  for (const line of lines.slice(1)) {
+    const keyword = line.split(/\s/)[0].toLowerCase();
+    if (
+      ['loop', 'alt', 'opt', 'par', 'critical', 'break', 'rect'].includes(
+        keyword,
+      )
+    ) {
+      blocks.push(keyword);
+    } else if (keyword === 'end') {
+      if (line.toLowerCase() !== 'end' || blocks.length === 0) return '';
+      blocks.pop();
+    } else if (['else', 'and', 'option'].includes(keyword)) {
+      const branchBlocks: Record<string, string> = {
+        else: 'alt',
+        and: 'par',
+        option: 'critical',
+      };
+      const required = branchBlocks[keyword];
+      if (blocks.at(-1) !== required) return '';
+    } else if (
+      !/^[\w.-]+\s*(?:--?(?:>>?|x|\)|\))|<<--?>>?)\s*[+-]?[\w.-]+\s*:/.test(
+        line,
+      ) &&
+      !/^(?:participant|actor|activate|deactivate|autonumber|note|title|create|destroy|link|links)\b/i.test(
+        line,
+      )
+    )
+      return '';
   }
+  if (blocks.length > 0 || lines.length < 2) return '';
   const sanitized = inner
     .split('\n')
     .map((line) => {
