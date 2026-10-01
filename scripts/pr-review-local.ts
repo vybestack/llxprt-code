@@ -213,7 +213,7 @@ async function completeInference(
     ...metadata,
     elapsedMs: Date.now() - started,
     request,
-    httpStatus: response.status,
+    httpStatus: inferenceHttpStatus(response.status),
     result: inferenceMetadata(raw),
   });
   if (!response.ok) throw new Error('Local inference HTTP ' + response.status);
@@ -393,6 +393,10 @@ export function checkDescription(body: string): { ok: boolean; note: string } {
       ? `Missing template sections: ${missing.join(', ')}.`
       : 'All expected template sections are present. Testing claims still require independent verification.',
   };
+}
+
+export function inferenceHttpStatus(status: unknown): number {
+  return Number(z.number().int().min(100).max(599).parse(status));
 }
 
 export function inferenceMetadata(raw: unknown): {

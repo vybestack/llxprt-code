@@ -89,9 +89,17 @@ observed failures without bundling raw prompts or model reasoning. The Gemini
 plugin install documentation and real local-HTTP CLI regression remain from
 the verification remediation; no provider assertions were weakened.
 
-Same-job reuse already avoids per-stage downloads. Cross-run reuse may be
-feasible, but transfer benefit, eviction and trust costs are unmeasured. No
-cross-run cache or separate optimization subsystem was added.
+Same-job reuse already avoids per-stage downloads. Two Linux Actions jobs
+measured runtime installation at 12 and 7 seconds, model startup/pull at 18 and
+20 seconds, and warm-up at 7 seconds each. Their walkthrough stages took 1334
+and 1359 seconds. Runtime plus model setup accounts for about 2% of those job
+runtimes. The remediation log's registry pull window was 16.82 seconds,
+including digest verification; its main weight blob was reported as 3.4 GB.
+The loaded model reports 4283726559 bytes, which is residency evidence rather
+than an exact cache-storage measurement. Restoring a cross-run cache would
+still transfer gigabytes and require digest validation, trusted cache writers,
+eviction policy and cleanup ownership. These measurements do not justify a
+cache redesign or an optimization issue. No cross-run cache was added.
 
 ## Final local verification
 
@@ -174,3 +182,65 @@ recorded; this later full package run exited 0. The driver's bare `yamllint`
 command was unavailable (exit 127); rerunning the same YAML files with the
 existing verification virtual environment exited 0. No rules were excluded
 beyond the repository's existing Actions-lint exclusions.
+
+## Delivery recovery diagnosis
+
+The trusted remediation run on `f2a7dcb17` also succeeded:
+[Actions run 36905034867](https://github.com/vybestack/llxprt-code/actions/runs/36905034867).
+All ordinary CI jobs and local setup, inference, publication and cleanup
+completed. It updated the same historical PR #3682 comment, retained all three
+paths and summarized three of four packets. The missing documentation packet
+and acceptance remain explicitly unavailable. Worker peak memory was 6084992
+KiB, final RSS 5845268 KiB, context 32768 and VRAM zero. The measured output is
+useful but still incomplete.
+
+The failed host E2E run
+[36905037000](https://github.com/vybestack/llxprt-code/actions/runs/36905037000/job/110513550713)
+failed `replace.test.ts` on every native-runner attempt. The test specified
+`tools.core: ['replace', 'read_file']`, but `configBuilder.ts` read only the
+legacy top-level `coreTools`. The first attempt invoked an exposed
+`apply_patch`, then completed the replacement; the unchanged no-unrelated-tools
+assertion correctly failed. Three failing tests through `loadCliConfig`
+reproduced the lost nested setting and incorrect precedence. The correction
+honors `tools.core` before the existing top-level fallback. No E2E assertion,
+timeout, retry count, skip or enforcement setting was changed. This defect is
+tracked in [#3799](https://github.com/vybestack/llxprt-code/issues/3799).
+
+CodeQL analysis 1876514395 examined `f2a7dcb17` and still reported alert 780.
+Its SARIF path identifies `response.status`, not the now-hashed response body,
+as the remaining network-to-file flow. The correction validates integer HTTP
+status range 100 through 599 and normalizes it to a number before persistence.
+Malformed metadata is rejected, while successful and failed transport evidence
+remain. No suppression, alert dismissal or security rule change was used.
+
+The existing branch CI dispatch
+[36905674894](https://github.com/vybestack/llxprt-code/actions/runs/36905674894)
+finished successfully on `f2a7dcb17`; its branch CodeQL analysis is 1876633411.
+That successful job still contained alert 780, so job success alone was not
+used to resolve the security thread.
+
+The default-branch automatic prereview
+[36905759913](https://github.com/vybestack/llxprt-code/actions/runs/36905759913)
+was cancelled at its existing job deadline. Logs show trusted base checkout
+`f3839b881`, installation of the nightly CLI and hosted Zai inference rather
+than candidate local inference. Its uploaded error log was empty; no completed
+review was recovered. This is preserved as a cancelled hosted-path result, not
+a successful candidate run or proof of a credential failure.
+
+Final source revision, current CI/E2E conclusions, head-specific CodeQL alert
+state, review-thread outcomes and latest-source Linux publication/resource/
+cleanup evidence are maintained in the durable
+[delivery status comment](https://github.com/vybestack/llxprt-code/pull/3796#issuecomment-5939004550).
+The evidence index links this status record so final Actions observations can
+be recorded after the source commit without changing the revision under test.
+
+Recovery verification in `tmp/verify3781-deliver/full-recovery/` passed format,
+lint, typecheck, full package tests, build, `gpt-6-luna` smoke, AST audit, all
+311 scripts files, script types, Actions lint, YAML lint and whitespace checks.
+The CLI suite passed all 765 files and 9816 cases. The additional focused
+prereview run passed 380 tests across 21 files with 1128 assertions; the config
+suite passed 38 tests with 89 assertions. Existing config-test audit findings
+were unchanged, and the inference-artifact suite had no findings. Test-file
+coverage, affected-shard, copyright, no-new-JS, no-Vitest and documentation
+placement guards also passed. Earlier failed runs remain documented rather
+than being relabeled successful.

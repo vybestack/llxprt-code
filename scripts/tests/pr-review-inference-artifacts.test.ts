@@ -4,7 +4,22 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { expect, it } from 'bun:test';
-import { inferenceMetadata } from '../pr-review-local.ts';
+import { inferenceMetadata, inferenceHttpStatus } from '../pr-review-local.ts';
+
+it.each([200, 400, 599])(
+  'retains a validated numeric HTTP status %i',
+  (status) => {
+    expect(inferenceHttpStatus(status)).toBe(status);
+  },
+);
+
+it.each([99, 600, 200.5, '200', '<script>unsafe</script>', null])(
+  'rejects invalid HTTP status metadata %j',
+  (status) => {
+    expect(() => inferenceHttpStatus(status)).toThrow();
+  },
+);
+
 it('retains hash and validated counters without storing arbitrary network content', () => {
   const raw = {
     done: true,
