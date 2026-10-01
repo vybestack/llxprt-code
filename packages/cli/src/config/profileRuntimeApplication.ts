@@ -83,7 +83,7 @@ function buildSyntheticProfile(
 /** Applies a profile snapshot and collects the result into a flat return. */
 async function applyProfileSnapshotAndCollect(
   profile: Profile,
-  profileName: string,
+  profileName: string | undefined,
   mutableWarnings: string[],
   finalProvider: string | undefined,
   appliedFromLoadedProfile: boolean,
@@ -150,7 +150,7 @@ async function resolveAndApplyProfile(
   ) {
     return applyProfileSnapshotAndCollect(
       loadedProfile,
-      profileToLoad ?? 'inline-profile',
+      profileToLoad,
       mutableWarnings,
       finalProvider,
       true,
