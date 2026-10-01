@@ -36,7 +36,7 @@ index 9582c49..2af0115 100644
 +    get currentValueSizeValue(): number;
  }
 diff --git a/node_modules/ink/build/data-limited-lru-map.js b/node_modules/ink/build/data-limited-lru-map.js
-index 80485a6..66c2b3f 100644
+index 80485a6..70a0716 100644
 --- a/node_modules/ink/build/data-limited-lru-map.js
 +++ b/node_modules/ink/build/data-limited-lru-map.js
 @@ -1,55 +1,122 @@
@@ -203,6 +203,7 @@ index 80485a6..66c2b3f 100644
 +    }
  }
  //# sourceMappingURL=data-limited-lru-map.js.map
+\ No newline at end of file
 diff --git a/node_modules/ink/build/ink.d.ts b/node_modules/ink/build/ink.d.ts
 index 1ff7c4c..5825b42 100644
 --- a/node_modules/ink/build/ink.d.ts
@@ -221,7 +222,7 @@ index 1ff7c4c..5825b42 100644
      private restoreConsole?;
      private readonly unsubscribeResize?;
 diff --git a/node_modules/ink/build/ink.js b/node_modules/ink/build/ink.js
-index 0dc50a2..d7f1739 100644
+index 0dc50a2..bb501f6 100644
 --- a/node_modules/ink/build/ink.js
 +++ b/node_modules/ink/build/ink.js
 @@ -21,6 +21,8 @@ import { calculateScroll } from './scroll.js';
@@ -316,27 +317,34 @@ index 0dc50a2..d7f1739 100644
              this.lastOutput = output;
              return;
          }
-@@ -266,13 +288,16 @@ export default class Ink {
-                 wrappedOutput === '' ? 0 : wrappedOutput.split('\n').length;
+@@ -267,22 +289,17 @@ export default class Ink {
              return;
          }
--        if (hasStaticOutput) {
+         if (hasStaticOutput) {
 -            this.fullStaticOutput += staticOutput;
--        }
-+        const staticOutputRetained = hasStaticOutput
-+            ? this.appendStaticOutput(staticOutput)
-+            : true;
++            this.appendStaticOutput(staticOutput);
+         }
          if (this.lastOutputHeight >= this.options.stdout.rows) {
-             // Build a single buffer for all operations
-             let buffer = '';
+-            // Build a single buffer for all operations
+-            let buffer = '';
 -            buffer += ansiEscapes.clearTerminal + this.fullStaticOutput + output;
-+            const staticOutputForRender = staticOutputRetained
-+                ? this.fullStaticOutput
-+                : this.fullStaticOutput + staticOutput;
-+            buffer += ansiEscapes.clearTerminal + staticOutputForRender + output;
-             // Position cursor after screen clear if requested by a component
-             if (cursorPosition) {
-                 const lineCount = output.split('\n').length;
+-            // Position cursor after screen clear if requested by a component
+-            if (cursorPosition) {
+-                const lineCount = output.split('\n').length;
+-                buffer += positionImeCursor(lineCount, cursorPosition);
++            this.log.clear();
++            if (hasStaticOutput) {
++                this.options.stdout.write(staticOutput);
+             }
+-            this.options.stdout.write(buffer);
++            this.log(output, styledOutput, debugRainbowColor, cursorPosition);
+             this.lastOutput = output;
+             this.lastOutputHeight = outputHeight;
+             this.lastCursorPosition = cursorPosition;
+-            this.log.sync(output, cursorPosition);
+             return;
+         }
+         // To ensure static output is cleanly rendered before main output, clear main output first
 diff --git a/node_modules/ink/build/measure-text.d.ts b/node_modules/ink/build/measure-text.d.ts
 index 5619c54..e6b6254 100644
 --- a/node_modules/ink/build/measure-text.d.ts
