@@ -5,6 +5,7 @@
  */
 
 import { promises as fs } from 'node:fs';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { marked } from 'marked';
 import { z } from 'zod';
@@ -20,6 +21,11 @@ import {
 export const LOCAL_REVIEW_MODEL = 'qwen3.5:4b';
 export const LOCAL_REVIEW_ENDPOINT = 'http://127.0.0.1:12644';
 export const LOCAL_REVIEW_INPUT_BYTES = 20000;
+export const REVIEW_CORRECTION =
+  '\nThe last response failed validation. Return all required fields and complete JSON only. Keep descriptions concise. For grouping, include every supplied path exactly once with no invented paths. For related, use only selections with verified numbers and short reasons, never markdown.';
+export const LOCAL_REVIEW_PROMPT_BYTES =
+  LOCAL_REVIEW_INPUT_BYTES -
+  Math.max(400, Buffer.byteLength(REVIEW_CORRECTION));
 
 export function batchReviewInputs<T>(
   items: readonly T[],
@@ -32,11 +38,13 @@ export function batchReviewInputs<T>(
     const next = [...current, item];
     if (
       next.length > maxItems ||
-      Buffer.byteLength(render(next), 'utf8') > LOCAL_REVIEW_INPUT_BYTES
+      Buffer.byteLength(render(next), 'utf8') > LOCAL_REVIEW_PROMPT_BYTES
     ) {
       if (current.length) batches.push(current);
       current = [item];
-      if (Buffer.byteLength(render(current), 'utf8') > LOCAL_REVIEW_INPUT_BYTES)
+      if (
+        Buffer.byteLength(render(current), 'utf8') > LOCAL_REVIEW_PROMPT_BYTES
+      )
         throw new Error(
           'Local review single evidence item exceeds input budget',
         );
@@ -206,7 +214,7 @@ async function completeInference(
     elapsedMs: Date.now() - started,
     request,
     httpStatus: response.status,
-    result: raw,
+    result: inferenceMetadata(raw),
   });
   if (!response.ok) throw new Error('Local inference HTTP ' + response.status);
   const parsed = responseSchema.safeParse(raw);
@@ -384,6 +392,33 @@ export function checkDescription(body: string): { ok: boolean; note: string } {
     note: missing.length
       ? `Missing template sections: ${missing.join(', ')}.`
       : 'All expected template sections are present. Testing claims still require independent verification.',
+  };
+}
+
+export function inferenceMetadata(raw: unknown): {
+  envelopeSha256: string;
+  done: boolean;
+  reason: 'stop' | 'length' | 'unknown';
+  promptTokens: number | null;
+  outputTokens: number | null;
+} {
+  const counters = z
+    .object({
+      prompt_eval_count: z.number().int().nonnegative(),
+      eval_count: z.number().int().nonnegative(),
+    })
+    .safeParse(raw);
+  const completion = z
+    .object({ done: z.boolean(), done_reason: z.enum(['stop', 'length']) })
+    .safeParse(raw);
+  return {
+    envelopeSha256: createHash('sha256')
+      .update(JSON.stringify(raw))
+      .digest('hex'),
+    done: completion.success && completion.data.done,
+    reason: completion.success ? completion.data.done_reason : 'unknown',
+    promptTokens: counters.success ? counters.data.prompt_eval_count : null,
+    outputTokens: counters.success ? counters.data.eval_count : null,
   };
 }
 

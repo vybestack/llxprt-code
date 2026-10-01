@@ -5,6 +5,13 @@
  */
 import { expect, it } from 'bun:test';
 import {
+  batchReviewInputs,
+  LOCAL_REVIEW_INPUT_BYTES,
+} from '../pr-review-local.ts';
+import { renderRelatedSelections } from '../pr-review-evidence.ts';
+import { marked } from 'marked';
+import { readFileSync } from 'node:fs';
+import {
   createLocalReviewRunner,
   reviewResponseFormat,
 } from '../pr-review-local.ts';
@@ -91,4 +98,41 @@ it('leaves later stages usable when the mapping allowance has expired', async ()
   } finally {
     server.stop(true);
   }
+});
+
+it('renders ordinary Related punctuation without corrupting entities or adding links', () => {
+  const output = renderRelatedSelections(
+    '{"selections":[{"number":3781,"reason":"Review: @actor"}]}',
+    [
+      {
+        number: 3781,
+        title: 'feat(ci): local inference',
+        url: 'https://github.com/vybestack/llxprt-code/issues/3781',
+      },
+    ],
+  );
+  const html = marked.parse(output);
+  expect(html).not.toContain('&amp;#58;');
+  expect(html).not.toContain('&amp;#64;');
+  expect(html).toContain('feat(ci)&#58; local inference');
+  expect(html).toContain('Review&#58; &#64;actor');
+});
+it('retains room for a corrective retry when packing dense evidence', () => {
+  const batches = batchReviewInputs(
+    ['x'.repeat(10000), 'y'.repeat(9900)],
+    (batch) => batch.join(''),
+  );
+  expect(
+    batches.every(
+      (batch) =>
+        Buffer.byteLength(batch.join('')) <= LOCAL_REVIEW_INPUT_BYTES - 400,
+    ),
+  ).toBe(true);
+});
+it('does not persist write credentials in the trusted Git checkout', () => {
+  const source = readFileSync(
+    new URL('../../.github/workflows/pr-review.yml', import.meta.url),
+    'utf8',
+  );
+  expect(source).toContain('persist-credentials: false');
 });

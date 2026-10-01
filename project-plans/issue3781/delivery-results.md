@@ -116,3 +116,61 @@ remain in output, including fallback grouping. Both assessments are incomplete:
 Related and acceptance unavailable for #3465, and group, synthesis, Related
 and acceptance unavailable for #3673. Their useful sections do not establish
 whole-review completion.
+
+## Linux Actions and review remediation
+
+The trusted candidate `f579735bca06e83a2e6edacb8bf19eb097ea99cd` ran on Linux
+through the registered CI dispatch. The
+[isolated historical run](https://github.com/vybestack/llxprt-code/actions/runs/36894401357)
+completed successfully, including every ordinary CI gate and the prereview job.
+It reviewed immutable PR #3682 head
+`b56c4b15daf6e6b99a5bad70c7d7a64398fc8460` without executing that head.
+The [bot comment](https://github.com/vybestack/llxprt-code/pull/3682#issuecomment-5673168005)
+retained a source-based walkthrough, release notes, all three changed paths,
+magnitude and verified Related. It was explicitly incomplete: three of four
+packets were summarized, one documentation packet failed, and acceptance was
+unavailable. Successful infrastructure does not make those missing stages
+complete.
+
+The AMD runner used the pinned runtime/model, context 32768 and zero VRAM.
+The worker high-water mark was 6080020 KiB and final RSS 5839556 KiB.
+The loaded backend was `libggml-cpu-haswell.so` on this AMD host; the Intel
+backend restriction was not exercised by this run. Seven completed HTTP
+requests are retained in the timing artifact. Their individual durations range
+from 61451 to 123256 ms. Both Related attempts completed at the HTTP layer;
+only validated selections were published. Cleanup confirmed the listening port
+closed and the owned server/model store removed. Resource artifacts and hashes
+are indexed in `delivery-actions-evidence.json`.
+
+The [first own-PR dispatch](https://github.com/vybestack/llxprt-code/actions/runs/36891692225)
+was cancelled during prereview by a newer same-PR run. Its ordinary CI jobs,
+including CodeQL analysis, completed successfully, while the overall run remained
+cancelled. Cleanup and an incomplete fallback comment were still published.
+The separate [E2E run](https://github.com/vybestack/llxprt-code/actions/runs/36891675471)
+passed both Linux sandbox lanes. Default-branch automatic prereview still runs
+trusted base scripts until this PR is merged; the candidate dispatch is the
+migration evidence.
+
+CodeRabbit findings prompted three bounded corrections: disable checkout
+credential persistence, preserve punctuation while sanitizing Related text,
+and reserve input headroom for the shared corrective retry suffix. CodeQL
+findings prompted a single optional-source read with ENOENT handling and
+validated inference metadata plus an envelope hash instead of persisting
+arbitrary network response bodies. Existing raw experiment evidence remains
+excluded from Git. These changes do not increase the input, deadline or output
+ceilings or reduce required CI enforcement.
+
+The automatic OCR wrapper published an infrastructure diagnostic rather than
+a review: preflight returned HTTP 401 and used no review tokens. This is tracked
+in [#3700](https://github.com/vybestack/llxprt-code/issues/3700).
+No additional manual OCR or independent local review was requested.
+
+The follow-up verification in `tmp/verify3781-deliver/full-codeql/` passed
+format, lint, typecheck, full package tests, build, `gpt-6-luna` smoke, AST audit,
+the full scripts shard, script types, Actions lint and whitespace checks.
+The scripts shard passed 311 files; the focused prereview suites passed 635
+tests with 1678 assertions across 29 files. Earlier package failures remain
+recorded; this later full package run exited 0. The driver's bare `yamllint`
+command was unavailable (exit 127); rerunning the same YAML files with the
+existing verification virtual environment exited 0. No rules were excluded
+beyond the repository's existing Actions-lint exclusions.

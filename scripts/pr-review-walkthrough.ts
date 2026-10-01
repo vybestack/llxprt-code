@@ -40,6 +40,7 @@ import {
 } from './pr-review-walkthrough-parse.ts';
 import {
   createLocalReviewRunner,
+  REVIEW_CORRECTION,
   LOCAL_REVIEW_MODEL,
   splitReviewDiff,
   parseSynthesis,
@@ -188,8 +189,7 @@ function createStage(
           try {
             return parser(raw);
           } catch {
-            correction = `
-The last response failed validation. Return all required fields and complete JSON only. Keep descriptions concise. For grouping, include every supplied path exactly once with no invented paths. For related, use only selections with verified numbers and short reasons, never markdown.`;
+            correction = REVIEW_CORRECTION;
             throw new Error(
               `Invalid ${phase} response: response contract failed`,
             );

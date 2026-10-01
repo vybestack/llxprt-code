@@ -8,7 +8,7 @@ import {
   DEFAULT_PR_TEMPLATE_SECTIONS,
   type PrContext,
 } from './pr-review-prompts.ts';
-import { LOCAL_REVIEW_INPUT_BYTES } from './pr-review-local.ts';
+import { LOCAL_REVIEW_PROMPT_BYTES } from './pr-review-local.ts';
 import type { bindSourceEvidence } from './pr-review-evidence.ts';
 
 interface AcceptanceArtifacts {
@@ -77,8 +77,8 @@ export async function acceptanceEvidence(
       evidence,
       artifacts.acceptanceMode,
     );
-  if (Buffer.byteLength(render(raw)) <= LOCAL_REVIEW_INPUT_BYTES) return raw;
-  if (Buffer.byteLength(render(notes)) <= LOCAL_REVIEW_INPUT_BYTES)
+  if (Buffer.byteLength(render(raw)) <= LOCAL_REVIEW_PROMPT_BYTES) return raw;
+  if (Buffer.byteLength(render(notes)) <= LOCAL_REVIEW_PROMPT_BYTES)
     return notes;
   // A complete manifest is retained in the result even when acceptance cannot fit.
   throw new Error(

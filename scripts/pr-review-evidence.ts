@@ -75,12 +75,12 @@ export const relatedSelectionSchema = z
 function plainMarkdown(text: string): string {
   return text
     .replace(/[\r\n]+/g, ' ')
+    .replace(/([\\`*_[\]{}()#!|])/g, '\\$1')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/:/g, '&#58;')
-    .replace(/@/g, '&#64;')
-    .replace(/([\\`*_[\]{}()#!|])/g, '\\$1');
+    .replace(/@/g, '&#64;');
 }
 export function renderRelatedSelections(raw: string, items: unknown[]): string {
   const selections = relatedSelectionSchema.parse(
@@ -132,12 +132,13 @@ export async function readSourceContext(
   reviewDir: string,
 ): Promise<Record<string, SourceContext[]>> {
   const file = path.join(reviewDir, 'source-context.json');
-  const exists = await fs.access(file).then(
-    () => true,
-    () => false,
-  );
-  if (!exists) return {};
-  return z
-    .record(z.array(sourceContextSchema))
-    .parse(JSON.parse(await fs.readFile(file, 'utf8')));
+  let content: string;
+  try {
+    content = await fs.readFile(file, 'utf8');
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT')
+      return {};
+    throw error;
+  }
+  return z.record(z.array(sourceContextSchema)).parse(JSON.parse(content));
 }

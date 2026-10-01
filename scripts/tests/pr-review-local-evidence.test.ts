@@ -36,7 +36,7 @@ it('retains failed transport evidence and exact inference configuration without 
           format: z.object({ type: z.string() }),
           options: z.object({ num_ctx: z.number() }),
         }),
-        result: z.string(),
+        result: z.object({ envelopeSha256: z.string(), done: z.boolean() }),
       })
       .parse(
         JSON.parse(await readFile(path.join(dir, 'inference-1.json'), 'utf8')),
@@ -46,7 +46,9 @@ it('retains failed transport evidence and exact inference configuration without 
     expect(evidence.request.think).toBe(false);
     expect(evidence.request.format.type).toBe('object');
     expect(evidence.request.options.num_ctx).toBe(32768);
-    expect(evidence.result).toContain('grammar failure');
+    expect(evidence.result.envelopeSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(evidence.result.done).toBe(false);
+    expect(JSON.stringify(evidence.result)).not.toContain('grammar failure');
   } finally {
     server.stop(true);
     await rm(dir, { recursive: true, force: true });
