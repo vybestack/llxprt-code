@@ -5,7 +5,7 @@
  */
 
 import { mock } from 'bun:test';
-import { createHash } from 'node:crypto';
+import { scryptSync } from 'node:crypto';
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import * as undici from 'undici';
@@ -123,7 +123,11 @@ function observe(url: string, headers: Headers, body: string): void {
     JSON.stringify({
       url,
       model: payload.model,
-      credentialHash: createHash('sha256').update(credential).digest('hex'),
+      credentialHash: scryptSync(
+        credential,
+        'synthetic-profile-parity-3448',
+        32,
+      ).toString('hex'),
       accountId: headers.get('chatgpt-account-id'),
       authorizationKind:
         authorization === null ? 'absent' : presentAuthorizationKind,

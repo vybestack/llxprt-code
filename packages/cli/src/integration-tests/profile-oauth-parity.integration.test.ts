@@ -6,7 +6,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { spawn } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { scryptSync } from 'node:crypto';
 import {
   mkdir,
   mkdtemp,
@@ -137,10 +137,29 @@ async function runProcess(
       stderr += data;
     });
     child.on('error', reject);
-    child.on('close', (code) =>
-      resolve({ stdout, stderr, exitCode: code ?? -1 }),
-    );
+    child.on('close', (code, signal) => {
+      if (signal !== null) {
+        reject(
+          new Error(`Profile parity child terminated by ${signal}: ${stderr}`),
+        );
+        return;
+      }
+      resolve({ stdout, stderr, exitCode: code ?? -1 });
+    });
   });
+}
+
+function expectCredentialIdentity(
+  observed: string,
+  expectedCredential: string,
+): void {
+  expect(observed).toBe(
+    scryptSync(
+      expectedCredential,
+      'synthetic-profile-parity-3448',
+      32,
+    ).toString('hex'),
+  );
 }
 
 async function optionalFile(
@@ -294,10 +313,9 @@ describe('real noninteractive CLI profile authentication parity (#3448, #3629, #
         !oauth && input.provider === 'anthropic',
       );
       expect(request.oauthBeta).toBe(oauth && input.provider === 'claudecode');
-      expect(request.credentialHash).toBe(
-        createHash('sha256')
-          .update(oauth ? oauthCredentials[input.provider] : credential)
-          .digest('hex'),
+      expectCredentialIdentity(
+        request.credentialHash,
+        oauth ? oauthCredentials[input.provider] : credential,
       );
       expect(request.accountId).toBe(
         oauth && input.provider === 'codex' ? accountId : null,
@@ -315,6 +333,54 @@ describe('real noninteractive CLI profile authentication parity (#3448, #3629, #
     expect(result.requests).toStrictEqual([]);
     expect(result.events).toStrictEqual([]);
   }
+
+  describe('subprocess outcome sensitivity', () => {
+    it('rejects signal termination with the signal and captured stderr', async () => {
+      await expect(
+        runProcess(dir, [
+          '--eval',
+          `await new Promise((resolve) => process.stderr.write('Synthetic child interruption', resolve));
+           process.kill(process.pid, 'SIGTERM');`,
+        ]),
+      ).rejects.toThrow(/SIGTERM[\s\S]*Synthetic child interruption/);
+    });
+
+    for (const exitCode of [0, 23]) {
+      it(`preserves actual exit status ${exitCode} and captured output`, async () => {
+        const outcome = await runProcess(dir, [
+          '--eval',
+          `process.stdout.write('Synthetic child output');
+           process.stderr.write('Synthetic child diagnostic');
+           process.exit(${exitCode});`,
+        ]);
+        expect(outcome).toStrictEqual({
+          exitCode,
+          stdout: 'Synthetic child output',
+          stderr: 'Synthetic child diagnostic',
+        });
+      });
+    }
+  });
+
+  it('rejects a wrong synthetic credential at the identity oracle without raw-token observations', async () => {
+    const input = {
+      provider: 'openai',
+      model: 'gpt-4o',
+      ephemeralSettings: { 'auth-key': probeCredential },
+    };
+    const pair = await runPair(input);
+    for (const result of pair) {
+      expect(result.exitCode).toBe(0);
+      expect(result.requests.length).toBeGreaterThan(0);
+      for (const request of result.requests) {
+        expectCredentialIdentity(request.credentialHash, probeCredential);
+        expect(() =>
+          expectCredentialIdentity(request.credentialHash, credential),
+        ).toThrow('expect(received).toBe(expected)');
+      }
+      expect(JSON.stringify(result)).not.toContain(probeCredential);
+    }
+  }, 120000);
 
   describe('test transport boundary sensitivity', () => {
     async function probe(source: string): Promise<{
