@@ -51,35 +51,31 @@ describe('Provider Formatting Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10
 
       const toolDeclarations = [
         {
-          functionDeclarations: [
-            {
-              name: 'read_file',
-              description: 'Read the contents of a file',
-              parametersJsonSchema: {
-                type: 'object',
-                properties: {
-                  file_path: {
-                    type: 'string',
-                    description: 'Path to the file',
-                  },
-                  offset: { type: 'number', description: 'Line offset' },
-                },
-                required: ['file_path'],
+          name: 'read_file',
+          description: 'Read the contents of a file',
+          parametersJsonSchema: {
+            type: 'object',
+            properties: {
+              file_path: {
+                type: 'string',
+                description: 'Path to the file',
               },
+              offset: { type: 'number', description: 'Line offset' },
             },
-            {
-              name: 'write_file',
-              description: 'Write content to a file',
-              parametersJsonSchema: {
-                type: 'object',
-                properties: {
-                  file_path: { type: 'string' },
-                  content: { type: 'string' },
-                },
-                required: ['file_path', 'content'],
-              },
+            required: ['file_path'],
+          },
+        },
+        {
+          name: 'write_file',
+          description: 'Write content to a file',
+          parametersJsonSchema: {
+            type: 'object',
+            properties: {
+              file_path: { type: 'string' },
+              content: { type: 'string' },
             },
-          ],
+            required: ['file_path', 'content'],
+          },
         },
       ];
 
@@ -103,35 +99,31 @@ describe('Provider Formatting Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P10
 
       const toolDeclarations = [
         {
-          functionDeclarations: [
-            {
-              name: 'read_file',
-              description: 'Read the contents of a file',
-              parametersJsonSchema: {
-                type: 'object',
-                properties: {
-                  file_path: {
-                    type: 'string',
-                    description: 'Path to the file',
-                  },
-                  offset: { type: 'number', description: 'Line offset' },
-                },
-                required: ['file_path'],
+          name: 'read_file',
+          description: 'Read the contents of a file',
+          parametersJsonSchema: {
+            type: 'object',
+            properties: {
+              file_path: {
+                type: 'string',
+                description: 'Path to the file',
               },
+              offset: { type: 'number', description: 'Line offset' },
             },
-            {
-              name: 'write_file',
-              description: 'Write content to a file',
-              parametersJsonSchema: {
-                type: 'object',
-                properties: {
-                  file_path: { type: 'string' },
-                  content: { type: 'string' },
-                },
-                required: ['file_path', 'content'],
-              },
+            required: ['file_path'],
+          },
+        },
+        {
+          name: 'write_file',
+          description: 'Write content to a file',
+          parametersJsonSchema: {
+            type: 'object',
+            properties: {
+              file_path: { type: 'string' },
+              content: { type: 'string' },
             },
-          ],
+            required: ['file_path', 'content'],
+          },
         },
       ];
 

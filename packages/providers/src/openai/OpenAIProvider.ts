@@ -542,7 +542,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         toolsLength: tools?.length,
         toolsType: typeof tools,
         isArray: Array.isArray(tools),
-        firstToolName: tools?.[0]?.functionDeclarations?.[0]?.name,
+        firstToolName: tools?.[0]?.name,
         toolsStructure: tools ? 'available' : 'undefined',
         runtimeKey,
       },

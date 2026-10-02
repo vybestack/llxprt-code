@@ -22,6 +22,7 @@
  * - CLI consumers (14+ files: sendMessageStream, setTools, updateSystemInstruction, etc.)
  */
 
+import type { ToolDeclaration } from '../llm-types/toolDeclaration.js';
 import type { ContentGeneratorConfig } from './contentGenerator.js';
 import type { HistoryService } from '../services/history/HistoryService.js';
 import type { IContent } from '../services/history/IContent.js';
@@ -71,7 +72,7 @@ export interface AgentClientGenerateConfig {
   topP?: number;
   topK?: number;
   abortSignal?: AbortSignal;
-  tools?: unknown;
+  tools?: ToolDeclaration[];
   toolConfig?: unknown;
   systemInstruction?: unknown;
 }

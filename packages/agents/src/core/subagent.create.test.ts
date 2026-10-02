@@ -434,7 +434,7 @@ describe('subagent.ts', () => {
 
         const toolGroups = messageParams?.config?.tools ?? [];
 
-        const functionDeclarations = toolGroups[0]?.functionDeclarations ?? [];
+        const functionDeclarations = toolGroups;
 
         const descriptionObservation = functionDeclarations[0]?.description;
         return {

@@ -202,19 +202,15 @@ describe('OpenAIProvider DeepSeek-reasoner reasoning+tool_calls co-emission (iss
         ],
         tools: [
           {
-            functionDeclarations: [
-              {
-                name: 'search',
-                description: 'Search the web',
-                parametersJsonSchema: {
-                  type: 'object' as const,
-                  properties: {
-                    query: { type: 'string' as const, description: 'Query' },
-                  },
-                  required: ['query'],
-                },
+            name: 'search',
+            description: 'Search the web',
+            parametersJsonSchema: {
+              type: 'object' as const,
+              properties: {
+                query: { type: 'string' as const, description: 'Query' },
               },
-            ],
+              required: ['query'],
+            },
           },
         ],
       }),

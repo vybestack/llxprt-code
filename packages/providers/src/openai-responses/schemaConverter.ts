@@ -59,14 +59,7 @@ export interface OpenAIResponsesTool {
   strict: null;
 }
 
-/**
- * Input format from Gemini-style tool declarations
- */
-interface ToolDeclaration {
-  name: string;
-  description?: string;
-  parametersJsonSchema?: unknown;
-}
+import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 
 /**
  * Convert a Gemini-style schema to OpenAI Responses parameter format.
@@ -250,9 +243,7 @@ function toNumber(value: unknown): number | undefined {
  * Convert an array of Gemini-style tool declarations to OpenAI Responses format
  */
 export function convertToolsToOpenAIResponses(
-  toolDeclarations?: Array<{
-    functionDeclarations?: ToolDeclaration[];
-  }>,
+  toolDeclarations?: ToolDeclaration[],
 ): OpenAIResponsesTool[] | undefined {
   if (!toolDeclarations || toolDeclarations.length === 0) {
     return undefined;
@@ -260,30 +251,24 @@ export function convertToolsToOpenAIResponses(
 
   const responsesTools: OpenAIResponsesTool[] = [];
 
-  for (const toolGroup of toolDeclarations) {
-    if (!toolGroup.functionDeclarations) {
-      continue;
-    }
-
-    for (const decl of toolGroup.functionDeclarations) {
-      if (!isSchemaObject(decl.parametersJsonSchema)) {
-        throw new Error(
-          `Tool "${decl.name}" is missing parametersJsonSchema — legacy schema fallback has been removed. ` +
-            `Ensure all tool declarations provide parametersJsonSchema at construction time.`,
-        );
-      }
-      const parameters = convertSchemaToOpenAIResponses(
-        decl.parametersJsonSchema,
+  for (const decl of toolDeclarations) {
+    if (!isSchemaObject(decl.parametersJsonSchema)) {
+      throw new Error(
+        `Tool "${decl.name}" is missing parametersJsonSchema — legacy schema fallback has been removed. ` +
+          `Ensure all tool declarations provide parametersJsonSchema at construction time.`,
       );
-
-      responsesTools.push({
-        type: 'function',
-        name: decl.name,
-        description: decl.description ?? null,
-        parameters,
-        strict: null,
-      });
     }
+    const parameters = convertSchemaToOpenAIResponses(
+      decl.parametersJsonSchema,
+    );
+
+    responsesTools.push({
+      type: 'function',
+      name: decl.name,
+      description: decl.description ?? null,
+      parameters,
+      strict: null,
+    });
   }
 
   if (logger.enabled && responsesTools.length > 0) {

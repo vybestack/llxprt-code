@@ -329,18 +329,13 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
           'These current instructions must remain visible to the model.',
         tools: [
           {
-            functionDeclarations: [
-              {
-                name: 'lookup_current_record',
-                description:
-                  'Look up a record under the current tool contract.',
-                parametersJsonSchema: {
-                  type: 'object',
-                  properties: { id: { type: 'string' } },
-                  required: ['id'],
-                },
-              },
-            ],
+            name: 'lookup_current_record',
+            description: 'Look up a record under the current tool contract.',
+            parametersJsonSchema: {
+              type: 'object',
+              properties: { id: { type: 'string' } },
+              required: ['id'],
+            },
           },
         ],
         ephemerals: { 'responses-stateful': true },
@@ -562,16 +557,12 @@ describe('OpenAIResponsesProvider.projectPromptEnvelope (issue #2817 A5)', () =>
         contents: baseContents,
         tools: [
           {
-            functionDeclarations: [
-              {
-                name: 'get_weather',
-                description: 'Get the weather for a city',
-                parametersJsonSchema: {
-                  type: 'object',
-                  properties: { city: { type: 'string' } },
-                },
-              },
-            ],
+            name: 'get_weather',
+            description: 'Get the weather for a city',
+            parametersJsonSchema: {
+              type: 'object',
+              properties: { city: { type: 'string' } },
+            },
           },
         ],
       }),

@@ -1,3 +1,4 @@
+import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 import { describe, it, expect } from 'bun:test';
 import { convertToolsToOpenAI } from '../schemaConverter.js';
 
@@ -5,19 +6,15 @@ describe('convertToolsToOpenAI — parametersJsonSchema source', () => {
   it('uses parametersJsonSchema when present', () => {
     const tools = [
       {
-        functionDeclarations: [
-          {
-            name: 'read_file',
-            description: 'Read a file',
-            parametersJsonSchema: {
-              type: 'object',
-              properties: {
-                path: { type: 'string', description: 'File path' },
-              },
-              required: ['path'],
-            },
+        name: 'read_file',
+        description: 'Read a file',
+        parametersJsonSchema: {
+          type: 'object',
+          properties: {
+            path: { type: 'string', description: 'File path' },
           },
-        ],
+          required: ['path'],
+        },
       },
     ];
 
@@ -30,29 +27,25 @@ describe('convertToolsToOpenAI — parametersJsonSchema source', () => {
     expect(result![0].function.parameters.required).toContain('path');
   });
 
-  it('uses parametersJsonSchema when both fields are present', () => {
+  it('uses parametersJsonSchema when both schema fields are present', () => {
     const tools = [
       {
-        functionDeclarations: [
-          {
-            name: 'dual_field_tool',
-            description: 'Has both fields',
-            parametersJsonSchema: {
-              type: 'object',
-              properties: {
-                fromJsonSchema: { type: 'string' },
-              },
-              required: [],
-            },
-            parameters: {
-              type: 'object',
-              properties: {
-                fromParameters: { type: 'string' },
-              },
-              required: [],
-            },
+        name: 'dual_field_tool',
+        description: 'Has both schema fields',
+        parametersJsonSchema: {
+          type: 'object',
+          properties: {
+            fromJsonSchema: { type: 'string' },
           },
-        ],
+          required: [],
+        },
+        parameters: {
+          type: 'object',
+          properties: {
+            fromParameters: { type: 'string' },
+          },
+          required: [],
+        },
       },
     ];
 
@@ -69,14 +62,16 @@ describe('convertToolsToOpenAI — parametersJsonSchema source', () => {
 
   it('throws when parametersJsonSchema is absent', () => {
     const tools = [
-      {
-        functionDeclarations: [
-          {
+      Object.assign<ToolDeclaration, { parametersJsonSchema: unknown }>(
+        {
+          ...{
             name: 'search_code',
             description: 'Search the codebase',
           },
-        ],
-      },
+          parametersJsonSchema: {},
+        },
+        { parametersJsonSchema: undefined },
+      ),
     ];
 
     expect(() => convertToolsToOpenAI(tools)).toThrow(
@@ -87,24 +82,26 @@ describe('convertToolsToOpenAI — parametersJsonSchema source', () => {
   it('throws for mixed tool group when any declaration lacks parametersJsonSchema', () => {
     const tools = [
       {
-        functionDeclarations: [
-          {
-            name: 'schema_tool',
-            description: 'Has schema',
-            parametersJsonSchema: {
-              type: 'object',
-              properties: {
-                schema_param: { type: 'string' },
-              },
-              required: ['schema_param'],
-            },
+        name: 'schema_tool',
+        description: 'Has schema',
+        parametersJsonSchema: {
+          type: 'object',
+          properties: {
+            schema_param: { type: 'string' },
           },
-          {
+          required: ['schema_param'],
+        },
+      },
+      Object.assign<ToolDeclaration, { parametersJsonSchema: unknown }>(
+        {
+          ...{
             name: 'legacy_tool',
             description: 'Missing schema',
           },
-        ],
-      },
+          parametersJsonSchema: {},
+        },
+        { parametersJsonSchema: undefined },
+      ),
     ];
 
     expect(() => convertToolsToOpenAI(tools)).toThrow(

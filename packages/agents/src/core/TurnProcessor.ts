@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
+
 import type { AgentClientGenerateConfig } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { ChatSessionConfig, SendMessageParams } from './chatSession.js';
 import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
@@ -68,7 +70,6 @@ import type {
 import {
   toModelStreamChunk,
   emptyModelOutput,
-  toolDeclarationsFromLegacyToolset,
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { recordAbandonedStreamAttempt } from './tokenUsageActualLogger.js';
 import { shouldRetryDirectProviderError } from './turnRetryPolicy.js';
@@ -88,12 +89,9 @@ import {
   throwAfterFailedTurnCleanup,
   wrapStreamGeneratorLifecycle,
 } from './turnMediaAdmissionLifecycle.js';
-type ToolGroupArray = Array<{
-  functionDeclarations?: Array<{ name: string }>;
-}>;
 
 interface ToolSelectionHookResult {
-  tools: ToolGroupArray | undefined;
+  tools: ToolDeclaration[] | undefined;
   allowedFunctionNames: string[] | undefined;
 }
 
@@ -554,13 +552,20 @@ export class TurnProcessor {
     timing: ProviderSendTiming,
     semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
   ): Promise<ModelOutput> {
+    const requestTools = this._selectRequestTools(requestParams);
     const toolSelection = await this._applyToolSelectionHook(
       this.runtimeContext.providerRuntime.config,
-      this._selectRequestTools(requestParams),
+      requestTools,
     );
     const runtimeContext = this.providerRuntimeBuilder(
       'TurnProcessor.executeProviderCall',
-      { toolCount: toolSelection.tools?.length ?? 0 },
+      {
+        toolCount: toolSelection.tools?.length ?? 0,
+        conversationLogEmptyTools:
+          requestTools === undefined ||
+          (toolSelection.allowedFunctionNames !== undefined &&
+            toolSelection.tools?.length === 0),
+      },
     );
     return enforceAndSendWithPromptEnvelopeRetries({
       provider,
@@ -710,7 +715,7 @@ export class TurnProcessor {
 
   private _buildProviderChatOptions(
     requestContents: IContent[],
-    tools: ToolGroupArray | undefined,
+    tools: ToolDeclaration[] | undefined,
     runtimeContext: ProviderRuntimeContext,
     timeoutSignal: AbortSignal,
     requestContext: Record<string, unknown> | undefined,
@@ -786,20 +791,16 @@ export class TurnProcessor {
 
   private _normalizeRequestTools(
     params: SendMessageParams,
-  ): Array<{ functionDeclarations: Array<{ name: string }> }> | undefined {
+  ): ToolDeclaration[] | undefined {
     const tools = this._selectRequestTools(params);
-    return Array.isArray(tools)
-      ? (tools as Array<{ functionDeclarations: Array<{ name: string }> }>)
-      : undefined;
+    return Array.isArray(tools) ? tools : undefined;
   }
 
   private async _applyToolSelectionHook(
     configForHooks: Config | undefined,
     tools: AgentClientGenerateConfig['tools'],
   ): Promise<ToolSelectionHookResult> {
-    const toolsFromConfig = Array.isArray(tools)
-      ? (tools as ToolGroupArray)
-      : [];
+    const toolsFromConfig = Array.isArray(tools) ? tools : [];
     if (
       configForHooks === undefined ||
       typeof configForHooks.getEnableHooks !== 'function' ||
@@ -820,7 +821,7 @@ export class TurnProcessor {
     const toolSelectionResult = await hookSystem.fireBeforeToolSelectionEvent({
       model: this.runtimeContext.state.model,
       contents: [],
-      tools: toolDeclarationsFromLegacyToolset(toolsFromConfig),
+      tools: toolsFromConfig,
     });
     const modifiedConfig = toolSelectionResult?.applyToolChoiceModifications({
       tools: toolsFromConfig,
@@ -835,35 +836,19 @@ export class TurnProcessor {
     }
 
     const allowedNames = new Set(allowedFunctions.map(canonicalizeToolName));
-    const filteredTools = toolsFromConfig
-      .map((toolGroup) => ({
-        ...toolGroup,
-        functionDeclarations: Array.isArray(toolGroup.functionDeclarations)
-          ? toolGroup.functionDeclarations.filter((fn) =>
-              allowedNames.has(canonicalizeToolName(fn.name)),
-            )
-          : [],
-      }))
-      .filter((toolGroup) => toolGroup.functionDeclarations.length > 0);
+    const filteredTools = toolsFromConfig.filter((decl) =>
+      allowedNames.has(canonicalizeToolName(decl.name)),
+    );
     return { tools: filteredTools, allowedFunctionNames: allowedFunctions };
   }
 
   private _logToolDiagnostics(
     provider: IProvider,
-    tools: unknown,
+    tools: ToolDeclaration[] | undefined,
     baseUrl: string | undefined,
   ): void {
     if (Array.isArray(tools)) {
-      const total = tools.reduce((sum, g) => {
-        if (
-          typeof g === 'object' &&
-          g !== null &&
-          'functionDeclarations' in g &&
-          Array.isArray(g.functionDeclarations)
-        )
-          return sum + g.functionDeclarations.length;
-        return sum;
-      }, 0);
+      const total = tools.length;
       if (total === 0)
         this.logger.warn(
           () =>

@@ -15,6 +15,7 @@
  * classic debug-logging namespace.
  */
 
+import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import {
   convertToolDeclarations,
@@ -48,13 +49,7 @@ export interface OpenAITool {
  * (missing descriptions become empty strings).
  */
 export function convertToolsToOpenAI(
-  toolDeclarations?: Array<{
-    functionDeclarations?: Array<{
-      name: string;
-      description?: string;
-      parametersJsonSchema?: unknown;
-    }>;
-  }>,
+  toolDeclarations?: ToolDeclaration[],
 ): OpenAITool[] | undefined {
   const converted = convertToolDeclarations(toolDeclarations, {
     descriptionStrategy: 'always-string',

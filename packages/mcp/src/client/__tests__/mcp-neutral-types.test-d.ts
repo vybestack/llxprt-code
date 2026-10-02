@@ -43,6 +43,4 @@ expectTypeOf<FunctionDeclaration>().toMatchTypeOf<{
 }>();
 
 // ToolDeclarations is the container for function declarations.
-expectTypeOf<ToolDeclarations>().toMatchTypeOf<{
-  functionDeclarations?: FunctionDeclaration[];
-}>();
+expectTypeOf<ToolDeclarations>().toMatchTypeOf<FunctionDeclaration[]>();

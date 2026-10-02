@@ -213,16 +213,12 @@ describe('AnthropicProvider', () => {
 
       const tools = [
         {
-          functionDeclarations: [
-            {
-              name: 'test_tool',
-              description: 'A test tool',
-              parametersJsonSchema: {
-                type: 'object',
-                properties: { foo: { type: 'string' } },
-              },
-            },
-          ],
+          name: 'test_tool',
+          description: 'A test tool',
+          parametersJsonSchema: {
+            type: 'object',
+            properties: { foo: { type: 'string' } },
+          },
         },
       ];
 

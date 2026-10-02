@@ -143,16 +143,12 @@ describe('OpenAIProvider.projectPromptEnvelope (issue #2817 A4)', () => {
         contents: baseContents,
         tools: [
           {
-            functionDeclarations: [
-              {
-                name: 'get_weather',
-                description: 'Get the weather for a city',
-                parametersJsonSchema: {
-                  type: 'object',
-                  properties: { city: { type: 'string' } },
-                },
-              },
-            ],
+            name: 'get_weather',
+            description: 'Get the weather for a city',
+            parametersJsonSchema: {
+              type: 'object',
+              properties: { city: { type: 'string' } },
+            },
           },
         ],
       }),

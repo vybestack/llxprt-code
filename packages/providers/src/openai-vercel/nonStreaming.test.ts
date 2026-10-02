@@ -473,19 +473,15 @@ describe('OpenAIVercelProvider - Non-Streaming Generation (P09)', () => {
 
       const tools: ProviderToolset = [
         {
-          functionDeclarations: [
-            {
-              name: 'get_weather',
-              description: 'Get the current weather',
-              parametersJsonSchema: {
-                type: 'object',
-                properties: {
-                  city: { type: 'string' },
-                },
-                required: ['city'],
-              },
+          name: 'get_weather',
+          description: 'Get the current weather',
+          parametersJsonSchema: {
+            type: 'object',
+            properties: {
+              city: { type: 'string' },
             },
-          ],
+            required: ['city'],
+          },
         },
       ];
 

@@ -163,7 +163,7 @@ describe('StreamProcessor._buildAndSendStreamRequest — stream retry boundary (
         getConversationLoggingEnabled: () => false,
       };
       const abortController = new AbortController();
-      const tools = [{ functionDeclarations: [] }];
+      const tools = [];
       const baseRuntimeContext = {
         config: configInstance,
         settingsService: {},

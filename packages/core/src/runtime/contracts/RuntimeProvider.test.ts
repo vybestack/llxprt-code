@@ -15,11 +15,9 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import type {
-  RuntimeProvider,
-  RuntimeToolDeclaration,
-  RuntimeToolset,
-} from './RuntimeProvider.js';
+import type { RuntimeProvider } from './RuntimeProvider.js';
+import type { RuntimeProviderToolset } from './RuntimeProviderChat.js';
+import type { ToolDeclaration } from '../../llm-types/toolDeclaration.js';
 import type { RuntimeProviderManager } from './RuntimeProviderManager.js';
 import type { RuntimeModel } from './RuntimeModel.js';
 
@@ -88,7 +86,7 @@ describe('RuntimeProvider contract', () => {
       name: 'test-provider',
       generateChatCompletion(
         _messages: unknown[],
-        _tools?: RuntimeToolset[],
+        _tools?: RuntimeProviderToolset,
         _options?: unknown,
       ): AsyncIterable<unknown> {
         async function* yieldChunks() {
@@ -126,51 +124,44 @@ describe('RuntimeProvider contract', () => {
   });
 });
 
-describe('RuntimeToolDeclaration and RuntimeToolset', () => {
-  /**
-   * @plan:PLAN-20260603-ISSUE1584.P04
-   * @requirement:REQ-TEST-001
-   */
-  it('accepts tool declarations with name and optional fields', () => {
-    const declaration: RuntimeToolDeclaration = {
-      name: 'read_file',
-      description: 'Read a file',
-      parametersJsonSchema: {
-        type: 'object',
-        properties: { path: { type: 'string' } },
+describe('RuntimeProvider flat tool declarations', () => {
+  it('accepts ordered neutral declarations with faithful schemas', () => {
+    const schema = {
+      type: 'object',
+      properties: { path: { type: 'string' } },
+      required: ['path'],
+    } as const;
+    const declarations: RuntimeProviderToolset = [
+      {
+        name: 'read_file',
+        description: 'Read a file',
+        parametersJsonSchema: schema,
+      },
+      { name: 'no_args', parametersJsonSchema: true },
+    ];
+
+    expect(declarations.map(({ name }) => name)).toStrictEqual([
+      'read_file',
+      'no_args',
+    ]);
+    expect(declarations[0]?.parametersJsonSchema).toBe(schema);
+    expect(declarations[1]?.parametersJsonSchema).toBe(true);
+  });
+
+  it('uses the same flat declarations for positional provider calls', () => {
+    const declarations: ToolDeclaration[] = [
+      { name: 'lookup', parametersJsonSchema: { type: 'object' } },
+    ];
+    const provider: RuntimeProvider = {
+      name: 'test-provider',
+      generateChatCompletion(_contents, tools) {
+        expect(tools?.[0]?.name).toBe('lookup');
+        return (async function* () {})();
       },
     };
 
-    expect(declaration.name).toBe('read_file');
-    expect(declaration.description).toBe('Read a file');
-  });
-
-  /**
-   * @plan:PLAN-20260603-ISSUE1584.P04
-   * @requirement:REQ-TEST-001
-   */
-  it('accepts tool declarations with minimal required fields', () => {
-    const declaration: RuntimeToolDeclaration = {
-      name: 'simple_tool',
-    };
-
-    expect(declaration.name).toBe('simple_tool');
-  });
-
-  /**
-   * @plan:PLAN-20260603-ISSUE1584.P04
-   * @requirement:REQ-TEST-001
-   */
-  it('accepts a toolset with function declarations', () => {
-    const toolset: RuntimeToolset = {
-      functionDeclarations: [
-        { name: 'tool_a' },
-        { name: 'tool_b', description: 'Tool B' },
-      ],
-    };
-
-    expect(toolset.functionDeclarations).toHaveLength(2);
-    expect(toolset.functionDeclarations[1].description).toBe('Tool B');
+    const stream = provider.generateChatCompletion([], declarations);
+    expect(stream).toBeDefined();
   });
 });
 

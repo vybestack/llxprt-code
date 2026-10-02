@@ -57,14 +57,7 @@ export interface OpenAIPropertySchema {
   [key: string]: unknown;
 }
 
-/**
- * Input format from Gemini-style tool declarations.
- */
-interface ToolDeclaration {
-  name: string;
-  description?: string;
-  parametersJsonSchema?: unknown;
-}
+import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 
 /**
  * Property-level keywords that receive explicit normalization. Every other
@@ -427,8 +420,8 @@ export interface ConvertedToolDeclaration {
 export type DescriptionStrategy = 'always-string' | 'preserve';
 
 /**
- * Shared core that both provider wrappers delegate to. Iterates Gemini-style
- * tool groups, validates each declaration has a parametersJsonSchema, and
+ * Shared core that both provider wrappers delegate to. Iterates flat
+ * tool declarations, validates each has a parametersJsonSchema, and
  * converts it to OpenAI format. Returns undefined when there are no tools.
  *
  * @throws {Error} when any tool declaration lacks a valid
@@ -436,9 +429,7 @@ export type DescriptionStrategy = 'always-string' | 'preserve';
  *   callers can identify the misconfigured declaration.
  */
 export function convertToolDeclarations(
-  toolDeclarations:
-    | Array<{ functionDeclarations?: ToolDeclaration[] }>
-    | undefined,
+  toolDeclarations: ToolDeclaration[] | undefined,
   options: { descriptionStrategy: DescriptionStrategy },
 ): ConvertedToolDeclaration[] | undefined {
   if (!toolDeclarations || toolDeclarations.length === 0) {
@@ -447,33 +438,27 @@ export function convertToolDeclarations(
 
   const converted: ConvertedToolDeclaration[] = [];
 
-  for (const toolGroup of toolDeclarations) {
-    if (!toolGroup.functionDeclarations) {
-      continue;
+  for (const decl of toolDeclarations) {
+    if (!isSchemaObject(decl.parametersJsonSchema)) {
+      throw new Error(
+        `Tool "${decl.name}" is missing parametersJsonSchema — legacy schema fallback has been removed. ` +
+          `Ensure all tool declarations provide parametersJsonSchema at construction time.`,
+      );
     }
+    const parameters = convertSchemaToOpenAI(decl.parametersJsonSchema);
+    const description =
+      options.descriptionStrategy === 'always-string'
+        ? (decl.description ?? '')
+        : decl.description;
 
-    for (const decl of toolGroup.functionDeclarations) {
-      if (!isSchemaObject(decl.parametersJsonSchema)) {
-        throw new Error(
-          `Tool "${decl.name}" is missing parametersJsonSchema — legacy schema fallback has been removed. ` +
-            `Ensure all tool declarations provide parametersJsonSchema at construction time.`,
-        );
-      }
-      const parameters = convertSchemaToOpenAI(decl.parametersJsonSchema);
-      const description =
-        options.descriptionStrategy === 'always-string'
-          ? (decl.description ?? '')
-          : decl.description;
-
-      converted.push({
-        type: 'function',
-        function: {
-          name: decl.name,
-          description,
-          parameters,
-        },
-      });
-    }
+    converted.push({
+      type: 'function',
+      function: {
+        name: decl.name,
+        description,
+        parameters,
+      },
+    });
   }
 
   return converted.length > 0 ? converted : undefined;

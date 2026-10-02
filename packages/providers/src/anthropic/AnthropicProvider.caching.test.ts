@@ -885,23 +885,19 @@ describe('AnthropicProvider', () => {
 
         const tools = [
           {
-            functionDeclarations: [
-              {
-                name: 'zebra_tool',
-                description: 'Z tool',
-                parametersJsonSchema: { type: 'object', properties: {} },
-              },
-              {
-                name: 'alpha_tool',
-                description: 'A tool',
-                parametersJsonSchema: { type: 'object', properties: {} },
-              },
-              {
-                name: 'middle_tool',
-                description: 'M tool',
-                parametersJsonSchema: { type: 'object', properties: {} },
-              },
-            ],
+            name: 'zebra_tool',
+            description: 'Z tool',
+            parametersJsonSchema: { type: 'object', properties: {} },
+          },
+          {
+            name: 'alpha_tool',
+            description: 'A tool',
+            parametersJsonSchema: { type: 'object', properties: {} },
+          },
+          {
+            name: 'middle_tool',
+            description: 'M tool',
+            parametersJsonSchema: { type: 'object', properties: {} },
           },
         ];
 
@@ -941,20 +937,16 @@ describe('AnthropicProvider', () => {
 
         const tools = [
           {
-            functionDeclarations: [
-              {
-                name: 'test_tool',
-                description: 'Test',
-                parametersJsonSchema: {
-                  type: 'object',
-                  properties: {
-                    zebra: { type: 'string' },
-                    apple: { type: 'number' },
-                    middle: { type: 'boolean' },
-                  },
-                },
+            name: 'test_tool',
+            description: 'Test',
+            parametersJsonSchema: {
+              type: 'object',
+              properties: {
+                zebra: { type: 'string' },
+                apple: { type: 'number' },
+                middle: { type: 'boolean' },
               },
-            ],
+            },
           },
         ];
 

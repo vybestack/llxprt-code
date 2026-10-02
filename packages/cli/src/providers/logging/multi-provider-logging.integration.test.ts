@@ -10,6 +10,7 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
+import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import type { IContent, Config } from '@vybestack/llxprt-code-core';
 import { testRegex } from '../../__tests__/regex.js';
@@ -23,13 +24,7 @@ import type {
 interface LoggingProviderWrapper {
   generateChatCompletion(
     messages: IContent[],
-    tools?: Array<{
-      functionDeclarations: Array<{
-        name: string;
-        description?: string;
-        parameters?: unknown;
-      }>;
-    }>,
+    tools?: ToolDeclaration[],
   ): AsyncIterableIterator<unknown>;
   getWrappedProvider(): IProvider;
 }
@@ -241,13 +236,7 @@ class MockLoggingProviderWrapper implements LoggingProviderWrapper {
 
   async *generateChatCompletion(
     messages: IContent[],
-    tools?: Array<{
-      functionDeclarations: Array<{
-        name: string;
-        description?: string;
-        parameters?: unknown;
-      }>;
-    }>,
+    tools?: ToolDeclaration[],
   ): AsyncIterableIterator<unknown> {
     const conversationId = `conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
@@ -487,19 +476,15 @@ describe('Multi-Provider Conversation Logging Integration', () => {
     // anything.
     const offeredTools = [
       {
-        functionDeclarations: [
-          {
-            name: 'search_web',
-            description: 'Search the web',
-            parametersJsonSchema: {
-              type: 'object',
-              properties: {
-                query: { type: 'string' },
-              },
-              required: ['query'],
-            },
+        name: 'search_web',
+        description: 'Search the web',
+        parametersJsonSchema: {
+          type: 'object',
+          properties: {
+            query: { type: 'string' },
           },
-        ],
+          required: ['query'],
+        },
       },
     ];
 

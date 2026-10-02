@@ -172,20 +172,16 @@ describe('OpenAIProvider integration test registration', () => {
 
       const tools = [
         {
-          functionDeclarations: [
-            {
-              name: 'get_weather',
-              description: 'Get the weather for a location',
-              parameters: {
-                type: 'object',
-                properties: {
-                  location: { type: 'string', description: 'The city name' },
-                  unit: { type: 'string', enum: ['celsius', 'fahrenheit'] },
-                },
-                required: ['location'],
-              },
+          name: 'get_weather',
+          description: 'Get the weather for a location',
+          parametersJsonSchema: {
+            type: 'object',
+            properties: {
+              location: { type: 'string', description: 'The city name' },
+              unit: { type: 'string', enum: ['celsius', 'fahrenheit'] },
             },
-          ],
+            required: ['location'],
+          },
         },
       ];
 

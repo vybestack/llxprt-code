@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
+
 import type { AgentClientGenerateConfig } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { ChatSessionConfig, SendMessageParams } from './chatSession.js';
 import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
@@ -13,10 +15,7 @@ import type {
   ContentMetadata,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import type {
-  RuntimeGenerateChatOptions as GenerateChatOptions,
-  RuntimeProviderToolset as ProviderToolset,
-} from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
+import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -48,16 +47,8 @@ import type { HookSystem } from '@vybestack/llxprt-code-core/hooks/hookSystem.js
 import type { BeforeModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 import type { HookLLMResponse } from '@vybestack/llxprt-code-core/hooks/hookTranslator.js';
 
-type ToolGroupArray = Array<{
-  functionDeclarations?: Array<{
-    name: string;
-    description?: string;
-    parametersJsonSchema?: unknown;
-  }>;
-}>;
-
 interface ToolSelectionHookResult {
-  tools: ToolGroupArray | undefined;
+  tools: ToolDeclaration[] | undefined;
   allowedFunctionNames: string[] | undefined;
 }
 
@@ -477,11 +468,7 @@ export class DirectMessageProcessor {
       runtimeContext.config,
       {
         contents: contentsForApi,
-        tools:
-          effectiveToolsFromConfig !== undefined &&
-          effectiveToolsFromConfig.length > 0
-            ? effectiveToolsFromConfig
-            : undefined,
+        tools: effectiveToolsFromConfig,
       },
       allowedFunctionNames,
     );
@@ -489,7 +476,7 @@ export class DirectMessageProcessor {
 
   private _buildProviderRuntimeMetadata(
     params: SendMessageParams,
-    effectiveToolsFromConfig: ToolGroupArray | undefined,
+    effectiveToolsFromConfig: ToolDeclaration[] | undefined,
   ): Record<string, unknown> {
     const directOverrides = this._extractDirectProviderOverrides(params.config);
     return {
@@ -501,7 +488,7 @@ export class DirectMessageProcessor {
   private _createDirectProviderStream(
     provider: IProvider,
     contentsForApi: IContent[],
-    effectiveToolsFromConfig: ToolGroupArray | undefined,
+    effectiveToolsFromConfig: ToolDeclaration[] | undefined,
     runtimeContext: ProviderRuntimeContext,
     timeoutSignal: AbortSignal,
     requestContext: Record<string, unknown> | undefined,
@@ -525,11 +512,7 @@ export class DirectMessageProcessor {
 
     return provider.generateChatCompletion({
       contents: contentsForApi,
-      tools:
-        effectiveToolsFromConfig !== undefined &&
-        effectiveToolsFromConfig.length > 0
-          ? (effectiveToolsFromConfig as ProviderToolset)
-          : undefined,
+      tools: effectiveToolsFromConfig,
       config: runtimeContext.config,
       runtime: runtimeContext,
       invocation: {
@@ -563,15 +546,13 @@ export class DirectMessageProcessor {
     params: SendMessageParams,
     userIContents: IContent[],
   ): Promise<{
-    effectiveToolsFromConfig: ToolGroupArray | undefined;
+    effectiveToolsFromConfig: ToolDeclaration[] | undefined;
     contentsForApi: IContent[];
     blockedOutput: ModelOutput | undefined;
     allowedFunctionNames: string[] | undefined;
   }> {
     const requestTools = this._selectRequestTools(params);
-    const toolsFromConfig = Array.isArray(requestTools)
-      ? (requestTools as ToolGroupArray)
-      : [];
+    const toolsFromConfig = Array.isArray(requestTools) ? requestTools : [];
 
     const configForHooks = this.runtimeContext.providerRuntime.config;
     let contentsForApi: IContent[] = userIContents;
@@ -579,7 +560,12 @@ export class DirectMessageProcessor {
       configForHooks !== undefined
         ? await this._applyToolSelectionHook(configForHooks, toolsFromConfig)
         : { tools: toolsFromConfig, allowedFunctionNames: undefined };
-    const effectiveToolsFromConfig = toolSelection.tools;
+    const effectiveToolsFromConfig =
+      requestTools === undefined ||
+      (toolSelection.allowedFunctionNames !== undefined &&
+        toolSelection.tools?.length === 0)
+        ? undefined
+        : toolSelection.tools;
 
     if (configForHooks) {
       const hookResult = await this._handleBeforeModelHook(
@@ -610,7 +596,7 @@ export class DirectMessageProcessor {
 
   private async _applyToolSelectionHook(
     configForHooks: Config,
-    toolsFromConfig: ToolGroupArray,
+    toolsFromConfig: ToolDeclaration[],
   ): Promise<ToolSelectionHookResult> {
     if (!resolveHooksEnabled(configForHooks)) {
       return { tools: toolsFromConfig, allowedFunctionNames: undefined };
@@ -638,16 +624,9 @@ export class DirectMessageProcessor {
     ) {
       const allowedFunctions = toolChoice.allowedToolNames;
       const allowedNames = new Set(allowedFunctions.map(canonicalizeToolName));
-      const filteredTools = toolsFromConfig
-        .map((toolGroup) => ({
-          ...toolGroup,
-          functionDeclarations: Array.isArray(toolGroup.functionDeclarations)
-            ? toolGroup.functionDeclarations.filter((fn) =>
-                allowedNames.has(canonicalizeToolName(fn.name)),
-              )
-            : [],
-        }))
-        .filter((g) => g.functionDeclarations.length > 0) as ToolGroupArray;
+      const filteredTools = toolsFromConfig.filter((decl) =>
+        allowedNames.has(canonicalizeToolName(decl.name)),
+      );
       return { tools: filteredTools, allowedFunctionNames: allowedFunctions };
     }
     return { tools: toolsFromConfig, allowedFunctionNames: undefined };
@@ -661,15 +640,7 @@ export class DirectMessageProcessor {
   private async _handleBeforeModelHook(
     configForHooks: Config,
     userIContents: IContent[],
-    effectiveToolsFromConfig:
-      | Array<{
-          functionDeclarations?: Array<{
-            name: string;
-            description?: string;
-            parametersJsonSchema?: unknown;
-          }>;
-        }>
-      | undefined,
+    effectiveToolsFromConfig: ToolDeclaration[] | undefined,
   ): Promise<{
     blockedOutput?: ModelOutput;
     modifiedContents?: IContent[];
@@ -758,7 +729,7 @@ export class DirectMessageProcessor {
     lastResponse: IContent,
     aggregatedText: string,
     config: Config | undefined,
-    llmRequest?: { contents: IContent[]; tools?: unknown },
+    llmRequest?: { contents: IContent[]; tools?: ToolDeclaration[] },
     allowedFunctionNames?: string[],
   ): Promise<ModelOutput> {
     const baseOutput = toModelStreamChunk(lastResponse);
@@ -814,7 +785,7 @@ export class DirectMessageProcessor {
    */
   private async _fireAfterModelAndApply(
     directOutput: ModelOutput,
-    llmRequest: { contents: IContent[]; tools?: unknown } | undefined,
+    llmRequest: { contents: IContent[]; tools?: ToolDeclaration[] } | undefined,
     config: Config | undefined,
     allowedFunctionNames: string[] | undefined,
   ): Promise<{

@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { ContentPart } from '@vybestack/llxprt-code-tools';
+
 import {
   limitOutputTokens,
   type ToolOutputSettingsProvider,
@@ -213,39 +215,7 @@ export function limitToolResponseBlock(
   };
 }
 
-/**
- * Structural shape for legacy PartListUnion input. Operates on `unknown` with
- * structural checks — no @google/genai import needed.
- */
-interface LegacyPartLike {
-  text?: string;
-  thought?: unknown;
-  functionCall?: { id?: string; name?: string; args?: unknown } | undefined;
-  functionResponse?:
-    | { id?: string; name?: string; response?: unknown }
-    | undefined;
-  inlineData?:
-    | {
-        mimeType?: string;
-        data?: string;
-        displayName?: string;
-        originalData?: string;
-        originalMimeType?: string;
-        originalDimensions?: {
-          readonly width: number;
-          readonly height: number;
-        };
-        transformation?: {
-          readonly policyId: string;
-          readonly policyVersion: number;
-          readonly parameters: Readonly<Record<string, number>>;
-        };
-      }
-    | undefined;
-  fileData?: { fileUri?: string; mimeType?: string } | undefined;
-}
-
-function isLegacyPartLike(value: unknown): value is LegacyPartLike {
+function isContentPart(value: unknown): value is ContentPart {
   return typeof value === 'object' && value !== null;
 }
 const CONTENT_BLOCK_TYPES = new Set<ContentBlock['type']>([
@@ -273,19 +243,15 @@ function toBlocksFromLegacyParts(input: unknown): ContentBlock[] {
       blocks.push({ type: 'text', text: entry });
     } else if (isContentBlock(entry)) {
       blocks.push(entry);
-    } else if (
-      entry !== null &&
-      entry !== undefined &&
-      isLegacyPartLike(entry)
-    ) {
-      blocks.push(...legacyPartToBlocks(entry));
+    } else if (entry !== null && entry !== undefined && isContentPart(entry)) {
+      blocks.push(...contentPartToBlocks(entry));
     }
   }
 
   return blocks;
 }
 
-function legacyPartToBlocks(part: LegacyPartLike): ContentBlock[] {
+function contentPartToBlocks(part: ContentPart): ContentBlock[] {
   if ('thought' in part && part.thought === true) {
     return [
       {
@@ -302,12 +268,14 @@ function legacyPartToBlocks(part: LegacyPartLike): ContentBlock[] {
   }
 
   if (part.functionCall) {
+    const functionCall: Partial<NonNullable<ContentPart['functionCall']>> =
+      part.functionCall;
     return [
       {
         type: 'tool_call',
-        id: part.functionCall.id ?? '',
-        name: part.functionCall.name ?? '',
-        parameters: part.functionCall.args ?? {},
+        id: functionCall.id ?? '',
+        name: functionCall.name ?? '',
+        parameters: functionCall.args ?? {},
       },
     ];
   }
@@ -353,8 +321,14 @@ function legacyPartToBlocks(part: LegacyPartLike): ContentBlock[] {
     return [
       {
         type: 'media',
-        mimeType: part.fileData.mimeType ?? 'application/octet-stream',
-        data: part.fileData.fileUri ?? '',
+        mimeType:
+          typeof part.fileData.mimeType === 'string'
+            ? part.fileData.mimeType
+            : 'application/octet-stream',
+        data:
+          typeof part.fileData.fileUri === 'string'
+            ? part.fileData.fileUri
+            : '',
         encoding: 'url',
       },
     ];

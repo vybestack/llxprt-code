@@ -350,13 +350,9 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
         {
           tools: [
             {
-              functionDeclarations: [
-                {
-                  name: 'read_file',
-                  description: 'Read a file',
-                  parametersJsonSchema: { type: 'object', properties: {} },
-                },
-              ],
+              name: 'read_file',
+              description: 'Read a file',
+              parametersJsonSchema: { type: 'object', properties: {} },
             },
           ],
           resolved: {
@@ -396,13 +392,9 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
         {
           tools: [
             {
-              functionDeclarations: [
-                {
-                  name: 'read_file',
-                  description: 'Read a file',
-                  parametersJsonSchema: { type: 'object', properties: {} },
-                },
-              ],
+              name: 'read_file',
+              description: 'Read a file',
+              parametersJsonSchema: { type: 'object', properties: {} },
             },
           ],
           resolved: {

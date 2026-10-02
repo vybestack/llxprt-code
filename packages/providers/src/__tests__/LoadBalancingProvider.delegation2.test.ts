@@ -409,13 +409,9 @@ describe('LoadBalancingProvider', () => {
 
       const testTools: ProviderToolset = [
         {
-          functionDeclarations: [
-            {
-              name: 'test_tool',
-              description: 'A test tool',
-              parametersJsonSchema: { type: 'object' },
-            },
-          ],
+          name: 'test_tool',
+          description: 'A test tool',
+          parametersJsonSchema: { type: 'object' },
         },
       ];
 
