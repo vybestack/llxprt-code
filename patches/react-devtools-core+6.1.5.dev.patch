@@ -1,0 +1,73 @@
+diff --git a/node_modules/react-devtools-core/dist/backend.js b/node_modules/react-devtools-core/dist/backend.js
+index 15c8ee7..a2d57d9 100644
+--- a/node_modules/react-devtools-core/dist/backend.js
++++ b/node_modules/react-devtools-core/dist/backend.js
+@@ -12024,7 +12024,11 @@ function renderer_attach(hook, rendererID, renderer, global, shouldStartProfilin
+     }
+ 
+     if (pendingOperationsQueue !== null) {
+-      pendingOperationsQueue.push(operations);
++      // Ink can run indefinitely without an inspector. Its live tree is the
++      // reconnect snapshot; only an explicitly requested profile needs a journal.
++      if (renderer.rendererPackageName !== 'ink' || isProfiling) {
++        pendingOperationsQueue.push(operations);
++      }
+     } else {
+       hook.emit('operations', operations);
+     }
+@@ -13382,8 +13386,43 @@ function renderer_attach(hook, rendererID, renderer, global, shouldStartProfilin
+     }
+   }
+ 
++  function resetInkTree() {
++    // These maps are shared by renderers, so release only this renderer's roots.
++    hook.getFiberRoots(rendererID).forEach(function (root) {
++      var rootInstance = rootToFiberInstanceMap.get(root);
++      if (rootInstance !== undefined) {
++        unmountInstanceRecursively(rootInstance);
++        rootToFiberInstanceMap.delete(root);
++      }
++    });
++    pendingOperations.length = 0;
++    pendingRealUnmountedIDs.length = 0;
++    pendingUnmountedRootID = null;
++    pendingStringTable.clear();
++    pendingStringTableLength = 0;
++    rootPseudoKeys.clear();
++    rootDisplayNameCounter.clear();
++    currentRoot = null;
++    mostRecentlyInspectedElement = null;
++    currentlyInspectedPaths = {};
++    trackedPathMatchFiber = null;
++    trackedPathMatchInstance = null;
++    trackedPathMatchDepth = -1;
++    traceUpdatesForNodes.clear();
++    needsToFlushComponentLogs = false;
++  }
++
+   function cleanup() {
+     isProfiling = false;
++    if (renderer.rendererPackageName === 'ink') {
++      stopProfiling();
++      resetInkTree();
++      pendingOperationsQueue = [];
++      currentCommitProfilingMetadata = null;
++      rootToCommitProfilingMetadataMap = null;
++      initialTreeBaseDurationsMap = null;
++      displayNamesByRootID = null;
++    }
+   }
+ 
+   function rootSupportsProfiling(root) {
+@@ -13401,6 +13440,11 @@ function renderer_attach(hook, rendererID, renderer, global, shouldStartProfilin
+ 
+   function flushInitialOperations() {
+     var localPendingOperationsQueue = pendingOperationsQueue;
++    if (renderer.rendererPackageName === 'ink' && localPendingOperationsQueue !== null && localPendingOperationsQueue.length === 0) {
++      // A dormant Ink renderer kept the live tree, not historical operations.
++      // Rebuild its IDs and operations for this new frontend connection.
++      resetInkTree();
++    }
+     pendingOperationsQueue = null;
+ 
+     if (localPendingOperationsQueue !== null && localPendingOperationsQueue.length > 0) {

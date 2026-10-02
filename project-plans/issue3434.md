@@ -1,8 +1,8 @@
 # Issue #3434 implementation plan
 
-## Latest status (2026-10-01)
+## Latest status (2026-10-02)
 
-The implementation has passing full-suite evidence in a source-identical temporary checkout and a completed two-cycle local review. The reviewer follow-up verdict is PASS, with F1-F4 resolved and no remaining code blockers. The final acceptance section at the end records the environment limits. Earlier blocked and incomplete sections below preserve the sequence of executed evidence; they do not describe the current acceptance status.
+The development-mode DevTools queue identified as #3797 is now fixed in this branch. It is no longer deferred. The maintained Ink and React DevTools patches preserve connected inspection, late connection, reconnect, explicit profiling and Static output. Final-candidate development lanes show flat retained Array counts after cache warmup, with no dormant operation journal and released mounted tree roots. The 2026-10-02 section below records the implementation and verification evidence. Earlier sections preserve historical failures and the completed two-cycle review of the preceding emission candidate; they do not establish broad verification success for the additional lifecycle fix.
 
 ## Accepted contract
 
@@ -276,8 +276,121 @@ The unchanged SessionDiscovery property passed in both serial lanes, including *
 
 Full format, lint, typecheck and build passed, as did the installed `gpt-6-luna` live haiku smoke. The complete-context unchanged interactive gate passed **19/19**. Maintained candidate suites passed **15 cap cases**, **6 resize cases**, and **40 eviction/turn-store cases**; the earlier 77-case aggregate included clean-main comparison cases. Real tmux copy-mode evidence and the five no-replay resize deltas remain recorded above.
 
-The non-test production renderer completed **3,000 measured appends at cap 25** and **2,000 at caps 100/400**. Late Array counts plateaued at **47,044**; settled late heap ranged approximately **93.13 to 93.76 MB** across those lanes. These measurements concern retained production-renderer state. Bounded ledger copying remains unchanged; there is no claim of constant whole-path allocation, exact #3430 workload coverage, or universal development-mode memory behavior. The executed real committed workloads are deterministic equivalents. Historical intermittent RSS [#3794](https://github.com/vybestack/llxprt-code/issues/3794) and main-reproduced development-tool queue [#3797](https://github.com/vybestack/llxprt-code/issues/3797) remain follow-ups.
+The non-test production renderer completed **3,000 measured appends at cap 25** and **2,000 at caps 100/400**. Late Array counts plateaued at **47,044**; settled late heap ranged approximately **93.13 to 93.76 MB** across those lanes. These measurements concern retained production-renderer state. Bounded ledger copying remains unchanged; there is no claim of constant whole-path allocation, exact #3430 workload coverage, or universal development-mode memory behavior. The executed real committed workloads are deterministic equivalents. Historical intermittent RSS [#3794](https://github.com/vybestack/llxprt-code/issues/3794) remains unattributed. The main-reproduced development-tool queue [#3797](https://github.com/vybestack/llxprt-code/issues/3797) was recorded as a follow-up at this stage; the 2026-10-02 implementation below fixes it here.
 
 The local review used two cycles: one full review and one findings-only follow-up. The supplied final reviewer verdict is **PASS**, with **F1-F4 resolved** and no remaining code blockers. Follow-up execution artifacts are retained in `tmp/verify3434/review-followup/`. No additional review or OCR was run during commit preparation.
 
 Scope remains #3434's bounded Static emission, genuine truncation count/replacement epoch, and the maintained Ink overflow/resize no-replay patch. Issues #3428, #854 and #3431 are excluded. No dependency versions, workflows, enforcement, project settings or agent memories changed. The earlier blocked status is superseded by this explicitly limited passing lane and completed review; it is retained as historical evidence.
+
+## 2026-10-02 development leak implementation and final-candidate evidence
+
+**The original development operation queue no longer grows during ordinary committed output.** The user expanded the accepted scope to fix the leak here, including the maintained Ink lifecycle and development-only React DevTools patches. #3797 is implemented in this branch, not deferred to a new issue. Existing issue bodies were not changed. No commit, push, OCR or additional code-review cycle was performed.
+
+### Accepted lifecycle contract and source fix
+
+Dormant and disconnected Ink renderers retain their bounded current tree, not a historical operations journal. A newly connected frontend receives a current snapshot with valid parent/child IDs and inspectable current props. Connected commits continue delivering operations. Reconnect rebuilds that snapshot after disconnect cleanup. Explicit profiling still records requested commits and can return profiling data after recording stops; ordinary output never implicitly starts profiling. Disconnect stops timeline recording and releases tree, inspection and profile metadata ownership. Unmount removes the frontend tree and releases mounted fibers. Other renderer packages keep upstream queue behavior.
+
+The source cause was `react-devtools-core/dist/backend.js` appending structural operation Arrays to `pendingOperationsQueue` before a frontend connects. The historical real production-layout development lane grew from 202 to 6,202 queued Arrays over 3,000 appends. The fix makes Ink's dormant queue conditional on explicit profiling. `flushInitialOperations()` reconstructs Ink's live tree when there is no requested historical journal. Cleanup recursively unmounts only this renderer's roots, clears pending/string/inspection/tracking state, and discards disconnected operation/profile metadata. Calling `stopProfiling()` also switches off the timeline recorder; setting only the renderer's `isProfiling` boolean was insufficient.
+
+Ink's installed React reconciler version reads renderer identity from host configuration. The old `injectIntoDevTools({...})` arguments did not publish that identity. The Ink patch now sets `rendererPackageName: 'ink'` and `rendererVersion` from the actual React version in `build/reconciler.js`, and calls `injectIntoDevTools()` without obsolete arguments. It preserves the existing bounded cache/static-output and no-replay overflow patches.
+
+Necessary changes relative to HEAD `714f8fb80`:
+
+- `patches/ink+6.4.8.patch`: correct reconciler host identity and DevTools injection.
+- `patches/react-devtools-core+6.1.5.dev.patch`: Ink-specific dormant queue, current-tree backfill and disconnect/profile cleanup. The `.dev.patch` suffix matches the existing development dependency.
+- `scripts/tests/fixtures/ink-devtools-lifecycle.ts`: real Ink/React/backend behavior with an external WebSocket transport substitute and a frontend operation decoder.
+- `scripts/tests/ink-devtools-lifecycle.test.ts`: Bun regression runner for the lifecycle fixture.
+- `project-plans/issue3434.md`: current scope, implementation and evidence record.
+
+No package version, dependency declaration, package manifest, workflow, enforcement, global setting or project `.llxprt` content changed. The worker's 100 added `bun.lock` lines described redundant workspace `file:` dependency records, not patch metadata or new dependency versions. Only that incidental drift was restored to HEAD. The running isolated checkout's lockfile was then updated to those restored bytes; no production source, test or patch blob changed. `lock-restoration-audit.json` records old SHA-256 `a6d0c8cf658d814362138133e41b46b54e714dc6c6b6ac8400987e168ab1e2fd` and restored SHA-256 `98f3e6317e82b6d498fcf0ee57b5f53db96be4c7fbd1feeb051591880cec5dcc`. The subsequent 12,318-file audit had zero mismatches. The plan is updated after that audit and will be recorded separately from verified code/test blobs.
+
+### Executed behavioral red/green evidence
+
+Evidence parent: `tmp/verify3434/leak-fix/`.
+
+1. `red.log`, exit 1: 600 real Static append/consume cycles retained 1,202 dormant operation batches, from two initially. Expected count was zero.
+2. `host-red.log`, exit 1: the real hook lacked renderer package/version identity. The host configuration fix supplies it.
+3. `green.log`, exit 0: dormant/connected/disconnected/reconnect/inspection/profile/unmount behavior passes with no old Static body replay.
+4. `timeline-red.log`, exit 1: after disconnect, recorded component measures grew from 14 to 8,400. This exposed timeline recording continuing despite renderer-level profiling shutdown.
+5. `timeline-green.log`, exit 0: invoking the actual profiler stop path prevents that disconnected growth. The final fixture keeps this assertion.
+
+The final fixture executes 1,220 append/consume cycles. It verifies every newly committed body reaches stdout once and no previous body is replayed. At 600 dormant appends, late connection emits at most two snapshot batches and current props inspect as `current 600`. Explicit connected profiling covers 20 appends and returns 80 commit records, including Static layout/body commits. The frontend's five-node live tree remains valid. Timeline profiling records connected work; after socket close and 599 further appends, its measure count does not increase and the disconnected operation queue remains zero. Reconnect emits at most two snapshot batches and inspects `current 1220`. Unmount leaves zero frontend nodes. Initial, dormant and disconnected queue counts are all zero.
+
+The fixture uses real patched renderer/backend logic, not a replacement implementation. The transport substitute is the external network boundary. It parses backend messages, checks unique IDs, existing parents and valid removals, and inspects real component props. Heap edges additionally check the retained dormant queue. The new runner appears in `test-audit/file-stats.tsv`, with no findings in `findings.tsv`.
+
+The final targeted group passed 62 cases across five files with 7,396 Bun `expect` calls, including the lifecycle fixture, 15 cap cases, six resize cases and 40 eviction/turn-store cases. The fixture's internal Node assertions are additional checks, not included in that Bun count. Clear/load/overlapping IDs, explicit refresh, genuine truncation notices, default/small/UTF-8 caps and no-replay resize behavior retain the preceding candidate's tests. The saved real-PTY lane passed 72 committed additions at cap 25, 36 model markers once, five resize deltas without old output, and copy-mode retention of old/tail/notice text (`pty.log`, exit 0).
+
+### Matched final-candidate development and production memory
+
+Evidence: `tmp/verify3434/leak-fix/final-candidate/memory-summary.json`, individual `metrics.jsonl` files, and `retained-roots.json` for snapshot lanes. Every lane ran 2,000 warmup additions followed by 3,000 measured additions, with forced-GC samples every 100 additions. The late ranges below cover measured additions 2,000 through 3,000. All values are bytes. These use real production layout/store/history rendering with a discard stream, not a test spy history or an output accumulator.
+
+| Mode | Item cap / retained serialized history | Arrays: measured start to end | Live heap: start to end | Late live-heap range | Late RSS range |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Development, no frontend | 25 / 1,950 | 48,070 to 48,070 | 95,661,056 to 95,778,741 | 95,751,322 to 95,778,741 | 435,404,800 to 435,781,632 |
+| Development, no frontend | 100 / 7,800 | 48,070 to 48,070 | 95,642,294 to 95,753,132 | 95,721,476 to 95,753,132 | 421,101,568 to 421,347,328 |
+| Development, no frontend | 400 / 31,200 | 48,070 to 48,070 | 95,718,988 to 95,870,124 | 95,813,301 to 95,870,124 | 448,921,600 to 449,495,040 |
+| Development, connected | 25 / 1,950 | 48,118 to 48,118 | 95,847,892 to 95,960,651 | 95,950,846 to 95,969,207 | 423,706,624 to 424,001,536 |
+| Development, connected | 100 / 7,800 | 48,118 to 48,118 | 95,863,611 to 95,979,159 | 95,943,247 to 95,979,159 | 427,835,392 to 428,195,840 |
+| Development, connected | 400 / 31,200 | 48,118 to 48,118 | 95,898,399 to 96,030,570 | 95,981,917 to 96,030,570 | 452,984,832 to 453,083,136 |
+| Development, disconnected | 100 / 7,800 | 48,070 to 48,070 | 95,682,985 to 95,782,495 | 95,766,219 to 95,790,979 | 420,904,960 to 421,199,872 |
+| Production | 25 / 1,950 | 47,002 to 47,002 | 92,826,461 to 92,938,637 | 92,909,363 to 92,938,637 | 387,760,128 to 394,870,784 |
+| Production | 100 / 7,800 | 47,002 to 47,002 | 92,818,196 to 92,936,793 | 92,894,482 to 92,937,882 | 393,805,824 to 401,735,680 |
+| Production | 400 / 31,200 | 47,002 to 47,002 | 92,912,451 to 93,025,512 | 92,986,930 to 93,025,512 | 420,315,136 to 420,413,440 |
+| Development, no frontend | 400 / 4,192,400 | 47,641 to 47,641 | 103,862,928 to 104,011,635 | 103,992,141 to 104,011,635 | 2,468,315,136 to 2,468,446,208 |
+| Development, connected | 400 / 4,192,400 | 47,689 to 47,689 | 104,048,741 to 104,173,366 | 104,062,782 to 104,185,695 | 2,309,029,888 to 2,309,259,264 |
+| Production | 400 / 4,192,400 | 46,573 to 46,573 | 101,039,310 to 101,139,702 | 101,053,782 to 101,155,152 | 2,084,945,920 to 2,101,968,896 |
+
+All 20 memory lanes, including seven attribution/snapshot lanes, exited zero. The driver lane named `development-disconnected` supplies a socket that never opens; the lifecycle fixture separately proves the real connect-close-reconnect sequence. History stayed at each item cap; the near-byte-cap bodies remained intact and retained history stayed at 4,192,400 bytes, below 4,194,304. Each connected measured lane delivered 6,000 additional operation batches, from 4,001 after warmup to 10,001 at the end. The dormant/disconnected lanes retained zero queued operation Arrays. This directly demonstrates cessation of the original development queue slope; production plateau alone is not the acceptance argument.
+
+Snapshot attribution finds 125 mounted FiberNodes at both measured start and end in development none/connected/disconnected cap-100 lanes. After unmount there are four. The near-4-MiB no-frontend lane also has 125 to 125 to four. Production cap 100 has 125 to 125 to three. Development dormant queue roots have zero operation Arrays at start, end and unmount; connected roots have no queue. The styled cache remains at 65,534 size units / 32,767 character cells in small-body lanes and 65,504 / 32,752 in near-byte-cap lanes, with bounded width keys. These are current bounded cache values, not retained old transcript fibers.
+
+RSS is reported separately from live heap. Generating/serializing heap snapshots adds large native/temporary allocation overhead: cap-100 snapshot lanes end around 1.13 to 1.20 GB RSS while nonsnapshot equivalents end around 0.40 to 0.43 GB. Near-byte-cap nonsnapshot RSS is also high, about 2.10 to 2.47 GB, while late live heap and retained Arrays remain nearly flat. This evidence fixes and attributes the JavaScript queue root; it does not identify all native/RSS allocation or prove absence of every RSS problem. The historical #3794 variance remains unattributed.
+
+The unchanged full interactive suite passed 19/19, including its existing post-clear memory gate. Its forced-GC baseline/post-clear RSS was 498,122,752 / 580,190,208, growth 82,067,456 below the unchanged 100,663,296-byte gate. Live heap was 190,786,120 / 197,573,526, growth 6,787,406; objects were 879,865 / 983,283, growth 103,418. The workload remained development-mode. `context-audit.json` verifies all project `.llxprt` files unchanged.
+
+### Patch installation, verification and limits
+
+Final-candidate format, lint, typecheck and build each exited zero. Targeted tests, test audit, patch reverse/reapply integrity and the 19-case full interactive suite exited zero. The actual live smoke used installed `gpt-6-luna`, exited zero and returned a three-line haiku; no missing `luna` run is counted as success. `verification.status` is the orchestrator's exit, not proof that every child check passed.
+
+A separate fresh published-tarball check downloaded `@jrichman/ink@6.4.8` and `react-devtools-core@6.1.5` into the ignored evidence directory, applied both patches with `patch-package --error-on-fail`, and reran the lifecycle fixture successfully. All eight patched installed files have identical SHA-256 bytes to the candidate, and both package versions are unchanged. Evidence: `fresh-published-integrity.json`, `fresh-published.log`, `fresh-published.status`. The earlier reverse/reapply probe is retained as `patch-integrity.json`. No root dependency install or lockfile regeneration was needed. The known hot Bun transpiler-cache mismatch is a setup hazard when an installed patched file changes; these probes use a disabled or dedicated cache. No workflow/cache policy was changed, and no shared cache was purged.
+
+The first final-candidate `npm run test` exited 1: core passed 459/460 files after a 2,000 ms media-store lock-contention failure; CLI passed 767/767 and all other workspace runners passed. Its separate `npm run test:scripts` exited 1 with 295/299 files: three files required Git index/plugin dependency metadata absent from the temporary launch, and the release-install file exceeded the unchanged runner timeout. Temporary Git metadata and a Google auth plugin dependency link were subsequently supplied in isolation, matching the existing source index and installed CI-style dependencies. No assertions, thresholds, retries, property iterations, filters, runner defaults or dependency versions changed.
+
+The inherited quiet full repeat completed with `npm run test` exit **1**, **2,737/2,739 file executions** across 18 runner summaries. Core passed **460/460** and CLI passed **767/767**. Tools passed 138/139 because the AST memory fixture's `git add -A` timed out before its tool/memory workload. Agents' native group passed 6/7 because both attempts of its four-second child-runner fixture timed out before creating the expected JUnit report. No leak/cap/resize assertion failed. The shell job and repeat orchestrator exited zero because they recorded the child status; that is not a passing full-test result. Evidence: `test-quiet-repeat.log`, `test-quiet-repeat.status` and `repeat-orchestrator.status`.
+
+After the complete repeat finished, bounded unchanged rechecks passed both failed files: AST memory/wiring **2/2**, 16 assertions, and agents retry behavior **5/5**, nine assertions. The three script files affected by missing temporary Git/plugin setup also passed **34/34**, 85 assertions, after that setup was supplied. These rechecks do not erase the failed full-run exits. The separate full scripts lane's release-install timeout remains unverified by a completed passing rerun, so an all-gates-green result is not claimed. No test timeout, assertion, threshold, retry or enforcement source was weakened; no duplicate full suite was started. Evidence: `ast-fixture-recheck.log`, `agents-fixture-recheck.log`, `scripts-metadata-recheck.log` and their status files.
+
+The repeat used the same verified source/test/patch blobs, supported serial concurrency overrides and isolated CI-plugin layout. The pre-leak candidate's earlier passing full suite does not establish broad acceptance for this added lifecycle fix. The leak implementation and its development lifecycle/memory evidence are complete; broad green acceptance still requires a clean full-run result and resolution of the release-install verification timeout. Default-concurrency reliability, unattributed native/RSS allocation and exact #3430 workload coverage are not claimed.
+
+## 2026-10-02 completed final verification of the development leak fix
+
+**Both remaining full gates pass on the unchanged final candidate.** This result supersedes the failed full-run and release-install verification status above. The historical failures and their logs remain preserved. No production, test, patch, dependency, workflow, enforcement or `.llxprt` edit was made during this verification mission. Only this plan and ignored verification evidence were written; no review, OCR, new issue, commit or push was performed.
+
+Evidence directory: `tmp/verify3434/leak-fix/final-candidate/final-gates/`.
+
+| Complete command | Exact child exit | Completed file executions | Evidence |
+| --- | ---: | --- | --- |
+| `npm run test` | 0 | 2,739/2,739 across all 18 workspace runner summaries | `test.log`, `test.status`, `test-result.json` |
+| `npm run test:scripts` | 0 | 299/299 scripts files, including the new lifecycle regression, plus 1/1 ESLint-rule test file | `test-scripts.log`, `test-scripts.status`, `test-scripts-result.json` |
+| Sequential verification driver and post-run integrity audit | 0 | Both child exits preserved; 12,317 implementation files checked with zero mismatches | `driver.status`, `result.json`, `before-audit.json`, `after-audit.json` |
+
+The workspace suite includes tools **139/139**, core **460/460**, providers **643/643**, agents **418/418** plus its native group **7/7**, and CLI **767/767**. The AST Git fixture and agents' four-second child-runner fixture both pass inside this complete run. The scripts gate's release-install fixture passes **5/5 cases**, with **16 assertions**. Its real global/local/ephemeral install case completes in **113,302.74 ms**, checking the existing release-manifest and version requirements. The new lifecycle fixture also passes inside the complete scripts run. No targeted pass is substituted for either full command.
+
+The two commands ran once each, sequentially, in the existing source-identical isolated checkout with its previously supplied temporary Git metadata and optional Google-plugin dependency-directory links. Existing dependencies and versions were reused. Core, CLI, agents and auth use their supported concurrency environment settings of **1**. A fresh dedicated Bun transpiler-cache path prevents reuse of the documented stale installed-patch cache. No timeout override, filter, partition, skip or retry loop was added. Existing runner retry policies and case-level platform skips remain unchanged; neither completed gate log contains a top-level timeout retry or failed-file line. Tests that exercise retry/failure handling retain their own expected diagnostics.
+
+The exact launch environment and commands are saved in `test-launch.json` and `test-scripts-launch.json`. Reproduction from this checkout is:
+
+```sh
+cd /Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/tmp/verify3434/leak-fix/final-candidate/isolated-checkout
+export BUN_RUNTIME_TRANSPILER_CACHE_PATH=/Volumes/XS1000/acoliver/projects/llxprt/branch-9/llxprt-code/tmp/verify3434/leak-fix/final-candidate/final-gates/bun-cache
+export LLXPRT_CORE_TEST_CONCURRENCY=1 LLXPRT_CLI_TEST_CONCURRENCY=1
+export LLXPRT_AGENTS_TEST_CONCURRENCY=1 LLXPRT_AUTH_TEST_CONCURRENCY=1
+npm run test
+npm run test:scripts
+```
+
+Before/after audits match all **12,317** implementation files in source, isolated copy and saved manifest, including both patches and both lifecycle files. All eight installed patched files match the saved fresh-published-tarball hashes. Ink remains **6.4.8**, React DevTools remains **6.1.5**, `bun.lock` matches HEAD, and every project `.llxprt` file remains unchanged. This plan's documentation-only update is recorded separately from the verified implementation. Runtime versions were Bun **1.3.14**, Node **25.2.1** and npm **11.6.2**.
+
+The requested 21,600-second foreground polling timeout did not prevent an external watchdog from terminating a polling shell. The managed verification job continued uninterrupted, completed both commands and its post-run audit, and exited zero. No completed work was lost and no sibling/user process was stopped. The completed managed job is `shell_f4cf1f2a8022`.
+
+Existing final-candidate format, lint, typecheck, build, live smoke, test audit, patch installation, **62-case** targeted group and **19/19** interactive results remain passing on these same implementation hashes. They were not rerun. The saved **20/20** memory lanes retain the development queue count of zero, flat retained Arrays after warmup and mounted/unmounted FiberNode evidence of **125 to 4**. No new profiling job was launched. The development operation-queue leak is fixed in this candidate and is not deferred. Historical native/RSS attribution limits remain as documented; there is no outstanding local verification gate error. Commit and push are left to the coordinating agent's next step.
