@@ -120,6 +120,7 @@ sequenceDiagram
   participant P
   par checks here
   A->>B: x; y
+  end
 ${fence}`;
     const result = sanitizeSequenceDiagram(input);
     expect(result).toContain('  participant P');
@@ -207,6 +208,7 @@ sequenceDiagram
   end
   break on error; stop
     A->>B: abort
+  end
   end
 ${fence}`;
     const result = sanitizeSequenceDiagram(input);

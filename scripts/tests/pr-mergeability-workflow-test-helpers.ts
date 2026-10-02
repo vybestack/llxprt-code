@@ -56,6 +56,7 @@ export function runFetchHeadStepWithRealRepository(
     runGit(seed, ['commit', '-m', 'feature']);
     const headSha = runGit(seed, ['rev-parse', 'HEAD']);
     runGit(seed, ['push', 'origin', 'feature-branch']);
+    runGit(seed, ['push', 'origin', 'HEAD:refs/pull/42/head']);
     runGit(root, ['clone', remote, workspace]);
     writeFileSync(githubEnv, '');
     writeFileSync(githubOutput, '');
@@ -71,6 +72,7 @@ export function runFetchHeadStepWithRealRepository(
       env: {
         ...process.env,
         PR_NUMBER: '42',
+        BASE_REVISION: baseSha,
         REPO: 'owner/repo',
         GITHUB_TOKEN: 'test-token',
         HEAD_REF_VALUE: 'feature-branch',

@@ -1,0 +1,100 @@
+{
+  "archive": "tmp/verify3781-deliver/",
+  "documents": [
+    {
+      "file": "results-final-reference.md",
+      "sha256": "d5c27497f0922ce808b4eb0cec711956d8fc67985c8b1b9fa8957c66d89db66b",
+      "bytes": 10039
+    },
+    {
+      "file": "verification-provenance.json",
+      "sha256": "823e1245594bedad384000daa625d6541ad763ea4a2fd97dfafe16a59255b4fc",
+      "bytes": 355
+    },
+    {
+      "file": "verification-final-reference.json",
+      "sha256": "9aa2ec60f889950bddd4031b2952706ee12d53ca3c08a3cd392f2171ec10da44",
+      "bytes": 8462
+    },
+    {
+      "file": "review-reproductions.json",
+      "sha256": "a745a47e3a208b1d25098b845f30ad7133a02b4a6fb2b3330f681382440dbd77",
+      "bytes": 26538
+    },
+    {
+      "file": "verification-fixes.json",
+      "sha256": "ae3a7b76056b16489a299ac1efdf15ff26378c99f90dfa1524b23eea146cd18c",
+      "bytes": 7776
+    },
+    {
+      "file": "provenance-plan.md",
+      "sha256": "073321261628fd0d45c150b42489947ba70f5b9cdd6d406993cf6305e311aad0",
+      "bytes": 3872
+    },
+    {
+      "file": "provenance-measurements.json",
+      "sha256": "74b332172a662d0ac7fac3490ffa4eb44b6a5760d46f4850f3a3f3cf96e51b61",
+      "bytes": 44903
+    },
+    {
+      "file": "results-provenance.md",
+      "sha256": "6c98041e02b7be1d4f14b2f548a225b0e0ef604e5619246bff1d3a97277ce642",
+      "bytes": 12013
+    },
+    {
+      "file": "results-thinking.md",
+      "sha256": "6945311432c3d9962704ba5df210da1226f6af54a43dc53eb6fe38f477167279",
+      "bytes": 18311
+    },
+    {
+      "file": "results.md",
+      "sha256": "d55b6e61737a31d327f2442ec2599b4c6db84884ca5c2528f92397d98bcb7269",
+      "bytes": 16119
+    },
+    {
+      "file": "results-next.md",
+      "sha256": "58a0fcacd3bf2c282eb8e71608c18101df4ae8c5228ec514166a2c11ac6c8dc7",
+      "bytes": 17780
+    },
+    {
+      "file": "implementation-review.md",
+      "sha256": "4556404139c6df233943afa0d14b9bbf96d9fa6f352fc6b8b393e13bf4da6b0b",
+      "bytes": 11718
+    },
+    {
+      "file": "plan.md",
+      "sha256": "d0b6626e10ed5d0f8ce6c25d301813157ab08cda05d78eab4268cc18d63468ac",
+      "bytes": 10883
+    },
+    {
+      "file": "results-fixes.md",
+      "sha256": "da879a4fe626e7e30e752df8aa31b4f2fa8e9477ee96f87d139a0354611768be",
+      "bytes": 20514
+    },
+    {
+      "file": "implementation-followup.md",
+      "sha256": "4d48b35f4237379c01d8209a897e793475a85ab94a47ad2b4bee34c9e4717399",
+      "bytes": 10166
+    },
+    {
+      "file": "evaluation-evidence.json",
+      "sha256": "e65b49cb628a0bba0a23e5842a0bf46281c4c94ca45f8f7dca54814904178f6f",
+      "bytes": 133449
+    },
+    {
+      "file": "evaluation-next-evidence.json",
+      "sha256": "a7261048d8047904bbcf96e35551cef0d9edad9dd10275c306f5ba3b08a751a9",
+      "bytes": 9475441
+    },
+    {
+      "file": "evaluation-provenance-evidence.json",
+      "sha256": "958575f50e2730f24338a4ed7f30b0a07d953e871e6146389401e0f0d5fb1485",
+      "bytes": 19344748
+    },
+    {
+      "file": "evaluation-thinking-evidence.json",
+      "sha256": "dd0ba0d827cefb016c069aba5824b26cd147f6b29956ae70fc03ff1f411505b2",
+      "bytes": 18358315
+    }
+  ]
+}

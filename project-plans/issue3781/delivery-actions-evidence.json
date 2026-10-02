@@ -1,0 +1,590 @@
+{
+  "candidate": "f579735bca06e83a2e6edacb8bf19eb097ea99cd",
+  "pr": 3796,
+  "finalStatus": {
+    "comment": "https://github.com/vybestack/llxprt-code/pull/3796#issuecomment-5939004550",
+    "contract": "Final source SHA, required CI/E2E, head-specific CodeQL alert state, review threads, latest-source Linux publication/resources/cleanup and no-merge outcome are maintained in this durable status comment"
+  },
+  "linux": {
+    "run": "https://github.com/vybestack/llxprt-code/actions/runs/36894401357",
+    "job": "https://github.com/vybestack/llxprt-code/actions/runs/36894401357/job/110477750674",
+    "comment": "https://github.com/vybestack/llxprt-code/pull/3682#issuecomment-5673168005",
+    "targetPr": 3682,
+    "base": "8921d849d8f5e67629b38064648b7dec2deb23b2",
+    "head": "b56c4b15daf6e6b99a5bad70c7d7a64398fc8460",
+    "state": "incomplete",
+    "unavailable": [
+      "map",
+      "unreviewed packet: project-plans/issue3669-cli-tools-dist-resolution.md (1)",
+      "pre-merge"
+    ],
+    "packets": 4,
+    "availablePackets": 3,
+    "paths": [
+      "packages/cli/test-bun/toolsResolution.issue3669.bun.ts",
+      "packages/cli/tsconfig.json",
+      "project-plans/issue3669-cli-tools-dist-resolution.md"
+    ],
+    "residency": {
+      "models": [
+        {
+          "name": "qwen3.5:4b",
+          "model": "qwen3.5:4b",
+          "size": 4283726559,
+          "digest": "2a654d98e6fba55d452b7043684e9b57a947e393bbffa62485a7aac05ee4eefd",
+          "details": {
+            "parent_model": "",
+            "format": "gguf",
+            "family": "qwen35",
+            "families": [
+              "qwen35"
+            ],
+            "parameter_size": "4.7B",
+            "quantization_level": "Q4_K_M"
+          },
+          "expires_at": "2026-10-01T18:09:18.01857312Z",
+          "size_vram": 0,
+          "context_length": 32768
+        }
+      ]
+    },
+    "memory": "VmHWM:\t 6080020 kB\nVmRSS:\t 5839556 kB\n",
+    "timings": [
+      {
+        "phase": "map",
+        "elapsedMs": 68980,
+        "inputBytes": 2912,
+        "httpStatus": 200
+      },
+      {
+        "phase": "map",
+        "elapsedMs": 80518,
+        "inputBytes": 4482,
+        "httpStatus": 200
+      },
+      {
+        "phase": "map",
+        "elapsedMs": 61451,
+        "inputBytes": 3999,
+        "httpStatus": 200
+      },
+      {
+        "phase": "group",
+        "elapsedMs": 105994,
+        "inputBytes": 5068,
+        "httpStatus": 200
+      },
+      {
+        "phase": "synthesis",
+        "elapsedMs": 123256,
+        "inputBytes": 6506,
+        "httpStatus": 200
+      },
+      {
+        "phase": "related",
+        "elapsedMs": 106265,
+        "inputBytes": 8524,
+        "httpStatus": 200
+      },
+      {
+        "phase": "related",
+        "elapsedMs": 65814,
+        "inputBytes": 8808,
+        "httpStatus": 200
+      }
+    ],
+    "cpuVendor": "AuthenticAMD",
+    "cpuBackend": "libggml-cpu-haswell.so",
+    "cleanup": "Owned server/model store removed and port closed, confirmed job log",
+    "sha256": {
+      "result.json": "cf28f45237e5d314395a2305462a0aa6e55c498675e21dc5bbb03a25e925a1e2",
+      "local-resources.json": "64bdea4aff938a5f9d87903f563fe8b21ed6ae75b57f76b15d97ca3ed1b346e5",
+      "local-memory.txt": "d52b31c8b321b33597e1907fa17112bc9da9613e70fbb2f4345afdbdd9370d61",
+      "local-timings.json": "08846c27c37a792c19d227148745727d993b16178372e1c73b948dfbcdd04a04"
+    }
+  },
+  "initialOwnPr": {
+    "run": "https://github.com/vybestack/llxprt-code/actions/runs/36891692225",
+    "conclusion": "cancelled",
+    "ciJobs": "All ordinary lint/test/smoke/security/CodeQL jobs succeeded; prereview cancelled by newer same-PR concurrency event",
+    "comment": "https://github.com/vybestack/llxprt-code/pull/3796#issuecomment-5935800679"
+  },
+  "e2e": {
+    "run": "https://github.com/vybestack/llxprt-code/actions/runs/36891675471",
+    "conclusion": "success"
+  },
+  "ocr": {
+    "issue": 3700,
+    "status": "llm-preflight HTTP 401, no review tokens",
+    "comment": "https://github.com/vybestack/llxprt-code/pull/3796#issuecomment-5935722642"
+  },
+  "remediation": {
+    "codeRabbit": [
+      "persist-credentials false",
+      "Markdown escapes precede HTML entities",
+      "shared corrective suffix and bounded packing reserve"
+    ],
+    "codeQL": [
+      "read optional source context once, catch only ENOENT",
+      "persist envelope hash/validated counters instead of arbitrary network content"
+    ]
+  },
+  "audit": {
+    "baseline": "tmp/verify3781-next/test-audit-main/findings.tsv",
+    "current": "tmp/verify3781-deliver/audit-codeql/findings.tsv",
+    "touchedTestHashes": [
+      {
+        "path": "packages/cli/src/integration-tests/cli-plugin-provider.integration.test.ts",
+        "sha256": "c8c689b4d38879a1663e2e369b3156ba68168f680568c6090a8f28d66260d5bd"
+      },
+      {
+        "path": "scripts/tests/issue-3062-walkthrough-no-leak.bun.test.ts",
+        "sha256": "c12030f2a15528eda77239e6f05b3450f021146ff4b4e9ef729a0d8e96ada2e0"
+      },
+      {
+        "path": "scripts/tests/pr-mergeability-workflow-wiring.test.ts",
+        "sha256": "9f5547c077a06f9b67c5f9f3408ade9f2f46ef99c6084c5a830f90d8aa5a2e36"
+      },
+      {
+        "path": "scripts/tests/pr-review-delivery.test.ts",
+        "sha256": "320e9d2707acc857b571e03302f302bedba40018408ddf61f081ac8c70dbbaea"
+      },
+      {
+        "path": "scripts/tests/pr-review-llm-helpers.test.ts",
+        "sha256": "39865a1e772eb387cfbbd2a39375da98f855a022d2d15e217422eef3edc554d8"
+      },
+      {
+        "path": "scripts/tests/pr-review-local-deadlines.test.ts",
+        "sha256": "cc6b864acd5b5a3b9bd23c0a61e2ed5de047469016ee84f876ae482caac5be73"
+      },
+      {
+        "path": "scripts/tests/pr-review-local-evidence.test.ts",
+        "sha256": "8645d5a1f52ce1cb974efe01427c729687fa76cb59186e79bd8c369efe586599"
+      },
+      {
+        "path": "scripts/tests/pr-review-local-provenance-pipeline.test.ts",
+        "sha256": "f55135003568f7f620cf274d8ffba4ca9c95992c8fae7f1031bb41f76a6c0661"
+      },
+      {
+        "path": "scripts/tests/pr-review-local-provenance.test.ts",
+        "sha256": "18c3401b7198e5a4b29d939348e86bec5c867999ebe59c6d88bb0c6be5dd5cd6"
+      },
+      {
+        "path": "scripts/tests/pr-review-local-workflow.test.ts",
+        "sha256": "6961872c2193021d2f81e0799f44bb13476da33a36ab5b749308cbc5987cc5f4"
+      },
+      {
+        "path": "scripts/tests/pr-review-local.test.ts",
+        "sha256": "288b0abd4bc99fb75d8f77bee33b641195adcb8c2cca2d4d192a9c33beab2c24"
+      },
+      {
+        "path": "scripts/tests/pr-review-promotion-boundary.test.ts",
+        "sha256": "a7d230e98ea1ce6168f33e01ecf38f559613ddf337ab6017ddb122b2811b3684"
+      },
+      {
+        "path": "scripts/tests/pr-review-related-references.test.ts",
+        "sha256": "ffb2e3c3ae20f8d4b0d9feac233b82c3c7804b1bd1352c41692182cbddbca367"
+      },
+      {
+        "path": "scripts/tests/pr-review-related.test.ts",
+        "sha256": "e8367effbb21c605ffb8c324705576dd94da1137ee7edfa37f829ad3cb258af7"
+      },
+      {
+        "path": "scripts/tests/pr-review-remediation.test.ts",
+        "sha256": "aa2a049657f7aa74d747945f38a0f494d65e9a20a6d8ece7249d03af25450b61"
+      },
+      {
+        "path": "scripts/tests/pr-review-source-context.test.ts",
+        "sha256": "83a911986b207ff52d7e2d68719f9c8e84849642c645637e88c268d8362de18a"
+      },
+      {
+        "path": "scripts/tests/pr-review-walkthrough-b.test.ts",
+        "sha256": "b308bf7dcab6eaad0ec97e77dba1812d75ed3715f8b387aec9dce4265b034c4d"
+      },
+      {
+        "path": "scripts/tests/pr-review-walkthrough-comment-script.test.ts",
+        "sha256": "51bcc91c70351d46f2538a1edde9ab8326098ae0e4d6c7548f204082420899a3"
+      },
+      {
+        "path": "scripts/tests/pr-review-walkthrough-prompts.test.ts",
+        "sha256": "3f2dfc4d29af42d453502a96f14ee796e98d665f3aae558da13abe819fdbceb9"
+      },
+      {
+        "path": "scripts/tests/pr-review-walkthrough-sanitize.bun.test.ts",
+        "sha256": "930fd2c2add7c1a244eb4a96290343d6da646702d82771c989450dbfe04727f7"
+      },
+      {
+        "path": "scripts/tests/pr-review-walkthrough-workflow.test.ts",
+        "sha256": "a6ec965a1415ec1b8e186b3cda8b2315d8d0852754568fd998906548344324f4"
+      },
+      {
+        "path": "scripts/tests/pr-review-walkthrough.test.ts",
+        "sha256": "376ec7cc43f93720e573a273f06f76c11d00adf2684e6a517dc08a826d2bc009"
+      },
+      {
+        "path": "scripts/tests/workflow-quota-selection.test.ts",
+        "sha256": "1ac66508f0e1f1d63296d3c0510e5f23808ec9a23faa841579063049a6bc92cf"
+      },
+      {
+        "path": "scripts/tests/pr-review-inference-artifacts.test.ts",
+        "sha256": "0ebbc24f7e525600affea1b7f11edc541d3206dc3b87a035e8f7ec9bf9f6130d"
+      }
+    ]
+  },
+  "checks": [
+    {
+      "name": "diff",
+      "exit": 0,
+      "log": "tmp/verify3781-deliver/full-codeql/diff.log"
+    },
+    {
+      "name": "actionlint",
+      "exit": 0,
+      "log": "tmp/verify3781-deliver/full-codeql/actionlint.log"
+    },
+    {
+      "name": "scripts",
+      "exit": 0,
+      "log": "tmp/verify3781-deliver/full-codeql/scripts.log"
+    },
+    {
+      "name": "build",
+      "exit": 0,
+      "log": "tmp/verify3781-deliver/full-codeql/build.log"
+    },
+    {
+      "name": "audit",
+      "exit": 0,
+      "log": "tmp/verify3781-deliver/full-codeql/audit.log"
+    },
+    {
+      "name": "typecheck",
+      "exit": 0,
+      "log": "tmp/verify3781-deliver/full-codeql/typecheck.log"
+    },
+    {
+      "name": "yaml",
+      "exit": 127,
+      "log": "tmp/verify3781-deliver/full-codeql/yaml.log"
+    },
+    {
+      "name": "smoke",
+      "exit": 0,
+      "log": "tmp/verify3781-deliver/full-codeql/smoke.log"
+    },
+    {
+      "name": "lint",
+      "exit": 0,
+      "log": "tmp/verify3781-deliver/full-codeql/lint.log"
+    },
+    {
+      "name": "script-types",
+      "exit": 0,
+      "log": "tmp/verify3781-deliver/full-codeql/script-types.log"
+    },
+    {
+      "name": "test",
+      "exit": 0,
+      "log": "tmp/verify3781-deliver/full-codeql/test.log"
+    },
+    {
+      "name": "format",
+      "exit": 0,
+      "log": "tmp/verify3781-deliver/full-codeql/format.log"
+    },
+    {
+      "name": "focused",
+      "exit": 0,
+      "passed": 635,
+      "assertions": 1678,
+      "files": 29
+    },
+    {
+      "name": "yaml-explicit-venv",
+      "exit": 0
+    }
+  ],
+  "linuxRemediation": {
+    "candidate": "f2a7dcb17ca4881ca96c3b30c00fa18f56aedfaa",
+    "run": "https://github.com/vybestack/llxprt-code/actions/runs/36905034867",
+    "job": "https://github.com/vybestack/llxprt-code/actions/runs/36905034867/job/110513495533",
+    "artifact": "https://github.com/vybestack/llxprt-code/actions/runs/36905034867/artifacts/11185796662",
+    "comment": "https://github.com/vybestack/llxprt-code/pull/3682#issuecomment-5673168005",
+    "conclusion": "success",
+    "state": "incomplete",
+    "unavailable": [
+      "map",
+      "unreviewed packet: project-plans/issue3669-cli-tools-dist-resolution.md (1)",
+      "pre-merge"
+    ],
+    "packets": 4,
+    "availablePackets": 3,
+    "memory": "VmHWM:\t 6084992 kB\nVmRSS:\t 5845268 kB\n",
+    "residency": {
+      "models": [
+        {
+          "name": "qwen3.5:4b",
+          "model": "qwen3.5:4b",
+          "size": 4283726559,
+          "digest": "2a654d98e6fba55d452b7043684e9b57a947e393bbffa62485a7aac05ee4eefd",
+          "details": {
+            "parent_model": "",
+            "format": "gguf",
+            "family": "qwen35",
+            "families": [
+              "qwen35"
+            ],
+            "parameter_size": "4.7B",
+            "quantization_level": "Q4_K_M"
+          },
+          "expires_at": "2026-10-01T19:36:07.026777862Z",
+          "size_vram": 0,
+          "context_length": 32768
+        }
+      ]
+    },
+    "timings": [
+      {
+        "phase": "map",
+        "elapsedMs": 71996,
+        "inputBytes": 2912,
+        "httpStatus": 200
+      },
+      {
+        "phase": "map",
+        "elapsedMs": 83508,
+        "inputBytes": 4482,
+        "httpStatus": 200
+      },
+      {
+        "phase": "map",
+        "elapsedMs": 64254,
+        "inputBytes": 3999,
+        "httpStatus": 200
+      },
+      {
+        "phase": "group",
+        "elapsedMs": 111156,
+        "inputBytes": 5068,
+        "httpStatus": 200
+      },
+      {
+        "phase": "synthesis",
+        "elapsedMs": 126491,
+        "inputBytes": 6506,
+        "httpStatus": 200
+      },
+      {
+        "phase": "related",
+        "elapsedMs": 107062,
+        "inputBytes": 8524,
+        "httpStatus": 200
+      },
+      {
+        "phase": "related",
+        "elapsedMs": 72845,
+        "inputBytes": 8808,
+        "httpStatus": 200
+      }
+    ],
+    "cleanup": "Owned server/model store removed and port closed, job log confirms",
+    "sha256": {
+      "result.json": "cf28f45237e5d314395a2305462a0aa6e55c498675e21dc5bbb03a25e925a1e2",
+      "local-resources.json": "28db5dbed1d587257c6f2cbc8a4f8895c76c4198cb97546fc539e9f1d7492ba2",
+      "local-memory.txt": "b1e9e93dc3109e22497907f1d85e178ef646cb5abc01c698b1b756fd01edb672",
+      "local-timings.json": "5b815c33f6f3cdd9bd75d55d4f838ec25b5f6f9a168128d397ca644d98fe67e6"
+    }
+  },
+  "recoveryDiagnosis": {
+    "e2eRun": "https://github.com/vybestack/llxprt-code/actions/runs/36905037000/job/110513550713",
+    "e2eFailure": "replace.test.ts invoked unrelated tools despite nested tools.core restriction; all three attempts failed existing assertion",
+    "rootCause": "configBuilder.ts ignored nested tools.core and read only top-level coreTools",
+    "issue": 3799,
+    "failingBehaviorTests": 3,
+    "codeqlAnalysis": 1876514395,
+    "codeqlCommit": "f2a7dcb17ca4881ca96c3b30c00fa18f56aedfaa",
+    "codeqlAlert": 780,
+    "codeqlFlow": "response.status -> httpStatus -> saveInference -> fs.writeFile",
+    "codeqlCorrection": "Validate integer HTTP status 100..599 and normalize to number before persistence",
+    "enforcementChanges": false
+  },
+  "recoveredBranchCI": {
+    "run": "https://github.com/vybestack/llxprt-code/actions/runs/36905674894",
+    "candidate": "f2a7dcb17ca4881ca96c3b30c00fa18f56aedfaa",
+    "conclusion": "success",
+    "codeqlAnalysis": 1876633411,
+    "codeqlAlert780State": "open"
+  },
+  "recoveredAutomaticReview": {
+    "run": "https://github.com/vybestack/llxprt-code/actions/runs/36905759913",
+    "conclusion": "cancelled",
+    "trustedBase": "f3839b8810496490f4eaf8513c27e12bd7952809",
+    "path": "nightly CLI and hosted Zai, not candidate local runtime",
+    "diagnostic": "Operation cancelled at existing job deadline; uploaded error log empty; no completed review"
+  },
+  "downloadReuse": {
+    "runIds": [
+      36894401357,
+      36905034867
+    ],
+    "runtimeInstallSeconds": [
+      12,
+      7
+    ],
+    "modelStartPullSeconds": [
+      18,
+      20
+    ],
+    "warmupSeconds": [
+      7,
+      7
+    ],
+    "walkthroughSeconds": [
+      1334,
+      1359
+    ],
+    "registryPullAndDigestSeconds": 16.82,
+    "registryMainBlobReportedGB": 3.4,
+    "loadedModelReportedBytes": 4283726559,
+    "exactCacheStorageBytes": null,
+    "sameJobReuse": true,
+    "decision": "No cache optimization issue: setup is about 2% of job runtime; cross-run restore still transfers gigabytes and adds storage, eviction and trusted-writer costs"
+  },
+  "fullRecovery": {
+    "checks": [
+      {
+        "name": "format",
+        "exit": 0,
+        "log": "tmp/verify3781-deliver/full-recovery/format.log",
+        "started": "2026-10-01T19:17:01Z",
+        "finished": "2026-10-01T19:17:02Z"
+      },
+      {
+        "name": "lint",
+        "exit": 0,
+        "log": "tmp/verify3781-deliver/full-recovery/lint.log",
+        "started": "2026-10-01T19:17:02Z",
+        "finished": "2026-10-01T19:19:19Z"
+      },
+      {
+        "name": "typecheck",
+        "exit": 0,
+        "log": "tmp/verify3781-deliver/full-recovery/typecheck.log",
+        "started": "2026-10-01T19:19:19Z",
+        "finished": "2026-10-01T19:20:50Z"
+      },
+      {
+        "name": "test",
+        "exit": 0,
+        "log": "tmp/verify3781-deliver/full-recovery/test.log",
+        "started": "2026-10-01T19:20:50Z",
+        "finished": "2026-10-01T19:43:25Z"
+      },
+      {
+        "name": "build",
+        "exit": 0,
+        "log": "tmp/verify3781-deliver/full-recovery/build.log",
+        "started": "2026-10-01T19:43:25Z",
+        "finished": "2026-10-01T19:44:01Z"
+      },
+      {
+        "name": "smoke",
+        "exit": 0,
+        "log": "tmp/verify3781-deliver/full-recovery/smoke.log",
+        "started": "2026-10-01T19:44:01Z",
+        "finished": "2026-10-01T19:44:05Z"
+      },
+      {
+        "name": "audit",
+        "exit": 0,
+        "log": "tmp/verify3781-deliver/full-recovery/audit.log",
+        "started": "2026-10-01T19:44:05Z",
+        "finished": "2026-10-01T19:44:08Z"
+      },
+      {
+        "name": "scripts",
+        "exit": 0,
+        "log": "tmp/verify3781-deliver/full-recovery/scripts.log",
+        "started": "2026-10-01T19:44:08Z",
+        "finished": "2026-10-01T19:54:20Z"
+      },
+      {
+        "name": "script-types",
+        "exit": 0,
+        "log": "tmp/verify3781-deliver/full-recovery/script-types.log",
+        "started": "2026-10-01T19:54:20Z",
+        "finished": "2026-10-01T19:54:27Z"
+      },
+      {
+        "name": "actionlint",
+        "exit": 0,
+        "log": "tmp/verify3781-deliver/full-recovery/actionlint.log",
+        "started": "2026-10-01T19:54:27Z",
+        "finished": "2026-10-01T19:54:27Z"
+      },
+      {
+        "name": "yaml",
+        "exit": 0,
+        "log": "tmp/verify3781-deliver/full-recovery/yaml.log",
+        "started": "2026-10-01T19:54:27Z",
+        "finished": "2026-10-01T19:54:27Z"
+      },
+      {
+        "name": "focused",
+        "exit": 0,
+        "log": "tmp/verify3781-deliver/full-recovery/focused.log",
+        "started": "2026-10-01T19:54:27Z",
+        "finished": "2026-10-01T19:54:43Z"
+      },
+      {
+        "name": "config",
+        "exit": 0,
+        "log": "tmp/verify3781-deliver/full-recovery/config.log",
+        "started": "2026-10-01T19:54:43Z",
+        "finished": "2026-10-01T19:54:44Z"
+      },
+      {
+        "name": "diff",
+        "exit": 0,
+        "log": "tmp/verify3781-deliver/full-recovery/diff.log",
+        "started": "2026-10-01T19:54:44Z",
+        "finished": "2026-10-01T19:54:44Z"
+      }
+    ],
+    "cli": {
+      "files": 765,
+      "passedCases": 9816,
+      "failedCases": 0,
+      "skippedCases": 5,
+      "todoCases": 13
+    },
+    "scripts": {
+      "files": 311,
+      "failure": 0
+    },
+    "focused": {
+      "files": 21,
+      "passedCases": 380,
+      "assertions": 1128
+    },
+    "config": {
+      "passedCases": 38,
+      "assertions": 89
+    },
+    "audit": "Existing config.test.ts findings unchanged; no findings in inference-artifacts test",
+    "guardChecks": [
+      "test-file-coverage",
+      "affected-shards",
+      "copyright-year",
+      "no-new-js",
+      "no-vitest",
+      "doc-placement"
+    ],
+    "sourceSha256": {
+      "packages/cli/src/config/configBuilder.ts": "c7f56bc369c15858dd03b0857d876cfb3121ca90b77c3d734a01e7dafbcb19ed",
+      "packages/cli/src/config/config.test.ts": "996c37a0366757742f8e6f52510a0b6faaa92205084aa45204226df38dd3d3f5",
+      "scripts/pr-review-local.ts": "5ce86c0333f590d1292077c306e7ffb96e5ece5a8f9204a677dec1501e31c761",
+      "scripts/tests/pr-review-inference-artifacts.test.ts": "e2f914ec3f3144048aaf70f77ba3533a578e35b3e1b8ae8e9b487b7114be2aaf"
+    }
+  }
+}

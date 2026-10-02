@@ -1,0 +1,180 @@
+{
+  "captured": "2026-09-30",
+  "issue": 3781,
+  "branch": "issue3781",
+  "productionReady": false,
+  "quality": "FAILED",
+  "review": "implementation-review.md",
+  "lastFollowup": "implementation-followup.md",
+  "lastFollowupOriginal": "tmp/verify3781-followup/audit-20260930-1736/findings.md",
+  "lastFollowupVerdict": "F1/F2/F4/F5/F6 resolved within original scope; F3 unresolved due to invented destinations. Subsequent F3 source remediation has regression evidence, not a new independent review.",
+  "acceptance": "NOT READY",
+  "results": "results-final-reference.md",
+  "finalVerification": "verification-final-reference.json",
+  "evidence": {
+    "models": ["evaluation-evidence.json", "evaluation-next-evidence.json"],
+    "originalReproductions": "review-reproductions.json",
+    "verificationDirectory": "tmp/verify3781-fixes"
+  },
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "HIGH",
+      "status": "source-remediated",
+      "fix": "Restore automatic production and isolate the failed local candidate to dispatch-only validation with a separate publication marker.",
+      "sources": [
+        ".github/workflows/pr-review.yml",
+        ".github/workflows/pr-review-local-pilot.yml",
+        "scripts/pr-review-walkthrough.ts",
+        "scripts/pr-review-local-walkthrough.ts"
+      ],
+      "tests": [
+        "scripts/tests/pr-review-promotion-boundary.test.ts",
+        "scripts/tests/pr-review-local-workflow.test.ts",
+        "scripts/tests/pr-mergeability-workflow-wiring.test.ts",
+        "scripts/tests/workflow-quota-selection.test.ts",
+        "scripts/tests/pr-review-walkthrough-comment-script.test.ts"
+      ],
+      "red": ["red-F1.log", "red-F1-publication-isolation.log"],
+      "green": [
+        "green-F1.log",
+        "green-F1-publication-isolation.log",
+        "focused.log"
+      ]
+    },
+    {
+      "id": "F2",
+      "severity": "HIGH",
+      "status": "source-remediated",
+      "fix": "Account for construction and inference failures, partition packet observations and oversized text, and require completed stages plus release notes before completion.",
+      "sources": ["scripts/pr-review-local-walkthrough.ts"],
+      "tests": [
+        "scripts/tests/pr-review-remediation.test.ts",
+        "scripts/tests/pr-review-local.test.ts"
+      ],
+      "red": ["red-F2-F4-F5-F6.log"],
+      "green": ["green-F2-F6.log", "focused.log"]
+    },
+    {
+      "id": "F3",
+      "severity": "MEDIUM",
+      "status": "source-remediated",
+      "fix": "Retain bounded trusted discovery. Validate each Markdown link's exact #number label and destination against the matching corpus URL/html_url, rejecting mismatched, external, foreign-repository, bare/autolink, image and HTML destinations. Preserve verified plain hash references and explanations. Rejected Related output remains unpublished and marks the stage incomplete.",
+      "lastFollowupStatus": "unresolved",
+      "remediationStatus": "source-remediated; regression verified; no additional review cycle",
+      "finalEvidenceDirectory": "tmp/verify3781-final-reference",
+      "finalRed": "tmp/verify3781-final-reference/red-F3-reference.log",
+      "finalQualifiedRed": "tmp/verify3781-final-reference/red-F3-qualified-reference.log",
+      "finalGreen": "tmp/verify3781-final-reference/green-F3-reference.log",
+      "finalReproductions": "tmp/verify3781-final-reference/reference-reproductions.json",
+      "sources": [
+        "scripts/pr-review-related.ts",
+        "scripts/pr-review-local-artifacts.ts",
+        "scripts/pr-review-local-prompts.ts",
+        "scripts/pr-review-local.ts",
+        ".github/workflows/pr-review-local-pilot.yml"
+      ],
+      "tests": [
+        "scripts/tests/pr-review-related.test.ts",
+        "scripts/tests/pr-review-related-references.test.ts",
+        "scripts/tests/pr-review-remediation.test.ts"
+      ],
+      "red": ["red-F3.log", "red-F3-publication.log"],
+      "green": ["green-F2-F6.log", "focused.log"],
+      "limits": "API and model responses in regression tests are fixtures. Search recall and model selection of relevant references require representative evaluation."
+    },
+    {
+      "id": "F4",
+      "severity": "MEDIUM",
+      "status": "source-remediated",
+      "fix": "Use referenced alignment when closingIssuesReferences is empty, retain title/description/scope checks, and distinguish alignment from closing fulfillment.",
+      "sources": [
+        "scripts/pr-review-local-artifacts.ts",
+        "scripts/pr-review-local-prompts.ts",
+        "scripts/pr-review-local-walkthrough.ts"
+      ],
+      "tests": [
+        "scripts/tests/pr-review-remediation.test.ts",
+        "scripts/tests/pr-review-local.test.ts"
+      ],
+      "red": ["red-F2-F4-F5-F6.log"],
+      "green": ["green-F2-F6.log", "focused.log"]
+    },
+    {
+      "id": "F5",
+      "severity": "MEDIUM",
+      "status": "source-remediated",
+      "fix": "Retain typed safe category/operation/artifact-path diagnostics at the executable boundary while keeping public status generic and excluding raw exception/server/secret text.",
+      "sources": [
+        "scripts/pr-review-local-artifacts.ts",
+        "scripts/pr-review-local-walkthrough.ts"
+      ],
+      "tests": [
+        "scripts/tests/pr-review-remediation.test.ts",
+        "scripts/tests/issue-3062-walkthrough-no-leak.bun.test.ts"
+      ],
+      "red": ["red-F2-F4-F5-F6.log"],
+      "green": ["green-F2-F6.log", "focused.log"]
+    },
+    {
+      "id": "F6",
+      "severity": "MEDIUM",
+      "status": "source-remediated",
+      "fix": "Reject malformed/unbalanced/nested Mermaid fences and sequence blocks, replay retained actual Gemma failures, and mark nonempty rejected diagrams unavailable.",
+      "sources": [
+        "scripts/pr-review-local-parse.ts",
+        "scripts/pr-review-local-walkthrough.ts"
+      ],
+      "tests": ["scripts/tests/pr-review-remediation.test.ts"],
+      "red": ["red-F2-F4-F5-F6.log"],
+      "green": ["green-F2-F6.log", "focused.log"],
+      "limits": "Syntax validity does not establish diagram factual correctness."
+    }
+  ],
+  "promotion": {
+    "automatic": ".github/workflows/pr-review.yml",
+    "pilot": ".github/workflows/pr-review-local-pilot.yml",
+    "event": "workflow_dispatch only, trusted reviewed revision",
+    "productionMarker": "<!-- llxprt-walkthrough -->",
+    "pilotMarker": "<!-- llxprt-local-prereview-pilot -->",
+    "requires": [
+      "Exact model/runtime/transport/prompt/budget factual-quality pass on representative cases",
+      "Actual trusted Linux Actions setup/CPU-residency/useful-output/publication/cleanup evidence",
+      "Separate reviewed production source/workflow promotion"
+    ],
+    "hostedFallbackInCandidate": false
+  },
+  "remaining": [
+    "Representative quality FAILED across evaluated candidates; no production candidate selected.",
+    "No actual Linux Actions prereview run establishes setup, useful output, publication and cleanup together.",
+    "Larger model Linux CPU suitability unproved; retained macOS extrapolation exceeds current inference/job budgets.",
+    "Full-suite Gemini integration baseline failures are tracked as #3784 with pristine-main reproduction.",
+    "Requested luna profile is absent; no alternative smoke profile substituted.",
+    "Existing automatic production nightly installation defect remains tracked as #3782.",
+    "Same-job reuse already uses one server/store. No cross-run cache or follow-on issue: net cache benefit, storage cost and trust tradeoff have not been established."
+  ],
+  "verification": "verification-final-reference.json",
+  "originalVerification": "verification-fixes.json",
+  "cleanup": {
+    "pidsNotRunning": [45927, 92250],
+    "noListenerPort": 12644,
+    "ownedStoreRemoved": "tmp/verify3781-next/models",
+    "sharedStoreLeftUntouched": "/Users/acoliver/.ollama/models"
+  },
+  "fullCycle": {
+    "format": 0,
+    "lint": 0,
+    "typecheck": 0,
+    "test": 1,
+    "build": 0,
+    "smoke": 1
+  },
+  "finalFocused": {
+    "pass": 384,
+    "fail": 0,
+    "assertions": 1352,
+    "files": 17,
+    "log": "tmp/verify3781-final-reference/focused.log"
+  },
+  "finalEvidenceDirectory": "tmp/verify3781-final-reference"
+}
