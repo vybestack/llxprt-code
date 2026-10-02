@@ -99,6 +99,8 @@ describe('createTurnStore', () => {
     const { store } = createTurnStore();
     expect(store.getState()).toStrictEqual({
       history: [],
+      historyTruncatedItems: 0,
+      historyEpoch: 0,
       pendingHistoryItems: [],
       streamingState: StreamingState.Idle,
       thought: null,

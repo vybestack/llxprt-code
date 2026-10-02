@@ -36,7 +36,7 @@ index 9582c49..2af0115 100644
 +    get currentValueSizeValue(): number;
  }
 diff --git a/node_modules/ink/build/data-limited-lru-map.js b/node_modules/ink/build/data-limited-lru-map.js
-index 80485a6..66c2b3f 100644
+index 80485a6..70a0716 100644
 --- a/node_modules/ink/build/data-limited-lru-map.js
 +++ b/node_modules/ink/build/data-limited-lru-map.js
 @@ -1,55 +1,122 @@
@@ -203,6 +203,7 @@ index 80485a6..66c2b3f 100644
 +    }
  }
  //# sourceMappingURL=data-limited-lru-map.js.map
+\ No newline at end of file
 diff --git a/node_modules/ink/build/ink.d.ts b/node_modules/ink/build/ink.d.ts
 index 1ff7c4c..5825b42 100644
 --- a/node_modules/ink/build/ink.d.ts
@@ -221,7 +222,7 @@ index 1ff7c4c..5825b42 100644
      private restoreConsole?;
      private readonly unsubscribeResize?;
 diff --git a/node_modules/ink/build/ink.js b/node_modules/ink/build/ink.js
-index 0dc50a2..d7f1739 100644
+index 0dc50a2..208dacf 100644
 --- a/node_modules/ink/build/ink.js
 +++ b/node_modules/ink/build/ink.js
 @@ -21,6 +21,8 @@ import { calculateScroll } from './scroll.js';
@@ -245,7 +246,7 @@ index 0dc50a2..d7f1739 100644
      exitPromise;
      restoreConsole;
      unsubscribeResize;
-@@ -112,9 +113,8 @@ export default class Ink {
+@@ -112,21 +113,14 @@ export default class Ink {
          // Store last output to only rerender when needed
          this.lastOutput = '';
          this.lastOutputHeight = 0;
@@ -257,7 +258,20 @@ index 0dc50a2..d7f1739 100644
          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
          this.container = reconciler.createContainer(this.rootNode, LegacyRoot, null, false, null, 'id', () => { }, () => { }, () => { }, () => { }, null);
          // Unmount when process exits
-@@ -138,6 +138,28 @@ export default class Ink {
+         this.unsubscribeExit = signalExit(this.unmount, { alwaysLast: false });
+         if (process.env['DEV'] === 'true') {
+-            reconciler.injectIntoDevTools({
+-                bundleType: 0,
+-                // Reporting React DOM's version, not Ink's
+-                // See https://github.com/facebook/react/issues/16666#issuecomment-532639905
+-                version: '16.13.1',
+-                rendererPackageName: 'ink',
+-            });
++            reconciler.injectIntoDevTools();
+         }
+         if (options.patchConsole) {
+             this.patchConsole();
+@@ -138,6 +132,28 @@ export default class Ink {
              };
          }
      }
@@ -286,7 +300,7 @@ index 0dc50a2..d7f1739 100644
      resized = () => {
          this.calculateLayout();
          this.onRender();
-@@ -211,10 +233,10 @@ export default class Ink {
+@@ -211,10 +227,10 @@ export default class Ink {
          // If <Static> output isn't empty, it means new children have been added to it
          const hasStaticOutput = staticOutput && staticOutput !== '\n';
          if (this.options.debug) {
@@ -301,7 +315,7 @@ index 0dc50a2..d7f1739 100644
              return;
          }
          if (isInCi) {
-@@ -226,10 +248,10 @@ export default class Ink {
+@@ -226,10 +242,10 @@ export default class Ink {
              return;
          }
          if (this.options.alternateBuffer) {
@@ -316,27 +330,34 @@ index 0dc50a2..d7f1739 100644
              this.lastOutput = output;
              return;
          }
-@@ -266,13 +288,16 @@ export default class Ink {
-                 wrappedOutput === '' ? 0 : wrappedOutput.split('\n').length;
+@@ -267,22 +283,17 @@ export default class Ink {
              return;
          }
--        if (hasStaticOutput) {
+         if (hasStaticOutput) {
 -            this.fullStaticOutput += staticOutput;
--        }
-+        const staticOutputRetained = hasStaticOutput
-+            ? this.appendStaticOutput(staticOutput)
-+            : true;
++            this.appendStaticOutput(staticOutput);
+         }
          if (this.lastOutputHeight >= this.options.stdout.rows) {
-             // Build a single buffer for all operations
-             let buffer = '';
+-            // Build a single buffer for all operations
+-            let buffer = '';
 -            buffer += ansiEscapes.clearTerminal + this.fullStaticOutput + output;
-+            const staticOutputForRender = staticOutputRetained
-+                ? this.fullStaticOutput
-+                : this.fullStaticOutput + staticOutput;
-+            buffer += ansiEscapes.clearTerminal + staticOutputForRender + output;
-             // Position cursor after screen clear if requested by a component
-             if (cursorPosition) {
-                 const lineCount = output.split('\n').length;
+-            // Position cursor after screen clear if requested by a component
+-            if (cursorPosition) {
+-                const lineCount = output.split('\n').length;
+-                buffer += positionImeCursor(lineCount, cursorPosition);
++            this.log.clear();
++            if (hasStaticOutput) {
++                this.options.stdout.write(staticOutput);
+             }
+-            this.options.stdout.write(buffer);
++            this.log(output, styledOutput, debugRainbowColor, cursorPosition);
+             this.lastOutput = output;
+             this.lastOutputHeight = outputHeight;
+             this.lastCursorPosition = cursorPosition;
+-            this.log.sync(output, cursorPosition);
+             return;
+         }
+         // To ensure static output is cleanly rendered before main output, clear main output first
 diff --git a/node_modules/ink/build/measure-text.d.ts b/node_modules/ink/build/measure-text.d.ts
 index 5619c54..e6b6254 100644
 --- a/node_modules/ink/build/measure-text.d.ts
@@ -429,3 +450,25 @@ index 94955b7..0b15987 100644
  export function toStyledCharacters(text) {
      const cached = toStyledCharactersCache.get(text);
      if (cached !== undefined) {
+diff --git a/node_modules/ink/build/reconciler.js b/node_modules/ink/build/reconciler.js
+index ab14aaf..1ec3745 100644
+--- a/node_modules/ink/build/reconciler.js
++++ b/node_modules/ink/build/reconciler.js
+@@ -2,7 +2,7 @@ import process from 'node:process';
+ import createReconciler from 'react-reconciler';
+ import { DefaultEventPriority, NoEventPriority, } from 'react-reconciler/constants.js';
+ import Yoga from 'yoga-layout';
+-import { createContext } from 'react';
++import { createContext, version } from 'react';
+ import { createTextNode, appendChildNode, insertBeforeNode, removeChildNode, setStyle, setTextNodeValue, createNode, setAttribute, } from './dom.js';
+ import applyStyles from './styles.js';
+ // We need to conditionally perform devtools connection to avoid
+@@ -62,6 +62,8 @@ const cleanupYogaNode = (node) => {
+ let currentUpdatePriority = NoEventPriority;
+ let currentRootNode;
+ export default createReconciler({
++    rendererPackageName: 'ink',
++    rendererVersion: version,
+     getRootHostContext: () => ({
+         isInsideText: false,
+     }),
