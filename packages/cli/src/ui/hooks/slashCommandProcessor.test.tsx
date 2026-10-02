@@ -52,6 +52,10 @@ const reactStub = (() => {
       useState,
       useEffect,
       useMemo: <T,>(factory: () => T) => factory(),
+      useSyncExternalStore: <T,>(
+        _subscribe: (listener: () => void) => () => void,
+        getSnapshot: () => T,
+      ) => getSnapshot(),
       useCallback: <T extends (...args: unknown[]) => unknown>(fn: T) => fn,
       useRef: <T,>(initial: T) => ({ current: initial }),
       useMemoizedState: <T,>(value: T) => value,

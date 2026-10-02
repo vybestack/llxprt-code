@@ -61,7 +61,7 @@ function usesAlternateBuffer(props: DefaultAppLayoutProps): boolean {
 
 function StreamingBoundary({ children }: React.PropsWithChildren) {
   const { store } = useTurnStore();
-  const state = useStoreSelector(store, (s) => s.streamingState);
+  const state = useStoreSelector(store, (s) => s.loadingState);
   return (
     <StreamingContext.Provider value={state}>
       {children}
