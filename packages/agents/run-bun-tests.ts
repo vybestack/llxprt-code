@@ -209,9 +209,10 @@ export function runTestFile(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<TestResult> {
   assertRunnerActive();
+  const runnerEnv = process.env;
   const timeoutMs = resolveRunnerTimeouts({
     runner: 'agents',
-    env: process.env,
+    env: runnerEnv,
   }).perFileMs;
   rmSync(reportPath, { force: true });
   return new Promise((resolve) => {

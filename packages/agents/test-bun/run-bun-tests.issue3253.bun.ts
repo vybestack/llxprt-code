@@ -16,6 +16,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { runTestFile, runTestFileWithTimeoutRetry } from '../run-bun-tests.js';
+import {
+  buildSessionEnv,
+  createTestSessionRoot,
+  removeSessionRoot,
+} from '../../../scripts/lib/test-session-isolation.js';
 
 interface RetryOutcome {
   readonly passed: boolean;
@@ -259,27 +264,51 @@ describe('external signal classification', () => {
 
 describe('runner timeout environment', () => {
   it('uses the runner budget rather than a supplied child override', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'agents-budget-source-'));
+    const session = createTestSessionRoot();
+    const root = session.root;
+    const runnerHome = process.env.HOME;
+    const marker = join(root, 'child-env.json');
+    const childEnv = buildSessionEnv(
+      { ...process.env, LLXPRT_TEST_FILE_TIMEOUT_MS: '0' },
+      session,
+    );
     try {
       const file = join(root, 'passes.test.ts');
       writeFileSync(
         file,
-        "import { it } from 'bun:test'; it('passes', () => {});",
+        `import { it } from 'bun:test';
+import { writeFileSync } from 'node:fs';
+writeFileSync(${JSON.stringify(marker)}, JSON.stringify({ home: process.env.HOME, tmp: process.env.TMPDIR }));
+it('passes', async () => { await Bun.sleep(50); });`,
       );
       const result = await withShortPerFileTimeout(() =>
-        runTestFile(file, join(root, 'junit.xml'), {
-          ...process.env,
-          LLXPRT_TEST_FILE_TIMEOUT_MS: '1',
-        }),
+        runTestFile(file, join(root, 'junit.xml'), childEnv),
       );
       expect(result.passed).toBe(true);
       expect(result.timedOut).toBe(false);
       expect(result.timeoutMs).toBe(4000);
+      expect(JSON.parse(readFileSync(marker, 'utf8'))).toEqual({
+        home: session.homeDir,
+        tmp: session.tmpDir,
+      });
+      expect(process.env.HOME).toBe(runnerHome);
       expect(readFileSync(join(root, 'junit.xml'), 'utf8')).toContain(
         'tests="1"',
       );
+      rmSync(marker);
+      const saved = process.env.LLXPRT_TEST_FILE_TIMEOUT_MS;
+      process.env.LLXPRT_TEST_FILE_TIMEOUT_MS = '0';
+      try {
+        expect(() =>
+          runTestFile(file, join(root, 'junit.xml'), childEnv),
+        ).toThrow('LLXPRT_TEST_FILE_TIMEOUT_MS');
+        expect(existsSync(marker)).toBe(false);
+      } finally {
+        if (saved === undefined) delete process.env.LLXPRT_TEST_FILE_TIMEOUT_MS;
+        else process.env.LLXPRT_TEST_FILE_TIMEOUT_MS = saved;
+      }
     } finally {
-      rmSync(root, { recursive: true, force: true });
+      removeSessionRoot(session);
     }
   });
 });

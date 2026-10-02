@@ -1256,6 +1256,47 @@ describe('runTestFile: report-scan failure settlement', () => {
   }, 30_000);
 });
 
+function relocateCoreRunnerImports(
+  source: string,
+  scriptsRoot: string,
+): string {
+  return source.replace(
+    /from '\.\.\/\.\.\/scripts\/lib\/([^']+)\.js'/g,
+    (_match, name: string) =>
+      `from ${JSON.stringify(join(scriptsRoot, `${name}.ts`))}`,
+  );
+}
+
+describe('core runner fixture module paths', () => {
+  it('loads a real module through a quoted native path', async () => {
+    const root = mkdtempSync(join(tmpdir(), "core-import-'quoted-"));
+    tempDirs.push(root);
+    writeFileSync(join(root, 'fixture.ts'), 'export const budget = 300000;');
+    const harness = join(root, 'runner.ts');
+    writeFileSync(
+      harness,
+      relocateCoreRunnerImports(
+        "import { budget } from '../../scripts/lib/fixture.js'; console.log(budget / 1000);",
+        root,
+      ),
+    );
+    const child = Bun.spawn([process.execPath, harness], {
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    const [stdout, stderr, exitCode] = await settleWithin(
+      Promise.all([
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+        child.exited,
+      ]),
+      20000,
+    );
+    expect(exitCode, stderr).toBe(0);
+    expect(stdout.trim()).toBe('300');
+  }, 25000);
+});
+
 describe('core batch settlement after retry reaping', () => {
   it.each([false, true])(
     'continues only when the final reap flag clears (persistent=%s)',
@@ -1296,11 +1337,10 @@ describe('core batch settlement after retry reaping', () => {
         'scripts',
         'lib',
       );
-      const source = readFileSync(runnerPath, 'utf8')
-        .replace(
-          /from '\.\.\/\.\.\/scripts\/lib\/([^']+)\.js'/g,
-          (_match, name: string) => `from '${join(scriptsRoot, name)}.ts'`,
-        )
+      const source = relocateCoreRunnerImports(
+        readFileSync(runnerPath, 'utf8'),
+        scriptsRoot,
+      )
         .replace(
           'const WORKSPACE_ROOT = import.meta.dir;',
           `const WORKSPACE_ROOT = ${JSON.stringify(root)};`,
@@ -1329,7 +1369,8 @@ describe('core batch settlement after retry reaping', () => {
         ]),
         20000,
       );
-      expect(exitCode).toBe(1);
+      expect(exitCode, stderr).toBe(1);
+      expect(existsSync(marker), stderr).toBe(true);
       expect(readFileSync(marker, 'utf8').split('attempt').length - 1).toBe(2);
       expect(existsSync(later)).toBe(!persistent);
       expect(stderr.includes('FATAL: failed to reap')).toBe(persistent);

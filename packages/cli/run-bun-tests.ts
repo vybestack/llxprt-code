@@ -103,10 +103,11 @@ export function timeoutForFile(file: string): number {
  * slow-but-progressing file rather than to bound total runtime.
  */
 export function fileTimeoutForFile(file: string): number {
+  const runnerEnv = process.env;
   return resolveRunnerTimeouts({
     runner: 'cli',
     integration: INTEGRATION_FILE_PATTERN.test(file),
-    env: process.env,
+    env: runnerEnv,
   }).perFileMs;
 }
 

@@ -1,3 +1,25 @@
+## CI fix local acceptance (2026-10-02)
+
+Both **Blocker-Fix** findings are resolved locally. CLI and agents bind runner env at the original evaluation point; child spawn env and every isolation assertion remain unchanged. Real children prove session HOME/TMPDIR delivery, invalid supplied child budgets do not control runner deadlines, runner-env changes are read on each call, and invalid runner configuration rejects before a child writes its marker. CLI also verifies the complete runner environment is preserved.
+
+The core fixture now relocates imports through JSON-escaped native module paths. Real-child quote-path loading failed before the fix and passes afterward. A separate raw Windows-path probe captures startup stderr showing backslashes stripped and escape sequences interpreted in the module name. Both real-child batch/retry/FATAL cases remain active with unchanged deadlines and assertions; startup failures now expose captured stderr before reading attempt markers. Windows runtime acceptance awaits candidate-head CI.
+
+Final local format, lint, typecheck, unfiltered workspace tests, build, existing `gpt-6-luna` smoke, coverage guard and audit all exit 0. Core passes 460/460 files; CLI passes 764/764 with 9813 cases passed. Independent full scripts verification passes 300/300 scripts files plus the test-audit suite. Focused coverage runs pass core 35 (one existing skip), CLI 81 and agents 7; auth passes 12; unchanged isolation suites pass 147; focused scripts pass 10/10 files. Coverage artifacts document platform-specific limits; no combined 100% claim is made. Audit comparison has 2106 baseline and candidate findings, with no added or removed findings after normalizing line-number shifts. The existing CLI determinism finding remains.
+
+Evidence is under `tmp/verify3442/ci-fix/`, particularly `scripts-final.log/.exit`, `restored/`, `final/`, red logs, the Windows-path stderr probe and audit comparisons. The actual verified code/config fingerprint is `062caf3290a4d8bf3a133603ea1d884bf58c30bc70cd9828aadb7192040572d3`; post-gate sorted hashes match. Only this reporting prose follows verification.
+
+Earlier failed attempts remain recorded. Already-declared optional plugin dependencies were restored without manifest or lock edits. Copied read-only evidence-directory cleanup failed (#3805); original directory permissions were restored after all copy-based tests. A subsequent npm cache-lock failure (#3806) and unchanged-source storage lock timeout (#3807) each recover in complete unfiltered reruns with no assertion, deadline, concurrency or product-source changes. These separate findings are not repairs included in this candidate. Literal `luna` remains absent; only the explicitly requested existing replacement smoke is claimed.
+
+No new reviewers or OCR were invoked. No workflow, quality enforcement, public abstraction, profile, dependency declaration or protected memory changes were made. Latest fetched main remains `f3839b8810496490f4eaf8513c27e12bd7952809`, an ancestor, and read-only merge-tree reports no conflicts. Commit and authorized SSH push follow these local gates; final candidate-head checks and threads will be reported after publication. No merge.
+
+## CI fix mission (2026-10-02)
+
+Both publication failures are **Blocker-Fix**. The scripts isolation guard rejects the new literal runner-config env inputs in CLI and agents, although child spawns use the session env. Keep all guard assertions unchanged and bind runner env at the original call time. Behavior tests must distinguish runner budgets from child env and prove session HOME reaches real children.
+
+The Windows core batch fixture interpolates native module paths into quoted TypeScript imports without escaping. First reproduce the escaping failure with a real child loading a module through a quote-containing path and retain its stderr. Use one private test-fixture relocation function with JSON-escaped module specifiers. Keep both real-child batch retry/FATAL cases, assertions and deadlines unchanged.
+
+Sequence: record isolation red; add portable-path and runner/child-env behavior proof; record fixture red; apply only runner integration and test-fixture fixes; run independent focused suites, unchanged isolation suites and the full scripts shard. Complete format, lint, typecheck, workspace tests, build, existing `gpt-6-luna` smoke, coverage and audit. Fingerprint the verified candidate before exact-scope commit and authorized SSH push. Watch final-head CI to completion, triage evidence-backed review threads and verify latest main ancestry and merge conflicts. No new reviews, OCR, profile, workflow, dependency, quality-rule or public API changes. No merge.
+
 ## Publication handoff (2026-10-02)
 
 The initial independent review and findings-only follow-up are complete with PASS. Both TypeScript include findings are resolved without weakening enforcement. The two-cycle review cap is reached; no further reviewer or OCR run is authorized. Follow-up proof is in `tmp/verify3442/followup/`.
