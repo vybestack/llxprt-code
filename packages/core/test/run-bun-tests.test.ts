@@ -1375,7 +1375,7 @@ describe('core batch settlement after retry reaping', () => {
       expect(existsSync(later)).toBe(!persistent);
       expect(stderr.includes('FATAL: failed to reap')).toBe(persistent);
       expect(stdout).toContain(
-        'RETRY (2/2): src/a.test.ts after per-file timeout',
+        `RETRY (2/2): ${join('src', 'a.test.ts')} after per-file timeout`,
       );
       const xml = readFileSync(join(root, 'junit.xml'), 'utf8');
       expect(xml).toContain(
