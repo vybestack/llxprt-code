@@ -1381,7 +1381,10 @@ describe('core batch settlement after retry reaping', () => {
       expect(xml).toContain(
         `<testsuites tests="${persistent ? 1 : 2}" failures="1">`,
       );
-      expect(xml.includes('classname="b"')).toBe(!persistent);
+      const laterClassName = process.platform === 'win32' ? 'src\\b' : 'b';
+      expect(xml.includes(`classname="${laterClassName}"`), xml).toBe(
+        !persistent,
+      );
       expect(xml).toContain(
         persistent ? 'TIMEOUT+REAP_FAILED' : '>TIMEOUT</failure>',
       );
