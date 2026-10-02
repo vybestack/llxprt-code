@@ -19,7 +19,10 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { reapStaleBunTestProcesses } from '../lib/bun-test-reaper.js';
+import {
+  reapStaleBunTestProcesses,
+  killTimedOutChild,
+} from '../lib/bun-test-reaper.js';
 
 describe('reapStaleBunTestProcesses', () => {
   /**
@@ -282,5 +285,21 @@ describe('reapStaleBunTestProcesses', () => {
     );
     expect(outcome.stderr).toHaveLength(1);
     expect(outcome.stderr[0]).toContain('Reaped 1 stale orphaned');
+  });
+});
+
+describe('finite timeout kills', () => {
+  it('finite CLI kill preserves direct-child fallback when no pid exists', () => {
+    const signals: string[] = [];
+    killTimedOutChild({
+      runner: 'cli',
+      child: {
+        kill: (signal) => {
+          signals.push(signal);
+          return true;
+        },
+      },
+    });
+    expect(signals).toEqual(['SIGKILL']);
   });
 });

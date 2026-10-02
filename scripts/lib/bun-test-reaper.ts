@@ -10,6 +10,10 @@
  * so its public import surface is unchanged).
  */
 
+import { spawn, type ChildProcess } from 'node:child_process';
+import { rmSync } from 'node:fs';
+import { killRunnerChild } from './bespoke-runner-isolation.js';
+
 /** Basenames the reaper accepts as the bun executable. */
 const BUN_BASENAMES: ReadonlySet<string> = new Set(['bun', 'bun.exe']);
 
@@ -128,4 +132,276 @@ export function reapStaleBunTestProcesses(
     );
   }
   return killed;
+}
+
+export interface CoreReapOptions {
+  readonly reapTimeoutMs?: number;
+  readonly taskkillTimeoutMs?: number;
+}
+export interface AttemptCleanupOptions {
+  readonly cleanupAttempts?: number;
+  readonly cleanupRetryDelayMs?: number;
+  readonly removeAttemptDir?: (attemptDir: string) => void;
+}
+const REAP_TIMEOUT_MS = 10_000;
+const TASKKILL_TIMEOUT_MS = 10_000;
+
+// Windows can transiently refuse removal of a directory whose report file
+// was just closed (AV scanners, search indexers, reporter teardown still
+// holding handles), reporting EBUSY/EPERM/EACCES/ENOTEMPTY. Removal gets a
+// bounded number of retries for exactly those errors; anything else
+// propagates immediately.
+const RETRYABLE_CLEANUP_ERROR_CODES: ReadonlySet<string> = new Set([
+  'EBUSY',
+  'EPERM',
+  'EACCES',
+  'ENOTEMPTY',
+]);
+const DEFAULT_CLEANUP_ATTEMPTS = 3;
+const DEFAULT_CLEANUP_RETRY_DELAY_MS = 100;
+
+function isRetryableCleanupError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    'code' in error &&
+    typeof error.code === 'string' &&
+    RETRYABLE_CLEANUP_ERROR_CODES.has(error.code)
+  );
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+export async function cleanupAttemptDirectory(
+  attemptDir: string,
+  options: AttemptCleanupOptions,
+): Promise<void> {
+  const remove =
+    options.removeAttemptDir ??
+    ((dir: string) => {
+      rmSync(dir, { recursive: true, force: true });
+    });
+  const attempts = options.cleanupAttempts ?? DEFAULT_CLEANUP_ATTEMPTS;
+  const retryDelayMs =
+    options.cleanupRetryDelayMs ?? DEFAULT_CLEANUP_RETRY_DELAY_MS;
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      remove(attemptDir);
+      return;
+    } catch (error) {
+      if (!isRetryableCleanupError(error)) throw error;
+      lastError = error;
+      if (attempt < attempts) {
+        await delay(retryDelayMs);
+      }
+    }
+  }
+  const lastDetail =
+    lastError instanceof Error ? lastError.message : String(lastError);
+  throw new Error(`removal failed after ${attempts} attempts: ${lastDetail}`, {
+    cause: lastError,
+  });
+}
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  operation: string,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`${operation} did not complete within ${timeoutMs}ms`));
+    }, timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
+export function observeChildClose(child: ChildProcess): Promise<void> {
+  return new Promise<void>((resolve) => {
+    child.once('close', () => resolve());
+  });
+}
+
+export async function killChildTreeAndWait(
+  child: ChildProcess,
+  childClosed: Promise<void>,
+  options: CoreReapOptions = {},
+): Promise<void> {
+  const pid = child.pid;
+  if (pid === undefined) {
+    throw new Error('Cannot reap test process without a PID');
+  }
+
+  if (process.platform === 'win32') {
+    await killWindowsTreeAndWait(pid, childClosed, options);
+    return;
+  }
+  // POSIX: kill the entire per-test process group by negative PID. The
+  // child was spawned with detached: true (see runTestFile) so it leads
+  // its own group; this sends SIGKILL to every descendant that inherited
+  // it (e.g. grandchildren spawned via Bun.spawn), which child.kill()
+  // alone would orphan.
+  try {
+    process.kill(-pid, 'SIGKILL');
+  } catch (error) {
+    const code =
+      error instanceof Error && 'code' in error ? error.code : undefined;
+    if (code !== 'ESRCH') throw error;
+  }
+
+  await withTimeout(
+    childClosed,
+    options.reapTimeoutMs ?? REAP_TIMEOUT_MS,
+    `Timed-out child (pid ${pid}) close lifecycle`,
+  );
+}
+
+function killCliProcessTree(child: {
+  pid?: number;
+  kill: (s: NodeJS.Signals) => boolean;
+}): void {
+  if (process.platform !== 'win32' && child.pid !== undefined) {
+    try {
+      process.kill(-child.pid, 'SIGKILL');
+      return;
+    } catch {
+      // Group already gone, or the child never became a group leader.
+    }
+  }
+  child.kill('SIGKILL');
+}
+export function killTimedOutChild(
+  input:
+    | {
+        readonly runner: 'cli';
+        readonly child: {
+          pid?: number;
+          kill: (signal: NodeJS.Signals) => boolean;
+        };
+      }
+    | {
+        readonly runner: 'agents' | 'auth' | 'shared';
+        readonly child: ChildProcess;
+      },
+): void {
+  if (input.runner === 'cli') {
+    killCliProcessTree(input.child);
+  } else {
+    killRunnerChild(input.child);
+  }
+}
+
+async function killWindowsTreeAndWait(
+  pid: number,
+  childClosed: Promise<void>,
+  options: CoreReapOptions,
+): Promise<void> {
+  const killer = spawn('taskkill', ['/T', '/F', '/PID', String(pid)], {
+    stdio: 'ignore',
+    windowsHide: true,
+  });
+  let taskkillError: Error | null = null;
+  killer.once('error', (error: Error) => {
+    taskkillError = error;
+  });
+  const killerClosed = new Promise<number | null>((resolve) => {
+    killer.once('close', resolve);
+  });
+  let taskkillCode: number | null;
+  try {
+    taskkillCode = await withTimeout(
+      killerClosed,
+      options.taskkillTimeoutMs ?? TASKKILL_TIMEOUT_MS,
+      `taskkill for test process ${pid}`,
+    );
+  } catch (error) {
+    await terminateTimedOutTaskkill(killer, killerClosed, pid, options, error);
+    throw error;
+  }
+  if (taskkillError !== null) {
+    throw taskkillError;
+  }
+  // A nonzero taskkill code is not by itself a reap failure: the usual cause
+  // is that the tree already exited between the timeout firing and taskkill
+  // running, which is the POSIX ESRCH case handled below. What matters is
+  // the invariant — that nothing is left alive holding the child's pipes —
+  // so verify that directly by waiting for close, and report the code only
+  // if the tree genuinely outlives the reap.
+  if (taskkillCode !== 0) {
+    try {
+      await withTimeout(
+        childClosed,
+        options.reapTimeoutMs ?? REAP_TIMEOUT_MS,
+        `Timed-out child (pid ${pid}) close lifecycle`,
+      );
+    } catch (closeError) {
+      throw new AggregateError(
+        [
+          new Error(
+            `taskkill /T /F /PID ${pid} exited with code ${taskkillCode}`,
+          ),
+          closeError,
+        ],
+        `taskkill for test process ${pid} reported failure and its tree did not close`,
+      );
+    }
+    return;
+  }
+
+  await withTimeout(
+    childClosed,
+    options.reapTimeoutMs ?? REAP_TIMEOUT_MS,
+    `Timed-out child (pid ${pid}) close lifecycle`,
+  );
+}
+
+async function terminateTimedOutTaskkill(
+  killer: ChildProcess,
+  killerClosed: Promise<number | null>,
+  pid: number,
+  options: CoreReapOptions,
+  error: unknown,
+): Promise<never> {
+  let forcedKillError: Error | null = null;
+  const recordForcedKillError = (killError: Error): void => {
+    forcedKillError = killError;
+  };
+  killer.once('error', recordForcedKillError);
+  try {
+    if (killer.exitCode === null && killer.signalCode === null) {
+      killer.kill('SIGKILL');
+    }
+    await withTimeout(
+      killerClosed,
+      options.reapTimeoutMs ?? REAP_TIMEOUT_MS,
+      `Timed-out taskkill (pid ${killer.pid ?? 'unknown'}) close lifecycle`,
+    );
+  } catch (closeError) {
+    throw new AggregateError(
+      [error, closeError],
+      `taskkill for test process ${pid} failed and did not close`,
+    );
+  } finally {
+    killer.off('error', recordForcedKillError);
+  }
+  if (forcedKillError !== null) {
+    throw new AggregateError(
+      [error, forcedKillError],
+      `taskkill for test process ${pid} timed out and could not be terminated`,
+    );
+  }
+  throw error;
 }
