@@ -11,6 +11,7 @@ import {
   chmodSync,
   closeSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
   openSync,
   readFileSync,
@@ -1253,4 +1254,131 @@ describe('runTestFile: report-scan failure settlement', () => {
     expect(removals).toHaveLength(1);
     expect(unhandledRejections).toEqual([]);
   }, 30_000);
+});
+
+describe('core batch settlement after retry reaping', () => {
+  it.each([false, true])(
+    'continues only when the final reap flag clears (persistent=%s)',
+    async (persistent) => {
+      const root = mkdtempSync(join(tmpdir(), 'core-batch-reap-'));
+      tempDirs.push(root);
+      const sourceDir = join(root, 'src');
+      const testDir = join(root, 'test');
+      mkdirSync(sourceDir);
+      mkdirSync(testDir);
+      const marker = join(root, 'attempts');
+      const later = join(root, 'later');
+      writeFileSync(
+        join(sourceDir, 'a.test.ts'),
+        [
+          "import { it } from 'bun:test';",
+          "import { appendFileSync, existsSync } from 'node:fs';",
+          `const marker = ${JSON.stringify(marker)};`,
+          'const retry = existsSync(marker);',
+          "appendFileSync(marker, 'attempt');",
+          `it('timeout then retry', async () => { if (${persistent} || !retry) await new Promise(() => {}); });`,
+        ].join('\n'),
+      );
+      writeFileSync(
+        join(sourceDir, 'b.test.ts'),
+        [
+          "import { it } from 'bun:test';",
+          "import { writeFileSync } from 'node:fs';",
+          `it('later batch', () => writeFileSync(${JSON.stringify(later)}, 'ran'));`,
+        ].join('\n'),
+      );
+      const runnerPath = join(import.meta.dir, '..', 'run-bun-tests.ts');
+      const scriptsRoot = join(
+        import.meta.dir,
+        '..',
+        '..',
+        '..',
+        'scripts',
+        'lib',
+      );
+      const source = readFileSync(runnerPath, 'utf8')
+        .replace(
+          /from '\.\.\/\.\.\/scripts\/lib\/([^']+)\.js'/g,
+          (_match, name: string) => `from '${join(scriptsRoot, name)}.ts'`,
+        )
+        .replace(
+          'const WORKSPACE_ROOT = import.meta.dir;',
+          `const WORKSPACE_ROOT = ${JSON.stringify(root)};`,
+        )
+        .replace(
+          "const PRELOAD = join(WORKSPACE_ROOT, 'bun-preload.ts');",
+          `const PRELOAD = ${JSON.stringify(join(import.meta.dir, '..', 'bun-preload.ts'))};`,
+        )
+        .replace(
+          'runTestFile(file, { env: isolation.sessionEnv })',
+          `runTestFile(file, { env: isolation.sessionEnv, timeoutMs: 3000, reapTimedOutChild: async (child, closed) => { await killChildTreeAndWait(child, closed); throw new Error('fixture reap error'); } })`,
+        );
+      const harness = join(root, 'runner.ts');
+      writeFileSync(harness, source);
+      const child = Bun.spawn([process.execPath, harness], {
+        cwd: root,
+        env: { ...process.env, LLXPRT_CORE_TEST_CONCURRENCY: '1' },
+        stdout: 'pipe',
+        stderr: 'pipe',
+      });
+      const [stdout, stderr, exitCode] = await settleWithin(
+        Promise.all([
+          new Response(child.stdout).text(),
+          new Response(child.stderr).text(),
+          child.exited,
+        ]),
+        20000,
+      );
+      expect(exitCode).toBe(1);
+      expect(readFileSync(marker, 'utf8').split('attempt').length - 1).toBe(2);
+      expect(existsSync(later)).toBe(!persistent);
+      expect(stderr.includes('FATAL: failed to reap')).toBe(persistent);
+      expect(stdout).toContain(
+        'RETRY (2/2): src/a.test.ts after per-file timeout',
+      );
+      const xml = readFileSync(join(root, 'junit.xml'), 'utf8');
+      expect(xml).toContain(
+        `<testsuites tests="${persistent ? 1 : 2}" failures="1">`,
+      );
+      expect(xml.includes('classname="b"')).toBe(!persistent);
+      expect(xml).toContain(
+        persistent ? 'TIMEOUT+REAP_FAILED' : '>TIMEOUT</failure>',
+      );
+      expect(xml.endsWith('</testsuites>')).toBe(true);
+    },
+    25000,
+  );
+});
+
+describe('external signal classification', () => {
+  it.skipIf(process.platform === 'win32')(
+    'does not turn a real SIGTERM without a timeout report into a retry',
+    async () => {
+      const root = mkdtempSync(join(tmpdir(), 'core-signal-policy-'));
+      tempDirs.push(root);
+      const file = join(root, 'signal.test.ts');
+      const marker = join(root, 'attempts');
+      writeFileSync(
+        file,
+        `import { appendFileSync } from 'node:fs'; appendFileSync(${JSON.stringify(marker)}, 'attempt'); process.kill(process.pid, 'SIGTERM');`,
+      );
+      const logs: string[] = [];
+      const result = await runTestFileWithTimeoutRetry(
+        file,
+        () => runTestFile(file),
+        (line) => logs.push(line),
+      );
+      expect(result).toEqual({
+        file,
+        passed: false,
+        exitCode: null,
+        timedOut: false,
+        timeoutMs: 300000,
+        reapFailed: false,
+        reapError: null,
+      });
+      expect(readFileSync(marker, 'utf8')).toBe('attempt');
+      expect(logs).toEqual([]);
+    },
+  );
 });

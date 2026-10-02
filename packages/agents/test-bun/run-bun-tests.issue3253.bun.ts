@@ -226,3 +226,60 @@ describe('real agents test-file child retries', () => {
     }
   }, 40_000);
 });
+
+describe('external signal classification', () => {
+  it.skipIf(process.platform === 'win32')(
+    'retains a real SIGTERM close and does not timeout-retry it',
+    async () => {
+      const root = mkdtempSync(join(tmpdir(), 'agents-signal-policy-'));
+      try {
+        const file = join(root, 'signal.test.ts');
+        const marker = join(root, 'attempts');
+        writeFileSync(
+          file,
+          `import { appendFileSync } from 'node:fs'; appendFileSync(${JSON.stringify(marker)}, 'attempt'); process.kill(process.pid, 'SIGTERM');`,
+        );
+        const logs: string[] = [];
+        const result = await runTestFileWithTimeoutRetry(
+          file,
+          () => runTestFile(file, join(root, 'junit.xml')),
+          (line) => logs.push(line),
+        );
+        expect(result.passed).toBe(false);
+        expect(result.timedOut).toBe(false);
+        expect(result.signal).toBe('SIGTERM');
+        expect(readFileSync(marker, 'utf8')).toBe('attempt');
+        expect(logs).toEqual([]);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  );
+});
+
+describe('runner timeout environment', () => {
+  it('uses the runner budget rather than a supplied child override', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'agents-budget-source-'));
+    try {
+      const file = join(root, 'passes.test.ts');
+      writeFileSync(
+        file,
+        "import { it } from 'bun:test'; it('passes', () => {});",
+      );
+      const result = await withShortPerFileTimeout(() =>
+        runTestFile(file, join(root, 'junit.xml'), {
+          ...process.env,
+          LLXPRT_TEST_FILE_TIMEOUT_MS: '1',
+        }),
+      );
+      expect(result.passed).toBe(true);
+      expect(result.timedOut).toBe(false);
+      expect(result.timeoutMs).toBe(4000);
+      expect(readFileSync(join(root, 'junit.xml'), 'utf8')).toContain(
+        'tests="1"',
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});

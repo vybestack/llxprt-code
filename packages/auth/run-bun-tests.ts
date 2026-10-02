@@ -11,19 +11,26 @@
  * See packages/core/run-bun-tests.ts for rationale (Bun 1.3.x Linux hang).
  */
 
+import {
+  resolveRunnerTimeouts,
+  classifyAttempt,
+  runTimeoutRetry,
+  killTimedOutChild,
+  renderJUnitReport,
+  buildAuthJUnitCases,
+  formatAuthFailureReason,
+} from '../../scripts/lib/bun-test-retry.js';
 import { spawn } from 'node:child_process';
 import { readdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  DEFAULT_PER_FILE_TIMEOUT_MS,
   DEFAULT_PER_TEST_TIMEOUT_MS,
   resolveTestConcurrency,
 } from '../../scripts/lib/bun-test-policy.js';
 import {
   assertRunnerActive,
   createBespokeRunnerIsolation,
-  killRunnerChild,
   throwWorkerFailures,
   installRunnerSignalHandlers,
   trackRunnerChild,
@@ -43,7 +50,7 @@ const JUNIT_PATH = join(WORKSPACE_ROOT, 'junit.xml');
 const CONCURRENCY = resolveTestConcurrency({
   envVar: 'LLXPRT_AUTH_TEST_CONCURRENCY',
 });
-const PER_FILE_TIMEOUT_MS = DEFAULT_PER_FILE_TIMEOUT_MS;
+const PER_FILE_TIMEOUT_MS = resolveRunnerTimeouts({ runner: 'auth' }).perFileMs;
 
 const TEST_ROOTS = ['src'] as const;
 
@@ -114,13 +121,7 @@ export async function runTestFileWithTimeoutRetry<
   runAttempt: () => Promise<T>,
   logRetry: (message: string) => void = (message) => console.log(message),
 ): Promise<T> {
-  const firstAttempt = await runAttempt();
-  if (!firstAttempt.timedOut) {
-    return firstAttempt;
-  }
-
-  logRetry(`RETRY (2/2): ${file} after per-file timeout`);
-  return runAttempt();
+  return runTimeoutRetry(file, runAttempt, logRetry);
 }
 
 export function runTestFile(
@@ -163,7 +164,7 @@ export function runTestFile(
     const timer = setTimeout(() => {
       killedByTimeout = true;
       try {
-        killRunnerChild(child);
+        killTimedOutChild({ runner: 'auth', child });
       } catch (error) {
         console.error(
           `Failed to kill timed-out test child ${child.pid}: ${String(error)}`,
@@ -177,7 +178,11 @@ export function runTestFile(
       clearTimeout(timer);
       resolve({
         file,
-        passed: !killedByTimeout && code === 0,
+        passed: classifyAttempt({
+          runner: 'auth',
+          killedByTimer: killedByTimeout,
+          exitCode: code,
+        }).passed,
         exitCode: killedByTimeout ? null : code,
         timedOut: killedByTimeout,
         signal: killedByTimeout ? null : (signal ?? null),
@@ -200,22 +205,8 @@ export function runTestFile(
   });
 }
 
-function escapeXml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
 export function formatFailureReason(result: TestResult): string {
-  if (result.timedOut) {
-    return `Timed out after ${PER_FILE_TIMEOUT_MS / 1000}s`;
-  }
-  if (result.signal !== null) {
-    return `Killed by signal ${result.signal}`;
-  }
-  return `Exit code ${result.exitCode ?? -1}`;
+  return formatAuthFailureReason(result, PER_FILE_TIMEOUT_MS);
 }
 
 export function generateJUnit(
@@ -223,28 +214,13 @@ export function generateJUnit(
   totalFiles: number,
   failedCount: number,
 ): string {
-  const newlines = '\n';
-  const testCases = results
-    .map((r) => {
-      const className = escapeXml(
-        r.file.replace(/^src\//, '').replace(/\.(test|spec)\.tsx?$/, ''),
-      );
-      const failureXml = r.passed
-        ? ''
-        : `<failure message="${formatFailureReason(r)}">FAILED</failure>`;
-      const timeAttr = r.passed ? '' : ' time="0"';
-      return `    <testcase classname="${className}" name="${className}"${timeAttr}>${failureXml}</testcase>`;
-    })
-    .join(newlines);
-
-  return [
-    '<?xml version="1.0" encoding="UTF-8"?>',
-    `<testsuites tests="${totalFiles}" failures="${failedCount}">`,
-    `  <testsuite name="auth" tests="${totalFiles}" failures="${failedCount}">`,
-    testCases,
-    '  </testsuite>',
-    '</testsuites>',
-  ].join(newlines);
+  return renderJUnitReport({
+    kind: 'workspace-summary',
+    workspace: 'auth',
+    cases: buildAuthJUnitCases(results, PER_FILE_TIMEOUT_MS),
+    totalFiles,
+    failedCount,
+  });
 }
 
 async function main(): Promise<void> {

@@ -1017,3 +1017,32 @@ it('reaps a timed-out child even when timeout notification throws', async () => 
     rmSync(dir, { recursive: true, force: true });
   }
 }, 15_000);
+
+describe('external signal classification', () => {
+  it.skipIf(process.platform === 'win32')(
+    'does not retry a real self-SIGTERM without a timer timeout',
+    async () => {
+      const root = mkdtempSync(join(tmpdir(), 'cli-signal-policy-'));
+      try {
+        const file = join(root, 'signal.test.ts');
+        const marker = join(root, 'attempts');
+        writeFileSync(
+          file,
+          `import { appendFileSync } from 'node:fs'; appendFileSync(${JSON.stringify(marker)}, 'attempt'); process.kill(process.pid, 'SIGTERM');`,
+        );
+        const logs: string[] = [];
+        const result = await runTestFileWithTimeoutRetry(
+          file,
+          () => runTestFile(file),
+          (line) => logs.push(line),
+        );
+        expect(result.passed).toBe(false);
+        expect(result.timedOut).toBe(false);
+        expect(readFileSync(marker, 'utf8')).toBe('attempt');
+        expect(logs).toEqual([]);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  );
+});
