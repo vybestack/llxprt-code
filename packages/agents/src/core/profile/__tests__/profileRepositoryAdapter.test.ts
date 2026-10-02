@@ -281,6 +281,46 @@ describe('ProfileManagerProfileRepository', () => {
     expect(document.modelParams).toStrictEqual(untouched.modelParams);
   });
 
+  it('round-trips setup and save through the real manager without constructing a binding', async () => {
+    await setupRepository();
+    const harness = makeDeps();
+    harness.deps.repository = repository;
+    const writer = new ProfileController(harness.deps);
+    expect(
+      (
+        await releaseAndAwait(
+          harness,
+          writer.execute({ kind: 'setup', expectedRevision: 0 }),
+        )
+      ).kind,
+    ).toStrictEqual('committed');
+    expect(
+      (
+        await writer.execute({
+          kind: 'save',
+          name: 'blank',
+          expectedRevision: 1,
+        })
+      ).kind,
+    ).toStrictEqual('committed');
+    expect((await repository.load('blank')).document.type).toBeUndefined();
+    const reader = new ProfileController(harness.deps);
+    expect(
+      (
+        await releaseAndAwait(
+          harness,
+          reader.execute({
+            kind: 'startup',
+            profileName: 'blank',
+            expectedRevision: 0,
+          }),
+        )
+      ).kind,
+    ).toStrictEqual('committed');
+    expect(harness.factory.built).toStrictEqual(0);
+    expect(reader.getRuntime()?.getBinding()).toBeUndefined();
+  });
+
   it('skips binding construction for an untagged blank returned by the manager', async () => {
     class CoreDocumentManager extends ProfileManager {
       constructor(private readonly directory: string) {
