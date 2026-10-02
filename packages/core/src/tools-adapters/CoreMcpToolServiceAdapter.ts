@@ -28,16 +28,14 @@ export interface McpPart {
 }
 
 /**
- * Structural shape of a @google/genai `Tool` (function-declaration container).
+ * Flat tool declarations returned by MCP/LSP discovery.
  */
-export interface McpTool {
-  functionDeclarations: Array<{
-    name: string;
-    description?: string;
-    parametersJsonSchema?: unknown;
-    parameters?: unknown;
-  }>;
-}
+export type McpTool = Array<{
+  name: string;
+  description?: string;
+  parametersJsonSchema?: unknown;
+  parameters?: unknown;
+}>;
 
 /**
  * Structural shape matching the @google/genai `CallableTool` interface as used

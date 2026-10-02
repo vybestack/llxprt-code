@@ -599,22 +599,18 @@ describe('Multi-Provider Integration Tests', () => {
 
       const tools = [
         {
-          functionDeclarations: [
-            {
-              name: 'get_weather',
-              description: 'Get the weather for a location',
-              parameters: {
-                type: 'object',
-                properties: {
-                  location: {
-                    type: 'string',
-                    description: 'The city name',
-                  },
-                },
-                required: ['location'],
+          name: 'get_weather',
+          description: 'Get the weather for a location',
+          parametersJsonSchema: {
+            type: 'object',
+            properties: {
+              location: {
+                type: 'string',
+                description: 'The city name',
               },
             },
-          ],
+            required: ['location'],
+          },
         },
       ];
 

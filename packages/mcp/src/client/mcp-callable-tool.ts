@@ -31,15 +31,13 @@ export class McpCallableTool implements CallableTool {
   ) {}
 
   async tool(): Promise<Tool> {
-    return {
-      functionDeclarations: [
-        {
-          name: this.toolDef.name,
-          description: this.toolDef.description,
-          parametersJsonSchema: this.toolDef.inputSchema,
-        },
-      ],
-    };
+    return [
+      {
+        name: this.toolDef.name,
+        description: this.toolDef.description,
+        parametersJsonSchema: this.toolDef.inputSchema,
+      },
+    ];
   }
 
   async callTool(functionCalls: FunctionCall[]): Promise<Part[]> {

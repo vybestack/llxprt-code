@@ -99,13 +99,9 @@ function makePending(): IContent {
  */
 const TOOLSET: ProviderToolset = [
   {
-    functionDeclarations: [
-      {
-        name: 'search',
-        description: `tool-schema-payload ${'schema-text '.repeat(300)}`,
-        parametersJsonSchema: { type: 'object', properties: {} },
-      },
-    ],
+    name: 'search',
+    description: `tool-schema-payload ${'schema-text '.repeat(300)}`,
+    parametersJsonSchema: { type: 'object', properties: {} },
   },
 ];
 

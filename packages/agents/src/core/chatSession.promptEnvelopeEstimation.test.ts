@@ -402,20 +402,16 @@ describe('ChatSession prompt-envelope estimation (issue #2817)', () => {
     await chat.sendMessage({ message: [{ text: 'Hello' }] }, 'prompt-1');
     const withoutToolsEstimate = chat.getPromptEnvelopeEstimate()!;
 
-    const largeToolSet = [
-      {
-        functionDeclarations: Array.from({ length: 8 }, (_, i) => ({
-          name: `tool_${i}`,
-          description: `Tool number ${i} with a lengthy description that adds prompt material so the projected envelope grows. This tool performs an action relevant to the conversation and its schema is non-trivial.`,
-          parametersJsonSchema: {
-            type: 'object',
-            properties: {
-              arg: { type: 'string', description: `argument for tool ${i}` },
-            },
-          },
-        })),
+    const largeToolSet = Array.from({ length: 8 }, (_, i) => ({
+      name: `tool_${i}`,
+      description: `Tool number ${i} with a lengthy description that adds prompt material so the projected envelope grows. This tool performs an action relevant to the conversation and its schema is non-trivial.`,
+      parametersJsonSchema: {
+        type: 'object',
+        properties: {
+          arg: { type: 'string', description: `argument for tool ${i}` },
+        },
       },
-    ];
+    }));
 
     await chat.sendMessage(
       { message: [{ text: 'Hello' }], config: { tools: largeToolSet } },

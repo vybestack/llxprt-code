@@ -73,7 +73,7 @@ function convertAndGuardTools(
       inputHadTools: !!tools,
       inputToolsLength: tools?.length,
       inputFirstGroup: tools?.[0],
-      inputFunctionDeclarationsLength: tools?.[0]?.functionDeclarations?.length,
+      inputFunctionDeclarationsLength: tools?.length,
       outputHasTools: formattedTools.length > 0,
       outputToolsLength: formattedTools.length,
       outputToolNames: formattedTools.map((t) => t.function.name),

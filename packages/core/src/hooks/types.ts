@@ -16,13 +16,11 @@ import {
   mergeHookLLMRequest,
   parseHookLLMRequestBoundaryResult,
 } from './hookTranslator.js';
-import type { ToolChoice } from '../llm-types/toolDeclaration.js';
+import type {
+  ToolChoice,
+  ToolDeclaration,
+} from '../llm-types/toolDeclaration.js';
 import type { ConfigSource } from './hookRegistry.js';
-
-type HookToolListUnion = Array<{
-  functionDeclarations?: Array<{ name?: string; [key: string]: unknown }>;
-  [key: string]: unknown;
-}>;
 
 /**
  * Generate a unique key for a hook configuration
@@ -198,10 +196,10 @@ export class DefaultHookOutput implements HookOutput {
    */
   applyToolChoiceModifications(target: {
     toolChoice?: ToolChoice;
-    tools?: HookToolListUnion;
+    tools?: ToolDeclaration[];
   }): {
     toolChoice?: ToolChoice;
-    tools?: HookToolListUnion;
+    tools?: ToolDeclaration[];
   } {
     // Base implementation - overridden by BeforeToolSelectionHookOutput
     return target;
@@ -380,10 +378,10 @@ export class BeforeToolSelectionHookOutput extends DefaultHookOutput {
    */
   override applyToolChoiceModifications(target: {
     toolChoice?: ToolChoice;
-    tools?: HookToolListUnion;
+    tools?: ToolDeclaration[];
   }): {
     toolChoice?: ToolChoice;
-    tools?: HookToolListUnion;
+    tools?: ToolDeclaration[];
   } {
     if (!this.hookSpecificOutput) return target;
     const toolChoice = decodeHookToolChoice(

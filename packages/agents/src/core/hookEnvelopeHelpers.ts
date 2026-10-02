@@ -21,8 +21,7 @@ import type {
 } from '@vybestack/llxprt-code-core/hooks/hookTranslator.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
-  toolDeclarationsFromLegacyToolset,
-  type LegacyToolsetLike,
+  type ToolDeclaration,
   type ModelOutput,
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
 
@@ -32,12 +31,12 @@ import {
  */
 export function toolSelectionRequest(
   model: string,
-  tools: LegacyToolsetLike,
+  tools: ToolDeclaration[],
 ): Omit<HookLLMRequest, 'version'> {
   return {
     model,
     contents: [],
-    tools: toolDeclarationsFromLegacyToolset(tools),
+    tools,
   };
 }
 
@@ -50,34 +49,29 @@ export function toolSelectionRequest(
 export function beforeModelRequestEnvelope(
   model: string,
   contents: IContent[],
-  tools: LegacyToolsetLike | undefined,
+  tools: ToolDeclaration[] | undefined,
 ): Omit<HookLLMRequest, 'version'> {
   return {
     model,
     contents,
-    tools:
-      tools !== undefined && tools.length > 0
-        ? toolDeclarationsFromLegacyToolset(tools)
-        : undefined,
+    tools,
   };
 }
 
 /**
  * Request envelope for the AfterModel fire site: the conversation as the
  * model saw it, with the tools key included only when the request carried
- * a non-empty toolset.
+ * a defined toolset, including producer-empty declarations.
  */
 export function afterModelRequestEnvelope(
   model: string,
   contents: IContent[] | undefined,
-  tools: unknown,
+  tools: ToolDeclaration[] | undefined,
 ): Omit<HookLLMRequest, 'version'> {
   return {
     model,
     contents: contents ?? [],
-    ...(Array.isArray(tools) && tools.length > 0
-      ? { tools: toolDeclarationsFromLegacyToolset(tools) }
-      : {}),
+    ...(tools !== undefined ? { tools } : {}),
   };
 }
 

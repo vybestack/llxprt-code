@@ -56,7 +56,7 @@ describe('MCP behavioral tests for neutral wire types', () => {
     );
 
     const tool: ToolDeclarations = await callableTool.tool();
-    expect(tool.functionDeclarations?.[0]).toStrictEqual({
+    expect(tool[0]).toStrictEqual({
       name: 'test_tool',
       description: 'A test tool',
       parametersJsonSchema: { type: 'object' },

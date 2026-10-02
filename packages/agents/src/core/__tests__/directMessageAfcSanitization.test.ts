@@ -175,12 +175,8 @@ function textIContent(text: string): IContent {
 }
 
 const tools = [
-  {
-    functionDeclarations: [
-      { name: 'read_file' } as Record<string, unknown>,
-      { name: 'run_shell_command' } as Record<string, unknown>,
-    ],
-  },
+  { name: 'read_file', parametersJsonSchema: {} },
+  { name: 'run_shell_command', parametersJsonSchema: {} },
 ] as unknown as ToolDeclaration[];
 
 describe('DirectMessageProcessor AFC sanitization — allowed/disallowed paired', () => {

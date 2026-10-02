@@ -345,12 +345,8 @@ describe('ChatSession hook execution control', () => {
       mockContentGenerator,
       {
         tools: [
-          {
-            functionDeclarations: [
-              { name: 'read_file' },
-              { name: 'run_shell_command' },
-            ],
-          },
+          { name: 'read_file', parametersJsonSchema: {} },
+          { name: 'run_shell_command', parametersJsonSchema: {} },
         ],
       },
       [],

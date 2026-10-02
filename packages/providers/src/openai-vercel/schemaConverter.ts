@@ -15,6 +15,7 @@
  * Vercel debug-logging namespace.
  */
 
+import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import {
   convertToolDeclarations,
@@ -48,13 +49,7 @@ export interface OpenAIVercelTool {
  * (missing descriptions stay undefined).
  */
 export function convertToolsToOpenAIVercel(
-  toolDeclarations?: Array<{
-    functionDeclarations?: Array<{
-      name: string;
-      description?: string;
-      parametersJsonSchema?: unknown;
-    }>;
-  }>,
+  toolDeclarations?: ToolDeclaration[],
 ): OpenAIVercelTool[] | undefined {
   const converted = convertToolDeclarations(toolDeclarations, {
     descriptionStrategy: 'preserve',

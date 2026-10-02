@@ -28,6 +28,10 @@ import {
 import { ApplyPatchTool } from '../../../../packages/tools/src/index.js';
 import { SchemaValidator } from '../../../../packages/tools/src/utils/schemaValidator.js';
 import { buildGeminiTools } from '../gemini/geminiRequestBuilding.js';
+import { GeminiProvider } from '../gemini/GeminiProvider.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createProviderCallOptions } from './testSupport.js';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -162,6 +166,58 @@ describe('geminiApiClientFactory', () => {
     expect(declarations).toBeDefined();
     return (declarations as Array<Record<string, unknown>>)[0];
   }
+
+  it.each([true, false])(
+    'keeps empty-tools logging metadata out of actual provider HTTP requests (streaming=%s)',
+    async (streaming) => {
+      const settings = new SettingsService();
+      const config = new Config({
+        cwd: process.cwd(),
+        targetDir: process.cwd(),
+        debugMode: false,
+        sessionId: 'logging-wire',
+        model: 'gemini-3-flash-preview',
+        settingsService: settings,
+      });
+      config.setEphemeralSetting(
+        'streaming',
+        streaming ? 'enabled' : 'disabled',
+      );
+      const provider = new GeminiProvider('test-key', origin(), config);
+      provider.setConfig(config);
+      captured = [];
+      nextResponse = textResponse('ok');
+      for (const conversationLogEmptyTools of [undefined, true, false]) {
+        const options = createProviderCallOptions({
+          providerName: 'gemini',
+          settings,
+          config,
+          contents: [
+            { speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] },
+          ],
+          tools: [],
+          runtimeMetadata: { conversationLogEmptyTools },
+          metadata: { conversationLogEmptyTools },
+          systemInstruction: 'Answer briefly.',
+          resolved: { model: 'gemini-3-flash-preview', baseURL: origin() },
+        });
+        const chunks = [];
+        for await (const chunk of provider.generateChatCompletion(options)) {
+          chunks.push(chunk);
+        }
+        expect(chunks.length).toBeGreaterThan(0);
+      }
+      expect(captured).toHaveLength(3);
+      expect(captured[1]).toStrictEqual(captured[0]);
+      expect(captured[2]).toStrictEqual(captured[0]);
+      expect(captured[0].path).toBe(
+        `/v1beta/models/gemini-3-flash-preview:${streaming ? 'streamGenerateContent' : 'generateContent'}`,
+      );
+      expect(JSON.stringify(captured)).not.toContain(
+        'conversationLogEmptyTools',
+      );
+    },
+  );
 
   describe('Gemini client seam: request URL', () => {
     it('sends to the versioned Gemini path when given a bare origin', async () => {
@@ -421,9 +477,7 @@ describe('geminiApiClientFactory', () => {
 
             it(`preserves ${casing} ${location} patch constraints on the wire`, async () => {
               const snapshot = structuredClone(toolDeclaration);
-              const { geminiTools } = buildGeminiTools([
-                { functionDeclarations: [toolDeclaration] },
-              ]);
+              const { geminiTools } = buildGeminiTools([toolDeclaration]);
               const request = await callWith(
                 { tools: geminiTools },
                 undefined,
@@ -477,9 +531,7 @@ describe('geminiApiClientFactory', () => {
             });
 
             it(`validates the ${casing} ${location} emitted patch truth table`, async () => {
-              const { geminiTools } = buildGeminiTools([
-                { functionDeclarations: [toolDeclaration] },
-              ]);
+              const { geminiTools } = buildGeminiTools([toolDeclaration]);
               const request = await callWith(
                 { tools: geminiTools },
                 undefined,
@@ -544,11 +596,7 @@ describe('geminiApiClientFactory', () => {
             };
             const snapshot = structuredClone(parametersJsonSchema);
             const { geminiTools } = buildGeminiTools([
-              {
-                functionDeclarations: [
-                  { name: 'mixed_boundary', parametersJsonSchema },
-                ],
-              },
+              { name: 'mixed_boundary', parametersJsonSchema },
             ]);
             const request = await callWith(
               { tools: geminiTools },
@@ -588,11 +636,7 @@ describe('geminiApiClientFactory', () => {
             anyOf: [],
           };
           const { geminiTools } = buildGeminiTools([
-            {
-              functionDeclarations: [
-                { name: 'empty_boundary', parametersJsonSchema },
-              ],
-            },
+            { name: 'empty_boundary', parametersJsonSchema },
           ]);
           const request = await callWith(
             { tools: geminiTools },
@@ -627,11 +671,7 @@ describe('geminiApiClientFactory', () => {
             };
             const snapshot = structuredClone(parametersJsonSchema);
             const { geminiTools } = buildGeminiTools([
-              {
-                functionDeclarations: [
-                  { name: 'ordinary', parametersJsonSchema },
-                ],
-              },
+              { name: 'ordinary', parametersJsonSchema },
             ]);
             const request = await callWith(
               { tools: geminiTools },
@@ -663,11 +703,7 @@ describe('geminiApiClientFactory', () => {
           };
           const snapshot = structuredClone(parametersJsonSchema);
           const { geminiTools } = buildGeminiTools([
-            {
-              functionDeclarations: [
-                { name: 'existing_union', parametersJsonSchema },
-              ],
-            },
+            { name: 'existing_union', parametersJsonSchema },
           ]);
           expect(
             geminiTools?.[0].functionDeclarations[0].parameters.type,

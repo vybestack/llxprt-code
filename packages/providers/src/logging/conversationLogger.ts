@@ -24,6 +24,7 @@ export interface ConversationLogContext {
   turnNumber: number;
   generatePromptId: () => string;
   redactor: ConversationDataRedactor | null;
+  conversationLogEmptyTools?: boolean;
 }
 
 /** Log a conversation request event to telemetry and disk. */
@@ -37,7 +38,14 @@ export async function logConversationRequestEntry(
   const redactedContent = ctx.redactor
     ? content.map((item) => ctx.redactor!.redactMessage(item, ctx.providerName))
     : content;
-  const redactedTools = tools;
+  let redactedTools: ConversationRequestEvent['redacted_tools'];
+  if (ctx.conversationLogEmptyTools === true && (tools?.length ?? 0) === 0) {
+    redactedTools = [];
+  } else if (tools !== undefined) {
+    redactedTools = [
+      { functionDeclarations: tools.map((decl) => ({ ...decl })) },
+    ];
+  }
 
   const resolvedPromptId = promptId ?? ctx.generatePromptId();
   const event = new ConversationRequestEvent(

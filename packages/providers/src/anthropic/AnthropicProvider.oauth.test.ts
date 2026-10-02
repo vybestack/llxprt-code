@@ -179,13 +179,9 @@ describe('AnthropicProvider', () => {
 
       const tools = [
         {
-          functionDeclarations: [
-            {
-              name: 'read_file',
-              description: 'Read a file',
-              parametersJsonSchema: { type: 'object', properties: {} },
-            },
-          ],
+          name: 'read_file',
+          description: 'Read a file',
+          parametersJsonSchema: { type: 'object', properties: {} },
         },
       ];
 
@@ -228,13 +224,9 @@ describe('AnthropicProvider', () => {
 
       const tools = [
         {
-          functionDeclarations: [
-            {
-              name: 'read_file',
-              description: 'Read a file',
-              parametersJsonSchema: { type: 'object', properties: {} },
-            },
-          ],
+          name: 'read_file',
+          description: 'Read a file',
+          parametersJsonSchema: { type: 'object', properties: {} },
         },
       ];
 
