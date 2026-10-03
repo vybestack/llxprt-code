@@ -9,13 +9,13 @@ import type {
   ILspService,
   LspConfig,
 } from '@vybestack/llxprt-code-tools';
-import type { Config } from '../config/config.js';
+import type { WorkspaceLspPort } from '../config/lspIntegration.js';
 
 export class CoreLspServiceAdapter implements ILspService {
-  constructor(private readonly config: Config) {}
+  constructor(private readonly lsp: WorkspaceLspPort | undefined) {}
 
   getDiagnostics(filePath: string): Diagnostic[] {
-    const lspClient = this.config.getLspServiceClient();
+    const lspClient = this.lsp?.client();
     if (lspClient === undefined || lspClient.isAlive() !== true) {
       return [];
     }
@@ -28,7 +28,7 @@ export class CoreLspServiceAdapter implements ILspService {
     filePath: string,
     timeout: number,
   ): Promise<Diagnostic[]> {
-    const lspClient = this.config.getLspServiceClient();
+    const lspClient = this.lsp?.client();
     if (lspClient === undefined || lspClient.isAlive() !== true) {
       return [];
     }
@@ -43,6 +43,6 @@ export class CoreLspServiceAdapter implements ILspService {
   }
 
   getLspConfig(): LspConfig | undefined {
-    return this.config.getLspConfig();
+    return this.lsp?.config();
   }
 }

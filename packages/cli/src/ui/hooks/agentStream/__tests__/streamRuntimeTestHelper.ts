@@ -9,7 +9,6 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import type {
   AgentClientContract,
-  AsyncTaskManager,
   BucketFailoverHandler,
   FileDiscoveryService,
   FileFilteringOptions,
@@ -55,7 +54,6 @@ export interface StreamRuntimeTestOverrides {
   mcp?: Partial<StreamRuntime['mcp']>;
   settings?: Partial<StreamRuntime['settings']>;
   scheduler?: Partial<StreamRuntime['scheduler']>;
-  asyncTasks?: Partial<StreamRuntime['asyncTasks']>;
   events?: Partial<StreamRuntime['events']>;
   bucketFailover?: Partial<StreamRuntime['bucketFailover']>;
   checkpoint?: Partial<StreamRuntime['checkpoint']>;
@@ -331,7 +329,7 @@ function makeIdeRuntime(
     setIdeClientDisconnected: () =>
       delegateVoid(source, 'setIdeClientDisconnected'),
     getLspConfig: () => call(source, 'getLspConfig', undefined),
-    getLspServiceClient: () => call(source, 'getLspServiceClient', undefined),
+    lsp: { status: async () => ({ disabled: true, servers: [] }) },
     ...override,
   };
 }
@@ -348,6 +346,7 @@ function makeHooksRuntime(
     setDisabledHooks: (disabledHooks) =>
       delegateVoid(source, 'setDisabledHooks', disabledHooks),
     isSkillsSupportEnabled: () => call(source, 'isSkillsSupportEnabled', false),
+    isAdminSkillsEnabled: () => call(source, 'isAdminSkillsEnabled', true),
     getEnableHooksUI: () => call(source, 'getEnableHooksUI', false),
     reloadSkills: () => {
       const fn = getMember(source, 'reloadSkills');
@@ -479,30 +478,6 @@ function makeSchedulerRuntime(
   };
 }
 
-function makeAsyncTasksRuntime(
-  source: LegacyRuntimeSource,
-  override: StreamRuntimeTestOverrides['asyncTasks'],
-): StreamRuntime['asyncTasks'] {
-  return {
-    getAsyncTaskManager: () =>
-      call(
-        source,
-        'getAsyncTaskManager',
-        undefined as AsyncTaskManager | undefined,
-      ),
-    setupAsyncTaskAutoTrigger: (isAgentBusy, triggerAgentTurn) => {
-      const fn = getMember(source, 'setupAsyncTaskAutoTrigger');
-      if (typeof fn === 'function') {
-        return (
-          fn as StreamRuntime['asyncTasks']['setupAsyncTaskAutoTrigger']
-        ).call(source, isAgentBusy, triggerAgentTurn);
-      }
-      return () => undefined;
-    },
-    ...override,
-  };
-}
-
 function makeEphemeralRuntime(
   source: LegacyRuntimeSource,
   override: StreamRuntimeTestOverrides['ephemeral'],
@@ -538,7 +513,6 @@ export function createStreamRuntimeForTest(
     mcp: makeMcpRuntime(source, overrides.mcp),
     settings: makeSettingsRuntime(source, overrides.settings),
     scheduler: makeSchedulerRuntime(source, overrides.scheduler),
-    asyncTasks: makeAsyncTasksRuntime(source, overrides.asyncTasks),
     events: {
       onMcpClientUpdate: () => () => undefined,
       ...overrides.events,

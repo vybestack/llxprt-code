@@ -24,7 +24,11 @@ import type {
 } from '../host/hostInterfaces.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { getErrorMessage } from '@vybestack/llxprt-code-tools/utils/errors.js';
-import { emitHostFeedback } from '../host/hostServices.js';
+import {
+  defaultHostServices,
+  deliverHostFeedback,
+  type McpHostServices,
+} from '../host/hostServices.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import type { DiscoveredMCPTool } from './mcp-tool.js';
 
@@ -110,6 +114,7 @@ export class McpClient {
     private readonly debugMode: boolean,
     private readonly clientVersion: string,
     private readonly onToolsUpdated?: (signal?: AbortSignal) => Promise<void>,
+    private readonly hostServices: Readonly<McpHostServices> = defaultHostServices,
   ) {}
 
   async connect(): Promise<void> {
@@ -131,6 +136,7 @@ export class McpClient {
         this.debugMode,
         this.workspaceContext,
         abortController.signal,
+        this.hostServices,
       );
       connectedClient = client;
 
@@ -754,7 +760,11 @@ export class McpClient {
         }
       }
 
-      emitHostFeedback('info', `Tools updated for server: ${this.serverName}`);
+      deliverHostFeedback(
+        this.hostServices.emitFeedback,
+        'info',
+        `Tools updated for server: ${this.serverName}`,
+      );
       return true;
     } finally {
       clearTimeout(timeoutId);
@@ -845,7 +855,8 @@ export class McpClient {
         return false;
       }
 
-      emitHostFeedback(
+      deliverHostFeedback(
+        this.hostServices.emitFeedback,
         'info',
         `Resources updated for server: ${this.serverName}`,
       );

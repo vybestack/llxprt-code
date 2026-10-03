@@ -11,8 +11,11 @@ import { Config, ApprovalMode } from './config.js';
 import type { HookDefinition } from '../hooks/types.js';
 import { HookType, HookEventName } from '../hooks/types.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
-import { initializeTestConfig } from '../__tests__/config-test-helpers.js';
+import { MCPDiscoveryState, MCPServerStatus } from '@vybestack/llxprt-code-mcp';
+import {
+  getTestRuntimeMessageBus,
+  initializeTestConfig,
+} from '../__tests__/config-test-helpers.js';
 import {
   buildFsMockBody,
   buildToolsMockBody,
@@ -25,6 +28,25 @@ import {
   buildFetchMockBody,
   type HoistedConfigMocks,
 } from './__tests__/configTestHarness.js';
+
+async function initializedConfig(config: Config): Promise<Config> {
+  await initializeTestConfig(config);
+  return config;
+}
+
+function skillConfigParameters(
+  overrides: Partial<ConfigParameters> = {},
+): ConfigParameters {
+  return {
+    sessionId: 'test-session',
+    targetDir: '/tmp/test',
+    debugMode: false,
+    model: 'test-model',
+    cwd: '/tmp/test',
+    skillsSupport: true,
+    ...overrides,
+  };
+}
 
 // Hoisted mocks referenced by mock factories below (vitest hoist-safe).
 const hoistedConfigMocks = {
@@ -43,6 +65,7 @@ const mockCoreEvents = hoistedConfigMocks.coreEvents;
 
 const mcpInstances: Array<{
   getMcpServers: ReturnType<typeof vi.fn>;
+  getClient: ReturnType<typeof vi.fn>;
   getDiscoveryFailures: ReturnType<typeof vi.fn>;
   getDiscoveryState: ReturnType<typeof vi.fn>;
   whenDiscoverySettled: ReturnType<typeof vi.fn>;
@@ -65,6 +88,7 @@ void vi.mock('@vybestack/llxprt-code-mcp', () => {
     McpClientManager: vi.fn().mockImplementation(() => {
       const mock = {
         getMcpServers: vi.fn().mockReturnValue({}),
+        getClient: vi.fn(),
         getDiscoveryFailures: vi
           .fn()
           .mockReturnValue(new Map<string, string>()),
@@ -580,7 +604,7 @@ describe('Config getHookSystem', () => {
         onReloadMcpServers: reloadMcpServers,
       });
 
-      await config.reloadMcpServers();
+      await config.reloadMcpServers(getTestRuntimeMessageBus(config));
 
       expect(config.getMcpServers()).toStrictEqual({
         fresh: { command: 'fresh-command' },
@@ -604,7 +628,7 @@ describe('Config getHookSystem', () => {
         }),
       });
 
-      await config.reloadMcpServers();
+      await config.reloadMcpServers(getTestRuntimeMessageBus(config));
 
       const trustedPrefixes = config
         .getPolicyEngine()
@@ -624,9 +648,9 @@ describe('Config getHookSystem', () => {
           .mockRejectedValue(new Error('settings invalid')),
       });
 
-      await expect(config.reloadMcpServers()).rejects.toThrow(
-        'settings invalid',
-      );
+      await expect(
+        config.reloadMcpServers(getTestRuntimeMessageBus(config)),
+      ).rejects.toThrow('settings invalid');
       expect(config.getMcpServers()).toStrictEqual({
         stable: { command: 'stable-command' },
       });
@@ -641,7 +665,9 @@ describe('Config getHookSystem', () => {
         mcpServers: { existing: { command: 'existing' } },
       });
 
-      await expect(config.reloadMcpServers()).rejects.toThrow(
+      await expect(
+        config.reloadMcpServers(getTestRuntimeMessageBus(config)),
+      ).rejects.toThrow(
         'MCP server reload is not available in this composition.',
       );
       expect(config.getMcpServers()).toStrictEqual({
@@ -667,7 +693,7 @@ describe('Config getHookSystem', () => {
         }),
       });
 
-      await config.reloadMcpServers();
+      await config.reloadMcpServers(getTestRuntimeMessageBus(config));
 
       const trustedPrefixes = config
         .getPolicyEngine()
@@ -699,7 +725,7 @@ describe('Config getHookSystem', () => {
         source: 'Test Custom Source',
       });
 
-      await config.reloadMcpServers();
+      await config.reloadMcpServers(getTestRuntimeMessageBus(config));
 
       const sources = config
         .getPolicyEngine()
@@ -714,25 +740,16 @@ describe('Config getHookSystem', () => {
       const mockOnReload = vi.fn().mockResolvedValue({
         disabledSkills: ['skill2'],
       });
-      const params: ConfigParameters = {
-        sessionId: 'test-session',
-        targetDir: '/tmp/test',
-        debugMode: false,
-        model: 'test-model',
-        cwd: '/tmp/test',
-        skillsSupport: true,
-        onReload: mockOnReload,
-      };
-
-      const config = new Config(params);
-      await initializeTestConfig(config);
+      const config = await initializedConfig(
+        new Config(skillConfigParameters({ onReload: mockOnReload })),
+      );
 
       const skillManager = config.getSkillManager();
 
       vi.spyOn(skillManager, 'discoverSkills').mockResolvedValue(undefined);
       vi.spyOn(skillManager, 'setDisabledSkills');
 
-      await config.reloadSkills();
+      await config.reloadSkills(getTestRuntimeMessageBus(config));
 
       expect(mockOnReload).toHaveBeenCalled();
       expect(skillManager.discoverSkills).toHaveBeenCalled();
@@ -740,24 +757,16 @@ describe('Config getHookSystem', () => {
     });
 
     it('should discover and apply defaults when no onReload is provided', async () => {
-      const params: ConfigParameters = {
-        sessionId: 'test-session',
-        targetDir: '/tmp/test',
-        debugMode: false,
-        model: 'test-model',
-        cwd: '/tmp/test',
-        skillsSupport: true,
-      };
-
-      const config = new Config(params);
-      await initializeTestConfig(config);
+      const config = await initializedConfig(
+        new Config(skillConfigParameters()),
+      );
 
       const skillManager = config.getSkillManager();
 
       vi.spyOn(skillManager, 'discoverSkills').mockResolvedValue(undefined);
       vi.spyOn(skillManager, 'setDisabledSkills');
 
-      await config.reloadSkills();
+      await config.reloadSkills(getTestRuntimeMessageBus(config));
 
       expect(skillManager.discoverSkills).toHaveBeenCalled();
       expect(skillManager.setDisabledSkills).toHaveBeenCalled();
@@ -767,25 +776,20 @@ describe('Config getHookSystem', () => {
       const mockOnReload = vi.fn().mockResolvedValue({
         disabledSkills: undefined,
       });
-      const params: ConfigParameters = {
-        sessionId: 'test-session',
-        targetDir: '/tmp/test',
-        debugMode: false,
-        model: 'test-model',
-        cwd: '/tmp/test',
-        skillsSupport: true,
-        disabledSkills: ['skill1'],
-        onReload: mockOnReload,
-      };
-
-      const config = new Config(params);
-      await initializeTestConfig(config);
+      const config = await initializedConfig(
+        new Config(
+          skillConfigParameters({
+            disabledSkills: ['skill1'],
+            onReload: mockOnReload,
+          }),
+        ),
+      );
 
       const skillManager = config.getSkillManager();
       vi.spyOn(skillManager, 'discoverSkills').mockResolvedValue(undefined);
       vi.spyOn(skillManager, 'setDisabledSkills');
 
-      await config.reloadSkills();
+      await config.reloadSkills(getTestRuntimeMessageBus(config));
 
       // disabledSkills undefined is falsy, so original value is preserved
       expect(skillManager.setDisabledSkills).toHaveBeenCalledWith(['skill1']);
@@ -795,23 +799,14 @@ describe('Config getHookSystem', () => {
       const mockOnReload = vi.fn().mockResolvedValue({
         adminSkillsEnabled: false,
       });
-      const params: ConfigParameters = {
-        sessionId: 'test-session',
-        targetDir: '/tmp/test',
-        debugMode: false,
-        model: 'test-model',
-        cwd: '/tmp/test',
-        skillsSupport: true,
-        onReload: mockOnReload,
-      };
-
-      const config = new Config(params);
-      await initializeTestConfig(config);
+      const config = await initializedConfig(
+        new Config(skillConfigParameters({ onReload: mockOnReload })),
+      );
 
       const skillManager = config.getSkillManager();
       vi.spyOn(skillManager, 'setAdminSettings');
 
-      await config.reloadSkills();
+      await config.reloadSkills(getTestRuntimeMessageBus(config));
 
       expect(skillManager.setAdminSettings).toHaveBeenCalledWith(false);
     });
@@ -846,7 +841,7 @@ describe('Config MCP runtime capabilities (agents boundary)', () => {
       await initializeTestConfig(config);
       const manager = mcpInstances[0];
 
-      await config.reloadMcpServers();
+      await config.reloadMcpServers(getTestRuntimeMessageBus(config));
 
       expect(config.getMcpServers()).toStrictEqual({
         fresh: { command: 'fresh' },
@@ -867,7 +862,7 @@ describe('Config MCP runtime capabilities (agents boundary)', () => {
           settingsMcpServers: { fresh: { command: 'fresh' } },
         }),
       });
-      await config.reloadMcpServers();
+      await config.reloadMcpServers(getTestRuntimeMessageBus(config));
       expect(config.getMcpServers()).toStrictEqual({
         fresh: { command: 'fresh' },
       });
@@ -882,12 +877,16 @@ describe('Config MCP runtime capabilities (agents boundary)', () => {
       const manager = mcpInstances[0];
       const failures = new Map<string, string>([['srv', 'boom']]);
       manager.getMcpServers.mockReturnValue({ srv: { command: 'run' } });
+      manager.getClient.mockReturnValue({
+        getStatus: () => MCPServerStatus.CONNECTED,
+      });
       manager.getDiscoveryFailures.mockReturnValue(failures);
       manager.getDiscoveryState.mockReturnValue(MCPDiscoveryState.COMPLETED);
 
       const status = config.getMcpRuntimeStatus();
       expect(status).toStrictEqual({
         servers: { srv: { command: 'run' } },
+        serverStatuses: new Map([['srv', MCPServerStatus.CONNECTED]]),
         discoveryFailures: failures,
         discoveryState: MCPDiscoveryState.COMPLETED,
       });
@@ -903,16 +902,24 @@ describe('Config MCP runtime capabilities (agents boundary)', () => {
       await initializeTestConfig(config);
       const manager = mcpInstances[0];
 
-      await config.refreshMcpServers('srv');
-      expect(manager.restartServer).toHaveBeenCalledWith('srv');
+      const messageBus = getTestRuntimeMessageBus(config);
+      await config.refreshMcpServers(messageBus, 'srv');
+      expect(manager.restartServer).toHaveBeenCalledWith(
+        'srv',
+        expect.any(Function),
+      );
       expect(manager.restart).not.toHaveBeenCalled();
 
-      await config.refreshMcpServers();
-      expect(manager.restart).toHaveBeenCalledTimes(1);
+      await config.refreshMcpServers(messageBus);
+      expect(manager.restart).toHaveBeenCalledWith(expect.any(Function));
 
       const uninit = new Config(baseParams);
-      await expect(uninit.refreshMcpServers()).resolves.toBeUndefined();
-      await expect(uninit.refreshMcpServers('srv')).resolves.toBeUndefined();
+      await expect(
+        uninit.refreshMcpServers(messageBus),
+      ).resolves.toBeUndefined();
+      await expect(
+        uninit.refreshMcpServers(messageBus, 'srv'),
+      ).resolves.toBeUndefined();
       expect(mcpInstances).toHaveLength(1);
     });
   });

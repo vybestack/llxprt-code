@@ -26,6 +26,7 @@ type RecordedCreationOptions = {
  */
 class RecordingScheduler implements SchedulerHandle {
   disposed = false;
+  cancelCount = 0;
 
   constructor(readonly creationOptions: RecordedCreationOptions) {}
 
@@ -34,7 +35,9 @@ class RecordingScheduler implements SchedulerHandle {
     _signal: AbortSignal,
   ): Promise<void> {}
 
-  cancelAll(): void {}
+  cancelAll(): void {
+    this.cancelCount += 1;
+  }
 
   setCallbacks(_options: SetCallbacksOptions): void {}
 
@@ -434,5 +437,20 @@ describe('SessionSchedulerRegistryImpl', () => {
     registry.release(owner, 'session');
     expect(created[0].disposed).toBe(true);
     expect(foreignHandle.disposed).toBe(false);
+  });
+
+  it('cancels a shared handle only once across distinct registry entries', async () => {
+    const scheduler = new RecordingScheduler({});
+    const registry = createSessionSchedulerRegistry({
+      createScheduler: async () => scheduler,
+    });
+
+    await registry.getOrCreate({ sessionId: 'first' }, 'session');
+    await registry.getOrCreate({ sessionId: 'second' }, 'subagent');
+    await registry.cancelAll();
+
+    expect(scheduler.cancelCount).toBe(1);
+    await registry.disposeAll();
+    expect(scheduler.disposed).toBe(true);
   });
 });

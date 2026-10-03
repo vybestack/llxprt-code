@@ -20,7 +20,7 @@ import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Agen
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { AgentDeps } from '../agentImpl.js';
 import { AgentImpl } from '../agentImpl.js';
 import type { AgentEvent } from '../event-types.js';
@@ -33,6 +33,7 @@ import {
   UNCONFIGURED_PROVIDER,
   PLACEHOLDER_MODEL,
 } from '@vybestack/llxprt-code-core';
+import { SessionTaskServices } from '../agentRuntimeAssembly.js';
 
 function makeUnconfiguredProviderManager(): RuntimeProviderManager {
   return {
@@ -160,9 +161,11 @@ function makeDeps(
     getActiveDecision: () => 'allow',
   };
   const messageBus = new MessageBus(policyEngine as never, false);
+  const settingsService = new SettingsService();
   const config = {
     getAgentClient: () => client,
-    getSettingsService: () => ({}) as unknown as SettingsService,
+    getSettingsService: () => settingsService,
+    getHookSystem: () => undefined,
     getProviderManager: () => manager,
     getToolRegistry: () => ({
       getAllTools: () => [],
@@ -186,7 +189,7 @@ function makeDeps(
     getProvider: () => undefined,
     initializeContentGeneratorConfig: async () => {},
     getConversationLoggingEnabled: () => false,
-    getAsyncTaskManager: () => undefined,
+    getShellJobManager: () => undefined,
     getIdeMode: () => false,
     getTargetDir: () => '/tmp',
     getProjectRoot: () => '/tmp',
@@ -204,18 +207,18 @@ function makeDeps(
     getCoreMemory: () => undefined,
     getCoreFileCount: () => 0,
     setCoreMemory: () => {},
-    getRuntimeMessageBus: () => undefined,
     getRuntimeOAuthManager: () => undefined,
   } as unknown as Config;
 
   return {
     config,
+    taskServices: new SessionTaskServices(settingsService, () => undefined),
     providerManager: manager,
     oauthManager: {
       dispose: async () => {},
       attachAddItemToProviders: () => {},
     } as unknown as OAuthManager,
-    settingsService: {} as unknown as SettingsService,
+    settingsService,
     runtimeId: 'test-unconfigured-runtime',
     runtimeHandle: { cleanup: () => {} },
     messageBus,

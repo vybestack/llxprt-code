@@ -171,7 +171,7 @@ export class ActivateSkillTool extends BaseDeclarativeTool<
       this.skillService,
       params,
       messageBus,
-      _toolName,
+      _toolName ?? ActivateSkillTool.Name,
       _toolDisplayName ?? 'Activate Skill',
     );
   }

@@ -232,6 +232,19 @@ describe('Config.initialize / ensureInitialized boundary provenance (Finding 4)'
 
   // ── Provenance: the messageBus from initialization is the one used ────
 
+  it('does not publish the session MessageBus back onto Config', async () => {
+    const config = makeConfig();
+    const sessionBus = new MessageBus(
+      config.getPolicyEngine(),
+      config.getDebugMode(),
+    );
+    await config.ensureInitialized({ messageBus: sessionBus });
+
+    expect(Reflect.has(config, 'runtimeMessageBus')).toBe(false);
+    expect(Reflect.has(config, 'getRuntimeMessageBus')).toBe(false);
+    expect(Reflect.has(config, 'setRuntimeMessageBus')).toBe(false);
+  });
+
   it('the messageBus passed to initialize is the exact instance used by the tool registry', async () => {
     const config = makeConfig();
     const messageBus = new MessageBus(

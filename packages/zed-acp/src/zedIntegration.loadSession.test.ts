@@ -30,8 +30,16 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import type * as acp from '@agentclientprotocol/sdk';
 import { RequestError } from '@agentclientprotocol/sdk';
-import type { Config, IContent } from '@vybestack/llxprt-code-core';
+import {
+  CoreMessageBusAdapter,
+  CoreToolRegistryHostAdapter,
+  MessageBus,
+  type Config,
+  type IContent,
+} from '@vybestack/llxprt-code-core';
 import type { Agent, AgentMessage } from '@vybestack/llxprt-code-agents';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { ChatSessionFileLister } from './zed-session-loader.js';
 
 import { RecordingConnection } from './__tests__/zed-test-helpers.js';
@@ -123,8 +131,14 @@ function buildStubAgent(options: {
   const dispose = vi.fn(async () => undefined);
   const getHistory = vi.fn(async () => options.liveHistory ?? []);
   const streamText = options.streamText;
+  const registry = new ToolRegistry(
+    new CoreToolRegistryHostAdapter(buildBaseConfig()),
+    new CoreMessageBusAdapter(new MessageBus()),
+    new SettingsService(),
+  );
   const agent = {
     getApprovalMode: () => 'default',
+    getToolRegistry: () => registry,
     setApprovalMode: vi.fn(),
     dispose,
     getHistory,
@@ -134,7 +148,7 @@ function buildStubAgent(options: {
       }
       yield { type: 'done', reason: 'stop' };
     },
-    session: { resume, setRecording },
+    session: { resume, setRecording, getActiveRecording: () => undefined },
     tools: { respondToConfirmation: vi.fn() },
   } as unknown as Agent;
   return { agent, resume, setRecording, dispose, getHistory };
@@ -159,10 +173,6 @@ function buildBaseConfig(): Config {
     getTargetDir: () => '/project',
     getProjectRoot: () => '/project',
     getMaxSessionTurns: () => 50,
-    // No recording service in loadSession tests — the session lifecycle under
-    // test does not depend on session recording (only the re-attach/resume
-    // probes and session-info hydration paths are exercised here).
-    getSessionRecordingService: () => undefined,
     // The re-attach + corrupt-vs-missing probes derive the chats dir from
     // storage.getProjectChatsDir(); point it at a dir that never exists so the
     // disk-resume probe's REAL readdir hits ENOENT (falling back to the plain
@@ -917,22 +927,13 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     const firstResumeGate = new Promise<void>((resolve) => {
       releaseFirstResume = resolve;
     });
-    const firstResume = vi.fn(async () => {
+    const firstStub = buildStubAgent({});
+    firstStub.resume.mockImplementation(async () => {
       await firstResumeGate;
       return [
         { speaker: 'ai', blocks: [{ type: 'text', text: 'first' }] },
       ] as readonly IContent[];
     });
-    const firstDispose = vi.fn(async () => undefined);
-    const firstAgent = {
-      getApprovalMode: () => 'default',
-      setApprovalMode: vi.fn(),
-      getHistory: vi.fn(async () => []),
-      dispose: firstDispose,
-      async *stream() {},
-      session: { resume: firstResume, setRecording: vi.fn() },
-      tools: { respondToConfirmation: vi.fn() },
-    } as unknown as Agent;
 
     const secondStub = buildStubAgent({
       resumeHistory: [
@@ -943,7 +944,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     // The top-level beforeEach (F2) already reset the mock; establish this
     // test's ordered two-agent resolution for the build-count assertion below.
     mockFromConfig
-      .mockResolvedValueOnce(firstAgent)
+      .mockResolvedValueOnce(firstStub.agent)
       .mockResolvedValueOnce(secondStub.agent);
 
     const connection = new RecordingConnection();
@@ -976,7 +977,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     // the second is serialized behind it, so it has NOT built an agent and its
     // resume has NOT been called — proving the two same-id loads do not race.
     expect(mockFromConfig).toHaveBeenCalledTimes(1);
-    expect(firstResume).toHaveBeenCalledTimes(1);
+    expect(firstStub.resume).toHaveBeenCalledTimes(1);
     expect(secondStub.resume).toHaveBeenCalledTimes(0);
 
     // Release the first resume; both loads now settle in order.
@@ -992,7 +993,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
 
     // The first session was disposed exactly once (replaced by the second); the
     // second remains live and was never disposed. No double-dispose occurred.
-    expect(firstDispose).toHaveBeenCalledTimes(1);
+    expect(firstStub.dispose).toHaveBeenCalledTimes(1);
     expect(secondStub.dispose).toHaveBeenCalledTimes(0);
 
     // Exactly one live session remains: prompting the id reaches the SECOND

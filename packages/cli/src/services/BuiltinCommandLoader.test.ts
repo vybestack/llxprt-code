@@ -54,6 +54,7 @@ import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { BuiltinCommandLoader } from './BuiltinCommandLoader.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { CommandKind } from '../ui/commands/types.js';
+import { createMockCommandContext } from '../__tests__/mockCommandContext.js';
 
 import { restoreCommand } from '../ui/commands/restoreCommand.js';
 
@@ -134,6 +135,25 @@ describe('BuiltinCommandLoader', () => {
       name: 'restore',
       description: 'Restore command',
       kind: CommandKind.BUILT_IN,
+    });
+  });
+
+  it('uses the skill policy rather than a second manager to gate the skills command', async () => {
+    const disabled = {
+      ...mockConfig,
+      isSkillsSupportEnabled: () => true,
+      isAdminSkillsEnabled: () => false,
+    } as Config;
+    const commands = await new BuiltinCommandLoader(disabled).loadCommands(
+      new AbortController().signal,
+    );
+    const skills = commands.find((command) => command.name === 'skills');
+    expect(skills).toBeDefined();
+    expect(
+      await skills?.action?.(createMockCommandContext(), ''),
+    ).toMatchObject({
+      type: 'message',
+      content: 'Skills are disabled by your admin.',
     });
   });
 

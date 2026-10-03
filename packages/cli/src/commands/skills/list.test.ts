@@ -23,6 +23,8 @@ import {
   type SkillDefinition,
   type Config,
 } from '@vybestack/llxprt-code-core';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import { MessageBusType } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
 import chalk from 'chalk';
 
 const realSettingsModule = { ...(await import('../../config/settings.js')) };
@@ -41,9 +43,7 @@ const debugLogger = {
 const actual = { ...(await import('@vybestack/llxprt-code-core')) };
 void vi.mock('@vybestack/llxprt-code-core', () => ({
   ...actual,
-  // discoverSkillsForConfig owns the session MessageBus + Config.initialize
-  // lifecycle (behaviorally tested in core/skills/skillDiscovery.test.ts).
-  // Here it is stubbed as the external boundary so these tests focus on the
+  // Discovery is stubbed as the external boundary so these tests focus on the
   // command's display/filtering behavior. The command does not emit through
   // core events; logging goes through the telemetry-package debugLogger,
   // whose owner is mocked below.
@@ -82,14 +82,19 @@ describe('skills list command', () => {
   const mockDiscoverSkills = discoverSkillsForConfig as Mock<
     typeof discoverSkillsForConfig
   >;
-  const mockConfig = {} as unknown as Config;
+  const mockConfig = {} as Config;
+  let sessionBus: MessageBus;
 
   beforeEach(async () => {
     vi.clearAllMocks();
     mockLoadSettings.mockReturnValue({
       merged: {},
     } as unknown as LoadedSettings);
-    mockLoadCliConfig.mockResolvedValue(mockConfig);
+    sessionBus = new MessageBus(undefined, false);
+    mockLoadCliConfig.mockResolvedValue({
+      config: mockConfig,
+      messageBus: sessionBus,
+    });
   });
 
   afterEach(() => {
@@ -97,13 +102,25 @@ describe('skills list command', () => {
   });
 
   describe('handleList', () => {
-    it('discovers skills through the public core discovery API (no CLI-owned runtime assembly)', async () => {
+    it('discovers skills using the bus returned by config bootstrap', async () => {
+      sessionBus.subscribe(MessageBusType.UPDATE_POLICY, vi.fn());
       mockDiscoverSkills.mockResolvedValue([]);
 
       await handleList();
 
       expect(mockDiscoverSkills).toHaveBeenCalledTimes(1);
-      expect(mockDiscoverSkills).toHaveBeenCalledWith(mockConfig);
+      expect(mockDiscoverSkills).toHaveBeenCalledWith(mockConfig, sessionBus);
+      expect(sessionBus.listenerCount(MessageBusType.UPDATE_POLICY)).toBe(1);
+    });
+
+    it('preserves bootstrap-owned bus listeners when discovery fails', async () => {
+      const onMessage = vi.fn();
+      sessionBus.subscribe(MessageBusType.UPDATE_POLICY, onMessage);
+      mockDiscoverSkills.mockRejectedValue(new Error('Discovery failed'));
+
+      await expect(handleList()).rejects.toThrow('Discovery failed');
+
+      expect(sessionBus.listenerCount(MessageBusType.UPDATE_POLICY)).toBe(1);
     });
 
     it('should log a message if no skills are discovered', async () => {

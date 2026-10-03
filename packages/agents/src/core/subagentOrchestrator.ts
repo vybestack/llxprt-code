@@ -71,6 +71,7 @@ import {
   cleanupFailedRuntimeBootstrap,
 } from '../api/agentRuntimeAssembly.js';
 import { AggregateDisposeError } from '../api/disposeErrors.js';
+import type { SessionSchedulerOwner } from '../api/agentRuntimeAssembly.js';
 
 const LOAD_BALANCER_PROVIDER_NAME = 'load-balancer';
 
@@ -138,9 +139,10 @@ export interface SubagentOrchestratorOptions {
   /**
    * Required session/runtime MessageBus threaded into the SubAgentScope so
    * non-interactive subagent tool execution can satisfy
-   * Config.getOrCreateScheduler's explicit MessageBus dependency (Issue #2312).
+   * the session scheduler owner's explicit MessageBus dependency (Issue #2312).
    */
   messageBus: MessageBus;
+  schedulerOwner?: SessionSchedulerOwner;
 }
 
 /**
@@ -229,6 +231,7 @@ export class SubagentOrchestrator {
         messageBus: this.options.messageBus,
       },
       signal,
+      { schedulerOwner: this.options.schedulerOwner },
     );
   }
 

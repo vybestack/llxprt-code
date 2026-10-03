@@ -24,6 +24,7 @@ import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clien
 // @plan:ISSUE-2376 the real tool/invocation types the get() handle wraps.
 import type {
   AnyDeclarativeTool,
+  ToolRegistry,
   AnyToolInvocation,
   ToolResult,
 } from '@vybestack/llxprt-code-tools';
@@ -85,6 +86,7 @@ export interface ToolControlDeps {
   readonly messageBus: MessageBus;
   /** The Config carrying the tool registry + settings service. */
   readonly config: Config;
+  readonly getToolRegistry: () => ToolRegistry;
   /**
    * The mutable editor-callbacks holder shared with the scheduler factory so
    * `setEditorCallbacks` is observable by the next turn's scheduler.
@@ -141,7 +143,7 @@ export class ToolControl implements AgentToolControl {
    * @plan:ISSUE-2376
    */
   list(): readonly ToolInfo[] {
-    const registry = this.deps.config.getToolRegistry();
+    const registry = this.deps.getToolRegistry();
     const allTools = registry.getAllTools().map((t) =>
       projectRegistryTool({
         name: t.name,
@@ -168,7 +170,7 @@ export class ToolControl implements AgentToolControl {
    * @plan:ISSUE-2376
    */
   get(name: string): AgentToolHandle | undefined {
-    const registry = this.deps.config.getToolRegistry();
+    const registry = this.deps.getToolRegistry();
     const tool = registry.getTool(name);
     if (tool === undefined) {
       return undefined;

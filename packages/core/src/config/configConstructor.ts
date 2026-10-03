@@ -37,7 +37,8 @@ import {
 } from './configTypes.js';
 import { DEFAULT_FILE_FILTERING_OPTIONS } from './constants.js';
 import { UNCONFIGURED_PROVIDER } from './models.js';
-import { parseLspConfig, type LspState } from './lspIntegration.js';
+import { parseLspConfig } from './lspIntegration.js';
+import type { LspConfig } from '@vybestack/llxprt-code-ide-integration';
 import { WorkspaceContext } from '../utils/workspaceContext.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { FileExclusions } from '../utils/ignorePatterns.js';
@@ -70,7 +71,6 @@ import type { RuntimeProviderManager } from '../runtime/contracts/RuntimeProvide
 import type { EventEmitter } from 'node:events';
 import type { Config } from './config.js';
 import type { AgentClientFactory } from '../core/clientContract.js';
-import type { ToolSchedulerFactory } from '../core/toolSchedulerContract.js';
 import type { TaskToolRegistration } from './toolRegistryFactory.js';
 import type { PostSkillDiscoveryToolRegistrar } from './configTypes.js';
 
@@ -109,8 +109,8 @@ export interface ConfigConstructorTarget {
   allowedMcpServers: string[];
   blockedMcpServers: Array<{ name: string; extensionName: string }>;
 
-  // LSP
-  _lspState: LspState;
+  // LSP settings (no live service lifetime on Config)
+  lspConfig: LspConfig | undefined;
 
   // Memory and context
   userMemory: string;
@@ -221,11 +221,6 @@ export interface ConfigConstructorTarget {
   agentClientFactory: AgentClientFactory | undefined;
   /**
    * @plan PLAN-20260610-ISSUE1592.P01
-   * @requirement REQ-INV-002
-   */
-  toolSchedulerFactory: ToolSchedulerFactory | undefined;
-  /**
-   * @plan PLAN-20260610-ISSUE1592.P01
    * @requirement REQ-INV-003
    */
   taskToolRegistration: TaskToolRegistration | undefined;
@@ -281,7 +276,7 @@ function applyToolGovernance(
   config.mcpServers = params.mcpServers;
   config.allowedMcpServers = params.allowedMcpServers ?? [];
   config.blockedMcpServers = params.blockedMcpServers ?? [];
-  config._lspState.lspConfig = parseLspConfig(params.lsp);
+  config.lspConfig = parseLspConfig(params.lsp);
 }
 
 function applyTelemetryAndMemory(
@@ -631,9 +626,8 @@ function applyPolicyAndLifecycle(
   config.useWriteTodos = params.useWriteTodos ?? true;
 
   // @plan PLAN-20260610-ISSUE1592.P01
-  // @requirement REQ-INV-001, REQ-INV-002, REQ-INV-003
+  // @requirement REQ-INV-001, REQ-INV-003
   config.agentClientFactory = params.agentClientFactory;
-  config.toolSchedulerFactory = params.toolSchedulerFactory;
   config.taskToolRegistration = params.taskToolRegistration;
   config.postSkillDiscoveryToolRegistrar =
     params.postSkillDiscoveryToolRegistrar;

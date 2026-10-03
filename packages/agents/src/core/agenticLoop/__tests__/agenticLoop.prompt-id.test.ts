@@ -43,7 +43,12 @@ describe('AgenticLoop promptId correlation', () => {
       [contentEvent('done'), finishedEvent()],
     ]);
 
-    const loop = new AgenticLoop({ agentClient: client, config, messageBus });
+    const loop = new AgenticLoop({
+      agentClient: client,
+      config,
+      schedulerOwner: config.schedulerOwner,
+      messageBus,
+    });
 
     const callerPromptId = 'caller-supplied-prompt-id';
     await collectEvents(
@@ -73,7 +78,12 @@ describe('AgenticLoop promptId correlation', () => {
       [contentEvent('done'), finishedEvent()],
     ]);
 
-    const loop = new AgenticLoop({ agentClient: client, config, messageBus });
+    const loop = new AgenticLoop({
+      agentClient: client,
+      config,
+      schedulerOwner: config.schedulerOwner,
+      messageBus,
+    });
 
     for await (const _event of loop.run('go', new AbortController().signal)) {
       void _event;
@@ -103,7 +113,12 @@ describe('AgenticLoop promptId correlation', () => {
       ],
       [contentEvent('done'), finishedEvent()],
     ]);
-    const loop = new AgenticLoop({ agentClient: client, config, messageBus });
+    const loop = new AgenticLoop({
+      agentClient: client,
+      config,
+      schedulerOwner: config.schedulerOwner,
+      messageBus,
+    });
 
     await collectEvents(
       loop,
@@ -132,7 +147,12 @@ describe('AgenticLoop promptId correlation', () => {
       [contentEvent('first chunk')],
       [contentEvent('second run'), finishedEvent()],
     ]);
-    const loop = new AgenticLoop({ agentClient: client, config, messageBus });
+    const loop = new AgenticLoop({
+      agentClient: client,
+      config,
+      schedulerOwner: config.schedulerOwner,
+      messageBus,
+    });
     const firstRun = loop.run('first', new AbortController().signal);
 
     const firstEvent = await firstRun.next();

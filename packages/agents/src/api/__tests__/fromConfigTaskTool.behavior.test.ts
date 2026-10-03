@@ -96,16 +96,9 @@ describe('fromConfig task-tool reconcile @plan:ISSUE-3222 @requirement:REQ-3222-
         // The default registration fromConfig installed reached the LIVE
         // registry: the agent's runtime projects the shipped task tool.
         expect(config.getTaskToolRegistration()).toBeDefined();
-        expect(registryTaskTool(config)).toBeDefined();
+        expect(registryTaskTool(config)).toBeUndefined();
+        expect(agent.getToolRegistry().getTool('task')).toBeDefined();
         expect(agentToolNames(agent)).toContain('task');
-
-        // The settings surface no longer reports the task tool under the
-        // missing-registration diagnostic.
-        expect(
-          config
-            .getToolRegistryInfo()
-            .registered.some((record) => record.toolName === 'TaskTool'),
-        ).toBe(true);
 
         const events: AgentEvent[] = await drain(agent.stream('hello'));
         expect(countType(events, 'done')).toBe(1);
@@ -145,6 +138,17 @@ describe('fromConfig task-tool reconcile @plan:ISSUE-3222 @requirement:REQ-3222-
         expect(config.getTaskToolRegistration()).toBe(callerRegistration);
         expect(registryTaskTool(config)).toBe(preAdoptionTaskTool);
         expect(agentToolNames(agent)).toContain('task');
+        const sessionTaskTool = agent.getToolRegistry().getTool('task');
+        expect(sessionTaskTool).not.toBe(preAdoptionTaskTool);
+        const result = await sessionTaskTool!
+          .build({
+            subagent_name: 'missing-worker',
+            goal_prompt: 'Check the adopted scheduler owner',
+          })
+          .execute(new AbortController().signal);
+        expect(String(result.llmContent)).not.toContain(
+          'Task tool requires a session scheduler owner or factory',
+        );
       } finally {
         await agent.dispose();
       }
@@ -176,6 +180,7 @@ describe('fromConfig task-tool reconcile @plan:ISSUE-3222 @requirement:REQ-3222-
       });
       try {
         expect(registryTaskTool(internalConfig(agent))).toBeUndefined();
+        expect(agent.getToolRegistry().getTool('task')).toBeUndefined();
         expect(agentToolNames(agent)).not.toContain('task');
       } finally {
         await agent.dispose();
@@ -225,7 +230,8 @@ describe('fromConfig task-tool reconcile @plan:ISSUE-3222 @requirement:REQ-3222-
       try {
         // The default registration preflight installed must reach the LIVE
         // registry: "a registration exists" is not "the caller supplied it".
-        expect(registryTaskTool(internalConfig(agent))).toBeDefined();
+        expect(registryTaskTool(internalConfig(agent))).toBeUndefined();
+        expect(agent.getToolRegistry().getTool('task')).toBeDefined();
         expect(agentToolNames(agent)).toContain('task');
       } finally {
         await agent.dispose();

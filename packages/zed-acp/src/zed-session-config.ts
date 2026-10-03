@@ -73,6 +73,9 @@ export function createSessionScopedConfig(
       if (property === 'getToolRegistry' && resolveToolRegistry !== undefined) {
         return () => resolveToolRegistry() ?? config.getToolRegistry();
       }
+      if (property === 'isInteractive') {
+        return () => true;
+      }
       if (property === 'getFileSystemService') {
         return () => fileSystemService;
       }

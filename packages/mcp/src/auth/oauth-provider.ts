@@ -9,10 +9,14 @@ import * as crypto from 'node:crypto';
 import type * as net from 'node:net';
 import { URL } from 'node:url';
 import type { EventEmitter } from 'node:events';
-import { openHostBrowser } from '../host/hostServices.js';
+import {
+  defaultHostServices,
+  type McpHostServices,
+} from '../host/hostServices.js';
 import {
   type MCPOAuthToken,
   MCPOAuthTokenStorage,
+  createMcpOAuthTokenStorage,
 } from './oauth-token-storage.js';
 import { getErrorMessage } from '@vybestack/llxprt-code-tools/utils/errors.js';
 import { OAuthUtils, ResourceMismatchError } from './oauth-utils.js';
@@ -753,17 +757,14 @@ export class MCPOAuthProvider {
     return config;
   }
 
-  /**
-   * Save the OAuth token and verify it was persisted correctly.
-   */
   private static async saveAndVerifyToken(
     serverName: string,
     token: MCPOAuthToken,
     config: MCPOAuthConfig,
     mcpServerUrl?: string,
+    hostServices?: Readonly<McpHostServices>,
   ): Promise<void> {
-    const tokenStorage = new MCPOAuthTokenStorage();
-
+    const tokenStorage = createMcpOAuthTokenStorage(hostServices);
     try {
       await tokenStorage.saveToken(
         serverName,
@@ -801,6 +802,7 @@ export class MCPOAuthProvider {
       response: Promise<OAuthAuthorizationResponse>;
     },
     events?: EventEmitter,
+    hostServices: Readonly<McpHostServices> = defaultHostServices,
   ): Promise<string> {
     const displayMessage = (message: string) => {
       if (events) {
@@ -809,7 +811,6 @@ export class MCPOAuthProvider {
         debugLogger.log(message);
       }
     };
-
     const authUrl = this.buildAuthorizationUrl(
       config,
       pkceParams,
@@ -826,18 +827,12 @@ TIP: Triple-click to select the entire URL, then copy and paste it into your bro
 WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.`);
 
     try {
-      await openHostBrowser(authUrl);
+      await hostServices.openBrowser(authUrl);
     } catch (error) {
-      debugLogger.warn(
-        'Failed to open browser automatically:',
-        getErrorMessage(error),
-      );
+      debugLogger.warn('Failed to open browser:', getErrorMessage(error));
     }
-
     const { code } = await callbackServer.response;
-    debugLogger.debug(
-      '[OK] Authorization code received, exchanging for tokens...',
-    );
+    debugLogger.debug('[OK] Authorization code received');
     return code;
   }
 
@@ -868,14 +863,12 @@ WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.
     return token;
   }
 
-  /**
-   * Perform the full OAuth authorization code flow with PKCE.
-   */
   static async authenticate(
     serverName: string,
     config: MCPOAuthConfig,
     mcpServerUrl?: string,
     events?: EventEmitter,
+    hostServices?: Readonly<McpHostServices>,
   ): Promise<MCPOAuthToken> {
     config = await this.discoverOAuthConfigIfNeeded(
       serverName,
@@ -893,7 +886,6 @@ WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.
 
     const redirectPort = await callbackServer.port;
     debugLogger.debug(`Callback server listening on port ${redirectPort}`);
-
     config = await this.ensureClientRegistration(config, redirectPort);
 
     if (!config.clientId || !config.authorizationUrl || !config.tokenUrl) {
@@ -901,7 +893,6 @@ WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.
         'Missing required OAuth configuration after discovery and registration',
       );
     }
-
     const code = await this.waitForAuthorizationCode(
       config,
       pkceParams,
@@ -909,8 +900,8 @@ WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.
       mcpServerUrl,
       callbackServer,
       events,
+      hostServices,
     );
-
     const tokenResponse = await this.exchangeCodeForToken(
       config,
       code,
@@ -918,9 +909,14 @@ WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.
       redirectPort,
       mcpServerUrl,
     );
-
     const token = this.buildMCPOAuthToken(tokenResponse);
-    await this.saveAndVerifyToken(serverName, token, config, mcpServerUrl);
+    await this.saveAndVerifyToken(
+      serverName,
+      token,
+      config,
+      mcpServerUrl,
+      hostServices,
+    );
 
     return token;
   }
@@ -931,9 +927,10 @@ WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.
   static async getValidToken(
     serverName: string,
     config: MCPOAuthConfig,
+    hostServices?: Readonly<McpHostServices>,
   ): Promise<string | null> {
     debugLogger.debug(`Getting valid token for server: ${serverName}`);
-    const tokenStorage = new MCPOAuthTokenStorage();
+    const tokenStorage = createMcpOAuthTokenStorage(hostServices);
     const credentials = await tokenStorage.getCredentials(serverName);
 
     if (!credentials) {

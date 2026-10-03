@@ -58,7 +58,7 @@ export interface AsyncTaskCollaborators {
   normalized: TaskToolInvocationParams;
   params: { timeout_seconds?: number; grace_period_seconds?: number };
   createOrchestrator: () => SubagentOrchestrator;
-  getAsyncTaskManager?: () => AsyncTaskManager | undefined;
+  getTaskManager?: () => AsyncTaskManager | undefined;
   isInteractiveEnvironment?: () => boolean;
   getSchedulerFactory?: () => SubagentSchedulerFactory | undefined;
   buildLaunchRequest: (timeoutMs?: number) => SubagentLaunchRequest;
@@ -161,7 +161,7 @@ export function resolveAsyncContext(collaborators: AsyncTaskCollaborators):
     return settingsCheck;
   }
 
-  const asyncTaskManager = collaborators.getAsyncTaskManager?.();
+  const asyncTaskManager = collaborators.getTaskManager?.();
   if (asyncTaskManager === undefined) {
     return {
       llmContent: 'Async mode requires AsyncTaskManager to be configured.',
@@ -398,7 +398,7 @@ export function executeInBackground(
   cleanupForegroundRelay?: () => void,
   timedOut?: { value: boolean },
 ): void {
-  void (async () => {
+  const execution = (async () => {
     try {
       const environmentInteractive =
         collaborators.isInteractiveEnvironment?.() ?? true;
@@ -465,6 +465,7 @@ export function executeInBackground(
       }
     }
   })();
+  asyncTaskManager.trackExecution(agentId, execution);
 }
 
 /**

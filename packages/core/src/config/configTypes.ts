@@ -22,6 +22,10 @@ import type { SkillDefinition } from '../skills/skillManager.js';
 import type { BucketFailureReason } from '../runtime/contracts/BucketFailureReason.js';
 import type { MCPOAuthConfig } from '@vybestack/llxprt-code-mcp';
 import type { MCPServerConfig } from '@vybestack/llxprt-code-mcp/config/mcpServerConfig.js';
+import type {
+  HostBrowserLauncher,
+  HostFeedbackSink,
+} from '@vybestack/llxprt-code-mcp/host/hostServices.js';
 import type { OutputFormat } from '../utils/output-format.js';
 import type { FileFilteringOptions } from './constants.js';
 import type { EventEmitter } from 'node:events';
@@ -40,7 +44,6 @@ import type {
 } from '@vybestack/llxprt-code-tools';
 import type { LspConfig } from '@vybestack/llxprt-code-ide-integration';
 import type { AgentClientFactory } from '../core/clientContract.js';
-import type { ToolSchedulerFactory } from '../core/toolSchedulerContract.js';
 import type { TaskToolRegistration } from './toolRegistryFactory.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 
@@ -378,6 +381,8 @@ export interface ConfigParameters {
   toolCallCommand?: string;
   mcpServerCommand?: string;
   mcpServers?: Record<string, MCPServerConfig>;
+  mcpFeedback?: HostFeedbackSink;
+  mcpBrowser?: HostBrowserLauncher;
   lsp?: LspConfig | boolean;
   userMemory?: string;
   llxprtMdFileCount?: number;
@@ -492,15 +497,6 @@ export interface ConfigParameters {
    * never at Config construction time.
    */
   agentClientFactory?: AgentClientFactory;
-
-  /**
-   * @plan PLAN-20260610-ISSUE1592.P01
-   * @requirement REQ-INV-002
-   * Factory for creating CoreToolScheduler instances. Injected by composition roots.
-   * Absence is an error at USE time (getOrCreateScheduler),
-   * never at Config construction time.
-   */
-  toolSchedulerFactory?: ToolSchedulerFactory;
 
   /**
    * @plan PLAN-20260610-ISSUE1592.P01

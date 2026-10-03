@@ -98,6 +98,12 @@ export function generateRuntimeId(): string {
   return `agent-${randomUUID()}`;
 }
 
+export function resolveAgentRuntimeId(sessionId: string | undefined): string {
+  const runtimeId = sessionId ?? generateRuntimeId();
+  validateAgentRuntimeId(runtimeId);
+  return runtimeId;
+}
+
 /**
  * Validate a caller-visible agent runtime/session id before it reaches the
  * providers runtime registry, where runtime ids must be deterministic keys.
@@ -371,6 +377,7 @@ export interface OwnershipRecord {
   };
   config: Config;
   messageBus: unknown;
+  approvalBus: { dispose(): void };
   loopHolder: {
     current?: unknown;
     activeRunController?: AbortController;
@@ -437,6 +444,7 @@ export function recordOwnership(deps: {
   runtimeHandle: OwnershipRecord['runtimeHandle'];
   config: Config;
   messageBus: unknown;
+  approvalBus: OwnershipRecord['approvalBus'];
   loopHolder: OwnershipRecord['loopHolder'];
   runtimeState: AgentRuntimeState;
   injectedSchedulerHandles: AgentSchedulerHandle[];
@@ -451,6 +459,7 @@ export function recordOwnership(deps: {
     runtimeHandle: deps.runtimeHandle,
     config: deps.config,
     messageBus: deps.messageBus,
+    approvalBus: deps.approvalBus,
     loopHolder: deps.loopHolder,
     runtimeState: deps.runtimeState,
     injectedSchedulerHandles: deps.injectedSchedulerHandles,

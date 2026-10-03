@@ -362,9 +362,6 @@ describe('ChatSession media history boundaries', () => {
     });
     const setup = createChatSessionRuntime({
       provider,
-      configOverrides: {
-        getSessionRecordingService: () => recording,
-      },
     });
     setup.settingsService.set('media.semantic-purge', options.mode);
     setup.settingsService.set('prompt-caching', '5m');
@@ -404,7 +401,15 @@ describe('ChatSession media history boundaries', () => {
       embedContent: vi.fn(),
     };
     return {
-      chat: new ChatSession(runtime, contentGenerator, {}, []),
+      chat: new ChatSession(
+        runtime,
+        contentGenerator,
+        {},
+        [],
+        undefined,
+        undefined,
+        () => recording,
+      ),
       recording,
       requests,
     };

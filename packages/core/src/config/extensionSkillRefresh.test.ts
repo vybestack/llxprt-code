@@ -22,11 +22,16 @@
 
 import { describe, it, expect, vi, type Mock } from 'bun:test';
 import { Config } from './config.js';
+import { MessageBus } from '../confirmation-bus/message-bus.js';
 import type { SkillDefinition } from '../skills/skillLoader.js';
 import type { LlxprtExtension } from './configTypes.js';
 import { SimpleExtensionLoader } from '../utils/extensionLoader.js';
 import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
-import { initializeTestConfig } from '../__tests__/config-test-helpers.js';
+import type { McpHostConfig } from '@vybestack/llxprt-code-mcp/host/hostInterfaces.js';
+import {
+  getTestRuntimeMessageBus,
+  initializeTestConfig,
+} from '../__tests__/config-test-helpers.js';
 import {
   buildFsMockBody,
   buildToolsMockBody,
@@ -50,29 +55,40 @@ const hoistedConfigMocks = {
   },
   setGlobalProxy: vi.fn(),
 } as HoistedConfigMocks;
+let discoveryRefresh: (() => Promise<void>) | undefined;
 const __actual = { ...(await import('@vybestack/llxprt-code-mcp')) };
 void vi.mock('@vybestack/llxprt-code-mcp', () => {
   const actual = __actual as Record<string, unknown>;
   return {
     ...actual,
-    McpClientManager: vi.fn().mockImplementation(() => ({
-      getMcpServers: vi.fn().mockReturnValue({}),
-      getDiscoveryFailures: vi.fn().mockReturnValue(new Map<string, string>()),
-      getDiscoveryState: vi.fn().mockReturnValue(MCPDiscoveryState.NOT_STARTED),
-      whenDiscoverySettled: vi.fn().mockResolvedValue(undefined),
-      restart: vi.fn().mockResolvedValue(undefined),
-      restartServer: vi.fn().mockResolvedValue(undefined),
-      reconcileConfiguredMcpServers: vi.fn().mockResolvedValue(undefined),
-      getMcpInstructions: vi.fn().mockReturnValue(''),
-      startConfiguredMcpServers: vi.fn().mockResolvedValue(undefined),
-      // ExtensionLoader drives these on every load/unload.
-      startExtension: vi.fn().mockResolvedValue(undefined),
-      stopExtension: vi.fn().mockResolvedValue(undefined),
-      onFolderTrustGained: vi.fn().mockResolvedValue(undefined),
-      onFolderTrustRevoked: vi.fn().mockResolvedValue(undefined),
-      quarantineForTrustRevocation: vi.fn(),
-      stop: vi.fn().mockResolvedValue(undefined),
-    })),
+    McpClientManager: vi
+      .fn()
+      .mockImplementation(
+        (_version: string, _registry: unknown, host: McpHostConfig) => {
+          discoveryRefresh = host.refreshMcpContext;
+          return {
+            getMcpServers: vi.fn().mockReturnValue({}),
+            getDiscoveryFailures: vi
+              .fn()
+              .mockReturnValue(new Map<string, string>()),
+            getDiscoveryState: vi
+              .fn()
+              .mockReturnValue(MCPDiscoveryState.NOT_STARTED),
+            whenDiscoverySettled: vi.fn().mockResolvedValue(undefined),
+            restart: vi.fn().mockResolvedValue(undefined),
+            restartServer: vi.fn().mockResolvedValue(undefined),
+            reconcileConfiguredMcpServers: vi.fn().mockResolvedValue(undefined),
+            getMcpInstructions: vi.fn().mockReturnValue(''),
+            startConfiguredMcpServers: vi.fn().mockResolvedValue(undefined),
+            startExtension: vi.fn().mockResolvedValue(undefined),
+            stopExtension: vi.fn().mockResolvedValue(undefined),
+            onFolderTrustGained: vi.fn().mockResolvedValue(undefined),
+            onFolderTrustRevoked: vi.fn().mockResolvedValue(undefined),
+            quarantineForTrustRevocation: vi.fn(),
+            stop: vi.fn().mockResolvedValue(undefined),
+          };
+        },
+      ),
   };
 });
 
@@ -166,6 +182,9 @@ async function buildHarness(
     },
   });
   await initializeTestConfig(config);
+  config.subscribeSkillSurface(() =>
+    config.publishSkillSurface(getTestRuntimeMessageBus(config)),
+  );
   // Real discovery would walk the filesystem for builtin/user/project skills;
   // the extension tier is the one under test, so only that is left live.
   vi.spyOn(config.getSkillManager(), 'discoverBuiltinSkills').mockResolvedValue(
@@ -190,6 +209,41 @@ function discoveredSkillNames(config: Config): string[] {
     .map((skill) => skill.name)
     .sort();
 }
+
+describe('MCP discovery after Config initialization', () => {
+  it('notifies active session subscribers without reusing the initializer bus', async () => {
+    const { config } = await buildHarness();
+    const initialBus = getTestRuntimeMessageBus(config);
+    const routedBuses: MessageBus[] = [];
+    const refresh = vi
+      .spyOn(config, 'refreshMcpContext')
+      .mockImplementation(async (bus) => {
+        routedBuses.push(bus);
+      });
+    const activeBus = new MessageBus(
+      config.getPolicyEngine(),
+      config.getDebugMode(),
+    );
+    const unsubscribe = config.subscribeMcpSurface(() =>
+      config.refreshMcpContext(activeBus),
+    );
+    if (discoveryRefresh === undefined) {
+      throw new Error('MCP host was not initialized');
+    }
+    try {
+      await discoveryRefresh();
+      expect(routedBuses).toStrictEqual([activeBus]);
+      expect(routedBuses).not.toContain(initialBus);
+      unsubscribe();
+      await discoveryRefresh();
+      expect(routedBuses).toStrictEqual([activeBus]);
+    } finally {
+      refresh.mockRestore();
+      unsubscribe();
+      activeBus.removeAllListeners();
+    }
+  });
+});
 
 describe('extension load and unload refresh the skill surface @issue:3383', () => {
   it('discovers the skills an extension brings when it is loaded', async () => {
@@ -263,7 +317,7 @@ describe('extension load and unload refresh the skill surface @issue:3383', () =
 
   it('retries on the next transition when the refresh itself fails', async () => {
     const { config, loader, observations } = await buildHarness();
-    vi.spyOn(config, 'refreshSkills').mockRejectedValueOnce(
+    vi.spyOn(config, 'publishSkillSurface').mockRejectedValueOnce(
       new Error('discovery exploded'),
     );
 

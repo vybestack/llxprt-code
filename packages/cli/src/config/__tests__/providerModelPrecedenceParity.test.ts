@@ -309,15 +309,17 @@ async function runConfig(settings: Settings, argv?: string[]) {
   }
   const parsedArgv = await parseArguments(settings);
   const runtimeSettingsService = new SettingsService();
-  return loadCliConfig(
-    settings,
-    [],
-    makeExtMgr(),
-    'test-session',
-    parsedArgv,
-    undefined,
-    { settingsService: runtimeSettingsService },
-  );
+  return (
+    await loadCliConfig(
+      settings,
+      [],
+      makeExtMgr(),
+      'test-session',
+      parsedArgv,
+      undefined,
+      { settingsService: runtimeSettingsService },
+    )
+  ).config;
 }
 
 // ─── Suite ────────────────────────────────────────────────────────────────────

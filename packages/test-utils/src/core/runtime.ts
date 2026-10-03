@@ -8,7 +8,6 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core/runtime/contracts/index.js';
 import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
-import type { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
 // Type-only import of bun:test: erased at compile time, creates no runtime edge.
 // Required to obtain the precise `vi.fn()` Mock<T> return type.
 import type { vi as ViNamespace } from 'bun:test';
@@ -239,7 +238,6 @@ interface ChatSessionConfigShape {
   getProviderManager: ReturnType<ReturnType<typeof requireVi>['fn']>;
   getSettingsService: ReturnType<ReturnType<typeof requireVi>['fn']>;
   getTokenizerFactory: () => RuntimeTokenizerFactory | undefined;
-  getSessionRecordingService: () => SessionRecordingService | undefined;
 }
 
 interface ChatSessionRuntimeOptions {
@@ -339,7 +337,6 @@ export function createChatSessionRuntime(
     getProviderManager: vi.fn().mockReturnValue(providerManager),
     getSettingsService: vi.fn().mockReturnValue(settingsService),
     getTokenizerFactory: () => tokenizerFactory,
-    getSessionRecordingService: () => undefined,
   };
 
   const config = {

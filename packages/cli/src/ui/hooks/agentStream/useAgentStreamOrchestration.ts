@@ -130,9 +130,8 @@ export function useAgentStreamOrchestration(
   // owner of running tasks, so cancelling all of them is the only mechanism
   // that reliably stops detached subagents regardless of launch turn.
   const cancelRunningAsyncTasks = useCallback(() => {
-    const mgr = args.runtime.asyncTasks.getAsyncTaskManager();
-    mgr?.getRunningTasks().forEach((t) => mgr.cancelTask(t.id));
-  }, [args.runtime]);
+    void args.agent.tasks.cancelAllRunning();
+  }, [args.agent]);
   const { cancelOngoingRequest } = useCancellation(
     streamingState,
     st.turnCancelledRef,

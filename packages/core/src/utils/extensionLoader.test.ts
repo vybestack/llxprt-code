@@ -69,7 +69,7 @@ describe('SimpleExtensionLoader', () => {
 
   it('should start active extensions', async () => {
     const loader = new SimpleExtensionLoader([activeExtension]);
-    await loader.start(mockConfig);
+    await loader.start(mockConfig, async () => {});
     expect(mockMcpClientManager.startExtension).toHaveBeenCalledTimes(1);
     expect(mockMcpClientManager.startExtension).toHaveBeenCalledWith(
       activeExtension,
@@ -78,7 +78,7 @@ describe('SimpleExtensionLoader', () => {
 
   it('should not start inactive extensions', async () => {
     const loader = new SimpleExtensionLoader([inactiveExtension]);
-    await loader.start(mockConfig);
+    await loader.start(mockConfig, async () => {});
     expect(mockMcpClientManager.startExtension).not.toHaveBeenCalled();
   });
 
@@ -95,7 +95,7 @@ describe('SimpleExtensionLoader', () => {
       const loader = new SimpleExtensionLoader([]);
       await loader.loadExtension(activeExtension);
       expect(mockMcpClientManager.startExtension).not.toHaveBeenCalled();
-      await loader.start(mockConfig);
+      await loader.start(mockConfig, async () => {});
       expect(mockMcpClientManager.startExtension).toHaveBeenCalledTimes(1);
       expect(mockMcpClientManager.startExtension).toHaveBeenCalledWith(
         activeExtension,
@@ -107,7 +107,7 @@ describe('SimpleExtensionLoader', () => {
       async (reloadingEnabled) => {
         extensionReloadingEnabled = reloadingEnabled;
         const loader = new SimpleExtensionLoader([]);
-        await loader.start(mockConfig);
+        await loader.start(mockConfig, async () => {});
         expect(mockMcpClientManager.startExtension).not.toHaveBeenCalled();
         await loader.loadExtension(activeExtension);
 
@@ -160,7 +160,7 @@ describe('SimpleExtensionLoader', () => {
 
       extensionReloadingEnabled = true;
       const loader = new SimpleExtensionLoader([]);
-      await loader.start(mockConfigWithHooks);
+      await loader.start(mockConfigWithHooks, async () => {});
 
       mockRefreshMemory.mockClear();
       mockHookSystemInit.mockClear();
@@ -202,7 +202,7 @@ describe('SimpleExtensionLoader', () => {
 
       extensionReloadingEnabled = true;
       const loader = new SimpleExtensionLoader([extensionWithHooks]);
-      await loader.start(mockConfigWithHooks);
+      await loader.start(mockConfigWithHooks, async () => {});
 
       mockRefreshMemory.mockClear();
       mockHookSystemInit.mockClear();

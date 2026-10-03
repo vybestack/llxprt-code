@@ -18,6 +18,7 @@
 
 import { vi } from 'bun:test';
 import { CoreToolScheduler } from '../../coreToolScheduler.js';
+import { createSessionSchedulerOwner } from '../../../api/agentRuntimeAssembly.js';
 import type { AgenticLoop } from '../AgenticLoop.js';
 import type { ApprovalHandler, AgenticLoopEvent } from '../types.js';
 import type { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
@@ -275,7 +276,9 @@ export function createTestConfig(options: {
   interactive: boolean;
   approvalMode?: ApprovalMode;
   imagePayloadBudgetBytes?: number;
-}): Config {
+}): Config & {
+  schedulerOwner: ReturnType<typeof createSessionSchedulerOwner>;
+} {
   const { messageBus, toolRegistry, policyEngine, interactive } = options;
   const approvalMode = options.approvalMode ?? ApprovalMode.YOLO;
 
@@ -324,7 +327,13 @@ export function createTestConfig(options: {
       }),
   });
 
-  return testBoundaryConfig({ ...fixture, ...delegate });
+  const config = testBoundaryConfig({ ...fixture, ...delegate });
+  return Object.assign(config, {
+    schedulerOwner: createSessionSchedulerOwner(
+      config,
+      fixture.getToolSchedulerFactory(),
+    ),
+  });
 }
 
 /**

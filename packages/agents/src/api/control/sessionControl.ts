@@ -56,6 +56,7 @@ import {
   captureRollbackFailure,
   cleanupSessionResources,
   rollbackPreparedSessionArtifacts,
+  throwCleanupFailures,
 } from './sessionControlRollback.js';
 import type {
   AgentSessionControl,
@@ -139,6 +140,8 @@ export class SessionControl implements AgentSessionControl {
    * @requirement:REQ-010
    */
   private opChain: Promise<void> = Promise.resolve();
+  private disposed = false;
+  private disposal: Promise<void> | undefined;
 
   /**
    * True when {@link integration} is committed as the live integration but its
@@ -173,6 +176,13 @@ export class SessionControl implements AgentSessionControl {
    * @requirement:REQ-010
    */
   private runExclusive<T>(fn: () => Promise<T>): Promise<T> {
+    if (this.disposed) {
+      return Promise.reject(new Error('Session control is disposed'));
+    }
+    return this.enqueueExclusive(fn);
+  }
+
+  private enqueueExclusive<T>(fn: () => Promise<T>): Promise<T> {
     const priorSettled = this.opChain;
     const run = (async () => {
       await priorSettled;
@@ -190,8 +200,8 @@ export class SessionControl implements AgentSessionControl {
    * `target:'latest'` resolves to CONTINUE_LATEST; any other target is a
    * session reference (id or, when options.prefix is set, an id-prefix that the
    * core SessionDiscovery resolves). On success the returned recording service
-   * is adopted as the live recording (installed on Config as the active
-   * recording, same swap semantics as setRecording) and the returned session
+   * is adopted as the agent's live recording (using the same swap semantics
+   * as setRecording) and the returned session
    * lock is retained. The resumed resources remain local while the prior
    * recording service and session lock are released and the reconstructed
    * IContent history is fed through the client restore path. Only after the new
@@ -313,7 +323,6 @@ export class SessionControl implements AgentSessionControl {
       historyReplacementAttempted = true;
       await client.setHistory(history);
       const subscribed = this.attachIntegrationToHistory(integration);
-      this.deps.config.setSessionRecordingService(recording);
       this.recording = recording;
       this.integration = integration;
       this.integrationNeedsSubscribe = !subscribed;
@@ -328,11 +337,6 @@ export class SessionControl implements AgentSessionControl {
       this.integration = priorIntegration;
       this.integrationNeedsSubscribe = priorNeedsSubscribe;
       this.currentLockHandle = priorLockHandle;
-      await captureRollbackFailure(rollbackFailures, () =>
-        this.deps.config.setSessionRecordingService(
-          priorRecording ?? undefined,
-        ),
-      );
       if (historyReplacementAttempted) {
         await captureRollbackFailure(rollbackFailures, () =>
           client.setHistory(priorHistory),
@@ -359,13 +363,10 @@ export class SessionControl implements AgentSessionControl {
       priorRecording,
       priorLockHandle,
     );
-    if (cleanupFailures.length === 1) throw cleanupFailures[0];
-    if (cleanupFailures.length > 1) {
-      throw new AggregateError(
-        cleanupFailures,
-        'Previous session cleanup failed after transition',
-      );
-    }
+    throwCleanupFailures(
+      cleanupFailures,
+      'Previous session cleanup failed after transition',
+    );
   }
 
   /**
@@ -405,7 +406,6 @@ export class SessionControl implements AgentSessionControl {
       this.integration = null;
       this.integrationNeedsSubscribe = false;
       this.currentLockHandle = null;
-      this.deps.config.setSessionRecordingService(undefined);
       const cleanupFailures = await cleanupSessionResources(
         integration,
         deadRecording,
@@ -739,6 +739,10 @@ export class SessionControl implements AgentSessionControl {
     });
   }
 
+  getActiveRecording(): SessionRecordingService | undefined {
+    return this.recording ?? undefined;
+  }
+
   /**
    * Returns the current recording state. enabled reflects the live service's
    * isActive(); path reflects its materialized file (only included when
@@ -893,10 +897,7 @@ export class SessionControl implements AgentSessionControl {
    * Starts a fresh recording service for this session, replacing any prior one
    * (the prior service + integration are flushed + disposed first). The current
    * history is recorded as content events so the file materializes and
-   * getRecording().path is defined. The freshly built service is installed on
-   * Config via setSessionRecordingService so the rest of the system (which reads
-   * the active recording via config.getSessionRecordingService) observes the
-   * swap. A RecordingIntegration is then subscribed to the client's
+   * getRecording().path is defined. A RecordingIntegration is then subscribed to the client's
    * HistoryService so EVERY subsequent turn's 'contentAdded' event is appended
    * to the JSONL file — this is what makes recording continuous rather than a
    * one-shot snapshot.
@@ -907,7 +908,7 @@ export class SessionControl implements AgentSessionControl {
    * stored service), so getHistoryService() is non-null here and the single
    * subscription established now captures all future turns. If it is
    * nonetheless null at this moment (no client/chat), the integration is still
-   * created and Config still owns the service; the subscription is deferred
+   * created and this control still owns the service; the subscription is deferred
    * (integrationNeedsSubscribe) and the next startRecording/resume re-attempts
    * it via {@link ensureSubscribed} (FINDING A3).
    *
@@ -933,23 +934,20 @@ export class SessionControl implements AgentSessionControl {
       mediaStore: this.deps.config.getLocalMediaStore(),
       maxQueueBytes: this.deps.config.getSessionRecordingQueueByteLimit(),
     });
-    const history = await this.deps.resolveClient().getHistory();
-    for (const item of history) {
-      service.recordContent(item);
-    }
-    await service.flush();
-    // FINDING F8: build + subscribe the integration BEFORE committing
-    // this.recording and the Config recording service, so a subscribe failure
-    // cannot leave recording PARTIALLY enabled (fields/Config set with no live
-    // integration). On failure dispose the integration AND the freshly built
-    // service (neither is referenced by any field yet) and rethrow; the instance
-    // fields stay untouched so recording remains cleanly disabled.
-    const integration = new RecordingIntegration(
-      service,
-      this.deps.config.createSessionPersistenceService(service.getSessionId()),
-    );
+    let integration: RecordingIntegration | null = null;
     let subscribed: boolean;
     try {
+      const history = await this.deps.resolveClient().getHistory();
+      for (const item of history) {
+        service.recordContent(item);
+      }
+      await service.flush();
+      integration = new RecordingIntegration(
+        service,
+        this.deps.config.createSessionPersistenceService(
+          service.getSessionId(),
+        ),
+      );
       subscribed = this.attachIntegrationToHistory(integration);
     } catch (error: unknown) {
       const cleanupFailures = await cleanupSessionResources(
@@ -966,7 +964,6 @@ export class SessionControl implements AgentSessionControl {
       throw error;
     }
     this.recording = service;
-    this.deps.config.setSessionRecordingService(service);
     this.integration = integration;
     // FINDING A3: when the HistoryService was unavailable the integration is
     // committed but dead; flag it so a later operation re-attaches it rather
@@ -1032,8 +1029,7 @@ export class SessionControl implements AgentSessionControl {
   }
 
   /**
-   * Flushes + disposes the live recording service (if any), clears it from
-   * Config (so the system no longer sees an active recording), and releases any
+   * Flushes + disposes the live recording service (if any) and releases any
    * session lock held by a prior resume. Each teardown step is guarded so a
    * single failure does not skip the others.
    * @plan:PLAN-20260617-COREAPI.P20
@@ -1046,7 +1042,7 @@ export class SessionControl implements AgentSessionControl {
   /**
    * Disposes the live RecordingIntegration (unsubscribing its HistoryService
    * listeners) and the live recording service (if any), clears the private
-   * fields, and clears the service from Config. The integration is disposed
+   * fields. The integration is disposed
    * FIRST so no 'contentAdded' event can reach a service mid-disposal. No-op
    * when no recording is active.
    * @plan:PLAN-20260617-COREAPI.P20
@@ -1058,7 +1054,6 @@ export class SessionControl implements AgentSessionControl {
     this.integration = null;
     this.integrationNeedsSubscribe = false;
     this.recording = null;
-    this.deps.config.setSessionRecordingService(undefined);
     const errors: unknown[] = [];
     if (integration !== null) {
       await captureRollbackFailure(errors, () => integration.dispose());
@@ -1066,10 +1061,7 @@ export class SessionControl implements AgentSessionControl {
     await captureRollbackFailure(errors, async () => {
       if (service !== null) await service.dispose();
     });
-    if (errors.length === 1) throw errors[0];
-    if (errors.length > 1) {
-      throw new AggregateError(errors, 'Recording cleanup failed');
-    }
+    throwCleanupFailures(errors, 'Recording cleanup failed');
   }
 
   /**
@@ -1097,11 +1089,16 @@ export class SessionControl implements AgentSessionControl {
    * @plan:PLAN-20260617-COREAPI.P20
    * @requirement:REQ-010
    */
-  async dispose(): Promise<void> {
+  dispose(): Promise<void> {
+    if (this.disposal !== undefined) {
+      return this.disposal;
+    }
+    this.disposed = true;
     // FINDING A1: serialize teardown through the op-chain mutex so dispose never
     // races a concurrent resume()/setRecording() adopting resources it is
     // releasing (double-dispose / released-then-adopted lock).
-    await this.runExclusive(() => this.teardownActiveSession());
+    this.disposal = this.enqueueExclusive(() => this.teardownActiveSession());
+    return this.disposal;
   }
 
   /**
@@ -1116,10 +1113,7 @@ export class SessionControl implements AgentSessionControl {
     const errors: unknown[] = [];
     await captureRollbackFailure(errors, () => this.releaseRecording());
     await captureRollbackFailure(errors, () => this.releaseLockHandle());
-    if (errors.length === 1) throw errors[0];
-    if (errors.length > 1) {
-      throw new AggregateError(errors, 'Session teardown failed');
-    }
+    throwCleanupFailures(errors, 'Session teardown failed');
   }
 
   private persistenceProjectHash(): string {

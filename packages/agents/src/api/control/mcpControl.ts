@@ -12,7 +12,6 @@ import type { MCPServerConfig } from '@vybestack/llxprt-code-core/config/config.
 import {
   MCPServerStatus,
   MCPDiscoveryState,
-  getMCPServerStatus,
 } from '@vybestack/llxprt-code-core';
 import type {
   AgentMcpControl,
@@ -76,6 +75,7 @@ export interface McpResourceRegistryView {
  */
 export interface McpRuntimeStatusView {
   readonly servers: Record<string, MCPServerConfig>;
+  readonly serverStatuses: ReadonlyMap<string, MCPServerStatus>;
   readonly discoveryFailures: ReadonlyMap<string, string>;
   readonly discoveryState: MCPDiscoveryState;
 }
@@ -168,7 +168,7 @@ export interface McpControlDeps {
  */
 function mapDiscoveryState(
   state: MCPDiscoveryState,
-  serverNames: readonly string[],
+  statuses: ReadonlyMap<string, MCPServerStatus>,
   failures: ReadonlyMap<string, string>,
 ): PublicMcpDiscoveryState {
   if (state === MCPDiscoveryState.NOT_STARTED) {
@@ -180,8 +180,8 @@ function mapDiscoveryState(
   if (failures.size === 0) {
     return 'ready';
   }
-  const anyConnected = serverNames.some(
-    (name) => getMCPServerStatus(name) === MCPServerStatus.CONNECTED,
+  const anyConnected = [...statuses.values()].some(
+    (status) => status === MCPServerStatus.CONNECTED,
   );
   return anyConnected ? 'partial' : 'failed';
 }
@@ -195,12 +195,13 @@ function mapDiscoveryState(
  */
 function mapServerStatus(
   name: string,
+  statuses: ReadonlyMap<string, MCPServerStatus>,
   failures: ReadonlyMap<string, string>,
 ): McpServerInfo['status'] {
   if (failures.has(name)) {
     return 'error';
   }
-  switch (getMCPServerStatus(name)) {
+  switch (statuses.get(name)) {
     case MCPServerStatus.CONNECTED:
       return 'connected';
     case MCPServerStatus.CONNECTING:
@@ -235,7 +236,11 @@ export class McpControl implements AgentMcpControl {
       const info: McpServerInfo = {
         name,
         config,
-        status: mapServerStatus(name, status.discoveryFailures),
+        status: mapServerStatus(
+          name,
+          status.serverStatuses,
+          status.discoveryFailures,
+        ),
         ...(toolNames.length > 0 ? { tools: toolNames } : {}),
         ...(typeof config.type === 'string' ? { transport: config.type } : {}),
       };
@@ -353,10 +358,9 @@ export class McpControl implements AgentMcpControl {
     if (status === undefined) {
       return 'idle';
     }
-    const serverNames = Object.keys(status.servers);
     return mapDiscoveryState(
       status.discoveryState,
-      serverNames,
+      status.serverStatuses,
       status.discoveryFailures,
     );
   }

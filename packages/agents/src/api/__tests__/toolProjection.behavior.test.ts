@@ -69,6 +69,7 @@ function buildDepsWithRealTools(
   return {
     messageBus,
     config,
+    getToolRegistry: () => config.getToolRegistry(),
     editorCallbacksHolder: { editorCallbacks: noopEditorCallbacks },
     keysDeps: { getStorage: () => getToolKeyStorage() },
   };

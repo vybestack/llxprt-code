@@ -8,7 +8,9 @@ import { loadCliConfig } from './config/config.js';
 import chalk from 'chalk';
 import type { LoadedSettings } from './config/settings.js';
 import {
+  type AgentClientContract,
   type Config,
+  type MessageBus,
   SessionRecordingService,
   RecordingIntegration,
   SessionDiscovery,
@@ -106,6 +108,7 @@ export interface SessionRecordingSetup extends ResolvedRecording {
 
 export interface RuntimeConfigBootstrap {
   config: Config;
+  messageBus: MessageBus;
   extensions: ReturnType<typeof loadExtensions>;
   runtimeSettingsService: SettingsService;
 }
@@ -117,11 +120,9 @@ export interface RuntimeConfigBootstrap {
  * @requirement:REQ-2378-002
  * Seed the CLI runtime context with a scoped SettingsService, load extensions,
  * construct Config, and re-seed the runtime context post-config with a
- * ProfileManager. Per #2378 this NO LONGER constructs the session MessageBus —
- * agent construction (fromConfig/createForegroundAgent) now owns the single
- * session bus (built from the Config's policy engine) and exposes it via
- * agent.getMessageBus(); Config.initialize() likewise runs behind agent
- * construction rather than here.
+ * ProfileManager. The provider runtime supplies the session bus to the CLI
+ * bootstrap, which passes it explicitly into fromConfig. Config.initialize()
+ * still runs during agent construction.
  */
 export async function bootstrapRuntimeAndConfig(
   settings: LoadedSettings,
@@ -162,7 +163,7 @@ export async function bootstrapRuntimeAndConfig(
   // precedent), so repeated in-process bootstrap re-registers safely.
   wireMcpAuthFactories(providerContributions);
 
-  const config = await loadCliConfig(
+  const { config, messageBus } = await loadCliConfig(
     settings.merged,
     extensions,
     extensionEnablementManager,
@@ -178,7 +179,7 @@ export async function bootstrapRuntimeAndConfig(
     profileManager,
   });
 
-  return { config, extensions, runtimeSettingsService };
+  return { config, messageBus, extensions, runtimeSettingsService };
 }
 
 /**
@@ -291,6 +292,7 @@ export async function setupSessionRecording(
   config: Config,
   argv: ParsedCliArgs,
   bootstrapSelection: BootstrapSelection | null,
+  agentClient: Pick<AgentClientContract, 'resetChat' | 'restoreHistory'>,
 ): Promise<SessionRecordingSetup> {
   const projectHash = getProjectHash(config.getProjectRoot());
   const chatsDir = join(config.getProjectTempDir(), 'chats');
@@ -311,7 +313,6 @@ export async function setupSessionRecording(
   let didFallback = false;
 
   if (resumedHistory && resumedHistory.length > 0) {
-    const agentClient = config.getAgentClient();
     try {
       await agentClient.restoreHistory(resumedHistory);
       // Adoption happens here — AFTER a successful restoreHistory — so a

@@ -132,6 +132,9 @@ import { VimModeProvider } from '../contexts/VimModeContext.js';
 const { buildSlashCommandRuntime, buildUiRuntimeFromSource } = await import(
   '../cliUiRuntime.js'
 );
+const { createRuntimeAgent } = await import(
+  '../__tests__/runtimeAgentFixture.js'
+);
 
 const TERMINAL_HEIGHT = 24;
 
@@ -199,6 +202,7 @@ function renderLayout({
     current: null,
   };
   const configSource = createConfigSource(screenReader);
+  const agent = createRuntimeAgent();
   const settings = createSettings(useAlternateBuffer) as never;
 
   // Turn-plane state lives in the TurnStore; only the history content this
@@ -231,9 +235,10 @@ function renderLayout({
         >
           <TurnProvider store={turnStore}>
             <DefaultAppLayout
-              uiRuntime={buildUiRuntimeFromSource(configSource as never)}
+              uiRuntime={buildUiRuntimeFromSource(configSource as never, agent)}
               slashCommandRuntime={buildSlashCommandRuntime(
                 configSource as never,
+                agent,
               )}
               settings={settings}
               startupWarnings={[]}

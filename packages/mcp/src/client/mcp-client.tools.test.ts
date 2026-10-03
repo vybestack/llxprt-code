@@ -30,11 +30,13 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { McpClient, populateMcpServerCommand } from './mcp-client.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import { registerMcpHostServices } from '../host/hostServices.js';
 
 // Exercises the real host seam instead of mocking a module (#3305).
 const mockEmitFeedback = vi.fn();
-registerMcpHostServices({ emitFeedback: mockEmitFeedback });
+const feedbackHost = {
+  emitFeedback: mockEmitFeedback,
+  openBrowser: async (_url: string): Promise<void> => {},
+};
 
 const realStdioModule = {
   ...(await import('@modelcontextprotocol/sdk/client/stdio.js')),
@@ -45,6 +47,8 @@ const realIndexModule = {
 const realOauthProviderModule = {
   ...(await import('../auth/oauth-provider.js')),
 };
+import { MCPOAuthTokenStorage } from '../auth/oauth-token-storage.js';
+
 const realOauthTokenStorageModule = {
   ...(await import('../auth/oauth-token-storage.js')),
 };
@@ -59,9 +63,10 @@ void vi.mock('@modelcontextprotocol/sdk/client/index.js', () =>
 void vi.mock('../auth/oauth-provider.js', () =>
   automock(realOauthProviderModule),
 );
-void vi.mock('../auth/oauth-token-storage.js', () =>
-  automock(realOauthTokenStorageModule),
-);
+void vi.mock('../auth/oauth-token-storage.js', () => ({
+  ...automock(realOauthTokenStorageModule),
+  createMcpOAuthTokenStorage: () => new MCPOAuthTokenStorage(),
+}));
 void vi.mock('../auth/oauth-utils.js', () => automock(realOauthUtilsModule));
 
 const createMockResourceRegistry = (): ResourceRegistry =>
@@ -142,6 +147,8 @@ describe('mcp-client', () => {
         createTrustedConfig(),
         false,
         '0.0.1',
+        undefined,
+        feedbackHost,
       );
       await client.connect();
       mockedClient.listTools.mockImplementation((_request, options) => {
@@ -199,6 +206,8 @@ describe('mcp-client', () => {
         createTrustedConfig(),
         false,
         '0.0.1',
+        undefined,
+        feedbackHost,
       );
 
       await client.connect();
@@ -236,6 +245,8 @@ describe('mcp-client', () => {
         createTrustedConfig(),
         false,
         '0.0.1',
+        undefined,
+        feedbackHost,
       );
 
       await client.connect();
@@ -273,6 +284,8 @@ describe('mcp-client', () => {
         createTrustedConfig(),
         false,
         '0.0.1',
+        undefined,
+        feedbackHost,
       );
 
       await client.connect();
@@ -333,6 +346,7 @@ describe('mcp-client', () => {
         false,
         '0.0.1',
         onToolsUpdatedSpy,
+        feedbackHost,
       );
 
       // 1. Connect (sets up listener)
@@ -403,6 +417,8 @@ describe('mcp-client', () => {
         createTrustedConfig(),
         false,
         '0.0.1',
+        undefined,
+        feedbackHost,
       );
 
       await client.connect();
@@ -475,6 +491,7 @@ describe('mcp-client', () => {
         false,
         '0.0.1',
         onToolsUpdatedSpy,
+        feedbackHost,
       );
 
       const clientB = new McpClient(
@@ -488,6 +505,7 @@ describe('mcp-client', () => {
         false,
         '0.0.1',
         onToolsUpdatedSpy,
+        feedbackHost,
       );
 
       await clientA.connect();
@@ -559,6 +577,8 @@ describe('mcp-client', () => {
         createTrustedConfig(),
         false,
         '0.0.1',
+        undefined,
+        feedbackHost,
       );
 
       await client.connect();
@@ -625,6 +645,7 @@ describe('mcp-client', () => {
         false,
         '0.0.1',
         onToolsUpdatedSpy,
+        feedbackHost,
       );
 
       await client.connect();
@@ -679,6 +700,7 @@ describe('mcp-client', () => {
           false,
           '0.0.1',
           vi.fn().mockRejectedValue(new Error('context refresh failed')),
+          feedbackHost,
         );
         await client.connect();
         const notificationCallback =
@@ -748,6 +770,7 @@ describe('mcp-client', () => {
         false,
         '0.0.1',
         vi.fn().mockReturnValueOnce(updatePending),
+        feedbackHost,
       );
       await client.connect();
       const notificationCallback =
@@ -813,6 +836,8 @@ describe('mcp-client', () => {
         { isTrustedFolder: () => trusted } as Config,
         false,
         '0.0.1',
+        undefined,
+        feedbackHost,
       );
       await client.connect();
       const notificationCallback =
@@ -866,6 +891,7 @@ describe('mcp-client', () => {
         vi.fn().mockImplementation(async () => {
           trusted = false;
         }),
+        feedbackHost,
       );
       await client.connect();
       const notificationCallback =

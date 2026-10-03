@@ -416,6 +416,18 @@ class DiscoveredToolInvocation extends BaseToolInvocation<
 
 export class ToolRegistry {
   private tools: Map<string, AnyDeclarativeTool> = new Map();
+  private publicationAllowed: (() => boolean) | undefined;
+
+  bindWorkspaceAuthority(isTrusted: () => boolean): void {
+    if (this.publicationAllowed !== undefined) {
+      throw new Error('Workspace authority is already bound');
+    }
+    this.publicationAllowed = isTrusted;
+  }
+
+  private canPublish(): boolean {
+    return this.publicationAllowed?.() ?? true;
+  }
   private config: IToolRegistryHost;
   private logger = debugLogger;
   private discoveryLock: Promise<void> | null = null;
@@ -849,6 +861,7 @@ export class ToolRegistry {
    * @returns An array of FunctionDeclarations.
    */
   getFunctionDeclarations(): FunctionDeclaration[] {
+    if (!this.canPublish()) return [];
     const governance = this.getToolGovernance();
     const transforms = this.getSchemaTransforms();
     const lazy = this.isLazyMcpEnabled();
@@ -873,6 +886,7 @@ export class ToolRegistry {
    * @returns An array of FunctionDeclarations for the specified tools.
    */
   getFunctionDeclarationsFiltered(toolNames: string[]): FunctionDeclaration[] {
+    if (!this.canPublish()) return [];
     const governance = this.getToolGovernance();
     const transforms = this.getSchemaTransforms();
     const declarations: FunctionDeclaration[] = [];
@@ -889,13 +903,14 @@ export class ToolRegistry {
    * Returns an array of all registered and discovered tool names.
    */
   getAllToolNames(): string[] {
-    return Array.from(this.tools.keys());
+    return this.canPublish() ? Array.from(this.tools.keys()) : [];
   }
 
   /**
    * Returns an array of all registered and discovered tool instances.
    */
   getAllTools(): AnyDeclarativeTool[] {
+    if (!this.canPublish()) return [];
     const tools = Array.from(this.tools.values()).sort((a, b) =>
       a.displayName.localeCompare(b.displayName),
     );
@@ -906,6 +921,7 @@ export class ToolRegistry {
    * Returns an array of enabled tool instances (excludes disabled tools).
    */
   getEnabledTools(): AnyDeclarativeTool[] {
+    if (!this.canPublish()) return [];
     const governance = this.getToolGovernance();
 
     return Array.from(this.tools.values())
@@ -917,6 +933,7 @@ export class ToolRegistry {
    * Returns an array of tools registered from a specific MCP server.
    */
   getToolsByServer(serverName: string): AnyDeclarativeTool[] {
+    if (!this.canPublish()) return [];
     const serverTools: AnyDeclarativeTool[] = [];
     for (const tool of this.tools.values()) {
       if (isDiscoveredMcpTool(tool) && tool.serverName === serverName) {
@@ -932,6 +949,7 @@ export class ToolRegistry {
    * @param context Optional context to inject into the tool instance
    */
   getTool(name: string, context?: ToolContext): AnyDeclarativeTool | undefined {
+    if (!this.canPublish()) return undefined;
     // Try original name first (most common case)
     let tool = this.tools.get(name);
 

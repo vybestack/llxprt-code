@@ -77,7 +77,6 @@ function makeConfig(): Config {
       allowedEnvironmentVariables: [],
       blockedEnvironmentVariables: [],
     }),
-    getSessionRecordingService: vi.fn().mockReturnValue(null),
   } as unknown as Config;
 }
 
@@ -234,7 +233,6 @@ describe('HookSystem management APIs (DELTA-HSYS-002)', () => {
         allowedEnvironmentVariables: [],
         blockedEnvironmentVariables: [],
       }),
-      getSessionRecordingService: vi.fn().mockReturnValue(null),
     } as unknown as Config;
 
     system = new HookSystem(config);

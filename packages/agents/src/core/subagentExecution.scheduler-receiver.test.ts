@@ -62,8 +62,8 @@ function makeCtx(
   return {
     schedulerConfig: {
       getSessionId: () => 'test-session',
-      disposeScheduler: vi.fn(),
     } as unknown as InitSchedulerContext['schedulerConfig'],
+    schedulerRelease: vi.fn(),
     messageBus: {
       subscribe: vi.fn(() => () => {}),
       respondToConfirmation: vi.fn(),
@@ -82,8 +82,8 @@ describe('initInteractiveScheduler — scheduler receiver preservation (issue #2
     const ctx = makeCtx({
       schedulerConfig: {
         getSessionId: () => 'test-session',
-        disposeScheduler: vi.fn(),
-        getOrCreateScheduler: vi.fn(async () => realScheduler),
+        releaseScheduler: vi.fn(),
+        acquireScheduler: vi.fn(async () => realScheduler),
       } as unknown as InitSchedulerContext['schedulerConfig'],
     });
 
@@ -101,6 +101,27 @@ describe('initInteractiveScheduler — scheduler receiver preservation (issue #2
 
     // Verify the original scheduler's schedule was actually called.
     expect(realScheduler.scheduleCallCount).toBe(1);
+  });
+
+  it('releases a subagent scheduler through its session port without a Config-shaped release lookup', async () => {
+    const realScheduler = new ReceiverSensitiveScheduler();
+    const owner = {
+      acquireScheduler: async () => realScheduler,
+      get releaseScheduler(): never {
+        throw new Error('Config-shaped release lookup');
+      },
+    };
+    const releases: unknown[] = [];
+    const ctx = makeCtx({
+      schedulerConfig:
+        owner as unknown as InitSchedulerContext['schedulerConfig'],
+      schedulerRelease: (key, purpose, handle) => {
+        releases.push([key, purpose, handle]);
+      },
+    });
+    const result = await initInteractiveScheduler(undefined, ctx);
+    await result.schedulerDispose();
+    expect(releases).toStrictEqual([[owner, 'subagent', realScheduler]]);
   });
 
   it('preserves the scheduler receiver when schedulerFactory IS provided', async () => {

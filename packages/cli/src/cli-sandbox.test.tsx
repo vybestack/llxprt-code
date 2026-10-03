@@ -19,7 +19,11 @@ import { loadSettings } from './config/settings.js';
 import { loadCliConfig } from './config/config.js';
 import { parseArguments } from './config/cliArgParser.js';
 import type { Config } from '@vybestack/llxprt-code-core';
-import { OutputFormat } from '@vybestack/llxprt-code-core';
+import {
+  MessageBus,
+  PolicyEngine,
+  OutputFormat,
+} from '@vybestack/llxprt-code-core';
 import { dynamicSettingsRegistry } from './utils/dynamicSettings.js';
 import {
   shouldRelaunchForMemory,
@@ -199,7 +203,10 @@ describe('cli sandbox integration', () => {
     } as unknown as LoadedSettings);
 
     const mockConfig = buildSandboxConfig();
-    loadCliConfigMock.mockResolvedValue(mockConfig);
+    loadCliConfigMock.mockResolvedValue({
+      config: mockConfig,
+      messageBus: new MessageBus(new PolicyEngine(), false),
+    });
     (parseArguments as Mock<typeof parseArguments>).mockResolvedValueOnce(
       buildArgv('test prompt'),
     );
@@ -259,7 +266,10 @@ describe('cli sandbox integration', () => {
     // block the hop: nested suppression is decided solely by
     // loadSandboxConfig, so getSandbox() staying defined must start_sandbox.
     process.env.SANDBOX = 'some-ci-value';
-    loadCliConfigMock.mockResolvedValue(buildSandboxConfig());
+    loadCliConfigMock.mockResolvedValue({
+      config: buildSandboxConfig(),
+      messageBus: new MessageBus(new PolicyEngine(), false),
+    });
     (parseArguments as Mock<typeof parseArguments>).mockResolvedValueOnce(
       buildArgv('test prompt'),
     );
@@ -306,8 +316,6 @@ function buildSandboxConfig(): Config {
     refreshAuth: fn().mockResolvedValue(undefined),
     getAgentClientFactory: fn(() => undefined),
     setAgentClientFactory: fn(),
-    getToolSchedulerFactory: fn(() => undefined),
-    setToolSchedulerFactory: fn(),
     getTaskToolRegistration: fn(() => undefined),
     setTaskToolRegistration: fn(),
     getProvider: fn(() => undefined),

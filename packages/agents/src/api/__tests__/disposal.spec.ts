@@ -283,6 +283,8 @@ describe('Disposal @plan:PLAN-20260617-COREAPI.P13 @requirement:REQ-016', () => 
       // ONLY the two active extensions were unloaded, in encounter order; the
       // inactive 'beta-inactive' was filtered out by the isActive predicate.
       expect(recorder.unloaded).toStrictEqual(['alpha', 'gamma']);
+      await agent.dispose();
+      expect(recorder.unloaded).toStrictEqual(['alpha', 'gamma']);
       // The teardown step completed and recorded its marker.
       expect(extensionsDisposed(probe)).toBe(true);
     } finally {
@@ -324,15 +326,10 @@ describe('Disposal @plan:PLAN-20260617-COREAPI.P13 @requirement:REQ-016', () => 
     }
   });
 
-  it('T13e a loader lacking the optional unloadExtension method is skipped defensively: dispose completes, nothing is unloaded @plan:PLAN-20260617-COREAPI.P24 @requirement:REQ-016', async () => {
+  it('T13e a loader missing required unloadExtension reports a cleanup failure @plan:PLAN-20260617-COREAPI.P24 @requirement:REQ-016', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
       const probe: DisposalProbe = captureProbe(agent);
-      // Loader exposes getExtensions() with an ACTIVE extension but does NOT
-      // surface unloadExtension. dispose()'s defensive guard
-      // (unloadExtensionSafely) must skip the missing method rather than
-      // crashing — dispose still completes and records its marker, with nothing
-      // unloaded.
       const extensions: readonly FakeExtension[] = [
         {
           name: 'active-but-unloadless',
@@ -344,10 +341,10 @@ describe('Disposal @plan:PLAN-20260617-COREAPI.P13 @requirement:REQ-016', () => 
       ];
       const recorder = installLoaderWithoutUnload(probe, extensions);
 
-      await agent.dispose();
+      await expect(agent.dispose()).rejects.toThrow('unloadExtension');
 
       expect(recorder.unloaded).toStrictEqual([]);
-      expect(extensionsDisposed(probe)).toBe(true);
+      expect(sessionLocksReleased(probe)).toBe(true);
     } finally {
       await cleanup();
     }
@@ -382,11 +379,13 @@ describe('Disposal @plan:PLAN-20260617-COREAPI.P13 @requirement:REQ-016', () => 
       // "not-yet-torn-down" reads.
       expect(agentClientDisposed(probe)).toBe(false);
       expect(extensionsDisposed(probe)).toBe(false);
-      // First dispose performs the teardown; dispose.md lines 11-12 guard with
-      // a disposed flag so a second dispose() is a no-op that resolves cleanly.
-      await agent.dispose();
-      // The second call must not throw — the idempotent guard short-circuits.
-      await agent.dispose();
+      const firstDisposal = agent.dispose();
+      const concurrentDisposal = agent.dispose();
+      expect(concurrentDisposal).toBe(firstDisposal);
+      await firstDisposal;
+      const repeatedDisposal = agent.dispose();
+      expect(repeatedDisposal).toBe(firstDisposal);
+      await repeatedDisposal;
       // Disposed flags remain true after the idempotent second dispose.
       expect(agentClientDisposed(probe)).toBe(true);
       expect(extensionsDisposed(probe)).toBe(true);

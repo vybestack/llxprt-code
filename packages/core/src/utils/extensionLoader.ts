@@ -9,9 +9,28 @@ import type { Config, LlxprtExtension } from '../config/config.js';
 
 export type { LlxprtExtension } from '../config/config.js';
 
+/** Attempts every active unload and returns failures for the owner's cleanup aggregate. */
+export async function unloadActiveExtensions(
+  loader: ExtensionLoader,
+): Promise<unknown[]> {
+  const failures: unknown[] = [];
+  const activeExtensions = loader
+    .getExtensions()
+    .filter((extension) => extension.isActive);
+  for (const extension of activeExtensions) {
+    try {
+      await loader.unloadExtension(extension);
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  return failures;
+}
+
 export abstract class ExtensionLoader {
   // Assigned in `start`.
   protected config: Config | undefined;
+  private refreshSkills: (() => Promise<void>) | undefined;
 
   // Used to track the count of currently starting and stopping extensions and
   // fire appropriate events.
@@ -34,17 +53,23 @@ export abstract class ExtensionLoader {
    */
   abstract getExtensions(): LlxprtExtension[];
 
+  abstract unloadExtension(extension: LlxprtExtension): Promise<void>;
+
   /**
    * Fully initializes all active extensions.
    *
    * Called within `Config.initialize`, which must already have an
    * McpClientManager, PromptRegistry, and ChatSession set up.
    */
-  async start(config: Config): Promise<void> {
+  async start(
+    config: Config,
+    refreshSkills: () => Promise<void>,
+  ): Promise<void> {
     this.isStarting = true;
     try {
       if (!this.config) {
         this.config = config;
+        this.refreshSkills = refreshSkills;
       } else {
         throw new Error('Already started, you may only call `start` once.');
       }
@@ -178,7 +203,7 @@ export abstract class ExtensionLoader {
    * transition is not misattributed to startup.
    */
   private async maybeRefreshSkills(): Promise<void> {
-    if (!this.config) {
+    if (!this.config || !this.refreshSkills) {
       throw new Error('Cannot refresh skills prior to calling `start`.');
     }
     if (this.isStarting) {
@@ -190,7 +215,7 @@ export abstract class ExtensionLoader {
     }
     this.skillsNeedRefresh = false;
     try {
-      await this.config.refreshSkills();
+      await this.refreshSkills();
     } catch (error) {
       // The failure propagates; this only restores the marker so the next
       // transition retries rather than inheriting a skill surface that was

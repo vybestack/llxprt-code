@@ -21,6 +21,14 @@ export async function captureRollbackFailure(
   }
 }
 
+export function throwCleanupFailures(
+  failures: unknown[],
+  message: string,
+): void {
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1) throw new AggregateError(failures, message);
+}
+
 export async function cleanupSessionResources(
   integration: RecordingIntegration | null,
   recording: SessionRecordingService | null,

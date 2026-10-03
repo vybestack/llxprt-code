@@ -307,7 +307,7 @@ describe('loadCliConfig interactive', () => {
     process.stdin.isTTY = true;
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       {},
       [],
       new ExtensionEnablementManager(
@@ -324,7 +324,7 @@ describe('loadCliConfig interactive', () => {
     process.stdin.isTTY = false;
     process.argv = ['node', 'script.js', '--prompt-interactive', 'test'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       {},
       [],
       new ExtensionEnablementManager(
@@ -341,7 +341,7 @@ describe('loadCliConfig interactive', () => {
     process.stdin.isTTY = false;
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       {},
       [],
       new ExtensionEnablementManager(
@@ -358,7 +358,7 @@ describe('loadCliConfig interactive', () => {
     process.stdin.isTTY = true;
     process.argv = ['node', 'script.js', '--prompt', 'test'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       {},
       [],
       new ExtensionEnablementManager(
@@ -375,7 +375,7 @@ describe('loadCliConfig interactive', () => {
     process.stdin.isTTY = true;
     process.argv = ['node', 'script.js', '--model', 'gemini-2.5-pro', 'Hello'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       {},
       [],
       new ExtensionEnablementManager(
@@ -399,7 +399,7 @@ describe('loadCliConfig interactive', () => {
       'Hello world',
     ];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       {},
       [],
       new ExtensionEnablementManager(
@@ -416,7 +416,7 @@ describe('loadCliConfig interactive', () => {
     process.stdin.isTTY = true;
     process.argv = ['node', 'script.js', '-e', 'none', 'hello'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       {},
       [],
       new ExtensionEnablementManager(
@@ -435,7 +435,7 @@ describe('loadCliConfig interactive', () => {
     process.stdin.isTTY = true;
     process.argv = ['node', 'script.js', 'hello world how are you'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       {},
       [],
       new ExtensionEnablementManager(
@@ -465,7 +465,7 @@ describe('loadCliConfig interactive', () => {
       'array',
     ];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       {},
       [],
       new ExtensionEnablementManager(
@@ -484,7 +484,7 @@ describe('loadCliConfig interactive', () => {
     process.stdin.isTTY = true;
     process.argv = ['node', 'script.js', ''];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       {},
       [],
       new ExtensionEnablementManager(
@@ -512,7 +512,7 @@ describe('loadCliConfig interactive', () => {
       'you',
     ];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       {},
       [],
       new ExtensionEnablementManager(
@@ -531,7 +531,7 @@ describe('loadCliConfig interactive', () => {
     process.stdin.isTTY = true;
     process.argv = ['node', 'script.js', '--model', 'gemini-2.5-pro'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       {},
       [],
       new ExtensionEnablementManager(
@@ -616,7 +616,7 @@ describe('loadCliConfig fileFiltering', () => {
         fileFiltering: { [property]: value },
       };
       const argv = await parseArguments(settings);
-      const config = await loadCliConfig(
+      const { config } = await loadCliConfig(
         settings,
         [],
         new ExtensionEnablementManager(

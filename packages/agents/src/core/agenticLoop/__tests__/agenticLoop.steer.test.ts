@@ -73,6 +73,7 @@ describe('AgenticLoop steering (injectSteer / drainSteer)', () => {
       const loop = new AgenticLoop({
         agentClient: client,
         config,
+        schedulerOwner: config.schedulerOwner,
         messageBus,
       });
 
@@ -157,7 +158,12 @@ describe('AgenticLoop steering (injectSteer / drainSteer)', () => {
         [toolCallRequestEvent('image_tool', 'call-1'), finishedEvent()],
         [contentEvent('final-response'), finishedEvent()],
       ]);
-      const loop = new AgenticLoop({ agentClient: client, config, messageBus });
+      const loop = new AgenticLoop({
+        agentClient: client,
+        config,
+        schedulerOwner: config.schedulerOwner,
+        messageBus,
+      });
 
       const eventsPromise = collectEvents(
         loop,
@@ -202,6 +208,7 @@ describe('AgenticLoop steering (injectSteer / drainSteer)', () => {
     const loop = new AgenticLoop({
       agentClient: client,
       config,
+      schedulerOwner: config.schedulerOwner,
       messageBus,
     });
 
@@ -248,6 +255,7 @@ describe('AgenticLoop steering (injectSteer / drainSteer)', () => {
     const loop = new AgenticLoop({
       agentClient: client,
       config,
+      schedulerOwner: config.schedulerOwner,
       messageBus,
     });
 
@@ -284,6 +292,7 @@ describe('AgenticLoop steering (injectSteer / drainSteer)', () => {
     const loop = new AgenticLoop({
       agentClient: client,
       config,
+      schedulerOwner: config.schedulerOwner,
       messageBus,
     });
 
@@ -318,6 +327,7 @@ describe('AgenticLoop steering (injectSteer / drainSteer)', () => {
     const loop = new AgenticLoop({
       agentClient: client,
       config,
+      schedulerOwner: config.schedulerOwner,
       messageBus,
     });
 

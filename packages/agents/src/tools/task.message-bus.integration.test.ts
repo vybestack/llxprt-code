@@ -26,6 +26,7 @@ import { getTestRuntimeMessageBus } from '@vybestack/llxprt-code-test-utils/core
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/tools.js';
 import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
 import { CoreToolScheduler } from '../core/coreToolScheduler.js';
+import { createSessionSchedulerOwner } from '../api/agentRuntimeAssembly.js';
 import { ChatSession } from '../core/chatSession.js';
 import { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
 import {
@@ -134,9 +135,9 @@ describe('TaskTool runtime MessageBus integration', () => {
       getTool: (name) => (name === TOOL_NAME ? probeTool : undefined),
     });
     config = runtimeConfig;
-    runtimeConfig.setToolSchedulerFactory(
-      (options) => new CoreToolScheduler(options),
-    );
+    const schedulerFactory = (
+      options: ConstructorParameters<typeof CoreToolScheduler>[0],
+    ) => new CoreToolScheduler(options);
 
     const sessionMessageBus = getTestRuntimeMessageBus(runtimeConfig);
     const decoyMessageBus = new MessageBus(
@@ -172,8 +173,13 @@ describe('TaskTool runtime MessageBus integration', () => {
     const runtimeBundle = createStatelessRuntimeBundle({
       toolRegistry: runtimeConfig.getToolRegistry(),
     });
+    const schedulerOwner = createSessionSchedulerOwner(
+      runtimeConfig,
+      schedulerFactory,
+    );
     const tool = new TaskTool(runtimeConfig, {
       messageBus: sessionMessageBus,
+      schedulerOwner,
       isInteractiveEnvironment: () => false,
       orchestratorFactory: (coreSchedulerMessageBus) => {
         expect(coreSchedulerMessageBus).toBe(sessionMessageBus);
@@ -183,6 +189,7 @@ describe('TaskTool runtime MessageBus integration', () => {
           foregroundConfig: runtimeConfig,
           runtimeLoader: vi.fn().mockResolvedValue(runtimeBundle),
           messageBus: coreSchedulerMessageBus,
+          schedulerOwner,
         });
       },
     });
@@ -197,5 +204,6 @@ describe('TaskTool runtime MessageBus integration', () => {
     expect(sessionRejections).toHaveLength(1);
     expect(sessionRejections[0].toolCall.name).toBe(TOOL_NAME);
     expect(decoyRejections).toHaveLength(0);
+    await schedulerOwner.dispose();
   }, 30_000);
 });

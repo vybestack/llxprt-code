@@ -34,6 +34,7 @@ import type {
   MCPServerConfig,
 } from '@vybestack/llxprt-code-core/config/config.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import {
   mcpServerRequiresOAuth,
   MCPOAuthTokenStorage,
@@ -107,6 +108,7 @@ function buildDeps(
 ) {
   return buildMcpControlDeps({
     config: fakeConfig(servers, extra),
+    messageBus: new MessageBus(),
     isMcpAuthenticated: () => false,
     markAuthenticated: () => {},
     resolveClient: () => ({}) as unknown as AgentClientContract,
@@ -276,5 +278,51 @@ describe('buildMcpControlDeps discovery passthrough closures @plan:PLAN-20260622
 
     const view = deps.getResourceRegistry?.();
     expect(view?.getAllResources()).toStrictEqual(resources);
+  });
+});
+
+describe('buildMcpControlDeps session MessageBus routing', () => {
+  it('routes same-label session refresh and reload operations through each exact bus', async () => {
+    const refreshBuses: MessageBus[] = [];
+    const reloadBuses: MessageBus[] = [];
+    const refreshServers: Array<string | undefined> = [];
+    const config = {
+      getMcpServers: () => ({}),
+      refreshMcpServers: async (
+        messageBus: MessageBus,
+        server?: string,
+      ): Promise<void> => {
+        refreshBuses.push(messageBus);
+        refreshServers.push(server);
+      },
+      reloadMcpServers: async (messageBus: MessageBus): Promise<void> => {
+        reloadBuses.push(messageBus);
+      },
+    } as unknown as Config;
+    const busA = new MessageBus();
+    const busB = new MessageBus();
+    const buildForBus = (messageBus: MessageBus) =>
+      buildMcpControlDeps({
+        config,
+        messageBus,
+        isMcpAuthenticated: () => false,
+        markAuthenticated: () => {},
+        resolveClient: () => ({}) as unknown as AgentClientContract,
+      });
+
+    const sessionA = buildForBus(busA);
+    const sessionB = buildForBus(busB);
+    await sessionA.refreshMcpServers?.('shared-label');
+    await sessionB.refreshMcpServers?.('shared-label');
+    await sessionA.reloadMcpServers?.();
+    await sessionB.reloadMcpServers?.();
+
+    expect(refreshBuses).toHaveLength(2);
+    expect(refreshBuses[0]).toBe(busA);
+    expect(refreshBuses[1]).toBe(busB);
+    expect(refreshServers).toStrictEqual(['shared-label', 'shared-label']);
+    expect(reloadBuses).toHaveLength(2);
+    expect(reloadBuses[0]).toBe(busA);
+    expect(reloadBuses[1]).toBe(busB);
   });
 });

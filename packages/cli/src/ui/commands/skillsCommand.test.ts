@@ -19,6 +19,8 @@ import { MessageType } from '../types.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import type { CommandContext } from './types.js';
 import type { Config, SkillDefinition } from '@vybestack/llxprt-code-core';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
   SettingScope,
   type LoadedSettings,
@@ -50,9 +52,11 @@ function findSkill(
 
 describe('skillsCommand', () => {
   let context: CommandContext;
+  let messageBus: MessageBus;
 
   beforeEach(() => {
     vi.useFakeTimers();
+    messageBus = new MessageBus();
     const skills = [
       {
         name: 'skill1',
@@ -69,6 +73,9 @@ describe('skillsCommand', () => {
     ];
     context = createMockCommandContext({
       services: {
+        agent: {
+          getMessageBus: () => messageBus,
+        } as unknown as Agent,
         config: {
           getSkillManager: vi.fn().mockReturnValue({
             getAllSkills: vi.fn().mockReturnValue(skills),
@@ -342,7 +349,7 @@ describe('skillsCommand', () => {
       await advanceTimersByTimeAsync(300);
       await actionPromise;
 
-      expect(reloadSkillsMock).toHaveBeenCalled();
+      expect(reloadSkillsMock).toHaveBeenCalledWith(messageBus);
       expect(context.ui.setPendingItem).toHaveBeenCalledWith(null);
       expect(context.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -441,6 +448,23 @@ describe('skillsCommand', () => {
         expect.objectContaining({
           type: MessageType.ERROR,
           text: 'Could not retrieve configuration.',
+        }),
+        expect.any(Number),
+      );
+    });
+
+    it('should show error if the active agent session is missing', async () => {
+      const reloadCmd = skillsCommand.subCommands!.find(
+        (s) => s.name === 'reload',
+      )!;
+      context.services.agent = null;
+
+      await reloadCmd.action!(context, '');
+
+      expect(context.ui.addItem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: MessageType.ERROR,
+          text: 'Could not retrieve the active agent session.',
         }),
         expect.any(Number),
       );

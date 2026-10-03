@@ -5,8 +5,15 @@
  */
 
 import type { SchedulerHandle } from './sessionExecutionServices.js';
+import type { ToolSchedulerCallbackPayload } from '../core/toolSchedulerContract.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+
+export type SchedulerCallbacks = Omit<ToolSchedulerCallbackPayload, 'config'>;
+
+export interface SchedulerOptions {
+  interactiveMode?: boolean;
+}
 
 /**
  * Purpose a scheduler entry is created for. Replaces the string key
@@ -61,6 +68,8 @@ export interface SessionSchedulerRegistry {
    * is ignored.
    */
   release(owner: object, purpose: SchedulerPurpose, handle?: object): void;
+  /** Cancel work and pending waits without releasing scheduler listeners. */
+  cancelAll(): Promise<void>;
   /** Dispose every entry, joining in-flight creations first. */
   disposeAll(): Promise<void>;
 }

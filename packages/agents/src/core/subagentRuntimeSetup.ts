@@ -15,14 +15,13 @@
 import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { ToolSchedulerContract } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
 import { triggerPreCompressHook } from '@vybestack/llxprt-code-core/core/lifecycleHookTriggers.js';
-import {
-  ApprovalMode,
-  type SchedulerCallbacks,
-  type SchedulerOptions,
-} from '@vybestack/llxprt-code-core/config/config.js';
-import type { SchedulerPurpose } from '@vybestack/llxprt-code-core/session/sessionSchedulerRegistry.js';
+import { ApprovalMode } from '@vybestack/llxprt-code-core/config/config.js';
+import type {
+  SchedulerCallbacks,
+  SchedulerOptions,
+  SchedulerPurpose,
+} from '@vybestack/llxprt-code-core/session/sessionSchedulerRegistry.js';
 import { type ToolExecutionConfig } from './nonInteractiveToolExecutor.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/index.js';
@@ -50,6 +49,7 @@ import {
   SUBAGENT_EXCLUDED_TOOL_NAMES,
 } from './toolGovernance.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import type { SessionSchedulerOwner } from '../api/agentRuntimeAssembly.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { resolvePromptMemory } from './promptMemoryPolicy.js';
 import {
@@ -256,6 +256,7 @@ export function createToolExecutionConfig(
   messageBus?: MessageBus,
   settingsSnapshot?: ReadonlySettingsSnapshot,
   toolConfig?: ToolConfig,
+  schedulerOwner?: SessionSchedulerOwner,
 ): ToolExecutionConfig {
   const ephemerals = buildEphemeralSettings(settingsSnapshot);
 
@@ -274,19 +275,25 @@ export function createToolExecutionConfig(
     getSessionId: () => runtimeBundle.runtimeContext.state.sessionId,
     getTelemetryLogPromptsEnabled: () =>
       Boolean(settingsSnapshot?.telemetry?.enabled),
-    getOrCreateScheduler: (owner, purpose, callbacks, options, dependencies) =>
-      foregroundConfig.getOrCreateScheduler(
-        owner,
-        purpose,
-        callbacks,
-        options,
-        {
-          messageBus: dependencies?.messageBus ?? messageBus,
-          toolRegistry: dependencies?.toolRegistry ?? toolRegistry,
-        },
-      ),
-    disposeScheduler: (owner, purpose, handle) =>
-      foregroundConfig.disposeScheduler(owner, purpose, handle),
+    acquireScheduler: (owner, purpose, callbacks, options, dependencies) => {
+      if (schedulerOwner === undefined) {
+        throw new Error('Subagent scheduler owner is required');
+      }
+      const bus = dependencies?.messageBus ?? messageBus;
+      if (bus === undefined) {
+        throw new Error('Subagent scheduler acquisition requires a MessageBus');
+      }
+      return schedulerOwner.acquire(owner, purpose, callbacks, options, {
+        messageBus: bus,
+        toolRegistry: dependencies?.toolRegistry ?? toolRegistry,
+      });
+    },
+    releaseScheduler: (owner, purpose, handle) => {
+      if (schedulerOwner === undefined) {
+        throw new Error('Subagent scheduler owner is required');
+      }
+      schedulerOwner.release(owner, purpose, handle);
+    },
   };
 }
 
@@ -658,11 +665,14 @@ function resolveConfigAccessors(
  *
  * Delegation chain: createSchedulerConfig → toolExecutorContext → foregroundConfig
  */
+export type SubagentSchedulerConfig = Config &
+  Pick<ToolExecutionConfig, 'acquireScheduler' | 'releaseScheduler'>;
+
 export function createSchedulerConfig(
   toolExecutorContext: ToolExecutionConfig,
   foregroundConfig: Config,
   options?: { interactive?: boolean },
-): Config {
+): SubagentSchedulerConfig {
   const isInteractive = options?.interactive ?? false;
 
   // Defensive runtime guard: test doubles and bootstrap configs may not
@@ -673,18 +683,6 @@ export function createSchedulerConfig(
     getTelemetryLogPromptsEnabled?: () => boolean;
     getAllowedTools?: () => string[] | undefined;
     getToolRegistry?: () => unknown;
-    getOrCreateScheduler?: (
-      owner: object,
-      purpose: SchedulerPurpose,
-      callbacks: unknown,
-      options: unknown,
-      deps: unknown,
-    ) => Promise<ToolSchedulerContract>;
-    disposeScheduler?: (
-      owner: object,
-      purpose: SchedulerPurpose,
-      handle?: object,
-    ) => void;
     getEnableHooks?: () => boolean;
     getHooks?: () => unknown;
     getHookSystem?: () => unknown;
@@ -707,36 +705,33 @@ export function createSchedulerConfig(
         ? foregroundConfig.getApprovalMode()
         : ApprovalMode.DEFAULT,
     getPolicyEngine: () => foregroundConfig.getPolicyEngine(),
-    getOrCreateScheduler: (
+    acquireScheduler: (
       owner: object,
       purpose: SchedulerPurpose,
       callbacks: SchedulerCallbacks,
       schedulerOptions?: SchedulerOptions,
-      dependencies?: {
-        messageBus?: MessageBus;
-        toolRegistry?: ToolRegistry;
-      },
+      dependencies?: { messageBus?: MessageBus; toolRegistry?: ToolRegistry },
     ) =>
-      toolExecutorContext.getOrCreateScheduler(
+      toolExecutorContext.acquireScheduler(
         owner,
         purpose,
         callbacks,
         { ...schedulerOptions, interactiveMode: isInteractive },
         dependencies,
       ),
-    disposeScheduler: (
+    releaseScheduler: (
       owner: object,
       purpose: SchedulerPurpose,
-      handle?: object,
+      handle: object,
     ) => {
-      toolExecutorContext.disposeScheduler(owner, purpose, handle);
+      toolExecutorContext.releaseScheduler(owner, purpose, handle);
     },
     getEnableHooks: () => defensiveConfig.getEnableHooks?.() ?? false,
     getHooks: () => defensiveConfig.getHooks?.(),
     getHookSystem: () => defensiveConfig.getHookSystem?.(),
     getWorkingDir: () => defensiveConfig.getWorkingDir?.() ?? process.cwd(),
     getTargetDir: () => defensiveConfig.getTargetDir?.() ?? process.cwd(),
-  } as unknown as Config;
+  } as SubagentSchedulerConfig;
 }
 
 // ---------------------------------------------------------------------------

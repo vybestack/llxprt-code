@@ -100,7 +100,9 @@ async function exportPackage(
     resolved.target.kind === 'session'
       ? resolved.target.session
       : resolved.target.source;
-  const activeRecording = config.getSessionRecordingService?.();
+  const agent = ctx.services.agent;
+  if (agent === null) throw new Error('Agent session is unavailable');
+  const activeRecording = agent.session.getActiveRecording();
   if (activeRecording?.getSessionId() === source.sessionId) {
     if (ctx.recordingIntegration !== undefined) {
       await ctx.recordingIntegration.flushAtTurnBoundary();

@@ -14,12 +14,9 @@ import type { PromptRegistry } from './test-support/mcpClientTestSupport.js';
 import type { ResourceRegistry } from './test-support/mcpClientTestSupport.js';
 import { WorkspaceContext } from './test-support/mcpClientTestSupport.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import { registerMcpHostServices } from '../host/hostServices.js';
 import { McpClient } from './mcp-client.js';
 
 // Exercises the real host seam instead of mocking a module (#3305).
-const mockEmitFeedback = vi.fn();
-registerMcpHostServices({ emitFeedback: mockEmitFeedback });
 
 const realStdioModule = {
   ...(await import('@modelcontextprotocol/sdk/client/stdio.js')),
@@ -30,6 +27,8 @@ const realIndexModule = {
 const realOauthProviderModule = {
   ...(await import('../auth/oauth-provider.js')),
 };
+import { MCPOAuthTokenStorage } from '../auth/oauth-token-storage.js';
+
 const realOauthTokenStorageModule = {
   ...(await import('../auth/oauth-token-storage.js')),
 };
@@ -44,9 +43,10 @@ void vi.mock('@modelcontextprotocol/sdk/client/index.js', () =>
 void vi.mock('../auth/oauth-provider.js', () =>
   automock(realOauthProviderModule),
 );
-void vi.mock('../auth/oauth-token-storage.js', () =>
-  automock(realOauthTokenStorageModule),
-);
+void vi.mock('../auth/oauth-token-storage.js', () => ({
+  ...automock(realOauthTokenStorageModule),
+  createMcpOAuthTokenStorage: () => new MCPOAuthTokenStorage(),
+}));
 void vi.mock('../auth/oauth-utils.js', () => automock(realOauthUtilsModule));
 
 type CleanupName = 'prompts' | 'resources' | 'tools';

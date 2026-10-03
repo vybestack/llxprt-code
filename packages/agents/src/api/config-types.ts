@@ -19,9 +19,12 @@ import type {
   HookEventName,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import type { ToolSchedulerFactory } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
 import type { OutputFormat } from '@vybestack/llxprt-code-core/utils/output-format.js';
 import { ProviderActivationIntentSchema } from './config-schema.js';
 import type { ActivationPreflightToken } from './activationPreflightState.js';
+import type { WorkspaceContext } from '@vybestack/llxprt-code-core/utils/workspaceContext.js';
+import type { FileSystemService } from '@vybestack/llxprt-code-core/services/fileSystemService.js';
 
 export interface ProviderAuth {
   readonly apiKey?: string;
@@ -353,11 +356,16 @@ export interface AgentConfig {
 
 export interface FromConfigOptions {
   readonly config: Config;
+  /** Borrowed workspace services; their lifecycle remains with the caller. */
+  readonly workspace?: {
+    readonly context?: WorkspaceContext;
+    readonly fileSystem: FileSystemService;
+  };
   readonly messageBus?: MessageBus;
   readonly onApproval?: ApprovalHandler;
   readonly onOAuthPrompt?: OAuthPromptHandler;
   readonly editorCallbacks?: EditorCallbacks;
-  readonly toolSchedulerFactory?: AgentSchedulerFactory;
+  readonly toolSchedulerFactory?: ToolSchedulerFactory;
   readonly sessionId?: string;
   /**
    * Declarative provider-activation / auth intent (#2374). When supplied,

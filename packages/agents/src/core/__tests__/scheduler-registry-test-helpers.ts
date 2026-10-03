@@ -11,17 +11,20 @@
  * createSessionSchedulerRegistry, and real schedulers are built through
  * the fixture's own factory. The adapter adds only the per-acquisition
  * callback refresh through handle.setCallbacks (last writer wins),
- * mirroring Config.getOrCreateScheduler. Agent test fixtures wire this in
+ * mirroring session scheduler acquisition. Agent test fixtures wire this in
  * where the deleted process-global scheduler singleton used to sit.
  */
 
 import { createSessionSchedulerRegistry } from '@vybestack/llxprt-code-core';
+import { createSessionSchedulerOwner } from '../../api/agentRuntimeAssembly.js';
+import type { ToolExecutionConfig } from '../nonInteractiveToolExecutor.js';
+import type { ToolSchedulerFactory } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
 import type { SchedulerHandle } from '@vybestack/llxprt-code-core/session/sessionExecutionServices.js';
-import type { SchedulerPurpose } from '@vybestack/llxprt-code-core/session/sessionSchedulerRegistry.js';
 import type {
-  Config,
   SchedulerCallbacks,
-} from '@vybestack/llxprt-code-core/config/config.js';
+  SchedulerPurpose,
+} from '@vybestack/llxprt-code-core/session/sessionSchedulerRegistry.js';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 
@@ -72,7 +75,7 @@ export function createSchedulerRegistryDelegate(
       dependencies,
     ) {
       // Construction deps flow through the acquisition that starts the
-      // entry (same shape as Config.getOrCreateScheduler); the fallbacks
+      // entry (same shape as session acquisition); the fallbacks
       // only cover acquisitions that supply none.
       const handle = await registry.getOrCreate(owner, purpose, {
         ...options,
@@ -88,5 +91,23 @@ export function createSchedulerRegistryDelegate(
     disposeScheduler(owner, purpose, handle) {
       registry.release(owner, purpose, handle);
     },
+  };
+}
+
+export function createToolExecutionPort(
+  config: Config,
+  factory: ToolSchedulerFactory,
+  messageBus: MessageBus,
+  toolRegistry: ToolRegistry,
+): Pick<ToolExecutionConfig, 'acquireScheduler' | 'releaseScheduler'> {
+  const owner = createSessionSchedulerOwner(config, factory);
+  return {
+    acquireScheduler: (identity, purpose, callbacks, options, dependencies) =>
+      owner.acquire(identity, purpose, callbacks, options, {
+        messageBus: dependencies?.messageBus ?? messageBus,
+        toolRegistry: dependencies?.toolRegistry ?? toolRegistry,
+      }),
+    releaseScheduler: (identity, purpose, handle) =>
+      owner.release(identity, purpose, handle),
   };
 }

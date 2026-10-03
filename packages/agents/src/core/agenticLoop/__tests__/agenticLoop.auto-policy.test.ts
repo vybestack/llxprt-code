@@ -66,6 +66,7 @@ describe('AgenticLoop integration - a2a-style with auto policy', () => {
     const loop = new AgenticLoop({
       agentClient: client,
       config,
+      schedulerOwner: config.schedulerOwner,
       messageBus,
       approvalHandler,
     });

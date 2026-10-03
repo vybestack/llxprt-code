@@ -3,11 +3,15 @@
  * ConfigBase extends this and adds abstract methods + complex multi-line logic.
  */
 
-import type { McpClientManager } from '@vybestack/llxprt-code-mcp';
+import {
+  MCPServerStatus,
+  type McpClientManager,
+} from '@vybestack/llxprt-code-mcp';
 import type { MCPServerConfig } from './configTypes.js';
 
 export interface McpRuntimeStatus {
   readonly servers: Record<string, MCPServerConfig>;
+  readonly serverStatuses: ReadonlyMap<string, MCPServerStatus>;
   readonly discoveryFailures: ReadonlyMap<string, string>;
   readonly discoveryState: ReturnType<McpClientManager['getDiscoveryState']>;
 }
@@ -18,8 +22,15 @@ export function mcpRuntimeStatus(
   manager: McpClientManager | undefined,
 ): McpRuntimeStatus | undefined {
   if (manager === undefined) return undefined;
+  const servers = manager.getMcpServers();
   return {
-    servers: manager.getMcpServers(),
+    servers,
+    serverStatuses: new Map(
+      Object.keys(servers).map((name) => [
+        name,
+        manager.getClient(name)?.getStatus() ?? MCPServerStatus.DISCONNECTED,
+      ]),
+    ),
     discoveryFailures: manager.getDiscoveryFailures(),
     discoveryState: manager.getDiscoveryState(),
   };
@@ -27,14 +38,15 @@ export function mcpRuntimeStatus(
 
 export async function refreshMcpServers(
   manager: McpClientManager | undefined,
+  refreshContext: () => Promise<void>,
   server?: string,
 ): Promise<void> {
   if (manager === undefined) return;
   if (server === undefined) {
-    await manager.restart();
+    await manager.restart(refreshContext);
     return;
   }
-  await manager.restartServer(server);
+  await manager.restartServer(server, refreshContext);
 }
 
 export async function awaitMcpDiscoveryGate(

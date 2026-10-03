@@ -4,12 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { coreEvents, openBrowserSecurely } from '@vybestack/llxprt-code-core';
-import { registerMcpHostServices } from '@vybestack/llxprt-code-mcp/host/hostServices.js';
+import { coreEvents } from '@vybestack/llxprt-code-core';
+import type { HostFeedbackSink } from '@vybestack/llxprt-code-mcp/host/hostServices.js';
 
-export function wireMcpHostServices(): void {
-  registerMcpHostServices({
-    emitFeedback: (...args) => coreEvents.emitFeedback(...args),
-    openBrowser: openBrowserSecurely,
-  });
-}
+export const agentMcpFeedback: HostFeedbackSink = (...args) =>
+  coreEvents.emitFeedback(...args);

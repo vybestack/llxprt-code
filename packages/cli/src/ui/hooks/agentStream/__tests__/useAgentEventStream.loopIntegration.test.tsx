@@ -44,7 +44,10 @@ import {
   type DisplayCallbacks,
   type AgentClientContract,
 } from '@vybestack/llxprt-code-agents';
-import { createSchedulerRegistryDelegate } from './schedulerRegistryTestHelper.js';
+import {
+  createSchedulerRegistryDelegate,
+  createLoopSchedulerOwnerForTest,
+} from './schedulerRegistryTestHelper.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import {
   AgentEventType,
@@ -252,6 +255,10 @@ interface RealEngineAgentOptions {
 }
 
 function createRealEngineAgent(opts: RealEngineAgentOptions): Agent {
+  const schedulerOwner = createLoopSchedulerOwnerForTest(
+    opts.config,
+    opts.messageBus,
+  );
   const displayCallbacksHolder =
     opts.displayCallbacksHolder ??
     ({ current: {} } as { current: DisplayCallbacks });
@@ -273,6 +280,7 @@ function createRealEngineAgent(opts: RealEngineAgentOptions): Agent {
         agentClient: opts.agentClient,
         config: opts.config,
         messageBus: opts.messageBus,
+        schedulerOwner,
         interactiveMode: opts.interactiveMode ?? true,
         displayCallbacks: displayCallbacksHolder.current,
       });

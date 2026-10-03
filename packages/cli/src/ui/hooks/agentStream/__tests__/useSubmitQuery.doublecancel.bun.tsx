@@ -134,6 +134,7 @@ function createDeps(options: Partial<DoubleCancelDeps> = {}): DoubleCancelDeps {
 
 interface SubmitQueryOverrides {
   runtime?: StreamRuntime;
+  agent?: UseSubmitQueryDeps['agent'];
   queuedSubmissionsRef?: React.MutableRefObject<QueuedSubmission[]>;
   queueOperations?: ReturnType<typeof createQueueOperations>;
   tryReserveDrain?: () => boolean;
@@ -163,7 +164,7 @@ function createUseSubmitQueryDeps(
     runtime:
       overrides.runtime ??
       createStreamRuntimeForTest({}, createMockOverrides()),
-    agent: createMockAgent(),
+    agent: overrides.agent ?? createMockAgent(),
     addItem: overrides.addItem ?? vi.fn().mockReturnValue(1),
     removeItems: vi.fn(),
     settings: createLoadedSettings(),
@@ -372,17 +373,19 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
   it('keeps submission callbacks and event subscriptions stable across rerenders', () => {
     const unsubscribeMcp = vi.fn();
     const onMcpClientUpdate = vi.fn(() => unsubscribeMcp);
-    const setupAsyncTaskAutoTrigger = vi.fn(() => vi.fn());
+    const setupAutoTrigger = vi.fn(() => vi.fn());
     const runtime = createStreamRuntimeForTest(
       {},
       {
         events: { onMcpClientUpdate },
-        asyncTasks: { setupAsyncTaskAutoTrigger },
       },
     );
+    const agent = createMockAgent();
+    agent.tasks.setupAutoTrigger = setupAutoTrigger;
     const deps = createDeps();
     const { result, rerender, unmount } = renderUseSubmitQuery(deps, {
       runtime,
+      agent,
     });
     const initialSubmitQuery = result.current.submitQuery;
     const initialSchedule = result.current.scheduleNextQueuedSubmission;
@@ -392,7 +395,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     expect(result.current.submitQuery).toBe(initialSubmitQuery);
     expect(result.current.scheduleNextQueuedSubmission).toBe(initialSchedule);
     expect(onMcpClientUpdate).toHaveBeenCalledTimes(1);
-    expect(setupAsyncTaskAutoTrigger).toHaveBeenCalledTimes(1);
+    expect(setupAutoTrigger).toHaveBeenCalledTimes(1);
 
     unmount();
     expect(unsubscribeMcp).toHaveBeenCalledTimes(1);

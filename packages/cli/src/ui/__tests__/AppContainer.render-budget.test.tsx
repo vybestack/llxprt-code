@@ -20,6 +20,7 @@ import { AppContainer } from '../AppContainer.js';
 import { initialAppState } from '../reducers/appReducer.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { createMockAgent } from '../../__tests__/mockAgent.js';
+import { createRuntimeAgent } from './runtimeAgentFixture.js';
 import {
   buildSlashCommandRuntime,
   buildUiRuntimeFromSource,
@@ -438,14 +439,20 @@ describe('AppContainer.render-budget', () => {
 
   describe('callback stability', () => {
     it('should maintain stable output across re-renders', () => {
+      const agent = Object.assign(
+        createMockAgent(mockConfig as unknown as Config),
+        createRuntimeAgent(),
+      );
       const props = {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
+          agent,
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
+          agent,
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        agent,
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -475,14 +482,20 @@ describe('AppContainer.render-budget', () => {
     });
 
     it('should not throw on rapid re-renders', () => {
+      const agent = Object.assign(
+        createMockAgent(mockConfig as unknown as Config),
+        createRuntimeAgent(),
+      );
       const props = {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
+          agent,
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
+          agent,
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        agent,
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -506,14 +519,20 @@ describe('AppContainer.render-budget', () => {
 
   describe('memoization', () => {
     it('should use useMemo for computed values', () => {
+      const agent = Object.assign(
+        createMockAgent(mockConfig as unknown as Config),
+        createRuntimeAgent(),
+      );
       const props = {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
+          agent,
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
+          agent,
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        agent,
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -531,14 +550,20 @@ describe('AppContainer.render-budget', () => {
     });
 
     it('should use useCallback for event handlers', () => {
+      const agent = Object.assign(
+        createMockAgent(mockConfig as unknown as Config),
+        createRuntimeAgent(),
+      );
       const props = {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
+          agent,
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
+          agent,
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        agent,
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -558,14 +583,20 @@ describe('AppContainer.render-budget', () => {
 
   describe('render performance', () => {
     it('should mount within reasonable time', async () => {
+      const agent = Object.assign(
+        createMockAgent(mockConfig as unknown as Config),
+        createRuntimeAgent(),
+      );
       const props = {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
+          agent,
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
+          agent,
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        agent,
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -583,14 +614,20 @@ describe('AppContainer.render-budget', () => {
     });
 
     it('should handle re-renders efficiently', async () => {
+      const agent = Object.assign(
+        createMockAgent(mockConfig as unknown as Config),
+        createRuntimeAgent(),
+      );
       const props = {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
+          agent,
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
+          agent,
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        agent,
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -619,14 +656,20 @@ describe('AppContainer.render-budget', () => {
 
   describe('cleanup smoke test', () => {
     it('should complete mount/unmount cycles without errors', () => {
+      const agent = Object.assign(
+        createMockAgent(mockConfig as unknown as Config),
+        createRuntimeAgent(),
+      );
       const props = {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
+          agent,
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
+          agent,
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        agent,
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,

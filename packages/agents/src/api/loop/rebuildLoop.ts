@@ -19,11 +19,28 @@
  * self-cleans in run()'s finally; the facade aborts its own controller and
  * unsubscribes facade-recorded per-turn subscriptions.
  */
-
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { AgenticLoop } from '../../core/agenticLoop/AgenticLoop.js';
 import type { AgenticLoopOptions } from '../../core/agenticLoop/types.js';
+import type { SessionSchedulerOwner } from '../agentRuntimeAssembly.js';
+
+/**
+ * After a client-rebinding mutation, carry the previous history into the new
+ * client's chat before a turn or compression observes it.
+ */
+export async function restoreChatVisibility(
+  resolveClient: () => AgentClientContract,
+): Promise<void> {
+  const client = resolveClient();
+  if (!client.hasChatInitialized()) {
+    const carriedHistory = await client.getHistory();
+    await client.startChat(
+      carriedHistory.length > 0 ? carriedHistory : undefined,
+    );
+  }
+}
 
 /** The mutable slot shared by createAgent and rebuildLoop. */
 export interface LoopHolder {
@@ -47,6 +64,7 @@ export interface RebuildLoopDeps {
   resolveClient: () => AgenticLoopOptions['agentClient'];
   config: Config;
   messageBus: MessageBus;
+  schedulerOwner: SessionSchedulerOwner;
   approvalHandler?: AgenticLoopOptions['approvalHandler'];
   displayCallbacks?: AgenticLoopOptions['displayCallbacks'];
   AgenticLoopCtor?: typeof AgenticLoop;
@@ -98,7 +116,14 @@ export function rebuildLoop(deps: RebuildLoopDeps): AgenticLoop {
   const Ctor = deps.AgenticLoopCtor ?? AgenticLoop;
   const newLoop = new Ctor({
     agentClient: currentClient,
-    config: deps.config,
+    config: {
+      getSessionId: () => deps.config.getSessionId(),
+      getModel: () => deps.config.getModel(),
+      getImagePayloadBudgetBytes: () =>
+        deps.config.getImagePayloadBudgetBytes(),
+      getToolRegistry: () => deps.schedulerOwner.getToolRegistry(),
+    },
+    schedulerOwner: deps.schedulerOwner,
     messageBus: deps.messageBus,
     approvalHandler: deps.approvalHandler,
     displayCallbacks: deps.displayCallbacks,

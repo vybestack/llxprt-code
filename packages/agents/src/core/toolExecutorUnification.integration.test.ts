@@ -35,7 +35,7 @@ import type {
 } from '@vybestack/llxprt-code-tools';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 import { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
-import { createSchedulerRegistryDelegate } from './__tests__/scheduler-registry-test-helpers.js';
+import { createToolExecutionPort } from './__tests__/scheduler-registry-test-helpers.js';
 
 function createMockMessageBus() {
   return {
@@ -145,25 +145,15 @@ function createMockExecutionConfig(
         new CoreToolScheduler(options),
   };
 
-  const delegate = createSchedulerRegistryDelegate({
-    config: fixture as unknown as Config,
-    messageBus: getTestRuntimeMessageBus(fixture as unknown as Config),
-    toolRegistry,
-    createScheduler: async (schedulerOptions) =>
-      fixture.getToolSchedulerFactory()({
-        config: fixture as unknown as Config,
-        messageBus: getTestRuntimeMessageBus(fixture as unknown as Config),
-        toolRegistry,
-        toolContextInteractiveMode: schedulerOptions.interactiveMode ?? true,
-        getPreferredEditor: () => undefined,
-        onEditorClose: () => {},
-      }),
-  });
-
   const config: ToolExecutionConfig = {
     ...fixture,
-    ...delegate,
-  } as unknown as ToolExecutionConfig;
+    ...createToolExecutionPort(
+      fixture as unknown as Config,
+      fixture.getToolSchedulerFactory(),
+      getTestRuntimeMessageBus(fixture as unknown as Config),
+      toolRegistry,
+    ),
+  };
 
   return config;
 }

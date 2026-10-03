@@ -20,6 +20,7 @@ import {
   buildSlashCommandRuntime,
   type UiRuntimeBareSource,
 } from './cliUiRuntime.js';
+import { createRuntimeAgent } from './__tests__/runtimeAgentFixture.js';
 
 /**
  * Minimal source for the detached-client bridge behavior.
@@ -62,7 +63,7 @@ describe('AgentClientSource detached-client bridge (buildSlashCommandRuntime)', 
       createDetachedAgentClient: async () => expectedClient,
     });
 
-    const runtime = buildSlashCommandRuntime(source);
+    const runtime = buildSlashCommandRuntime(source, createRuntimeAgent());
 
     expect(typeof runtime.createDetachedAgentClient).toBe('function');
     const result = await runtime.createDetachedAgentClient!();
@@ -72,7 +73,7 @@ describe('AgentClientSource detached-client bridge (buildSlashCommandRuntime)', 
   it('omits createDetachedAgentClient from the flattened runtime when absent on the source', () => {
     const source = makeBareSource();
 
-    const runtime = buildSlashCommandRuntime(source);
+    const runtime = buildSlashCommandRuntime(source, createRuntimeAgent());
 
     expect(runtime.createDetachedAgentClient).toBeUndefined();
   });

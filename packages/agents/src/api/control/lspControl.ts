@@ -12,7 +12,7 @@
  * Config escape hatch. Avoids leaking the raw LspServiceClient.
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { WorkspaceLspPort } from '@vybestack/llxprt-code-core/config/lspIntegration.js';
 import type {
   LspServerConfig,
   ServerStatus,
@@ -30,7 +30,7 @@ import { formatError } from './errorUtils.js';
  * @plan:PLAN-20260626-RUNTIMEBOUNDARY.P05
  */
 export interface LspControlDeps {
-  readonly config: Config;
+  readonly lsp: WorkspaceLspPort;
 }
 
 function unavailableServerStatus(
@@ -99,9 +99,8 @@ export class LspControl implements AgentLspControl {
   }
 
   private async readStatus(): Promise<LspStatusSnapshot> {
-    const config = this.deps.config;
-    const lspConfig = config.getLspConfig();
-    const client = config.getLspServiceClient();
+    const lspConfig = this.deps.lsp.config();
+    const client = this.deps.lsp.client();
 
     if (lspConfig === undefined) {
       return {

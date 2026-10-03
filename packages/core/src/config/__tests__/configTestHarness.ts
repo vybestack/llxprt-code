@@ -24,7 +24,6 @@
 import { vi } from 'bun:test';
 import type { Mock } from 'bun:test';
 import type { ConfigParameters, SandboxConfig } from '../config.js';
-import type { ToolSchedulerFactoryOptions } from '../../core/toolSchedulerContract.js';
 import type { AgentClientContract } from '../../core/clientContract.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type * as IdeIntegrationModule from '@vybestack/llxprt-code-ide-integration';
@@ -95,6 +94,8 @@ export function buildToolsMockBody(actual: unknown) {
     getTool = getToolMock;
     getFunctionDeclarations = getFunctionDeclarationsMock;
     listDeferredMcpServers = listDeferredMcpServersMock;
+    bindWorkspaceAuthority = vi.fn();
+    removeMcpToolsByServer = vi.fn();
   }
   return {
     ...(actual as object),
@@ -246,7 +247,7 @@ export function buildFetchMockBody(hoisted: HoistedConfigMocks) {
 }
 
 // ---------------------------------------------------------------------------
-// Shared AgentClient / CoreToolScheduler mock classes
+// Shared AgentClient mock
 // ---------------------------------------------------------------------------
 
 export const AgentClient = vi.fn().mockImplementation(() => ({
@@ -262,15 +263,6 @@ export const AgentClient = vi.fn().mockImplementation(() => ({
   clearTools: vi.fn(),
   stripThoughtsFromHistory: vi.fn(),
 }));
-
-export class CoreToolScheduler {
-  constructor(_options: ToolSchedulerFactoryOptions) {}
-  schedule = vi.fn().mockResolvedValue(undefined);
-  cancelAll = vi.fn();
-  dispose = vi.fn();
-  setCallbacks = vi.fn();
-  handleConfirmationResponse = vi.fn().mockResolvedValue(undefined);
-}
 
 // ---------------------------------------------------------------------------
 // Shared base params + constants
@@ -319,7 +311,6 @@ export function createBaseParams(
       new (AgentClient as unknown as new (
         ...args: unknown[]
       ) => AgentClientContract)(config, runtimeState),
-    toolSchedulerFactory: (options) => new CoreToolScheduler(options),
   };
 }
 

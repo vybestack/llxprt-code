@@ -54,6 +54,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
       getServers?: () => Record<string, MCPServerConfig>;
       trusted?: boolean;
       mcpServerCommand?: string;
+      refreshMcpContext?: () => Promise<void>;
     } = {},
   ) =>
     ({
@@ -72,7 +73,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
         isInitialized: () => false,
       }),
       getExtensions: () => [],
-      refreshMcpContext: vi.fn(),
+      refreshMcpContext: options.refreshMcpContext ?? (async () => {}),
     }) as unknown as Config;
 
   type MockMcpClient = {
@@ -109,6 +110,27 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
       return client as unknown as McpClient;
     });
   };
+
+  it('uses an explicit lifecycle refresh callback instead of the host default', async () => {
+    const observations: string[] = [];
+    const registries = createRegistries();
+    const config = createConfig({}, registries, {
+      refreshMcpContext: async () => {
+        observations.push('host');
+      },
+    });
+    const manager = new McpClientManager(
+      '0.0.1',
+      registries.toolRegistry,
+      config,
+    );
+
+    await manager.restart(async () => {
+      observations.push('session');
+    });
+
+    expect(observations).toStrictEqual(['session']);
+  });
 
   it('restartServer does not leave a stale dead client when existing.disconnect throws (reconnects with a fresh client)', async () => {
     const goodClient = createMockMcpClient();

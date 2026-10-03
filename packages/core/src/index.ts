@@ -66,6 +66,7 @@ export {
   type RegisterTaskInput,
 } from './services/asyncTaskManager.js';
 export { AsyncTaskReminderService } from './services/asyncTaskReminderService.js';
+export { resolveMaxAsyncTasks } from './config/asyncTaskServices.js';
 export { AsyncTaskAutoTrigger } from './services/asyncTaskAutoTrigger.js';
 export {
   ShellJobManager,

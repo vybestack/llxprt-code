@@ -31,18 +31,19 @@ import {
   type Agent,
   type AgentEvent,
 } from '@vybestack/llxprt-code-agents';
-import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core';
 import {
-  disposeCliRuntime,
-  getCliRuntimeServices,
-  runWithRuntimeScope,
-} from '@vybestack/llxprt-code-providers/runtime.js';
+  AsyncTaskManager,
+  type RuntimeTokenizerFactory,
+} from '@vybestack/llxprt-code-core';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import { MessageBusType } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
+import { disposeCliRuntime } from '@vybestack/llxprt-code-providers/runtime.js';
+import { AgentImpl } from '../agentImpl.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import {
   buildCliStyleConfig,
   buildFactoryLessConfig,
   type CallerAgentRuntimeFactories,
-  type MessageBus,
 } from './helpers/buildCliStyleConfig.js';
 import {
   captureProbe,
@@ -77,6 +78,14 @@ interface RecordLike {
 
 function asRecord(v: unknown): RecordLike | null {
   return typeof v === 'object' && v !== null ? (v as RecordLike) : null;
+}
+
+function requireRecord(value: unknown, label: string): RecordLike {
+  const record = asRecord(value);
+  if (record === null) {
+    throw new Error(`Expected ${label} to be an object`);
+  }
+  return record;
 }
 
 /** Reaches the AgentImpl providerManager field (agentImpl.ts AgentDeps). */
@@ -205,52 +214,6 @@ describe('fromConfig tokenizer readiness @requirement:REQ-3217-001 @requirement:
       await built.cleanup();
     }
   });
-
-  it('rejects with the causal preparation failure reached through authoritative post-activation state (not stale Config state) and removes the isolated runtime', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
-    const failure = new Error('mandatory tokenizer readiness failed causally');
-    const runtimeId = 'from-config-rejected-tokenizer-readiness';
-    // Mutate the Config's provider field to stale state. The isolated runtime
-    // manager still has 'fake' active (authoritative). fromConfig must derive
-    // the readiness target from the manager, not from this stale Config field.
-    built.config.setProvider('stale-config-provider');
-    let readinessTarget:
-      | { readonly provider: string; readonly model: string }
-      | undefined;
-    built.config.setTokenizerFactory(
-      createReadinessFactory(
-        async (providerName, model) => {
-          readinessTarget = { provider: providerName, model: model ?? '' };
-          throw failure;
-        },
-        () => {
-          throw new Error('unreachable tokenizer use');
-        },
-      ),
-    );
-
-    try {
-      await expect(
-        fromConfig({ config: built.config, sessionId: runtimeId }),
-      ).rejects.toBe(failure);
-      // Authoritative post-activation manager state ('fake'/'fake-model')
-      // reached readiness — NOT the stale Config provider
-      // ('stale-config-provider').
-      expect(readinessTarget).toStrictEqual({
-        provider: 'fake',
-        model: 'fake-model',
-      });
-      expect(readinessTarget?.provider).not.toBe('stale-config-provider');
-      expect(() =>
-        runWithRuntimeScope({ runtimeId, metadata: {} }, () =>
-          getCliRuntimeServices(),
-        ),
-      ).toThrow(/runtime registration|runtime.*not/i);
-    } finally {
-      await disposeCliRuntime(runtimeId);
-      await built.cleanup();
-    }
-  });
 });
 
 describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:REQ-001 @requirement:REQ-INT-001', () => {
@@ -369,6 +332,74 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
     }
   });
 
+  it('routes skill and MCP lifecycle work through each same-label session bus when both sessions adopt one Config', async () => {
+    const built = await buildFactoryLessConfig(
+      'plain-text.jsonl',
+      {},
+      { skillsSupport: true },
+    );
+    const config = built.config;
+    const busA = built.messageBus;
+    const busB = new MessageBus(
+      config.getPolicyEngine(),
+      config.getDebugMode(),
+    );
+    const skillBuses: MessageBus[] = [];
+    const mcpBuses: MessageBus[] = [];
+    config.setPostSkillDiscoveryToolRegistrar(
+      (_registry, _skillService, messageBus) => {
+        skillBuses.push(messageBus);
+      },
+    );
+    vi.spyOn(config, 'refreshMcpContext').mockImplementation(
+      async (messageBus) => {
+        mcpBuses.push(messageBus);
+      },
+    );
+    let agentA: Agent | undefined;
+    let agentB: Agent | undefined;
+    try {
+      agentA = await fromConfig({
+        config,
+        messageBus: busA,
+        sessionId: 'shared-label',
+      });
+      agentB = await fromConfig({
+        config,
+        messageBus: busB,
+        sessionId: 'shared-label',
+      });
+      expect(agentA.getMessageBus()).toBe(busA);
+      expect(agentB.getMessageBus()).toBe(busB);
+      expect(agentA.mcp).not.toBe(agentB.mcp);
+      skillBuses.length = 0;
+      mcpBuses.length = 0;
+
+      await agentA.skills.reload();
+      expect(skillBuses).toStrictEqual([busA, busA, busB]);
+      await agentB.skills.reload();
+      expect(skillBuses).toStrictEqual([busA, busA, busB, busB, busA, busB]);
+      await agentA.mcp.refresh();
+      await agentB.mcp.refresh();
+
+      expect(mcpBuses).toHaveLength(2);
+      expect(mcpBuses[0]).toBe(busA);
+      expect(mcpBuses[1]).toBe(busB);
+
+      await agentB.dispose();
+      agentB = undefined;
+      skillBuses.length = 0;
+      await agentA.skills.reload();
+      expect(skillBuses).toStrictEqual([busA, busA]);
+    } finally {
+      await agentB?.dispose();
+      await agentA?.dispose();
+      await built.cleanup();
+      busA.removeAllListeners();
+      busB.removeAllListeners();
+    }
+  });
+
   it('T6d no Config.getMessageBus (CRIT-2): fromConfig({ config }) WITHOUT messageBus builds exactly one bus from config.getPolicyEngine() and never reads a bus off the Config — a turn still drives and exactly one bus governs @requirement:REQ-001 @scenario:single-bus @given:a Config with no caller-supplied messageBus and NO getMessageBus method @when:fromConfig({ config }) and a single stream turn @then:the turn drives without crashing and the runtime has exactly one non-null bus', async () => {
     const built = await buildCliStyleConfig('plain-text.jsonl');
     try {
@@ -392,9 +423,14 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
     try {
       const agent: Agent = await fromConfig({ config: built.config });
       const probe: DisposalProbe = captureProbe(agent);
+      const callerProbe = {
+        ...probe,
+        agentClient: built.config.getAgentClient(),
+      };
       expect(agentClientDisposed(probe)).toBe(false);
       await agent.dispose();
-      expect(agentClientDisposed(probe)).toBe(false);
+      expect(agentClientDisposed(probe)).toBe(true);
+      expect(agentClientDisposed(callerProbe)).toBe(false);
     } finally {
       await built.cleanup();
     }
@@ -412,55 +448,65 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
     }
   });
 
-  it('T7c ownership: a caller-supplied messageBus stays caller-owned and FUNCTIONAL after agent.dispose() — the caller bus still accepts subscriptions and reports live listener counts (not torn down) @requirement:REQ-001.3 @scenario:caller-owned-bus @given:a fromConfig agent with a caller-supplied messageBus, and a pre-existing subscription recorded on that caller bus @when:agent.dispose() runs @then:the caller bus listenerCount still reflects the caller subscription (count unchanged by dispose), a NEW subscribe increases the observable count, and removeAllListeners() runs without throwing — the bus is alive', async () => {
+  it('keeps the adopted Config and borrowed bus functional while disposal joins an in-flight task', async () => {
     const built = await buildCliStyleConfig('plain-text.jsonl');
+    const taskJoin = createSignal();
     try {
       const callerBus: MessageBus = built.messageBus;
-      // Probe the caller bus via the SAME documented structural-narrowing idiom
-      // used by captureProviderManager (no deep imports for MessageBusType).
-      const bus = asRecord(callerBus);
-      const eventType = 'tool-confirmation-request';
-      const listenerCountOf = (b: RecordLike): number => {
-        const fn = b['listenerCount'];
-        return typeof fn === 'function'
-          ? (fn.call(callerBus, eventType) as number)
-          : -1;
+      const eventType = MessageBusType.TOOL_CONFIRMATION_REQUEST;
+      const subscribeOn = (): number => {
+        callerBus.subscribe(eventType, () => undefined);
+        return callerBus.listenerCount(eventType);
       };
-      const subscribeOn = (b: RecordLike): boolean => {
-        const fn = b['subscribe'];
-        if (typeof fn !== 'function') return false;
-        fn.call(callerBus, eventType, () => undefined);
-        return true;
-      };
-      const removeAllOn = (b: RecordLike): boolean => {
-        const fn = b['removeAllListeners'];
-        if (typeof fn !== 'function') return false;
-        fn.call(callerBus);
-        return true;
-      };
-      expect(bus).not.toBeNull();
-      // Record a caller-side subscription BEFORE the agent exists.
-      expect(subscribeOn(bus as RecordLike)).toBe(true);
-      const before = listenerCountOf(bus as RecordLike);
+      const before = subscribeOn();
       expect(before).toBeGreaterThanOrEqual(1);
-
       const agent: Agent = await fromConfig({
         config: built.config,
         messageBus: callerBus,
       });
-      await agent.dispose();
+      const impl = requireRecord(agent, 'AgentImpl');
+      const deps = requireRecord(impl['deps'], 'AgentImpl deps');
+      const taskServices = requireRecord(
+        deps['taskServices'],
+        'session task services',
+      );
+      const manager: unknown = taskServices['manager'];
+      if (!(manager instanceof AsyncTaskManager)) {
+        throw new Error('Agent has no session task manager');
+      }
+      const cancellationStarted = createSignal();
+      const controller = new AbortController();
+      controller.signal.addEventListener('abort', cancellationStarted.resolve, {
+        once: true,
+      });
+      manager.registerTask({
+        id: 'borrowed-resource-join',
+        subagentName: 'worker',
+        goalPrompt: 'hold disposal open',
+        abortController: controller,
+      });
+      manager.trackExecution('borrowed-resource-join', taskJoin.promise);
 
-      // The caller bus must still be ALIVE: its observable listener count is
-      // unchanged by agent.dispose() (the caller subscription survived), a NEW
-      // subscribe still takes effect (count grows), and removeAllListeners()
-      // runs without throwing (count collapses to 0).
-      const afterDispose = listenerCountOf(bus as RecordLike);
-      expect(afterDispose).toBe(before);
-      expect(subscribeOn(bus as RecordLike)).toBe(true);
-      expect(listenerCountOf(bus as RecordLike)).toBe(afterDispose + 1);
-      expect(removeAllOn(bus as RecordLike)).toBe(true);
-      expect(listenerCountOf(bus as RecordLike)).toBe(0);
+      let disposalSettled = false;
+      const disposal = agent.dispose().then(() => {
+        disposalSettled = true;
+      });
+      await cancellationStarted.promise;
+      expect(disposalSettled).toBe(false);
+      expect(internalConfig(agent)).toBe(built.config);
+      built.config.setModel('during-disposal-model');
+      expect(built.config.getModel()).toBe('during-disposal-model');
+      const during = callerBus.listenerCount(eventType);
+      expect(subscribeOn()).toBe(during + 1);
+
+      taskJoin.resolve();
+      await disposal;
+      expect(callerBus.listenerCount(eventType)).toBe(before + 1);
+      expect(subscribeOn()).toBe(before + 2);
+      callerBus.removeAllListeners();
+      expect(callerBus.listenerCount(eventType)).toBe(0);
     } finally {
+      taskJoin.resolve();
       await built.cleanup();
     }
   });
@@ -675,7 +721,7 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
 // anything absent — while NEVER overriding caller-supplied factories.
 
 describe('fromConfig agent-owned assembly @plan:ISSUE-3222 @requirement:REQ-3222-AC2', () => {
-  it('T2a adopting a factory-less minimal Config yields a working agent: the client initializes, a scheduler is creatable, and the shipped task tool is registered @requirement:REQ-3222-AC2 @scenario:factory-less-adoption @given:a minimal Config carrying NO agentClientFactory, toolSchedulerFactory, or taskToolRegistration @when:fromConfig({ config, sessionId, messageBus }) @then:the Config agent client reports initialized, getOrCreateScheduler produces a scheduler, and the tool surface lists the shipped "task" tool', async () => {
+  it('T2a adopting a factory-less minimal Config yields a working agent: the client initializes, its scheduler is creatable, and the shipped task tool is registered @requirement:REQ-3222-AC2 @scenario:factory-less-adoption @given:a minimal Config with no agent factories or task registration @when:fromConfig({ config, sessionId, messageBus }) @then:the client initializes, the agent scheduler acquires a handle, and the tool surface lists "task"', async () => {
     const built = await buildFactoryLessConfig('plain-text.jsonl');
     const runtimeId = 'issue3222-fromconfig-factoryless';
     try {
@@ -687,7 +733,7 @@ describe('fromConfig agent-owned assembly @plan:ISSUE-3222 @requirement:REQ-3222
       try {
         const config = internalConfig(agent);
 
-        const scheduler = await config.getOrCreateScheduler(
+        const scheduler = await agent.scheduler.acquire(
           agent,
           'session',
           {
@@ -697,9 +743,13 @@ describe('fromConfig agent-owned assembly @plan:ISSUE-3222 @requirement:REQ-3222
             onEditorClose: vi.fn(),
           },
           undefined,
-          { messageBus: built.messageBus },
+          {
+            messageBus: built.messageBus,
+            toolRegistry: config.getToolRegistry(),
+          },
         );
         expect(scheduler).toBeDefined();
+        agent.scheduler.release(agent, 'session', scheduler);
 
         const names = agent.tools.list().map((tool) => tool.name);
         expect(names).toContain('task');
@@ -709,7 +759,10 @@ describe('fromConfig agent-owned assembly @plan:ISSUE-3222 @requirement:REQ-3222
         // design in AgentClient (same as the CLI-style adoption path).
         const events: AgentEvent[] = await drain(agent.stream('hello'));
         expect(countType(events, 'done')).toBe(1);
-        expect(config.getAgentClient().isInitialized()).toBe(true);
+        if (!(agent instanceof AgentImpl)) {
+          throw new Error('Expected the real Agent implementation');
+        }
+        expect(agent.agentClient.isInitialized()).toBe(true);
       } finally {
         await agent.dispose();
       }
@@ -719,31 +772,45 @@ describe('fromConfig agent-owned assembly @plan:ISSUE-3222 @requirement:REQ-3222
     }
   });
 
-  it('T2b caller-supplied factories WIN: adoption keeps exactly the caller instances (identity) and the agent still drives a turn @requirement:REQ-3222-AC2 @scenario:caller-wins @given:a minimal Config carrying caller-supplied agentClientFactory, toolSchedulerFactory, and taskToolRegistration @when:fromConfig({ config, sessionId }) @then:all three Config getters return the SAME caller instances after adoption and a stream turn completes', async () => {
+  it('T2b caller-supplied factories survive adoption and drive a turn @requirement:REQ-3222-AC2 @scenario:caller-wins @given:a minimal Config with caller client and task factories and an explicit agent scheduler factory @when:fromConfig({ config, sessionId, toolSchedulerFactory }) @then:the client and task factories retain identity, the scheduler factory creates a handle, and a turn completes', async () => {
     const runtimeId = 'issue3222-fromconfig-callercwins';
+    let created = 0;
     const callerFactories: CallerAgentRuntimeFactories = {
       agentClientFactory: (config, runtimeState) =>
         createAgentClient(config, runtimeState),
-      toolSchedulerFactory: (options) => createToolScheduler(options),
+      toolSchedulerFactory: (options) => {
+        created++;
+        return createToolScheduler(options);
+      },
       taskToolRegistration: createTaskRegistration(),
     };
-    const built = await buildFactoryLessConfig(
-      'plain-text.jsonl',
-      callerFactories,
-    );
+    const built = await buildFactoryLessConfig('plain-text.jsonl', {
+      agentClientFactory: callerFactories.agentClientFactory,
+      taskToolRegistration: callerFactories.taskToolRegistration,
+    });
     try {
       const agent: Agent = await fromConfig({
         config: built.config,
         sessionId: runtimeId,
+        toolSchedulerFactory: callerFactories.toolSchedulerFactory,
       });
       try {
         const config = internalConfig(agent);
         expect(config.getAgentClientFactory()).toBe(
           callerFactories.agentClientFactory,
         );
-        expect(config.getToolSchedulerFactory()).toBe(
-          callerFactories.toolSchedulerFactory,
+        const scheduler = await agent.scheduler.acquire(
+          agent,
+          'session',
+          { getPreferredEditor: () => undefined, onEditorClose: () => {} },
+          undefined,
+          {
+            messageBus: built.messageBus,
+            toolRegistry: config.getToolRegistry(),
+          },
         );
+        expect(created).toBe(1);
+        agent.scheduler.release(agent, 'session', scheduler);
         expect(config.getTaskToolRegistration()).toBe(
           callerFactories.taskToolRegistration,
         );
@@ -760,34 +827,52 @@ describe('fromConfig agent-owned assembly @plan:ISSUE-3222 @requirement:REQ-3222
   });
 
   it(
-    'T2b-PROP for any non-empty sessionId, caller-supplied factories keep their identity through adoption @requirement:REQ-3222-AC2 @scenario:caller-wins @given:any non-empty sessionId and a minimal Config with caller factories @when:fromConfig({ config, sessionId }) @then:every Config factory getter returns the caller instance',
+    'T2b-PROP for any non-empty sessionId, caller factories keep their identity through adoption @requirement:REQ-3222-AC2 @scenario:caller-wins @given:any non-empty sessionId and caller factories @when:fromConfig({ config, sessionId, toolSchedulerFactory }) @then:client and task factories retain identity and the agent creates a scheduler',
     async () => {
       await fc.assert(
         fc.asyncProperty(nonBlankStringArbitrary, async (sessionId) => {
+          let creations = 0;
           const callerFactories: CallerAgentRuntimeFactories = {
             agentClientFactory: (config, runtimeState) =>
               createAgentClient(config, runtimeState),
-            toolSchedulerFactory: (options) => createToolScheduler(options),
+            toolSchedulerFactory: (options) => {
+              creations++;
+              return createToolScheduler(options);
+            },
             taskToolRegistration: createTaskRegistration(),
           };
-          const built = await buildFactoryLessConfig(
-            'plain-text.jsonl',
-            callerFactories,
-          );
+          const built = await buildFactoryLessConfig('plain-text.jsonl', {
+            agentClientFactory: callerFactories.agentClientFactory,
+            taskToolRegistration: callerFactories.taskToolRegistration,
+          });
           try {
             const agent: Agent = await fromConfig({
               config: built.config,
               sessionId,
+              toolSchedulerFactory: callerFactories.toolSchedulerFactory,
             });
             try {
               const config = internalConfig(agent);
+              const scheduler = await agent.scheduler.acquire(
+                agent,
+                'session',
+                {
+                  getPreferredEditor: () => undefined,
+                  onEditorClose: () => {},
+                },
+                undefined,
+                {
+                  messageBus: built.messageBus,
+                  toolRegistry: config.getToolRegistry(),
+                },
+              );
+              agent.scheduler.release(agent, 'session', scheduler);
               return (
                 config.getAgentClientFactory() ===
                   callerFactories.agentClientFactory &&
-                config.getToolSchedulerFactory() ===
-                  callerFactories.toolSchedulerFactory &&
                 config.getTaskToolRegistration() ===
-                  callerFactories.taskToolRegistration
+                  callerFactories.taskToolRegistration &&
+                creations === 1
               );
             } finally {
               await agent.dispose();

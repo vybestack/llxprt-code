@@ -40,10 +40,12 @@ import {
   type AgentEvent,
   type Agent,
   type AgenticLoopApprovalHandler,
+  type FromConfigOptions,
 } from '@vybestack/llxprt-code-agents';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import {
   buildCliStyleConfig,
+  createParitySchedulerOwner,
   projectEvents,
   type Config,
   type MessageBus,
@@ -61,14 +63,17 @@ import { drain } from './helpers/agentHarness.js';
 async function driveReferenceLoop(
   config: Config,
   messageBus: MessageBus,
+  schedulerFactory: NonNullable<FromConfigOptions['toolSchedulerFactory']>,
   input: string,
 ): Promise<readonly AgentEvent[]> {
   const approvalHandler: AgenticLoopApprovalHandler = async () => ({
     outcome: ToolConfirmationOutcome.ProceedOnce,
   });
+  const schedulerOwner = createParitySchedulerOwner(config, schedulerFactory);
   const loop = createAgenticLoop({
     agentClient: config.getAgentClient(),
     config,
+    schedulerOwner,
     messageBus,
     interactiveMode: false,
     approvalHandler,
@@ -77,7 +82,11 @@ async function driveReferenceLoop(
   const controller = new AbortController();
   const loopEvents = loop.run(input, controller.signal);
   const agentEvents = mapLoopStream(loopEvents);
-  return drain(agentEvents);
+  try {
+    return await drain(agentEvents);
+  } finally {
+    await schedulerOwner.dispose();
+  }
 }
 
 /**
@@ -156,6 +165,7 @@ describe('CLI turn-parity (broad) @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
       // Config + MessageBus + FakeProvider script so it does not drain Path B.
       const agent: Agent = await fromConfig({
         config: built.config,
+        toolSchedulerFactory: built.schedulerFactory,
         onApproval: () => ToolConfirmationOutcome.ProceedOnce,
       });
       const pathAEvents = await drain(agent.stream('hello'));
@@ -168,6 +178,7 @@ describe('CLI turn-parity (broad) @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
         const pathBEvents = await driveReferenceLoop(
           builtRef.config,
           builtRef.messageBus,
+          builtRef.schedulerFactory,
           'hello',
         );
         const pathB = projectEvents(pathBEvents);
@@ -206,6 +217,7 @@ describe('CLI turn-parity (broad) @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
             try {
               const agent: Agent = await fromConfig({
                 config: built.config,
+                toolSchedulerFactory: built.schedulerFactory,
                 onApproval: () => ToolConfirmationOutcome.ProceedOnce,
               });
               const pathAEvents = await drain(agent.stream('hello'));
@@ -217,6 +229,7 @@ describe('CLI turn-parity (broad) @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
                 const pathBEvents = await driveReferenceLoop(
                   builtRef.config,
                   builtRef.messageBus,
+                  builtRef.schedulerFactory,
                   'hello',
                 );
                 const pathB = projectEvents(pathBEvents);

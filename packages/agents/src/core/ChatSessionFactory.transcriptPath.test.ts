@@ -82,6 +82,7 @@ void vi.mock('@vybestack/llxprt-code-core/utils/errorReporting.js', () => ({
 import { createChatSession } from './ChatSessionFactory.js';
 import { ChatSession } from './chatSession.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { RecordingPort } from '@vybestack/llxprt-code-core/session/sessionExecutionServices.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { TodoContinuationService } from './TodoContinuationService.js';
@@ -95,9 +96,7 @@ function activeRecording(filePath: string | null): RecordingServiceStub {
   return { isActive: () => true, getFilePath: () => filePath };
 }
 
-function makeConfig(
-  getSessionRecordingService: () => RecordingServiceStub | undefined,
-): Config {
+function makeConfig(): Config {
   return {
     getEphemeralSetting: vi.fn().mockReturnValue(undefined),
     isJitContextEnabled: vi.fn().mockReturnValue(false),
@@ -115,7 +114,6 @@ function makeConfig(
     getModel: vi.fn().mockReturnValue('gemini-2.5-flash'),
     getToolRegistry: vi.fn().mockReturnValue(undefined),
     getProviderManager: vi.fn().mockReturnValue(undefined),
-    getSessionRecordingService,
   } as unknown as Config;
 }
 
@@ -162,7 +160,8 @@ describe('createChatSession transcript path wiring (#2933)', () => {
     ).mockImplementationOnce(() => chatDouble as unknown as ChatSession);
 
     await createChatSession({
-      config: makeConfig(readRecording),
+      config: makeConfig(),
+      readRecording: () => readRecording() as RecordingPort | undefined,
       runtimeState: makeRuntimeState(),
       contentGenerator: {} as unknown as ContentGenerator,
       storedHistoryService: undefined,

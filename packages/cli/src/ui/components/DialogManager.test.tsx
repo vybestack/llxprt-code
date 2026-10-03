@@ -6,6 +6,7 @@
 
 import { Config } from '@vybestack/llxprt-code-core';
 import { buildSlashCommandRuntime } from '../cliUiRuntime.js';
+import { createRuntimeAgent } from '../__tests__/runtimeAgentFixture.js';
 import { DialogManager } from './DialogManager.js';
 import { DialogProvider } from '../stores/dialog/DialogContext.js';
 import { AppCommandsProvider } from '../contexts/AppCommandsContext.js';
@@ -323,6 +324,7 @@ function DialogManagerHarness({ store }: { store: DialogStore }) {
       debugMode: false,
       model: 'test',
     }),
+    createRuntimeAgent(),
   );
   return (
     <AppCommandsProvider value={commands}>

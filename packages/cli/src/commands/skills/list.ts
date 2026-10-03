@@ -26,7 +26,7 @@ export async function handleList(showAll = false) {
   );
   const extensions = loadExtensions(extensionEnablementManager, workspaceDir);
 
-  const config = await loadCliConfig(
+  const { config, messageBus } = await loadCliConfig(
     settings.merged,
     extensions,
     extensionEnablementManager,
@@ -37,10 +37,7 @@ export async function handleList(showAll = false) {
     workspaceDir,
   );
 
-  // Skill discovery owns its own session MessageBus and Config.initialize
-  // lifecycle inside core (#2378): the CLI command is a thin client and never
-  // constructs a MessageBus or calls Config.initialize itself.
-  let skills = await discoverSkillsForConfig(config);
+  let skills = await discoverSkillsForConfig(config, messageBus);
 
   // By default, filter out built-in skills unless --all is specified
   if (!showAll) {
