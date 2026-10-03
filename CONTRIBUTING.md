@@ -171,6 +171,46 @@ If you'd like to run the source build outside the llxprt-code folder you can uti
 
 This project contains two types of tests: unit tests and integration tests. Testing uses [bun:test](https://bun.sh/docs/test) as the test runner.
 
+#### Runtime plugin test setup
+
+The CLI profile integration suites exercise Gemini, which is supplied by the
+optional `plugins/google-gemini` runtime plugin. Root `bun install`, `npm ci`
+and builds do not install plugin dependencies. Before running the full test
+suite from a checkout, install them separately, as the CI test job does:
+
+```bash
+# Use a separate Bun >= 1.4.2 executable for plugin installs.
+BUN_PLUGIN=/absolute/path/to/bun-1.4.2
+for plugin in plugins/*/; do
+  if [ -f "${plugin}package.json" ]; then
+    (cd "$plugin" && "$BUN_PLUGIN" install --omit=peer)
+  fi
+done
+npm run test
+```
+
+The root runtime remains pinned by `.bun-version`. Plugin installs need Bun
+1.4.2 or newer to handle their unresolved host peers; `--omit=peer` leaves the
+host packages supplied by the checkout. See [plugins/README.md](./plugins/README.md).
+Checkout discovery loads marked packages from `plugins/` only when each has
+its own `node_modules`. Without the Gemini plugin install, selecting `gemini`
+fails with `Provider 'gemini' not found` before any API request. Changing
+`NODE_ENV` or building the base packages does not register an absent plugin.
+
+For individual CLI integration suites, use an explicit relative path so Bun
+does not also match retained worktree copies elsewhere in the checkout:
+
+```bash
+bun test ./packages/cli/src/integration-tests/cli-args.integration.test.ts
+bun test ./packages/cli/src/integration-tests/cli-args.profile-flag.integration.test.ts
+bun test ./packages/cli/src/integration-tests/cli-plugin-provider.integration.test.ts
+```
+
+These three suites use invalid credentials or a local HTTP fixture. They do
+not need a live Gemini API key. The endpoint fixture verifies that the real
+CLI discovers the installed plugin and sends the selected model to the
+configured endpoint.
+
 #### Unit Tests
 
 `npm run test` runs every workspace's `test` script — the full set of workspace

@@ -150,7 +150,9 @@ function buildToolConfig(
   policyEngineConfig: PolicyEngineConfig,
 ) {
   return {
-    coreTools: profileSettingsWithTools.coreTools ?? undefined,
+    coreTools:
+      profileSettingsWithTools.tools?.core ??
+      profileSettingsWithTools.coreTools,
     allowedTools: allowedTools.length > 0 ? [...allowedTools] : undefined,
     policyEngineConfig,
     excludeTools: [...excludeTools],

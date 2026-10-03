@@ -29,10 +29,6 @@ function readWorkflow(name: string): Workflow {
   );
 }
 
-function selectedKeyExpression(stepId: string): string {
-  return `\${{ steps.${stepId}.outputs.selected_key == 'primary' && secrets[vars.KEY_VAR_NAME] || steps.${stepId}.outputs.selected_key == 'secondary' && secrets[vars.KEY_VAR_NAME_2] || '' }}`;
-}
-
 function hasSecret(value: unknown): boolean {
   return /\bsecrets(?:\.|\[)/.test(JSON.stringify(value));
 }
@@ -109,37 +105,29 @@ describe('quota-selected workflow credentials', () => {
     expect(asRecord(tests.env).LLXPRT_DEFAULT_MODEL).toBe('gemma4:e2b-it-qat');
   });
 
-  it('maps only the selected PR-review key into the walkthrough invocation', () => {
+  it('runs PR walkthrough with credential-free local inference instead of quota-selected provider keys', () => {
     const workflow = readWorkflow('pr-review.yml');
     const jobs = workflow.jobs;
     if (!jobs) throw new Error('pr-review.yml must define jobs');
     const gate = jobs['mergeability-gate'];
     const job = jobs.review;
     if (!job) throw new Error('pr-review.yml must define review job');
-    const jobStepsLocal = jobSteps(job);
-    const quota = stepNamed(
-      jobStepsLocal,
-      'Check API quota and select optimal key',
-    );
-    const walkthrough = stepNamed(jobStepsLocal, 'Run walkthrough pipeline');
-
+    const steps = jobSteps(job);
+    const model = stepNamed(steps, 'Start pinned local Qwen model');
+    const inference = stepNamed(steps, 'Run walkthrough pipeline');
     expect(gate?.secrets).toBeUndefined();
     expect(hasSecret(gate ?? {})).toBe(false);
     expect(job.env ?? {}).not.toHaveProperty('OPENAI_API_KEY');
     expect(job.env ?? {}).not.toHaveProperty('OPENAI_API_KEY_2');
-    expect(hasSecret(job.env ?? {})).toBe(false);
-    expect(quota.id).toBe('quota');
-    expect(quota.env).toEqual({
-      KEY_VAR_NAME: '${{ vars.KEY_VAR_NAME }}',
-      OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}',
-      OPENAI_API_KEY_2: '${{ secrets[vars.KEY_VAR_NAME_2] }}',
-    });
-    expect(walkthrough.env).toEqual({
-      OPENAI_API_KEY: selectedKeyExpression('quota'),
-    });
-    expect(jobStepsLocal.filter(hasSecret)).toEqual([quota, walkthrough]);
-    expect(jobStepsLocal.indexOf(quota)).toBeLessThan(
-      jobStepsLocal.indexOf(walkthrough),
+    expect(hasSecret(job)).toBe(false);
+    expect(steps.filter(hasSecret)).toEqual([]);
+    expect(JSON.stringify(job)).not.toContain('ci-quota-check');
+    expect(asString(model.run)).toContain(
+      'env -u GH_TOKEN -u GITHUB_TOKEN ollama serve',
     );
+    expect(asString(inference.run)).toContain(
+      'env -u GH_TOKEN -u GITHUB_TOKEN bun scripts/pr-review-walkthrough.ts',
+    );
+    expect(steps.indexOf(model)).toBeLessThan(steps.indexOf(inference));
   });
 });

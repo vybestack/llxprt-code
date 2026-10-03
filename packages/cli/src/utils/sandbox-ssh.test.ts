@@ -10,6 +10,7 @@ import type { Mock } from 'bun:test';
 import * as child_process from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
+import { PassThrough } from 'node:stream';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import { testRegex } from '../__tests__/regex.js';
 import {
@@ -43,11 +44,29 @@ const PODMAN_CONNECTION_LIST = Buffer.from(
   ]),
 );
 
+let podmanPortReady = true;
+
+function mockPodmanReadiness(ready: boolean): void {
+  podmanPortReady = ready;
+}
+
+function completedPodmanProbe(): child_process.ChildProcess {
+  const probe = new realNodeChildProcessModule.ChildProcess();
+  const stdout = new PassThrough();
+  Object.defineProperty(probe, 'stdout', { value: stdout });
+  Object.defineProperty(probe, 'stderr', { value: new PassThrough() });
+  queueMicrotask(() => {
+    stdout.end(podmanPortReady ? 'ok' : '');
+    probe.emit('close', podmanPortReady ? 0 : 1);
+  });
+  return probe;
+}
+
 function returnConnectionListWithUnavailablePort(
   command: string,
 ): NonSharedBuffer | string {
+  mockPodmanReadiness(false);
   if (command.includes('connection list')) return PODMAN_CONNECTION_LIST;
-  if (command.includes('ss -tln')) throw new Error('port not found');
   return Buffer.from('');
 }
 
@@ -301,6 +320,7 @@ describe('setupSshAgentForwarding', () => {
 });
 
 function mockValidPodmanConnection() {
+  mockPodmanReadiness(true);
   (
     child_process.execSync as unknown as Mock<
       (command: string) => NonSharedBuffer | string
@@ -319,10 +339,6 @@ function mockValidPodmanConnection() {
         ]),
       );
     }
-    // TCP port poll via ss
-    if (cmdStr.includes('ss -tln')) {
-      return Buffer.from('ok');
-    }
     return Buffer.from('');
   });
 }
@@ -330,8 +346,14 @@ function mockValidPodmanConnection() {
 function mockTunnelProcess(exitCode: number | null = null): MockTunnelProcess {
   const fakeProcess = createMockTunnelProcess(exitCode);
   (
-    child_process.spawn as unknown as Mock<typeof child_process.spawn>
-  ).mockReturnValue(fakeProcess as unknown as child_process.ChildProcess);
+    child_process.spawn as unknown as Mock<
+      (command: string) => child_process.ChildProcess
+    >
+  ).mockImplementation((command: string) =>
+    command.startsWith('podman machine ssh')
+      ? completedPodmanProbe()
+      : (fakeProcess as unknown as child_process.ChildProcess),
+  );
   return fakeProcess;
 }
 
@@ -685,8 +707,9 @@ describe('setupCredentialProxyPodmanMacOS', () => {
     const spawnCalls = (
       child_process.spawn as unknown as Mock<typeof child_process.spawn>
     ).mock.calls;
-    const sshArgs = spawnCalls[0][1] as string[];
-    const proxyArgs = spawnCalls[1][1] as string[];
+    const tunnelCalls = spawnCalls.filter(([command]) => command === 'ssh');
+    const sshArgs = tunnelCalls[0][1] as string[];
+    const proxyArgs = tunnelCalls[1][1] as string[];
 
     const sshPort = Number(sshArgs[sshArgs.indexOf('-R') + 1].split(':')[1]);
     const proxyPort = Number(

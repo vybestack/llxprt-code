@@ -1,0 +1,1750 @@
+{
+  "model": "qwen3.5:4b",
+  "digest": "2a654d98e6fba55d452b7043684e9b57a947e393bbffa62485a7aac05ee4eefd",
+  "runtime": "Ollama 0.31.1",
+  "context": 32768,
+  "transport": "native /api/chat",
+  "thinking": "pre-merge only",
+  "rawEvidenceRoot": "tmp/verify3781-deliver/",
+  "scope": "Darwin inference, not Linux Actions evidence",
+  "cases": [
+    {
+      "name": "clean-control",
+      "group": "replay",
+      "elapsedMs": 119657,
+      "state": "complete",
+      "unavailable": [],
+      "packets": 2,
+      "availablePackets": 2,
+      "changedPaths": 2,
+      "groupedPaths": 2,
+      "preMergeChecks": {
+        "title": {
+          "note": "PR title 'Add bounded review retries' is clear and descriptive, accurately reflecting the implementation intent stated in the body TLDR.",
+          "ok": true
+        },
+        "description": {
+          "ok": true,
+          "note": "All expected template sections are present. Testing claims still require independent verification."
+        },
+        "linked_issues": {
+          "ok": true,
+          "note": "Closing fulfillment: Implementation satisfies acceptance criteria via code diff: max retries limited by loop count (attempt < 3), auth errors trigger immediate throw before wait logic, delay implemented with setTimeout(1000). Test file contains specific assertion for authentication failure behavior. Execution logs not required per instructions."
+        },
+        "out_of_scope": {
+          "note": "No out-of-scope items identified; all acceptance criteria from linked issue #3781 are addressed by the provided code changes and test assertions."
+        }
+      },
+      "inference": [
+        {
+          "file": "inference-2.json",
+          "sha256": "8dc589b89ed4bea3098b679d80198c1d18e1247ad6a8774146304b5e7ebb6516",
+          "phase": "map",
+          "elapsedMs": 2329,
+          "inputBytes": 2485,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 663,
+          "outputTokens": 124
+        },
+        {
+          "file": "inference-3.json",
+          "sha256": "bf7176d81fa5d4db66da5e462995e26db9da2d0f320e0fc64f8a1f982b749653",
+          "phase": "group",
+          "elapsedMs": 2830,
+          "inputBytes": 2471,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 643,
+          "outputTokens": 164
+        },
+        {
+          "file": "inference-4.json",
+          "sha256": "58902a8ab79d21e429581e2bca0cfd27ff77b856efa875f87c079b34e91c654a",
+          "phase": "synthesis",
+          "elapsedMs": 3476,
+          "inputBytes": 3372,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 803,
+          "outputTokens": 207
+        },
+        {
+          "file": "inference-5.json",
+          "sha256": "5451922258ea4b038fe0071f2774641dae6fd5448c58b98ce53b004f0d9ca793",
+          "phase": "related",
+          "elapsedMs": 604,
+          "inputBytes": 1650,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 366,
+          "outputTokens": 2
+        },
+        {
+          "file": "inference-6.json",
+          "sha256": "91f2d3e9291759857ff74cf44beebaf97aadb9f9baa401f8e6f9735a63d6fe0d",
+          "phase": "related",
+          "elapsedMs": 1000,
+          "inputBytes": 1934,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 416,
+          "outputTokens": 34
+        },
+        {
+          "file": "inference-7.json",
+          "sha256": "78db2ff62ba28a56b8c3e6584c1ab5c56f910cdc4a2126fca09e14865ff13dc9",
+          "phase": "pre-merge",
+          "elapsedMs": 106749,
+          "inputBytes": 4806,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 7178,
+          "outputTokens": 232
+        },
+        {
+          "file": "inference-1.json",
+          "sha256": "1f4a5530a4c7c9f204abee8d9ea6c331c75fd2bd09e8863c4422a58e1c4c018b",
+          "phase": "map",
+          "elapsedMs": 1650,
+          "inputBytes": 2357,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 623,
+          "outputTokens": 85
+        }
+      ]
+    },
+    {
+      "name": "known-gap",
+      "group": "replay",
+      "elapsedMs": 107066,
+      "state": "complete",
+      "unavailable": [],
+      "packets": 2,
+      "availablePackets": 2,
+      "changedPaths": 2,
+      "groupedPaths": 2,
+      "preMergeChecks": {
+        "title": {
+          "note": "Title 'Add bounded review retries' clearly describes the feature implementation.",
+          "ok": true
+        },
+        "description": {
+          "ok": true,
+          "note": "All expected template sections are present. Testing claims still require independent verification."
+        },
+        "linked_issues": {
+          "ok": false,
+          "note": "Closing fulfillment: Implementation does not satisfy acceptance criteria. AC2 (no retry auth errors) unmet as code retries generic exceptions without status checks. AC3 (wait at least one second) absent in implementation logic. AC4 (tests cover auth failures) missing from test suite which only covers transient 500s."
+        },
+        "out_of_scope": {
+          "note": "No features identified as out of scope; however, acceptance criteria for retry behavior and testing coverage are unmet by the provided code evidence."
+        }
+      },
+      "inference": [
+        {
+          "file": "inference-2.json",
+          "sha256": "11b2a3c52994bb7ddb123149e89a497a6ba191a9ceda11b9cac69be253826bf8",
+          "phase": "map",
+          "elapsedMs": 2016,
+          "inputBytes": 2277,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 597,
+          "outputTokens": 82
+        },
+        {
+          "file": "inference-3.json",
+          "sha256": "045f0b314fa7b37ba88e38f887adf9e59030789ad8c0492c02ca32c1da06c96a",
+          "phase": "group",
+          "elapsedMs": 2890,
+          "inputBytes": 2316,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 603,
+          "outputTokens": 149
+        },
+        {
+          "file": "inference-4.json",
+          "sha256": "f28125c731de5a9560d1bc5a84f34090227b92af2eae1e7e0e5469701f6fc6d7",
+          "phase": "synthesis",
+          "elapsedMs": 3493,
+          "inputBytes": 3058,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 730,
+          "outputTokens": 146
+        },
+        {
+          "file": "inference-5.json",
+          "sha256": "161e8510b7e96406031fd63284d4ec262ecb848427ca563f2532a7f26e7ecc6f",
+          "phase": "related",
+          "elapsedMs": 691,
+          "inputBytes": 1567,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 346,
+          "outputTokens": 2
+        },
+        {
+          "file": "inference-6.json",
+          "sha256": "28aa4e615918a9dde8e508160dc376b860ce7418701a640c8d336a443107ba86",
+          "phase": "related",
+          "elapsedMs": 902,
+          "inputBytes": 1851,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 396,
+          "outputTokens": 24
+        },
+        {
+          "file": "inference-7.json",
+          "sha256": "d97fcbc4c260f3910027d53f8e9231551b86cf4a2aebbb5c798502f0bdd935b9",
+          "phase": "pre-merge",
+          "elapsedMs": 94166,
+          "inputBytes": 4494,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 5992,
+          "outputTokens": 216
+        },
+        {
+          "file": "inference-1.json",
+          "sha256": "4c38f44dc9f8bf94833f4e0c0e67fc506ce2ffb3c38d4080952c9f008421d654",
+          "phase": "map",
+          "elapsedMs": 1892,
+          "inputBytes": 2253,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 595,
+          "outputTokens": 78
+        }
+      ]
+    },
+    {
+      "name": "misleading-claim",
+      "group": "replay",
+      "elapsedMs": 119580,
+      "state": "complete",
+      "unavailable": [],
+      "packets": 2,
+      "availablePackets": 2,
+      "changedPaths": 2,
+      "groupedPaths": 2,
+      "preMergeChecks": {
+        "title": {
+          "note": "Title is clear and descriptive.",
+          "ok": true
+        },
+        "description": {
+          "ok": true,
+          "note": "All expected template sections are present. Testing claims still require independent verification."
+        },
+        "linked_issues": {
+          "ok": false,
+          "note": "Closing fulfillment: Actual code in scripts/retry.ts lacks logic to exclude authentication errors (401/403) as it retries on all exceptions without status checks. It also omits the required delay between attempts found in acceptance criteria, and provided tests do not cover authentication failures despite PR claims of satisfaction."
+        },
+        "out_of_scope": {
+          "note": "No specific items were flagged as out-of-scope relative to the PR scope or acceptance criteria provided."
+        }
+      },
+      "inference": [
+        {
+          "file": "inference-2.json",
+          "sha256": "007cf794062a94c6b9a756c6d83f66f7f89587f6739716175a323b7d0ee60181",
+          "phase": "map",
+          "elapsedMs": 1510,
+          "inputBytes": 2277,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 597,
+          "outputTokens": 82
+        },
+        {
+          "file": "inference-3.json",
+          "sha256": "2d6fd4b262bea671d27d525a2a3aec35dcbdd88ec51136f51f83bd3e431fe928",
+          "phase": "group",
+          "elapsedMs": 2818,
+          "inputBytes": 2316,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 603,
+          "outputTokens": 149
+        },
+        {
+          "file": "inference-4.json",
+          "sha256": "97a81741514c76d128ea06b56162250a9b666f42d7640cc29f11231cecb1f924",
+          "phase": "synthesis",
+          "elapsedMs": 2917,
+          "inputBytes": 3058,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 730,
+          "outputTokens": 146
+        },
+        {
+          "file": "inference-5.json",
+          "sha256": "7fc69e95f53cbe33663821be1758bcef2e72fe0b32030c36f16cb5a59eacb725",
+          "phase": "related",
+          "elapsedMs": 702,
+          "inputBytes": 1567,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 346,
+          "outputTokens": 2
+        },
+        {
+          "file": "inference-6.json",
+          "sha256": "7543d197c8bdaa9bf8fb9d7ba448d9a05cbfa0f30fbfe764bc5ea47172c624cd",
+          "phase": "related",
+          "elapsedMs": 972,
+          "inputBytes": 1851,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 396,
+          "outputTokens": 24
+        },
+        {
+          "file": "inference-7.json",
+          "sha256": "4249cf1327f816707153d8bf523df309a456ca788ca61117780cb9fe412ee44f",
+          "phase": "pre-merge",
+          "elapsedMs": 108160,
+          "inputBytes": 4617,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 5901,
+          "outputTokens": 199
+        },
+        {
+          "file": "inference-1.json",
+          "sha256": "a65c4d81dcda00fca28de1a800c1cda1f0826b6509c7c17771529612c73037fb",
+          "phase": "map",
+          "elapsedMs": 1485,
+          "inputBytes": 2253,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 595,
+          "outputTokens": 78
+        }
+      ]
+    },
+    {
+      "name": "stepfun3465",
+      "group": "history-current",
+      "elapsedMs": 98731,
+      "revisions": {
+        "base": "e4d0999b76b2cc6a9fee1be21f17095857ddb6d8",
+        "head": "94b43fd57feb14608245074d509c41ea2c879631"
+      },
+      "state": "incomplete",
+      "unavailable": [
+        "related",
+        "pre-merge"
+      ],
+      "packets": 10,
+      "availablePackets": 10,
+      "changedPaths": 6,
+      "groupedPaths": 6,
+      "preMergeChecks": null,
+      "inference": [
+        {
+          "file": "inference-10.json",
+          "sha256": "1b4e3a2955c5b3b528652fbafc636530a6d1626418ff43f45fabf83b6bf5c9f3",
+          "phase": "map",
+          "elapsedMs": 4032,
+          "inputBytes": 7738,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 2290,
+          "outputTokens": 124
+        },
+        {
+          "file": "inference-2.json",
+          "sha256": "6f38bf60554bf8bacbe0762edefc23fc0bd4c68e99c47f161827d995f4e7ef84",
+          "phase": "map",
+          "elapsedMs": 7333,
+          "inputBytes": 13895,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 3422,
+          "outputTokens": 198
+        },
+        {
+          "file": "inference-3.json",
+          "sha256": "5360055ca3a66b538449592786c87f8fceffa90592138f66ee02b85d81f1a0c5",
+          "phase": "map",
+          "elapsedMs": 4865,
+          "inputBytes": 10843,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 2558,
+          "outputTokens": 138
+        },
+        {
+          "file": "inference-11.json",
+          "sha256": "4d421f7916d8c6992a35dba83a08b9dac4e607ece7c0e6dda3f480d11d8ebdb8",
+          "phase": "group",
+          "elapsedMs": 11624,
+          "inputBytes": 17314,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 5346,
+          "outputTokens": 364
+        },
+        {
+          "file": "inference-16.json",
+          "sha256": "f7f645d541876cf5e84399a3e36f1e2358339e5ca2e74267dd757b0d4c240dc4",
+          "phase": "related",
+          "elapsedMs": 2062,
+          "inputBytes": 7251,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 1683,
+          "outputTokens": 2
+        },
+        {
+          "file": "inference-4.json",
+          "sha256": "d4497dd46121c3bb6ed85a6ed489b54863a0fcaf435546022c632ac16d7a92be",
+          "phase": "map",
+          "elapsedMs": 3507,
+          "inputBytes": 4575,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 1339,
+          "outputTokens": 110
+        },
+        {
+          "file": "inference-8.json",
+          "sha256": "7193065d49960fe55ba44667d29f89401d2fb301f413ef7acf96d966900b3e03",
+          "phase": "map",
+          "elapsedMs": 6547,
+          "inputBytes": 10810,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 3365,
+          "outputTokens": 195
+        },
+        {
+          "file": "inference-9.json",
+          "sha256": "22aeb33f4f2daef8100ce32a0357099fea2f17bfc3b28ea106150a8e1a4381bf",
+          "phase": "map",
+          "elapsedMs": 3081,
+          "inputBytes": 5100,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 1524,
+          "outputTokens": 91
+        },
+        {
+          "file": "inference-5.json",
+          "sha256": "4c40ada295810e3a6850e90c65247b72685eaf23e865a1c4c3abfd30e3169889",
+          "phase": "map",
+          "elapsedMs": 6717,
+          "inputBytes": 14567,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 4552,
+          "outputTokens": 128
+        },
+        {
+          "file": "inference-17.json",
+          "sha256": "b425d7ebe1a3af304f71871ed7678ea994ccd2aa31b3787278fd3f9246c7fee7",
+          "phase": "related",
+          "elapsedMs": 2721,
+          "inputBytes": 7535,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 1733,
+          "outputTokens": 96
+        },
+        {
+          "file": "inference-6.json",
+          "sha256": "ea9bd0d42eda1ee465ac78c8f360f24d7eb303cba3f785b2201c626edbfbec74",
+          "phase": "map",
+          "elapsedMs": 6096,
+          "inputBytes": 14573,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 4358,
+          "outputTokens": 107
+        },
+        {
+          "file": "inference-14.json",
+          "sha256": "d8a4d83ecf89da7febf2843622ebc88a93011a26cbac1f01732c249d856876fa",
+          "phase": "diagram",
+          "elapsedMs": 14022,
+          "inputBytes": 19591,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 5812,
+          "outputTokens": 410
+        },
+        {
+          "file": "inference-15.json",
+          "sha256": "8263d32db6e3bb67be34f3dbacc07c25f2e58cfaf4569b08975c5a16f67ada95",
+          "phase": "diagram",
+          "elapsedMs": 1156,
+          "inputBytes": 2418,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 586,
+          "outputTokens": 7
+        },
+        {
+          "file": "inference-7.json",
+          "sha256": "beea23dc0fcf6189c37a7c521b8c1754a95905297c2f48f136175f789d68c744",
+          "phase": "map",
+          "elapsedMs": 3251,
+          "inputBytes": 5226,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 1554,
+          "outputTokens": 116
+        },
+        {
+          "file": "inference-12.json",
+          "sha256": "abbbdb697472170c8803e7fcfff15b71de2795b0e2819020958abf06c08ce4be",
+          "phase": "synthesis",
+          "elapsedMs": 11620,
+          "inputBytes": 19816,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 5839,
+          "outputTokens": 320
+        },
+        {
+          "file": "inference-13.json",
+          "sha256": "f32f7af4e8570f68342609398400603b54de644f2a596a14de5da501a6153b1c",
+          "phase": "synthesis",
+          "elapsedMs": 2881,
+          "inputBytes": 2643,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 613,
+          "outputTokens": 121
+        },
+        {
+          "file": "inference-1.json",
+          "sha256": "b762846676d764a6477f601a5bca1afbcec4ea637a87ed556b28e51bba23d657",
+          "phase": "map",
+          "elapsedMs": 6141,
+          "inputBytes": 14078,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 3473,
+          "outputTokens": 133
+        }
+      ]
+    },
+    {
+      "name": "zai3673",
+      "group": "history-current",
+      "elapsedMs": 528266,
+      "revisions": {
+        "base": "999ba5c49864335b0c7d49bf6ea392f7463a2434",
+        "head": "61214722a31bed12b6bddebe74ff699ebbb9d94c"
+      },
+      "state": "incomplete",
+      "unavailable": [
+        "group",
+        "synthesis",
+        "related",
+        "pre-merge"
+      ],
+      "packets": 64,
+      "availablePackets": 64,
+      "changedPaths": 45,
+      "groupedPaths": 45,
+      "preMergeChecks": null,
+      "inference": [
+        {
+          "file": "inference-71.json",
+          "sha256": "55ef817a2669e49c933b5d8acedc3652ad4220bac7a54ad3e6f8f8163f6e1c2d",
+          "phase": "synthesis",
+          "elapsedMs": 15077,
+          "inputBytes": 18726,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 5012,
+          "outputTokens": 445
+        },
+        {
+          "file": "inference-26.json",
+          "sha256": "9ac276664af6723920a355ece38d959ea4211f8a9e851ef84770ecb2c70654bf",
+          "phase": "map",
+          "elapsedMs": 4075,
+          "inputBytes": 6398,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 1882,
+          "outputTokens": 91
+        },
+        {
+          "file": "inference-30.json",
+          "sha256": "da66ea5a015c3c695a436341fa59ca9547381bec48b976bdd274f5d9f36ab6ee",
+          "phase": "map",
+          "elapsedMs": 7214,
+          "inputBytes": 14638,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 4525,
+          "outputTokens": 98
+        },
+        {
+          "file": "inference-67.json",
+          "sha256": "24c2dc3b7e180e60630a84389bb24ecb7fce0773200842f64bd1a04e13242550",
+          "phase": "group",
+          "elapsedMs": 15748,
+          "inputBytes": 19295,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 5972,
+          "outputTokens": 394
+        },
+        {
+          "file": "inference-10.json",
+          "sha256": "d58a0b61da603c1dc8378937e6b9739cbd70b3a1cd985d048b653995264306fb",
+          "phase": "map",
+          "elapsedMs": 7623,
+          "inputBytes": 14101,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 3832,
+          "outputTokens": 200
+        },
+        {
+          "file": "inference-47.json",
+          "sha256": "c6892468be6cd42775dac4e5a1ef14a96770e82258740699a4c63dcceb484ede",
+          "phase": "map",
+          "elapsedMs": 7273,
+          "inputBytes": 11273,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 4178,
+          "outputTokens": 124
+        },
+        {
+          "file": "inference-51.json",
+          "sha256": "5fafc31ce4f68fb9103815659aba5416c7c22e58e6c418aca0d62681bf83255d",
+          "phase": "map",
+          "elapsedMs": 9258,
+          "inputBytes": 13761,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 5349,
+          "outputTokens": 149
+        },
+        {
+          "file": "inference-2.json",
+          "sha256": "18127edd6ce2844c46c7502900d5ecf7ca45c567a6fea7cf33794d383116a08a",
+          "phase": "map",
+          "elapsedMs": 2582,
+          "inputBytes": 3189,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 1038,
+          "outputTokens": 62
+        },
+        {
+          "file": "inference-84.json",
+          "sha256": "40a6b4a5533b6c28bd4ff43c8875118c2801c7e23fcd544a7b2cadef948cc4fb",
+          "phase": "diagram",
+          "elapsedMs": 5492,
+          "inputBytes": 18806,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 5040,
+          "outputTokens": 7
+        },
+        {
+          "file": "inference-3.json",
+          "sha256": "764335e01b044b1b9ef2d0a481ac813e4bcd4dd8c275f34a91ac07bb0f66b54d",
+          "phase": "map",
+          "elapsedMs": 4091,
+          "inputBytes": 6277,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 1785,
+          "outputTokens": 107
+        },
+        {
+          "file": "inference-50.json",
+          "sha256": "3c3d7ffcd34b3ada212d849f0bc1b064ae9a2a661e7aa480e84c51aab72ab24d",
+          "phase": "map",
+          "elapsedMs": 6947,
+          "inputBytes": 13553,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 4845,
+          "outputTokens": 81
+        },
+        {
+          "file": "inference-46.json",
+          "sha256": "5db3c5d9859ac70efb0765054ae34eb5b0d49e36aa98b3128ff5618ab00aca60",
+          "phase": "map",
+          "elapsedMs": 5848,
+          "inputBytes": 7733,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 2885,
+          "outputTokens": 118
+        },
+        {
+          "file": "inference-11.json",
+          "sha256": "8fd02d870b20bb99c806aff31ff7a84654aa6d98809591a2965f009652a44941",
+          "phase": "map",
+          "elapsedMs": 3151,
+          "inputBytes": 3310,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 881,
+          "outputTokens": 105
+        },
+        {
+          "file": "inference-66.json",
+          "sha256": "9d3c8831ad5b2be425f4c2b253a2327064cfa1a3e9a086b48a7c56431719d1b3",
+          "phase": "group",
+          "elapsedMs": 19812,
+          "inputBytes": 18053,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 6469,
+          "outputTokens": 530
+        },
+        {
+          "file": "inference-31.json",
+          "sha256": "b50e8be71c010e8717c598cf5bab8823f08f6e187ad67fe22237f90e2a4c39a3",
+          "phase": "map",
+          "elapsedMs": 5381,
+          "inputBytes": 12595,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 3680,
+          "outputTokens": 74
+        },
+        {
+          "file": "inference-27.json",
+          "sha256": "2efaaef0dfb0a8d433ce8d87d4002ffd6e5d24a6630a08331d7479c09e46208c",
+          "phase": "map",
+          "elapsedMs": 3976,
+          "inputBytes": 6561,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 1961,
+          "outputTokens": 90
+        },
+        {
+          "file": "inference-70.json",
+          "sha256": "5820fbc12f2c0264ba89f18bdef63aa8fe72fff60680e4861165aaf2a554e6c0",
+          "phase": "group",
+          "elapsedMs": 8665,
+          "inputBytes": 18349,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 5472,
+          "outputTokens": 326
+        },
+        {
+          "file": "inference-16.json",
+          "sha256": "e55548877269cc46595e414ebca08dc44788fcf9050b9a033e9acbbd54b3040d",
+          "phase": "map",
+          "elapsedMs": 5408,
+          "inputBytes": 12203,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 3845,
+          "outputTokens": 74
+        },
+        {
+          "file": "inference-41.json",
+          "sha256": "85a61efe9f0b7783d8ff49ab5bcb318ae5761f9252894bdcbbd6221b35e544a7",
+          "phase": "map",
+          "elapsedMs": 5047,
+          "inputBytes": 9704,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 2893,
+          "outputTokens": 74
+        },
+        {
+          "file": "inference-57.json",
+          "sha256": "5addbf5f3f659a51c5d2e5c6247dcadc4b2b91c3e682542f8bc98c3ed437c899",
+          "phase": "map",
+          "elapsedMs": 3095,
+          "inputBytes": 4331,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 1213,
+          "outputTokens": 79
+        },
+        {
+          "file": "inference-4.json",
+          "sha256": "8b139652d9ed99bb29060f975b3f12cce23d2f919ddc09c181c42ea4857f7510",
+          "phase": "map",
+          "elapsedMs": 2503,
+          "inputBytes": 3001,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 808,
+          "outputTokens": 75
+        },
+        {
+          "file": "inference-82.json",
+          "sha256": "8e8a9ce058405dbf224f1797d6234de915eab6013b6b1746cc5ea5427f912a93",
+          "phase": "diagram",
+          "elapsedMs": 5406,
+          "inputBytes": 18836,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 4976,
+          "outputTokens": 7
+        },
+        {
+          "file": "inference-8.json",
+          "sha256": "ebee34a0d8b0e83e9c8546e72d593baba19583cfbce58184b9d1cc5f5dabe306",
+          "phase": "map",
+          "elapsedMs": 3752,
+          "inputBytes": 6924,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 1993,
+          "outputTokens": 79
+        },
+        {
+          "file": "inference-77.json",
+          "sha256": "45f5caf62367981709ef6826b0a32941bf1e1cdf15d6f9e1168c6aee23757db4",
+          "phase": "synthesis",
+          "elapsedMs": 7698,
+          "inputBytes": 18932,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 5236,
+          "outputTokens": 351
+        },
+        {
+          "file": "inference-20.json",
+          "sha256": "bf2dc69d1f4164a6de5399fe58f7a221fdf598e09b358bebd1698f46aefa92c9",
+          "phase": "map",
+          "elapsedMs": 7228,
+          "inputBytes": 14003,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 3570,
+          "outputTokens": 173
+        },
+        {
+          "file": "inference-36.json",
+          "sha256": "6c8ae5776980135dcd28f3042e9770d69b8d4e6ea2732b991caf25530d71f853",
+          "phase": "map",
+          "elapsedMs": 3003,
+          "inputBytes": 2878,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 807,
+          "outputTokens": 79
+        },
+        {
+          "file": "inference-61.json",
+          "sha256": "94a4bb13bed97ec96791abd982dbb2fbfde5a3dcc12da9a13ea7d7f0b50007d4",
+          "phase": "map",
+          "elapsedMs": 3836,
+          "inputBytes": 4490,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 1397,
+          "outputTokens": 100
+        },
+        {
+          "file": "inference-60.json",
+          "sha256": "607bd4571a7d1d022606cb475849d0383fdb7d8935a4fae57eed6ed0441bb4bd",
+          "phase": "map",
+          "elapsedMs": 4480,
+          "inputBytes": 7608,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 2058,
+          "outputTokens": 101
+        },
+        {
+          "file": "inference-37.json",
+          "sha256": "ef1088a491f54637836f90b36eb26e717cdf9ad9dd084ff032a309c50c5d14f4",
+          "phase": "map",
+          "elapsedMs": 3501,
+          "inputBytes": 3121,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 806,
+          "outputTokens": 96
+        },
+        {
+          "file": "inference-21.json",
+          "sha256": "da7be00805bf479f90f25c51d5ad3f09f9869274b902524f9ff6ccdef6b21e58",
+          "phase": "map",
+          "elapsedMs": 4423,
+          "inputBytes": 7001,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 1898,
+          "outputTokens": 116
+        },
+        {
+          "file": "inference-9.json",
+          "sha256": "8955d40881bad1836181b89cc8239eb1a7b9135a6a5fe94bee66ebfbcdcdfafb",
+          "phase": "map",
+          "elapsedMs": 4308,
+          "inputBytes": 8180,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 2258,
+          "outputTokens": 104
+        },
+        {
+          "file": "inference-76.json",
+          "sha256": "9042780c5a20b652a60e42ba9c17356c778d81493c816ed8b42711b594bab5cf",
+          "phase": "synthesis",
+          "elapsedMs": 8477,
+          "inputBytes": 18648,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 5186,
+          "outputTokens": 141
+        },
+        {
+          "file": "inference-83.json",
+          "sha256": "b96392b2a7fc980eae0f5b8a0242d807bebf9245f10d27f0e438b4d27966684b",
+          "phase": "diagram",
+          "elapsedMs": 5521,
+          "inputBytes": 18423,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 5159,
+          "outputTokens": 7
+        },
+        {
+          "file": "inference-5.json",
+          "sha256": "8ec3b15ce65aea298f35cd6231b56179c6b0b9fd1af83bea8bca0cca91107c6d",
+          "phase": "map",
+          "elapsedMs": 4694,
+          "inputBytes": 7552,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 2043,
+          "outputTokens": 131
+        },
+        {
+          "file": "inference-56.json",
+          "sha256": "a81fb468d092286539515bfd2f5677f3735e78c06c677be463d7b9d1fbc78ee5",
+          "phase": "map",
+          "elapsedMs": 6917,
+          "inputBytes": 14873,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 4585,
+          "outputTokens": 67
+        },
+        {
+          "file": "inference-40.json",
+          "sha256": "d62cdb57026c3765bf000c9304b524832f3caf5c44da9d7ca96c1e7f41b3f308",
+          "phase": "map",
+          "elapsedMs": 2954,
+          "inputBytes": 3487,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 987,
+          "outputTokens": 80
+        },
+        {
+          "file": "inference-17.json",
+          "sha256": "0d17e3e8c3bdb3caffd963df72bca4ead5be641997e8c7fc0a61a0f2658bef5d",
+          "phase": "map",
+          "elapsedMs": 2803,
+          "inputBytes": 4075,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 1168,
+          "outputTokens": 82
+        },
+        {
+          "file": "inference-80.json",
+          "sha256": "9ff8a9876ca7f88b7de146bb1f8d200e3309b9c054d210bc63bac2c74feb4064",
+          "phase": "diagram",
+          "elapsedMs": 5888,
+          "inputBytes": 19045,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 5550,
+          "outputTokens": 7
+        },
+        {
+          "file": "inference-38.json",
+          "sha256": "177f67bc86e11e39b8ee2b25ec2d16ff8a65bec623e75e945b8d841fe8c41099",
+          "phase": "map",
+          "elapsedMs": 2957,
+          "inputBytes": 3651,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 1077,
+          "outputTokens": 70
+        },
+        {
+          "file": "inference-79.json",
+          "sha256": "27825e948023aef0f1a07879038b60c53afbe689b97ccc3155d6021cfbcb1401",
+          "phase": "diagram",
+          "elapsedMs": 6109,
+          "inputBytes": 18017,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 5714,
+          "outputTokens": 7
+        },
+        {
+          "file": "inference-6.json",
+          "sha256": "d217cb2e3ecd53af70e498f89a3019c14734a29903610205728091e8fbe95847",
+          "phase": "map",
+          "elapsedMs": 2895,
+          "inputBytes": 4372,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 1323,
+          "outputTokens": 70
+        },
+        {
+          "file": "inference-55.json",
+          "sha256": "6f1085b588b2a83cd07569eb1854d89ad0c335079bc3776b414ab1ae7889fe8d",
+          "phase": "map",
+          "elapsedMs": 2776,
+          "inputBytes": 3863,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 1131,
+          "outputTokens": 69
+        },
+        {
+          "file": "inference-43.json",
+          "sha256": "7a63617a54fc4c85d9ac1050b192d8224f668618f75a2f8f612f48d3f30ad8e5",
+          "phase": "map",
+          "elapsedMs": 5974,
+          "inputBytes": 5640,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 1995,
+          "outputTokens": 176
+        },
+        {
+          "file": "inference-14.json",
+          "sha256": "12ced61b3552e2370d68e729a0a508de2e95668c1ea2ac87a5122a5480728edd",
+          "phase": "map",
+          "elapsedMs": 3597,
+          "inputBytes": 8809,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 2562,
+          "outputTokens": 40
+        },
+        {
+          "file": "inference-63.json",
+          "sha256": "ba6b92747c8753bdac46eebcb141c765584f3391525dd4521d2a6d5caf9f5e8c",
+          "phase": "map",
+          "elapsedMs": 1984,
+          "inputBytes": 3191,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 872,
+          "outputTokens": 38
+        },
+        {
+          "file": "inference-34.json",
+          "sha256": "70faa5eeb4e896f3593ae97bd38758af1f6667079541bd0a78d5bc453ba270e8",
+          "phase": "map",
+          "elapsedMs": 7158,
+          "inputBytes": 14652,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 4388,
+          "outputTokens": 94
+        },
+        {
+          "file": "inference-22.json",
+          "sha256": "6df177df67ace9831d3e2e65692e89bd44a2670e7ef9e8a159fd4fe150ac9ad3",
+          "phase": "map",
+          "elapsedMs": 6933,
+          "inputBytes": 14621,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 4320,
+          "outputTokens": 112
+        },
+        {
+          "file": "inference-75.json",
+          "sha256": "ddc7538db2026ce5a7f1e368fadb6dde3ef498f9ff94007095d38ddd964a9662",
+          "phase": "synthesis",
+          "elapsedMs": 15993,
+          "inputBytes": 19061,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 5003,
+          "outputTokens": 525
+        },
+        {
+          "file": "inference-59.json",
+          "sha256": "f984289ac9091a9813042e0fb9fe0aef6b23d8886f3a399cad1bb1049e9e33f3",
+          "phase": "map",
+          "elapsedMs": 5982,
+          "inputBytes": 8129,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 3237,
+          "outputTokens": 100
+        },
+        {
+          "file": "inference-18.json",
+          "sha256": "620bd0596fa1951980a505b915720facaa531faf0023f3075b4eaae758e4ee6b",
+          "phase": "map",
+          "elapsedMs": 5130,
+          "inputBytes": 8215,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 2584,
+          "outputTokens": 122
+        },
+        {
+          "file": "inference-19.json",
+          "sha256": "2b726e87d7d7afa4155f3e89178381758a32c72244923bce5b9e03d1008003b8",
+          "phase": "map",
+          "elapsedMs": 3131,
+          "inputBytes": 2322,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 636,
+          "outputTokens": 119
+        },
+        {
+          "file": "inference-58.json",
+          "sha256": "637e0dcd8a5e987f914d964baf2ac2212eff7a9c9fca495959996dc04280d29b",
+          "phase": "map",
+          "elapsedMs": 3120,
+          "inputBytes": 2862,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 838,
+          "outputTokens": 98
+        },
+        {
+          "file": "inference-74.json",
+          "sha256": "a73e91d6e1f7c53dcf180f419acb594e921f0fb2e992c76fa8a371bcfda6aabc",
+          "phase": "synthesis",
+          "elapsedMs": 9411,
+          "inputBytes": 18573,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 5204,
+          "outputTokens": 184
+        },
+        {
+          "file": "inference-23.json",
+          "sha256": "135167c27c00da9c4e515d3e0898b0bae727ab3974e5e3a212e21cbea7feb1c5",
+          "phase": "map",
+          "elapsedMs": 5831,
+          "inputBytes": 11116,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 3430,
+          "outputTokens": 110
+        },
+        {
+          "file": "inference-35.json",
+          "sha256": "8c2a5f654d0e021dab12dab3b06b426ff6d0ce663f3c662368edff681927cb5a",
+          "phase": "map",
+          "elapsedMs": 6845,
+          "inputBytes": 14635,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 4363,
+          "outputTokens": 83
+        },
+        {
+          "file": "inference-62.json",
+          "sha256": "312c82066f40f915b10118fc6648627ef726d820ebbfa66d9b1b0b118d090d5c",
+          "phase": "map",
+          "elapsedMs": 5771,
+          "inputBytes": 9537,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 2784,
+          "outputTokens": 120
+        },
+        {
+          "file": "inference-15.json",
+          "sha256": "23ce6150465e5e8d3de9e3938ad9c46e86e27bdc312171141c94d1696ecca316",
+          "phase": "map",
+          "elapsedMs": 2648,
+          "inputBytes": 3730,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 1022,
+          "outputTokens": 76
+        },
+        {
+          "file": "inference-42.json",
+          "sha256": "85d2b1fd0df7b47061f332bf6bdee3dff10a85976b490abe9d1de500edaf8f74",
+          "phase": "map",
+          "elapsedMs": 4453,
+          "inputBytes": 6364,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 1925,
+          "outputTokens": 101
+        },
+        {
+          "file": "inference-54.json",
+          "sha256": "1152f845b9877e8a1d785480785990bd4f144a07ca74a538aacf85d3c2f5c3df",
+          "phase": "map",
+          "elapsedMs": 3658,
+          "inputBytes": 3980,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 1120,
+          "outputTokens": 102
+        },
+        {
+          "file": "inference-78.json",
+          "sha256": "dde6727a0ab195c74a322963a608c863d61ac9f749f0193253e52be429056169",
+          "phase": "diagram",
+          "elapsedMs": 5619,
+          "inputBytes": 18501,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 4985,
+          "outputTokens": 7
+        },
+        {
+          "file": "inference-7.json",
+          "sha256": "56b564edb05f6871f77ab02dda277edd11cc9d7bfa424a918a059fb2c922f2ee",
+          "phase": "map",
+          "elapsedMs": 3439,
+          "inputBytes": 4342,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 1211,
+          "outputTokens": 111
+        },
+        {
+          "file": "inference-39.json",
+          "sha256": "2717a50bfbfb0170538cddceb4833bb3cba54eee5c067d9b9358609369f9e271",
+          "phase": "map",
+          "elapsedMs": 6777,
+          "inputBytes": 14663,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 4260,
+          "outputTokens": 82
+        },
+        {
+          "file": "inference-81.json",
+          "sha256": "8befd456f7baa6917ec18ebdb8532313db0376d1fd38d3a7da3c3c5426f003b2",
+          "phase": "diagram",
+          "elapsedMs": 5630,
+          "inputBytes": 18348,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 5177,
+          "outputTokens": 7
+        },
+        {
+          "file": "inference-65.json",
+          "sha256": "dfbed1017aaa50ee809dad54b3d1f9136d75fd81d77ffefa4a1af876df687b93",
+          "phase": "group",
+          "elapsedMs": 12886,
+          "inputBytes": 18626,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 5550,
+          "outputTokens": 295
+        },
+        {
+          "file": "inference-32.json",
+          "sha256": "658d43feabca94880db852018552379256a7b6d83285925c941fc089c51dd3cc",
+          "phase": "map",
+          "elapsedMs": 4448,
+          "inputBytes": 5471,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 1386,
+          "outputTokens": 120
+        },
+        {
+          "file": "inference-24.json",
+          "sha256": "9968367274828706d916c0d17e08a9b5be582323320dfd06f673a266d4095c1b",
+          "phase": "map",
+          "elapsedMs": 6956,
+          "inputBytes": 14814,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 4339,
+          "outputTokens": 116
+        },
+        {
+          "file": "inference-73.json",
+          "sha256": "5e0eb44ad287e035518cfa6edee6301676e0e6bc15f0616fcadf529b2b7b591a",
+          "phase": "synthesis",
+          "elapsedMs": 13388,
+          "inputBytes": 19270,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 5577,
+          "outputTokens": 355
+        },
+        {
+          "file": "inference-49.json",
+          "sha256": "58f3f73e2ac56b9d2a3db6e79fe5ac1545c4a7d50ba3e0cb361faaf75f2c9a1c",
+          "phase": "map",
+          "elapsedMs": 8223,
+          "inputBytes": 13022,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 4822,
+          "outputTokens": 128
+        },
+        {
+          "file": "inference-69.json",
+          "sha256": "694ad44f856c73bb7bcdc1fc479c6d9fd7cf9efc306d8f013c194ee43daa196f",
+          "phase": "group",
+          "elapsedMs": 13937,
+          "inputBytes": 18065,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 5422,
+          "outputTokens": 323
+        },
+        {
+          "file": "inference-28.json",
+          "sha256": "ebbf7260262385c1de73bffe4fbfadee65d0a7d77261adfd1855807732a967ec",
+          "phase": "map",
+          "elapsedMs": 4480,
+          "inputBytes": 8443,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 2512,
+          "outputTokens": 81
+        },
+        {
+          "file": "inference-53.json",
+          "sha256": "9cef962194082ecf47cfb0a3fa95c5117b44b43dbda9e3c80c11117889312cc3",
+          "phase": "map",
+          "elapsedMs": 4402,
+          "inputBytes": 4972,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 1760,
+          "outputTokens": 109
+        },
+        {
+          "file": "inference-45.json",
+          "sha256": "d4fdd9bbd0da9cb022e3b0b42c97a4fdce05bd6ada23773dc332578fbb156d72",
+          "phase": "map",
+          "elapsedMs": 8430,
+          "inputBytes": 13528,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 5039,
+          "outputTokens": 124
+        },
+        {
+          "file": "inference-12.json",
+          "sha256": "c417075c3af998a194a1dcad59a2ad90bfebe6817b72be2f2b525db5cb32a90e",
+          "phase": "map",
+          "elapsedMs": 4471,
+          "inputBytes": 7441,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 2093,
+          "outputTokens": 113
+        },
+        {
+          "file": "inference-13.json",
+          "sha256": "4864067eed21a6a6b38c2990aa620427b9cd1393742ff0deb5a78d7ad88c261d",
+          "phase": "map",
+          "elapsedMs": 2481,
+          "inputBytes": 3141,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 1007,
+          "outputTokens": 71
+        },
+        {
+          "file": "inference-44.json",
+          "sha256": "efdb7fc2ce41683e8f7d82724666353ba0a302d5da72fbd44ea98040acdfebf4",
+          "phase": "map",
+          "elapsedMs": 9677,
+          "inputBytes": 14333,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 5500,
+          "outputTokens": 160
+        },
+        {
+          "file": "inference-52.json",
+          "sha256": "98872a99582ade4fc31ef9f8027f0ce18ea167451c2b95f1f9ffa2a437cbb31a",
+          "phase": "map",
+          "elapsedMs": 4863,
+          "inputBytes": 5220,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 1729,
+          "outputTokens": 127
+        },
+        {
+          "file": "inference-1.json",
+          "sha256": "e375ece42c33f63ed32a1222e8a55a3d9831bb0ffc6402f356fcc2d75f0405f8",
+          "phase": "map",
+          "elapsedMs": 2736,
+          "inputBytes": 3735,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 1099,
+          "outputTokens": 97
+        },
+        {
+          "file": "inference-29.json",
+          "sha256": "37fb63be40869219f94697826515e3e86da3b022e6a09d732e7487b7ed67d33e",
+          "phase": "map",
+          "elapsedMs": 6511,
+          "inputBytes": 14598,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 4578,
+          "outputTokens": 78
+        },
+        {
+          "file": "inference-68.json",
+          "sha256": "81d6ce4536e1e3d7a19520dc51fa2bda3d98b3a4d4261c109ffebf9ab80343ac",
+          "phase": "group",
+          "elapsedMs": 13864,
+          "inputBytes": 18679,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 5557,
+          "outputTokens": 327
+        },
+        {
+          "file": "inference-48.json",
+          "sha256": "4d4c7ea098a36faed122e69703070b162e9740cf3982c6706b605f45ff3a1890",
+          "phase": "map",
+          "elapsedMs": 8156,
+          "inputBytes": 12869,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 4584,
+          "outputTokens": 132
+        },
+        {
+          "file": "inference-72.json",
+          "sha256": "0252032bb08a4e3cca9fac46a7cce5b1a228ed6d617b30ebaca34405aeb5ba8c",
+          "phase": "synthesis",
+          "elapsedMs": 15787,
+          "inputBytes": 18242,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 5741,
+          "outputTokens": 447
+        },
+        {
+          "file": "inference-25.json",
+          "sha256": "ed664b0a02672ec494f7aa0f49ed88bb430fef0328e9ac6e08c6e89bf6f79138",
+          "phase": "map",
+          "elapsedMs": 4619,
+          "inputBytes": 7048,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 2022,
+          "outputTokens": 112
+        },
+        {
+          "file": "inference-33.json",
+          "sha256": "9fd8d22ac926a9db23c2ca6284873d518e7f5475ed0bb1eab53157cc4a3ed12e",
+          "phase": "map",
+          "elapsedMs": 3225,
+          "inputBytes": 5095,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 1430,
+          "outputTokens": 73
+        },
+        {
+          "file": "inference-64.json",
+          "sha256": "a360589476bed9d413c7389b9b0c70733485ff93e6c549da52df8f5b1324aa95",
+          "phase": "map",
+          "elapsedMs": 4457,
+          "inputBytes": 7085,
+          "status": 200,
+          "done": true,
+          "reason": "stop",
+          "promptTokens": 1972,
+          "outputTokens": 91
+        }
+      ]
+    }
+  ],
+  "sources": [
+    {
+      "path": "scripts/pr-review-walkthrough-parse.ts",
+      "sha256": "3d3feedd8f253605a34ff26a373d9073fa9edab30645d76b2cd19b5e5bf6ca7e"
+    },
+    {
+      "path": "scripts/pr-review-related.ts",
+      "sha256": "8b65837812314d3b2c6126d8a2ca4ce64e6da75ac9835606f0b2e1bc79aea627"
+    },
+    {
+      "path": "scripts/pr-review-evidence.ts",
+      "sha256": "8a0b372023cb92041cd33860da4e7152e283d9a212276fde811612fbc16684bc"
+    },
+    {
+      "path": "scripts/pr-review-prompts.ts",
+      "sha256": "5ca5dd03f610a75bccd78068a7830ce10eb8edd14cd14cea5972232d1af6f557"
+    },
+    {
+      "path": "scripts/pr-review-source-context.ts",
+      "sha256": "79cc992c2538385776bab56af5ca2ff62b6c767670d53a1173584f3ca098782d"
+    },
+    {
+      "path": "scripts/pr-review-llm-helpers.ts",
+      "sha256": "3ab380dc7d6e74cc458b54a993193837e423eabeb52859b26922ff72fd582824"
+    },
+    {
+      "path": "scripts/pr-review-walkthrough.ts",
+      "sha256": "ce25bb613aab6b2ef9488acbdd4779fa6e228116dc0db70f5b647b187f35ca34"
+    },
+    {
+      "path": "scripts/pr-review-local.ts",
+      "sha256": "73ca9058cb75a5b0a816922292364438b7a774634ce966547dfb9a090d4e9965"
+    },
+    {
+      "path": "scripts/pr-review-acceptance.ts",
+      "sha256": "84eafbdbc73857646f2f58293c9177d3c8dfbd5061137ebf7f6e1eeec84b5e4d"
+    },
+    {
+      "path": "scripts/pr-review-artifacts.ts",
+      "sha256": "2502e0e69fc502fc5c29f458f1ddc7557ec4019493c4982a2a9cc0b9e741ed00"
+    },
+    {
+      "path": ".github/workflows/pr-review.yml",
+      "sha256": "1e69942ea2c347405153c7aeca27e5f6e4a69c109ab593a4811aaefdfeb81744"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "0c46d914434cae3b9e17e96d3347a1b912411fca62bd7072cda6b83429e62aa0"
+    }
+  ],
+  "checks": [
+    {
+      "name": "diff",
+      "exit": 0
+    },
+    {
+      "name": "actionlint",
+      "exit": 0
+    },
+    {
+      "name": "scripts",
+      "exit": 0
+    },
+    {
+      "name": "build",
+      "exit": 0
+    },
+    {
+      "name": "audit",
+      "exit": 0
+    },
+    {
+      "name": "typecheck",
+      "exit": 0
+    },
+    {
+      "name": "yaml",
+      "exit": 0
+    },
+    {
+      "name": "smoke",
+      "exit": 0
+    },
+    {
+      "name": "lint",
+      "exit": 0
+    },
+    {
+      "name": "script-types",
+      "exit": 0
+    },
+    {
+      "name": "test",
+      "exit": 1
+    },
+    {
+      "name": "format",
+      "exit": 0
+    }
+  ],
+  "packageTestContext": {
+    "priorFullRun": {
+      "path": "tmp/verify3781-deliver/full-final/test.log",
+      "exit": 0
+    },
+    "latestFullRun": {
+      "path": "tmp/verify3781-deliver/full-remediation/test.log",
+      "exit": 1,
+      "failures": [
+        "SessionDiscovery property timeout tracked in #3790",
+        "local-media-store-locking live-publisher 2000ms contention under concurrent verification"
+      ]
+    },
+    "unchangedSuiteReruns": [
+      {
+        "path": "tmp/verify3781-deliver/session-discovery-default-runner-retry.log",
+        "exit": 0,
+        "passed": 23
+      },
+      {
+        "path": "tmp/verify3781-deliver/media-locking-retry2.log",
+        "exit": 0,
+        "passed": 15
+      }
+    ],
+    "scriptShard": {
+      "path": "tmp/verify3781-deliver/full-remediation/scripts.log",
+      "exit": 0
+    }
+  },
+  "audit": {
+    "baseline": "tmp/verify3781-next/test-audit-main/findings.tsv",
+    "current": "tmp/verify3781-deliver/audit-final/findings.tsv",
+    "newProhibitedFindings": 0,
+    "retained": [
+      "Existing parse-error catch assertion",
+      "Existing magnitude determinism self-confirming flag"
+    ],
+    "additional": "Repeated retry-count check is separated by backoff timing assertions, not an output-value mirror."
+  }
+}
