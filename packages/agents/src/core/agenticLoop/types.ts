@@ -26,12 +26,7 @@ import {
 import type { ToolConfirmationRequest } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import type { SchedulerHandle } from '@vybestack/llxprt-code-core/session/sessionExecutionServices.js';
-import type { SchedulerPurpose } from '@vybestack/llxprt-code-core/session/sessionSchedulerRegistry.js';
-import type {
-  SchedulerCallbacks,
-  SchedulerOptions,
-} from '@vybestack/llxprt-code-core/config/config.js';
+import type { SessionSchedulerOwner } from '../../api/agentRuntimeAssembly.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 
 /**
@@ -118,26 +113,7 @@ export interface AgenticLoopRuntime {
   getSessionId(): string;
   getModel(): string;
   getImagePayloadBudgetBytes(): number;
-  /**
-   * Releases the loop's scheduler acquisition. Callers holding their
-   * acquired scheduler handle should pass it so a stale release cannot
-   * dispose a replacement entry installed under the same owner/purpose.
-   */
-  disposeScheduler(
-    owner: object,
-    purpose: SchedulerPurpose,
-    handle?: object,
-  ): void;
-  getOrCreateScheduler(
-    owner: object,
-    purpose: SchedulerPurpose,
-    callbacks: SchedulerCallbacks,
-    options?: SchedulerOptions,
-    dependencies?: {
-      messageBus?: MessageBus;
-      toolRegistry?: ToolRegistry;
-    },
-  ): Promise<SchedulerHandle>;
+  getToolRegistry(): ToolRegistry;
 }
 
 /**
@@ -158,6 +134,7 @@ export interface AgenticLoopOptions {
   agentClient: AgentClientContract;
   /** Carries scheduler singleton, session id, and current model identity. */
   config: AgenticLoopRuntime;
+  schedulerOwner: Pick<SessionSchedulerOwner, 'acquire' | 'release'>;
   /** Confirmation bus the scheduler's ConfirmationCoordinator publishes to. */
   messageBus: MessageBus;
   /** Optional handler resolving ASK_USER confirmations. See {@link ApprovalHandler}. */

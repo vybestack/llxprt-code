@@ -48,14 +48,23 @@ export interface CoreToolHostConfig {
 }
 
 export class CoreToolHostAdapter implements IToolHost {
-  constructor(private readonly config: CoreToolHostConfig) {}
+  constructor(
+    private readonly config: CoreToolHostConfig,
+    private readonly workspace?: {
+      getDirectories(): readonly string[];
+      getFileSystemService(): IToolHostFileSystemService;
+    },
+  ) {}
 
   getTargetDir(): string {
     return this.config.getTargetDir();
   }
 
   getWorkspaceRoots(): string[] {
-    return [...this.config.getWorkspaceContext().getDirectories()];
+    return [
+      ...(this.workspace?.getDirectories() ??
+        this.config.getWorkspaceContext().getDirectories()),
+    ];
   }
 
   getApprovalMode(): ToolsApprovalMode {
@@ -133,7 +142,10 @@ export class CoreToolHostAdapter implements IToolHost {
   }
 
   getFileSystemService(): IToolHostFileSystemService {
-    return this.config.getFileSystemService();
+    return (
+      this.workspace?.getFileSystemService() ??
+      this.config.getFileSystemService()
+    );
   }
 
   getLlxprtIgnorePatterns(): string[] {

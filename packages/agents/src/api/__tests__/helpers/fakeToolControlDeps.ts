@@ -155,6 +155,7 @@ export function createToolControlDeps(
   const deps: ToolControlDeps = {
     messageBus,
     config,
+    getToolRegistry: () => config.getToolRegistry(),
     editorCallbacksHolder,
     displayCallbacksHolder: {},
     resolveClient: () => {

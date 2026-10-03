@@ -12,7 +12,6 @@ import type {
   AgentClientContract,
   AgentChatContract,
 } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import type { ToolSchedulerFactory } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
 import type { ContentGeneratorConfig } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import {
   PerformCompressionResult,
@@ -95,14 +94,6 @@ export function createTestAgentClient(
   };
 }
 
-const createTestToolScheduler: ToolSchedulerFactory = () => ({
-  schedule: async () => {},
-  cancelAll: () => {},
-  dispose: () => {},
-  setCallbacks: () => {},
-  handleConfirmationResponse: async () => {},
-});
-
 /**
  * Test-only helper that returns a session-scoped MessageBus for the given Config.
  *
@@ -119,25 +110,12 @@ export function getTestRuntimeMessageBus(config: Config): MessageBusType {
 }
 
 export function attachTestAgentFactories(config: Config): void {
-  const target = config as Config & {
-    agentClientFactory?: unknown;
-    toolSchedulerFactory?: unknown;
-  };
-  const descriptors: PropertyDescriptorMap = {};
+  const target = config as Config & { agentClientFactory?: unknown };
   if (target.agentClientFactory === undefined) {
-    descriptors.agentClientFactory = {
+    Object.defineProperty(config, 'agentClientFactory', {
       value: () => createTestAgentClient(),
       configurable: true,
-    };
-  }
-  if (target.toolSchedulerFactory === undefined) {
-    descriptors.toolSchedulerFactory = {
-      value: createTestToolScheduler,
-      configurable: true,
-    };
-  }
-  if (Object.keys(descriptors).length > 0) {
-    Object.defineProperties(config, descriptors);
+    });
   }
 }
 

@@ -107,6 +107,7 @@ export async function performMcpOAuth(
       oauthConfig,
       mcpServerUrl,
       appEvents,
+      runtimeConfig.getMcpHostServices?.(),
     );
 
     context.ui.addItem(

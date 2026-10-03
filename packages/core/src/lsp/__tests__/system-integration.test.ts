@@ -15,7 +15,11 @@ import { fileURLToPath } from 'node:url';
 import type { ConfigParameters } from '../../config/config.js';
 import { Config } from '../../config/config.js';
 import type { LspConfig } from '@vybestack/llxprt-code-ide-integration';
-import { initializeTestConfig } from '../../__tests__/config-test-helpers.js';
+import {
+  initializeTestLsp,
+  testLspClient,
+  shutdownTestLsp,
+} from './lspTestRuntime.js';
 
 import { setLlxprtMdFilename as mockSetLlxprtMdFilename } from '@vybestack/llxprt-code-tools';
 import * as lspServiceClientModule from '@vybestack/llxprt-code-ide-integration';
@@ -41,6 +45,7 @@ void vi.mock('@vybestack/llxprt-code-tools', () => {
       ),
       discoverAllTools: vi.fn(),
       sortTools: vi.fn(),
+      bindWorkspaceAuthority: vi.fn(),
       getAllTools: vi.fn(() => [...tools]),
       removeMcpToolsByServer: vi.fn((serverName: string) => {
         for (let i = tools.length - 1; i >= 0; i -= 1) {
@@ -274,26 +279,26 @@ describe('LSP system integration (P35)', () => {
   }
   it('returns undefined client/config when lsp is false', async () => {
     const config = new Config(createBaseConfigParams({ lsp: false }));
-    await initializeTestConfig(config);
+    await initializeTestLsp(config);
 
-    expect(config.getLspServiceClient()).toBeUndefined();
+    expect(testLspClient(config)).toBeUndefined();
     expect(config.getLspConfig()).toBeUndefined();
   });
 
   it('defaults to disabled when lsp key is absent (not configured)', async () => {
     const config = new Config(createBaseConfigParams());
-    await initializeTestConfig(config);
+    await initializeTestLsp(config);
 
     expect(config.getLspConfig()).toBeUndefined();
-    expect(config.getLspServiceClient()).toBeUndefined();
+    expect(testLspClient(config)).toBeUndefined();
   });
 
   it('defaults to enabled config when lsp is true', async () => {
     const config = new Config(createBaseConfigParams({ lsp: true }));
-    await initializeTestConfig(config);
+    await initializeTestLsp(config);
 
     expect(config.getLspConfig()).toStrictEqual({ servers: [] });
-    expect(config.getLspServiceClient()).toBeDefined();
+    expect(testLspClient(config)).toBeDefined();
   });
 
   it('uses provided lsp config object', async () => {
@@ -304,24 +309,24 @@ describe('LSP system integration (P35)', () => {
       navigationTools: true,
     };
     const config = new Config(createBaseConfigParams({ lsp }));
-    await initializeTestConfig(config);
+    await initializeTestLsp(config);
 
     expect(config.getLspConfig()).toStrictEqual(lsp);
   });
 
   it('returns same LSP service client instance across calls', async () => {
     const config = new Config(createBaseConfigParams({ lsp: { servers: [] } }));
-    await initializeTestConfig(config);
+    await initializeTestLsp(config);
 
-    const client1 = config.getLspServiceClient();
-    const client2 = config.getLspServiceClient();
+    const client1 = testLspClient(config);
+    const client2 = testLspClient(config);
     expect(client1).toBeDefined();
     expect(client1).toBe(client2);
   });
 
   it('returns same LSP config reference across calls', async () => {
     const config = new Config(createBaseConfigParams({ lsp: { servers: [] } }));
-    await initializeTestConfig(config);
+    await initializeTestLsp(config);
 
     const config1 = config.getLspConfig();
     const config2 = config.getLspConfig();
@@ -338,7 +343,7 @@ describe('LSP system integration (P35)', () => {
         },
       }),
     );
-    await initializeTestConfig(config);
+    await initializeTestLsp(config);
 
     const tools = config.getToolRegistry().getAllTools();
     const lspNavTools = tools.filter(
@@ -360,7 +365,7 @@ describe('LSP system integration (P35)', () => {
             },
           }),
         );
-        await initializeTestConfig(config);
+        await initializeTestLsp(config);
 
         const tools = config.getToolRegistry().getAllTools();
         const lspNavTools = tools.filter(
@@ -385,9 +390,9 @@ describe('LSP system integration (P35)', () => {
         },
       }),
     );
-    await initializeTestConfig(config);
+    await initializeTestLsp(config);
 
-    const lspClient = config.getLspServiceClient();
+    const lspClient = testLspClient(config);
     expect(lspClient?.isAlive()).toBe(false);
 
     const tools = config.getToolRegistry().getAllTools();
@@ -404,8 +409,8 @@ describe('LSP system integration (P35)', () => {
     ).mockRejectedValue(new Error('simulated start failure'));
 
     const config = new Config(createBaseConfigParams({ lsp: { servers: [] } }));
-    await expect(initializeTestConfig(config)).resolves.toBeUndefined();
-    expect(config.getLspServiceClient()).toBeUndefined();
+    await expect(initializeTestLsp(config)).resolves.toBeUndefined();
+    expect(testLspClient(config)).toBeUndefined();
     expect(config.getLspConfig()).toStrictEqual({ servers: [] });
   });
 
@@ -419,11 +424,11 @@ describe('LSP system integration (P35)', () => {
           },
         }),
       );
-      await initializeTestConfig(config);
+      await initializeTestLsp(config);
 
-      await config.shutdownLspService();
+      await shutdownTestLsp(config);
 
-      expect(config.getLspServiceClient()).toBeUndefined();
+      expect(testLspClient(config)).toBeUndefined();
       const tools = config.getToolRegistry().getAllTools();
       const lspNavTools = tools.filter(
         (t: { serverName?: string }) => t.serverName === 'lsp-navigation',

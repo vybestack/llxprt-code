@@ -77,7 +77,6 @@ describe('HookSystem', () => {
         allowedEnvironmentVariables: [],
         blockedEnvironmentVariables: [],
       }),
-      getSessionRecordingService: vi.fn().mockReturnValue(null),
     } as unknown as Config;
 
     hookSystem = new HookSystem(mockConfig);

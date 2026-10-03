@@ -24,6 +24,7 @@
 import { describe, it, expect, vi } from 'bun:test';
 import * as fc from 'fast-check';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { LspServiceClient } from '@vybestack/llxprt-code-ide-integration';
 import {
   disposeCliRuntime,
   getCliRuntimeServices,
@@ -125,13 +126,14 @@ describe('createAgent self-contained assembly @plan:ISSUE-3222 @requirement:REQ-
     const disposeSpy = vi
       .spyOn(Config.prototype, 'dispose')
       .mockRejectedValueOnce(injectedCleanupError);
-    const lspShutdownSpy = vi.spyOn(Config.prototype, 'shutdownLspService');
+    const lspShutdownSpy = vi.spyOn(LspServiceClient.prototype, 'shutdown');
     try {
       let rejection: unknown;
       try {
         await buildAgent('plain-text.jsonl', {
           sessionId: runtimeId,
           activation: failingActivation,
+          lsp: true,
         });
       } catch (error) {
         rejection = error;
@@ -160,8 +162,8 @@ describe('createAgent self-contained assembly @plan:ISSUE-3222 @requirement:REQ-
       ).toBe(true);
       // The injected cleanup error is preserved BY IDENTITY.
       expect(rejection.errors).toContain(injectedCleanupError);
-      // The cleanup step AFTER the injected failure still ran.
-      expect(lspShutdownSpy).toHaveBeenCalledTimes(1);
+      // Activation failed before session publication, so no LSP was started.
+      expect(lspShutdownSpy).toHaveBeenCalledTimes(0);
     } finally {
       disposeSpy.mockRestore();
       lspShutdownSpy.mockRestore();
@@ -226,29 +228,15 @@ describe('createAgent self-contained assembly @plan:ISSUE-3222 @requirement:REQ-
     }
   });
 
-  // Review finding on #3222: Config.dispose() does NOT shut down the LSP
-  // service (agentImpl.dispose wires that separately for agent-owned Configs),
-  // so a bootstrap that failed AFTER config.initialize() started LSP but
-  // BEFORE the facade exists had no owner left to release it — the caller
-  // gets a rejection with no Agent to dispose and the LSP service leaks.
-  it('T7 a post-initialize activation failure releases the LSP service the agent-owned Config started: the shutdown ran and the service client is gone @requirement:REQ-3222-AC5 @scenario:activation-failure-lsp-leak @given:createAgent with LSP enabled and a strict activation intent that fails AFTER config.initialize() started LSP @when:createAgent rejects @then:shutdownLspService ran exactly once on the owned Config before the rejection resolves (no facade exists to do it), the service client initialize() constructed was DEFINED before that shutdown, and the owned Config public LSP state shows the client actually cleared afterwards', async () => {
+  it('does not start the workspace LSP before an activation failure', async () => {
     const runtimeId = 'issue3222-createagent-failure-lsp-shutdown';
-    // The Config is constructed inside createAgent, so its state is observed
-    // at the prototype seam (the same seam subagent-test-helpers uses to
-    // spy on Config behavior). The spy CALLS THROUGH so the real shutdown
-    // still releases the started service; recording the public
-    // getLspServiceClient() state on the receiver around that call makes the
-    // teardown independently observable, beyond the method call count.
-    let clientBeforeShutdown: ReturnType<Config['getLspServiceClient']>;
-    let clientAfterShutdown: ReturnType<Config['getLspServiceClient']>;
-    const realShutdownLspService = Config.prototype.shutdownLspService;
-    const lspShutdownSpy = vi
-      .spyOn(Config.prototype, 'shutdownLspService')
-      .mockImplementation(async function (this: Config) {
-        clientBeforeShutdown = this.getLspServiceClient();
-        await realShutdownLspService.call(this);
-        clientAfterShutdown = this.getLspServiceClient();
-      });
+    const start = vi
+      .spyOn(LspServiceClient.prototype, 'start')
+      .mockResolvedValue(undefined);
+    vi.spyOn(LspServiceClient.prototype, 'isAlive').mockReturnValue(false);
+    const shutdown = vi
+      .spyOn(LspServiceClient.prototype, 'shutdown')
+      .mockResolvedValue(undefined);
     try {
       await expect(
         buildAgent('plain-text.jsonl', {
@@ -257,20 +245,12 @@ describe('createAgent self-contained assembly @plan:ISSUE-3222 @requirement:REQ-
           lsp: true,
         }),
       ).rejects.toThrow(/createAgent activation failed/);
-
-      expect(lspShutdownSpy).toHaveBeenCalledTimes(1);
-      // Non-vacuous state change: initialize() CONSTRUCTED a service client
-      // (LspServiceClient.start() reports failure through disable() rather
-      // than throwing, so under lsp:true the client is always set before
-      // the shutdown runs).
-      expect(clientBeforeShutdown).toBeDefined();
-      // shutdownLsp is the only path that clears _lspState.lspServiceClient
-      // (Config.dispose() does not touch LSP state), so an undefined client
-      // here proves the service was actually released by the call-through
-      // shutdown — not merely that the method was invoked.
-      expect(clientAfterShutdown).toBeUndefined();
+      expect(start).toHaveBeenCalledTimes(0);
+      expect(shutdown).toHaveBeenCalledTimes(0);
     } finally {
-      lspShutdownSpy.mockRestore();
+      start.mockRestore();
+      shutdown.mockRestore();
+      vi.restoreAllMocks();
       await disposeCliRuntime(runtimeId);
     }
   });

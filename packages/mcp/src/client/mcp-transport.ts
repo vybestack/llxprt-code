@@ -15,8 +15,9 @@ import type { MCPServerConfig } from '../config/mcpServerConfig.js';
 import type { McpAuthProvider } from '../auth/auth-provider.js';
 import { getRegisteredMcpAuthFactoryRegistry } from '../auth/mcp-auth-factory.js';
 import { MCPOAuthProvider } from '../auth/oauth-provider.js';
-import { MCPOAuthTokenStorage } from '../auth/oauth-token-storage.js';
+import { createMcpOAuthTokenStorage } from '../auth/oauth-token-storage.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
+import type { McpHostServices } from '../host/hostServices.js';
 
 const debugLogger = DebugLogger.getLogger('llxprt:core:tools:mcp-client');
 
@@ -256,13 +257,18 @@ export async function createTransportWithOAuth(
  */
 export async function getStoredOAuthToken(
   serverName: string,
+  hostServices?: Readonly<McpHostServices>,
 ): Promise<string | null> {
-  const tokenStorage = new MCPOAuthTokenStorage();
+  const tokenStorage = createMcpOAuthTokenStorage(hostServices);
   const credentials = await tokenStorage.getCredentials(serverName);
   if (!credentials) return null;
-  return MCPOAuthProvider.getValidToken(serverName, {
-    clientId: credentials.clientId,
-  });
+  return MCPOAuthProvider.getValidToken(
+    serverName,
+    {
+      clientId: credentials.clientId,
+    },
+    hostServices,
+  );
 }
 
 /**
@@ -316,6 +322,7 @@ function validateNoUrlAuthProvider(mcpServerConfig: MCPServerConfig): void {
 async function resolveOAuthHeaders(
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
+  hostServices?: Readonly<McpHostServices>,
 ): Promise<{
   headers: Record<string, string>;
   authProvider: McpAuthProvider | undefined;
@@ -328,7 +335,11 @@ async function resolveOAuthHeaders(
     return { headers, authProvider };
   }
 
-  const oauthResult = await resolveAccessToken(mcpServerName, mcpServerConfig);
+  const oauthResult = await resolveAccessToken(
+    mcpServerName,
+    mcpServerConfig,
+    hostServices,
+  );
   if (oauthResult.hasOAuthConfig && oauthResult.accessToken) {
     headers['Authorization'] = `Bearer ${oauthResult.accessToken}`;
   }
@@ -339,6 +350,7 @@ async function resolveOAuthHeaders(
 async function resolveAccessToken(
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
+  hostServices?: Readonly<McpHostServices>,
 ): Promise<{ accessToken: string | null; hasOAuthConfig: boolean }> {
   let accessToken: string | null = null;
   let hasOAuthConfig: boolean = mcpServerConfig.oauth?.enabled === true;
@@ -347,6 +359,7 @@ async function resolveAccessToken(
     accessToken = await MCPOAuthProvider.getValidToken(
       mcpServerName,
       mcpServerConfig.oauth,
+      hostServices,
     );
 
     if (
@@ -360,13 +373,17 @@ async function resolveAccessToken(
       );
     }
   } else {
-    const tokenStorage = new MCPOAuthTokenStorage();
+    const tokenStorage = createMcpOAuthTokenStorage(hostServices);
     const credentials = await tokenStorage.getCredentials(mcpServerName);
 
     if (credentials) {
-      accessToken = await MCPOAuthProvider.getValidToken(mcpServerName, {
-        clientId: credentials.clientId,
-      });
+      accessToken = await MCPOAuthProvider.getValidToken(
+        mcpServerName,
+        {
+          clientId: credentials.clientId,
+        },
+        hostServices,
+      );
 
       if (
         accessToken !== null &&
@@ -387,10 +404,12 @@ async function resolveAccessToken(
 async function createUrlBasedTransport(
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
+  hostServices?: Readonly<McpHostServices>,
 ): Promise<Transport> {
   const { headers, authProvider } = await resolveOAuthHeaders(
     mcpServerName,
     mcpServerConfig,
+    hostServices,
   );
 
   const transportOptions:
@@ -411,6 +430,7 @@ export async function createTransport(
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
   debugMode: boolean,
+  hostServices?: Readonly<McpHostServices>,
 ): Promise<Transport> {
   const noUrl = !mcpServerConfig.url && !mcpServerConfig.httpUrl;
   if (noUrl) {
@@ -418,7 +438,11 @@ export async function createTransport(
   }
 
   if (mcpServerConfig.httpUrl || mcpServerConfig.url) {
-    return createUrlBasedTransport(mcpServerName, mcpServerConfig);
+    return createUrlBasedTransport(
+      mcpServerName,
+      mcpServerConfig,
+      hostServices,
+    );
   }
 
   if (mcpServerConfig.command) {

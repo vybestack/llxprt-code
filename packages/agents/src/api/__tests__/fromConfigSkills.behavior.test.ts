@@ -23,10 +23,19 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
-import { ACTIVATE_SKILL_TOOL_NAME } from '@vybestack/llxprt-code-tools';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
-import { internalConfig } from './helpers/agentHarness.js';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import { SimpleExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
+import { MessageBusType } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
+import {
+  ACTIVATE_SKILL_TOOL_NAME,
+  ActivateSkillTool,
+  ToolConfirmationOutcome,
+} from '@vybestack/llxprt-code-tools';
+import {
+  buildCliStyleConfig,
+  buildFactoryLessConfig,
+} from './helpers/buildCliStyleConfig.js';
+import { AgentImpl } from '../agentImpl.js';
 
 interface ProviderToolDeclaration {
   readonly name: string;
@@ -39,8 +48,11 @@ interface ProviderToolDeclaration {
  * rather than returning empty if the shape moves, so a refactor of
  * `ChatSession.setTools` cannot turn this green by accident.
  */
-function modelVisibleSkillNames(config: Config): string[] {
-  const chat = config.getAgentClient().getChat() as unknown as {
+function modelVisibleSkillNames(agent: Agent): string[] {
+  if (!(agent instanceof AgentImpl)) {
+    throw new Error('Expected the real Agent implementation');
+  }
+  const chat = agent.agentClient.getChat() as unknown as {
     generationConfig?: {
       tools?: Array<{ functionDeclarations?: ProviderToolDeclaration[] }>;
     };
@@ -95,13 +107,201 @@ describe('fromConfig gives the model the skills the config discovered @issue:338
       }
 
       expect(agent.skills.list().map((skill) => skill.name)).toContain('alpha');
-      expect(modelVisibleSkillNames(internalConfig(agent))).toContain('alpha');
+      expect(modelVisibleSkillNames(agent)).toContain('alpha');
     } finally {
       await agent?.dispose().catch(() => {
         /* disposed via cleanup regardless of impl state */
       });
       await built.cleanup();
       rmSync(workspace, { recursive: true, force: true });
+    }
+  });
+
+  it('builds activation confirmation on the second plain adopter bus after the first agent disposes', async () => {
+    const workspace = mkdtempSync(join(tmpdir(), 'llxprt-adopted-skill-bus-'));
+    writeSkill(workspace, 'alpha');
+    const built = await buildFactoryLessConfig(
+      'plain-text.jsonl',
+      {},
+      { skillsSupport: true, workingDir: workspace },
+    );
+    const busA = built.messageBus;
+    const busB = new MessageBus(
+      built.config.getPolicyEngine(),
+      built.config.getDebugMode(),
+    );
+    const routed: string[] = [];
+    busA.subscribe(MessageBusType.UPDATE_POLICY, () => routed.push('A'));
+    busB.subscribe(MessageBusType.UPDATE_POLICY, () => routed.push('B'));
+    let agentA: Agent | undefined;
+    let agentB: Agent | undefined;
+    try {
+      agentA = await fromConfig({ config: built.config, messageBus: busA });
+      await agentA.dispose();
+      agentA = undefined;
+      agentB = await fromConfig({ config: built.config, messageBus: busB });
+      const tool = agentB.getToolRegistry().getTool(ACTIVATE_SKILL_TOOL_NAME);
+      expect(tool).toBeInstanceOf(ActivateSkillTool);
+      if (!(tool instanceof ActivateSkillTool)) {
+        throw new Error('Expected an activation tool');
+      }
+      const confirmation = await tool
+        .build({ name: 'alpha' })
+        .shouldConfirmExecute(new AbortController().signal);
+      if (confirmation === false) {
+        throw new Error('Expected skill activation confirmation');
+      }
+      await confirmation.onConfirm(ToolConfirmationOutcome.ProceedAlways);
+      expect(routed).toStrictEqual(['B']);
+      expect(agentB.getMessageBus()).toBe(busB);
+    } finally {
+      await agentB?.dispose();
+      await agentA?.dispose();
+      await built.cleanup();
+      rmSync(workspace, { recursive: true, force: true });
+      busA.removeAllListeners();
+      busB.removeAllListeners();
+    }
+  });
+
+  it('reloads skills into the caller and other live sessions without reviving a disposed bus', async () => {
+    const workspace = mkdtempSync(
+      join(tmpdir(), 'llxprt-shared-skill-reload-'),
+    );
+    writeSkill(workspace, 'alpha');
+    const built = await buildFactoryLessConfig(
+      'plain-text.jsonl',
+      {},
+      { skillsSupport: true, workingDir: workspace },
+    );
+    const config = built.config;
+    const busA = built.messageBus;
+    const busB = new MessageBus(
+      config.getPolicyEngine(),
+      config.getDebugMode(),
+    );
+    const busC = new MessageBus(
+      config.getPolicyEngine(),
+      config.getDebugMode(),
+    );
+    const routed: string[] = [];
+    busA.subscribe(MessageBusType.UPDATE_POLICY, () => routed.push('A'));
+    busB.subscribe(MessageBusType.UPDATE_POLICY, () => routed.push('B'));
+    busC.subscribe(MessageBusType.UPDATE_POLICY, () => routed.push('C'));
+    let agentA: Agent | undefined;
+    let agentB: Agent | undefined;
+    let agentC: Agent | undefined;
+    try {
+      agentA = await fromConfig({ config, messageBus: busA });
+      agentB = await fromConfig({ config, messageBus: busB });
+      agentC = await fromConfig({ config, messageBus: busC });
+      if (!(agentB instanceof AgentImpl) || !(agentC instanceof AgentImpl)) {
+        throw new Error('Expected real Agent implementations');
+      }
+      await agentB.agentClient.setTools();
+      await agentC.agentClient.setTools();
+      await agentA.dispose();
+      agentA = undefined;
+      writeSkill(workspace, 'beta');
+
+      await agentB.skills.reload();
+
+      for (const agent of [agentB, agentC]) {
+        const activation = agent
+          .getToolRegistry()
+          .getTool(ACTIVATE_SKILL_TOOL_NAME);
+        expect(activation).toBeInstanceOf(ActivateSkillTool);
+        expect(activation?.schema.description).toContain('beta');
+        expect(agent.skills.get('beta')?.name).toBe('beta');
+        expect(modelVisibleSkillNames(agent)).toContain('beta');
+      }
+      const tool = agentB.getToolRegistry().getTool(ACTIVATE_SKILL_TOOL_NAME);
+      if (!(tool instanceof ActivateSkillTool)) {
+        throw new Error('Expected the caller session activation tool');
+      }
+      const confirmation = await tool
+        .build({ name: 'beta' })
+        .shouldConfirmExecute(new AbortController().signal);
+      if (confirmation === false) {
+        throw new Error('Expected reloaded skill activation confirmation');
+      }
+      await confirmation.onConfirm(ToolConfirmationOutcome.ProceedAlways);
+      expect(routed).toStrictEqual(['B']);
+    } finally {
+      await agentC?.dispose();
+      await agentB?.dispose();
+      await agentA?.dispose();
+      await built.cleanup();
+      rmSync(workspace, { recursive: true, force: true });
+      busA.removeAllListeners();
+      busB.removeAllListeners();
+      busC.removeAllListeners();
+    }
+  });
+
+  it('does not route extension skill discovery to the disposed first adopter bus', async () => {
+    const built = await buildFactoryLessConfig(
+      'plain-text.jsonl',
+      {},
+      { skillsSupport: true },
+      { enableExtensionReloading: true },
+    );
+    const config = built.config;
+    const busA = built.messageBus;
+    const busB = new MessageBus(
+      config.getPolicyEngine(),
+      config.getDebugMode(),
+    );
+    const observedBuses: MessageBus[] = [];
+    config.setPostSkillDiscoveryToolRegistrar(
+      (_registry, _skillService, bus) => {
+        observedBuses.push(bus);
+      },
+    );
+    let agentA: Agent | undefined;
+    let agentB: Agent | undefined;
+    try {
+      agentA = await fromConfig({ config, messageBus: busA });
+      agentB = await fromConfig({ config, messageBus: busB });
+      await agentA.dispose();
+      agentA = undefined;
+      observedBuses.length = 0;
+      const loader = config.getExtensionLoader();
+      if (!(loader instanceof SimpleExtensionLoader)) {
+        throw new Error('Expected a reloadable extension loader');
+      }
+
+      await loader.loadExtension({
+        name: 'session-skill-extension',
+        version: '1.0.0',
+        path: '/extensions/session-skill-extension',
+        isActive: true,
+        contextFiles: [],
+        skills: [
+          {
+            name: 'session-skill',
+            description: 'Skill for the active session',
+            location: '/extensions/session-skill-extension/SKILL.md',
+            body: 'Session instructions',
+            source: 'extension',
+          },
+        ],
+      });
+
+      expect(
+        config
+          .getSkillManager()
+          .getSkills()
+          .map((skill) => skill.name),
+      ).toContain('session-skill');
+      expect(observedBuses).not.toContain(busA);
+      expect(observedBuses).toContain(busB);
+    } finally {
+      await agentB?.dispose();
+      await agentA?.dispose();
+      await built.cleanup();
+      busA.removeAllListeners();
+      busB.removeAllListeners();
     }
   });
 });

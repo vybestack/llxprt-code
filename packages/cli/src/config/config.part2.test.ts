@@ -309,7 +309,7 @@ describe('loadCliConfig chatCompression', () => {
         contextPercentageThreshold: 0.5,
       },
     };
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       settings,
       [],
       new ExtensionEnablementManager(
@@ -328,7 +328,7 @@ describe('loadCliConfig chatCompression', () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
     const settings: Settings = {};
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       settings,
       [],
       new ExtensionEnablementManager(
@@ -369,7 +369,7 @@ describe('loadCliConfig useRipgrep', () => {
     (isRipgrepAvailable as Mock<typeof isRipgrepAvailable>).mockResolvedValue(
       true,
     );
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       settings,
       [],
       new ExtensionEnablementManager(
@@ -389,7 +389,7 @@ describe('loadCliConfig useRipgrep', () => {
     (isRipgrepAvailable as Mock<typeof isRipgrepAvailable>).mockResolvedValue(
       false,
     );
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       settings,
       [],
       new ExtensionEnablementManager(
@@ -409,7 +409,7 @@ describe('loadCliConfig useRipgrep', () => {
     (isRipgrepAvailable as Mock<typeof isRipgrepAvailable>).mockResolvedValue(
       true,
     );
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       settings,
       [],
       new ExtensionEnablementManager(
@@ -429,7 +429,7 @@ describe('loadCliConfig useRipgrep', () => {
     (isRipgrepAvailable as Mock<typeof isRipgrepAvailable>).mockResolvedValue(
       false,
     );
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       settings,
       [],
       new ExtensionEnablementManager(
@@ -465,7 +465,7 @@ describe('screenReader configuration', () => {
     const settings: Settings = {
       accessibility: { screenReader: true },
     };
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       settings,
       [],
       new ExtensionEnablementManager(
@@ -484,7 +484,7 @@ describe('screenReader configuration', () => {
     const settings: Settings = {
       accessibility: { screenReader: false },
     };
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       settings,
       [],
       new ExtensionEnablementManager(
@@ -503,7 +503,7 @@ describe('screenReader configuration', () => {
     const settings: Settings = {
       accessibility: { screenReader: false },
     };
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       settings,
       [],
       new ExtensionEnablementManager(
@@ -520,7 +520,7 @@ describe('screenReader configuration', () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
     const settings: Settings = {};
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       settings,
       [],
       new ExtensionEnablementManager(
@@ -560,7 +560,7 @@ describe('loadCliConfig tool exclusions', () => {
     process.stdin.isTTY = true;
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       {},
       [],
       new ExtensionEnablementManager(
@@ -579,7 +579,7 @@ describe('loadCliConfig tool exclusions', () => {
     process.stdin.isTTY = true;
     process.argv = ['node', 'script.js', '--yolo'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       {},
       [],
       new ExtensionEnablementManager(
@@ -598,7 +598,7 @@ describe('loadCliConfig tool exclusions', () => {
     process.stdin.isTTY = false;
     process.argv = ['node', 'script.js', '-p', 'test'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       {},
       [],
       new ExtensionEnablementManager(
@@ -617,7 +617,7 @@ describe('loadCliConfig tool exclusions', () => {
     process.stdin.isTTY = false;
     process.argv = ['node', 'script.js', '-p', 'test', '--yolo'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       {},
       [],
       new ExtensionEnablementManager(
@@ -643,7 +643,7 @@ describe('loadCliConfig tool exclusions', () => {
       'ShellTool',
     ];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       {},
       [],
       new ExtensionEnablementManager(
@@ -667,7 +667,7 @@ describe('loadCliConfig tool exclusions', () => {
       'run_shell_command',
     ];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       {},
       [],
       new ExtensionEnablementManager(
@@ -691,7 +691,7 @@ describe('loadCliConfig tool exclusions', () => {
       'ShellTool(wc)',
     ];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       {},
       [],
       new ExtensionEnablementManager(

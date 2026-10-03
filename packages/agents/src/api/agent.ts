@@ -19,6 +19,7 @@ import type {
 import type {
   ToolConfirmationOutcome,
   ToolConfirmationPayload,
+  ToolRegistry,
 } from '@vybestack/llxprt-code-tools';
 import type {
   CompletedToolCall,
@@ -29,6 +30,19 @@ import type { PolicyDecision } from '@vybestack/llxprt-code-core';
 // @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-004 @pseudocode agents-projection.md line 95
 import type { McpOAuthStatus } from '@vybestack/llxprt-code-core';
 import type { EditorCallbacks } from './config-types.js';
+import type { FileSystemService } from '@vybestack/llxprt-code-core/services/fileSystemService.js';
+import type { SessionSchedulerOwner } from './agentRuntimeAssembly.js';
+import type {
+  AgentClientContract,
+  ShellJobPort,
+  SessionRecordingService,
+} from '@vybestack/llxprt-code-core';
+
+/** Scheduler acquisitions owned by this Agent's lifetime, not by Config. */
+type AgentSchedulerControl = Pick<
+  SessionSchedulerOwner,
+  'acquire' | 'release' | 'setInteractiveSubagentSchedulerFactory'
+>;
 import type {
   AgentEvent,
   AgentToolCall,
@@ -727,6 +741,8 @@ export interface AgentSessionControl {
   importSession(packageDirectory: string): Promise<SessionInfo>;
   setRecording(state: SessionRecordingState): Promise<void>;
   getRecording(): SessionRecordingState;
+  /** Reads the current Agent-owned recorder, including after resume or fork. */
+  getActiveRecording(): SessionRecordingService | undefined;
 }
 
 export interface AgentProfileControl {
@@ -848,11 +864,17 @@ export type AgentTaskInfo = AgentSubagentTaskInfo | AgentShellJobInfo;
  * @requirement:REQ-003
  */
 export interface AgentTasksControl {
+  /** Active Agent-owned background shell jobs for external shell-tool adapters. */
+  shellJobs(): ShellJobPort;
   list(): readonly AgentTaskInfo[];
   listRunning(): readonly AgentTaskInfo[];
   get(id: string): AgentTaskInfo | undefined;
   cancel(id: string): Promise<boolean>;
   cancelAllRunning(): Promise<number>;
+  setupAutoTrigger(
+    isAgentBusy: () => boolean,
+    triggerAgentTurn: (message: string) => Promise<void>,
+  ): Unsubscribe;
 }
 
 /**
@@ -915,6 +937,7 @@ export interface AgentSkillsControl {
  */
 export interface AgentWorkspaceControl {
   getDirectories(): readonly string[];
+  getFileSystemService(): FileSystemService;
   addDirectory(path: string): void;
   getWorkingDirectory(): string;
   getProjectRoot(): string;
@@ -1009,6 +1032,13 @@ export interface Agent {
    * @requirement:REQ-2378-001
    */
   getMessageBus(): MessageBus;
+  /**
+   * Returns the live client owned by this Agent session. Callers that adopt a
+   * Config must use this client rather than the Config bootstrap client.
+   */
+  readonly agentClient: AgentClientContract;
+  /** Tool registry owned by this agent's session execution. */
+  getToolRegistry(): ToolRegistry;
   /** @plan:PLAN-20260621-COREAPIREMED.P10 @requirement:REQ-002 */
   getEphemeralSetting(key: string): unknown;
   /** @plan:PLAN-20260621-COREAPIREMED.P10 @requirement:REQ-002 */
@@ -1029,6 +1059,7 @@ export interface Agent {
   readonly policy: AgentPolicyControl;
   /** @plan:PLAN-20260622-COREAPIGAP.P08 @requirement:REQ-003 */
   readonly tasks: AgentTasksControl;
+  readonly scheduler: AgentSchedulerControl;
   /** @plan:PLAN-20260626-RUNTIMEBOUNDARY.P02 */
   readonly memory: AgentMemoryControl;
   /** @plan:PLAN-20260626-RUNTIMEBOUNDARY.P03 */

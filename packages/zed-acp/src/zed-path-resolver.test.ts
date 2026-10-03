@@ -15,6 +15,7 @@ import * as os from 'os';
 
 import { ZedPathResolver } from './zed-path-resolver.js';
 import type { Config, ContentBlock } from '@vybestack/llxprt-code-core';
+import { StandardFileSystemService } from '@vybestack/llxprt-code-storage';
 
 describe('ZedPathResolver - recursive glob search', () => {
   let tmpDir: string;
@@ -49,6 +50,48 @@ describe('ZedPathResolver - recursive glob search', () => {
       }),
     } as unknown as Config;
   }
+
+  it('reads the session filesystem rather than the shared Config filesystem for each workspace view', async () => {
+    const firstDir = path.join(tmpDir, 'first');
+    const secondDir = path.join(tmpDir, 'second');
+    await fs.mkdir(firstDir);
+    await fs.mkdir(secondDir);
+    await fs.writeFile(path.join(firstDir, 'sample.txt'), 'first disk');
+    await fs.writeFile(path.join(secondDir, 'sample.txt'), 'second disk');
+    const request = [
+      {
+        type: 'resource_link' as const,
+        uri: 'file://sample.txt',
+        name: 'sample.txt',
+        mimeType: 'text/plain',
+      },
+    ];
+    const read = async (directory: string, marker: string): Promise<string> => {
+      const config = buildConfig(directory);
+      const files = new (class extends StandardFileSystemService {
+        override async readTextFile(filePath: string): Promise<string> {
+          return `${marker}:${await super.readTextFile(filePath)}`;
+        }
+      })();
+      const resolver = new ZedPathResolver(config, () => {}, files);
+      const parts = await resolver.resolvePrompt(
+        request,
+        new AbortController().signal,
+      );
+      return parts
+        .filter(
+          (part): part is ContentBlock & { type: 'text' } =>
+            part.type === 'text',
+        )
+        .map((part) => part.text)
+        .join('');
+    };
+    const first = await read(firstDir, 'session-one');
+    const second = await read(secondDir, 'session-two');
+    expect(first).toContain('session-one:first disk');
+    expect(second).toContain('session-two:second disk');
+    expect(first).not.toContain('session-two');
+  });
 
   it('returns a valid relative path for a deeply nested glob match', async () => {
     // Create a nested file that does not exist at the root.

@@ -33,7 +33,6 @@ function createHookConfig(extensions: LlxprtExtension[] = []): Config {
       allowedEnvironmentVariables: [],
       blockedEnvironmentVariables: [],
     }),
-    getSessionRecordingService: () => null,
   } as unknown as Config;
 }
 

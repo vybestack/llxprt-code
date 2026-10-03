@@ -8,7 +8,8 @@ import { afterEach, describe, expect, it, vi } from 'bun:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { ShellJobManager, type Config } from '@vybestack/llxprt-code-core';
+import { ShellJobManager } from '@vybestack/llxprt-code-core';
+import type { AgentTasksControl } from '@vybestack/llxprt-code-agents';
 import {
   MAX_COMMAND_LENGTH,
   MAX_LISTED_JOBS,
@@ -127,6 +128,22 @@ describe('registerShellJobShutdownNotice', () => {
    * `maxBackgroundJobs` overrides the default budget of 10 for tests that
    * need more concurrent jobs than that.
    */
+  function tasksFor(
+    manager: ShellJobManager,
+  ): Pick<AgentTasksControl, 'listRunning'> {
+    return {
+      listRunning: () =>
+        manager.getRunningJobs().map((job) => ({
+          kind: 'shell' as const,
+          id: job.id,
+          command: job.command,
+          cwd: job.cwd,
+          status: 'running' as const,
+          launchedAt: job.startedAt,
+        })),
+    };
+  }
+
   function makeManager(maxBackgroundJobs?: number): ShellJobManager {
     const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'shutdown-notice-'));
     baseDirs.push(baseDir);
@@ -208,15 +225,44 @@ describe('registerShellJobShutdownNotice', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
   }
+  it('reads running shell jobs from the active Agent task port', () => {
+    const tasks: Pick<AgentTasksControl, 'listRunning'> = {
+      listRunning: () => [
+        {
+          kind: 'shell',
+          id: 'shell_session_owned',
+          command: 'sleep 30',
+          cwd: os.tmpdir(),
+          status: 'running',
+          launchedAt: Date.now(),
+        },
+        {
+          kind: 'subagent',
+          id: 'task_unrelated',
+          subagentName: 'worker',
+          goalPrompt: 'unrelated',
+          status: 'running',
+          launchedAt: Date.now(),
+        },
+      ],
+    };
+    const { target, fireExit } = captureExitListeners();
+    spyStderrFd2();
+
+    registerShellJobShutdownNotice(tasks, target);
+    fireExit();
+
+    const output = stderrChunks.join('');
+    expect(output).toContain('shell_session_owned: sleep 30');
+    expect(output).not.toContain('task_unrelated');
+  });
 
   it('announces a running managed background job on process exit', () => {
     const manager = makeManager();
     const job = manager.launch({ command: 'sleep 30', cwd: os.tmpdir() });
     const { target, fireExit } = captureExitListeners();
     spyStderrFd2();
-    const host: Pick<Config, 'peekShellJobManager'> = {
-      peekShellJobManager: () => manager,
-    };
+    const host = tasksFor(manager);
 
     registerShellJobShutdownNotice(host, target);
     fireExit();
@@ -234,9 +280,7 @@ describe('registerShellJobShutdownNotice', () => {
     const job = manager.launch({ command: longCommand, cwd: os.tmpdir() });
     const { target, fireExit } = captureExitListeners();
     spyStderrFd2();
-    const host: Pick<Config, 'peekShellJobManager'> = {
-      peekShellJobManager: () => manager,
-    };
+    const host = tasksFor(manager);
 
     registerShellJobShutdownNotice(host, target);
     fireExit();
@@ -263,9 +307,7 @@ describe('registerShellJobShutdownNotice', () => {
     }
     const { target, fireExit } = captureExitListeners();
     spyStderrFd2();
-    const host: Pick<Config, 'peekShellJobManager'> = {
-      peekShellJobManager: () => manager,
-    };
+    const host = tasksFor(manager);
 
     registerShellJobShutdownNotice(host, target);
     fireExit();
@@ -290,9 +332,7 @@ describe('registerShellJobShutdownNotice', () => {
     manager.launch({ command: 'sleep 30', cwd: os.tmpdir() });
     const { target, fireExit } = captureExitListeners();
     spyStderrFd2();
-    const host: Pick<Config, 'peekShellJobManager'> = {
-      peekShellJobManager: () => manager,
-    };
+    const host = tasksFor(manager);
 
     registerShellJobShutdownNotice(host, target);
     registerShellJobShutdownNotice(host, target);
@@ -305,6 +345,24 @@ describe('registerShellJobShutdownNotice', () => {
     expect(noticeCount).toBe(1);
   });
 
+  it('reads the newest session when the process hosts consecutive agents', () => {
+    const first = makeManager();
+    const second = makeManager();
+    const firstJob = first.launch({ command: 'sleep 30', cwd: os.tmpdir() });
+    const secondJob = second.launch({ command: 'sleep 31', cwd: os.tmpdir() });
+    const { target, fireExit } = captureExitListeners();
+    spyStderrFd2();
+
+    registerShellJobShutdownNotice(tasksFor(first), target);
+    registerShellJobShutdownNotice(tasksFor(second), target);
+    fireExit();
+
+    const output = stderrChunks.join('');
+    expect(output).toContain(`${secondJob.id}: sleep 31`);
+    expect(output).not.toContain(firstJob.id);
+    expect(output.split('Shutting down with')).toHaveLength(2);
+  });
+
   it('a throwing fd-2 write does not escape the exit listener and a later exit listener still runs', () => {
     const manager = makeManager();
     manager.launch({ command: 'sleep 30', cwd: os.tmpdir() });
@@ -314,9 +372,7 @@ describe('registerShellJobShutdownNotice', () => {
         code: 'EPIPE',
       }),
     });
-    const host: Pick<Config, 'peekShellJobManager'> = {
-      peekShellJobManager: () => manager,
-    };
+    const host = tasksFor(manager);
 
     registerShellJobShutdownNotice(host, target);
     let laterListenerRan = false;
@@ -336,9 +392,9 @@ describe('registerShellJobShutdownNotice', () => {
   it('a throwing manager read does not escape the exit listener and a later exit listener still runs', () => {
     const { target, fireExit } = captureExitListeners();
     spyStderrFd2();
-    const host: Pick<Config, 'peekShellJobManager'> = {
-      peekShellJobManager: () => {
-        throw new Error('manager read failed during exit');
+    const host: Pick<AgentTasksControl, 'listRunning'> = {
+      listRunning: () => {
+        throw new Error('task read failed during exit');
       },
     };
 
@@ -364,9 +420,7 @@ describe('registerShellJobShutdownNotice', () => {
     // First write accepts only 10 bytes; the notice must resume from byte
     // 10 rather than restart, drop, or duplicate anything.
     spyStderrFd2({ firstWriteAccepts: 10 });
-    const host: Pick<Config, 'peekShellJobManager'> = {
-      peekShellJobManager: () => manager,
-    };
+    const host = tasksFor(manager);
 
     registerShellJobShutdownNotice(host, target);
     fireExit();
@@ -385,9 +439,7 @@ describe('registerShellJobShutdownNotice', () => {
     await waitForTerminalState(manager, finished.id);
     const { target, fireExit } = captureExitListeners();
     spyStderrFd2();
-    const host: Pick<Config, 'peekShellJobManager'> = {
-      peekShellJobManager: () => manager,
-    };
+    const host = tasksFor(manager);
 
     registerShellJobShutdownNotice(host, target);
     fireExit();
@@ -399,31 +451,20 @@ describe('registerShellJobShutdownNotice', () => {
     const { target, fireExit } = captureExitListeners();
     spyStderrFd2();
     const mkdtemp = vi.spyOn(fs, 'mkdtempSync');
-    let creatingGetterCalls = 0;
-    // The exit path must read state without constructing anything. If it
-    // used the creating getter, this host would build a real manager — and
-    // mkdtemp its log directory — during exit on a session that never
-    // backgrounded a job.
-    const host = {
-      peekShellJobManager: (): undefined => undefined,
-      getShellJobManager: (): ShellJobManager => {
-        creatingGetterCalls++;
-        return makeManager();
-      },
+    const host: Pick<AgentTasksControl, 'listRunning'> = {
+      listRunning: () => [],
     };
 
     registerShellJobShutdownNotice(host, target);
     fireExit();
-
-    expect(creatingGetterCalls).toBe(0);
     expect(mkdtemp).not.toHaveBeenCalled();
     expect(stderrChunks).toStrictEqual([]);
   });
 
   it('registers the exit listener on the real process by default', () => {
     const before = process.listeners('exit');
-    const host: Pick<Config, 'peekShellJobManager'> = {
-      peekShellJobManager: () => undefined,
+    const host: Pick<AgentTasksControl, 'listRunning'> = {
+      listRunning: () => [],
     };
 
     registerShellJobShutdownNotice(host);
@@ -470,7 +511,7 @@ describe('registerShellJobShutdownNotice', () => {
       'const manager = new ShellJobManager({ baseDir });',
       'const job = manager.launch({ command: "sleep 30", cwd: baseDir });',
       'writeFileSync(baseDir + "/job.pid", String(job.pid));',
-      'registerShellJobShutdownNotice({ peekShellJobManager: () => manager });',
+      'registerShellJobShutdownNotice({ listRunning: () => manager.getRunningJobs().map((job) => ({ kind: "shell", id: job.id, command: job.command })) });',
       'process.exit(0);',
       '',
     ].join('\n');

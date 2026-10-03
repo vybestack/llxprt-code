@@ -20,8 +20,8 @@ interface SchedulerFixture {
     getFunctionDeclarationsFiltered: () => never[];
   };
   foregroundConfig: {
-    getOrCreateScheduler: () => void;
-    disposeScheduler: () => void;
+    acquireScheduler: () => void;
+    releaseScheduler: () => void;
   };
 }
 
@@ -34,8 +34,8 @@ const makeSchedulerFixture = (sessionId: string): SchedulerFixture => ({
     getFunctionDeclarationsFiltered: () => [],
   },
   foregroundConfig: {
-    getOrCreateScheduler: () => {},
-    disposeScheduler: () => {},
+    acquireScheduler: () => {},
+    releaseScheduler: () => {},
   },
 });
 
@@ -45,8 +45,8 @@ const makeSchedulerFixture = (sessionId: string): SchedulerFixture => ({
 const makeForegroundWithDefaults = (allowedTools: string[]) => ({
   getApprovalMode: () => 'DEFAULT' as const,
   getPolicyEngine: () => undefined,
-  getOrCreateScheduler: () => Promise.resolve({}),
-  disposeScheduler: () => {},
+  acquireScheduler: () => Promise.resolve({}),
+  releaseScheduler: () => {},
   getEphemeralSettings: () => ({}),
   getExcludeTools: () => [],
   getTelemetryLogPromptsEnabled: () => false,
@@ -188,8 +188,8 @@ describe('createSchedulerConfig — fail-closed empty whitelist (#2069)', () => 
           key === 'tools.allowed' ? [] : undefined,
         getExcludeTools: () => [],
         getTelemetryLogPromptsEnabled: () => false,
-        getOrCreateScheduler: () => Promise.resolve({}),
-        disposeScheduler: () => {},
+        acquireScheduler: () => Promise.resolve({}),
+        releaseScheduler: () => {},
       };
       const foregroundWithDefaults = makeForegroundWithDefaults([
         'read_file',
@@ -211,8 +211,8 @@ describe('createSchedulerConfig — fail-closed empty whitelist (#2069)', () => 
       getEphemeralSetting: () => undefined,
       getExcludeTools: () => [],
       getTelemetryLogPromptsEnabled: () => false,
-      getOrCreateScheduler: () => Promise.resolve({}),
-      disposeScheduler: () => {},
+      acquireScheduler: () => Promise.resolve({}),
+      releaseScheduler: () => {},
     };
     const foregroundWithDefaults = makeForegroundWithDefaults(['read_file']);
     const config = createSchedulerConfig(
@@ -224,7 +224,7 @@ describe('createSchedulerConfig — fail-closed empty whitelist (#2069)', () => 
 });
 
 describe('createToolExecutionConfig — scheduler delegation', () => {
-  it('should forward owner, purpose, callbacks, options, and default dependencies to foregroundConfig.getOrCreateScheduler', async () => {
+  it('should forward owner, purpose, callbacks, options, and default dependencies to foregroundConfig.acquireScheduler', async () => {
     const forwarded: Record<string, unknown> = {};
     const sentinelRegistry = { sentinel: 'subagent-registry' };
     const sentinelMessageBus = { sentinel: 'message-bus' };
@@ -235,7 +235,7 @@ describe('createToolExecutionConfig — scheduler delegation', () => {
       runtimeContext: { state: { sessionId: 'sess-fwd' } },
     };
     const foregroundConfig = {
-      getOrCreateScheduler: (
+      acquireScheduler: (
         fwdOwner: unknown,
         fwdPurpose: unknown,
         fwdCallbacks: unknown,
@@ -251,7 +251,7 @@ describe('createToolExecutionConfig — scheduler delegation', () => {
         });
         return Promise.resolve({});
       },
-      disposeScheduler: () => {},
+      releaseScheduler: () => {},
     };
 
     const config = createToolExecutionConfig(
@@ -259,8 +259,15 @@ describe('createToolExecutionConfig — scheduler delegation', () => {
       sentinelRegistry,
       foregroundConfig,
       sentinelMessageBus as never,
+      undefined,
+      undefined,
+      {
+        acquire: foregroundConfig.acquireScheduler,
+        release: foregroundConfig.releaseScheduler,
+        dispose: async () => {},
+      } as never,
     );
-    await config.getOrCreateScheduler(owner, 'subagent', callbacks, options);
+    await config.acquireScheduler(owner, 'subagent', callbacks, options);
 
     expect(forwarded.owner).toBe(owner);
     expect(forwarded.purpose).toBe('subagent');
@@ -279,7 +286,7 @@ describe('createToolExecutionConfig — scheduler delegation', () => {
       runtimeContext: { state: { sessionId: 'sess-override' } },
     };
     const foregroundConfig = {
-      getOrCreateScheduler: (
+      acquireScheduler: (
         _owner: object,
         _purpose: unknown,
         _cb: unknown,
@@ -289,21 +296,25 @@ describe('createToolExecutionConfig — scheduler delegation', () => {
         Object.assign(capturedDeps, deps);
         return Promise.resolve({});
       },
-      disposeScheduler: () => {},
+      releaseScheduler: () => {},
     };
 
     const config = createToolExecutionConfig(
       runtimeBundle,
       defaultRegistry,
       foregroundConfig,
-    );
-    await config.getOrCreateScheduler(
-      owner,
-      'subagent',
-      {} as never,
+      { sentinel: 'message-bus' } as never,
       undefined,
-      { toolRegistry: overrideRegistry } as never,
+      undefined,
+      {
+        acquire: foregroundConfig.acquireScheduler,
+        release: foregroundConfig.releaseScheduler,
+        dispose: async () => {},
+      } as never,
     );
+    await config.acquireScheduler(owner, 'subagent', {} as never, undefined, {
+      toolRegistry: overrideRegistry,
+    } as never);
 
     expect(capturedDeps.toolRegistry).toBe(overrideRegistry);
   });
@@ -318,24 +329,24 @@ describe('createSchedulerConfig', () => {
     expect(typeof config.getSessionId).toBe('function');
   });
 
-  it('should delegate getOrCreateScheduler through toolExecutorContext, not foregroundConfig', async () => {
+  it('should delegate acquireScheduler through toolExecutorContext, not foregroundConfig', async () => {
     const flags = { toolExecCalled: false, foregroundCalled: false };
     const mockToolExecCtx = {
       ...makeToolExecCtx('test-session'),
-      getOrCreateScheduler: () => {
+      acquireScheduler: () => {
         flags.toolExecCalled = true;
         return Promise.resolve({});
       },
     };
     const mockForeground = {
       ...makeForegroundWithDefaults([]),
-      getOrCreateScheduler: () => {
+      acquireScheduler: () => {
         flags.foregroundCalled = true;
         return Promise.resolve({});
       },
     };
     const config = createSchedulerConfig(mockToolExecCtx, mockForeground);
-    await config.getOrCreateScheduler('test-session', {} as never);
+    await config.acquireScheduler({}, 'subagent', {} as never);
 
     expect(flags.toolExecCalled).toBe(true);
     expect(flags.foregroundCalled).toBe(false);
@@ -346,13 +357,13 @@ describe('createSchedulerConfig', () => {
     let capturedOptions: Record<string, unknown> = {};
     const mockForeground = {
       ...makeForegroundWithDefaults([]),
-      getOrCreateScheduler: () => Promise.resolve({}),
+      acquireScheduler: () => Promise.resolve({}),
     };
     // Override toolExec to capture the options argument (4th of the
     // 5-arg acquisition contract) on its way to scheduler creation.
     const toolExecWithOptions = {
       ...mockToolExecCtx,
-      getOrCreateScheduler: (
+      acquireScheduler: (
         _owner: object,
         _purpose: unknown,
         _cb: unknown,
@@ -365,28 +376,28 @@ describe('createSchedulerConfig', () => {
     const config = createSchedulerConfig(toolExecWithOptions, mockForeground, {
       interactive: true,
     });
-    await config.getOrCreateScheduler({}, 'subagent', {} as never);
+    await config.acquireScheduler({}, 'subagent', {} as never);
 
     expect(capturedOptions.interactiveMode).toBe(true);
   });
 
-  it('should delegate disposeScheduler through toolExecutorContext', () => {
+  it('should delegate releaseScheduler through toolExecutorContext', () => {
     const flags = { toolExec: false, foreground: false };
     const mockToolExecCtx = {
       ...makeToolExecCtx('test-session'),
-      disposeScheduler: () => {
+      releaseScheduler: () => {
         flags.toolExec = true;
       },
     };
     const mockForeground = {
       ...makeForegroundWithDefaults([]),
-      getOrCreateScheduler: () => Promise.resolve({}),
-      disposeScheduler: () => {
+      acquireScheduler: () => Promise.resolve({}),
+      releaseScheduler: () => {
         flags.foreground = true;
       },
     };
     const config = createSchedulerConfig(mockToolExecCtx, mockForeground);
-    config.disposeScheduler('test-session');
+    config.releaseScheduler({}, 'subagent', {});
 
     expect(flags.toolExec).toBe(true);
     expect(flags.foreground).toBe(false);
@@ -403,8 +414,8 @@ const makeToolExecCtx = (sessionId: string) => ({
   getEphemeralSetting: () => undefined,
   getExcludeTools: () => [],
   getTelemetryLogPromptsEnabled: () => false,
-  getOrCreateScheduler: () => Promise.resolve({}),
-  disposeScheduler: () => {},
+  acquireScheduler: () => Promise.resolve({}),
+  releaseScheduler: () => {},
 });
 
 describe('Issue #2069: scheduler governance excludes task/list_subagents', () => {

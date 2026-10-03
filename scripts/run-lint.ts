@@ -381,6 +381,14 @@ async function runLint(): Promise<void> {
       packageDirs: targets === null ? readPackageDirs(repoRoot) : [],
     }),
   );
+  await execa(process.execPath, ['run', 'lint:session-config-boundary'], {
+    cwd: repoRoot,
+    stdio: 'inherit',
+  });
+  await execa(process.execPath, ['run', 'lint:workspace-config-boundary'], {
+    cwd: repoRoot,
+    stdio: 'inherit',
+  });
 }
 
 /** Maps a signal name to its POSIX number, or undefined when unknown. */

@@ -35,7 +35,6 @@ void vi.mock('@vybestack/llxprt-code-core', () => ({
       }),
       getProviderManager: vi.fn(),
       setProviderManager: vi.fn(),
-      setRuntimeMessageBus: vi.fn(),
       setRuntimeOAuthManager: vi.fn(),
       setImageBackendResolver: vi.fn(),
       setRunImageOperation: vi.fn(),
@@ -403,7 +402,7 @@ describe('loadCliConfig memory discovery', () => {
     const { ExtensionEnablementManager, ExtensionStorage } = await import(
       './extension.js'
     );
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       settings,
       [],
       new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir()),

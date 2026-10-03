@@ -4,13 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export class AggregateDisposeError extends Error {
-  readonly errors: readonly unknown[];
-
+export class AggregateDisposeError extends AggregateError {
   constructor(errors: readonly unknown[]) {
-    super(AggregateDisposeError.buildMessage(errors));
+    super(errors, AggregateDisposeError.buildMessage(errors));
     this.name = 'AggregateDisposeError';
-    this.errors = errors;
     Object.setPrototypeOf(this, AggregateDisposeError.prototype);
   }
 

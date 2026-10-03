@@ -5,7 +5,11 @@
  * LSP-provided navigation tools.
  */
 
-import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import type {
+  ToolRegistry,
+  IToolMessageBus,
+} from '@vybestack/llxprt-code-tools';
+import type { McpTrustConfig } from '@vybestack/llxprt-code-mcp/host/hostInterfaces.js';
 import type {
   McpCallableTool,
   McpPart,
@@ -20,7 +24,6 @@ import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { Readable, Writable } from 'node:stream';
 import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
 import { DiscoveredMCPTool } from '@vybestack/llxprt-code-mcp';
-import type { Config } from './config.js';
 
 const MCP_NAVIGATION_REGISTRATION_TIMEOUT_MS = 2_000;
 
@@ -32,9 +35,16 @@ export interface LspState {
 }
 
 /** Narrow interface for LSP integration — avoids full Config dependency */
-export interface LspHost {
+export interface LspHost extends McpTrustConfig {
   getTargetDir(): string;
   getToolRegistry(): ToolRegistry;
+  getNavigationMessageBus?(): IToolMessageBus | undefined;
+}
+
+/** A session's live LSP, supplied by the workspace runtime, never by Config. */
+export interface WorkspaceLspPort {
+  config(): LspConfig | undefined;
+  client(): LspServiceClient | undefined;
 }
 
 /**
@@ -79,8 +89,7 @@ export async function initializeLsp(
       await registerAvailableNavigationTools(state, host);
     }
   } catch {
-    // LSP service initialization failed - continue without LSP
-    state.lspServiceClient = undefined;
+    await shutdownLsp(state, host.getToolRegistry());
   }
 }
 
@@ -365,9 +374,8 @@ async function registerDiscoveredTools(
       toolDef.inputSchema ?? { type: 'object', properties: {} },
       true,
       undefined,
-      // LspHost is a strict subset of Config; the runtime value is always a
-      // full Config instance, but this module only depends on the narrow interface.
-      host as unknown as Config,
+      host,
+      host.getNavigationMessageBus?.(),
     );
 
     registry.registerTool(discoveredTool);

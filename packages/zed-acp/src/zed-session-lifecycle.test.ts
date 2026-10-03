@@ -9,8 +9,16 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { mkdtempSync, rmSync } from 'node:fs';
 import type * as acp from '@agentclientprotocol/sdk';
-import type { Config, IContent } from '@vybestack/llxprt-code-core';
+import {
+  CoreMessageBusAdapter,
+  CoreToolRegistryHostAdapter,
+  MessageBus,
+  type Config,
+  type IContent,
+} from '@vybestack/llxprt-code-core';
 import type { Agent, AgentMessage } from '@vybestack/llxprt-code-agents';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { ChatSessionFileLister } from './zed-session-loader.js';
 
 import { RecordingConnection } from './__tests__/zed-test-helpers.js';
@@ -68,8 +76,14 @@ function buildStubAgent(options: {
   const setRecording = vi.fn(async () => undefined);
   const getHistory = vi.fn(async () => options.liveHistory ?? []);
   let disposedCount = 0;
+  const registry = new ToolRegistry(
+    new CoreToolRegistryHostAdapter(buildBaseConfig('/project')),
+    new CoreMessageBusAdapter(new MessageBus()),
+    new SettingsService(),
+  );
   const agent = {
     getApprovalMode: () => 'default',
+    getToolRegistry: () => registry,
     setApprovalMode: vi.fn(),
     async dispose() {
       if (options.beforeDispose !== undefined) {
@@ -81,7 +95,7 @@ function buildStubAgent(options: {
     async *stream() {
       yield { type: 'done', reason: 'stop' };
     },
-    session: { resume, setRecording },
+    session: { resume, setRecording, getActiveRecording: () => undefined },
     tools: { respondToConfirmation: vi.fn() },
   } as unknown as Agent;
   return {
@@ -107,7 +121,6 @@ function buildBaseConfig(root: string): Config {
     getTargetDir: () => '/project',
     getProjectRoot: () => '/project',
     getMaxSessionTurns: () => 50,
-    getSessionRecordingService: () => undefined,
     storage: {
       getProjectTempDir: () => root,
       getProjectChatsDir: () => path.join(root, 'chats'),

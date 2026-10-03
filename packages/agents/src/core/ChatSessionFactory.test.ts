@@ -110,6 +110,7 @@ import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Agen
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import { withChatSessionFactoryMediaFixture } from './chatSessionFactoryMediaTestHelper.js';
 import type { TodoContinuationService } from './TodoContinuationService.js';
+import type { CreateChatSessionDeps } from './ChatSessionFactory.js';
 
 function makeConfig(
   overrides: Partial<Config> = {},
@@ -167,9 +168,11 @@ function createTestChatSession(
   config: Config,
   runtimeState: AgentRuntimeState,
   extraHistory?: IContent[],
+  readRecording?: CreateChatSessionDeps['readRecording'],
 ): ReturnType<typeof createChatSession> {
   return createChatSession({
     config,
+    readRecording,
     runtimeState,
     contentGenerator: makeContentGenerator(),
     storedHistoryService: undefined,
@@ -638,19 +641,15 @@ describe('createChatSession', () => {
   it('configures thinking for supported models', async () => {
     const config = makeConfig();
     const runtimeState = makeRuntimeState({ model: 'gemini-2.5-flash' });
-    const todoContinuationService = makeTodoContinuationService();
+    const readRecording = vi.fn(() => undefined);
 
-    await createChatSession({
-      config,
-      runtimeState,
-      contentGenerator: makeContentGenerator(),
-      storedHistoryService: undefined,
-      clearStoredHistoryService: vi.fn(),
-      generateContentConfig: {},
-      todoContinuationService,
-      toolRegistry: undefined,
-    });
+    await createTestChatSession(config, runtimeState, undefined, readRecording);
 
+    expect(loadAgentRuntime).toHaveBeenCalledWith(
+      expect.objectContaining({
+        profile: expect.objectContaining({ state: runtimeState }),
+      }),
+    );
     expect(ChatSession).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
@@ -660,25 +659,22 @@ describe('createChatSession', () => {
       [],
       expect.anything(),
       expect.anything(),
+      readRecording,
     );
   });
 
   it('disables thinking config for gemini-2.0 models', async () => {
     const config = makeConfig();
     const runtimeState = makeRuntimeState({ model: 'gemini-2.0-flash' });
-    const todoContinuationService = makeTodoContinuationService();
+    const readRecording = vi.fn(() => undefined);
 
-    await createChatSession({
-      config,
-      runtimeState,
-      contentGenerator: makeContentGenerator(),
-      storedHistoryService: undefined,
-      clearStoredHistoryService: vi.fn(),
-      generateContentConfig: {},
-      todoContinuationService,
-      toolRegistry: undefined,
-    });
+    await createTestChatSession(config, runtimeState, undefined, readRecording);
 
+    expect(loadAgentRuntime).toHaveBeenCalledWith(
+      expect.objectContaining({
+        profile: expect.objectContaining({ state: runtimeState }),
+      }),
+    );
     expect(ChatSession).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
@@ -686,6 +682,7 @@ describe('createChatSession', () => {
       [],
       expect.anything(),
       expect.anything(),
+      readRecording,
     );
   });
 

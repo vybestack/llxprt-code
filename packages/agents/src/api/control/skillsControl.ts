@@ -4,28 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * @plan:PLAN-20260626-RUNTIMEBOUNDARY.P03
- *
- * AgentSkillsControl implementation. Delegates to the bound Config's
- * SkillManager so clients query/reload skills without a Config escape hatch.
- */
-
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SkillDefinition } from '@vybestack/llxprt-code-core/skills/skillLoader.js';
 import type { AgentSkillsControl, SkillInfo } from '../agent.js';
+import type { WorkspaceSkillSurface } from '../workspace-skill-surface.js';
 import { createControlError } from './errorUtils.js';
 
-/**
- * Deps bundle injected by AgentImpl so SkillsControl can read the live Config
- * skill surface.
- * @plan:PLAN-20260626-RUNTIMEBOUNDARY.P03
- */
 export interface SkillsControlDeps {
-  readonly config: Config;
+  readonly skills: Pick<
+    WorkspaceSkillSurface,
+    'getSkills' | 'getAllSkills' | 'getSkill' | 'isAdminEnabled'
+  >;
+  readonly reload: () => Promise<void>;
 }
 
-/** Projects a raw SkillDefinition onto the public SkillInfo shape. */
 function toSkillInfo(s: SkillDefinition): SkillInfo {
   return {
     name: s.name,
@@ -40,30 +31,27 @@ export class SkillsControl implements AgentSkillsControl {
   constructor(private readonly deps: SkillsControlDeps) {}
 
   list(opts?: { readonly includeDisabled?: boolean }): readonly SkillInfo[] {
-    const mgr = this.deps.config.getSkillManager();
     const source =
-      opts?.includeDisabled === true ? mgr.getAllSkills() : mgr.getSkills();
+      opts?.includeDisabled === true
+        ? this.deps.skills.getAllSkills()
+        : this.deps.skills.getSkills();
     return source.map(toSkillInfo);
   }
 
   get(name: string): SkillInfo | undefined {
-    const mgr = this.deps.config.getSkillManager();
-    const skill = mgr.getSkill(name);
-    if (skill === null) {
-      return undefined;
-    }
-    return toSkillInfo(skill);
+    const skill = this.deps.skills.getSkill(name);
+    return skill === null ? undefined : toSkillInfo(skill);
   }
 
   async reload(): Promise<void> {
     try {
-      await this.deps.config.reloadSkills();
+      await this.deps.reload();
     } catch (err) {
       throw createControlError('Failed to reload skills', err);
     }
   }
 
   isAdminEnabled(): boolean {
-    return this.deps.config.getSkillManager().isAdminEnabled();
+    return this.deps.skills.isAdminEnabled();
   }
 }

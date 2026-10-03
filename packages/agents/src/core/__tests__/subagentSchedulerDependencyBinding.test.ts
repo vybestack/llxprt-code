@@ -16,7 +16,7 @@
 
 import { describe, it, expect } from 'bun:test';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { SchedulerCallbacks } from '@vybestack/llxprt-code-core/config/config.js';
+import type { SchedulerCallbacks } from '@vybestack/llxprt-code-core/session/sessionSchedulerRegistry.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import {
   MessageBusType,
@@ -28,6 +28,7 @@ import type { SchedulerHandle } from '@vybestack/llxprt-code-core/session/sessio
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
+import { createSessionSchedulerOwner } from '../../api/agentRuntimeAssembly.js';
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { CoreToolScheduler } from '../coreToolScheduler.js';
 import type { ToolCall } from '../coreToolScheduler.js';
@@ -40,15 +41,20 @@ import { createStatelessRuntimeBundle } from './subagent-test-helpers.js';
 interface ForegroundFixture {
   config: Config;
   constructionOptions: ToolSchedulerFactoryOptions[];
+  schedulerOwner: ReturnType<typeof createSessionSchedulerOwner>;
   dispose: () => Promise<void>;
 }
 
 /**
- * One foreground Config whose toolSchedulerFactory records the options of
- * every construction before delegating to the production CoreToolScheduler.
+ * One foreground session whose scheduler factory records construction options
+ * before delegating to the production CoreToolScheduler.
  */
 function makeForegroundFixture(): ForegroundFixture {
   const constructionOptions: ToolSchedulerFactoryOptions[] = [];
+  const factory = (options: ToolSchedulerFactoryOptions): CoreToolScheduler => {
+    constructionOptions.push(options);
+    return new CoreToolScheduler(options);
+  };
   const config = new Config({
     sessionId: `dep-binding-${crypto.randomUUID()}`,
     targetDir: process.cwd(),
@@ -58,15 +64,16 @@ function makeForegroundFixture(): ForegroundFixture {
     // The behavioral test drives a real pending confirmation, and the
     // confirmation prompt setup throws for non-interactive configs.
     interactive: true,
-    toolSchedulerFactory: (options) => {
-      constructionOptions.push(options);
-      return new CoreToolScheduler(options);
-    },
   });
+  const schedulerOwner = createSessionSchedulerOwner(config, factory);
   return {
     config,
     constructionOptions,
-    dispose: () => config.dispose(),
+    schedulerOwner,
+    dispose: async () => {
+      await schedulerOwner.dispose();
+      await config.dispose();
+    },
   };
 }
 
@@ -125,7 +132,7 @@ interface OwnerFacade {
  * runtime uses, carrying this owner's messageBus and toolRegistry defaults.
  */
 function makeOwnerFacade(
-  foregroundConfig: Config,
+  foreground: ForegroundFixture,
   messageBus: MessageBus,
   toolRegistry: ToolRegistry,
 ): OwnerFacade {
@@ -133,21 +140,32 @@ function makeOwnerFacade(
   const toolExecutorContext = createToolExecutionConfig(
     runtimeBundle,
     toolRegistry,
-    foregroundConfig,
+    foreground.config,
     messageBus,
+    undefined,
+    undefined,
+    foreground.schedulerOwner,
   );
   const schedulerConfig = createSchedulerConfig(
     toolExecutorContext,
-    foregroundConfig,
+    foreground.config,
   );
   const owner = { owner: 'scheduler-acquisition-owner' };
+  let handle: SchedulerHandle | undefined;
   return {
     schedulerConfig,
     owner,
-    acquire: (callbacks) =>
-      schedulerConfig.getOrCreateScheduler(owner, 'subagent', callbacks),
+    acquire: async (callbacks) => {
+      handle = await schedulerConfig.acquireScheduler(
+        owner,
+        'subagent',
+        callbacks,
+      );
+      return handle;
+    },
     dispose: () => {
-      schedulerConfig.disposeScheduler(owner, 'subagent');
+      if (handle !== undefined)
+        schedulerConfig.releaseScheduler(owner, 'subagent', handle);
     },
   };
 }
@@ -205,8 +223,8 @@ describe('subagent scheduler dependency binding (#2615 registry fix)', () => {
 
     // B acquires first: before the fix both entries bound the first
     // caller's deps, so A must not inherit B's bus or registry.
-    const facadeB = makeOwnerFacade(foreground.config, busB, registryB);
-    const facadeA = makeOwnerFacade(foreground.config, busA, registryA);
+    const facadeB = makeOwnerFacade(foreground, busB, registryB);
+    const facadeA = makeOwnerFacade(foreground, busA, registryA);
     const handleB = await facadeB.acquire(makeStatusLog().callbacks);
     const handleA = await facadeA.acquire(makeStatusLog().callbacks);
 
@@ -237,11 +255,11 @@ describe('subagent scheduler dependency binding (#2615 registry fix)', () => {
     // B first again, so a pre-fix first-caller dep binding would wire A's
     // confirmation coordinator onto B's bus.
     const facadeB = makeOwnerFacade(
-      foreground.config,
+      foreground,
       busB,
       makeRegistryStub(makeConfirmableTool('confirm_tool_b', [])),
     );
-    const facadeA = makeOwnerFacade(foreground.config, busA, registryA);
+    const facadeA = makeOwnerFacade(foreground, busA, registryA);
     await facadeB.acquire(makeStatusLog().callbacks);
     const statusLogA = makeStatusLog();
     const handleA = await facadeA.acquire(statusLogA.callbacks);
@@ -310,6 +328,114 @@ describe('subagent scheduler dependency binding (#2615 registry fix)', () => {
       unsubscribeB();
       facadeA.dispose();
       facadeB.dispose();
+      await foreground.dispose();
+    }
+  });
+
+  it('routes approvals exactly once for two subagents with distinct buses and registries', async () => {
+    const foreground = makeForegroundFixture();
+    const session = foreground.schedulerOwner;
+    const executed = [[], []] as string[][];
+    const buses = [
+      new MessageBus(foreground.config.getPolicyEngine(), false),
+      new MessageBus(foreground.config.getPolicyEngine(), false),
+    ];
+    const registries = executed.map((results, index) =>
+      makeRegistryStub(makeConfirmableTool(`confirm_${index}`, results)),
+    );
+    const scopes = buses.map((bus, index) =>
+      createSchedulerConfig(
+        createToolExecutionConfig(
+          createStatelessRuntimeBundle(),
+          registries[index],
+          foreground.config,
+          bus,
+          undefined,
+          undefined,
+          session,
+        ),
+        foreground.config,
+      ),
+    );
+    const owners = [{}, {}];
+    const statuses = [makeStatusLog(), makeStatusLog()];
+    const requests: ToolConfirmationRequest[][] = [[], []];
+    const unsubscribes = buses.map((bus, index) =>
+      bus.subscribe<ToolConfirmationRequest>(
+        MessageBusType.TOOL_CONFIRMATION_REQUEST,
+        (request) => {
+          requests[index].push(request);
+        },
+      ),
+    );
+    try {
+      const handles = await Promise.all(
+        scopes.map((scope, index) =>
+          scope.acquireScheduler(
+            owners[index],
+            'subagent',
+            statuses[index].callbacks,
+          ),
+        ),
+      );
+      expect(
+        foreground.constructionOptions.map((options) => options.messageBus),
+      ).toStrictEqual(buses);
+      expect(
+        foreground.constructionOptions.map((options) => options.toolRegistry),
+      ).toStrictEqual(registries);
+      await Promise.all(
+        handles.map((handle, index) =>
+          handle.schedule(
+            [
+              {
+                callId: `call-${index}`,
+                name: `confirm_${index}`,
+                args: {},
+                isClientInitiated: false,
+                prompt_id: 'parent',
+              },
+            ],
+            new AbortController().signal,
+          ),
+        ),
+      );
+      await Promise.all(
+        statuses.map((status, index) =>
+          waitForStatus(status, `call-${index}`, 'awaiting_approval'),
+        ),
+      );
+      expect(requests.map((received) => received.length)).toStrictEqual([1, 1]);
+      buses[1].publish({
+        type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
+        correlationId: requests[0][0].correlationId,
+        outcome: ToolConfirmationOutcome.ProceedOnce,
+      } satisfies ToolConfirmationResponse);
+      await flushAsyncWork();
+      expect(statuses[0].latest('call-0')).toBe('awaiting_approval');
+      expect(statuses[1].latest('call-1')).toBe('awaiting_approval');
+      expect(executed).toStrictEqual([[], []]);
+
+      buses[0].respondToConfirmation(
+        requests[0][0].correlationId,
+        ToolConfirmationOutcome.ProceedOnce,
+      );
+      await waitForStatus(statuses[0], 'call-0', 'success');
+      expect(statuses[1].latest('call-1')).toBe('awaiting_approval');
+      expect(executed).toStrictEqual([['confirm_0'], []]);
+
+      buses[1].respondToConfirmation(
+        requests[1][0].correlationId,
+        ToolConfirmationOutcome.ProceedOnce,
+      );
+      await waitForStatus(statuses[1], 'call-1', 'success');
+      expect(executed).toStrictEqual([['confirm_0'], ['confirm_1']]);
+      expect(requests.map((received) => received.length)).toStrictEqual([1, 1]);
+      handles.forEach((handle, index) =>
+        scopes[index].releaseScheduler(owners[index], 'subagent', handle),
+      );
+    } finally {
+      unsubscribes.forEach((unsubscribe) => unsubscribe());
       await foreground.dispose();
     }
   });

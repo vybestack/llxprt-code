@@ -93,7 +93,7 @@
     "core": ["providers", "test-utils"],
     "providers": ["test-utils"],
     "tools": ["settings", "storage", "test-utils"],
-    "zed-acp": ["settings", "test-utils"],
+    "zed-acp": ["mcp", "settings", "test-utils"],
     "cli": ["test-utils"]
   },
   "observers": {

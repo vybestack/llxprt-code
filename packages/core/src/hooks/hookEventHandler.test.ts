@@ -17,7 +17,10 @@ import type { HookRegistry } from './hookRegistry.js';
 import type { HookPlanner } from './hookPlanner.js';
 import type { HookRunner } from './hookRunner.js';
 import type { HookAggregator, AggregatedHookResult } from './hookAggregator.js';
-import type { SessionRecordingService } from '../recording/SessionRecordingService.js';
+import { SessionRecordingService } from '../recording/SessionRecordingService.js';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { HookEventName } from './types.js';
 import type { IContent } from '../services/history/IContent.js';
 import type { HookLLMRequest } from './hookTranslator.js';
@@ -78,6 +81,7 @@ describe('HookEventHandler', () => {
   let mockRunner: HookRunner;
   let mockAggregator: HookAggregator;
   let eventHandler: HookEventHandler;
+  let activeRecording: Pick<SessionRecordingService, 'getFilePath'> | undefined;
 
   const EMPTY_SUCCESS_RESULT: AggregatedHookResult = {
     success: true,
@@ -91,14 +95,11 @@ describe('HookEventHandler', () => {
     mockConfig = {
       getSessionId: vi.fn().mockReturnValue('test-session-123'),
       getTargetDir: vi.fn().mockReturnValue('/test/target'),
-      getSessionRecordingService: vi.fn().mockReturnValue({
-        getFilePath: vi
-          .fn()
-          .mockReturnValue(
-            '/test/target/.llxprt/tmp/chats/session-2025-01-20-test-session-123.jsonl',
-          ),
-      }),
     } as unknown as Config;
+    activeRecording = {
+      getFilePath: () =>
+        '/test/target/.llxprt/tmp/chats/session-2025-01-20-test-session-123.jsonl',
+    };
 
     mockRegistry = {} as unknown as HookRegistry;
 
@@ -121,6 +122,9 @@ describe('HookEventHandler', () => {
       mockPlanner,
       mockRunner,
       mockAggregator,
+      undefined,
+      undefined,
+      () => activeRecording,
     );
   });
 
@@ -545,6 +549,75 @@ describe('HookEventHandler', () => {
         }),
       );
     });
+    it('reads each active recording independently after the other is disposed', async () => {
+      const root = mkdtempSync(join(tmpdir(), 'hook-recording-'));
+      const recordings = ['agent-one', 'agent-two'].map(
+        (sessionId) =>
+          new SessionRecordingService({
+            sessionId,
+            projectHash: 'hook-recording',
+            chatsDir: root,
+            workspaceDirs: [],
+            provider: 'test',
+            model: 'test',
+          }),
+      );
+      const plan = {
+        hookConfigs: [{ type: 'command', command: 'echo test' }],
+        sequential: false,
+      };
+      (
+        mockPlanner.createExecutionPlan as Mock<
+          typeof mockPlanner.createExecutionPlan
+        >
+      ).mockReturnValue(plan);
+      const captured: string[] = [];
+      const runner = {
+        executeHooksParallel: async (
+          _hooks: unknown,
+          _event: unknown,
+          input: { transcript_path: string },
+        ) => {
+          captured.push(input.transcript_path);
+          return [];
+        },
+      } as unknown as HookRunner;
+      const handlers = recordings.map(
+        (recording) =>
+          new HookEventHandler(
+            mockConfig,
+            mockRegistry,
+            mockPlanner,
+            runner,
+            mockAggregator,
+            undefined,
+            undefined,
+            () => (recording.isActive() ? recording : undefined),
+          ),
+      );
+      try {
+        for (const recording of recordings) {
+          recording.recordContent({
+            speaker: 'human',
+            blocks: [{ type: 'text', text: recording.getSessionId() }],
+          });
+          await recording.flush();
+        }
+        const paths = recordings.map((recording) => recording.getFilePath());
+        expect(paths[0]).not.toBe(paths[1]);
+        expect(readFileSync(paths[0]!, 'utf8')).toContain('agent-one');
+        expect(readFileSync(paths[1]!, 'utf8')).toContain('agent-two');
+        await handlers[0].fireBeforeModelEvent(V2_REQUEST);
+        await handlers[1].fireBeforeModelEvent(V2_REQUEST);
+        await recordings[0].dispose();
+        await handlers[0].fireBeforeModelEvent(V2_REQUEST);
+        await handlers[1].fireBeforeModelEvent(V2_REQUEST);
+        expect(captured).toStrictEqual([paths[0], paths[1], '', paths[1]]);
+      } finally {
+        await Promise.all(recordings.map((recording) => recording.dispose()));
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
 
     it('should use empty string for transcript_path when SessionRecordingService is undefined', async () => {
       // ARRANGE
@@ -557,11 +630,7 @@ describe('HookEventHandler', () => {
           typeof mockPlanner.createExecutionPlan
         >
       ).mockReturnValue(plan);
-      (
-        mockConfig.getSessionRecordingService as Mock<
-          typeof mockConfig.getSessionRecordingService
-        >
-      ).mockReturnValue(undefined);
+      activeRecording = undefined;
 
       // ACT
       await eventHandler.fireBeforeModelEvent(V2_REQUEST);
@@ -587,13 +656,7 @@ describe('HookEventHandler', () => {
           typeof mockPlanner.createExecutionPlan
         >
       ).mockReturnValue(plan);
-      (
-        mockConfig.getSessionRecordingService as Mock<
-          typeof mockConfig.getSessionRecordingService
-        >
-      ).mockReturnValue({
-        getFilePath: vi.fn().mockReturnValue(null),
-      } as unknown as SessionRecordingService);
+      activeRecording = { getFilePath: () => null };
 
       // ACT
       await eventHandler.fireBeforeModelEvent(V2_REQUEST);

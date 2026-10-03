@@ -104,7 +104,6 @@ describe('extension hook integration: gemini-extension.json -> HookRegistry', ()
       getExtensions: () => extensions,
       getDisabledHooks: () => [],
       getModel: () => 'test-model',
-      getSessionRecordingService: () => undefined,
       isTrustedFolder: () => true,
       getSanitizationConfig: () => ({
         enableEnvironmentVariableRedaction: false,
@@ -170,7 +169,6 @@ describe('extension hook integration: gemini-extension.json -> HookRegistry', ()
       getExtensions: () => extensions,
       getDisabledHooks: () => [],
       getModel: () => 'test-model',
-      getSessionRecordingService: () => undefined,
       isTrustedFolder: () => true,
       getSanitizationConfig: () => ({
         enableEnvironmentVariableRedaction: false,

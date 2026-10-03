@@ -24,7 +24,7 @@ import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message
 import { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
-import { createSchedulerRegistryDelegate } from './__tests__/scheduler-registry-test-helpers.js';
+import { createToolExecutionPort } from './__tests__/scheduler-registry-test-helpers.js';
 
 describe('executeToolCall response structure', () => {
   let mockToolRegistry: ToolRegistry;
@@ -89,25 +89,15 @@ describe('executeToolCall response structure', () => {
           new CoreToolScheduler(schedulerOptions),
     };
 
-    const delegate = createSchedulerRegistryDelegate({
-      config: fixture as unknown as Config,
-      messageBus,
-      toolRegistry: mockToolRegistry,
-      createScheduler: async (schedulerOptions) =>
-        fixture.getToolSchedulerFactory()({
-          config: fixture as unknown as Config,
-          messageBus,
-          toolRegistry: mockToolRegistry,
-          toolContextInteractiveMode: schedulerOptions.interactiveMode ?? true,
-          getPreferredEditor: () => undefined,
-          onEditorClose: () => {},
-        }),
-    });
-
     const config: ToolExecutionConfig = {
       ...fixture,
-      ...delegate,
-    } as unknown as ToolExecutionConfig;
+      ...createToolExecutionPort(
+        fixture as unknown as Config,
+        fixture.getToolSchedulerFactory(),
+        messageBus,
+        mockToolRegistry,
+      ),
+    };
 
     return config;
   }

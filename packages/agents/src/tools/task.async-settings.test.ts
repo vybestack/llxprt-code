@@ -47,7 +47,7 @@ describe('TaskTool', () => {
       const tool = new TaskTool(configWithDisabledGlobalAsync, {
         orchestratorFactory: () => ({}) as SubagentOrchestrator,
         messageBus,
-        getAsyncTaskManager: () =>
+        getTaskManager: () =>
           mockAsyncTaskManager as unknown as AsyncTaskManager,
       });
       const params: TaskToolParams = {
@@ -85,7 +85,7 @@ describe('TaskTool', () => {
       const tool = new TaskTool(configWithDisabledProfileAsync, {
         orchestratorFactory: () => ({}) as SubagentOrchestrator,
         messageBus,
-        getAsyncTaskManager: () =>
+        getTaskManager: () =>
           mockAsyncTaskManager as unknown as AsyncTaskManager,
       });
       const params: TaskToolParams = {
@@ -104,14 +104,8 @@ describe('TaskTool', () => {
     });
 
     it('proceeds when async=true and both global and profile settings enabled', async () => {
-      const registerTaskMock = vi.fn();
-      const mockAsyncTaskManager = {
-        canLaunchAsync: () => ({ allowed: true }),
-        tryReserveAsyncSlot: () => 'booking-1',
-        registerTask: registerTaskMock,
-        completeTask: vi.fn(),
-        failTask: vi.fn(),
-      };
+      const taskManager = new AsyncTaskManager();
+      const registerTaskMock = vi.spyOn(taskManager, 'registerTask');
       const launchMock = vi.fn().mockResolvedValue({
         agentId: 'async-enabled-agent',
         scope: {
@@ -138,8 +132,7 @@ describe('TaskTool', () => {
         orchestratorFactory: () =>
           ({ launch: launchMock }) as unknown as SubagentOrchestrator,
         messageBus,
-        getAsyncTaskManager: () =>
-          mockAsyncTaskManager as unknown as AsyncTaskManager,
+        getTaskManager: () => taskManager,
         isInteractiveEnvironment: () => false,
       });
       const params: TaskToolParams = {
@@ -154,17 +147,15 @@ describe('TaskTool', () => {
       expect(result.error).toBeUndefined();
       expect(registerTaskMock).toHaveBeenCalled();
       expect(result.metadata?.async).toBe(true);
+      await taskManager.close();
+      expect(taskManager.getTask('async-enabled-agent')?.status).toBe(
+        'completed',
+      );
     });
 
     it('defaults to enabled when no subagent settings are configured', async () => {
-      const registerTaskMock = vi.fn();
-      const mockAsyncTaskManager = {
-        canLaunchAsync: () => ({ allowed: true }),
-        tryReserveAsyncSlot: () => 'booking-1',
-        registerTask: registerTaskMock,
-        completeTask: vi.fn(),
-        failTask: vi.fn(),
-      };
+      const taskManager = new AsyncTaskManager();
+      const registerTaskMock = vi.spyOn(taskManager, 'registerTask');
       const launchMock = vi.fn().mockResolvedValue({
         agentId: 'async-no-settings',
         scope: {
@@ -186,8 +177,7 @@ describe('TaskTool', () => {
         orchestratorFactory: () =>
           ({ launch: launchMock }) as unknown as SubagentOrchestrator,
         messageBus,
-        getAsyncTaskManager: () =>
-          mockAsyncTaskManager as unknown as AsyncTaskManager,
+        getTaskManager: () => taskManager,
         isInteractiveEnvironment: () => false,
       });
       const params: TaskToolParams = {
@@ -201,6 +191,10 @@ describe('TaskTool', () => {
 
       expect(result.error).toBeUndefined();
       expect(registerTaskMock).toHaveBeenCalled();
+      await taskManager.close();
+      expect(taskManager.getTask('async-no-settings')?.status).toBe(
+        'completed',
+      );
     });
   });
 });

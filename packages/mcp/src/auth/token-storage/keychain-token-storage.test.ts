@@ -11,11 +11,9 @@ import {
   resetKeytarLoader,
 } from './keychain-token-storage.js';
 import type { OAuthCredentials } from './types.js';
-import { registerMcpHostServices } from '../../host/hostServices.js';
 
 // Exercises the real host seam instead of mocking a module (#3305).
 const mockEmitFeedback = vi.fn();
-registerMcpHostServices({ emitFeedback: mockEmitFeedback });
 
 // Create mock keytar functions
 const mockKeytar = {
@@ -41,7 +39,7 @@ describe('KeychainTokenStorage', () => {
     vi.resetAllMocks();
     // Inject the mock keytar via setKeytarLoader
     setKeytarLoader(() => Promise.resolve(mockKeytar));
-    storage = new KeychainTokenStorage(mockServiceName);
+    storage = new KeychainTokenStorage(mockServiceName, mockEmitFeedback);
   });
 
   afterEach(() => {

@@ -38,6 +38,7 @@ import type { SubagentSchedulerFactory } from './subagentScheduler.js';
 import { type CompletedToolCall } from './coreToolScheduler.js';
 import { type EmojiFilter } from '@vybestack/llxprt-code-core/filters/EmojiFilter.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import type { SessionSchedulerOwner } from '../api/agentRuntimeAssembly.js';
 import {
   filterToolsAgainstRuntime,
   createToolExecutionConfig,
@@ -218,6 +219,7 @@ function readInteractiveOutputTokens(
  * @pseudocode agent-runtime-context.md line 93 (step 007.1)
  */
 export interface SubAgentDependencies {
+  schedulerOwner?: SessionSchedulerOwner;
   createTurn?: (
     chat: ChatSession,
     promptId: string,
@@ -352,6 +354,7 @@ export class SubAgentScope {
       overrides.messageBus,
       settingsSnapshot,
       toolConfig,
+      dependencies.schedulerOwner,
     );
 
     const environmentContextLoader =
@@ -639,6 +642,8 @@ export class SubAgentScope {
         this.config,
         { interactive: true },
       ),
+      schedulerRelease: (owner, purpose, handle) =>
+        this.toolExecutorContext.releaseScheduler(owner, purpose, handle),
       onMessage: this.onMessage,
       messageBus: this.messageBus,
       subagentId: this.subagentId,

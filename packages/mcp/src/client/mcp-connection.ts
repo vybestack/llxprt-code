@@ -3,6 +3,10 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import {
+  defaultHostServices,
+  type McpHostServices,
+} from '../host/hostServices.js';
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { ListRootsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
@@ -247,6 +251,7 @@ async function retryWithWwwAuthenticate(
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
   wwwAuthenticate: string,
+  hostServices: Readonly<McpHostServices>,
 ): Promise<Client> {
   debugLogger.log(
     `Received 401 with www-authenticate header: ${wwwAuthenticate}`,
@@ -256,10 +261,16 @@ async function retryWithWwwAuthenticate(
     mcpServerName,
     mcpServerConfig,
     wwwAuthenticate,
+    hostServices,
   );
 
   if (oauthSuccess) {
-    return connectWithOAuthToken(mcpClient, mcpServerName, mcpServerConfig);
+    return connectWithOAuthToken(
+      mcpClient,
+      mcpServerName,
+      mcpServerConfig,
+      hostServices,
+    );
   }
 
   debugLogger.error(
@@ -274,6 +285,7 @@ async function retryWithOAuthDiscovery(
   mcpClient: Client,
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
+  hostServices: Readonly<McpHostServices>,
 ): Promise<Client> {
   const shouldTryDiscovery =
     (typeof mcpServerConfig.httpUrl === 'string' &&
@@ -281,7 +293,7 @@ async function retryWithOAuthDiscovery(
     mcpServerConfig.oauth?.enabled === true;
 
   if (!shouldTryDiscovery) {
-    await showAuthRequiredMessage(mcpServerName);
+    await showAuthRequiredMessage(mcpServerName, hostServices);
   }
 
   debugLogger.log(`Attempting OAuth discovery for '${mcpServerName}'...`);
@@ -291,9 +303,15 @@ async function retryWithOAuthDiscovery(
       mcpServerName,
       mcpServerConfig,
       '',
+      hostServices,
     );
     if (oauthSuccess) {
-      return connectWithOAuthToken(mcpClient, mcpServerName, mcpServerConfig);
+      return connectWithOAuthToken(
+        mcpClient,
+        mcpServerName,
+        mcpServerConfig,
+        hostServices,
+      );
     }
     throw new Error(
       `OAuth configuration failed for '${mcpServerName}'. Please authenticate manually with /mcp auth ${mcpServerName}`,
@@ -312,6 +330,7 @@ async function trySSEFallback(
   mcpClient: Client,
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
+  hostServices: Readonly<McpHostServices>,
 ): Promise<Client | undefined> {
   debugLogger.log(
     `Initial connection failed for '${mcpServerName}', attempting SSE fallback`,
@@ -322,12 +341,15 @@ async function trySSEFallback(
   } catch (fallbackError) {
     if (isAuthenticationError(fallbackError)) {
       mcpServerRequiresOAuth.set(mcpServerName, true);
-      const storedToken = await getStoredOAuthToken(mcpServerName);
+      const storedToken = await getStoredOAuthToken(
+        mcpServerName,
+        hostServices,
+      );
       if (storedToken) {
         await connectWithSSETransport(mcpClient, mcpServerConfig, storedToken);
         return mcpClient;
       }
-      await showAuthRequiredMessage(mcpServerName);
+      await showAuthRequiredMessage(mcpServerName, hostServices);
     }
   }
   return undefined;
@@ -338,10 +360,11 @@ async function handleAuthenticationError(
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
   errorString: string,
+  hostServices: Readonly<McpHostServices>,
 ): Promise<Client> {
   const shouldTriggerOAuth = mcpServerConfig.oauth?.enabled;
   if (shouldTriggerOAuth !== true) {
-    await showAuthRequiredMessage(mcpServerName);
+    await showAuthRequiredMessage(mcpServerName, hostServices);
   }
 
   const wwwAuthenticate = await resolveWwwAuthenticateHeader(
@@ -356,10 +379,16 @@ async function handleAuthenticationError(
       mcpServerName,
       mcpServerConfig,
       wwwAuthenticate,
+      hostServices,
     );
   }
 
-  return retryWithOAuthDiscovery(mcpClient, mcpServerName, mcpServerConfig);
+  return retryWithOAuthDiscovery(
+    mcpClient,
+    mcpServerName,
+    mcpServerConfig,
+    hostServices,
+  );
 }
 
 async function handleConnectionError(
@@ -368,10 +397,11 @@ async function handleConnectionError(
   mcpServerConfig: MCPServerConfig,
   error: unknown,
   httpReturned404: boolean,
+  hostServices: Readonly<McpHostServices>,
 ): Promise<Client> {
   if (isAuthenticationError(error)) {
     mcpServerRequiresOAuth.set(mcpServerName, true);
-    const storedToken = await getStoredOAuthToken(mcpServerName);
+    const storedToken = await getStoredOAuthToken(mcpServerName, hostServices);
     if (storedToken) {
       await retryWithOAuth(
         mcpClient,
@@ -382,7 +412,7 @@ async function handleConnectionError(
       );
       return mcpClient;
     }
-    await showAuthRequiredMessage(mcpServerName);
+    await showAuthRequiredMessage(mcpServerName, hostServices);
   }
 
   if (
@@ -395,6 +425,7 @@ async function handleConnectionError(
       mcpClient,
       mcpServerName,
       mcpServerConfig,
+      hostServices,
     );
     if (sseResult) {
       return sseResult;
@@ -408,6 +439,7 @@ async function handleConnectionError(
       mcpServerName,
       mcpServerConfig,
       errorString,
+      hostServices,
     );
   }
 
@@ -468,6 +500,7 @@ export async function connectToMcpServer(
   debugMode: boolean,
   workspaceContext: McpWorkspaceContext,
   signal?: AbortSignal,
+  hostServices: Readonly<McpHostServices> = defaultHostServices,
 ): Promise<Client> {
   const mcpClient = initializeMcpClient(clientVersion, workspaceContext);
 
@@ -478,6 +511,7 @@ export async function connectToMcpServer(
       mcpServerName,
       mcpServerConfig,
       debugMode,
+      hostServices,
     );
     const transport =
       signal !== undefined
@@ -512,6 +546,7 @@ export async function connectToMcpServer(
       mcpServerConfig,
       error,
       httpReturned404,
+      hostServices,
     );
     return signal !== undefined
       ? abortable(

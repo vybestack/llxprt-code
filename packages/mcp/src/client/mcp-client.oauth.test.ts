@@ -58,9 +58,10 @@ void vi.mock('@modelcontextprotocol/sdk/client/index.js', () =>
 void vi.mock('../auth/oauth-provider.js', () =>
   automock(realOauthProviderModule),
 );
-void vi.mock('../auth/oauth-token-storage.js', () =>
-  automock(realOauthTokenStorageModule),
-);
+void vi.mock('../auth/oauth-token-storage.js', () => ({
+  ...automock(realOauthTokenStorageModule),
+  createMcpOAuthTokenStorage: () => new MCPOAuthTokenStorage(),
+}));
 void vi.mock('../auth/oauth-utils.js', () => automock(realOauthUtilsModule));
 
 const createMockResourceRegistry = (): ResourceRegistry =>
@@ -69,11 +70,8 @@ const createMockResourceRegistry = (): ResourceRegistry =>
     removeResourcesByServer: vi.fn(),
   }) as unknown as ResourceRegistry;
 import type { TransportWithInternals } from './mcpClientTestHelpers.js';
-import { registerMcpHostServices } from '../host/hostServices.js';
 
 // Exercises the real host seam instead of mocking a module (#3305).
-const mockEmitFeedback = vi.fn();
-registerMcpHostServices({ emitFeedback: mockEmitFeedback });
 
 async function expectPending(promise: Promise<unknown>): Promise<void> {
   expect(await Promise.race([promise, Promise.resolve('pending')])).toBe(

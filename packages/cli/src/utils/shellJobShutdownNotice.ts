@@ -5,7 +5,7 @@
  */
 
 import fs from 'node:fs';
-import type { Config } from '@vybestack/llxprt-code-core';
+import type { AgentTasksControl } from '@vybestack/llxprt-code-agents';
 
 /**
  * Registration target for the exit listener. The real `process` satisfies
@@ -22,7 +22,10 @@ export interface ExitListenerTarget {
  * idempotent: every call appends another `exit` listener, so a second
  * registration on the same target would print the notice twice on exit.
  */
-const armedTargets = new WeakSet<ExitListenerTarget>();
+const armedTargets = new WeakMap<
+  ExitListenerTarget,
+  { tasks: Pick<AgentTasksControl, 'listRunning'> }
+>();
 
 /**
  * Bound on each job's command text in the notice. Job commands are
@@ -72,22 +75,24 @@ function truncateCommand(command: string): string {
  * capped — so job text cannot fill a pipe buffer and turn that synchronous
  * drain into a blocked exit.
  *
- * The manager is read through the non-creating `peekShellJobManager`: the
- * creating `getShellJobManager` would construct a manager (and its
- * `shell-jobs-*` temp log directory) during exit on sessions that never
- * backgrounded a job. The exit code is left untouched.
+ * The session's task port is read without constructing a new manager.
  */
 export function registerShellJobShutdownNotice(
-  config: Pick<Config, 'peekShellJobManager'>,
+  tasks: Pick<AgentTasksControl, 'listRunning'>,
   target: ExitListenerTarget = process,
 ): void {
-  if (armedTargets.has(target)) {
+  const existing = armedTargets.get(target);
+  if (existing !== undefined) {
+    existing.tasks = tasks;
     return;
   }
-  armedTargets.add(target);
+  const source = { tasks };
+  armedTargets.set(target, source);
   target.on('exit', () => {
     try {
-      const running = config.peekShellJobManager()?.getRunningJobs() ?? [];
+      const running = source.tasks
+        .listRunning()
+        .filter((job) => job.kind === 'shell');
       if (running.length === 0) {
         return;
       }

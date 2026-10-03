@@ -23,14 +23,14 @@ import {
   __resetUnhandledRejectionStateForTesting,
   formatNonInteractiveError,
 } from './cli.js';
-import type { LoadedSettings } from './config/settings.js';
-import { loadSettings } from './config/settings.js';
+import { loadSettings, type LoadedSettings } from './config/settings.js';
 import { loadCliConfig } from './config/config.js';
 import { parseArguments } from './config/cliArgParser.js';
 import { appEvents, AppEvent, type AppEvents } from './utils/events.js';
 import { EventEmitter } from 'node:events';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { FatalConfigError, OutputFormat } from '@vybestack/llxprt-code-core';
+import { withCliMessageBus } from './__tests__/cli-runtime-fixture.js';
 import { dynamicSettingsRegistry } from './utils/dynamicSettings.js';
 import { shouldRelaunchForMemory, isDebugMode } from './utils/bootstrap.js';
 import { relaunchAppInChildProcess } from './utils/relaunch.js';
@@ -76,11 +76,13 @@ void vi.mock('./ui/utils/terminalCapabilityManager.js', () => ({
 }));
 
 void vi.mock('./config/config.js', () => ({
-  loadCliConfig: vi.fn().mockResolvedValue({
-    getSandbox: () => false,
-    getQuestion: () => '',
-    getProvider: () => undefined,
-  } as unknown as Config),
+  loadCliConfig: vi.fn().mockResolvedValue(
+    withCliMessageBus({
+      getSandbox: () => false,
+      getQuestion: () => '',
+      getProvider: () => undefined,
+    }),
+  ),
 }));
 
 void vi.mock('./config/cliArgParser.js', () => ({
@@ -537,7 +539,7 @@ describe('cli.tsx main function', () => {
     } as unknown as LoadedSettings);
 
     (loadCliConfig as Mock<typeof loadCliConfig>).mockResolvedValueOnce(
-      mockConfig,
+      withCliMessageBus(mockConfig),
     );
     (parseArguments as Mock<typeof parseArguments>).mockResolvedValueOnce({
       model: undefined,
@@ -701,7 +703,7 @@ describe('cli.tsx main function', () => {
     } as unknown as LoadedSettings);
 
     (loadCliConfig as Mock<typeof loadCliConfig>).mockResolvedValueOnce(
-      mockConfig,
+      withCliMessageBus(mockConfig),
     );
     (parseArguments as Mock<typeof parseArguments>).mockResolvedValueOnce({
       model: undefined,

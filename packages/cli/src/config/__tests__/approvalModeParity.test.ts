@@ -314,7 +314,7 @@ async function getApprovalMode(
   const argv = await parseArguments(settings);
   Object.assign(argv, argvOverride ?? {});
   const runtimeSettingsService = new SettingsService();
-  const config = await loadCliConfig(
+  const { config } = await loadCliConfig(
     settings,
     [],
     makeExtMgr(argv.extensions),

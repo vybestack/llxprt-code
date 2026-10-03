@@ -82,6 +82,7 @@ describe('AgenticLoop done ordering through mapLoopStream (issue #3087)', () => 
       const loop = new AgenticLoop({
         agentClient: client,
         config,
+        schedulerOwner: config.schedulerOwner,
         messageBus,
         interactiveMode: true,
       });

@@ -34,13 +34,21 @@ import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import type { Agent, AgentMessage } from '@vybestack/llxprt-code-agents';
+import { fromConfig } from '@vybestack/llxprt-code-agents';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import {
+  HookEventName,
+  HookType,
+} from '@vybestack/llxprt-code-core/hooks/types.js';
 import {
   buildAgent,
+  fixturesDir,
   drain,
   captureHistoryServiceIdentity,
   respondToFirstConfirmation,
   ToolConfirmationOutcome,
 } from './helpers/agentHarness.js';
+import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
 
 /** Builds a public AgentMessage (IContent) with speaker + a single text block. */
 function textMessage(role: 'user' | 'model', text: string): AgentMessage {
@@ -106,6 +114,251 @@ async function withIsolatedAgent<T>(
 }
 
 describe('SessionControl continuous recording @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010', () => {
+  it('keeps two Agents in the same workspace recording independently after one disposes', async () => {
+    const workingDir = mkdtempSync(join(tmpdir(), 'llxprt-recording-owners-'));
+    let first: Awaited<ReturnType<typeof buildAgent>> | undefined;
+    let second: Awaited<ReturnType<typeof buildAgent>> | undefined;
+    try {
+      first = await buildAgent('plain-text.jsonl', { workingDir });
+      second = await buildAgent('plain-text.jsonl', { workingDir });
+      await drain(first.agent.stream('first agent prompt'));
+      await drain(second.agent.stream('second agent prompt'));
+      await first.agent.session.setRecording({ enabled: true });
+      await second.agent.session.setRecording({ enabled: true });
+      const firstPath = first.agent.session.getRecording().path;
+      const secondPath = second.agent.session.getRecording().path;
+      expect(firstPath).toBeDefined();
+      expect(secondPath).toBeDefined();
+      expect(firstPath).not.toBe(secondPath);
+      expect(readFileSync(firstPath!, 'utf8')).toContain('first agent prompt');
+      expect(readFileSync(secondPath!, 'utf8')).toContain(
+        'second agent prompt',
+      );
+      await first.agent.dispose();
+      expect(second.agent.session.getRecording().enabled).toBe(true);
+      await second.agent.session.setRecording({ enabled: false });
+      expect(readFileSync(secondPath!, 'utf8')).toContain('session_start');
+    } finally {
+      await second?.cleanup();
+      await first?.cleanup();
+      rmSync(workingDir, { recursive: true, force: true });
+      rmSync(storageTempDirFor(workingDir), { recursive: true, force: true });
+    }
+  });
+
+  it('keeps the active recording bound to its Agent when session labels match', async () => {
+    const firstDir = mkdtempSync(join(tmpdir(), 'llxprt-rec-owner-a-'));
+    const secondDir = mkdtempSync(join(tmpdir(), 'llxprt-rec-owner-b-'));
+    let first: Awaited<ReturnType<typeof buildAgent>> | undefined;
+    let second: Awaited<ReturnType<typeof buildAgent>> | undefined;
+    try {
+      first = await buildAgent('plain-text.jsonl', {
+        workingDir: firstDir,
+        sessionId: 'shared-label',
+      });
+      second = await buildAgent('plain-text.jsonl', {
+        workingDir: secondDir,
+        sessionId: 'shared-label',
+      });
+      await first.agent.addHistory(textMessage('user', 'first recording'));
+      await second.agent.addHistory(textMessage('user', 'second recording'));
+      await first.agent.session.setRecording({ enabled: true });
+      await second.agent.session.setRecording({ enabled: true });
+      const firstRecording = first.agent.session.getActiveRecording();
+      const secondRecording = second.agent.session.getActiveRecording();
+      expect(firstRecording?.getSessionId()).toBe('shared-label');
+      expect(secondRecording?.getSessionId()).toBe('shared-label');
+      expect(firstRecording?.getFilePath()).not.toBe(
+        secondRecording?.getFilePath(),
+      );
+      await first.agent.dispose();
+      expect(first.agent.session.getActiveRecording()).toBeUndefined();
+      expect(second.agent.session.getActiveRecording()).toBe(secondRecording);
+      expect(secondRecording?.isActive()).toBe(true);
+    } finally {
+      await second?.cleanup();
+      await first?.cleanup();
+      for (const dir of [firstDir, secondDir]) {
+        rmSync(dir, { recursive: true, force: true });
+        rmSync(storageTempDirFor(dir), { recursive: true, force: true });
+      }
+    }
+  });
+
+  it('exports each same-label Agent recording with its own attribution and keeps the survivor exportable', async () => {
+    const firstDir = mkdtempSync(join(tmpdir(), 'llxprt-export-owner-a-'));
+    const secondDir = mkdtempSync(join(tmpdir(), 'llxprt-export-owner-b-'));
+    const exportDir = mkdtempSync(join(tmpdir(), 'llxprt-export-packages-'));
+    let first: Awaited<ReturnType<typeof buildAgent>> | undefined;
+    let second: Awaited<ReturnType<typeof buildAgent>> | undefined;
+    try {
+      first = await buildAgent('plain-text.jsonl', {
+        workingDir: firstDir,
+        sessionId: 'shared-export-label',
+      });
+      second = await buildAgent('plain-text.jsonl', {
+        workingDir: secondDir,
+        sessionId: 'shared-export-label',
+      });
+      await first.agent.addHistory(
+        textMessage('user', 'export attribution sentinel A'),
+      );
+      await second.agent.addHistory(
+        textMessage('user', 'export attribution sentinel B'),
+      );
+      await first.agent.session.setRecording({ enabled: true });
+      await second.agent.session.setRecording({ enabled: true });
+
+      const firstRecordingPath = first.agent.session
+        .getActiveRecording()
+        ?.getFilePath();
+      const secondRecordingPath = second.agent.session
+        .getActiveRecording()
+        ?.getFilePath();
+      expect(firstRecordingPath).toBeDefined();
+      expect(secondRecordingPath).toBeDefined();
+      expect(secondRecordingPath).not.toBe(firstRecordingPath);
+
+      const firstDestination = join(exportDir, 'agent-a');
+      const secondDestination = join(exportDir, 'agent-b');
+      await first.agent.session.exportSession(
+        'shared-export-label',
+        firstDestination,
+      );
+      await second.agent.session.exportSession(
+        'shared-export-label',
+        secondDestination,
+      );
+
+      const firstExport = readFileSync(
+        join(firstDestination, 'session.jsonl'),
+        'utf8',
+      );
+      const secondExport = readFileSync(
+        join(secondDestination, 'session.jsonl'),
+        'utf8',
+      );
+      expect(firstExport).toContain('export attribution sentinel A');
+      expect(firstExport).not.toContain('export attribution sentinel B');
+      expect(secondExport).toContain('export attribution sentinel B');
+      expect(secondExport).not.toContain('export attribution sentinel A');
+
+      await first.agent.dispose();
+      await drain(second.agent.stream('survivor export sentinel B2'));
+
+      const survivorDestination = join(exportDir, 'agent-b-after-dispose');
+      await second.agent.session.exportSession(
+        'shared-export-label',
+        survivorDestination,
+      );
+      const survivorExport = readFileSync(
+        join(survivorDestination, 'session.jsonl'),
+        'utf8',
+      );
+      expect(survivorExport).toContain('export attribution sentinel B');
+      expect(survivorExport).toContain('survivor export sentinel B2');
+      expect(survivorExport).not.toContain('export attribution sentinel A');
+    } finally {
+      await second?.cleanup();
+      await first?.cleanup();
+      rmSync(exportDir, { recursive: true, force: true });
+      for (const dir of [firstDir, secondDir]) {
+        rmSync(dir, { recursive: true, force: true });
+        rmSync(storageTempDirFor(dir), { recursive: true, force: true });
+      }
+    }
+  });
+
+  it('passes the current Agent recording to hooks during turns after another Agent with the same label disposes', async () => {
+    const roots = [
+      mkdtempSync(join(tmpdir(), 'llxprt-hook-owner-a-')),
+      mkdtempSync(join(tmpdir(), 'llxprt-hook-owner-b-')),
+    ];
+    const priorFixture = process.env.LLXPRT_FAKE_RESPONSES;
+    process.env.LLXPRT_FAKE_RESPONSES = join(
+      fixturesDir,
+      'multi-turn-text.jsonl',
+    );
+    const agents: Agent[] = [];
+    const configs: Config[] = [];
+    try {
+      for (const [index, root] of roots.entries()) {
+        const hookOutput = join(root, 'hook-input.json');
+        const config = new Config({
+          sessionId: 'shared-hook-label',
+          targetDir: root,
+          cwd: root,
+          debugMode: false,
+          provider: 'fake',
+          model: 'fake-model',
+          enableHooks: true,
+          hooks: {
+            [HookEventName.BeforeModel]: [
+              {
+                hooks: [
+                  { type: HookType.Command, command: `cat > "${hookOutput}"` },
+                ],
+              },
+            ],
+          },
+        });
+        configs.push(config);
+        const agent = await fromConfig({ config });
+        agents.push(agent);
+        await config.getHookSystem()!.initialize();
+        await agent.addHistory(textMessage('user', `agent ${index} content`));
+        await agent.session.setRecording({ enabled: true });
+      }
+      const firstPath = agents[0].session.getActiveRecording()?.getFilePath();
+      const secondPath = agents[1].session.getActiveRecording()?.getFilePath();
+      expect(firstPath).toBeDefined();
+      expect(secondPath).toBeDefined();
+      expect(firstPath).not.toBe(secondPath);
+      const firstEvents = await drain(agents[0].stream('first hook turn'));
+      expect(firstEvents.some((event) => event.type === 'error')).toBe(false);
+      const firstInput = JSON.parse(
+        readFileSync(join(roots[0], 'hook-input.json'), 'utf8'),
+      );
+      expect(firstInput.transcript_path).toBe(firstPath);
+      await agents[0].dispose();
+      const secondEvents = await drain(agents[1].stream('second hook turn'));
+      expect(secondEvents.some((event) => event.type === 'error')).toBe(false);
+      const secondInput = JSON.parse(
+        readFileSync(join(roots[1], 'hook-input.json'), 'utf8'),
+      );
+      expect(secondInput.transcript_path).toBe(secondPath);
+    } finally {
+      await Promise.all(agents.map((agent) => agent.dispose()));
+      await Promise.all(configs.map((config) => config.dispose()));
+      if (priorFixture === undefined) {
+        delete process.env.LLXPRT_FAKE_RESPONSES;
+      } else {
+        process.env.LLXPRT_FAKE_RESPONSES = priorFixture;
+      }
+      for (const root of roots) {
+        rmSync(root, { recursive: true, force: true });
+        rmSync(storageTempDirFor(root), { recursive: true, force: true });
+      }
+    }
+  });
+
+  it('disposes an adopted recording without disposing the caller Config', async () => {
+    const built = await buildCliStyleConfig('plain-text.jsonl');
+    let agent: Agent | undefined;
+    try {
+      agent = await fromConfig({ config: built.config });
+      await drain(agent.stream('record this adopted session'));
+      await agent.session.setRecording({ enabled: true });
+      expect(agent.session.getRecording().enabled).toBe(true);
+      await agent.dispose();
+      expect(agent.session.getRecording().enabled).toBe(false);
+      expect(built.config.getAgentClient()).toBeDefined();
+    } finally {
+      await agent?.dispose();
+      await built.cleanup();
+    }
+  });
+
   it('appends a turn that happens AFTER setRecording(true) to the JSONL file (continuous, not a one-shot snapshot) @requirement:REQ-010', async () => {
     const { path, raw } =
       await observeAppendsATurnThatHappensAFTERSetRecordingTrueToTheJSONLFile();

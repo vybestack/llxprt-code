@@ -61,8 +61,6 @@ function makeMockClient(history: IContent[]): AgentClientContract {
 function makeConfig(): Config {
   return {
     getProjectRoot: () => '/tmp/test-session-control',
-    setSessionRecordingService: () => undefined,
-    getSessionRecordingService: () => undefined,
     storage: {
       readProjectTempData: () => Promise.resolve(null),
       writeProjectTempData: () => Promise.resolve(),

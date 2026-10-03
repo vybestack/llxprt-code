@@ -10,11 +10,7 @@ import type {
 } from '../config/mcpServerConfig.js';
 import type { McpHostConfig } from '../host/hostInterfaces.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import {
-  McpClient,
-  MCPDiscoveryState,
-  populateMcpServerCommand,
-} from './mcp-client.js';
+import { McpClient, MCPDiscoveryState } from './mcp-client.js';
 import { MCPServerStatus, updateMCPServerStatus } from './mcp-status.js';
 import {
   applyFakeServerDiscovery,
@@ -27,8 +23,10 @@ import {
 } from '@vybestack/llxprt-code-tools/utils/errors.js';
 import type { EventEmitter } from 'node:events';
 import {
-  emitHostFeedback,
+  defaultHostServices,
+  deliverHostFeedback,
   MCP_CLIENT_UPDATE_EVENT,
+  type McpHostServices,
 } from '../host/hostServices.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry/utils/debugLogger.js';
@@ -41,7 +39,8 @@ import { collectMcpInstructions } from './mcp-instructions.js';
 import {
   collectMcpServers,
   consumeMcpContextRefreshes,
-  getConfiguredMcpReconciliation,
+  getHostMcpReconciliation,
+  getHostMcpServers,
   isAllowedMcpServer,
   recordPendingDiscoveryTimeouts,
   reconcileConfiguredMcpClients,
@@ -103,10 +102,11 @@ export class McpClientManager {
     private readonly cliConfig: McpHostConfig,
     private readonly eventEmitter?: EventEmitter,
     private readonly settleTimeoutMs: number = DEFAULT_MCP_DISCOVERY_SETTLE_TIMEOUT_MS,
+    private readonly hostServices: Readonly<McpHostServices> = defaultHostServices,
   ) {}
-  getBlockedMcpServers() {
-    return this.blockedMcpServers;
-  }
+  private readonly refreshContext = (): Promise<void> =>
+    this.cliConfig.refreshMcpContext();
+  getBlockedMcpServers = () => this.blockedMcpServers;
   /**
    * For all the MCP servers associated with this extension:
    *
@@ -266,7 +266,8 @@ export class McpClientManager {
           this.pendingDiscoveryServers.delete(name);
           if (!isAuthenticationError(error)) {
             this.discoveryFailures.set(name, getErrorMessage(error));
-            emitHostFeedback(
+            deliverHostFeedback(
+              this.hostServices.emitFeedback,
               'error',
               `Error during discovery for server '${name}': ${getErrorMessage(
                 error,
@@ -307,6 +308,7 @@ export class McpClientManager {
         debugLogger.log('Tools changed, updating agent context...');
         await this.scheduleMcpContextRefresh();
       },
+      this.hostServices,
     );
     this.clientDisconnections.activate(client);
     return client;
@@ -425,7 +427,8 @@ export class McpClientManager {
       // when the settle timeout fired is not left with a bogus "Timed out".
       if (!isAuthenticationError(error)) {
         this.discoveryFailures.set(name, getErrorMessage(error));
-        emitHostFeedback(
+        deliverHostFeedback(
+          this.hostServices.emitFeedback,
           'error',
           `Error during discovery for server '${name}': ${getErrorMessage(
             error,
@@ -511,6 +514,7 @@ export class McpClientManager {
       this.eventEmitter?.emit(MCP_CLIENT_UPDATE_EVENT, {
         clients: new Map(this.clients),
       });
+      await this.cliConfig.refreshMcpContext();
       if (!isAuthorized()) {
         await this.removeAndDisconnectClient(name, client);
       }
@@ -580,11 +584,7 @@ export class McpClientManager {
       });
     await startConfiguredMcpClients({
       trusted: this.cliConfig.isTrustedFolder(),
-      resolveServers: () =>
-        populateMcpServerCommand(
-          this.cliConfig.getMcpServers() ?? {},
-          this.cliConfig.getMcpServerCommand(),
-        ),
+      resolveServers: () => getHostMcpServers(this.cliConfig),
       completeEmpty: () => {
         this.discoveryState = MCPDiscoveryState.COMPLETED;
       },
@@ -603,10 +603,7 @@ export class McpClientManager {
     if (this.stopped) {
       return;
     }
-    const servers = populateMcpServerCommand(
-      this.cliConfig.getMcpServers() ?? {},
-      this.cliConfig.getMcpServerCommand(),
-    );
+    const servers = getHostMcpServers(this.cliConfig);
     const discoverPromises: Array<Promise<void>> = [];
     for (const [name, config] of Object.entries(servers)) {
       discoverPromises.push(
@@ -751,15 +748,14 @@ export class McpClientManager {
     throwTrustRevocationFailures(failures, 'MCP trust revocation failed');
   }
 
-  async reconcileConfiguredMcpServers(): Promise<void> {
+  async reconcileConfiguredMcpServers(
+    refreshContext: () => Promise<void> = this.refreshContext,
+  ): Promise<void> {
     if (!this.cliConfig.isTrustedFolder() || this.stopped) return;
     this.trustGeneration++;
-    const reconciliation = getConfiguredMcpReconciliation(
+    const reconciliation = getHostMcpReconciliation(
       this.clients,
-      populateMcpServerCommand(
-        this.cliConfig.getMcpServers() ?? {},
-        this.cliConfig.getMcpServerCommand(),
-      ),
+      this.cliConfig,
     );
     await reconcileConfiguredMcpClients({
       reconciliation,
@@ -767,18 +763,20 @@ export class McpClientManager {
       remove: (name, client) => this.removeAndDisconnectClient(name, client),
       deleteFailure: (name) => this.discoveryFailures.delete(name),
       discover: (name, config) => this.maybeDiscoverMcpServer(name, config),
-      refresh: () => this.cliConfig.refreshMcpContext(),
+      refresh: refreshContext,
     });
   }
 
   /**
    * Restarts all active MCP Clients.
    */
-  async restart(): Promise<void> {
+  async restart(
+    refreshContext: () => Promise<void> = this.refreshContext,
+  ): Promise<void> {
     await restartMcpClients({
       clients: this.clients,
       discover: (name, config) => this.maybeDiscoverMcpServer(name, config),
-      refresh: () => this.cliConfig.refreshMcpContext(),
+      refresh: refreshContext,
       reportError: (name, error) => {
         logger.error(
           `Error restarting client '${name}': ${getErrorMessage(error)}`,
@@ -790,13 +788,16 @@ export class McpClientManager {
   /**
    * Restart a single MCP server by name.
    */
-  async restartServer(name: string) {
+  async restartServer(
+    name: string,
+    refreshContext: () => Promise<void> = this.refreshContext,
+  ): Promise<void> {
     const client = this.clients.get(name);
     if (!client) {
       throw new Error(`No MCP server registered with the name "${name}"`);
     }
     await this.maybeDiscoverMcpServer(name, client.getServerConfig());
-    await this.cliConfig.refreshMcpContext();
+    await refreshContext();
   }
 
   /**

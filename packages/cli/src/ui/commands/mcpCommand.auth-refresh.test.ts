@@ -185,6 +185,10 @@ describe('mcpCommand', () => {
               },
             }),
             getMcpClientManager: vi.fn().mockReturnValue(mockMcpClientManager),
+            getMcpHostServices: () => ({
+              emitFeedback: () => {},
+              openBrowser: async () => {},
+            }),
             getAgentClient: vi.fn().mockReturnValue(mockAgentClient),
             getPromptRegistry: vi.fn().mockReturnValue({
               removePromptsByServer: vi.fn(),
@@ -207,6 +211,10 @@ describe('mcpCommand', () => {
         { enabled: true },
         'http://localhost:3000',
         expect.any(Object),
+        expect.objectContaining({
+          emitFeedback: expect.any(Function),
+          openBrowser: expect.any(Function),
+        }),
       );
       expect(mockMcpClientManager.restartServer).toHaveBeenCalledWith(
         'test-server',

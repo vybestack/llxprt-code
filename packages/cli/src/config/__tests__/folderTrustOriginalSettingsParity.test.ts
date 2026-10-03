@@ -305,9 +305,11 @@ function makeExtMgr() {
 async function runConfig(settings: Settings, cwd: string = process.cwd()) {
   const argv = await parseArguments(settings);
   const runtimeSettingsService = new SettingsService();
-  return loadCliConfig(settings, [], makeExtMgr(), 'test-session', argv, cwd, {
-    settingsService: runtimeSettingsService,
-  });
+  return (
+    await loadCliConfig(settings, [], makeExtMgr(), 'test-session', argv, cwd, {
+      settingsService: runtimeSettingsService,
+    })
+  ).config;
 }
 
 // ─── Suite ────────────────────────────────────────────────────────────────────

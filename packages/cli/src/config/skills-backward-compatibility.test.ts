@@ -39,16 +39,18 @@ async function buildConfig(
 ) {
   process.argv = ['node', 'llxprt'];
   const argv = await parseArguments(settings);
-  return loadCliConfig(
-    settings,
-    [],
-    new ExtensionEnablementManager(
-      ExtensionStorage.getUserExtensionsDir(),
-      argv.extensions,
-    ),
-    'test-session',
-    argv,
-  );
+  return (
+    await loadCliConfig(
+      settings,
+      [],
+      new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        argv.extensions,
+      ),
+      'test-session',
+      argv,
+    )
+  ).config;
 }
 
 describe('Agent Skills Backward Compatibility', () => {

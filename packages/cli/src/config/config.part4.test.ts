@@ -314,7 +314,7 @@ describe('defaultDisabledTools', () => {
     };
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       settings,
       [],
       new ExtensionEnablementManager(
@@ -334,7 +334,7 @@ describe('defaultDisabledTools', () => {
     };
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       settings,
       [],
       new ExtensionEnablementManager(
@@ -356,7 +356,7 @@ describe('defaultDisabledTools', () => {
     };
     process.argv = ['node', 'script.js', '--set', 'tools.disabled=["glob"]'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       settings,
       [],
       new ExtensionEnablementManager(
@@ -385,7 +385,7 @@ describe('defaultDisabledTools', () => {
       'tools.disabled=["read_file"]',
     ];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       settings,
       [],
       new ExtensionEnablementManager(
@@ -406,7 +406,7 @@ describe('defaultDisabledTools', () => {
     };
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       settings,
       [],
       new ExtensionEnablementManager(
@@ -427,7 +427,7 @@ describe('defaultDisabledTools', () => {
     };
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       settings,
       [],
       new ExtensionEnablementManager(
@@ -448,7 +448,7 @@ describe('defaultDisabledTools', () => {
     };
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       settings,
       [],
       new ExtensionEnablementManager(
@@ -476,7 +476,7 @@ describe('defaultDisabledTools', () => {
       'tools.allowed=["read_file"]',
     ];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       settings,
       [],
       new ExtensionEnablementManager(
@@ -516,7 +516,7 @@ describe('loadCliConfig disableYoloMode', () => {
     const settings: Settings = {
       security: { disableYoloMode: true },
     };
-    const config = await loadCliConfig(
+    const { config } = await loadCliConfig(
       settings,
       [],
       new ExtensionEnablementManager(

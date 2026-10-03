@@ -16,11 +16,9 @@
  *  (b) `config.getAgentClient()` returns a usable AgentClientContract for the
  *      reference AgenticLoop drive (REQ-INT-002).
  *
- * The Config-build path mirrors createAgent's steps (toConfigParameters +
- * agentClientFactory + default toolSchedulerFactory + interactive:true +
- * new Config(params) + isolated runtime context + provider registration +
- * initialize + refreshAuth), but STOPS before building the Agent facade —
- * returning the Config itself for fromConfig to adopt.
+ * The Config-build path sets up the client factory, isolated runtime context,
+ * providers and auth. It also returns a scheduler factory for explicit agent
+ * injection and for the reference loop; Config does not own that factory.
  *
  * This is the CANONICAL helper; the broader P19 parity suite REUSES this
  * exact file (P19 MUST NOT duplicate it).
@@ -35,6 +33,7 @@ import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { Config as ConfigType } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { createIsolatedRuntimeContext } from '@vybestack/llxprt-code-providers/runtime.js';
 import type { IsolatedRuntimeContextHandle } from '@vybestack/llxprt-code-providers/runtime.js';
@@ -46,6 +45,7 @@ import {
 } from '@vybestack/llxprt-code-agents';
 import { AgentClient } from '../../../core/client.js';
 import { CoreToolScheduler } from '../../../core/coreToolScheduler.js';
+import { createSessionSchedulerOwner } from '../../agentRuntimeAssembly.js';
 import type { AgentEvent, DoneReason } from '@vybestack/llxprt-code-agents';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { AgentClientFactory } from '@vybestack/llxprt-code-core/core/clientContract.js';
@@ -61,6 +61,13 @@ const HARNESS_DIR = stripSandboxSegment(
   fileURLToPath(new URL('.', import.meta.url)),
 );
 const FIXTURES_DIR = resolve(HARNESS_DIR, '..', 'fixtures');
+
+export function createParitySchedulerOwner(
+  config: Config,
+  factory: ToolSchedulerFactory,
+): ReturnType<typeof createSessionSchedulerOwner> {
+  return createSessionSchedulerOwner(config, factory);
+}
 
 // ─── Public projection helpers (REQ-INT-002 parity) ─────────────────────────
 
@@ -113,13 +120,13 @@ export function projectEvents(
 export interface BuiltCliConfig {
   readonly config: ConfigType;
   readonly messageBus: MessageBus;
+  readonly schedulerFactory: ToolSchedulerFactory;
   readonly cleanup: () => Promise<void>;
 }
 
 /**
- * Caller-supplied agent runtime factories a non-CLI API consumer may install
- * on its own Config before adoption. Mirrors the three ConfigParameters seams
- * fromConfig installs agent-owned defaults into (issue #3222).
+ * Caller-supplied agent runtime factories. The client and task registration
+ * belong to Config; the scheduler factory is passed to fromConfig explicitly.
  */
 export interface CallerAgentRuntimeFactories {
   readonly agentClientFactory?: AgentClientFactory;
@@ -135,11 +142,10 @@ export interface BuiltFactoryLessConfig {
 
 /**
  * Builds the MINIMAL Config a non-CLI API consumer constructs (issue #3222):
- * toConfigParameters + `new Config(params)` with NO agentClientFactory,
- * NO toolSchedulerFactory, NO taskToolRegistration, and NO runtime
- * activation/initialization — fromConfig owns those steps during adoption.
- * Optionally installs caller-supplied factories so adoption can be observed
- * honoring them (caller-wins), and optionally overrides base AgentConfig
+ * toConfigParameters + `new Config(params)` with no agent client or task
+ * registration and no runtime activation. fromConfig owns those steps during
+ * adoption. Optionally installs caller-supplied client and task factories,
+ * and optionally overrides base AgentConfig
  * fields (e.g. excludeTools) for governance-observation scenarios.
  *
  * The FakeProvider env seam stays set until cleanup so the turn driven after
@@ -151,6 +157,7 @@ export async function buildFactoryLessConfig(
   fixtureRelPath: string,
   callerFactories: Readonly<CallerAgentRuntimeFactories> = {},
   baseConfigOverrides: Readonly<Partial<AgentConfig>> = {},
+  configParameterOverrides: Readonly<Partial<ConfigParameters>> = {},
 ): Promise<BuiltFactoryLessConfig> {
   const prev = process.env.LLXPRT_FAKE_RESPONSES;
   const fixturePath = resolve(FIXTURES_DIR, fixtureRelPath);
@@ -164,12 +171,9 @@ export async function buildFactoryLessConfig(
   };
 
   const frozenParams = toConfigParameters(baseConfig);
-  const params = { ...frozenParams };
+  const params = { ...frozenParams, ...configParameterOverrides };
   if (callerFactories.agentClientFactory !== undefined) {
     params.agentClientFactory = callerFactories.agentClientFactory;
-  }
-  if (callerFactories.toolSchedulerFactory !== undefined) {
-    params.toolSchedulerFactory = callerFactories.toolSchedulerFactory;
   }
   if (callerFactories.taskToolRegistration !== undefined) {
     params.taskToolRegistration = callerFactories.taskToolRegistration;
@@ -207,11 +211,8 @@ export async function buildFactoryLessConfig(
 }
 
 /**
- * The default tool-scheduler factory, mirroring createAgent's
- * createDefaultToolSchedulerFactory. Constructs a CoreToolScheduler backed by
- * the tool registry wrapped so every tool surfaces a REAL confirmation (the
- * confirmation-forcing seam). Without this, Config.getOrCreateScheduler throws
- * "toolSchedulerFactory is required".
+ * The default tool-scheduler factory for parity's reference loop. Constructs
+ * a CoreToolScheduler backed by the confirmation-forcing tool registry.
  */
 function createDefaultToolSchedulerFactory(): ToolSchedulerFactory {
   return (options) => {
@@ -245,10 +246,8 @@ function createDefaultToolSchedulerFactory(): ToolSchedulerFactory {
 
 /**
  * Builds a REAL Config wired to the FakeProvider via the
- * LLXPRT_FAKE_RESPONSES env seam. Mirrors createAgent's Config-build path
- * (toConfigParameters + agentClientFactory + default toolSchedulerFactory +
- * interactive:true + new Config + isolated runtime + provider registration +
- * initialize + refreshAuth), returning the Config for fromConfig to adopt.
+ * LLXPRT_FAKE_RESPONSES env seam. Returns the Config for fromConfig to adopt
+ * and a separate scheduler factory for agent and reference-loop injection.
  *
  * @param fixtureRelPath  Fixture JSONL path relative to __tests__/fixtures.
  */
@@ -273,7 +272,7 @@ export async function buildCliStyleConfig(
   const params = { ...frozenParams };
   params.agentClientFactory = (config, runtimeState): AgentClientContract =>
     new AgentClient(config, runtimeState);
-  params.toolSchedulerFactory = createDefaultToolSchedulerFactory();
+  const schedulerFactory = createDefaultToolSchedulerFactory();
   params.interactive = true;
 
   // Construct Config + ONE shared MessageBus (mirrors createAgent steps 30-38).
@@ -316,7 +315,7 @@ export async function buildCliStyleConfig(
     await cleanupHandle(handle, prev);
   };
 
-  return { config, messageBus, cleanup };
+  return { config, messageBus, schedulerFactory, cleanup };
 }
 
 /** Restores the env var and disposes the runtime handle. */

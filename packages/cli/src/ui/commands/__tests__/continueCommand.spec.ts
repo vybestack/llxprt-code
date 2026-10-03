@@ -10,10 +10,12 @@
 import { assertNotNull } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach } from 'bun:test';
 import * as fc from 'fast-check';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { appendFile, mkdtemp, readFile, rm, stat } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { homedir, tmpdir } from 'node:os';
+import { basename, dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createAgent } from '@vybestack/llxprt-code-agents';
 import { continueCommand } from '../continueCommand.js';
 import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
 import {
@@ -495,6 +497,80 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       }
     });
 
+    it('exports the active Agent recording without installing it on Config', async () => {
+      const root = await mkdtemp(join(tmpdir(), 'continue-agent-export-'));
+      const previousFixture = process.env.LLXPRT_FAKE_RESPONSES;
+      process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
+        new URL(
+          '../../../../../agents/src/api/__tests__/fixtures/plain-text.jsonl',
+          import.meta.url,
+        ),
+      );
+      let agent: Awaited<ReturnType<typeof createAgent>> | undefined;
+      const storageTemp = join(
+        homedir(),
+        '.llxprt',
+        'tmp',
+        createHash('sha256').update(root).digest('hex'),
+      );
+      try {
+        agent = await createAgent({
+          provider: 'fake',
+          model: 'fake-model',
+          workingDir: root,
+        });
+        await agent.addHistory({
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Agent-owned export payload' }],
+        });
+        await agent.session.setRecording({ enabled: true });
+        const recording = agent.session.getActiveRecording();
+        assertDefined(recording, 'Expected an active Agent recorder');
+        const path = recording.getFilePath();
+        assertNotNull(path, 'Expected an active Agent recording file');
+        const chatsDir = dirname(path);
+        const projectTemp = dirname(chatsDir);
+        const mediaStore = new LocalMediaStore({
+          rootDirectory: join(projectTemp, 'media'),
+          quotaBytes: 1024 * 1024,
+        });
+        ctx = createMockCommandContext({
+          services: {
+            agent,
+            config: {
+              storage: {
+                getProjectChatsDir: () => chatsDir,
+                getProjectTempDir: () => projectTemp,
+              },
+              getLocalMediaStore: () => mediaStore,
+            },
+          },
+        });
+        expect(basename(projectTemp)).toBe(
+          createHash('sha256').update(root).digest('hex'),
+        );
+        const destination = join(root, 'exported');
+        const result = await continueCommand.action!(
+          ctx,
+          `export ${recording.getSessionId()} ${destination}`,
+        );
+        assertType(result, isMessageAction);
+        expect(result.messageType).toBe('info');
+        expect(
+          await readFile(join(destination, 'session.jsonl'), 'utf8'),
+        ).toContain('Agent-owned export payload');
+      } finally {
+        await agent?.dispose();
+        if (previousFixture === undefined) {
+          delete process.env.LLXPRT_FAKE_RESPONSES;
+        } else {
+          process.env.LLXPRT_FAKE_RESPONSES = previousFixture;
+        }
+        await rm(root, { recursive: true, force: true });
+        await rm(storageTemp, { recursive: true, force: true });
+      }
+    });
+
     it('awaits integration and active recording flushes before exporting', async () => {
       const root = await mkdtemp(join(tmpdir(), 'continue-export-'));
       const projectTemp = join(root, 'portable-project');
@@ -540,8 +616,8 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
               getProjectTempDir: () => projectTemp,
             },
             getLocalMediaStore: () => mediaStore,
-            getSessionRecordingService: () => recording,
           },
+          agent: { session: { getActiveRecording: () => recording } },
         },
         recordingIntegration: integration,
       });
@@ -611,8 +687,8 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
               getProjectTempDir: () => projectTemp,
             },
             getLocalMediaStore: () => mediaStore,
-            getSessionRecordingService: () => recording,
           },
+          agent: { session: { getActiveRecording: () => recording } },
         },
         recordingIntegration: integration,
       });

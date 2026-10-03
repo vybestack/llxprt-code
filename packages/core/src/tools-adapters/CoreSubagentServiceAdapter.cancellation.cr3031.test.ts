@@ -68,7 +68,7 @@ function buildAdapter(
     isInteractiveEnvironment: () => false,
     orchestratorFactory: () => fakeOrchestrator,
     ...(asyncTaskManager !== undefined
-      ? { getAsyncTaskManager: () => asyncTaskManager }
+      ? { getTaskManager: () => asyncTaskManager }
       : {}),
   });
 }

@@ -9,40 +9,683 @@
  * @requirement:REQ-3222-AC2
  *
  * Agent-owned runtime assembly. The public Agent API (createAgent/fromConfig)
- * builds complete shipped runtimes itself: the three agent runtime factories
- * (agent client, tool scheduler, task-tool registration), the runtime
- * managers, and the isolated-runtime Config for subagent runtimes. Defaults
- * are installed per-field ONLY where the Config reports absence — caller
- * supplied factories and managers always win. Nothing here registers into
- * module-global state.
+ * builds complete shipped runtimes itself: the agent client and task-tool
+ * registration, the session scheduler owner, the runtime managers, and the
+ * isolated-runtime Config for subagent runtimes. Config defaults are installed
+ * only where absent. Scheduler factories are supplied to session execution.
+ * Nothing here registers into module-global state.
  */
 
 import * as path from 'node:path';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { createToolRegistry } from '@vybestack/llxprt-code-core/config/toolRegistryFactory.js';
+import type { AnyDeclarativeTool } from '@vybestack/llxprt-code-tools';
+import { ActivateMcpServerTool } from '@vybestack/llxprt-code-tools';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
+import {
+  AsyncTaskAutoTrigger,
+  AsyncTaskManager,
+  AsyncTaskReminderService,
+  resolveMaxAsyncTasks,
+} from '@vybestack/llxprt-code-core';
+import {
+  resolveShellJobSettings,
+  normalizeShellMaxBackgroundJobs,
+} from '@vybestack/llxprt-code-core/config/asyncTaskServices.js';
+import { ShellNotificationAdapter } from '@vybestack/llxprt-code-core/services/shellNotificationAdapter.js';
+import { ShellJobManager } from '@vybestack/llxprt-code-core/services/shellJobManager.js';
+import type { SubagentSchedulerFactory } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import { createSessionSchedulerRegistry } from '@vybestack/llxprt-code-core';
+import type { SchedulerHandle } from '@vybestack/llxprt-code-core/session/sessionExecutionServices.js';
+import type {
+  SchedulerCallbacks,
+  SchedulerOptions,
+  SchedulerPurpose,
+} from '@vybestack/llxprt-code-core/session/sessionSchedulerRegistry.js';
+import type { ToolSchedulerFactory } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { ProfileManager, Storage } from '@vybestack/llxprt-code-settings';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { IsolatedRuntimeContextHandle } from '@vybestack/llxprt-code-providers/runtime.js';
 import { CoreToolScheduler } from '../core/coreToolScheduler.js';
 import { buildAgentClientFactory } from './agentBootstrap.js';
 import { createTaskRegistration } from './runtimeFactories.js';
+import { TaskTool } from '../tools/task.js';
+import { registerActivateSkillTool } from '../skill-tool-registrar.js';
+import { syncActivateMcpServerTool } from '@vybestack/llxprt-code-core/config/mcp-lazy-tool-sync.js';
 import type { Agent } from './agent.js';
+import { WorkspaceToolAuthority } from './workspace-tool-authority.js';
+import { WorkspaceSkillSurface } from './workspace-skill-surface.js';
+import { WorkspaceLspLifetime } from './workspace-lsp-lifetime.js';
+import { WorkspaceFileAccess } from './workspace-file-access.js';
+import { WorkspaceContext } from '@vybestack/llxprt-code-core/utils/workspaceContext.js';
+import type { FileSystemService } from '@vybestack/llxprt-code-core/services/fileSystemService.js';
 
 const DEFAULT_MODEL = 'gemini-1.5-flash';
 const DEFAULT_DEBUG_MODE = false;
 
+export interface SessionApprovalBus {
+  readonly messageBus: MessageBus;
+  dispose(): void;
+}
+
+export function createSessionApprovalBus(
+  config: Config,
+  borrowedBus?: MessageBus,
+): SessionApprovalBus {
+  const messageBus =
+    borrowedBus ??
+    new MessageBus(config.getPolicyEngine(), config.getDebugMode());
+  return {
+    messageBus,
+    dispose: () => {
+      if (borrowedBus === undefined) {
+        messageBus.removeAllListeners();
+      }
+    },
+  };
+}
+
+export interface SessionSchedulerOwner {
+  setToolRegistry(registry: ToolRegistry, source: ToolRegistry): void;
+  getToolRegistry(): ToolRegistry;
+  acquire(
+    owner: object,
+    purpose: SchedulerPurpose,
+    callbacks: SchedulerCallbacks,
+    options: SchedulerOptions | undefined,
+    dependencies: { messageBus: MessageBus; toolRegistry: ToolRegistry },
+  ): Promise<SchedulerHandle>;
+  release(owner: object, purpose: SchedulerPurpose, handle: object): void;
+  setInteractiveSubagentSchedulerFactory(
+    factory: SubagentSchedulerFactory | undefined,
+  ): void;
+  getInteractiveSubagentSchedulerFactory():
+    | SubagentSchedulerFactory
+    | undefined;
+  cancelAll(): Promise<void>;
+  dispose(): Promise<void>;
+}
+
+function sessionSchedulerFactory(
+  config: Config,
+  factory: ToolSchedulerFactory,
+): Parameters<typeof createSessionSchedulerRegistry>[0]['createScheduler'] {
+  return async (options) => {
+    const { messageBus, toolRegistry } = options;
+    if (messageBus === undefined || toolRegistry === undefined) {
+      throw new Error('Scheduler acquisition requires a bus and tool registry');
+    }
+    return factory({
+      config,
+      messageBus,
+      toolRegistry,
+      toolContextInteractiveMode: options.interactiveMode ?? true,
+      getPreferredEditor: () => undefined,
+      onEditorClose: () => {},
+    });
+  };
+}
+
+/** A registry belongs to this session, while each entry binds its first acquisition. */
+export function createSessionSchedulerOwner(
+  config: Config,
+  factory: ToolSchedulerFactory,
+): SessionSchedulerOwner {
+  const registry = createSessionSchedulerRegistry({
+    createScheduler: sessionSchedulerFactory(config, factory),
+  });
+  let closing = false;
+  let interactiveSubagentSchedulerFactory: SubagentSchedulerFactory | undefined;
+  const isClosing = (): boolean => closing;
+  let cleanup: Promise<void> = Promise.resolve();
+  let sessionRegistry: ToolRegistry | undefined;
+  let sourceRegistry: ToolRegistry | undefined;
+  return {
+    setToolRegistry(registry, source) {
+      if (sessionRegistry !== undefined) {
+        throw new Error('Session tool registry was already bound');
+      }
+      sessionRegistry = registry;
+      sourceRegistry = source;
+    },
+    getToolRegistry() {
+      if (sessionRegistry === undefined) {
+        throw new Error('Session tool registry is not bound');
+      }
+      return sessionRegistry;
+    },
+    async acquire(owner, purpose, callbacks, options, dependencies) {
+      if (closing) {
+        throw new Error('Session scheduler owner is disposed');
+      }
+      const handle = await registry.getOrCreate(owner, purpose, {
+        ...options,
+        ...dependencies,
+        toolRegistry:
+          sessionRegistry !== undefined &&
+          (dependencies.toolRegistry === sourceRegistry ||
+            dependencies.toolRegistry === config.getToolRegistry())
+            ? sessionRegistry
+            : dependencies.toolRegistry,
+      });
+      if (isClosing()) {
+        registry.release(owner, purpose, handle);
+        throw new Error('Session scheduler owner is disposed');
+      }
+      handle.setCallbacks({ config, ...callbacks });
+      return handle;
+    },
+    release(owner, purpose, handle) {
+      registry.release(owner, purpose, handle);
+    },
+    setInteractiveSubagentSchedulerFactory(factory) {
+      interactiveSubagentSchedulerFactory = factory;
+    },
+    getInteractiveSubagentSchedulerFactory() {
+      return interactiveSubagentSchedulerFactory;
+    },
+    cancelAll() {
+      return registry.cancelAll();
+    },
+    dispose() {
+      if (!closing) {
+        closing = true;
+        cleanup = registry.disposeAll();
+      }
+      return cleanup;
+    },
+  };
+}
+
+export function createAgentSchedulerControl(
+  owner: SessionSchedulerOwner,
+  assertAccepting: () => void,
+): Agent['scheduler'] {
+  return {
+    acquire: async (agent, purpose, callbacks, options, dependencies) => {
+      assertAccepting();
+      return owner.acquire(agent, purpose, callbacks, options, dependencies);
+    },
+    release: (agent, purpose, handle) => owner.release(agent, purpose, handle),
+    setInteractiveSubagentSchedulerFactory: (factory) =>
+      owner.setInteractiveSubagentSchedulerFactory(factory),
+  };
+}
+
+export async function createSessionAgentClient(
+  config: Config,
+  registry: ToolRegistry,
+  runtimeState: AgentRuntimeState,
+): Promise<AgentClientContract> {
+  const factory = config.getAgentClientFactory();
+  if (factory === undefined) {
+    throw new Error('Session client requires an agent client factory');
+  }
+  const view = new Proxy(config, {
+    get(target, property) {
+      if (property === 'getToolRegistry') return () => registry;
+      const value: unknown = Reflect.get(target, property, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+  const client = factory(view, runtimeState);
+  if (client === config.getAgentClient()) {
+    throw new Error('Session client factory returned the caller-owned client');
+  }
+  try {
+    const history = await config.getAgentClient().getHistory();
+    if (history.length > 0) {
+      await client.storeHistoryForLaterUse(history);
+    }
+    const contentGeneratorConfig = config.getContentGeneratorConfig();
+    if (contentGeneratorConfig !== undefined) {
+      await client.initialize(contentGeneratorConfig);
+    }
+    return client;
+  } catch (error) {
+    await client.dispose();
+    throw error;
+  }
+}
+
+export async function bindSessionTaskTools(
+  config: Config,
+  messageBus: MessageBus,
+  taskManager: AsyncTaskManager,
+  schedulerOwner: SessionSchedulerOwner,
+  shellJobs: ShellJobManager,
+  workspaceAuthority: WorkspaceToolAuthority,
+  tasks: SessionTaskServices,
+): Promise<void> {
+  const source = config.getToolRegistry();
+  const lsp = tasks.workspaceLsp;
+  const { registry } = await createToolRegistry(
+    config,
+    config,
+    messageBus,
+    () => taskManager,
+    () => shellJobs,
+    lsp,
+    tasks.workspaceFiles,
+  );
+  tasks.bindLspRegistry(registry, messageBus);
+  const task = registry.getTool(TaskTool.Name);
+  if (task instanceof TaskTool) {
+    task.bindSessionExecution(schedulerOwner, messageBus, () => taskManager);
+  }
+  schedulerOwner.setToolRegistry(registry, source);
+  if (config.isSkillsSupportEnabled()) {
+    await tasks.workspaceSkills.refresh();
+    publishSessionSkills(config, registry, messageBus, tasks.workspaceSkills);
+  }
+  await refreshSessionMcpTools(source, registry, messageBus);
+  await lsp.start();
+  workspaceAuthority.publish(registry);
+}
+
+function publishSessionSkills(
+  config: Config,
+  registry: ToolRegistry,
+  messageBus: MessageBus,
+  workspaceSkills: WorkspaceSkillSurface,
+): void {
+  if (!config.isSkillsSupportEnabled()) return;
+  (config.getPostSkillDiscoveryToolRegistrar() ?? registerActivateSkillTool)(
+    registry,
+    workspaceSkills.service(),
+    messageBus,
+  );
+}
+
+function isMcpTool(tool: AnyDeclarativeTool): tool is AnyDeclarativeTool & {
+  serverName: string;
+  forSession(messageBus: MessageBus): AnyDeclarativeTool;
+} {
+  return (
+    'serverName' in tool &&
+    typeof tool.serverName === 'string' &&
+    'forSession' in tool &&
+    typeof tool.forSession === 'function'
+  );
+}
+
+export async function refreshSessionMcpTools(
+  source: ToolRegistry,
+  registry: ToolRegistry,
+  messageBus: MessageBus,
+): Promise<void> {
+  const discovered = source.getAllTools().filter(isMcpTool);
+  const names = new Set(discovered.map((tool) => tool.name));
+  for (const tool of registry.getAllTools()) {
+    if (
+      isMcpTool(tool) &&
+      tool.serverName !== 'lsp-navigation' &&
+      !names.has(tool.name)
+    ) {
+      registry.unregisterTool(tool.name);
+    }
+  }
+  for (const tool of discovered) {
+    registry.unregisterTool(tool.name);
+    registry.registerTool(tool.forSession(messageBus));
+  }
+  if (
+    registry.getTool(ActivateMcpServerTool.Name) instanceof
+    ActivateMcpServerTool
+  ) {
+    registry.unregisterTool(ActivateMcpServerTool.Name);
+  }
+  await syncActivateMcpServerTool(registry, messageBus, () =>
+    refreshSessionMcpTools(source, registry, messageBus),
+  );
+}
+
+export function bindSessionSurfaceUpdates(
+  config: Config,
+  messageBus: MessageBus,
+  tasks: SessionTaskServices,
+  schedulerOwner: SessionSchedulerOwner,
+  client: AgentClientContract,
+): void {
+  const source = config.getToolRegistry();
+  tasks.registerCleanup(
+    tasks.workspaceSkills.subscribe(async () => {
+      if (!config.isSkillsSupportEnabled()) return;
+      publishSessionSkills(
+        config,
+        schedulerOwner.getToolRegistry(),
+        messageBus,
+        tasks.workspaceSkills,
+      );
+      if (client.isInitialized()) {
+        await client.setTools();
+      }
+    }),
+  );
+  tasks.registerCleanup(
+    config.subscribeMcpSurface(async () => {
+      await refreshSessionMcpTools(
+        source,
+        schedulerOwner.getToolRegistry(),
+        messageBus,
+      );
+      if (client.isInitialized()) {
+        await client.setTools();
+        await client.updateSystemInstruction();
+      }
+    }),
+  );
+}
+
+export function createShellJobManager(
+  options: ReturnType<typeof resolveShellJobSettings>,
+): ShellJobManager {
+  return new ShellJobManager(options);
+}
+
+export class SessionTaskServices {
+  readonly manager: AsyncTaskManager;
+  readonly workspaceFiles: WorkspaceFileAccess | undefined;
+  readonly shellJobs: ShellJobManager;
+  readonly workspaceLsp: WorkspaceLspLifetime;
+  private lspRegistry: ToolRegistry | undefined;
+  private lspMessageBus: MessageBus | undefined;
+  private readonly reminder: AsyncTaskReminderService;
+  private autoTrigger: AsyncTaskAutoTrigger | undefined;
+  private readonly subscriptions = new Set<() => void>();
+  private readonly admissionFailures: unknown[] = [];
+  private disposed = false;
+  private disposal: Promise<void> | undefined;
+  private readonly onSettingsChanged: (event: { key: string }) => void;
+
+  constructor(
+    private readonly settings: SettingsService,
+    private readonly skills?: WorkspaceSkillSurface,
+    lspConfig?: Pick<
+      Config,
+      'getLspConfig' | 'getTargetDir' | 'isTrustedFolder'
+    >,
+    workspaceFiles?: WorkspaceFileAccess,
+  ) {
+    this.workspaceFiles = workspaceFiles;
+    this.workspaceLsp = new WorkspaceLspLifetime(lspConfig?.getLspConfig(), {
+      getTargetDir: () => lspConfig?.getTargetDir() ?? process.cwd(),
+      getToolRegistry: () => {
+        if (this.lspRegistry === undefined) {
+          throw new Error('Workspace LSP registry is not bound');
+        }
+        return this.lspRegistry;
+      },
+      isTrustedFolder: () => lspConfig?.isTrustedFolder() ?? false,
+      getNavigationMessageBus: () => this.lspMessageBus,
+    });
+    this.manager = new AsyncTaskManager(resolveMaxAsyncTasks(settings));
+    this.shellJobs = createShellJobManager(resolveShellJobSettings(settings));
+    this.reminder = new AsyncTaskReminderService(this.manager);
+    const shellSource = new ShellNotificationAdapter(this.shellJobs);
+    this.reminder.setShellNotificationSource(shellSource);
+    this.onSettingsChanged = (event) => {
+      if (event.key === 'task-max-async') {
+        this.manager.setMaxAsyncTasks(resolveMaxAsyncTasks(this.settings));
+      }
+      if (event.key === 'shell-max-background-jobs') {
+        this.shellJobs.setMaxBackgroundJobs(
+          normalizeShellMaxBackgroundJobs(
+            this.settings.get('shell-max-background-jobs'),
+          ),
+        );
+      }
+    };
+    this.settings.on('change', this.onSettingsChanged);
+  }
+
+  get workspaceSkills(): WorkspaceSkillSurface {
+    if (this.skills === undefined) {
+      throw new Error('Workspace skills were not bound to this session');
+    }
+    return this.skills;
+  }
+
+  bindLspRegistry(registry: ToolRegistry, messageBus: MessageBus): void {
+    if (this.lspRegistry !== undefined) {
+      throw new Error('Workspace LSP registry was already bound');
+    }
+    this.lspRegistry = registry;
+    this.lspMessageBus = messageBus;
+  }
+
+  registerCleanup(cleanup: () => void): void {
+    if (this.disposed) {
+      throw new Error('Session task services are disposed');
+    }
+    this.subscriptions.add(cleanup);
+  }
+
+  setupAutoTrigger(
+    isAgentBusy: () => boolean,
+    triggerAgentTurn: (message: string) => Promise<void>,
+  ): () => void {
+    if (this.disposed) {
+      throw new Error('Session task services are disposed');
+    }
+    const shellSource = new ShellNotificationAdapter(this.shellJobs);
+    if (this.autoTrigger === undefined) {
+      this.autoTrigger = new AsyncTaskAutoTrigger(
+        this.manager,
+        this.reminder,
+        isAgentBusy,
+        triggerAgentTurn,
+      );
+    } else {
+      this.autoTrigger.updateCallbacks(isAgentBusy, triggerAgentTurn);
+    }
+    this.autoTrigger.setShellNotificationSource(shellSource);
+    const unsubscribe = this.autoTrigger.subscribe();
+    let subscribed = true;
+    const cleanup = (): void => {
+      if (!subscribed) return;
+      subscribed = false;
+      this.subscriptions.delete(cleanup);
+      unsubscribe();
+    };
+    this.subscriptions.add(cleanup);
+    return cleanup;
+  }
+
+  stopAdmissions(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.manager.stopAdmissions();
+    this.shellJobs.stopAdmissions();
+    for (const unsubscribe of [...this.subscriptions]) {
+      this.subscriptions.delete(unsubscribe);
+      try {
+        unsubscribe();
+      } catch (error) {
+        this.admissionFailures.push(error);
+      }
+    }
+  }
+
+  dispose(): Promise<void> {
+    if (this.disposal !== undefined) return this.disposal;
+    let resolveDisposal: (() => void) | undefined;
+    let rejectDisposal: ((error: unknown) => void) | undefined;
+    const disposal = new Promise<void>((resolve, reject) => {
+      resolveDisposal = resolve;
+      rejectDisposal = reject;
+    });
+    this.disposal = disposal;
+    this.stopAdmissions();
+    const failures: unknown[] = [...this.admissionFailures];
+    const pending: Array<Promise<void>> = [];
+    const start = (action: () => void | Promise<void>): void => {
+      try {
+        pending.push(Promise.resolve(action()));
+      } catch (error) {
+        failures.push(error);
+      }
+    };
+    start(() => this.manager.close());
+    start(() => this.shellJobs.dispose());
+    start(() => this.workspaceLsp.dispose());
+    for (const unsubscribe of [...this.subscriptions]) {
+      try {
+        unsubscribe();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    try {
+      this.settings.off('change', this.onSettingsChanged);
+    } catch (error) {
+      failures.push(error);
+    }
+    void Promise.allSettled(pending)
+      .then((results) => {
+        for (const result of results) {
+          if (result.status === 'rejected') {
+            if (result.reason instanceof AggregateError) {
+              failures.push(...result.reason.errors);
+            } else {
+              failures.push(result.reason);
+            }
+          }
+        }
+        if (failures.length > 0) {
+          throw new AggregateError(failures, 'Session task cleanup failed');
+        }
+      })
+      .then(
+        () => resolveDisposal?.(),
+        (error: unknown) => rejectDisposal?.(error),
+      );
+    return this.disposal;
+  }
+}
+
+export function createSessionTaskServices(
+  settings: SettingsService,
+  skills?: WorkspaceSkillSurface,
+  lspConfig?: Pick<Config, 'getLspConfig' | 'getTargetDir' | 'isTrustedFolder'>,
+  workspaceFiles?: WorkspaceFileAccess,
+): SessionTaskServices {
+  return new SessionTaskServices(settings, skills, lspConfig, workspaceFiles);
+}
+
+interface SharedSkillOwner {
+  readonly surface: WorkspaceSkillSurface;
+  readonly context: WorkspaceContext;
+  readonly release: () => void;
+}
+
+const workspaceSkillOwners = new WeakMap<
+  Config,
+  {
+    surface: WorkspaceSkillSurface;
+    context: WorkspaceContext;
+    borrowers: number;
+    unsubscribe: () => void;
+  }
+>();
+
+function borrowWorkspaceSkills(config: Config): SharedSkillOwner {
+  let owner = workspaceSkillOwners.get(config);
+  if (owner === undefined) {
+    const context = config.getWorkspaceContext();
+    const surface = new WorkspaceSkillSurface(
+      config.storage,
+      () => config.getExtensions(),
+      () => [...config.getDisabledSkillNames()],
+      () => config.isAdminSkillsEnabled(),
+      context,
+    );
+    owner = {
+      surface,
+      context,
+      borrowers: 0,
+      unsubscribe: config.subscribeSkillSurface(() => surface.refresh(true)),
+    };
+    workspaceSkillOwners.set(config, owner);
+  }
+  const shared = owner;
+  shared.borrowers++;
+  let released = false;
+  return {
+    surface: shared.surface,
+    context: shared.context,
+    release: () => {
+      if (released) return;
+      released = true;
+      shared.borrowers--;
+      if (shared.borrowers === 0) {
+        shared.unsubscribe();
+        workspaceSkillOwners.delete(config);
+      }
+    },
+  };
+}
+
+/** Assemble the two per-agent services before activation or adoption. */
+export function createAgentSessionExecution(
+  config: Config,
+  settings: SettingsService,
+  factory?: ToolSchedulerFactory,
+  workspace?: {
+    readonly context?: WorkspaceContext;
+    readonly fileSystem: FileSystemService;
+  },
+): {
+  tasks: SessionTaskServices;
+  schedulerOwner: SessionSchedulerOwner;
+  workspaceAuthority: WorkspaceToolAuthority;
+} {
+  const skills = borrowWorkspaceSkills(config);
+  let context = workspace?.context ?? skills.context;
+  if (
+    workspace !== undefined &&
+    workspace.context === undefined &&
+    config.getTargetDir() !== skills.context.getDirectories()[0]
+  ) {
+    context = new WorkspaceContext(config.getTargetDir(), [
+      ...config.getConfiguredIncludeDirectories(),
+    ]);
+  }
+  const workspaceFiles =
+    workspace === undefined
+      ? undefined
+      : new WorkspaceFileAccess(context, workspace.fileSystem, () =>
+          config.isTrustedFolder(),
+        );
+  const tasks = createSessionTaskServices(
+    settings,
+    skills.surface,
+    config,
+    workspaceFiles,
+  );
+  tasks.registerCleanup(skills.release);
+  return {
+    tasks,
+    workspaceAuthority: new WorkspaceToolAuthority(() =>
+      config.isTrustedFolder(),
+    ),
+    schedulerOwner: createSessionSchedulerOwner(
+      config,
+      factory ?? ((options) => new CoreToolScheduler(options)),
+    ),
+  };
+}
+
 /**
- * Installs the agent-owned factory defaults onto a Config, per field, only
- * when the Config reports that field absent. Caller-supplied factories
- * always win. Callers that construct their own Config with richer factories
- * (e.g. createAgent's confirmation-forcing scheduler) are never overridden.
- * Each default is constructed lazily inside its own absence guard so a Config
- * that already carries all three factories builds no unused replacements.
+ * Installs the agent client factory and task registration defaults on Config
+ * only when absent. Scheduler construction belongs to session execution and
+ * its optional caller-supplied factory, not to Config.
  */
 export function ensureAgentRuntimeFactories(config: Config): void {
-  if (config.getToolSchedulerFactory() === undefined) {
-    config.setToolSchedulerFactory((options) => new CoreToolScheduler(options));
-  }
   if (config.getAgentClientFactory() === undefined) {
     config.setAgentClientFactory(buildAgentClientFactory());
   }
@@ -117,6 +760,10 @@ export function buildIsolatedAgentConfig(
  * isolated runtime handle.
  */
 export interface FailedBootstrapTeardown {
+  readonly sessionClient?: AgentClientContract;
+  readonly approvalBus?: SessionApprovalBus;
+  readonly taskServices?: SessionTaskServices;
+  readonly schedulerOwner?: SessionSchedulerOwner;
   /**
    * The fully built Agent facade, when the failure happened AFTER finalize
    * (e.g. session-start). Its idempotent dispose() is the complete teardown —
@@ -136,6 +783,47 @@ export interface FailedBootstrapTeardown {
   readonly ownedConfig?: Config;
 }
 
+async function attemptBootstrapCleanup(
+  action: () => void | Promise<void>,
+  failures: unknown[],
+): Promise<void> {
+  try {
+    await action();
+  } catch (error) {
+    failures.push(error);
+  }
+}
+
+async function cleanupPartialBootstrap(
+  handle: IsolatedRuntimeContextHandle,
+  teardown: FailedBootstrapTeardown,
+  failures: unknown[],
+): Promise<void> {
+  const {
+    sessionClient,
+    schedulerOwner,
+    taskServices,
+    approvalBus,
+    ownedConfig,
+  } = teardown;
+  if (sessionClient !== undefined) {
+    await attemptBootstrapCleanup(() => sessionClient.dispose(), failures);
+  }
+  if (schedulerOwner !== undefined) {
+    await attemptBootstrapCleanup(() => schedulerOwner.dispose(), failures);
+  }
+  if (taskServices !== undefined) {
+    await attemptBootstrapCleanup(() => taskServices.dispose(), failures);
+  }
+  if (approvalBus !== undefined) {
+    await attemptBootstrapCleanup(() => approvalBus.dispose(), failures);
+  }
+  await attemptBootstrapCleanup(() => handle.cleanup(), failures);
+  if (ownedConfig !== undefined) {
+    await attemptBootstrapCleanup(() => ownedConfig.dispose(), failures);
+  }
+}
+
 /**
  * Cleans up a failed agent bootstrap and surfaces the ORIGINAL error. When
  * cleanup also fails, every error surfaces through an AggregateError so
@@ -149,34 +837,10 @@ export async function cleanupFailedRuntimeBootstrap(
 ): Promise<never> {
   const cleanupErrors: unknown[] = [];
   if (teardown.facade !== undefined) {
-    try {
-      await teardown.facade.dispose();
-    } catch (cleanupError) {
-      cleanupErrors.push(cleanupError);
-    }
+    const { facade } = teardown;
+    await attemptBootstrapCleanup(() => facade.dispose(), cleanupErrors);
   } else {
-    try {
-      await handle.cleanup();
-    } catch (cleanupError) {
-      cleanupErrors.push(cleanupError);
-    }
-    if (teardown.ownedConfig !== undefined) {
-      try {
-        await teardown.ownedConfig.dispose();
-      } catch (cleanupError) {
-        cleanupErrors.push(cleanupError);
-      }
-      // Config.dispose() does NOT shut down the LSP service initialize()
-      // started (agentImpl.dispose wires that separately for agent-owned
-      // Configs), so a bootstrap that failed after initialize() must release
-      // it here too or it leaks past the rejection — the caller has no Agent
-      // to dispose. Mirrors agentImpl's ordering: dispose first, then LSP.
-      try {
-        await teardown.ownedConfig.shutdownLspService();
-      } catch (cleanupError) {
-        cleanupErrors.push(cleanupError);
-      }
-    }
+    await cleanupPartialBootstrap(handle, teardown, cleanupErrors);
   }
   if (cleanupErrors.length > 0) {
     throw new AggregateError(

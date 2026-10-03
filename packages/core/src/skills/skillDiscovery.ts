@@ -10,12 +10,10 @@
  *
  * Public core API for lightweight skill discovery against a resolved Config.
  *
- * #2378: the CLI `skills list` command must NOT construct a session MessageBus
- * or call `Config.initialize({ messageBus })` itself — those are runtime-
- * assembly seams owned by core. This helper OWNS that assembly: it builds the
- * one session bus internally (from the Config's policy engine, via
- * {@link createSessionMessageBus}) and drives `Config.initialize` so extension
- * loading + skill discovery run, then returns the discovered skills.
+ * #2378: the CLI `skills list` command delegates Config initialization and
+ * discovery to this helper. The caller retains ownership of the explicit
+ * MessageBus while this helper drives `Config.initialize` so extension loading
+ * and skill discovery run, then returns the discovered skills.
  *
  * The initialize lifecycle is idempotent here: an already-initialized Config
  * (its `initialize()` throws "Config was already initialized") is treated as a
@@ -24,12 +22,12 @@
  */
 
 import type { Config } from '../config/config.js';
-import { createSessionMessageBus } from '../confirmation-bus/message-bus.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import type { SkillDefinition } from './skillLoader.js';
 
 /**
- * Initializes the given Config (owning the session MessageBus internally) and
- * returns the skills discovered during that initialization.
+ * Initializes the given Config with the caller-owned MessageBus and returns the
+ * skills discovered during that initialization.
  *
  * When `skillsSupport` is disabled on the Config, initialization does not run
  * skill discovery and this returns an empty array.
@@ -39,13 +37,8 @@ import type { SkillDefinition } from './skillLoader.js';
  */
 export async function discoverSkillsForConfig(
   config: Config,
+  messageBus: MessageBus,
 ): Promise<SkillDefinition[]> {
-  await config.ensureInitialized(() => {
-    const messageBus =
-      config.getRuntimeMessageBus() ??
-      createSessionMessageBus(config.getPolicyEngine(), config.getDebugMode());
-    config.setRuntimeMessageBus(messageBus);
-    return { messageBus };
-  });
+  await config.ensureInitialized({ messageBus });
   return config.getSkillManager().getAllSkills();
 }

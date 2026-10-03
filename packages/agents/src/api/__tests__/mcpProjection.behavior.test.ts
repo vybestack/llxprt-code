@@ -105,6 +105,7 @@ function buildProjectionDeps(
     },
     getMcpRuntimeStatus: () => ({
       servers: opts.servers ?? {},
+      serverStatuses: new Map(),
       discoveryFailures: new Map<string, string>(),
       discoveryState: MCPDiscoveryState.COMPLETED,
     }),

@@ -188,10 +188,12 @@ function importEntrypoint(consumerRoot: string): ImportOutcome {
         `const host = await import(${JSON.stringify(
           `${MCP_PACKAGE_NAME}/host/hostServices.js`,
         )});` +
-        'if ("registerMcpHostServices" in root) ' +
-        'throw new Error("Host registration leaked through the root barrel");' +
-        'if (typeof host.registerMcpHostServices !== "function") ' +
-        'throw new Error("Host registration subpath is unavailable");' +
+        'if ("registerMcpHostServices" in root || ' +
+        '"registerMcpHostServices" in host) ' +
+        'throw new Error("Global host registration remains available");' +
+        'if (typeof host.deliverHostFeedback !== "function" || ' +
+        'typeof host.defaultHostServices?.openBrowser !== "function") ' +
+        'throw new Error("Per-host port subpath is unavailable");' +
         'console.log("EXPORT_COUNT:" + Object.keys(root).length);',
     ],
     {

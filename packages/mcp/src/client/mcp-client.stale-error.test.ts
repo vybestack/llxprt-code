@@ -25,6 +25,8 @@ const realIndexModule = {
 const realOauthProviderModule = {
   ...(await import('../auth/oauth-provider.js')),
 };
+import { MCPOAuthTokenStorage } from '../auth/oauth-token-storage.js';
+
 const realOauthTokenStorageModule = {
   ...(await import('../auth/oauth-token-storage.js')),
 };
@@ -39,9 +41,10 @@ void vi.mock('@modelcontextprotocol/sdk/client/index.js', () =>
 void vi.mock('../auth/oauth-provider.js', () =>
   automock(realOauthProviderModule),
 );
-void vi.mock('../auth/oauth-token-storage.js', () =>
-  automock(realOauthTokenStorageModule),
-);
+void vi.mock('../auth/oauth-token-storage.js', () => ({
+  ...automock(realOauthTokenStorageModule),
+  createMcpOAuthTokenStorage: () => new MCPOAuthTokenStorage(),
+}));
 void vi.mock('../auth/oauth-utils.js', () => automock(realOauthUtilsModule));
 
 function createSdkClient() {

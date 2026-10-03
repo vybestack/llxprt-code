@@ -16,7 +16,7 @@
  */
 
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { SubagentSchedulerConfig } from './subagentRuntimeSetup.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type {
   IContent,
@@ -567,7 +567,12 @@ function synthesizeToolCalls(
 
 /** Context needed to initialize an interactive scheduler. */
 export interface InitSchedulerContext {
-  schedulerConfig: Config;
+  schedulerConfig: SubagentSchedulerConfig;
+  schedulerRelease: (
+    owner: object,
+    purpose: 'subagent',
+    handle: object,
+  ) => void;
   onMessage?: (message: string) => void;
   messageBus?: MessageBus;
   subagentId: string;
@@ -681,7 +686,7 @@ export async function initInteractiveScheduler(
           onToolCallsUpdate: undefined,
         }),
       )
-    : ctx.schedulerConfig.getOrCreateScheduler(
+    : ctx.schedulerConfig.acquireScheduler(
         owner,
         'subagent',
         {
@@ -719,7 +724,7 @@ export async function initInteractiveScheduler(
     schedulerDispose = async () =>
       // Pass the acquired scheduler so a stale release after a disposeAll
       // sweep cannot dispose a replacement entry under the same key.
-      ctx.schedulerConfig.disposeScheduler(owner, 'subagent', scheduler);
+      ctx.schedulerRelease(owner, 'subagent', scheduler);
   }
 
   return {

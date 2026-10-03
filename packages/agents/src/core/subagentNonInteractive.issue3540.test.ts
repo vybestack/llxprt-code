@@ -26,7 +26,10 @@ import {
 import { ChatSession, StreamEventType } from './chatSession.js';
 import { executeNonInteractiveRun } from './subagentNonInteractive.js';
 import type { ExecutionLoopContext } from './subagentExecution.js';
-import { getScopeLocalFuncDefs } from './subagentRuntimeSetup.js';
+import {
+  createToolExecutionConfig,
+  getScopeLocalFuncDefs,
+} from './subagentRuntimeSetup.js';
 import {
   createMockConfig,
   createStatelessRuntimeBundle,
@@ -109,7 +112,11 @@ async function runDirectNonInteractive(
       config,
       runConfig: defaultRunConfig,
       outputConfig: OUTPUT_CONFIG,
-      toolExecutorContext: config,
+      toolExecutorContext: createToolExecutionConfig(
+        baseBundle,
+        config.getToolRegistry(),
+        config,
+      ),
     },
     () => undefined,
   );

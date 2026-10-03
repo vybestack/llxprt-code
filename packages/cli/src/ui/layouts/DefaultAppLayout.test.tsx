@@ -35,6 +35,7 @@ import {
   buildSlashCommandRuntime,
   buildUiRuntimeFromSource,
 } from '../cliUiRuntime.js';
+import { createRuntimeAgent } from '../__tests__/runtimeAgentFixture.js';
 
 const DIALOG_MANAGER_SENTINEL = 'DIALOG_MANAGER_RENDERED';
 const STANDARD_BUFFER_SENTINEL = 'STANDARD_BUFFER_HISTORY';
@@ -239,11 +240,12 @@ function renderDefaultAppLayout({
   store = createDialogStore(),
 }: RenderLayoutOptions = {}): ReturnType<typeof render> {
   const config = createConfigStub() as never;
+  const agent = createRuntimeAgent();
 
   const inner = (
     <DefaultAppLayout
-      uiRuntime={buildUiRuntimeFromSource(config)}
-      slashCommandRuntime={buildSlashCommandRuntime(config)}
+      uiRuntime={buildUiRuntimeFromSource(config, agent)}
+      slashCommandRuntime={buildSlashCommandRuntime(config, agent)}
       settings={settings as never}
       startupWarnings={[]}
       version={'0.0.0-test'}

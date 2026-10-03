@@ -73,23 +73,17 @@ export interface SessionSchedulerRegistryDeps {
 }
 
 /**
- * Dispose errors are swallowed at cleanup exactly as the deleted scheduler
- * singleton module did: a failing dispose must not mask the release that
- * triggers it. The WeakSet keeps disposeAll's join of an in-flight creation
- * from disposing a handle that an at-zero resolution already disposed.
+ * The WeakSet keeps disposal idempotent when an at-zero resolution races a
+ * session-wide cleanup sweep.
  */
-const createDisposeQuietly = (): ((handle: SchedulerHandle) => void) => {
+const createDisposeOnce = (): ((handle: SchedulerHandle) => void) => {
   const disposed = new WeakSet<SchedulerHandle>();
   return (handle: SchedulerHandle): void => {
     if (disposed.has(handle)) {
       return;
     }
     disposed.add(handle);
-    try {
-      handle.dispose();
-    } catch {
-      // Dispose may fail; ignore during cleanup.
-    }
+    handle.dispose();
   };
 };
 
@@ -104,7 +98,7 @@ export class SessionSchedulerRegistryImpl implements SessionSchedulerRegistry {
     Map<SchedulerPurpose, SchedulerEntry>
   >();
 
-  private readonly disposeQuietly = createDisposeQuietly();
+  private readonly disposeOnce = createDisposeOnce();
 
   /** Monotonic token stamping each creation attempt with its identity. */
   private generation = 0;
@@ -253,7 +247,11 @@ export class SessionSchedulerRegistryImpl implements SessionSchedulerRegistry {
       // Every acquirer released while creation ran; nobody owns the
       // handle, so the at-zero rule disposes it here.
       this.remove(owner, purpose);
-      this.disposeQuietly(handle);
+      try {
+        this.disposeOnce(handle);
+      } catch {
+        // release() is synchronous and historically best-effort.
+      }
     }
     return handle;
   }
@@ -285,32 +283,73 @@ export class SessionSchedulerRegistryImpl implements SessionSchedulerRegistry {
       return;
     }
     this.remove(owner, purpose);
-    this.disposeQuietly(entry.handle);
+    try {
+      this.disposeOnce(entry.handle);
+    } catch {
+      // release() is synchronous and historically best-effort.
+    }
+  }
+
+  async cancelAll(): Promise<void> {
+    const snapshots = [...this.entries.values()].flatMap((byPurpose) => [
+      ...byPurpose.values(),
+    ]);
+    const settled = await this.resolveHandles(snapshots);
+    const failures: unknown[] = [];
+    const cancelled = new Set<SchedulerHandle>();
+    for (const result of settled) {
+      if (result.status === 'rejected') {
+        failures.push(result.reason);
+      } else if (!cancelled.has(result.value)) {
+        cancelled.add(result.value);
+        try {
+          result.value.cancelAll();
+        } catch (error) {
+          failures.push(error);
+        }
+      }
+    }
+    if (failures.length > 0) {
+      throw new AggregateError(failures, 'Scheduler cancellation failed');
+    }
   }
 
   async disposeAll(): Promise<void> {
-    const snapshots: SchedulerEntry[] = [];
-    for (const byPurpose of this.entries.values()) {
-      for (const entry of byPurpose.values()) {
-        snapshots.push(entry);
-      }
-    }
+    const snapshots = [...this.entries.values()].flatMap((byPurpose) => [
+      ...byPurpose.values(),
+    ]);
     this.entries.clear();
 
     // Join in-flight creations first so their handles land in the dispose
     // sweep below instead of resolving into a cleared registry as orphans.
-    const handles = await Promise.all(
+    const settled = await this.resolveHandles(snapshots);
+    const failures: unknown[] = [];
+    for (const result of settled) {
+      if (result.status === 'rejected') {
+        failures.push(result.reason);
+        continue;
+      }
+      try {
+        this.disposeOnce(result.value);
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (failures.length > 0) {
+      throw new AggregateError(failures, 'Scheduler disposal failed');
+    }
+  }
+
+  private resolveHandles(
+    snapshots: readonly SchedulerEntry[],
+  ): Promise<Array<PromiseSettledResult<SchedulerHandle>>> {
+    return Promise.allSettled(
       snapshots.map((entry) =>
         entry.phase === 'creating'
-          ? entry.promise.catch(() => undefined)
+          ? entry.promise
           : Promise.resolve(entry.handle),
       ),
     );
-    for (const handle of handles) {
-      if (handle !== undefined) {
-        this.disposeQuietly(handle);
-      }
-    }
   }
 
   private lookup(

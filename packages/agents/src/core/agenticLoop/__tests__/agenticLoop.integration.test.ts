@@ -82,6 +82,7 @@ describe('AgenticLoop integration - CLI-style with ASK_USER policy', () => {
     const loop = new AgenticLoop({
       agentClient: client,
       config,
+      schedulerOwner: config.schedulerOwner,
       messageBus,
       approvalHandler,
     });
@@ -158,6 +159,7 @@ describe('AgenticLoop integration - CLI-style with ASK_USER policy', () => {
     const loop = new AgenticLoop({
       agentClient: client,
       config,
+      schedulerOwner: config.schedulerOwner,
       messageBus,
       approvalHandler,
     });
@@ -214,6 +216,7 @@ describe('AgenticLoop integration - CLI-style with ASK_USER policy', () => {
     const loop = new AgenticLoop({
       agentClient: client,
       config,
+      schedulerOwner: config.schedulerOwner,
       messageBus,
       approvalHandler,
     });
@@ -270,6 +273,7 @@ describe('AgenticLoop integration - CLI-style with ASK_USER policy', () => {
     const loop = new AgenticLoop({
       agentClient: client,
       config,
+      schedulerOwner: config.schedulerOwner,
       messageBus,
       approvalHandler,
     });
@@ -340,6 +344,7 @@ describe('AgenticLoop integration - CLI-style with ASK_USER policy', () => {
       const loop = new AgenticLoop({
         agentClient: client,
         config,
+        schedulerOwner: config.schedulerOwner,
         messageBus,
         approvalHandler,
         interactiveMode: true,
@@ -392,6 +397,7 @@ describe('AgenticLoop integration - CLI-style with ASK_USER policy', () => {
     const loop = new AgenticLoop({
       agentClient: client,
       config,
+      schedulerOwner: config.schedulerOwner,
       messageBus,
       approvalHandler,
     });
