@@ -187,19 +187,9 @@ jobs:
       - name: Check for duplicate scheduled nightly
         id: duplicate_check
         if: github.event_name == 'schedule'
-        run: |
-          RELEASE_VERSION="${{ steps.version.outputs.RELEASE_VERSION }}"
-          if OUTPUT=$(npm view "@vybestack/llxprt-code-tools@${RELEASE_VERSION}" version 2>&1); then
-            echo "::notice::Scheduled nightly ${RELEASE_VERSION} is already published; skipping the release pipeline."
-            echo "is_duplicate=true" >> "$GITHUB_OUTPUT"
-          elif echo "$OUTPUT" | grep -qiE 'E404|404|not found|no match'; then
-            echo "Version ${RELEASE_VERSION} is not published yet; proceeding with release."
-            echo "is_duplicate=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "::error::Unable to verify whether ${RELEASE_VERSION} is already published; npm registry check was inconclusive."
-            echo "$OUTPUT" >&2
-            exit 1
-          fi
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.RELEASE_VERSION }}
+        run: bun scripts/check-nightly-release.ts
 
       - name: Determine if release branch should be created
         id: branch_decision
@@ -233,6 +223,28 @@ jobs:
           KEY_VAR_NAME: ${{ vars.KEY_VAR_NAME }}
           OPENAI_API_KEY: ${{ secrets[vars.KEY_VAR_NAME] }}
           OPENAI_API_KEY_2: ${{ secrets[vars.KEY_VAR_NAME_2] }}
+      # Source-checkout CLI integration tests discover runtime plugins only
+      # after their plugin-local dependencies have been installed. Use the
+      # plugin lockfile's required Bun version, then restore the repository pin
+      # so preflight runs with the same Bun version as the rest of the project.
+      - name: Setup Bun for runtime plugin dependencies
+        if: steps.duplicate_check.outputs.is_duplicate != 'true'
+        uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6' # ratchet:oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.2'
+
+      - name: Install runtime plugin dependencies for preflight
+        if: steps.duplicate_check.outputs.is_duplicate != 'true'
+        run: |
+          for plugin in plugins/google-gemini plugins/google-mcp-auth; do
+            (cd "$plugin" && bun install --omit=peer)
+          done
+
+      - name: Restore repository Bun version
+        if: steps.duplicate_check.outputs.is_duplicate != 'true'
+        uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6' # ratchet:oven-sh/setup-bun@v2
+        with:
+          bun-version-file: '.bun-version'
 
       - name: Run Preflight Checks
         if: ${{ github.event.inputs.force_skip_tests != 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}

@@ -7,6 +7,8 @@
 import { describe, it, expect } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'node:os';
+import { execFileSync } from 'node:child_process';
 import {
   asString,
   asStringArray,
@@ -208,9 +210,8 @@ describe('.github/workflows/release.yml', () => {
     expect(asString(duplicateCheck['if'])).toBe(
       "github.event_name == 'schedule'",
     );
-    expect(asString(duplicateCheck.run)).toContain('npm view');
-    expect(asString(duplicateCheck.run)).toContain(
-      '@vybestack/llxprt-code-tools@',
+    expect(asString(duplicateCheck.run)).toBe(
+      'bun scripts/check-nightly-release.ts',
     );
 
     const guardedSteps = [
@@ -237,6 +238,106 @@ describe('.github/workflows/release.yml', () => {
     expect(asString(stepByName('Create Issue on Failure')['if'])).toBe(
       'failure()',
     );
+  });
+
+  it('installs first-party runtime plugin dependencies before preflight and restores the repository Bun version', () => {
+    const pluginBunSetup = stepByName(
+      'Setup Bun for runtime plugin dependencies',
+    );
+    const pluginInstall = stepByName(
+      'Install runtime plugin dependencies for preflight',
+    );
+    const bunRestore = stepByName('Restore repository Bun version');
+    const preflight = stepByName('Run Preflight Checks');
+
+    expect(asString(pluginBunSetup.uses)).toContain('oven-sh/setup-bun@');
+    expect(asString(pluginBunSetup['if'])).toContain(
+      "steps.duplicate_check.outputs.is_duplicate != 'true'",
+    );
+    expect(asString(pluginInstall['if'])).toContain(
+      "steps.duplicate_check.outputs.is_duplicate != 'true'",
+    );
+    expect(asString(asRecord(pluginBunSetup.with)['bun-version'])).toBe(
+      '1.4.2',
+    );
+    expect(asString(pluginInstall.run)).toContain(
+      'plugins/google-gemini plugins/google-mcp-auth',
+    );
+    expect(asString(pluginInstall.run)).toContain('bun install --omit=peer');
+    expect(asString(asRecord(bunRestore.with)['bun-version-file'])).toBe(
+      '.bun-version',
+    );
+    expect(releaseSteps.indexOf(pluginBunSetup)).toBeLessThan(
+      releaseSteps.indexOf(pluginInstall),
+    );
+    expect(releaseSteps.indexOf(pluginInstall)).toBeLessThan(
+      releaseSteps.indexOf(bunRestore),
+    );
+    expect(releaseSteps.indexOf(bunRestore)).toBeLessThan(
+      releaseSteps.indexOf(preflight),
+    );
+  });
+
+  it('executes plugin installation in each plugin directory with peer omission and stops on either install failure', () => {
+    const shell = asString(
+      stepByName('Install runtime plugin dependencies for preflight').run,
+    );
+    const fixture = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'release-plugin-install-'),
+    );
+    const bin = path.join(fixture, 'bin');
+    fs.mkdirSync(bin);
+    for (const plugin of ['google-gemini', 'google-mcp-auth']) {
+      fs.mkdirSync(path.join(fixture, 'plugins', plugin), { recursive: true });
+    }
+    const log = path.join(fixture, 'installs.log');
+    const installer = path.join(bin, 'bun');
+    fs.writeFileSync(
+      installer,
+      `#!/bin/sh
+printf "%s|%s\n" "$PWD" "$*" >> "$INSTALL_LOG"
+if [ -n "$FAIL_PLUGIN" ]; then case "$PWD" in */"$FAIL_PLUGIN") exit 17 ;; esac; fi
+`,
+    );
+    fs.chmodSync(installer, 0o755);
+    const run = (failPlugin: string): string => {
+      try {
+        execFileSync('bash', ['-e', '-c', shell], {
+          cwd: fixture,
+          env: {
+            ...process.env,
+            PATH: `${bin}:${process.env.PATH ?? ''}`,
+            INSTALL_LOG: log,
+            FAIL_PLUGIN: failPlugin,
+          },
+          stdio: 'pipe',
+        });
+        return 'success';
+      } catch (error) {
+        if (typeof error === 'object' && error !== null && 'status' in error)
+          return String(error.status);
+        return 'unknown failure';
+      }
+    };
+
+    try {
+      expect(run('')).toBe('success');
+      const realFixture = fs.realpathSync(fixture);
+      expect(fs.readFileSync(log, 'utf8')).toBe(
+        `${path.join(realFixture, 'plugins/google-gemini')}|install --omit=peer
+${path.join(realFixture, 'plugins/google-mcp-auth')}|install --omit=peer
+`,
+      );
+      for (const plugin of ['google-gemini', 'google-mcp-auth']) {
+        fs.writeFileSync(log, '');
+        expect(run(plugin)).toBe('17');
+        expect(fs.readFileSync(log, 'utf8').trim().split('\n')).toHaveLength(
+          plugin === 'google-gemini' ? 1 : 2,
+        );
+      }
+    } finally {
+      fs.rmSync(fixture, { recursive: true, force: true });
+    }
   });
 
   it('publishes every npm release package', () => {
