@@ -184,25 +184,52 @@ describe('.github/workflows/release.yml', () => {
     releaseSteps.find((s) => s.name === name) ??
     raiseMissing(`missing step: ${name}`);
 
-  it('selects keys before standard release notes without blocking skipped-test fallback', () => {
-    const quota = stepById('quota');
+  it('runs release tests and release-note generation against the pinned local model without paid-provider credentials', () => {
     const releaseNotes = stepByName('Generate Release Notes');
-    const quotaIndex = releaseSteps.indexOf(quota);
-    const releaseNotesIndex = releaseSteps.indexOf(releaseNotes);
-    expect(asString(quota['if']).replace(/\s+/g, ' ').trim()).toBe(
-      "( github.event.inputs.force_skip_tests != 'true' || (github.event.inputs.dry_run != 'true' && github.event.inputs.publish_vscode_only != 'true') ) && steps.duplicate_check.outputs.is_duplicate != 'true'",
+    const preflight = stepByName('Run Preflight Checks');
+    const integrations = stepByName('Run Integration Tests');
+    const modelBudget = stepByName('Check local-model request budget');
+    expect(modelBudget.if).toBe(
+      "${{ success() && github.event.inputs.force_skip_tests != 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}",
     );
-    expect(quotaIndex >= 0 && releaseNotesIndex > quotaIndex).toBe(true);
-    expect(asString(quota['continue-on-error'])).toBe(
-      "${{ github.event.inputs.force_skip_tests == 'true' }}",
+    expect(asString(integrations.env?.LLXPRT_E2E_MODEL_LEDGER)).toBe(
+      '${{ runner.temp }}/release-model-ledger.jsonl',
     );
-    expect(asString(quota.run)).toBe('bun scripts/ci-quota-check.ts');
-    expect(asRecord(releaseNotes.env).OPENAI_API_KEY).toContain(
-      "steps.quota.outputs.selected_key == 'secondary'",
+    expect(asString(modelBudget.run).trim()).toBe(
+      'bun scripts/check-e2e-model-budget.ts --ledger "$LLXPRT_E2E_MODEL_LEDGER"',
     );
-    expect(asRecord(quota.env).OPENAI_API_KEY).toBe(
-      '${{ secrets[vars.KEY_VAR_NAME] }}',
+    const cpuProof = stepByName('Verify live Ollama CPU backend');
+    expect(asString(cpuProof.run)).toContain('/proc/$pid/maps');
+    expect(asString(cpuProof.run)).toContain('libggml-cpu-haswell.so');
+    const ollama = stepByName('Start pinned local Gemma model');
+    expect(releaseSteps.some((step) => step.id === 'quota')).toBe(false);
+    expect(releaseSteps.indexOf(ollama)).toBeLessThan(
+      releaseSteps.indexOf(preflight),
     );
+    expect(releaseSteps.indexOf(preflight)).toBeLessThan(
+      releaseSteps.indexOf(integrations),
+    );
+    expect(releaseSteps.indexOf(integrations)).toBeLessThan(
+      releaseSteps.indexOf(releaseNotes),
+    );
+    expect(releaseSteps.indexOf(integrations)).toBeLessThan(
+      releaseSteps.indexOf(modelBudget),
+    );
+    for (const step of [preflight, integrations, releaseNotes]) {
+      const env = asRecord(step.env);
+      expect(env.OPENAI_BASE_URL).toBe('http://127.0.0.1:12644/v1');
+      expect(env.OPENAI_API_KEY).toBe('ollama-local-only');
+      expect(env.LLXPRT_DEFAULT_PROVIDER).toBe('openai');
+      expect(env.LLXPRT_DEFAULT_MODEL).toBe('gemma4:e2b-it-qat');
+    }
+    expect(JSON.stringify(releaseSteps)).not.toContain('ci-quota-check.ts');
+    expect(JSON.stringify(releaseSteps)).not.toContain(
+      'secrets[vars.KEY_VAR_NAME',
+    );
+    expect(asString(integrations.run)).toContain(
+      'npm run test:integration:sandbox:none',
+    );
+    expect(asString(integrations.run)).not.toContain('--exclude');
   });
 
   it('skips the release pipeline for scheduled nightlies when the version is already published', () => {
@@ -215,7 +242,11 @@ describe('.github/workflows/release.yml', () => {
     );
 
     const guardedSteps = [
-      stepById('quota'),
+      stepByName(
+        'Install pinned local Ollama runtime for release model checks',
+      ),
+      stepByName('Select local Ollama CPU backend'),
+      stepByName('Start pinned local Gemma model'),
       stepByName('Run Preflight Checks'),
       stepByName('Run Integration Tests'),
       stepByName('Update package versions'),
