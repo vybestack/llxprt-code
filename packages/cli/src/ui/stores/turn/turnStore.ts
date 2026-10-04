@@ -31,6 +31,8 @@ import {
 export interface TurnState {
   /** Committed transcript items rendered into Ink's <Static> region. */
   history: HistoryItem[];
+  historyTruncatedItems: number;
+  historyEpoch: number;
   /** Items still pending commit (streaming, confirmations). */
   pendingHistoryItems: HistoryItemWithoutId[];
   streamingState: StreamingState;
@@ -109,6 +111,8 @@ export interface TurnStore {
 function initialTurnState(): TurnState {
   return {
     history: [],
+    historyTruncatedItems: 0,
+    historyEpoch: 0,
     pendingHistoryItems: [],
     streamingState: StreamingState.Idle,
     thought: null,
@@ -161,7 +165,7 @@ type TurnStatusCommands = Pick<
  */
 function createTurnHistoryCommands(
   ledger: HistoryLedger,
-  publishHistory: () => void,
+  publishHistory: (reset?: boolean) => void,
 ): TurnHistoryCommands {
   const addItem = (
     itemData: Omit<HistoryItem, 'id'>,
@@ -200,7 +204,7 @@ function createTurnHistoryCommands(
   const clearItems = (): void => {
     const before = ledger.getState();
     ledger.clear();
-    if (ledger.getState() !== before) publishHistory();
+    if (ledger.getState() !== before) publishHistory(true);
     // The conversation-id reset travels with the command so every caller
     // (hook, keybinding, slash command) gets the same semantics.
     ConversationContext.startNewConversation();
@@ -208,7 +212,7 @@ function createTurnHistoryCommands(
 
   const loadHistory = (newHistory: HistoryItem[]): void => {
     ledger.load(newHistory);
-    publishHistory();
+    publishHistory(true);
   };
 
   const setHistoryLimits = (limits: HistoryLimits): void => {
@@ -328,12 +332,15 @@ export function createTurnStore(initial?: Partial<TurnState>): TurnStore {
     ...initialTurnState(),
     ...initial,
     history: projectHistory(ledger.getState()),
+    historyTruncatedItems: ledger.getState().truncatedItems,
   });
 
-  const publishHistory = (): void => {
+  const publishHistory = (reset = false): void => {
     store.setState((prev) => ({
       ...prev,
       history: projectHistory(ledger.getState()),
+      historyTruncatedItems: ledger.getState().truncatedItems,
+      historyEpoch: prev.historyEpoch + (reset ? 1 : 0),
     }));
   };
 

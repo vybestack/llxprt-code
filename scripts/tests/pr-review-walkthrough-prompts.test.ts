@@ -246,7 +246,7 @@ describe('buildSynthesisPrompts', () => {
   it('related prompt asks for related issues and PRs with a why', () => {
     const r = buildSynthesisPrompts(context).related.toLowerCase();
     expect(r).toContain('issue');
-    expect(r).toContain('why');
+    expect(r).toContain('reason');
   });
 });
 
@@ -351,4 +351,91 @@ describe('buildPreMergeChecksPrompt', () => {
       buildPreMergeChecksPrompt(SAMPLE_PR_CONTEXT, [], undefined),
     ).toThrow(/prTemplateSections/);
   });
+});
+
+describe('packet evidence contracts', () => {
+  it('preserves fragment provenance rather than presenting partial hunks as complete files', () => {
+    const prompt = buildMapPrompt(
+      'src/file.ts',
+      SAMPLE_DIFF,
+      SAMPLE_PR_CONTEXT,
+      { packet: 2, packetCount: 3 },
+    );
+    const data = JSON.parse(
+      prompt.split('\n').find((line) => line.startsWith('{"pullRequest":')) ??
+        '{}',
+    );
+    expect(data.file.provenance).toEqual({ packet: 2, packetCount: 3 });
+    expect(prompt).toContain(
+      'Do not infer behavior absent from the supplied lines',
+    );
+  });
+  it('supplies underlying packet facts to synthesis rather than only grouped paraphrases', () => {
+    const summary = {
+      filePath: 'src/file.ts',
+      packet: 2,
+      summary: 'Waits 1000 ms after failure',
+      triage: 'fix',
+    };
+    const prompts = buildSynthesisPrompts({
+      prContext: SAMPLE_PR_CONTEXT,
+      summaries: [summary],
+      themes: [
+        { layer: 'core', files: ['src/file.ts'], summary: 'Retries requests' },
+      ],
+    });
+    const data = JSON.parse(
+      prompts.walkthroughReleaseNotes
+        .split('\n')
+        .find((line) => line.startsWith('{"pullRequest":')) ?? '{}',
+    );
+    expect(data.fileEvidence).toEqual([summary]);
+    expect(prompts.walkthroughReleaseNotes).toContain(
+      'Do not invent a prior failure mode',
+    );
+  });
+});
+
+it('limits packet extraction to observations without inventing whole-PR absence', async () => {
+  const { buildAcceptanceEvidencePrompt } = await import(
+    '../pr-review-prompts.ts'
+  );
+  const prompt = buildAcceptanceEvidencePrompt(
+    SAMPLE_PR_CONTEXT,
+    { number: 1, body: 'Implement retry and tests' },
+    [{ filePath: 'docs/plan.md', diff: '+Planned work' }],
+  );
+  expect(prompt).toContain(
+    'Do not report missing implementation, missing tests or unmet criteria at this extraction stage',
+  );
+
+  expect(prompt).toContain(
+    'all batch observations will be assessed together later',
+  );
+});
+
+it('gives general retry arithmetic without embedding control-specific answers', async () => {
+  const { buildAcceptanceEvidencePrompt } = await import(
+    '../pr-review-prompts.ts'
+  );
+  const prompt = buildAcceptanceEvidencePrompt(
+    SAMPLE_PR_CONTEXT,
+    { number: 1 },
+    [],
+  );
+  expect(prompt).toContain('total attempts minus one');
+  expect(prompt).not.toContain('Three total attempts');
+});
+
+it('keeps review metadata and documentation out of runtime diagram actors', () => {
+  const prompts = buildSynthesisPrompts({
+    prContext: SAMPLE_PR_CONTEXT,
+    themes: [],
+  });
+  expect(prompts.sequenceDiagram).toContain(
+    'PR metadata, plans and tests are not runtime actors',
+  );
+  expect(prompts.sequenceDiagram).toContain(
+    'return an empty diagram when runtime flow is not established',
+  );
 });

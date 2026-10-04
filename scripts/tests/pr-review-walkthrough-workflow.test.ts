@@ -102,7 +102,9 @@ function evalStepIf(
   normalized = normalized.replace(
     /steps\.([a-zA-Z0-9_-]+)\.outcome\s*==\s*'([^']*)'/g,
     (_match, id: string, value: string) => {
-      const outcome = stepOutcomes.outcomes[id] ?? 'skipped';
+      const outcome =
+        stepOutcomes.outcomes[id] ??
+        (['backend', 'model', 'warmup'].includes(id) ? 'success' : 'skipped');
       return outcome === value ? 'TRUE' : 'FALSE';
     },
   );
@@ -257,33 +259,22 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
     });
   });
 
-  describe('env vars (unchanged)', () => {
-    it('preserves KEY_VAR_NAME and REPO at workflow level', () => {
+  describe('local inference configuration', () => {
+    it('retains repository metadata while removing hosted key selection', () => {
       const env = asOptionalRecord(workflow.env) ?? {};
-      expect(env.KEY_VAR_NAME).toBeTruthy();
       expect(env.REPO).toBeTruthy();
+      expect(env.KEY_VAR_NAME).toBeUndefined();
+      expect(readRootFile(WORKFLOW_PATH)).not.toContain('secrets[');
     });
-
-    it('preserves provider env vars in the review job', () => {
+    it('has one pinned local model rather than repository-controlled provider tiers', () => {
       const env = asOptionalRecord(reviewJob?.env) ?? {};
-      expect(env.OPENAI_BASE_URL).toBeTruthy();
-      expect(env.LLXPRT_DEFAULT_MODEL).toBeTruthy();
-      expect(env.LLXPRT_DEFAULT_PROVIDER).toBeTruthy();
-      expect(env.LLXPRT_CONTEXT_LIMIT).toBeTruthy();
-      expect(env.DEBUG_OUTPUT).toBeTruthy();
-    });
-
-    it('keeps the repository override ahead of the 256000 context fallback', () => {
-      const env = asOptionalRecord(reviewJob?.env) ?? {};
-      expect(asString(env.LLXPRT_CONTEXT_LIMIT ?? '')).toBe(
-        "${{ vars.LLXPRT_CONTEXT_LIMIT || '256000' }}",
+      expect(env.OPENAI_BASE_URL).toBeUndefined();
+      expect(env.LLXPRT_DEFAULT_PROVIDER).toBeUndefined();
+      expect(readRootFile(WORKFLOW_PATH)).toContain('qwen3.5:4b');
+      expect(readRootFile(WORKFLOW_PATH)).toContain(
+        "OLLAMA_CONTEXT_LENGTH: '32768'",
       );
-    });
-
-    it('wires the strong model tier from repository variables', () => {
-      const env = asOptionalRecord(reviewJob?.env) ?? {};
-      expect(env.LLXPRT_STRONG_MODEL).toContain('vars.LLXPRT_STRONG_MODEL');
-      expect(env.LLXPRT_STRONG_MODEL).toContain('vars.LLXPRT_DEFAULT_MODEL');
+      expect(env.DEBUG_OUTPUT).toBe('stderr');
     });
   });
 
@@ -387,8 +378,8 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
       'Fetch pull request head',
       'Collect PR metadata and ensure linked issue',
       'Detect documentation-only change',
-      'Install LLxprt CLI nightly',
-      'Check API quota and select optimal key',
+      'Install Ollama CPU runtime',
+      'Verify CPU-only model inference',
       'Capture LLxprt Code CI status',
       'Capture coverage summary comment',
       'Generate diff artifacts',
@@ -402,12 +393,12 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
       });
     }
 
-    it('ci-quota-check.ts is still called in the quota check step', () => {
+    it('verifies CPU-only local inference before the walkthrough', () => {
       const quotaRun = stepRunText(
         reviewJob,
-        'Check API quota and select optimal key',
+        'Verify CPU-only model inference',
       );
-      expect(quotaRun).toContain('ci-quota-check.ts');
+      expect(quotaRun).toContain('.size_vram == 0');
     });
 
     it('issue_gate still outputs should_review', () => {
@@ -554,14 +545,14 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
 
     // --- A1: Every advisory step has continue-on-error: true ---
 
-    it('Install LLxprt CLI nightly has id "install" and continue-on-error', () => {
-      const step = stepByName('Install LLxprt CLI nightly');
+    it('Install Ollama CPU runtime has id "install" and continue-on-error', () => {
+      const step = stepByName('Install Ollama CPU runtime');
       expect(step.id).toBe('install');
       expect(continueOnError(step)).toBe(true);
     });
 
-    it('Check API quota and select optimal key has id "quota" and continue-on-error', () => {
-      const step = stepByName('Check API quota and select optimal key');
+    it('Verify CPU-only model inference has id "quota" and continue-on-error', () => {
+      const step = stepByName('Verify CPU-only model inference');
       expect(step.id).toBe('quota');
       expect(continueOnError(step)).toBe(true);
     });
@@ -739,7 +730,7 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
       );
       expect(evalStepIf(fallback?.if, scenarios)).toBe(true);
       expect(evalStepIf(post?.if, scenarios)).toBe(true);
-      expect(continueOnError(stepByName('Install LLxprt CLI nightly'))).toBe(
+      expect(continueOnError(stepByName('Install Ollama CPU runtime'))).toBe(
         true,
       );
     });
@@ -759,7 +750,7 @@ describe('.github/workflows/pr-review.yml — repurposed walkthrough pipeline', 
       expect(evalStepIf(fallback?.if, scenarios)).toBe(true);
       expect(evalStepIf(post?.if, scenarios)).toBe(true);
       expect(
-        continueOnError(stepByName('Check API quota and select optimal key')),
+        continueOnError(stepByName('Verify CPU-only model inference')),
       ).toBe(true);
     });
 

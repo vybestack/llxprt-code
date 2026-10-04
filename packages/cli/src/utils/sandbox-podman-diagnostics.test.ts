@@ -60,11 +60,24 @@ function invokeCredentialBridgeInFreshBun(
     runnerPath,
     [
       `import { setupCredentialProxyPodmanMacOS } from ${JSON.stringify(modulePath)};`,
+      "import fs from 'node:fs';",
+      `const resultTimePath = ${JSON.stringify(path.join(fixtureRoot, 'bridge-result-time'))};`,
       `const socketPath = ${JSON.stringify(socketPath)};`,
       'try {',
       `  await setupCredentialProxyPodmanMacOS([], socketPath, ${String(pollTimeoutMs)});`,
       "  console.log('unexpected success');",
       '} catch (error) {',
+      '  fs.writeFileSync(resultTimePath, String(Date.now()));',
+      `  const probePidPath = ${JSON.stringify(path.join(fixtureRoot, 'probe.pid'))};`,
+      '  if (fs.existsSync(probePidPath)) {',
+      '    const pid = Number(fs.readFileSync(probePidPath, "utf8"));',
+      '    let alive = true;',
+      '    try { process.kill(pid, 0); } catch (error) {',
+      '      if (!(error instanceof Error) || !("code" in error) || error.code !== "ESRCH") throw error;',
+      '      alive = false;',
+      '    }',
+      `    fs.writeFileSync(${JSON.stringify(path.join(fixtureRoot, 'probe-alive-at-result'))}, String(alive));`,
+      '  }',
       '  console.log(error instanceof Error ? error.message : String(error));',
       '}',
     ].join('\n'),
@@ -155,6 +168,93 @@ describe('Podman tunnel startup diagnostics', () => {
       );
       expect(message).toContain('late OpenSSH forwarding failure');
       expect(processExists(sshPid)).toBe(false);
+    }, 10000);
+
+    it('surfaces SSH diagnostics when a readiness probe overlaps SSH exit', () => {
+      const readinessStarted = path.join(fixtureRoot, 'readiness-started');
+      const probePidPath = path.join(fixtureRoot, 'probe.pid');
+      const sshPidPath = path.join(fixtureRoot, 'ssh.pid');
+      writeExecutable(
+        path.join(fixtureRoot, 'podman'),
+        [
+          '#!/bin/sh',
+          `printf '%s\\n' "$*" >> ${shellQuote(podmanInvocationLog)}`,
+          'case "$*" in',
+          "  *'system connection list'*)",
+          `    printf '%s\\n' '[{"Name":"default","URI":"ssh://core@localhost:12345/run/podman/podman.sock","Identity":"/tmp/key","Default":true}]'`,
+          '    ;;',
+          '  *)',
+          '    sleep 1.5 &',
+          `    printf '%s\n' "$!" > ${shellQuote(probePidPath)}`,
+          `    ${shellQuote(process.execPath)} -e ${shellQuote(`require('node:fs').writeFileSync(${JSON.stringify(readinessStarted)}, String(Date.now()))`)}`,
+          '    wait',
+          '    exit 1',
+          '    ;;',
+          'esac',
+        ].join('\n'),
+      );
+      writeExecutable(
+        path.join(fixtureRoot, 'ssh'),
+        [
+          '#!/bin/sh',
+          `printf '%s\\n' "$$" > ${shellQuote(sshPidPath)}`,
+          `while [ ! -f ${shellQuote(readinessStarted)} ]; do sleep 0.01; done`,
+          "printf 'probe-overlap diagnostic\\n' >&2",
+          "yes 'chatty tunnel output' | head -c 8388608",
+          'sleep 0.4',
+          'exit 23',
+        ].join('\n'),
+      );
+
+      const message = invokeCredentialBridgeInFreshBun(
+        fixtureRoot,
+        originalPath,
+        '/tmp/cred-proxy.sock',
+      );
+      const sshPid = Number(fs.readFileSync(sshPidPath, 'utf8').trim());
+
+      expect(message).toContain('probe-overlap diagnostic');
+      expect(processExists(sshPid)).toBe(false);
+      expect(
+        fs.readFileSync(
+          path.join(fixtureRoot, 'probe-alive-at-result'),
+          'utf8',
+        ),
+      ).toBe('false');
+      const probePid = Number(fs.readFileSync(probePidPath, 'utf8'));
+      expect(processExists(probePid)).toBe(false);
+      const readinessStartTime = Number(
+        fs.readFileSync(readinessStarted, 'utf8'),
+      );
+      const resultTime = Number(
+        fs.readFileSync(path.join(fixtureRoot, 'bridge-result-time'), 'utf8'),
+      );
+      expect(resultTime - readinessStartTime).toBeLessThan(1000);
+    }, 10000);
+
+    it('reports a bounded readiness timeout and reaps an SSH process that remains running', () => {
+      const sshPidPath = path.join(fixtureRoot, 'ssh.pid');
+      writeExecutable(
+        path.join(fixtureRoot, 'ssh'),
+        [
+          '#!/bin/sh',
+          `printf '%s\n' "$$" > ${shellQuote(sshPidPath)}`,
+          'exec sleep 30',
+        ].join('\n'),
+      );
+
+      const start = Date.now();
+      const message = invokeCredentialBridgeInFreshBun(
+        fixtureRoot,
+        originalPath,
+        '/tmp/cred-proxy.sock',
+      );
+      const sshPid = Number(fs.readFileSync(sshPidPath, 'utf8').trim());
+
+      expect(message).toContain('timed out waiting for TCP tunnel');
+      expect(message).not.toContain('OpenSSH exited from signal');
+      expect(processExists(sshPid)).toBe(false);
+      expect(Date.now() - start).toBeLessThan(5000);
     }, 10000);
 
     it('retains exactly 4096 encoded bytes from an oversized OpenSSH diagnostic', () => {

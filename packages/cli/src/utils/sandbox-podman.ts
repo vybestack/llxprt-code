@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { execSync, spawn, type ChildProcess } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import net from 'node:net';
 import { FatalSandboxError } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
@@ -249,8 +249,9 @@ async function waitForTunnelReadiness(
   readiness: (signal: AbortSignal) => Promise<void>,
 ): Promise<ChildProcess> {
   const abortController = new AbortController();
+  const readinessPromise = readiness(abortController.signal);
   try {
-    await Promise.race([readiness(abortController.signal), monitor.failure]);
+    await Promise.race([readinessPromise, monitor.failure]);
     if (!monitor.isRunning()) {
       await monitor.failure;
     }
@@ -258,7 +259,16 @@ async function waitForTunnelReadiness(
     return monitor.process;
   } catch (error) {
     abortController.abort();
-    return await terminateAfterFailure(monitor, error);
+    let failure = error;
+    await readinessPromise.catch((readinessError: unknown) => {
+      if (readinessError !== error) {
+        failure = new AggregateError(
+          [error, readinessError],
+          'OpenSSH tunnel startup and readiness cleanup failed',
+        );
+      }
+    });
+    return await terminateAfterFailure(monitor, failure);
   } finally {
     abortController.abort();
   }
@@ -284,6 +294,108 @@ async function spawnAndWaitForTunnel(
   return monitor;
 }
 
+async function cancelPodmanReadinessProbe(
+  probe: ChildProcess,
+  closePromise: Promise<void>,
+): Promise<void> {
+  const pid = probe.pid;
+  if (pid === undefined) return;
+  const killOwnedGroup = (killSignal: NodeJS.Signals): void => {
+    try {
+      process.kill(-pid, killSignal);
+    } catch (error) {
+      if (
+        !(error instanceof Error) ||
+        !('code' in error) ||
+        (error.code !== 'ESRCH' && error.code !== 'EPERM')
+      )
+        throw error;
+    }
+  };
+  const waitForOwnedGroupExit = async (): Promise<boolean> => {
+    const deadline = Date.now() + SSH_TERMINATE_TIMEOUT_MS;
+    do {
+      try {
+        process.kill(-pid, 0);
+      } catch (error) {
+        if (!(error instanceof Error) || !('code' in error)) throw error;
+        if (error.code === 'ESRCH') return true;
+        if (error.code !== 'EPERM') throw error;
+      }
+      await delay(10);
+    } while (Date.now() < deadline);
+    return false;
+  };
+  const waitForCancellation = async (): Promise<boolean> => {
+    const results = await Promise.all([
+      waitForClose(closePromise, SSH_TERMINATE_TIMEOUT_MS),
+      waitForOwnedGroupExit(),
+    ]);
+    return results.every((closed) => closed);
+  };
+  killOwnedGroup('SIGTERM');
+  if (!(await waitForCancellation())) {
+    killOwnedGroup('SIGKILL');
+    if (!(await waitForCancellation())) {
+      throw new Error(
+        'Podman readiness probe group did not exit after SIGKILL',
+      );
+    }
+  }
+}
+
+async function runPodmanReadinessProbe(
+  tunnelPort: number,
+  signal: AbortSignal,
+): Promise<{ output: string | undefined; aborted: boolean }> {
+  const probe = spawn(
+    `podman machine ssh -- ss -tln | grep -q ':${tunnelPort} ' && echo ok`,
+    { shell: true, detached: true, stdio: ['ignore', 'pipe', 'pipe'] },
+  );
+  let stdout = '';
+  let failed = false;
+  let cancellation: Promise<void> | undefined;
+  let rejectResult: ((error: unknown) => void) | undefined;
+  let resolveClose: (() => void) | undefined;
+  const closePromise = new Promise<void>((resolve) => {
+    resolveClose = resolve;
+  });
+  const abort = (): void => {
+    cancellation = cancelPodmanReadinessProbe(probe, closePromise);
+    void cancellation.catch((error: unknown) => rejectResult?.(error));
+  };
+  probe.stdout.setEncoding('utf8');
+  probe.stdout.on('data', (chunk: string) => {
+    stdout += chunk;
+  });
+  probe.stderr.resume();
+  probe.once('error', () => {
+    failed = true;
+  });
+  const timeout = setTimeout(() => {
+    failed = true;
+    probe.kill('SIGTERM');
+    probe.stdout.destroy();
+    probe.stderr.destroy();
+  }, 2000);
+  const result = new Promise<string | undefined>((resolve, reject) => {
+    rejectResult = reject;
+    probe.once('close', (code) => {
+      clearTimeout(timeout);
+      signal.removeEventListener('abort', abort);
+      resolveClose?.();
+      resolve(
+        !failed && !signal.aborted && code === 0 ? stdout.trim() : undefined,
+      );
+    });
+  });
+  signal.addEventListener('abort', abort, { once: true });
+  if (signal.aborted) abort();
+  const output = await result;
+  await cancellation;
+  return { output, aborted: signal.aborted };
+}
+
 /** Polls Podman VM for a TCP port to become listen-ready. */
 async function pollPodmanVmPortReady(
   tunnelPort: number,
@@ -293,19 +405,8 @@ async function pollPodmanVmPortReady(
 ): Promise<void> {
   const pollStart = Date.now();
   while (!signal.aborted && Date.now() - pollStart < pollTimeoutMs) {
-    try {
-      const result = execSync(
-        `podman machine ssh -- ss -tln | grep -q ':${tunnelPort} ' && echo ok`,
-        { timeout: 2000 },
-      )
-        .toString()
-        .trim();
-      if (result === 'ok') {
-        return;
-      }
-    } catch {
-      // Port not ready yet
-    }
+    const result = await runPodmanReadinessProbe(tunnelPort, signal);
+    if (result.aborted || result.output === 'ok') return;
     await delay(SSH_TUNNEL_POLL_INTERVAL_MS);
   }
   if (!signal.aborted) throw new FatalSandboxError(timeoutMessage);

@@ -7,8 +7,72 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
+import { relatedItemSchema } from './pr-review-local.ts';
 
 const recordSchema = z.record(z.unknown());
+export interface ArtifactDiagnostic {
+  category:
+    | 'missing-artifact'
+    | 'artifact-read'
+    | 'artifact-json'
+    | 'artifact-schema';
+  operation: 'read' | 'parse' | 'validate';
+  path: string;
+}
+export class ArtifactFailure extends Error {
+  constructor(readonly diagnostic: ArtifactDiagnostic) {
+    super(
+      `Required artifact unavailable: ${diagnostic.operation} ${diagnostic.path}`,
+    );
+  }
+}
+function artifactPath(file: string): string {
+  const basename = path
+    .basename(file)
+    .replace(/[^a-zA-Z0-9_.-]/g, '_')
+    .slice(0, 120);
+  const parent = path.basename(path.dirname(file));
+  return ['issues', 'diffs'].includes(parent)
+    ? `${parent}/${basename}`
+    : basename;
+}
+async function readRequired(file: string): Promise<string> {
+  try {
+    return await fs.readFile(file, 'utf8');
+  } catch (error) {
+    const missing =
+      error instanceof Error && 'code' in error && error.code === 'ENOENT';
+    throw new ArtifactFailure({
+      category: missing ? 'missing-artifact' : 'artifact-read',
+      operation: 'read',
+      path: artifactPath(file),
+    });
+  }
+}
+async function readRequiredJson(
+  file: string,
+  schema: z.ZodType<Record<string, unknown>> = recordSchema,
+): Promise<Record<string, unknown>> {
+  const content = await readRequired(file);
+  let value: unknown;
+  try {
+    value = JSON.parse(content);
+  } catch {
+    throw new ArtifactFailure({
+      category: 'artifact-json',
+      operation: 'parse',
+      path: artifactPath(file),
+    });
+  }
+  const result = schema.safeParse(value);
+  if (!result.success)
+    throw new ArtifactFailure({
+      category: 'artifact-schema',
+      operation: 'validate',
+      path: artifactPath(file),
+    });
+  return result.data;
+}
 
 async function readWithConcurrency<T>(
   items: T[],
@@ -22,14 +86,7 @@ async function readWithConcurrency<T>(
       const index = nextIndex;
       nextIndex += 1;
       const item = items[index];
-      try {
-        results[index] = await asyncFn(item);
-      } catch (error) {
-        results[index] = {
-          error: error instanceof Error ? error.message : String(error),
-          filePath: String(item),
-        };
-      }
+      results[index] = await asyncFn(item);
     }
   };
   const workerCount = Math.min(concurrencyLimit, items.length);
@@ -39,23 +96,52 @@ async function readWithConcurrency<T>(
 
 export async function readArtifacts(
   reviewDir: string,
+  { requireRelated = false }: { requireRelated?: boolean } = {},
 ): Promise<Record<string, unknown>> {
   const prPath = path.join(reviewDir, 'pr.json');
-  try {
-    await fs.access(prPath);
-  } catch {
-    throw new Error(`Required artifact missing: ${prPath}`);
-  }
-  const pr = recordSchema.parse(JSON.parse(await fs.readFile(prPath, 'utf8')));
+  const pr = await readRequiredJson(
+    prPath,
+    z
+      .object({
+        number: z.number(),
+        title: z.string().min(1),
+        body: z.string().optional(),
+      })
+      .passthrough(),
+  );
   const issues = await readIssueFiles(reviewDir);
   if (issues.length === 0) {
-    throw new Error(
-      'No linked issue files found in review/issues — the issue_gate should have blocked this PR. Infrastructure problem.',
-    );
+    throw new ArtifactFailure({
+      category: 'missing-artifact',
+      operation: 'read',
+      path: 'issues',
+    });
   }
   const diffs = await readDiffFiles(reviewDir);
   const numstat = await readNumstat(reviewDir);
-  return buildArtifactContext(pr, issues, diffs, numstat);
+  const relatedPath = path.join(reviewDir, 'related.json');
+  let relatedItems: unknown[] = [];
+  let relatedUnavailable = false;
+  const exists = await fs.access(relatedPath).then(
+    () => true,
+    () => false,
+  );
+  if (exists || requireRelated) {
+    const related = await readRequiredJson(
+      relatedPath,
+      z.object({
+        state: z.enum(['complete', 'unavailable']),
+        items: z.array(relatedItemSchema).max(20),
+      }),
+    );
+    relatedItems = z.array(relatedItemSchema).parse(related.items);
+    relatedUnavailable = related.state !== 'complete';
+  }
+  return {
+    ...buildArtifactContext(pr, issues, diffs, numstat),
+    relatedItems,
+    relatedUnavailable,
+  };
 }
 
 async function readIssueFiles(
@@ -69,7 +155,16 @@ async function readIssueFiles(
     8,
     async (file: string) => ({
       filePath: file,
-      issue: JSON.parse(await fs.readFile(path.join(issuesDir, file), 'utf8')),
+      issue: await readRequiredJson(
+        path.join(issuesDir, file),
+        z
+          .object({
+            number: z.number().int().positive(),
+            title: z.string().optional(),
+            body: z.string().optional(),
+          })
+          .passthrough(),
+      ),
     }),
   );
   const issues = collectArtifactReads(results, 'issue');
@@ -100,7 +195,7 @@ async function readDiffFiles(
       diff: {
         filePath: resolveOriginalPath(file, manifest),
         safeName: file,
-        content: await fs.readFile(path.join(diffsDir, file), 'utf8'),
+        content: await readRequired(path.join(diffsDir, file)),
       },
     }),
   );
@@ -120,7 +215,7 @@ function collectArtifactReads(
   const values: Array<Record<string, unknown>> = [];
   for (const result of results) {
     if ('error' in result) {
-      console.error(`Failed to read ${result.filePath}: ${result.error}`);
+      throw new Error(`Required artifact unavailable: ${result.filePath}`);
     } else {
       const value = result[valueKey];
       if (value !== undefined) {
@@ -219,6 +314,7 @@ export function buildArtifactContext(
   } else if (typeof rawCommits === 'number') {
     commitCount = rawCommits;
   }
+  const closingReferences = pr.closingIssuesReferences;
   return {
     prContext: {
       number: pr.number,
@@ -233,6 +329,19 @@ export function buildArtifactContext(
       commits: commitCount,
     },
     issues,
+    acceptanceMode:
+      Array.isArray(closingReferences) && closingReferences.length === 0
+        ? 'alignment'
+        : 'fulfillment',
+    acceptanceIssues:
+      Array.isArray(closingReferences) && closingReferences.length > 0
+        ? issues.filter((issue) =>
+            closingReferences.some((reference: unknown) => {
+              const parsed = recordSchema.safeParse(reference);
+              return parsed.success && parsed.data.number === issue.number;
+            }),
+          )
+        : issues,
     diffs,
     numstat,
     changedFilePaths,

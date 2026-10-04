@@ -44,6 +44,7 @@ const AsyncFunction = asyncFunctionConstructor;
 interface CommentRecord {
   readonly id: number;
   readonly body: string;
+  readonly user?: { readonly login: string };
 }
 
 interface GithubCallLog {
@@ -58,6 +59,11 @@ interface GithubFake {
     options: unknown,
   ) => Promise<readonly CommentRecord[]>;
   readonly rest: {
+    readonly pulls: {
+      readonly get: (
+        options: unknown,
+      ) => Promise<{ data: { head: { sha: string } } }>;
+    };
     readonly issues: {
       readonly listComments: (
         options: unknown,
@@ -71,6 +77,7 @@ interface GithubFake {
 }
 
 interface GithubConfig {
+  readonly headSha?: string;
   readonly comments?: readonly CommentRecord[];
   readonly paginateError?: unknown;
   readonly update?: (options: unknown) => { data: { id: number } };
@@ -102,6 +109,11 @@ function makeGithub(config: GithubConfig = {}): {
       return (await fn(options)).data;
     },
     rest: {
+      pulls: {
+        get: async () => ({
+          data: { head: { sha: config.headSha ?? 'a'.repeat(40) } },
+        }),
+      },
       issues: {
         listComments: async (
           _options: unknown,
@@ -109,7 +121,12 @@ function makeGithub(config: GithubConfig = {}): {
           if (config.paginateError !== undefined) {
             throw config.paginateError;
           }
-          return { data: config.comments ?? [] };
+          return {
+            data: (config.comments ?? []).map((comment) => ({
+              user: { login: 'github-actions[bot]' },
+              ...comment,
+            })),
+          };
         },
         updateComment: async (options: unknown): Promise<unknown> => {
           calls.updateCalls.push(options);
@@ -216,6 +233,7 @@ describe('Post walkthrough comment github-script behavior', () => {
   let commentFile: string | undefined;
   let previousCommentFile: string | undefined;
   let previousCommentMarker: string | undefined;
+  let previousHeadSha: string | undefined;
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'llxprt-walkthrough-comment-'));
@@ -225,9 +243,13 @@ describe('Post walkthrough comment github-script behavior', () => {
     previousCommentMarker = process.env.COMMENT_MARKER;
     process.env.COMMENT_FILE = commentFile;
     process.env.COMMENT_MARKER = MARKER;
+    previousHeadSha = process.env.EXPECTED_HEAD_SHA;
+    process.env.EXPECTED_HEAD_SHA = 'a'.repeat(40);
   });
 
   afterEach(() => {
+    if (previousHeadSha === undefined) delete process.env.EXPECTED_HEAD_SHA;
+    else process.env.EXPECTED_HEAD_SHA = previousHeadSha;
     if (tempDir !== undefined) {
       rmSync(tempDir, { recursive: true, force: true });
     }
@@ -241,6 +263,47 @@ describe('Post walkthrough comment github-script behavior', () => {
     } else {
       process.env.COMMENT_MARKER = previousCommentMarker;
     }
+  });
+
+  it('suppresses stale-head output instead of updating or creating a comment', async () => {
+    const { github, calls } = makeGithub({
+      headSha: 'b'.repeat(40),
+      comments: [{ id: 7, body: MARKER }],
+    });
+    const { core, info, failures } = makeCore();
+    await runScript(
+      script,
+      github,
+      reviewContext(ISSUE_NUMBER),
+      core,
+      requireFn,
+    );
+    expect(calls.updateCalls).toEqual([]);
+    expect(calls.createCalls).toEqual([]);
+    expect(info.join(' ')).toContain('head changed');
+    expect(failures).toEqual([]);
+  });
+
+  it('does not update an attacker-authored marker comment', async () => {
+    const { github, calls } = makeGithub({
+      comments: [
+        { id: 99, body: MARKER, user: { login: 'attacker' } },
+        { id: 7, body: MARKER },
+      ],
+    });
+    const { core, failures } = makeCore();
+    await runScript(
+      script,
+      github,
+      reviewContext(ISSUE_NUMBER),
+      core,
+      requireFn,
+    );
+    expect(calls.updateCalls).toEqual([
+      { owner: OWNER, repo: REPO, comment_id: 7, body: BODY },
+    ]);
+    expect(calls.createCalls).toEqual([]);
+    expect(failures).toEqual([]);
   });
 
   it('compiles as an AsyncFunction (mirrors actions/github-script)', () => {

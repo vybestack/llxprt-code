@@ -1,0 +1,167 @@
+{
+  "date": "2026-10-01",
+  "issue": 3781,
+  "relatedIssue": 3784,
+  "branch": "issue3781",
+  "evidenceDirectory": "tmp/verify3781-gemini-fix",
+  "verificationStatus": "PASSED",
+  "acceptance": "NOT READY",
+  "quality": "FAILED",
+  "productionReady": false,
+  "scope": "Missing optional Gemini plugin test setup, direct CLI registration/request regression, and verified existing Luna smoke profile.",
+  "rootCause": "The optional google-gemini plugin had no plugin-local node_modules. Checkout discovery correctly omitted it; root installation/build and NODE_ENV do not install or register optional plugin contributions.",
+  "setup": {
+    "plugin": "@vybestack/llxprt-plugin-google-gemini",
+    "toolchainVersion": "1.4.2",
+    "toolchainInstallExit": 0,
+    "pluginInstallCommand": "bun install --omit=peer",
+    "pluginInstallDirectory": "plugins/google-gemini",
+    "pluginInstallExit": 0,
+    "cliAndTestRuntimeVersion": "1.3.14",
+    "productionProviderChanges": false,
+    "manifestOrLockfileChanges": false,
+    "originalAssertionsChanged": false,
+    "fallbackOrCompatibilityShimAdded": false
+  },
+  "fullCycle": {
+    "format": 0,
+    "lint": 0,
+    "typecheck": 0,
+    "test": 0,
+    "build": 0,
+    "smoke": 0
+  },
+  "fullCycleLogs": {
+    "status": "tmp/verify3781-gemini-fix/complete-status.txt",
+    "format": "tmp/verify3781-gemini-fix/format-complete.log",
+    "lint": "tmp/verify3781-gemini-fix/lint-complete.log",
+    "typecheck": "tmp/verify3781-gemini-fix/typecheck-complete.log",
+    "test": "tmp/verify3781-gemini-fix/test-complete.log",
+    "build": "tmp/verify3781-gemini-fix/build-complete.log",
+    "smoke": "tmp/verify3781-gemini-fix/smoke-complete.log"
+  },
+  "fullCli": {
+    "files": 765,
+    "passedFiles": 765,
+    "passedCases": 9812,
+    "failedCases": 0,
+    "existingSkippedCases": 5,
+    "existingTodoCases": 13,
+    "newlySkippedOrDisabledTests": false
+  },
+  "focused": {
+    "cliArgs": {
+      "redPass": 11,
+      "redFail": 9,
+      "redExit": 1,
+      "greenPass": 20,
+      "greenFail": 0,
+      "greenExit": 0,
+      "redLog": "tmp/verify3781-gemini-fix/red-exact-cli-args.integration.log",
+      "greenLog": "tmp/verify3781-gemini-fix/green-cli-args.integration.log"
+    },
+    "profileFlag": {
+      "redPass": 8,
+      "redFail": 3,
+      "redExit": 1,
+      "greenPass": 11,
+      "greenFail": 0,
+      "greenExit": 0,
+      "redLog": "tmp/verify3781-gemini-fix/red-exact-cli-args.profile-flag.integration.log",
+      "greenLog": "tmp/verify3781-gemini-fix/green-cli-args.profile-flag.integration.log"
+    },
+    "directCliRequest": {
+      "file": "packages/cli/src/integration-tests/cli-plugin-provider.integration.test.ts",
+      "redPass": 0,
+      "redFail": 1,
+      "redExit": 1,
+      "greenPass": 1,
+      "greenFail": 0,
+      "greenAssertions": 4,
+      "greenExit": 0,
+      "redLog": "tmp/verify3781-gemini-fix/red-plugin-provider.log",
+      "greenLog": "tmp/verify3781-gemini-fix/green-plugin-provider-http-final.log",
+      "behavior": "Real CLI discovers the installed plugin, activates Gemini and sends the selected model to a local HTTP 401 endpoint; error retains endpoint precedence."
+    },
+    "related": {
+      "files": 9,
+      "pass": 144,
+      "fail": 0,
+      "allExitCodes": 0,
+      "status": "tmp/verify3781-gemini-fix/related-status.txt",
+      "summary": "tmp/verify3781-gemini-fix/related-summary.json"
+    }
+  },
+  "smoke": {
+    "profile": "gpt-6-luna",
+    "provider": "codex",
+    "model": "gpt-6-luna",
+    "basis": "Existing ordinary current Luna profile, without the high-reasoning, review or localhost overrides of the other Luna-named profiles.",
+    "inventory": "tmp/verify3781-gemini-fix/profile-inventory.json",
+    "command": "bun scripts/start.ts --profile-load gpt-6-luna \"write me a haiku and nothing else\"",
+    "exit": 0,
+    "response": "Soft rain taps the leaves\nMoonlight pools along the path\nNight holds its breath still",
+    "userProfileOrConfigurationEdited": false
+  },
+  "audit": {
+    "exit": 0,
+    "log": "tmp/verify3781-gemini-fix/test-audit-complete.log",
+    "findings": "tmp/verify3781-gemini-fix/test-audit-complete/findings.tsv",
+    "newTestFindings": [],
+    "newProhibitedFindings": []
+  },
+  "retainedIntermediateOutcomes": {
+    "initialCycle": {
+      "format": 0,
+      "lint": 0,
+      "typecheck": 2,
+      "test": 0,
+      "build": 0,
+      "smoke": 0,
+      "status": "tmp/verify3781-gemini-fix/full-status.txt"
+    },
+    "bunServerImportCycle": {
+      "format": 0,
+      "lint": 1,
+      "typecheck": 2,
+      "build": 0,
+      "smoke": 0,
+      "status": "tmp/verify3781-gemini-fix/final-status.txt"
+    },
+    "httpCleanupFailureExit": 1,
+    "httpCleanupLog": "tmp/verify3781-gemini-fix/green-plugin-provider-http.log",
+    "correction": "Use the established node:http infrastructure API in a Bun test to avoid ambient Bun/fetch type augmentation, and close the listening server once. No compiler/lint enforcement change.",
+    "barePathRedLogs": "Initial bare Bun path filters matched retained pristine-main tests too. Exact-path logs are used for reported baseline counts; no retained worktree was deleted."
+  },
+  "preservation": {
+    "priorF3SourceAndTestsAndFollowupHashesMatch": true,
+    "sourceComparison": "tmp/verify3781-gemini-fix/preserved-source.json",
+    "protectedContractParity": 0,
+    "protectedTreeChanges": false,
+    "enforcementChanges": false,
+    "originalBaseline": "f3839b8810496490f4eaf8513c27e12bd7952809",
+    "originalBaselineIssueComment": "https://github.com/vybestack/llxprt-code/issues/3784#issuecomment-5920954309"
+  },
+  "changedFilesThisTask": [
+    "CONTRIBUTING.md",
+    "plugins/google-gemini/README.md",
+    "packages/cli/src/integration-tests/cli-plugin-provider.integration.test.ts",
+    "project-plans/issue3781/plan.md",
+    "project-plans/issue3781/results.md",
+    "project-plans/issue3781/results-final-reference.md",
+    "project-plans/issue3781/results-gemini-fix.md",
+    "project-plans/issue3781/verification-gemini-fix.json"
+  ],
+  "github": {
+    "verifiedIdentity": "acoliver",
+    "identityLog": "tmp/verify3781-gemini-fix/github-identity.log",
+    "issue3784Update": "https://github.com/vybestack/llxprt-code/issues/3784#issuecomment-5925469569"
+  },
+  "remainingVerificationFailures": [],
+  "acceptanceUnmet": [
+    "Separate representative local-prereview factual quality remains FAILED.",
+    "No trusted Linux Actions prereview proves setup, CPU residency, useful complete output, publication and owned cleanup together.",
+    "Manual pilot remains separate from automatic production; no production promotion."
+  ],
+  "prohibitedActionsPerformed": []
+}

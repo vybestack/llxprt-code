@@ -795,6 +795,32 @@ describe('loadCliConfig', () => {
     vi.restoreAllMocks();
   });
 
+  it.each([
+    { tools: { core: ['replace', 'read_file'] } },
+    { tools: { core: [] }, coreTools: ['apply_patch'] },
+    { tools: { core: ['read_file'] }, coreTools: ['apply_patch'] },
+    { coreTools: ['read_file'] },
+  ])(
+    'honors the configured core tool restriction %j',
+    async (settings: Settings) => {
+      process.argv = ['bun', 'llxprt'];
+      const argv = await parseArguments(settings);
+      const config = await loadCliConfig(
+        settings,
+        [],
+        new ExtensionEnablementManager(
+          ExtensionStorage.getUserExtensionsDir(),
+          argv.extensions,
+        ),
+        'core-tool-restriction',
+        argv,
+      );
+      expect(config.getCoreTools()).toStrictEqual(
+        settings.tools?.core ?? settings.coreTools,
+      );
+    },
+  );
+
   it('should combine and resolve paths from settings and CLI arguments', async () => {
     const mockCwd = path.resolve(path.sep, 'home', 'user', 'project');
     process.argv = [
