@@ -17,8 +17,8 @@
  * and (for wiring) the real AnthropicProvider. No unit under test is mocked.
  */
 
-import { createAnthropicRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
-import { vi, describe, it, expect, afterEach } from 'bun:test';
+import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
+import { describe, it, expect, afterEach } from 'bun:test';
 import type Anthropic from '@anthropic-ai/sdk';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
@@ -189,512 +189,512 @@ function freshRequestContext(): ReturnType<
   );
 }
 
-describe('AnthropicStreamProcessor terminal-event validation (issue #2532)', () => {
-  describe('processor level', () => {
-    it('completes a stream that ends with message_stop and records terminalSeen on the shared commit state', async () => {
-      const request = freshRequestContext();
-      const { chunks, error } = await collect(
-        processAnthropicStream(
-          sse(
-            messageStart,
-            textStart,
-            textDelta('Hello'),
-            textStop,
-            messageDeltaStop,
-            messageStop,
-          ),
-          { ...baseProcessorOptions, commitState: request },
+interface ScriptedAnthropicOptions {
+  readonly scripts: ReadonlyArray<
+    () => AsyncGenerator<Anthropic.MessageStreamEvent>
+  >;
+}
+
+/**
+ * A transport that behaves like AnthropicProvider's streaming path: it
+ * runs the real stream processor and hands it the shared commit state
+ * exactly the way the provider wiring does.
+ */
+function scriptedAnthropicTransport(options: ScriptedAnthropicOptions): {
+  provider: IProvider;
+  calls: () => number;
+} {
+  let calls = 0;
+  const provider: IProvider = {
+    name: 'anthropic-scripted',
+    generateChatCompletion(
+      requestOptions: GenerateChatOptions | AsyncIterable<IContent>,
+    ): AsyncIterableIterator<IContent> {
+      const resolved = isAsyncIterableContents(requestOptions)
+        ? ({ contents: requestOptions } as GenerateChatOptions)
+        : requestOptions;
+      const script =
+        options.scripts[Math.min(calls, options.scripts.length - 1)];
+      calls++;
+      return processAnthropicStream(script(), {
+        ...baseProcessorOptions,
+        commitState: findRequestCommitState(resolved),
+      });
+    },
+    getModels: async () => [],
+    getDefaultModel: () => 'claude-test',
+  };
+  return { provider, calls: () => calls };
+}
+
+function fullStream(): AsyncGenerator<Anthropic.MessageStreamEvent> {
+  return sse(
+    messageStart,
+    textStart,
+    textDelta('Hello'),
+    textStop,
+    messageDeltaStop,
+    messageStop,
+  );
+}
+
+describe('AnthropicStreamProcessor terminal-event validation (issue #2532) > processor level', () => {
+  it('completes a stream that ends with message_stop and records terminalSeen on the shared commit state', async () => {
+    const request = freshRequestContext();
+    const { chunks, error } = await collect(
+      processAnthropicStream(
+        sse(
+          messageStart,
+          textStart,
+          textDelta('Hello'),
+          textStop,
+          messageDeltaStop,
+          messageStop,
         ),
-      );
+        { ...baseProcessorOptions, commitState: request },
+      ),
+    );
 
-      expect(error).toBeUndefined();
-      expect(chunks.length).toBeGreaterThan(0);
-      const state = getRequestCommitState(request);
-      expect(state.terminalSeen).toBe(true);
-      // The processor observes protocol events only; commitment belongs to
-      // the guarded stream that yields outward.
-      expect(state.committed).toBe(false);
-    });
-
-    it('throws a truncated failure when the stream is cut mid-block after output', async () => {
-      const { chunks, error } = await collect(
-        processAnthropicStream(
-          sse(
-            messageStart,
-            textStart,
-            textDelta('Hello'),
-            textStop,
-            // Cut before any terminal signal: no stop_reason, no message_stop.
-          ),
-          baseProcessorOptions,
-        ),
-      );
-
-      expect(chunks.length).toBeGreaterThan(0);
-      expect(error).toBeInstanceOf(StreamTruncatedError);
-      const failure = decodeRetryFailure(error);
-      expect(failure.kind).toBe('truncated');
-      expect(failure.phase).toBe('stream');
-    });
-
-    it('accepts a final stop_reason message_delta as terminal when message_stop is absent', async () => {
-      const request = freshRequestContext();
-      const { chunks, error } = await collect(
-        processAnthropicStream(
-          sse(
-            messageStart,
-            textStart,
-            textDelta('Hello'),
-            textStop,
-            messageDeltaStop,
-          ),
-          { ...baseProcessorOptions, commitState: request },
-        ),
-      );
-
-      // Gateways that end after the final stop_reason (instead of the
-      // first-party message_stop) completed their message: not truncated.
-      expect(error).toBeUndefined();
-      expect(chunks.length).toBeGreaterThan(0);
-      expect(getRequestCommitState(request).terminalSeen).toBe(true);
-    });
-
-    it('treats an empty stream as truncated, not a successful turn', async () => {
-      const { chunks, error } = await collect(
-        processAnthropicStream(sse(), baseProcessorOptions),
-      );
-
-      expect(chunks).toStrictEqual([]);
-      expect(error).toBeInstanceOf(StreamTruncatedError);
-      expect(decodeRetryFailure(error).kind).toBe('truncated');
-    });
-
-    it('does not treat ping as a terminal event', async () => {
-      const { error } = await collect(
-        processAnthropicStream(sse(ping), baseProcessorOptions),
-      );
-
-      expect(error).toBeInstanceOf(StreamTruncatedError);
-    });
-
-    it('throws a malformed failure for input_json_delta without an open tool_use block', async () => {
-      const { error } = await collect(
-        processAnthropicStream(
-          sse(messageStart, jsonDelta('{"city"')),
-          baseProcessorOptions,
-        ),
-      );
-
-      expect(error).toBeInstanceOf(MalformedStreamEventError);
-      const failure = decodeRetryFailure(error);
-      expect(failure.kind).toBe('malformed');
-      expect(failure.phase).toBe('protocol');
-    });
-
-    it('still accepts input_json_delta while a tool_use block is open', async () => {
-      const { error } = await collect(
-        processAnthropicStream(
-          sse(
-            messageStart,
-            toolStart,
-            jsonDelta('{"city":"SF"}'),
-            toolStop,
-            messageStop,
-          ),
-          baseProcessorOptions,
-        ),
-      );
-
-      expect(error).toBeUndefined();
-    });
+    expect(error).toBeUndefined();
+    expect(chunks.length).toBeGreaterThan(0);
+    const state = getRequestCommitState(request);
+    expect(state.terminalSeen).toBe(true);
+    // The processor observes protocol events only; commitment belongs to
+    // the guarded stream that yields outward.
+    expect(state.committed).toBe(false);
   });
 
-  describe('composed with the retry orchestrator', () => {
-    interface ScriptedAnthropicOptions {
-      readonly scripts: ReadonlyArray<
-        () => AsyncGenerator<Anthropic.MessageStreamEvent>
-      >;
-    }
+  it('throws a truncated failure when the stream is cut mid-block after output', async () => {
+    const { chunks, error } = await collect(
+      processAnthropicStream(
+        sse(
+          messageStart,
+          textStart,
+          textDelta('Hello'),
+          textStop,
+          // Cut before any terminal signal: no stop_reason, no message_stop.
+        ),
+        baseProcessorOptions,
+      ),
+    );
 
-    /**
-     * A transport that behaves like AnthropicProvider's streaming path: it
-     * runs the real stream processor and hands it the shared commit state
-     * exactly the way the provider wiring does.
-     */
-    function scriptedAnthropicTransport(options: ScriptedAnthropicOptions): {
-      provider: IProvider;
-      calls: () => number;
-    } {
-      let calls = 0;
-      const provider: IProvider = {
-        name: 'anthropic-scripted',
-        generateChatCompletion(
-          requestOptions: GenerateChatOptions | AsyncIterable<IContent>,
-        ): AsyncIterableIterator<IContent> {
-          const resolved = isAsyncIterableContents(requestOptions)
-            ? ({ contents: requestOptions } as GenerateChatOptions)
-            : requestOptions;
-          const script =
-            options.scripts[Math.min(calls, options.scripts.length - 1)];
-          calls++;
-          return processAnthropicStream(script(), {
-            ...baseProcessorOptions,
-            commitState: findRequestCommitState(resolved),
-          });
-        },
-        getModels: async () => [],
-        getDefaultModel: () => 'claude-test',
-      };
-      return { provider, calls: () => calls };
-    }
+    expect(chunks.length).toBeGreaterThan(0);
+    expect(error).toBeInstanceOf(StreamTruncatedError);
+    const failure = decodeRetryFailure(error);
+    expect(failure.kind).toBe('truncated');
+    expect(failure.phase).toBe('stream');
+  });
 
-    function fullStream(): AsyncGenerator<Anthropic.MessageStreamEvent> {
-      return sse(
-        messageStart,
-        textStart,
-        textDelta('Hello'),
-        textStop,
-        messageDeltaStop,
-        messageStop,
-      );
-    }
+  it('accepts a final stop_reason message_delta as terminal when message_stop is absent', async () => {
+    const request = freshRequestContext();
+    const { chunks, error } = await collect(
+      processAnthropicStream(
+        sse(
+          messageStart,
+          textStart,
+          textDelta('Hello'),
+          textStop,
+          messageDeltaStop,
+        ),
+        { ...baseProcessorOptions, commitState: request },
+      ),
+    );
 
-    it('usage metadata then connection reset: committed, never replayed', async () => {
-      const { provider, calls } = scriptedAnthropicTransport({
-        scripts: [
-          () => sseThenThrow([messageStart], connectionResetError()),
-          fullStream,
-        ],
-      });
-      const orchestrator = new RetryOrchestrator(provider, {
-        maxAttempts: 3,
-        initialDelayMs: 1,
-      });
+    // Gateways that end after the final stop_reason (instead of the
+    // first-party message_stop) completed their message: not truncated.
+    expect(error).toBeUndefined();
+    expect(chunks.length).toBeGreaterThan(0);
+    expect(getRequestCommitState(request).terminalSeen).toBe(true);
+  });
+});
 
-      const { chunks, error } = await collect(
-        orchestrator.generateChatCompletion({
-          contents: replayableContents([]),
-        }),
-      );
+describe('AnthropicStreamProcessor terminal-event validation (issue #2532) > malformed and empty streams', () => {
+  it('treats an empty stream as truncated, not a successful turn', async () => {
+    const { chunks, error } = await collect(
+      processAnthropicStream(sse(), baseProcessorOptions),
+    );
 
-      expect(calls()).toBe(1);
-      expect(chunks.length).toBe(1);
-      expect(chunks[0]?.blocks).toStrictEqual([]);
-      expect(chunks[0]?.metadata?.usage).toBeDefined();
-      expect(error).toBeDefined();
-      expect(isTerminalRetryError(error)).toBe(true);
-    });
+    expect(chunks).toStrictEqual([]);
+    expect(error).toBeInstanceOf(StreamTruncatedError);
+    expect(decodeRetryFailure(error).kind).toBe('truncated');
+  });
 
-    it('malformed event after partial output: terminal, never replayed', async () => {
-      const { provider, calls } = scriptedAnthropicTransport({
-        // Text escapes, then a protocol violation (json delta with no open
-        // tool block) arrives; the malformed error is terminal because the
-        // request already committed.
-        scripts: [
-          () =>
-            sse(messageStart, textStart, textDelta('Hi'), jsonDelta('{"oops"')),
-        ],
-      });
-      const orchestrator = new RetryOrchestrator(provider, {
-        maxAttempts: 3,
-        initialDelayMs: 1,
-      });
+  it('does not treat ping as a terminal event', async () => {
+    const { error } = await collect(
+      processAnthropicStream(sse(ping), baseProcessorOptions),
+    );
 
-      const { chunks, error } = await collect(
-        orchestrator.generateChatCompletion({
-          contents: replayableContents([]),
-        }),
-      );
+    expect(error).toBeInstanceOf(StreamTruncatedError);
+  });
 
-      expect(calls()).toBe(1);
-      expect(chunks.length).toBeGreaterThan(0);
-      expect(error).toBeInstanceOf(MalformedStreamEventError);
-      expect(isTerminalRetryError(error)).toBe(true);
-    });
+  it('throws a malformed failure for input_json_delta without an open tool_use block', async () => {
+    const { error } = await collect(
+      processAnthropicStream(
+        sse(messageStart, jsonDelta('{"city"')),
+        baseProcessorOptions,
+      ),
+    );
 
-    it('HTTP-200 in-band overload before any output: retried within budget', async () => {
-      const { provider, calls } = scriptedAnthropicTransport({
-        scripts: [() => sseThenThrow([], inBandOverloadError()), fullStream],
-      });
-      const orchestrator = new RetryOrchestrator(provider, {
-        maxAttempts: 3,
-        initialDelayMs: 1,
-      });
+    expect(error).toBeInstanceOf(MalformedStreamEventError);
+    const failure = decodeRetryFailure(error);
+    expect(failure.kind).toBe('malformed');
+    expect(failure.phase).toBe('protocol');
+  });
 
-      const { chunks, error } = await collect(
-        orchestrator.generateChatCompletion({
-          contents: replayableContents([]),
-        }),
-      );
-
-      expect(error).toBeUndefined();
-      expect(calls()).toBe(2);
-      const text = chunks
-        .flatMap((c) => c.blocks)
-        .find((b) => b.type === 'text');
-      expect(text).toBeDefined();
-    });
-
-    it('HTTP-200 in-band overload after usage metadata: never replayed', async () => {
-      const { provider, calls } = scriptedAnthropicTransport({
-        scripts: [
-          () => sseThenThrow([messageStart], inBandOverloadError()),
-          fullStream,
-        ],
-      });
-      const orchestrator = new RetryOrchestrator(provider, {
-        maxAttempts: 3,
-        initialDelayMs: 1,
-      });
-
-      const { chunks, error } = await collect(
-        orchestrator.generateChatCompletion({
-          contents: replayableContents([]),
-        }),
-      );
-
-      expect(calls()).toBe(1);
-      expect(chunks.length).toBe(1);
-      expect(error).toBeDefined();
-      expect(isTerminalRetryError(error)).toBe(true);
-    });
-
-    it('HTTP-200 in-band overload after text: never replayed', async () => {
-      const { provider, calls } = scriptedAnthropicTransport({
-        scripts: [
-          () =>
-            sseThenThrow(
-              [messageStart, textStart, textDelta('partial')],
-              inBandOverloadError(),
-            ),
-          fullStream,
-        ],
-      });
-      const orchestrator = new RetryOrchestrator(provider, {
-        maxAttempts: 3,
-        initialDelayMs: 1,
-      });
-
-      const { chunks, error } = await collect(
-        orchestrator.generateChatCompletion({
-          contents: replayableContents([]),
-        }),
-      );
-
-      expect(calls()).toBe(1);
-      expect(error).toBeDefined();
-      expect(isTerminalRetryError(error)).toBe(true);
-      const text = chunks
-        .flatMap((c) => c.blocks)
-        .find((b) => b.type === 'text');
-      expect(text).toBeDefined();
-    });
-
-    it('truncated stream before any output: retried within budget', async () => {
-      const { provider, calls } = scriptedAnthropicTransport({
-        scripts: [() => sse(), fullStream],
-      });
-      const orchestrator = new RetryOrchestrator(provider, {
-        maxAttempts: 3,
-        initialDelayMs: 1,
-      });
-
-      const { chunks, error } = await collect(
-        orchestrator.generateChatCompletion({
-          contents: replayableContents([]),
-        }),
-      );
-
-      expect(error).toBeUndefined();
-      expect(calls()).toBe(2);
-      const text = chunks
-        .flatMap((c) => c.blocks)
-        .find((b) => b.type === 'text');
-      expect(text).toBeDefined();
-    });
-
-    it('truncated stream after partial output: surfaces the failure, never committed as success', async () => {
-      const { provider, calls } = scriptedAnthropicTransport({
-        scripts: [
-          () => sse(messageStart, textStart, textDelta('partial'), textStop),
-          fullStream,
-        ],
-      });
-      const orchestrator = new RetryOrchestrator(provider, {
-        maxAttempts: 3,
-        initialDelayMs: 1,
-      });
-
-      const { chunks, error } = await collect(
-        orchestrator.generateChatCompletion({
-          contents: replayableContents([]),
-        }),
-      );
-
-      expect(calls()).toBe(1);
-      expect(error).toBeInstanceOf(StreamTruncatedError);
-      expect(isTerminalRetryError(error)).toBe(true);
-      const text = chunks
-        .flatMap((c) => c.blocks)
-        .find((b) => b.type === 'text');
-      expect(text).toBeDefined();
-    });
-
-    it('partial thinking then failure: committed, never replayed', async () => {
-      const { provider, calls } = scriptedAnthropicTransport({
-        scripts: [
-          () =>
-            sseThenThrow(
-              [messageStart, thinkingStart, thinkingDelta('let me think')],
-              connectionResetError(),
-            ),
-          fullStream,
-        ],
-      });
-      const orchestrator = new RetryOrchestrator(provider, {
-        maxAttempts: 3,
-        initialDelayMs: 1,
-      });
-
-      const { chunks, error } = await collect(
-        orchestrator.generateChatCompletion({
-          contents: replayableContents([]),
-        }),
-      );
-
-      expect(calls()).toBe(1);
-      expect(error).toBeDefined();
-      expect(isTerminalRetryError(error)).toBe(true);
-      const thinking = chunks
-        .flatMap((c) => c.blocks)
-        .find((b) => b.type === 'thinking');
-      expect(thinking).toBeDefined();
-    });
-
-    it('completed tool call then failure: committed, never replayed', async () => {
-      const { provider, calls } = scriptedAnthropicTransport({
-        scripts: [
-          () =>
-            sseThenThrow(
-              [messageStart, toolStart, jsonDelta('{"city":"SF"}'), toolStop],
-              connectionResetError(),
-            ),
-          fullStream,
-        ],
-      });
-      const orchestrator = new RetryOrchestrator(provider, {
-        maxAttempts: 3,
-        initialDelayMs: 1,
-      });
-
-      const { chunks, error } = await collect(
-        orchestrator.generateChatCompletion({
-          contents: replayableContents([]),
-        }),
-      );
-
-      expect(calls()).toBe(1);
-      expect(error).toBeDefined();
-      expect(isTerminalRetryError(error)).toBe(true);
-      const toolCall = chunks
-        .flatMap((c) => c.blocks)
-        .find((b) => b.type === 'tool_call');
-      expect(toolCall).toBeDefined();
-    });
-
-    it('tool assembly interrupted before any emission: nothing escaped, replay allowed', async () => {
-      const fullToolStream = () =>
+  it('still accepts input_json_delta while a tool_use block is open', async () => {
+    const { error } = await collect(
+      processAnthropicStream(
         sse(
           messageStart,
           toolStart,
           jsonDelta('{"city":"SF"}'),
           toolStop,
-          messageDeltaStop,
           messageStop,
-        );
-      const { provider, calls } = scriptedAnthropicTransport({
-        scripts: [
-          () =>
-            sseThenThrow(
-              // No message_start: tool assembly alone emits nothing outward.
-              [toolStart, jsonDelta('{"city"')],
-              connectionResetError(),
-            ),
-          fullToolStream,
-        ],
-      });
-      const orchestrator = new RetryOrchestrator(provider, {
-        maxAttempts: 3,
-        initialDelayMs: 1,
-      });
+        ),
+        baseProcessorOptions,
+      ),
+    );
 
-      const { chunks, error } = await collect(
-        orchestrator.generateChatCompletion({
-          contents: replayableContents([]),
-        }),
-      );
+    expect(error).toBeUndefined();
+  });
+});
 
-      expect(error).toBeUndefined();
-      expect(calls()).toBe(2);
-      const toolCall = chunks
-        .flatMap((c) => c.blocks)
-        .find((b) => b.type === 'tool_call');
-      expect(toolCall).toBeDefined();
+describe('AnthropicStreamProcessor terminal-event validation (issue #2532) > composed with the retry orchestrator', () => {
+  it('usage metadata then connection reset: committed, never replayed', async () => {
+    const { provider, calls } = scriptedAnthropicTransport({
+      scripts: [
+        () => sseThenThrow([messageStart], connectionResetError()),
+        fullStream,
+      ],
     });
+    const orchestrator = new RetryOrchestrator(provider, {
+      maxAttempts: 3,
+      initialDelayMs: 1,
+    });
+
+    const { chunks, error } = await collect(
+      orchestrator.generateChatCompletion({
+        contents: replayableContents([]),
+      }),
+    );
+
+    expect(calls()).toBe(1);
+    expect(chunks.length).toBe(1);
+    expect(chunks[0]?.blocks).toStrictEqual([]);
+    expect(chunks[0]?.metadata?.usage).toBeDefined();
+    expect(error).toBeDefined();
+    expect(isTerminalRetryError(error)).toBe(true);
   });
 
-  describe('AnthropicProvider wiring', () => {
-    const mockMessagesCreate = vi.fn();
-
-    void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
-      getCoreSystemPromptAsync: vi.fn(
-        async () => "You are Claude Code, Anthropic's official CLI for Claude.",
-      ),
-    }));
-
-    void vi.mock('@anthropic-ai/sdk', () => ({
-      default: vi.fn().mockImplementation(() => ({
-        ...createAnthropicRawPostTestAdapter(mockMessagesCreate),
-        messages: { create: mockMessagesCreate },
-      })),
-    }));
-
-    afterEach(() => {
-      clearActiveProviderRuntimeContext();
-      vi.clearAllMocks();
+  it('malformed event after partial output: terminal, never replayed', async () => {
+    const { provider, calls } = scriptedAnthropicTransport({
+      // Text escapes, then a protocol violation (json delta with no open
+      // tool block) arrives; the malformed error is terminal because the
+      // request already committed.
+      scripts: [
+        () =>
+          sse(messageStart, textStart, textDelta('Hi'), jsonDelta('{"oops"')),
+      ],
+    });
+    const orchestrator = new RetryOrchestrator(provider, {
+      maxAttempts: 3,
+      initialDelayMs: 1,
     });
 
-    it('marks terminalSeen on the shared request commit state through the real provider stream', async () => {
-      const setup: AnthropicTestSetup = setupAnthropicProvider();
-      const provider = setup.provider;
+    const { chunks, error } = await collect(
+      orchestrator.generateChatCompletion({
+        contents: replayableContents([]),
+      }),
+    );
 
-      mockMessagesCreate.mockResolvedValue(
-        (async function* () {
-          yield messageStart;
-          yield textStart;
-          yield textDelta('Hello');
-          yield textStop;
-          yield messageDeltaStop;
-          yield messageStop;
-        })(),
-      );
+    expect(calls()).toBe(1);
+    expect(chunks.length).toBeGreaterThan(0);
+    expect(error).toBeInstanceOf(MalformedStreamEventError);
+    expect(isTerminalRetryError(error)).toBe(true);
+  });
+});
 
-      const orchestrator = new RetryOrchestrator(provider, {
-        maxAttempts: 2,
-        initialDelayMs: 1,
-      });
-      const request = resolveRetryRequestContext(setup.buildCallOptions([]), {
-        maxAttempts: 2,
-        initialDelayMs: 1,
-        authRetryTimeoutMs: 0,
-      });
-
-      const { error } = await collect(
-        orchestrator.generateChatCompletion(request.options),
-      );
-
-      expect(error).toBeUndefined();
-      expect(getRequestCommitState(request).terminalSeen).toBe(true);
+describe('AnthropicStreamProcessor terminal-event validation (issue #2532) > overload retry boundaries', () => {
+  it('HTTP-200 in-band overload before any output: retried within budget', async () => {
+    const { provider, calls } = scriptedAnthropicTransport({
+      scripts: [() => sseThenThrow([], inBandOverloadError()), fullStream],
     });
+    const orchestrator = new RetryOrchestrator(provider, {
+      maxAttempts: 3,
+      initialDelayMs: 1,
+    });
+
+    const { chunks, error } = await collect(
+      orchestrator.generateChatCompletion({
+        contents: replayableContents([]),
+      }),
+    );
+
+    expect(error).toBeUndefined();
+    expect(calls()).toBe(2);
+    const text = chunks.flatMap((c) => c.blocks).find((b) => b.type === 'text');
+    expect(text).toBeDefined();
+  });
+
+  it('HTTP-200 in-band overload after usage metadata: never replayed', async () => {
+    const { provider, calls } = scriptedAnthropicTransport({
+      scripts: [
+        () => sseThenThrow([messageStart], inBandOverloadError()),
+        fullStream,
+      ],
+    });
+    const orchestrator = new RetryOrchestrator(provider, {
+      maxAttempts: 3,
+      initialDelayMs: 1,
+    });
+
+    const { chunks, error } = await collect(
+      orchestrator.generateChatCompletion({
+        contents: replayableContents([]),
+      }),
+    );
+
+    expect(calls()).toBe(1);
+    expect(chunks.length).toBe(1);
+    expect(error).toBeDefined();
+    expect(isTerminalRetryError(error)).toBe(true);
+  });
+});
+
+describe('AnthropicStreamProcessor terminal-event validation (issue #2532) > partial output and truncated retry', () => {
+  it('HTTP-200 in-band overload after text: never replayed', async () => {
+    const { provider, calls } = scriptedAnthropicTransport({
+      scripts: [
+        () =>
+          sseThenThrow(
+            [messageStart, textStart, textDelta('partial')],
+            inBandOverloadError(),
+          ),
+        fullStream,
+      ],
+    });
+    const orchestrator = new RetryOrchestrator(provider, {
+      maxAttempts: 3,
+      initialDelayMs: 1,
+    });
+
+    const { chunks, error } = await collect(
+      orchestrator.generateChatCompletion({
+        contents: replayableContents([]),
+      }),
+    );
+
+    expect(calls()).toBe(1);
+    expect(error).toBeDefined();
+    expect(isTerminalRetryError(error)).toBe(true);
+    const text = chunks.flatMap((c) => c.blocks).find((b) => b.type === 'text');
+    expect(text).toBeDefined();
+  });
+
+  it('truncated stream before any output: retried within budget', async () => {
+    const { provider, calls } = scriptedAnthropicTransport({
+      scripts: [() => sse(), fullStream],
+    });
+    const orchestrator = new RetryOrchestrator(provider, {
+      maxAttempts: 3,
+      initialDelayMs: 1,
+    });
+
+    const { chunks, error } = await collect(
+      orchestrator.generateChatCompletion({
+        contents: replayableContents([]),
+      }),
+    );
+
+    expect(error).toBeUndefined();
+    expect(calls()).toBe(2);
+    const text = chunks.flatMap((c) => c.blocks).find((b) => b.type === 'text');
+    expect(text).toBeDefined();
+  });
+});
+
+describe('AnthropicStreamProcessor terminal-event validation (issue #2532) > committed failures', () => {
+  it('truncated stream after partial output: surfaces the failure, never committed as success', async () => {
+    const { provider, calls } = scriptedAnthropicTransport({
+      scripts: [
+        () => sse(messageStart, textStart, textDelta('partial'), textStop),
+        fullStream,
+      ],
+    });
+    const orchestrator = new RetryOrchestrator(provider, {
+      maxAttempts: 3,
+      initialDelayMs: 1,
+    });
+
+    const { chunks, error } = await collect(
+      orchestrator.generateChatCompletion({
+        contents: replayableContents([]),
+      }),
+    );
+
+    expect(calls()).toBe(1);
+    expect(error).toBeInstanceOf(StreamTruncatedError);
+    expect(isTerminalRetryError(error)).toBe(true);
+    const text = chunks.flatMap((c) => c.blocks).find((b) => b.type === 'text');
+    expect(text).toBeDefined();
+  });
+
+  it('partial thinking then failure: committed, never replayed', async () => {
+    const { provider, calls } = scriptedAnthropicTransport({
+      scripts: [
+        () =>
+          sseThenThrow(
+            [messageStart, thinkingStart, thinkingDelta('let me think')],
+            connectionResetError(),
+          ),
+        fullStream,
+      ],
+    });
+    const orchestrator = new RetryOrchestrator(provider, {
+      maxAttempts: 3,
+      initialDelayMs: 1,
+    });
+
+    const { chunks, error } = await collect(
+      orchestrator.generateChatCompletion({
+        contents: replayableContents([]),
+      }),
+    );
+
+    expect(calls()).toBe(1);
+    expect(error).toBeDefined();
+    expect(isTerminalRetryError(error)).toBe(true);
+    const thinking = chunks
+      .flatMap((c) => c.blocks)
+      .find((b) => b.type === 'thinking');
+    expect(thinking).toBeDefined();
+  });
+});
+
+describe('AnthropicStreamProcessor terminal-event validation (issue #2532) > tool call retry boundaries', () => {
+  it('completed tool call then failure: committed, never replayed', async () => {
+    const { provider, calls } = scriptedAnthropicTransport({
+      scripts: [
+        () =>
+          sseThenThrow(
+            [messageStart, toolStart, jsonDelta('{"city":"SF"}'), toolStop],
+            connectionResetError(),
+          ),
+        fullStream,
+      ],
+    });
+    const orchestrator = new RetryOrchestrator(provider, {
+      maxAttempts: 3,
+      initialDelayMs: 1,
+    });
+
+    const { chunks, error } = await collect(
+      orchestrator.generateChatCompletion({
+        contents: replayableContents([]),
+      }),
+    );
+
+    expect(calls()).toBe(1);
+    expect(error).toBeDefined();
+    expect(isTerminalRetryError(error)).toBe(true);
+    const toolCall = chunks
+      .flatMap((c) => c.blocks)
+      .find((b) => b.type === 'tool_call');
+    expect(toolCall).toBeDefined();
+  });
+
+  it('tool assembly interrupted before any emission: nothing escaped, replay allowed', async () => {
+    const fullToolStream = () =>
+      sse(
+        messageStart,
+        toolStart,
+        jsonDelta('{"city":"SF"}'),
+        toolStop,
+        messageDeltaStop,
+        messageStop,
+      );
+    const { provider, calls } = scriptedAnthropicTransport({
+      scripts: [
+        () =>
+          sseThenThrow(
+            // No message_start: tool assembly alone emits nothing outward.
+            [toolStart, jsonDelta('{"city"')],
+            connectionResetError(),
+          ),
+        fullToolStream,
+      ],
+    });
+    const orchestrator = new RetryOrchestrator(provider, {
+      maxAttempts: 3,
+      initialDelayMs: 1,
+    });
+
+    const { chunks, error } = await collect(
+      orchestrator.generateChatCompletion({
+        contents: replayableContents([]),
+      }),
+    );
+
+    expect(error).toBeUndefined();
+    expect(calls()).toBe(2);
+    const toolCall = chunks
+      .flatMap((c) => c.blocks)
+      .find((b) => b.type === 'tool_call');
+    expect(toolCall).toBeDefined();
+  });
+});
+
+describe('AnthropicStreamProcessor terminal-event validation (issue #2532) > AnthropicProvider wiring', () => {
+  afterEach(() => {
+    restoreGlobals();
+    clearActiveProviderRuntimeContext();
+  });
+
+  it('marks terminalSeen on the shared request commit state through the real provider stream', async () => {
+    const setup: AnthropicTestSetup = setupAnthropicProvider();
+    const provider = setup.provider;
+
+    setGlobal(
+      'fetch',
+      async () =>
+        new Response(
+          [
+            messageStart,
+            textStart,
+            textDelta('Hello'),
+            textStop,
+            messageDeltaStop,
+            messageStop,
+          ]
+            .map(
+              (event) => `event: ${event.type}
+data: ${JSON.stringify(event)}
+
+`,
+            )
+            .join(''),
+          {
+            status: 200,
+            headers: { 'content-type': 'text/event-stream' },
+          },
+        ),
+    );
+
+    const orchestrator = new RetryOrchestrator(provider, {
+      maxAttempts: 2,
+      initialDelayMs: 1,
+    });
+    const request = resolveRetryRequestContext(setup.buildCallOptions([]), {
+      maxAttempts: 2,
+      initialDelayMs: 1,
+      authRetryTimeoutMs: 0,
+    });
+
+    const { error } = await collect(
+      orchestrator.generateChatCompletion(request.options),
+    );
+
+    expect(error).toBeUndefined();
+    expect(getRequestCommitState(request).terminalSeen).toBe(true);
   });
 });

@@ -8,7 +8,7 @@ import {
   assertInstanceOf,
   errorMessage,
 } from '@vybestack/llxprt-code-test-utils';
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, vi } from 'bun:test';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
@@ -41,6 +41,32 @@ function buildPrepared(
   };
 }
 
+async function installSingleRetry(): Promise<() => void> {
+  const previousRetry = {
+    ...(await import('@vybestack/llxprt-code-core/utils/retry.js')),
+  };
+  void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
+    ...previousRetry,
+    retryWithBackoff: async <T>(
+      fn: () => Promise<T>,
+      options: { shouldRetryOnError: (error: unknown) => boolean },
+    ): Promise<T> => {
+      try {
+        return await fn();
+      } catch (error: unknown) {
+        if (!options.shouldRetryOnError(error)) throw error;
+        return fn();
+      }
+    },
+  }));
+  return () => {
+    void vi.mock(
+      '@vybestack/llxprt-code-core/utils/retry.js',
+      () => previousRetry,
+    );
+  };
+}
+
 describe('bindPreparedTransportSignal', () => {
   it('immutably binds the timeout signal while preserving prepared transport identity', () => {
     const callerSignal = new AbortController().signal;
@@ -61,405 +87,449 @@ describe('bindPreparedTransportSignal', () => {
 });
 
 describe('preparePromptEnvelopeAfterEnforcement', () => {
-  it('estimates enforcement candidates via the provider projection and prepares only the selected history', async () => {
-    const firstCandidate: IContent[] = [
-      { speaker: 'human', blocks: [{ type: 'text', text: 'first' }] },
-    ];
-    const selectedCandidate: IContent[] = [
-      ...firstCandidate,
-      { speaker: 'ai', blocks: [{ type: 'text', text: 'selected' }] },
-    ];
-    const projectedContents: IContent[][] = [];
-    const provider: IProvider = {
-      name: 'candidate-estimation-provider',
-      getModels: () => Promise.resolve([]),
-      getServerTools: () => [],
-      invokeServerTool: () => Promise.resolve(undefined),
-      async *generateChatCompletion(): AsyncIterableIterator<IContent> {
-        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'unused' }] };
-      },
-      projectPromptEnvelope(
-        options: GenerateChatOptions,
-      ): Promise<PromptEnvelopeProjection> {
-        projectedContents.push(options.contents);
-        return Promise.resolve({
-          model: 'test-model',
-          protocol: 'anthropic-messages',
-          method: 'messages/v1',
-          projectionRevision: 1,
-          unsupportedMedia: [],
-          transportToken: Object.freeze({}),
-          finalizedProjection: options.contents,
-          legacyEstimate: () => Promise.resolve(options.contents.length + 1000),
-        });
-      },
-    };
-    const runtime = createChatSessionRuntime({ provider });
-    const candidateEstimates: number[] = [];
+  it(
+    'estimates enforcement candidates via the provider projection and prepares only the selected history',
+    testPromptEnvelope1,
+  );
+  it(
+    'falls back to the contents-only estimator when the provider lacks projectPromptEnvelope',
+    testPromptEnvelope2,
+  );
+  it(
+    'falls back to the contents-only estimator when the provider resolves an undefined projection',
+    testPromptEnvelope3,
+  );
+  it(
+    'releases candidate projections when enforcement rejects',
+    testPromptEnvelope4,
+  );
+  it(
+    'releases non-kept enforcement-candidate projections on success while the kept projection stays reserved for transport',
+    testPromptEnvelope5,
+  );
+  it(
+    'awaits projection cleanup before an estimation failure escapes',
+    testPromptEnvelope6,
+  );
+  it('does not prepare or send when enforcement rejects', testPromptEnvelope7);
+  it(
+    'does not release a projection consumed by a successful send',
+    testPromptEnvelope8,
+  );
+  it(
+    'prepares a fresh projection for a retry and releases the prior unsent projection',
+    testPromptEnvelope9,
+    10_000,
+  );
+  it(
+    'releases every unsent projection and aggregates cleanup failures',
+    testPromptEnvelope10,
+  );
+  it(
+    'prepares a fresh projection after releasing the prior projection for the same contents',
+    testPromptEnvelope11,
+  );
+});
 
-    const result = await preparePromptEnvelopeAfterEnforcement({
-      provider,
-      contents: firstCandidate,
-      buildOptions: (contents) => ({ contents, config: runtime.config }),
-      enforce: async (_contents, estimate) => {
-        candidateEstimates.push(await estimate(firstCandidate));
-        candidateEstimates.push(await estimate(selectedCandidate));
-        return selectedCandidate;
-      },
-      fallbackEstimate: (contents) => Promise.resolve(contents.length),
-    });
+async function testPromptEnvelope1(): Promise<void> {
+  const firstCandidate: IContent[] = [
+    { speaker: 'human', blocks: [{ type: 'text', text: 'first' }] },
+  ];
+  const selectedCandidate: IContent[] = [
+    ...firstCandidate,
+    { speaker: 'ai', blocks: [{ type: 'text', text: 'selected' }] },
+  ];
+  const projectedContents: IContent[][] = [];
+  const provider: IProvider = {
+    name: 'candidate-estimation-provider',
+    getModels: () => Promise.resolve([]),
+    getServerTools: () => [],
+    invokeServerTool: () => Promise.resolve(undefined),
+    async *generateChatCompletion(): AsyncIterableIterator<IContent> {
+      yield { speaker: 'ai', blocks: [{ type: 'text', text: 'unused' }] };
+    },
+    projectPromptEnvelope(
+      options: GenerateChatOptions,
+    ): Promise<PromptEnvelopeProjection> {
+      projectedContents.push(options.contents);
+      return Promise.resolve({
+        model: 'test-model',
+        protocol: 'anthropic-messages',
+        method: 'messages/v1',
+        projectionRevision: 1,
+        unsupportedMedia: [],
+        transportToken: Object.freeze({}),
+        finalizedProjection: options.contents,
+        legacyEstimate: () => Promise.resolve(options.contents.length + 1000),
+      });
+    },
+  };
+  const runtime = createChatSessionRuntime({ provider });
+  const candidateEstimates: number[] = [];
 
-    // The estimator receives the projection's finalized-envelope estimate
-    // (legacyEstimate 1001/1002), never the contents-only fallback (1/2):
-    // issue #3507 AC2 restores #2817's projection-aware estimator.
-    expect(candidateEstimates).toStrictEqual([1001, 1002]);
-    // Each estimated candidate is projected once; the selected history's
-    // final prepare reuses the cached projection instead of re-projecting.
-    expect(projectedContents).toStrictEqual([
-      firstCandidate,
-      selectedCandidate,
-    ]);
-    expect(result.contents).toBe(selectedCandidate);
-    expect(result.prepared.options.contents).toBe(selectedCandidate);
+  const result = await preparePromptEnvelopeAfterEnforcement({
+    provider,
+    contents: firstCandidate,
+    buildOptions: (contents) => ({ contents, config: runtime.config }),
+    enforce: async (_contents, estimate) => {
+      candidateEstimates.push(await estimate(firstCandidate));
+      candidateEstimates.push(await estimate(selectedCandidate));
+      return selectedCandidate;
+    },
+    fallbackEstimate: (contents) => Promise.resolve(contents.length),
   });
 
-  it('falls back to the contents-only estimator when the provider lacks projectPromptEnvelope', async () => {
-    const candidate: IContent[] = [
-      { speaker: 'human', blocks: [{ type: 'text', text: 'candidate' }] },
-    ];
-    const provider: IProvider = {
-      name: 'no-projection-provider',
-      getModels: () => Promise.resolve([]),
-      getServerTools: () => [],
-      invokeServerTool: () => Promise.resolve(undefined),
-      async *generateChatCompletion(): AsyncIterableIterator<IContent> {
-        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'unused' }] };
-      },
-    };
-    const runtime = createChatSessionRuntime({ provider });
-    const candidateEstimates: number[] = [];
+  // The estimator receives the projection's finalized-envelope estimate
+  // (legacyEstimate 1001/1002), never the contents-only fallback (1/2):
+  // issue #3507 AC2 restores #2817's projection-aware estimator.
+  expect(candidateEstimates).toStrictEqual([1001, 1002]);
+  // Each estimated candidate is projected once; the selected history's
+  // final prepare reuses the cached projection instead of re-projecting.
+  expect(projectedContents).toStrictEqual([firstCandidate, selectedCandidate]);
+  expect(result.contents).toBe(selectedCandidate);
+  expect(result.prepared.options.contents).toBe(selectedCandidate);
+}
 
-    const result = await preparePromptEnvelopeAfterEnforcement({
+async function testPromptEnvelope2(): Promise<void> {
+  const candidate: IContent[] = [
+    { speaker: 'human', blocks: [{ type: 'text', text: 'candidate' }] },
+  ];
+  const provider: IProvider = {
+    name: 'no-projection-provider',
+    getModels: () => Promise.resolve([]),
+    getServerTools: () => [],
+    invokeServerTool: () => Promise.resolve(undefined),
+    async *generateChatCompletion(): AsyncIterableIterator<IContent> {
+      yield { speaker: 'ai', blocks: [{ type: 'text', text: 'unused' }] };
+    },
+  };
+  const runtime = createChatSessionRuntime({ provider });
+  const candidateEstimates: number[] = [];
+
+  const result = await preparePromptEnvelopeAfterEnforcement({
+    provider,
+    contents: candidate,
+    buildOptions: (contents) => ({ contents, config: runtime.config }),
+    enforce: async (contents, estimate) => {
+      candidateEstimates.push(await estimate(contents));
+      return contents;
+    },
+    fallbackEstimate: (contents) => Promise.resolve(contents.length + 500),
+  });
+
+  // Fallback-only providers keep the contents-only enforcement estimate
+  // and a null seam estimate (issue #3507 AC2 fallback branch).
+  expect(candidateEstimates).toStrictEqual([501]);
+  expect(result.prepared.estimate).toBeNull();
+}
+
+async function testPromptEnvelope3(): Promise<void> {
+  const candidate: IContent[] = [
+    { speaker: 'human', blocks: [{ type: 'text', text: 'candidate' }] },
+  ];
+  const provider: IProvider = {
+    name: 'undefined-projection-provider',
+    getModels: () => Promise.resolve([]),
+    getServerTools: () => [],
+    invokeServerTool: () => Promise.resolve(undefined),
+    async *generateChatCompletion(): AsyncIterableIterator<IContent> {
+      yield { speaker: 'ai', blocks: [{ type: 'text', text: 'unused' }] };
+    },
+    projectPromptEnvelope: () => Promise.resolve(undefined),
+  };
+  const runtime = createChatSessionRuntime({ provider });
+  const candidateEstimates: number[] = [];
+
+  const result = await preparePromptEnvelopeAfterEnforcement({
+    provider,
+    contents: candidate,
+    buildOptions: (contents) => ({ contents, config: runtime.config }),
+    enforce: async (contents, estimate) => {
+      candidateEstimates.push(await estimate(contents));
+      return contents;
+    },
+    fallbackEstimate: (contents) => Promise.resolve(contents.length + 900),
+  });
+
+  expect(candidateEstimates).toStrictEqual([901]);
+  expect(result.prepared.estimate).toBeNull();
+}
+
+async function testPromptEnvelope4(): Promise<void> {
+  const candidate: IContent[] = [
+    { speaker: 'human', blocks: [{ type: 'text', text: 'candidate' }] },
+  ];
+  const releasedContents: IContent[][] = [];
+  const provider: IProvider = {
+    name: 'enforcement-release-provider',
+    getModels: () => Promise.resolve([]),
+    getServerTools: () => [],
+    invokeServerTool: () => Promise.resolve(undefined),
+    async *generateChatCompletion(): AsyncIterableIterator<IContent> {
+      yield { speaker: 'ai', blocks: [{ type: 'text', text: 'unused' }] };
+    },
+    projectPromptEnvelope: (options) =>
+      Promise.resolve({
+        model: 'test-model',
+        protocol: 'anthropic-messages',
+        method: 'messages/v1',
+        projectionRevision: 1,
+        unsupportedMedia: [],
+        transportToken: Object.freeze({}),
+        finalizedProjection: options.contents,
+        legacyEstimate: () => Promise.resolve(options.contents.length),
+        releaseIfUnsent: () => {
+          releasedContents.push(options.contents);
+          return Promise.resolve();
+        },
+      }),
+  };
+  const runtime = createChatSessionRuntime({ provider });
+
+  await expect(
+    preparePromptEnvelopeAfterEnforcement({
       provider,
       contents: candidate,
       buildOptions: (contents) => ({ contents, config: runtime.config }),
-      enforce: async (contents, estimate) => {
-        candidateEstimates.push(await estimate(contents));
-        return contents;
-      },
-      fallbackEstimate: (contents) => Promise.resolve(contents.length + 500),
-    });
-
-    // Fallback-only providers keep the contents-only enforcement estimate
-    // and a null seam estimate (issue #3507 AC2 fallback branch).
-    expect(candidateEstimates).toStrictEqual([501]);
-    expect(result.prepared.estimate).toBeNull();
-  });
-
-  it('falls back to the contents-only estimator when the provider resolves an undefined projection', async () => {
-    const candidate: IContent[] = [
-      { speaker: 'human', blocks: [{ type: 'text', text: 'candidate' }] },
-    ];
-    const provider: IProvider = {
-      name: 'undefined-projection-provider',
-      getModels: () => Promise.resolve([]),
-      getServerTools: () => [],
-      invokeServerTool: () => Promise.resolve(undefined),
-      async *generateChatCompletion(): AsyncIterableIterator<IContent> {
-        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'unused' }] };
-      },
-      projectPromptEnvelope: () => Promise.resolve(undefined),
-    };
-    const runtime = createChatSessionRuntime({ provider });
-    const candidateEstimates: number[] = [];
-
-    const result = await preparePromptEnvelopeAfterEnforcement({
-      provider,
-      contents: candidate,
-      buildOptions: (contents) => ({ contents, config: runtime.config }),
-      enforce: async (contents, estimate) => {
-        candidateEstimates.push(await estimate(contents));
-        return contents;
-      },
-      fallbackEstimate: (contents) => Promise.resolve(contents.length + 900),
-    });
-
-    expect(candidateEstimates).toStrictEqual([901]);
-    expect(result.prepared.estimate).toBeNull();
-  });
-
-  it('releases candidate projections when enforcement rejects', async () => {
-    const candidate: IContent[] = [
-      { speaker: 'human', blocks: [{ type: 'text', text: 'candidate' }] },
-    ];
-    const releasedContents: IContent[][] = [];
-    const provider: IProvider = {
-      name: 'enforcement-release-provider',
-      getModels: () => Promise.resolve([]),
-      getServerTools: () => [],
-      invokeServerTool: () => Promise.resolve(undefined),
-      async *generateChatCompletion(): AsyncIterableIterator<IContent> {
-        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'unused' }] };
-      },
-      projectPromptEnvelope: (options) =>
-        Promise.resolve({
-          model: 'test-model',
-          protocol: 'anthropic-messages',
-          method: 'messages/v1',
-          projectionRevision: 1,
-          unsupportedMedia: [],
-          transportToken: Object.freeze({}),
-          finalizedProjection: options.contents,
-          legacyEstimate: () => Promise.resolve(options.contents.length),
-          releaseIfUnsent: () => {
-            releasedContents.push(options.contents);
-            return Promise.resolve();
-          },
-        }),
-    };
-    const runtime = createChatSessionRuntime({ provider });
-
-    await expect(
-      preparePromptEnvelopeAfterEnforcement({
-        provider,
-        contents: candidate,
-        buildOptions: (contents) => ({ contents, config: runtime.config }),
-        enforce: async (_contents, estimate) => {
-          await estimate(candidate);
-          throw new Error('enforcement failed');
-        },
-        fallbackEstimate: () => Promise.resolve(0),
-      }),
-    ).rejects.toThrow('enforcement failed');
-
-    // The candidate projection created for the estimator is released via the
-    // releaseUnused path when enforcement fails (issue #3507 AC2, preserving
-    // #3199's cleanup machinery).
-    expect(releasedContents).toStrictEqual([candidate]);
-  });
-
-  it('releases non-kept enforcement-candidate projections on success while the kept projection stays reserved for transport', async () => {
-    const fullCandidate: IContent[] = [
-      { speaker: 'human', blocks: [{ type: 'text', text: 'first full item' }] },
-      { speaker: 'ai', blocks: [{ type: 'text', text: 'second full item' }] },
-    ];
-    const reducedCandidate: IContent[] = [
-      { speaker: 'human', blocks: [{ type: 'text', text: 'reduced item' }] },
-    ];
-    const releasedByProjection: boolean[] = [];
-    const provider: IProvider = {
-      name: 'success-release-provider',
-      getModels: () => Promise.resolve([]),
-      getServerTools: () => [],
-      invokeServerTool: () => Promise.resolve(undefined),
-      async *generateChatCompletion(): AsyncIterableIterator<IContent> {
-        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'unused' }] };
-      },
-      projectPromptEnvelope: (options) => {
-        const projectionIndex = releasedByProjection.length;
-        releasedByProjection.push(false);
-        return Promise.resolve({
-          model: 'test-model',
-          protocol: 'anthropic-messages',
-          method: 'messages/v1',
-          projectionRevision: 1,
-          unsupportedMedia: [],
-          transportToken: Object.freeze({ projectionIndex }),
-          finalizedProjection: options.contents,
-          legacyEstimate: () => Promise.resolve(options.contents.length + 1000),
-          releaseIfUnsent: () => {
-            releasedByProjection[projectionIndex] = true;
-            return Promise.resolve();
-          },
-        });
-      },
-    };
-    const runtime = createChatSessionRuntime({ provider });
-    const candidateEstimates: number[] = [];
-
-    const result = await preparePromptEnvelopeAfterEnforcement({
-      provider,
-      contents: fullCandidate,
-      buildOptions: (contents) => ({ contents, config: runtime.config }),
       enforce: async (_contents, estimate) => {
-        candidateEstimates.push(await estimate(fullCandidate));
-        candidateEstimates.push(await estimate(reducedCandidate));
-        return reducedCandidate;
+        await estimate(candidate);
+        throw new Error('enforcement failed');
       },
       fallbackEstimate: () => Promise.resolve(0),
-    });
+    }),
+  ).rejects.toThrow('enforcement failed');
 
-    // The compression ladder estimated two distinct candidates and kept the
-    // reduced one.
-    expect(candidateEstimates).toStrictEqual([1002, 1001]);
-    // On success the non-kept candidate's reservation (projection 0) is
-    // discharged inside the seam, while the kept candidate's stays reserved
-    // because transport consumes it (issue #3507 success-path cleanup).
-    expect(releasedByProjection).toStrictEqual([true, false]);
-    expect(result.contents).toBe(reducedCandidate);
-    // The kept prepared estimate survives the cleanup and stays usable.
-    expect(result.prepared.estimate?.estimatedPromptTokens).toBe(1001);
-    // Transport's first attempt still reuses the reserved projection
-    // instead of re-projecting or finding it already released.
-    const transportPrepared = await result.preparer.prepare(reducedCandidate);
-    expect(transportPrepared).toBe(result.prepared);
-    expect(releasedByProjection).toStrictEqual([true, false]);
-  });
+  // The candidate projection created for the estimator is released via the
+  // releaseUnused path when enforcement fails (issue #3507 AC2, preserving
+  // #3199's cleanup machinery).
+  expect(releasedContents).toStrictEqual([candidate]);
+}
 
-  it('awaits projection cleanup before an estimation failure escapes', async () => {
-    const cleanupEvents: string[] = [];
-    const provider: IProvider = {
-      name: 'failing-estimate-provider',
-      getModels: () => Promise.resolve([]),
-      getServerTools: () => [],
-      invokeServerTool: () => Promise.resolve(undefined),
-      async *generateChatCompletion(): AsyncIterableIterator<IContent> {
-        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'unused' }] };
-      },
-      projectPromptEnvelope: () =>
-        Promise.resolve({
-          model: '',
-          protocol: 'anthropic-messages',
-          method: 'messages/v1',
-          projectionRevision: 1,
-          unsupportedMedia: [],
-          transportToken: Object.freeze({}),
-          finalizedProjection: [],
-          legacyEstimate: () => Promise.resolve(1),
-          releaseIfUnsent: async () => {
-            await Promise.resolve();
-            cleanupEvents.push('released');
-          },
-        }),
-    };
-    const runtime = createChatSessionRuntime({ provider });
-
-    const error = await prepareAtSendSeam(provider, {
-      contents: [],
-      config: runtime.config,
-    }).catch((reason: unknown) => reason);
-
-    expect(error).toBeInstanceOf(Error);
-    expect(cleanupEvents).toStrictEqual(['released']);
-  });
-
-  it('does not prepare or send when enforcement rejects', async () => {
-    let projectionCount = 0;
-    let sendCount = 0;
-    const provider: IProvider = {
-      name: 'enforcement-failure-provider',
-      getModels: () => Promise.resolve([]),
-      getServerTools: () => [],
-      invokeServerTool: () => Promise.resolve(undefined),
-      async *generateChatCompletion(): AsyncIterableIterator<IContent> {
-        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'unused' }] };
-      },
-      projectPromptEnvelope: () => {
-        projectionCount += 1;
-        return Promise.resolve(undefined);
-      },
-    };
-
-    await expect(
-      enforceAndSendWithPromptEnvelopeRetries({
-        provider,
-        contents: [],
-        buildOptions: (contents) => ({ contents }),
-        enforce: () => Promise.reject(new Error('enforcement failed')),
-        fallbackEstimate: () => Promise.resolve(0),
-        send: () => {
-          sendCount += 1;
-          return Promise.resolve('sent');
+async function testPromptEnvelope5(): Promise<void> {
+  const fullCandidate: IContent[] = [
+    { speaker: 'human', blocks: [{ type: 'text', text: 'first full item' }] },
+    { speaker: 'ai', blocks: [{ type: 'text', text: 'second full item' }] },
+  ];
+  const reducedCandidate: IContent[] = [
+    { speaker: 'human', blocks: [{ type: 'text', text: 'reduced item' }] },
+  ];
+  const releasedByProjection: boolean[] = [];
+  const provider: IProvider = {
+    name: 'success-release-provider',
+    getModels: () => Promise.resolve([]),
+    getServerTools: () => [],
+    invokeServerTool: () => Promise.resolve(undefined),
+    async *generateChatCompletion(): AsyncIterableIterator<IContent> {
+      yield { speaker: 'ai', blocks: [{ type: 'text', text: 'unused' }] };
+    },
+    projectPromptEnvelope: (options) => {
+      const projectionIndex = releasedByProjection.length;
+      releasedByProjection.push(false);
+      return Promise.resolve({
+        model: 'test-model',
+        protocol: 'anthropic-messages',
+        method: 'messages/v1',
+        projectionRevision: 1,
+        unsupportedMedia: [],
+        transportToken: Object.freeze({ projectionIndex }),
+        finalizedProjection: options.contents,
+        legacyEstimate: () => Promise.resolve(options.contents.length + 1000),
+        releaseIfUnsent: () => {
+          releasedByProjection[projectionIndex] = true;
+          return Promise.resolve();
         },
-        shouldRetryOnError: () => false,
-      }),
-    ).rejects.toThrow('enforcement failed');
+      });
+    },
+  };
+  const runtime = createChatSessionRuntime({ provider });
+  const candidateEstimates: number[] = [];
 
-    expect(projectionCount).toBe(0);
-    expect(sendCount).toBe(0);
+  const result = await preparePromptEnvelopeAfterEnforcement({
+    provider,
+    contents: fullCandidate,
+    buildOptions: (contents) => ({ contents, config: runtime.config }),
+    enforce: async (_contents, estimate) => {
+      candidateEstimates.push(await estimate(fullCandidate));
+      candidateEstimates.push(await estimate(reducedCandidate));
+      return reducedCandidate;
+    },
+    fallbackEstimate: () => Promise.resolve(0),
   });
 
-  it('does not release a projection consumed by a successful send', async () => {
-    let releaseCount = 0;
-    const provider: IProvider = {
-      name: 'successful-send-provider',
-      getModels: () => Promise.resolve([]),
-      getServerTools: () => [],
-      invokeServerTool: () => Promise.resolve(undefined),
-      async *generateChatCompletion(): AsyncIterableIterator<IContent> {
-        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'unused' }] };
-      },
-      projectPromptEnvelope: (options) =>
-        Promise.resolve({
-          model: 'test-model',
-          protocol: 'anthropic-messages',
-          method: 'messages/v1',
-          projectionRevision: 1,
-          unsupportedMedia: [],
-          transportToken: Object.freeze({}),
-          finalizedProjection: options.contents,
-          legacyEstimate: () => Promise.resolve(options.contents.length),
-          releaseIfUnsent: () => {
-            releaseCount += 1;
-            return Promise.resolve();
-          },
-        }),
-    };
-    const runtime = createChatSessionRuntime({ provider });
+  // The compression ladder estimated two distinct candidates and kept the
+  // reduced one.
+  expect(candidateEstimates).toStrictEqual([1002, 1001]);
+  // On success the non-kept candidate's reservation (projection 0) is
+  // discharged inside the seam, while the kept candidate's stays reserved
+  // because transport consumes it (issue #3507 success-path cleanup).
+  expect(releasedByProjection).toStrictEqual([true, false]);
+  expect(result.contents).toBe(reducedCandidate);
+  // The kept prepared estimate survives the cleanup and stays usable.
+  expect(result.prepared.estimate?.estimatedPromptTokens).toBe(1001);
+  // Transport's first attempt still reuses the reserved projection
+  // instead of re-projecting or finding it already released.
+  const transportPrepared = await result.preparer.prepare(reducedCandidate);
+  expect(transportPrepared).toBe(result.prepared);
+  expect(releasedByProjection).toStrictEqual([true, false]);
+}
 
-    const result = await enforceAndSendWithPromptEnvelopeRetries({
+async function testPromptEnvelope6(): Promise<void> {
+  const cleanupEvents: string[] = [];
+  const provider: IProvider = {
+    name: 'failing-estimate-provider',
+    getModels: () => Promise.resolve([]),
+    getServerTools: () => [],
+    invokeServerTool: () => Promise.resolve(undefined),
+    async *generateChatCompletion(): AsyncIterableIterator<IContent> {
+      yield { speaker: 'ai', blocks: [{ type: 'text', text: 'unused' }] };
+    },
+    projectPromptEnvelope: () =>
+      Promise.resolve({
+        model: '',
+        protocol: 'anthropic-messages',
+        method: 'messages/v1',
+        projectionRevision: 1,
+        unsupportedMedia: [],
+        transportToken: Object.freeze({}),
+        finalizedProjection: [],
+        legacyEstimate: () => Promise.resolve(1),
+        releaseIfUnsent: async () => {
+          await Promise.resolve();
+          cleanupEvents.push('released');
+        },
+      }),
+  };
+  const runtime = createChatSessionRuntime({ provider });
+
+  const error = await prepareAtSendSeam(provider, {
+    contents: [],
+    config: runtime.config,
+  }).catch((reason: unknown) => reason);
+
+  expect(error).toBeInstanceOf(Error);
+  expect(cleanupEvents).toStrictEqual(['released']);
+}
+
+async function testPromptEnvelope7(): Promise<void> {
+  let projectionCount = 0;
+  let sendCount = 0;
+  const provider: IProvider = {
+    name: 'enforcement-failure-provider',
+    getModels: () => Promise.resolve([]),
+    getServerTools: () => [],
+    invokeServerTool: () => Promise.resolve(undefined),
+    async *generateChatCompletion(): AsyncIterableIterator<IContent> {
+      yield { speaker: 'ai', blocks: [{ type: 'text', text: 'unused' }] };
+    },
+    projectPromptEnvelope: () => {
+      projectionCount += 1;
+      return Promise.resolve(undefined);
+    },
+  };
+
+  await expect(
+    enforceAndSendWithPromptEnvelopeRetries({
       provider,
       contents: [],
-      buildOptions: (contents) => ({ contents, config: runtime.config }),
-      enforce: (contents) => Promise.resolve(contents),
+      buildOptions: (contents) => ({ contents }),
+      enforce: () => Promise.reject(new Error('enforcement failed')),
       fallbackEstimate: () => Promise.resolve(0),
-      send: () => Promise.resolve('sent'),
+      send: () => {
+        sendCount += 1;
+        return Promise.resolve('sent');
+      },
       shouldRetryOnError: () => false,
-    });
+    }),
+  ).rejects.toThrow('enforcement failed');
 
-    expect(result).toBe('sent');
-    expect(releaseCount).toBe(0);
+  expect(projectionCount).toBe(0);
+  expect(sendCount).toBe(0);
+}
+
+async function testPromptEnvelope8(): Promise<void> {
+  let releaseCount = 0;
+  const provider: IProvider = {
+    name: 'successful-send-provider',
+    getModels: () => Promise.resolve([]),
+    getServerTools: () => [],
+    invokeServerTool: () => Promise.resolve(undefined),
+    async *generateChatCompletion(): AsyncIterableIterator<IContent> {
+      yield { speaker: 'ai', blocks: [{ type: 'text', text: 'unused' }] };
+    },
+    projectPromptEnvelope: (options) =>
+      Promise.resolve({
+        model: 'test-model',
+        protocol: 'anthropic-messages',
+        method: 'messages/v1',
+        projectionRevision: 1,
+        unsupportedMedia: [],
+        transportToken: Object.freeze({}),
+        finalizedProjection: options.contents,
+        legacyEstimate: () => Promise.resolve(options.contents.length),
+        releaseIfUnsent: () => {
+          releaseCount += 1;
+          return Promise.resolve();
+        },
+      }),
+  };
+  const runtime = createChatSessionRuntime({ provider });
+
+  const result = await enforceAndSendWithPromptEnvelopeRetries({
+    provider,
+    contents: [],
+    buildOptions: (contents) => ({ contents, config: runtime.config }),
+    enforce: (contents) => Promise.resolve(contents),
+    fallbackEstimate: () => Promise.resolve(0),
+    send: () => Promise.resolve('sent'),
+    shouldRetryOnError: () => false,
   });
 
-  it('prepares a fresh projection for a retry and releases the prior unsent projection', async () => {
-    const transportTokens: object[] = [];
-    const releasedTokens: object[] = [];
-    const provider: IProvider = {
-      name: 'retry-projection-provider',
-      getModels: () => Promise.resolve([]),
-      getServerTools: () => [],
-      invokeServerTool: () => Promise.resolve(undefined),
-      async *generateChatCompletion(): AsyncIterableIterator<IContent> {
-        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'unused' }] };
-      },
-      projectPromptEnvelope: (options) => {
-        const transportToken = Object.freeze({
-          sequence: transportTokens.length,
-        });
-        transportTokens.push(transportToken);
-        return Promise.resolve({
-          model: 'test-model',
-          protocol: 'anthropic-messages',
-          method: 'messages/v1',
-          projectionRevision: 1,
-          unsupportedMedia: [],
-          transportToken,
-          finalizedProjection: options.contents,
-          legacyEstimate: () => Promise.resolve(options.contents.length),
-          releaseIfUnsent: () => {
-            releasedTokens.push(transportToken);
-            return Promise.resolve();
-          },
-        });
-      },
-    };
-    const runtime = createChatSessionRuntime({ provider });
-    const observedAttempts: Array<{
-      readonly attemptIndex: number;
-      readonly transportToken: object | undefined;
-    }> = [];
+  expect(result).toBe('sent');
+  expect(releaseCount).toBe(0);
+}
 
-    const result = await enforceAndSendWithPromptEnvelopeRetries({
+async function testPromptEnvelope9(): Promise<void> {
+  const transportTokens: object[] = [];
+  const releasedTokens: object[] = [];
+  const provider: IProvider = {
+    name: 'retry-projection-provider',
+    getModels: () => Promise.resolve([]),
+    getServerTools: () => [],
+    invokeServerTool: () => Promise.resolve(undefined),
+    async *generateChatCompletion(): AsyncIterableIterator<IContent> {
+      yield { speaker: 'ai', blocks: [{ type: 'text', text: 'unused' }] };
+    },
+    projectPromptEnvelope: (options) => {
+      const transportToken = Object.freeze({
+        sequence: transportTokens.length,
+      });
+      transportTokens.push(transportToken);
+      return Promise.resolve({
+        model: 'test-model',
+        protocol: 'anthropic-messages',
+        method: 'messages/v1',
+        projectionRevision: 1,
+        unsupportedMedia: [],
+        transportToken,
+        finalizedProjection: options.contents,
+        legacyEstimate: () => Promise.resolve(options.contents.length),
+        releaseIfUnsent: () => {
+          releasedTokens.push(transportToken);
+          return Promise.resolve();
+        },
+      });
+    },
+  };
+  const runtime = createChatSessionRuntime({ provider });
+  const observedAttempts: Array<{
+    readonly attemptIndex: number;
+    readonly transportToken: object | undefined;
+  }> = [];
+
+  const restoreRetry = await installSingleRetry();
+  let result: string;
+  try {
+    result = await enforceAndSendWithPromptEnvelopeRetries({
       provider,
       contents: [],
       buildOptions: (contents) => ({ contents, config: runtime.config }),
@@ -479,119 +549,121 @@ describe('preparePromptEnvelopeAfterEnforcement', () => {
       shouldRetryOnError: (error) =>
         error instanceof Error && error.message === 'retry once',
     });
+  } finally {
+    restoreRetry();
+  }
 
-    expect(result).toBe('sent');
-    expect(observedAttempts).toStrictEqual([
-      { attemptIndex: 0, transportToken: transportTokens[0] },
-      { attemptIndex: 1, transportToken: transportTokens[1] },
-    ]);
-    expect(transportTokens[1]).not.toBe(transportTokens[0]);
-    expect(releasedTokens).toStrictEqual([transportTokens[0]]);
-  }, 10_000);
+  expect(result).toBe('sent');
+  expect(observedAttempts).toStrictEqual([
+    { attemptIndex: 0, transportToken: transportTokens[0] },
+    { attemptIndex: 1, transportToken: transportTokens[1] },
+  ]);
+  expect(transportTokens[1]).not.toBe(transportTokens[0]);
+  expect(releasedTokens).toStrictEqual([transportTokens[0]]);
+}
 
-  it('releases every unsent projection and aggregates cleanup failures', async () => {
-    const cleanupFailures = [
-      new Error('first cleanup failed'),
-      new Error('second cleanup failed'),
-    ];
-    let projectionIndex = 0;
-    const provider: IProvider = {
-      name: 'aggregate-cleanup-provider',
-      getModels: () => Promise.resolve([]),
-      getServerTools: () => [],
-      invokeServerTool: () => Promise.resolve(undefined),
-      async *generateChatCompletion(): AsyncIterableIterator<IContent> {
-        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'unused' }] };
-      },
-      projectPromptEnvelope: (options) => {
-        const cleanupFailure = cleanupFailures[projectionIndex++];
-        return Promise.resolve({
-          model: 'test-model',
-          protocol: 'anthropic-messages',
-          method: 'messages/v1',
-          projectionRevision: 1,
-          unsupportedMedia: [],
-          transportToken: Object.freeze({}),
-          finalizedProjection: options.contents,
-          legacyEstimate: () => Promise.resolve(options.contents.length),
-          releaseIfUnsent: () => Promise.reject(cleanupFailure),
-        });
-      },
-    };
-    const runtime = createChatSessionRuntime({ provider });
-    const preparer = createPromptEnvelopePreparer(provider, (contents) => ({
-      contents,
-      config: runtime.config,
-    }));
-    await preparer.prepare([]);
-    await preparer.prepare([
-      { speaker: 'human', blocks: [{ type: 'text', text: 'candidate' }] },
-    ]);
+async function testPromptEnvelope10(): Promise<void> {
+  const cleanupFailures = [
+    new Error('first cleanup failed'),
+    new Error('second cleanup failed'),
+  ];
+  let projectionIndex = 0;
+  const provider: IProvider = {
+    name: 'aggregate-cleanup-provider',
+    getModels: () => Promise.resolve([]),
+    getServerTools: () => [],
+    invokeServerTool: () => Promise.resolve(undefined),
+    async *generateChatCompletion(): AsyncIterableIterator<IContent> {
+      yield { speaker: 'ai', blocks: [{ type: 'text', text: 'unused' }] };
+    },
+    projectPromptEnvelope: (options) => {
+      const cleanupFailure = cleanupFailures[projectionIndex++];
+      return Promise.resolve({
+        model: 'test-model',
+        protocol: 'anthropic-messages',
+        method: 'messages/v1',
+        projectionRevision: 1,
+        unsupportedMedia: [],
+        transportToken: Object.freeze({}),
+        finalizedProjection: options.contents,
+        legacyEstimate: () => Promise.resolve(options.contents.length),
+        releaseIfUnsent: () => Promise.reject(cleanupFailure),
+      });
+    },
+  };
+  const runtime = createChatSessionRuntime({ provider });
+  const preparer = createPromptEnvelopePreparer(provider, (contents) => ({
+    contents,
+    config: runtime.config,
+  }));
+  await preparer.prepare([]);
+  await preparer.prepare([
+    { speaker: 'human', blocks: [{ type: 'text', text: 'candidate' }] },
+  ]);
 
-    const thrown = await preparer
-      .releaseUnused()
-      .catch((error: unknown) => error);
+  const thrown = await preparer
+    .releaseUnused()
+    .catch((error: unknown) => error);
 
-    expect(thrown).toBeInstanceOf(AggregateError);
-    assertInstanceOf(
-      thrown,
-      AggregateError,
-      'Expected aggregate cleanup failure',
-    );
-    expect(thrown.errors.map((error) => errorMessage(error))).toStrictEqual([
-      'first cleanup failed',
-      'second cleanup failed',
-    ]);
-  });
+  expect(thrown).toBeInstanceOf(AggregateError);
+  assertInstanceOf(
+    thrown,
+    AggregateError,
+    'Expected aggregate cleanup failure',
+  );
+  expect(thrown.errors.map((error) => errorMessage(error))).toStrictEqual([
+    'first cleanup failed',
+    'second cleanup failed',
+  ]);
+}
 
-  it('prepares a fresh projection after releasing the prior projection for the same contents', async () => {
-    const contents: IContent[] = [
-      { speaker: 'human', blocks: [{ type: 'text', text: 'candidate' }] },
-    ];
-    const projectionStates: Array<{ released: boolean }> = [];
-    const provider: IProvider = {
-      name: 'projection-reuse-provider',
-      getModels: () => Promise.resolve([]),
-      getServerTools: () => [],
-      invokeServerTool: () => Promise.resolve(undefined),
-      async *generateChatCompletion(): AsyncIterableIterator<IContent> {
-        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'unused' }] };
-      },
-      projectPromptEnvelope: (options) => {
-        const state = { released: false };
-        projectionStates.push(state);
-        return Promise.resolve({
-          model: 'test-model',
-          protocol: 'anthropic-messages',
-          method: 'messages/v1',
-          projectionRevision: 1,
-          unsupportedMedia: [],
-          transportToken: Object.freeze({ state }),
-          finalizedProjection: options.contents,
-          legacyEstimate: () => Promise.resolve(options.contents.length),
-          releaseIfUnsent: () => {
-            state.released = true;
-            return Promise.resolve();
-          },
-        });
-      },
-    };
-    const runtime = createChatSessionRuntime({ provider });
-    const preparer = createPromptEnvelopePreparer(provider, (candidate) => ({
-      contents: candidate,
-      config: runtime.config,
-    }));
+async function testPromptEnvelope11(): Promise<void> {
+  const contents: IContent[] = [
+    { speaker: 'human', blocks: [{ type: 'text', text: 'candidate' }] },
+  ];
+  const projectionStates: Array<{ released: boolean }> = [];
+  const provider: IProvider = {
+    name: 'projection-reuse-provider',
+    getModels: () => Promise.resolve([]),
+    getServerTools: () => [],
+    invokeServerTool: () => Promise.resolve(undefined),
+    async *generateChatCompletion(): AsyncIterableIterator<IContent> {
+      yield { speaker: 'ai', blocks: [{ type: 'text', text: 'unused' }] };
+    },
+    projectPromptEnvelope: (options) => {
+      const state = { released: false };
+      projectionStates.push(state);
+      return Promise.resolve({
+        model: 'test-model',
+        protocol: 'anthropic-messages',
+        method: 'messages/v1',
+        projectionRevision: 1,
+        unsupportedMedia: [],
+        transportToken: Object.freeze({ state }),
+        finalizedProjection: options.contents,
+        legacyEstimate: () => Promise.resolve(options.contents.length),
+        releaseIfUnsent: () => {
+          state.released = true;
+          return Promise.resolve();
+        },
+      });
+    },
+  };
+  const runtime = createChatSessionRuntime({ provider });
+  const preparer = createPromptEnvelopePreparer(provider, (candidate) => ({
+    contents: candidate,
+    config: runtime.config,
+  }));
 
-    const first = await preparer.prepare(contents);
-    await preparer.releaseUnused();
-    const second = await preparer.prepare(contents);
+  const first = await preparer.prepare(contents);
+  await preparer.releaseUnused();
+  const second = await preparer.prepare(contents);
 
-    expect(projectionStates).toStrictEqual([
-      { released: true },
-      { released: false },
-    ]);
-    expect(second.options.promptEnvelopeTransportToken).not.toBe(
-      first.options.promptEnvelopeTransportToken,
-    );
-  });
-});
+  expect(projectionStates).toStrictEqual([
+    { released: true },
+    { released: false },
+  ]);
+  expect(second.options.promptEnvelopeTransportToken).not.toBe(
+    first.options.promptEnvelopeTransportToken,
+  );
+}

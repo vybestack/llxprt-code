@@ -42,11 +42,13 @@
 
 import { Buffer } from 'node:buffer';
 import {
-  JournalCursor,
   type IContent,
-  type JournalEntry,
+  type JournalReadCounters,
 } from '@vybestack/llxprt-code-core';
+import { ProjectedJournalCursor as JournalCursor } from './projected-journal-cursor.js';
+import type { DisplayJournalEntry as JournalEntry } from './journal-page-file.js';
 import type { HistoryItem } from '../../types.js';
+
 import {
   pendingRowIdentity,
   rowIdentity,
@@ -74,6 +76,7 @@ export interface ScrollbackPagerOptions {
   readonly settings: ScrollbackPagerSettings;
   /** JournalCursor read chunk size; defaults to the cursor's own default. */
   readonly chunkBytes?: number;
+  readonly counters?: JournalReadCounters;
 }
 
 /** One display row: a projected journal record or a live-tail item. */
@@ -191,19 +194,6 @@ function contentText(content: IContent): string {
   return parts.join('\n');
 }
 
-function contentToHistoryItem(content: IContent): HistoryItem {
-  const id = nextRowItemId();
-  const text = contentText(content);
-  const chronologySeq = content.metadata?.chronology?.seq;
-  if (content.speaker === 'ai') {
-    return { id, type: 'gemini', text, chronologySeq };
-  }
-  if (content.speaker === 'human') {
-    return { id, type: 'user', text, chronologySeq };
-  }
-  return { id, type: 'info', text, chronologySeq };
-}
-
 function compressedBoundaryText(payload: unknown): string {
   const summary = readSummaryContent(payload);
   const summaryText = summary === null ? '' : contentText(summary).trim();
@@ -216,9 +206,9 @@ function isClearBoundary(entry: JournalEntry): boolean {
   return entry.kind === 'boundary' && entry.envelope.type === 'rewind';
 }
 
-/** Entries that project a row a viewport can measure; boundaries do not. */
+/** Every projected row consumes viewport capacity, including summaries. */
 function isDisplayEntry(entry: JournalEntry): boolean {
-  return entry.kind === 'content' || entry.kind === 'group';
+  return entry.kind === 'projected' || entry.envelope.type === 'compressed';
 }
 
 interface BackPageCollect {
@@ -240,8 +230,10 @@ function collectBackPage(
     if (isClearBoundary(entry)) {
       return { added, hitClearBoundary: true };
     }
-    collected.push(entry);
-    if (isDisplayEntry(entry)) added += 1;
+    if (isDisplayEntry(entry)) {
+      collected.push(entry);
+      added += 1;
+    }
   }
   return { added, hitClearBoundary: false };
 }
@@ -253,8 +245,10 @@ function pushForwardPage(
 ): number {
   let added = 0;
   for (const entry of entries) {
-    collected.push(entry);
-    if (isDisplayEntry(entry)) added += 1;
+    if (isDisplayEntry(entry)) {
+      collected.push(entry);
+      added += 1;
+    }
   }
   return added;
 }
@@ -292,35 +286,15 @@ function scanResumeFloorPage(
 
 function entryToRow(entry: JournalEntry): ScrollbackRow | null {
   switch (entry.kind) {
-    case 'content': {
-      const identity = rowIdentity(
-        { kind: 'journal', offset: entry.offset },
-        'text',
-      );
+    case 'projected': {
+      const identity = entry.item.rowIdentity;
+      if (!identity) throw new Error('Missing projected identity');
       return {
         key: rowIdentityKey(identity),
         seq: entry.seq,
         identity,
         offset: entry.offset,
-        item: contentToHistoryItem(entry.content),
-      };
-    }
-    case 'group': {
-      const identity = rowIdentity(
-        { kind: 'journal', offset: entry.offset },
-        'toolGroup',
-      );
-      const content = entry.call ?? entry.response;
-      const item: HistoryItem =
-        content === null
-          ? { id: nextRowItemId(), type: 'info', text: '[tool group]' }
-          : contentToHistoryItem(content);
-      return {
-        key: rowIdentityKey(identity),
-        seq: entry.seqSpan[1],
-        identity,
-        offset: entry.offset,
-        item,
+        item: entry.item,
       };
     }
     case 'boundary': {
@@ -384,10 +358,12 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
   private readonly pageRows: number;
   private readonly settings: ScrollbackPagerSettings;
   private readonly chunkBytes: number | undefined;
+  private readonly counters: JournalReadCounters | undefined;
 
   private cursor: JournalCursor | null = null;
   private openPromise: Promise<JournalCursor | null> | null = null;
   private openGeneration = -1;
+  private controller = new AbortController();
   private closed = false;
   private generation = 0;
   private inFlightBackReads = 0;
@@ -398,7 +374,20 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
    * cannot stall the callers behind it.
    */
   private pageQueue: Promise<void> = Promise.resolve();
-  private pagedRows: ScrollbackRow[] = [];
+  private residentPagedRows: ScrollbackRow[] = [];
+  private get pagedRows(): ScrollbackRow[] {
+    return this.residentPagedRows;
+  }
+
+  private set pagedRows(next: ScrollbackRow[]) {
+    const ownership = this.counters?.ownership;
+    if (ownership) {
+      for (const row of next) ownership.retain(row.item);
+      for (const row of this.residentPagedRows) ownership.release(row.item);
+    }
+    this.residentPagedRows = next;
+  }
+
   private liveItems: readonly HistoryItem[] = [];
   private atVisibilityFloor = false;
   private atFileEnd = false;
@@ -422,6 +411,7 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
     this.pageRows = options.pageRows;
     this.settings = options.settings;
     this.chunkBytes = options.chunkBytes;
+    this.counters = options.counters;
   }
 
   getState(): ScrollbackPagerState {
@@ -500,8 +490,10 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
       if (cursor === null || this.isStale(gen)) return;
       const { collected, exhausted } = await this.collectBack(cursor, gen);
       if (this.isStale(gen)) return;
+      await cursor.refreshFileEnd();
+      if (this.isStale(gen)) return;
       this.absorbBack(collected);
-      if (exhausted || this.isResumeFloor(cursor.windowStart())) {
+      if (exhausted || this.isResumeFloor(cursor)) {
         this.atVisibilityFloor = true;
       }
       this.atFileEnd = cursor.windowEnd() >= cursor.size();
@@ -574,16 +566,13 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
     }
     this.pagedRows = seeded;
     this.resumeFirstDisplayOffset = floor.firstDisplayOffset;
-    this.atVisibilityFloor =
-      exhausted ||
-      floor.boundaryOffset !== null ||
-      this.isResumeFloor(cursor.windowStart());
+    this.atVisibilityFloor = exhausted || this.isResumeFloor(cursor);
     this.atFileEnd = cursor.windowEnd() >= cursor.size();
     this.error = null;
     const { headSeq, tailSeq } = seqWatermarks(seeded);
     return {
       seededRows: seeded.length,
-      floorOffset: floor.boundaryOffset ?? cursor.windowStart(),
+      floorOffset: floor.boundaryOffset ?? 0,
       tailOffset: cursor.windowEnd(),
       headSeq,
       tailSeq,
@@ -603,6 +592,8 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
   private async walkResumeFloor(gen: number): Promise<ResumeFloorOffsets> {
     const probe = await JournalCursor.open(this.filePath, {
       chunkBytes: this.chunkBytes,
+      counters: this.counters,
+      signal: this.controller.signal,
     });
     const walk: ResumeFloorOffsets = {
       boundaryOffset: null,
@@ -626,17 +617,19 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
    * resumeFromJournal. Null keeps the pre-resume behavior (exhausted read
    * or data start) untouched.
    */
-  private isResumeFloor(windowStart: number): boolean {
+  private isResumeFloor(cursor: JournalCursor): boolean {
     return (
-      windowStart === 0 ||
+      cursor.atStart() ||
       (this.resumeFirstDisplayOffset !== null &&
-        windowStart === this.resumeFirstDisplayOffset)
+        cursor.atFirstPageAtOffset(this.resumeFirstDisplayOffset))
     );
   }
 
   async invalidate(): Promise<void> {
     if (this.closed) return;
     this.generation += 1;
+    this.controller.abort();
+    this.controller = new AbortController();
     this.pagedRows = [];
     this.atVisibilityFloor = false;
     this.atFileEnd = false;
@@ -650,7 +643,10 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
     if (this.closed) return;
     this.closed = true;
     this.generation += 1;
+    this.controller.abort();
+    this.controller = new AbortController();
     this.clearPurgeTimer();
+    this.pagedRows = [];
     await this.dropCursor();
   }
 
@@ -733,15 +729,15 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
     return new Set(this.visibleKeys);
   }
 
-  /** Seq range of reported visible paged rows; null when none reported. */
-  private visibleSeqRange(): { oldest: number | null; newest: number | null } {
+  /** Display-row range, including distinct pages sharing a chronology span. */
+  private visibleRowRange(): { oldest: number | null; newest: number | null } {
     const visible = this.visibleSet();
     let oldest: number | null = null;
     let newest: number | null = null;
-    for (const row of this.pagedRows) {
-      if (row.seq === null || !visible.has(row.key)) continue;
-      if (oldest === null || row.seq < oldest) oldest = row.seq;
-      if (newest === null || row.seq > newest) newest = row.seq;
+    for (let index = 0; index < this.pagedRows.length; index += 1) {
+      if (!visible.has(this.pagedRows[index].key)) continue;
+      oldest ??= index;
+      newest = index;
     }
     return { oldest, newest };
   }
@@ -755,10 +751,13 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
     const ctx = this.contextWindow;
     if (ctx === null) return;
     const visible = this.visibleSet();
+    const previousCount = this.pagedRows.length;
     this.pagedRows = this.pagedRows.filter(
       (row) =>
         row.seq === null || row.seq >= ctx.firstSeq || visible.has(row.key),
     );
+    if (this.pagedRows.length !== previousCount)
+      this.retainCursorWindow('older');
   }
 
   private flushPurge(): void {
@@ -777,7 +776,7 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
   private evictFarEnd(direction: 'older' | 'newer'): void {
     const visible = this.visibleSet();
     const margin = this.marginRows();
-    const { oldest, newest } = this.visibleSeqRange();
+    const { oldest, newest } = this.visibleRowRange();
     let limit = Number.POSITIVE_INFINITY;
     if (direction === 'newer') {
       limit = newest === null ? Number.NEGATIVE_INFINITY : newest + margin;
@@ -785,15 +784,12 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
       limit = oldest - margin;
     }
     const candidates = this.pagedRows.filter(
-      (row): row is ScrollbackRow & { readonly seq: number } =>
-        row.seq !== null &&
+      (row, index) =>
         !visible.has(row.key) &&
-        (direction === 'older' ? row.seq < limit : row.seq > limit),
+        (direction === 'older' ? index < limit : index > limit),
     );
     if (candidates.length === 0) return;
-    candidates.sort((a, b) =>
-      direction === 'older' ? a.seq - b.seq : b.seq - a.seq,
-    );
+    if (direction === 'newer') candidates.reverse();
     const byteFloor = this.settings.byteFloorBytes;
     let residentBytes = this.metrics().residentBytes;
     const evicted = new Set<string>();
@@ -804,6 +800,19 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
     }
     if (evicted.size === 0) return;
     this.pagedRows = this.pagedRows.filter((row) => !evicted.has(row.key));
+    this.retainCursorWindow(direction);
+  }
+
+  private retainCursorWindow(direction: 'older' | 'newer'): void {
+    this.cursor?.retainWindow(
+      this.pagedRows[0]?.key,
+      this.pagedRows[this.pagedRows.length - 1]?.key,
+      direction,
+    );
+    this.atVisibilityFloor =
+      this.cursor !== null && this.isResumeFloor(this.cursor);
+    this.atFileEnd =
+      this.cursor !== null && this.cursor.windowEnd() >= this.cursor.size();
   }
 
   private isStale(gen: number): boolean {
@@ -834,7 +843,7 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
 
   /**
    * Pages back until `pageRows` display rows are collected or the walk ends.
-   * Boundary rows (compressed) ride along free of the row budget; a rewind
+   * Compression summaries consume the same budget as content rows; a rewind
    * boundary ends the walk and everything from it onward is dropped.
    */
   private async collectBack(
@@ -875,7 +884,9 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
       const row = entryToRow(entry);
       if (row !== null) rows.push(row);
     }
-    this.pagedRows = [...this.pagedRows, ...rows];
+    const merged = new Map(this.pagedRows.map((row) => [row.key, row]));
+    for (const row of rows) merged.set(row.key, row);
+    this.pagedRows = [...merged.values()];
   }
 
   /**
@@ -890,10 +901,12 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
       this.openGeneration = gen;
       this.openPromise = JournalCursor.open(this.filePath, {
         chunkBytes: this.chunkBytes,
+        counters: this.counters,
+        signal: this.controller.signal,
       }).then(
-        (cursor): JournalCursor | null => {
+        async (cursor): Promise<JournalCursor | null> => {
           if (this.closed || gen !== this.generation) {
-            void cursor.close().catch(() => undefined);
+            await cursor.close();
             return null;
           }
           this.cursor = cursor;

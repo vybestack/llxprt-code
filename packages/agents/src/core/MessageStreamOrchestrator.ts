@@ -54,7 +54,9 @@ export interface MessageStreamDeps {
   ideContextTracker: IdeContextTracker;
   agentHookManager: AgentHookManager;
   getEffectiveModelIdentity: () => EffectiveModelIdentity;
-  getHistory: () => Promise<readonly IContent[]>;
+  streamHistory: (
+    signal?: AbortSignal,
+  ) => AsyncGenerator<IContent, void, unknown>;
   getSessionTurnCount: () => number;
   incrementSessionTurnCount: () => void;
   lazyInitialize: () => Promise<void>;
@@ -275,7 +277,7 @@ export class MessageStreamOrchestrator {
     const earlyTurn = yield* this._checkSessionLimits(ctx);
     if (earlyTurn) return earlyTurn;
 
-    await this._injectIdeContext();
+    await this._injectIdeContext(signal);
     return yield* this._runRetryLoop(request, signal, ctx);
   }
 
@@ -399,21 +401,20 @@ export class MessageStreamOrchestrator {
    * @plan:PLAN-20260707-AGENTNEUTRAL.P15
    * @requirement:REQ-005.4
    */
-  private async _injectIdeContext(): Promise<void> {
-    const { config, ideContextTracker, getChat, getHistory } = this.deps;
-    const history = await getHistory();
-    const lastMessage =
-      history.length > 0 ? history[history.length - 1] : undefined;
-    const lastIContent = lastMessage;
-    const hasPendingToolCall =
-      !!lastIContent &&
-      lastIContent.speaker === 'ai' &&
-      lastIContent.blocks.some((b) => b.type === 'tool_call');
+  private async _injectIdeContext(signal: AbortSignal): Promise<void> {
+    const { config, ideContextTracker, getChat, streamHistory } = this.deps;
+    let empty = true;
+    let hasPendingToolCall = false;
+    for await (const row of streamHistory(signal)) {
+      empty = false;
+      hasPendingToolCall =
+        row.speaker === 'ai' &&
+        row.blocks.some((block) => block.type === 'tool_call');
+    }
 
     if (config.getIdeMode() && !hasPendingToolCall) {
-      const { contextParts, newIdeContext } = ideContextTracker.getContextParts(
-        history.length === 0,
-      );
+      const { contextParts, newIdeContext } =
+        ideContextTracker.getContextParts(empty);
       if (contextParts.length > 0) {
         getChat().addHistory(
           iContentFromBlocks(

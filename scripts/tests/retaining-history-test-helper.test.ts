@@ -1,0 +1,99 @@
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { describe, expect, it } from 'bun:test';
+import { gcAndSweep } from 'bun:jsc';
+import {
+  suffixRow,
+  withSuffixFixture,
+} from '../../packages/core/src/services/history/history-suffix-test-helpers.js';
+import {
+  rejectedValue,
+  rollbackRow,
+  withRollbackFixture,
+} from '../../packages/core/src/services/history/chronology-rollback-test-helpers.js';
+import { deferred } from '../../packages/core/src/services/history/token-accounting-stream-test-helpers.js';
+import { retainHistoryForMemoryTrap } from './retaining-history-test-helper.js';
+
+function sweep(): void {
+  gcAndSweep();
+  gcAndSweep();
+}
+
+describe('test-only eager memory trap source', () => {
+  for (const size of [512, 8192]) {
+    for (const compressed of [false, true]) {
+      it(`retains every ${size} row across source replacement and GC with compression=${compressed}`, async () => {
+        const retained = await withSuffixFixture(
+          size,
+          async (service, ownership, counters) => {
+            if (compressed) {
+              await service.replaceAll(
+                Array.from({ length: size }, (_, index) =>
+                  suffixRow(index, 2048),
+                ),
+                'test',
+              );
+              await service.waitForTokenUpdates();
+              await service.waitForCommit();
+              await service.waitForOwnershipSettlement();
+            }
+            const owners = ownership.snapshot();
+            const reads = counters.snapshot();
+            const rows = retainHistoryForMemoryTrap(service);
+            expect(rows).toHaveLength(size);
+            expect(ownership.snapshot()).toStrictEqual({ ...owners });
+            expect(counters.snapshot()).toStrictEqual({ ...reads });
+            const first = new WeakRef(rows[0]);
+            const last = new WeakRef(rows[size - 1]);
+            await service.replaceAll([suffixRow(size)], 'test');
+            await service.waitForCommit();
+            sweep();
+            expect(first.deref()).toBe(rows[0]);
+            expect(last.deref()).toBe(rows[size - 1]);
+            return rows;
+          },
+          2048,
+        );
+        sweep();
+        expect(retained).toHaveLength(size);
+        for (let index = 0; index < size; index++)
+          expect(retained[index]).toStrictEqual(suffixRow(index, 2048));
+      }, 120_000);
+    }
+  }
+
+  it('keeps original pending row and nested object identities during paused publication and rollback', async () => {
+    await withRollbackFixture(async (service) => {
+      const original = [rollbackRow(0, 2048), rollbackRow(1, 2048)];
+      await service.addBatch(original);
+      const retained = retainHistoryForMemoryTrap(service);
+      const entered = deferred();
+      const release = deferred();
+      const failure = new Error('test eager trap publication failure');
+      const operation = rejectedValue(
+        service.replaceBatch([rollbackRow(2)], undefined, {
+          afterPublication: async (): Promise<void> => {
+            entered.resolve();
+            await release.promise;
+            throw failure;
+          },
+        }),
+      );
+      await entered.promise;
+      try {
+        sweep();
+        expect(retained).toHaveLength(original.length);
+        for (let index = 0; index < original.length; index++) {
+          expect(retained[index]).toBe(original[index]);
+          expect(retained[index].blocks).toBe(original[index].blocks);
+          expect(retained[index].metadata).toBe(original[index].metadata);
+        }
+      } finally {
+        release.resolve();
+        await operation;
+      }
+      expect(await operation).toBe(failure);
+      expect(retained[0]).toBe(original[0]);
+      expect(retained[1]).toBe(original[1]);
+    }, true);
+  });
+});

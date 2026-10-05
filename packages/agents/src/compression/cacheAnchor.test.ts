@@ -20,9 +20,10 @@
  */
 
 import { describe, it, expect } from 'bun:test';
+import { observeHistorySynchronouslyForTest as testHistory } from '../../../core/src/test-utils/synchronous-history-test-observation.js';
+import { collectRowsForAssertions } from '../../../core/src/test-utils/collect-rows-for-assertions.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { annotateCompressionSpan } from '@vybestack/llxprt-code-core/services/history/historyChronology.js';
 import { applyCompressionWithAnchor } from './cacheAnchor.js';
 
 function human(text: string): IContent {
@@ -42,7 +43,7 @@ function summary(text: string): IContent {
 }
 
 function entryTexts(historyService: HistoryService): string[] {
-  return historyService.getAll().map((entry) => {
+  return testHistory(historyService).map((entry) => {
     const block = entry.blocks[0];
     return block.type === 'text' ? block.text : `<${block.type}>`;
   });
@@ -58,8 +59,74 @@ function apply(
     newHistory,
     topPreserved,
     'test-model',
-    annotateCompressionSpan,
   );
+}
+
+function registerToolRoundTrip(): void {
+  describe('preserved-head tool round-trip', () => {
+    it('anchors the preserved-head tool content after a complete tool round-trip', async () => {
+      const historyService = new HistoryService();
+      const toolCallId = 'compression-tool-call';
+      const roundTrip: IContent[] = [
+        human('Read the file'),
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: toolCallId,
+              name: 'read_file',
+              parameters: { path: 'file.txt' },
+            },
+          ],
+        },
+        {
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: toolCallId,
+              toolName: 'read_file',
+              result: 'contents',
+              isComplete: true,
+            },
+          ],
+        },
+        ai('The file was read'),
+      ];
+      for (const content of roundTrip) {
+        historyService.add(content, 'test-model');
+      }
+      await collectRowsForAssertions(
+        historyService.getComprehensive(),
+        async (stamped) => {
+          await apply(
+            historyService,
+            [
+              stamped[0],
+              stamped[1],
+              stamped[2],
+              summary('compressed remainder'),
+              human('tail'),
+            ],
+            3,
+          );
+
+          await collectRowsForAssertions(
+            historyService.getComprehensive(),
+            async (rebuilt) => {
+              const anchored = rebuilt.filter(
+                (content) => content.metadata?.cacheAnchor === true,
+              );
+              expect(anchored).toHaveLength(1);
+              expect(anchored[0].speaker).toBe('tool');
+              expect(anchored[0].blocks[0].type).toBe('tool_response');
+            },
+          );
+        },
+      );
+    });
+  });
 }
 
 describe('applyCompressionWithAnchor — cacheAnchor marker (#3070)', () => {
@@ -72,87 +139,47 @@ describe('applyCompressionWithAnchor — cacheAnchor marker (#3070)', () => {
 
     // Compressed result: 2 preserved head entries, a summary, 1 tail entry.
     // Production strategies reuse preserved entries from the stamped history.
-    const stamped = historyService.getAll();
-    const newHistory = [
-      stamped[0],
-      stamped[1],
-      summary('<state_snapshot>compressed middle</state_snapshot>'),
-      stamped[3],
-    ];
-    const topPreserved = 2;
+    await collectRowsForAssertions(
+      historyService.getComprehensive(),
+      async (stamped) => {
+        const newHistory = [
+          stamped[0],
+          stamped[1],
+          summary('<state_snapshot>compressed middle</state_snapshot>'),
+          stamped[3],
+        ];
+        const topPreserved = 2;
 
-    await apply(historyService, newHistory, topPreserved);
+        await apply(historyService, newHistory, topPreserved);
 
-    const rebuilt = historyService.getAll();
-    expect(rebuilt).toHaveLength(newHistory.length);
+        await collectRowsForAssertions(
+          historyService.getComprehensive(),
+          async (rebuilt) => {
+            expect(rebuilt).toHaveLength(newHistory.length);
 
-    // Exactly ONE entry carries the marker.
-    const marked = rebuilt.filter((c) => c.metadata?.cacheAnchor === true);
-    expect(marked).toHaveLength(1);
+            // Exactly ONE entry carries the marker.
+            const marked = rebuilt.filter(
+              (c) => c.metadata?.cacheAnchor === true,
+            );
+            expect(marked).toHaveLength(1);
 
-    // The marker is on the last preserved-head entry (index topPreserved - 1)
-    // after atomic replacement.
-    expect(rebuilt[topPreserved - 1].metadata?.cacheAnchor).toBe(true);
-    // Atomic replacement stamps entries through the normal chronology path.
-    expect(rebuilt[topPreserved - 1].metadata?.chronology?.seq).toBeDefined();
+            // The marker is on the last preserved-head entry (index topPreserved - 1)
+            // after atomic replacement.
+            expect(rebuilt[topPreserved - 1].metadata?.cacheAnchor).toBe(true);
+            // Atomic replacement stamps entries through the normal chronology path.
+            expect(
+              rebuilt[topPreserved - 1].metadata?.chronology?.seq,
+            ).toBeDefined();
+          },
+        );
+      },
+    );
   });
 
-  it('anchors the preserved-head tool content after a complete tool round-trip', async () => {
-    const historyService = new HistoryService();
-    const toolCallId = 'compression-tool-call';
-    const roundTrip: IContent[] = [
-      human('Read the file'),
-      {
-        speaker: 'ai',
-        blocks: [
-          {
-            type: 'tool_call',
-            id: toolCallId,
-            name: 'read_file',
-            parameters: { path: 'file.txt' },
-          },
-        ],
-      },
-      {
-        speaker: 'tool',
-        blocks: [
-          {
-            type: 'tool_response',
-            callId: toolCallId,
-            toolName: 'read_file',
-            result: 'contents',
-            isComplete: true,
-          },
-        ],
-      },
-      ai('The file was read'),
-    ];
-    for (const content of roundTrip) {
-      historyService.add(content, 'test-model');
-    }
-    const stamped = historyService.getAll();
+  registerToolRoundTrip();
+});
 
-    await apply(
-      historyService,
-      [
-        stamped[0],
-        stamped[1],
-        stamped[2],
-        summary('compressed remainder'),
-        human('tail'),
-      ],
-      3,
-    );
-
-    const rebuilt = historyService.getAll();
-    const anchored = rebuilt.filter(
-      (content) => content.metadata?.cacheAnchor === true,
-    );
-    expect(anchored).toHaveLength(1);
-    expect(anchored[0].speaker).toBe('tool');
-    expect(anchored[0].blocks[0].type).toBe('tool_response');
-  });
-
+describe('applyCompressionWithAnchor marker replacement (#3070)', () => {
   it('clears stale markers so exactly one entry carries the marker after a second compression', async () => {
     const historyService = new HistoryService();
     for (const c of [human('seed1'), ai('seed2')]) {
@@ -160,31 +187,48 @@ describe('applyCompressionWithAnchor — cacheAnchor marker (#3070)', () => {
     }
 
     // First compression: head of 2 entries reused from the stamped history.
-    const stamped = historyService.getAll();
-    await apply(
-      historyService,
-      [stamped[0], stamped[1], summary('first summary'), human('tail-a')],
-      2,
-    );
-    const afterFirst = historyService.getAll();
-    expect(
-      afterFirst.filter((c) => c.metadata?.cacheAnchor === true),
-    ).toHaveLength(1);
+    await collectRowsForAssertions(
+      historyService.getComprehensive(),
+      async (stamped) => {
+        await apply(
+          historyService,
+          [stamped[0], stamped[1], summary('first summary'), human('tail-a')],
+          2,
+        );
+        await collectRowsForAssertions(
+          historyService.getComprehensive(),
+          async (afterFirst) => {
+            expect(
+              afterFirst.filter((c) => c.metadata?.cacheAnchor === true),
+            ).toHaveLength(1);
 
-    // Second compression with the previous head reused (byte-identical) plus a
-    // longer tail. The marker must move to the new boundary and the old one
-    // must be cleared — never two markers at once.
-    const reusedHead = afterFirst.slice(0, 2);
-    await apply(
-      historyService,
-      [...reusedHead, summary('second summary'), human('tail-b'), ai('tail-c')],
-      2,
+            // Second compression with the previous head reused (byte-identical) plus a
+            // longer tail. The marker must move to the new boundary and the old one
+            // must be cleared — never two markers at once.
+            const reusedHead = afterFirst.slice(0, 2);
+            await apply(
+              historyService,
+              [
+                ...reusedHead,
+                summary('second summary'),
+                human('tail-b'),
+                ai('tail-c'),
+              ],
+              2,
+            );
+            await collectRowsForAssertions(
+              historyService.getComprehensive(),
+              async (afterSecond) => {
+                expect(
+                  afterSecond.filter((c) => c.metadata?.cacheAnchor === true),
+                ).toHaveLength(1);
+                expect(afterSecond[1].metadata?.cacheAnchor).toBe(true);
+              },
+            );
+          },
+        );
+      },
     );
-    const afterSecond = historyService.getAll();
-    expect(
-      afterSecond.filter((c) => c.metadata?.cacheAnchor === true),
-    ).toHaveLength(1);
-    expect(afterSecond[1].metadata?.cacheAnchor).toBe(true);
   });
 
   it('marks no entry when the prefix is destroyed (topPreserved <= 0)', async () => {
@@ -200,14 +244,20 @@ describe('applyCompressionWithAnchor — cacheAnchor marker (#3070)', () => {
       0,
     );
 
-    const rebuilt = historyService.getAll();
-    expect(
-      rebuilt.filter((c) => c.metadata?.cacheAnchor === true),
-    ).toHaveLength(0);
-    // The anchor seq is reset (not advanced) when the prefix is destroyed.
-    expect(historyService.getCacheAnchorSeq()).toBe(0);
+    await collectRowsForAssertions(
+      historyService.getComprehensive(),
+      async (rebuilt) => {
+        expect(
+          rebuilt.filter((c) => c.metadata?.cacheAnchor === true),
+        ).toHaveLength(0);
+        // The anchor seq is reset (not advanced) when the prefix is destroyed.
+        expect(historyService.getCacheAnchorSeq()).toBe(0);
+      },
+    );
   });
+});
 
+describe('applyCompressionWithAnchor atomic anchor publication (#3070)', () => {
   it('advances the cache anchor seq to the last preserved-head entry', async () => {
     const historyService = new HistoryService();
     // Seed real history so the preserved-head entries carry chronology
@@ -216,36 +266,53 @@ describe('applyCompressionWithAnchor — cacheAnchor marker (#3070)', () => {
     for (const c of [human('seed1'), ai('seed2'), human('seed3')]) {
       historyService.add(c, 'test-model');
     }
-    const stamped = historyService.getAll();
+    await collectRowsForAssertions(
+      historyService.getComprehensive(),
+      async (stamped) => {
+        await apply(
+          historyService,
+          [stamped[0], stamped[1], summary('summary'), human('tail')],
+          2,
+        );
 
-    await apply(
-      historyService,
-      [stamped[0], stamped[1], summary('summary'), human('tail')],
-      2,
+        await collectRowsForAssertions(
+          historyService.getComprehensive(),
+          async (rebuilt) => {
+            // stamped[1] was reused as the last preserved head; its seq carries over.
+            const expectedSeq = stamped[1].metadata?.chronology?.seq;
+            expect(expectedSeq).toBeDefined();
+            expect(rebuilt[1].metadata?.chronology?.seq).toBe(expectedSeq);
+            expect(historyService.getCacheAnchorSeq()).toBe(expectedSeq);
+          },
+        );
+      },
     );
-
-    const rebuilt = historyService.getAll();
-    // stamped[1] was reused as the last preserved head; its seq carries over.
-    const expectedSeq = stamped[1].metadata?.chronology?.seq;
-    expect(expectedSeq).toBeDefined();
-    expect(rebuilt[1].metadata?.chronology?.seq).toBe(expectedSeq);
-    expect(historyService.getCacheAnchorSeq()).toBe(expectedSeq);
   });
 
   it('publishes compression as one atomic history mutation', async () => {
     const historyService = new HistoryService();
     historyService.add(human('original'), 'test-model');
     await historyService.waitForTokenUpdates();
-    const original = historyService.getAll();
-    let tokenUpdateCount = 0;
-    historyService.on('tokensUpdated', () => {
-      tokenUpdateCount += 1;
-    });
+    await collectRowsForAssertions(
+      historyService.getComprehensive(),
+      async (original) => {
+        let observedTokenUpdateCount = 0;
+        historyService.on('tokensUpdated', () => {
+          observedTokenUpdateCount += 1;
+        });
 
-    await apply(historyService, [original[0], summary('replacement')], 1);
+        await apply(historyService, [original[0], summary('replacement')], 1);
+        const tokenUpdateCount = observedTokenUpdateCount;
 
-    expect(historyService.getAll()).toHaveLength(2);
-    expect(tokenUpdateCount).toBe(1);
+        await collectRowsForAssertions(
+          historyService.getComprehensive(),
+          async (contentsForAssertions) => {
+            expect(contentsForAssertions).toHaveLength(2);
+            expect(tokenUpdateCount).toBe(1);
+          },
+        );
+      },
+    );
   });
 });
 
@@ -259,73 +326,77 @@ describe('applyCompressionWithAnchor under an active compression lock (#3338)', 
     ]) {
       historyService.add(c, 'test-model');
     }
-    const stamped = historyService.getAll();
-    const newHistory = [
-      stamped[0],
-      stamped[1],
-      summary('compressed'),
-      stamped[2],
-    ];
-    const topPreserved = 2;
+    await collectRowsForAssertions(
+      historyService.getComprehensive(),
+      async (stamped) => {
+        const newHistory = [
+          stamped[0],
+          stamped[1],
+          summary('compressed'),
+          stamped[2],
+        ];
+        const topPreserved = 2;
 
-    const observed: string[] = [];
-    historyService.on('contentAdded', (content) => {
-      const block = content.blocks[0];
-      observed.push(
-        `contentAdded:${block.type === 'text' ? block.text : block.type}`,
-      );
-    });
-    let textsAtRelease: string[] | undefined;
-    historyService.on('compressionLockReleased', () => {
-      observed.push('compressionLockReleased');
-      // Snapshot AT the release, not after endCompression: this is what
-      // actually witnesses that the rebuild was committed first.
-      textsAtRelease = entryTexts(historyService);
-    });
-    historyService.on('compressionEnded', () => {
-      observed.push('compressionEnded');
-    });
+        const observed: string[] = [];
+        historyService.on('contentAdded', (content) => {
+          const block = content.blocks[0];
+          observed.push(
+            `contentAdded:${block.type === 'text' ? block.text : block.type}`,
+          );
+        });
+        let textsAtRelease: string[] | undefined;
+        historyService.on('compressionLockReleased', () => {
+          observed.push('compressionLockReleased');
+          // Snapshot AT the release, not after endCompression: this is what
+          // actually witnesses that the rebuild was committed first.
+          textsAtRelease = entryTexts(historyService);
+        });
+        historyService.on('compressionEnded', () => {
+          observed.push('compressionEnded');
+        });
 
-    historyService.startCompression();
-    // An ordinary streaming add queued before the helper must not be treated as
-    // rebuild work: it lands in the streaming phase after the release events.
-    historyService.add(human('pre-helper-stream'));
-    await apply(historyService, newHistory, topPreserved);
-    // A late ordinary streaming add queued after the helper must also stay in the
-    // streaming phase; it cannot be inferred from position relative to the rebuild.
-    historyService.add(ai('post-helper-stream'));
-    historyService.endCompression(summary('done'), stamped.length);
+        historyService.startCompression();
+        // An ordinary streaming add queued before the helper must not be treated as
+        // rebuild work: it lands in the streaming phase after the release events.
+        historyService.add(human('pre-helper-stream'));
+        await apply(historyService, newHistory, topPreserved);
+        // A late ordinary streaming add queued after the helper must also stay in the
+        // streaming phase; it cannot be inferred from position relative to the rebuild.
+        historyService.add(ai('post-helper-stream'));
+        historyService.endCompression(summary('done'), stamped.length);
 
-    // The rebuild is published as one atomic replacement (#3199), so it emits
-    // no per-entry contentAdded events; the sibling #3070 case asserts that
-    // atomicity directly. What #3338 guarantees is the ordering, which is
-    // unchanged: the rebuild is committed before the lock release, and both
-    // ordinary streaming adds fire after it in FIFO order.
-    expect(observed).toStrictEqual([
-      'compressionLockReleased',
-      'compressionEnded',
-      'contentAdded:pre-helper-stream',
-      'contentAdded:post-helper-stream',
-    ]);
+        // The rebuild is published as one atomic replacement (#3199), so it emits
+        // no per-entry contentAdded events; the sibling #3070 case asserts that
+        // atomicity directly. What #3338 guarantees is the ordering, which is
+        // unchanged: the rebuild is committed before the lock release, and both
+        // ordinary streaming adds fire after it in FIFO order.
+        expect(observed).toStrictEqual([
+          'compressionLockReleased',
+          'compressionEnded',
+          'contentAdded:pre-helper-stream',
+          'contentAdded:post-helper-stream',
+        ]);
 
-    // Observed at the moment of release rather than inferred from the order of
-    // the awaits above: the rebuild is already published, and neither queued
-    // streaming add has landed yet. Without this the ordering guarantee was
-    // only established by the test's own choreography.
-    expect(textsAtRelease).toStrictEqual([
-      'original-1',
-      'original-2',
-      'compressed',
-      'original-3',
-    ]);
+        // Observed at the moment of release rather than inferred from the order of
+        // the awaits above: the rebuild is already published, and neither queued
+        // streaming add has landed yet. Without this the ordering guarantee was
+        // only established by the test's own choreography.
+        expect(textsAtRelease).toStrictEqual([
+          'original-1',
+          'original-2',
+          'compressed',
+          'original-3',
+        ]);
 
-    expect(entryTexts(historyService)).toStrictEqual([
-      'original-1',
-      'original-2',
-      'compressed',
-      'original-3',
-      'pre-helper-stream',
-      'post-helper-stream',
-    ]);
+        expect(entryTexts(historyService)).toStrictEqual([
+          'original-1',
+          'original-2',
+          'compressed',
+          'original-3',
+          'pre-helper-stream',
+          'post-helper-stream',
+        ]);
+      },
+    );
   });
 });

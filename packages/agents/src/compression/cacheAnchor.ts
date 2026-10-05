@@ -5,7 +5,8 @@
  */
 
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { invalidateResponsesStatefulChain } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { publishCompressionArrayValues } from './cache-anchor-array-values.js';
 
 /**
  * Resolve the chronology `seq` that should become the new cache anchor after a
@@ -51,74 +52,31 @@ function extractSeq(entry: IContent): number {
 }
 
 /**
- * Apply the compression result to the history service: clear, re-add the
- * annotated entries, then advance or reset the cache anchor atomically
+ * Capture the compression result as disk values, publish annotated entries,
+ * then advance or reset the cache anchor after replacement succeeds
  * (#3070 Defects 3, 5).
  *
  * The anchor value is resolved BEFORE mutation so a throw cannot leave a
  * partially applied compression. When the prefix was destroyed
  * (`topPreserved <= 0`), the anchor is explicitly reset.
  */
-export async function applyCompressionWithAnchor(
-  historyService: {
-    replaceAll(contents: readonly IContent[], model?: string): Promise<void>;
-    resetCacheAnchorSeq(): void;
-    setCacheAnchorSeq(seq: number): void;
-    getRawHistory(): readonly IContent[];
-  },
+export function applyCompressionWithAnchor(
+  historyService: HistoryService,
   newHistory: readonly IContent[],
   topPreserved: number,
   model: string,
-  annotate: (
-    oldHistory: readonly IContent[],
-    newHist: readonly IContent[],
-  ) => IContent[],
+  signal?: AbortSignal,
 ): Promise<void> {
-  const anchorSeq = resolveHeadAnchorSeq(newHistory, topPreserved);
-  const isPrefixDestroyed = topPreserved <= 0;
-  // #3134 Fix 3: compression rewrites history behind the head, invalidating
-  // the Responses stateful chain. Strip responsesStored from retained AI
-  // entries so the next turn finds no parent and sends full history.
-  const annotated = invalidateResponsesStatefulChain(
-    stampCacheAnchorMarker(
-      annotate(historyService.getRawHistory(), newHistory),
-      isPrefixDestroyed ? 0 : topPreserved,
-    ),
-  );
-
-  // Exactly one preserved-head entry — the last one — carries the marker, so
-  // explicit-cache providers can place a breakpoint at the head boundary. The
-  // marker travels with the history; a wholesale replacement drops it.
-
-  // #3199 replaces the history atomically instead of clear()+add(). The
-  // multi-step rebuild only lands when the compression queue is flushed, so a
-  // caller reading history straight after the apply saw it empty; replaceAll
-  // is awaited and leaves no interleaving window for late streaming writes.
-  await historyService.replaceAll(annotated, model);
-  if (isPrefixDestroyed) {
-    historyService.resetCacheAnchorSeq();
-  } else if (anchorSeq !== undefined) {
-    historyService.setCacheAnchorSeq(anchorSeq);
+  try {
+    resolveHeadAnchorSeq(newHistory, topPreserved);
+  } catch (error) {
+    return Promise.reject(error);
   }
-}
-
-/**
- * Ensure exactly one entry (or none) carries `metadata.cacheAnchor`.
- *
- * `anchorCount` is the number of preserved-head entries (`topPreserved`); the
- * anchor entry is `entries[anchorCount - 1]`. A non-positive `anchorCount`
- * means the prefix was destroyed, so every marker is cleared and none is set.
- */
-function stampCacheAnchorMarker(
-  entries: readonly IContent[],
-  anchorCount: number,
-): IContent[] {
-  return entries.map((entry, index) => {
-    const metadata = { ...entry.metadata };
-    delete metadata.cacheAnchor;
-    if (index === anchorCount - 1) {
-      metadata.cacheAnchor = true;
-    }
-    return { ...entry, metadata };
-  });
+  return publishCompressionArrayValues(
+    historyService,
+    newHistory,
+    Math.max(0, topPreserved),
+    model,
+    signal,
+  );
 }

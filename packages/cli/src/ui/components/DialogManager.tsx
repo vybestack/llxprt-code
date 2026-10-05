@@ -3,6 +3,7 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { resumeHistoryWindow } from '../utils/streamHistoryItems.js';
 
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { Box } from 'ink';
@@ -17,10 +18,7 @@ import {
   type PerformResumeResult,
   type ResumeContext,
 } from '../../services/performResume.js';
-import {
-  iContentToHistoryItems,
-  resolveEmojiFilterMode,
-} from '../utils/iContentToHistoryItems.js';
+import { resolveEmojiFilterMode } from '../utils/iContentToHistoryItems.js';
 // import { LoopDetectionConfirmation } from './LoopDetectionConfirmation.js'; // NOTE: Not yet ported from upstream
 import { SettingsDialog } from './SettingsDialog.js';
 import { PrivacyNotice } from '../privacy/PrivacyNotice.js';
@@ -208,7 +206,7 @@ function useSessionBrowserHandler(
       for (const warning of resumeResult.warnings) {
         addItem({ type: 'info', text: `Warning: ${warning}` });
       }
-      const uiHistory = iContentToHistoryItems(
+      const uiHistory = await resumeHistoryWindow(
         resumeResult.history,
         resolveEmojiFilterMode(config),
       );

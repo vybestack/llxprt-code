@@ -1,3 +1,7 @@
+import { forbidHistoryMaterializationForTest } from '../../../core/src/test-utils/history-materialization-test-guard.js';
+import { observeHistorySynchronouslyForTest as testHistory } from '../../../core/src/test-utils/synchronous-history-test-observation.js';
+import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-core/test-utils/collect-rows-for-assertions.js';
+import { withCuratedHistoryForTest } from '../../../core/src/test-utils/curated-history-fixture.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -19,6 +23,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -112,17 +117,11 @@ function buildConversationManager(
 }
 
 describe('ConversationManager stamps model origin at recording boundary (issue #2335)', () => {
-  let conversationManager: ConversationManager;
-  let historyService: HistoryService;
-
-  beforeEach(() => {
-    ({ conversationManager, historyService } = buildConversationManager(
+  it('stamps metadata.model on a freshly generated AI turn', async () => {
+    const { conversationManager, historyService } = buildConversationManager(
       GENERATING_MODEL,
       GENERATING_BASE_URL,
-    ));
-  });
-
-  it('stamps metadata.model on a freshly generated AI turn', async () => {
+    );
     const userInput: IContent = {
       speaker: 'human',
       blocks: [{ type: 'text', text: 'Hello' }],
@@ -136,16 +135,22 @@ describe('ConversationManager stamps model origin at recording boundary (issue #
 
     await conversationManager.recordHistory(userInput, modelOutput);
 
-    const all = historyService.getAll();
-    const ai = all.find((c) => c.speaker === 'ai');
-    const human = all.find((c) => c.speaker === 'human');
+    await withRows(historyService.streamRawHistory(), (rows) => {
+      const all = rows;
+      const ai = all.find((c) => c.speaker === 'ai');
+      const human = all.find((c) => c.speaker === 'human');
 
-    expect(ai?.metadata?.model).toBe(GENERATING_MODEL);
-    expect(ai?.metadata?.providerBaseURL).toBe(GENERATING_BASE_URL);
-    expect(human?.metadata?.model).toBeUndefined();
+      expect(ai?.metadata?.model).toBe(GENERATING_MODEL);
+      expect(ai?.metadata?.providerBaseURL).toBe(GENERATING_BASE_URL);
+      expect(human?.metadata?.model).toBeUndefined();
+    });
   });
 
   it('stamps metadata.model on an AI turn that carries a signed thinking block', async () => {
+    const { conversationManager, historyService } = buildConversationManager(
+      GENERATING_MODEL,
+      GENERATING_BASE_URL,
+    );
     const userInput: IContent = {
       speaker: 'human',
       blocks: [{ type: 'text', text: 'Think and answer' }],
@@ -167,21 +172,31 @@ describe('ConversationManager stamps model origin at recording boundary (issue #
 
     await conversationManager.recordHistory(userInput, modelOutput);
 
-    const all = historyService.getAll();
-    const ai = all.find((c) => c.speaker === 'ai');
-    const human = all.find((c) => c.speaker === 'human');
+    await withRows(historyService.streamRawHistory(), (rows) => {
+      const all = rows;
+      const ai = all.find((c) => c.speaker === 'ai');
+      const human = all.find((c) => c.speaker === 'human');
 
-    expect(ai?.metadata?.model).toBe(GENERATING_MODEL);
-    expect(ai?.metadata?.providerBaseURL).toBe(GENERATING_BASE_URL);
-    expect(human?.metadata?.model).toBeUndefined();
+      expect(ai?.metadata?.model).toBe(GENERATING_MODEL);
+      expect(ai?.metadata?.providerBaseURL).toBe(GENERATING_BASE_URL);
+      expect(human?.metadata?.model).toBeUndefined();
 
-    // The signed thinking block must still be present (stamping does not strip).
-    expect(
-      ai?.blocks.some((b) => b.type === 'thinking' && b.signature === 'sig-A'),
-    ).toBe(true);
+      // The signed thinking block must still be present (stamping does not strip).
+      expect(
+        ai?.blocks.some(
+          (b) => b.type === 'thinking' && b.signature === 'sig-A',
+        ),
+      ).toBe(true);
+    });
   });
+});
 
+describe('ConversationManager AFC model stamps', () => {
   it('stamps metadata.model on AI turns mixed into automaticFunctionCallingHistory but not user turns', async () => {
+    const { conversationManager, historyService } = buildConversationManager(
+      GENERATING_MODEL,
+      GENERATING_BASE_URL,
+    );
     const userInput: IContent = {
       speaker: 'human',
       blocks: [{ type: 'text', text: 'Run the tool' }],
@@ -221,21 +236,102 @@ describe('ConversationManager stamps model origin at recording boundary (issue #
       automaticFunctionCallingHistory,
     );
 
-    const all = historyService.getAll();
-    const aiTurns = all.filter((c) => c.speaker === 'ai');
-    const humanTurns = all.filter((c) => c.speaker === 'human');
+    await withRows(historyService.streamRawHistory(), (rows) => {
+      const all = rows;
+      const aiTurns = all.filter((c) => c.speaker === 'ai');
+      const humanTurns = all.filter((c) => c.speaker === 'human');
 
-    // Every recorded AI turn — including the one carried by the AFC history —
-    // is stamped with the generating model.
-    expect(aiTurns.length).toBeGreaterThan(0);
-    for (const ai of aiTurns) {
-      expect(ai.metadata?.model).toBe(GENERATING_MODEL);
-      expect(ai.metadata?.providerBaseURL).toBe(GENERATING_BASE_URL);
-    }
-    // User turns (including those mixed into the AFC history) are not stamped.
-    for (const human of humanTurns) {
-      expect(human.metadata?.model).toBeUndefined();
-    }
+      // Every recorded AI turn — including the one carried by the AFC history —
+      // is stamped with the generating model.
+      expect(aiTurns.length).toBeGreaterThan(0);
+      for (const ai of aiTurns) {
+        expect(ai.metadata?.model).toBe(GENERATING_MODEL);
+        expect(ai.metadata?.providerBaseURL).toBe(GENERATING_BASE_URL);
+      }
+      // User turns (including those mixed into the AFC history) are not stamped.
+      for (const human of humanTurns) {
+        expect(human.metadata?.model).toBeUndefined();
+      }
+    });
+  });
+});
+
+describe('ConversationManager AFC curated prefix', () => {
+  it('deduplicates AFC against curated rows without materializing curated history', async () => {
+    const { conversationManager, historyService } = buildConversationManager(
+      GENERATING_MODEL,
+      GENERATING_BASE_URL,
+    );
+    const call: IContent = {
+      speaker: 'ai',
+      blocks: [
+        { type: 'tool_call', id: 'call-1', name: 'tool', parameters: {} },
+      ],
+    };
+    const reply: IContent = {
+      speaker: 'tool',
+      blocks: [
+        {
+          type: 'tool_response',
+          callId: 'call-1',
+          toolName: 'tool',
+          result: 7,
+        },
+      ],
+    };
+    historyService.add(
+      { speaker: 'ai', blocks: [{ type: 'text', text: '' }] },
+      GENERATING_MODEL,
+    );
+    await historyService.addBatch(
+      [
+        { speaker: 'human', blocks: [{ type: 'text', text: 'question' }] },
+        call,
+      ],
+      GENERATING_MODEL,
+    );
+    await withCuratedHistoryForTest(historyService, async (existing) => {
+      const afc = [
+        ...existing.map((row) => ({
+          ...row,
+          metadata: { turnId: 'provider' },
+        })),
+        reply,
+      ];
+      const restoreMaterialization = forbidHistoryMaterializationForTest(
+        historyService,
+        'eager curated history',
+      );
+      try {
+        await conversationManager.recordHistory(
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'ignored in AFC' }],
+          },
+          [],
+          afc,
+        );
+      } finally {
+        restoreMaterialization();
+      }
+    });
+    await withRows(historyService.streamRawHistory(), (rows) => {
+      const all = rows;
+      expect(all).toHaveLength(4);
+      expect(all[3].blocks).toStrictEqual(reply.blocks);
+    });
+  });
+
+  it('uses the scalar query for turn AFC offsets without an eager curated read', () => {
+    const source = readFileSync(
+      new URL('./turnHistoryCommit.ts', import.meta.url),
+      'utf8',
+    );
+    const body = source
+      .split('async function afcHistoryEntries(')[1]
+      ?.split('\n}')[0];
+    expect(body).toContain('await historyService.countCuratedRows()');
+    expect(body).not.toMatch(/getCurated\s*\(|materializeHistory\s*\(/);
   });
 });
 
@@ -259,7 +355,7 @@ describe('ConversationManager import/restore paths do NOT stamp (issue #2335)', 
 
     conversationManager.importInitialHistory(importedHistory, GENERATING_MODEL);
 
-    const all = historyService.getAll();
+    const all = testHistory(historyService);
     const ai = all.find((c) => c.speaker === 'ai');
 
     // Imported turns have unknown origin and must remain unstamped.
@@ -278,11 +374,13 @@ describe('ConversationManager import/restore paths do NOT stamp (issue #2335)', 
 
     await conversationManager.setHistory(restoredHistory);
 
-    const all = historyService.getAll();
-    const ai = all.find((c) => c.speaker === 'ai');
+    await withRows(historyService.streamRawHistory(), (rows) => {
+      const all = rows;
+      const ai = all.find((c) => c.speaker === 'ai');
 
-    expect(ai?.metadata?.model).toBeUndefined();
-    expect(ai?.metadata?.providerBaseURL).toBeUndefined();
+      expect(ai?.metadata?.model).toBeUndefined();
+      expect(ai?.metadata?.providerBaseURL).toBeUndefined();
+    });
   });
 
   it('addHistory does NOT stamp metadata.model on externally-supplied turns', () => {
@@ -293,7 +391,7 @@ describe('ConversationManager import/restore paths do NOT stamp (issue #2335)', 
 
     conversationManager.addHistory(externalAiTurn);
 
-    const all = historyService.getAll();
+    const all = testHistory(historyService);
     const ai = all.find((c) => c.speaker === 'ai');
 
     expect(ai?.metadata?.model).toBeUndefined();

@@ -23,6 +23,8 @@ import type {
   UsageStats,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { SendMessageParams } from './chatSession.js';
+import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
+import { sanitizeProviderContentForSerialization } from '@vybestack/llxprt-code-core/services/history/historyCloneUtils.js';
 import { logApiRequest } from './turnLogging.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
@@ -54,17 +56,38 @@ export interface PreparedRequest {
   baseRuntimeContext: ProviderRuntimeContext;
 }
 
-/**
- * Build the request contents (curated IContent[]) and pending IContent[]
- * from user input. Returns both the provider-ready contents and the raw
- * pending items so downstream enforcement can thread the pending boundary
- * explicitly (issue #2304).
- */
-export function buildRequestContentsResult(
+/** Cold, repeatable request copies preserve the purge transaction and boundary identity. */
+export function streamSemanticPurgeRequest(
+  attempt: SemanticMediaPurgeAttempt | undefined,
+  signal?: AbortSignal,
+): AsyncIterable<IContent> | undefined {
+  if (attempt === undefined) return undefined;
+  return {
+    async *[Symbol.asyncIterator](): AsyncGenerator<IContent, void, unknown> {
+      signal?.throwIfAborted();
+      for await (const row of attempt.requestHistory.streamRows(signal)) {
+        signal?.throwIfAborted();
+        const content = sanitizeProviderContentForSerialization(row);
+        const boundary = row.metadata?.semanticMediaPurgeBoundary;
+        if (row.metadata !== undefined) {
+          content.metadata = structuredClone(row.metadata);
+          if (boundary !== undefined) {
+            content.metadata.semanticMediaPurgeBoundary = { ...boundary };
+          }
+        }
+        yield content;
+      }
+    },
+  };
+}
+
+/** Collect normalized rows for the existing enforcement and hook request contracts. */
+export async function buildRequestContentsResult(
   userContents: IContent | IContent[],
   historyService: HistoryService,
-  historyOverride?: readonly IContent[],
-): { contents: IContent[]; pending: IContent[] } {
+  historyOverride?: Iterable<IContent> | AsyncIterable<IContent>,
+  signal?: AbortSignal,
+): Promise<{ contents: IContent[]; pending: IContent[] }> {
   const inputArray = Array.isArray(userContents)
     ? userContents
     : [userContents];
@@ -76,13 +99,15 @@ export function buildRequestContentsResult(
       metadata: { ...(content.metadata ?? {}), id: idGen(), turnId: turnKey },
     };
   });
-  return {
-    contents: historyService.getCuratedForProvider(
-      userIContents,
-      historyOverride,
-    ),
-    pending: userIContents,
-  };
+  const contents: IContent[] = [];
+  for await (const row of historyService.getCuratedForProviderStream(
+    userIContents,
+    signal,
+    historyOverride,
+  )) {
+    contents.push(row);
+  }
+  return { contents, pending: userIContents };
 }
 
 /**

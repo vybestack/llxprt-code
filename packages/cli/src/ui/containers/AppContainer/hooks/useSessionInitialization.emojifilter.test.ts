@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { displayBoot } from '../../../../test-utils/resumeRows.js';
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { act } from 'react';
@@ -55,7 +56,7 @@ async function seedWith(
       agent: makeAgent(),
       addItem: vi.fn(),
       loadHistory,
-      resumedHistory,
+      resumedBoot: displayBoot(resumedHistory),
     }),
   );
   await act(async () => {
@@ -64,14 +65,17 @@ async function seedWith(
   return loadHistory;
 }
 
-describe('useSessionInitialization emoji filtering (#2888)', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+function clearTestMocks(): void {
+  vi.clearAllMocks();
+}
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
+function restoreTestMocks(): void {
+  vi.restoreAllMocks();
+}
+
+describe('useSessionInitialization emoji filtering (#2888)', () => {
+  beforeEach(clearTestMocks);
+  afterEach(restoreTestMocks);
 
   it('seeds filtered model text and verbatim user text by default', async () => {
     const loadHistory = await seedWith(undefined);
@@ -111,6 +115,11 @@ describe('useSessionInitialization emoji filtering (#2888)', () => {
       },
     ]);
   });
+});
+
+describe('useSessionInitialization emoji filtering (#2888): error and warn', () => {
+  beforeEach(clearTestMocks);
+  afterEach(restoreTestMocks);
 
   it('seeds the live error item for blocked model text in error mode', async () => {
     const loadHistory = await seedWith('error');

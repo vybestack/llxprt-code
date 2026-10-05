@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { displayBoot } from '../../../test-utils/resumeRows.js';
 
 /**
  * @plan PLAN-20260214-SESSIONBROWSER.P13
@@ -141,8 +142,9 @@ function makeHookProps(
       overrides.onSelect ??
       (async (): Promise<PerformResumeResult> => ({
         ok: true,
-        history: [],
+        history: displayBoot([]).streamRows(),
         metadata: {
+          kind: 'main',
           sessionId: 'resumed',
           projectHash: PROJECT_HASH,
           startTime: new Date().toISOString(),
@@ -164,26 +166,10 @@ function delay(ms: number): Promise<void> {
 // Test Suite
 // ---------------------------------------------------------------------------
 
-describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
-  let tempDir: string;
-  let chatsDir: string;
-  let lockHandles: Array<{ release: () => Promise<void> }>;
+let chatsDir: string;
 
-  beforeEach(async () => {
-    tempDir = await fs.mkdtemp(
-      path.join(os.tmpdir(), 'use-session-browser-test-'),
-    );
-    chatsDir = path.join(tempDir, 'chats');
-    await fs.mkdir(chatsDir, { recursive: true });
-    lockHandles = [];
-  });
-
-  afterEach(async () => {
-    await Promise.all(lockHandles.map((handle) => handle.release()));
-    await fs.rm(tempDir, { recursive: true, force: true });
-  });
-
-  describe('Search @requirement:REQ-SR-001', () => {
+function registerSearch1(): void {
+  describe.each([0])('Search @requirement:REQ-SR-001', () => {
     /**
      * Test 8: Start in search mode (REQ-SR-001)
      * GIVEN: Hook is mounted
@@ -239,7 +225,11 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       result.current.handleKeypress('', makeKey('backspace'));
       expect(result.current.searchTerm).toBe('a');
     });
+  });
+}
 
+function registerSearch2(): void {
+  describe.each([0])('Search @requirement:REQ-SR-001', () => {
     /**
      * Test 11: Search filters by preview text (REQ-SR-002)
      * GIVEN: Sessions with different content
@@ -308,7 +298,11 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       expect(search.hasLoadedPreview).toBe(true);
       expect(search.filteredSessionIds).toContain('match-session');
     });
+  });
+}
 
+function registerSearch3(): void {
+  describe.each([0])('Search @requirement:REQ-SR-001', () => {
     /**
      * Test 12: Search filters by provider
      * GIVEN: Sessions with different providers
@@ -371,7 +365,11 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       const matchIds = result.current.filteredSessions.map((s) => s.sessionId);
       expect(matchIds).toContain('gpt-session');
     });
+  });
+}
 
+function registerSearch4(): void {
+  describe.each([0])('Search @requirement:REQ-SR-001', () => {
     /**
      * Test 14: Sessions are included in filtered results during search (REQ-SR-003)
      * GIVEN: Sessions exist
@@ -446,7 +444,11 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       result.current.handleKeypress('a', makeKey('a'));
       expect(result.current.page).toBe(0);
     });
+  });
+}
 
+function registerSearch5(): void {
+  describe.each([0])('Search @requirement:REQ-SR-001', () => {
     /**
      * Test 16: Search resets selection to 0 (REQ-SR-006)
      * GIVEN: User has selectedIndex 3
@@ -510,7 +512,11 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
 
       expect(result.current.filteredSessions).toHaveLength(2);
     });
+  });
+}
 
+function registerSearch6(): void {
+  describe.each([0])('Search @requirement:REQ-SR-001', () => {
     /**
      * Test 17a: No-match state includes query (REQ-SR-011)
      * GIVEN: No sessions match search
@@ -579,7 +585,11 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       result.current.handleKeypress('\t', makeKey('tab'));
       expect(result.current.isSearching).toBe(true);
     });
+  });
+}
 
+function registerSearch7(): void {
+  describe.each([0])('Search @requirement:REQ-SR-001', () => {
     /**
      * Test 20: Arrow keys work in search mode (REQ-SR-007)
      * GIVEN: Hook in search mode with multiple sessions
@@ -606,261 +616,300 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       expect(result.current.selectedIndex).toBe(1);
     });
   });
+}
 
-  describe('Search Name, Checkpoint, and ID @requirement:REQ-SR-002', () => {
-    /**
-     * Test 27a: Search filters by session name (REQ-SR-002)
-     * GIVEN: A session has a mutable name set via setSessionName
-     * WHEN: User searches a substring of that name
-     * THEN: The named session is retained and non-matching sessions drop
-     */
-    it('search filters by session name', async () => {
-      const namedSvc = new SessionRecordingService(
-        makeConfig(chatsDir, { sessionId: 'named-session' }),
-      );
-      namedSvc.recordContent(makeContent('hello'));
-      await namedSvc.setSessionName('my-unique-project-name');
-      await namedSvc.dispose();
-      await createTestSession(chatsDir, {
-        sessionId: 'plain-session',
-        contents: [makeContent('goodbye world')],
-      });
-
-      const props = makeHookProps(chatsDir);
-      const { result } = renderHook(() => useSessionBrowser(props));
-
-      await waitFor(() => {
-        expect(result.current.isLoading).toBe(false);
-        expect(
-          result.current.sessions.every((s) => s.previewState === 'loaded'),
-        ).toBe(true);
-      });
-
-      for (const char of 'my-unique-project') {
-        result.current.handleKeypress(char, makeKey(char));
-      }
-
-      const matchIds = result.current.filteredSessions.map((s) => s.sessionId);
-      expect(matchIds).toContain('named-session');
-      expect(matchIds).not.toContain('plain-session');
-    });
-
-    /**
-     * Test 27b: Search filters by checkpoint name (REQ-SR-002)
-     * GIVEN: A checkpoint row has a checkpointName
-     * WHEN: User searches a substring of that checkpoint name
-     * THEN: The checkpoint row is retained and plain session rows drop
-     */
-    it('search filters by checkpoint name', async () => {
-      const recording = await SessionRecordingService.createLocked(
-        makeConfig(chatsDir, { sessionId: 'checkpoint-source' }),
-      );
-      recording.recordContent(makeContent('checkpoint body'));
-      await recording.createCheckpoint('release-cut-branch');
-      try {
-        const { result } = renderHook(() =>
-          useSessionBrowser(
-            makeHookProps(chatsDir, {
-              currentSessionId: 'different-current-session',
-              activeRecording: recording,
-            }),
-          ),
+function registerSearchName1(): void {
+  describe.each([0])(
+    'Search Name, Checkpoint, and ID @requirement:REQ-SR-002',
+    () => {
+      /**
+       * Test 27a: Search filters by session name (REQ-SR-002)
+       * GIVEN: A session has a mutable name set via setSessionName
+       * WHEN: User searches a substring of that name
+       * THEN: The named session is retained and non-matching sessions drop
+       */
+      it('search filters by session name', async () => {
+        const namedSvc = new SessionRecordingService(
+          makeConfig(chatsDir, { sessionId: 'named-session' }),
         );
+        namedSvc.recordContent(makeContent('hello'));
+        await namedSvc.setSessionName('my-unique-project-name');
+        await namedSvc.dispose();
+        await createTestSession(chatsDir, {
+          sessionId: 'plain-session',
+          contents: [makeContent('goodbye world')],
+        });
+
+        const props = makeHookProps(chatsDir);
+        const { result } = renderHook(() => useSessionBrowser(props));
+
         await waitFor(() => {
-          expect(result.current.sessions.length).toBe(2);
+          expect(result.current.isLoading).toBe(false);
           expect(
             result.current.sessions.every((s) => s.previewState === 'loaded'),
           ).toBe(true);
         });
 
-        for (const char of 'release-cut') {
+        for (const char of 'my-unique-project') {
+          result.current.handleKeypress(char, makeKey(char));
+        }
+
+        const matchIds = result.current.filteredSessions.map(
+          (s) => s.sessionId,
+        );
+        expect(matchIds).toContain('named-session');
+        expect(matchIds).not.toContain('plain-session');
+      });
+    },
+  );
+}
+
+function registerSearchName2(): void {
+  describe.each([0])(
+    'Search Name, Checkpoint, and ID @requirement:REQ-SR-002',
+    () => {
+      /**
+       * Test 27b: Search filters by checkpoint name (REQ-SR-002)
+       * GIVEN: A checkpoint row has a checkpointName
+       * WHEN: User searches a substring of that checkpoint name
+       * THEN: The checkpoint row is retained and plain session rows drop
+       */
+      it('search filters by checkpoint name', async () => {
+        const recording = await SessionRecordingService.createLocked(
+          makeConfig(chatsDir, { sessionId: 'checkpoint-source' }),
+        );
+        recording.recordContent(makeContent('checkpoint body'));
+        await recording.createCheckpoint('release-cut-branch');
+        try {
+          const { result } = renderHook(() =>
+            useSessionBrowser(
+              makeHookProps(chatsDir, {
+                currentSessionId: 'different-current-session',
+                activeRecording: recording,
+              }),
+            ),
+          );
+          await waitFor(() => {
+            expect(result.current.sessions.length).toBe(2);
+            expect(
+              result.current.sessions.every((s) => s.previewState === 'loaded'),
+            ).toBe(true);
+          });
+
+          for (const char of 'release-cut') {
+            result.current.handleKeypress(char, makeKey(char));
+          }
+
+          expect(
+            result.current.filteredSessions.map((row) => ({
+              kind: row.target.kind,
+              checkpointName: row.checkpointName,
+            })),
+          ).toStrictEqual([
+            { kind: 'checkpoint', checkpointName: 'release-cut-branch' },
+          ]);
+        } finally {
+          await recording.dispose();
+        }
+      });
+    },
+  );
+}
+
+function registerSearchName3(): void {
+  describe.each([0])(
+    'Search Name, Checkpoint, and ID @requirement:REQ-SR-002',
+    () => {
+      /**
+       * Test 27c: Search filters by session id (REQ-SR-002)
+       * GIVEN: A session has a distinctive sessionId
+       * WHEN: User searches a substring of that sessionId
+       * THEN: Only that session is retained
+       */
+      it('search filters by session id', async () => {
+        await createTestSession(chatsDir, { sessionId: 'zeta-nebula-92813' });
+        await createTestSession(chatsDir, {
+          sessionId: 'plain-delta-11223',
+          contents: [makeContent('alpha')],
+        });
+
+        const props = makeHookProps(chatsDir);
+        const { result } = renderHook(() => useSessionBrowser(props));
+
+        await waitFor(() => {
+          expect(result.current.isLoading).toBe(false);
+          expect(
+            result.current.sessions.every((s) => s.previewState === 'loaded'),
+          ).toBe(true);
+        });
+
+        for (const char of 'nebula-9281') {
           result.current.handleKeypress(char, makeKey(char));
         }
 
         expect(
-          result.current.filteredSessions.map((row) => ({
-            kind: row.target.kind,
-            checkpointName: row.checkpointName,
-          })),
-        ).toStrictEqual([
-          { kind: 'checkpoint', checkpointName: 'release-cut-branch' },
-        ]);
-      } finally {
-        await recording.dispose();
-      }
-    });
-
-    /**
-     * Test 27c: Search filters by session id (REQ-SR-002)
-     * GIVEN: A session has a distinctive sessionId
-     * WHEN: User searches a substring of that sessionId
-     * THEN: Only that session is retained
-     */
-    it('search filters by session id', async () => {
-      await createTestSession(chatsDir, { sessionId: 'zeta-nebula-92813' });
-      await createTestSession(chatsDir, {
-        sessionId: 'plain-delta-11223',
-        contents: [makeContent('alpha')],
+          result.current.filteredSessions.map((s) => s.sessionId),
+        ).toStrictEqual(['zeta-nebula-92813']);
       });
 
-      const props = makeHookProps(chatsDir);
-      const { result } = renderHook(() => useSessionBrowser(props));
+      /**
+       * Test 27d: Search matches session names case-insensitively (REQ-SR-002)
+       * GIVEN: A session has a name with mixed casing
+       * WHEN: User searches the name in a different case
+       * THEN: The session is still retained
+       */
+      it('search matches session names case-insensitively', async () => {
+        const mixedSvc = new SessionRecordingService(
+          makeConfig(chatsDir, { sessionId: 'case-named-session' }),
+        );
+        mixedSvc.recordContent(makeContent('hello'));
+        await mixedSvc.setSessionName('QuantumKernelBuild');
+        await mixedSvc.dispose();
+        await createTestSession(chatsDir, {
+          sessionId: 'case-plain-session',
+          contents: [makeContent('goodbye world')],
+        });
 
-      await waitFor(() => {
-        expect(result.current.isLoading).toBe(false);
+        const props = makeHookProps(chatsDir);
+        const { result } = renderHook(() => useSessionBrowser(props));
+
+        await waitFor(() => {
+          expect(result.current.isLoading).toBe(false);
+          expect(
+            result.current.sessions.every((s) => s.previewState === 'loaded'),
+          ).toBe(true);
+        });
+
+        for (const char of 'quantumkernel') {
+          result.current.handleKeypress(char, makeKey(char));
+        }
+
+        const matchIds = result.current.filteredSessions.map(
+          (s) => s.sessionId,
+        );
+        expect(matchIds).toContain('case-named-session');
+        expect(matchIds).not.toContain('case-plain-session');
+      });
+    },
+  );
+}
+
+function registerSearchName4(): void {
+  describe.each([0])(
+    'Search Name, Checkpoint, and ID @requirement:REQ-SR-002',
+    () => {
+      /**
+       * Test 27d2: Provider and model matching excludes non-matching rows and
+       * ignores case (REQ-SR-002)
+       * GIVEN: Two sessions differing only by provider and model
+       * WHEN: User searches the provider, then the model, in mixed case
+       * THEN: Only the owning session is retained each time
+       */
+      it('search filters by provider and model case-insensitively', async () => {
+        await createTestSession(chatsDir, {
+          sessionId: 'aaa-first-row',
+          provider: 'anthropic',
+          model: 'claude-opus-4-5',
+          contents: [makeContent('shared body text')],
+        });
+        await createTestSession(chatsDir, {
+          sessionId: 'bbb-second-row',
+          provider: 'openai',
+          model: 'gpt-5-codex',
+          contents: [makeContent('shared body text')],
+        });
+
+        const props = makeHookProps(chatsDir);
+        const { result } = renderHook(() => useSessionBrowser(props));
+
+        await waitFor(() => {
+          expect(result.current.isLoading).toBe(false);
+          expect(
+            result.current.sessions.every((s) => s.previewState === 'loaded'),
+          ).toBe(true);
+        });
+
+        for (const char of 'OPENAI') {
+          result.current.handleKeypress(char, makeKey(char));
+        }
         expect(
-          result.current.sessions.every((s) => s.previewState === 'loaded'),
-        ).toBe(true);
-      });
+          result.current.filteredSessions.map((s) => s.sessionId),
+        ).toStrictEqual(['bbb-second-row']);
 
-      for (const char of 'nebula-9281') {
-        result.current.handleKeypress(char, makeKey(char));
-      }
-
-      expect(
-        result.current.filteredSessions.map((s) => s.sessionId),
-      ).toStrictEqual(['zeta-nebula-92813']);
-    });
-
-    /**
-     * Test 27d: Search matches session names case-insensitively (REQ-SR-002)
-     * GIVEN: A session has a name with mixed casing
-     * WHEN: User searches the name in a different case
-     * THEN: The session is still retained
-     */
-    it('search matches session names case-insensitively', async () => {
-      const mixedSvc = new SessionRecordingService(
-        makeConfig(chatsDir, { sessionId: 'case-named-session' }),
-      );
-      mixedSvc.recordContent(makeContent('hello'));
-      await mixedSvc.setSessionName('QuantumKernelBuild');
-      await mixedSvc.dispose();
-      await createTestSession(chatsDir, {
-        sessionId: 'case-plain-session',
-        contents: [makeContent('goodbye world')],
-      });
-
-      const props = makeHookProps(chatsDir);
-      const { result } = renderHook(() => useSessionBrowser(props));
-
-      await waitFor(() => {
-        expect(result.current.isLoading).toBe(false);
+        for (let index = 0; index < 'OPENAI'.length; index += 1) {
+          result.current.handleKeypress('', makeKey('backspace'));
+        }
+        for (const char of 'Claude-Opus') {
+          result.current.handleKeypress(char, makeKey(char));
+        }
         expect(
-          result.current.sessions.every((s) => s.previewState === 'loaded'),
-        ).toBe(true);
+          result.current.filteredSessions.map((s) => s.sessionId),
+        ).toStrictEqual(['aaa-first-row']);
       });
+    },
+  );
+}
 
-      for (const char of 'quantumkernel') {
-        result.current.handleKeypress(char, makeKey(char));
-      }
+function registerSearchName5(): void {
+  describe.each([0])(
+    'Search Name, Checkpoint, and ID @requirement:REQ-SR-002',
+    () => {
+      /**
+       * Test 27e: Previews still loading are retained by a non-matching search
+       * (REQ-SR-002)
+       * GIVEN: A session's preview has not resolved yet
+       * WHEN: A non-matching search term is applied
+       * THEN: The session is retained while loading and drops once its preview
+       * resolves
+       */
+      it('sessions with loading previews are retained by a non-matching search', async () => {
+        await createTestSession(chatsDir, {
+          sessionId: 'slow-preview-session',
+          contents: [makeContent('first message here')],
+        });
 
-      const matchIds = result.current.filteredSessions.map((s) => s.sessionId);
-      expect(matchIds).toContain('case-named-session');
-      expect(matchIds).not.toContain('case-plain-session');
-    });
+        const { result } = renderHook(() =>
+          useSessionBrowser(makeHookProps(chatsDir)),
+        );
+        for (const char of 'nomatchterm') {
+          result.current.handleKeypress(char, makeKey(char));
+        }
 
-    /**
-     * Test 27d2: Provider and model matching excludes non-matching rows and
-     * ignores case (REQ-SR-002)
-     * GIVEN: Two sessions differing only by provider and model
-     * WHEN: User searches the provider, then the model, in mixed case
-     * THEN: Only the owning session is retained each time
-     */
-    it('search filters by provider and model case-insensitively', async () => {
-      await createTestSession(chatsDir, {
-        sessionId: 'aaa-first-row',
-        provider: 'anthropic',
-        model: 'claude-opus-4-5',
-        contents: [makeContent('shared body text')],
-      });
-      await createTestSession(chatsDir, {
-        sessionId: 'bbb-second-row',
-        provider: 'openai',
-        model: 'gpt-5-codex',
-        contents: [makeContent('shared body text')],
-      });
-
-      const props = makeHookProps(chatsDir);
-      const { result } = renderHook(() => useSessionBrowser(props));
-
-      await waitFor(() => {
-        expect(result.current.isLoading).toBe(false);
+        await waitFor(() => {
+          expect(
+            result.all.some(
+              (snapshot) =>
+                snapshot.sessions.length === 1 &&
+                snapshot.sessions[0].previewState === 'loading',
+            ),
+          ).toBe(true);
+        });
+        const loadingSnapshot = result.all.find(
+          (snapshot) =>
+            snapshot.sessions.length === 1 &&
+            snapshot.sessions[0].previewState === 'loading',
+        );
         expect(
-          result.current.sessions.every((s) => s.previewState === 'loaded'),
-        ).toBe(true);
-      });
-
-      for (const char of 'OPENAI') {
-        result.current.handleKeypress(char, makeKey(char));
-      }
-      expect(
-        result.current.filteredSessions.map((s) => s.sessionId),
-      ).toStrictEqual(['bbb-second-row']);
-
-      for (let index = 0; index < 'OPENAI'.length; index += 1) {
-        result.current.handleKeypress('', makeKey('backspace'));
-      }
-      for (const char of 'Claude-Opus') {
-        result.current.handleKeypress(char, makeKey(char));
-      }
-      expect(
-        result.current.filteredSessions.map((s) => s.sessionId),
-      ).toStrictEqual(['aaa-first-row']);
-    });
-
-    /**
-     * Test 27e: Previews still loading are retained by a non-matching search
-     * (REQ-SR-002)
-     * GIVEN: A session's preview has not resolved yet
-     * WHEN: A non-matching search term is applied
-     * THEN: The session is retained while loading and drops once its preview
-     * resolves
-     */
-    it('sessions with loading previews are retained by a non-matching search', async () => {
-      await createTestSession(chatsDir, {
-        sessionId: 'slow-preview-session',
-        contents: [makeContent('first message here')],
-      });
-
-      const { result } = renderHook(() =>
-        useSessionBrowser(makeHookProps(chatsDir)),
-      );
-      for (const char of 'nomatchterm') {
-        result.current.handleKeypress(char, makeKey(char));
-      }
-
-      await waitFor(() => {
-        expect(
-          result.all.some(
-            (snapshot) =>
-              snapshot.sessions.length === 1 &&
-              snapshot.sessions[0].previewState === 'loading',
-          ),
-        ).toBe(true);
-      });
-      const loadingSnapshot = result.all.find(
-        (snapshot) =>
-          snapshot.sessions.length === 1 &&
-          snapshot.sessions[0].previewState === 'loading',
-      );
-      expect(
-        loadingSnapshot?.filteredSessions.some(
-          (s) => s.sessionId === 'slow-preview-session',
-        ),
-      ).toBe(true);
-
-      await waitFor(() => {
-        expect(result.current.sessions[0].previewState).toBe('loaded');
-        expect(
-          result.current.filteredSessions.some(
+          loadingSnapshot?.filteredSessions.some(
             (s) => s.sessionId === 'slow-preview-session',
           ),
-        ).toBe(false);
-      });
-    });
-  });
+        ).toBe(true);
 
-  describe('Sort @requirement:REQ-SO-001', () => {
+        await waitFor(() => {
+          expect(result.current.sessions[0].previewState).toBe('loaded');
+          expect(
+            result.current.filteredSessions.some(
+              (s) => s.sessionId === 'slow-preview-session',
+            ),
+          ).toBe(false);
+        });
+      });
+    },
+  );
+}
+
+function registerSort1(): void {
+  describe.each([0])('Sort @requirement:REQ-SO-001', () => {
     /**
      * Test 21: Default sort is newest (REQ-SB-002)
      * GIVEN: Hook is mounted
@@ -901,7 +950,11 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       result.current.handleKeypress('s', makeKey('s'));
       expect(result.current.sortOrder).toBe('newest');
     });
+  });
+}
 
+function registerSort2(): void {
+  describe.each([0])('Sort @requirement:REQ-SO-001', () => {
     /**
      * Test 23: s does NOT cycle in search mode
      * GIVEN: Hook in search mode
@@ -952,7 +1005,11 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
 
       expect(result.current.sortOrder).toBe('oldest');
     });
+  });
+}
 
+function registerSort3(): void {
+  describe.each([0])('Sort @requirement:REQ-SO-001', () => {
     /**
      * Test 25: Oldest sort reverses order
      * GIVEN: Multiple sessions with different timestamps
@@ -1028,4 +1085,39 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       expect(first.fileSize).toBeGreaterThanOrEqual(second.fileSize);
     });
   });
+}
+
+describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
+  let tempDir: string;
+  let lockHandles: Array<{ release: () => Promise<void> }>;
+
+  beforeEach(async () => {
+    tempDir = await fs.mkdtemp(
+      path.join(os.tmpdir(), 'use-session-browser-test-'),
+    );
+    chatsDir = path.join(tempDir, 'chats');
+    await fs.mkdir(chatsDir, { recursive: true });
+    lockHandles = [];
+  });
+
+  afterEach(async () => {
+    await Promise.all(lockHandles.map((handle) => handle.release()));
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  registerSearch1();
+  registerSearch2();
+  registerSearch3();
+  registerSearch4();
+  registerSearch5();
+  registerSearch6();
+  registerSearch7();
+  registerSearchName1();
+  registerSearchName2();
+  registerSearchName3();
+  registerSearchName4();
+  registerSearchName5();
+  registerSort1();
+  registerSort2();
+  registerSort3();
 });

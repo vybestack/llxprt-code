@@ -6,6 +6,7 @@
 
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
+import { observeHistorySynchronouslyForTest as synchronousTestHistory } from '../../test-utils/synchronous-history-test-observation.js';
 
 function compressSummary(text: string): {
   speaker: 'human';
@@ -15,7 +16,7 @@ function compressSummary(text: string): {
 }
 
 function historyTexts(service: HistoryService): string[] {
-  return service.getAll().map((entry) => {
+  return synchronousTestHistory(service).map((entry) => {
     const block = entry.blocks[0];
     return block.type === 'text' ? block.text : `<${block.type}>`;
   });
@@ -183,7 +184,7 @@ describe('rebuild scope boundary matrix (#3338)', () => {
     });
 
     expect(
-      historyService.getAll().map((entry) => entry.blocks[0]),
+      synchronousTestHistory(historyService).map((entry) => entry.blocks[0]),
     ).toStrictEqual([{ type: 'text', text: 'immediate rebuilt' }]);
     expect(texts).toStrictEqual(['immediate rebuilt']);
   });

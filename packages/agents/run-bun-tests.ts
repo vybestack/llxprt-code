@@ -43,15 +43,16 @@ import { tmpdir } from 'node:os';
 import {
   DEFAULT_PER_FILE_TIMEOUT_MS,
   DEFAULT_PER_TEST_TIMEOUT_MS,
+  acceptancePolicyForFile,
   envPerFileTimeoutMs,
   MAX_TEST_CONCURRENCY,
   resolveTestConcurrency,
+  scheduleTestFiles,
 } from '../../scripts/lib/bun-test-policy.js';
 import {
   assertRunnerActive,
   createBespokeRunnerIsolation,
   killRunnerChild,
-  throwWorkerFailures,
   installRunnerSignalHandlers,
   trackRunnerChild,
 } from '../../scripts/lib/bespoke-runner-isolation.js';
@@ -107,7 +108,32 @@ const CONCURRENCY = resolveTestConcurrency({
  * by the per-file budget below, which is what should happen - a raised per-test
  * bound must not turn a hang into a longer hang.
  */
-const PER_TEST_TIMEOUT_MS = DEFAULT_PER_TEST_TIMEOUT_MS;
+export function timeoutForFile(file: string): number {
+  return (
+    acceptancePolicyForFile(WORKSPACE_ROOT, file)?.perTestTimeoutMs ??
+    DEFAULT_PER_TEST_TIMEOUT_MS
+  );
+}
+
+export function fileTimeoutForFile(file: string): number {
+  const override = envPerFileTimeoutMs(
+    process.env,
+    'LLXPRT_TEST_FILE_TIMEOUT_MS',
+  );
+  return (
+    acceptancePolicyForFile(WORKSPACE_ROOT, file)?.perFileTimeoutMs ??
+    override ??
+    DEFAULT_PER_FILE_TIMEOUT_MS
+  );
+}
+
+export function runTestFiles<T>(
+  files: readonly string[],
+  concurrency: number,
+  runFile: (file: string) => Promise<T>,
+): Promise<T[]> {
+  return scheduleTestFiles(WORKSPACE_ROOT, files, concurrency, runFile);
+}
 
 /**
  * Directories that are pruned during discovery.
@@ -207,9 +233,7 @@ export function runTestFile(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<TestResult> {
   assertRunnerActive();
-  const timeoutMs =
-    envPerFileTimeoutMs(process.env, 'LLXPRT_TEST_FILE_TIMEOUT_MS') ??
-    DEFAULT_PER_FILE_TIMEOUT_MS;
+  const timeoutMs = fileTimeoutForFile(file);
   rmSync(reportPath, { force: true });
   return new Promise((resolve) => {
     let settled = false;
@@ -226,7 +250,7 @@ export function runTestFile(
       [
         'test',
         '--timeout',
-        String(PER_TEST_TIMEOUT_MS),
+        String(timeoutForFile(file)),
         '--reporter=junit',
         `--reporter-outfile=${reportPath}`,
         file,
@@ -413,10 +437,7 @@ async function main(): Promise<void> {
   // EMFILE catch-all in the worker cannot swallow a misconfiguration into a
   // generic failed-file result. The validated value also feeds the catch-all
   // so spawn failures report the budget that was actually in effect.
-  const perFileOverrideMs = envPerFileTimeoutMs(
-    process.env,
-    'LLXPRT_TEST_FILE_TIMEOUT_MS',
-  );
+  envPerFileTimeoutMs(process.env, 'LLXPRT_TEST_FILE_TIMEOUT_MS');
   const testFiles = discoverTestFiles(WORKSPACE_ROOT).map((file) =>
     relative(WORKSPACE_ROOT, file),
   );
@@ -448,45 +469,35 @@ async function main(): Promise<void> {
     // it is free. Fixed-size batches would hold `CONCURRENCY - 1` slots idle
     // while the slowest file in a batch finished, which both lengthens the run
     // and prolongs the contention window that makes slow files slower still.
-    const results: TestResult[] = [];
-    let nextIndex = 0;
-    const worker = async (): Promise<void> => {
-      while (nextIndex < testFiles.length) {
-        const file = testFiles[nextIndex++];
+    const results = await runTestFiles<TestResult>(
+      testFiles,
+      CONCURRENCY,
+      async (file) => {
         try {
           const reportPath = reportPathFor(file);
-          results.push(
-            await isolation.runFile(file, () =>
-              runTestFileWithTimeoutRetry(file, () =>
-                runTestFile(file, reportPath, isolation.sessionEnv),
-              ),
+          return await isolation.runFile(file, () =>
+            runTestFileWithTimeoutRetry(file, () =>
+              runTestFile(file, reportPath, isolation.sessionEnv),
             ),
           );
         } catch (error: unknown) {
-          // `spawn` can throw synchronously under OS-level resource exhaustion
-          // (EMFILE). Record it as a failed file so the run still produces a
-          // report and a controlled exit code rather than dying on an unhandled
-          // rejection and discarding every result collected so far.
+          // OS-level spawn exhaustion must remain a failed file in the report.
           console.error(
             `Unexpected error running ${file}: ${
               error instanceof Error ? error.message : String(error)
             }`,
           );
-          results.push({
+          return {
             file,
             passed: false,
             exitCode: -1,
             signal: null,
             timedOut: false,
-            timeoutMs: perFileOverrideMs ?? DEFAULT_PER_FILE_TIMEOUT_MS,
-          });
+            timeoutMs: fileTimeoutForFile(file),
+          };
         }
-      }
-    };
-    const workers = await Promise.allSettled(
-      Array.from({ length: Math.min(CONCURRENCY, testFiles.length) }, worker),
+      },
     );
-    throwWorkerFailures(workers);
 
     results.sort((left, right) => left.file.localeCompare(right.file));
 

@@ -21,95 +21,99 @@ function hasSameIdentity(
   ].every(Boolean);
 }
 
-export function bindProviderFileToHistory(
-  history: readonly IContent[],
-  contentId: string,
-  reference: ProviderFileReferenceMetadata,
-): IContent[] {
-  const retainedReference = Object.freeze({ ...reference });
-  const matched = history.some((content) =>
-    content.blocks.some(
-      (block) =>
-        block.type === 'media' &&
-        block.encoding === 'reference' &&
-        block.contentId === contentId,
-    ),
+function hasMedia(content: IContent, contentId: string): boolean {
+  return content.blocks.some(
+    (block) =>
+      block.type === 'media' &&
+      block.encoding === 'reference' &&
+      block.contentId === contentId,
   );
-  if (!matched) {
-    throw new Error(
-      `Cannot bind provider file to missing media content ${contentId}`,
-    );
-  }
-  return history.map((content) => {
-    const blocks = content.blocks.map((block) => {
-      if (
-        block.type !== 'media' ||
-        block.encoding !== 'reference' ||
-        block.contentId !== contentId
-      ) {
-        return block;
-      }
-      const retained = (block.providerFiles ?? []).filter(
-        (candidate) => !hasSameIdentity(candidate, retainedReference),
-      );
-      return {
-        ...block,
-        providerFiles: Object.freeze([...retained, retainedReference]),
-      };
-    });
-    return blocks.some((block, index) => block !== content.blocks[index])
-      ? { ...content, blocks }
-      : content;
-  });
 }
 
-export function unbindProviderFileFromHistory(
-  history: readonly IContent[],
+function bindRow(
+  content: IContent,
   contentId: string,
   reference: ProviderFileReferenceMetadata,
-): IContent[] {
-  return history.map((content) => {
-    const blocks = content.blocks.map((block) => {
-      if (
-        block.type !== 'media' ||
-        block.encoding !== 'reference' ||
-        block.contentId !== contentId ||
-        block.providerFiles === undefined
-      ) {
-        return block;
-      }
-      const retained = block.providerFiles.filter(
-        (candidate) =>
-          !(
-            hasSameIdentity(candidate, reference) &&
-            candidate.fileId === reference.fileId
-          ),
-      );
-      return retained.length === block.providerFiles.length
-        ? block
-        : {
-            ...block,
-            providerFiles:
-              retained.length === 0 ? undefined : Object.freeze(retained),
-          };
-    });
-    return blocks.some((block, index) => block !== content.blocks[index])
-      ? { ...content, blocks }
-      : content;
+): IContent {
+  const blocks = content.blocks.map((block) => {
+    if (
+      block.type !== 'media' ||
+      block.encoding !== 'reference' ||
+      block.contentId !== contentId
+    )
+      return block;
+    const retained = (block.providerFiles ?? []).filter(
+      (candidate) => !hasSameIdentity(candidate, reference),
+    );
+    return { ...block, providerFiles: Object.freeze([...retained, reference]) };
   });
+  return blocks.some((block, index) => block !== content.blocks[index])
+    ? { ...content, blocks }
+    : content;
+}
+
+function unbindRow(
+  content: IContent,
+  contentId: string,
+  reference: ProviderFileReferenceMetadata,
+): IContent {
+  const blocks = content.blocks.map((block) => {
+    if (
+      block.type !== 'media' ||
+      block.encoding !== 'reference' ||
+      block.contentId !== contentId ||
+      block.providerFiles === undefined
+    )
+      return block;
+    const retained = block.providerFiles.filter(
+      (candidate) =>
+        !(
+          hasSameIdentity(candidate, reference) &&
+          candidate.fileId === reference.fileId
+        ),
+    );
+    return retained.length === block.providerFiles.length
+      ? block
+      : {
+          ...block,
+          providerFiles:
+            retained.length === 0 ? undefined : Object.freeze(retained),
+        };
+  });
+  return blocks.some((block, index) => block !== content.blocks[index])
+    ? { ...content, blocks }
+    : content;
 }
 
 export function createHistoryProviderFileBindingStore(
   history: HistoryService,
 ): ProviderFileBindingStore {
   return {
-    bind: (contentId, reference) =>
-      history.transformAll((contents) =>
-        bindProviderFileToHistory(contents, contentId, reference),
-      ),
-    unbind: (contentId, reference) =>
-      history.transformAll((contents) =>
-        unbindProviderFileFromHistory(contents, contentId, reference),
-      ),
+    bind: (contentId, reference) => {
+      const retainedReference = Object.freeze({ ...reference });
+      return history.detachedValues.transform(async (source, sink) => {
+        let matched = false;
+        // Validation precedes candidate serialization, as in the array contract.
+        for await (const row of source.streamRows()) {
+          if (hasMedia(row, contentId)) {
+            matched = true;
+            break;
+          }
+        }
+        if (!matched)
+          throw new Error(
+            `Cannot bind provider file to missing media content ${contentId}`,
+          );
+        for await (const row of source.streamRows())
+          sink.appendValue(bindRow(row, contentId, retainedReference));
+      });
+    },
+    unbind: (contentId, reference) => {
+      const retainedReference = Object.freeze({ ...reference });
+      return history.detachedValues.transform(async (source, sink) => {
+        for await (const row of source.streamRows())
+          sink.appendValue(unbindRow(row, contentId, retainedReference));
+      });
+    },
   };
 }

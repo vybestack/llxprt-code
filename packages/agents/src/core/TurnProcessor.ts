@@ -582,6 +582,7 @@ export class TurnProcessor {
           provider,
           promptId: prompt_id,
           semanticMediaPurge,
+          signal: requestParams.config?.abortSignal,
           estimateFinalizedPromptTokens: estimate,
         }),
       fallbackEstimate: (contents) =>
@@ -647,7 +648,7 @@ export class TurnProcessor {
           ),
         ));
       this.currentPromptEnvelopeEstimate = prepared.estimate;
-      recordSendSeamTelemetry({
+      await recordSendSeamTelemetry({
         usageLogger: this.compressionHandler.tokenUsageLogger,
         promptId,
         estimate: prepared.estimate,

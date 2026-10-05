@@ -125,7 +125,7 @@ export async function dispatchInteractiveOrNonInteractive({
       workspaceRoot,
       sessionMessageBus,
       recording.recordingIntegration,
-      recording.resumedHistory ?? undefined,
+      recording.resumedBoot ?? undefined,
       recording.recordingService,
       recording.resumedLockHandle,
       suppressStartupWelcome,

@@ -1,3 +1,4 @@
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -22,180 +23,197 @@ function terminalError(): Error & {
 }
 
 describe('agent processor retry boundaries', () => {
-  it('TurnProcessor does not retry a terminal provider aggregate', async () => {
-    const error = terminalError();
-    let calls = 0;
-    const processor = Object.create(TurnProcessor.prototype) as TurnProcessor;
-    Object.assign(processor, {
-      compressionHandler: {
-        enforceProviderContents: async ({
-          contents,
-        }: {
-          contents: unknown[];
-        }) => contents,
-        clearProviderCompressionCallback: () => undefined,
-      },
-      runtimeContext: {
-        state: { model: 'test-model' },
-        providerRuntime: {},
-        telemetry: {
-          logApiError: () => undefined,
-          logApiRequest: () => undefined,
-        },
-      },
-      historyService: {
-        getCuratedForProvider: (contents: unknown[]) => contents,
-      },
-      providerRuntimeBuilder: () => ({
-        config: undefined,
-        settingsService: {},
-        metadata: {},
-      }),
-      resolveProviderBaseUrl: () => undefined,
-      generationConfig: {},
-      _executeProviderCall: async () => {
-        calls++;
-        throw error;
-      },
-      _validateProvider: () => undefined,
-      _enforceAndLogProviderContents: async (contents: unknown[]) => contents,
-    });
+  it(
+    'TurnProcessor does not retry a terminal provider aggregate',
+    facadeCallback0,
+  );
 
-    await expect(
-      Reflect.apply(
-        (
-          processor as unknown as {
-            _executeSendWithRetry: (...args: unknown[]) => Promise<unknown>;
-          }
-        )._executeSendWithRetry,
-        processor,
-        [
-          { message: 'test' },
-          [{ speaker: 'human', blocks: [] }],
-          { name: 'test-provider' },
-          'prompt-id',
-        ],
-      ),
-    ).rejects.toBe(error);
-    expect(calls).toBe(1);
+  it(
+    'DirectMessageProcessor passes the signal and does not retry a terminal aggregate',
+    facadeCallback1,
+  );
+
+  it(
+    'DirectMessageProcessor honors an already-aborted signal before transport',
+    facadeCallback2,
+  );
+
+  it(
+    'TurnProcessor stops when aborted during the retry delay',
+    facadeCallback3,
+  );
+});
+
+async function facadeCallback0(): Promise<void> {
+  const error = terminalError();
+  let calls = 0;
+  const processor = Object.create(TurnProcessor.prototype) as TurnProcessor;
+  Object.assign(processor, {
+    compressionHandler: {
+      enforceProviderContents: async ({ contents }: { contents: unknown[] }) =>
+        contents,
+      clearProviderCompressionCallback: () => undefined,
+    },
+    runtimeContext: {
+      state: { model: 'test-model' },
+      providerRuntime: {},
+      telemetry: {
+        logApiError: () => undefined,
+        logApiRequest: () => undefined,
+      },
+    },
+    historyService: {
+      async *getCuratedForProviderStream(contents: IContent[]) {
+        yield* contents;
+      },
+    },
+    providerRuntimeBuilder: () => ({
+      config: undefined,
+      settingsService: {},
+      metadata: {},
+    }),
+    resolveProviderBaseUrl: () => undefined,
+    generationConfig: {},
+    _executeProviderCall: async () => {
+      calls++;
+      throw error;
+    },
+    _validateProvider: () => undefined,
+    _enforceAndLogProviderContents: async (contents: unknown[]) => contents,
   });
 
-  it('DirectMessageProcessor passes the signal and does not retry a terminal aggregate', async () => {
-    const error = terminalError();
-    const controller = new AbortController();
-    let calls = 0;
-    const processor = Object.create(
-      DirectMessageProcessor.prototype,
-    ) as DirectMessageProcessor;
-    Object.assign(processor, {
-      retry: retryWithBackoff,
-      _executeDirectProviderCall: async () => {
-        calls++;
-        throw error;
-      },
-    });
-
-    await expect(
-      Reflect.apply(
-        (
-          processor as unknown as {
-            _executeWithRetry: (...args: unknown[]) => Promise<unknown>;
-          }
-        )._executeWithRetry,
-        processor,
-        [
-          { name: 'test-provider' },
-          { message: 'test', config: { abortSignal: controller.signal } },
-          [{ speaker: 'human', blocks: [] }],
-        ],
-      ),
-    ).rejects.toBe(error);
-    expect(calls).toBe(1);
-    expect(isTerminalRetryError(error)).toBe(true);
-  });
-
-  it('DirectMessageProcessor honors an already-aborted signal before transport', async () => {
-    const controller = new AbortController();
-    controller.abort();
-    let calls = 0;
-    const processor = Object.create(
-      DirectMessageProcessor.prototype,
-    ) as DirectMessageProcessor;
-    Object.assign(processor, {
-      retry: retryWithBackoff,
-      _executeDirectProviderCall: async () => {
-        calls++;
-      },
-    });
-
-    await expect(
-      Reflect.apply(
-        (
-          processor as unknown as {
-            _executeWithRetry: (...args: unknown[]) => Promise<unknown>;
-          }
-        )._executeWithRetry,
-        processor,
-        [
-          { name: 'test-provider' },
-          { message: 'test', config: { abortSignal: controller.signal } },
-          [{ speaker: 'human', blocks: [] }],
-        ],
-      ),
-    ).rejects.toMatchObject({ name: 'AbortError' });
-    expect(calls).toBe(0);
-  });
-
-  it('TurnProcessor stops when aborted during the retry delay', async () => {
-    const controller = new AbortController();
-    let attempts = 0;
-    let releaseAttempt!: () => void;
-    const attemptStarted = new Promise<void>((resolve) => {
-      releaseAttempt = resolve;
-    });
-    const processor = Object.create(TurnProcessor.prototype) as TurnProcessor;
-    Object.assign(processor, {
-      streamProcessor: {
-        releasePromptTurnIdentity: () => undefined,
-      },
-      async *_runStreamAttempt() {
-        attempts++;
-        releaseAttempt();
-        yield* [];
-        return { error: new Error('retry me'), action: 'retry' as const };
-      },
-    });
-
-    const generator = Reflect.apply(
+  await expect(
+    Reflect.apply(
       (
         processor as unknown as {
-          _createStreamGenerator: (
-            ...args: unknown[]
-          ) => AsyncGenerator<unknown>;
+          _executeSendWithRetry: (...args: unknown[]) => Promise<unknown>;
         }
-      )._createStreamGenerator,
+      )._executeSendWithRetry,
       processor,
       [
-        { message: 'test', config: { abortSignal: controller.signal } },
+        { message: 'test' },
+        [{ speaker: 'human', blocks: [] }],
+        { name: 'test-provider' },
         'prompt-id',
-        {
-          userContents: [],
-          userIContents: [],
-          turnId: 'turn-test',
-          admission: undefined,
-          releaseIfUncommitted: () => Promise.resolve(),
-          transferToHistory: async () => undefined,
-          isTransferredToHistory: () => false,
-        },
-        undefined,
-        () => undefined,
       ],
-    );
-    const pending = generator.next();
-    await attemptStarted;
-    controller.abort();
+    ),
+  ).rejects.toBe(error);
+  expect(calls).toBe(1);
+}
 
-    await expect(pending).rejects.toThrow(/abort/i);
-    expect(attempts).toBe(1);
+async function facadeCallback1(): Promise<void> {
+  const error = terminalError();
+  const controller = new AbortController();
+  let calls = 0;
+  const processor = Object.create(
+    DirectMessageProcessor.prototype,
+  ) as DirectMessageProcessor;
+  Object.assign(processor, {
+    retry: retryWithBackoff,
+    _executeDirectProviderCall: async () => {
+      calls++;
+      throw error;
+    },
   });
-});
+
+  await expect(
+    Reflect.apply(
+      (
+        processor as unknown as {
+          _executeWithRetry: (...args: unknown[]) => Promise<unknown>;
+        }
+      )._executeWithRetry,
+      processor,
+      [
+        { name: 'test-provider' },
+        { message: 'test', config: { abortSignal: controller.signal } },
+        [{ speaker: 'human', blocks: [] }],
+      ],
+    ),
+  ).rejects.toBe(error);
+  expect(calls).toBe(1);
+  expect(isTerminalRetryError(error)).toBe(true);
+}
+
+async function facadeCallback2(): Promise<void> {
+  const controller = new AbortController();
+  controller.abort();
+  let calls = 0;
+  const processor = Object.create(
+    DirectMessageProcessor.prototype,
+  ) as DirectMessageProcessor;
+  Object.assign(processor, {
+    retry: retryWithBackoff,
+    _executeDirectProviderCall: async () => {
+      calls++;
+    },
+  });
+
+  await expect(
+    Reflect.apply(
+      (
+        processor as unknown as {
+          _executeWithRetry: (...args: unknown[]) => Promise<unknown>;
+        }
+      )._executeWithRetry,
+      processor,
+      [
+        { name: 'test-provider' },
+        { message: 'test', config: { abortSignal: controller.signal } },
+        [{ speaker: 'human', blocks: [] }],
+      ],
+    ),
+  ).rejects.toMatchObject({ name: 'AbortError' });
+  expect(calls).toBe(0);
+}
+
+async function facadeCallback3(): Promise<void> {
+  const controller = new AbortController();
+  let attempts = 0;
+  let releaseAttempt!: () => void;
+  const attemptStarted = new Promise<void>((resolve) => {
+    releaseAttempt = resolve;
+  });
+  const processor = Object.create(TurnProcessor.prototype) as TurnProcessor;
+  Object.assign(processor, {
+    streamProcessor: {
+      releasePromptTurnIdentity: () => undefined,
+    },
+    async *_runStreamAttempt() {
+      attempts++;
+      releaseAttempt();
+      yield* [];
+      return { error: new Error('retry me'), action: 'retry' as const };
+    },
+  });
+
+  const generator = Reflect.apply(
+    (
+      processor as unknown as {
+        _createStreamGenerator: (...args: unknown[]) => AsyncGenerator<unknown>;
+      }
+    )._createStreamGenerator,
+    processor,
+    [
+      { message: 'test', config: { abortSignal: controller.signal } },
+      'prompt-id',
+      {
+        userContents: [],
+        userIContents: [],
+        turnId: 'turn-test',
+        admission: undefined,
+        releaseIfUncommitted: () => Promise.resolve(),
+        transferToHistory: async () => undefined,
+        isTransferredToHistory: () => false,
+      },
+      undefined,
+      () => undefined,
+    ],
+  );
+  const pending = generator.next();
+  await attemptStarted;
+  controller.abort();
+
+  await expect(pending).rejects.toThrow(/abort/i);
+  expect(attempts).toBe(1);
+}

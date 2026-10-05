@@ -1,3 +1,4 @@
+/// <reference lib="esnext.array" />
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -24,6 +25,8 @@
  * were called with specific arguments.
  */
 
+import { installFixtureCandidate } from './provider-fallback-candidate-fixture.js';
+import { collectRawHistory } from '@vybestack/llxprt-code-core/test-utils/collect-raw-history.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import {
@@ -35,41 +38,22 @@ import {
   type ProviderContentEnforcementDeps,
 } from '../providerContentEnforcement.js';
 import { CompressionHandler } from '../CompressionHandler.js';
-import * as compressionFactory from '../compressionStrategyFactory.js';
+import { TopDownTruncationStrategy } from '../TopDownTruncationStrategy.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
-import {
-  EmptySummaryError,
-  type CompressionProviderResult,
-  type CompressionStrategy,
-} from '@vybestack/llxprt-code-core/core/compression/types.js';
+import { type CompressionProviderResult } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderContentEnvelope } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
-
-function makeLogger(): DebugLogger {
-  return {
-    debug: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-    child: vi.fn().mockReturnThis(),
-  } as unknown as DebugLogger;
-}
-
-function makeStoredAi(id: string): IContent {
-  return {
-    speaker: 'ai',
-    blocks: [{ type: 'text', text: `stored answer ${id}` }],
-    metadata: {
-      id,
-      responsesStored: true,
-      providerBaseURL: 'https://api.openai.com/v1',
-      providerMetadata: { custom: `metadata ${id}` },
-    },
-  };
-}
+import {
+  makeFallbackFacadeLogger as makeLogger,
+  makeStoredAi,
+  makeCompressionSnapshot,
+  estimateBookkeepingProjection,
+  restoredPromptTokenBaseline,
+  seedFallbackCooldown,
+  installProviderDiskFixture,
+} from './compression-provider-fallback-test-helpers.js';
 
 const original = { ...(await import('@vybestack/llxprt-code-settings')) };
 void vi.mock('@vybestack/llxprt-code-settings', () => ({
@@ -83,108 +67,55 @@ void vi.mock('@vybestack/llxprt-code-settings', () => ({
   }),
 }));
 
-interface BookkeepingStrategyControl {
-  activateCandidateAfter(noopCalls: number): void;
-}
-
-async function seedFallbackCooldown(
-  handler: CompressionHandler,
-  candidateHistory: IContent[],
-): Promise<BookkeepingStrategyControl> {
-  let candidateActive = false;
-  let targetCallCount = 0;
-  let targetNoopCalls = 0;
-  const strategy: CompressionStrategy = {
-    name: 'top-down-truncation',
-    requiresLLM: false,
-    trigger: { mode: 'threshold', defaultThreshold: 0.8 },
-    compress: async () => {
-      if (!candidateActive) {
-        throw new EmptySummaryError('top-down-truncation');
-      }
-      targetCallCount += 1;
-      if (targetCallCount <= targetNoopCalls) {
-        return {
-          kind: 'noop',
-          reason: 'bookkeeping-test-auto-compression-noop',
-          metadata: {
-            originalMessageCount: 1,
-            compressedMessageCount: 1,
-            strategyUsed: 'top-down-truncation',
-            llmCallMade: false,
-          },
-        };
-      }
-      return {
-        kind: 'applied',
-        newHistory: candidateHistory,
-        metadata: {
-          originalMessageCount: 1,
-          compressedMessageCount: candidateHistory.length,
-          strategyUsed: 'top-down-truncation',
-          llmCallMade: false,
-        },
-      };
-    },
-  };
-  vi.spyOn(compressionFactory, 'getCompressionStrategy').mockReturnValue(
-    strategy,
-  );
-
-  await handler.performCompression('seed-failure-1');
-  await handler.performCompression('seed-failure-2');
-  await handler.performCompression('seed-failure-3');
-
-  return {
-    activateCandidateAfter: (noopCalls) => {
-      targetNoopCalls = noopCalls;
-      candidateActive = true;
-    },
-  };
-}
-
-function makeCompressionSnapshot(label: string): IContent {
-  return {
-    speaker: 'human',
-    blocks: [{ type: 'text', text: label }],
-    metadata: {
-      synthetic: true,
-      isSummary: true,
-      reason: 'compression-state-snapshot',
-    },
-  };
-}
-
-function estimateBookkeepingProjection(contents: IContent[]): Promise<number> {
-  const hasCommittedSnapshot = contents.some((content) =>
-    content.blocks.some(
-      (block) =>
-        block.type === 'text' && block.text.includes('committed snapshot'),
-    ),
-  );
-  return Promise.resolve(hasCommittedSnapshot ? 10 : 150_000);
-}
-
-function restoredPromptTokenBaseline(baseline: number | null): number {
-  return baseline ?? 0;
-}
-
 // ---------------------------------------------------------------------------
 // Finding 1: Provider fallback failure propagation through real wiring
 // ---------------------------------------------------------------------------
 
-describe('Finding 1: provider fallback failure propagation through real CompressionHandler (Issue #2588)', () => {
-  let historyService: HistoryService;
-  let runtimeContext: AgentRuntimeContext;
-  let handler: CompressionHandler;
+let suite0HistoryService: HistoryService;
 
+let suite0RuntimeContext: AgentRuntimeContext;
+
+let suite0Handler: CompressionHandler;
+
+let suite1HistoryService: HistoryService;
+
+interface EnforcerHarness {
+  enforcer: ProviderContentEnforcer;
+  deps: ProviderContentEnforcementDeps;
+}
+
+function suite1BuildEnforcerHarness(
+  overrides: Partial<ProviderContentEnforcementDeps> = {},
+): EnforcerHarness {
+  const runtimeContext = buildRuntimeContext(suite1HistoryService, {
+    contextLimit: 200_000,
+    compressionThreshold: 0.8,
+  });
+  const deps: ProviderContentEnforcementDeps = {
+    historyService: suite1HistoryService,
+    runtimeContext,
+    generationConfig: {},
+    providerRuntimeNullable: undefined,
+    logger: makeLogger(),
+    ensureDensityOptimized: vi.fn().mockResolvedValue(undefined),
+    performCompression: vi.fn(),
+    performFallbackCompression: vi.fn().mockResolvedValue(false),
+    getPromptTokenBaseline: () => null,
+    resetPromptTokenBaseline: () => {},
+    restorePromptTokenBaseline: () => {},
+    ...overrides,
+  };
+  return { enforcer: new ProviderContentEnforcer(deps), deps };
+}
+
+describe('Finding 1: provider fallback failure propagation through real CompressionHandler (Issue #2588)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    historyService = new HistoryService();
-    runtimeContext = buildRuntimeContext(historyService, {
+    suite0HistoryService = new HistoryService();
+    suite0RuntimeContext = buildRuntimeContext(suite0HistoryService, {
       contextLimit: 200_000,
       compressionThreshold: 0.8,
-      compressionStrategy: 'top-down-truncation',
+      compressionStrategy: 'high-density',
     });
 
     const provider = {
@@ -192,9 +123,9 @@ describe('Finding 1: provider fallback failure propagation through real Compress
       generateChatCompletion: vi.fn(),
     } as unknown as RuntimeProvider;
     const providerResult: CompressionProviderResult = { provider };
-    handler = new CompressionHandler(
-      runtimeContext,
-      historyService,
+    suite0Handler = new CompressionHandler(
+      suite0RuntimeContext,
+      suite0HistoryService,
       {},
       vi.fn().mockResolvedValue(providerResult),
       vi.fn().mockResolvedValue(undefined),
@@ -210,94 +141,19 @@ describe('Finding 1: provider fallback failure propagation through real Compress
    * enforceProviderContents hard-limit enforcement, the error must propagate
    * as truncationFailure in the final overflow diagnostics.
    */
-  it('propagates fallback truncation failure cause into the final overflow error', async () => {
-    historyService.add(makeUserMessage('established history'));
-    historyService.add(makeStoredAi('resp-preserved-on-failure'));
-
-    const pending = makeUserMessage('pending request');
-    const envelope: ProviderContentEnvelope = {
-      contents: historyService.getCuratedForProvider([pending]),
-      pendingContents: [pending],
-    };
-
-    vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
-      150_000,
-    );
-
-    vi.spyOn(handler, 'performCompression').mockResolvedValue(
-      PerformCompressionResult.COMPRESSED,
-    );
-
-    const strategy: CompressionStrategy = {
-      name: 'top-down-truncation',
-      requiresLLM: false,
-      trigger: { mode: 'threshold', defaultThreshold: 0.8 },
-      compress: vi
-        .fn()
-        .mockRejectedValue(new Error('truncation engine blew up')),
-    };
-    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockReturnValue(
-      strategy,
-    );
-
-    let thrownError: Error | undefined;
-    try {
-      await handler.enforceProviderContents(envelope, 'test-prompt');
-    } catch (error) {
-      thrownError = error as Error;
-    }
-
-    expect(thrownError).toBeInstanceOf(Error);
-    expect(thrownError?.message).toContain(
-      'Truncation fallback failed during hard-limit enforcement',
-    );
-    expect(thrownError!.message).toContain('truncation engine blew up');
-    expect(historyService.getRawHistory()[1].metadata?.responsesStored).toBe(
-      true,
-    );
-    expect(historyService.getRawHistory()[1].metadata?.id).toBe(
-      'resp-preserved-on-failure',
-    );
-  });
+  it(
+    'propagates fallback truncation failure cause into the final overflow error',
+    testBody0,
+  );
 
   /**
    * When buildCompressionContext fails during the provider fallback path,
    * the error must also propagate as truncationFailure.
    */
-  it('propagates buildCompressionContext failure cause into the final overflow error', async () => {
-    historyService.add(makeUserMessage('established history'));
-
-    const pending = makeUserMessage('pending request');
-    const envelope: ProviderContentEnvelope = {
-      contents: historyService.getCuratedForProvider([pending]),
-      pendingContents: [pending],
-    };
-
-    vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
-      150_000,
-    );
-
-    vi.spyOn(handler, 'performCompression').mockResolvedValue(
-      PerformCompressionResult.COMPRESSED,
-    );
-
-    vi.spyOn(handler, 'buildCompressionContext').mockRejectedValue(
-      new Error('context build exploded'),
-    );
-
-    let thrownError: Error | undefined;
-    try {
-      await handler.enforceProviderContents(envelope, 'test-prompt');
-    } catch (error) {
-      thrownError = error as Error;
-    }
-
-    expect(thrownError).toBeInstanceOf(Error);
-    expect(thrownError?.message).toContain(
-      'Truncation fallback failed during hard-limit enforcement',
-    );
-    expect(thrownError?.message).toContain('context build exploded');
-  });
+  it(
+    'propagates buildCompressionContext failure cause into the final overflow error',
+    testBody1,
+  );
 
   /**
    * When the fallback strategy succeeds, the normal happy path should work.
@@ -310,214 +166,27 @@ describe('Finding 1: provider fallback failure propagation through real Compress
    * returning early from an earlier stage. The returned contents must
    * contain the truncated summary and preserve the pending message.
    */
-  it('still succeeds when fallback truncation works correctly', async () => {
-    historyService.add(makeUserMessage('established history'));
+  it('still succeeds when fallback truncation works correctly', testBody2);
 
-    const pending = makeUserMessage('pending request');
-    const envelope: ProviderContentEnvelope = {
-      contents: historyService.getCuratedForProvider([pending]),
-      pendingContents: [pending],
-    };
+  it(
+    'keeps pending fallback failure bookkeeping when candidate commit rejects',
+    testBody3,
+  );
 
-    // contextLimit = 200_000, completionBudget = 65_536
-    // marginAdjustedLimit = 199_995 → over-limit when projected > 199_995
-    // estimate + 65_536 > 199_995 → estimate > 134_459
-    const OVER_LIMIT_ESTIMATE = 150_000; // 150_000 + 65_536 = 215_536 > 199_995
-    const TRUNCATED_SUMMARY_ESTIMATE = 50_000; // 50_000 + 65_536 = 115_536 < 199_995
+  it(
+    'keeps provider fallback failure bookkeeping when candidate commit rejects',
+    testBody4,
+  );
 
-    const estimateSpy = vi.spyOn(historyService, 'estimateTokensForContents');
-    // 1. Initial projection — over-limit
-    estimateSpy.mockResolvedValueOnce(OVER_LIMIT_ESTIMATE);
-    // 2. Post-density-optimization — over-limit
-    estimateSpy.mockResolvedValueOnce(OVER_LIMIT_ESTIMATE);
-    // 3. Post-first-compression — still over-limit, but effective enough to
-    //    avoid retry (reduction >= 5% of pre-compression projection).
-    //    pre-compression projected = 215_536, need reduction >= ~10_777,
-    //    so post-compression estimate <= 139_223 keeps ratio >= 5%.
-    //    135_000 + 65_536 = 200_536 > 199_995 (still over margin limit).
-    estimateSpy.mockResolvedValueOnce(135_000);
-    // 4. Post-truncation — under-limit (fallback succeeded)
-    estimateSpy.mockResolvedValueOnce(TRUNCATED_SUMMARY_ESTIMATE);
+  it(
+    'publishes pending fallback success bookkeeping after candidate commit',
+    testBody5,
+  );
 
-    vi.spyOn(handler, 'performCompression').mockResolvedValue(
-      PerformCompressionResult.COMPRESSED,
-    );
-
-    const fallbackHistory = [
-      makeStoredAi('resp-fallback-1'),
-      makeUserMessage('truncated summary'),
-      makeStoredAi('resp-fallback-2'),
-    ];
-    const strategy: CompressionStrategy = {
-      name: 'top-down-truncation',
-      requiresLLM: false,
-      trigger: { mode: 'threshold', defaultThreshold: 0.8 },
-      compress: vi.fn().mockResolvedValue({
-        newHistory: fallbackHistory,
-        metadata: {
-          originalMessageCount: 1,
-          compressedMessageCount: 1,
-          strategyUsed: 'top-down-truncation',
-          llmCallMade: false,
-        },
-      }),
-    };
-    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockReturnValue(
-      strategy,
-    );
-    handler.setLastPromptTokenCount(123);
-
-    let incrementalPublications = 0;
-    historyService.on('contentAdded', () => {
-      incrementalPublications += 1;
-    });
-
-    const result = await handler.enforceProviderContents(
-      envelope,
-      'test-prompt',
-    );
-
-    // The truncated summary content must appear in the returned provider
-    // contents, proving the fallback path applied its result.
-    const resultText = result
-      .flatMap((c) => c.blocks)
-      .filter((b) => b.type === 'text')
-      .map((b) => (b as { text: string }).text)
-      .join(' ');
-    expect(resultText).toContain('truncated summary');
-
-    // The pending request must be preserved in the returned contents.
-    expect(result).toContainEqual(pending);
-
-    const rewrittenHistory = historyService.getRawHistory();
-    expect(rewrittenHistory[0].metadata).toMatchObject({
-      id: 'resp-fallback-1',
-      providerBaseURL: 'https://api.openai.com/v1',
-      providerMetadata: { custom: 'metadata resp-fallback-1' },
-    });
-    expect(rewrittenHistory[0].metadata?.responsesStored).toBeUndefined();
-    expect(rewrittenHistory[2].metadata).toMatchObject({
-      id: 'resp-fallback-2',
-      providerBaseURL: 'https://api.openai.com/v1',
-      providerMetadata: { custom: 'metadata resp-fallback-2' },
-    });
-    expect(rewrittenHistory[2].metadata?.responsesStored).toBeUndefined();
-    expect(handler.getLastPromptTokenCount()).toBe(0);
-    expect(incrementalPublications).toBe(0);
-  });
-
-  it('keeps pending fallback failure bookkeeping when candidate commit rejects', async () => {
-    historyService.add(makeUserMessage('established history'));
-    await historyService.waitForTokenUpdates();
-    const snapshot = makeCompressionSnapshot(
-      'pending rejected committed snapshot',
-    );
-    const control = await seedFallbackCooldown(handler, [snapshot]);
-    expect(handler['compressionFailureCount']).toBe(3);
-    control.activateCandidateAfter(2);
-    handler.setLastPromptTokenCount(150_000);
-    vi.spyOn(historyService, 'replaceAll').mockRejectedValue(
-      new Error('pending candidate commit rejected'),
-    );
-
-    await expect(
-      handler.enforceContextWindow(0, 'pending-rejected-commit'),
-    ).rejects.toThrow(/context limit/i);
-
-    expect(handler['compressionFailureCount']).toBe(4);
-    expect(handler['compressionSummary']).toBeUndefined();
-    expect(handler['lastSuccessfulCompressionTime']).toBeNull();
-    expect(handler.isCompressionInCooldown()).toBe(true);
-    expect(handler.wasRecentlyCompressed()).toBe(false);
-  });
-
-  it('keeps provider fallback failure bookkeeping when candidate commit rejects', async () => {
-    historyService.add(makeUserMessage('established history'));
-    await historyService.waitForTokenUpdates();
-    const snapshot = makeCompressionSnapshot(
-      'provider rejected committed snapshot',
-    );
-    const control = await seedFallbackCooldown(handler, [snapshot]);
-    expect(handler['compressionFailureCount']).toBe(3);
-    control.activateCandidateAfter(1);
-    vi.spyOn(historyService, 'replaceAll').mockRejectedValue(
-      new Error('provider candidate commit rejected'),
-    );
-    const pending = makeUserMessage('pending request');
-
-    await expect(
-      handler.enforceProviderContents(
-        {
-          contents: historyService.getCuratedForProvider([pending]),
-          pendingContents: [pending],
-        },
-        'provider-rejected-commit',
-        undefined,
-        estimateBookkeepingProjection,
-      ),
-    ).rejects.toThrow(/context limit/i);
-
-    expect(handler['compressionFailureCount']).toBe(4);
-    expect(handler['compressionSummary']).toBeUndefined();
-    expect(handler['lastSuccessfulCompressionTime']).toBeNull();
-    expect(handler.isCompressionInCooldown()).toBe(true);
-    expect(handler.wasRecentlyCompressed()).toBe(false);
-  });
-
-  it('publishes pending fallback success bookkeeping after candidate commit', async () => {
-    historyService.add(makeUserMessage('established history'));
-    await historyService.waitForTokenUpdates();
-    const snapshot = makeCompressionSnapshot(
-      'pending successful committed snapshot',
-    );
-    const control = await seedFallbackCooldown(handler, [snapshot]);
-    expect(handler['compressionFailureCount']).toBe(3);
-    control.activateCandidateAfter(2);
-    handler.setLastPromptTokenCount(150_000);
-
-    await handler.enforceContextWindow(0, 'pending-successful-commit');
-
-    expect(handler['compressionFailureCount']).toBe(0);
-    expect(handler['compressionSummary']).toBe(snapshot);
-    expect(handler['lastSuccessfulCompressionTime']).not.toBeNull();
-    expect(handler.isCompressionInCooldown()).toBe(false);
-    expect(handler.wasRecentlyCompressed()).toBe(true);
-    expect(historyService.getRawHistory()).toHaveLength(1);
-    expect(historyService.getRawHistory()[0].blocks[0]).toMatchObject({
-      type: 'text',
-      text: 'pending successful committed snapshot',
-    });
-  });
-
-  it('publishes provider fallback success bookkeeping after candidate commit', async () => {
-    historyService.add(makeUserMessage('established history'));
-    await historyService.waitForTokenUpdates();
-    const snapshot = makeCompressionSnapshot(
-      'provider successful committed snapshot',
-    );
-    const control = await seedFallbackCooldown(handler, [snapshot]);
-    expect(handler['compressionFailureCount']).toBe(3);
-    control.activateCandidateAfter(1);
-    const pending = makeUserMessage('pending request');
-
-    const contents = await handler.enforceProviderContents(
-      {
-        contents: historyService.getCuratedForProvider([pending]),
-        pendingContents: [pending],
-      },
-      'provider-successful-commit',
-      undefined,
-      estimateBookkeepingProjection,
-    );
-
-    expect(handler['compressionFailureCount']).toBe(0);
-    expect(handler['compressionSummary']).toBe(snapshot);
-    expect(handler['lastSuccessfulCompressionTime']).not.toBeNull();
-    expect(handler.isCompressionInCooldown()).toBe(false);
-    expect(handler.wasRecentlyCompressed()).toBe(true);
-    expect(contents).toContainEqual(snapshot);
-    expect(contents).toContainEqual(pending);
-  });
+  it(
+    'publishes provider fallback success bookkeeping after candidate commit',
+    testBody6,
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -525,204 +194,29 @@ describe('Finding 1: provider fallback failure propagation through real Compress
 // ---------------------------------------------------------------------------
 
 describe('Finding 2: stage-aware projection errors in ProviderContentEnforcer (Issue #2588)', () => {
-  let historyService: HistoryService;
-
   beforeEach(() => {
     vi.clearAllMocks();
-    historyService = new HistoryService();
+    suite1HistoryService = new HistoryService();
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  interface EnforcerHarness {
-    enforcer: ProviderContentEnforcer;
-    deps: ProviderContentEnforcementDeps;
-  }
+  it(
+    'preserves all history state when fallback candidate installation fails',
+    testBody7,
+  );
 
-  function buildEnforcerHarness(
-    overrides: Partial<ProviderContentEnforcementDeps> = {},
-  ): EnforcerHarness {
-    const runtimeContext = buildRuntimeContext(historyService, {
-      contextLimit: 200_000,
-      compressionThreshold: 0.8,
-    });
-    const deps: ProviderContentEnforcementDeps = {
-      historyService,
-      runtimeContext,
-      generationConfig: {},
-      providerRuntimeNullable: undefined,
-      logger: makeLogger(),
-      ensureDensityOptimized: vi.fn().mockResolvedValue(undefined),
-      performCompression: vi.fn(),
-      performFallbackCompression: vi.fn().mockResolvedValue(false),
-      getPromptTokenBaseline: () => null,
-      resetPromptTokenBaseline: () => {},
-      restorePromptTokenBaseline: () => {},
-      ...overrides,
-    };
-    return { enforcer: new ProviderContentEnforcer(deps), deps };
-  }
+  it(
+    'restores history state when fallback rejects after committing its candidate',
+    testBody8,
+  );
 
-  it('preserves all history state when fallback candidate installation fails', async () => {
-    historyService.add(makeStoredAi('resp-original-parent'));
-    historyService.add(makeUserMessage('original follow-up'));
-    await historyService.waitForTokenUpdates();
-    historyService.setBaseTokenOffset(37);
-    const [anchorEntry] = historyService.getChronologyTrace();
-    historyService.setCacheAnchorSeq(anchorEntry.seq);
-    const originalHistory = [...historyService.getRawHistory()];
-    const originalHistoryTokens =
-      await historyService.estimateTokensForContents(originalHistory);
-    let promptTokenBaseline = 123;
-
-    const harness = buildEnforcerHarness({
-      estimateFinalizedPromptTokens: async () => 150_000,
-      getPromptTokenBaseline: () => promptTokenBaseline,
-      resetPromptTokenBaseline: () => {
-        promptTokenBaseline = 0;
-      },
-      restorePromptTokenBaseline: (baseline) => {
-        promptTokenBaseline = restoredPromptTokenBaseline(baseline);
-      },
-    });
-    harness.deps.performCompression.mockResolvedValue(
-      PerformCompressionResult.COMPRESSED,
-    );
-    harness.deps.performFallbackCompression.mockImplementation(
-      async (_promptId, applyResult) => {
-        await applyResult([makeStoredAi('resp-candidate')]);
-        return true;
-      },
-    );
-    historyService.on('tokensUpdated', () => {
-      throw new Error('injected candidate installation failure');
-    });
-    const pending = makeUserMessage('pending request');
-
-    await expect(
-      harness.enforcer.enforce(
-        {
-          contents: historyService.getCuratedForProvider([pending]),
-          pendingContents: [pending],
-        },
-        'failed-candidate',
-      ),
-    ).rejects.toThrow('injected candidate installation failure');
-
-    expect(historyService.getRawHistory()).toStrictEqual(originalHistory);
-    expect(historyService.getTotalTokens()).toBe(originalHistoryTokens + 37);
-    expect(historyService.getBaseTokenOffset()).toBe(37);
-    expect(historyService.getCacheAnchorSeq()).toBe(anchorEntry.seq);
-    expect(promptTokenBaseline).toBe(123);
-    expect(historyService.getRawHistory()[0].metadata).toMatchObject({
-      id: 'resp-original-parent',
-      responsesStored: true,
-      providerMetadata: { custom: 'metadata resp-original-parent' },
-    });
-  });
-
-  it('restores history state when fallback rejects after committing its candidate', async () => {
-    historyService.add(makeStoredAi('resp-original-parent'));
-    historyService.add(makeUserMessage('original follow-up'));
-    await historyService.waitForTokenUpdates();
-    historyService.setBaseTokenOffset(37);
-    const [anchorEntry] = historyService.getChronologyTrace();
-    historyService.setCacheAnchorSeq(anchorEntry.seq);
-    const originalHistory = [...historyService.getRawHistory()];
-    const originalTokens =
-      (await historyService.estimateTokensForContents(originalHistory)) + 37;
-    let promptTokenBaseline = 123;
-
-    const harness = buildEnforcerHarness({
-      estimateFinalizedPromptTokens: async () => 150_000,
-      getPromptTokenBaseline: () => promptTokenBaseline,
-      resetPromptTokenBaseline: () => {
-        promptTokenBaseline = 0;
-      },
-      restorePromptTokenBaseline: (baseline) => {
-        promptTokenBaseline = restoredPromptTokenBaseline(baseline);
-      },
-    });
-    harness.deps.performCompression.mockResolvedValue(
-      PerformCompressionResult.COMPRESSED,
-    );
-    harness.deps.performFallbackCompression.mockImplementation(
-      async (_promptId, applyResult) => {
-        await applyResult([makeStoredAi('resp-candidate')]);
-        throw new Error('fallback bookkeeping failed');
-      },
-    );
-    const pending = makeUserMessage('pending request');
-
-    await expect(
-      harness.enforcer.enforce(
-        {
-          contents: historyService.getCuratedForProvider([pending]),
-          pendingContents: [pending],
-        },
-        'rejected-after-commit',
-      ),
-    ).rejects.toThrow('fallback bookkeeping failed');
-
-    expect(historyService.getRawHistory()).toStrictEqual(originalHistory);
-    expect(historyService.getTotalTokens()).toBe(originalTokens);
-    expect(historyService.getBaseTokenOffset()).toBe(37);
-    expect(historyService.getCacheAnchorSeq()).toBe(anchorEntry.seq);
-    expect(promptTokenBaseline).toBe(123);
-  });
-
-  it('restores history state when prompt-baseline reset fails after replacement', async () => {
-    historyService.add(makeStoredAi('resp-original-parent'));
-    historyService.add(makeUserMessage('original follow-up'));
-    await historyService.waitForTokenUpdates();
-    historyService.setBaseTokenOffset(37);
-    const [anchorEntry] = historyService.getChronologyTrace();
-    historyService.setCacheAnchorSeq(anchorEntry.seq);
-    const originalHistory = [...historyService.getRawHistory()];
-    const originalTokens =
-      (await historyService.estimateTokensForContents(originalHistory)) + 37;
-    let promptTokenBaseline = 123;
-
-    const harness = buildEnforcerHarness({
-      estimateFinalizedPromptTokens: async () => 150_000,
-      getPromptTokenBaseline: () => promptTokenBaseline,
-      resetPromptTokenBaseline: () => {
-        promptTokenBaseline = 0;
-        throw new Error('prompt baseline reset failed');
-      },
-      restorePromptTokenBaseline: (baseline) => {
-        promptTokenBaseline = restoredPromptTokenBaseline(baseline);
-      },
-    });
-    harness.deps.performCompression.mockResolvedValue(
-      PerformCompressionResult.COMPRESSED,
-    );
-    harness.deps.performFallbackCompression.mockImplementation(
-      async (_promptId, applyResult) => {
-        await applyResult([makeStoredAi('resp-candidate')]);
-        return true;
-      },
-    );
-    const pending = makeUserMessage('pending request');
-
-    await expect(
-      harness.enforcer.enforce(
-        {
-          contents: historyService.getCuratedForProvider([pending]),
-          pendingContents: [pending],
-        },
-        'failed-baseline-reset',
-      ),
-    ).rejects.toThrow('prompt baseline reset failed');
-
-    expect(historyService.getRawHistory()).toStrictEqual(originalHistory);
-    expect(historyService.getTotalTokens()).toBe(originalTokens);
-    expect(historyService.getBaseTokenOffset()).toBe(37);
-    expect(historyService.getCacheAnchorSeq()).toBe(anchorEntry.seq);
-    expect(promptTokenBaseline).toBe(123);
-  });
+  it(
+    'restores history state when prompt-baseline reset fails after replacement',
+    testBody9,
+  );
 
   /**
    * Post-first-compression projection failure.
@@ -732,40 +226,10 @@ describe('Finding 2: stage-aware projection errors in ProviderContentEnforcer (I
    * 2. Post-density-optimization (optimizeAndProject)
    * 3. Post-compression (projectSuccess) — ALL subsequent calls reject
    */
-  it('includes stage context when projection fails after first compression', async () => {
-    historyService.add(makeUserMessage('established history'));
-    const pending = makeUserMessage('pending request');
-    const contents: IContent[] = historyService.getCuratedForProvider([
-      pending,
-    ]);
-    const envelope: ProviderContentEnvelope = {
-      contents,
-      pendingContents: [pending],
-    };
-
-    const harness = buildEnforcerHarness();
-    const estimateSpy = vi.spyOn(historyService, 'estimateTokensForContents');
-
-    estimateSpy
-      .mockResolvedValueOnce(200_000)
-      .mockResolvedValueOnce(200_000)
-      .mockRejectedValue(new Error('estimation infrastructure down'));
-
-    harness.deps.performCompression.mockResolvedValue(
-      PerformCompressionResult.COMPRESSED,
-    );
-
-    let thrownError: Error | undefined;
-    try {
-      await harness.enforcer.enforce(envelope, 'test-prompt');
-    } catch (error) {
-      thrownError = error as Error;
-    }
-
-    expect(thrownError).toBeInstanceOf(Error);
-    expect(thrownError?.message).toContain('estimation infrastructure down');
-    expect(thrownError?.message).toContain('post-compression stage');
-  });
+  it(
+    'includes stage context when projection fails after first compression',
+    testBody10,
+  );
 
   /**
    * Post-retry projection failure.
@@ -776,41 +240,10 @@ describe('Finding 2: stage-aware projection errors in ProviderContentEnforcer (I
    * 3. Post-first-compression (reduction < 5%, triggers retry)
    * 4. Post-retry-compression — ALL subsequent calls reject
    */
-  it('includes stage context when projection fails after retry compression', async () => {
-    historyService.add(makeUserMessage('established history'));
-    const pending = makeUserMessage('pending request');
-    const contents: IContent[] = historyService.getCuratedForProvider([
-      pending,
-    ]);
-    const envelope: ProviderContentEnvelope = {
-      contents,
-      pendingContents: [pending],
-    };
-
-    const harness = buildEnforcerHarness();
-    const estimateSpy = vi.spyOn(historyService, 'estimateTokensForContents');
-
-    estimateSpy
-      .mockResolvedValueOnce(200_000)
-      .mockResolvedValueOnce(200_000)
-      .mockResolvedValueOnce(199_000)
-      .mockRejectedValue(new Error('estimation infrastructure down'));
-
-    harness.deps.performCompression.mockResolvedValue(
-      PerformCompressionResult.COMPRESSED,
-    );
-
-    let thrownError: Error | undefined;
-    try {
-      await harness.enforcer.enforce(envelope, 'test-prompt');
-    } catch (error) {
-      thrownError = error as Error;
-    }
-
-    expect(thrownError).toBeInstanceOf(Error);
-    expect(thrownError?.message).toContain('estimation infrastructure down');
-    expect(thrownError?.message.toLowerCase()).toContain('retry');
-  });
+  it(
+    'includes stage context when projection fails after retry compression',
+    testBody11,
+  );
 
   /**
    * Post-truncation projection failure.
@@ -822,77 +255,18 @@ describe('Finding 2: stage-aware projection errors in ProviderContentEnforcer (I
    * 4. Post-retry-compression (still over, triggers truncation)
    * 5. Post-truncation — ALL subsequent calls reject
    */
-  it('includes stage context when projection fails after truncation', async () => {
-    historyService.add(makeUserMessage('established history'));
-    const pending = makeUserMessage('pending request');
-    const contents: IContent[] = historyService.getCuratedForProvider([
-      pending,
-    ]);
-    const envelope: ProviderContentEnvelope = {
-      contents,
-      pendingContents: [pending],
-    };
-
-    const harness = buildEnforcerHarness();
-    const estimateSpy = vi.spyOn(historyService, 'estimateTokensForContents');
-
-    estimateSpy
-      .mockResolvedValueOnce(200_000)
-      .mockResolvedValueOnce(200_000)
-      .mockResolvedValueOnce(199_000)
-      .mockResolvedValueOnce(199_000)
-      .mockRejectedValue(new Error('estimation infrastructure down'));
-
-    harness.deps.performCompression.mockResolvedValue(
-      PerformCompressionResult.COMPRESSED,
-    );
-
-    harness.deps.performFallbackCompression.mockImplementation(
-      async (_promptId, applyResult) => {
-        await applyResult([makeUserMessage('truncated history')]);
-        return true;
-      },
-    );
-
-    let thrownError: Error | undefined;
-    try {
-      await harness.enforcer.enforce(envelope, 'test-prompt');
-    } catch (error) {
-      thrownError = error as Error;
-    }
-
-    expect(thrownError).toBeInstanceOf(Error);
-    expect(thrownError?.message).toContain('estimation infrastructure down');
-    expect(thrownError?.message.toLowerCase()).toContain('truncation');
-  });
+  it(
+    'includes stage context when projection fails after truncation',
+    testBody12,
+  );
 
   /**
    * Initial projection failure should propagate with a stage label.
    */
-  it('propagates initial projection error with explicit stage label', async () => {
-    historyService.add(makeUserMessage('established history'));
-    const contents: IContent[] = historyService.getCuratedForProvider();
-    const envelope: ProviderContentEnvelope = {
-      contents,
-      pendingContents: undefined,
-    };
-
-    const harness = buildEnforcerHarness();
-    vi.spyOn(historyService, 'estimateTokensForContents').mockRejectedValue(
-      new Error('estimation infrastructure down'),
-    );
-
-    let thrownError: Error | undefined;
-    try {
-      await harness.enforcer.enforce(envelope, 'test-prompt');
-    } catch (error) {
-      thrownError = error as Error;
-    }
-
-    expect(thrownError).toBeInstanceOf(Error);
-    expect(thrownError?.message).toContain('estimation infrastructure down');
-    expect(thrownError?.message.toLowerCase()).toContain('projection');
-  });
+  it(
+    'propagates initial projection error with explicit stage label',
+    testBody13,
+  );
 
   /**
    * Finding 4 (CodeRabbit PR #2598): Projection rejection must not be caught
@@ -904,49 +278,686 @@ describe('Finding 2: stage-aware projection errors in ProviderContentEnforcer (I
    * second estimate would succeed, enforcement must NOT proceed to truncation
    * or fallback; it must surface the original projection error.
    */
-  it('throws the stage-aware projection error when post-compression projection rejects, even if a subsequent estimate would succeed (CodeRabbit PR #2598)', async () => {
-    historyService.add(makeUserMessage('established history'));
-    const pending = makeUserMessage('pending request');
-    const contents: IContent[] = historyService.getCuratedForProvider([
-      pending,
-    ]);
-    const envelope: ProviderContentEnvelope = {
-      contents,
-      pendingContents: [pending],
-    };
-
-    const harness = buildEnforcerHarness();
-    const estimateSpy = vi.spyOn(historyService, 'estimateTokensForContents');
-
-    // 1. Initial — over-limit (succeeds)
-    estimateSpy.mockResolvedValueOnce(200_000);
-    // 2. Post-density — over-limit (succeeds)
-    estimateSpy.mockResolvedValueOnce(200_000);
-    // 3. Post-first-compression — REJECTS with a specific stage error
-    estimateSpy.mockRejectedValueOnce(
-      new Error('estimation infrastructure down'),
-    );
-    // 4+. Any subsequent call would succeed (never reached)
-    estimateSpy.mockResolvedValueOnce(50_000);
-
-    harness.deps.performCompression.mockResolvedValue(
-      PerformCompressionResult.COMPRESSED,
-    );
-
-    let thrownError: Error | undefined;
-    try {
-      await harness.enforcer.enforce(envelope, 'test-prompt');
-    } catch (error) {
-      thrownError = error as Error;
-    }
-
-    // The original stage-aware projection error must propagate directly.
-    expect(thrownError).toBeInstanceOf(Error);
-    expect(thrownError?.message).toContain('estimation infrastructure down');
-    expect(thrownError?.message.toLowerCase()).toContain('post-compression');
-
-    // Fallback must NOT be reached — the projection error surfaced before
-    // truncation.
-    expect(harness.deps.performFallbackCompression).not.toHaveBeenCalled();
-  });
+  it(
+    'throws the stage-aware projection error when post-compression projection rejects, even if a subsequent estimate would succeed (CodeRabbit PR #2598)',
+    testBody14,
+  );
 });
+
+async function testBody0(): Promise<void> {
+  suite0HistoryService.add(makeUserMessage('established history'));
+  suite0HistoryService.add(makeStoredAi('resp-preserved-on-failure'));
+
+  const pending = makeUserMessage('pending request');
+  const envelope: ProviderContentEnvelope = {
+    contents: await Array.fromAsync(
+      suite0HistoryService.getCuratedForProviderStream([pending]),
+    ),
+    pendingContents: [pending],
+  };
+
+  vi.spyOn(suite0HistoryService, 'estimateTokensForContents').mockResolvedValue(
+    150_000,
+  );
+
+  vi.spyOn(suite0Handler, 'performCompression').mockResolvedValue(
+    PerformCompressionResult.COMPRESSED,
+  );
+
+  vi.spyOn(
+    TopDownTruncationStrategy.prototype,
+    'compressDisk',
+  ).mockRejectedValue(new Error('truncation engine blew up'));
+
+  let thrownError: Error | undefined;
+  try {
+    await suite0Handler.enforceProviderContents(envelope, 'test-prompt');
+  } catch (error) {
+    thrownError = error as Error;
+  }
+
+  expect(thrownError).toBeInstanceOf(Error);
+  expect(thrownError?.message).toContain(
+    'Truncation fallback failed during hard-limit enforcement',
+  );
+  expect(thrownError!.message).toContain('truncation engine blew up');
+  expect(
+    (await collectRawHistory(suite0HistoryService))[1].metadata
+      ?.responsesStored,
+  ).toBe(true);
+  expect((await collectRawHistory(suite0HistoryService))[1].metadata?.id).toBe(
+    'resp-preserved-on-failure',
+  );
+}
+
+async function testBody1(): Promise<void> {
+  suite0HistoryService.add(makeUserMessage('established history'));
+
+  const pending = makeUserMessage('pending request');
+  const envelope: ProviderContentEnvelope = {
+    contents: await Array.fromAsync(
+      suite0HistoryService.getCuratedForProviderStream([pending]),
+    ),
+    pendingContents: [pending],
+  };
+
+  vi.spyOn(suite0HistoryService, 'estimateTokensForContents').mockResolvedValue(
+    150_000,
+  );
+
+  vi.spyOn(suite0Handler, 'performCompression').mockResolvedValue(
+    PerformCompressionResult.COMPRESSED,
+  );
+
+  suite0Handler.setTranscriptPathProvider(() => {
+    throw new Error('context build exploded');
+  });
+
+  let thrownError: Error | undefined;
+  try {
+    await suite0Handler.enforceProviderContents(envelope, 'test-prompt');
+  } catch (error) {
+    thrownError = error as Error;
+  }
+
+  expect(thrownError).toBeInstanceOf(Error);
+  expect(thrownError?.message).toContain(
+    'Truncation fallback failed during hard-limit enforcement',
+  );
+  expect(thrownError?.message).toContain('context build exploded');
+}
+
+async function testBody2(): Promise<void> {
+  suite0HistoryService.add(makeUserMessage('established history'));
+
+  const pending = makeUserMessage('pending request');
+  const envelope: ProviderContentEnvelope = {
+    contents: await Array.fromAsync(
+      suite0HistoryService.getCuratedForProviderStream([pending]),
+    ),
+    pendingContents: [pending],
+  };
+
+  // contextLimit = 200_000, completionBudget = 65_536
+  // marginAdjustedLimit = 199_995 → over-limit when projected > 199_995
+  // estimate + 65_536 > 199_995 → estimate > 134_459
+  const OVER_LIMIT_ESTIMATE = 150_000; // 150_000 + 65_536 = 215_536 > 199_995
+  const TRUNCATED_SUMMARY_ESTIMATE = 50_000; // 50_000 + 65_536 = 115_536 < 199_995
+
+  const estimateSpy = vi.spyOn(
+    suite0HistoryService,
+    'estimateTokensForContents',
+  );
+  // 1. Initial projection — over-limit
+  estimateSpy.mockResolvedValueOnce(OVER_LIMIT_ESTIMATE);
+  // 2. Post-density-optimization — over-limit
+  estimateSpy.mockResolvedValueOnce(OVER_LIMIT_ESTIMATE);
+  // 3. Post-first-compression — still over-limit, but effective enough to
+  //    avoid retry (reduction >= 5% of pre-compression projection).
+  //    pre-compression projected = 215_536, need reduction >= ~10_777,
+  //    so post-compression estimate <= 139_223 keeps ratio >= 5%.
+  //    135_000 + 65_536 = 200_536 > 199_995 (still over margin limit).
+  estimateSpy.mockResolvedValueOnce(135_000);
+  // 4. Post-truncation — under-limit (fallback succeeded)
+  estimateSpy.mockResolvedValueOnce(TRUNCATED_SUMMARY_ESTIMATE);
+
+  vi.spyOn(suite0Handler, 'performCompression').mockResolvedValue(
+    PerformCompressionResult.COMPRESSED,
+  );
+
+  const fallbackHistory = [
+    makeStoredAi('resp-fallback-1'),
+    makeUserMessage('truncated summary'),
+    makeStoredAi('resp-fallback-2'),
+  ];
+  installProviderDiskFixture(fallbackHistory);
+  suite0Handler.setLastPromptTokenCount(123);
+
+  let incrementalPublications = 0;
+  suite0HistoryService.on('contentAdded', () => {
+    incrementalPublications += 1;
+  });
+
+  const result = await suite0Handler.enforceProviderContents(
+    envelope,
+    'test-prompt',
+  );
+
+  // The truncated summary content must appear in the returned provider
+  // contents, proving the fallback path applied its result.
+  const resultText = result
+    .flatMap((c) => c.blocks)
+    .filter((b) => b.type === 'text')
+    .map((b) => (b as { text: string }).text)
+    .join(' ');
+  expect(resultText).toContain('truncated summary');
+
+  // The pending request must be preserved in the returned contents.
+  expect(result).toContainEqual(pending);
+
+  const rewrittenHistory = await collectRawHistory(suite0HistoryService);
+  expect(rewrittenHistory[0].metadata).toMatchObject({
+    id: 'resp-fallback-1',
+    providerBaseURL: 'https://api.openai.com/v1',
+    providerMetadata: { custom: 'metadata resp-fallback-1' },
+  });
+  expect(rewrittenHistory[0].metadata?.responsesStored).toBeUndefined();
+  expect(rewrittenHistory[2].metadata).toMatchObject({
+    id: 'resp-fallback-2',
+    providerBaseURL: 'https://api.openai.com/v1',
+    providerMetadata: { custom: 'metadata resp-fallback-2' },
+  });
+  expect(rewrittenHistory[2].metadata?.responsesStored).toBeUndefined();
+  expect(suite0Handler.getLastPromptTokenCount()).toBe(0);
+  expect(incrementalPublications).toBe(0);
+}
+
+async function testBody3(): Promise<void> {
+  suite0HistoryService.add(makeUserMessage('established history'));
+  await suite0HistoryService.waitForTokenUpdates();
+  const snapshot = makeCompressionSnapshot(
+    'pending rejected committed snapshot',
+  );
+  const control = await seedFallbackCooldown(suite0Handler, [snapshot]);
+  expect(suite0Handler['compressionFailureCount']).toBe(3);
+  control.activateCandidateAfter(2);
+  suite0Handler.setLastPromptTokenCount(150_000);
+  vi.spyOn(suite0HistoryService, 'transformRows').mockRejectedValue(
+    new Error('pending candidate commit rejected'),
+  );
+
+  await expect(
+    suite0Handler.enforceContextWindow(0, 'pending-rejected-commit'),
+  ).rejects.toThrow(/context limit/i);
+
+  expect(suite0Handler['compressionFailureCount']).toBe(4);
+  expect(suite0Handler['compressionSummary']).toBeUndefined();
+  expect(suite0Handler['lastSuccessfulCompressionTime']).toBeNull();
+  expect(suite0Handler.isCompressionInCooldown()).toBe(true);
+  expect(suite0Handler.wasRecentlyCompressed()).toBe(false);
+}
+
+async function testBody4(): Promise<void> {
+  suite0HistoryService.add(makeUserMessage('established history'));
+  await suite0HistoryService.waitForTokenUpdates();
+  const snapshot = makeCompressionSnapshot(
+    'provider rejected committed snapshot',
+  );
+  const control = await seedFallbackCooldown(suite0Handler, [snapshot]);
+  expect(suite0Handler['compressionFailureCount']).toBe(3);
+  control.activateCandidateAfter(1);
+  vi.spyOn(suite0HistoryService, 'transformRows').mockRejectedValue(
+    new Error('provider candidate commit rejected'),
+  );
+  const pending = makeUserMessage('pending request');
+
+  await expect(
+    suite0Handler.enforceProviderContents(
+      {
+        contents: await Array.fromAsync(
+          suite0HistoryService.getCuratedForProviderStream([pending]),
+        ),
+        pendingContents: [pending],
+      },
+      'provider-rejected-commit',
+      undefined,
+      estimateBookkeepingProjection,
+    ),
+  ).rejects.toThrow(/context limit/i);
+
+  expect(suite0Handler['compressionFailureCount']).toBe(4);
+  expect(suite0Handler['compressionSummary']).toBeUndefined();
+  expect(suite0Handler['lastSuccessfulCompressionTime']).toBeNull();
+  expect(suite0Handler.isCompressionInCooldown()).toBe(true);
+  expect(suite0Handler.wasRecentlyCompressed()).toBe(false);
+}
+
+async function testBody5(): Promise<void> {
+  suite0HistoryService.add(makeUserMessage('established history'));
+  await suite0HistoryService.waitForTokenUpdates();
+  const snapshot = makeCompressionSnapshot(
+    'pending successful committed snapshot',
+  );
+  const control = await seedFallbackCooldown(suite0Handler, [snapshot]);
+  expect(suite0Handler['compressionFailureCount']).toBe(3);
+  control.activateCandidateAfter(2);
+  suite0Handler.setLastPromptTokenCount(150_000);
+
+  await suite0Handler.enforceContextWindow(0, 'pending-successful-commit');
+
+  expect(suite0Handler['compressionFailureCount']).toBe(0);
+  expect(suite0Handler['compressionSummary']).toBe(snapshot);
+  expect(suite0Handler['lastSuccessfulCompressionTime']).not.toBeNull();
+  expect(suite0Handler.isCompressionInCooldown()).toBe(false);
+  expect(suite0Handler.wasRecentlyCompressed()).toBe(true);
+  expect(await collectRawHistory(suite0HistoryService)).toHaveLength(1);
+  expect(
+    (await collectRawHistory(suite0HistoryService))[0].blocks[0],
+  ).toMatchObject({
+    type: 'text',
+    text: 'pending successful committed snapshot',
+  });
+}
+
+async function testBody6(): Promise<void> {
+  suite0HistoryService.add(makeUserMessage('established history'));
+  await suite0HistoryService.waitForTokenUpdates();
+  const snapshot = makeCompressionSnapshot(
+    'provider successful committed snapshot',
+  );
+  const control = await seedFallbackCooldown(suite0Handler, [snapshot]);
+  expect(suite0Handler['compressionFailureCount']).toBe(3);
+  control.activateCandidateAfter(1);
+  const pending = makeUserMessage('pending request');
+
+  const contents = await suite0Handler.enforceProviderContents(
+    {
+      contents: await Array.fromAsync(
+        suite0HistoryService.getCuratedForProviderStream([pending]),
+      ),
+      pendingContents: [pending],
+    },
+    'provider-successful-commit',
+    undefined,
+    estimateBookkeepingProjection,
+  );
+
+  expect(suite0Handler['compressionFailureCount']).toBe(0);
+  expect(suite0Handler['compressionSummary']).toBe(snapshot);
+  expect(suite0Handler['lastSuccessfulCompressionTime']).not.toBeNull();
+  expect(suite0Handler.isCompressionInCooldown()).toBe(false);
+  expect(suite0Handler.wasRecentlyCompressed()).toBe(true);
+  expect(contents).toContainEqual(snapshot);
+  expect(contents).toContainEqual(pending);
+}
+
+async function testBody7(): Promise<void> {
+  suite1HistoryService.add(makeStoredAi('resp-original-parent'));
+  suite1HistoryService.add(makeUserMessage('original follow-up'));
+  await suite1HistoryService.waitForTokenUpdates();
+  suite1HistoryService.setBaseTokenOffset(37);
+  const [anchorEntry] = await Array.fromAsync(
+    suite1HistoryService.getChronologyTrace(),
+  );
+  suite1HistoryService.setCacheAnchorSeq(anchorEntry.seq);
+  const originalHistory = [...(await collectRawHistory(suite1HistoryService))];
+  const originalHistoryTokens =
+    await suite1HistoryService.estimateTokensForContents(originalHistory);
+  let promptTokenBaseline = 123;
+
+  const harness = suite1BuildEnforcerHarness({
+    estimateFinalizedPromptTokens: async () => 150_000,
+    getPromptTokenBaseline: () => promptTokenBaseline,
+    resetPromptTokenBaseline: () => {
+      promptTokenBaseline = 0;
+    },
+    restorePromptTokenBaseline: (baseline) => {
+      promptTokenBaseline = restoredPromptTokenBaseline(baseline);
+    },
+  });
+  harness.deps.performCompression.mockResolvedValue(
+    PerformCompressionResult.COMPRESSED,
+  );
+  harness.deps.performFallbackCompression.mockImplementation(
+    async (_promptId, applyResult) => {
+      await installFixtureCandidate(applyResult, [
+        makeStoredAi('resp-candidate'),
+      ]);
+      return true;
+    },
+  );
+  suite1HistoryService.on('tokensUpdated', () => {
+    throw new Error('injected candidate installation failure');
+  });
+  const pending = makeUserMessage('pending request');
+
+  await expect(
+    harness.enforcer.enforce(
+      {
+        contents: await Array.fromAsync(
+          suite1HistoryService.getCuratedForProviderStream([pending]),
+        ),
+        pendingContents: [pending],
+      },
+      'failed-candidate',
+    ),
+  ).rejects.toThrow('injected candidate installation failure');
+
+  expect(await collectRawHistory(suite1HistoryService)).toStrictEqual(
+    originalHistory,
+  );
+  expect(suite1HistoryService.getTotalTokens()).toBe(
+    originalHistoryTokens + 37,
+  );
+  expect(suite1HistoryService.getBaseTokenOffset()).toBe(37);
+  expect(suite1HistoryService.getCacheAnchorSeq()).toBe(anchorEntry.seq);
+  expect(promptTokenBaseline).toBe(123);
+  expect(
+    (await collectRawHistory(suite1HistoryService))[0].metadata,
+  ).toMatchObject({
+    id: 'resp-original-parent',
+    responsesStored: true,
+    providerMetadata: { custom: 'metadata resp-original-parent' },
+  });
+}
+
+async function testBody8(): Promise<void> {
+  suite1HistoryService.add(makeStoredAi('resp-original-parent'));
+  suite1HistoryService.add(makeUserMessage('original follow-up'));
+  await suite1HistoryService.waitForTokenUpdates();
+  suite1HistoryService.setBaseTokenOffset(37);
+  const [anchorEntry] = await Array.fromAsync(
+    suite1HistoryService.getChronologyTrace(),
+  );
+  suite1HistoryService.setCacheAnchorSeq(anchorEntry.seq);
+  const originalHistory = [...(await collectRawHistory(suite1HistoryService))];
+  const originalTokens =
+    (await suite1HistoryService.estimateTokensForContents(originalHistory)) +
+    37;
+  let promptTokenBaseline = 123;
+
+  const harness = suite1BuildEnforcerHarness({
+    estimateFinalizedPromptTokens: async () => 150_000,
+    getPromptTokenBaseline: () => promptTokenBaseline,
+    resetPromptTokenBaseline: () => {
+      promptTokenBaseline = 0;
+    },
+    restorePromptTokenBaseline: (baseline) => {
+      promptTokenBaseline = restoredPromptTokenBaseline(baseline);
+    },
+  });
+  harness.deps.performCompression.mockResolvedValue(
+    PerformCompressionResult.COMPRESSED,
+  );
+  harness.deps.performFallbackCompression.mockImplementation(
+    async (_promptId, applyResult) => {
+      await installFixtureCandidate(applyResult, [
+        makeStoredAi('resp-candidate'),
+      ]);
+      throw new Error('fallback bookkeeping failed');
+    },
+  );
+  const pending = makeUserMessage('pending request');
+
+  await expect(
+    harness.enforcer.enforce(
+      {
+        contents: await Array.fromAsync(
+          suite1HistoryService.getCuratedForProviderStream([pending]),
+        ),
+        pendingContents: [pending],
+      },
+      'rejected-after-commit',
+    ),
+  ).rejects.toThrow('fallback bookkeeping failed');
+
+  expect(await collectRawHistory(suite1HistoryService)).toStrictEqual(
+    originalHistory,
+  );
+  expect(suite1HistoryService.getTotalTokens()).toBe(originalTokens);
+  expect(suite1HistoryService.getBaseTokenOffset()).toBe(37);
+  expect(suite1HistoryService.getCacheAnchorSeq()).toBe(anchorEntry.seq);
+  expect(promptTokenBaseline).toBe(123);
+}
+
+async function testBody9(): Promise<void> {
+  suite1HistoryService.add(makeStoredAi('resp-original-parent'));
+  suite1HistoryService.add(makeUserMessage('original follow-up'));
+  await suite1HistoryService.waitForTokenUpdates();
+  suite1HistoryService.setBaseTokenOffset(37);
+  const [anchorEntry] = await Array.fromAsync(
+    suite1HistoryService.getChronologyTrace(),
+  );
+  suite1HistoryService.setCacheAnchorSeq(anchorEntry.seq);
+  const originalHistory = [...(await collectRawHistory(suite1HistoryService))];
+  const originalTokens =
+    (await suite1HistoryService.estimateTokensForContents(originalHistory)) +
+    37;
+  let promptTokenBaseline = 123;
+
+  const harness = suite1BuildEnforcerHarness({
+    estimateFinalizedPromptTokens: async () => 150_000,
+    getPromptTokenBaseline: () => promptTokenBaseline,
+    resetPromptTokenBaseline: () => {
+      promptTokenBaseline = 0;
+      throw new Error('prompt baseline reset failed');
+    },
+    restorePromptTokenBaseline: (baseline) => {
+      promptTokenBaseline = restoredPromptTokenBaseline(baseline);
+    },
+  });
+  harness.deps.performCompression.mockResolvedValue(
+    PerformCompressionResult.COMPRESSED,
+  );
+  harness.deps.performFallbackCompression.mockImplementation(
+    async (_promptId, applyResult) => {
+      await installFixtureCandidate(applyResult, [
+        makeStoredAi('resp-candidate'),
+      ]);
+      return true;
+    },
+  );
+  const pending = makeUserMessage('pending request');
+
+  await expect(
+    harness.enforcer.enforce(
+      {
+        contents: await Array.fromAsync(
+          suite1HistoryService.getCuratedForProviderStream([pending]),
+        ),
+        pendingContents: [pending],
+      },
+      'failed-baseline-reset',
+    ),
+  ).rejects.toThrow('prompt baseline reset failed');
+
+  expect(await collectRawHistory(suite1HistoryService)).toStrictEqual(
+    originalHistory,
+  );
+  expect(suite1HistoryService.getTotalTokens()).toBe(originalTokens);
+  expect(suite1HistoryService.getBaseTokenOffset()).toBe(37);
+  expect(suite1HistoryService.getCacheAnchorSeq()).toBe(anchorEntry.seq);
+  expect(promptTokenBaseline).toBe(123);
+}
+
+async function testBody10(): Promise<void> {
+  suite1HistoryService.add(makeUserMessage('established history'));
+  const pending = makeUserMessage('pending request');
+  const contents: IContent[] = await Array.fromAsync(
+    suite1HistoryService.getCuratedForProviderStream([pending]),
+  );
+  const envelope: ProviderContentEnvelope = {
+    contents,
+    pendingContents: [pending],
+  };
+
+  const harness = suite1BuildEnforcerHarness();
+  const estimateSpy = vi.spyOn(
+    suite1HistoryService,
+    'estimateTokensForContents',
+  );
+
+  estimateSpy
+    .mockResolvedValueOnce(200_000)
+    .mockResolvedValueOnce(200_000)
+    .mockRejectedValue(new Error('estimation infrastructure down'));
+
+  harness.deps.performCompression.mockResolvedValue(
+    PerformCompressionResult.COMPRESSED,
+  );
+
+  let thrownError: Error | undefined;
+  try {
+    await harness.enforcer.enforce(envelope, 'test-prompt');
+  } catch (error) {
+    thrownError = error as Error;
+  }
+
+  expect(thrownError).toBeInstanceOf(Error);
+  expect(thrownError?.message).toContain('estimation infrastructure down');
+  expect(thrownError?.message).toContain('post-compression stage');
+}
+
+async function testBody11(): Promise<void> {
+  suite1HistoryService.add(makeUserMessage('established history'));
+  const pending = makeUserMessage('pending request');
+  const contents: IContent[] = await Array.fromAsync(
+    suite1HistoryService.getCuratedForProviderStream([pending]),
+  );
+  const envelope: ProviderContentEnvelope = {
+    contents,
+    pendingContents: [pending],
+  };
+
+  const harness = suite1BuildEnforcerHarness();
+  const estimateSpy = vi.spyOn(
+    suite1HistoryService,
+    'estimateTokensForContents',
+  );
+
+  estimateSpy
+    .mockResolvedValueOnce(200_000)
+    .mockResolvedValueOnce(200_000)
+    .mockResolvedValueOnce(199_000)
+    .mockRejectedValue(new Error('estimation infrastructure down'));
+
+  harness.deps.performCompression.mockResolvedValue(
+    PerformCompressionResult.COMPRESSED,
+  );
+
+  let thrownError: Error | undefined;
+  try {
+    await harness.enforcer.enforce(envelope, 'test-prompt');
+  } catch (error) {
+    thrownError = error as Error;
+  }
+
+  expect(thrownError).toBeInstanceOf(Error);
+  expect(thrownError?.message).toContain('estimation infrastructure down');
+  expect(thrownError?.message.toLowerCase()).toContain('retry');
+}
+
+async function testBody12(): Promise<void> {
+  suite1HistoryService.add(makeUserMessage('established history'));
+  const pending = makeUserMessage('pending request');
+  const contents: IContent[] = await Array.fromAsync(
+    suite1HistoryService.getCuratedForProviderStream([pending]),
+  );
+  const envelope: ProviderContentEnvelope = {
+    contents,
+    pendingContents: [pending],
+  };
+
+  const harness = suite1BuildEnforcerHarness();
+  const estimateSpy = vi.spyOn(
+    suite1HistoryService,
+    'estimateTokensForContents',
+  );
+
+  estimateSpy
+    .mockResolvedValueOnce(200_000)
+    .mockResolvedValueOnce(200_000)
+    .mockResolvedValueOnce(199_000)
+    .mockResolvedValueOnce(199_000)
+    .mockRejectedValue(new Error('estimation infrastructure down'));
+
+  harness.deps.performCompression.mockResolvedValue(
+    PerformCompressionResult.COMPRESSED,
+  );
+
+  harness.deps.performFallbackCompression.mockImplementation(
+    async (_promptId, applyResult) => {
+      await installFixtureCandidate(applyResult, [
+        makeUserMessage('truncated history'),
+      ]);
+      return true;
+    },
+  );
+
+  let thrownError: Error | undefined;
+  try {
+    await harness.enforcer.enforce(envelope, 'test-prompt');
+  } catch (error) {
+    thrownError = error as Error;
+  }
+
+  expect(thrownError).toBeInstanceOf(Error);
+  expect(thrownError?.message).toContain('estimation infrastructure down');
+  expect(thrownError?.message.toLowerCase()).toContain('truncation');
+}
+
+async function testBody13(): Promise<void> {
+  suite1HistoryService.add(makeUserMessage('established history'));
+  const contents: IContent[] = await Array.fromAsync(
+    suite1HistoryService.getCuratedForProviderStream(),
+  );
+  const envelope: ProviderContentEnvelope = {
+    contents,
+    pendingContents: undefined,
+  };
+
+  const harness = suite1BuildEnforcerHarness();
+  vi.spyOn(suite1HistoryService, 'estimateTokensForContents').mockRejectedValue(
+    new Error('estimation infrastructure down'),
+  );
+
+  let thrownError: Error | undefined;
+  try {
+    await harness.enforcer.enforce(envelope, 'test-prompt');
+  } catch (error) {
+    thrownError = error as Error;
+  }
+
+  expect(thrownError).toBeInstanceOf(Error);
+  expect(thrownError?.message).toContain('estimation infrastructure down');
+  expect(thrownError?.message.toLowerCase()).toContain('projection');
+}
+
+async function testBody14(): Promise<void> {
+  suite1HistoryService.add(makeUserMessage('established history'));
+  const pending = makeUserMessage('pending request');
+  const contents: IContent[] = await Array.fromAsync(
+    suite1HistoryService.getCuratedForProviderStream([pending]),
+  );
+  const envelope: ProviderContentEnvelope = {
+    contents,
+    pendingContents: [pending],
+  };
+
+  const harness = suite1BuildEnforcerHarness();
+  const estimateSpy = vi.spyOn(
+    suite1HistoryService,
+    'estimateTokensForContents',
+  );
+
+  // 1. Initial — over-limit (succeeds)
+  estimateSpy.mockResolvedValueOnce(200_000);
+  // 2. Post-density — over-limit (succeeds)
+  estimateSpy.mockResolvedValueOnce(200_000);
+  // 3. Post-first-compression — REJECTS with a specific stage error
+  estimateSpy.mockRejectedValueOnce(
+    new Error('estimation infrastructure down'),
+  );
+  // 4+. Any subsequent call would succeed (never reached)
+  estimateSpy.mockResolvedValueOnce(50_000);
+
+  harness.deps.performCompression.mockResolvedValue(
+    PerformCompressionResult.COMPRESSED,
+  );
+
+  let thrownError: Error | undefined;
+  try {
+    await harness.enforcer.enforce(envelope, 'test-prompt');
+  } catch (error) {
+    thrownError = error as Error;
+  }
+
+  // The original stage-aware projection error must propagate directly.
+  expect(thrownError).toBeInstanceOf(Error);
+  expect(thrownError?.message).toContain('estimation infrastructure down');
+  expect(thrownError?.message.toLowerCase()).toContain('post-compression');
+
+  // Fallback must NOT be reached — the projection error surfaced before
+  // truncation.
+  expect(harness.deps.performFallbackCompression).not.toHaveBeenCalled();
+}

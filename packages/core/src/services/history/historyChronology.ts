@@ -14,11 +14,76 @@
  * limitations under the License.
  */
 
+export { annotateCompressionSpanStream } from './compression-span-stream.js';
+
 import type {
   IContent,
   ChronologyMarker,
   ChronologyReplacedSpan,
 } from './IContent.js';
+import type {
+  ChronologyRollbackEntry,
+  HistoryMutationInput,
+} from './historyBatchContracts.js';
+import {
+  historyRowAt,
+  type HistoryRowSource,
+} from './historyMutationSnapshot.js';
+
+export function stampMutationChronology(
+  stamper: ChronologyStamper,
+  input: HistoryMutationInput,
+  previous: HistoryRowSource,
+): void {
+  const next = input.nextHistory;
+  for (const [index, replacement] of input.densityResult?.replacements ?? []) {
+    const marker = historyRowAt(previous, index).metadata?.chronology;
+    if (marker !== undefined) stamper.inherit(replacement, marker);
+  }
+  let index = 0;
+  for (const content of next) {
+    stamper.stamp(content);
+    if ('readRow' in next) next.writeRow(index, content);
+    index++;
+  }
+}
+
+export function restoreChronologyEntry(entry: ChronologyRollbackEntry): void {
+  if (!entry.hadMetadata) {
+    delete entry.content.metadata;
+    return;
+  }
+  if (entry.chronology === undefined) {
+    if (entry.content.metadata?.chronology !== undefined) {
+      delete entry.content.metadata.chronology;
+    }
+    return;
+  }
+  if (
+    entry.content.metadata !== undefined &&
+    entry.content.metadata.chronology !== entry.chronology
+  ) {
+    entry.content.metadata.chronology = entry.chronology;
+  }
+}
+
+export function restoreMutationChronology(
+  stamper: ChronologyStamper,
+  input: {
+    readonly state: ChronologyState;
+    readonly entries: Iterable<ChronologyRollbackEntry>;
+  },
+  failures: unknown[],
+): void {
+  stamper.restore(input.state);
+  for (const entry of input.entries) {
+    try {
+      restoreChronologyEntry(entry);
+    } catch (error: unknown) {
+      failures.push(error);
+    }
+  }
+}
 
 export interface ChronologyState {
   readonly nextSeq: number;
@@ -342,36 +407,37 @@ export function buildChronologyTrace(
 ): ChronologyTraceEntry[] {
   const entries: ChronologyTraceEntry[] = [];
   for (const item of history) {
-    const marker = item.metadata?.chronology;
-    if (marker === undefined) {
-      continue;
-    }
-    const blockTypes: string[] = [];
-    const toolCallIds: string[] = [];
-    const toolResponseIds: string[] = [];
-    for (const block of item.blocks) {
-      blockTypes.push(block.type);
-      if (block.type === 'tool_call') {
-        toolCallIds.push(block.id);
-      } else if (block.type === 'tool_response') {
-        toolResponseIds.push(block.callId);
-      }
-    }
-    const entry: ChronologyTraceEntry = {
-      seq: marker.seq,
-      userTurn: marker.userTurn,
-      step: marker.step,
-      recordedAt: marker.recordedAt,
-      speaker: item.speaker,
-      blockTypes,
-      toolCallIds,
-      toolResponseIds,
-      isSummary: item.metadata?.isSummary === true,
-      ...(item.metadata?.chronologyReplaced !== undefined
-        ? { replaced: item.metadata.chronologyReplaced }
-        : {}),
-    };
-    entries.push(entry);
+    const entry = projectChronologyTraceEntry(item);
+    if (entry !== undefined) entries.push(entry);
   }
   return entries;
+}
+
+export function projectChronologyTraceEntry(
+  item: IContent,
+): ChronologyTraceEntry | undefined {
+  const marker = item.metadata?.chronology;
+  if (marker === undefined) return undefined;
+  const blockTypes: string[] = [];
+  const toolCallIds: string[] = [];
+  const toolResponseIds: string[] = [];
+  for (const block of item.blocks) {
+    blockTypes.push(block.type);
+    if (block.type === 'tool_call') toolCallIds.push(block.id);
+    else if (block.type === 'tool_response') toolResponseIds.push(block.callId);
+  }
+  return {
+    seq: marker.seq,
+    userTurn: marker.userTurn,
+    step: marker.step,
+    recordedAt: marker.recordedAt,
+    speaker: item.speaker,
+    blockTypes,
+    toolCallIds,
+    toolResponseIds,
+    isSummary: item.metadata?.isSummary === true,
+    ...(item.metadata?.chronologyReplaced !== undefined
+      ? { replaced: item.metadata.chronologyReplaced }
+      : {}),
+  };
 }

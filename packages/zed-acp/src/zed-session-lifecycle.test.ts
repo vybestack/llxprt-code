@@ -66,7 +66,9 @@ function buildStubAgent(options: {
   liveHistory?: readonly AgentMessage[];
   beforeDispose?: () => Promise<void>;
 }): StubAgentHandle {
-  const resume = vi.fn(async () => [] as readonly IContent[]);
+  const resume = vi.fn(async () =>
+    (async function* (): AsyncIterable<IContent> {})(),
+  );
   const setRecording = vi.fn(async () => undefined);
   const getHistory = vi.fn(async () => options.liveHistory ?? []);
   let disposedCount = 0;
@@ -141,21 +143,24 @@ function defaultNotFoundDelete(): void {
   });
 }
 
-describe('ACP session close/delete lifecycle boundaries (issue #2564)', () => {
-  afterEach(() => {
-    while (tmpRoots.length > 0) {
-      const root = tmpRoots.pop();
-      if (root !== undefined) {
-        rmSync(root, { recursive: true, force: true });
-      }
+function cleanupTmpRoots(): void {
+  while (tmpRoots.length > 0) {
+    const root = tmpRoots.pop();
+    if (root !== undefined) {
+      rmSync(root, { recursive: true, force: true });
     }
-  });
+  }
+}
 
-  beforeEach(() => {
-    mockFromConfig.mockReset();
-    mockDeleteSessionById.mockReset();
-    defaultNotFoundDelete();
-  });
+function resetLifecycleMocks(): void {
+  mockFromConfig.mockReset();
+  mockDeleteSessionById.mockReset();
+  defaultNotFoundDelete();
+}
+
+describe('ACP lifecycle close and unknown-session deletion (issue #2564)', () => {
+  afterEach(cleanupTmpRoots);
+  beforeEach(resetLifecycleMocks);
 
   it('succeeds when closing then deleting an unrecorded session (new→close→delete)', async () => {
     const stub = buildStubAgent({});
@@ -199,6 +204,11 @@ describe('ACP session close/delete lifecycle boundaries (issue #2564)', () => {
       zedAgent.deleteSession({ sessionId: 'never-existed' }),
     ).rejects.toMatchObject({ code: -32002 });
   });
+});
+
+describe('ACP lifecycle live-session deletion retries (issue #2564)', () => {
+  afterEach(cleanupTmpRoots);
+  beforeEach(resetLifecycleMocks);
 
   it('rejects a second delete after successful close→delete with -32002', async () => {
     const stub = buildStubAgent({});
@@ -282,6 +292,11 @@ describe('ACP session close/delete lifecycle boundaries (issue #2564)', () => {
     ).resolves.toStrictEqual({});
     expect(stub.disposedCount()).toBe(1);
   });
+});
+
+describe('ACP lifecycle close/delete serialization and persisted deletion (issue #2564)', () => {
+  afterEach(cleanupTmpRoots);
+  beforeEach(resetLifecycleMocks);
 
   it('serializes concurrent close and delete for the same session id', async () => {
     let releaseDispose!: () => void;
@@ -376,6 +391,11 @@ describe('ACP session close/delete lifecycle boundaries (issue #2564)', () => {
       zedAgent.deleteSession({ sessionId: created.sessionId }),
     ).resolves.toStrictEqual({});
   });
+});
+
+describe('ACP lifecycle restored sessions and known-closed markers (issue #2564)', () => {
+  afterEach(cleanupTmpRoots);
+  beforeEach(resetLifecycleMocks);
 
   it('coexistence of live session and known-closed marker: first delete succeeds, second rejects -32002', async () => {
     const stub = buildStubAgent({});

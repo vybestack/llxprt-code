@@ -189,7 +189,9 @@ async function loadExtraHistory(
     const turnKey = historyService.generateTurnKey();
     return { ...content, metadata: { ...content.metadata, turnId: turnKey } };
   });
-  await historyService.addBatch(restored, currentModel);
+  await historyService.addBatch(restored, currentModel, {
+    streamPublication: true,
+  });
 }
 
 /**

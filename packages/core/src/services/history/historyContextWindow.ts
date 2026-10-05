@@ -43,27 +43,3 @@ export function getWithinTokenLimit(
 
   return result;
 }
-
-/**
- * Summarize older history to fit within token limits.
- * Returns the new history array with a summary prepended to the kept tail.
- * Returns null when no summarization is needed.
- */
-export async function summarizeOldHistory(
-  history: readonly IContent[],
-  keepRecentCount: number,
-  summarizeFn: (contents: IContent[]) => Promise<IContent>,
-): Promise<IContent[] | null> {
-  const keep = Number.isFinite(keepRecentCount)
-    ? Math.max(0, Math.floor(keepRecentCount))
-    : 0;
-  if (history.length <= keep) {
-    return null;
-  }
-
-  const toSummarize = keep === 0 ? [...history] : history.slice(0, -keep);
-  const toKeep = keep === 0 ? [] : history.slice(-keep);
-
-  const summary = await summarizeFn(toSummarize);
-  return [summary, ...toKeep];
-}

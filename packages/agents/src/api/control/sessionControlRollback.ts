@@ -5,6 +5,7 @@
  */
 
 import {
+  withRecordingFailureReport,
   type LockHandle,
   type RecordingIntegration,
   type SessionRecordingService,
@@ -28,7 +29,9 @@ export async function cleanupSessionResources(
 ): Promise<unknown[]> {
   const failures: unknown[] = [];
   if (integration !== null) {
-    await captureRollbackFailure(failures, () => integration.dispose());
+    await captureRollbackFailure(failures, () =>
+      withRecordingFailureReport(integration.dispose()),
+    );
   }
   if (recording !== null) {
     await captureRollbackFailure(failures, () => recording.dispose());

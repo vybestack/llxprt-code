@@ -23,6 +23,10 @@
  */
 
 import type { IContent } from './IContent.js';
+import {
+  historyRowAt,
+  type HistoryRowSource,
+} from './historyMutationSnapshot.js';
 import type { DensityResult } from '../../core/compression/types.js';
 import type {
   ContextRange,
@@ -70,25 +74,29 @@ export function mergeRemovedInteriorSpans(
  * @requirement G3,G4
  */
 function deriveRewoundSpan(
-  previousHistory: readonly IContent[],
-  nextHistory: readonly IContent[],
+  previousHistory: HistoryRowSource,
+  nextHistory: HistoryRowSource,
 ): RemovedInteriorSpan | undefined {
   if (nextHistory.length >= previousHistory.length) {
     return undefined;
   }
   for (let index = 0; index < nextHistory.length; index++) {
-    const previousSeq = previousHistory[index].metadata?.chronology?.seq ?? 0;
-    const nextSeq = nextHistory[index].metadata?.chronology?.seq ?? 0;
+    const previousSeq =
+      historyRowAt(previousHistory, index).metadata?.chronology?.seq ?? 0;
+    const nextSeq =
+      historyRowAt(nextHistory, index).metadata?.chronology?.seq ?? 0;
     if (previousSeq !== nextSeq) {
       return undefined;
     }
   }
   const newLastSeq =
     nextHistory.length > 0
-      ? (nextHistory[nextHistory.length - 1].metadata?.chronology?.seq ?? 0)
+      ? (historyRowAt(nextHistory, nextHistory.length - 1).metadata?.chronology
+          ?.seq ?? 0)
       : 0;
   const prevLastSeq =
-    previousHistory[previousHistory.length - 1].metadata?.chronology?.seq ?? 0;
+    historyRowAt(previousHistory, previousHistory.length - 1).metadata
+      ?.chronology?.seq ?? 0;
   if (prevLastSeq <= newLastSeq) {
     return undefined;
   }
@@ -106,47 +114,30 @@ function deriveRewoundSpan(
  * @plan PLAN-20260917-ISSUE854.P01
  * @requirement REQ-854-004
  */
-export function computeContextRange(
-  history: readonly IContent[],
-): ContextRange {
-  const first = history.length > 0 ? history[0] : undefined;
-  const last = history.length > 0 ? history[history.length - 1] : undefined;
-  if (first === undefined || last === undefined) {
-    return {
-      firstSeq: 0,
-      lastSeq: 0,
-      totalEntries: 0,
-      removedInterior: [],
-      approximate: false,
-    };
+export function computeContextRange(history: Iterable<IContent>): ContextRange {
+  let firstSeq = 0;
+  let lastSeq = 0;
+  let totalEntries = 0;
+  let approximate = false;
+  let removedInterior: RemovedInteriorSpan[] = [];
+  for (const entry of history) {
+    const seq = entry.metadata?.chronology?.seq ?? 0;
+    if (totalEntries === 0) firstSeq = seq;
+    lastSeq = seq;
+    totalEntries++;
+    if (entry.metadata?.chronology === undefined) {
+      approximate = true;
+      removedInterior = [];
+    }
+    const replaced = entry.metadata?.chronologyReplaced;
+    if (!approximate && replaced !== undefined) {
+      removedInterior = mergeRemovedInteriorSpans([
+        ...removedInterior,
+        { start: replaced.fromSeq, end: replaced.toSeq, reason: 'compressed' },
+      ]);
+    }
   }
-  const approximate = history.some(
-    (entry) => entry.metadata?.chronology === undefined,
-  );
-  const removedInterior: RemovedInteriorSpan[] = approximate
-    ? []
-    : mergeRemovedInteriorSpans(
-        history.flatMap((entry) => {
-          const replaced = entry.metadata?.chronologyReplaced;
-          if (replaced === undefined) {
-            return [];
-          }
-          return [
-            {
-              start: replaced.fromSeq,
-              end: replaced.toSeq,
-              reason: 'compressed' as const,
-            },
-          ];
-        }),
-      );
-  return {
-    firstSeq: first.metadata?.chronology?.seq ?? 0,
-    lastSeq: last.metadata?.chronology?.seq ?? 0,
-    totalEntries: history.length,
-    removedInterior,
-    approximate,
-  };
+  return { firstSeq, lastSeq, totalEntries, removedInterior, approximate };
 }
 
 /**
@@ -211,7 +202,7 @@ export function firstEntryContextRange(content: IContent): ContextRange {
  * @requirement G3,G4
  */
 export function buildContextRangeSnapshot(
-  history: readonly IContent[],
+  history: Iterable<IContent>,
   accumulatedSpans: readonly RemovedInteriorSpan[],
 ): ContextRange {
   const derived = computeContextRange(history);
@@ -238,8 +229,8 @@ export function buildContextRangeSnapshot(
 export function mergeCommitSpans(
   accumulatedSpans: readonly RemovedInteriorSpan[],
   extraSpans: readonly RemovedInteriorSpan[] | undefined,
-  previousHistory: readonly IContent[],
-  nextHistory: readonly IContent[],
+  previousHistory: HistoryRowSource,
+  nextHistory: HistoryRowSource,
 ): RemovedInteriorSpan[] {
   const mutationSpans: RemovedInteriorSpan[] = [...(extraSpans ?? [])];
   const rewound = deriveRewoundSpan(previousHistory, nextHistory);
@@ -259,18 +250,18 @@ export function mergeCommitSpans(
  * @requirement G3,G4
  */
 export function collectDensitySpans(
-  history: readonly IContent[],
+  history: HistoryRowSource,
   result: DensityResult,
 ): RemovedInteriorSpan[] {
   const spans: RemovedInteriorSpan[] = [];
   for (const index of result.removals) {
-    const seq = history[index].metadata?.chronology?.seq;
+    const seq = historyRowAt(history, index).metadata?.chronology?.seq;
     if (seq !== undefined) {
       spans.push({ start: seq, end: seq, reason: 'density-removed' });
     }
   }
   for (const index of result.replacements.keys()) {
-    const seq = history[index].metadata?.chronology?.seq;
+    const seq = historyRowAt(history, index).metadata?.chronology?.seq;
     if (seq !== undefined) {
       spans.push({ start: seq, end: seq, reason: 'density-replaced' });
     }

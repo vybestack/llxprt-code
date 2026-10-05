@@ -34,6 +34,7 @@
  * the phase contract.
  */
 
+import { collectAgentHistory } from './helpers/collect-agent-history.js';
 import { describe, it, expect } from 'bun:test';
 import * as fc from 'fast-check';
 import type {
@@ -68,7 +69,69 @@ function messageText(msg: AgentMessage | AgentHistoryItem): string {
   return blocks.map((b) => (b.type === 'text' ? b.text : '')).join('');
 }
 
-describe('Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @requirement:REQ-011', () => {
+const observeT8ExplicitCompressReturnsACompressionResultWithAValidStatusAndNumeric =
+  async () => {
+    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+    try {
+      // seed enough history for compression to be meaningful
+      await agent.setHistory([
+        textMessage('human', 'a'.repeat(2000)),
+        textMessage('ai', 'b'.repeat(2000)),
+        textMessage('human', 'c'.repeat(2000)),
+      ]);
+
+      // A caller-supplied promptId must be echoed back verbatim on the result
+      // (proves the promptId is threaded through, not regenerated).
+      const result = await agent.compress({ promptId: 'caller-compress-id' });
+
+      // status is one of the documented outcomes (issue #2602 added 'noop')
+
+      // when compressed, numeric token fields are populated and monotonic.
+      // Evaluate the contract as a single boolean to avoid conditional expects.
+      const orig = result.originalTokenCount;
+      const next = result.newTokenCount;
+      const numericWhenCompressed =
+        result.status !== 'compressed' ||
+        (typeof orig === 'number' && typeof next === 'number' && orig >= next);
+
+      return { result, numericWhenCompressed };
+    } finally {
+      await cleanup();
+    }
+  };
+
+const observeT22ChatAgentResultCarriesTextToolCallsFinishReasonAndOptionalUsageErrorFor =
+  async () => {
+    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+    try {
+      const result = await agent.chat('produce output');
+
+      // text drives --output-format text
+
+      // toolCalls is an array (drives --output-format json tool arrays)
+
+      // finishReason is a valid DoneReason (drives exit/error code mapping)
+
+      // usage, when present, has the SessionStats numeric shape.
+      // Evaluate as a single boolean so no expect lives inside a conditional.
+      const usageValid =
+        result.usage === undefined ||
+        (typeof result.usage.totalTokens === 'number' &&
+          typeof result.usage.turnCount === 'number');
+
+      // error, when present, has a code + message (drives non-zero exit).
+      const errorValid =
+        result.error === undefined ||
+        (typeof result.error.code === 'string' &&
+          typeof result.error.message === 'string');
+
+      return { result, usageValid, errorValid };
+    } finally {
+      await cleanup();
+    }
+  };
+
+describe('Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @requirement:REQ-011: history updates', () => {
   it('T6 setHistory then getHistory round-trips messages and a follow-up turn sees the context @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
@@ -78,7 +141,7 @@ describe('Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @req
       ];
       await agent.setHistory(seeded);
 
-      const got = await agent.getHistory();
+      const got = await collectAgentHistory(agent);
       expect(got.length).toBe(seeded.length);
       expect(messageText(got[0])).toBe('remember the magic word: quokka');
       expect(messageText(got[1])).toBe('got it, the magic word is quokka');
@@ -101,7 +164,7 @@ describe('Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @req
       ]);
       await agent.resetChat();
 
-      const got = await agent.getHistory();
+      const got = await collectAgentHistory(agent);
       expect(got.length).toBe(0);
 
       // next turn runs cleanly with no prior context
@@ -109,13 +172,36 @@ describe('Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @req
       expect(events.filter(isDoneEvent)).toHaveLength(1);
 
       // after a fresh turn, history contains only the new turn
-      const after = await agent.getHistory();
+      const after = await collectAgentHistory(agent);
       expect(after.length).toBeLessThanOrEqual(2);
     } finally {
       await cleanup();
     }
   });
 
+  it('discards deferred history before the first chat and keeps later turns separate', async () => {
+    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+    try {
+      await agent.setHistory([
+        textMessage('human', 'obsolete prompt'),
+        textMessage('ai', 'obsolete reply'),
+      ]);
+      await agent.resetChat();
+      expect(await collectAgentHistory(agent)).toStrictEqual([]);
+
+      const events = await drain(agent.stream('only new prompt'));
+      expect(events.filter(isDoneEvent)).toHaveLength(1);
+      const texts = (await collectAgentHistory(agent)).map(messageText);
+      expect(texts).toContain('only new prompt');
+      expect(texts).not.toContain('obsolete prompt');
+      expect(texts).not.toContain('obsolete reply');
+    } finally {
+      await cleanup();
+    }
+  });
+});
+
+describe('Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @requirement:REQ-011: explicit compression', () => {
   it('T8 explicit compress() returns a CompressionResult with a valid status and numeric token fields when compressed @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-011', async () => {
     const { result, numericWhenCompressed } =
       await observeT8ExplicitCompressReturnsACompressionResultWithAValidStatusAndNumeric();
@@ -125,39 +211,6 @@ describe('Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @req
     );
     expect(numericWhenCompressed).toBe(true);
   });
-
-  const observeT8ExplicitCompressReturnsACompressionResultWithAValidStatusAndNumeric =
-    async () => {
-      const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-      try {
-        // seed enough history for compression to be meaningful
-        await agent.setHistory([
-          textMessage('human', 'a'.repeat(2000)),
-          textMessage('ai', 'b'.repeat(2000)),
-          textMessage('human', 'c'.repeat(2000)),
-        ]);
-
-        // A caller-supplied promptId must be echoed back verbatim on the result
-        // (proves the promptId is threaded through, not regenerated).
-        const result = await agent.compress({ promptId: 'caller-compress-id' });
-
-        // status is one of the documented outcomes (issue #2602 added 'noop')
-
-        // when compressed, numeric token fields are populated and monotonic.
-        // Evaluate the contract as a single boolean to avoid conditional expects.
-        const orig = result.originalTokenCount;
-        const next = result.newTokenCount;
-        const numericWhenCompressed =
-          result.status !== 'compressed' ||
-          (typeof orig === 'number' &&
-            typeof next === 'number' &&
-            orig >= next);
-
-        return { result, numericWhenCompressed };
-      } finally {
-        await cleanup();
-      }
-    };
 
   it('T8c compress() without a promptId generates a default compress-prefixed id and the no-op path reports skipped (not failed) under the fake seam @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-011', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
@@ -180,7 +233,9 @@ describe('Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @req
       await cleanup();
     }
   });
+});
 
+describe('Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @requirement:REQ-011: stats during turns', () => {
   it('T8b onStats: an immediate frame at subscribe, at least one more telemetry-driven frame during a turn, and NO further frames after unsubscribe @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
@@ -237,7 +292,9 @@ describe('Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @req
       await cleanup();
     }
   });
+});
 
+describe('Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @requirement:REQ-011: immediate stats and context updates', () => {
   it('T8c2 onStats delivers an immediate stats frame at subscription time even when no turn ever runs @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
@@ -271,11 +328,11 @@ describe('Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @req
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
       // addHistory appends a message visible to the next turn
-      const before = await agent.getHistory();
+      const before = await collectAgentHistory(agent);
       await agent.addHistory(
         textMessage('human', 'injected context for the next turn'),
       );
-      const after = await agent.getHistory();
+      const after = await collectAgentHistory(agent);
       expect(after.length).toBe(before.length + 1);
       expect(messageText(after[after.length - 1])).toBe(
         'injected context for the next turn',
@@ -290,14 +347,16 @@ describe('Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @req
       expect(events.filter(isDoneEvent)).toHaveLength(1);
 
       // the injected message is still present after the turn
-      const hist = await agent.getHistory();
+      const hist = await collectAgentHistory(agent);
       const texts = hist.map(messageText);
       expect(texts).toContain('injected context for the next turn');
     } finally {
       await cleanup();
     }
   });
+});
 
+describe('Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @requirement:REQ-011: result mapping and history restoration', () => {
   it('T22 chat() AgentResult carries text, toolCalls, finishReason, and optional usage/error for non-interactive output mapping @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-001 @requirement:REQ-003 @requirement:REQ-021', async () => {
     const { result, usageValid, errorValid } =
       await observeT22ChatAgentResultCarriesTextToolCallsFinishReasonAndOptionalUsageErrorFor();
@@ -309,37 +368,6 @@ describe('Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @req
     expect(usageValid).toBe(true);
     expect(errorValid).toBe(true);
   });
-
-  const observeT22ChatAgentResultCarriesTextToolCallsFinishReasonAndOptionalUsageErrorFor =
-    async () => {
-      const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-      try {
-        const result = await agent.chat('produce output');
-
-        // text drives --output-format text
-
-        // toolCalls is an array (drives --output-format json tool arrays)
-
-        // finishReason is a valid DoneReason (drives exit/error code mapping)
-
-        // usage, when present, has the SessionStats numeric shape.
-        // Evaluate as a single boolean so no expect lives inside a conditional.
-        const usageValid =
-          result.usage === undefined ||
-          (typeof result.usage.totalTokens === 'number' &&
-            typeof result.usage.turnCount === 'number');
-
-        // error, when present, has a code + message (drives non-zero exit).
-        const errorValid =
-          result.error === undefined ||
-          (typeof result.error.code === 'string' &&
-            typeof result.error.message === 'string');
-
-        return { result, usageValid, errorValid };
-      } finally {
-        await cleanup();
-      }
-    };
 
   it('T6r restoreHistory accepts curated IContent items and getHistory surfaces their text @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
@@ -359,7 +387,7 @@ describe('Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @req
       ];
       await agent.restoreHistory(items);
 
-      const hist = await agent.getHistory();
+      const hist = await collectAgentHistory(agent);
       const texts = hist.map(messageText);
       expect(texts).toContain('curated human turn');
       expect(texts).toContain('curated ai reply');
@@ -380,7 +408,7 @@ describe('Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @req
         },
       ]);
 
-      const hist = await agent.getHistory();
+      const hist = await collectAgentHistory(agent);
       const texts = hist.map(messageText);
       expect(texts).toContain('restored replacement');
       expect(texts).not.toContain('original seeded message');
@@ -388,7 +416,9 @@ describe('Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @req
       await cleanup();
     }
   });
+});
 
+describe('Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @requirement:REQ-011: model state and generated history', () => {
   it('T-seq getCurrentSequenceModel returns null (no active load-balancer sequence under the fake seam) @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-004', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
@@ -450,7 +480,7 @@ describe('Core history @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-010 @req
         try {
           const seeded = msgs.map((m) => textMessage(m.speaker, m.text));
           await agent.setHistory(seeded);
-          const got = await agent.getHistory();
+          const got = await collectAgentHistory(agent);
           expect(got.length).toBe(seeded.length);
           for (let i = 0; i < seeded.length; i++) {
             expect(messageText(got[i])).toBe(messageText(seeded[i]));

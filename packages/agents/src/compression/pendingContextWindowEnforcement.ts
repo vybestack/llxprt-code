@@ -16,16 +16,8 @@
  */
 
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import {
-  invalidateResponsesStatefulChain,
-  type IContent,
-  type ContentBlock,
-} from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { type ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import type {
-  CompressionContext,
-  StrategyCompressionResult,
-} from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import { buildContextOverflowError } from './contextOverflowError.js';
@@ -49,7 +41,12 @@ interface ReductionResult {
   toolResponsesTruncated?: number;
 }
 
-export interface PendingContextWindowEnforcerDeps {
+import {
+  applyPendingWindowFallback,
+  type PendingFallbackDeps,
+} from './pendingWindowFallback.js';
+
+export interface PendingContextWindowEnforcerDeps extends PendingFallbackDeps {
   historyService: HistoryService;
   logger: DebugLogger;
   ineffectiveCompressionReductionThreshold: number;
@@ -57,27 +54,12 @@ export interface PendingContextWindowEnforcerDeps {
   computeProjectedTokens(
     pendingTokens: number,
     completionBudget: number,
-  ): number;
+  ): number | Promise<number>;
   ensureDensityOptimized(): Promise<void>;
   performCompression(
     promptId: string,
     options: { bypassCooldown: true; trigger: 'auto' },
   ): Promise<PerformCompressionResult>;
-  buildCompressionContext(
-    promptId: string,
-    targetTokenCount?: number,
-  ): Promise<CompressionContext>;
-  compressWithFallbackStrategy(
-    context: CompressionContext,
-  ): Promise<StrategyCompressionResult>;
-  applyFallbackCompressionResult(
-    result: StrategyCompressionResult,
-    applyResult: (
-      newHistory: IContent[],
-      summary: IContent | undefined,
-      topPreserved: number,
-    ) => Promise<void>,
-  ): Promise<void>;
   setSuppressDensityDirty(value: boolean): void;
   recordCompressionFailure(): void;
   resetLastPromptTokenCount(): void;
@@ -98,7 +80,7 @@ export class PendingContextWindowEnforcer {
     const { completionBudget, limit, marginAdjustedLimit } =
       this.deps.getContextLimits(provider);
 
-    const initialProjected = this.deps.computeProjectedTokens(
+    const initialProjected = await this.deps.computeProjectedTokens(
       pendingTokens,
       completionBudget,
     );
@@ -114,7 +96,7 @@ export class PendingContextWindowEnforcer {
     await this.deps.ensureDensityOptimized();
     await this.deps.historyService.waitForTokenUpdates();
 
-    const postOptProjected = this.deps.computeProjectedTokens(
+    const postOptProjected = await this.deps.computeProjectedTokens(
       pendingTokens,
       completionBudget,
     );
@@ -123,7 +105,7 @@ export class PendingContextWindowEnforcer {
     }
 
     const compressionFailure = await this.tryAutoCompression(promptId);
-    let recomputed = this.deps.computeProjectedTokens(
+    let recomputed = await this.deps.computeProjectedTokens(
       pendingTokens,
       completionBudget,
     );
@@ -350,10 +332,10 @@ export class PendingContextWindowEnforcer {
           'Additional hard-limit compression attempt failed',
         );
         this.logAdditionalCompressionFailure(retryError);
-        return this.projectWithCompressionFailure(input, retryError);
+        return await this.projectWithCompressionFailure(input, retryError);
       }
       return {
-        projected: this.deps.computeProjectedTokens(
+        projected: await this.deps.computeProjectedTokens(
           input.pendingTokens,
           input.completionBudget,
         ),
@@ -374,12 +356,12 @@ export class PendingContextWindowEnforcer {
     );
   }
 
-  private projectWithCompressionFailure(
+  private async projectWithCompressionFailure(
     input: { pendingTokens: number; completionBudget: number },
     compressionFailure: Error,
-  ): { projected: number; compressionFailure: Error } {
+  ): Promise<{ projected: number; compressionFailure: Error }> {
     return {
-      projected: this.deps.computeProjectedTokens(
+      projected: await this.deps.computeProjectedTokens(
         input.pendingTokens,
         input.completionBudget,
       ),
@@ -406,7 +388,8 @@ export class PendingContextWindowEnforcer {
     this.deps.setSuppressDensityDirty(true);
     let truncationFailure: Error | undefined;
     try {
-      const context = await this.deps.buildCompressionContext(
+      await applyPendingWindowFallback(
+        this.deps,
         input.promptId,
         computeHistoryTruncationTarget(
           input.postCompressionProjected,
@@ -414,8 +397,6 @@ export class PendingContextWindowEnforcer {
           this.deps.historyService.getTotalTokens(),
         ),
       );
-      const result = await this.deps.compressWithFallbackStrategy(context);
-      await this.applyFallbackCompressionResult(result);
       this.deps.logger.debug(
         'Compression completed with hard-limit fallback (TopDownTruncation)',
       );
@@ -429,7 +410,7 @@ export class PendingContextWindowEnforcer {
     }
 
     return {
-      projected: this.deps.computeProjectedTokens(
+      projected: await this.deps.computeProjectedTokens(
         input.pendingTokens,
         input.completionBudget,
       ),
@@ -452,41 +433,6 @@ export class PendingContextWindowEnforcer {
           input.postCompressionProjected - input.marginAdjustedLimit,
       },
     );
-  }
-
-  private async applyFallbackCompressionResult(
-    result: StrategyCompressionResult,
-  ): Promise<void> {
-    if (result.kind === 'noop') {
-      // Truthful no-op: do not mutate history or counters.
-      this.deps.logger.debug(
-        `Hard-limit fallback (TopDownTruncation) was a structural no-op: ${result.reason}`,
-      );
-      return;
-    }
-    const application = { completed: false };
-    await this.deps.applyFallbackCompressionResult(
-      result,
-      async (newHistory, _summary, _topPreserved) => {
-        await this.rebuildFallbackHistory(newHistory);
-        application.completed = true;
-      },
-    );
-    if (!application.completed) {
-      throw new Error(
-        `Hard-limit fallback reported applied but no candidate history was committed (${result.metadata.strategyUsed})`,
-      );
-    }
-  }
-
-  private async rebuildFallbackHistory(newHistory: IContent[]): Promise<void> {
-    await this.deps.historyService.replaceAll(
-      [...invalidateResponsesStatefulChain(newHistory)],
-      this.deps.getRuntimeModel(),
-    );
-    // Post-truncation rebuild: the prefix is already destroyed (#3070).
-    this.deps.historyService.resetCacheAnchorSeq();
-    this.deps.resetLastPromptTokenCount();
   }
 
   private async truncateToolResponsesIfStillOverLimit(input: {
@@ -517,7 +463,7 @@ export class PendingContextWindowEnforcer {
           input.marginAdjustedLimit,
         );
       } catch (truncatorError) {
-        return this.handleTruncatorThrow(
+        return await this.handleTruncatorThrow(
           truncatorError,
           input.truncationFailure,
           input.compressionFailure,
@@ -539,13 +485,13 @@ export class PendingContextWindowEnforcer {
     }
   }
 
-  private handleTruncatorThrow(
+  private async handleTruncatorThrow(
     truncatorError: unknown,
     prevTruncationFailure: Error | undefined,
     compressionFailure: Error | undefined,
     pendingTokens: number,
     completionBudget: number,
-  ): ReductionResult {
+  ): Promise<ReductionResult> {
     const normalized = this.normalizeError(truncatorError);
     this.deps.logger.warn(
       () =>
@@ -554,7 +500,7 @@ export class PendingContextWindowEnforcer {
     );
     let fallbackProjected: number;
     try {
-      fallbackProjected = this.deps.computeProjectedTokens(
+      fallbackProjected = await this.deps.computeProjectedTokens(
         pendingTokens,
         completionBudget,
       );

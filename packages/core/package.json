@@ -185,6 +185,11 @@
       "bun": "./src/services/history/semantic-media-purge.ts",
       "import": "./dist/src/services/history/semantic-media-purge.js"
     },
+    "./services/history/semantic-purge-stream.js": {
+      "types": "./dist/src/services/history/semantic-purge-stream.d.ts",
+      "bun": "./src/services/history/semantic-purge-stream.ts",
+      "import": "./dist/src/services/history/semantic-purge-stream.js"
+    },
     "./services/history/historyCloneUtils.js": {
       "types": "./dist/src/services/history/historyCloneUtils.d.ts",
       "bun": "./src/services/history/historyCloneUtils.ts",
@@ -300,6 +305,14 @@
     "./test-utils/runtime.js": {
       "bun": "./src/test-utils/runtime.ts",
       "import": "./dist/src/test-utils/runtime.js"
+    },
+    "./test-utils/retained-growth.js": {
+      "bun": "./src/test-utils/retained-growth.ts",
+      "import": "./dist/src/test-utils/retained-growth.js"
+    },
+    "./test-utils/collect-raw-history.js": {
+      "bun": "./src/test-utils/collect-raw-history.ts",
+      "import": "./dist/src/test-utils/collect-raw-history.js"
     },
     "./utils/debugLogger.js": {
       "bun": "./src/utils/debugLogger.ts",
@@ -564,6 +577,26 @@
     "./utils/tool-utils.js": {
       "bun": "./src/utils/tool-utils.ts",
       "import": "./dist/src/utils/tool-utils.js"
+    },
+    "./recording/journalCounters.js": {
+      "types": "./dist/src/recording/journalCounters.d.ts",
+      "bun": "./src/recording/journalCounters.ts",
+      "import": "./dist/src/recording/journalCounters.js"
+    },
+    "./recording/rowOwnership.js": {
+      "types": "./dist/src/recording/rowOwnership.d.ts",
+      "bun": "./src/recording/rowOwnership.ts",
+      "import": "./dist/src/recording/rowOwnership.js"
+    },
+    "./storage/history-media-ownership.js": {
+      "types": "./dist/src/storage/history-media-ownership.d.ts",
+      "bun": "./src/storage/history-media-ownership.ts",
+      "import": "./dist/src/storage/history-media-ownership.js"
+    },
+    "./storage/SessionPersistenceService.js": {
+      "types": "./dist/src/storage/SessionPersistenceService.d.ts",
+      "bun": "./src/storage/SessionPersistenceService.ts",
+      "import": "./dist/src/storage/SessionPersistenceService.js"
     }
   },
   "scripts": {

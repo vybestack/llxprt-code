@@ -20,6 +20,12 @@
  */
 
 import * as path from 'node:path';
+import { optimizeDiskDensity } from './diskDensityOptimization.js';
+import { compressHighDensityDisk } from './highDensityDiskPlan.js';
+import { findKeyParamForCallId } from './densityArrayLookup.js';
+import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
+import type { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
+import type { DiskTruncationContext } from './TopDownTruncationStrategy.js';
 import type {
   IContent,
   ContentBlock,
@@ -298,7 +304,6 @@ function isStaleReadCall(
  */
 function applyStaleAiEntries(
   history: readonly IContent[],
-  staleCallIds: Set<string>,
   aiEntryStaleBlocks: Map<number, Set<string>>,
   aiEntryTotalToolCalls: Map<number, number>,
   removals: Set<number>,
@@ -564,29 +569,6 @@ function applyStaleInclusionRemovals(
 }
 
 /**
- * @plan PLAN-20260211-HIGHDENSITY.P14
- * Find the file-path key parameter for a tool_call matching the given callId.
- * @pseudocode high-density-compress.md lines 130-149
- */
-function findKeyParamForCallId(
-  fullHistory: readonly IContent[],
-  callId: string,
-): string | undefined {
-  for (const entry of fullHistory) {
-    if (entry.speaker !== 'ai') {
-      continue;
-    }
-    const matchingBlock = entry.blocks.find(
-      (b): b is ToolCallBlock => b.type === 'tool_call' && b.id === callId,
-    );
-    if (matchingBlock) {
-      return extractFilePath(matchingBlock.parameters);
-    }
-  }
-  return undefined;
-}
-
-/**
  * @plan PLAN-20260211-HIGHDENSITY.P11
  * Classify a single read_many_files path for pruning eligibility.
  * @pseudocode high-density-optimize.md lines 220-250
@@ -646,6 +628,13 @@ function findPrunableToolResponses(
  * @pseudocode high-density-optimize.md lines 20-53
  */
 export class HighDensityStrategy implements CompressionStrategy {
+  readonly optimizeRows = optimizeDiskDensity;
+  readonly diskCompressionOwnership = new RowOwnership();
+  readonly compressDisk = (
+    context: DiskTruncationContext,
+    candidate: HistoryDensityRows,
+  ): ReturnType<typeof compressHighDensityDisk> =>
+    compressHighDensityDisk(context, candidate, this.diskCompressionOwnership);
   readonly name = 'high-density' as const;
   readonly requiresLLM = false;
   readonly trigger: StrategyTrigger = {
@@ -985,7 +974,6 @@ export class HighDensityStrategy implements CompressionStrategy {
 
     applyStaleAiEntries(
       history,
-      staleCallIds,
       aiEntryStaleBlocks,
       aiEntryTotalToolCalls,
       removals,

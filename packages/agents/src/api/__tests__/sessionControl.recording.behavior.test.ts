@@ -152,11 +152,10 @@ describe('SessionControl continuous recording @plan:PLAN-20260617-COREAPI.P20 @r
       await agent.session.setRecording({ enabled: true });
       await agent.session.setRecording({ enabled: false });
 
-      const restored = await agent.session.resume('latest');
-
-      // The returned value is a real IContent[] carrying the recorded turns —
-      // not void, not a Gemini Content[] round-trip.
-      expect(Array.isArray(restored)).toBe(true);
+      const stream = await agent.session.resume('latest');
+      expect(Symbol.asyncIterator in stream).toBe(true);
+      const restored = [];
+      for await (const row of stream) restored.push(row);
       expect(restored.length).toBeGreaterThanOrEqual(2);
       for (const item of restored) {
         expect(item).toHaveProperty('speaker');
@@ -168,12 +167,14 @@ describe('SessionControl continuous recording @plan:PLAN-20260617-COREAPI.P20 @r
       expect(serialized).toContain('acknowledged wombat');
     });
   });
+});
 
+describe('SessionControl post-resume recording', () => {
   it('post-resume turns append to the resumed JSONL file @requirement:REQ-010', async () => {
     const { path, raw } =
       await observePostResumeTurnsAppendToTheResumedJSONLFile();
     expect(path.length).toBeGreaterThan(0);
-    expect(raw).toContain('post-resume-sentinel-gamma');
+    expect(raw.match(/post-resume-sentinel-gamma/g)).toHaveLength(1);
     expect(raw).toContain('a plain text reply');
   });
 
@@ -199,7 +200,9 @@ describe('SessionControl continuous recording @plan:PLAN-20260617-COREAPI.P20 @r
 
       return { path, raw };
     });
+});
 
+describe('SessionControl completed tool recording', () => {
   it('records COMPLETED TOOL CALLS (call + response) into the session JSONL for later replay (issue #1605 verification) @requirement:REQ-010', async () => {
     const { path, raw, callBlock, responseBlock } =
       await observeRecordsCOMPLETEDTOOLCALLSCallResponseIntoTheSessionJSONLForLater();
@@ -271,7 +274,9 @@ describe('SessionControl continuous recording @plan:PLAN-20260617-COREAPI.P20 @r
 
         return { path, raw, callBlock, responseBlock };
       });
+});
 
+describe('SessionControl recording teardown', () => {
   it('teardown unsubscribes the RecordingIntegration from the HistoryService (no leaked listener) @requirement:REQ-010', async () => {
     await withIsolatedAgent('plain-text.jsonl', async (agent) => {
       // Warm up so the chat + reused HistoryService are materialized and the
@@ -281,8 +286,8 @@ describe('SessionControl continuous recording @plan:PLAN-20260617-COREAPI.P20 @r
       const baseline = emitter.listenerCount('contentAdded');
 
       await agent.session.setRecording({ enabled: true });
-      // Enabling subscribes exactly one additional 'contentAdded' listener.
-      expect(emitter.listenerCount('contentAdded')).toBe(baseline + 1);
+      // Journal ownership does not install a second content writer.
+      expect(emitter.listeners('contentAdded')).toHaveLength(baseline);
 
       await agent.session.setRecording({ enabled: false });
       // Disabling disposes the integration, returning the listener count to the

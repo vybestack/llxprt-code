@@ -39,8 +39,11 @@ function textContent(speaker: 'human' | 'ai', text: string): IContent {
   return { speaker, blocks: [{ type: 'text', text }] };
 }
 
-function seqOf(service: HistoryService, positionFromEnd: number): number {
-  const entries = service.getRecent(positionFromEnd + 1);
+async function seqOf(
+  service: HistoryService,
+  positionFromEnd: number,
+): Promise<number> {
+  const entries = await Array.fromAsync(service.getRecent(positionFromEnd + 1));
   const index = entries.length - 1 - positionFromEnd;
   const entry = index >= 0 ? entries[index] : undefined;
   if (entry === undefined) {
@@ -133,14 +136,14 @@ function expectWellFormedInterior(range: ContextRange): void {
 }
 
 describe('HistoryService context range v2', () => {
-  it('emits contextRangeChanged once when the first entry lands in an empty history', () => {
+  it('emits contextRangeChanged once when the first entry lands in an empty history', async () => {
     const service = new HistoryService();
     const events = captureRanges(service);
     service.add(textContent('human', 'one'));
     expect(events).toHaveLength(1);
     const range = lastRangeOf(events);
-    expect(range.firstSeq).toBe(seqOf(service, 0));
-    expect(range.lastSeq).toBe(seqOf(service, 0));
+    expect(range.firstSeq).toBe(await seqOf(service, 0));
+    expect(range.lastSeq).toBe(await seqOf(service, 0));
     expect(range.totalEntries).toBe(1);
     expect(range.removedInterior).toStrictEqual([]);
     expect(range.approximate).toBe(false);
@@ -162,15 +165,21 @@ describe('HistoryService context range v2', () => {
       service.add(textContent('human', text));
     }
     const events = captureRanges(service);
-    await service.transformAll((contents) => [
-      ...contents.slice(0, 2),
-      summaryEntry(99, 3, 5, 'summary of three through five'),
-      ...contents.slice(5),
-    ]);
+    await service.transformAll(async (source, sink) => {
+      let index = 0;
+      for await (const { row } of source.streamRows()) {
+        if (index === 2)
+          sink.appendDetached(
+            summaryEntry(99, 3, 5, 'summary of three through five'),
+          );
+        if (index < 2 || index >= 5) sink.appendRetained(index, row);
+        index++;
+      }
+    });
     expect(events).toHaveLength(1);
     const range = lastRangeOf(events);
-    expect(range.firstSeq).toBe(seqOf(service, 4));
-    expect(range.lastSeq).toBe(seqOf(service, 0));
+    expect(range.firstSeq).toBe(await seqOf(service, 4));
+    expect(range.lastSeq).toBe(await seqOf(service, 0));
     expect(range.totalEntries).toBe(5);
     expect(range.removedInterior).toStrictEqual([
       { start: 3, end: 5, reason: 'compressed' },
@@ -198,7 +207,9 @@ describe('HistoryService context range v2', () => {
     ]);
     expectWellFormedInterior(range);
   });
+});
 
+describe('HistoryService context range v2 membership changes', () => {
   it('coalesces adjacent same-reason spans and keeps different reasons separate', async () => {
     const service = new HistoryService();
     for (const text of ['one', 'two', 'three', 'four', 'five']) {
@@ -232,11 +243,17 @@ describe('HistoryService context range v2', () => {
     const events = captureRanges(service);
     // In-memory rewind shape: a strict seq-prefix truncation through the
     // batch-commit path; P05 journals it as a durable rewind op.
-    await service.transformAll((contents) => contents.slice(0, 3));
+    await service.transformAll(async (source, sink) => {
+      let index = 0;
+      for await (const { row } of source.streamRows()) {
+        if (index === 3) break;
+        sink.appendRetained(index++, row);
+      }
+    });
     expect(events).toHaveLength(1);
     const range = lastRangeOf(events);
-    expect(range.firstSeq).toBe(seqOf(service, 2));
-    expect(range.lastSeq).toBe(seqOf(service, 0));
+    expect(range.firstSeq).toBe(await seqOf(service, 2));
+    expect(range.lastSeq).toBe(await seqOf(service, 0));
     expect(range.totalEntries).toBe(3);
     expect(range.removedInterior).toStrictEqual([
       { start: 4, end: 5, reason: 'rewound' },
@@ -261,7 +278,9 @@ describe('HistoryService context range v2', () => {
       approximate: false,
     });
   });
+});
 
+describe('HistoryService context range v2 combined changes and projections', () => {
   it('keeps compressed and density spans disjoint and ordered, and the snapshot matches the last event', async () => {
     const service = new HistoryService();
     for (const text of [
@@ -276,11 +295,17 @@ describe('HistoryService context range v2', () => {
       service.add(textContent('human', text));
     }
     const events = captureRanges(service);
-    await service.transformAll((contents) => [
-      ...contents.slice(0, 2),
-      summaryEntry(99, 3, 5, 'summary of three through five'),
-      ...contents.slice(5),
-    ]);
+    await service.transformAll(async (source, sink) => {
+      let index = 0;
+      for await (const { row } of source.streamRows()) {
+        if (index === 2)
+          sink.appendDetached(
+            summaryEntry(99, 3, 5, 'summary of three through five'),
+          );
+        if (index < 2 || index >= 5) sink.appendRetained(index, row);
+        index++;
+      }
+    });
     await service.waitForTokenUpdates();
     // After the compression the tail row with seq 6 sits at index 3.
     await service.applyDensityResult(

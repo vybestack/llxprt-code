@@ -61,6 +61,7 @@ import {
 import {
   applyToolSelectionHook,
   buildRequestContentsResult,
+  streamSemanticPurgeRequest,
   contentForTelemetryPreservingUsage,
   selectRequestTools,
   prepareRequestPayload,
@@ -329,7 +330,15 @@ export class StreamProcessor {
     semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
   ): Promise<AsyncGenerator<ModelStreamChunk>> {
     const { contents: requestContents, pending: pendingUserIContents } =
-      this._buildRequestContents(userContent, semanticMediaPurge);
+      await buildRequestContentsResult(
+        userContent,
+        this.historyService,
+        streamSemanticPurgeRequest(
+          semanticMediaPurge,
+          params.config?.abortSignal,
+        ),
+        params.config?.abortSignal,
+      );
 
     const configForHooks = this.runtimeContext.providerRuntime.config;
     const toolSelection = await this._applyToolSelectionHook(
@@ -374,13 +383,6 @@ export class StreamProcessor {
           this.compressionHandler.estimatePendingTokens(contents),
       });
       requestPayload.contents = streamPreparation.contents;
-      logOutgoingRequest(
-        this.runtimeContext,
-        requestPayload,
-        this.runtimeContext.state.model,
-        promptId,
-      );
-
       const stream = await this._sendProviderRequest(
         provider,
         requestPayload,
@@ -499,6 +501,12 @@ export class StreamProcessor {
     hookRestrictedAllowedTools: string[] | undefined,
     preparedAtEnforcement?: Awaited<ReturnType<typeof prepareAtSendSeam>>,
   ): Promise<AsyncGenerator<ModelStreamChunk>> {
+    logOutgoingRequest(
+      this.runtimeContext,
+      requestPayload,
+      this.runtimeContext.state.model,
+      promptId,
+    );
     const startTime = Date.now();
     try {
       const chatOptions = this._buildStreamChatOptions(
@@ -512,7 +520,7 @@ export class StreamProcessor {
         preparedAtEnforcement ??
         (await prepareAtSendSeam(provider, chatOptions));
       this.currentPromptEnvelopeEstimate = prepared.estimate;
-      recordSendSeamTelemetry({
+      await recordSendSeamTelemetry({
         usageLogger: this.compressionHandler.tokenUsageLogger,
         promptId,
         estimate: prepared.estimate,
@@ -596,20 +604,6 @@ export class StreamProcessor {
       configForHooks,
       tools,
       this.runtimeContext.state.model,
-    );
-  }
-
-  private _buildRequestContents(
-    userContent: IContent | IContent[],
-    semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
-  ): {
-    contents: IContent[];
-    pending: IContent[];
-  } {
-    return buildRequestContentsResult(
-      userContent,
-      this.historyService,
-      semanticMediaPurge?.requestHistory,
     );
   }
 

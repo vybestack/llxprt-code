@@ -140,7 +140,9 @@ function isForwardableKimiVideo(block: MediaBlock): boolean {
   );
 }
 
-function convertBlockToPart(block: ContentBlock): ExtendedContentPart | null {
+export function convertBlockToPart(
+  block: ContentBlock,
+): ExtendedContentPart | null {
   if (block.type === 'text' && block.text) {
     return { type: 'text', text: block.text };
   }
@@ -185,7 +187,7 @@ function convertBlockToPart(block: ContentBlock): ExtendedContentPart | null {
 /**
  * Processes a user/human message block and converts it to OpenAI format.
  */
-function processUserMessage(
+export function processUserMessage(
   content: IContent,
 ): OpenAI.Chat.ChatCompletionMessageParam | null {
   const hasMedia = content.blocks.some((b) => b.type === 'media');
@@ -225,7 +227,7 @@ function processUserMessage(
 /**
  * Processes an AI/assistant message block and converts it to OpenAI format.
  */
-function processAssistantMessage(
+export function processAssistantMessage(
   content: IContent,
   includeInContext: boolean,
   toolFormat: ToolFormat | undefined,
@@ -286,7 +288,7 @@ function processAssistantMessage(
 /**
  * Processes tool response blocks and converts them to OpenAI format.
  */
-function processToolResponses(
+export function processToolResponses(
   content: IContent,
   toolFormat: ToolFormat | undefined,
   resolveToolResponseId: (tr: ToolResponseBlock) => string,

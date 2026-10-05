@@ -1,3 +1,4 @@
+import { collectRowsForAssertions } from '../../test-utils/collect-rows-for-assertions.js';
 /**
  * Copyright 2025 Vybestack LLC
  *
@@ -31,7 +32,7 @@ describe('HistoryService does NOT stamp metadata.model (issue #2335 import-safet
     service = new HistoryService();
   });
 
-  it('does NOT inject metadata.model on an AI turn added with a modelName', () => {
+  it('does NOT inject metadata.model on an AI turn added with a modelName', async () => {
     const aiContent: IContent = {
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'Hello there.' }],
@@ -41,10 +42,12 @@ describe('HistoryService does NOT stamp metadata.model (issue #2335 import-safet
 
     // HistoryService.add is used by import/restore paths; stamping here would
     // falsify the origin of imported turns (false negative defeating the fix).
-    expect(service.getAll()[0].metadata?.model).toBeUndefined();
+    await collectRowsForAssertions(service.streamRawHistory(), (all) => {
+      expect(all[0].metadata?.model).toBeUndefined();
+    });
   });
 
-  it('does NOT inject metadata.model on a human turn added with a modelName', () => {
+  it('does NOT inject metadata.model on a human turn added with a modelName', async () => {
     const humanContent: IContent = {
       speaker: 'human',
       blocks: [{ type: 'text', text: 'Hi' }],
@@ -52,10 +55,12 @@ describe('HistoryService does NOT stamp metadata.model (issue #2335 import-safet
 
     service.add(humanContent, 'claude-opus-4-8');
 
-    expect(service.getAll()[0].metadata?.model).toBeUndefined();
+    await collectRowsForAssertions(service.streamRawHistory(), (all) => {
+      expect(all[0].metadata?.model).toBeUndefined();
+    });
   });
 
-  it('preserves an explicit metadata.model already present on added content', () => {
+  it('preserves an explicit metadata.model already present on added content', async () => {
     const aiContent: IContent = {
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'Hello there.' }],
@@ -64,7 +69,9 @@ describe('HistoryService does NOT stamp metadata.model (issue #2335 import-safet
 
     service.add(aiContent, 'claude-fable-5');
 
-    expect(service.getAll()[0].metadata?.model).toBe('claude-opus-4-8');
+    await collectRowsForAssertions(service.streamRawHistory(), (all) => {
+      expect(all[0].metadata?.model).toBe('claude-opus-4-8');
+    });
   });
 });
 

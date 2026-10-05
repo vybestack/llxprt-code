@@ -1,3 +1,4 @@
+/// <reference lib="esnext.array" />
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -120,157 +121,86 @@ function hasCacheableToolResult(message: unknown): boolean {
 
   return false;
 }
+let provider: AnthropicProvider;
+let runtimeContext: ProviderRuntimeContext;
+let settingsService: SettingsService;
+const buildCallOptions = (
+  contents: IContent[],
+  overrides: Omit<ProviderCallOptionsInit, 'providerName' | 'contents'> = {},
+) =>
+  createProviderCallOptions({
+    providerName: provider.name,
+    contents,
+    settings: settingsService,
+    runtime: runtimeContext,
+    config: runtimeContext.config,
+    ...overrides,
+  });
+const getToolUseIds = (content: AnthropicContentBlock[]): string[] =>
+  content
+    .filter(
+      (
+        b,
+      ): b is {
+        type: 'tool_use';
+        id: string;
+        name: string;
+        input: unknown;
+      } => b.type === 'tool_use',
+    )
+    .map((b) => b.id);
+const getToolResultIds = (content: AnthropicContentBlock[]): string[] =>
+  content
+    .filter(
+      (
+        b,
+      ): b is {
+        type: 'tool_result';
+        tool_use_id: string;
+        content: unknown;
+      } => b.type === 'tool_result',
+    )
+    .map((b) => b.tool_use_id);
+interface ToolUseMessageLocation {
+  readonly index: number;
+  readonly ids: string[];
+}
+const toolUseMessageLocations = (
+  request: AnthropicRequestBody,
+): ToolUseMessageLocation[] => {
+  const locations: ToolUseMessageLocation[] = [];
+  for (let index = 0; index < request.messages.length; index++) {
+    const message = request.messages[index];
+    if (message.role !== 'assistant' || !Array.isArray(message.content)) {
+      continue;
+    }
+    const ids = getToolUseIds(message.content);
+    if (ids.length > 0) {
+      locations.push({ index, ids });
+    }
+  }
+  return locations;
+};
+const firstToolUseMessageLocation = (
+  request: AnthropicRequestBody,
+): ToolUseMessageLocation => {
+  for (let index = 0; index < request.messages.length; index++) {
+    const message = request.messages[index];
+    if (message.role !== 'assistant' || !Array.isArray(message.content)) {
+      continue;
+    }
+    const ids = getToolUseIds(message.content);
+    if (ids.length > 0) {
+      return { index, ids };
+    }
+  }
+  return { index: -1, ids: [] };
+};
 
 describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () => {
-  let provider: AnthropicProvider;
-  let runtimeContext: ProviderRuntimeContext;
-  let settingsService: SettingsService;
+  beforeEach(facadeCallback0);
 
-  beforeEach(() => {
-    vi.clearAllMocks();
-
-    let ephemeralSettingsGetter: () => Record<string, unknown> = () => ({});
-
-    const result = createProviderWithRuntime<AnthropicProvider>(
-      ({ settingsService: svc }) => {
-        svc.set('auth-key', 'test-api-key');
-        svc.set('activeProvider', 'anthropic');
-        svc.setProviderSetting('anthropic', 'streaming', 'disabled');
-
-        ephemeralSettingsGetter = () => ({
-          ...svc.getAllGlobalSettings(),
-          ...svc.getProviderSettings('anthropic'),
-        });
-
-        return new AnthropicProvider('test-api-key', undefined, {
-          ...TEST_PROVIDER_CONFIG,
-          getEphemeralSettings: ephemeralSettingsGetter,
-        });
-      },
-      {
-        runtimeId: 'anthropic.toolresult.test',
-        metadata: { source: 'AnthropicProvider.issue1150.toolresult.test.ts' },
-      },
-    );
-
-    provider = result.provider;
-    runtimeContext = result.runtime;
-    settingsService = result.settingsService;
-
-    runtimeContext.config ??= createRuntimeConfigStub(settingsService);
-
-    runtimeContext.config.getEphemeralSettings = () => ({
-      ...settingsService.getAllGlobalSettings(),
-      ...settingsService.getProviderSettings(provider.name),
-    });
-
-    runtimeContext.config.getEphemeralSetting = (key: string) => {
-      const providerValue = settingsService.getProviderSetting(
-        provider.name,
-        key,
-      );
-      if (providerValue !== undefined) {
-        return providerValue;
-      }
-      return settingsService.get(key);
-    };
-
-    setActiveProviderRuntimeContext(runtimeContext);
-
-    // Enable extended thinking
-    settingsService.set('reasoning.enabled', true);
-    settingsService.set('reasoning.budgetTokens', 10000);
-    settingsService.set('reasoning.includeInContext', true);
-    settingsService.set('reasoning.stripFromContext', 'none');
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
-
-  const buildCallOptions = (
-    contents: IContent[],
-    overrides: Omit<ProviderCallOptionsInit, 'providerName' | 'contents'> = {},
-  ) =>
-    createProviderCallOptions({
-      providerName: provider.name,
-      contents,
-      settings: settingsService,
-      runtime: runtimeContext,
-      config: runtimeContext.config,
-      ...overrides,
-    });
-
-  /**
-   * Helper to extract tool_use ids from a message
-   */
-  const getToolUseIds = (content: AnthropicContentBlock[]): string[] =>
-    content
-      .filter(
-        (
-          b,
-        ): b is {
-          type: 'tool_use';
-          id: string;
-          name: string;
-          input: unknown;
-        } => b.type === 'tool_use',
-      )
-      .map((b) => b.id);
-
-  /**
-   * Helper to extract tool_result tool_use_ids from a message
-   */
-  const getToolResultIds = (content: AnthropicContentBlock[]): string[] =>
-    content
-      .filter(
-        (
-          b,
-        ): b is {
-          type: 'tool_result';
-          tool_use_id: string;
-          content: unknown;
-        } => b.type === 'tool_result',
-      )
-      .map((b) => b.tool_use_id);
-
-  interface ToolUseMessageLocation {
-    readonly index: number;
-    readonly ids: string[];
-  }
-
-  const toolUseMessageLocations = (
-    request: AnthropicRequestBody,
-  ): ToolUseMessageLocation[] => {
-    const locations: ToolUseMessageLocation[] = [];
-    for (let index = 0; index < request.messages.length; index++) {
-      const message = request.messages[index];
-      if (message.role !== 'assistant' || !Array.isArray(message.content)) {
-        continue;
-      }
-      const ids = getToolUseIds(message.content);
-      if (ids.length > 0) {
-        locations.push({ index, ids });
-      }
-    }
-    return locations;
-  };
-
-  const firstToolUseMessageLocation = (
-    request: AnthropicRequestBody,
-  ): ToolUseMessageLocation => {
-    for (let index = 0; index < request.messages.length; index++) {
-      const message = request.messages[index];
-      if (message.role !== 'assistant' || !Array.isArray(message.content)) {
-        continue;
-      }
-      const ids = getToolUseIds(message.content);
-      if (ids.length > 0) {
-        return { index, ids };
-      }
-    }
-    return { index: -1, ids: [] };
-  };
+  afterEach(facadeCallback1);
   describe('Critical: Every tool_use must have tool_result in next message', () => {
     /**
      * CRITICAL TEST: This is the exact error from the bug report:
@@ -280,330 +210,29 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
      * must have corresponding tool_result blocks in the NEXT message.
      */
 
-    it('should have tool_result for every tool_use id in the next message', async () => {
-      mockMessagesCreate.mockResolvedValueOnce({
-        content: [{ type: 'text', text: 'Response' }],
-        usage: { input_tokens: 100, output_tokens: 50 },
-      });
-
-      // Simulate 4 parallel tool calls (like in the error)
-      const messages: IContent[] = [
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'Do multiple things' }],
-        },
-        {
-          speaker: 'ai',
-          blocks: [
-            {
-              type: 'thinking',
-              thought: 'I need to make 4 tool calls',
-              sourceField: 'thinking',
-              signature: 'sig_multi',
-            } as ThinkingBlock,
-            {
-              type: 'tool_call',
-              id: 'toolu_01PCrAFi3Lase4GDDq32Qkvy',
-              name: 'list_directory',
-              parameters: { path: '/a' },
-            } as ToolCallBlock,
-            {
-              type: 'tool_call',
-              id: 'toolu_01QRZFAaYwxXrsbd5grzLg4E',
-              name: 'list_directory',
-              parameters: { path: '/b' },
-            } as ToolCallBlock,
-            {
-              type: 'tool_call',
-              id: 'toolu_01VRn8DCAuPjDgz53odfq3Av',
-              name: 'list_directory',
-              parameters: { path: '/c' },
-            } as ToolCallBlock,
-            {
-              type: 'tool_call',
-              id: 'toolu_01Wzxo8ENJMmQQetKhgZ1mee',
-              name: 'list_directory',
-              parameters: { path: '/d' },
-            } as ToolCallBlock,
-          ],
-        },
-        // All 4 tool responses in a single tool message
-        {
-          speaker: 'tool',
-          blocks: [
-            {
-              type: 'tool_response',
-              callId: 'toolu_01PCrAFi3Lase4GDDq32Qkvy',
-              toolName: 'list_directory',
-              result: { files: ['a1'] },
-            } as ToolResponseBlock,
-            {
-              type: 'tool_response',
-              callId: 'toolu_01QRZFAaYwxXrsbd5grzLg4E',
-              toolName: 'list_directory',
-              result: { files: ['b1'] },
-            } as ToolResponseBlock,
-            {
-              type: 'tool_response',
-              callId: 'toolu_01VRn8DCAuPjDgz53odfq3Av',
-              toolName: 'list_directory',
-              result: { files: ['c1'] },
-            } as ToolResponseBlock,
-            {
-              type: 'tool_response',
-              callId: 'toolu_01Wzxo8ENJMmQQetKhgZ1mee',
-              toolName: 'list_directory',
-              result: { files: ['d1'] },
-            } as ToolResponseBlock,
-          ],
-        },
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'What did you find?' }],
-        },
-      ];
-
-      const generator = provider.generateChatCompletion(
-        buildCallOptions(messages),
-      );
-      await generator.next();
-
-      const request = mockMessagesCreate.mock
-        .calls[0][0] as AnthropicRequestBody;
-
-      // Find the assistant message with tool_use blocks
-      const { index: toolUseMessageIndex, ids: toolUseIds } =
-        firstToolUseMessageLocation(request);
-
-      expect(toolUseMessageIndex).toBeGreaterThan(-1);
-      expect(toolUseIds.length).toBe(4);
-
-      // The NEXT message must be user with tool_result for ALL tool_use ids
-      const nextMessage = request.messages[toolUseMessageIndex + 1];
-      expect(nextMessage).toBeDefined();
-      expect(nextMessage.role).toBe('user');
-      expect(Array.isArray(nextMessage.content)).toBe(true);
-
-      const toolResultIds = getToolResultIds(
-        nextMessage.content as AnthropicContentBlock[],
-      );
-
-      // CRITICAL: Every tool_use id must have a corresponding tool_result
-      for (const toolUseId of toolUseIds) {
-        const hasResult = toolResultIds.includes(toolUseId);
-        // tool_use id must have corresponding tool_result in next message
-        // Missing results cause: "tool_use ids were found without tool_result blocks immediately after"
-        expect(hasResult).toBe(true);
-      }
-
-      // Also verify no extra tool_results
-      expect(toolResultIds.length).toBe(toolUseIds.length);
-    });
+    it(
+      'should have tool_result for every tool_use id in the next message',
+      facadeCallback2,
+    );
 
     /**
      * Test when tool responses come in separate IContent messages (streaming scenario)
      */
 
-    it('should consolidate separate tool response IContents into single user message', async () => {
-      mockMessagesCreate.mockResolvedValueOnce({
-        content: [{ type: 'text', text: 'Response' }],
-        usage: { input_tokens: 100, output_tokens: 50 },
-      });
-
-      // Simulate tool responses arriving as separate IContent (from streaming/executor)
-      const messages: IContent[] = [
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'Do two things' }],
-        },
-        {
-          speaker: 'ai',
-          blocks: [
-            {
-              type: 'thinking',
-              thought: 'Making two tool calls',
-              sourceField: 'thinking',
-              signature: 'sig_two',
-            } as ThinkingBlock,
-            {
-              type: 'tool_call',
-              id: 'tool_first',
-              name: 'read_file',
-              parameters: { path: 'a.txt' },
-            } as ToolCallBlock,
-            {
-              type: 'tool_call',
-              id: 'tool_second',
-              name: 'read_file',
-              parameters: { path: 'b.txt' },
-            } as ToolCallBlock,
-          ],
-        },
-        // First tool response in separate message
-        {
-          speaker: 'tool',
-          blocks: [
-            {
-              type: 'tool_response',
-              callId: 'tool_first',
-              toolName: 'read_file',
-              result: 'content A',
-            } as ToolResponseBlock,
-          ],
-        },
-        // Second tool response in separate message
-        {
-          speaker: 'tool',
-          blocks: [
-            {
-              type: 'tool_response',
-              callId: 'tool_second',
-              toolName: 'read_file',
-              result: 'content B',
-            } as ToolResponseBlock,
-          ],
-        },
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'Continue' }],
-        },
-      ];
-
-      const generator = provider.generateChatCompletion(
-        buildCallOptions(messages),
-      );
-      await generator.next();
-
-      const request = mockMessagesCreate.mock
-        .calls[0][0] as AnthropicRequestBody;
-
-      // Find assistant message with tool_use
-      const { index: toolUseMessageIndex } =
-        firstToolUseMessageLocation(request);
-
-      expect(toolUseMessageIndex).toBeGreaterThan(-1);
-
-      // Next message must contain BOTH tool_results
-      const nextMessage = request.messages[toolUseMessageIndex + 1];
-      expect(nextMessage).toBeDefined();
-      expect(nextMessage.role).toBe('user');
-
-      const content = nextMessage.content as AnthropicContentBlock[];
-      const toolResultIds = getToolResultIds(content);
-
-      // IDs are normalized to toolu_ prefix by AnthropicProvider
-      const hasFirst = toolResultIds.some((id) => id.includes('tool_first'));
-      const hasSecond = toolResultIds.some((id) => id.includes('tool_second'));
-
-      // First tool_result must be in consolidated message
-      expect(hasFirst).toBe(true);
-      // Second tool_result must be in consolidated message
-      expect(hasSecond).toBe(true);
-
-      // Should be exactly one user message with both results, not two separate messages
-      expect(toolResultIds.length).toBe(2);
-    });
+    it(
+      'should consolidate separate tool response IContents into single user message',
+      facadeCallback3,
+    );
 
     /**
      * Test when some tool responses are missing entirely
      * KNOWN BUG: Provider doesn't synthesize placeholder tool_results for missing responses
      */
 
-    it('should detect when tool_results are missing for some tool_use ids', async () => {
-      mockMessagesCreate.mockResolvedValueOnce({
-        content: [{ type: 'text', text: 'Response' }],
-        usage: { input_tokens: 100, output_tokens: 50 },
-      });
-
-      // Missing one tool response - this SHOULD fail or be handled
-      const messages: IContent[] = [
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'Do three things' }],
-        },
-        {
-          speaker: 'ai',
-          blocks: [
-            {
-              type: 'thinking',
-              thought: 'Making three calls',
-              sourceField: 'thinking',
-              signature: 'sig_three',
-            } as ThinkingBlock,
-            {
-              type: 'tool_call',
-              id: 'tool_a',
-              name: 'action',
-              parameters: {},
-            } as ToolCallBlock,
-            {
-              type: 'tool_call',
-              id: 'tool_b',
-              name: 'action',
-              parameters: {},
-            } as ToolCallBlock,
-            {
-              type: 'tool_call',
-              id: 'tool_c',
-              name: 'action',
-              parameters: {},
-            } as ToolCallBlock,
-          ],
-        },
-        // Only 2 of 3 tool responses provided!
-        {
-          speaker: 'tool',
-          blocks: [
-            {
-              type: 'tool_response',
-              callId: 'tool_a',
-              toolName: 'action',
-              result: 'done A',
-            } as ToolResponseBlock,
-            {
-              type: 'tool_response',
-              callId: 'tool_b',
-              toolName: 'action',
-              result: 'done B',
-            } as ToolResponseBlock,
-            // tool_c response is MISSING
-          ],
-        },
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'What happened?' }],
-        },
-      ];
-
-      const generator = provider.generateChatCompletion(
-        buildCallOptions(messages),
-      );
-      await generator.next();
-
-      const request = mockMessagesCreate.mock
-        .calls[0][0] as AnthropicRequestBody;
-
-      // Find assistant message with tool_use
-      const { index: toolUseMessageIndex } =
-        firstToolUseMessageLocation(request);
-
-      // Next message should have tool_results
-      const nextMessage = request.messages[toolUseMessageIndex + 1];
-      expect(nextMessage).toBeDefined();
-
-      const content = nextMessage.content as AnthropicContentBlock[];
-      const toolResultIds = getToolResultIds(content);
-
-      // This test documents the bug: missing tool_c result
-      // Provider should either:
-      // 1. Synthesize a placeholder tool_result for missing responses, OR
-      // 2. Throw an error before sending to Anthropic
-      // IDs are normalized to toolu_ prefix
-      const hasMissingToolResult = toolResultIds.some((id) =>
-        id.includes('tool_c'),
-      );
-      expect(hasMissingToolResult).toBe(true);
-    });
+    it(
+      'should detect when tool_results are missing for some tool_use ids',
+      facadeCallback4,
+    );
   });
 
   describe('tool_result must immediately follow tool_use', () => {
@@ -612,280 +241,681 @@ describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () =
      * KNOWN BUG: Provider doesn't reorder messages to ensure adjacency
      */
 
-    it('should not have other messages between assistant tool_use and user tool_result', async () => {
-      mockMessagesCreate.mockResolvedValueOnce({
-        content: [{ type: 'text', text: 'Response' }],
-        usage: { input_tokens: 100, output_tokens: 50 },
-      });
-
-      // Simulate incorrect ordering: user message between tool_use and tool_result
-      const messages: IContent[] = [
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'Start' }],
-        },
-        {
-          speaker: 'ai',
-          blocks: [
-            {
-              type: 'thinking',
-              thought: 'Calling tool',
-              sourceField: 'thinking',
-              signature: 'sig_order',
-            } as ThinkingBlock,
-            {
-              type: 'tool_call',
-              id: 'tool_order_test',
-              name: 'do_thing',
-              parameters: {},
-            } as ToolCallBlock,
-          ],
-        },
-        // WRONG: Human message before tool_result
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'Interruption!' }],
-        },
-        // Tool response comes after human message - bad ordering
-        {
-          speaker: 'tool',
-          blocks: [
-            {
-              type: 'tool_response',
-              callId: 'tool_order_test',
-              toolName: 'do_thing',
-              result: 'done',
-            } as ToolResponseBlock,
-          ],
-        },
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'Continue' }],
-        },
-      ];
-
-      const generator = provider.generateChatCompletion(
-        buildCallOptions(messages),
-      );
-      await generator.next();
-
-      const request = mockMessagesCreate.mock
-        .calls[0][0] as AnthropicRequestBody;
-
-      // Find assistant message with tool_use
-      const { index: toolUseMessageIndex } =
-        firstToolUseMessageLocation(request);
-
-      expect(toolUseMessageIndex).toBeGreaterThan(-1);
-
-      // The IMMEDIATELY NEXT message must have tool_result
-      const nextMessage = request.messages[toolUseMessageIndex + 1];
-      expect(nextMessage).toBeDefined();
-      expect(nextMessage.role).toBe('user');
-
-      expect(Array.isArray(nextMessage.content)).toBe(true);
-      const hasToolResult = (
-        nextMessage.content as AnthropicContentBlock[]
-      ).some((b) => b.type === 'tool_result');
-      // Message immediately after tool_use must contain tool_result
-      // Provider must reorder or consolidate to ensure adjacency
-      expect(hasToolResult).toBe(true);
-    });
+    it(
+      'should not have other messages between assistant tool_use and user tool_result',
+      facadeCallback5,
+    );
 
     /**
      * Test proper handling of interleaved tool calls and responses
      */
 
-    it('should handle multiple sequential tool call/response pairs correctly', async () => {
-      mockMessagesCreate.mockResolvedValueOnce({
-        content: [{ type: 'text', text: 'Response' }],
-        usage: { input_tokens: 100, output_tokens: 50 },
-      });
+    it(
+      'should handle multiple sequential tool call/response pairs correctly',
+      facadeCallback6,
+    );
 
-      // Sequential tool calls (not parallel)
-      const messages: IContent[] = [
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'Do things sequentially' }],
-        },
-        // First tool call
-        {
-          speaker: 'ai',
-          blocks: [
-            {
-              type: 'thinking',
-              thought: 'First action',
-              sourceField: 'thinking',
-              signature: 'sig_seq1',
-            } as ThinkingBlock,
-            {
-              type: 'tool_call',
-              id: 'seq_tool_1',
-              name: 'step1',
-              parameters: {},
-            } as ToolCallBlock,
-          ],
-        },
-        // First response
-        {
-          speaker: 'tool',
-          blocks: [
-            {
-              type: 'tool_response',
-              callId: 'seq_tool_1',
-              toolName: 'step1',
-              result: 'result 1',
-            } as ToolResponseBlock,
-          ],
-        },
-        // Second tool call
-        {
-          speaker: 'ai',
-          blocks: [
-            {
-              type: 'thinking',
-              thought: 'Second action',
-              sourceField: 'thinking',
-              signature: 'sig_seq2',
-            } as ThinkingBlock,
-            {
-              type: 'tool_call',
-              id: 'seq_tool_2',
-              name: 'step2',
-              parameters: {},
-            } as ToolCallBlock,
-          ],
-        },
-        // Second response
-        {
-          speaker: 'tool',
-          blocks: [
-            {
-              type: 'tool_response',
-              callId: 'seq_tool_2',
-              toolName: 'step2',
-              result: 'result 2',
-            } as ToolResponseBlock,
-          ],
-        },
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'Done?' }],
-        },
-      ];
-
-      const generator = provider.generateChatCompletion(
-        buildCallOptions(messages),
-      );
-      await generator.next();
-
-      const request = mockMessagesCreate.mock
-        .calls[0][0] as AnthropicRequestBody;
-
-      // Find all assistant messages with tool_use
-      const toolUseIndices = toolUseMessageLocations(request).map(
-        ({ index }) => index,
-      );
-
-      // Each tool_use message must be immediately followed by tool_result
-      for (const idx of toolUseIndices) {
-        const assistantMsg = request.messages[idx];
-        const nextMsg = request.messages[idx + 1];
-
-        expect(nextMsg).toBeDefined();
-        expect(nextMsg.role).toBe('user');
-        expect(Array.isArray(nextMsg.content)).toBe(true);
-
-        const nextContent = nextMsg.content as AnthropicContentBlock[];
-        const hasToolResult = nextContent.some((b) => b.type === 'tool_result');
-
-        // Get the tool_use ids from this assistant message
-        const toolUseIds = getToolUseIds(
-          assistantMsg.content as AnthropicContentBlock[],
-        );
-        const toolResultIds = getToolResultIds(nextContent);
-
-        // Assistant message has tool_use, next message must have tool_result
-        expect(hasToolResult).toBe(true);
-
-        // Each tool_use should have corresponding tool_result
-        for (const id of toolUseIds) {
-          const hasMatchingResult = toolResultIds.includes(id);
-          expect(hasMatchingResult).toBe(true);
-        }
-      }
-    });
-
-    it('keeps curated anchored tool results adjacent and cacheable in the request', async () => {
-      settingsService.setProviderSetting('anthropic', 'prompt-caching', '5m');
-      mockMessagesCreate.mockResolvedValueOnce({
-        content: [{ type: 'text', text: 'Response' }],
-        usage: { input_tokens: 100, output_tokens: 50 },
-      });
-      const historyService = new HistoryService();
-      const contents: IContent[] = [
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'Read the file' }],
-        },
-        {
-          speaker: 'ai',
-          blocks: [
-            {
-              type: 'tool_call',
-              id: 'anchored_tool_request',
-              name: 'read_file',
-              parameters: { path: 'file.txt' },
-            },
-          ],
-        },
-        {
-          speaker: 'tool',
-          blocks: [
-            {
-              type: 'tool_response',
-              callId: 'anchored_tool_request',
-              toolName: 'read_file',
-              result: 'contents',
-              isComplete: true,
-            },
-          ],
-          metadata: { cacheAnchor: true },
-        },
-        {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: 'The file was read' }],
-        },
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'Continue' }],
-        },
-      ];
-      for (const content of contents) {
-        historyService.add(content);
-      }
-      const curated = historyService.getCuratedForProvider();
-
-      const generator = provider.generateChatCompletion(
-        buildCallOptions(curated),
-      );
-      await generator.next();
-
-      const requestValue: unknown = mockMessagesCreate.mock.calls[0]?.[0];
-      const requestMessages = getRequestMessages(requestValue);
-      const toolUseIndex = requestMessages.findIndex((message) =>
-        messageContainsBlockType(message, 'assistant', 'tool_use'),
-      );
-      expect(toolUseIndex).toBeGreaterThan(-1);
-
-      const resultMessage = requestMessages[toolUseIndex + 1];
-      if (!isRecord(resultMessage)) {
-        throw new Error('Anthropic request did not contain an adjacent result');
-      }
-
-      expect(resultMessage.role).toBe('user');
-      expect(hasCacheableToolResult(resultMessage)).toBe(true);
-      expect(JSON.stringify(requestValue)).not.toContain('cacheAnchor');
-    });
+    it(
+      'keeps curated anchored tool results adjacent and cacheable in the request',
+      facadeCallback7,
+    );
   });
 });
+
+function facadeCallback0(): void {
+  vi.clearAllMocks();
+
+  let ephemeralSettingsGetter: () => Record<string, unknown> = () => ({});
+
+  const result = createProviderWithRuntime<AnthropicProvider>(
+    ({ settingsService: svc }) => {
+      svc.set('auth-key', 'test-api-key');
+      svc.set('activeProvider', 'anthropic');
+      svc.setProviderSetting('anthropic', 'streaming', 'disabled');
+
+      ephemeralSettingsGetter = () => ({
+        ...svc.getAllGlobalSettings(),
+        ...svc.getProviderSettings('anthropic'),
+      });
+
+      return new AnthropicProvider('test-api-key', undefined, {
+        ...TEST_PROVIDER_CONFIG,
+        getEphemeralSettings: ephemeralSettingsGetter,
+      });
+    },
+    {
+      runtimeId: 'anthropic.toolresult.test',
+      metadata: { source: 'AnthropicProvider.issue1150.toolresult.test.ts' },
+    },
+  );
+
+  provider = result.provider;
+  runtimeContext = result.runtime;
+  settingsService = result.settingsService;
+
+  runtimeContext.config ??= createRuntimeConfigStub(settingsService);
+
+  runtimeContext.config.getEphemeralSettings = () => ({
+    ...settingsService.getAllGlobalSettings(),
+    ...settingsService.getProviderSettings(provider.name),
+  });
+
+  runtimeContext.config.getEphemeralSetting = (key: string) => {
+    const providerValue = settingsService.getProviderSetting(
+      provider.name,
+      key,
+    );
+    if (providerValue !== undefined) {
+      return providerValue;
+    }
+    return settingsService.get(key);
+  };
+
+  setActiveProviderRuntimeContext(runtimeContext);
+
+  // Enable extended thinking
+  settingsService.set('reasoning.enabled', true);
+  settingsService.set('reasoning.budgetTokens', 10000);
+  settingsService.set('reasoning.includeInContext', true);
+  settingsService.set('reasoning.stripFromContext', 'none');
+}
+
+function facadeCallback1(): void {
+  clearActiveProviderRuntimeContext();
+}
+
+async function facadeCallback2(): Promise<void> {
+  mockMessagesCreate.mockResolvedValueOnce({
+    content: [{ type: 'text', text: 'Response' }],
+    usage: { input_tokens: 100, output_tokens: 50 },
+  });
+
+  // Simulate 4 parallel tool calls (like in the error)
+  const messages: IContent[] = [
+    facadeCallback2Message0(),
+    facadeCallback2Message1(),
+    facadeCallback2Message2(),
+    facadeCallback2Message3(),
+  ];
+
+  const generator = provider.generateChatCompletion(buildCallOptions(messages));
+  await generator.next();
+
+  const request = mockMessagesCreate.mock.calls[0][0] as AnthropicRequestBody;
+
+  // Find the assistant message with tool_use blocks
+  const { index: toolUseMessageIndex, ids: toolUseIds } =
+    firstToolUseMessageLocation(request);
+
+  expect(toolUseMessageIndex).toBeGreaterThan(-1);
+  expect(toolUseIds.length).toBe(4);
+
+  // The NEXT message must be user with tool_result for ALL tool_use ids
+  const nextMessage = request.messages[toolUseMessageIndex + 1];
+  expect(nextMessage).toBeDefined();
+  expect(nextMessage.role).toBe('user');
+  expect(Array.isArray(nextMessage.content)).toBe(true);
+
+  const toolResultIds = getToolResultIds(
+    nextMessage.content as AnthropicContentBlock[],
+  );
+
+  // CRITICAL: Every tool_use id must have a corresponding tool_result
+  for (const toolUseId of toolUseIds) {
+    const hasResult = toolResultIds.includes(toolUseId);
+    // tool_use id must have corresponding tool_result in next message
+    // Missing results cause: "tool_use ids were found without tool_result blocks immediately after"
+    expect(hasResult).toBe(true);
+  }
+
+  // Also verify no extra tool_results
+  expect(toolResultIds.length).toBe(toolUseIds.length);
+}
+
+async function facadeCallback3(): Promise<void> {
+  mockMessagesCreate.mockResolvedValueOnce({
+    content: [{ type: 'text', text: 'Response' }],
+    usage: { input_tokens: 100, output_tokens: 50 },
+  });
+
+  // Simulate tool responses arriving as separate IContent (from streaming/executor)
+  const messages: IContent[] = [
+    {
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'Do two things' }],
+    },
+    {
+      speaker: 'ai',
+      blocks: [
+        {
+          type: 'thinking',
+          thought: 'Making two tool calls',
+          sourceField: 'thinking',
+          signature: 'sig_two',
+        } as ThinkingBlock,
+        {
+          type: 'tool_call',
+          id: 'tool_first',
+          name: 'read_file',
+          parameters: { path: 'a.txt' },
+        } as ToolCallBlock,
+        {
+          type: 'tool_call',
+          id: 'tool_second',
+          name: 'read_file',
+          parameters: { path: 'b.txt' },
+        } as ToolCallBlock,
+      ],
+    },
+    // First tool response in separate message
+    {
+      speaker: 'tool',
+      blocks: [
+        {
+          type: 'tool_response',
+          callId: 'tool_first',
+          toolName: 'read_file',
+          result: 'content A',
+        } as ToolResponseBlock,
+      ],
+    },
+    // Second tool response in separate message
+    {
+      speaker: 'tool',
+      blocks: [
+        {
+          type: 'tool_response',
+          callId: 'tool_second',
+          toolName: 'read_file',
+          result: 'content B',
+        } as ToolResponseBlock,
+      ],
+    },
+    {
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'Continue' }],
+    },
+  ];
+
+  const generator = provider.generateChatCompletion(buildCallOptions(messages));
+  await generator.next();
+
+  const request = mockMessagesCreate.mock.calls[0][0] as AnthropicRequestBody;
+
+  // Find assistant message with tool_use
+  const { index: toolUseMessageIndex } = firstToolUseMessageLocation(request);
+
+  expect(toolUseMessageIndex).toBeGreaterThan(-1);
+
+  // Next message must contain BOTH tool_results
+  const nextMessage = request.messages[toolUseMessageIndex + 1];
+  expect(nextMessage).toBeDefined();
+  expect(nextMessage.role).toBe('user');
+
+  const content = nextMessage.content as AnthropicContentBlock[];
+  const toolResultIds = getToolResultIds(content);
+
+  // IDs are normalized to toolu_ prefix by AnthropicProvider
+  const hasFirst = toolResultIds.some((id) => id.includes('tool_first'));
+  const hasSecond = toolResultIds.some((id) => id.includes('tool_second'));
+
+  // First tool_result must be in consolidated message
+  expect(hasFirst).toBe(true);
+  // Second tool_result must be in consolidated message
+  expect(hasSecond).toBe(true);
+
+  // Should be exactly one user message with both results, not two separate messages
+  expect(toolResultIds.length).toBe(2);
+}
+
+async function facadeCallback4(): Promise<void> {
+  mockMessagesCreate.mockResolvedValueOnce({
+    content: [{ type: 'text', text: 'Response' }],
+    usage: { input_tokens: 100, output_tokens: 50 },
+  });
+
+  // Missing one tool response - this SHOULD fail or be handled
+  const messages: IContent[] = [
+    {
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'Do three things' }],
+    },
+    {
+      speaker: 'ai',
+      blocks: [
+        {
+          type: 'thinking',
+          thought: 'Making three calls',
+          sourceField: 'thinking',
+          signature: 'sig_three',
+        } as ThinkingBlock,
+        {
+          type: 'tool_call',
+          id: 'tool_a',
+          name: 'action',
+          parameters: {},
+        } as ToolCallBlock,
+        {
+          type: 'tool_call',
+          id: 'tool_b',
+          name: 'action',
+          parameters: {},
+        } as ToolCallBlock,
+        {
+          type: 'tool_call',
+          id: 'tool_c',
+          name: 'action',
+          parameters: {},
+        } as ToolCallBlock,
+      ],
+    },
+    // Only 2 of 3 tool responses provided!
+    {
+      speaker: 'tool',
+      blocks: [
+        {
+          type: 'tool_response',
+          callId: 'tool_a',
+          toolName: 'action',
+          result: 'done A',
+        } as ToolResponseBlock,
+        {
+          type: 'tool_response',
+          callId: 'tool_b',
+          toolName: 'action',
+          result: 'done B',
+        } as ToolResponseBlock,
+        // tool_c response is MISSING
+      ],
+    },
+    {
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'What happened?' }],
+    },
+  ];
+
+  const generator = provider.generateChatCompletion(buildCallOptions(messages));
+  await generator.next();
+
+  const request = mockMessagesCreate.mock.calls[0][0] as AnthropicRequestBody;
+
+  // Find assistant message with tool_use
+  const { index: toolUseMessageIndex } = firstToolUseMessageLocation(request);
+
+  // Next message should have tool_results
+  const nextMessage = request.messages[toolUseMessageIndex + 1];
+  expect(nextMessage).toBeDefined();
+
+  const content = nextMessage.content as AnthropicContentBlock[];
+  const toolResultIds = getToolResultIds(content);
+
+  // This test documents the bug: missing tool_c result
+  // Provider should either:
+  // 1. Synthesize a placeholder tool_result for missing responses, OR
+  // 2. Throw an error before sending to Anthropic
+  // IDs are normalized to toolu_ prefix
+  const hasMissingToolResult = toolResultIds.some((id) =>
+    id.includes('tool_c'),
+  );
+  expect(hasMissingToolResult).toBe(true);
+}
+
+async function facadeCallback5(): Promise<void> {
+  mockMessagesCreate.mockResolvedValueOnce({
+    content: [{ type: 'text', text: 'Response' }],
+    usage: { input_tokens: 100, output_tokens: 50 },
+  });
+
+  // Simulate incorrect ordering: user message between tool_use and tool_result
+  const messages: IContent[] = [
+    {
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'Start' }],
+    },
+    {
+      speaker: 'ai',
+      blocks: [
+        {
+          type: 'thinking',
+          thought: 'Calling tool',
+          sourceField: 'thinking',
+          signature: 'sig_order',
+        } as ThinkingBlock,
+        {
+          type: 'tool_call',
+          id: 'tool_order_test',
+          name: 'do_thing',
+          parameters: {},
+        } as ToolCallBlock,
+      ],
+    },
+    // WRONG: Human message before tool_result
+    {
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'Interruption!' }],
+    },
+    // Tool response comes after human message - bad ordering
+    {
+      speaker: 'tool',
+      blocks: [
+        {
+          type: 'tool_response',
+          callId: 'tool_order_test',
+          toolName: 'do_thing',
+          result: 'done',
+        } as ToolResponseBlock,
+      ],
+    },
+    {
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'Continue' }],
+    },
+  ];
+
+  const generator = provider.generateChatCompletion(buildCallOptions(messages));
+  await generator.next();
+
+  const request = mockMessagesCreate.mock.calls[0][0] as AnthropicRequestBody;
+
+  // Find assistant message with tool_use
+  const { index: toolUseMessageIndex } = firstToolUseMessageLocation(request);
+
+  expect(toolUseMessageIndex).toBeGreaterThan(-1);
+
+  // The IMMEDIATELY NEXT message must have tool_result
+  const nextMessage = request.messages[toolUseMessageIndex + 1];
+  expect(nextMessage).toBeDefined();
+  expect(nextMessage.role).toBe('user');
+
+  expect(Array.isArray(nextMessage.content)).toBe(true);
+  const hasToolResult = (nextMessage.content as AnthropicContentBlock[]).some(
+    (b) => b.type === 'tool_result',
+  );
+  // Message immediately after tool_use must contain tool_result
+  // Provider must reorder or consolidate to ensure adjacency
+  expect(hasToolResult).toBe(true);
+}
+
+async function facadeCallback6(): Promise<void> {
+  mockMessagesCreate.mockResolvedValueOnce({
+    content: [{ type: 'text', text: 'Response' }],
+    usage: { input_tokens: 100, output_tokens: 50 },
+  });
+
+  // Sequential tool calls (not parallel)
+  const messages: IContent[] = [
+    facadeCallback6Message0(),
+    facadeCallback6Message1(),
+    facadeCallback6Message2(),
+    facadeCallback6Message3(),
+    facadeCallback6Message4(),
+    facadeCallback6Message5(),
+  ];
+
+  const generator = provider.generateChatCompletion(buildCallOptions(messages));
+  await generator.next();
+
+  const request = mockMessagesCreate.mock.calls[0][0] as AnthropicRequestBody;
+
+  // Find all assistant messages with tool_use
+  const toolUseIndices = toolUseMessageLocations(request).map(
+    ({ index }) => index,
+  );
+
+  // Each tool_use message must be immediately followed by tool_result
+  for (const idx of toolUseIndices) {
+    const assistantMsg = request.messages[idx];
+    const nextMsg = request.messages[idx + 1];
+
+    expect(nextMsg).toBeDefined();
+    expect(nextMsg.role).toBe('user');
+    expect(Array.isArray(nextMsg.content)).toBe(true);
+
+    const nextContent = nextMsg.content as AnthropicContentBlock[];
+    const hasToolResult = nextContent.some((b) => b.type === 'tool_result');
+
+    // Get the tool_use ids from this assistant message
+    const toolUseIds = getToolUseIds(
+      assistantMsg.content as AnthropicContentBlock[],
+    );
+    const toolResultIds = getToolResultIds(nextContent);
+
+    // Assistant message has tool_use, next message must have tool_result
+    expect(hasToolResult).toBe(true);
+
+    // Each tool_use should have corresponding tool_result
+    for (const id of toolUseIds) {
+      const hasMatchingResult = toolResultIds.includes(id);
+      expect(hasMatchingResult).toBe(true);
+    }
+  }
+}
+
+async function facadeCallback7(): Promise<void> {
+  settingsService.setProviderSetting('anthropic', 'prompt-caching', '5m');
+  mockMessagesCreate.mockResolvedValueOnce({
+    content: [{ type: 'text', text: 'Response' }],
+    usage: { input_tokens: 100, output_tokens: 50 },
+  });
+  const historyService = new HistoryService();
+  const contents: IContent[] = [
+    {
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'Read the file' }],
+    },
+    {
+      speaker: 'ai',
+      blocks: [
+        {
+          type: 'tool_call',
+          id: 'anchored_tool_request',
+          name: 'read_file',
+          parameters: { path: 'file.txt' },
+        },
+      ],
+    },
+    {
+      speaker: 'tool',
+      blocks: [
+        {
+          type: 'tool_response',
+          callId: 'anchored_tool_request',
+          toolName: 'read_file',
+          result: 'contents',
+          isComplete: true,
+        },
+      ],
+      metadata: { cacheAnchor: true },
+    },
+    {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'The file was read' }],
+    },
+    {
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'Continue' }],
+    },
+  ];
+  for (const content of contents) {
+    historyService.add(content);
+  }
+  const curated = await Array.fromAsync(
+    historyService.getCuratedForProviderStream(),
+  );
+
+  const generator = provider.generateChatCompletion(buildCallOptions(curated));
+  await generator.next();
+
+  const requestValue: unknown = mockMessagesCreate.mock.calls[0]?.[0];
+  const requestMessages = getRequestMessages(requestValue);
+  const toolUseIndex = requestMessages.findIndex((message) =>
+    messageContainsBlockType(message, 'assistant', 'tool_use'),
+  );
+  expect(toolUseIndex).toBeGreaterThan(-1);
+
+  const resultMessage = requestMessages[toolUseIndex + 1];
+  if (!isRecord(resultMessage)) {
+    throw new Error('Anthropic request did not contain an adjacent result');
+  }
+
+  expect(resultMessage.role).toBe('user');
+  expect(hasCacheableToolResult(resultMessage)).toBe(true);
+  expect(JSON.stringify(requestValue)).not.toContain('cacheAnchor');
+}
+
+function facadeCallback2Message0(): IContent {
+  return {
+    speaker: 'human',
+    blocks: [{ type: 'text', text: 'Do multiple things' }],
+  };
+}
+function facadeCallback2Message1(): IContent {
+  return {
+    speaker: 'ai',
+    blocks: [
+      {
+        type: 'thinking',
+        thought: 'I need to make 4 tool calls',
+        sourceField: 'thinking',
+        signature: 'sig_multi',
+      } as ThinkingBlock,
+      {
+        type: 'tool_call',
+        id: 'toolu_01PCrAFi3Lase4GDDq32Qkvy',
+        name: 'list_directory',
+        parameters: { path: '/a' },
+      } as ToolCallBlock,
+      {
+        type: 'tool_call',
+        id: 'toolu_01QRZFAaYwxXrsbd5grzLg4E',
+        name: 'list_directory',
+        parameters: { path: '/b' },
+      } as ToolCallBlock,
+      {
+        type: 'tool_call',
+        id: 'toolu_01VRn8DCAuPjDgz53odfq3Av',
+        name: 'list_directory',
+        parameters: { path: '/c' },
+      } as ToolCallBlock,
+      {
+        type: 'tool_call',
+        id: 'toolu_01Wzxo8ENJMmQQetKhgZ1mee',
+        name: 'list_directory',
+        parameters: { path: '/d' },
+      } as ToolCallBlock,
+    ],
+  };
+}
+function facadeCallback2Message2(): IContent {
+  return {
+    speaker: 'tool',
+    blocks: [
+      {
+        type: 'tool_response',
+        callId: 'toolu_01PCrAFi3Lase4GDDq32Qkvy',
+        toolName: 'list_directory',
+        result: { files: ['a1'] },
+      } as ToolResponseBlock,
+      {
+        type: 'tool_response',
+        callId: 'toolu_01QRZFAaYwxXrsbd5grzLg4E',
+        toolName: 'list_directory',
+        result: { files: ['b1'] },
+      } as ToolResponseBlock,
+      {
+        type: 'tool_response',
+        callId: 'toolu_01VRn8DCAuPjDgz53odfq3Av',
+        toolName: 'list_directory',
+        result: { files: ['c1'] },
+      } as ToolResponseBlock,
+      {
+        type: 'tool_response',
+        callId: 'toolu_01Wzxo8ENJMmQQetKhgZ1mee',
+        toolName: 'list_directory',
+        result: { files: ['d1'] },
+      } as ToolResponseBlock,
+    ],
+  };
+}
+function facadeCallback2Message3(): IContent {
+  return {
+    speaker: 'human',
+    blocks: [{ type: 'text', text: 'What did you find?' }],
+  };
+}
+function facadeCallback6Message0(): IContent {
+  return {
+    speaker: 'human',
+    blocks: [{ type: 'text', text: 'Do things sequentially' }],
+  };
+}
+function facadeCallback6Message1(): IContent {
+  return {
+    speaker: 'ai',
+    blocks: [
+      {
+        type: 'thinking',
+        thought: 'First action',
+        sourceField: 'thinking',
+        signature: 'sig_seq1',
+      } as ThinkingBlock,
+      {
+        type: 'tool_call',
+        id: 'seq_tool_1',
+        name: 'step1',
+        parameters: {},
+      } as ToolCallBlock,
+    ],
+  };
+}
+function facadeCallback6Message2(): IContent {
+  return {
+    speaker: 'tool',
+    blocks: [
+      {
+        type: 'tool_response',
+        callId: 'seq_tool_1',
+        toolName: 'step1',
+        result: 'result 1',
+      } as ToolResponseBlock,
+    ],
+  };
+}
+function facadeCallback6Message3(): IContent {
+  return {
+    speaker: 'ai',
+    blocks: [
+      {
+        type: 'thinking',
+        thought: 'Second action',
+        sourceField: 'thinking',
+        signature: 'sig_seq2',
+      } as ThinkingBlock,
+      {
+        type: 'tool_call',
+        id: 'seq_tool_2',
+        name: 'step2',
+        parameters: {},
+      } as ToolCallBlock,
+    ],
+  };
+}
+function facadeCallback6Message4(): IContent {
+  return {
+    speaker: 'tool',
+    blocks: [
+      {
+        type: 'tool_response',
+        callId: 'seq_tool_2',
+        toolName: 'step2',
+        result: 'result 2',
+      } as ToolResponseBlock,
+    ],
+  };
+}
+function facadeCallback6Message5(): IContent {
+  return {
+    speaker: 'human',
+    blocks: [{ type: 'text', text: 'Done?' }],
+  };
+}

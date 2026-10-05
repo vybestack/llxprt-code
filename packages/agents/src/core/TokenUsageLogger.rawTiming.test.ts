@@ -29,6 +29,7 @@ import {
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { RAW_TOKEN_DELTA_SINK_KEY } from '@vybestack/llxprt-code-providers';
 import { createTokenSyncTestFixture } from './__tests__/helpers/tokenSyncTestFixture.js';
+import { waitForCondition } from '../test-utils/eventLoop.js';
 
 function makeTempLogPath(): string {
   return path.join(
@@ -183,14 +184,13 @@ async function collectConsumedText(
   return text;
 }
 
-describe('TokenUsageLogger raw token-delta timing (#3493)', () => {
-  let logFile: string;
+let logFile: string;
 
-  beforeEach(() => {
+const tempLogPath = {
+  create(): void {
     logFile = makeTempLogPath();
-  });
-
-  afterEach(() => {
+  },
+  remove(): void {
     const dir = path.dirname(logFile);
     try {
       fs.rmSync(dir, { recursive: true, force: true });
@@ -198,18 +198,18 @@ describe('TokenUsageLogger raw token-delta timing (#3493)', () => {
       // Temp dir cleanup is best-effort; failure here does not affect test outcomes
       process.stderr.write(`Failed to clean up temp dir: ${String(error)}\n`);
     }
-  });
+  },
+};
 
-  // A reasoning-style buffered stream: raw deltas arrive at the transport
-  // while the visible layer defers everything into one terminal chunk. With
-  // a single visible chunk, visible-only timing stamps first and last token
-  // at the same instant, so generation_ms is omitted entirely. A positive
-  // generation_ms can therefore only come from the raw deltas.
+// A reasoning-style buffered stream: raw deltas arrive at the transport
+// while the visible layer defers everything into one terminal chunk. With
+// a single visible chunk, visible-only timing stamps first and last token
+// at the same instant, so generation_ms is omitted entirely. A positive
+// generation_ms can therefore only come from the raw deltas.
+describe('TokenUsageLogger raw token-delta timing (#3493): buffered text', () => {
+  beforeEach(tempLogPath.create);
+  afterEach(tempLogPath.remove);
   it('derives ttft/generation from raw token deltas for a single-chunk stream (#3493)', async () => {
-    const fixture = createTokenSyncTestFixture();
-    const mockContentGenerator = fixture.mockContentGenerator;
-    const historyService = fixture.historyService;
-
     const mockProvider = {
       name: 'anthropic',
       generateChatCompletion: vi
@@ -237,37 +237,11 @@ describe('TokenUsageLogger raw token-delta timing (#3493)', () => {
         }),
     };
 
-    const view = buildTokenSyncView(
-      fixture,
+    const records = await runTurnReadRecords(
       mockProvider,
       'raw-timing-session',
+      'raw-timing-prompt',
     );
-
-    const chat = new ChatSession(view, mockContentGenerator, {}, []);
-
-    const realLogger = new TokenUsageLogger(true, logFile);
-    chat.setTokenUsageLoggerForTesting(realLogger);
-
-    const promptId = 'raw-timing-prompt';
-    realLogger.recordEstimate(promptId, {
-      provider: 'anthropic',
-      model: 'claude-3-5-sonnet-20241022',
-      estimatedTokens: 150,
-      estimator: 'anthropic-char',
-      tiktokenTokens: 140,
-    });
-
-    const stream = await chat.sendMessageStream(
-      { message: 'What is 2+2?' },
-      promptId,
-    );
-    for await (const _event of stream) {
-      // consume
-    }
-
-    await historyService.waitForTokenUpdates();
-
-    const records = readJsonl(logFile);
     expect(records).toHaveLength(1);
     const record = records[0];
     expect(record.chunk_count).toBe(1);
@@ -286,14 +260,14 @@ describe('TokenUsageLogger raw token-delta timing (#3493)', () => {
       record.provider_request_ms,
     );
   });
+});
 
-  // AC-3: visible-chunk stamping must stay the timing source when the
-  // provider never fires the raw sink (mirrors the #3257 expectations).
+// AC-3: visible-chunk stamping must stay the timing source when the
+// provider never fires the raw sink (mirrors the #3257 expectations).
+describe('TokenUsageLogger raw token-delta timing (#3493): visible fallback', () => {
+  beforeEach(tempLogPath.create);
+  afterEach(tempLogPath.remove);
   it('keeps visible-chunk timing when no raw signal arrives (#3493 AC-3)', async () => {
-    const fixture = createTokenSyncTestFixture();
-    const mockContentGenerator = fixture.mockContentGenerator;
-    const historyService = fixture.historyService;
-
     const mockProvider = {
       name: 'anthropic',
       generateChatCompletion: vi.fn().mockImplementation(async function* () {
@@ -315,37 +289,11 @@ describe('TokenUsageLogger raw token-delta timing (#3493)', () => {
       }),
     };
 
-    const view = buildTokenSyncView(
-      fixture,
+    const records = await runTurnReadRecords(
       mockProvider,
       'visible-fallback-session',
+      'visible-fallback-prompt',
     );
-
-    const chat = new ChatSession(view, mockContentGenerator, {}, []);
-
-    const realLogger = new TokenUsageLogger(true, logFile);
-    chat.setTokenUsageLoggerForTesting(realLogger);
-
-    const promptId = 'visible-fallback-prompt';
-    realLogger.recordEstimate(promptId, {
-      provider: 'anthropic',
-      model: 'claude-3-5-sonnet-20241022',
-      estimatedTokens: 150,
-      estimator: 'anthropic-char',
-      tiktokenTokens: 140,
-    });
-
-    const stream = await chat.sendMessageStream(
-      { message: 'What is 2+2?' },
-      promptId,
-    );
-    for await (const _event of stream) {
-      // consume
-    }
-
-    await historyService.waitForTokenUpdates();
-
-    const records = readJsonl(logFile);
     expect(records).toHaveLength(1);
     const record = records[0];
     expect(record.ttft_ms).toBeGreaterThanOrEqual(0);
@@ -353,9 +301,13 @@ describe('TokenUsageLogger raw token-delta timing (#3493)', () => {
     expect(record.provider_request_ms).toBeGreaterThan(0);
     expect(record.chunk_count).toBe(3);
   });
+});
 
-  // The sink rides the same internal metadata channel as the logical
-  // request id and must never leak into the consumer-visible stream.
+// The sink rides the same internal metadata channel as the logical
+// request id and must never leak into the consumer-visible stream.
+describe('TokenUsageLogger raw token-delta timing (#3493): internal sink metadata', () => {
+  beforeEach(tempLogPath.create);
+  afterEach(tempLogPath.remove);
   it('threads the sink on internal metadata only and leaves visible chunks untouched (#3493)', async () => {
     const fixture = createTokenSyncTestFixture();
     const mockContentGenerator = fixture.mockContentGenerator;
@@ -425,45 +377,49 @@ describe('TokenUsageLogger raw token-delta timing (#3493)', () => {
     expect(typeof metadata?.[RAW_TOKEN_DELTA_SINK_KEY]).toBe('function');
     expect(consumedText).toBe(providerText);
   });
+});
 
-  /** Drives one full turn against the given provider stub and reads back the serialized records. */
-  async function runTurnReadRecords(
-    mockProvider: unknown,
-    sessionId: string,
-    promptId: string,
-  ): Promise<SerializedTokenUsageRecord[]> {
-    const fixture = createTokenSyncTestFixture();
-    const view = buildTokenSyncView(fixture, mockProvider, sessionId);
-    const chat = new ChatSession(view, fixture.mockContentGenerator, {}, []);
+/** Drives one full turn against the given provider stub and reads back the serialized records. */
+async function runTurnReadRecords(
+  mockProvider: unknown,
+  sessionId: string,
+  promptId: string,
+): Promise<SerializedTokenUsageRecord[]> {
+  const fixture = createTokenSyncTestFixture();
+  const view = buildTokenSyncView(fixture, mockProvider, sessionId);
+  const chat = new ChatSession(view, fixture.mockContentGenerator, {}, []);
 
-    const realLogger = new TokenUsageLogger(true, logFile);
-    chat.setTokenUsageLoggerForTesting(realLogger);
+  const realLogger = new TokenUsageLogger(true, logFile);
+  chat.setTokenUsageLoggerForTesting(realLogger);
 
-    realLogger.recordEstimate(promptId, {
-      provider: 'anthropic',
-      model: 'claude-3-5-sonnet-20241022',
-      estimatedTokens: 150,
-      estimator: 'anthropic-char',
-      tiktokenTokens: 140,
-    });
+  realLogger.recordEstimate(promptId, {
+    provider: 'anthropic',
+    model: 'claude-3-5-sonnet-20241022',
+    estimatedTokens: 150,
+    estimator: 'anthropic-char',
+    tiktokenTokens: 140,
+  });
 
-    const stream = await chat.sendMessageStream(
-      { message: 'What is 2+2?' },
-      promptId,
-    );
-    for await (const _event of stream) {
-      // consume
-    }
-
-    await fixture.historyService.waitForTokenUpdates();
-    return readJsonl(logFile);
+  const stream = await chat.sendMessageStream(
+    { message: 'What is 2+2?' },
+    promptId,
+  );
+  for await (const _event of stream) {
+    // consume
   }
 
-  // A tool-call turn buffered into a single terminal chunk: raw argument
-  // fragments fire at the transport while the visible layer defers the whole
-  // call. With one visible chunk the visible-only window is zero, so a
-  // positive generation_ms can only come from the raw deltas — tool-call-only
-  // turns get real generation timing too.
+  await fixture.historyService.waitForTokenUpdates();
+  return readJsonl(logFile);
+}
+
+// A tool-call turn buffered into a single terminal chunk: raw argument
+// fragments fire at the transport while the visible layer defers the whole
+// call. With one visible chunk the visible-only window is zero, so a
+// positive generation_ms can only come from the raw deltas — tool-call-only
+// turns get real generation timing too.
+describe('TokenUsageLogger raw token-delta timing (#3493): buffered tool call', () => {
+  beforeEach(tempLogPath.create);
+  afterEach(tempLogPath.remove);
   it('derives generation timing for a buffered tool-call-only stream (#3493)', async () => {
     const mockProvider = {
       name: 'anthropic',
@@ -510,11 +466,15 @@ describe('TokenUsageLogger raw token-delta timing (#3493)', () => {
     expect(record.chunk_count).toBe(1);
     expect(record.generation_ms).toBeGreaterThan(0);
   });
+});
 
-  // Buffered text flushed late: raw content deltas arrive early while the
-  // provider holds the visible text back. The generation window must track
-  // the raw deltas and end BEFORE the late flush, proving the window
-  // measures generation rather than visible emission.
+// Buffered text flushed late: raw content deltas arrive early while the
+// provider holds the visible text back. The generation window must track
+// the raw deltas and end BEFORE the late flush, proving the window
+// measures generation rather than visible emission.
+describe('TokenUsageLogger raw token-delta timing (#3493): late buffered flush', () => {
+  beforeEach(tempLogPath.create);
+  afterEach(tempLogPath.remove);
   it('ends the raw-derived generation window before a late buffered flush (#3493)', async () => {
     const holdMs = 120;
     const mockProvider = {
@@ -570,10 +530,14 @@ describe('TokenUsageLogger raw token-delta timing (#3493)', () => {
       record.provider_request_ms - (record.ttft_ms + record.generation_ms),
     ).toBeGreaterThanOrEqual(50);
   });
+});
 
-  // An ordinary text stream interleaves raw deltas with visible chunks; the
-  // recorded shape must match the visible-only fallback expectations, so the
-  // raw signal does not distort the common case.
+// An ordinary text stream interleaves raw deltas with visible chunks; the
+// recorded shape must match the visible-only fallback expectations, so the
+// raw signal does not distort the common case.
+describe('TokenUsageLogger raw token-delta timing (#3493): interleaved stream', () => {
+  beforeEach(tempLogPath.create);
+  afterEach(tempLogPath.remove);
   it('records ordinary-stream timing when raw deltas interleave visible chunks (#3493)', async () => {
     const mockProvider = {
       name: 'anthropic',
@@ -617,12 +581,16 @@ describe('TokenUsageLogger raw token-delta timing (#3493)', () => {
     expect(record.generation_ms).toBeGreaterThan(0);
     expect(record.provider_request_ms).toBeGreaterThan(0);
   });
+});
 
-  // A failed attempt that already streamed raw deltas must keep that partial
-  // raw timing on its abandoned-attempt record, and the retry must record
-  // fresh timing of its own (mirrors the #3257 abandoned/success pair; the
-  // raw deltas make the abandoned generation window strictly positive where
-  // the visible-only record omitted it).
+// A failed attempt that already streamed raw deltas must keep that partial
+// raw timing on its abandoned-attempt record, and the retry must record
+// fresh timing of its own (mirrors the #3257 abandoned/success pair; the
+// raw deltas make the abandoned generation window strictly positive where
+// the visible-only record omitted it).
+describe('TokenUsageLogger raw token-delta timing (#3493): abandoned attempt', () => {
+  beforeEach(tempLogPath.create);
+  afterEach(tempLogPath.remove);
   it('keeps partial raw timing on an abandoned attempt and fresh timing on the retry (#3493)', async () => {
     let attempt = 0;
     const mockProvider = {
@@ -705,20 +673,50 @@ describe('TokenUsageLogger raw token-delta timing (#3493)', () => {
     // Fresh attempt-2 timing wins: three chunks, not attempt 1's single one.
     expect(success.chunk_count).toBe(3);
   });
+});
 
-  // Inner retryWithBackoff retry: attempt 1 fires raw deltas then fails
-  // BEFORE its first chunk, so the failure lands inside the retry boundary
-  // and attempt 2 runs within the same makeApiCallAndProcessStream call.
-  // The retry's own generator fires attempt 1's captured sink at a known
-  // point — attach runs at generator-body start, before the first provider
-  // pull, so the stale call deterministically lands after the retry's
-  // tracker is attached. With a shared bridge that stale call stamps the
-  // retry's tracker (ttft ~0, generation spanning the stale-to-last-delta
-  // gap); with a per-attempt bridge the retry's window holds only its own
-  // deltas (ttft past the 80ms sleep, generation near one 15ms sleep).
+// Inner retryWithBackoff retry: attempt 1 fires raw deltas then fails
+// BEFORE its first chunk, so the failure lands inside the retry boundary
+// and attempt 2 runs within the same makeApiCallAndProcessStream call.
+// The retry's own generator fires attempt 1's captured sink at a known
+// point — attach runs at generator-body start, before the first provider
+// pull, so the stale call deterministically lands after the retry's
+// tracker is attached. With a shared bridge that stale call stamps the
+// retry's tracker (ttft ~0, generation spanning the stale-to-last-delta
+// gap); with a per-attempt bridge the retry's window holds only its own
+// deltas (ttft past the 80ms sleep, generation near one 15ms sleep).
+async function runStaleSinkRetryTurn(
+  mockProvider: unknown,
+  retryBackoffArmed: Promise<void>,
+): Promise<SerializedTokenUsageRecord[]> {
+  const recordsPromise = runTurnReadRecords(
+    mockProvider,
+    'stale-sink-retry-session',
+    'stale-sink-retry-prompt',
+  );
+  try {
+    await retryBackoffArmed;
+    if (!(await waitForCondition(() => vi.getTimerCount() === 1))) {
+      throw new Error('retry backoff timer was not scheduled');
+    }
+    // Only the retry backoff runs on fake time. Provider sleeps on real time.
+    vi.advanceTimersByTime(6_500);
+  } finally {
+    vi.useRealTimers();
+  }
+  return recordsPromise;
+}
+
+describe('TokenUsageLogger raw token-delta timing (#3493): stale sink retry', () => {
+  beforeEach(tempLogPath.create);
+  afterEach(tempLogPath.remove);
   it('keeps retry timing free of a late raw delta from the abandoned attempt (#3493)', async () => {
     let staleSink: (() => void) | undefined;
     let attempt = 0;
+    let armRetryBackoff: () => void = () => {};
+    const retryBackoffArmed = new Promise<void>((resolve) => {
+      armRetryBackoff = resolve;
+    });
     const mockProvider = {
       name: 'anthropic',
       generateChatCompletion: vi
@@ -734,6 +732,8 @@ describe('TokenUsageLogger raw token-delta timing (#3493)', () => {
             staleSink?.();
             // Fail before the first chunk so the error surfaces inside the
             // retryWithBackoff boundary rather than ChatSession's outer retry.
+            vi.useFakeTimers();
+            armRetryBackoff();
             throw new Error('Connection error.');
           }
           const sink = rawDeltaSinkFrom(options.metadata);
@@ -757,10 +757,9 @@ describe('TokenUsageLogger raw token-delta timing (#3493)', () => {
         }),
     };
 
-    const records = await runTurnReadRecords(
+    const records = await runStaleSinkRetryTurn(
       mockProvider,
-      'stale-sink-retry-session',
-      'stale-sink-retry-prompt',
+      retryBackoffArmed,
     );
 
     expect(attempt).toBe(2);

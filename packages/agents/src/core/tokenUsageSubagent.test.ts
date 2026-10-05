@@ -20,6 +20,7 @@
  * called at the send seams) so they exercise the actual wiring.
  */
 
+import { collectRawHistory } from '@vybestack/llxprt-code-core/test-utils/collect-raw-history.js';
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -71,10 +72,172 @@ async function driveTurn(
     estimator: 'anthropic-char',
     tiktokenTokens: 90,
   });
-  recordTurnJoinContext(logger, promptId, runtimeState, historyService, turnId);
+  await recordTurnJoinContext(
+    logger,
+    promptId,
+    runtimeState,
+    historyService,
+    turnId,
+  );
   return logger.recordActual(promptId, {
     actualPromptTokens: 500,
     cachedTokens: 0,
+  });
+}
+
+type UsageFixture = () => { logFile: string; logger: TokenUsageLogger };
+
+function registerIdentityCases(fixture: UsageFixture): void {
+  describe('runtime identity', () => {
+    it('subagent turn record carries own runtime_id, parent runtime_id, and subagent_name', async () => {
+      const { logFile, logger } = fixture();
+      const parentRuntimeId = 'main-runtime-001';
+      const subagentRuntimeId = 'main-runtime-001#coder#abc12345';
+
+      const subagentState = createAgentRuntimeState({
+        runtimeId: subagentRuntimeId,
+        provider: 'anthropic',
+        model: 'claude-3-5-sonnet-20241022',
+        sessionId: 'subagent-session',
+        parentRuntimeId,
+        subagentName: 'coder',
+      });
+
+      const historyService = new HistoryService();
+      // Add a user message so the chronology has a marker
+      historyService.add(
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Write code' }],
+          metadata: { turnId: 'turn-sub-1' },
+        },
+        'claude-3-5-sonnet-20241022',
+      );
+
+      const promptId = 'subagent-prompt-1';
+      await driveTurn(logger, logFile, subagentState, historyService, promptId);
+
+      // Wait for the async write to settle
+
+      const records = readTurnRecords(logFile);
+      expect(records).toHaveLength(1);
+      const record = records[0];
+
+      expect(record.runtime_id).toBe(subagentRuntimeId);
+      expect(record.parent_runtime_id).toBe(parentRuntimeId);
+      expect(record.subagent_name).toBe('coder');
+      expect(record.session_id).toBe('subagent-session');
+    });
+
+    it('main-agent turn record carries null for parent_runtime_id and subagent_name', async () => {
+      const { logFile, logger } = fixture();
+      const mainRuntimeId = 'main-runtime-002';
+
+      const mainState = createAgentRuntimeState({
+        runtimeId: mainRuntimeId,
+        provider: 'openai',
+        model: 'gpt-4',
+        sessionId: 'main-session',
+      });
+
+      const historyService = new HistoryService();
+      historyService.add(
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Hello' }],
+          metadata: { turnId: 'turn-main-1' },
+        },
+        'gpt-4',
+      );
+
+      const promptId = 'main-prompt-1';
+      await driveTurn(logger, logFile, mainState, historyService, promptId);
+
+      const records = readTurnRecords(logFile);
+      expect(records).toHaveLength(1);
+      const record = records[0];
+
+      expect(record.runtime_id).toBe(mainRuntimeId);
+      expect(record.parent_runtime_id).toBeNull();
+      expect(record.subagent_name).toBeNull();
+      expect(record.session_id).toBe('main-session');
+    });
+  });
+}
+
+function registerBoundaryCases(fixture: UsageFixture): void {
+  describe('missing history and disabled logging', () => {
+    it('empty-history boundary: user_turn/step are null, never 0 or invented', async () => {
+      const { logFile, logger } = fixture();
+      const state = createAgentRuntimeState({
+        runtimeId: 'empty-history-rt',
+        provider: 'anthropic',
+        model: 'claude-3-5-sonnet-20241022',
+        sessionId: 'empty-session',
+      });
+
+      // No history items — no chronology marker exists
+      const historyService = new HistoryService();
+
+      // findCurrentTurnMarker must return null for empty history
+      expect(
+        findCurrentTurnMarker(await collectRawHistory(historyService)),
+      ).toBeNull();
+
+      const promptId = 'empty-history-prompt';
+      await driveTurn(
+        logger,
+        logFile,
+        state,
+        historyService,
+        promptId,
+        'minted-turn',
+      );
+
+      const records = readTurnRecords(logFile);
+      expect(records).toHaveLength(1);
+      const record = records[0];
+
+      // turn_id is minted before the send, so it survives an empty history —
+      // that is precisely what stops the first turn of a session being unjoinable.
+      expect(record.turn_id).toBe('minted-turn');
+      // The chronology-derived fields describe the state the request was built
+      // from. There is none, so they are null — never 0, never invented.
+      expect(record.user_turn).toBeNull();
+      expect(record.step).toBeNull();
+
+      // Runtime identity keys are still present (they don't depend on history)
+      expect(record.session_id).toBe('empty-session');
+      expect(record.runtime_id).toBe('empty-history-rt');
+      expect(record.parent_runtime_id).toBeNull();
+      expect(record.subagent_name).toBeNull();
+    });
+
+    it('disabled logger writes nothing', async () => {
+      const { logFile } = fixture();
+      const disabledLogger = new TokenUsageLogger(false, logFile);
+
+      const state = createAgentRuntimeState({
+        runtimeId: 'disabled-rt',
+        provider: 'anthropic',
+        model: 'claude-3-5-sonnet-20241022',
+        sessionId: 'disabled-session',
+      });
+
+      const historyService = new HistoryService();
+
+      await recordTurnJoinContext(
+        disabledLogger,
+        'disabled-prompt',
+        state,
+        historyService,
+        'disabled-turn',
+      );
+
+      // When the logger is disabled, nothing is written — the file does not
+      // even exist (AC-1 boundary: logger disabled → nothing written).
+      expect(fs.existsSync(logFile)).toBe(false);
+    });
   });
 }
 
@@ -92,147 +255,12 @@ describe('Token usage subagent identity and boundary (issue #3130)', () => {
     try {
       fs.rmSync(dir, { recursive: true, force: true });
     } catch (error) {
-      process.stderr.write(`Failed to clean up temp dir: ${String(error)}\n`);
+      process.stderr.write(`Failed to clean up temp dir: ${String(error)}
+`);
     }
   });
 
-  it('subagent turn record carries own runtime_id, parent runtime_id, and subagent_name', async () => {
-    const parentRuntimeId = 'main-runtime-001';
-    const subagentRuntimeId = 'main-runtime-001#coder#abc12345';
-
-    const subagentState = createAgentRuntimeState({
-      runtimeId: subagentRuntimeId,
-      provider: 'anthropic',
-      model: 'claude-3-5-sonnet-20241022',
-      sessionId: 'subagent-session',
-      parentRuntimeId,
-      subagentName: 'coder',
-    });
-
-    const historyService = new HistoryService();
-    // Add a user message so the chronology has a marker
-    historyService.add(
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'Write code' }],
-        metadata: { turnId: 'turn-sub-1' },
-      },
-      'claude-3-5-sonnet-20241022',
-    );
-
-    const promptId = 'subagent-prompt-1';
-    await driveTurn(logger, logFile, subagentState, historyService, promptId);
-
-    // Wait for the async write to settle
-
-    const records = readTurnRecords(logFile);
-    expect(records).toHaveLength(1);
-    const record = records[0];
-
-    expect(record.runtime_id).toBe(subagentRuntimeId);
-    expect(record.parent_runtime_id).toBe(parentRuntimeId);
-    expect(record.subagent_name).toBe('coder');
-    expect(record.session_id).toBe('subagent-session');
-  });
-
-  it('main-agent turn record carries null for parent_runtime_id and subagent_name', async () => {
-    const mainRuntimeId = 'main-runtime-002';
-
-    const mainState = createAgentRuntimeState({
-      runtimeId: mainRuntimeId,
-      provider: 'openai',
-      model: 'gpt-4',
-      sessionId: 'main-session',
-    });
-
-    const historyService = new HistoryService();
-    historyService.add(
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'Hello' }],
-        metadata: { turnId: 'turn-main-1' },
-      },
-      'gpt-4',
-    );
-
-    const promptId = 'main-prompt-1';
-    await driveTurn(logger, logFile, mainState, historyService, promptId);
-
-    const records = readTurnRecords(logFile);
-    expect(records).toHaveLength(1);
-    const record = records[0];
-
-    expect(record.runtime_id).toBe(mainRuntimeId);
-    expect(record.parent_runtime_id).toBeNull();
-    expect(record.subagent_name).toBeNull();
-    expect(record.session_id).toBe('main-session');
-  });
-
-  it('empty-history boundary: user_turn/step are null, never 0 or invented', async () => {
-    const state = createAgentRuntimeState({
-      runtimeId: 'empty-history-rt',
-      provider: 'anthropic',
-      model: 'claude-3-5-sonnet-20241022',
-      sessionId: 'empty-session',
-    });
-
-    // No history items — no chronology marker exists
-    const historyService = new HistoryService();
-
-    // findCurrentTurnMarker must return null for empty history
-    expect(findCurrentTurnMarker(historyService.getRawHistory())).toBeNull();
-
-    const promptId = 'empty-history-prompt';
-    await driveTurn(
-      logger,
-      logFile,
-      state,
-      historyService,
-      promptId,
-      'minted-turn',
-    );
-
-    const records = readTurnRecords(logFile);
-    expect(records).toHaveLength(1);
-    const record = records[0];
-
-    // turn_id is minted before the send, so it survives an empty history —
-    // that is precisely what stops the first turn of a session being unjoinable.
-    expect(record.turn_id).toBe('minted-turn');
-    // The chronology-derived fields describe the state the request was built
-    // from. There is none, so they are null — never 0, never invented.
-    expect(record.user_turn).toBeNull();
-    expect(record.step).toBeNull();
-
-    // Runtime identity keys are still present (they don't depend on history)
-    expect(record.session_id).toBe('empty-session');
-    expect(record.runtime_id).toBe('empty-history-rt');
-    expect(record.parent_runtime_id).toBeNull();
-    expect(record.subagent_name).toBeNull();
-  });
-
-  it('disabled logger writes nothing', async () => {
-    const disabledLogger = new TokenUsageLogger(false, logFile);
-
-    const state = createAgentRuntimeState({
-      runtimeId: 'disabled-rt',
-      provider: 'anthropic',
-      model: 'claude-3-5-sonnet-20241022',
-      sessionId: 'disabled-session',
-    });
-
-    const historyService = new HistoryService();
-
-    recordTurnJoinContext(
-      disabledLogger,
-      'disabled-prompt',
-      state,
-      historyService,
-      'disabled-turn',
-    );
-
-    // When the logger is disabled, nothing is written — the file does not
-    // even exist (AC-1 boundary: logger disabled → nothing written).
-    expect(fs.existsSync(logFile)).toBe(false);
-  });
+  const fixture = (): ReturnType<UsageFixture> => ({ logFile, logger });
+  registerIdentityCases(fixture);
+  registerBoundaryCases(fixture);
 });

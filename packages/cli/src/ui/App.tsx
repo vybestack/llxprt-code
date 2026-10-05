@@ -6,7 +6,7 @@
 
 import { useReducer } from 'react';
 import type {
-  IContent,
+  ResumeCursorBoot,
   RecordingIntegration,
   SessionRecordingService,
   LockHandle,
@@ -41,7 +41,7 @@ interface AppProps {
   agent: Agent;
   settings: LoadedSettings;
   startupWarnings?: string[];
-  resumedHistory?: IContent[];
+  resumedBoot?: Pick<ResumeCursorBoot, 'streamRows'>;
   version: string;
   terminalBackgroundColor?: string;
   runtimeMessageBus?: MessageBus;

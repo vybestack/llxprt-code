@@ -48,8 +48,47 @@ const baseProfile: Profile = {
   ephemeralSettings: { 'auth-key': 'subagent-key' },
 };
 
+const loadBalancerProfile: Profile = {
+  version: 1,
+  type: 'loadbalancer',
+  policy: 'roundrobin',
+  profiles: ['lb-member'],
+  provider: 'load-balancer',
+  model: 'load-balancer',
+  modelParams: {},
+  ephemeralSettings: {},
+};
+
+const memberProfile: Profile = {
+  version: 1,
+  provider: 'openai',
+  model: 'gpt-4o',
+  modelParams: {},
+  ephemeralSettings: { 'auth-key': 'member-key' },
+};
+
+const loadBalancerActivation = {
+  providerName: 'load-balancer',
+  modelName: 'load-balancer',
+  infoMessages: [],
+  warnings: [],
+  providerChanged: true,
+  didFallback: false,
+  requestedProvider: 'load-balancer',
+};
+
+function loadBalancerScope(): SubAgentScope {
+  return {
+    runtimeContext: createRuntimeBundle('lb').runtimeContext,
+    getAgentId: () => 'lb-helper-1',
+  } as unknown as SubAgentScope;
+}
+
+import { makeRecordingInputs } from './subagent-journal-fixture.js';
+
 function makeConfigWithSettings(settings: SettingsService): Config {
   return {
+    ...makeRecordingInputs(),
     getSessionId: () => 'primary-session',
     getProvider: () => 'gemini',
     getContentGeneratorConfig: () => undefined,
@@ -96,11 +135,13 @@ async function launchSubagent(
   return { isolatedSettings, dispose: result.dispose };
 }
 
+function resetRuntime(): void {
+  runtimeModule.resetRuntimeScopeForTesting();
+  runtimeModule.resetCliRuntimeRegistryForTesting();
+}
+
 describe('SubagentOrchestrator — session dumpcontext inheritance (#3151)', () => {
-  afterEach(() => {
-    runtimeModule.resetRuntimeScopeForTesting();
-    runtimeModule.resetCliRuntimeRegistryForTesting();
-  });
+  afterEach(resetRuntime);
 
   it('inherits the foreground on mode in the isolated settings service', async () => {
     const foreground = new SettingsService();
@@ -148,7 +189,10 @@ describe('SubagentOrchestrator — session dumpcontext inheritance (#3151)', () 
 
     await dispose();
   });
+});
 
+describe('SubagentOrchestrator — live dumpcontext inheritance (#3151)', () => {
+  afterEach(resetRuntime);
   it('observes live foreground on -> off -> error changes on later reads', async () => {
     const foreground = new SettingsService();
     foreground.setSessionScoped('dumpcontext', 'on');
@@ -205,7 +249,10 @@ describe('SubagentOrchestrator — session dumpcontext inheritance (#3151)', () 
 
     await dispose();
   });
+});
 
+describe('SubagentOrchestrator — dumpcontext isolation (#3151)', () => {
+  afterEach(resetRuntime);
   it('does not inherit unrelated foreground ephemerals into the isolated service', async () => {
     const foreground = new SettingsService();
     foreground.setSessionScoped('dumpcontext', 'on');
@@ -239,7 +286,10 @@ describe('SubagentOrchestrator — session dumpcontext inheritance (#3151)', () 
     await disposeA();
     await dispose();
   });
+});
 
+describe('SubagentOrchestrator — load-balancer dumpcontext inheritance (#3151)', () => {
+  afterEach(resetRuntime);
   it('inherits the foreground dumpcontext for a load-balancer subagent', async () => {
     // Launch a genuine load-balancer profile through SubagentOrchestrator.launch
     // so the private createRuntimeBundle load-balancer branch is exercised end
@@ -249,24 +299,6 @@ describe('SubagentOrchestrator — session dumpcontext inheritance (#3151)', () 
     // seams. The mocked isolated handle retains the production settingsService
     // passed by the orchestrator, so the runtime loader receives and exposes
     // the service constructed by production code.
-    const loadBalancerProfile: Profile = {
-      version: 1,
-      type: 'loadbalancer',
-      policy: 'roundrobin',
-      profiles: ['lb-member'],
-      provider: 'load-balancer',
-      model: 'load-balancer',
-      modelParams: {},
-      ephemeralSettings: {},
-    };
-    const memberProfile: Profile = {
-      version: 1,
-      provider: 'openai',
-      model: 'gpt-4o',
-      modelParams: {},
-      ephemeralSettings: { 'auth-key': 'member-key' },
-    };
-
     const foreground = new SettingsService();
     foreground.setSessionScoped('dumpcontext', 'on');
 
@@ -281,13 +313,9 @@ describe('SubagentOrchestrator — session dumpcontext inheritance (#3151)', () 
       throw new Error(`unexpected profile ${profileName}`);
     });
     const runtimeLoader = vi.fn().mockResolvedValue(createRuntimeBundle('lb'));
-    const lbScope = {
-      runtimeContext: createRuntimeBundle('lb').runtimeContext,
-      getAgentId: () => 'lb-helper-1',
-    } as unknown as SubAgentScope;
     const scopeFactory = vi
       .fn<typeof SubAgentScope.create>()
-      .mockResolvedValue(lbScope);
+      .mockResolvedValue(loadBalancerScope());
 
     let capturedSettings: SettingsService | undefined;
     const isolatedSpy = vi
@@ -316,15 +344,7 @@ describe('SubagentOrchestrator — session dumpcontext inheritance (#3151)', () 
       );
     const applyProfileSpy = vi
       .spyOn(profileApplicationModule, 'applyProfileWithGuards')
-      .mockResolvedValue({
-        providerName: 'load-balancer',
-        modelName: 'load-balancer',
-        infoMessages: [],
-        warnings: [],
-        providerChanged: true,
-        didFallback: false,
-        requestedProvider: 'load-balancer',
-      });
+      .mockResolvedValue(loadBalancerActivation);
 
     try {
       const orchestrator = new SubagentOrchestrator({

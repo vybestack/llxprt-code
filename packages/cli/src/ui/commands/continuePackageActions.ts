@@ -8,6 +8,7 @@ import {
   exportSessionMediaPackage,
   SessionDiscovery,
   validateSessionMediaPackage,
+  withRecordingFailureReport,
 } from '@vybestack/llxprt-code-core';
 import { basename } from 'node:path';
 import type { CommandContext, SlashCommandActionReturn } from './types.js';
@@ -103,7 +104,9 @@ async function exportPackage(
   const activeRecording = config.getSessionRecordingService?.();
   if (activeRecording?.getSessionId() === source.sessionId) {
     if (ctx.recordingIntegration !== undefined) {
-      await ctx.recordingIntegration.flushAtTurnBoundary();
+      await withRecordingFailureReport(
+        ctx.recordingIntegration.flushAtTurnBoundary(),
+      );
     }
     await activeRecording.flush();
   }

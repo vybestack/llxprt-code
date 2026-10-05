@@ -1,3 +1,4 @@
+import { collectRowsForAssertions } from '../../test-utils/collect-rows-for-assertions.js';
 /**
  * Copyright 2025 Vybestack LLC
  *
@@ -25,56 +26,89 @@ import { describe, it, expect, beforeEach } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 
-describe('issue #2410 – HistoryService rejects zero-block turns', () => {
-  let service: HistoryService;
+let service: HistoryService;
+async function assertRejectedEmpty0(): Promise<void> {
+  const emptyHuman: IContent = {
+    speaker: 'human',
+    blocks: [],
+  };
+  service.add(emptyHuman);
+  expect(service.length()).toBe(0);
 
+  await collectRowsForAssertions(service.streamRawHistory(), (rows) => {
+    expect(rows).toHaveLength(0);
+  });
+}
+
+async function assertRejectedEmpty1(): Promise<void> {
+  const emptyAI: IContent = {
+    speaker: 'ai',
+    blocks: [],
+  };
+  service.add(emptyAI);
+  expect(service.length()).toBe(0);
+
+  await collectRowsForAssertions(service.streamRawHistory(), (rows) => {
+    expect(rows).toHaveLength(0);
+  });
+}
+
+async function assertRejectedEmpty2(): Promise<void> {
+  const emptyTool: IContent = {
+    speaker: 'tool',
+    blocks: [],
+  };
+  service.add(emptyTool);
+  expect(service.length()).toBe(0);
+
+  await collectRowsForAssertions(service.streamRawHistory(), (rows) => {
+    expect(rows).toHaveLength(0);
+  });
+}
+
+describe('issue #2410 – HistoryService rejects zero-block turns', () => {
   beforeEach(() => {
     service = new HistoryService();
   });
-
-  it('refuses to store a zero-block human turn', () => {
-    const emptyHuman: IContent = {
-      speaker: 'human',
-      blocks: [],
-    };
-    service.add(emptyHuman);
-    expect(service.getAll()).toHaveLength(0);
+  it('refuses to store a zero-block human turn', async () => {
+    expect(service.length()).toBe(0);
+    await assertRejectedEmpty0();
   });
 
-  it('refuses to store a zero-block AI turn', () => {
-    const emptyAI: IContent = {
-      speaker: 'ai',
-      blocks: [],
-    };
-    service.add(emptyAI);
-    expect(service.getAll()).toHaveLength(0);
+  it('refuses to store a zero-block AI turn', async () => {
+    expect(service.length()).toBe(0);
+    await assertRejectedEmpty1();
   });
 
-  it('refuses to store a zero-block tool turn', () => {
-    const emptyTool: IContent = {
-      speaker: 'tool',
-      blocks: [],
-    };
-    service.add(emptyTool);
-    expect(service.getAll()).toHaveLength(0);
+  it('refuses to store a zero-block tool turn', async () => {
+    expect(service.length()).toBe(0);
+    await assertRejectedEmpty2();
   });
 
-  it('still stores a valid human message with one block', () => {
+  it('still stores a valid human message with one block', async () => {
     const validHuman: IContent = {
       speaker: 'human',
       blocks: [{ type: 'text', text: 'hello' }],
     };
     service.add(validHuman);
-    expect(service.getAll()).toHaveLength(1);
+    expect(service.length()).toBe(1);
+
+    await collectRowsForAssertions(service.streamRawHistory(), (rows) => {
+      expect(rows).toHaveLength(1);
+    });
   });
 
-  it('still stores a valid AI message with one block', () => {
+  it('still stores a valid AI message with one block', async () => {
     const validAI: IContent = {
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'response' }],
     };
     service.add(validAI);
-    expect(service.getAll()).toHaveLength(1);
+    expect(service.length()).toBe(1);
+
+    await collectRowsForAssertions(service.streamRawHistory(), (rows) => {
+      expect(rows).toHaveLength(1);
+    });
   });
 
   it('does not emit contentAdded for rejected zero-block content', () => {
@@ -102,12 +136,16 @@ describe('issue #2410 – HistoryService rejects zero-block turns', () => {
     expect(emitted).toBe(true);
   });
 
-  it('still rejects invalid speaker (pre-existing behavior)', () => {
+  it('still rejects invalid speaker (pre-existing behavior)', async () => {
     const badSpeaker: IContent = {
       speaker: 'invalid' as IContent['speaker'],
       blocks: [{ type: 'text', text: 'hello' }],
     };
     service.add(badSpeaker);
-    expect(service.getAll()).toHaveLength(0);
+    expect(service.length()).toBe(0);
+
+    await collectRowsForAssertions(service.streamRawHistory(), (rows) => {
+      expect(rows).toHaveLength(0);
+    });
   });
 });

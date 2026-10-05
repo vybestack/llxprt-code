@@ -1,3 +1,5 @@
+import { curatedHistoryForTest } from '../../../../core/src/test-utils/curated-history-fixture.js';
+/// <reference lib="esnext.array" />
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -27,8 +29,7 @@ import {
   ProviderContentEnforcer,
   type ProviderContentEnforcementDeps,
 } from '../providerContentEnforcement.js';
-import { TopDownTruncationStrategy } from '../TopDownTruncationStrategy.js';
-import { buildCompressionContext } from '../compressionContextBuilder.js';
+import { runDiskProviderFallback } from '../diskProviderFallback.js';
 import { computeMarginAdjustedLimit } from '../contextLimitPolicy.js';
 import {
   buildRuntimeContext,
@@ -131,7 +132,8 @@ function buildFallbackCompression(
   logger: DebugLogger,
 ): ProviderContentEnforcementDeps['performFallbackCompression'] {
   return async (promptId, applyResult, targetTokenCount) => {
-    const context = await buildCompressionContext(
+    const result = await runDiskProviderFallback(
+      applyResult,
       promptId,
       runtimeContext,
       historyService,
@@ -145,12 +147,7 @@ function buildFallbackCompression(
       logger,
       { targetTokenCount },
     );
-    const result = await new TopDownTruncationStrategy().compress(context);
-    if (result.kind === 'noop') {
-      return false;
-    }
-    await applyResult(result.newHistory);
-    return true;
+    return result.outcome === 'applied';
   };
 }
 
@@ -161,7 +158,7 @@ function buildFallbackCompression(
 async function shedOldestMessage(
   historyService: HistoryService,
 ): Promise<void> {
-  const original = [...historyService.getCurated()];
+  const original = [...curatedHistoryForTest(historyService)];
   historyService.clear();
   for (const entry of original.slice(1)) {
     historyService.add(entry);
@@ -190,7 +187,9 @@ async function buildDirectHarness(options: {
   seedHistory(historyService);
   await historyService.waitForTokenUpdates();
   const pending = makePending();
-  const contents = historyService.getCuratedForProvider([pending]);
+  const contents = await Array.fromAsync(
+    historyService.getCuratedForProviderStream([pending]),
+  );
   const initialEstimate = await historyService.estimateTokensForContents(
     contents,
     MODEL,
@@ -232,184 +231,222 @@ async function buildDirectHarness(options: {
 }
 
 describe('ProviderContentEnforcer compression-callback escalation (issue #3499)', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(facadeCallback0);
 
-  it('T2: escalates past an under-delivering compression round and truncates history to the guard target', async () => {
-    const historyService = new HistoryService();
-    const runtimeContext = buildRuntimeContext(historyService, {
-      contextLimit: SESSION_CONTEXT_LIMIT,
-      compressionThreshold: 0.8,
-    });
-    seedHistory(historyService);
-    const pending = makePending();
-    const chat = new ChatSession(
-      runtimeContext,
-      buildMockContentGenerator(),
-      {},
-      [],
-    );
-    const handler = chat['compressionHandler'];
+  it(
+    'T2: escalates past an under-delivering compression round and truncates history to the guard target',
+    facadeCallback1,
+  );
 
-    let compressionCalls = 0;
-    vi.spyOn(handler, 'performCompression').mockImplementation(async () => {
-      compressionCalls++;
-      if (compressionCalls === 1) {
-        await shedOldestMessage(historyService);
-        return PerformCompressionResult.COMPRESSED;
-      }
-      return PerformCompressionResult.NOOP;
-    });
+  it(
+    'T3: returns fitting contents instead of throwing when compression is a structural no-op',
+    facadeCallback2,
+  );
 
-    let capturedCallback: GuardAwareCallback | null = null;
-    const providerWithCallback = {
-      name: 'load-balancer',
-      generateChatCompletion: vi.fn(),
-      setCompressionCallback: vi.fn((cb: CompressionCallback | null) => {
-        if (cb !== null) {
-          capturedCallback = cb;
-        }
-      }),
-    };
+  it(
+    'T3: throws the structured overflow error when even truncation cannot fit the guard limit',
+    facadeCallback3,
+  );
 
-    const contents = historyService.getCuratedForProvider([pending]);
-    const initialEstimate = await historyService.estimateTokensForContents(
-      contents,
-      MODEL,
-    );
-    await handler.enforceProviderContents(
-      { contents, pendingContents: [pending] },
-      'prompt-3499',
-      providerWithCallback as unknown as IProvider,
-    );
+  it(
+    'T4: targets contextLimit minus overhead for a small deficit instead of over-cutting',
+    facadeCallback4,
+  );
 
-    const callback = expectCapturedCallback(capturedCallback);
-    const guard = guardOverBy(initialEstimate, 900);
-    const result = await callback(contents, guard);
+  it(
+    'T4: converges against the enforcer own limits when no guard info is supplied',
+    facadeCallback5,
+  );
 
-    const finalEstimate = await historyService.estimateTokensForContents(
-      result,
-      MODEL,
-    );
-    expect(finalEstimate).toBeLessThanOrEqual(effectiveLimitFor(guard));
-    // Compression shed only entry 00; truncation had to remove more than
-    // that for the payload to fit the guard target, while entry 03 onward
-    // survives and the pending request is preserved.
-    expect(resultText(result)).not.toContain('entry 00');
-    expect(resultText(result)).not.toContain('entry 01');
-    expect(resultText(result)).toContain('entry 03');
-    expect(resultText(result)).toContain('pending-marker');
-  });
-
-  it('T3: returns fitting contents instead of throwing when compression is a structural no-op', async () => {
-    const harness = await buildDirectHarness({
-      contextLimit: SESSION_CONTEXT_LIMIT,
-      compression: 'noop',
-    });
-    const guard = guardOverBy(harness.initialEstimate, 900);
-    const historyTokensBefore = harness.historyService.getTotalTokens();
-
-    const result = await harness.enforcer.compressAndRecompose(
-      [harness.pending],
-      'prompt-3499',
-      guard,
-    );
-
-    const finalEstimate =
-      await harness.historyService.estimateTokensForContents(result, MODEL);
-    expect(finalEstimate).toBeLessThanOrEqual(effectiveLimitFor(guard));
-    expect(harness.historyService.getTotalTokens()).toBeLessThan(
-      historyTokensBefore,
-    );
-  });
-
-  it('T3: throws the structured overflow error when even truncation cannot fit the guard limit', async () => {
-    const harness = await buildDirectHarness({
-      contextLimit: SESSION_CONTEXT_LIMIT,
-      compression: 'noop',
-    });
-    const guard: GuardInfo = {
-      estimatedTokens: harness.initialEstimate + GUARD_OVERHEAD,
-      contextLimit: 40,
-    };
-
-    await expect(
-      harness.enforcer.compressAndRecompose(
-        [harness.pending],
-        'prompt-3499',
-        guard,
-      ),
-    ).rejects.toThrow(
-      /Request still exceeds the safety-adjusted context limit/,
-    );
-  });
-
-  it('T4: targets contextLimit minus overhead for a small deficit instead of over-cutting', async () => {
-    const harness = await buildDirectHarness({
-      contextLimit: SESSION_CONTEXT_LIMIT,
-      compression: 'noop',
-    });
-    const guard = guardOverBy(harness.initialEstimate, 800);
-    const historyTokensBefore = harness.historyService.getTotalTokens();
-
-    const result = await harness.enforcer.compressAndRecompose(
-      [harness.pending],
-      'prompt-3499',
-      guard,
-    );
-
-    const finalEstimate =
-      await harness.historyService.estimateTokensForContents(result, MODEL);
-    expect(finalEstimate).toBeLessThanOrEqual(effectiveLimitFor(guard));
-    // A deficit-exact target removes roughly the deficit; a default
-    // completion-budget ceiling (~limit/2) would land far below this floor.
-    expect(finalEstimate).toBeGreaterThan(effectiveLimitFor(guard) - 800);
-    expect(finalEstimate).toBeGreaterThan(guard.contextLimit / 2);
-    expect(harness.historyService.getTotalTokens()).toBeLessThan(
-      historyTokensBefore,
-    );
-  });
-
-  it('T4: converges against the enforcer own limits when no guard info is supplied', async () => {
-    const contextLimit = 6_000;
-    const harness = await buildDirectHarness({
-      contextLimit,
-      compression: 'noop',
-    });
-    const historyTokensBefore = harness.historyService.getTotalTokens();
-    const completionBudget = Math.min(65_536, Math.floor(contextLimit * 0.5));
-    const marginAdjustedLimit = computeMarginAdjustedLimit(contextLimit);
-
-    const result = await harness.enforcer.compressAndRecompose(
-      [harness.pending],
-      'prompt-3499',
-    );
-
-    const finalEstimate =
-      await harness.historyService.estimateTokensForContents(result, MODEL);
-    expect(finalEstimate + completionBudget).toBeLessThanOrEqual(
-      marginAdjustedLimit,
-    );
-    expect(harness.historyService.getTotalTokens()).toBeLessThan(
-      historyTokensBefore,
-    );
-    expect(resultText(result)).toContain('pending-marker');
-  });
-
-  it('T4: keeps an empty pending boundary a no-op regardless of guard facts', async () => {
-    const harness = await buildDirectHarness({
-      contextLimit: SESSION_CONTEXT_LIMIT,
-      compression: 'noop',
-    });
-    const guard = guardOverBy(harness.initialEstimate, 900);
-
-    const result = await harness.enforcer.compressAndRecompose(
-      [],
-      'prompt-3499',
-      guard,
-    );
-
-    expect(result).toStrictEqual([]);
-  });
+  it(
+    'T4: keeps an empty pending boundary a no-op regardless of guard facts',
+    facadeCallback6,
+  );
 });
+
+function facadeCallback0(): void {
+  vi.clearAllMocks();
+}
+
+async function facadeCallback1(): Promise<void> {
+  const historyService = new HistoryService();
+  const runtimeContext = buildRuntimeContext(historyService, {
+    contextLimit: SESSION_CONTEXT_LIMIT,
+    compressionThreshold: 0.8,
+  });
+  seedHistory(historyService);
+  const pending = makePending();
+  const chat = new ChatSession(
+    runtimeContext,
+    buildMockContentGenerator(),
+    {},
+    [],
+  );
+  const handler = chat['compressionHandler'];
+
+  let compressionCalls = 0;
+  vi.spyOn(handler, 'performCompression').mockImplementation(async () => {
+    compressionCalls++;
+    if (compressionCalls === 1) {
+      await shedOldestMessage(historyService);
+      return PerformCompressionResult.COMPRESSED;
+    }
+    return PerformCompressionResult.NOOP;
+  });
+
+  let capturedCallback: GuardAwareCallback | null = null;
+  const providerWithCallback = {
+    name: 'load-balancer',
+    generateChatCompletion: vi.fn(),
+    setCompressionCallback: vi.fn((cb: CompressionCallback | null) => {
+      if (cb !== null) {
+        capturedCallback = cb;
+      }
+    }),
+  };
+
+  const contents = await Array.fromAsync(
+    historyService.getCuratedForProviderStream([pending]),
+  );
+  const initialEstimate = await historyService.estimateTokensForContents(
+    contents,
+    MODEL,
+  );
+  await handler.enforceProviderContents(
+    { contents, pendingContents: [pending] },
+    'prompt-3499',
+    providerWithCallback as unknown as IProvider,
+  );
+
+  const callback = expectCapturedCallback(capturedCallback);
+  const guard = guardOverBy(initialEstimate, 900);
+  const result = await callback(contents, guard);
+
+  const finalEstimate = await historyService.estimateTokensForContents(
+    result,
+    MODEL,
+  );
+  expect(finalEstimate).toBeLessThanOrEqual(effectiveLimitFor(guard));
+  // Compression shed only entry 00; truncation had to remove more than
+  // that for the payload to fit the guard target, while entry 03 onward
+  // survives and the pending request is preserved.
+  expect(resultText(result)).not.toContain('entry 00');
+  expect(resultText(result)).not.toContain('entry 01');
+  expect(resultText(result)).toContain('entry 03');
+  expect(resultText(result)).toContain('pending-marker');
+}
+
+async function facadeCallback2(): Promise<void> {
+  const harness = await buildDirectHarness({
+    contextLimit: SESSION_CONTEXT_LIMIT,
+    compression: 'noop',
+  });
+  const guard = guardOverBy(harness.initialEstimate, 900);
+  const historyTokensBefore = harness.historyService.getTotalTokens();
+
+  const result = await harness.enforcer.compressAndRecompose(
+    [harness.pending],
+    'prompt-3499',
+    guard,
+  );
+
+  const finalEstimate = await harness.historyService.estimateTokensForContents(
+    result,
+    MODEL,
+  );
+  expect(finalEstimate).toBeLessThanOrEqual(effectiveLimitFor(guard));
+  expect(harness.historyService.getTotalTokens()).toBeLessThan(
+    historyTokensBefore,
+  );
+}
+
+async function facadeCallback3(): Promise<void> {
+  const harness = await buildDirectHarness({
+    contextLimit: SESSION_CONTEXT_LIMIT,
+    compression: 'noop',
+  });
+  const guard: GuardInfo = {
+    estimatedTokens: harness.initialEstimate + GUARD_OVERHEAD,
+    contextLimit: 40,
+  };
+
+  await expect(
+    harness.enforcer.compressAndRecompose(
+      [harness.pending],
+      'prompt-3499',
+      guard,
+    ),
+  ).rejects.toThrow(/Request still exceeds the safety-adjusted context limit/);
+}
+
+async function facadeCallback4(): Promise<void> {
+  const harness = await buildDirectHarness({
+    contextLimit: SESSION_CONTEXT_LIMIT,
+    compression: 'noop',
+  });
+  const guard = guardOverBy(harness.initialEstimate, 800);
+  const historyTokensBefore = harness.historyService.getTotalTokens();
+
+  const result = await harness.enforcer.compressAndRecompose(
+    [harness.pending],
+    'prompt-3499',
+    guard,
+  );
+
+  const finalEstimate = await harness.historyService.estimateTokensForContents(
+    result,
+    MODEL,
+  );
+  expect(finalEstimate).toBeLessThanOrEqual(effectiveLimitFor(guard));
+  // A deficit-exact target removes roughly the deficit; a default
+  // completion-budget ceiling (~limit/2) would land far below this floor.
+  expect(finalEstimate).toBeGreaterThan(effectiveLimitFor(guard) - 800);
+  expect(finalEstimate).toBeGreaterThan(guard.contextLimit / 2);
+  expect(harness.historyService.getTotalTokens()).toBeLessThan(
+    historyTokensBefore,
+  );
+}
+
+async function facadeCallback5(): Promise<void> {
+  const contextLimit = 6_000;
+  const harness = await buildDirectHarness({
+    contextLimit,
+    compression: 'noop',
+  });
+  const historyTokensBefore = harness.historyService.getTotalTokens();
+  const completionBudget = Math.min(65_536, Math.floor(contextLimit * 0.5));
+  const marginAdjustedLimit = computeMarginAdjustedLimit(contextLimit);
+
+  const result = await harness.enforcer.compressAndRecompose(
+    [harness.pending],
+    'prompt-3499',
+  );
+
+  const finalEstimate = await harness.historyService.estimateTokensForContents(
+    result,
+    MODEL,
+  );
+  expect(finalEstimate + completionBudget).toBeLessThanOrEqual(
+    marginAdjustedLimit,
+  );
+  expect(harness.historyService.getTotalTokens()).toBeLessThan(
+    historyTokensBefore,
+  );
+  expect(resultText(result)).toContain('pending-marker');
+}
+
+async function facadeCallback6(): Promise<void> {
+  const harness = await buildDirectHarness({
+    contextLimit: SESSION_CONTEXT_LIMIT,
+    compression: 'noop',
+  });
+  const guard = guardOverBy(harness.initialEstimate, 900);
+
+  const result = await harness.enforcer.compressAndRecompose(
+    [],
+    'prompt-3499',
+    guard,
+  );
+
+  expect(result).toStrictEqual([]);
+}

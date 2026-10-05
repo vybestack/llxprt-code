@@ -384,7 +384,7 @@ function createEngineEnv(options: {
       providerName: 'test',
       model: 'test-model',
     }),
-    getHistory: async () => [],
+    async *streamHistory() {},
     getSessionTurnCount: () => 1,
     incrementSessionTurnCount: () => {},
     lazyInitialize: async () => {},

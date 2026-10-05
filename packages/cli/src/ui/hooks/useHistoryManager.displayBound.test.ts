@@ -21,6 +21,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { SessionRecordingService } from '@vybestack/llxprt-code-core';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { collectRowsForAssertions } from '../../../../core/src/test-utils/collect-rows-for-assertions.js';
 import { useHistory } from './useHistoryManager.js';
 import { createTurnStore } from '../stores/turn/turnStore.js';
 
@@ -41,7 +42,7 @@ describe('UI history display bound preserves content elsewhere', () => {
     }
   });
 
-  it('bounds the on-screen copy while core history keeps the full text', () => {
+  it('bounds the on-screen copy while core history keeps the full text', async () => {
     const historyService = new HistoryService();
     historyService.add({
       speaker: 'ai',
@@ -57,19 +58,24 @@ describe('UI history display bound preserves content elsewhere', () => {
     });
 
     const displayed = result.current.history[0].text as string;
-    const core = historyService.getAll()[0].blocks[0] as { text: string };
-
-    expect({
-      displayIsBounded: displayed.length < LARGE_TEXT.length,
-      displayExplainsBound: displayed.includes(
-        'full text is in the session transcript',
-      ),
-      coreIsComplete: core.text === LARGE_TEXT,
-    }).toStrictEqual({
-      displayIsBounded: true,
-      displayExplainsBound: true,
-      coreIsComplete: true,
-    });
+    await collectRowsForAssertions(
+      historyService.streamRawHistory(),
+      (rows) => {
+        const core = rows[0].blocks[0];
+        if (core.type !== 'text') throw new Error('Expected core text');
+        expect({
+          displayIsBounded: displayed.length < LARGE_TEXT.length,
+          displayExplainsBound: displayed.includes(
+            'full text is in the session transcript',
+          ),
+          coreIsComplete: core.text === LARGE_TEXT,
+        }).toStrictEqual({
+          displayIsBounded: true,
+          displayExplainsBound: true,
+          coreIsComplete: true,
+        });
+      },
+    );
   });
 
   it('writes the full text to the session transcript', async () => {

@@ -3,6 +3,7 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { resumeHistoryWindow } from '../utils/streamHistoryItems.js';
 
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import type {
@@ -27,7 +28,6 @@ import { secureInputHandler } from '../utils/secureInputHandler.js';
 import {
   createEmojiFilter,
   filterHistoryItems,
-  iContentToHistoryItems,
   resolveEmojiFilterMode,
 } from '../utils/iContentToHistoryItems.js';
 import type {
@@ -692,7 +692,7 @@ async function performSessionResume(
       timestamp: new Date(),
     });
   }
-  const uiHistory = iContentToHistoryItems(
+  const uiHistory = await resumeHistoryWindow(
     resumeResult.history,
     resolveEmojiFilterMode(deps.config),
   );

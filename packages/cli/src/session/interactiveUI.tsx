@@ -1,12 +1,12 @@
-import React, { type ErrorInfo } from 'react';
-import { render as inkRender } from 'ink';
-
 /**
  * Test-injectable render function. Defaults to the real ink render.
  * Tests that need to capture render calls (without module-level mocking,
  * which is unsupported under Bun's native test runner) can replace this
  * via the exported __setRenderForTesting seam.
  */
+import React, { type ErrorInfo } from 'react';
+import { render as inkRender } from 'ink';
+
 let render: typeof inkRender = inkRender;
 
 export function __setRenderForTesting(fn: typeof inkRender | null): void {
@@ -20,7 +20,7 @@ import {
   type Config,
   type SessionRecordingService,
   type RecordingIntegration,
-  type IContent,
+  type ResumeCursorBoot,
   type LockHandle,
   type MessageBus,
   type TelemetrySettings,
@@ -293,7 +293,7 @@ function buildRenderElement(
   version: string,
   runtimeMessageBus: MessageBus | undefined,
   recordingIntegration: RecordingIntegration | undefined,
-  resumedHistory: IContent[] | undefined,
+  resumedBoot: Pick<ResumeCursorBoot, 'streamRows'> | undefined,
   initialRecordingService: SessionRecordingService | undefined,
   initialLockHandle: LockHandle | null | undefined,
   suppressStartupWelcome: boolean | undefined,
@@ -313,7 +313,7 @@ function buildRenderElement(
             version={version}
             terminalBackgroundColor={uiRuntime.shell.getTerminalBackground()}
             recordingIntegration={recordingIntegration}
-            resumedHistory={resumedHistory}
+            resumedBoot={resumedBoot}
             initialRecordingService={initialRecordingService}
             initialLockHandle={initialLockHandle}
             suppressStartupWelcome={suppressStartupWelcome}
@@ -356,7 +356,7 @@ export async function startInteractiveUI(
   workspaceRoot: string,
   runtimeMessageBus?: MessageBus,
   recordingIntegration?: RecordingIntegration,
-  resumedHistory?: IContent[],
+  resumedBoot?: Pick<ResumeCursorBoot, 'streamRows'>,
   initialRecordingService?: SessionRecordingService,
   initialLockHandle?: LockHandle | null,
   suppressStartupWelcome?: boolean,
@@ -390,7 +390,7 @@ export async function startInteractiveUI(
     startupWarnings,
     runtimeMessageBus,
     recordingIntegration,
-    resumedHistory,
+    resumedBoot,
     initialRecordingService,
     initialLockHandle,
     suppressStartupWelcome,
@@ -484,7 +484,7 @@ export interface CommitInteractiveStartupArgs {
   readonly ports?: Partial<InteractiveStartupPorts>;
   readonly runtimeMessageBus?: MessageBus;
   readonly recordingIntegration?: RecordingIntegration;
-  readonly resumedHistory?: IContent[];
+  readonly resumedBoot?: Pick<ResumeCursorBoot, 'streamRows'>;
   readonly initialRecordingService?: SessionRecordingService;
   readonly initialLockHandle?: LockHandle | null | undefined;
   readonly suppressStartupWelcome?: boolean;
@@ -546,7 +546,7 @@ export async function commitInteractiveStartup(
         args.version,
         args.runtimeMessageBus,
         args.recordingIntegration,
-        args.resumedHistory,
+        args.resumedBoot,
         args.initialRecordingService,
         args.initialLockHandle,
         args.suppressStartupWelcome,

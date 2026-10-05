@@ -41,16 +41,9 @@ export interface HistoryMutationError {
 /**
  * Compute the items that would be removed by clearing all non-initial content.
  * "Initial" means everything up to and including the first human-led turn.
- * Returns the cut point index and the removed items.
+ * Returns the cut point index without copying the removed tail.
  */
-function computeClearCut(history: readonly IContent[]): {
-  cutIndex: number;
-  removed: IContent[];
-} {
-  if (history.length === 0) {
-    return { cutIndex: 0, removed: [] };
-  }
-
+export function computeClearCutIndex(history: readonly IContent[]): number {
   let cutIndex = 0;
   let foundHuman = false;
   for (let i = 0; i < history.length; i++) {
@@ -62,15 +55,15 @@ function computeClearCut(history: readonly IContent[]): {
       cutIndex = i + 1;
     }
   }
+  return foundHuman ? cutIndex : history.length;
+}
 
-  if (!foundHuman) {
-    return { cutIndex: history.length, removed: [] };
-  }
-
-  return {
-    cutIndex,
-    removed: history.slice(cutIndex),
-  };
+function computeClearCut(history: readonly IContent[]): {
+  cutIndex: number;
+  removed: IContent[];
+} {
+  const cutIndex = computeClearCutIndex(history);
+  return { cutIndex, removed: history.slice(cutIndex) };
 }
 
 /**

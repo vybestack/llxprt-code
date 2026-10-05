@@ -18,6 +18,7 @@ import {
   vi,
   beforeEach,
   afterEach,
+  afterAll,
   type Mock,
 } from 'bun:test';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/llm-types/index.js';
@@ -41,6 +42,9 @@ import {
 const realConfigModule = {
   ...(await import('@vybestack/llxprt-code-core/config/config.js')),
 };
+const realRetryModule = {
+  ...(await import('@vybestack/llxprt-code-core/utils/retry.js')),
+};
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(() =>
@@ -52,6 +56,9 @@ void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
 }));
 
 // Mock clientToolGovernance module so tests can control tool name/governance returns
+const realClientToolGovernance = {
+  ...(await import('./clientToolGovernance.js')),
+};
 void vi.mock('./clientToolGovernance.js', () => ({
   getToolGovernanceEphemerals: vi.fn(() => undefined),
   readToolList: vi.fn((v: unknown) =>
@@ -216,45 +223,49 @@ void vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
   },
 }));
 
-describe('AgentClient (client.ts)', () => {
-  let client: AgentClient;
+let client: AgentClient;
 
-  beforeEach(async () => {
-    const ctx = await setupAgentClient({
-      mockChatCreateFn,
-      mockGenerateContentFn,
-      mockEmbedContentFn,
-    });
-    client = ctx.client;
-
-    mockTodoStoreConstructor.mockImplementation(() => ({
-      readTodos: todoStoreReadMock,
-      readPausedState: todoStoreReadPausedMock,
-      writePausedState: todoStoreWritePausedMock,
-    }));
-    todoStoreReadMock.mockResolvedValue([]);
-    todoStoreReadPausedMock.mockResolvedValue(false);
-    todoStoreWritePausedMock.mockResolvedValue(undefined);
-
-    // Inject a mock content generator so embedding validation runs in BaseLLMClient
-    const mockContentGenerator = {
-      embedContent: vi
-        .fn()
-        .mockImplementation((opts: { texts: string[] }) =>
-          mockEmbedContentFn(opts),
-        ),
-      generateContentStream: vi.fn(),
-      generateContent: vi.fn(),
-    };
-    (client as unknown as { contentGenerator: unknown }).contentGenerator =
-      mockContentGenerator;
+function prepareInstructionChat(tokenCount: number): {
+  setSystemInstruction: ReturnType<typeof vi.fn>;
+  estimateTokensForText: ReturnType<typeof vi.fn>;
+  setBaseTokenOffset: ReturnType<typeof vi.fn>;
+} {
+  const setSystemInstruction = vi.fn();
+  const estimateTokensForText = vi.fn().mockResolvedValue(tokenCount);
+  const setBaseTokenOffset = vi.fn();
+  const getHistoryService = vi.fn().mockReturnValue({
+    estimateTokensForText,
+    setBaseTokenOffset,
   });
+  client['chat'] = {
+    setSystemInstruction,
+    getHistoryService,
+  } as unknown as ChatSession;
+  client['contentGenerator'] = {
+    countTokens: vi.fn(),
+  } as unknown as ContentGenerator;
+  return { setSystemInstruction, estimateTokensForText, setBaseTokenOffset };
+}
 
-  afterEach(async () => {
-    await client.dispose();
-    vi.restoreAllMocks();
-  });
+function prepareInstructionPrompt(
+  tools: string[],
+  includeSubagentDelegation: boolean,
+  prompt: string,
+): void {
+  (
+    getEnabledToolNamesForPrompt as Mock<typeof getEnabledToolNamesForPrompt>
+  ).mockReturnValue(tools);
+  (
+    shouldIncludeSubagentDelegationForConfig as Mock<
+      typeof shouldIncludeSubagentDelegationForConfig
+    >
+  ).mockResolvedValue(includeSubagentDelegation);
+  (
+    getCoreSystemPromptAsync as Mock<typeof getCoreSystemPromptAsync>
+  ).mockResolvedValue(prompt);
+}
 
+function registerGenerateEmbeddingTests(): void {
   describe('generateEmbedding', () => {
     const texts = ['hello world', 'goodbye world'];
 
@@ -329,488 +340,172 @@ describe('AgentClient (client.ts)', () => {
       );
     });
   });
+}
 
-  describe('updateSystemInstruction', () => {
-    it('updates chat system instruction and history token offset', async () => {
-      const setSystemInstruction = vi.fn();
-      const estimateTokensForText = vi.fn().mockResolvedValue(321);
-      const setBaseTokenOffset = vi.fn();
-      const getHistoryService = vi.fn().mockReturnValue({
-        estimateTokensForText,
-        setBaseTokenOffset,
-      });
+async function prepareUpdateInstruction1(): Promise<
+  ReturnType<typeof prepareInstructionChat>
+> {
+  const { setSystemInstruction, estimateTokensForText, setBaseTokenOffset } =
+    prepareInstructionChat(321);
+  const config = client['config'];
+  vi.spyOn(config, 'getUserMemory').mockReturnValue('new memory');
+  prepareInstructionPrompt(['tool_a'], true, 'prompt body with new memory');
+  await client.updateSystemInstruction();
+  return { setSystemInstruction, estimateTokensForText, setBaseTokenOffset };
+}
 
-      const mockChat = {
-        setSystemInstruction,
-        getHistoryService,
-      };
+async function prepareUpdateInstruction2(): Promise<void> {
+  prepareInstructionChat(100);
+  const config = client['config'];
+  vi.spyOn(config, 'getUserMemory').mockReturnValue('');
+  vi.spyOn(config, 'getCoreMemory').mockReturnValue('Always respond in JSON');
+  prepareInstructionPrompt([], false, 'prompt with core directives');
+  await client.updateSystemInstruction();
+}
 
-      client['chat'] = mockChat as unknown as ChatSession;
-      client['contentGenerator'] = {
-        countTokens: vi.fn(),
-      } as unknown as ContentGenerator;
+function prepareJitInstruction(
+  jitMemory: string,
+  prompt: string,
+): (typeof client)['config'] {
+  prepareInstructionChat(100);
+  const config = client['config'];
+  vi.spyOn(config, 'getUserMemory').mockReturnValue('base memory');
+  vi.spyOn(config, 'getCoreMemory').mockReturnValue('');
+  vi.spyOn(config, 'getJitMemoryForPath').mockResolvedValue(jitMemory);
+  vi.spyOn(config, 'getWorkingDir').mockReturnValue('/test/dir');
+  prepareInstructionPrompt([], false, prompt);
+  return config;
+}
 
-      const config = client['config'] as unknown as {
-        getUserMemory: () => string;
-      };
-      vi.spyOn(config, 'getUserMemory').mockReturnValue('new memory');
-
-      (
-        getEnabledToolNamesForPrompt as Mock<
-          typeof getEnabledToolNamesForPrompt
-        >
-      ).mockReturnValue(['tool_a']);
-      (
-        shouldIncludeSubagentDelegationForConfig as Mock<
-          typeof shouldIncludeSubagentDelegationForConfig
-        >
-      ).mockResolvedValue(true);
-
-      (
-        getCoreSystemPromptAsync as Mock<typeof getCoreSystemPromptAsync>
-      ).mockResolvedValue('prompt body with new memory');
-
-      await client.updateSystemInstruction();
-
-      expect(getEnabledToolNamesForPrompt).toHaveBeenCalled();
-      expect(shouldIncludeSubagentDelegationForConfig).toHaveBeenCalledWith(
-        expect.anything(),
-        ['tool_a'],
-      );
-      expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
-        expect.objectContaining({
-          userMemory: 'new memory',
-          model: 'test-model',
-          tools: ['tool_a'],
-          includeSubagentDelegation: true,
-        }),
-      );
-      expect(setSystemInstruction).toHaveBeenCalledWith(
-        expect.stringContaining('prompt body with new memory'),
-      );
-      expect(estimateTokensForText).toHaveBeenCalledWith(
-        expect.any(String),
-        'test-model',
-      );
-      expect(setBaseTokenOffset).toHaveBeenCalledWith(321);
-    });
-
-    it('passes non-empty coreMemory to getCoreSystemPromptAsync', async () => {
-      const setSystemInstruction = vi.fn();
-      const estimateTokensForText = vi.fn().mockResolvedValue(100);
-      const setBaseTokenOffset = vi.fn();
-      const getHistoryService = vi.fn().mockReturnValue({
-        estimateTokensForText,
-        setBaseTokenOffset,
-      });
-
-      const mockChat = {
-        setSystemInstruction,
-        getHistoryService,
-      };
-
-      client['chat'] = mockChat as unknown as ChatSession;
-      client['contentGenerator'] = {
-        countTokens: vi.fn(),
-      } as unknown as ContentGenerator;
-
-      const config = client['config'] as unknown as {
-        getUserMemory: () => string;
-        getCoreMemory: () => string;
-      };
-      vi.spyOn(config, 'getUserMemory').mockReturnValue('');
-      vi.spyOn(config, 'getCoreMemory').mockReturnValue(
-        'Always respond in JSON',
-      );
-
-      (
-        getEnabledToolNamesForPrompt as Mock<
-          typeof getEnabledToolNamesForPrompt
-        >
-      ).mockReturnValue([]);
-      (
-        shouldIncludeSubagentDelegationForConfig as Mock<
-          typeof shouldIncludeSubagentDelegationForConfig
-        >
-      ).mockResolvedValue(false);
-
-      (
-        getCoreSystemPromptAsync as Mock<typeof getCoreSystemPromptAsync>
-      ).mockResolvedValue('prompt with core directives');
-
-      await client.updateSystemInstruction();
-
-      expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
-        expect.objectContaining({
-          coreMemory: 'Always respond in JSON',
-        }),
-      );
-    });
-
-    it('appends JIT subdirectory memory to userMemory', async () => {
-      const setSystemInstruction = vi.fn();
-      const estimateTokensForText = vi.fn().mockResolvedValue(100);
-      const setBaseTokenOffset = vi.fn();
-      const getHistoryService = vi.fn().mockReturnValue({
-        estimateTokensForText,
-        setBaseTokenOffset,
-      });
-
-      const mockChat = {
-        setSystemInstruction,
-        getHistoryService,
-      };
-
-      client['chat'] = mockChat as unknown as ChatSession;
-      client['contentGenerator'] = {
-        countTokens: vi.fn(),
-      } as unknown as ContentGenerator;
-
-      const config = client['config'] as unknown as {
-        getUserMemory: () => string;
-        getCoreMemory: () => string;
-        getJitMemoryForPath: (path: string) => Promise<string>;
-        getWorkingDir: () => string;
-      };
-      vi.spyOn(config, 'getUserMemory').mockReturnValue('base memory');
-      vi.spyOn(config, 'getCoreMemory').mockReturnValue('');
-      vi.spyOn(config, 'getJitMemoryForPath').mockResolvedValue(
-        `--- JIT Context from: sub/LLXPRT.md ---
+async function prepareUpdateInstruction3(): Promise<(typeof client)['config']> {
+  const config = prepareJitInstruction(
+    `--- JIT Context from: sub/LLXPRT.md ---
 sub memory
 --- End of JIT Context from: sub/LLXPRT.md ---`,
-      );
-      vi.spyOn(config, 'getWorkingDir').mockReturnValue('/test/dir');
+    'prompt with jit',
+  );
+  await client.updateSystemInstruction();
+  return config;
+}
 
-      (
-        getEnabledToolNamesForPrompt as Mock<
-          typeof getEnabledToolNamesForPrompt
-        >
-      ).mockReturnValue([]);
-      (
-        shouldIncludeSubagentDelegationForConfig as Mock<
-          typeof shouldIncludeSubagentDelegationForConfig
-        >
-      ).mockResolvedValue(false);
+async function prepareUpdateInstruction4(): Promise<void> {
+  prepareJitInstruction('', 'prompt no jit');
+  await client.updateSystemInstruction();
+}
 
-      (
-        getCoreSystemPromptAsync as Mock<typeof getCoreSystemPromptAsync>
-      ).mockResolvedValue('prompt with jit');
+async function prepareUpdateInstruction5(): Promise<{
+  estimateTokensForText: ReturnType<typeof vi.fn>;
+}> {
+  const { estimateTokensForText } = prepareInstructionChat(100);
+  // runtimeState.model is 'test-model' (from setup), but the live config
+  // returns a different model after a profile or provider switch.
+  const config = client['config'];
+  vi.spyOn(config, 'getUserMemory').mockReturnValue('memory');
+  vi.spyOn(config, 'getModel').mockReturnValue('glm-5.2');
+  prepareInstructionPrompt([], false, 'prompt with live model');
+  await client.updateSystemInstruction();
+  return { estimateTokensForText };
+}
 
-      await client.updateSystemInstruction();
+async function prepareUpdateInstruction6(): Promise<void> {
+  prepareInstructionChat(0);
+  const config = client['config'];
+  vi.spyOn(config, 'getModel').mockReturnValue('');
+}
 
-      expect(config.getJitMemoryForPath).toHaveBeenCalledWith('/test/dir');
-      expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
-        expect.objectContaining({
-          userMemory: expect.stringContaining('base memory'),
-        }),
-      );
-      expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
-        expect.objectContaining({
-          userMemory: expect.stringContaining('sub memory'),
-        }),
-      );
-    });
-
-    it('does not modify userMemory when JIT returns empty', async () => {
-      const setSystemInstruction = vi.fn();
-      const estimateTokensForText = vi.fn().mockResolvedValue(100);
-      const setBaseTokenOffset = vi.fn();
-      const getHistoryService = vi.fn().mockReturnValue({
-        estimateTokensForText,
-        setBaseTokenOffset,
-      });
-
-      const mockChat = {
-        setSystemInstruction,
-        getHistoryService,
-      };
-
-      client['chat'] = mockChat as unknown as ChatSession;
-      client['contentGenerator'] = {
-        countTokens: vi.fn(),
-      } as unknown as ContentGenerator;
-
-      const config = client['config'] as unknown as {
-        getUserMemory: () => string;
-        getCoreMemory: () => string;
-        getJitMemoryForPath: (path: string) => Promise<string>;
-        getWorkingDir: () => string;
-      };
-      vi.spyOn(config, 'getUserMemory').mockReturnValue('base memory');
-      vi.spyOn(config, 'getCoreMemory').mockReturnValue('');
-      vi.spyOn(config, 'getJitMemoryForPath').mockResolvedValue('');
-      vi.spyOn(config, 'getWorkingDir').mockReturnValue('/test/dir');
-
-      (
-        getEnabledToolNamesForPrompt as Mock<
-          typeof getEnabledToolNamesForPrompt
-        >
-      ).mockReturnValue([]);
-      (
-        shouldIncludeSubagentDelegationForConfig as Mock<
-          typeof shouldIncludeSubagentDelegationForConfig
-        >
-      ).mockResolvedValue(false);
-
-      (
-        getCoreSystemPromptAsync as Mock<typeof getCoreSystemPromptAsync>
-      ).mockResolvedValue('prompt no jit');
-
-      await client.updateSystemInstruction();
-
-      expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
-        expect.objectContaining({
-          userMemory: 'base memory',
-        }),
-      );
-    });
-
-    it('uses config.getModel() for the system prompt, not the stale runtimeState snapshot (issue #3138)', async () => {
-      const setSystemInstruction = vi.fn();
-      const estimateTokensForText = vi.fn().mockResolvedValue(100);
-      const setBaseTokenOffset = vi.fn();
-      const getHistoryService = vi.fn().mockReturnValue({
-        estimateTokensForText,
-        setBaseTokenOffset,
-      });
-
-      const mockChat = {
-        setSystemInstruction,
-        getHistoryService,
-      };
-
-      client['chat'] = mockChat as unknown as ChatSession;
-      client['contentGenerator'] = {
-        countTokens: vi.fn(),
-      } as unknown as ContentGenerator;
-
-      // runtimeState.model is 'test-model' (from setup), but the live config
-      // returns a different model after a profile or provider switch.
-      const config = client['config'] as unknown as {
-        getModel: () => string;
-        getUserMemory: () => string;
-      };
-      vi.spyOn(config, 'getUserMemory').mockReturnValue('memory');
-      vi.spyOn(config, 'getModel').mockReturnValue('glm-5.2');
-
-      (
-        getEnabledToolNamesForPrompt as Mock<
-          typeof getEnabledToolNamesForPrompt
-        >
-      ).mockReturnValue([]);
-      (
-        shouldIncludeSubagentDelegationForConfig as Mock<
-          typeof shouldIncludeSubagentDelegationForConfig
-        >
-      ).mockResolvedValue(false);
-
-      (
-        getCoreSystemPromptAsync as Mock<typeof getCoreSystemPromptAsync>
-      ).mockResolvedValue('prompt with live model');
-
-      await client.updateSystemInstruction();
-
-      expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
-        expect.objectContaining({
-          model: 'glm-5.2',
-        }),
-      );
-      expect(estimateTokensForText).toHaveBeenCalledWith(
-        expect.any(String),
-        'glm-5.2',
-      );
-    });
-
-    it('throws when config has no model rather than substituting a vendor default (issue #3138)', async () => {
-      const mockChat = {
-        setSystemInstruction: vi.fn(),
-        getHistoryService: vi.fn().mockReturnValue({
-          estimateTokensForText: vi.fn().mockResolvedValue(0),
-          setBaseTokenOffset: vi.fn(),
-        }),
-      };
-
-      client['chat'] = mockChat as unknown as ChatSession;
-      client['contentGenerator'] = {
-        countTokens: vi.fn(),
-      } as unknown as ContentGenerator;
-
-      const config = client['config'] as unknown as {
-        getModel: () => string;
-      };
-      vi.spyOn(config, 'getModel').mockReturnValue('');
-
-      await expect(client.updateSystemInstruction()).rejects.toThrow(
-        /no model identity/i,
-      );
-    });
-  });
-
-  describe('generateJson', () => {
-    it('should call generateContent with the correct parameters', async () => {
-      const contents: IContent[] = [
-        { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
-      ];
-      const schema = { type: 'string' };
-      const abortSignal = new AbortController().signal;
-
-      // Mock lazyInitialize to prevent it from overriding our mock
-      client['lazyInitialize'] = vi.fn().mockResolvedValue(undefined);
-
-      const mockGenerator: Partial<ContentGenerator> = {
-        countTokens: vi.fn().mockResolvedValue({ totalTokens: 1 }),
-        generateContent: vi.fn().mockResolvedValue({
-          content: {
-            speaker: 'ai',
-            blocks: [{ type: 'text', text: '{"key": "value"}' }],
-          },
-        }),
-        generateContentStream: vi.fn(),
-        embedContent: vi.fn(),
-      };
-      client['contentGenerator'] = mockGenerator as ContentGenerator;
-
-      const result = await client.generateJson(
+async function prepareGenerateJson(
+  model: string,
+  customConfig?: { temperature: number; topK: number },
+): Promise<{
+  result: unknown;
+  mockGenerator: Partial<ContentGenerator>;
+  schema: { type: string };
+}> {
+  const contents: IContent[] = [
+    { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
+  ];
+  const schema = { type: 'string' };
+  const abortSignal = new AbortController().signal;
+  // Mock lazyInitialize to prevent it from overriding our mock
+  client['lazyInitialize'] = vi.fn().mockResolvedValue(undefined);
+  const mockGenerator: Partial<ContentGenerator> = {
+    countTokens: vi.fn().mockResolvedValue({ totalTokens: 1 }),
+    generateContent: vi.fn().mockResolvedValue({
+      content: {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: '{"key": "value"}' }],
+      },
+    }),
+    ...(customConfig
+      ? {}
+      : { generateContentStream: vi.fn(), embedContent: vi.fn() }),
+  };
+  client['contentGenerator'] = mockGenerator as ContentGenerator;
+  const result = customConfig
+    ? await client.generateJson(
         contents,
         schema,
         abortSignal,
-        'test-model',
-      );
-
-      // Check that generateJson returns the correct result
-      expect(result).toStrictEqual({ key: 'value' });
-
-      // Verify generateContent was called (now via BaseLLMClient)
-      expect(mockGenerator.generateContent).toHaveBeenCalledWith(
-        expect.objectContaining({
-          model: 'test-model',
-          settings: expect.objectContaining({
-            responseJsonSchema: schema,
-          }),
-          modelParams: expect.objectContaining({
-            responseMimeType: 'application/json',
-          }),
-        }),
-        'test-session-id',
-      );
-    });
-
-    it('should allow overriding model and config', async () => {
-      const contents: IContent[] = [
-        { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
-      ];
-      const schema = { type: 'string' };
-      const abortSignal = new AbortController().signal;
-      const customModel = 'custom-json-model';
-      const customConfig = { temperature: 0.9, topK: 20 };
-
-      // Mock lazyInitialize to prevent it from overriding our mock
-      client['lazyInitialize'] = vi.fn().mockResolvedValue(undefined);
-
-      const mockGenerator: Partial<ContentGenerator> = {
-        countTokens: vi.fn().mockResolvedValue({ totalTokens: 1 }),
-        generateContent: vi.fn().mockResolvedValue({
-          content: {
-            speaker: 'ai',
-            blocks: [{ type: 'text', text: '{"key": "value"}' }],
-          },
-        }),
-      };
-      client['contentGenerator'] = mockGenerator as ContentGenerator;
-
-      const result = await client.generateJson(
-        contents,
-        schema,
-        abortSignal,
-        customModel,
+        model,
         customConfig,
-      );
+      )
+    : await client.generateJson(contents, schema, abortSignal, model);
+  return { result, mockGenerator, schema };
+}
 
-      // Check that generateJson returns the correct result
-      expect(result).toStrictEqual({ key: 'value' });
-
-      // Verify generateContent was called with custom config (now via BaseLLMClient)
-      expect(mockGenerator.generateContent).toHaveBeenCalledWith(
-        expect.objectContaining({
-          model: customModel,
-          settings: expect.objectContaining({
-            temperature: 0.9,
-            responseJsonSchema: schema,
-          }),
-          modelParams: expect.objectContaining({
-            responseMimeType: 'application/json',
-          }),
-        }),
-        'test-session-id',
-      );
-    });
-
-    it('should not change models when consecutive 429 errors occur', async () => {
-      const { generatedErrorMessage, configInstance, retryErrorMessages } =
-        await observeNotChangeModelsWhenConsecutive429ErrorsOccur();
-      expect(generatedErrorMessage).toContain('Rate limited');
-      expect(retryErrorMessages[0]).toContain('Rate limited');
-      expect(retryErrorMessages[1]).toContain('Rate limited');
-      expect(configInstance.setModel).not.toHaveBeenCalled();
-      expect(configInstance.setFallbackMode).not.toHaveBeenCalled();
-    });
-
-    const observeNotChangeModelsWhenConsecutive429ErrorsOccur = async () => {
-      const error429 = new Error('Rate limited') as Error & { status?: number };
-      error429.status = 429;
-
-      mockGenerateContentFn.mockRejectedValue(error429);
-
-      const retrySpy = retryWithBackoff as Mock<typeof retryWithBackoff>;
-      const originalImpl = retrySpy.getMockImplementation();
-
-      const retryErrors: unknown[] = [];
-      retrySpy.mockImplementation(async (apiCall) => {
-        for (let attempt = 0; attempt < 2; attempt += 1) {
-          try {
-            await apiCall();
-          } catch (error: unknown) {
-            retryErrors.push(error);
-          }
-        }
-        throw error429;
-      });
-
-      const contents: IContent[] = [
-        { speaker: 'human', blocks: [{ type: 'text', text: 'throttle?' }] },
-      ];
-      const schema = { type: 'string' };
-      const abortSignal = new AbortController().signal;
-
-      const configInstance = client['config'] as unknown as {
-        setModel: ReturnType<typeof vi.fn>;
-        setFallbackMode: ReturnType<typeof vi.fn>;
-      };
-
-      let generatedError: unknown;
+async function observeNotChangeModelsWhenConsecutive429ErrorsOccur(): Promise<{
+  generatedErrorMessage: string;
+  configInstance: {
+    setModel: ReturnType<typeof vi.fn>;
+    setFallbackMode: ReturnType<typeof vi.fn>;
+  };
+  retryErrorMessages: string[];
+}> {
+  const error429 = new Error('Rate limited') as Error & { status?: number };
+  error429.status = 429;
+  mockGenerateContentFn.mockRejectedValue(error429);
+  const retrySpy = retryWithBackoff as Mock<typeof retryWithBackoff>;
+  const originalImpl = retrySpy.getMockImplementation();
+  const retryErrors: unknown[] = [];
+  retrySpy.mockImplementation(async (apiCall) => {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
-        await client.generateJson(contents, schema, abortSignal, 'test-model');
+        await apiCall();
       } catch (error: unknown) {
-        generatedError = error;
-      } finally {
-        retrySpy.mockImplementation(originalImpl ?? ((apiCall) => apiCall()));
+        retryErrors.push(error);
       }
-
-      const generatedErrorMessage =
-        generatedError instanceof Error
-          ? generatedError.message
-          : String(generatedError);
-      const retryErrorMessages = retryErrors.map((error) =>
-        error instanceof Error ? error.message : String(error),
-      );
-
-      return { generatedErrorMessage, configInstance, retryErrorMessages };
-    };
+    }
+    throw error429;
   });
+  const contents: IContent[] = [
+    { speaker: 'human', blocks: [{ type: 'text', text: 'throttle?' }] },
+  ];
+  const schema = { type: 'string' };
+  const abortSignal = new AbortController().signal;
+  const configInstance = client['config'] as unknown as {
+    setModel: ReturnType<typeof vi.fn>;
+    setFallbackMode: ReturnType<typeof vi.fn>;
+  };
+  let generatedError: unknown;
+  try {
+    await client.generateJson(contents, schema, abortSignal, 'test-model');
+  } catch (error: unknown) {
+    generatedError = error;
+  } finally {
+    retrySpy.mockImplementation(originalImpl ?? ((apiCall) => apiCall()));
+  }
 
-  // resetChat test deleted - new behavior preserves context between provider switches
-  // Only /clear command should clear context, not provider switching
+  const generatedErrorMessage =
+    generatedError instanceof Error
+      ? generatedError.message
+      : String(generatedError);
+  const retryErrorMessages = retryErrors.map((error) =>
+    error instanceof Error ? error.message : String(error),
+  );
+  return { generatedErrorMessage, configInstance, retryErrorMessages };
+}
 
+function registerAddHistoryTests(): void {
   describe('addHistory', () => {
     it('admits the provided content into the active chat', async () => {
       let admittedHistory: IContent[] = [];
@@ -820,24 +515,25 @@ sub memory
         },
       };
       client['chat'] = mockChat as ChatSession;
-
       const newContent: IContent = {
         speaker: 'human',
         blocks: [{ type: 'text', text: 'New history item' }],
       };
       await client.addHistory(newContent);
-
       expect(admittedHistory).toStrictEqual([newContent]);
     });
   });
+}
 
+function registerResetChatTests(): void {
   describe('resetChat', () => {
     it('clears history and keeps the active chat instance', async () => {
       let historyState: IContent[] = [];
       (client.getHistory as Mock<typeof client.getHistory>).mockImplementation(
-        () => Promise.resolve([...historyState]),
+        async function* () {
+          yield* historyState;
+        },
       );
-
       const activeChat = client.getChat();
       activeChat.admitAndAddHistory = async (content: IContent) => {
         historyState = [...historyState, content];
@@ -847,21 +543,24 @@ sub memory
       };
       activeChat.clearHistory = clearHistory;
       activeChat.getLastPromptTokenCount = () => 0;
-
       const oldContent: IContent = {
         speaker: 'human',
         blocks: [{ type: 'text', text: 'some old message' }],
       };
       await client.addHistory(oldContent);
-      expect(await client.getHistory()).toStrictEqual([oldContent]);
+      expect(await Array.fromAsync(client.getHistory())).toStrictEqual([
+        oldContent,
+      ]);
 
       await client.resetChat();
 
       expect(client.getChat().clearHistory).toBe(clearHistory);
-      expect(await client.getHistory()).toStrictEqual([]);
+      expect(await Array.fromAsync(client.getHistory())).toStrictEqual([]);
     });
   });
+}
 
+function registerRecordModelActivityTests(): void {
   describe('recordModelActivity', () => {
     it('only counts completed tool call responses toward reminders', () => {
       const svc = (
@@ -903,4 +602,207 @@ sub memory
       expect(svc.toolCallReminderLevel).toBe('base');
     });
   });
+}
+
+function expectJsonCall(
+  mockGenerator: Partial<ContentGenerator>,
+  model: string,
+  settings: { responseJsonSchema: { type: string }; temperature?: number },
+): void {
+  expect(mockGenerator.generateContent).toHaveBeenCalledWith(
+    expect.objectContaining({
+      model,
+      settings: expect.objectContaining(settings),
+      modelParams: expect.objectContaining({
+        responseMimeType: 'application/json',
+      }),
+    }),
+    'test-session-id',
+  );
+}
+
+function registerGenerateJsonTests(): void {
+  describe('generateJson', () => {
+    it('should call generateContent with the correct parameters', async () => {
+      const { result, mockGenerator, schema } =
+        await prepareGenerateJson('test-model');
+      expect(result).toStrictEqual({ key: 'value' });
+
+      // Verify generateContent was called (now via BaseLLMClient)
+      expectJsonCall(mockGenerator, 'test-model', {
+        responseJsonSchema: schema,
+      });
+    });
+    it('should allow overriding model and config', async () => {
+      const customModel = 'custom-json-model';
+      const { result, mockGenerator, schema } = await prepareGenerateJson(
+        customModel,
+        { temperature: 0.9, topK: 20 },
+      );
+      expect(result).toStrictEqual({ key: 'value' });
+
+      // Verify generateContent was called with custom config (now via BaseLLMClient)
+      expectJsonCall(mockGenerator, customModel, {
+        temperature: 0.9,
+        responseJsonSchema: schema,
+      });
+    });
+    it('should not change models when consecutive 429 errors occur', async () => {
+      const { generatedErrorMessage, configInstance, retryErrorMessages } =
+        await observeNotChangeModelsWhenConsecutive429ErrorsOccur();
+      expect(generatedErrorMessage).toContain('Rate limited');
+      expect(retryErrorMessages[0]).toContain('Rate limited');
+      expect(retryErrorMessages[1]).toContain('Rate limited');
+      expect(configInstance.setModel).not.toHaveBeenCalled();
+      expect(configInstance.setFallbackMode).not.toHaveBeenCalled();
+    });
+  });
+}
+
+function registerUpdateSystemInstructionTests(): void {
+  describe('updateSystemInstruction', () => {
+    it('updates chat system instruction and history token offset', async () => {
+      const {
+        setSystemInstruction,
+        estimateTokensForText,
+        setBaseTokenOffset,
+      } = await prepareUpdateInstruction1();
+      expect(getEnabledToolNamesForPrompt).toHaveBeenCalled();
+      expect(shouldIncludeSubagentDelegationForConfig).toHaveBeenCalledWith(
+        expect.anything(),
+        ['tool_a'],
+      );
+      expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userMemory: 'new memory',
+          model: 'test-model',
+          tools: ['tool_a'],
+          includeSubagentDelegation: true,
+        }),
+      );
+      expect(setSystemInstruction).toHaveBeenCalledWith(
+        expect.stringContaining('prompt body with new memory'),
+      );
+      expect(estimateTokensForText).toHaveBeenCalledWith(
+        expect.any(String),
+        'test-model',
+      );
+      expect(setBaseTokenOffset).toHaveBeenCalledWith(321);
+    });
+    it('passes non-empty coreMemory to getCoreSystemPromptAsync', async () => {
+      await prepareUpdateInstruction2();
+      expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          coreMemory: 'Always respond in JSON',
+        }),
+      );
+    });
+    it('appends JIT subdirectory memory to userMemory', async () => {
+      const config = await prepareUpdateInstruction3();
+      expect(config.getJitMemoryForPath).toHaveBeenCalledWith('/test/dir');
+      expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userMemory: expect.stringContaining('base memory'),
+        }),
+      );
+      expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userMemory: expect.stringContaining('sub memory'),
+        }),
+      );
+    });
+    it('does not modify userMemory when JIT returns empty', async () => {
+      await prepareUpdateInstruction4();
+      expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userMemory: 'base memory',
+        }),
+      );
+    });
+    it('uses config.getModel() for the system prompt, not the stale runtimeState snapshot (issue #3138)', async () => {
+      const { estimateTokensForText } = await prepareUpdateInstruction5();
+      expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: 'glm-5.2',
+        }),
+      );
+      expect(estimateTokensForText).toHaveBeenCalledWith(
+        expect.any(String),
+        'glm-5.2',
+      );
+    });
+    it('throws when config has no model rather than substituting a vendor default (issue #3138)', async () => {
+      await prepareUpdateInstruction6();
+      await expect(client.updateSystemInstruction()).rejects.toThrow(
+        /no model identity/i,
+      );
+    });
+  });
+}
+
+describe('AgentClient (client.ts)', () => {
+  afterAll(() => {
+    void vi.mock('./clientToolGovernance.js', () => realClientToolGovernance);
+    void vi.mock(
+      '@vybestack/llxprt-code-core/utils/retry.js',
+      () => realRetryModule,
+    );
+    void vi.mock('./turn', () => __actual);
+    void vi.mock(
+      '@vybestack/llxprt-code-core/core/tokenLimits.js',
+      () => actual4,
+    );
+    void vi.mock(
+      '@vybestack/llxprt-code-core/config/config.js',
+      () => realConfigModule,
+    );
+    void vi.mock('@vybestack/llxprt-code-tools', () => actual);
+  });
+
+  beforeEach(async () => {
+    const ctx = await setupAgentClient({
+      mockChatCreateFn,
+      mockGenerateContentFn,
+      mockEmbedContentFn,
+    });
+    client = ctx.client;
+
+    mockTodoStoreConstructor.mockImplementation(() => ({
+      readTodos: todoStoreReadMock,
+      readPausedState: todoStoreReadPausedMock,
+      writePausedState: todoStoreWritePausedMock,
+    }));
+    todoStoreReadMock.mockResolvedValue([]);
+    todoStoreReadPausedMock.mockResolvedValue(false);
+    todoStoreWritePausedMock.mockResolvedValue(undefined);
+
+    // Inject a mock content generator so embedding validation runs in BaseLLMClient
+    const mockContentGenerator = {
+      embedContent: vi
+        .fn()
+        .mockImplementation((opts: { texts: string[] }) =>
+          mockEmbedContentFn(opts),
+        ),
+      generateContentStream: vi.fn(),
+      generateContent: vi.fn(),
+    };
+    (client as unknown as { contentGenerator: unknown }).contentGenerator =
+      mockContentGenerator;
+  });
+
+  afterEach(async () => {
+    await client.dispose();
+    vi.restoreAllMocks();
+  });
+
+  registerGenerateEmbeddingTests();
+  registerUpdateSystemInstructionTests();
+  registerGenerateJsonTests();
+
+  // resetChat test deleted - new behavior preserves context between provider switches
+  // Only /clear command should clear context, not provider switching
+
+  registerAddHistoryTests();
+  registerResetChatTests();
+  registerRecordModelActivityTests();
 });

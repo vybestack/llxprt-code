@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+export { dumpRequestContextStream } from './dumpRequestContextStream.js';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { Storage } from '@vybestack/llxprt-code-settings';

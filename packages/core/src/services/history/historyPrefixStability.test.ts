@@ -1,3 +1,4 @@
+import { curatedHistoryForTest } from '../../test-utils/curated-history-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -76,7 +77,7 @@ function toolResponseMsg(callId: string, toolName: string): IContent {
 }
 
 function providerContent(hs: HistoryService): IContent[] {
-  return buildProviderContent(hs.getCurated(), [], logger);
+  return buildProviderContent(curatedHistoryForTest(hs), [], logger);
 }
 
 describe('B1: per-turn provider pipeline is prefix-stable under append (characterization)', () => {
@@ -153,7 +154,7 @@ describe('B3: curation is an identity map on any valid prefix (characterization)
       hs.add(textMsg('ai', `response ${i}`));
     }
 
-    const curated = hs.getCurated();
+    const curated = curatedHistoryForTest(hs);
     expect(curated.length).toBe(20);
 
     // Curation is an identity map on already-valid entries: re-curating a
@@ -167,7 +168,7 @@ describe('B3: curation is an identity map on any valid prefix (characterization)
       for (const entry of prefix) {
         reCurated.add(entry);
       }
-      const reCuratedOutput = reCurated.getCurated();
+      const reCuratedOutput = curatedHistoryForTest(reCurated);
 
       const serializedPrefix = serializeForCache(prefix);
       const serializedReCurated = serializeForCache(reCuratedOutput);
@@ -184,12 +185,12 @@ describe('B3: curation is an identity map on any valid prefix (characterization)
     hs.add(textMsg('human', 'first'));
     hs.add(textMsg('ai', 'reply'));
 
-    const before = hs.getCurated();
+    const before = curatedHistoryForTest(hs);
 
     hs.add(textMsg('human', 'second'));
     hs.add(textMsg('ai', 'reply2'));
 
-    const after = hs.getCurated();
+    const after = curatedHistoryForTest(hs);
     const serializedBefore = serializeForCache(before);
     const serializedAfter = serializeForCache(after);
 

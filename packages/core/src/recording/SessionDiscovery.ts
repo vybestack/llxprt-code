@@ -29,6 +29,9 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as readline from 'node:readline';
 import { readBoundedFirstLine } from './boundedHeaderReader.js';
+import { scanSessionMetadata } from './boundedSessionScan.js';
+import { readMetadataJsonLines } from './metadataJsonLines.js';
+import { MetadataJsonProjection } from './metadataJsonProjection.js';
 import {
   SESSION_TITLE_MAX_LENGTH,
   type ContinueResolution,
@@ -36,7 +39,8 @@ import {
   type SessionSummary,
   type SessionStartPayload,
 } from './types.js';
-import { readSessionHeader, replaySession } from './ReplayEngine.js';
+import { readSessionHeader } from './ReplayEngine.js';
+import type { JournalReadCounters } from './journalCounters.js';
 import {
   resumeSessionIndexOutOfRangeMessage,
   resumeSessionNotFoundMessage,
@@ -59,6 +63,24 @@ export interface SessionResolutionError {
 }
 
 /**
+ * Options for the bounded continue-target discovery pass (issue #854 P05d).
+ * The counters are optional; absent means uninstrumented.
+ */
+export interface BoundedDiscoveryOptions {
+  readonly counters?: JournalReadCounters;
+}
+
+/**
+ * Result shape shared with `listContinueTargetsDetailed` so pickers migrate
+ * by swapping the call name.
+ */
+export interface BoundedContinueTargets {
+  targets: ContinueTarget[];
+  skippedCount: number;
+  recordingErrors: readonly string[];
+}
+
+/**
  * Read the first line from a file using the canonical bounded header reader.
  *
  * This is the single shared reader used by session discovery, resume, and the
@@ -68,13 +90,24 @@ export interface SessionResolutionError {
  */
 export async function readFirstLineFromFile(
   filePath: string,
+  counters?: JournalReadCounters,
 ): Promise<SessionStartPayload | null> {
   const firstLine = await readBoundedFirstLine(filePath);
   if (firstLine === null || firstLine.trim() === '') return null;
   try {
-    const parsed = JSON.parse(firstLine) as Record<string, unknown>;
-    if (parsed.type !== 'session_start') return null;
+    const projection = new MetadataJsonProjection();
+    projection.push(firstLine);
+    const parsed = projection.finish();
+    counters?.recordDecoded();
     if (
+      typeof parsed !== 'object' ||
+      parsed === null ||
+      !('type' in parsed) ||
+      parsed.type !== 'session_start'
+    )
+      return null;
+    if (
+      !('payload' in parsed) ||
       parsed.payload === undefined ||
       parsed.payload === null ||
       typeof parsed.payload !== 'object'
@@ -146,11 +179,13 @@ export class SessionDiscovery {
     chatsDir: string,
     projectHash: string,
     mediaStore?: LocalMediaStore,
+    options: BoundedDiscoveryOptions = {},
   ): Promise<ContinueTarget[]> {
     const detailed = await this.listContinueTargetsDetailed(
       chatsDir,
       projectHash,
       mediaStore,
+      options,
     );
     if (detailed.recordingErrors.length > 0) {
       throw new Error(
@@ -163,70 +198,64 @@ export class SessionDiscovery {
   static async listContinueTargetsDetailed(
     chatsDir: string,
     projectHash: string,
-    mediaStore?: LocalMediaStore,
-  ): Promise<{
-    targets: ContinueTarget[];
-    skippedCount: number;
-    recordingErrors: readonly string[];
-  }> {
-    const detailed = await this.listSessionsDetailed(chatsDir, projectHash);
-    const sessionTargets: Array<ContinueTarget | null> = Array.from(
-      { length: detailed.sessions.length },
-      () => null,
+    _mediaStore?: LocalMediaStore,
+    options: BoundedDiscoveryOptions = {},
+  ): Promise<BoundedContinueTargets> {
+    return SessionDiscovery.listContinueTargetsDetailedBounded(
+      chatsDir,
+      projectHash,
+      options,
     );
-    const checkpointTargets: ContinueTarget[][] = Array.from(
-      { length: detailed.sessions.length },
-      () => [],
+  }
+
+  static async listContinueTargetsDetailedBounded(
+    chatsDir: string,
+    projectHash: string,
+    options: BoundedDiscoveryOptions = {},
+  ): Promise<BoundedContinueTargets> {
+    // Named-class call, not `this`: pickers and the test kit may extract and
+    // invoke this static unbound, so it must not depend on the receiver.
+    const detailed = await SessionDiscovery.listSessionsDetailed(
+      chatsDir,
+      projectHash,
+      options,
     );
-    const recordingErrors: Array<string | null> = Array.from(
-      { length: detailed.sessions.length },
-      () => null,
-    );
-    let nextIndex = 0;
+    const targets: ContinueTarget[] = [];
+    const checkpoints: ContinueTarget[] = [];
+    const recordingErrors: string[] = [];
     let skippedCount = detailed.skippedCount;
-    const worker = async (): Promise<void> => {
-      while (nextIndex < detailed.sessions.length) {
-        const index = nextIndex;
-        nextIndex += 1;
-        const summary = detailed.sessions[index];
-        const replay = await replaySession(summary.filePath, projectHash, {
-          mediaStore,
-        });
-        if (!replay.ok || replay.sequenceCorrupt) {
-          const detail = replay.ok ? 'non-monotonic sequences' : replay.error;
-          debugLogger.debug(
-            `Skipping unreadable session recording ${summary.filePath}: ${detail}`,
-          );
-          recordingErrors[index] = `${summary.filePath}: ${detail}`;
-          skippedCount += 1;
-          continue;
-        }
-        const namedSummary = { ...summary, name: replay.sessionName };
-        sessionTargets[index] = { kind: 'session', session: namedSummary };
-        checkpointTargets[index] = (replay.checkpoints ?? [])
-          .filter((checkpoint) => !checkpoint.deleted)
-          .map((checkpoint) => ({
-            kind: 'checkpoint',
-            source: namedSummary,
-            checkpointId: checkpoint.checkpointId,
-            checkpointName: checkpoint.name,
-            sequence: checkpoint.sequence,
-          }));
+    for (const summary of detailed.sessions) {
+      const scan = await scanSessionMetadata(
+        summary.filePath,
+        projectHash,
+        options.counters ?? null,
+      );
+      if (!scan.ok || scan.sequenceCorrupt) {
+        const detail = scan.ok ? 'non-monotonic sequences' : scan.error;
+        debugLogger.debug(
+          `Skipping unreadable session recording ${summary.filePath}: ${detail}`,
+        );
+        recordingErrors.push(`${summary.filePath}: ${detail}`);
+        skippedCount += 1;
+        continue;
       }
-    };
-    const workerCount = Math.min(8, detailed.sessions.length);
-    await Promise.all(Array.from({ length: workerCount }, worker));
+      const namedSummary = { ...summary, name: scan.sessionName };
+      targets.push({ kind: 'session', session: namedSummary });
+      for (const checkpoint of scan.checkpoints) {
+        if (checkpoint.deleted) continue;
+        checkpoints.push({
+          kind: 'checkpoint',
+          source: namedSummary,
+          checkpointId: checkpoint.checkpointId,
+          checkpointName: checkpoint.name,
+          sequence: checkpoint.sequence,
+        });
+      }
+    }
     return {
-      targets: [
-        ...sessionTargets.filter(
-          (target): target is ContinueTarget => target !== null,
-        ),
-        ...checkpointTargets.flat(),
-      ],
+      targets: [...targets, ...checkpoints],
       skippedCount,
-      recordingErrors: recordingErrors.filter(
-        (error): error is string => error !== null,
-      ),
+      recordingErrors,
     };
   }
 
@@ -369,6 +398,7 @@ export class SessionDiscovery {
   static async listSessionsDetailed(
     chatsDir: string,
     projectHash: string,
+    options: BoundedDiscoveryOptions = {},
   ): Promise<{ sessions: SessionSummary[]; skippedCount: number }> {
     let entries: string[];
     try {
@@ -389,7 +419,7 @@ export class SessionDiscovery {
 
     for (const fileName of sessionFiles) {
       const filePath = path.join(chatsDir, fileName);
-      const summary = await readSessionSummary(filePath);
+      const summary = await readSessionSummary(filePath, options.counters);
       // Same subagent filter as listSessions, applied BEFORE the sort so
       // continue targets and the checkpoints folded through them can never
       // resolve to a child journal (#854 P05c). Children are healthy files,
@@ -420,10 +450,22 @@ export class SessionDiscovery {
    * Check if a session file contains any content events (user or assistant messages).
    * Returns false for non-existent files, empty files, or files with only session_start.
    */
-  static async hasContentEvents(filePath: string): Promise<boolean> {
+  static async hasContentEvents(
+    filePath: string,
+    counters?: JournalReadCounters,
+  ): Promise<boolean> {
     try {
-      const fileContent = await fs.readFile(filePath, 'utf-8');
-      return fileContent.split('\n').some((line) => isContentEventLine(line));
+      for await (const line of readMetadataJsonLines(filePath)) {
+        if (line.parsed === null) continue;
+        counters?.recordDecoded();
+        if (
+          typeof line.parsed === 'object' &&
+          'type' in line.parsed &&
+          line.parsed.type === 'content'
+        )
+          return true;
+      }
+      return false;
     } catch {
       return false;
     }
@@ -498,6 +540,7 @@ export class SessionDiscovery {
 
 async function readSessionSummary(
   filePath: string,
+  counters?: JournalReadCounters,
 ): Promise<SessionSummary | null> {
   let stat: Awaited<ReturnType<typeof fs.stat>>;
   try {
@@ -506,7 +549,7 @@ async function readSessionSummary(
     return null;
   }
 
-  const header = await readFirstLineFromFile(filePath);
+  const header = await readFirstLineFromFile(filePath, counters);
   if (header === null) {
     return null;
   }
@@ -527,18 +570,6 @@ async function readSessionSummary(
       ? { createdAt: header.startTime }
       : {}),
   };
-}
-
-function isContentEventLine(line: string): boolean {
-  if (!line.trim()) {
-    return false;
-  }
-  try {
-    const event = JSON.parse(line) as Record<string, unknown>;
-    return event.type === 'content';
-  } catch {
-    return false;
-  }
 }
 
 function extractUserMessageText(line: string): string | null {

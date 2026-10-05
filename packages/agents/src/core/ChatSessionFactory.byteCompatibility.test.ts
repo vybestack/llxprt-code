@@ -26,6 +26,9 @@ import path from 'node:path';
 // Only clientToolGovernance is substituted: it is infrastructure that is
 // identical for both the production builder and the legacy reference, so it
 // cannot mask a memory-derivation divergence.
+const realClientToolGovernance = {
+  ...(await import('./clientToolGovernance.js')),
+};
 void vi.mock('./clientToolGovernance.js', () => ({
   getToolGovernanceEphemerals: vi.fn().mockReturnValue(undefined),
   getEnabledToolNamesForPrompt: vi.fn().mockReturnValue([]),
@@ -231,6 +234,7 @@ describe('buildSystemInstruction byte-for-byte compatibility with pre-change mai
   });
 
   afterAll(() => {
+    void vi.mock('./clientToolGovernance.js', () => realClientToolGovernance);
     if (originalPromptsDir === undefined) {
       delete process.env.LLXPRT_PROMPTS_DIR;
     } else {

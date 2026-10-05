@@ -136,9 +136,10 @@ function createMockHistoryService(): HistoryService {
     getHistory: vi.fn().mockResolvedValue([]),
     addToHistory: vi.fn(),
     add: vi.fn(),
-    getAll: vi.fn().mockReturnValue([]),
     getCurated: vi.fn().mockReturnValue([]),
-    getCuratedForProvider: vi.fn().mockReturnValue([]),
+    async *getCuratedForProviderStream() {
+      yield* [];
+    },
     clear: vi.fn(),
     generateTurnKey: vi.fn().mockReturnValue('test-turn-key'),
     getIdGeneratorCallback: vi.fn().mockReturnValue(() => 'test-id'),
@@ -157,56 +158,9 @@ describe('ChatSession - Runtime State Integration', () => {
    * Test: ChatSession constructor accepts runtime state
    */
   describe('Constructor Integration', () => {
-    it('should accept AgentRuntimeState as first parameter', () => {
-      // @plan PLAN-20251027-STATELESS5.P09
-      // @requirement REQ-STAT5-004.1
-      // @pseudocode gemini-runtime.md lines 204-220
+    it('should accept AgentRuntimeState as first parameter', facadeCallback0);
 
-      const runtimeState = createTestRuntimeState();
-      const config = createTestConfig();
-      const contentGenerator = createMockContentGenerator();
-      const historyService = createMockHistoryService();
-      const view = createTestRuntimeContext(
-        runtimeState,
-        config,
-        historyService,
-      );
-
-      // Phase 6: Use AgentRuntimeContext constructor
-      expect(() => {
-        new ChatSession(
-          view,
-          contentGenerator,
-          { systemInstruction: 'test' },
-          [],
-        );
-      }).not.toThrow();
-    });
-
-    it('should accept provider context parameter', () => {
-      // @plan PLAN-20251027-STATELESS5.P09
-      // @requirement REQ-STAT5-004.1
-      // @pseudocode gemini-runtime.md lines 197-217
-
-      const runtimeState = createTestRuntimeState();
-      const config = createTestConfig();
-      const contentGenerator = createMockContentGenerator();
-      const historyService = createMockHistoryService();
-      const view = createTestRuntimeContext(
-        runtimeState,
-        config,
-        historyService,
-      );
-      // Phase 7: Constructor relies solely on AgentRuntimeContext
-      expect(() => {
-        new ChatSession(
-          view,
-          contentGenerator,
-          { systemInstruction: 'test' },
-          [],
-        );
-      }).not.toThrow();
-    });
+    it('should accept provider context parameter', facadeCallback0);
   });
 
   /**
@@ -216,126 +170,13 @@ describe('ChatSession - Runtime State Integration', () => {
    * Test: ChatSession uses runtime state for provider calls
    */
   describe('Runtime State Usage in Provider Calls', () => {
-    it('should use provider from runtime state not Config', async () => {
-      // @plan PLAN-20251027-STATELESS5.P09
-      // @requirement REQ-STAT5-004.1
+    it('should use provider from runtime state not Config', facadeCallback2);
 
-      const runtimeState = createTestRuntimeState({
-        provider: 'gemini', // Runtime state says gemini
-      });
-      const config = createTestConfig();
-      config.setProvider('openai'); // Config says openai (wrong!)
+    it('should use model from runtime state not Config', facadeCallback3);
 
-      const contentGenerator = createMockContentGenerator();
-      const historyService = createMockHistoryService();
-      const view = createTestRuntimeContext(
-        runtimeState,
-        config,
-        historyService,
-      );
+    it('should use runtime state over Config defaults', facadeCallback4);
 
-      const chat = new ChatSession(
-        view,
-        contentGenerator,
-        { systemInstruction: 'test' },
-        [],
-      );
-
-      // When sending a message, should use 'gemini' from runtime state
-      expect(chat['runtimeState']).toBeDefined();
-      expect(chat['runtimeState'].provider).toBe('gemini');
-    });
-
-    it('should use model from runtime state not Config', async () => {
-      // @plan PLAN-20251027-STATELESS5.P09
-      // @requirement REQ-STAT5-004.1
-
-      const runtimeState = createTestRuntimeState({
-        model: 'gemini-2.0-flash', // Runtime state model
-      });
-      const config = createTestConfig();
-      config.setModel('gemini-1.5-pro'); // Config model (wrong!)
-
-      const contentGenerator = createMockContentGenerator();
-      const historyService = createMockHistoryService();
-      const view = createTestRuntimeContext(
-        runtimeState,
-        config,
-        historyService,
-      );
-
-      const chat = new ChatSession(
-        view,
-        contentGenerator,
-        { systemInstruction: 'test' },
-        [],
-      );
-
-      // Should use model from runtime state
-      expect(chat['runtimeState']).toBeDefined();
-      expect(chat['runtimeState'].model).toBe('gemini-2.0-flash');
-    });
-
-    it('should use runtime state over Config defaults', async () => {
-      // @plan PLAN-20251027-STATELESS5.P09
-      // @requirement REQ-STAT5-004.1
-
-      const runtimeState = createTestRuntimeState({
-        model: 'runtime-model',
-      });
-      const config = createTestConfig();
-
-      const contentGenerator = createMockContentGenerator();
-      const historyService = createMockHistoryService();
-      const view = createTestRuntimeContext(
-        runtimeState,
-        config,
-        historyService,
-      );
-
-      const chat = new ChatSession(
-        view,
-        contentGenerator,
-        { systemInstruction: 'test' },
-        [],
-      );
-
-      // Should use values from runtime state
-      expect(chat['runtimeState']).toBeDefined();
-      expect(chat['runtimeState'].model).toBe('runtime-model');
-    });
-
-    it('should use baseUrl from runtime state not Config', async () => {
-      // @plan PLAN-20251027-STATELESS5.P09
-      // @requirement REQ-STAT5-004.1
-
-      const runtimeState = createTestRuntimeState({
-        baseUrl: 'https://runtime.api.example.com', // Runtime state base URL
-      });
-      const config = createTestConfig();
-      // Config has different base URL (via constructor defaults)
-
-      const contentGenerator = createMockContentGenerator();
-      const historyService = createMockHistoryService();
-      const view = createTestRuntimeContext(
-        runtimeState,
-        config,
-        historyService,
-      );
-
-      const chat = new ChatSession(
-        view,
-        contentGenerator,
-        { systemInstruction: 'test' },
-        [],
-      );
-
-      // Should use baseUrl from runtime state
-      expect(chat['runtimeState']).toBeDefined();
-      expect(chat['runtimeState'].baseUrl).toBe(
-        'https://runtime.api.example.com',
-      );
-    });
+    it('should use baseUrl from runtime state not Config', facadeCallback5);
   });
 
   /**
@@ -346,57 +187,12 @@ describe('ChatSession - Runtime State Integration', () => {
    * Test: HistoryService injection remains explicit
    */
   describe('HistoryService Injection', () => {
-    it('should accept and use injected HistoryService', async () => {
-      // @plan PLAN-20251027-STATELESS5.P09
-      // @requirement REQ-STAT5-004.1
-      // @pseudocode gemini-runtime.md lines 189-196
+    it('should accept and use injected HistoryService', facadeCallback6);
 
-      const runtimeState = createTestRuntimeState();
-      const config = createTestConfig();
-      const contentGenerator = createMockContentGenerator();
-      const historyService = createMockHistoryService();
-      const view = createTestRuntimeContext(
-        runtimeState,
-        config,
-        historyService,
-      );
-
-      const chat = new ChatSession(
-        view,
-        contentGenerator,
-        { systemInstruction: 'test' },
-        [],
-      );
-
-      // Chat should use the injected history service
-      expect(chat['historyService']).toBe(historyService);
-    });
-
-    it('should not create its own HistoryService when one is injected', async () => {
-      // @plan PLAN-20251027-STATELESS5.P09
-      // @requirement REQ-STAT5-004.1
-
-      const runtimeState = createTestRuntimeState();
-      const config = createTestConfig();
-      const contentGenerator = createMockContentGenerator();
-      const historyService = createMockHistoryService();
-      const view = createTestRuntimeContext(
-        runtimeState,
-        config,
-        historyService,
-      );
-
-      const chat = new ChatSession(
-        view,
-        contentGenerator,
-        { systemInstruction: 'test' },
-        [],
-      );
-
-      // Should not create a second history service
-      // This tests that we properly reuse the injected instance
-      expect(chat['historyService']).toBe(historyService);
-    });
+    it(
+      'should not create its own HistoryService when one is injected',
+      facadeCallback6,
+    );
   });
 
   /**
@@ -406,60 +202,9 @@ describe('ChatSession - Runtime State Integration', () => {
    * Test: Runtime context data flows correctly
    */
   describe('Provider Runtime Context', () => {
-    it('should receive runtime context with state + settings', () => {
-      // @plan PLAN-20251027-STATELESS5.P09
-      // @requirement REQ-STAT5-004.1
-      // @pseudocode gemini-runtime.md lines 197-217
+    it('should receive runtime context with state + settings', facadeCallback8);
 
-      const runtimeState = createTestRuntimeState();
-      const config = createTestConfig();
-      const contentGenerator = createMockContentGenerator();
-      const historyService = createMockHistoryService();
-      const view = createTestRuntimeContext(
-        runtimeState,
-        config,
-        historyService,
-      );
-      const chat = new ChatSession(
-        view,
-        contentGenerator,
-        { systemInstruction: 'test' },
-        [],
-      );
-      expect(chat).toBeInstanceOf(ChatSession);
-    });
-
-    it('should use provider context for metadata, not Config', () => {
-      // @plan PLAN-20251027-STATELESS5.P09
-      // @requirement REQ-STAT5-004.1
-
-      const runtimeState = createTestRuntimeState({
-        provider: 'gemini',
-        model: 'gemini-2.0-flash',
-      });
-      const config = createTestConfig();
-      config.setProvider('openai'); // Wrong!
-      config.setModel('gpt-4'); // Wrong!
-
-      const contentGenerator = createMockContentGenerator();
-      const historyService = createMockHistoryService();
-      const view = createTestRuntimeContext(
-        runtimeState,
-        config,
-        historyService,
-      );
-      const chat = new ChatSession(
-        view,
-        contentGenerator,
-        { systemInstruction: 'test' },
-        [],
-      );
-
-      // Should use runtime state from provided AgentRuntimeContext, not Config
-      expect(chat['runtimeState']).toBeDefined();
-      expect(chat['runtimeState'].provider).toBe('gemini');
-      expect(chat['runtimeState'].model).toBe('gemini-2.0-flash');
-    });
+    it('should use provider context for metadata, not Config', facadeCallback9);
   });
 
   /**
@@ -469,66 +214,247 @@ describe('ChatSession - Runtime State Integration', () => {
    * Test: Config only used for ephemeral settings passthrough
    */
   describe('Config Usage Restrictions', () => {
-    it('should not read provider from Config when runtime state provided', () => {
-      // @plan PLAN-20251027-STATELESS5.P09
-      // @requirement REQ-STAT5-004.1
+    it(
+      'should not read provider from Config when runtime state provided',
+      facadeCallback10,
+    );
 
-      const runtimeState = createTestRuntimeState();
-      const config = createTestConfig();
-      const contentGenerator = createMockContentGenerator();
-      const historyService = createMockHistoryService();
-      const view = createTestRuntimeContext(
-        runtimeState,
-        config,
-        historyService,
-      );
-
-      const getProviderSpy = vi.spyOn(config, 'getProvider');
-
-      new ChatSession(
-        view,
-        contentGenerator,
-        { systemInstruction: 'test' },
-        [],
-      );
-
-      // ChatSession should NOT call getProvider when runtime state is provided
-      // Note: getModel() may still be called as a fallback in line 425 of chatSession.ts
-      // but the result won't be used if runtimeState.model is present
-      expect(getProviderSpy).not.toHaveBeenCalled();
-    });
-
-    it('should only use Config for ephemeral settings (tools, user memory, etc)', () => {
-      // @plan PLAN-20251027-STATELESS5.P09
-      // @requirement REQ-STAT5-004.1
-      // @pseudocode gemini-runtime.md lines 166-174
-
-      const runtimeState = createTestRuntimeState();
-      const config = createTestConfig();
-      const contentGenerator = createMockContentGenerator();
-      const historyService = createMockHistoryService();
-      const view = createTestRuntimeContext(
-        runtimeState,
-        config,
-        historyService,
-      );
-
-      const _getToolRegistrySpy = vi.spyOn(config, 'getToolRegistry');
-      const _getUserMemorySpy = vi.spyOn(config, 'getUserMemory');
-
-      new ChatSession(
-        view,
-        contentGenerator,
-        { systemInstruction: 'test' },
-        [],
-      );
-
-      // ChatSession CAN call these Config methods (ephemeral settings)
-      // This tests that we maintain backward compatibility for non-migrated settings
-      // These calls are OK in Phase 5
-      expect(true).toBe(true); // This test documents acceptable Config usage
-      void _getToolRegistrySpy;
-      void _getUserMemorySpy;
-    });
+    it(
+      'should only use Config for ephemeral settings (tools, user memory, etc)',
+      facadeCallback11,
+    );
   });
 });
+
+function facadeCallback0(): void {
+  // @plan PLAN-20251027-STATELESS5.P09
+  // @requirement REQ-STAT5-004.1
+  // @pseudocode gemini-runtime.md lines 204-220
+
+  const runtimeState = createTestRuntimeState();
+  const config = createTestConfig();
+  const contentGenerator = createMockContentGenerator();
+  const historyService = createMockHistoryService();
+  const view = createTestRuntimeContext(runtimeState, config, historyService);
+
+  // Phase 6: Use AgentRuntimeContext constructor
+  expect(() => {
+    new ChatSession(view, contentGenerator, { systemInstruction: 'test' }, []);
+  }).not.toThrow();
+}
+
+async function facadeCallback2(): Promise<void> {
+  // @plan PLAN-20251027-STATELESS5.P09
+  // @requirement REQ-STAT5-004.1
+
+  const runtimeState = createTestRuntimeState({
+    provider: 'gemini', // Runtime state says gemini
+  });
+  const config = createTestConfig();
+  config.setProvider('openai'); // Config says openai (wrong!)
+
+  const contentGenerator = createMockContentGenerator();
+  const historyService = createMockHistoryService();
+  const view = createTestRuntimeContext(runtimeState, config, historyService);
+
+  const chat = new ChatSession(
+    view,
+    contentGenerator,
+    { systemInstruction: 'test' },
+    [],
+  );
+
+  // When sending a message, should use 'gemini' from runtime state
+  expect(chat['runtimeState']).toBeDefined();
+  expect(chat['runtimeState'].provider).toBe('gemini');
+}
+
+async function facadeCallback3(): Promise<void> {
+  // @plan PLAN-20251027-STATELESS5.P09
+  // @requirement REQ-STAT5-004.1
+
+  const runtimeState = createTestRuntimeState({
+    model: 'gemini-2.0-flash', // Runtime state model
+  });
+  const config = createTestConfig();
+  config.setModel('gemini-1.5-pro'); // Config model (wrong!)
+
+  const contentGenerator = createMockContentGenerator();
+  const historyService = createMockHistoryService();
+  const view = createTestRuntimeContext(runtimeState, config, historyService);
+
+  const chat = new ChatSession(
+    view,
+    contentGenerator,
+    { systemInstruction: 'test' },
+    [],
+  );
+
+  // Should use model from runtime state
+  expect(chat['runtimeState']).toBeDefined();
+  expect(chat['runtimeState'].model).toBe('gemini-2.0-flash');
+}
+
+async function facadeCallback4(): Promise<void> {
+  // @plan PLAN-20251027-STATELESS5.P09
+  // @requirement REQ-STAT5-004.1
+
+  const runtimeState = createTestRuntimeState({
+    model: 'runtime-model',
+  });
+  const config = createTestConfig();
+
+  const contentGenerator = createMockContentGenerator();
+  const historyService = createMockHistoryService();
+  const view = createTestRuntimeContext(runtimeState, config, historyService);
+
+  const chat = new ChatSession(
+    view,
+    contentGenerator,
+    { systemInstruction: 'test' },
+    [],
+  );
+
+  // Should use values from runtime state
+  expect(chat['runtimeState']).toBeDefined();
+  expect(chat['runtimeState'].model).toBe('runtime-model');
+}
+
+async function facadeCallback5(): Promise<void> {
+  // @plan PLAN-20251027-STATELESS5.P09
+  // @requirement REQ-STAT5-004.1
+
+  const runtimeState = createTestRuntimeState({
+    baseUrl: 'https://runtime.api.example.com', // Runtime state base URL
+  });
+  const config = createTestConfig();
+  // Config has different base URL (via constructor defaults)
+
+  const contentGenerator = createMockContentGenerator();
+  const historyService = createMockHistoryService();
+  const view = createTestRuntimeContext(runtimeState, config, historyService);
+
+  const chat = new ChatSession(
+    view,
+    contentGenerator,
+    { systemInstruction: 'test' },
+    [],
+  );
+
+  // Should use baseUrl from runtime state
+  expect(chat['runtimeState']).toBeDefined();
+  expect(chat['runtimeState'].baseUrl).toBe('https://runtime.api.example.com');
+}
+
+async function facadeCallback6(): Promise<void> {
+  // @plan PLAN-20251027-STATELESS5.P09
+  // @requirement REQ-STAT5-004.1
+  // @pseudocode gemini-runtime.md lines 189-196
+
+  const runtimeState = createTestRuntimeState();
+  const config = createTestConfig();
+  const contentGenerator = createMockContentGenerator();
+  const historyService = createMockHistoryService();
+  const view = createTestRuntimeContext(runtimeState, config, historyService);
+
+  const chat = new ChatSession(
+    view,
+    contentGenerator,
+    { systemInstruction: 'test' },
+    [],
+  );
+
+  // Chat should use the injected history service
+  expect(chat['historyService']).toBe(historyService);
+}
+
+function facadeCallback8(): void {
+  // @plan PLAN-20251027-STATELESS5.P09
+  // @requirement REQ-STAT5-004.1
+  // @pseudocode gemini-runtime.md lines 197-217
+
+  const runtimeState = createTestRuntimeState();
+  const config = createTestConfig();
+  const contentGenerator = createMockContentGenerator();
+  const historyService = createMockHistoryService();
+  const view = createTestRuntimeContext(runtimeState, config, historyService);
+  const chat = new ChatSession(
+    view,
+    contentGenerator,
+    { systemInstruction: 'test' },
+    [],
+  );
+  expect(chat).toBeInstanceOf(ChatSession);
+}
+
+function facadeCallback9(): void {
+  // @plan PLAN-20251027-STATELESS5.P09
+  // @requirement REQ-STAT5-004.1
+
+  const runtimeState = createTestRuntimeState({
+    provider: 'gemini',
+    model: 'gemini-2.0-flash',
+  });
+  const config = createTestConfig();
+  config.setProvider('openai'); // Wrong!
+  config.setModel('gpt-4'); // Wrong!
+
+  const contentGenerator = createMockContentGenerator();
+  const historyService = createMockHistoryService();
+  const view = createTestRuntimeContext(runtimeState, config, historyService);
+  const chat = new ChatSession(
+    view,
+    contentGenerator,
+    { systemInstruction: 'test' },
+    [],
+  );
+
+  // Should use runtime state from provided AgentRuntimeContext, not Config
+  expect(chat['runtimeState']).toBeDefined();
+  expect(chat['runtimeState'].provider).toBe('gemini');
+  expect(chat['runtimeState'].model).toBe('gemini-2.0-flash');
+}
+
+function facadeCallback10(): void {
+  // @plan PLAN-20251027-STATELESS5.P09
+  // @requirement REQ-STAT5-004.1
+
+  const runtimeState = createTestRuntimeState();
+  const config = createTestConfig();
+  const contentGenerator = createMockContentGenerator();
+  const historyService = createMockHistoryService();
+  const view = createTestRuntimeContext(runtimeState, config, historyService);
+
+  const getProviderSpy = vi.spyOn(config, 'getProvider');
+
+  new ChatSession(view, contentGenerator, { systemInstruction: 'test' }, []);
+
+  // ChatSession should NOT call getProvider when runtime state is provided
+  // Note: getModel() may still be called as a fallback in line 425 of chatSession.ts
+  // but the result won't be used if runtimeState.model is present
+  expect(getProviderSpy).not.toHaveBeenCalled();
+}
+
+function facadeCallback11(): void {
+  // @plan PLAN-20251027-STATELESS5.P09
+  // @requirement REQ-STAT5-004.1
+  // @pseudocode gemini-runtime.md lines 166-174
+
+  const runtimeState = createTestRuntimeState();
+  const config = createTestConfig();
+  const contentGenerator = createMockContentGenerator();
+  const historyService = createMockHistoryService();
+  const view = createTestRuntimeContext(runtimeState, config, historyService);
+
+  const _getToolRegistrySpy = vi.spyOn(config, 'getToolRegistry');
+  const _getUserMemorySpy = vi.spyOn(config, 'getUserMemory');
+
+  new ChatSession(view, contentGenerator, { systemInstruction: 'test' }, []);
+
+  // ChatSession CAN call these Config methods (ephemeral settings)
+  // This tests that we maintain backward compatibility for non-migrated settings
+  // These calls are OK in Phase 5
+  expect(true).toBe(true); // This test documents acceptable Config usage
+  void _getToolRegistrySpy;
+  void _getUserMemorySpy;
+}

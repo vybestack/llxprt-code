@@ -1,3 +1,4 @@
+import { collectRows } from './p05dTestKit.js';
 /**
  * Copyright 2025 Vybestack LLC
  *
@@ -169,23 +170,36 @@ function makeResumeRequest(
 // Test suite
 // ---------------------------------------------------------------------------
 
-describe('integration: full session recording lifecycle', () => {
-  let tempDir: string;
-  let chatsDir: string;
+function createTestDirectory(setPaths?: (chatsDir: string) => void): {
+  setup: () => Promise<void>;
+  cleanup: () => Promise<void>;
+} {
+  let tempDir = '';
+  let chatsDir = '';
+  return {
+    setup: async () => {
+      tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'integration-test-'));
+      chatsDir = path.join(tempDir, 'chats');
+      await fs.mkdir(chatsDir, { recursive: true });
+      setPaths?.(chatsDir);
+    },
+    cleanup: async () => {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    },
+  };
+}
 
-  beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'integration-test-'));
-    chatsDir = path.join(tempDir, 'chats');
-    await fs.mkdir(chatsDir, { recursive: true });
+// =========================================================================
+// Test 1: Full session lifecycle — record → flush → dispose → replay
+// @plan PLAN-20260211-SESSIONRECORDING.P25
+
+describe('integration: full session recording lifecycle / recording and resume', () => {
+  let chatsDir = '';
+  const fixture = createTestDirectory((dir) => {
+    chatsDir = dir;
   });
-
-  afterEach(async () => {
-    await fs.rm(tempDir, { recursive: true, force: true });
-  });
-
-  // =========================================================================
-  // Test 1: Full session lifecycle — record → flush → dispose → replay
-  // @plan PLAN-20260211-SESSIONRECORDING.P25
+  beforeEach(fixture.setup);
+  afterEach(fixture.cleanup);
 
   it('1: records 3 turns (6 content) → replays 6 IContent items', async () => {
     const contents: IContent[] = [
@@ -252,12 +266,21 @@ describe('integration: full session recording lifecycle', () => {
       'turn5-a',
     );
   });
+});
 
-  // =========================================================================
-  // Test 3: Sequence numbers continuous across resume boundary
-  // @plan PLAN-20260211-SESSIONRECORDING.P25
-  // @requirement REQ-INT-FULL-003
-  // =========================================================================
+// =========================================================================
+// Test 3: Sequence numbers continuous across resume boundary
+// @plan PLAN-20260211-SESSIONRECORDING.P25
+// @requirement REQ-INT-FULL-003
+// =========================================================================
+describe('integration: full session recording lifecycle / sequence and compression', () => {
+  let chatsDir = '';
+  const fixture = createTestDirectory((dir) => {
+    chatsDir = dir;
+  });
+  beforeEach(fixture.setup);
+  afterEach(fixture.cleanup);
+
   it('3: seq numbers are monotonic across resume boundary', async () => {
     const initial: IContent[] = [
       makeContent('m1', 'human'),
@@ -328,12 +351,21 @@ describe('integration: full session recording lifecycle', () => {
       'post-2',
     );
   });
+});
 
-  // =========================================================================
-  // Test 5: Rewind roundtrip
-  // @plan PLAN-20260211-SESSIONRECORDING.P25
-  // @requirement REQ-INT-FULL-001
-  // =========================================================================
+// =========================================================================
+// Test 5: Rewind roundtrip
+// @plan PLAN-20260211-SESSIONRECORDING.P25
+// @requirement REQ-INT-FULL-001
+// =========================================================================
+describe('integration: full session recording lifecycle / rewind and metadata changes', () => {
+  let chatsDir = '';
+  const fixture = createTestDirectory((dir) => {
+    chatsDir = dir;
+  });
+  beforeEach(fixture.setup);
+  afterEach(fixture.cleanup);
+
   it('5: record 5, rewind 2 → replay shows 3', async () => {
     const sid = crypto.randomUUID();
     const svc = new SessionRecordingService(
@@ -410,12 +442,21 @@ describe('integration: full session recording lifecycle', () => {
       '/new/dir-b',
     ]);
   });
+});
 
-  // =========================================================================
-  // Test 8: Deferred materialization — no content = no file
-  // @plan PLAN-20260211-SESSIONRECORDING.P25
-  // @requirement REQ-INT-FULL-001
-  // =========================================================================
+// =========================================================================
+// Test 8: Deferred materialization — no content = no file
+// @plan PLAN-20260211-SESSIONRECORDING.P25
+// @requirement REQ-INT-FULL-001
+// =========================================================================
+describe('integration: full session recording lifecycle / materialization and discovery', () => {
+  let chatsDir = '';
+  const fixture = createTestDirectory((dir) => {
+    chatsDir = dir;
+  });
+  beforeEach(fixture.setup);
+  afterEach(fixture.cleanup);
+
   it('8: no content events → no file on disk', async () => {
     const svc = new SessionRecordingService(makeConfig(chatsDir));
     // Only non-content events
@@ -478,15 +519,24 @@ describe('integration: full session recording lifecycle', () => {
 
     // Should be the most recently created session
     expect(result.metadata.sessionId).toBe(sessions[2].sessionId);
-    expect(result.history).toHaveLength(2);
+    expect(await collectRows(result.boot)).toHaveLength(2);
     await result.recording.dispose();
   });
+});
 
-  // =========================================================================
-  // Test 11: Resume by specific session ID
-  // @plan PLAN-20260211-SESSIONRECORDING.P25
-  // @requirement REQ-INT-FULL-002
-  // =========================================================================
+// =========================================================================
+// Test 11: Resume by specific session ID
+// @plan PLAN-20260211-SESSIONRECORDING.P25
+// @requirement REQ-INT-FULL-002
+// =========================================================================
+describe('integration: full session recording lifecycle / resume selection, deletion, and locking', () => {
+  let chatsDir = '';
+  const fixture = createTestDirectory((dir) => {
+    chatsDir = dir;
+  });
+  beforeEach(fixture.setup);
+  afterEach(fixture.cleanup);
+
   it('11: resume specific session by ID → correct one', async () => {
     const { sessionId: sid1 } = await createAndRecordSession(chatsDir, {
       contents: [makeContent('first-session', 'human')],
@@ -499,10 +549,12 @@ describe('integration: full session recording lifecycle', () => {
     const result = await resumeSession(makeResumeRequest(chatsDir, sid1));
     assertReplayOk(result);
     expect(result.metadata.sessionId).toBe(sid1);
-    expect(result.history).toHaveLength(1);
-    expect((result.history[0].blocks[0] as { text: string }).text).toBe(
-      'first-session',
-    );
+    const history = await collectRows(result.boot);
+    expect(history).toHaveLength(1);
+    expect(history[0].blocks[0]).toStrictEqual({
+      type: 'text',
+      text: 'first-session',
+    });
     void result.recording.dispose();
   });
 
@@ -547,12 +599,17 @@ describe('integration: full session recording lifecycle', () => {
 
     void result1.recording.dispose();
   });
+});
 
-  // =========================================================================
-  // Test 14: Config.getContinueSessionRef with string value
-  // @plan PLAN-20260211-SESSIONRECORDING.P25
-  // @requirement REQ-INT-FULL-005
-  // =========================================================================
+// =========================================================================
+// Test 14: Config.getContinueSessionRef with string value
+// @plan PLAN-20260211-SESSIONRECORDING.P25
+// @requirement REQ-INT-FULL-005
+// =========================================================================
+describe('integration: full session recording lifecycle / continue session references', () => {
+  const fixture = createTestDirectory();
+  beforeEach(fixture.setup);
+  afterEach(fixture.cleanup);
   it('14: getContinueSessionRef returns string session ref', async () => {
     // We test the logic directly — the Config class constructor has too many
     // dependencies to instantiate in an integration test. Instead we test the
@@ -587,7 +644,7 @@ describe('integration: full session recording lifecycle', () => {
     const isContinueFalse = !!continueSessionFalse;
     expect(isContinueFalse).toBe(false);
   });
-
-  // =========================================================================
-  // Property-Based Tests (17-23)
 });
+
+// =========================================================================
+// Property-Based Tests (17-23)

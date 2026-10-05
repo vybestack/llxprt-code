@@ -11,12 +11,38 @@
  * would be wrong in all four situations.
  */
 
-import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
+import {
+  afterAll,
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  type Mock,
+} from 'bun:test';
+
+const realChatSessionModule = { ...(await import('./chatSession.js')) };
+const realHistoryServiceModule = {
+  ...(await import(
+    '@vybestack/llxprt-code-core/services/history/HistoryService.js'
+  )),
+};
+const realEnvironmentContextModule = {
+  ...(await import('@vybestack/llxprt-code-core/utils/environmentContext.js')),
+};
+const realProviderRuntimeContextModule = {
+  ...(await import(
+    '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js'
+  )),
+};
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('core system prompt'),
 }));
 
+const realClientToolGovernance = {
+  ...(await import('./clientToolGovernance.js')),
+};
 void vi.mock('./clientToolGovernance.js', () => ({
   getToolGovernanceEphemerals: vi.fn().mockReturnValue(undefined),
   getEnabledToolNamesForPrompt: vi.fn().mockReturnValue(['tool_a', 'tool_b']),
@@ -71,7 +97,6 @@ void vi.mock(
       resetTokenAccounting: vi.fn(),
       recalculateTotalTokens: vi.fn().mockResolvedValue(undefined),
       isEmpty: vi.fn().mockReturnValue(true),
-      getAll: vi.fn().mockReturnValue([]),
     })),
   }),
 );
@@ -139,6 +164,23 @@ function makeTodoContinuationService(): TodoContinuationService {
 }
 
 describe('createChatSession transcript path wiring (#2933)', () => {
+  afterAll(() => {
+    void vi.mock('./clientToolGovernance.js', () => realClientToolGovernance);
+    void vi.mock('./chatSession.js', () => realChatSessionModule);
+    void vi.mock(
+      '@vybestack/llxprt-code-core/services/history/HistoryService.js',
+      () => realHistoryServiceModule,
+    );
+    void vi.mock(
+      '@vybestack/llxprt-code-core/utils/environmentContext.js',
+      () => realEnvironmentContextModule,
+    );
+    void vi.mock(
+      '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js',
+      () => realProviderRuntimeContextModule,
+    );
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
   });

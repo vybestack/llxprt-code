@@ -28,6 +28,7 @@
  * unchanged and are the regression fence for that boundary.
  */
 
+import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-core/test-utils/collect-rows-for-assertions.js';
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { ChatSession } from './chatSession.js';
 import type { StreamEvent } from './chatSession.js';
@@ -559,57 +560,52 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
   });
 
   it('records only the successful attempt in history after a discard-and-restart', async () => {
-    const { attempt, events, ai, aiText } =
-      await observeRecordsOnlyTheSuccessfulAttemptInHistoryAfterADiscardAndRestart();
-    expect(attempt).toBe(2);
-    expect(events.some((event) => event.type === 'retry')).toBe(true);
-    expect(ai).toHaveLength(1);
-    expect(aiText).toBe('recovered response');
-    expect(aiText).not.toContain('partial');
-  });
-
-  const observeRecordsOnlyTheSuccessfulAttemptInHistoryAfterADiscardAndRestart =
-    async () => {
-      const history = new HistoryService();
-      let attempt = 0;
-      const generateChatCompletionMock = vi.fn(async function* (
-        _options: GenerateChatOptions,
-      ) {
-        attempt++;
-        if (attempt === 1) {
-          yield {
-            speaker: 'ai',
-            blocks: [{ type: 'text', text: 'partial' }],
-          };
-          throw createConnectionError();
-        }
+    const history = new HistoryService();
+    let attempt = 0;
+    const generateChatCompletionMock = vi.fn(async function* (
+      _options: GenerateChatOptions,
+    ) {
+      attempt++;
+      if (attempt === 1) {
         yield {
           speaker: 'ai',
-          blocks: [{ type: 'text', text: 'recovered response' }],
+          blocks: [{ type: 'text', text: 'partial' }],
         };
-      });
-      registerProvider(generateChatCompletionMock);
+        throw createConnectionError();
+      }
+      yield {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'recovered response' }],
+      };
+    });
+    registerProvider(generateChatCompletionMock);
 
-      const chat = buildChatSession(history);
+    const chat = buildChatSession(history);
 
-      const stream = await chat.sendMessageStream(
-        { message: 'history-safety trigger' },
-        'prompt-issue-2150-history-safety',
-      );
+    const stream = await chat.sendMessageStream(
+      { message: 'history-safety trigger' },
+      'prompt-issue-2150-history-safety',
+    );
 
-      const events = await collectEvents(stream);
+    const events = await collectEvents(stream);
 
-      await chat.waitForIdle();
+    await chat.waitForIdle();
 
-      const ai = history.getAll().filter((content) => content.speaker === 'ai');
+    await withRows(history.streamRawHistory(), (rows) => {
+      const ai = rows.filter((content) => content.speaker === 'ai');
 
       const aiText = ai[0].blocks
         .filter((block) => block.type === 'text')
         .map((block) => (block as { text: string }).text)
         .join('');
 
-      return { attempt, events, ai, aiText };
-    };
+      expect(attempt).toBe(2);
+      expect(events.some((event) => event.type === 'retry')).toBe(true);
+      expect(ai).toHaveLength(1);
+      expect(aiText).toBe('recovered response');
+      expect(aiText).not.toContain('partial');
+    });
+  });
 
   it('does not retry InvalidStreamError after a chunk was already emitted', async () => {
     const { stream, observation } =

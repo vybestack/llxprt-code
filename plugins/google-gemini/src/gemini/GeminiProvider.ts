@@ -46,7 +46,8 @@ import {
   type NonOAuthContentGenerator,
 } from './geminiGenerationExecution.js';
 import { requireAssembledSystemInstruction } from '@vybestack/llxprt-code-providers/utils/systemPromptPlacement.js';
-import { buildGeminiDumpContents } from './geminiDumpConversion.js';
+import { buildGeminiDumpContentsStream } from './geminiDumpConversion.js';
+import type { HistoryDumpSource } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { ToolOutputSettingsProvider } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import {
   finishMediaRequest,
@@ -122,12 +123,14 @@ export class GeminiProvider extends BaseProvider {
    * dump from the runtime provider instance without the base package ever
    * importing plugin-owned code (#2763).
    */
-  buildContextDumpBody(
-    history: IContent[],
+  readonly contextDumpVersion = 2;
+
+  async buildContextDumpBody(
+    history: HistoryDumpSource,
     model?: string,
     config?: ToolOutputSettingsProvider,
-  ): Record<string, unknown> {
-    const contents = buildGeminiDumpContents(history, model, config);
+  ): Promise<Record<string, unknown>> {
+    const contents = buildGeminiDumpContentsStream(history, model, config);
     return model ? { model, contents } : { contents };
   }
 

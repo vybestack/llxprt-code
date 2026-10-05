@@ -10,7 +10,7 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
-import { describe, it, expect, beforeEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import type { IContent, Config } from '@vybestack/llxprt-code-core';
 import { testRegex } from '../../test-utils/regex.js';
 import type {
@@ -86,7 +86,7 @@ function createMockProvider(name: string): IProvider {
       },
     ]),
     async *generateChatCompletion(
-      _optionsOrMessages: GenerateChatOptions | IContent[],
+      _optionsOrMessages: GenerateChatOptions | AsyncIterable<IContent>,
       _tools?: ProviderToolset,
     ) {
       // Simulate provider-specific response patterns
@@ -135,6 +135,12 @@ function createMockProvider(name: string): IProvider {
       .fn()
       .mockReturnValue(name === 'anthropic' ? 'xml' : 'json'),
   };
+}
+
+async function* toStream(
+  messages: readonly IContent[],
+): AsyncIterableIterator<IContent> {
+  yield* messages;
 }
 
 async function consumeAsyncIterable<T>(
@@ -276,7 +282,7 @@ class MockLoggingProviderWrapper implements LoggingProviderWrapper {
     // Stream response from wrapped provider
     const responseChunks: unknown[] = [];
     for await (const chunk of this.provider.generateChatCompletion(
-      messages,
+      toStream(messages),
       tools,
     )) {
       responseChunks.push(chunk);
@@ -325,19 +331,30 @@ function createConfigWithLogging(enabled: boolean): Config {
   } as Config;
 }
 
-describe('Multi-Provider Conversation Logging Integration', () => {
-  let providerManager: MockProviderManager;
-  let redactor: ConversationDataRedactor;
-  let storage: MockConversationStorage;
-  let config: Config;
+let providerManager: MockProviderManager;
+let redactor: ConversationDataRedactor;
+let storage: MockConversationStorage;
+let config: Config;
 
-  beforeEach(() => {
-    vi.clearAllMocks();
-    providerManager = new MockProviderManager();
-    redactor = new MockConversationDataRedactor();
-    storage = new MockConversationStorage();
-    config = createConfigWithLogging(true);
-  });
+function resetIntegrationFixture(): void {
+  vi.clearAllMocks();
+  providerManager = new MockProviderManager();
+  redactor = new MockConversationDataRedactor();
+  storage = new MockConversationStorage();
+  config = createConfigWithLogging(true);
+}
+
+function wrapProvider(provider: IProvider): MockLoggingProviderWrapper {
+  return new MockLoggingProviderWrapper(provider, config, redactor, storage);
+}
+
+function restoreIntegrationMocks(): void {
+  vi.restoreAllMocks();
+}
+
+describe('Multi-Provider Conversation Logging Integration: switches', () => {
+  beforeEach(resetIntegrationFixture);
+  afterEach(restoreIntegrationMocks);
 
   /**
    * @requirement INTEGRATION-001: Cross-provider conversation logging
@@ -358,24 +375,9 @@ describe('Multi-Provider Conversation Logging Integration', () => {
     providerManager.registerProvider(geminiProvider);
 
     // Wrap each provider with logging
-    const openaiWrapper = new MockLoggingProviderWrapper(
-      openaiProvider,
-      config,
-      redactor,
-      storage,
-    );
-    const anthropicWrapper = new MockLoggingProviderWrapper(
-      anthropicProvider,
-      config,
-      redactor,
-      storage,
-    );
-    const geminiWrapper = new MockLoggingProviderWrapper(
-      geminiProvider,
-      config,
-      redactor,
-      storage,
-    );
+    const openaiWrapper = wrapProvider(openaiProvider);
+    const anthropicWrapper = wrapProvider(anthropicProvider);
+    const geminiWrapper = wrapProvider(geminiProvider);
 
     // Simulate conversation flow with provider switches
     providerManager.setActiveProvider('openai');
@@ -439,7 +441,11 @@ describe('Multi-Provider Conversation Logging Integration', () => {
       }),
     );
   });
+});
 
+describe('Multi-Provider Conversation Logging Integration: tools', () => {
+  beforeEach(resetIntegrationFixture);
+  afterEach(restoreIntegrationMocks);
   /**
    * @requirement INTEGRATION-002: Tool usage logging across providers
    * @scenario Different providers with different tool formats
@@ -531,7 +537,11 @@ describe('Multi-Provider Conversation Logging Integration', () => {
       expect.objectContaining({ has_tools: true }),
     );
   });
+});
 
+describe('Multi-Provider Conversation Logging Integration: streaming', () => {
+  beforeEach(resetIntegrationFixture);
+  afterEach(restoreIntegrationMocks);
   /**
    * @requirement INTEGRATION-003: Streaming response logging
    * @scenario Providers with different streaming patterns
@@ -623,7 +633,11 @@ describe('Multi-Provider Conversation Logging Integration', () => {
       expect.objectContaining({ response_chunks: 3 }),
     );
   });
+});
 
+describe('Multi-Provider Conversation Logging Integration: errors', () => {
+  beforeEach(resetIntegrationFixture);
+  afterEach(restoreIntegrationMocks);
   /**
    * @requirement INTEGRATION-004: Error handling across providers
    * @scenario Provider errors during logged conversations
@@ -683,7 +697,11 @@ describe('Multi-Provider Conversation Logging Integration', () => {
     // Verify that at least the request was logged for error provider
     expect(telemetrySystem.logConversationRequest).toHaveBeenCalledTimes(2);
   });
+});
 
+describe('Multi-Provider Conversation Logging Integration: concurrent', () => {
+  beforeEach(resetIntegrationFixture);
+  afterEach(restoreIntegrationMocks);
   /**
    * @requirement INTEGRATION-005: Concurrent provider operations
    * @scenario Multiple providers handling conversations simultaneously
@@ -739,7 +757,11 @@ describe('Multi-Provider Conversation Logging Integration', () => {
     expect(telemetrySystem.logConversationRequest).toHaveBeenCalledTimes(3);
     expect(telemetrySystem.logConversationComplete).toHaveBeenCalledTimes(3);
   });
+});
 
+describe('Multi-Provider Conversation Logging Integration: redaction', () => {
+  beforeEach(resetIntegrationFixture);
+  afterEach(restoreIntegrationMocks);
   /**
    * @requirement INTEGRATION-006: Provider-specific data redaction
    * @scenario Different providers with provider-specific sensitive data
@@ -811,7 +833,11 @@ describe('Multi-Provider Conversation Logging Integration', () => {
       expect(textContent).not.toContain('AIza');
     });
   });
+});
 
+describe('Multi-Provider Conversation Logging Integration: continuity', () => {
+  beforeEach(resetIntegrationFixture);
+  afterEach(restoreIntegrationMocks);
   /**
    * @requirement INTEGRATION-007: Session continuity across providers
    * @scenario Long conversation session with multiple provider switches

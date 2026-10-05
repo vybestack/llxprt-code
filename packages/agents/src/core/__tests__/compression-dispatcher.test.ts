@@ -1,9 +1,9 @@
+import { curatedHistoryForTest } from '../../../../core/src/test-utils/curated-history-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
 /**
  * @plan PLAN-20260211-COMPRESSION.P13
  * @requirement REQ-CS-006.1, REQ-CS-006.2, REQ-CS-006.3, REQ-CS-006.4
@@ -15,7 +15,6 @@
  * These tests are written TDD-style: they WILL FAIL until P14 refactors
  * performCompression() to use the strategy pattern via the factory.
  */
-
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { ChatSession } from '../chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -28,7 +27,6 @@ import type { CompressionContext } from '@vybestack/llxprt-code-core/core/compre
 import { triggerPreCompressHook } from '@vybestack/llxprt-code-core/core/lifecycleHookTriggers.js';
 import { PreCompressTrigger } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
-
 // Mock the lifecycle hook triggers
 void vi.mock(
   '@vybestack/llxprt-code-core/core/lifecycleHookTriggers.js',
@@ -36,29 +34,24 @@ void vi.mock(
     triggerPreCompressHook: vi.fn().mockResolvedValue(undefined),
   }),
 );
-
 // ---------------------------------------------------------------------------
 // Message helpers (same pattern as sandwich-compression.test.ts)
 // ---------------------------------------------------------------------------
-
 function createUserMessage(text: string): IContent {
   return {
     speaker: 'human',
     blocks: [{ type: 'text' as const, text }],
   };
 }
-
 function createAiTextMessage(text: string): IContent {
   return {
     speaker: 'ai',
     blocks: [{ type: 'text' as const, text }],
   };
 }
-
 // ---------------------------------------------------------------------------
 // Test helpers
 // ---------------------------------------------------------------------------
-
 function buildRuntimeContext(
   historyService: HistoryService,
   overrides: {
@@ -72,23 +65,19 @@ function buildRuntimeContext(
     model: 'test-model',
     sessionId: 'test-session',
   });
-
   const mockProviderAdapter = {
     getActiveProvider: vi.fn(() => ({
       name: 'test-provider',
       generateChatCompletion: vi.fn(),
     })),
   };
-
   const mockTelemetryAdapter = {
     recordTokenUsage: vi.fn(),
     recordEvent: vi.fn(),
   };
-
   const mockToolsView = {
     getToolRegistry: vi.fn(() => undefined),
   };
-
   return createAgentRuntimeContext({
     state: runtimeState,
     history: historyService,
@@ -110,7 +99,6 @@ function buildRuntimeContext(
     },
   });
 }
-
 function buildMockContentGenerator(): ContentGenerator {
   return {
     generateContent: vi.fn(),
@@ -119,7 +107,6 @@ function buildMockContentGenerator(): ContentGenerator {
     embedContent: vi.fn(),
   } as unknown as ContentGenerator;
 }
-
 function buildMockProvider(summaryText: string) {
   return {
     name: 'test-provider',
@@ -131,7 +118,6 @@ function buildMockProvider(summaryText: string) {
     }),
   };
 }
-
 /**
  * Populate history with enough messages to guarantee compression will occur.
  * With default thresholds (topPreserve=0.2, bottomPreserve=0.3) and 40
@@ -143,512 +129,453 @@ function populateHistory(historyService: HistoryService, count = 20): void {
     historyService.add(createAiTextMessage(`AI response ${i}`));
   }
 }
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
-describe('Compression Dispatcher Integration (P13)', () => {
-  let historyService: HistoryService;
-  let mockContentGenerator: ContentGenerator;
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    historyService = new HistoryService();
-    mockContentGenerator = buildMockContentGenerator();
+async function legacyTest0() {
+  const { hasSummary, finalHistory, messageCountBefore, hasAck } =
+    await legacySuite2_observeUseTopDownTruncationWhenCompressionStrategyIsTopDownTruncation();
+  expect(hasSummary).toBe(false);
+  expect(finalHistory.length).toBeLessThan(messageCountBefore);
+  expect(hasAck).toBe(false);
+}
+async function legacyTest1() {
+  const { hasSummary, hasAck } =
+    await legacySuite3_observeUseMiddleOutDefaultWhenCompressionStrategyIsMiddleOut();
+  expect(hasSummary).toBe(true);
+  expect(hasAck).toBe(true);
+}
+async function legacyTest2() {
+  const { hasSummary } =
+    await legacySuite4_observeDefaultToMiddleOutWhenNoStrategyIsExplicitlySet();
+  expect(hasSummary).toBe(true);
+}
+const legacySuite2_observeUseTopDownTruncationWhenCompressionStrategyIsTopDownTruncation =
+  async () => {
+    const runtimeContext = buildRuntimeContext(legacySuite0_historyService, {
+      compressionStrategy: 'top-down-truncation',
+    });
+    populateHistory(legacySuite0_historyService);
+    const messageCountBefore = curatedHistoryForTest(
+      legacySuite0_historyService,
+    ).length;
+    const chat = new ChatSession(
+      runtimeContext,
+      legacySuite1_mockContentGenerator,
+      {},
+      [],
+    );
+    // top-down-truncation needs currentTokenCount above the target threshold
+    // to actually truncate. Mock getTotalTokens to simulate token pressure.
+    vi.spyOn(legacySuite0_historyService, 'getTotalTokens').mockReturnValue(
+      100000,
+    );
+    const mockProvider = buildMockProvider('should-not-appear');
+    vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
+      mockProvider as never,
+    );
+    vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
+    await chat.performCompression('test-prompt-id');
+    const finalHistory = curatedHistoryForTest(legacySuite0_historyService);
+    // Top-down truncation should NOT produce any state_snapshot summary
+    const hasSummary = finalHistory.some((msg) =>
+      msg.blocks.some(
+        (b) => b.type === 'text' && b.text.includes('state_snapshot'),
+      ),
+    );
+    // History should be shorter (messages were truncated from the top)
+    // All surviving messages should be originals (no synthetic ack message)
+    const hasAck = finalHistory.some((msg) =>
+      msg.blocks.some(
+        (b) =>
+          b.type === 'text' &&
+          b.text.includes('Understood.') &&
+          b.text.includes('Continuing with the current task.'),
+      ),
+    );
+    return { hasSummary, finalHistory, messageCountBefore, hasAck };
+  };
+const legacySuite3_observeUseMiddleOutDefaultWhenCompressionStrategyIsMiddleOut =
+  async () => {
+    const runtimeContext = buildRuntimeContext(legacySuite0_historyService, {
+      compressionStrategy: 'middle-out',
+    });
+    populateHistory(legacySuite0_historyService);
+    const chat = new ChatSession(
+      runtimeContext,
+      legacySuite1_mockContentGenerator,
+      {},
+      [],
+    );
+    const summaryText =
+      '<state_snapshot><overall_goal>Test goal</overall_goal></state_snapshot>';
+    const mockProvider = buildMockProvider(summaryText);
+    vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
+      mockProvider as never,
+    );
+    vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
+    await chat.performCompression('test-prompt-id');
+    const finalHistory = curatedHistoryForTest(legacySuite0_historyService);
+    // Middle-out SHOULD produce a state_snapshot summary
+    const hasSummary = finalHistory.some((msg) =>
+      msg.blocks.some(
+        (b) => b.type === 'text' && b.text.includes('state_snapshot'),
+      ),
+    );
+    // Should have the acknowledgment message
+    const hasAck = finalHistory.some((msg) =>
+      msg.blocks.some(
+        (b) =>
+          b.type === 'text' &&
+          b.text.includes('Understood.') &&
+          b.text.includes('Continuing with the current task.'),
+      ),
+    );
+    return { hasSummary, hasAck };
+  };
+const legacySuite4_observeDefaultToMiddleOutWhenNoStrategyIsExplicitlySet =
+  async () => {
+    // No compressionStrategy override — relies on registry default
+    const runtimeContext = buildRuntimeContext(legacySuite0_historyService);
+    populateHistory(legacySuite0_historyService);
+    const chat = new ChatSession(
+      runtimeContext,
+      legacySuite1_mockContentGenerator,
+      {},
+      [],
+    );
+    const summaryText =
+      '<state_snapshot><overall_goal>Default strategy</overall_goal></state_snapshot>';
+    const mockProvider = buildMockProvider(summaryText);
+    vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
+      mockProvider as never,
+    );
+    vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
+    await chat.performCompression('test-prompt-id');
+    const finalHistory = curatedHistoryForTest(legacySuite0_historyService);
+    // Should behave as middle-out: summary with state_snapshot present
+    const hasSummary = finalHistory.some((msg) =>
+      msg.blocks.some(
+        (b) => b.type === 'text' && b.text.includes('state_snapshot'),
+      ),
+    );
+    return { hasSummary };
+  };
+async function legacyTest4() {
+  const { finalHistory, summaryIndex, firstMsg, lastMsg } =
+    await legacySuite5_observeRebuildHistoryWithMessagesInCorrectOrderAfterCompression();
+  expect(finalHistory.length).toBeGreaterThan(0);
+  expect(summaryIndex).toBeGreaterThanOrEqual(0);
+  expect(firstMsg.speaker).toBe('human');
+  expect(firstMsg.blocks[0].type).toBe('text');
+  expect(lastMsg.blocks[0].type).toBe('text');
+}
+const legacySuite5_observeRebuildHistoryWithMessagesInCorrectOrderAfterCompression =
+  async () => {
+    const runtimeContext = buildRuntimeContext(legacySuite0_historyService, {
+      compressionStrategy: 'middle-out',
+    });
+    populateHistory(legacySuite0_historyService);
+    const chat = new ChatSession(
+      runtimeContext,
+      legacySuite1_mockContentGenerator,
+      {},
+      [],
+    );
+    const summaryText =
+      '<state_snapshot><overall_goal>Ordered result</overall_goal></state_snapshot>';
+    const mockProvider = buildMockProvider(summaryText);
+    vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
+      mockProvider as never,
+    );
+    vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
+    await chat.performCompression('test-prompt-id');
+    const finalHistory = curatedHistoryForTest(legacySuite0_historyService);
+    // History should have content (not be empty)
+    // Find the summary message index
+    const summaryIndex = finalHistory.findIndex((msg) =>
+      msg.blocks.some(
+        (b) => b.type === 'text' && b.text.includes('state_snapshot'),
+      ),
+    );
+    // Messages before summary should be preserved top messages (user/ai originals)
+    // Messages after summary+ack should be preserved bottom messages
+    // The first message should still be from the original conversation
+    const firstMsg = finalHistory[0];
+    // The last message should be from the original conversation bottom
+    const lastMsg = finalHistory[finalHistory.length - 1];
+    return { finalHistory, summaryIndex, firstMsg, lastMsg };
+  };
+async function legacyTest6() {
+  const runtimeContext = buildRuntimeContext(legacySuite0_historyService, {
+    compressionStrategy: 'middle-out',
   });
-
-  describe('strategy delegation (REQ-CS-006.1)', () => {
-    it('should use top-down-truncation when compressionStrategy is "top-down-truncation"', async () => {
-      const { hasSummary, finalHistory, messageCountBefore, hasAck } =
-        await observeUseTopDownTruncationWhenCompressionStrategyIsTopDownTruncation();
-      expect(hasSummary).toBe(false);
-      expect(finalHistory.length).toBeLessThan(messageCountBefore);
-      expect(hasAck).toBe(false);
-    });
-
-    const observeUseTopDownTruncationWhenCompressionStrategyIsTopDownTruncation =
-      async () => {
-        const runtimeContext = buildRuntimeContext(historyService, {
-          compressionStrategy: 'top-down-truncation',
-        });
-
-        populateHistory(historyService);
-        const messageCountBefore = historyService.getCurated().length;
-
-        const chat = new ChatSession(
-          runtimeContext,
-          mockContentGenerator,
-          {},
-          [],
-        );
-
-        // top-down-truncation needs currentTokenCount above the target threshold
-        // to actually truncate. Mock getTotalTokens to simulate token pressure.
-        vi.spyOn(historyService, 'getTotalTokens').mockReturnValue(100_000);
-
-        const mockProvider = buildMockProvider('should-not-appear');
-        vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
-          mockProvider as never,
-        );
-        vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(
-          true,
-        );
-
-        await chat.performCompression('test-prompt-id');
-
-        const finalHistory = historyService.getCurated();
-
-        // Top-down truncation should NOT produce any state_snapshot summary
-        const hasSummary = finalHistory.some((msg) =>
-          msg.blocks.some(
-            (b) => b.type === 'text' && b.text.includes('state_snapshot'),
-          ),
-        );
-
-        // History should be shorter (messages were truncated from the top)
-
-        // All surviving messages should be originals (no synthetic ack message)
-        const hasAck = finalHistory.some((msg) =>
-          msg.blocks.some(
-            (b) =>
-              b.type === 'text' &&
-              b.text.includes('Understood.') &&
-              b.text.includes('Continuing with the current task.'),
-          ),
-        );
-
-        return { hasSummary, finalHistory, messageCountBefore, hasAck };
-      };
-
-    it('should use middle-out (default) when compressionStrategy is "middle-out"', async () => {
-      const { hasSummary, hasAck } =
-        await observeUseMiddleOutDefaultWhenCompressionStrategyIsMiddleOut();
-      expect(hasSummary).toBe(true);
-      expect(hasAck).toBe(true);
-    });
-
-    const observeUseMiddleOutDefaultWhenCompressionStrategyIsMiddleOut =
-      async () => {
-        const runtimeContext = buildRuntimeContext(historyService, {
-          compressionStrategy: 'middle-out',
-        });
-
-        populateHistory(historyService);
-
-        const chat = new ChatSession(
-          runtimeContext,
-          mockContentGenerator,
-          {},
-          [],
-        );
-
-        const summaryText =
-          '<state_snapshot><overall_goal>Test goal</overall_goal></state_snapshot>';
-        const mockProvider = buildMockProvider(summaryText);
-        vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
-          mockProvider as never,
-        );
-        vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(
-          true,
-        );
-
-        await chat.performCompression('test-prompt-id');
-
-        const finalHistory = historyService.getCurated();
-
-        // Middle-out SHOULD produce a state_snapshot summary
-        const hasSummary = finalHistory.some((msg) =>
-          msg.blocks.some(
-            (b) => b.type === 'text' && b.text.includes('state_snapshot'),
-          ),
-        );
-
-        // Should have the acknowledgment message
-        const hasAck = finalHistory.some((msg) =>
-          msg.blocks.some(
-            (b) =>
-              b.type === 'text' &&
-              b.text.includes('Understood.') &&
-              b.text.includes('Continuing with the current task.'),
-          ),
-        );
-
-        return { hasSummary, hasAck };
-      };
-
-    it('should default to middle-out when no strategy is explicitly set', async () => {
-      const { hasSummary } =
-        await observeDefaultToMiddleOutWhenNoStrategyIsExplicitlySet();
-      expect(hasSummary).toBe(true);
-    });
-
-    const observeDefaultToMiddleOutWhenNoStrategyIsExplicitlySet = async () => {
-      // No compressionStrategy override — relies on registry default
-      const runtimeContext = buildRuntimeContext(historyService);
-
-      populateHistory(historyService);
-
-      const chat = new ChatSession(
-        runtimeContext,
-        mockContentGenerator,
-        {},
-        [],
-      );
-
-      const summaryText =
-        '<state_snapshot><overall_goal>Default strategy</overall_goal></state_snapshot>';
-      const mockProvider = buildMockProvider(summaryText);
-      vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
-        mockProvider as never,
-      );
-      vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
-
-      await chat.performCompression('test-prompt-id');
-
-      const finalHistory = historyService.getCurated();
-
-      // Should behave as middle-out: summary with state_snapshot present
-      const hasSummary = finalHistory.some((msg) =>
-        msg.blocks.some(
-          (b) => b.type === 'text' && b.text.includes('state_snapshot'),
-        ),
-      );
-
-      return { hasSummary };
-    };
+  populateHistory(legacySuite0_historyService);
+  const chat = new ChatSession(
+    runtimeContext,
+    legacySuite1_mockContentGenerator,
+    {},
+    [],
+  );
+  // Make the provider throw an error to simulate strategy failure
+  const mockProvider = {
+    name: 'test-provider',
+    generateChatCompletion: vi.fn(async function* () {
+      throw new Error('Strategy execution failed');
+      yield undefined as never;
+    }),
+  };
+  vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
+    mockProvider as never,
+  );
+  vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
+  // Should propagate the error
+  await expect(chat.performCompression('test-prompt-id')).rejects.toThrow(
+    'Strategy execution failed',
+  );
+  // After error, historyService should be unlocked (endCompression was called)
+  // Verify by checking we can add messages (would throw if still locked)
+  expect(() => {
+    legacySuite0_historyService.add(createUserMessage('Post-error message'));
+  }).not.toThrow();
+}
+async function legacyTest8() {
+  const runtimeContext = buildRuntimeContext(legacySuite0_historyService, {
+    compressionStrategy: 'middle-out',
   });
-
-  describe('result application (REQ-CS-006.2)', () => {
-    it('should rebuild history with messages in correct order after compression', async () => {
-      const { finalHistory, summaryIndex, firstMsg, lastMsg } =
-        await observeRebuildHistoryWithMessagesInCorrectOrderAfterCompression();
-      expect(finalHistory.length).toBeGreaterThan(0);
-      expect(summaryIndex).toBeGreaterThanOrEqual(0);
-      expect(firstMsg.speaker).toBe('human');
-      expect(firstMsg.blocks[0].type).toBe('text');
-      expect(lastMsg.blocks[0].type).toBe('text');
-    });
-
-    const observeRebuildHistoryWithMessagesInCorrectOrderAfterCompression =
-      async () => {
-        const runtimeContext = buildRuntimeContext(historyService, {
-          compressionStrategy: 'middle-out',
-        });
-
-        populateHistory(historyService);
-
-        const chat = new ChatSession(
-          runtimeContext,
-          mockContentGenerator,
-          {},
-          [],
-        );
-
-        const summaryText =
-          '<state_snapshot><overall_goal>Ordered result</overall_goal></state_snapshot>';
-        const mockProvider = buildMockProvider(summaryText);
-        vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
-          mockProvider as never,
-        );
-        vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(
-          true,
-        );
-
-        await chat.performCompression('test-prompt-id');
-
-        const finalHistory = historyService.getCurated();
-
-        // History should have content (not be empty)
-
-        // Find the summary message index
-        const summaryIndex = finalHistory.findIndex((msg) =>
-          msg.blocks.some(
-            (b) => b.type === 'text' && b.text.includes('state_snapshot'),
-          ),
-        );
-
-        // Messages before summary should be preserved top messages (user/ai originals)
-        // Messages after summary+ack should be preserved bottom messages
-        // The first message should still be from the original conversation
-        const firstMsg = finalHistory[0];
-
-        // The last message should be from the original conversation bottom
-        const lastMsg = finalHistory[finalHistory.length - 1];
-
-        return { finalHistory, summaryIndex, firstMsg, lastMsg };
-      };
+  populateHistory(legacySuite0_historyService);
+  const chat = new ChatSession(
+    runtimeContext,
+    legacySuite1_mockContentGenerator,
+    {},
+    [],
+  );
+  // Simulate a provider that returns an invalid generator
+  const mockProvider = {
+    name: 'test-provider',
+    generateChatCompletion: vi.fn(() => {
+      throw new Error('Provider initialization failed');
+    }),
+  };
+  vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
+    mockProvider as never,
+  );
+  vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
+  await expect(chat.performCompression('test-prompt-id')).rejects.toThrow(
+    /Provider initialization failed/,
+  );
+  // historyService must be unlocked — verify by adding a message
+  expect(() => {
+    legacySuite0_historyService.add(
+      createUserMessage('After failed compression'),
+    );
+  }).not.toThrow();
+  // And the message should actually appear in the history
+  const curated = curatedHistoryForTest(legacySuite0_historyService);
+  const lastMsg = curated[curated.length - 1];
+  expect(lastMsg.blocks[0]).toMatchObject({
+    type: 'text',
+    text: 'After failed compression',
   });
-
-  describe('error propagation (REQ-CS-006.3)', () => {
-    it('should propagate strategy errors and still call endCompression', async () => {
-      const runtimeContext = buildRuntimeContext(historyService, {
-        compressionStrategy: 'middle-out',
-      });
-
-      populateHistory(historyService);
-
-      const chat = new ChatSession(
-        runtimeContext,
-        mockContentGenerator,
-        {},
-        [],
-      );
-
-      // Make the provider throw an error to simulate strategy failure
-      const mockProvider = {
-        name: 'test-provider',
-        generateChatCompletion: vi.fn(async function* () {
-          throw new Error('Strategy execution failed');
-          yield undefined as never;
-        }),
-      };
-      vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
-        mockProvider as never,
-      );
-      vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
-
-      // Should propagate the error
-      await expect(chat.performCompression('test-prompt-id')).rejects.toThrow(
-        'Strategy execution failed',
-      );
-
-      // After error, historyService should be unlocked (endCompression was called)
-      // Verify by checking we can add messages (would throw if still locked)
-      expect(() => {
-        historyService.add(createUserMessage('Post-error message'));
-      }).not.toThrow();
-    });
+}
+async function legacyTest9() {
+  const runtimeContext = buildRuntimeContext(legacySuite0_historyService, {
+    compressionStrategy: 'middle-out',
   });
-
-  describe('atomicity (REQ-CS-006.4)', () => {
-    it('should unlock historyService after error (endCompression called in finally)', async () => {
-      const runtimeContext = buildRuntimeContext(historyService, {
-        compressionStrategy: 'middle-out',
-      });
-
-      populateHistory(historyService);
-
-      const chat = new ChatSession(
-        runtimeContext,
-        mockContentGenerator,
-        {},
-        [],
-      );
-
-      // Simulate a provider that returns an invalid generator
-      const mockProvider = {
-        name: 'test-provider',
-        generateChatCompletion: vi.fn(() => {
-          throw new Error('Provider initialization failed');
-        }),
-      };
-      vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
-        mockProvider as never,
-      );
-      vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
-
-      await expect(chat.performCompression('test-prompt-id')).rejects.toThrow(
-        /Provider initialization failed/,
-      );
-
-      // historyService must be unlocked — verify by adding a message
-      expect(() => {
-        historyService.add(createUserMessage('After failed compression'));
-      }).not.toThrow();
-
-      // And the message should actually appear in the history
-      const curated = historyService.getCurated();
-      const lastMsg = curated[curated.length - 1];
-      expect(lastMsg.blocks[0]).toMatchObject({
-        type: 'text',
-        text: 'After failed compression',
-      });
-    });
-
-    it('should unlock historyService after successful compression', async () => {
-      const runtimeContext = buildRuntimeContext(historyService, {
-        compressionStrategy: 'middle-out',
-      });
-
-      populateHistory(historyService);
-
-      const chat = new ChatSession(
-        runtimeContext,
-        mockContentGenerator,
-        {},
-        [],
-      );
-
-      const summaryText =
-        '<state_snapshot><overall_goal>Success</overall_goal></state_snapshot>';
-      const mockProvider = buildMockProvider(summaryText);
-      vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
-        mockProvider as never,
-      );
-      vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
-
-      await chat.performCompression('test-prompt-id');
-
-      // historyService must be unlocked after successful completion
-      expect(() => {
-        historyService.add(createUserMessage('Post-compression message'));
-      }).not.toThrow();
-    });
+  populateHistory(legacySuite0_historyService);
+  const chat = new ChatSession(
+    runtimeContext,
+    legacySuite1_mockContentGenerator,
+    {},
+    [],
+  );
+  const summaryText =
+    '<state_snapshot><overall_goal>Success</overall_goal></state_snapshot>';
+  const mockProvider = buildMockProvider(summaryText);
+  vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
+    mockProvider as never,
+  );
+  vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
+  await chat.performCompression('test-prompt-id');
+  // historyService must be unlocked after successful completion
+  expect(() => {
+    legacySuite0_historyService.add(
+      createUserMessage('Post-compression message'),
+    );
+  }).not.toThrow();
+}
+function legacyTest11() {
+  // This is a compile-time assertion: CompressionContext should not
+  // have a historyService field. We verify by constructing a minimal
+  // CompressionContext and confirming it has no historyService key.
+  const contextKeys: Array<keyof CompressionContext> = [
+    'history',
+    'runtimeContext',
+    'runtimeState',
+    'estimateTokens',
+    'currentTokenCount',
+    'logger',
+    'resolveProvider',
+    'promptResolver',
+    'promptBaseDir',
+    'promptContext',
+    'promptId',
+  ];
+  // historyService must NOT be a valid key on CompressionContext
+  expect(contextKeys).not.toContain('historyService');
+  // Double-check: construct a partial CompressionContext-shaped object
+  // and verify 'historyService' is not among its expected fields
+  const knownFields = new Set(contextKeys);
+  expect(knownFields.has('historyService' as never)).toBe(false);
+}
+async function legacyTest13() {
+  const historyService = new HistoryService(8000);
+  // Add a message to trigger compression
+  historyService.add(createUserMessage('Test message'), 'test-model');
+  const mockContentGenerator: ContentGenerator = vi.fn();
+  const mockProvider = {
+    generateChatCompletion: mockContentGenerator,
+  };
+  const runtimeContext = buildRuntimeContext(historyService, {
+    compressionStrategy: 'middle-out',
   });
-
-  describe('context boundary (REQ-CS-001.6)', () => {
-    it('CompressionContext type should not include historyService', () => {
-      // This is a compile-time assertion: CompressionContext should not
-      // have a historyService field. We verify by constructing a minimal
-      // CompressionContext and confirming it has no historyService key.
-      const contextKeys: Array<keyof CompressionContext> = [
-        'history',
-        'runtimeContext',
-        'runtimeState',
-        'estimateTokens',
-        'currentTokenCount',
-        'logger',
-        'resolveProvider',
-        'promptResolver',
-        'promptBaseDir',
-        'promptContext',
-        'promptId',
-      ];
-
-      // historyService must NOT be a valid key on CompressionContext
-      expect(contextKeys).not.toContain('historyService');
-
-      // Double-check: construct a partial CompressionContext-shaped object
-      // and verify 'historyService' is not among its expected fields
-      const knownFields = new Set(contextKeys);
-      expect(knownFields.has('historyService' as never)).toBe(false);
-    });
+  const chat = new ChatSession(runtimeContext, mockContentGenerator, {}, []);
+  vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
+    mockProvider as never,
+  );
+  vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
+  // Mock the compression to return valid history
+  (
+    mockContentGenerator as Mock<typeof mockContentGenerator>
+  ).mockResolvedValueOnce({
+    content: 'Compressed summary',
+    usage: {},
+  } as never);
+  await chat.performCompression('test-prompt-id');
+  // Assert: triggerPreCompressHook was called
+  expect(triggerPreCompressHook).toHaveBeenCalledTimes(1);
+  // Assert: triggerPreCompressHook was called with correct parameters
+  expect(triggerPreCompressHook).toHaveBeenCalledWith(
+    expect.anything(), // config
+    PreCompressTrigger.Manual,
+  );
+}
+async function legacyTest14() {
+  const localHistoryService = new HistoryService(8000);
+  populateHistory(localHistoryService);
+  const localContentGenerator = buildMockContentGenerator();
+  const summaryText =
+    '<state_snapshot><overall_goal>Hook failure recovery</overall_goal></state_snapshot>';
+  const localMockProvider = buildMockProvider(summaryText);
+  const runtimeContext = buildRuntimeContext(localHistoryService, {
+    compressionStrategy: 'middle-out',
   });
-
-  /**
-   * Group C: PreCompress hook tests
-   * @plan PLAN-20250219-GMERGE021.R4
-   * @requirement REQ-R4-3 (PreCompress hook before compression)
-   *
-   * These tests verify that performCompression triggers the PreCompress hook
-   * before compression logic runs. These tests WILL FAIL in RED phase because
-   * performCompression does not currently call triggerPreCompressHook.
-   */
-  describe('PreCompress hook integration', () => {
-    beforeEach(() => {
-      vi.clearAllMocks();
-    });
-
-    it('should trigger PreCompress hook before compression', async () => {
-      const historyService = new HistoryService(8000);
-      // Add a message to trigger compression
-      historyService.add(createUserMessage('Test message'), 'test-model');
-
-      const mockContentGenerator: ContentGenerator = vi.fn();
-      const mockProvider = {
-        generateChatCompletion: mockContentGenerator,
-      };
-
-      const runtimeContext = buildRuntimeContext(historyService, {
-        compressionStrategy: 'middle-out',
-      });
-
-      const chat = new ChatSession(
-        runtimeContext,
-        mockContentGenerator,
-        {},
-        [],
-      );
-      vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
-        mockProvider as never,
-      );
-      vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
-
-      // Mock the compression to return valid history
-      (
-        mockContentGenerator as Mock<typeof mockContentGenerator>
-      ).mockResolvedValueOnce({
-        content: 'Compressed summary',
-        usage: {},
-      } as never);
-
-      await chat.performCompression('test-prompt-id');
-
-      // Assert: triggerPreCompressHook was called
-      expect(triggerPreCompressHook).toHaveBeenCalledTimes(1);
-
-      // Assert: triggerPreCompressHook was called with correct parameters
-      expect(triggerPreCompressHook).toHaveBeenCalledWith(
-        expect.anything(), // config
-        PreCompressTrigger.Manual, // or Auto - depends on context
-      );
-    });
-
-    it('should proceed with compression even if PreCompress hook throws', async () => {
-      const localHistoryService = new HistoryService(8000);
-      populateHistory(localHistoryService);
-
-      const localContentGenerator = buildMockContentGenerator();
-      const summaryText =
-        '<state_snapshot><overall_goal>Hook failure recovery</overall_goal></state_snapshot>';
-      const localMockProvider = buildMockProvider(summaryText);
-
-      const runtimeContext = buildRuntimeContext(localHistoryService, {
-        compressionStrategy: 'middle-out',
-      });
-
-      const chat = new ChatSession(
-        runtimeContext,
-        localContentGenerator,
-        {},
-        [],
-      );
-      vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
-        localMockProvider as never,
-      );
-      vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
-
-      // Mock triggerPreCompressHook to throw
-      (
-        triggerPreCompressHook as Mock<typeof triggerPreCompressHook>
-      ).mockRejectedValueOnce(new Error('Hook failed'));
-
-      // Compression should still succeed despite hook failure
-      await expect(chat.performCompression('test-prompt-id')).resolves.toBe(
-        PerformCompressionResult.COMPRESSED,
-      );
-
-      // Verify compression still ran (provider was called to generate summary)
-      expect(localMockProvider.generateChatCompletion).toHaveBeenCalled();
-    });
-
-    it('should call PreCompress hook when compression is attempted on empty history', async () => {
-      const historyService = new HistoryService(8000);
-      // Empty history - compression will be skipped after PreCompress hook
-
-      const mockContentGenerator: ContentGenerator = vi.fn();
-
-      const runtimeContext = buildRuntimeContext(historyService, {
-        compressionStrategy: 'middle-out',
-      });
-
-      const chat = new ChatSession(
-        runtimeContext,
-        mockContentGenerator,
-        {},
-        [],
-      );
-
-      const result = await chat.performCompression('test-prompt-id');
-
-      expect(result).toBe(PerformCompressionResult.SKIPPED_EMPTY);
-      expect(triggerPreCompressHook).toHaveBeenCalledTimes(1);
-      expect(triggerPreCompressHook).toHaveBeenCalledWith(
-        expect.anything(),
-        PreCompressTrigger.Manual,
-      );
-      expect(mockContentGenerator).not.toHaveBeenCalled();
-    });
+  const chat = new ChatSession(runtimeContext, localContentGenerator, {}, []);
+  vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
+    localMockProvider as never,
+  );
+  vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
+  // Mock triggerPreCompressHook to throw
+  (
+    triggerPreCompressHook as Mock<typeof triggerPreCompressHook>
+  ).mockRejectedValueOnce(new Error('Hook failed'));
+  // Compression should still succeed despite hook failure
+  await expect(chat.performCompression('test-prompt-id')).resolves.toBe(
+    PerformCompressionResult.COMPRESSED,
+  );
+  // Verify compression still ran (provider was called to generate summary)
+  expect(localMockProvider.generateChatCompletion).toHaveBeenCalled();
+}
+async function legacyTest15() {
+  const historyService = new HistoryService(8000);
+  // Empty history - compression will be skipped after PreCompress hook
+  const mockContentGenerator: ContentGenerator = vi.fn();
+  const runtimeContext = buildRuntimeContext(historyService, {
+    compressionStrategy: 'middle-out',
+  });
+  const chat = new ChatSession(runtimeContext, mockContentGenerator, {}, []);
+  const result = await chat.performCompression('test-prompt-id');
+  expect(result).toBe(PerformCompressionResult.SKIPPED_EMPTY);
+  expect(triggerPreCompressHook).toHaveBeenCalledTimes(1);
+  expect(triggerPreCompressHook).toHaveBeenCalledWith(
+    expect.anything(),
+    PreCompressTrigger.Manual,
+  );
+  expect(mockContentGenerator).not.toHaveBeenCalled();
+}
+let legacySuite0_historyService: HistoryService;
+let legacySuite1_mockContentGenerator: ContentGenerator;
+const legacyHook0 = () => {
+  vi.clearAllMocks();
+  legacySuite0_historyService = new HistoryService();
+  legacySuite1_mockContentGenerator = buildMockContentGenerator();
+};
+const legacyHook1 = () => {
+  vi.clearAllMocks();
+};
+describe('Compression Dispatcher Integration (P13) > strategy delegation (REQ-CS-006.1) / should use top-down-truncation when compressionStrategy is "top-down-truncation"', () => {
+  beforeEach(legacyHook0);
+  it('should use top-down-truncation when compressionStrategy is "top-down-truncation"', async () => {
+    await expect(legacyTest0()).resolves.toBeUndefined();
+  });
+});
+describe('Compression Dispatcher Integration (P13) > strategy delegation (REQ-CS-006.1) / should use middle-out (default) when compressionStrategy is "middle-out"', () => {
+  beforeEach(legacyHook0);
+  it('should use middle-out (default) when compressionStrategy is "middle-out"', async () => {
+    await expect(legacyTest1()).resolves.toBeUndefined();
+  });
+});
+describe('Compression Dispatcher Integration (P13) > strategy delegation (REQ-CS-006.1) / should default to middle-out when no strategy is explicitly set', () => {
+  beforeEach(legacyHook0);
+  it('should default to middle-out when no strategy is explicitly set', async () => {
+    await expect(legacyTest2()).resolves.toBeUndefined();
+  });
+});
+describe('Compression Dispatcher Integration (P13) > result application (REQ-CS-006.2) / should rebuild history with messages in correct order after compression', () => {
+  beforeEach(legacyHook0);
+  it('should rebuild history with messages in correct order after compression', async () => {
+    await expect(legacyTest4()).resolves.toBeUndefined();
+  });
+});
+describe('Compression Dispatcher Integration (P13) > error propagation (REQ-CS-006.3) / should propagate strategy errors and still call endCompression', () => {
+  beforeEach(legacyHook0);
+  it('should propagate strategy errors and still call endCompression', async () => {
+    await expect(legacyTest6()).resolves.toBeUndefined();
+  });
+});
+describe('Compression Dispatcher Integration (P13) > atomicity (REQ-CS-006.4) / should unlock historyService after error (endCompression called in finally)', () => {
+  beforeEach(legacyHook0);
+  it('should unlock historyService after error (endCompression called in finally)', async () => {
+    await expect(legacyTest8()).resolves.toBeUndefined();
+  });
+});
+describe('Compression Dispatcher Integration (P13) > atomicity (REQ-CS-006.4) / should unlock historyService after successful compression', () => {
+  beforeEach(legacyHook0);
+  it('should unlock historyService after successful compression', async () => {
+    await expect(legacyTest9()).resolves.toBeUndefined();
+  });
+});
+describe('Compression Dispatcher Integration (P13) > context boundary (REQ-CS-001.6) / CompressionContext type should not include historyService', () => {
+  beforeEach(legacyHook0);
+  it('CompressionContext type should not include historyService', () => {
+    expect(legacyTest11).not.toThrow();
+  });
+});
+describe('Compression Dispatcher Integration (P13) > PreCompress hook integration / should trigger PreCompress hook before compression', () => {
+  beforeEach(legacyHook0);
+  beforeEach(legacyHook1);
+  it('should trigger PreCompress hook before compression', async () => {
+    await expect(legacyTest13()).resolves.toBeUndefined();
+  });
+});
+describe('Compression Dispatcher Integration (P13) > PreCompress hook integration / should proceed with compression even if PreCompress hook throws', () => {
+  beforeEach(legacyHook0);
+  beforeEach(legacyHook1);
+  it('should proceed with compression even if PreCompress hook throws', async () => {
+    await expect(legacyTest14()).resolves.toBeUndefined();
+  });
+});
+describe('Compression Dispatcher Integration (P13) > PreCompress hook integration / should call PreCompress hook when compression is attempted on empty history', () => {
+  beforeEach(legacyHook0);
+  beforeEach(legacyHook1);
+  it('should call PreCompress hook when compression is attempted on empty history', async () => {
+    await expect(legacyTest15()).resolves.toBeUndefined();
   });
 });

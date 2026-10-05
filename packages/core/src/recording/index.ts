@@ -22,6 +22,22 @@
 
 export * from './types.js';
 export {
+  RecordingFailureReport,
+  RecordingFailureNotice,
+  RecordingFailureStorageError,
+  type RecordingFailureDetail,
+} from './recording-failure-report.js';
+export {
+  withRecordingFailureReport,
+  type RecordingFailureSink,
+} from './recording-failure-consumer.js';
+export {
+  createRowCounters,
+  type JournalReadCounters,
+  type JournalReadStats,
+  type RowCounters,
+} from './journalCounters.js';
+export {
   JournalCursor,
   MAX_RECORD_BYTES,
   type JournalCursorMetrics,
@@ -65,6 +81,7 @@ export {
 } from './SessionDiscovery.js';
 export {
   resumeSession,
+  ResumeCursorBoot,
   CONTINUE_LATEST,
   type ResumeRequest,
   type ResumeResult,
@@ -95,6 +112,7 @@ export {
 } from './SessionTransitionService.js';
 export {
   HistoryMutationService,
+  computeClearCutIndex,
   type HistoryMutationResult,
   type HistoryMutationError,
 } from './HistoryMutationService.js';
@@ -114,3 +132,5 @@ export {
   type ImportedSessionMediaPackage,
   type ValidatedSessionMediaPackage,
 } from './session-media-package.js';
+
+export { scanResumeMetadata } from './resumeMetadata.js';

@@ -29,6 +29,7 @@
  * These tests are expected to fail against the Phase 12 stub implementation.
  */
 
+import { collectRowsForAssertions } from '../test-utils/collect-rows-for-assertions.js';
 import {
   assertDefined,
   blockTextOrEmpty,
@@ -37,18 +38,20 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import type { EventEmitter } from 'node:events';
 
 import { HistoryService } from '../services/history/HistoryService.js';
 import { type IContent } from '../services/history/IContent.js';
 import { RecordingIntegration } from './RecordingIntegration.js';
+import { withRecordingFailureReport } from './recording-failure-consumer.js';
+import { replaySession } from './ReplayEngine.js';
+import { assertReplayOk } from './replay-test-helpers.js';
 import { SessionRecordingService } from './SessionRecordingService.js';
 import { type SessionRecordingServiceConfig } from './types.js';
 import { SessionPersistenceService } from '../storage/SessionPersistenceService.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
 
 interface ControlledSave {
-  readonly history: readonly IContent[];
+  readonly file: string;
   readonly resolve: () => void;
   readonly reject: (error: unknown) => void;
 }
@@ -63,10 +66,21 @@ function textFromUnknownBlock(block: unknown): string {
 class ControlledPersistenceService extends SessionPersistenceService {
   private readonly controlledSaves: ControlledSave[] = [];
 
-  override save(history: IContent[]): Promise<void> {
+  private readonly ready = new Map<number, () => void>();
+
+  override saveJournal(file: string): Promise<void> {
     return new Promise<void>((resolve, reject) => {
-      this.controlledSaves.push({ history, resolve, reject });
+      const index = this.controlledSaves.length;
+      this.controlledSaves.push({ file, resolve, reject });
+      this.ready.get(index)?.();
     });
+  }
+
+  async waitForSave(index: number): Promise<ControlledSave> {
+    if (this.controlledSaves.length <= index) {
+      await new Promise<void>((resolve) => this.ready.set(index, resolve));
+    }
+    return this.getSave(index);
   }
 
   getSave(index: number): ControlledSave {
@@ -100,7 +114,7 @@ function errorMessages(error: unknown): string[] {
 
 async function captureFailure(operation: Promise<void>): Promise<unknown> {
   try {
-    await operation;
+    await withRecordingFailureReport(operation, async () => undefined);
   } catch (error: unknown) {
     return error;
   }
@@ -141,10 +155,6 @@ function textContent(
   };
 }
 
-function historyEmitter(historyService: HistoryService): EventEmitter {
-  return historyService;
-}
-
 async function readRecordedEvents(
   recordingService: SessionRecordingService,
 ): Promise<JsonlEvent[]> {
@@ -172,388 +182,484 @@ async function flushAndRead(
   return readRecordedEvents(recordingService);
 }
 
+let tempDir: string;
+
+let chatsDir: string;
+
+let recordingService: SessionRecordingService;
+
+let integration: RecordingIntegration;
+
+let historyService: HistoryService;
+
 describe('RecordingIntegration lifecycle @plan:PLAN-20260211-SESSIONRECORDING.P13', () => {
-  let tempDir: string;
-  let chatsDir: string;
-  let recordingService: SessionRecordingService;
-  let integration: RecordingIntegration;
-  let historyService: HistoryService;
-  let emitter: EventEmitter;
+  beforeEach(beforeEachRecordingLifecycle);
 
-  beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'recording-int-test-'));
-    chatsDir = path.join(tempDir, 'chats');
-    await fs.mkdir(chatsDir, { recursive: true });
-
-    recordingService = new SessionRecordingService(makeConfig(chatsDir));
-    integration = new RecordingIntegration(recordingService);
-    historyService = new HistoryService();
-    emitter = historyEmitter(historyService);
-  });
-
-  afterEach(async () => {
-    await integration.dispose();
-    await recordingService.dispose();
-    await fs.rm(tempDir, { recursive: true, force: true });
-  });
+  afterEach(afterEachRecordingLifecycle);
 
   describe('Delegate methods @requirement:REQ-INT-003 @plan:PLAN-20260211-SESSIONRECORDING.P13', () => {
-    it('recordProviderSwitch delegates to SessionRecordingService', async () => {
-      integration.subscribeToHistory(historyService);
-      integration.recordProviderSwitch('openai', 'gpt-5');
-      emitter.emit('contentAdded', textContent('materialize content'));
+    it(
+      'recordProviderSwitch delegates to SessionRecordingService',
+      testRecordingLifecycle01,
+    );
 
-      const events = await flushAndRead(integration, recordingService);
-      expect(events.some((event) => event.type === 'provider_switch')).toBe(
-        true,
-      );
-    });
+    it(
+      'recordDirectoriesChanged delegates to SessionRecordingService',
+      testRecordingLifecycle02,
+    );
 
-    it('recordDirectoriesChanged delegates to SessionRecordingService', async () => {
-      integration.subscribeToHistory(historyService);
-      integration.recordDirectoriesChanged(['/a', '/b', '/c']);
-      emitter.emit('contentAdded', textContent('materialize content'));
-
-      const events = await flushAndRead(integration, recordingService);
-      expect(events.some((event) => event.type === 'directories_changed')).toBe(
-        true,
-      );
-    });
-
-    it('recordSessionEvent delegates to SessionRecordingService', async () => {
-      integration.subscribeToHistory(historyService);
-      integration.recordSessionEvent('warning', 'Disk pressure');
-      emitter.emit('contentAdded', textContent('materialize content'));
-
-      const events = await flushAndRead(integration, recordingService);
-      expect(events.some((event) => event.type === 'session_event')).toBe(true);
-    });
+    it(
+      'recordSessionEvent delegates to SessionRecordingService',
+      testRecordingLifecycle03,
+    );
   });
 
   describe('Flush / dispose / replacement behavior @requirement:REQ-INT-004,REQ-INT-005,REQ-INT-006 @plan:PLAN-20260211-SESSIONRECORDING.P13', () => {
-    it('flushAtTurnBoundary persists pending events', async () => {
-      integration.subscribeToHistory(historyService);
-      emitter.emit('contentAdded', textContent('flush-boundary'));
+    it('flushAtTurnBoundary persists pending events', testRecordingLifecycle04);
 
-      const events = await flushAndRead(integration, recordingService);
-      expect(events.filter((event) => event.type === 'content')).toHaveLength(
-        1,
-      );
-    });
+    it(
+      'flushAtTurnBoundary with no activity does not create file',
+      testRecordingLifecycle05,
+    );
 
-    it('flushAtTurnBoundary with no activity does not create file', async () => {
-      await integration.flushAtTurnBoundary();
-      expect(recordingService.getFilePath()).toBeNull();
-    });
+    it(
+      'flushes the latest history generation after rapid recording events',
+      testRecordingLifecycle06,
+    );
 
-    it('flushes the latest history generation after rapid recording events', async () => {
-      await integration.dispose();
-      const storage = new Storage(tempDir);
-      const persistence = new SessionPersistenceService(
-        storage,
-        'recording-integration-persistence',
-        { maxQueueBytes: 1024 * 1024 },
-      );
-      integration = new RecordingIntegration(recordingService, persistence);
-      integration.subscribeToHistory(historyService);
+    it(
+      'publishes a complete history batch to recording and persistence in order',
+      testRecordingLifecycle07,
+    );
 
-      historyService.add(textContent('first'));
-      historyService.add(textContent('second'));
-      historyService.add(textContent('final'));
+    it(
+      'rolls back recording and persistence when batch publication listener fails',
+      testRecordingLifecycle08,
+    );
 
-      await integration.flushAtTurnBoundary();
-      const restored = await persistence.loadMostRecent();
+    it(
+      'propagates a pending persistence failure after flushing recording data',
+      testRecordingLifecycle09,
+    );
 
-      expect(
-        restored?.history.map((entry) => {
-          const block = entry.blocks[0];
-          return blockTextOrEmpty(block);
-        }),
-      ).toStrictEqual(['first', 'second', 'final']);
-      expect(persistence.getPendingByteCount()).toBe(0);
-      await fs.rm(storage.getProjectTempDir(), {
-        recursive: true,
-        force: true,
-      });
-    });
+    it(
+      'captures a synchronous persistence scheduling failure without interrupting recording',
+      testRecordingLifecycle10,
+    );
 
-    it('publishes a complete history batch to recording and persistence in order', async () => {
-      await integration.dispose();
-      const storage = new Storage(path.join(tempDir, 'batch-success'));
-      const persistence = new SessionPersistenceService(
-        storage,
-        'batch-success',
-      );
-      integration = new RecordingIntegration(recordingService, persistence);
-      integration.subscribeToHistory(historyService);
+    it(
+      'surfaces each failed generation once and allows a repaired later generation to flush',
+      testRecordingLifecycle11,
+    );
 
-      await historyService.addBatch([
-        textContent('batch first'),
-        textContent('batch second', 'ai'),
-      ]);
-      await integration.flushAtTurnBoundary();
-      const events = await readRecordedEvents(recordingService);
-      const restored = await persistence.loadMostRecent();
+    it(
+      'does not attribute a newer failed generation to an older boundary or clear it',
+      testRecordingLifecycle12,
+    );
 
-      expect(
-        events
-          .filter((event) => event.type === 'content')
-          .map((event) => {
-            const payload = event.payload;
-            if (
-              typeof payload !== 'object' ||
-              payload === null ||
-              !('content' in payload)
-            ) {
-              return '';
-            }
-            const content = payload.content;
-            if (
-              typeof content !== 'object' ||
-              content === null ||
-              !('blocks' in content) ||
-              !Array.isArray(content.blocks)
-            ) {
-              return '';
-            }
-            return textFromUnknownBlock(content.blocks[0]);
-          }),
-      ).toStrictEqual(['batch first', 'batch second']);
-      expect(
-        restored?.history.map((content) =>
-          textFromUnknownBlock(content.blocks[0]),
-        ),
-      ).toStrictEqual(['batch first', 'batch second']);
-    });
+    it(
+      'waits for and surfaces queued persistence failure while disabling integration',
+      testRecordingLifecycle13,
+    );
 
-    it('rolls back recording and persistence when batch publication listener fails', async () => {
-      await integration.dispose();
-      const storage = new Storage(path.join(tempDir, 'batch-listener-failure'));
-      const persistence = new SessionPersistenceService(
-        storage,
-        'batch-listener-failure',
-      );
-      integration = new RecordingIntegration(recordingService, persistence);
-      integration.subscribeToHistory(historyService);
-      historyService.on('contentBatchAdded', () => {
-        throw new Error('publication listener failed');
-      });
+    it(
+      'dispose prevents future event recording while keeping prior events',
+      testRecordingLifecycle14,
+    );
 
-      await expect(
-        historyService.addBatch([
-          textContent('not recorded first'),
-          textContent('not recorded second', 'ai'),
-        ]),
-      ).rejects.toThrow('publication listener failed');
+    it('dispose is idempotent', testRecordingLifecycle15);
 
-      expect(historyService.getAll()).toStrictEqual([]);
-      await recordingService.flush();
-      const events = await readRecordedEvents(recordingService);
-      expect(events.filter((event) => event.type === 'content')).toHaveLength(
-        0,
-      );
-      expect(persistence.getPendingByteCount()).toBe(0);
-      expect(await persistence.loadMostRecent()).toBeNull();
-    });
+    it(
+      'journal attachment switches subscription to the new instance',
+      testRecordingLifecycle16,
+    );
 
-    it('propagates a pending persistence failure after flushing recording data', async () => {
-      await integration.dispose();
-      const storage = new Storage(path.join(tempDir, 'failing-persistence'));
-      const projectTemp = storage.getProjectTempDir();
-      await fs.mkdir(projectTemp, { recursive: true });
-      await fs.writeFile(path.join(projectTemp, 'chats'), 'not a directory');
-      const persistence = new SessionPersistenceService(
-        storage,
-        'recording-integration-failure',
-        { maxQueueBytes: 1024 * 1024 },
-      );
-      integration = new RecordingIntegration(recordingService, persistence);
-      integration.subscribeToHistory(historyService);
+    it(
+      'after replacement, old history events are ignored',
+      testRecordingLifecycle17,
+    );
 
-      try {
-        historyService.add(textContent('durable recording before failure'));
-
-        let failure: unknown;
-        try {
-          await integration.flushAtTurnBoundary();
-        } catch (error: unknown) {
-          failure = error;
-        }
-        expect(failure).toBeInstanceOf(Error);
-        expect(errorMessages(failure).join('\n')).toContain('EEXIST');
-        expect(
-          (await readRecordedEvents(recordingService)).some(
-            (event) => event.type === 'content',
-          ),
-        ).toBe(true);
-        expect(persistence.getPendingByteCount()).toBe(0);
-      } finally {
-        await fs.rm(projectTemp, { recursive: true, force: true });
-      }
-    });
-
-    it('captures a synchronous persistence scheduling failure without interrupting recording', async () => {
-      await integration.dispose();
-      const persistence = new SessionPersistenceService(
-        new Storage(path.join(tempDir, 'synchronous-failure')),
-        'synchronous-failure',
-      );
-      integration = new RecordingIntegration(recordingService, persistence);
-      integration.subscribeToHistory(historyService);
-      const content: IContent = {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'record before persistence clone' }],
-        metadata: {
-          providerMetadata: { nonCloneable: () => undefined },
-        },
-      };
-
-      expect(() => historyService.add(content)).not.toThrow();
-      const failure = await captureFailure(integration.flushAtTurnBoundary());
-
-      expect(errorMessages(failure).join('\n')).toMatch(/clone|function/i);
-      expect(
-        (await readRecordedEvents(recordingService)).some(
-          (event) => event.type === 'content',
-        ),
-      ).toBe(true);
-    });
-
-    it('surfaces each failed generation once and allows a repaired later generation to flush', async () => {
-      await integration.dispose();
-      const storage = new Storage(path.join(tempDir, 'transient-failure'));
-      const projectTemp = storage.getProjectTempDir();
-      await fs.mkdir(projectTemp, { recursive: true });
-      await fs.writeFile(path.join(projectTemp, 'chats'), 'not a directory');
-      const persistence = new SessionPersistenceService(
-        storage,
-        'transient-failure',
-      );
-      integration = new RecordingIntegration(recordingService, persistence);
-      integration.subscribeToHistory(historyService);
-
-      historyService.add(textContent('failed generation'));
-      const firstFailure = await captureFailure(
-        integration.flushAtTurnBoundary(),
-      );
-      await fs.rm(path.join(projectTemp, 'chats'), { force: true });
-      await fs.mkdir(path.join(projectTemp, 'chats'), { recursive: true });
-      historyService.add(textContent('repaired generation'));
-
-      await expect(integration.flushAtTurnBoundary()).resolves.toBeUndefined();
-      expect(errorMessages(firstFailure).join('\n')).toContain('EEXIST');
-    });
-
-    it('does not attribute a newer failed generation to an older boundary or clear it', async () => {
-      await integration.dispose();
-      const persistence = new ControlledPersistenceService(
-        new Storage(path.join(tempDir, 'generation-order')),
-        'generation-order',
-      );
-      integration = new RecordingIntegration(recordingService, persistence);
-      integration.subscribeToHistory(historyService);
-
-      historyService.add(textContent('generation one'));
-      const firstBoundary = integration.flushAtTurnBoundary();
-      historyService.add(textContent('generation two'));
-      persistence.getSave(1).reject(new Error('generation two failed'));
-      persistence.getSave(0).resolve();
-
-      await expect(firstBoundary).resolves.toBeUndefined();
-      const secondFailure = await captureFailure(
-        integration.flushAtTurnBoundary(),
-      );
-      expect(errorMessages(secondFailure)).toContain(
-        'Session persistence generation 2 failed: generation two failed',
-      );
-    });
-
-    it('waits for and surfaces queued persistence failure while disabling integration', async () => {
-      await integration.dispose();
-      const persistence = new ControlledPersistenceService(
-        new Storage(path.join(tempDir, 'dispose-failure')),
-        'dispose-failure',
-      );
-      integration = new RecordingIntegration(recordingService, persistence);
-      integration.subscribeToHistory(historyService);
-      historyService.add(textContent('queued before disable'));
-
-      const disposal = Promise.resolve(integration.dispose());
-      persistence.getSave(0).reject(new Error('queued save failed'));
-
-      const failure = await captureFailure(disposal);
-      expect(errorMessages(failure)).toContain(
-        'Session persistence generation 1 failed: queued save failed',
-      );
-    });
-
-    it('dispose prevents future event recording while keeping prior events', async () => {
-      integration.subscribeToHistory(historyService);
-      emitter.emit('contentAdded', textContent('before-dispose'));
-      await integration.flushAtTurnBoundary();
-
-      await integration.dispose();
-      emitter.emit('contentAdded', textContent('after-dispose'));
-      const events = await readRecordedEvents(recordingService);
-      expect(events.filter((event) => event.type === 'content')).toHaveLength(
-        1,
-      );
-    });
-
-    it('dispose is idempotent', async () => {
-      const firstDisposal = integration.dispose();
-      const repeatedDisposal = integration.dispose();
-      await repeatedDisposal;
-
-      expect(repeatedDisposal).toBe(firstDisposal);
-    });
-
-    it('onHistoryServiceReplaced switches subscription to new instance', async () => {
-      const secondHistory = new HistoryService();
-      const secondEmitter = historyEmitter(secondHistory);
-
-      integration.subscribeToHistory(historyService);
-      integration.onHistoryServiceReplaced(secondHistory);
-      secondEmitter.emit('contentAdded', textContent('from-new-service'));
-
-      const events = await flushAndRead(integration, recordingService);
-      expect(events.filter((event) => event.type === 'content')).toHaveLength(
-        1,
-      );
-    });
-
-    it('after replacement, old history events are ignored', async () => {
-      const secondHistory = new HistoryService();
-      const secondEmitter = historyEmitter(secondHistory);
-
-      integration.subscribeToHistory(historyService);
-      integration.onHistoryServiceReplaced(secondHistory);
-
-      emitter.emit('contentAdded', textContent('from-old-service'));
-      secondEmitter.emit('contentAdded', textContent('from-new-service'));
-
-      const events = await flushAndRead(integration, recordingService);
-      const contentEvents = events.filter((event) => event.type === 'content');
-      expect(contentEvents).toHaveLength(1);
-      const text = (
-        (contentEvents[0].payload as { content: IContent }).content
-          .blocks[0] as {
-          type: 'text';
-          text: string;
-        }
-      ).text;
-      expect(text).toBe('from-new-service');
-    });
-
-    it('replacement with same HistoryService instance is safe', async () => {
-      integration.subscribeToHistory(historyService);
-      integration.onHistoryServiceReplaced(historyService);
-      emitter.emit('contentAdded', textContent('same-instance'));
-
-      const events = await flushAndRead(integration, recordingService);
-      expect(events.filter((event) => event.type === 'content')).toHaveLength(
-        1,
-      );
-    });
+    it(
+      'replacement with same HistoryService instance is safe',
+      testRecordingLifecycle18,
+    );
   });
 });
+
+async function testRecordingLifecycle01(): Promise<void> {
+  await integration.subscribeToJournal(historyService);
+  integration.recordProviderSwitch('openai', 'gpt-5');
+  historyService.add(textContent('materialize content'));
+
+  const events = await flushAndRead(integration, recordingService);
+  expect(events.some((event) => event.type === 'provider_switch')).toBe(true);
+}
+
+async function testRecordingLifecycle02(): Promise<void> {
+  await integration.subscribeToJournal(historyService);
+  integration.recordDirectoriesChanged(['/a', '/b', '/c']);
+  historyService.add(textContent('materialize content'));
+
+  const events = await flushAndRead(integration, recordingService);
+  expect(events.some((event) => event.type === 'directories_changed')).toBe(
+    true,
+  );
+}
+
+async function testRecordingLifecycle03(): Promise<void> {
+  await integration.subscribeToJournal(historyService);
+  integration.recordSessionEvent('warning', 'Disk pressure');
+  historyService.add(textContent('materialize content'));
+
+  const events = await flushAndRead(integration, recordingService);
+  expect(events.some((event) => event.type === 'session_event')).toBe(true);
+}
+
+async function testRecordingLifecycle04(): Promise<void> {
+  await integration.subscribeToJournal(historyService);
+  historyService.add(textContent('flush-boundary'));
+
+  const events = await flushAndRead(integration, recordingService);
+  expect(events.filter((event) => event.type === 'content')).toHaveLength(1);
+}
+
+async function testRecordingLifecycle05(): Promise<void> {
+  await integration.flushAtTurnBoundary();
+  expect(recordingService.getFilePath()).toBeNull();
+}
+
+async function testRecordingLifecycle06(): Promise<void> {
+  await integration.dispose();
+  const storage = new Storage(tempDir);
+  const persistence = new SessionPersistenceService(
+    storage,
+    'recording-integration-persistence',
+    { maxQueueBytes: 1024 * 1024 },
+  );
+  integration = new RecordingIntegration(recordingService, persistence);
+  await integration.subscribeToJournal(historyService);
+
+  historyService.add(textContent('first'));
+  historyService.add(textContent('second'));
+  historyService.add(textContent('final'));
+
+  await integration.flushAtTurnBoundary();
+  const restored = await persistence.loadMostRecent();
+
+  expect(
+    restored?.history.map((entry) => {
+      const block = entry.blocks[0];
+      return blockTextOrEmpty(block);
+    }),
+  ).toStrictEqual(['first', 'second', 'final']);
+  expect(persistence.getPendingByteCount()).toBe(0);
+  await fs.rm(storage.getProjectTempDir(), {
+    recursive: true,
+    force: true,
+  });
+}
+
+async function testRecordingLifecycle07(): Promise<void> {
+  await integration.dispose();
+  const storage = new Storage(path.join(tempDir, 'batch-success'));
+  const persistence = new SessionPersistenceService(storage, 'batch-success');
+  integration = new RecordingIntegration(recordingService, persistence);
+  await integration.subscribeToJournal(historyService);
+
+  await historyService.addBatch([
+    textContent('batch first'),
+    textContent('batch second', 'ai'),
+  ]);
+  await integration.flushAtTurnBoundary();
+  const events = await readRecordedEvents(recordingService);
+  const restored = await persistence.loadMostRecent();
+
+  expect(
+    events
+      .filter((event) => event.type === 'content')
+      .map((event) => {
+        const payload = event.payload;
+        if (
+          typeof payload !== 'object' ||
+          payload === null ||
+          !('content' in payload)
+        ) {
+          return '';
+        }
+        const content = payload.content;
+        if (
+          typeof content !== 'object' ||
+          content === null ||
+          !('blocks' in content) ||
+          !Array.isArray(content.blocks)
+        ) {
+          return '';
+        }
+        return textFromUnknownBlock(content.blocks[0]);
+      }),
+  ).toStrictEqual(['batch first', 'batch second']);
+  expect(
+    restored?.history.map((content) => textFromUnknownBlock(content.blocks[0])),
+  ).toStrictEqual(['batch first', 'batch second']);
+}
+
+async function testRecordingLifecycle08(): Promise<void> {
+  await integration.dispose();
+  const storage = new Storage(path.join(tempDir, 'batch-listener-failure'));
+  const persistence = new SessionPersistenceService(
+    storage,
+    'batch-listener-failure',
+  );
+  integration = new RecordingIntegration(recordingService, persistence);
+  await integration.subscribeToJournal(historyService);
+  historyService.on('contentBatchAdded', () => {
+    throw new Error('publication listener failed');
+  });
+
+  await expect(
+    historyService.addBatch([
+      textContent('not recorded first'),
+      textContent('not recorded second', 'ai'),
+    ]),
+  ).rejects.toThrow('publication listener failed');
+  await collectRowsForAssertions(
+    historyService.streamRawHistory(),
+    async (contentsForAssertions) => {
+      expect(contentsForAssertions).toStrictEqual([]);
+      await recordingService.flush();
+      const file = recordingService.getFilePath();
+      if (file === null) throw new Error('Journal missing');
+      const replay = await replaySession(file, PROJECT_HASH);
+      assertReplayOk(replay);
+      expect(replay.history).toStrictEqual([]);
+      expect(persistence.getPendingByteCount()).toBe(0);
+      expect(await persistence.loadMostRecent()).toBeNull();
+    },
+  );
+}
+
+async function testRecordingLifecycle09(): Promise<void> {
+  await integration.dispose();
+  const storage = new Storage(path.join(tempDir, 'failing-persistence'));
+  const projectTemp = storage.getProjectTempDir();
+  await fs.mkdir(projectTemp, { recursive: true });
+  await fs.writeFile(path.join(projectTemp, 'chats'), 'not a directory');
+  const persistence = new SessionPersistenceService(
+    storage,
+    'recording-integration-failure',
+    { maxQueueBytes: 1024 * 1024 },
+  );
+  integration = new RecordingIntegration(recordingService, persistence);
+  await integration.subscribeToJournal(historyService);
+
+  try {
+    historyService.add(textContent('durable recording before failure'));
+
+    let failure: unknown;
+    try {
+      await withRecordingFailureReport(
+        integration.flushAtTurnBoundary(),
+        async () => undefined,
+      );
+    } catch (error: unknown) {
+      failure = error;
+    }
+    expect(failure).toBeInstanceOf(Error);
+    expect(errorMessages(failure).join('\n')).toContain('EEXIST');
+    expect(
+      (await readRecordedEvents(recordingService)).some(
+        (event) => event.type === 'content',
+      ),
+    ).toBe(true);
+    expect(persistence.getPendingByteCount()).toBe(0);
+  } finally {
+    await fs.rm(projectTemp, { recursive: true, force: true });
+  }
+}
+
+async function testRecordingLifecycle10(): Promise<void> {
+  await integration.dispose();
+  class SchedulingFailure extends SessionPersistenceService {
+    override saveJournal(): Promise<void> {
+      throw new Error('persistence scheduling failed');
+    }
+  }
+  const persistence = new SchedulingFailure(
+    new Storage(path.join(tempDir, 'synchronous-failure')),
+    'synchronous-failure',
+  );
+  integration = new RecordingIntegration(recordingService, persistence);
+  await integration.subscribeToJournal(historyService);
+  const content: IContent = {
+    speaker: 'human',
+    blocks: [{ type: 'text', text: 'record before persistence clone' }],
+    metadata: {
+      providerMetadata: { nonCloneable: () => undefined },
+    },
+  };
+
+  expect(() => historyService.add(content)).not.toThrow();
+  const failure = await captureFailure(integration.flushAtTurnBoundary());
+
+  expect(errorMessages(failure)).toContain('persistence scheduling failed');
+  expect(
+    (await readRecordedEvents(recordingService)).some(
+      (event) => event.type === 'content',
+    ),
+  ).toBe(true);
+}
+
+async function testRecordingLifecycle11(): Promise<void> {
+  await integration.dispose();
+  const storage = new Storage(path.join(tempDir, 'transient-failure'));
+  const projectTemp = storage.getProjectTempDir();
+  await fs.mkdir(projectTemp, { recursive: true });
+  await fs.writeFile(path.join(projectTemp, 'chats'), 'not a directory');
+  const persistence = new SessionPersistenceService(
+    storage,
+    'transient-failure',
+  );
+  integration = new RecordingIntegration(recordingService, persistence);
+  await integration.subscribeToJournal(historyService);
+
+  historyService.add(textContent('failed generation'));
+  const firstFailure = await captureFailure(integration.flushAtTurnBoundary());
+  await fs.rm(path.join(projectTemp, 'chats'), { force: true });
+  await fs.mkdir(path.join(projectTemp, 'chats'), { recursive: true });
+  historyService.add(textContent('repaired generation'));
+
+  await expect(integration.flushAtTurnBoundary()).resolves.toBeUndefined();
+  expect(errorMessages(firstFailure).join('\n')).toContain('EEXIST');
+}
+
+async function testRecordingLifecycle12(): Promise<void> {
+  await integration.dispose();
+  const persistence = new ControlledPersistenceService(
+    new Storage(path.join(tempDir, 'generation-order')),
+    'generation-order',
+  );
+  integration = new RecordingIntegration(recordingService, persistence);
+  await integration.subscribeToJournal(historyService);
+
+  historyService.add(textContent('generation one'));
+  const firstBoundary = integration.flushAtTurnBoundary();
+  const firstSave = await persistence.waitForSave(0);
+  historyService.add(textContent('generation two'));
+  const secondBoundary = captureFailure(integration.flushAtTurnBoundary());
+  const secondSave = await persistence.waitForSave(1);
+  secondSave.reject(new Error('generation two failed'));
+  firstSave.resolve();
+
+  await expect(firstBoundary).resolves.toBeUndefined();
+  const secondFailure = await secondBoundary;
+  expect(errorMessages(secondFailure)).toContain(
+    'Session persistence generation 2 failed: generation two failed',
+  );
+}
+
+async function testRecordingLifecycle13(): Promise<void> {
+  await integration.dispose();
+  const persistence = new ControlledPersistenceService(
+    new Storage(path.join(tempDir, 'dispose-failure')),
+    'dispose-failure',
+  );
+  integration = new RecordingIntegration(recordingService, persistence);
+  await integration.subscribeToJournal(historyService);
+  historyService.add(textContent('queued before disable'));
+
+  const boundary = withRecordingFailureReport(
+    integration.flushAtTurnBoundary(),
+    async () => undefined,
+  );
+  const pending = await persistence.waitForSave(0);
+  const disposal = withRecordingFailureReport(
+    integration.dispose(),
+    async () => undefined,
+  );
+  const outcomes = Promise.allSettled([boundary, disposal]);
+  pending.reject(new Error('queued save failed'));
+  const results = await outcomes;
+  const failures = results.flatMap((result) =>
+    result.status === 'rejected' ? errorMessages(result.reason) : [],
+  );
+  expect(failures).toContain(
+    'Session persistence generation 1 failed: queued save failed',
+  );
+  await expect(integration.dispose()).resolves.toBeUndefined();
+}
+
+async function testRecordingLifecycle14(): Promise<void> {
+  await integration.subscribeToJournal(historyService);
+  historyService.add(textContent('before-dispose'));
+  await integration.flushAtTurnBoundary();
+
+  await integration.dispose();
+  historyService.add(textContent('after-dispose'));
+  const events = await readRecordedEvents(recordingService);
+  expect(events.filter((event) => event.type === 'content')).toHaveLength(1);
+}
+
+async function testRecordingLifecycle15(): Promise<void> {
+  const firstDisposal = integration.dispose();
+  const repeatedDisposal = integration.dispose();
+  await repeatedDisposal;
+
+  expect(repeatedDisposal).toBe(firstDisposal);
+}
+
+async function testRecordingLifecycle16(): Promise<void> {
+  const secondHistory = new HistoryService();
+
+  await integration.subscribeToJournal(historyService);
+  await integration.subscribeToJournal(secondHistory);
+  secondHistory.add(textContent('from-new-service'));
+
+  const events = await flushAndRead(integration, recordingService);
+  expect(events.filter((event) => event.type === 'content')).toHaveLength(1);
+}
+
+async function testRecordingLifecycle17(): Promise<void> {
+  const secondHistory = new HistoryService();
+
+  await integration.subscribeToJournal(historyService);
+  await integration.subscribeToJournal(secondHistory);
+
+  historyService.add(textContent('from-old-service'));
+  secondHistory.add(textContent('from-new-service'));
+
+  const events = await flushAndRead(integration, recordingService);
+  const contentEvents = events.filter((event) => event.type === 'content');
+  expect(contentEvents).toHaveLength(1);
+  const text = (
+    (contentEvents[0].payload as { content: IContent }).content.blocks[0] as {
+      type: 'text';
+      text: string;
+    }
+  ).text;
+  expect(text).toBe('from-new-service');
+}
+
+async function testRecordingLifecycle18(): Promise<void> {
+  await integration.subscribeToJournal(historyService);
+  await integration.subscribeToJournal(historyService);
+  historyService.add(textContent('same-instance'));
+
+  const events = await flushAndRead(integration, recordingService);
+  expect(events.filter((event) => event.type === 'content')).toHaveLength(1);
+}
+
+async function beforeEachRecordingLifecycle(): Promise<void> {
+  tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'recording-int-test-'));
+  chatsDir = path.join(tempDir, 'chats');
+  await fs.mkdir(chatsDir, { recursive: true });
+
+  recordingService = new SessionRecordingService(makeConfig(chatsDir));
+  integration = new RecordingIntegration(recordingService);
+  historyService = new HistoryService();
+}
+
+async function afterEachRecordingLifecycle(): Promise<void> {
+  await integration.dispose();
+  await recordingService.dispose();
+  await fs.rm(tempDir, { recursive: true, force: true });
+}

@@ -872,8 +872,10 @@ export class AgentImpl implements Agent {
     delete this.providerState.modelParams[key];
   }
 
-  async getHistory(): Promise<readonly AgentMessage[]> {
-    return this.deps.resolveClient().getHistory();
+  async *streamHistory(
+    signal?: AbortSignal,
+  ): AsyncGenerator<AgentMessage, void, unknown> {
+    yield* this.deps.resolveClient().streamHistory(signal);
   }
 
   async setHistory(
@@ -1209,21 +1211,17 @@ export class AgentImpl implements Agent {
 
   /**
    * After a client-rebinding mutation, the new client's chat is not yet
-   * initialized. The prior conversation is carried onto the new client by
-   * transferHistoryToNewClient (as history content) and surfaced by the new
-   * client's getHistory() before its chat exists. Seeding startChat() with that
-   * carried-over history makes the chat visible WITHOUT dropping prior context,
-   * preserving the conversation across the rebind for REQ-005.
+   * initialized. Consume carried rows through durable detached admission before
+   * startup so the factory reuses the journal without retaining an array. A
+   * failed admission leaves the prior journal readable for a startup retry.
    * @plan:PLAN-20260617-COREAPI.P16
    * @requirement:REQ-005
    */
   private async restoreChatVisibility(): Promise<void> {
     const client = this.deps.resolveClient();
     if (!client.hasChatInitialized()) {
-      const carriedHistory = await client.getHistory();
-      await client.startChat(
-        carriedHistory.length > 0 ? carriedHistory : undefined,
-      );
+      await client.setHistoryFromSource(client.streamHistory());
+      await client.startChat();
     }
   }
 

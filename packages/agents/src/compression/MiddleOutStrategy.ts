@@ -60,6 +60,13 @@ import { getCompressionPrompt } from '@vybestack/llxprt-code-core/core/prompts.j
 import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { buildCompressionChatOptions } from './compressionSystemPrompt.js';
 
+import type { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
+import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
+import {
+  planDiskMiddleOut,
+  withDiskSummaryRequest,
+} from './middleOutDiskPlan.js';
+
 const MINIMUM_MIDDLE_MESSAGES = 4;
 const LAST_PROMPT_TOKEN_THRESHOLD = 500;
 const LAST_PROMPT_CONTEXT_MAX_LENGTH = 200;
@@ -92,6 +99,48 @@ export class MiddleOutStrategy implements CompressionStrategy {
     mode: 'threshold',
     defaultThreshold: 0.85,
   };
+
+  readonly summaryRequestOwnership = new RowOwnership();
+
+  async compressDisk(
+    context: Omit<CompressionContext, 'history'> & {
+      readonly history: HistoryDensityRows;
+    },
+    candidate: HistoryDensityRows,
+  ): Promise<
+    | { readonly kind: 'applied'; readonly top: number }
+    | { readonly kind: 'noop' }
+  > {
+    const plan = planDiskMiddleOut(context.history, context);
+    if (plan === undefined) return { kind: 'noop' };
+    const providerResult = destructureProviderResult(
+      await context.resolveProvider(
+        context.runtimeContext.ephemerals.compressionProfile(),
+      ),
+    );
+    const { finalSummary, capturedUsage } = await withDiskSummaryRequest(
+      context.history,
+      plan,
+      this.resolvePrompt(context),
+      this.buildContextInjections(context),
+      this.summaryRequestOwnership,
+      (request) => this.compressAndVerify(context, request, providerResult),
+    );
+    for (let index = 0; index < plan.top; index++)
+      candidate.append(context.history.readRow(index));
+    for (const row of this.assembleHistory(
+      [],
+      finalSummary,
+      [],
+      context.activeTodos,
+      capturedUsage,
+      plan.lastPromptContext,
+    ))
+      candidate.append(row);
+    for (let index = plan.bottom; index < context.history.length; index++)
+      candidate.append(context.history.readRow(index));
+    return { kind: 'applied', top: plan.top };
+  }
 
   async compress(
     context: CompressionContext,
@@ -189,7 +238,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
   }
 
   private async maybeVerifySummary(
-    context: CompressionContext,
+    context: Omit<CompressionContext, 'history'>,
     provider: IProvider,
     summary: string,
     resolvedRuntime: ProviderRuntimeContext,
@@ -351,7 +400,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
     return -1;
   }
 
-  private resolvePrompt(context: CompressionContext): string {
+  private resolvePrompt(context: Omit<CompressionContext, 'history'>): string {
     const resolved = context.promptResolver.resolveFile(
       context.promptBaseDir,
       'compression.md',
@@ -379,7 +428,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
    * summary is empty, then runs the optional verification pass.
    */
   private async compressAndVerify(
-    context: CompressionContext,
+    context: Omit<CompressionContext, 'history'>,
     request: IContent[],
     providerResult: ReturnType<typeof destructureProviderResult>,
   ): Promise<{ finalSummary: string; capturedUsage: UsageStats | undefined }> {
@@ -425,7 +474,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
   private async callProvider(
     provider: IProvider,
     request: IContent[],
-    context: CompressionContext,
+    context: Omit<CompressionContext, 'history'>,
     resolvedRuntime: ProviderRuntimeContext,
     resolvedConfig: Config | undefined,
     resolvedOptions: RuntimeGenerateChatOptions['resolved'] | undefined,
@@ -685,7 +734,9 @@ ${messageText}`,
    * @requirement REQ-HD-011.3, REQ-HD-012.2
    * @pseudocode prompts-todos.md lines 251-276
    */
-  private buildContextInjections(context: CompressionContext): IContent[] {
+  private buildContextInjections(
+    context: Omit<CompressionContext, 'history'>,
+  ): IContent[] {
     const injections: IContent[] = [];
 
     if (context.activeTodos && context.activeTodos.trim().length > 0) {

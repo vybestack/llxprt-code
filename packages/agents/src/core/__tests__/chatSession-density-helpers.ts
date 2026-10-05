@@ -194,7 +194,7 @@ export interface ChatSessionInternals {
     promptId: string,
     provider?: unknown,
   ): Promise<void>;
-  shouldCompress(pendingTokens?: number): boolean;
+  shouldCompress(pendingTokens?: number): Promise<boolean>;
 }
 
 export function getInternals(chat: ChatSession): ChatSessionInternals {

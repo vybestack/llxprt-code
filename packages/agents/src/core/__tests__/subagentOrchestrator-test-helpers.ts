@@ -24,9 +24,12 @@ import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message
 import { SubagentOrchestrator } from '../subagentOrchestrator.js';
 import { type SubAgentScope as SubAgentScopeInstance } from '../subagent.js';
 
+import { makeRecordingInputs } from './subagent-journal-fixture.js';
+
 export function makeForegroundConfig(): Config {
   const settingsService = new SettingsService();
   return {
+    ...makeRecordingInputs(),
     getSessionId: () => 'primary-session',
     getProvider: () => 'gemini',
     getContentGeneratorConfig: () => undefined,

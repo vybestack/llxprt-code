@@ -252,7 +252,7 @@ export function buildTriggerInstruction(toCompress: IContent[]): string {
 export async function runVerificationPass(
   provider: IProvider,
   initialSummary: string,
-  context: CompressionContext,
+  context: Omit<CompressionContext, 'history'>,
   resolvedRuntime?: ProviderRuntimeContext,
   resolvedConfig?: Config,
   resolvedOptions?: RuntimeGenerateChatOptions['resolved'],

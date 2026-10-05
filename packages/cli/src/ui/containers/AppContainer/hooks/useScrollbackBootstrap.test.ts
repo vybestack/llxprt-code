@@ -151,6 +151,35 @@ function makeHarness(options: HarnessOptions): {
 describe('useScrollbackBootstrap', () => {
   afterEach(() => cleanupJournalDirs());
 
+  it('rebinds scrollback to the resumed journal after a recording swap', async () => {
+    const first = await makeJournalFixture([[1, 'old session']]);
+    const second = await makeJournalFixture([[1, 'resumed session']]);
+    const { props } = makeHarness({
+      ui: { scrollbackPagerEnabled: true },
+      recordingPath: first.filePath,
+    });
+    const { result, rerender, unmount } = renderHook(
+      (p: UseScrollbackBootstrapOptions) => useScrollbackBootstrap(p),
+      { initialProps: props },
+    );
+    const oldPager = result.current.pager;
+    await oldPager?.store.pageBack();
+    const oldGeneration = oldPager?.store.getState().generation ?? 0;
+    rerender({
+      ...props,
+      recordingSwapCallbacks: makeSwapCallbacks(second.filePath),
+    });
+    const resumedPager = result.current.pager;
+    await resumedPager?.store.pageBack();
+    expect(
+      resumedPager?.store.getState().rows.map((row) => row.item.text),
+    ).toStrictEqual(['resumed session']);
+    expect(oldPager?.store.getState().generation).toBeGreaterThan(
+      oldGeneration,
+    );
+    unmount();
+  });
+
   it('flag off constructs no pager and emits no notice', () => {
     // The schema default is on since the P02e flip, so flag-off coverage
     // passes the setting explicitly.
@@ -167,6 +196,10 @@ describe('useScrollbackBootstrap', () => {
     expect(result.current.restartNotice).toBeNull();
     expect(addItem).not.toHaveBeenCalled();
   });
+});
+
+describe('useScrollbackBootstrap (group 2)', () => {
+  afterEach(() => cleanupJournalDirs());
 
   it('flag on binds the pager to the session journal file', async () => {
     const fixture = await makeJournalFixture([
@@ -236,6 +269,10 @@ describe('useScrollbackBootstrap', () => {
     expect(notice.type).toBe('info');
     expect(notice.text).toBe('scrollback unavailable: no journal');
   });
+});
+
+describe('useScrollbackBootstrap (group 3)', () => {
+  afterEach(() => cleanupJournalDirs());
 
   it('failed journal resolution emits the notice exactly once across renders', () => {
     const { props, addItem } = makeHarness({
@@ -299,6 +336,10 @@ describe('useScrollbackBootstrap', () => {
     expect(result.current.pager).toBe(pagerBefore);
     unmount();
   });
+});
+
+describe('useScrollbackBootstrap (group 4)', () => {
+  afterEach(() => cleanupJournalDirs());
 
   it('toggle back to the boot value clears the restart notice', async () => {
     const fixture = await makeJournalFixture();

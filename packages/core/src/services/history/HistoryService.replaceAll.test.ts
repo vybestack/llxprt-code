@@ -1,3 +1,4 @@
+import { collectRowsForAssertions } from '../../test-utils/collect-rows-for-assertions.js';
 /**
  * Copyright 2026 Vybestack LLC
  *
@@ -16,7 +17,7 @@
 
 import { describe, expect, it } from 'bun:test';
 import type { RuntimeTokenizerFactory } from '../../runtime/contracts/RuntimeTokenizerFactory.js';
-import { createUserMessage } from './IContent.js';
+import { createUserMessage, type IContent } from './IContent.js';
 import { HistoryService } from './HistoryService.js';
 
 function createBlockedTokenizerFactory(): {
@@ -59,8 +60,10 @@ async function expectConsistentTokenCount(
   service: HistoryService,
 ): Promise<void> {
   await service.waitForTokenUpdates();
-  const expected = await service.estimateTokensForContents(service.getAll());
-  expect(service.getTotalTokens()).toBe(expected);
+  await collectRowsForAssertions(service.streamRawHistory(), async (all) => {
+    const expected = await service.estimateTokensForContents(all);
+    expect(service.getTotalTokens()).toBe(expected);
+  });
 }
 
 function createQueuedFailureListener(service: HistoryService): () => never {
@@ -89,6 +92,43 @@ function errorMessages(errors: readonly unknown[]): readonly string[] {
   );
 }
 
+async function expectQueuedValues(
+  service: HistoryService,
+  replacement: IContent,
+  appended: IContent,
+): Promise<void> {
+  await collectRowsForAssertions(service.streamRawHistory(), (all) => {
+    expect(all).toStrictEqual([
+      {
+        ...replacement,
+        metadata: {
+          chronology: {
+            seq: 1,
+            userTurn: 1,
+            step: 1,
+            recordedAt: expect.any(Number),
+          },
+        },
+      },
+      appended,
+    ]);
+    expect(all[0].metadata?.chronology).toMatchObject({
+      seq: 1,
+      userTurn: 1,
+      step: 1,
+    });
+    expect(all[1].metadata?.chronology).toMatchObject({
+      seq: 2,
+      userTurn: 2,
+      step: 1,
+    });
+    expect(all[0].metadata?.chronology?.recordedAt).toStrictEqual(
+      expect.any(Number),
+    );
+    expect(all[0]).not.toBe(replacement);
+  });
+}
+
 describe('HistoryService replaceAll serialization', () => {
   it('applies an add after an in-flight replacement without losing its tokens', async () => {
     const service = new HistoryService();
@@ -104,7 +144,9 @@ describe('HistoryService replaceAll serialization', () => {
     blocked.release();
     await replacing;
 
-    expect(service.getAll()).toStrictEqual([replacement, appended]);
+    await service.waitForCommit();
+    await expectQueuedValues(service, replacement, appended);
+    expect(replacement.metadata).toBeUndefined();
     await expectConsistentTokenCount(service);
   });
 
@@ -120,11 +162,13 @@ describe('HistoryService replaceAll serialization', () => {
     blocked.release();
     await replacing;
 
-    expect(service.getAll()).toStrictEqual([]);
+    await collectRowsForAssertions(service.streamRawHistory(), (all) => {
+      expect(all).toStrictEqual([]);
+    });
     await expectConsistentTokenCount(service);
   });
 
-  it('rolls back an add when a content listener rejects it', () => {
+  it('rolls back an add when a content listener rejects it', async () => {
     const service = new HistoryService();
     service.on('contentAdded', () => {
       throw new Error('listener failed');
@@ -133,10 +177,12 @@ describe('HistoryService replaceAll serialization', () => {
     expect(() => service.add(createUserMessage('rejected'))).toThrow(
       'listener failed',
     );
-    expect(service.getAll()).toStrictEqual([]);
+    await collectRowsForAssertions(service.streamRawHistory(), (all) => {
+      expect(all).toStrictEqual([]);
+    });
   });
 
-  it('reports every initial and queued listener failure', () => {
+  it('reports every initial and queued listener failure', async () => {
     const service = new HistoryService();
     service.on('contentAdded', createQueuedFailureListener(service));
 
@@ -155,6 +201,8 @@ describe('HistoryService replaceAll serialization', () => {
       'queued failure 1',
       'queued failure 2',
     ]);
-    expect(service.getAll()).toStrictEqual([]);
+    await collectRowsForAssertions(service.streamRawHistory(), (all) => {
+      expect(all).toStrictEqual([]);
+    });
   });
 });

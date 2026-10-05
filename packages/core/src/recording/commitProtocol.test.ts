@@ -309,7 +309,7 @@ function gatedPassthrough(gate: AppendGate): AppendBehavior {
  * RecordingIntegration.lifecycle.test.ts's ControlledPersistenceService.
  */
 type ControlledSave = {
-  readonly history: readonly IContent[];
+  readonly file: string;
   readonly resolve: () => void;
   readonly reject: (error: unknown) => void;
 };
@@ -317,10 +317,20 @@ type ControlledSave = {
 class ControlledPersistenceService extends SessionPersistenceService {
   private readonly saves: ControlledSave[] = [];
 
-  override save(history: IContent[]): Promise<void> {
+  override saveJournal(file: string): Promise<void> {
     return new Promise<void>((resolve, reject) => {
-      this.saves.push({ history, resolve, reject });
+      this.saves.push({ file, resolve, reject });
+      this.ready?.();
     });
+  }
+
+  private ready: (() => void) | undefined;
+
+  async waitForSave(): Promise<void> {
+    if (this.saves.length === 0)
+      await new Promise<void>((resolve) => {
+        this.ready = resolve;
+      });
   }
 
   getSave(index: number): {
@@ -339,23 +349,35 @@ class ControlledPersistenceService extends SessionPersistenceService {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('Awaitable commit protocol @plan:PLAN-20260917-ISSUE854.P05 @requirement:G2', () => {
+function createTestDirectory(
+  setPaths?: (tempDir: string, chatsDir: string) => void,
+): { setup: () => Promise<void>; cleanup: () => Promise<void> } {
   let tempDir = '';
   let chatsDir = '';
+  return {
+    setup: async () => {
+      tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'commit-protocol-'));
+      chatsDir = path.join(tempDir, 'chats');
+      await fs.mkdir(chatsDir, { recursive: true });
+      setPaths?.(tempDir, chatsDir);
+    },
+    cleanup: async () => {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    },
+  };
+}
 
-  beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'commit-protocol-'));
-    chatsDir = path.join(tempDir, 'chats');
-    await fs.mkdir(chatsDir, { recursive: true });
+// -------------------------------------------------------------------------
+// Pin 1 — commit ack watermarks.
+// -------------------------------------------------------------------------
+
+describe('Awaitable commit protocol @plan:PLAN-20260917-ISSUE854.P05 @requirement:G2 / commit watermarks and awaiting durability', () => {
+  let chatsDir = '';
+  const fixture = createTestDirectory((_, chats) => {
+    chatsDir = chats;
   });
-
-  afterEach(async () => {
-    await fs.rm(tempDir, { recursive: true, force: true });
-  });
-
-  // -------------------------------------------------------------------------
-  // Pin 1 — commit ack watermarks.
-  // -------------------------------------------------------------------------
+  beforeEach(fixture.setup);
+  afterEach(fixture.cleanup);
 
   it('commit resolves with a watermark: seq equals the envelope seq and byteOffset equals the file size at ack time', async () => {
     const recording = new SessionRecordingService(
@@ -431,10 +453,19 @@ describe('Awaitable commit protocol @plan:PLAN-20260917-ISSUE854.P05 @requiremen
     expect(recording.getPendingByteCount()).toBe(0);
     await recording.dispose();
   });
+});
 
-  // -------------------------------------------------------------------------
-  // Pin 2 — bounded queue with backpressure; explicit Infinity opt-out.
-  // -------------------------------------------------------------------------
+// -------------------------------------------------------------------------
+// Pin 2 — bounded queue with backpressure; explicit Infinity opt-out.
+// -------------------------------------------------------------------------
+
+describe('Awaitable commit protocol @plan:PLAN-20260917-ISSUE854.P05 @requirement:G2 / bounded queue behavior', () => {
+  let chatsDir = '';
+  const fixture = createTestDirectory((_, chats) => {
+    chatsDir = chats;
+  });
+  beforeEach(fixture.setup);
+  afterEach(fixture.cleanup);
 
   it('commits beyond maxQueueBytes apply backpressure: they await instead of throwing or dropping', async () => {
     const gate = new AppendGate();
@@ -518,10 +549,19 @@ describe('Awaitable commit protocol @plan:PLAN-20260917-ISSUE854.P05 @requiremen
     expect(rejections).toStrictEqual([]);
     await recording.dispose();
   });
+});
 
-  // -------------------------------------------------------------------------
-  // Pin 3 — fail fast: injected write errors reject the commit loudly.
-  // -------------------------------------------------------------------------
+// -------------------------------------------------------------------------
+// Pin 3 — fail fast: injected write errors reject the commit loudly.
+// -------------------------------------------------------------------------
+
+describe('Awaitable commit protocol @plan:PLAN-20260917-ISSUE854.P05 @requirement:G2 / write failure propagation', () => {
+  let chatsDir = '';
+  const fixture = createTestDirectory((_, chats) => {
+    chatsDir = chats;
+  });
+  beforeEach(fixture.setup);
+  afterEach(fixture.cleanup);
 
   it('injected ENOSPC rejects the pending commit with the underlying error and poisons subsequent commits', async () => {
     const recording = new SessionRecordingService(
@@ -552,7 +592,9 @@ describe('Awaitable commit protocol @plan:PLAN-20260917-ISSUE854.P05 @requiremen
 
   it('injected EACCES surfaces its code on the commit rejection', async () => {
     const recording = new SessionRecordingService(
-      makeConfig(chatsDir, { io: new InjectedWriter(alwaysFail('EACCES')).io }),
+      makeConfig(chatsDir, {
+        io: new InjectedWriter(alwaysFail('EACCES')).io,
+      }),
     );
     const failure = await captureFailure(
       recording.commit('content', { content: makeContent('denied') }),
@@ -564,7 +606,9 @@ describe('Awaitable commit protocol @plan:PLAN-20260917-ISSUE854.P05 @requiremen
 
   it('injected ENOENT surfaces its code on the commit rejection', async () => {
     const recording = new SessionRecordingService(
-      makeConfig(chatsDir, { io: new InjectedWriter(alwaysFail('ENOENT')).io }),
+      makeConfig(chatsDir, {
+        io: new InjectedWriter(alwaysFail('ENOENT')).io,
+      }),
     );
     const failure = await captureFailure(
       recording.commit('content', { content: makeContent('vanished') }),
@@ -573,6 +617,15 @@ describe('Awaitable commit protocol @plan:PLAN-20260917-ISSUE854.P05 @requiremen
     expect(recording.isActive()).toBe(false);
     await recording.dispose();
   });
+});
+
+describe('Awaitable commit protocol @plan:PLAN-20260917-ISSUE854.P05 @requirement:G2 / append integrity and ordered acknowledgements', () => {
+  let chatsDir = '';
+  const fixture = createTestDirectory((_, chats) => {
+    chatsDir = chats;
+  });
+  beforeEach(fixture.setup);
+  afterEach(fixture.cleanup);
 
   it('a failed append leaves the bytes before the failure point byte-identical (append-only preserved)', async () => {
     const recording = new SessionRecordingService(
@@ -638,10 +691,21 @@ describe('Awaitable commit protocol @plan:PLAN-20260917-ISSUE854.P05 @requiremen
     }
     await recording.dispose();
   });
+});
 
-  // -------------------------------------------------------------------------
-  // Pin 5 — failure AFTER the append: observer channel, never the commit.
-  // -------------------------------------------------------------------------
+// -------------------------------------------------------------------------
+// Pin 5 — failure AFTER the append: observer channel, never the commit.
+// -------------------------------------------------------------------------
+
+describe('Awaitable commit protocol @plan:PLAN-20260917-ISSUE854.P05 @requirement:G2 / observer failure isolation', () => {
+  let tempDir = '';
+  let chatsDir = '';
+  const fixture = createTestDirectory((dir, chats) => {
+    tempDir = dir;
+    chatsDir = chats;
+  });
+  beforeEach(fixture.setup);
+  afterEach(fixture.cleanup);
 
   it('an observer failing after the append neither rolls back the journal nor rejects the resolved commit', async () => {
     const recording = new SessionRecordingService(makeConfig(chatsDir));
@@ -651,7 +715,7 @@ describe('Awaitable commit protocol @plan:PLAN-20260917-ISSUE854.P05 @requiremen
     );
     const history = new HistoryService();
     const integration = new RecordingIntegration(recording, persistence);
-    integration.subscribeToHistory(history);
+    await integration.subscribeToJournal(history);
 
     // Append committed, ack resolved.
     const watermark: CommitWatermark = await recording.commit('content', {
@@ -668,11 +732,10 @@ describe('Awaitable commit protocol @plan:PLAN-20260917-ISSUE854.P05 @requiremen
     expect(bytesWithObservedRow.startsWith(bytesAtAck)).toBe(true);
 
     // The observer fails AFTER the append committed.
+    const boundary = captureFailure(integration.flushAtTurnBoundary());
+    await persistence.waitForSave();
     persistence.getSave(0).reject(new Error('observer persistence exploded'));
-
-    const boundaryFailure = await captureFailure(
-      integration.flushAtTurnBoundary(),
-    );
+    const boundaryFailure = await boundary;
     expect(boundaryFailure).toBeInstanceOf(Error);
     expect((boundaryFailure as Error).message).toContain(
       'observer persistence exploded',
@@ -687,10 +750,19 @@ describe('Awaitable commit protocol @plan:PLAN-20260917-ISSUE854.P05 @requiremen
     await integration.dispose();
     await recording.dispose();
   });
+});
 
-  // -------------------------------------------------------------------------
-  // Pin 6 — concurrent queued commits under a slow disk.
-  // -------------------------------------------------------------------------
+// -------------------------------------------------------------------------
+// Pin 6 — concurrent queued commits under a slow disk.
+// -------------------------------------------------------------------------
+
+describe('Awaitable commit protocol @plan:PLAN-20260917-ISSUE854.P05 @requirement:G2 / concurrent acknowledgements and resolution', () => {
+  let chatsDir = '';
+  const fixture = createTestDirectory((_, chats) => {
+    chatsDir = chats;
+  });
+  beforeEach(fixture.setup);
+  afterEach(fixture.cleanup);
 
   it('eight concurrent commits under a slow disk all resolve with exactly-once, monotone watermarks', async () => {
     const recording = new SessionRecordingService(

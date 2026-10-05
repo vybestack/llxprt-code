@@ -237,6 +237,11 @@
       "bun": "./src/utils/dumpSDKContext.ts",
       "import": "./dist/src/utils/dumpSDKContext.js"
     },
+    "./utils/streamPrettyJson.js": {
+      "types": "./dist/src/utils/streamPrettyJson.d.ts",
+      "bun": "./src/utils/streamPrettyJson.ts",
+      "import": "./dist/src/utils/streamPrettyJson.js"
+    },
     "./utils/request-media-resolution.js": {
       "types": "./dist/src/utils/request-media-resolution.d.ts",
       "bun": "./src/utils/request-media-resolution.ts",

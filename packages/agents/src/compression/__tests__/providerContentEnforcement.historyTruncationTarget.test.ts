@@ -1,3 +1,4 @@
+import { curatedHistoryForTest } from '../../../../core/src/test-utils/curated-history-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -37,8 +38,7 @@ import {
   ProviderContentEnforcer,
   type ProviderContentEnforcementDeps,
 } from '../providerContentEnforcement.js';
-import { TopDownTruncationStrategy } from '../TopDownTruncationStrategy.js';
-import { buildCompressionContext } from '../compressionContextBuilder.js';
+import { runDiskProviderFallback } from '../diskProviderFallback.js';
 import { computeMarginAdjustedLimit } from '../contextLimitPolicy.js';
 
 const MODEL = 'test-model';
@@ -108,7 +108,8 @@ function buildFallbackCompression(
   logger: DebugLogger,
 ): ProviderContentEnforcementDeps['performFallbackCompression'] {
   return async (promptId, applyResult, targetTokenCount) => {
-    const context = await buildCompressionContext(
+    const result = await runDiskProviderFallback(
+      applyResult,
       promptId,
       runtimeContext,
       historyService,
@@ -122,12 +123,7 @@ function buildFallbackCompression(
       logger,
       { targetTokenCount },
     );
-    const result = await new TopDownTruncationStrategy().compress(context);
-    if (result.kind === 'noop') {
-      return false;
-    }
-    await applyResult(result.newHistory);
-    return true;
+    return result.outcome === 'applied';
   };
 }
 
@@ -188,7 +184,7 @@ async function buildHarness(): Promise<Harness> {
     historyService,
     pending,
     envelope: buildEnvelope(
-      [...historyService.getCurated(), ...pending],
+      [...curatedHistoryForTest(historyService), ...pending],
       pending,
     ),
   };
@@ -203,7 +199,7 @@ describe('ProviderContentEnforcer history-truncation target (issue #3406)', () =
     const ephemeralTarget = COMPRESSION_THRESHOLD * CONTEXT_LIMIT * 0.6;
     const historyTokens = historyService.getTotalTokens();
     const envelopeTokens = await historyService.estimateTokensForContents(
-      [...historyService.getCurated(), ...pending],
+      [...curatedHistoryForTest(historyService), ...pending],
       MODEL,
     );
 
@@ -213,7 +209,7 @@ describe('ProviderContentEnforcer history-truncation target (issue #3406)', () =
     expect(historyTokens).toBeLessThanOrEqual(ephemeralTarget);
 
     const envelope = buildEnvelope(
-      [...historyService.getCurated(), ...pending],
+      [...curatedHistoryForTest(historyService), ...pending],
       pending,
     );
     const result = await enforcer.enforce(envelope, 'prompt-3406', undefined);
@@ -236,7 +232,7 @@ describe('ProviderContentEnforcer history-truncation target (issue #3406)', () =
     // the budget once the completion reservation is small.
     const smallPending = [textContent('human', 'hi')];
     const envelope = buildEnvelope(
-      [...historyService.getCurated(), ...smallPending],
+      [...curatedHistoryForTest(historyService), ...smallPending],
       smallPending,
     );
 

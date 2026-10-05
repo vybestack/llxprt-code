@@ -23,8 +23,9 @@
  * P02a per implementation-plan.md §10; behavior spec: issue-854-design.md §2.
  */
 
-import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
+import { describe, expect, it, beforeEach, afterEach, vi } from 'bun:test';
 import * as fs from 'node:fs/promises';
+import { truncateSync } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { JournalCursor, MAX_RECORD_BYTES } from './journalCursor.js';
@@ -182,20 +183,20 @@ function contentTexts(page: JournalPage): string[] {
   );
 }
 
-describe('JournalCursor @plan:PLAN-20260917-ISSUE854.P02 @requirement:G2', () => {
+function createCursorFixtures() {
   let tempDir = '';
   let filePath = '';
   let opened: JournalCursor[] = [];
   let recordings: SessionRecordingService[] = [];
 
-  beforeEach(async () => {
+  async function initialize(): Promise<void> {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'journal-cursor-test-'));
     filePath = path.join(tempDir, 'session-under-test.jsonl');
     opened = [];
     recordings = [];
-  });
+  }
 
-  afterEach(async () => {
+  async function cleanup(): Promise<void> {
     for (const cursor of opened.splice(0).reverse()) {
       await cursor.close().catch(() => undefined);
     }
@@ -203,7 +204,7 @@ describe('JournalCursor @plan:PLAN-20260917-ISSUE854.P02 @requirement:G2', () =>
       await recording.dispose().catch(() => undefined);
     }
     await fs.rm(tempDir, { recursive: true, force: true });
-  });
+  }
 
   async function openAndTrack(
     options: JournalCursorOptions = {},
@@ -213,7 +214,120 @@ describe('JournalCursor @plan:PLAN-20260917-ISSUE854.P02 @requirement:G2', () =>
     return cursor;
   }
 
+  return {
+    get tempDir() {
+      return tempDir;
+    },
+    get filePath() {
+      return filePath;
+    },
+    get opened() {
+      return opened;
+    },
+    get recordings() {
+      return recordings;
+    },
+    openAndTrack,
+    initialize,
+    cleanup,
+  };
+}
+
+describe('JournalCursor @plan:PLAN-20260917-ISSUE854.P02 @requirement:G2 bounded raw chunk allocations', () => {
+  const fixtures = createCursorFixtures();
+  beforeEach(fixtures.initialize);
+  afterEach(fixtures.cleanup);
+  it('caps raw chunk allocations while reading a complete line larger than the cap', async () => {
+    const { filePath, openAndTrack } = fixtures;
+    const writer = new FixtureWriter(filePath);
+    await writer.add(contentLine(1, textContent('human', 'a'.repeat(140_000))));
+    const lengths: number[] = [];
+    const allocate = Buffer.alloc;
+    const spy = vi.spyOn(Buffer, 'alloc').mockImplementation((size) => {
+      lengths.push(size);
+      return allocate(size);
+    });
+    try {
+      const cursor = await openAndTrack({ chunkBytes: 250_000 });
+      const page = await cursor.pageBack(1);
+      expect(contentTexts(page)).toStrictEqual(['a'.repeat(140_000)]);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(lengths.length).toBeGreaterThan(1);
+    expect(Math.max(...lengths)).toBeLessThanOrEqual(64 * 1024);
+  });
+});
+
+describe('JournalCursor @plan:PLAN-20260917-ISSUE854.P02 @requirement:G2 bounded buffer reuse', () => {
+  const fixtures = createCursorFixtures();
+  beforeEach(fixtures.initialize);
+  afterEach(fixtures.cleanup);
+  it('reuses bounded scan and decode buffers across many chunk reads', async () => {
+    const { filePath, openAndTrack } = fixtures;
+    const writer = new FixtureWriter(filePath);
+    const text = '😀'.repeat(20_000);
+    await writer.add(contentLine(1, textContent('human', text)));
+    const allocate = Buffer.alloc;
+    const lengths: number[] = [];
+    const spy = vi.spyOn(Buffer, 'alloc').mockImplementation((size) => {
+      lengths.push(size);
+      return allocate(size);
+    });
+    try {
+      const cursor = await openAndTrack({ chunkBytes: 7 });
+      const back = await cursor.pageBack(1);
+      expect(contentTexts(back)).toStrictEqual([text]);
+      await cursor.close();
+      await fs.writeFile(filePath, '');
+      const forward = await openAndTrack({ chunkBytes: 7 });
+      await fs.appendFile(
+        filePath,
+        `${contentLine(2, textContent('human', text))}\n`,
+      );
+      expect(contentTexts(await forward.pageForward(1))).toStrictEqual([text]);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(lengths.length).toBeLessThan(20);
+    expect(Math.max(...lengths)).toBeLessThanOrEqual(64 * 1024);
+  });
+});
+
+describe('JournalCursor @plan:PLAN-20260917-ISSUE854.P02 @requirement:G2 forward truncation', () => {
+  const fixtures = createCursorFixtures();
+  beforeEach(fixtures.initialize);
+  afterEach(fixtures.cleanup);
+  it('stops forward scanning when the journal is truncated after the prepass', async () => {
+    const { filePath, openAndTrack } = fixtures;
+    await fs.writeFile(filePath, '');
+    const first = `${contentLine(1, textContent('human', 'survives'))}\n`;
+    const second = `${contentLine(2, textContent('human', 'removed'))}\n`;
+    let truncated = false;
+    const cursor = await openAndTrack({
+      chunkBytes: 7,
+      onParsedRecord: (_, envelope) => {
+        if (envelope.seq === 1) {
+          truncateSync(filePath, Buffer.byteLength(first));
+          truncated = true;
+        }
+      },
+    });
+    await fs.appendFile(filePath, first + second);
+    const page = await cursor.pageForward(10);
+    expect(truncated).toBe(true);
+    expect(contentSeqs(page)).toStrictEqual([1]);
+    expect(contentTexts(page)).toStrictEqual(['survives']);
+    expect(cursor.windowEnd()).toBe(Buffer.byteLength(first));
+  });
+});
+
+describe('JournalCursor @plan:PLAN-20260917-ISSUE854.P02 @requirement:G2 reverse journal order', () => {
+  const fixtures = createCursorFixtures();
+  beforeEach(fixtures.initialize);
+  afterEach(fixtures.cleanup);
   it('reads records in reverse byte order matching reverse seq order', async () => {
+    const { tempDir, opened, recordings } = fixtures;
     const chatsDir = path.join(tempDir, 'chats');
     const recording = new SessionRecordingService(makeConfig(chatsDir));
     recordings.push(recording);
@@ -254,8 +368,14 @@ describe('JournalCursor @plan:PLAN-20260917-ISSUE854.P02 @requirement:G2', () =>
     }
     expect(cursor.size()).toBeGreaterThan(0);
   });
+});
 
+describe('JournalCursor @plan:PLAN-20260917-ISSUE854.P02 @requirement:G2 multi-chunk records', () => {
+  const fixtures = createCursorFixtures();
+  beforeEach(fixtures.initialize);
+  afterEach(fixtures.cleanup);
   it('assembles a record spanning more than three chunks', async () => {
+    const { filePath, openAndTrack } = fixtures;
     const writer = new FixtureWriter(filePath);
     await writer.add(envelopeJson(1, 'session_start', { sessionId: 's' }));
     const bigText = 'y'.repeat(200);
@@ -269,8 +389,14 @@ describe('JournalCursor @plan:PLAN-20260917-ISSUE854.P02 @requirement:G2', () =>
     expect(contentTexts(page)[1]).toBe(bigText);
     expect(page.envelopes).toHaveLength(3);
   });
+});
 
+describe('JournalCursor @plan:PLAN-20260917-ISSUE854.P02 @requirement:G2 split UTF-8', () => {
+  const fixtures = createCursorFixtures();
+  beforeEach(fixtures.initialize);
+  afterEach(fixtures.cleanup);
   it('decodes a multi-byte UTF-8 character split exactly at a chunk edge', async () => {
+    const { filePath, openAndTrack } = fixtures;
     const writer = new FixtureWriter(filePath);
     // Line 1 is padded to exactly one chunk so line 2 starts chunk-aligned.
     await writer.add(paddedLineTo(1, textContent('human', ''), CHUNK));
@@ -297,8 +423,14 @@ describe('JournalCursor @plan:PLAN-20260917-ISSUE854.P02 @requirement:G2', () =>
     expect(contentSeqs(page)).toStrictEqual([2, 1]);
     expect(contentTexts(page)[0]).toBe(text);
   });
+});
 
+describe('JournalCursor @plan:PLAN-20260917-ISSUE854.P02 @requirement:G2 chunk boundaries', () => {
+  const fixtures = createCursorFixtures();
+  beforeEach(fixtures.initialize);
+  afterEach(fixtures.cleanup);
   it('reads records that end and start exactly at chunk boundaries', async () => {
+    const { filePath, openAndTrack } = fixtures;
     const writer = new FixtureWriter(filePath);
     const firstOffset = await writer.add(
       paddedLineTo(1, textContent('human', ''), CHUNK),
@@ -320,8 +452,14 @@ describe('JournalCursor @plan:PLAN-20260917-ISSUE854.P02 @requirement:G2', () =>
       CHUNK * 2,
     ]);
   });
+});
 
+describe('JournalCursor @plan:PLAN-20260917-ISSUE854.P02 @requirement:G2 torn tail and CRLF', () => {
+  const fixtures = createCursorFixtures();
+  beforeEach(fixtures.initialize);
+  afterEach(fixtures.cleanup);
   it('ignores a torn tail and decodes CRLF-terminated lines', async () => {
+    const { filePath, openAndTrack } = fixtures;
     const writer = new FixtureWriter(filePath);
     await writer.addRaw(
       `${envelopeJson(1, 'session_start', { sessionId: 's' })}\r\n`,
@@ -348,8 +486,14 @@ describe('JournalCursor @plan:PLAN-20260917-ISSUE854.P02 @requirement:G2', () =>
     expect(page.envelopes[1].offset).toBe(offset2);
     expect(cursor.windowStart()).toBe(0);
   });
+});
 
+describe('JournalCursor @plan:PLAN-20260917-ISSUE854.P02 @requirement:G2 head continuation', () => {
+  const fixtures = createCursorFixtures();
+  beforeEach(fixtures.initialize);
+  afterEach(fixtures.cleanup);
   it('reassembles a head-continuation line from the earlier chunk', async () => {
+    const { filePath, openAndTrack } = fixtures;
     const writer = new FixtureWriter(filePath);
     await writer.add(envelopeJson(1, 'session_start', { sessionId: 's' }));
     const offsets: number[] = [];
@@ -375,8 +519,14 @@ describe('JournalCursor @plan:PLAN-20260917-ISSUE854.P02 @requirement:G2', () =>
     ]);
     expect(cursor.windowStart()).toBe(offsets[0]);
   });
+});
 
+describe('JournalCursor @plan:PLAN-20260917-ISSUE854.P02 @requirement:G2 atomic tool groups', () => {
+  const fixtures = createCursorFixtures();
+  beforeEach(fixtures.initialize);
+  afterEach(fixtures.cleanup);
   it('keeps a tool group atomic when the pair straddles a page boundary', async () => {
+    const { filePath, openAndTrack } = fixtures;
     const writer = new FixtureWriter(filePath);
     // Open on an empty journal so the forward head starts at byte 0 and the
     // freshly appended pair pages forward as one entry.
@@ -434,8 +584,14 @@ describe('JournalCursor @plan:PLAN-20260917-ISSUE854.P02 @requirement:G2', () =>
     expect(backwardGroup.seqSpan).toStrictEqual([2, 4]);
     expect(backward.windowStart()).toBe(callOffset);
   });
+});
 
+describe('JournalCursor @plan:PLAN-20260917-ISSUE854.P02 @requirement:G2 interleaved metadata', () => {
+  const fixtures = createCursorFixtures();
+  beforeEach(fixtures.initialize);
+  afterEach(fixtures.cleanup);
   it('skips interleaved metadata envelopes and retains their offsets', async () => {
+    const { filePath, openAndTrack } = fixtures;
     const writer = new FixtureWriter(filePath);
     const offsets: number[] = [];
     offsets.push(
@@ -461,7 +617,10 @@ describe('JournalCursor @plan:PLAN-20260917-ISSUE854.P02 @requirement:G2', () =>
     );
     offsets.push(
       await writer.add(
-        envelopeJson(8, 'checkpoint_created', { checkpointId: 'c', name: 'n' }),
+        envelopeJson(8, 'checkpoint_created', {
+          checkpointId: 'c',
+          name: 'n',
+        }),
       ),
     );
     offsets.push(await writer.add(contentLine(9, textContent('human', 'C'))));
@@ -488,8 +647,14 @@ describe('JournalCursor @plan:PLAN-20260917-ISSUE854.P02 @requirement:G2', () =>
     ]);
     expect(cursor.windowStart()).toBe(0);
   });
+});
 
+describe('JournalCursor @plan:PLAN-20260917-ISSUE854.P02 @requirement:G2 stable page windows', () => {
+  const fixtures = createCursorFixtures();
+  beforeEach(fixtures.initialize);
+  afterEach(fixtures.cleanup);
   it('keeps repeated pageBack and pageForward windows stable without duplicates', async () => {
+    const { filePath, openAndTrack } = fixtures;
     const writer = new FixtureWriter(filePath);
     await writer.add(envelopeJson(1, 'session_start', { sessionId: 's' }));
     for (let seq = 2; seq <= 7; seq += 1) {
@@ -539,8 +704,14 @@ describe('JournalCursor @plan:PLAN-20260917-ISSUE854.P02 @requirement:G2', () =>
 
     expect(new Set(seen).size).toBe(seen.length);
   });
+});
 
+describe('JournalCursor @plan:PLAN-20260917-ISSUE854.P02 @requirement:G2 appended records', () => {
+  const fixtures = createCursorFixtures();
+  beforeEach(fixtures.initialize);
+  afterEach(fixtures.cleanup);
   it('pages records appended after the cursor was opened', async () => {
+    const { filePath, openAndTrack } = fixtures;
     const writer = new FixtureWriter(filePath);
     await writer.add(envelopeJson(1, 'session_start', { sessionId: 's' }));
     await writer.add(contentLine(2, textContent('human', 'first')));
@@ -566,8 +737,14 @@ describe('JournalCursor @plan:PLAN-20260917-ISSUE854.P02 @requirement:G2', () =>
     expect(contentSeqs(donePage)).toStrictEqual([4]);
     expect(contentTexts(donePage)).toStrictEqual(['finished-late']);
   });
+});
 
+describe('JournalCursor @plan:PLAN-20260917-ISSUE854.P02 @requirement:G2 empty and invalid files', () => {
+  const fixtures = createCursorFixtures();
+  beforeEach(fixtures.initialize);
+  afterEach(fixtures.cleanup);
   it('opens empty and non-journal files with deterministic empty results', async () => {
+    const { filePath, openAndTrack } = fixtures;
     await fs.writeFile(filePath, '', 'utf8');
     const empty = await openAndTrack();
     expect(empty.size()).toBe(0);
@@ -598,8 +775,14 @@ describe('JournalCursor @plan:PLAN-20260917-ISSUE854.P02 @requirement:G2', () =>
     expect(bomBack.envelopes).toHaveLength(2);
     expect(bom.windowStart()).toBe(3);
   });
+});
 
+describe('JournalCursor @plan:PLAN-20260917-ISSUE854.P02 @requirement:G2 bounded assembly memory', () => {
+  const fixtures = createCursorFixtures();
+  beforeEach(fixtures.initialize);
+  afterEach(fixtures.cleanup);
   it('bounds assembly memory and frees transient record buffers', async () => {
+    const { filePath, openAndTrack } = fixtures;
     const writer = new FixtureWriter(filePath);
     await writer.add(envelopeJson(1, 'session_start', { sessionId: 's' }));
     await writer.add(contentLine(2, textContent('ai', 'M'.repeat(40_000))));

@@ -14,7 +14,6 @@ import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { findCurrentTurnMarker } from '@vybestack/llxprt-code-core/services/history/historyChronology.js';
 import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { extractSystemInstructionText } from './streamRequestHelpers.js';
 import type { AgentClientGenerateConfig } from '@vybestack/llxprt-code-core/core/clientContract.js';
@@ -106,13 +105,13 @@ export function recordFinalizedPromptEnvelopeEstimate(
  *
  * @issue #3130
  */
-export function recordTurnJoinContext(
+export async function recordTurnJoinContext(
   usageLogger: TokenUsageLogger | null | undefined,
   promptId: string,
   runtimeState: AgentRuntimeState,
   historyService: HistoryService,
   turnId: string | null,
-): void {
+): Promise<void> {
   if (usageLogger === undefined || usageLogger === null) return;
   if (!usageLogger.isEnabled()) return;
 
@@ -121,7 +120,7 @@ export function recordTurnJoinContext(
   // this send, not something derived from history; deriving it here would name
   // the previous turn. `userTurn`/`step` describe the conversation position
   // the request was built from, which is the newest persisted marker.
-  const priorMarker = findCurrentTurnMarker(historyService.getRawHistory());
+  const priorMarker = await historyService.getCurrentTurnMarker();
 
   const context: TokenUsageTurnContext = {
     sessionId: runtimeState.sessionId,
@@ -218,7 +217,9 @@ export interface SendSeamTelemetryInput {
   turnId: string | null;
 }
 
-export function recordSendSeamTelemetry(input: SendSeamTelemetryInput): void {
+export async function recordSendSeamTelemetry(
+  input: SendSeamTelemetryInput,
+): Promise<void> {
   // Single fail-open boundary for the whole send-seam observation. This runs
   // on the request path, so a telemetry failure must never abort a real
   // conversation; equally, the functions below stay guard-free internally so a
@@ -229,7 +230,7 @@ export function recordSendSeamTelemetry(input: SendSeamTelemetryInput): void {
       input.promptId,
       input.estimate,
     );
-    recordTurnJoinContext(
+    await recordTurnJoinContext(
       input.usageLogger,
       input.promptId,
       input.runtimeState,

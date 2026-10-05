@@ -18,39 +18,16 @@
  * new session/* modules by changing ONLY import specifiers, leaving assertion
  * bodies byte-identical.
  */
-
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
-import {
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-  beforeAll,
-  afterAll,
-  vi,
-} from 'bun:test';
-
-const { mockWriteToStderr } = {
-  mockWriteToStderr: vi.fn<(chunk: string | Uint8Array) => boolean>(() => true),
-};
-
-import * as coreModule from '@vybestack/llxprt-code-core';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import {
   coreEvents,
   CoreEvent,
-  OutputFormat,
-  JsonStreamEventType,
   type OutputPayload,
   type ConsoleLogPayload,
 } from '@vybestack/llxprt-code-core';
 
 // Real exports under test — NOT mocked.
-import {
-  formatNonInteractiveError,
-  reportNonInteractiveError,
-  __setWriteToStderrForTesting,
-} from '../session/errorReporting.js';
 import {
   installNonInteractiveSigintHandler,
   setupUnhandledRejectionHandler,
@@ -60,7 +37,6 @@ import { dispatchInteractiveOrNonInteractive } from '../session/nonInteractiveSe
 import {
   startInteractiveUI,
   __resetInteractiveUIStateForTesting,
-  __setRenderForTesting,
 } from '../session/interactiveUI.js';
 
 import {
@@ -73,206 +49,19 @@ import {
 // Real appEvents — NOT mocked. Used to verify observable LogError emissions.
 import { appEvents, AppEvent } from '../utils/events.js';
 
-// ---------------------------------------------------------------------------
-// Safe-seam dependency mocks for heavyweight externals.
-//
-// These mock DEPENDENCIES of the session-dispatch code (not the module itself), so
-// the real dispatch code runs while external effects (Agent construction, ink
-// render, non-interactive runner, update checks) are isolated. The observable
-// effects asserted below are produced by the REAL dispatch code running through
-// these seams.
-// ---------------------------------------------------------------------------
-
-// Capture which branch dispatch selected by recording mock invocations.
-const dispatchTrace: string[] = [];
-
-void vi.mock('../cliAgentBootstrap.js', () => ({
-  createForegroundAgent: vi.fn(async () => {
-    dispatchTrace.push('createForegroundAgent');
-    return { fake: true } as unknown;
-  }),
-}));
-
-// The actual module path used by session-dispatch is utils/startupWarnings.js
-const TEST_SSH_AGENT_EMPTY_WARNING =
-  [
-    'SSH agent socket is present, but no identities are loaded (ssh-add -l reported empty).',
-    'SSH forwarding is enabled, but git SSH auth will fail until a key is loaded.',
-    'Try: ssh-add ~/.ssh/id_ed25519',
-  ].join('\n') + '\n';
-void vi.mock('../utils/startupWarnings.js', () => ({
-  getStartupWarnings: vi.fn(async () => []),
-  getSandboxHandoffWarning: vi.fn((env: NodeJS.ProcessEnv) =>
-    env.LLXPRT_SANDBOX_SSH_AGENT_EMPTY === '1'
-      ? TEST_SSH_AGENT_EMPTY_WARNING
-      : undefined,
-  ),
-}));
-
-void vi.mock('../utils/userStartupWarnings.js', () => ({
-  getUserStartupWarnings: vi.fn(async () => []),
-}));
-
-void vi.mock('../nonInteractiveCli.js', () => ({
-  runNonInteractive: vi.fn(async () => {
-    dispatchTrace.push('runNonInteractive');
-    return 0;
-  }),
-}));
-
-void vi.mock('../validateNonInteractiveAuth.js', () => ({
-  validateNonInteractiveAuth: vi.fn(
-    async (_external: unknown, config: unknown) => {
-      dispatchTrace.push('validateNonInteractiveAuth');
-      return config;
-    },
-  ),
-}));
-
-void vi.mock('../utils/version.js', () => ({
-  getCliVersion: vi.fn(async () => 'test-version'),
-}));
-
-void vi.mock('../ui/utils/updateCheck.js', () => ({
-  checkForUpdates: vi.fn(async () => null),
-}));
-
-void vi.mock('../utils/handleAutoUpdate.js', () => ({
-  handleAutoUpdate: vi.fn(),
-}));
-
-void vi.mock('../utils/cleanup.js', () => ({
-  cleanupCheckpoints: vi.fn(async () => {}),
-  registerCleanup: vi.fn(),
-  registerSyncCleanup: vi.fn(),
-  runExitCleanup: vi.fn(async () => {}),
-}));
-
-// Recording Ink render fake: captures the call without touching a real TTY.
-// Uses the __setRenderForTesting seam in interactiveUI.tsx instead of
-// module mocking, which deadlocks during module evaluation under Bun.
-const renderCalls: unknown[] = [];
-
-/**
- * Walks the rendered React element tree (StrictMode → ErrorBoundary →
- * SettingsContext.Provider → AppWrapper) to the startupWarnings prop, exposing
- * the warnings array delivered to the TUI root as an observable effect.
- */
-function findStartupWarningsProp(node: unknown): unknown[] | undefined {
-  if (node === null || node === undefined || typeof node !== 'object') {
-    return undefined;
-  }
-  const el = node as { props?: Record<string, unknown> };
-  const props = el.props;
-  if (props) {
-    if (Array.isArray(props.startupWarnings)) {
-      return props.startupWarnings;
-    }
-    const childProps = (props as { children?: unknown }).children;
-    const viaChildren = Array.isArray(childProps)
-      ? childProps
-          .map(findStartupWarningsProp)
-          .find((found) => found !== undefined)
-      : findStartupWarningsProp(childProps);
-    if (viaChildren !== undefined) return viaChildren;
-  }
-  return undefined;
-}
-
-// ---------------------------------------------------------------------------
-// Helpers for building minimal Config/Settings stubs consumed by the real
-// dispatch code paths. These satisfy the type contracts without constructing
-// heavyweight runtime objects.
-// ---------------------------------------------------------------------------
-
-function createMinimalConfig(options: {
-  interactive: boolean;
-  question?: string;
-  outputFormat?: string;
-}): unknown {
-  return {
-    isInteractive: () => options.interactive,
-    getQuestion: () => options.question ?? '',
-    getOutputFormat: () => options.outputFormat ?? 'text',
-    getProvider: () => undefined,
-    getProviderManager: () => undefined,
-    getModel: () => undefined,
-    getProjectRoot: () => '/tmp/test-project',
-    getTerminalBackground: () => '#000000',
-    getDebugMode: () => false,
-    getScreenReader: () => false,
-    getSessionId: () => 'test-session',
-    refreshAuth: vi.fn(async () => {}),
-    setEphemeralSetting: vi.fn(),
-    getEphemeralSetting: vi.fn(() => undefined),
-    getTelemetrySettings: () => ({ perf: { enabled: false, memory: false } }),
-  };
-}
-
-function createMinimalSettings(options?: {
-  hideWindowTitle?: boolean;
-  enableMouseEvents?: boolean;
-  useAlternateBuffer?: boolean;
-}): unknown {
-  return {
-    merged: {
-      ui: {
-        hideWindowTitle: options?.hideWindowTitle ?? false,
-        enableMouseEvents: options?.enableMouseEvents ?? false,
-        useAlternateBuffer: options?.useAlternateBuffer ?? false,
-      },
-    },
-  };
-}
-
-// #2378: dispatch no longer constructs the Agent — the composition root builds
-// the single Agent and passes it in. The dispatch reads the session bus via
-// agent.getMessageBus(), so the minimal fake exposes that accessor. tools.get
-// is present for the non-interactive @-command fallback path.
-//
-// The non-interactive run drives SessionStart through the Agent's own hooks
-// surface (agent.hooks.triggerSessionStart()), so the fake exposes that hook
-// returning an empty output object ({} — no systemMessage/additionalContext).
-// Without it the runner throws before reaching runNonInteractive and the
-// dispatch-branch traces would never record the runner.
-function createFakeAgent(): unknown {
-  return {
-    getMessageBus: () => ({}) as never,
-    hooks: {
-      triggerSessionStart: vi.fn(async () => ({})),
-    },
-    tools: { get: () => undefined },
-    dispose: vi.fn(async () => {}),
-  };
-}
+import {
+  createMinimalConfig,
+  createMinimalSettings,
+  createFakeAgent,
+  dispatchTrace,
+  renderCalls,
+  useDispatchRenderSeams,
+} from './cliSessionDispatch.characterization.test-helpers.js';
 
 // ---------------------------------------------------------------------------
 // Suite 1: Dispatch branch selection
 // ---------------------------------------------------------------------------
-
-describe('session-dispatch characterization', () => {
-  beforeEach(() => {
-    mockWriteToStderr.mockClear();
-  });
-
-  beforeAll(() => {
-    __setWriteToStderrForTesting(mockWriteToStderr);
-    __setRenderForTesting((...args: unknown[]) => {
-      renderCalls.push(args);
-      return {
-        waitUntilExit: vi.fn(async () => {}),
-        clear: vi.fn(),
-        rerender: vi.fn(),
-        unmount: vi.fn(),
-      } as never;
-    });
-  });
-
-  afterAll(() => {
-    __setRenderForTesting(null);
-    __setWriteToStderrForTesting(null);
-  });
-
+function registerSuite1(): void {
   describe('session-dispatch characterization — dispatch branch selection', () => {
     beforeEach(() => {
       dispatchTrace.length = 0;
@@ -297,7 +86,7 @@ describe('session-dispatch characterization', () => {
         workspaceRoot: '/tmp/test',
         recording: {
           recordingIntegration: undefined,
-          resumedHistory: undefined,
+          resumedBoot: undefined,
           recordingService: undefined,
           resumedLockHandle: null,
         } as never,
@@ -331,7 +120,7 @@ describe('session-dispatch characterization', () => {
           workspaceRoot: '/tmp/test',
           recording: {
             recordingIntegration: undefined,
-            resumedHistory: undefined,
+            resumedBoot: undefined,
             recordingService: undefined,
             resumedLockHandle: null,
           } as never,
@@ -346,11 +135,9 @@ describe('session-dispatch characterization', () => {
       expect(renderCalls).toHaveLength(0);
     });
   });
+}
 
-  // ---------------------------------------------------------------------------
-  // Suite 2: SIGINT handler installation/disposal
-  // ---------------------------------------------------------------------------
-
+function registerSuite2(): void {
   describe('session-dispatch characterization — SIGINT signal handler installation/disposal', () => {
     let stdio: ReturnType<typeof installCapturedStdio>;
     let listeners: ReturnType<typeof installListenerCapture>;
@@ -408,11 +195,9 @@ describe('session-dispatch characterization', () => {
       expect(exitProcess).not.toHaveBeenCalled();
     });
   });
+}
 
-  // ---------------------------------------------------------------------------
-  // Suite 3: Output flush ordering
-  // ---------------------------------------------------------------------------
-
+function registerSuite3(): void {
   describe('session-dispatch characterization — output flush ordering', () => {
     // coreEvents is a process singleton. We must clean up listeners installed by
     // initializeOutputListenersAndFlush between tests so each test starts with a
@@ -549,11 +334,9 @@ describe('session-dispatch characterization', () => {
       expect(routed[1].content).toBe('log-content');
     });
   });
+}
 
-  // ---------------------------------------------------------------------------
-  // Suite 4: Process lifecycle / unhandled rejection handling
-  // ---------------------------------------------------------------------------
-
+function registerSuite4(): void {
   describe('session-dispatch characterization — process lifecycle / unhandled rejection handling', () => {
     let listeners: ReturnType<typeof installListenerCapture>;
 
@@ -608,26 +391,64 @@ describe('session-dispatch characterization', () => {
       expect(listeners.listenerCount('unhandledRejection')).toBe(countBefore);
     });
   });
+}
 
-  // ---------------------------------------------------------------------------
-  // Suite 5: Piped prompt driving / non-interactive path
-  // ---------------------------------------------------------------------------
+let readStdinCalls: number;
 
-  describe('session-dispatch characterization — piped prompt driving / non-interactive path', () => {
-    let readStdinCalls: number;
+async function verifyExits1WhenPipedStdinAndPromptAreBothEmptyNoInputNonInteractivePath() {
+  const config = createMinimalConfig({
+    interactive: false,
+    question: '',
+  });
+  const settings = createMinimalSettings();
 
+  let caught: ExitCalledError | undefined;
+  try {
+    await dispatchInteractiveOrNonInteractive({
+      config: config as never,
+      agent: createFakeAgent() as never,
+      settings: settings as never,
+      workspaceRoot: '/tmp/test',
+      recording: {
+        recordingIntegration: undefined,
+        resumedBoot: undefined,
+        recordingService: undefined,
+        resumedLockHandle: null,
+      } as never,
+      hasPipedInput: true,
+      readStdinData: async () => '',
+    });
+  } catch (error: unknown) {
+    if (error instanceof ExitCalledError) {
+      caught = error;
+    } else {
+      throw error;
+    }
+  }
+
+  // Observable effect: the real code took the no-input early-exit branch:
+  // process.exit(1) fired via the safe sentinel (NOT the runner's exit), and
+  // the non-interactive runner was never reached.
+  return {
+    caughtExit: caught,
+    exitCode: caught?.exitCode,
+  };
+}
+
+function registerPipedInputTest(): void {
+  describe.each([
+    [
+      'session-dispatch characterization — piped prompt driving / non-interactive path',
+    ],
+  ])('%s', () => {
     beforeEach(() => {
       dispatchTrace.length = 0;
       readStdinCalls = 0;
-      // Install the safe process.exit seam so the non-interactive branch's
-      // process.exit does not terminate the test runner.
       installSafeProcessExit();
     });
-
     afterEach(() => {
       vi.restoreAllMocks();
     });
-
     it('drives the non-interactive session using piped stdin when hasPipedInput is true', async () => {
       const pipedContent = 'piped prompt content';
       const config = createMinimalConfig({
@@ -645,7 +466,7 @@ describe('session-dispatch characterization', () => {
           workspaceRoot: '/tmp/test',
           recording: {
             recordingIntegration: undefined,
-            resumedHistory: undefined,
+            resumedBoot: undefined,
             recordingService: undefined,
             resumedLockHandle: null,
           } as never,
@@ -664,46 +485,22 @@ describe('session-dispatch characterization', () => {
       // input (runNonInteractive was invoked).
       expect(dispatchTrace).toContain('runNonInteractive');
     });
+  });
+}
 
-    async function verifyExits1WhenPipedStdinAndPromptAreBothEmptyNoInputNonInteractivePath() {
-      const config = createMinimalConfig({
-        interactive: false,
-        question: '',
-      });
-      const settings = createMinimalSettings();
+function registerSuite5(): void {
+  describe('session-dispatch characterization — piped prompt driving / non-interactive path', () => {
+    beforeEach(() => {
+      dispatchTrace.length = 0;
+      readStdinCalls = 0;
+      // Install the safe process.exit seam so the non-interactive branch's
+      // process.exit does not terminate the test runner.
+      installSafeProcessExit();
+    });
 
-      let caught: ExitCalledError | undefined;
-      try {
-        await dispatchInteractiveOrNonInteractive({
-          config: config as never,
-          agent: createFakeAgent() as never,
-          settings: settings as never,
-          workspaceRoot: '/tmp/test',
-          recording: {
-            recordingIntegration: undefined,
-            resumedHistory: undefined,
-            recordingService: undefined,
-            resumedLockHandle: null,
-          } as never,
-          hasPipedInput: true,
-          readStdinData: async () => '',
-        });
-      } catch (error: unknown) {
-        if (error instanceof ExitCalledError) {
-          caught = error;
-        } else {
-          throw error;
-        }
-      }
-
-      // Observable effect: the real code took the no-input early-exit branch:
-      // process.exit(1) fired via the safe sentinel (NOT the runner's exit), and
-      // the non-interactive runner was never reached.
-      return {
-        caughtExit: caught,
-        exitCode: caught?.exitCode,
-      };
-    }
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
 
     it('exits 1 when piped stdin and prompt are both empty (no-input non-interactive path)', async () => {
       const behaviorResult =
@@ -730,7 +527,7 @@ describe('session-dispatch characterization', () => {
           workspaceRoot: '/tmp/test',
           recording: {
             recordingIntegration: undefined,
-            resumedHistory: undefined,
+            resumedBoot: undefined,
             recordingService: undefined,
             resumedLockHandle: null,
           } as never,
@@ -748,11 +545,9 @@ describe('session-dispatch characterization', () => {
       expect(dispatchTrace).toContain('runNonInteractive');
     });
   });
+}
 
-  // ---------------------------------------------------------------------------
-  // Suite 6: Terminal/mouse cleanup
-  // ---------------------------------------------------------------------------
-
+function registerSuite6(): void {
   describe('session-dispatch characterization — terminal/mouse cleanup', () => {
     let listeners: ReturnType<typeof installListenerCapture>;
 
@@ -838,306 +633,15 @@ describe('session-dispatch characterization', () => {
       expect(renderCalls.length).toBeGreaterThanOrEqual(1);
     });
   });
+}
 
-  // ---------------------------------------------------------------------------
-  // Suite 7: Non-interactive error output (formatNonInteractiveError)
-  // ---------------------------------------------------------------------------
-
-  describe('session-dispatch characterization — non-interactive error output / formatNonInteractiveError', () => {
-    afterEach(() => {
-      vi.restoreAllMocks();
-    });
-
-    it('formatNonInteractiveError formats a plain Error via parseAndFormatApiError result', () => {
-      const error = new Error('something went wrong');
-      const formatted = formatNonInteractiveError(error);
-
-      // Observable effect: the real formatter delegates to parseAndFormatApiError
-      // first; for an Error with a message, that produces an [API Error: ...]
-      // string containing the message, which formatNonInteractiveError returns
-      // as-is (it does not fall through to error.stack).
-      expect(formatted).toContain('something went wrong');
-      expect(formatted).toContain('[API Error:');
-    });
-
-    it('formatNonInteractiveError formats a structured object via parseAndFormatApiError fallback', () => {
-      const structured = { code: 500, detail: 'server failure' };
-      const formatted = formatNonInteractiveError(structured);
-
-      // Observable effect: parseAndFormatApiError does not recognize a plain
-      // object as structured, so it returns the generic [API Error: An unknown
-      // error occurred.] string, which formatNonInteractiveError returns as-is.
-      expect(formatted).toContain('[API Error: An unknown error occurred.]');
-    });
-
-    it('formatNonInteractiveError formats a number primitive via parseAndFormatApiError fallback', () => {
-      const formatted = formatNonInteractiveError(42);
-
-      // Observable effect: parseAndFormatApiError returns the generic API-error
-      // string for a number; formatNonInteractiveError returns it as-is.
-      expect(formatted).toContain('[API Error: An unknown error occurred.]');
-    });
-
-    it('formatNonInteractiveError formats null via parseAndFormatApiError fallback', () => {
-      const formatted = formatNonInteractiveError(null);
-
-      // Observable effect: parseAndFormatApiError returns the generic API-error
-      // string for null; formatNonInteractiveError returns it as-is.
-      expect(formatted).toContain('[API Error: An unknown error occurred.]');
-    });
-
-    it('formatNonInteractiveError formats undefined via parseAndFormatApiError fallback', () => {
-      const formatted = formatNonInteractiveError(undefined);
-
-      // Observable effect: parseAndFormatApiError returns the generic API-error
-      // string for undefined; formatNonInteractiveError returns it as-is.
-      expect(formatted).toContain('[API Error: An unknown error occurred.]');
-    });
-
-    it('formatNonInteractiveError formats a TypeError via parseAndFormatApiError result', () => {
-      const error = new TypeError('type mismatch');
-      const formatted = formatNonInteractiveError(error);
-
-      // Observable effect: parseAndFormatApiError recognizes the TypeError's
-      // message and produces [API Error: type mismatch], which
-      // formatNonInteractiveError returns as-is.
-      expect(formatted).toContain('type mismatch');
-      expect(formatted).toContain('[API Error:');
-    });
-
-    it('reportNonInteractiveError emits a structured stream-json error event', () => {
-      const stdoutWrite = vi
-        .spyOn(process.stdout, 'write')
-        .mockImplementation(() => true);
-      const config = createMinimalConfig({
-        interactive: false,
-        outputFormat: OutputFormat.STREAM_JSON,
-      });
-
-      try {
-        reportNonInteractiveError(config as never, new Error('stream failure'));
-
-        expect(stdoutWrite).not.toHaveBeenCalled();
-        expect(mockWriteToStderr).toHaveBeenCalledTimes(1);
-        const written = mockWriteToStderr.mock.calls[0][0];
-        expect(typeof written).toBe('string');
-        const event = JSON.parse(written as string);
-        expect(event).toStrictEqual({
-          type: JsonStreamEventType.ERROR,
-          timestamp: expect.any(String),
-          severity: 'error',
-          message: expect.stringContaining('stream failure'),
-        });
-      } finally {
-        stdoutWrite.mockRestore();
-      }
-    });
-
-    it('reportNonInteractiveError emits json errors to stderr and not stdout', () => {
-      const stdoutWrite = vi
-        .spyOn(process.stdout, 'write')
-        .mockImplementation(() => true);
-      const config = createMinimalConfig({
-        interactive: false,
-        outputFormat: OutputFormat.JSON,
-      });
-
-      try {
-        reportNonInteractiveError(config as never, new Error('json failure'));
-
-        expect(stdoutWrite).not.toHaveBeenCalled();
-        expect(mockWriteToStderr).toHaveBeenCalledTimes(1);
-        const written = mockWriteToStderr.mock.calls[0][0];
-        expect(typeof written).toBe('string');
-        const envelope = JSON.parse(written as string);
-        expect(envelope).toStrictEqual({
-          error: {
-            type: 'Error',
-            message: 'json failure',
-          },
-        });
-      } finally {
-        stdoutWrite.mockRestore();
-      }
-    });
-
-    it('reportNonInteractiveError emits plain text errors to stderr and not stdout', () => {
-      const stdoutWrite = vi
-        .spyOn(process.stdout, 'write')
-        .mockImplementation(() => true);
-      const config = createMinimalConfig({
-        interactive: false,
-        outputFormat: 'text',
-      });
-
-      try {
-        reportNonInteractiveError(config as never, new Error('plain failure'));
-
-        expect(stdoutWrite).not.toHaveBeenCalled();
-        expect(mockWriteToStderr).toHaveBeenCalledTimes(1);
-        expect(mockWriteToStderr).toHaveBeenCalledWith(
-          expect.stringContaining('Non-interactive run failed:'),
-        );
-        expect(mockWriteToStderr).toHaveBeenCalledWith(
-          expect.stringContaining('plain failure'),
-        );
-      } finally {
-        stdoutWrite.mockRestore();
-      }
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // Suite 8: Sandbox empty-agent handoff warning delivery (#3408)
-  // ---------------------------------------------------------------------------
-
-  describe('session-dispatch characterization — sandbox empty-agent handoff warning delivery', () => {
-    const originalEnv = process.env;
-
-    // Created per test: afterEach(vi.restoreAllMocks) would otherwise kill a
-    // suite-scoped spy after the first test.
-    function installStderrSpy() {
-      return vi
-        .spyOn(coreModule, 'writeToStderr')
-        .mockImplementation(() => true);
-    }
-    let stderrWriteSpy: ReturnType<typeof installStderrSpy>;
-
-    beforeEach(() => {
-      stderrWriteSpy = installStderrSpy();
-      process.env = { ...originalEnv };
-      dispatchTrace.length = 0;
-      renderCalls.length = 0;
-      installSafeProcessExit();
-    });
-
-    afterEach(() => {
-      // Restore the original env object identity, not a copy, so a throwing
-      // test cannot leak the substituted object or the handoff flag into
-      // suites that run later in this worker.
-      process.env = originalEnv;
-      vi.restoreAllMocks();
-    });
-
-    /** Runs dispatch with the fixed recording/stdin arguments these cases share. */
-    function runDispatch(config: unknown, settings: unknown) {
-      return dispatchInteractiveOrNonInteractive({
-        config: config as never,
-        agent: createFakeAgent() as never,
-        settings: settings as never,
-        workspaceRoot: '/tmp/test',
-        recording: {
-          recordingIntegration: undefined,
-          resumedHistory: undefined,
-          recordingService: undefined,
-          resumedLockHandle: null,
-        } as never,
-        hasPipedInput: false,
-        readStdinData: async () => '',
-      });
-    }
-
-    /** The startupWarnings array the TUI root was rendered with. */
-    function renderedStartupWarnings(): unknown[] | undefined {
-      return renderCalls
-        .map((args) => findStartupWarningsProp((args as unknown[])[0]))
-        .find((warnings) => warnings !== undefined);
-    }
-
-    function wroteEmptyAgentWarning(): boolean {
-      return stderrWriteSpy.mock.calls.some((call) =>
-        String(call[0]).includes('SSH agent socket is present'),
-      );
-    }
-
-    it('pins the mocked handoff text to the warning the production preflight emits', async () => {
-      // Imported lazily: referencing this binding from the hoisted vi.mock
-      // factory above would read it before the module is evaluated.
-      const { SSH_AGENT_EMPTY_WARNING } = await import(
-        '../utils/sandbox-ssh.js'
-      );
-      expect(TEST_SSH_AGENT_EMPTY_WARNING).toBe(SSH_AGENT_EMPTY_WARNING);
-    });
-
-    it('interactive: prepends the empty-agent warning to the startup warnings rendered by the TUI when the env flag is set', async () => {
-      process.env.LLXPRT_SANDBOX_SSH_AGENT_EMPTY = '1';
-
-      await runDispatch(
-        createMinimalConfig({ interactive: true }),
-        createMinimalSettings({ hideWindowTitle: true }),
-      );
-
-      expect(renderedStartupWarnings()?.[0]).toBe(TEST_SSH_AGENT_EMPTY_WARNING);
-    });
-
-    it('interactive: startup warnings are unchanged when the env flag is unset', async () => {
-      delete process.env.LLXPRT_SANDBOX_SSH_AGENT_EMPTY;
-
-      await runDispatch(
-        createMinimalConfig({ interactive: true }),
-        createMinimalSettings({ hideWindowTitle: true }),
-      );
-
-      expect(renderedStartupWarnings()).toStrictEqual([]);
-    });
-
-    it('non-interactive: writes the empty-agent warning to stderr before the session runs when the env flag is set', async () => {
-      process.env.LLXPRT_SANDBOX_SSH_AGENT_EMPTY = '1';
-
-      // Sampling the dispatch trace at the moment of the write puts both
-      // events on one timeline, so a regression that warned only after the
-      // session ran would be caught.
-      const order: string[] = [];
-      stderrWriteSpy.mockImplementation((chunk: unknown) => {
-        if (String(chunk) === TEST_SSH_AGENT_EMPTY_WARNING) {
-          order.push(...dispatchTrace, 'warning');
-        }
-        return true;
-      });
-
-      await expect(
-        runDispatch(
-          createMinimalConfig({ interactive: false, question: 'prompt' }),
-          createMinimalSettings(),
-        ),
-      ).rejects.toThrow('process.exit');
-
-      // The warning was the only event on the timeline when it was written:
-      // runNonInteractive had not run yet, and it did run afterwards.
-      expect(order).toStrictEqual(['warning']);
-      expect(dispatchTrace).toContain('runNonInteractive');
-    });
-
-    it('non-interactive: withholds the handoff warning in JSON output mode so it cannot reach the payload stream', async () => {
-      process.env.LLXPRT_SANDBOX_SSH_AGENT_EMPTY = '1';
-
-      await expect(
-        runDispatch(
-          createMinimalConfig({
-            interactive: false,
-            question: 'prompt',
-            outputFormat: OutputFormat.JSON,
-          }),
-          createMinimalSettings(),
-        ),
-      ).rejects.toThrow('process.exit');
-
-      expect(wroteEmptyAgentWarning()).toBe(false);
-      expect(dispatchTrace).toContain('runNonInteractive');
-    });
-
-    it('non-interactive: writes nothing for the handoff when the env flag is unset', async () => {
-      delete process.env.LLXPRT_SANDBOX_SSH_AGENT_EMPTY;
-
-      await expect(
-        runDispatch(
-          createMinimalConfig({ interactive: false, question: 'prompt' }),
-          createMinimalSettings(),
-        ),
-      ).rejects.toThrow('process.exit');
-
-      expect(wroteEmptyAgentWarning()).toBe(false);
-      expect(dispatchTrace).toContain('runNonInteractive');
-    });
-  });
+describe('session-dispatch characterization', () => {
+  useDispatchRenderSeams();
+  registerSuite1();
+  registerSuite2();
+  registerSuite3();
+  registerSuite4();
+  registerPipedInputTest();
+  registerSuite5();
+  registerSuite6();
 });

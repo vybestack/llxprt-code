@@ -218,10 +218,10 @@ void vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
   },
 }));
 
-describe('AgentClient (client.ts)', () => {
-  let client: AgentClient;
-  let directory: string;
+let client: AgentClient;
+let directory: string;
 
+describe('AgentClient (client.ts)', () => {
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'agent-client-lifecycle-'));
     const ctx = await setupAgentClient({
@@ -248,364 +248,401 @@ describe('AgentClient (client.ts)', () => {
   });
 
   describe('setHistory', () => {
-    it('should strip thought signatures when stripThoughts is true', async () => {
-      let retainedHistory: readonly IContent[] = [];
-      const mockChat = {
-        async setHistory(history: readonly IContent[]): Promise<void> {
-          retainedHistory = history;
-        },
-        getHistory(): readonly IContent[] {
-          return retainedHistory;
-        },
-        async clearHistory(): Promise<void> {
-          retainedHistory = [];
-        },
-      };
-      client['chat'] = mockChat as unknown as ChatSession;
-
-      const historyWithThoughts: IContent[] = [
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'hello' }],
-        },
-        {
-          speaker: 'ai',
-          blocks: [
-            {
-              type: 'thinking',
-              thought: 'thinking...',
-              signature: 'thought-123',
-            },
-            {
-              type: 'tool_call',
-              id: '',
-              name: 'test',
-              parameters: {},
-            },
-          ],
-        },
-      ];
-
-      await client.setHistory(historyWithThoughts, { stripThoughts: true });
-
-      const expectedHistory: IContent[] = [
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'hello' }],
-        },
-        {
-          speaker: 'ai',
-          blocks: [
-            { type: 'thinking', thought: 'thinking...' },
-            { type: 'tool_call', id: '', name: 'test', parameters: {} },
-          ],
-        },
-      ];
-
-      expect(retainedHistory).toStrictEqual(expectedHistory);
-    });
-
-    it('should not strip thought signatures when stripThoughts is false', async () => {
-      let retainedHistory: readonly IContent[] = [];
-      const mockChat = {
-        async setHistory(history: readonly IContent[]): Promise<void> {
-          retainedHistory = history;
-        },
-        getHistory(): readonly IContent[] {
-          return retainedHistory;
-        },
-        async clearHistory(): Promise<void> {
-          retainedHistory = [];
-        },
-      };
-      client['chat'] = mockChat as unknown as ChatSession;
-
-      const historyWithThoughts: IContent[] = [
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'hello' }],
-        },
-        {
-          speaker: 'ai',
-          blocks: [
-            {
-              type: 'thinking',
-              thought: 'thinking...',
-              signature: 'thought-123',
-            },
-            {
-              type: 'thinking',
-              thought: 'ok',
-              signature: 'thought-456',
-            },
-          ],
-        },
-      ];
-
-      await client.setHistory(historyWithThoughts, { stripThoughts: false });
-
-      expect(retainedHistory).toStrictEqual(historyWithThoughts);
-    });
-
-    it('returns history from a stored history service after profile invalidation', async () => {
-      const history: IContent[] = [
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'remember issue 2049' }],
-        },
-        {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: 'we are preserving history' }],
-        },
-      ];
-      const historyService = new HistoryService();
-      for (const content of history) {
-        historyService.add(content, 'test-model');
-      }
-      client['_storedHistoryService'] = historyService;
-      client['_previousHistory'] = undefined;
-      client['chat'] = undefined;
-      client.getHistory = AgentClient.prototype.getHistory.bind(client);
-
-      const result = await client.getHistory();
-      // Compare block-level content, ignoring metadata (turnId etc.) added by
-      // the HistoryService that are not part of the test's input data.
-      expect(result).toHaveLength(history.length);
-      for (let i = 0; i < history.length; i++) {
-        expect(result[i].speaker).toBe(history[i].speaker);
-        expect(result[i].blocks).toStrictEqual(history[i].blocks);
-      }
-    });
-
-    it('should update chat immediately when chat is initialized', async () => {
-      // Arrange
-      let retainedHistory: readonly IContent[] = [];
-      const mockChat = {
-        async setHistory(history: readonly IContent[]): Promise<void> {
-          retainedHistory = history;
-        },
-        getHistory(): readonly IContent[] {
-          return retainedHistory;
-        },
-        async clearHistory(): Promise<void> {
-          retainedHistory = [];
-        },
-      };
-      client['chat'] = mockChat as unknown as ChatSession;
-
-      const history: IContent[] = [
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'hello' }],
-        },
-      ];
-
-      // Act
-      await client.setHistory(history);
-
-      // Assert
-      expect(retainedHistory).toStrictEqual(history);
-      expect(client['_previousHistory']).toStrictEqual(history);
-      expect(client['ideContextTracker']['forceFullIdeContext']).toBe(true);
-    });
-
-    it('should reset IDE context tracking when history changes', async () => {
-      // Arrange
-      let retainedHistory: readonly IContent[] = [];
-      const mockChat = {
-        async setHistory(history: readonly IContent[]): Promise<void> {
-          retainedHistory = history;
-        },
-        getHistory(): readonly IContent[] {
-          return retainedHistory;
-        },
-        async clearHistory(): Promise<void> {
-          retainedHistory = [];
-        },
-      };
-      client['chat'] = mockChat as unknown as ChatSession;
-
-      const history: IContent[] = [
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'hello' }],
-        },
-      ];
-
-      // Initialize forceFullIdeContext to false to test that it gets reset to true
-      client['ideContextTracker']['forceFullIdeContext'] = false;
-
-      // Act
-      await client.setHistory(history);
-
-      // Assert
-      expect(retainedHistory).toStrictEqual(history);
-      expect(client['ideContextTracker']['forceFullIdeContext']).toBe(true);
-    });
+    it(
+      'should strip thought signatures when stripThoughts is true',
+      registerLifecycleCase0,
+    );
+    it(
+      'should not strip thought signatures when stripThoughts is false',
+      registerLifecycleCase1,
+    );
+    it(
+      'returns history from a stored history service after profile invalidation',
+      registerLifecycleCase2,
+    );
+    it(
+      'should update chat immediately when chat is initialized',
+      registerLifecycleCase3,
+    );
+    it(
+      'should reset IDE context tracking when history changes',
+      registerLifecycleCase4,
+    );
   });
-
   describe('restoreHistory media admission lifecycle', () => {
-    it('releases restored-history media when adding admitted history fails', async () => {
-      const directory = await mkdtemp(
-        join(tmpdir(), 'client-restore-history-'),
-      );
-      try {
-        const store = new LocalMediaStore({
-          rootDirectory: join(directory, 'media'),
-          quotaBytes: 1024 * 1024,
-        });
-        client['config'].getLocalMediaStore = () => store;
-        const initializedChat = client['chat'];
-        assertDefined(initializedChat, 'Expected chat');
-        const historyService = new HistoryService();
-        historyService.replaceBatch = async () => {
-          throw new Error('history add failed');
-        };
-        initializedChat.getHistoryService = () => historyService;
-        const mediaHistory: IContent[] = [
-          {
-            speaker: 'human',
-            blocks: [
-              {
-                type: 'media',
-                mimeType: 'image/png',
-                encoding: 'base64',
-                data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=',
-              },
-            ],
-          },
-        ];
-
-        await expect(client.restoreHistory(mediaHistory)).rejects.toThrow(
-          'history add failed',
-        );
-
-        const admission = new MediaAdmissionService(store);
-        const probe = await admission.admitContents(mediaHistory, {
-          turnId: 'probe',
-          source: 'probe',
-        });
-        const block = probe[0]?.blocks[0];
-        if (block.type !== 'media' || block.encoding !== 'reference') {
-          throw new Error('Expected probe media reference');
-        }
-        await admission.releaseContents(probe, {
-          turnId: 'probe',
-          source: 'probe',
-        });
-        expect(await store.hasReservations(block.contentId)).toBe(false);
-      } finally {
-        await rm(directory, { recursive: true, force: true });
-      }
-    });
+    it(
+      'releases restored-history media when adding admitted history fails',
+      registerLifecycleCase5,
+    );
   });
   describe('interactionMode wiring', () => {
-    it('passes interactionMode interactive when config.isInteractive() returns true', async () => {
-      const setSystemInstruction = vi.fn();
-      const estimateTokensForText = vi.fn().mockResolvedValue(100);
-      const setBaseTokenOffset = vi.fn();
-      const getHistoryService = vi.fn().mockReturnValue({
-        estimateTokensForText,
-        setBaseTokenOffset,
-      });
-
-      const mockChat = {
-        setSystemInstruction,
-        getHistoryService,
-      };
-
-      client['chat'] = mockChat as unknown as ChatSession;
-      client['contentGenerator'] = {
-        countTokens: vi.fn(),
-      } as unknown as ContentGenerator;
-
-      const config = client['config'] as unknown as {
-        getUserMemory: () => string;
-        getCoreMemory: () => string;
-        getMcpInstructions: () => unknown;
-        isInteractive: () => boolean;
-      };
-      vi.spyOn(config, 'getUserMemory').mockReturnValue('');
-      vi.spyOn(config, 'getCoreMemory').mockReturnValue('');
-      vi.spyOn(config, 'getMcpInstructions').mockReturnValue(undefined);
-      vi.spyOn(config, 'isInteractive').mockReturnValue(true);
-
-      (
-        getEnabledToolNamesForPrompt as Mock<
-          typeof getEnabledToolNamesForPrompt
-        >
-      ).mockReturnValue([]);
-      (
-        shouldIncludeSubagentDelegationForConfig as Mock<
-          typeof shouldIncludeSubagentDelegationForConfig
-        >
-      ).mockResolvedValue(false);
-
-      (
-        getCoreSystemPromptAsync as Mock<typeof getCoreSystemPromptAsync>
-      ).mockResolvedValue('prompt');
-
-      await client.updateSystemInstruction();
-
-      expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
-        expect.objectContaining({
-          interactionMode: 'interactive',
-        }),
-      );
-    });
-
-    it('passes interactionMode non-interactive when config.isInteractive() returns false', async () => {
-      const setSystemInstruction = vi.fn();
-      const estimateTokensForText = vi.fn().mockResolvedValue(100);
-      const setBaseTokenOffset = vi.fn();
-      const getHistoryService = vi.fn().mockReturnValue({
-        estimateTokensForText,
-        setBaseTokenOffset,
-      });
-
-      const mockChat = {
-        setSystemInstruction,
-        getHistoryService,
-      };
-
-      client['chat'] = mockChat as unknown as ChatSession;
-      client['contentGenerator'] = {
-        countTokens: vi.fn(),
-      } as unknown as ContentGenerator;
-
-      const config = client['config'] as unknown as {
-        getUserMemory: () => string;
-        getCoreMemory: () => string;
-        getMcpInstructions: () => unknown;
-        isInteractive: () => boolean;
-      };
-      vi.spyOn(config, 'getUserMemory').mockReturnValue('');
-      vi.spyOn(config, 'getCoreMemory').mockReturnValue('');
-      vi.spyOn(config, 'getMcpInstructions').mockReturnValue(undefined);
-      vi.spyOn(config, 'isInteractive').mockReturnValue(false);
-
-      (
-        getEnabledToolNamesForPrompt as Mock<
-          typeof getEnabledToolNamesForPrompt
-        >
-      ).mockReturnValue([]);
-      (
-        shouldIncludeSubagentDelegationForConfig as Mock<
-          typeof shouldIncludeSubagentDelegationForConfig
-        >
-      ).mockResolvedValue(false);
-
-      (
-        getCoreSystemPromptAsync as Mock<typeof getCoreSystemPromptAsync>
-      ).mockResolvedValue('prompt');
-
-      await client.updateSystemInstruction();
-
-      expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
-        expect.objectContaining({
-          interactionMode: 'non-interactive',
-        }),
-      );
-    });
+    it(
+      'passes interactionMode interactive when config.isInteractive() returns true',
+      registerLifecycleCase6,
+    );
+    it(
+      'passes interactionMode non-interactive when config.isInteractive() returns false',
+      registerLifecycleCase7,
+    );
   });
 });
+
+async function registerLifecycleCase0(): Promise<void> {
+  let retainedHistory: readonly IContent[] = [];
+  const fixtureHistory = new HistoryService();
+  const mockChat = {
+    async setHistory(history: readonly IContent[]): Promise<void> {
+      retainedHistory = history;
+    },
+    async *getHistory(): AsyncGenerator<IContent, void, unknown> {
+      yield* retainedHistory;
+    },
+    getHistoryService: () => fixtureHistory,
+    async clearHistory(): Promise<void> {
+      retainedHistory = [];
+    },
+  };
+  client['chat'] = mockChat as unknown as ChatSession;
+
+  const historyWithThoughts: IContent[] = [
+    {
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'hello' }],
+    },
+    {
+      speaker: 'ai',
+      blocks: [
+        {
+          type: 'thinking',
+          thought: 'thinking...',
+          signature: 'thought-123',
+        },
+        {
+          type: 'tool_call',
+          id: '',
+          name: 'test',
+          parameters: {},
+        },
+      ],
+    },
+  ];
+
+  await client.setHistory(historyWithThoughts, { stripThoughts: true });
+
+  const expectedHistory: IContent[] = [
+    {
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'hello' }],
+    },
+    {
+      speaker: 'ai',
+      blocks: [
+        { type: 'thinking', thought: 'thinking...' },
+        { type: 'tool_call', id: '', name: 'test', parameters: {} },
+      ],
+    },
+  ];
+
+  expect(retainedHistory).toStrictEqual(expectedHistory);
+}
+
+async function registerLifecycleCase1(): Promise<void> {
+  let retainedHistory: readonly IContent[] = [];
+  const fixtureHistory = new HistoryService();
+  const mockChat = {
+    async setHistory(history: readonly IContent[]): Promise<void> {
+      retainedHistory = history;
+    },
+    async *getHistory(): AsyncGenerator<IContent, void, unknown> {
+      yield* retainedHistory;
+    },
+    getHistoryService: () => fixtureHistory,
+    async clearHistory(): Promise<void> {
+      retainedHistory = [];
+    },
+  };
+  client['chat'] = mockChat as unknown as ChatSession;
+
+  const historyWithThoughts: IContent[] = [
+    {
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'hello' }],
+    },
+    {
+      speaker: 'ai',
+      blocks: [
+        {
+          type: 'thinking',
+          thought: 'thinking...',
+          signature: 'thought-123',
+        },
+        {
+          type: 'thinking',
+          thought: 'ok',
+          signature: 'thought-456',
+        },
+      ],
+    },
+  ];
+
+  await client.setHistory(historyWithThoughts, { stripThoughts: false });
+
+  expect(retainedHistory).toStrictEqual(historyWithThoughts);
+}
+
+async function registerLifecycleCase2(): Promise<void> {
+  const history: IContent[] = [
+    {
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'remember issue 2049' }],
+    },
+    {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'we are preserving history' }],
+    },
+  ];
+  const historyService = new HistoryService();
+  for (const content of history) {
+    historyService.add(content, 'test-model');
+  }
+  client['_storedHistoryService'] = historyService;
+  client['_previousHistory'] = undefined;
+  client['chat'] = undefined;
+  client.getHistory = AgentClient.prototype.getHistory.bind(client);
+  vi.spyOn(client, 'streamHistory').mockRestore();
+
+  const result = await Array.fromAsync(client.getHistory());
+  // Compare block-level content, ignoring metadata (turnId etc.) added by
+  // the HistoryService that are not part of the test's input data.
+  expect(result).toHaveLength(history.length);
+  for (let i = 0; i < history.length; i++) {
+    expect(result[i].speaker).toBe(history[i].speaker);
+    expect(result[i].blocks).toStrictEqual(history[i].blocks);
+  }
+}
+
+async function registerLifecycleCase3(): Promise<void> {
+  // Arrange
+  let retainedHistory: readonly IContent[] = [];
+  const fixtureHistory = new HistoryService();
+  const mockChat = {
+    async setHistory(history: readonly IContent[]): Promise<void> {
+      retainedHistory = history;
+    },
+    async *getHistory(): AsyncGenerator<IContent, void, unknown> {
+      yield* retainedHistory;
+    },
+    getHistoryService: () => fixtureHistory,
+    async clearHistory(): Promise<void> {
+      retainedHistory = [];
+    },
+  };
+  client['chat'] = mockChat as unknown as ChatSession;
+
+  const history: IContent[] = [
+    {
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'hello' }],
+    },
+  ];
+
+  // Act
+  await client.setHistory(history);
+
+  // Assert
+  expect(retainedHistory).toStrictEqual(history);
+  expect(client['_previousHistory']).toBeUndefined();
+  expect(client['ideContextTracker']['forceFullIdeContext']).toBe(true);
+}
+
+async function registerLifecycleCase4(): Promise<void> {
+  // Arrange
+  let retainedHistory: readonly IContent[] = [];
+  const fixtureHistory = new HistoryService();
+  const mockChat = {
+    async setHistory(history: readonly IContent[]): Promise<void> {
+      retainedHistory = history;
+    },
+    async *getHistory(): AsyncGenerator<IContent, void, unknown> {
+      yield* retainedHistory;
+    },
+    getHistoryService: () => fixtureHistory,
+    async clearHistory(): Promise<void> {
+      retainedHistory = [];
+    },
+  };
+  client['chat'] = mockChat as unknown as ChatSession;
+
+  const history: IContent[] = [
+    {
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'hello' }],
+    },
+  ];
+
+  // Initialize forceFullIdeContext to false to test that it gets reset to true
+  client['ideContextTracker']['forceFullIdeContext'] = false;
+
+  // Act
+  await client.setHistory(history);
+
+  // Assert
+  expect(retainedHistory).toStrictEqual(history);
+  expect(client['ideContextTracker']['forceFullIdeContext']).toBe(true);
+}
+
+async function registerLifecycleCase5(): Promise<void> {
+  const directory = await mkdtemp(join(tmpdir(), 'client-restore-history-'));
+  try {
+    const store = new LocalMediaStore({
+      rootDirectory: join(directory, 'media'),
+      quotaBytes: 1024 * 1024,
+    });
+    client['config'].getLocalMediaStore = () => store;
+    const initializedChat = client['chat'];
+    assertDefined(initializedChat, 'Expected chat');
+    const historyService = new HistoryService();
+    historyService.detachedValues.replace = async () => {
+      throw new Error('history add failed');
+    };
+    initializedChat.getHistoryService = () => historyService;
+    const mediaHistory: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [
+          {
+            type: 'media',
+            mimeType: 'image/png',
+            encoding: 'base64',
+            data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=',
+          },
+        ],
+      },
+    ];
+
+    await expect(client.restoreHistory(mediaHistory)).rejects.toThrow(
+      'history add failed',
+    );
+
+    const admission = new MediaAdmissionService(store);
+    const probe = await admission.admitContents(mediaHistory, {
+      turnId: 'probe',
+      source: 'probe',
+    });
+    const block = probe[0]?.blocks[0];
+    if (block.type !== 'media' || block.encoding !== 'reference') {
+      throw new Error('Expected probe media reference');
+    }
+    await admission.releaseContents(probe, {
+      turnId: 'probe',
+      source: 'probe',
+    });
+    expect(await store.hasReservations(block.contentId)).toBe(false);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
+async function registerLifecycleCase6(): Promise<void> {
+  const setSystemInstruction = vi.fn();
+  const estimateTokensForText = vi.fn().mockResolvedValue(100);
+  const setBaseTokenOffset = vi.fn();
+  const getHistoryService = vi.fn().mockReturnValue({
+    estimateTokensForText,
+    setBaseTokenOffset,
+  });
+
+  const mockChat = {
+    setSystemInstruction,
+    getHistoryService,
+  };
+
+  client['chat'] = mockChat as unknown as ChatSession;
+  client['contentGenerator'] = {
+    countTokens: vi.fn(),
+  } as unknown as ContentGenerator;
+
+  const config = client['config'] as unknown as {
+    getUserMemory: () => string;
+    getCoreMemory: () => string;
+    getMcpInstructions: () => unknown;
+    isInteractive: () => boolean;
+  };
+  vi.spyOn(config, 'getUserMemory').mockReturnValue('');
+  vi.spyOn(config, 'getCoreMemory').mockReturnValue('');
+  vi.spyOn(config, 'getMcpInstructions').mockReturnValue(undefined);
+  vi.spyOn(config, 'isInteractive').mockReturnValue(true);
+
+  (
+    getEnabledToolNamesForPrompt as Mock<typeof getEnabledToolNamesForPrompt>
+  ).mockReturnValue([]);
+  (
+    shouldIncludeSubagentDelegationForConfig as Mock<
+      typeof shouldIncludeSubagentDelegationForConfig
+    >
+  ).mockResolvedValue(false);
+
+  (
+    getCoreSystemPromptAsync as Mock<typeof getCoreSystemPromptAsync>
+  ).mockResolvedValue('prompt');
+
+  await client.updateSystemInstruction();
+
+  expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
+    expect.objectContaining({
+      interactionMode: 'interactive',
+    }),
+  );
+}
+
+async function registerLifecycleCase7(): Promise<void> {
+  const setSystemInstruction = vi.fn();
+  const estimateTokensForText = vi.fn().mockResolvedValue(100);
+  const setBaseTokenOffset = vi.fn();
+  const getHistoryService = vi.fn().mockReturnValue({
+    estimateTokensForText,
+    setBaseTokenOffset,
+  });
+
+  const mockChat = {
+    setSystemInstruction,
+    getHistoryService,
+  };
+
+  client['chat'] = mockChat as unknown as ChatSession;
+  client['contentGenerator'] = {
+    countTokens: vi.fn(),
+  } as unknown as ContentGenerator;
+
+  const config = client['config'] as unknown as {
+    getUserMemory: () => string;
+    getCoreMemory: () => string;
+    getMcpInstructions: () => unknown;
+    isInteractive: () => boolean;
+  };
+  vi.spyOn(config, 'getUserMemory').mockReturnValue('');
+  vi.spyOn(config, 'getCoreMemory').mockReturnValue('');
+  vi.spyOn(config, 'getMcpInstructions').mockReturnValue(undefined);
+  vi.spyOn(config, 'isInteractive').mockReturnValue(false);
+
+  (
+    getEnabledToolNamesForPrompt as Mock<typeof getEnabledToolNamesForPrompt>
+  ).mockReturnValue([]);
+  (
+    shouldIncludeSubagentDelegationForConfig as Mock<
+      typeof shouldIncludeSubagentDelegationForConfig
+    >
+  ).mockResolvedValue(false);
+
+  (
+    getCoreSystemPromptAsync as Mock<typeof getCoreSystemPromptAsync>
+  ).mockResolvedValue('prompt');
+
+  await client.updateSystemInstruction();
+
+  expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
+    expect.objectContaining({
+      interactionMode: 'non-interactive',
+    }),
+  );
+}

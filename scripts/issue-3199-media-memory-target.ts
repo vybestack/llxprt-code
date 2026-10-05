@@ -35,6 +35,11 @@ import {
   type MediaProbeResources,
   settleOperation,
 } from './issue-3199-media-memory-lifecycle.js';
+import { resolveMediaProbeHistory } from './issue-3199-media-memory-resolution.js';
+import {
+  saveMediaProbeHistory,
+  countMediaProbeHistory,
+} from './issue-3199-media-memory-persistence.js';
 
 const IMAGE_BYTES = 512 * 1024;
 const STREAM_CHUNK_BYTES = 64 * 1024;
@@ -148,35 +153,30 @@ async function measureActiveTurn(
   admitted: IContent,
   resolved: Awaited<ReturnType<RequestMediaResolver['resolve']>>,
 ): Promise<ActiveTurnMeasurements> {
-  let turnFailure: unknown;
   let active: MediaProbeTurnSample['active'] | undefined;
   let transportBytes: number | undefined;
   const persistenceSave = settleOperation(() =>
-    runtime.persistence.save(runtime.history.getAll()),
+    saveMediaProbeHistory(runtime.history, runtime.persistence, async () => {
+      runtime.recording.recordContent(admitted);
+      active = await runtime.metrics.snapshot();
+      const body = resolved.withContents(
+        (contents) =>
+          new BoundedJsonBody(
+            { model: 'probe', messages: contents, stream: true },
+            {
+              maxChunkBytes: STREAM_CHUNK_BYTES,
+              maxEnvelopeBytes: ENVELOPE_BUDGET_BYTES,
+            },
+          ),
+      );
+      transportBytes = await consumeTransport(body);
+    }).then(() => undefined),
   );
-  try {
-    runtime.recording.recordContent(admitted);
-    active = await runtime.metrics.snapshot();
-    const body = resolved.withContents(
-      (contents) =>
-        new BoundedJsonBody(
-          { model: 'probe', messages: contents, stream: true },
-          {
-            maxChunkBytes: STREAM_CHUNK_BYTES,
-            maxEnvelopeBytes: ENVELOPE_BUDGET_BYTES,
-          },
-        ),
-    );
-    transportBytes = await consumeTransport(body);
-  } catch (error) {
-    turnFailure = error;
-  } finally {
-    turnFailure = await completeTurnResources(
-      persistenceSave,
-      resolved.release,
-      turnFailure,
-    );
-  }
+  const turnFailure = await completeTurnResources(
+    persistenceSave,
+    resolved.release,
+    undefined,
+  );
   if (turnFailure !== undefined) throw turnFailure;
   if (active === undefined || transportBytes === undefined) {
     throw new Error('Media probe turn completed without measurements');
@@ -201,12 +201,15 @@ async function collectTurnSample(
   );
   await runtime.history.replaceAll([admitted]);
   const contentId = admittedMediaContentId(admitted, turn);
-  const resolved = await runtime.resolver.resolve({
-    contents: runtime.history.getRawHistory(),
-    requestId: `media-probe-request-${turn}`,
-    turnId: `media-probe-${turn}`,
-    aggregateBudgetBytes: REQUEST_BUDGET_BYTES,
-  });
+  const resolved = await resolveMediaProbeHistory(
+    runtime.history.streamRawHistory(),
+    runtime.resolver,
+    {
+      requestId: `media-probe-request-${turn}`,
+      turnId: `media-probe-${turn}`,
+      aggregateBudgetBytes: REQUEST_BUDGET_BYTES,
+    },
+  );
   const measured = await measureActiveTurn(runtime, admitted, resolved);
   await runtime.recording.flush();
   await forceFullGc();
@@ -229,7 +232,7 @@ async function collectTurnSample(
     settledStoreReadCount: resolution.storeReadCount,
     settledProviderFileCount:
       runtime.providerRetention.snapshot().retainedFiles,
-    settledHistoryContentCount: runtime.history.getAll().length,
+    settledHistoryContentCount: await countMediaProbeHistory(runtime.history),
     settledSupersededHistoryOwnerCount:
       supersededReservationStates.filter(Boolean).length,
     bounds: probeBounds,

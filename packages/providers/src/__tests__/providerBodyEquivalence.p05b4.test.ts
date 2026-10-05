@@ -25,6 +25,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'bun:test';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   clearActiveProviderRuntimeContext,
@@ -227,6 +228,9 @@ function referenceAnthropicUserMessage(row: IContent): ReferenceMessage {
     if (block.type === 'text' && block.text) {
       content.push({ type: 'text', text: block.text });
     } else if (block.type === 'media') {
+      if (block.encoding === 'reference') {
+        throw new Error('Unresolved media reference in eager Anthropic body');
+      }
       const data = block.data.split(';base64,')[1] ?? block.data;
       content.push({
         type: 'image',
@@ -502,10 +506,6 @@ void vi.mock('@anthropic-ai/sdk', () => ({
   })),
 }));
 
-void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
-  getCoreSystemPromptAsync: vi.fn(async () => 'test system prompt'),
-}));
-
 function makeAnthropicSettings(): SettingsService {
   const settings = new SettingsService();
   settings.set('auth-key', 'test-api-key');
@@ -530,14 +530,18 @@ async function captureAnthropicBody(
     providerName: 'anthropic',
     ephemeralsSnapshot: { streaming: 'disabled' },
   });
-  const options = createProviderCallOptions({
-    providerName: 'anthropic',
-    settings,
-    config: runtime.config,
-    runtime,
-    invocation,
-    contents: opLogStream(rows),
-  });
+  const contents = opLogStream(rows);
+  const options = {
+    ...createProviderCallOptions({
+      providerName: 'anthropic',
+      settings,
+      config: runtime.config,
+      runtime,
+      invocation,
+      contents,
+    }),
+    contents,
+  };
   const provider = new AnthropicProvider(
     'test-api-key',
     undefined,
@@ -619,14 +623,18 @@ async function captureResponsesBodies(
     providerName: 'openai-responses',
     ephemeralsSnapshot: ephemerals,
   });
-  const options = createProviderCallOptions({
-    providerName: 'openai-responses',
-    settings,
-    config: runtime.config,
-    runtime,
-    invocation,
-    contents: opLogStream(rows),
-  });
+  const contents = opLogStream(rows);
+  const options = {
+    ...createProviderCallOptions({
+      providerName: 'openai-responses',
+      settings,
+      config: runtime.config,
+      runtime,
+      invocation,
+      contents,
+    }),
+    contents,
+  };
   const provider = new OpenAIResponsesProvider(
     'test-api-key',
     'https://api.openai.com/v1',
@@ -651,11 +659,13 @@ async function captureResponsesBodies(
  * Tests
  * ------------------------------------------------------------------ */
 
-describe('P05b4 criterion-3 provider body equivalence @plan:PLAN-20260917-ISSUE854.P05b4', () => {
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-    globalThis.fetch = originalFetch;
-  });
+function cleanupProvider(): void {
+  clearActiveProviderRuntimeContext();
+  globalThis.fetch = originalFetch;
+}
+
+describe('P05b4 anthropic body equivalence @plan:PLAN-20260917-ISSUE854.P05b4', () => {
+  afterEach(cleanupProvider);
 
   it('anthropic: provider-sent body bytes equal the independent eager reference', async () => {
     const rows = seededOpLog(0xa11ce);
@@ -678,6 +688,10 @@ describe('P05b4 criterion-3 provider body equivalence @plan:PLAN-20260917-ISSUE8
         : describeByteMismatch(first, second),
     ).toBe('byte-identical');
   });
+});
+
+describe('P05b4 openai-responses body equivalence @plan:PLAN-20260917-ISSUE854.P05b4', () => {
+  afterEach(cleanupProvider);
 
   it('openai-responses: provider-sent body bytes equal the independent eager reference', async () => {
     const rows = seededOpLog(0xb0b5e);
@@ -710,39 +724,78 @@ describe('P05b4 criterion-3 provider body equivalence @plan:PLAN-20260917-ISSUE8
         : describeByteMismatch(eagerBody, lazyBody),
     ).toBe('byte-identical');
   });
+});
+
+function retryReasoningRows(): IContent[] {
+  return [
+    humanText('chain-parent'),
+    {
+      speaker: 'ai',
+      blocks: [
+        {
+          type: 'thinking',
+          thought: 'mulling the chain',
+          sourceField: 'thinking',
+          encryptedContent: 'enc-p05b4-stable',
+        },
+        { type: 'text', text: 'chained reply' },
+      ],
+    },
+    {
+      speaker: 'ai',
+      blocks: [
+        {
+          type: 'thinking',
+          thought: 'mulling again',
+          encryptedContent: 'enc-p05b4-second',
+        },
+        { type: 'text', text: 'second reply' },
+      ],
+    },
+    humanText('chain-next'),
+  ];
+}
+
+function expectStableRetryBodies(bodies: readonly string[]): void {
+  const capturedBodies = bodies.filter((text) => text.length > 0);
+  // Two forced 401s plus one success: every capture is a distinct
+  // orchestrator attempt with a physically rebuilt body, and the run
+  // must have settled successfully on the third attempt.
+  expect(capturedBodies.length).toBe(3);
+  // Coverage guard: the rebuilds must actually synthesize reasoning ids
+  // (no stored provider metadata), or the stability claim is vacuous.
+  const firstParsed = JSON.parse(capturedBodies[0] ?? '{}') as {
+    input?: Array<{ type?: string; id?: string }>;
+  };
+  const reasoningIds = (firstParsed.input ?? [])
+    .filter((item) => item.type === 'reasoning')
+    .map((item) => item.id);
+  expect(reasoningIds.length).toBe(2);
+  for (const id of reasoningIds) {
+    expect(id).toMatch(/^rs_/);
+  }
+  const firstBody = capturedBodies[0] ?? '';
+  for (const retryBody of capturedBodies.slice(1)) {
+    const retryMatchesFirst = Buffer.from(retryBody, 'utf-8').equals(
+      Buffer.from(firstBody, 'utf-8'),
+    );
+    expect(
+      retryMatchesFirst
+        ? 'byte-identical'
+        : describeByteMismatch(retryBody, firstBody),
+    ).toBe('byte-identical');
+  }
+}
+
+describe('P05b4 openai-responses retry body stability @plan:PLAN-20260917-ISSUE854.P05b4', () => {
+  afterEach(cleanupProvider);
 
   it('openai-responses: retry rebuilds are byte-stable across orchestrator attempts (target contract)', async () => {
     // Reasoning rows WITHOUT stored 'openai.responses.reasoningId' metadata:
     // each orchestrator attempt rebuilds the input from the replayed history
     // and SYNTHESIZES rs_ ids for them, so any wall-clock component in the
     // synthesized id shows up as a byte difference between attempts.
-    const rows: IContent[] = [
-      humanText('chain-parent'),
-      {
-        speaker: 'ai',
-        blocks: [
-          {
-            type: 'thinking',
-            thought: 'mulling the chain',
-            sourceField: 'thinking',
-            encryptedContent: 'enc-p05b4-stable',
-          },
-          { type: 'text', text: 'chained reply' },
-        ],
-      },
-      {
-        speaker: 'ai',
-        blocks: [
-          {
-            type: 'thinking',
-            thought: 'mulling again',
-            encryptedContent: 'enc-p05b4-second',
-          },
-          { type: 'text', text: 'second reply' },
-        ],
-      },
-      humanText('chain-next'),
-    ];
+    const rows = retryReasoningRows();
     let fetchCount = 0;
     const bodies: string[] = [];
     const failingFetch: typeof fetch = async () => {
@@ -750,7 +803,7 @@ describe('P05b4 criterion-3 provider body equivalence @plan:PLAN-20260917-ISSUE8
       fetchCount += 1;
       // A real millisecond boundary between builds makes any wall-clock
       // field in a rebuilt body observable, deterministically.
-      await Bun.sleep(5);
+      await sleep(5);
       // A 401 is authoritative to the transport (shouldRetryOnError(401) is
       // false), so fetchStreamWithRetries rethrows it instead of internally
       // retrying — a 5xx would be retried INSIDE the transport over the same
@@ -784,14 +837,18 @@ describe('P05b4 criterion-3 provider body equivalence @plan:PLAN-20260917-ISSUE8
         retrywait: 0,
       },
     });
-    const options = createProviderCallOptions({
-      providerName: 'openai-responses',
-      settings,
-      config: runtime.config,
-      runtime,
-      invocation,
-      contents: opLogStream(rows),
-    });
+    const contents = opLogStream(rows);
+    const options = {
+      ...createProviderCallOptions({
+        providerName: 'openai-responses',
+        settings,
+        config: runtime.config,
+        runtime,
+        invocation,
+        contents,
+      }),
+      contents,
+    };
     const provider = new OpenAIResponsesProvider(
       'test-api-key',
       'https://api.openai.com/v1',
@@ -818,35 +875,8 @@ describe('P05b4 criterion-3 provider body equivalence @plan:PLAN-20260917-ISSUE8
     } finally {
       globalThis.fetch = originalFetch;
     }
-    const capturedBodies = bodies.filter((text) => text.length > 0);
-    // Two forced 401s plus one success: every capture is a distinct
-    // orchestrator attempt with a physically rebuilt body, and the run
-    // must have settled successfully on the third attempt.
     expect(settled).toBe(true);
-    expect(capturedBodies.length).toBe(3);
-    // Coverage guard: the rebuilds must actually synthesize reasoning ids
-    // (no stored provider metadata), or the stability claim is vacuous.
-    const firstParsed = JSON.parse(capturedBodies[0] ?? '{}') as {
-      input?: Array<{ type?: string; id?: string }>;
-    };
-    const reasoningIds = (firstParsed.input ?? [])
-      .filter((item) => item.type === 'reasoning')
-      .map((item) => item.id);
-    expect(reasoningIds.length).toBe(2);
-    for (const id of reasoningIds) {
-      expect(id).toMatch(/^rs_/);
-    }
-    const firstBody = capturedBodies[0] ?? '';
-    for (const retryBody of capturedBodies.slice(1)) {
-      const retryMatchesFirst = Buffer.from(retryBody, 'utf-8').equals(
-        Buffer.from(firstBody, 'utf-8'),
-      );
-      expect(
-        retryMatchesFirst
-          ? 'byte-identical'
-          : describeByteMismatch(retryBody, firstBody),
-      ).toBe('byte-identical');
-    }
+    expectStableRetryBodies(bodies);
     void streamingSseResponse;
   });
 });

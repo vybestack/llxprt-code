@@ -28,6 +28,7 @@ export type RowDiscriminator = 'text' | 'toolGroup' | 'summaryRow';
 
 /** Identity for a row projected from a journal envelope at a byte offset. */
 export interface JournalRowIdentity {
+  readonly toolOffset?: number;
   readonly kind: 'journal';
   readonly offset: number;
   readonly discriminator: RowDiscriminator;
@@ -42,6 +43,7 @@ export interface LegacyRowIdentity {
   readonly kind: 'legacy';
   readonly index: number;
   readonly discriminator: RowDiscriminator;
+  readonly toolOffset?: number;
 }
 
 /**
@@ -95,9 +97,9 @@ export function pendingRowIdentity(pendingKey: string): PendingRowIdentity {
 export function rowIdentityKey(identity: RowIdentity): string {
   switch (identity.kind) {
     case 'journal':
-      return `journal:${identity.offset}:${DISCRIMINATOR_PREFIX[identity.discriminator]}`;
+      return `journal:${identity.offset}:${DISCRIMINATOR_PREFIX[identity.discriminator]}${identity.toolOffset === undefined ? '' : `:tools:${identity.toolOffset}`}`;
     case 'legacy':
-      return `legacy:${identity.index}:${DISCRIMINATOR_PREFIX[identity.discriminator]}`;
+      return `legacy:${identity.index}:${DISCRIMINATOR_PREFIX[identity.discriminator]}${identity.toolOffset === undefined ? '' : `:tools:${identity.toolOffset}`}`;
     case 'pending':
       return `pending:${identity.pendingKey}`;
     default:

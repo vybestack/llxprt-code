@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { collectRowsForAssertions } from '../test-utils/collect-rows-for-assertions.js';
+import { collectRawHistory } from '../test-utils/collect-raw-history.js';
 import {
   assertDefined,
   assertNotNull,
@@ -81,25 +83,139 @@ function observePersistenceSave(
   );
 }
 
-describe('MediaLifecycleMetrics', () => {
-  it('converts maxRSS using Darwin byte and other-platform KiB semantics', () => {
-    expect(maxRssToBytes(4096, 'darwin')).toBe(4096);
-    expect(maxRssToBytes(4096, 'linux')).toBe(4_194_304);
-    expect(maxRssToBytes(4096, 'win32')).toBe(4_194_304);
-    expect(maxRssToBytes(0, 'darwin')).toBeNull();
+function rssBehavior(): number {
+  expect(maxRssToBytes(4096, 'darwin')).toBe(4096);
+  expect(maxRssToBytes(4096, 'linux')).toBe(4_194_304);
+  expect(maxRssToBytes(4096, 'win32')).toBe(4_194_304);
+  expect(maxRssToBytes(0, 'darwin')).toBeNull();
+  return maxRssToBytes(4096, 'linux') ?? 0;
+}
+
+let directory = '';
+
+let recording: SessionRecordingService | undefined;
+
+let persistenceSave: Promise<PersistenceSaveOutcome> | undefined;
+
+async function finishPersistenceSave(): Promise<void> {
+  const pending = persistenceSave;
+  persistenceSave = undefined;
+  if (pending === undefined) return;
+  const outcome = await pending;
+  if (!outcome.ok) throw outcome.error;
+}
+
+async function lifecycleBehavior(): Promise<number> {
+  let releasedDiskSpoolBytes = 0;
+
+  const payload = imageBytes(192);
+  const encoded = Buffer.from(payload).toString('base64');
+  const store = new LocalMediaStore({
+    rootDirectory: join(directory, 'media'),
+    quotaBytes: 1024 * 1024,
+  });
+  const history = new HistoryService();
+  const admission = new MediaAdmissionService(store);
+  await admission.addToHistory(history, inlineImage(encoded), {
+    turnId: 'turn-1',
+    source: 'metrics-test',
+  });
+  history.add(inlineImage(encoded));
+  const resolver = new RequestMediaResolver(store);
+  const resolved = await resolver.resolve({
+    contents: await collectRawHistory(history),
+    requestId: 'request-1',
+    turnId: 'turn-1',
+    aggregateBudgetBytes: encoded.length * 3,
+  });
+  const activeRecording = await startMetricRecording(history);
+  recording = activeRecording;
+  const persistence = new SessionPersistenceService(
+    new Storage(directory),
+    'metrics-session',
+    { mediaStore: store },
+  );
+  await collectRowsForAssertions(
+    history.streamRawHistory(),
+    async (contentsForAssertions) => {
+      persistenceSave = observePersistenceSave(
+        persistence.save([...contentsForAssertions]),
+      );
+      const providerRetention = new ProviderRetentionSource(321);
+      const metrics = new MediaLifecycleMetrics({
+        store,
+        history,
+        requestResolver: resolver,
+        recording: activeRecording,
+        persistence,
+        providerFileRetention: providerRetention,
+      });
+
+      const active = await metrics.snapshot();
+
+      assertActiveMetrics(active, payload.byteLength, encoded.length);
+
+      await resolved.release();
+      history.clear();
+      providerRetention.release();
+      await finishPersistenceSave();
+      await activeRecording.flush();
+      const released = await metrics.snapshot();
+
+      expect({
+        localRetainedBlobBytes: released.localRetainedBlobBytes,
+        residentEncodedBytes: released.residentEncodedBytes,
+        activeRequestMaterializationBytes:
+          released.activeRequestMaterializationBytes,
+        recordingQueueBytes: released.recordingQueueBytes,
+        persistenceQueueBytes: released.persistenceQueueBytes,
+        diskSpoolBytes: released.diskSpoolBytes,
+        providerFileRetainedBytes: released.providerFileRetainedBytes,
+      }).toStrictEqual({
+        localRetainedBlobBytes: 0,
+        residentEncodedBytes: 0,
+        activeRequestMaterializationBytes: 0,
+        recordingQueueBytes: 0,
+        persistenceQueueBytes: 0,
+        diskSpoolBytes: payload.byteLength,
+        providerFileRetainedBytes: 0,
+      });
+      releasedDiskSpoolBytes = released.diskSpoolBytes;
+    },
+  );
+
+  return releasedDiskSpoolBytes;
+}
+
+async function cacheBehavior(): Promise<number> {
+  const store = new LocalMediaStore({
+    rootDirectory: join(directory, 'media'),
+    quotaBytes: 1024,
+  });
+  const metrics = new MediaLifecycleMetrics({
+    store,
+    history: new HistoryService(),
+    requestResolver: new RequestMediaResolver(store),
+    recording: { getPendingByteCount: () => 0 },
+    persistence: { getPendingByteCount: () => 0 },
+    decodedImageCache: { snapshot: () => ({ entries: 2, bytes: 640 }) },
+    providerFileRetention: { snapshot: () => ({ retainedBytes: 0 }) },
   });
 
-  let directory = '';
-  let recording: SessionRecordingService | undefined;
-  let persistenceSave: Promise<PersistenceSaveOutcome> | undefined;
+  const snapshot = await metrics.snapshot();
 
-  async function finishPersistenceSave(): Promise<void> {
-    const pending = persistenceSave;
-    persistenceSave = undefined;
-    if (pending === undefined) return;
-    const outcome = await pending;
-    if (!outcome.ok) throw outcome.error;
-  }
+  expect(snapshot.decodedImageCache).toStrictEqual({
+    available: true,
+    entries: 2,
+    bytes: 640,
+  });
+  return snapshot.decodedImageCache.bytes ?? 0;
+}
+
+describe('MediaLifecycleMetrics', () => {
+  it('converts maxRSS using Darwin byte and other-platform KiB semantics', () => {
+    expect(rssBehavior()).toBeGreaterThan(0);
+  });
 
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'llxprt-media-metrics-'));
@@ -130,128 +246,56 @@ describe('MediaLifecycleMetrics', () => {
   });
 
   it('measures independent live lifecycle, process, and unavailable cache state', async () => {
-    const payload = imageBytes(192);
-    const encoded = Buffer.from(payload).toString('base64');
-    const store = new LocalMediaStore({
-      rootDirectory: join(directory, 'media'),
-      quotaBytes: 1024 * 1024,
-    });
-    const history = new HistoryService();
-    const admission = new MediaAdmissionService(store);
-    await admission.addToHistory(history, inlineImage(encoded), {
-      turnId: 'turn-1',
-      source: 'metrics-test',
-    });
-    history.add(inlineImage(encoded));
-    const resolver = new RequestMediaResolver(store);
-    const resolved = await resolver.resolve({
-      contents: history.getRawHistory(),
-      requestId: 'request-1',
-      turnId: 'turn-1',
-      aggregateBudgetBytes: encoded.length * 3,
-    });
-    recording = new SessionRecordingService({
-      sessionId: 'metrics-session',
-      projectHash: 'metrics-project',
-      chatsDir: join(directory, 'recording'),
-      workspaceDirs: [directory],
-      provider: 'test',
-      model: 'test',
-    });
-    recording.recordProviderSwitch('provider', 'model');
-    const admittedHistory = history
-      .getRawHistory()
-      .find((content) => content.blocks.length > 0);
-    assertDefined(admittedHistory, 'Expected admitted media history');
-    recording.recordContent(admittedHistory);
-    const persistence = new SessionPersistenceService(
-      new Storage(directory),
-      'metrics-session',
-      { mediaStore: store },
-    );
-    persistenceSave = observePersistenceSave(
-      persistence.save(history.getAll()),
-    );
-    const providerRetention = new ProviderRetentionSource(321);
-    const metrics = new MediaLifecycleMetrics({
-      store,
-      history,
-      requestResolver: resolver,
-      recording,
-      persistence,
-      providerFileRetention: providerRetention,
-    });
-
-    const active = await metrics.snapshot();
-
-    expect(active.localRetainedBlobBytes).toBe(payload.byteLength);
-    expect(active.residentEncodedBytes).toBe(encoded.length);
-    expect(active.activeRequestMaterializationBytes).toBe(encoded.length);
-    expect(active.recordingQueueBytes).toBeGreaterThan(0);
-    expect(active.persistenceQueueBytes).toBeGreaterThan(0);
-    expect(active.diskSpoolBytes).toBe(payload.byteLength);
-    expect(active.decodedImageCache).toStrictEqual({
-      available: false,
-      entries: null,
-      bytes: null,
-    });
-    expect(active.providerFileRetainedBytes).toBe(321);
-    expect(active.process.heapUsed).toBeGreaterThan(0);
-    expect(active.process.external).toBeGreaterThan(0);
-    expect(active.process.arrayBuffers).toBeGreaterThanOrEqual(0);
-    expect(active.process.rss).toBeGreaterThan(0);
-    const peakFootprint = requireAvailableMetric(active.osPeakFootprintBytes);
-    expect(peakFootprint).toBeGreaterThanOrEqual(active.process.rss);
-    expect(peakFootprint).toBeLessThan(active.process.rss * 10);
-
-    await resolved.release();
-    history.clear();
-    providerRetention.release();
-    await finishPersistenceSave();
-    await recording.flush();
-    const released = await metrics.snapshot();
-
-    expect({
-      localRetainedBlobBytes: released.localRetainedBlobBytes,
-      residentEncodedBytes: released.residentEncodedBytes,
-      activeRequestMaterializationBytes:
-        released.activeRequestMaterializationBytes,
-      recordingQueueBytes: released.recordingQueueBytes,
-      persistenceQueueBytes: released.persistenceQueueBytes,
-      diskSpoolBytes: released.diskSpoolBytes,
-      providerFileRetainedBytes: released.providerFileRetainedBytes,
-    }).toStrictEqual({
-      localRetainedBlobBytes: 0,
-      residentEncodedBytes: 0,
-      activeRequestMaterializationBytes: 0,
-      recordingQueueBytes: 0,
-      persistenceQueueBytes: 0,
-      diskSpoolBytes: payload.byteLength,
-      providerFileRetainedBytes: 0,
-    });
+    expect(await lifecycleBehavior()).toBeGreaterThan(0);
   });
 
   it('measures a present decoded-image cache independently', async () => {
-    const store = new LocalMediaStore({
-      rootDirectory: join(directory, 'media'),
-      quotaBytes: 1024,
-    });
-    const metrics = new MediaLifecycleMetrics({
-      store,
-      history: new HistoryService(),
-      requestResolver: new RequestMediaResolver(store),
-      recording: { getPendingByteCount: () => 0 },
-      persistence: { getPendingByteCount: () => 0 },
-      decodedImageCache: { snapshot: () => ({ entries: 2, bytes: 640 }) },
-      providerFileRetention: { snapshot: () => ({ retainedBytes: 0 }) },
-    });
-
-    const snapshot = await metrics.snapshot();
-
-    expect(snapshot.decodedImageCache).toStrictEqual({
-      available: true,
-      entries: 2,
-      bytes: 640,
-    });
+    expect(await cacheBehavior()).toBeGreaterThan(0);
   });
 });
+
+function assertActiveMetrics(
+  active: Awaited<ReturnType<MediaLifecycleMetrics['snapshot']>>,
+  payloadBytes: number,
+  encodedBytes: number,
+): void {
+  expect(active.localRetainedBlobBytes).toBe(payloadBytes);
+  expect(active.residentEncodedBytes).toBe(encodedBytes);
+  expect(active.activeRequestMaterializationBytes).toBe(encodedBytes);
+  expect(active.recordingQueueBytes).toBeGreaterThan(0);
+  expect(active.persistenceQueueBytes).toBeGreaterThan(0);
+  expect(active.diskSpoolBytes).toBe(payloadBytes);
+  expect(active.decodedImageCache).toStrictEqual({
+    available: false,
+    entries: null,
+    bytes: null,
+  });
+  expect(active.providerFileRetainedBytes).toBe(321);
+  expect(active.process.heapUsed).toBeGreaterThan(0);
+  expect(active.process.external).toBeGreaterThan(0);
+  expect(active.process.arrayBuffers).toBeGreaterThanOrEqual(0);
+  expect(active.process.rss).toBeGreaterThan(0);
+  const peakFootprint = requireAvailableMetric(active.osPeakFootprintBytes);
+  expect(peakFootprint).toBeGreaterThanOrEqual(active.process.rss);
+  expect(peakFootprint).toBeLessThan(active.process.rss * 10);
+}
+
+async function startMetricRecording(
+  history: HistoryService,
+): Promise<SessionRecordingService> {
+  const activeRecording = new SessionRecordingService({
+    sessionId: 'metrics-session',
+    projectHash: 'metrics-project',
+    chatsDir: join(directory, 'recording'),
+    workspaceDirs: [directory],
+    provider: 'test',
+    model: 'test',
+  });
+  activeRecording.recordProviderSwitch('provider', 'model');
+  const admittedHistory = (await collectRawHistory(history)).find(
+    (content) => content.blocks.length > 0,
+  );
+  assertDefined(admittedHistory, 'Expected admitted media history');
+  activeRecording.recordContent(admittedHistory);
+  return activeRecording;
+}

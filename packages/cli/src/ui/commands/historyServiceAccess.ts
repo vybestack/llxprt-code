@@ -18,6 +18,7 @@ import type {
   IContent,
 } from '@vybestack/llxprt-code-core';
 import type { CommandContext } from './types.js';
+import type { HistoryDumpSnapshot } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 
 /**
  * Structural view of the members commands consume. Declared structurally rather
@@ -25,9 +26,9 @@ import type { CommandContext } from './types.js';
  * HistoryService type.
  */
 export interface HistoryServiceView {
-  getAll: () => unknown;
-  getChronologyTrace: () => readonly ChronologyTraceEntry[];
-  getRawHistory: () => readonly IContent[];
+  openDumpSnapshot(): Promise<HistoryDumpSnapshot>;
+  getChronologyTrace: () => AsyncIterable<ChronologyTraceEntry>;
+  streamRawHistory: (signal?: AbortSignal) => AsyncIterable<IContent>;
 }
 
 type AgentClientWithHistory = {

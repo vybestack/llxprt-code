@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+
 import {
   type Config,
   todoEvents,
@@ -36,8 +37,7 @@ import {
 } from './zed-tool-handler.js';
 import type { TerminalManager } from './zed-terminal-manager.js';
 import { buildZedTerminalSetup } from './zed-terminal-setup.js';
-import { mapHistoryToSessionUpdates } from './zed-session-replay.js';
-import { wrapReplayFailure } from './zed-session-errors.js';
+import { deliverHistoryUpdates } from './zed-session-replay.js';
 import {
   resumeAgentHistory,
   toLoadRequestError,
@@ -310,7 +310,7 @@ export class ZedAgent {
   private async buildAndResumeSession(
     sessionId: string,
     cwd: string | undefined,
-  ): Promise<{ session: Session; history: readonly IContent[] }> {
+  ): Promise<{ session: Session; history: AsyncIterable<IContent> }> {
     const {
       agent,
       config: sessionConfig,
@@ -776,21 +776,15 @@ export class Session {
   private sendPlanUpdate(todos: TodoUpdateEvent['todos']): Promise<void> {
     return this.sendUpdate(buildZedPlanUpdate(todos));
   }
-  async streamHistory(items: readonly IContent[]): Promise<void> {
-    const updates = mapHistoryToSessionUpdates(items);
-    for (const update of updates) {
-      try {
-        await this.sendUpdateStrict(update);
-      } catch (error) {
-        throw wrapReplayFailure(this.id, error);
-      }
-    }
-    this.sessionInfo.hydrateFromHistory(items);
+  async streamHistory(
+    items: AsyncIterable<IContent> | Iterable<IContent>,
+  ): Promise<void> {
+    await deliverHistoryUpdates(items, this.sessionInfo, this.id, (update) =>
+      this.sendUpdateStrict(update),
+    );
   }
   async replayLiveHistory(): Promise<void> {
-    await this.streamHistory(
-      await readAgentHistoryForReplay(this.agent, this.id),
-    );
+    await this.streamHistory(readAgentHistoryForReplay(this.agent, this.id));
   }
   async dispose(): Promise<void> {
     try {

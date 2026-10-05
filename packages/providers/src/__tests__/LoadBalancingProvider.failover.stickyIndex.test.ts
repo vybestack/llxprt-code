@@ -8,7 +8,6 @@ import { describe, it, expect, beforeEach } from 'bun:test';
 import { ProviderManager } from '../ProviderManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   LoadBalancingProvider,
   type LoadBalancingProviderConfig,
@@ -17,6 +16,12 @@ import { LoadBalancerFailoverError } from '../errors.js';
 import type { IProvider } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { GenerateChatOptions } from '../GenerateChatOptions.js';
+import { replayableContents } from '../utils/collectContents.js';
+
+const requestContents = replayableContents([
+  { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+  { speaker: 'human', blocks: [{ type: 'text', text: 'test prompt' }] },
+]);
 
 async function* generateInitialStickyResponse(
   options: GenerateChatOptions,
@@ -95,16 +100,78 @@ async function* generateMultiRequestStickyResponse(
     yield { type: 'text' as const, content: 'zai success again' };
   }
 }
+function makeStickyConfig(profileName: string): LoadBalancingProviderConfig {
+  return {
+    profileName,
+    strategy: 'failover',
+    lbProfileEphemeralSettings: { failover_retry_count: 1 },
+    subProfiles: [
+      {
+        name: 'backend-a',
+        providerName: 'test-provider',
+        modelId: 'model-a',
+        baseURL: 'https://api.test.com',
+        authToken: 'test-token-a',
+      },
+      {
+        name: 'backend-b',
+        providerName: 'test-provider',
+        modelId: 'model-b',
+        baseURL: 'https://api.test.com',
+        authToken: 'test-token-b',
+      },
+      {
+        name: 'backend-c',
+        providerName: 'test-provider',
+        modelId: 'model-c',
+        baseURL: 'https://api.test.com',
+        authToken: 'test-token-c',
+      },
+    ],
+  };
+}
 
-describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492)', () => {
-  let settingsService: SettingsService;
-  let config: Config;
+function makeMultiRequestConfig(): LoadBalancingProviderConfig {
+  return {
+    profileName: 'test-not-pegged',
+    strategy: 'failover',
+    lbProfileEphemeralSettings: { failover_retry_count: 1 },
+    subProfiles: [
+      {
+        name: 'zai',
+        providerName: 'test-provider',
+        modelId: 'zai-model',
+        baseURL: 'https://api.test.com',
+        authToken: 'test-token-zai',
+      },
+      {
+        name: 'makora',
+        providerName: 'test-provider',
+        modelId: 'makora-model',
+        baseURL: 'https://api.test.com',
+        authToken: 'test-token-makora',
+      },
+      {
+        name: 'ollama',
+        providerName: 'test-provider',
+        modelId: 'ollama-model',
+        baseURL: 'https://api.test.com',
+        authToken: 'test-token-ollama',
+      },
+    ],
+  };
+}
+
+function makeProviderManager(): ProviderManager {
+  const settingsService = new SettingsService();
+  const config = createRuntimeConfigStub(settingsService);
+  return new ProviderManager({ settingsService, config });
+}
+
+describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492) [part 1]', () => {
   let providerManager: ProviderManager;
-
   beforeEach(() => {
-    settingsService = new SettingsService();
-    config = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager({ settingsService, config });
+    providerManager = makeProviderManager();
   });
 
   it('should failover from sticky index 2 to healthy index 0', async () => {
@@ -120,39 +187,13 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492)', () => {
 
     providerManager.registerProvider(mockProvider);
 
-    const lbConfig: LoadBalancingProviderConfig = {
-      profileName: 'test-sticky-wraparound',
-      strategy: 'failover',
-      lbProfileEphemeralSettings: { failover_retry_count: 1 },
-      subProfiles: [
-        {
-          name: 'backend-a',
-          providerName: 'test-provider',
-          modelId: 'model-a',
-          baseURL: 'https://api.test.com',
-          authToken: 'test-token-a',
-        },
-        {
-          name: 'backend-b',
-          providerName: 'test-provider',
-          modelId: 'model-b',
-          baseURL: 'https://api.test.com',
-          authToken: 'test-token-b',
-        },
-        {
-          name: 'backend-c',
-          providerName: 'test-provider',
-          modelId: 'model-c',
-          baseURL: 'https://api.test.com',
-          authToken: 'test-token-c',
-        },
-      ],
-    };
+    const lbConfig = makeStickyConfig('test-sticky-wraparound');
 
     const provider = new LoadBalancingProvider(lbConfig, providerManager);
     const options: GenerateChatOptions = {
       prompt: 'test prompt',
       messages: [{ role: 'user' as const, content: 'test' }],
+      contents: requestContents,
     };
 
     callLog.length = 0;
@@ -178,6 +219,13 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492)', () => {
     expect(provider.getCurrentFailoverIndex()).toBe(0);
     expect(callLog).toStrictEqual(['model-c', 'model-a']);
   });
+});
+
+describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492) [part 2]', () => {
+  let providerManager: ProviderManager;
+  beforeEach(() => {
+    providerManager = makeProviderManager();
+  });
 
   it('should reset sticky index to 0 after all backends fail', async () => {
     let phase: 'first' | 'second' = 'first';
@@ -193,39 +241,13 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492)', () => {
 
     providerManager.registerProvider(mockProvider);
 
-    const lbConfig: LoadBalancingProviderConfig = {
-      profileName: 'test-reset-on-all-fail',
-      strategy: 'failover',
-      lbProfileEphemeralSettings: { failover_retry_count: 1 },
-      subProfiles: [
-        {
-          name: 'backend-a',
-          providerName: 'test-provider',
-          modelId: 'model-a',
-          baseURL: 'https://api.test.com',
-          authToken: 'test-token-a',
-        },
-        {
-          name: 'backend-b',
-          providerName: 'test-provider',
-          modelId: 'model-b',
-          baseURL: 'https://api.test.com',
-          authToken: 'test-token-b',
-        },
-        {
-          name: 'backend-c',
-          providerName: 'test-provider',
-          modelId: 'model-c',
-          baseURL: 'https://api.test.com',
-          authToken: 'test-token-c',
-        },
-      ],
-    };
+    const lbConfig = makeStickyConfig('test-reset-on-all-fail');
 
     const provider = new LoadBalancingProvider(lbConfig, providerManager);
     const options: GenerateChatOptions = {
       prompt: 'test prompt',
       messages: [{ role: 'user' as const, content: 'test' }],
+      contents: requestContents,
     };
 
     for await (const _chunk of provider.generateChatCompletion(options)) {
@@ -249,6 +271,13 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492)', () => {
     expect(provider.getCurrentFailoverIndex()).toBe(0);
     expect(callLog).toStrictEqual(['model-c', 'model-a', 'model-b']);
   });
+});
+
+describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492) [part 3]', () => {
+  let providerManager: ProviderManager;
+  beforeEach(() => {
+    providerManager = makeProviderManager();
+  });
 
   it('should attempt all backends in order and reset index to 0 when a full rotation from sticky index 0 fails', async () => {
     const callLog: string[] = [];
@@ -263,39 +292,13 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492)', () => {
 
     providerManager.registerProvider(mockProvider);
 
-    const lbConfig: LoadBalancingProviderConfig = {
-      profileName: 'test-full-rotation-from-zero',
-      strategy: 'failover',
-      lbProfileEphemeralSettings: { failover_retry_count: 1 },
-      subProfiles: [
-        {
-          name: 'backend-a',
-          providerName: 'test-provider',
-          modelId: 'model-a',
-          baseURL: 'https://api.test.com',
-          authToken: 'test-token-a',
-        },
-        {
-          name: 'backend-b',
-          providerName: 'test-provider',
-          modelId: 'model-b',
-          baseURL: 'https://api.test.com',
-          authToken: 'test-token-b',
-        },
-        {
-          name: 'backend-c',
-          providerName: 'test-provider',
-          modelId: 'model-c',
-          baseURL: 'https://api.test.com',
-          authToken: 'test-token-c',
-        },
-      ],
-    };
+    const lbConfig = makeStickyConfig('test-full-rotation-from-zero');
 
     const provider = new LoadBalancingProvider(lbConfig, providerManager);
     const options: GenerateChatOptions = {
       prompt: 'test prompt',
       messages: [{ role: 'user' as const, content: 'test' }],
+      contents: requestContents,
     };
 
     expect(provider.getCurrentFailoverIndex()).toBe(0);
@@ -310,6 +313,13 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492)', () => {
 
     expect(callLog).toStrictEqual(['model-a', 'model-b', 'model-c']);
     expect(provider.getCurrentFailoverIndex()).toBe(0);
+  });
+});
+
+describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492) [part 4]', () => {
+  let providerManager: ProviderManager;
+  beforeEach(() => {
+    providerManager = makeProviderManager();
   });
 
   it('should not be pegged to exhausted backend across multiple requests', async () => {
@@ -327,39 +337,13 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492)', () => {
 
     providerManager.registerProvider(mockProvider);
 
-    const lbConfig: LoadBalancingProviderConfig = {
-      profileName: 'test-not-pegged',
-      strategy: 'failover',
-      lbProfileEphemeralSettings: { failover_retry_count: 1 },
-      subProfiles: [
-        {
-          name: 'zai',
-          providerName: 'test-provider',
-          modelId: 'zai-model',
-          baseURL: 'https://api.test.com',
-          authToken: 'test-token-zai',
-        },
-        {
-          name: 'makora',
-          providerName: 'test-provider',
-          modelId: 'makora-model',
-          baseURL: 'https://api.test.com',
-          authToken: 'test-token-makora',
-        },
-        {
-          name: 'ollama',
-          providerName: 'test-provider',
-          modelId: 'ollama-model',
-          baseURL: 'https://api.test.com',
-          authToken: 'test-token-ollama',
-        },
-      ],
-    };
+    const lbConfig = makeMultiRequestConfig();
 
     const provider = new LoadBalancingProvider(lbConfig, providerManager);
     const options: GenerateChatOptions = {
       prompt: 'test prompt',
       messages: [{ role: 'user' as const, content: 'test' }],
+      contents: requestContents,
     };
 
     const phase1Calls: string[] = [];

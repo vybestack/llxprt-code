@@ -8,7 +8,79 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import { MediaAdmissionService } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
 
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { DeferredHistorySourceOptions } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import {
+  prepareDeferredArrayAdmission,
+  type DeferredArrayAdmission,
+} from './deferredArrayAdmission.js';
+
+interface DeferredRetainedArrayAdmission extends DeferredArrayAdmission {
+  readonly retained: RetainedHistoryAdmission;
+}
+
+export function replaceDeferredArray(
+  admissions: RetainedHistoryAdmissions,
+  history: readonly IContent[],
+  prior: RetainedHistoryAdmission | undefined,
+  stored: HistoryService | undefined,
+  options: DeferredHistorySourceOptions = {},
+): Promise<{ journal: HistoryService; retained: RetainedHistoryAdmission }> {
+  return publishDeferredArray(
+    admissions,
+    admissions.prepareDeferredArray(history, options),
+    prior,
+    stored,
+    options,
+  );
+}
+
+async function publishDeferredArray(
+  admissions: RetainedHistoryAdmissions,
+  admitted: DeferredRetainedArrayAdmission,
+  prior: RetainedHistoryAdmission | undefined,
+  stored: HistoryService | undefined,
+  options: DeferredHistorySourceOptions,
+): Promise<{ journal: HistoryService; retained: RetainedHistoryAdmission }> {
+  const journal =
+    stored ??
+    new HistoryService({
+      mutationOwnership: options.ownership,
+      attachmentCounters: options.counters,
+    });
+  try {
+    if (admitted.rows === undefined)
+      throw new Error('Deferred array already submitted');
+    const operation = journal.detachedValues.replace(admitted.rows, undefined, {
+      signal: options.signal,
+      publishTokens: true,
+    });
+    admitted.rows = undefined;
+    await operation;
+    await releaseDeferredArray(
+      admissions,
+      prior,
+      'Prior deferred history cleanup failed',
+    );
+    return { journal, retained: admitted.retained };
+  } catch (error) {
+    if (journal !== stored) journal.dispose();
+    try {
+      await admitted.release();
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [error, cleanupError],
+        'Deferred array admission cleanup failed',
+      );
+    }
+    throw error;
+  } finally {
+    admitted.discardInput();
+  }
+}
+
 export interface RetainedHistoryAdmission {
+  readonly detached?: true;
   readonly history: readonly IContent[];
   readonly release: () => Promise<void>;
 }
@@ -21,6 +93,46 @@ export class RetainedHistoryAdmissions {
 
   get all(): readonly RetainedHistoryAdmission[] {
     return this.retained;
+  }
+
+  prepareDeferredArray(
+    history: readonly IContent[],
+    options: DeferredHistorySourceOptions,
+  ): DeferredRetainedArrayAdmission {
+    this.sequence += 1;
+    return this.retainDeferredArray(
+      prepareDeferredArrayAdmission(
+        history,
+        this.getStore(),
+        `agent-client-history:${this.sequence}`,
+        options,
+      ),
+    );
+  }
+
+  private retainDeferredArray(
+    admitted: DeferredArrayAdmission,
+  ): DeferredRetainedArrayAdmission {
+    const retained = this.register({
+      detached: true,
+      history: [],
+      release: admitted.release,
+    });
+    const rows = admitted.rows;
+    admitted.rows = undefined;
+    return {
+      rows,
+      retained,
+      discardInput: admitted.discardInput,
+      release: async (): Promise<void> => {
+        const failures = await this.release([retained]);
+        if (failures.length > 0)
+          throw new AggregateError(
+            failures,
+            'Deferred array media release failed',
+          );
+      },
+    };
   }
 
   async admitRetainedHistory(
@@ -65,35 +177,6 @@ export class RetainedHistoryAdmissions {
       );
     }
     throw replacementError;
-  }
-
-  async transferActiveHistory(
-    history: readonly IContent[],
-    releaseActiveHistory: () => Promise<void>,
-  ): Promise<RetainedHistoryAdmission | undefined> {
-    const priorAdmissions = this.retained;
-    const retained = await this.admitRetainedHistory(
-      history,
-      'agent-client-reinitialize',
-    );
-    if (retained === undefined) return undefined;
-    try {
-      await releaseActiveHistory();
-    } catch (error: unknown) {
-      await this.releaseAfterFailure(
-        error,
-        [retained],
-        'Client reinitialization failed and deferred media cleanup was incomplete',
-      );
-    }
-    const releaseFailures = await this.release(priorAdmissions);
-    if (releaseFailures.length > 0) {
-      throw new AggregateError(
-        releaseFailures,
-        'Client reinitialization ownership transfer was incomplete',
-      );
-    }
-    return retained;
   }
 
   async release(
@@ -141,6 +224,15 @@ export class RetainedHistoryAdmissions {
     this.retained = [...this.retained, admission];
     return admission;
   }
+}
+
+export async function releaseDeferredArray(
+  admissions: RetainedHistoryAdmissions,
+  prior: RetainedHistoryAdmission | undefined,
+  message: string,
+): Promise<void> {
+  const failures = await admissions.release(prior ? [prior] : []);
+  if (failures.length > 0) throw new AggregateError(failures, message);
 }
 
 function hasLocalMedia(history: readonly IContent[]): boolean {

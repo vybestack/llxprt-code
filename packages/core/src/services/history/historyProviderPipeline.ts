@@ -18,6 +18,7 @@ import type { IContent } from './IContent.js';
 import type { DebugLogger } from '../../debug/index.js';
 import { HistoryToolNormalization } from './historyToolNormalization.js';
 import { sanitizeProviderHistoryForSerialization } from './historyCloneUtils.js';
+import { ProviderAnchorDiagnostics } from './providerDiagnostics.js';
 
 /**
  * Build a provider-ready content array from curated history and optional tail
@@ -68,19 +69,12 @@ export function buildProviderContent(
   // Sanitize cyclic tool payloads while isolating prepared provider contents
   // from the stored history references.
   const sanitized = sanitizeProviderHistoryForSerialization(ordered);
-  const inputAnchorIndexes = combined.flatMap((content, index) =>
-    content.metadata?.cacheAnchor === true ? [index] : [],
-  );
-  const outputHasAnchor = sanitized.some(
-    (content) => content.metadata?.cacheAnchor === true,
-  );
-  if (inputAnchorIndexes.length > 0 && !outputHasAnchor) {
-    logger.warn('Provider history normalization removed a cache anchor', {
-      inputAnchorIndexes,
-      inputContentCount: combined.length,
-      outputContentCount: sanitized.length,
-    });
-  }
+  const anchors = new ProviderAnchorDiagnostics();
+  for (const content of combined)
+    anchors.input(content.metadata?.cacheAnchor === true);
+  for (const content of sanitized)
+    anchors.output(content.metadata?.cacheAnchor === true);
+  anchors.log(logger);
   return sanitized;
 }
 

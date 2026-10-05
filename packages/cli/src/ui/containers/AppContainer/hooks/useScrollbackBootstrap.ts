@@ -109,8 +109,9 @@ type ScrollbackBootOutcome =
 function resolveBootOutcome(
   settings: LoadedSettings,
   recordingSwapCallbacks: RecordingSwapCallbacks,
+  enabled: boolean,
 ): ScrollbackBootOutcome {
-  if (!isFlagEnabled(settings)) {
+  if (!enabled) {
     return { kind: 'disabled' };
   }
   const journalPath =
@@ -141,6 +142,10 @@ export function useScrollbackBootstrap(
   // The store owns no renders, so it never re-binds; unmount closes it.
   const pagerRef = useRef<ScrollbackPagerBinding | null>(null);
   const initializedRef = useRef(false);
+  const enabledRef = useRef(isFlagEnabled(settings));
+  const journalPath =
+    recordingSwapCallbacks.getCurrentRecording()?.getFilePath() ?? null;
+  const journalPathRef = useRef(journalPath);
   const unavailableRef = useRef(false);
   const noticeSentRef = useRef(false);
   const disposedRef = useRef(false);
@@ -166,9 +171,21 @@ export function useScrollbackBootstrap(
       Date.now(),
     );
   };
+  if (journalPathRef.current !== journalPath) {
+    journalPathRef.current = journalPath;
+    void pagerRef.current?.store.close();
+    pagerRef.current = null;
+    initializedRef.current = false;
+    unavailableRef.current = false;
+    noticeSentRef.current = false;
+  }
   if (!initializedRef.current) {
     initializedRef.current = true;
-    const outcome = resolveBootOutcome(settings, recordingSwapCallbacks);
+    const outcome = resolveBootOutcome(
+      settings,
+      recordingSwapCallbacks,
+      enabledRef.current,
+    );
     if (outcome.kind === 'unavailable') {
       unavailableRef.current = true;
     }
@@ -197,26 +214,25 @@ export function useScrollbackBootstrap(
     );
   }, [addItem]);
 
-  // The flag itself is never reactive: a mid-session change only prompts
-  // for a restart, and the prompt clears if the boot value is restored.
-  // The effect keys on the flag value, so the rerender cadence is irrelevant.
-  const bootFlagRef = useRef<boolean | null>(null);
-  bootFlagRef.current ??= isFlagEnabled(settings);
-  const flagNow = isFlagEnabled(settings);
-  const [restartNotice, setRestartNotice] = useState<string | null>(null);
-  useEffect(() => {
-    setRestartNotice(
-      flagNow === bootFlagRef.current ? null : SCROLLBACK_RESTART_NOTICE,
-    );
-  }, [flagNow]);
+  const restartNotice = useRestartNotice(settings);
 
-  useEffect(() => {
-    const pager = pagerRef.current;
-    return () => {
+  useEffect(
+    () => () => {
       disposedRef.current = true;
-      void pager?.store.close();
-    };
-  }, []);
+      void pagerRef.current?.store.close();
+    },
+    [],
+  );
 
   return { pager: pagerRef.current, restartNotice };
+}
+
+function useRestartNotice(settings: LoadedSettings): string | null {
+  const bootFlag = useRef(isFlagEnabled(settings));
+  const flagNow = isFlagEnabled(settings);
+  const [notice, setNotice] = useState<string | null>(null);
+  useEffect(() => {
+    setNotice(flagNow === bootFlag.current ? null : SCROLLBACK_RESTART_NOTICE);
+  }, [flagNow]);
+  return notice;
 }

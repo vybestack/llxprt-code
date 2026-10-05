@@ -46,30 +46,81 @@
  * settle point. Divergences are documented at the mirror sites below.
  */
 
+import {
+  isRecord,
+  fieldOf,
+  isSpeakerContent,
+  isValidSequence,
+  isSpeakerContentArray,
+  isDensityReplacementRecord,
+} from './historyJournalGuards.js';
 import * as fs from 'node:fs';
+import {
+  openHistoryDumpSnapshot,
+  type HistoryDumpSnapshot,
+} from './historyDumpSnapshot.js';
+import {
+  appendHistoryJournal,
+  HistoryAttachmentError,
+  type AttachmentCommit,
+} from './attachHistoryJournal.js';
+import type { JournalReadCounters } from '../../recording/journalCounters.js';
+import type { RowOwnership } from '../../recording/rowOwnership.js';
+import { cloneHistoryJournal, removeTempDir } from './cloneHistoryJournal.js';
+import {
+  parseChronologyBinding,
+  type ChronologyBinding,
+} from '../../recording/chronologyBinding.js';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { randomUUID } from 'crypto';
-import { isDeepStrictEqual } from 'node:util';
-import { type IContent } from './IContent.js';
-import { sanitizeProviderHistoryForSerialization } from './historyCloneUtils.js';
+import {
+  captureHistoryMutationSnapshot,
+  type HistoryMutationSnapshot,
+} from './historyMutationSnapshot.js';
+export {
+  planHistoryMutation,
+  planDensityMutation,
+} from './planHistoryMutation.js';
+import { invalidateResponsesStatefulChain, type IContent } from './IContent.js';
+import { recordPublicationOwners } from './historyPublicationOwners.js';
+import {
+  admitHistoryPending,
+  absorbHistoryPending,
+  retireHistoryPending,
+} from './historyPendingAdmission.js';
+import {
+  journalBinding,
+  type JournalBinding,
+} from './historyJournalBinding.js';
+import {
+  HistoryPublicationOrdinals,
+  readHistoryLength,
+} from './historyScalarLength.js';
 import { SessionRecordingService } from '../../recording/SessionRecordingService.js';
 import type {
   CommitWatermark,
   CompressionDetailPayload,
   DensityMutationPayload,
-  SessionEventType,
-  SessionRecordLine,
   SyntheticInsertPayload,
 } from '../../recording/types.js';
-import type { DensityResult } from '../../core/compression/types.js';
-import { debugLogger } from '../../utils/debugLogger.js';
+import { HistoryPendingTickets } from './history-pending-tickets.js';
+import type { ResumeProjection } from './historyResumeProjection.js';
+import {
+  capturePendingFold,
+  type PendingFoldSnapshot,
+} from '../../recording/pendingFoldSnapshot.js';
+import {
+  streamHistoryJournalRows as streamRows,
+  type HistorySuffixQuery,
+} from './historyJournalRows.js';
+import {
+  withSynchronousHistoryCursor,
+  type HistoryReadCursor,
+} from '../../recording/synchronousHistoryCursor.js';
 
 /** Recorder options for the HistoryService constructor. */
-export interface HistoryServiceJournalOptions {
-  /** Injected journal store; omitted, the service creates its own temp-file store. */
-  readonly recording?: SessionRecordingService;
-}
+export type { HistoryServiceJournalOptions } from './historyBatchContracts.js';
 
 /**
  * One durable history mutation in the P05b1 journal-op vocabulary. This is
@@ -103,6 +154,11 @@ export type HistoryJournalOp =
  * both layers.
  */
 type FoldEvent =
+  | {
+      readonly kind: 'chronologyBind';
+      readonly binding: ChronologyBinding;
+      readonly content?: IContent;
+    }
   | { readonly kind: 'content'; readonly content: IContent }
   | {
       readonly kind: 'rewind';
@@ -134,48 +190,9 @@ type FoldEvent =
 /** Recording versions this store folds, mirroring the resolver. */
 const SUPPORTED_RECORDING_VERSIONS = new Set([1, 2]);
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
-
-function fieldOf(value: unknown, key: string): unknown {
-  return isRecord(value) ? value[key] : undefined;
-}
-
-/** Engine-parity speaker guard: human/ai/tool speaker with a blocks array. */
-function isSpeakerContent(value: unknown): value is IContent {
-  const speaker = fieldOf(value, 'speaker');
-  if (speaker !== 'human' && speaker !== 'ai' && speaker !== 'tool') {
-    return false;
-  }
-  return Array.isArray(fieldOf(value, 'blocks'));
-}
-
-/** Chronology marker seq of a content row, or null when unmarked. */
 function chronSeqOf(content: IContent): number | null {
   const seq = content.metadata?.chronology?.seq;
   return typeof seq === 'number' ? seq : null;
-}
-
-function isValidSequence(value: unknown): value is number {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
-}
-
-function isSpeakerContentArray(value: unknown): value is readonly IContent[] {
-  return Array.isArray(value) && value.every(isSpeakerContent);
-}
-
-interface DensityReplacementRecordShape {
-  readonly replacedSeq: number;
-  readonly replacement: IContent;
-}
-
-function isDensityReplacementRecord(
-  value: unknown,
-): value is DensityReplacementRecordShape {
-  if (!isRecord(value)) return false;
-  if (!isValidSequence(value['replacedSeq'])) return false;
-  return isSpeakerContent(value['replacement']);
 }
 
 // ---------------------------------------------------------------------------
@@ -184,139 +201,12 @@ function isDensityReplacementRecord(
 // derives membership spans before calling these.
 // ---------------------------------------------------------------------------
 
-/** True when `next` extends or truncates `previous` at the same marked positions. */
-function isMarkedPrefix(
-  previous: readonly IContent[],
-  next: readonly IContent[],
-): boolean {
-  if (next.length > previous.length) return false;
-  for (let index = 0; index < next.length; index += 1) {
-    const previousSeq = chronSeqOf(previous[index]);
-    if (previousSeq === null || previousSeq !== chronSeqOf(next[index])) {
-      return false;
-    }
-  }
-  return true;
-}
-
-function contentOps(contents: readonly IContent[]): HistoryJournalOp[] {
-  return contents.map((content) => ({ kind: 'content', content }));
-}
-
-function rewindAllOp(rows: readonly IContent[]): HistoryJournalOp {
-  const firstSeq =
-    rows.length > 0 ? (chronSeqOf(rows[0]) ?? undefined) : undefined;
-  return { kind: 'rewind', itemsRemoved: rows.length, cutSeq: firstSeq };
-}
-
-/**
- * Plan the journal ops that turn `previous` into `next`:
- *
- *  - strict marked prefix, shorter → one `rewind` (count + cut seq);
- *  - strict marked prefix, longer → `content` rows for the appended tail;
- *  - single-item whole replacement over a marked history →
- *    `compression_detail` + `compressed` (the compression shape);
- *  - anything else → rewind everything, then re-record `next` in full.
- */
-export function planHistoryMutation(
-  previous: readonly IContent[],
-  next: readonly IContent[],
-): HistoryJournalOp[] {
-  if (next.length === previous.length && isMarkedPrefix(previous, next)) {
-    // Membership is unchanged; durable ops are needed only for rows whose
-    // VALUE changed in place (block rewrites such as provider-file bindings
-    // or tool-response edits). Each changed row lands as its own addressed
-    // replacement keyed by the row's chronology marker (#854).
-    const ops: HistoryJournalOp[] = [];
-    for (let index = 0; index < next.length; index += 1) {
-      if (
-        next[index] === previous[index] ||
-        isDeepStrictEqual(next[index], previous[index])
-      ) {
-        continue;
-      }
-      ops.push({
-        kind: 'density',
-        payload: {
-          removedSeqs: [],
-          replacements: [
-            {
-              replacedSeq: chronSeqOf(previous[index]) ?? 0,
-              replacement: next[index],
-            },
-          ],
-        },
-      });
-    }
-    return ops;
-  }
-  if (
-    next.length > previous.length &&
-    isMarkedPrefix(previous, next.slice(0, previous.length))
-  ) {
-    return contentOps(next.slice(previous.length));
-  }
-  if (next.length < previous.length && isMarkedPrefix(previous, next)) {
-    const firstRemoved = previous[next.length];
-    return [
-      {
-        kind: 'rewind',
-        itemsRemoved: previous.length - next.length,
-        cutSeq: chronSeqOf(firstRemoved) ?? undefined,
-      },
-    ];
-  }
-  if (
-    next.length === 1 &&
-    previous.length > 0 &&
-    previous.every((row) => chronSeqOf(row) !== null)
-  ) {
-    return [
-      {
-        kind: 'compressionDetail',
-        payload: {
-          fromSeq: chronSeqOf(previous[0]) ?? 0,
-          toSeq: chronSeqOf(previous[previous.length - 1]) ?? 0,
-          itemsCompressed: previous.length,
-        },
-      },
-      {
-        kind: 'compressed',
-        summary: next[0],
-        itemsCompressed: previous.length,
-      },
-    ];
-  }
-  return [
-    ...(previous.length > 0 ? [rewindAllOp(previous)] : []),
-    ...contentOps(next),
-  ];
-}
-
 /**
  * Plan a validated density pass as one `density_mutation` op, addressed by
  * chronology marker. Returns null when any affected row is unmarked — the
  * journal cannot address it, so the caller falls back to the wholesale
  * rewrite plan.
  */
-export function planDensityMutation(
-  current: readonly IContent[],
-  result: DensityResult,
-): HistoryJournalOp[] | null {
-  const removedSeqs: number[] = [];
-  for (const index of result.removals) {
-    const seq = chronSeqOf(current[index]);
-    if (seq === null) return null;
-    removedSeqs.push(seq);
-  }
-  const replacements: DensityReplacementRecordShape[] = [];
-  for (const [index, replacement] of result.replacements) {
-    const seq = chronSeqOf(current[index]);
-    if (seq === null) return null;
-    replacements.push({ replacedSeq: seq, replacement });
-  }
-  return [{ kind: 'density', payload: { removedSeqs, replacements } }];
-}
 
 // ---------------------------------------------------------------------------
 // Op ↔ envelope ↔ fold-event mapping
@@ -367,8 +257,18 @@ function opToEvent(op: HistoryJournalOp): FoldEvent {
  * bookkeeping, metadata events, and any payload that fails its engine-parity
  * validation (those records are skipped, matching the resolver).
  */
+function chronologyBindingEvent(payload: unknown): FoldEvent | null {
+  const binding = parseChronologyBinding(payload);
+  const content = fieldOf(payload, 'content');
+  if (binding === null || (content !== undefined && !isSpeakerContent(content)))
+    return null;
+  return { kind: 'chronologyBind', binding, content };
+}
+
 function envelopeToEvent(type: string, payload: unknown): FoldEvent | null {
   switch (type) {
+    case 'chronology_bind':
+      return chronologyBindingEvent(payload);
     case 'content': {
       const content = fieldOf(payload, 'content');
       return isSpeakerContent(content) ? { kind: 'content', content } : null;
@@ -532,6 +432,20 @@ function applyDensityEvent(
 
 /** Apply one fold event to the transient rows. */
 function applyFoldEvent(rows: IContent[], event: FoldEvent): void {
+  if (event.kind === 'chronologyBind') {
+    if (event.binding.rowIndex >= rows.length) return;
+    const row = event.content ?? rows[event.binding.rowIndex];
+    const restored =
+      event.binding.invalidateResponses === true
+        ? invalidateResponsesStatefulChain([row])[0]
+        : row;
+    rows[event.binding.rowIndex] = {
+      ...restored,
+      metadata: { ...restored.metadata, chronology: event.binding.chronology },
+    };
+    return;
+  }
+
   switch (event.kind) {
     case 'content':
       rows.push(event.content);
@@ -610,39 +524,45 @@ function parseFoldEvents(text: string): Array<FoldEvent | null> {
 // The store
 // ---------------------------------------------------------------------------
 
-interface PendingEntry {
-  readonly op: HistoryJournalOp;
-  /** Envelope seq once enqueued; null when the recorder could not accept it. */
-  readonly seq: number | null;
+export interface HistoryJournalAdoption {
+  useDurableProjection(watermark: CommitWatermark): void;
+  prepareCommit(): void;
+  commit(): Promise<void>;
+  rollback(): void;
 }
 
-/**
- * Journal-backed store behind the HistoryService facade. See the module
- * header for the architecture contract.
- */
 export class HistoryJournalStore {
-  private recorder: SessionRecordingService | undefined;
-  private ownsRecorder: boolean;
-  private tempDir: string | null = null;
-  private pending: PendingEntry[] = [];
-  private durableTail = 0;
-  private lastLine: SessionRecordLine | null = null;
+  private binding: JournalBinding;
+  private adoptionPending = false;
+  private attachmentPending = false;
   private disposed = false;
+  private readonly publicationOrdinals = new HistoryPublicationOrdinals();
 
-  constructor(recording?: SessionRecordingService) {
-    if (recording !== undefined) {
-      this.recorder = recording;
-      this.ownsRecorder = false;
-      return;
-    }
-    // The bare store's recorder is created lazily on the first mutation so
-    // read-only services never touch the filesystem.
-    this.ownsRecorder = true;
+  constructor(
+    recording?: SessionRecordingService,
+    private readonly attachmentCounters?: JournalReadCounters,
+    private readonly mutationOwnership?: RowOwnership,
+  ) {
+    this.binding = journalBinding(recording);
   }
 
   /** The file backing the store, or null before the first durable record. */
+  onRetired(listener: () => void): () => void {
+    const binding = this.binding;
+    binding.retired.add(listener);
+    return () => binding.retired.delete(listener);
+  }
+
+  isRecorder(recorder: SessionRecordingService): boolean {
+    return this.binding.recorder === recorder;
+  }
+
+  isAdoptingRecorder(recorder: SessionRecordingService): boolean {
+    return this.adoptionPending && this.isRecorder(recorder);
+  }
+
   journalPath(): string | null {
-    return this.recorder?.getFilePath() ?? null;
+    return this.binding.recorder?.getFilePath() ?? null;
   }
 
   /**
@@ -651,25 +571,66 @@ export class HistoryJournalStore {
    * P05b2 watermark acks.
    */
   apply(op: HistoryJournalOp): void {
+    this.assertNoAdoption();
     if (this.disposed) return;
+    const current = this.readLength();
+    const nextLength = this.publicationOrdinals.project(
+      op,
+      current.length,
+      this.binding.recorder?.getLastEnqueuedSequence() ?? 0,
+      () => this.capturePendingFold(),
+      (execute) => this.withReadRows(execute),
+    );
     const recorder = this.ensureRecorder();
-    const { type, payload } = opToEnvelope(op);
-    const line = recorder.enqueue(type, payload);
-    if (line !== null) {
-      this.lastLine = line;
-      // Track the ack in the background so the overlay shrinks as records
-      // become durable; a failure surfaces to waitForDurable() callers.
-      void recorder.waitForCommit(line).then(
-        (watermark) => this.absorb(line.seq, watermark),
-        (error: unknown) => {
-          debugLogger.debug(
-            'History journal commit failed; durability error is reported through waitForCommit()',
-            error,
-          );
-        },
-      );
+    const binding = this.binding;
+    binding.unsubscribeWatermark ??= recorder.onCommitWatermark((watermark) =>
+      absorbHistoryPending(binding, watermark.seq, watermark),
+    );
+    const ordinal = binding.pending.prepare(
+      op,
+      recorder.isActive() ? recorder.getLastEnqueuedSequence() + 1 : null,
+    );
+    let line: ReturnType<typeof admitHistoryPending>['line'];
+    try {
+      ({ line } = admitHistoryPending(
+        recorder,
+        op,
+        this.attachmentCounters?.ownership,
+      ));
+    } catch (error) {
+      binding.pending.cancel(ordinal);
+      throw error;
     }
-    this.pending.push({ op, seq: line === null ? null : line.seq });
+    if (line !== null) {
+      if (binding.lastSeq !== null && line.seq > binding.lastSeq + 1)
+        binding.externalBoundarySeq ??= line.seq - 1;
+      binding.lastSeq = line.seq;
+    }
+    binding.pending.publish(ordinal);
+    // Admission publishes both membership and cardinality synchronously. Acks
+    // only move that same membership from pending to durable, never count twice.
+    binding.rowCount = nextLength;
+    binding.durableTail = current.durableTail;
+    this.publicationOrdinals.admitted(
+      line?.seq ?? recorder.getLastEnqueuedSequence(),
+    );
+  }
+
+  withPublicationOrdinals(action: () => Promise<void>): Promise<void> {
+    return this.publicationOrdinals.run(
+      this.binding.recorder?.getLastEnqueuedSequence() ?? 0,
+      action,
+    );
+  }
+
+  capturePublicationOwners(): Iterable<IContent> {
+    return recordPublicationOwners(this.binding.lastLine);
+  }
+
+  adoptMutationBoundary(durableTail: number): void {
+    if (!this.binding.seeded && this.binding.durableTail === 0) {
+      this.binding.durableTail = durableTail;
+    }
   }
 
   /**
@@ -678,12 +639,18 @@ export class HistoryJournalStore {
    * observed after this resolves folds exactly the journal bytes.
    */
   async waitForDurable(): Promise<void> {
-    const line = this.lastLine;
-    if (line === null) return;
-    const recorder = this.recorder;
+    const binding = this.binding;
+    const seq = binding.lastSeq;
+    if (seq === null) return;
+    const recorder = binding.recorder;
     if (recorder === undefined) return;
-    const watermark = await recorder.waitForCommit(line);
-    this.absorb(line.seq, watermark);
+    const watermark = await recorder.waitForCommitSequence(seq);
+    absorbHistoryPending(binding, seq, watermark);
+  }
+
+  retireIdleTicketStorage(): void {
+    this.binding.pending.retireIdleStorage();
+    this.binding.recorder?.retireIdleTicketStorage();
   }
 
   /**
@@ -692,52 +659,260 @@ export class HistoryJournalStore {
    */
   materialize(): IContent[] {
     const durable = this.foldDurable();
-    if (this.pending.length === 0) return durable;
-    return foldEvents(
-      this.pending.map((entry) => opToEvent(entry.op)),
-      durable,
+    if (this.binding.pending.length === 0) return durable;
+    for (let index = 0; index < this.binding.pending.length; index++)
+      applyFoldEvent(durable, opToEvent(this.binding.pending.read(index).op));
+    return durable;
+  }
+
+  /** Internal only. Capture binding, watermark, and pending membership in one turn. */
+  capturePendingFold(): PendingFoldSnapshot {
+    if (this.disposed) throw new Error('History journal store is disposed');
+    return capturePendingFold(this.binding);
+  }
+
+  withReadRows<T>(
+    execute: (cursor: HistoryReadCursor) => T,
+    signal?: AbortSignal,
+  ): T {
+    return withSynchronousHistoryCursor(
+      this.capturePendingFold(),
+      execute,
+      this.attachmentCounters,
+      signal,
     );
   }
 
+  getLength(): number {
+    return this.readLength().length;
+  }
+
+  private readLength(): ReturnType<typeof readHistoryLength> {
+    if (this.disposed) throw new Error('History journal store is disposed');
+    return readHistoryLength(
+      this.binding,
+      () => this.capturePendingFold(),
+      this.attachmentCounters,
+    );
+  }
+
+  /** Stream one captured row at a time without eager history materialization. */
+  streamRows(
+    query?: HistorySuffixQuery,
+    signal?: AbortSignal,
+  ): AsyncIterable<IContent> {
+    return streamRows(
+      () => this.capturePendingFold(),
+      this.attachmentCounters,
+      query,
+      signal,
+    );
+  }
+
+  openDumpSnapshot(): Promise<HistoryDumpSnapshot> {
+    return openHistoryDumpSnapshot(
+      this.capturePendingFold(),
+      this.attachmentCounters,
+    );
+  }
+
+  async withMutationSnapshot<T>(
+    execute: (snapshot: HistoryMutationSnapshot) => Promise<T>,
+    signal?: AbortSignal,
+  ): Promise<T> {
+    const snapshot = await captureHistoryMutationSnapshot(
+      this.capturePendingFold(),
+      this.attachmentCounters,
+      this.mutationOwnership,
+      signal,
+    );
+    try {
+      return await execute(snapshot);
+    } finally {
+      await snapshot.close();
+    }
+  }
+
   /**
-   * Late attach: transfer the live rows to `recorder` and use it from here
-   * on. Used by the foreground wiring order where history is built before
-   * recording starts. Content that reached the (temp) journal pre-attach is
-   * re-recorded onto the attached journal so its fold carries the full
-   * conversation; the retired self-owned store is disposed.
+   * Switch to a validated durable range without reading or copying content.
+   * The caller retains ownership of the adopted recorder. Rollback restores
+   * the old binding, including acknowledgements received during the switch;
+   * commit retires only a self-owned temporary journal. Neither operation
+   * changes media ownership or HistoryService's derived state.
    */
-  attachJournal(recorder: SessionRecordingService): void {
-    if (this.disposed || recorder === this.recorder) return;
-    const rows = this.materialize();
-    const retired = this.ownsRecorder ? this.recorder : undefined;
-    const retiredTempDir = this.ownsRecorder ? this.tempDir : null;
-    this.recorder = recorder;
-    this.ownsRecorder = false;
-    this.tempDir = null;
-    this.pending = [];
-    this.durableTail = 0;
-    this.lastLine = null;
-    for (const row of rows) {
-      this.apply({ kind: 'content', content: row });
+  adoptJournal(
+    recorder: SessionRecordingService,
+    watermark: CommitWatermark,
+    stripResumeMarkers = false,
+    projection?: ResumeProjection,
+  ): HistoryJournalAdoption {
+    this.assertNoAdoption();
+    if (this.disposed) throw new Error('History journal store is disposed');
+    if (recorder === this.binding.recorder) {
+      throw new Error('Journal adoption requires a different recorder');
     }
-    if (retired !== undefined) {
-      void retired
-        .dispose()
-        .catch(() => undefined)
-        .then(() => {
-          removeTempDir(retiredTempDir);
-        });
+    const previous = this.binding;
+    this.binding = {
+      ...journalBinding(recorder),
+      projection,
+      durableTail: watermark.byteOffset,
+      resumeBoundary: stripResumeMarkers ? watermark.byteOffset : 0,
+      seeded: true,
+    };
+    this.adoptionPending = true;
+    let settled = false;
+    let retirementPrepared = false;
+    const prepareCommit = (): void => {
+      if (settled) throw new Error('Journal adoption is already settled');
+      if (retirementPrepared) return;
+      for (const listener of previous.retired) listener();
+      retirementPrepared = true;
+    };
+    const settle = (): void => {
+      if (settled) throw new Error('Journal adoption is already settled');
+      settled = true;
+      this.adoptionPending = false;
+    };
+    return {
+      useDurableProjection: (watermark) => {
+        if (settled) throw new Error('Journal adoption is already settled');
+        this.binding = {
+          ...this.binding,
+          durableTail: watermark.byteOffset,
+          rowCount: null,
+          resumeBoundary: 0,
+          projection: undefined,
+        };
+      },
+      prepareCommit,
+      commit: async () => {
+        settle();
+        if (!retirementPrepared)
+          for (const listener of previous.retired) listener();
+        retireHistoryPending(previous);
+        removeTempDir(previous.projection?.directory ?? null);
+        if (previous.ownsRecorder) {
+          await previous.recorder?.dispose();
+          removeTempDir(previous.tempDir);
+        }
+      },
+      rollback: () => {
+        settle();
+        this.binding = previous;
+      },
+    };
+  }
+
+  private assertNoAdoption(): void {
+    if (this.adoptionPending || this.attachmentPending)
+      throw new Error('Journal adoption is pending');
+  }
+
+  /**
+   * Late attach: copy live rows onto a new recorder when foreground history
+   * was built before recording started. Resume must use adoptJournal instead.
+   */
+  async detachJournal(recorder: SessionRecordingService): Promise<void> {
+    if (this.disposed || this.binding.recorder !== recorder) return;
+    this.assertNoAdoption();
+    await this.waitForDurable();
+    if (this.binding.pending.length > 0)
+      throw new Error('History journal contains uncommitted mutations');
+    const previous = this.binding;
+    const copy = await cloneHistoryJournal(recorder, () => this.disposed);
+    this.binding = {
+      ...previous,
+      retired: new Set(),
+      recorder: copy.recorder,
+      ownsRecorder: true,
+      tempDir: copy.directory,
+      pending: new HistoryPendingTickets(),
+      unsubscribeWatermark: undefined,
+      durableTail: copy.byteOffset,
+      seeded: true,
+      lastLine: null,
+      lastSeq: null,
+    };
+    for (const listener of previous.retired) listener();
+    if (previous.ownsRecorder) {
+      await previous.recorder?.dispose();
+      removeTempDir(previous.tempDir);
     }
+  }
+
+  attachJournal(
+    recorder: SessionRecordingService,
+    replace = false,
+    onAttached?: () => void,
+  ): Promise<void> {
+    this.assertNoAdoption();
+    if (this.disposed)
+      return Promise.reject(new Error('History journal store is disposed'));
+    if (recorder === this.binding.recorder) {
+      onAttached?.();
+      return Promise.resolve();
+    }
+    return this.transferJournal(recorder, replace, onAttached);
+  }
+
+  private async transferJournal(
+    recorder: SessionRecordingService,
+    replace: boolean,
+    onAttached?: () => void,
+  ): Promise<void> {
+    this.attachmentPending = true;
+    let transferred: AttachmentCommit;
+    try {
+      await this.waitForDurable();
+      if (this.binding.pending.length > 0)
+        throw new Error('History journal contains uncommitted mutations');
+      await this.binding.recorder?.flush();
+      const filePath = this.journalPath();
+      const fileSize = filePath === null ? 0 : fs.statSync(filePath).size;
+      const byteOffset =
+        this.binding.seeded || this.binding.durableTail > 0
+          ? this.binding.durableTail
+          : fileSize;
+      transferred = await appendHistoryJournal(
+        {
+          filePath,
+          byteOffset,
+          resumeBoundary: this.binding.resumeBoundary,
+          projection: this.binding.projection,
+        },
+        recorder,
+        replace,
+        () => this.disposed,
+        this.attachmentCounters,
+      );
+    } finally {
+      this.attachmentPending = false;
+    }
+    const adoption = this.adoptJournal(recorder, transferred.watermark);
+    try {
+      onAttached?.();
+      adoption.prepareCommit();
+    } catch (error) {
+      adoption.rollback();
+      throw new HistoryAttachmentError(
+        error,
+        transferred.committedRows,
+        transferred.destinationRewound,
+      );
+    }
+    await adoption.commit();
   }
 
   /** Flush and retire the journal; a self-owned temp store is removed. */
   dispose(): void {
+    this.assertNoAdoption();
     if (this.disposed) return;
     this.disposed = true;
-    this.pending = [];
-    const recorder = this.recorder;
-    const tempDir = this.tempDir;
-    if (recorder === undefined) {
+    removeTempDir(this.binding.projection?.directory ?? null);
+    retireHistoryPending(this.binding);
+    const recorder = this.binding.recorder;
+    const tempDir = this.binding.tempDir;
+    if (recorder === undefined || !this.binding.ownsRecorder) {
       removeTempDir(tempDir);
       return;
     }
@@ -745,15 +920,15 @@ export class HistoryJournalStore {
       .dispose()
       .catch(() => undefined)
       .then(() => {
-        if (this.ownsRecorder) removeTempDir(tempDir);
+        if (this.binding.ownsRecorder) removeTempDir(tempDir);
       });
   }
 
   private ensureRecorder(): SessionRecordingService {
-    if (this.recorder === undefined) {
+    if (this.binding.recorder === undefined) {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'llxprt-history-'));
-      this.tempDir = dir;
-      this.recorder = new SessionRecordingService({
+      this.binding.tempDir = dir;
+      this.binding.recorder = new SessionRecordingService({
         sessionId: `history-${randomUUID()}`,
         projectHash: 'llxprt-history-service',
         chatsDir: dir,
@@ -762,21 +937,7 @@ export class HistoryJournalStore {
         model: 'local',
       });
     }
-    return this.recorder;
-  }
-
-  /**
-   * Record durability of `seq`: advance the foldable tail to the watermark's
-   * exclusive end offset and drop the now-durable overlay entries. A seq that
-   * was never enqueued (null) never leaves the overlay.
-   */
-  private absorb(seq: number, watermark: CommitWatermark): void {
-    if (watermark.byteOffset > this.durableTail) {
-      this.durableTail = watermark.byteOffset;
-    }
-    this.pending = this.pending.filter(
-      (entry) => entry.seq === null || entry.seq > seq,
-    );
+    return this.binding.recorder;
   }
 
   /**
@@ -792,11 +953,13 @@ export class HistoryJournalStore {
    * the JournalResolver fold of the same path (#854).
    */
   private foldDurable(): IContent[] {
-    const filePath = this.recorder?.getFilePath();
+    const filePath = this.binding.recorder?.getFilePath();
     if (filePath === null || filePath === undefined) return [];
     const externallySeeded =
-      this.durableTail === 0 && this.pending.length === 0;
-    if (!externallySeeded && this.durableTail <= 0) return [];
+      !this.binding.seeded &&
+      this.binding.durableTail === 0 &&
+      this.binding.pending.length === 0;
+    if (!externallySeeded && this.binding.durableTail <= 0) return [];
     let buffer: Buffer;
     try {
       buffer = fs.readFileSync(filePath);
@@ -806,82 +969,24 @@ export class HistoryJournalStore {
     }
     const limit = externallySeeded
       ? buffer.length
-      : Math.min(buffer.length, this.durableTail);
+      : Math.min(buffer.length, this.binding.durableTail);
     if (limit <= 0) return [];
     const folded = limit < buffer.length ? buffer.subarray(0, limit) : buffer;
-    return foldEvents(parseFoldEvents(folded.toString('utf8')));
-  }
-}
-
-/**
- * The durability boundary requires JSON-safe payloads: the journal is a
- * JSON-lines file, so content that reaches an envelope passes through the
- * same cyclic-structure sanitizer the provider path uses. The pending
- * overlay keeps the caller's original object untouched — pre-commit reads
- * behave exactly as before; only the durable copy is normalized (#854).
- */
-function durableContent(content: IContent): IContent {
-  return sanitizeProviderHistoryForSerialization([content])[0];
-}
-
-/** Map an op onto its journal envelope; one op, one record. */
-function opToEnvelope(op: HistoryJournalOp): {
-  readonly type: SessionEventType;
-  readonly payload: unknown;
-} {
-  switch (op.kind) {
-    case 'content':
-      return {
-        type: 'content',
-        payload: { content: durableContent(op.content) },
-      };
-    case 'rewind':
-      return op.cutSeq === undefined
-        ? { type: 'rewind', payload: { itemsRemoved: op.itemsRemoved } }
-        : {
-            type: 'rewind',
-            payload: { itemsRemoved: op.itemsRemoved, cutSeq: op.cutSeq },
-          };
-    case 'compressed':
-      return {
-        type: 'compressed',
-        payload: {
-          summary: durableContent(op.summary),
-          itemsCompressed: op.itemsCompressed,
-        },
-      };
-    case 'compressionDetail':
-      return { type: 'compression_detail', payload: op.payload };
-    case 'syntheticInsert':
-      return {
-        type: 'synthetic_insert',
-        payload: { ...op.payload, content: durableContent(op.payload.content) },
-      };
-    case 'density':
-      return {
-        type: 'density_mutation',
-        payload: {
-          ...op.payload,
-          replacements: op.payload.replacements.map((entry) => ({
-            replacedSeq: entry.replacedSeq,
-            replacement: durableContent(entry.replacement),
-          })),
-        },
-      };
-    default: {
-      // Exhaustiveness guard: a new op kind must state its envelope shape.
-      const exhaustive: never = op;
-      void exhaustive;
-      throw new Error('unreachable: unmapped history journal op');
-    }
-  }
-}
-
-function removeTempDir(dir: string | null): void {
-  if (dir === null) return;
-  try {
-    fs.rmSync(dir, { recursive: true, force: true });
-  } catch {
-    // Temp litter is harmless; never mask a dispose outcome with cleanup.
+    const boundary = this.binding.resumeBoundary ?? 0;
+    if (boundary === 0)
+      return foldEvents(parseFoldEvents(folded.toString('utf8')));
+    const restored = invalidateResponsesStatefulChain(
+      foldEvents(
+        parseFoldEvents(
+          this.binding.projection === undefined
+            ? folded.subarray(0, boundary).toString('utf8')
+            : fs.readFileSync(this.binding.projection.filePath, 'utf8'),
+        ),
+      ),
+    );
+    return foldEvents(
+      parseFoldEvents(folded.subarray(boundary).toString('utf8')),
+      [...restored],
+    );
   }
 }

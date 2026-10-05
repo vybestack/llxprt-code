@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { collectResumeRows } from '../test-utils/resumeRows.js';
 
 /**
  * @plan PLAN-20260214-SESSIONBROWSER.P30
@@ -75,24 +76,25 @@ describe('History conversion #2', () => {
 
     expect(result.ok).toBe(true);
     assertTruthy(result.ok);
-    expect(result.history).toHaveLength(4);
-    expect(result.history[0].speaker).toBe('human');
-    expect(result.history[0].blocks[0]).toMatchObject({
+    const restoredRows = await collectResumeRows(result.history);
+    expect(restoredRows).toHaveLength(4);
+    expect(restoredRows[0].speaker).toBe('human');
+    expect(restoredRows[0].blocks[0]).toMatchObject({
       type: 'text',
       text: 'first question',
     });
-    expect(result.history[1].speaker).toBe('ai');
-    expect(result.history[1].blocks[0]).toMatchObject({
+    expect(restoredRows[1].speaker).toBe('ai');
+    expect(restoredRows[1].blocks[0]).toMatchObject({
       type: 'text',
       text: 'first answer',
     });
-    expect(result.history[2].speaker).toBe('human');
-    expect(result.history[2].blocks[0]).toMatchObject({
+    expect(restoredRows[2].speaker).toBe('human');
+    expect(restoredRows[2].blocks[0]).toMatchObject({
       type: 'text',
       text: 'second question',
     });
-    expect(result.history[3].speaker).toBe('ai');
-    expect(result.history[3].blocks[0]).toMatchObject({
+    expect(restoredRows[3].speaker).toBe('ai');
+    expect(restoredRows[3].blocks[0]).toMatchObject({
       type: 'text',
       text: 'second answer',
     });

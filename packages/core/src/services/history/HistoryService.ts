@@ -14,7 +14,28 @@
  * limitations under the License.
  */
 
-import { invalidateResponsesStatefulChainForRetainedRewrite as invalidateRetainedRewrite } from './IContent.js';
+import { rewriteToolResponse } from './historyToolRewrite.js';
+import { HistoryValidationRepair } from './historyValidationRepair.js';
+import {
+  removeHistoryTail,
+  RemovalObserverFailure,
+} from './historyRemoveTail.js';
+import { clearHistoryRows } from './historyClearRows.js';
+import { withFallbackRestoreRows } from './historyFallbackRows.js';
+import {
+  withMergedHistoryRows,
+  estimateMergedAppendTokens,
+} from './historyMergeRows.js';
+import type { HistoryMutationSnapshot } from './historyMutationSnapshot.js';
+import type { HistoryDumpSnapshot } from './historyDumpSnapshot.js';
+export type {
+  HistoryDumpSource,
+  HistoryDumpSnapshot,
+} from './historyDumpSnapshot.js';
+import { adoptResumeJournal } from './historyResumeAdoption.js';
+import { publishResumeRestoration } from './historyResumeProjection.js';
+import type { ResumeCursorBoot } from '../../recording/resumeCursorBoot.js';
+import type { SessionRecordingService } from '../../recording/SessionRecordingService.js';
 import { isDeepStrictEqual } from 'node:util';
 import type { IContent, ToolCallBlock, ToolResponseBlock } from './IContent.js';
 import { estimateContentTokens as estimateContentTokensImpl } from './historyTokenEstimation.js';
@@ -23,35 +44,52 @@ import {
   type ConversationStatistics,
 } from './curationDebugLogger.js';
 import {
-  collectRespondedCallIds,
-  getMissingToolCalls,
-  createSyntheticToolMessage,
   findUnmatchedToolCalls as findUnmatchedToolCallsHelper,
+  type ToolPairingStreamOptions,
 } from './historyToolPairing.js';
-import { buildCuratedHistory } from './historyCuration.js';
-import { buildProviderContent } from './historyProviderPipeline.js';
-import { getLastContentBySpeaker } from './historyQuery.js';
+export type { ToolPairingStreamOptions } from './historyToolPairing.js';
 import {
-  getWithinTokenLimit as getWithinTokenLimitHelper,
-  summarizeOldHistory as summarizeOldHistoryHelper,
-} from './historyContextWindow.js';
+  isCuratedContent,
+  streamCuratedProviderHistory,
+} from './historyCuration.js';
+import { streamProviderContent } from './provider-curated-stream.js';
+
 import {
-  buildChronologyTrace,
+  withSummaryRows,
+  type HistorySummaryCallback,
+} from './history-summary.js';
+export type {
+  HistorySummarySource,
+  HistorySummaryCallback,
+} from './history-summary.js';
+import {
+  streamHistoryJson,
+  writeHistoryJson,
+  type HistoryJsonSink,
+} from './history-export.js';
+export type { HistoryJsonSink } from './history-export.js';
+import {
+  projectChronologyTraceEntry,
+  findCurrentTurnMarker,
+  type CurrentTurnMarker,
   type ChronologyTraceEntry,
 } from './historyChronology.js';
 import { HistoryServiceCore } from './HistoryServiceCore.js';
-import { recordClearedSpan } from './contextRange.js';
-import { sanitizeProviderHistoryForSerialization } from './historyCloneUtils.js';
-import {
-  planHistoryMutation,
-  type HistoryServiceJournalOptions,
-} from './historyJournalStore.js';
+
+import { sanitizeProviderContentForSerialization } from './historyCloneUtils.js';
+import type { HistoryServiceJournalOptions } from './historyJournalStore.js';
+
+export type {
+  HistoryTransformEntry,
+  HistoryTransformSource,
+  HistoryTransformSink,
+  HistoryRowTransformOptions,
+  HistoryRowTransform,
+} from './historyRowTransform.js';
 
 export type {
   CompressionConfig,
   HistoryBatchOptions,
-  HistoryBatchParticipant,
-  HistoryBatchPublication,
   HistoryMediaOwner,
   HistoryOwnedMediaReservation,
   PreparedHistoryBatchEffect,
@@ -78,6 +116,127 @@ export class HistoryService extends HistoryServiceCore {
   constructor(options: HistoryServiceJournalOptions = {}) {
     super(options);
   }
+
+  openDumpSnapshot(): Promise<HistoryDumpSnapshot> {
+    return this.journal.openDumpSnapshot();
+  }
+
+  withRawHistorySnapshot<T>(
+    execute: (snapshot: HistoryMutationSnapshot) => Promise<T>,
+    signal?: AbortSignal,
+  ): Promise<T> {
+    return this.journal.withMutationSnapshot(execute, signal);
+  }
+
+  restoreRawHistorySnapshot(
+    snapshot: HistoryMutationSnapshot,
+    modelName?: string,
+  ): Promise<void> {
+    return this.enqueueAsynchronousHistoryMutation(() =>
+      withFallbackRestoreRows(
+        snapshot,
+        async (nextHistory) => {
+          await this.waitForTokenUpdates();
+          const nextHistoryTokens = await this.estimateTokensForContents(
+            nextHistory.streamRows(),
+            modelName,
+          );
+          await this.commitHistoryMutation({
+            nextHistory,
+            nextHistoryTokens,
+            streamPublication: !snapshot.hasPendingRows,
+            options: {},
+          });
+        },
+        this.mutationOwnership,
+      ),
+    );
+  }
+  async adoptResumeBoot(
+    recording: SessionRecordingService,
+    boot: ResumeCursorBoot,
+    afterPublication: () => void | Promise<void> = () => {},
+  ): Promise<string[]> {
+    if (this.isCompressing) {
+      return new Promise((resolve, reject) => {
+        this.queueCompressionOperation(() => {
+          void this.adoptResumeBoot(recording, boot, afterPublication).then(
+            resolve,
+            reject,
+          );
+        });
+      });
+    }
+    let warnings: string[] = [];
+    await this.enqueueAsynchronousHistoryMutation(async () => {
+      warnings = await this.adoptResumeBootInternal(
+        recording,
+        boot,
+        afterPublication,
+      );
+    });
+    return warnings;
+  }
+
+  private async adoptResumeBootInternal(
+    recording: SessionRecordingService,
+    boot: ResumeCursorBoot,
+    afterPublication: () => void | Promise<void>,
+  ): Promise<string[]> {
+    await this.waitForTokenUpdates();
+    const previous = {
+      chronology: this.chronology,
+      tokens: this.totalTokens,
+      anchor: this.cacheAnchorSeq,
+      spans: this.spanWindow.get(),
+      range: this.getContextRange(),
+    };
+    let published = false;
+    return adoptResumeJournal({
+      journal: this.journal,
+      recording,
+      boot,
+      mediaOwner: this.mediaOwner,
+      estimate: (rows) => this.estimateTokensForContents(rows),
+      publish: (state) => {
+        this.invalidatePendingSyncs();
+        this.chronology = state.chronology;
+        this.totalTokens = state.tokens;
+        this.cacheAnchorSeq = 0;
+        this.spanWindow.set([]);
+        published = true;
+        this.emit('tokensUpdated', {
+          totalTokens: this.getTotalTokens(),
+          addedTokens: state.tokens - previous.tokens,
+          contentId: null,
+        });
+        this.emit('contextRangeChanged', state.range);
+      },
+      restore: () => {
+        this.chronology = previous.chronology;
+        this.totalTokens = previous.tokens;
+        this.cacheAnchorSeq = previous.anchor;
+        this.spanWindow.set(previous.spans);
+        if (published) {
+          publishResumeRestoration([
+            ...this.rawListeners('tokensUpdated').map(
+              (listener) => () =>
+                listener.call(this, {
+                  totalTokens: this.getTotalTokens(),
+                  addedTokens: 0,
+                  contentId: null,
+                }),
+            ),
+            ...this.rawListeners('contextRangeChanged').map(
+              (listener) => () => listener.call(this, previous.range),
+            ),
+          ]);
+        }
+      },
+      afterPublication,
+    });
+  }
+
   /**
    * Immutably replace a single tool_response block with a replacement
    * tool_response block, preserving callId/toolName invariants.
@@ -94,6 +253,7 @@ export class HistoryService extends HistoryServiceCore {
     blockIndex: number,
     replacement: ToolResponseBlock,
     modelName?: string,
+    signal?: AbortSignal,
   ): Promise<boolean> {
     let replaced = false;
     await this.enqueueAsynchronousHistoryMutation(async () => {
@@ -102,6 +262,7 @@ export class HistoryService extends HistoryServiceCore {
         blockIndex,
         replacement,
         modelName,
+        signal,
       );
     });
     return replaced;
@@ -116,82 +277,43 @@ export class HistoryService extends HistoryServiceCore {
     blockIndex: number,
     replacement: ToolResponseBlock,
     modelName?: string,
+    signal?: AbortSignal,
   ): Promise<boolean> {
-    const rows = this.materializeHistory();
-    const entry = Number.isInteger(entryIndex) ? rows[entryIndex] : undefined;
-    if (entry === undefined) return false;
-    const target = Number.isInteger(blockIndex)
-      ? entry.blocks[blockIndex]
-      : undefined;
-    if (target?.type !== 'tool_response') return false;
-    // Runtime invariant: the replacement MUST be a tool_response at runtime,
-    // even though the TypeScript type already constrains it. A malformed
-    // object with matching callId/toolName but wrong type (or missing type)
-    // could slip through at runtime and corrupt tool-call/response pairing.
-    const replacementType = (replacement as { type?: unknown }).type;
-    if (replacementType !== 'tool_response') return false;
-    if (target.callId !== replacement.callId) return false;
-    if (target.toolName !== replacement.toolName) return false;
-    if (isDeepStrictEqual(target, replacement)) return true;
-
-    const newBlocks = [...entry.blocks];
-    newBlocks[blockIndex] = replacement;
-    const candidateHistory = [...rows];
-    candidateHistory[entryIndex] = { ...entry, blocks: newBlocks };
-    const nextHistory = invalidateRetainedRewrite(candidateHistory, entryIndex);
-
-    // The generic planner emits one addressed replacement op per value-
-    // changed row; rows the retained-rewrite invalidation touched plan the
-    // same way (#854).
-    const journalPlan = planHistoryMutation(rows, nextHistory);
-    const oldTokens = this.totalTokens;
-    for (const op of journalPlan) {
-      this.journal.apply(op);
-    }
-
-    try {
-      await this.recalculateTotalTokens(modelName);
-    } catch (error) {
-      // Restore BOTH invariants: the journal projection AND the token
-      // accounting. recalculateTotalTokens may have already mutated
-      // totalTokens to reflect the replacement content before a listener/
-      // event error aborted the emit. Leaving totalTokens stale would
-      // corrupt the token budget.
-      for (const op of planHistoryMutation(nextHistory, rows)) {
-        this.journal.apply(op);
-      }
-      this.totalTokens = oldTokens;
-      // Best-effort notification so healthy listeners observe the rollback.
-      // A broken listener that originally caused the failure must not mask
-      // the original error.
-      try {
-        this.emit('tokensUpdated', {
-          totalTokens: this.getTotalTokens(),
-          addedTokens: 0,
-          contentId: null,
-        });
-      } catch (emitError) {
-        this.logger.debug(
-          'tokensUpdated emit during rollback failed; original error preserved',
-          emitError,
-        );
-      }
-      throw error;
-    }
-    return true;
+    let oldTokens = this.totalTokens;
+    return rewriteToolResponse({
+      journal: this.journal,
+      entryIndex,
+      blockIndex,
+      replacement,
+      ownership: this.mutationOwnership,
+      owner: this.mediaOwner,
+      signal,
+      prepareTokens: async () => {
+        await this.waitForTokenUpdates();
+        oldTokens = this.totalTokens;
+      },
+      recalculate: () =>
+        this.recalculateTotalTokensInternal(modelName, undefined, signal),
+      restoreTokens: () => {
+        this.totalTokens = oldTokens;
+        this.notifyRestoredTokens();
+      },
+    });
   }
 
-  /**
-   * Return a transient materialization of the current history (#854): a
-   * fresh array per call — the journal is the system of record, so there is
-   * no backing array to hand out.
-   *
-   * @plan PLAN-20260211-HIGHDENSITY.P08
-   * @requirement REQ-HD-003.5
-   * @pseudocode history-service.md lines 10-15
-   */
-  getRawHistory(): readonly IContent[] {
-    return this.materializeHistory();
+  async *streamRawHistory(
+    signal?: AbortSignal,
+  ): AsyncGenerator<IContent, void, unknown> {
+    yield* this.journal.streamRows(undefined, signal);
+  }
+
+  async getCurrentTurnMarker(): Promise<CurrentTurnMarker | null> {
+    let latest: CurrentTurnMarker | null = null;
+    for await (const row of this.streamRawHistory()) {
+      const marker = findCurrentTurnMarker([row]);
+      if (marker !== null) latest = marker;
+    }
+    return latest;
   }
 
   /**
@@ -202,23 +324,38 @@ export class HistoryService extends HistoryServiceCore {
    * @pseudocode history-service.md lines 90-120
    */
   recalculateTotalTokens(
+    modelName?: string,
+    activeProvider?: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    return this.enqueueAsynchronousHistoryMutation(() =>
+      this.recalculateTotalTokensInternal(modelName, activeProvider, signal),
+    );
+  }
+
+  private recalculateTotalTokensInternal(
     modelName = this.activeTokenizationModel,
     activeProvider = this.activeTokenizationProvider,
+    signal?: AbortSignal,
   ): Promise<void> {
     return this.runSerializedTokenOperation(async () => {
+      signal?.throwIfAborted();
       let newTotal = 0;
+      let entryCount = 0;
       const tokenizerProvider = this.tokenizerProvider(activeProvider);
-      const history = this.materializeHistory();
-
-      for (const entry of history) {
+      for await (const entry of this.journal.streamRows(undefined, signal)) {
         const entryTokens = await estimateContentTokensImpl(
           entry,
           modelName,
           tokenizerProvider,
           this.logger,
+          signal,
         );
+        signal?.throwIfAborted();
         newTotal += entryTokens;
+        entryCount += 1;
       }
+      signal?.throwIfAborted();
 
       const previousTotal = this.totalTokens;
       this.totalTokens = newTotal;
@@ -226,7 +363,7 @@ export class HistoryService extends HistoryServiceCore {
       this.logger.debug('Density: recalculated total tokens', {
         previousTotal,
         newTotal,
-        entryCount: history.length,
+        entryCount,
       });
 
       this.emit('tokensUpdated', {
@@ -237,15 +374,14 @@ export class HistoryService extends HistoryServiceCore {
     });
   }
 
-  /** Get all history as a transient materialization (fresh array per call). */
-  getAll(): IContent[] {
-    return this.materializeHistory();
-  }
-
   /**
    * Release all listeners and internal buffers to allow GC
    */
   dispose(): void {
+    this.runSynchronousHistoryMutation(() => this.disposeInternal());
+  }
+
+  private disposeInternal(): void {
     this.invalidatePendingSyncs();
 
     try {
@@ -255,6 +391,7 @@ export class HistoryService extends HistoryServiceCore {
     }
 
     this.journal.dispose();
+    this.tokenTickets.close();
     this.totalTokens = 0;
     this.baseTokenOffset = 0;
     this.isCompressing = false;
@@ -273,11 +410,15 @@ export class HistoryService extends HistoryServiceCore {
    * Clear all history
    */
   clear(): void {
+    const rebuilding = this.isCompressing && this.inRebuildScope;
     const clearAndRelease = (): void => {
       this.runSynchronousHistoryMutation(() => {
-        this.clearInternal();
+        try {
+          this.clearInternal(rebuilding);
+        } finally {
+          if (!rebuilding) this.enqueueSynchronousOwnershipSettlement();
+        }
       });
-      this.enqueueSynchronousOwnershipReleaseAll();
     };
     if (this.isCompressing) {
       this.logger.debug('Queueing clear operation during compression');
@@ -288,60 +429,87 @@ export class HistoryService extends HistoryServiceCore {
     clearAndRelease();
   }
 
-  private clearInternal(): void {
-    const previousHistory = this.materializeHistory();
-    this.logger.debug('Clearing history', {
-      previousLength: previousHistory.length,
-    });
-
-    this.invalidatePendingSyncs();
-
-    // Record the cleared membership span while the boundary is still readable
-    // (#854); the emitted snapshot below joins it with the emptied history.
-    this.spanWindow.set(
-      recordClearedSpan(this.spanWindow.get(), previousHistory),
-    );
-
+  private clearInternal(rebuilding: boolean): void {
     const previousTokens = this.totalTokens;
-    for (const op of planHistoryMutation(previousHistory, [])) {
-      this.journal.apply(op);
-    }
-    this.totalTokens = 0;
-    // Chronology counters are intentionally NOT reset on clear (NG8): seq must
-    // never be reused so items added after a clear never collide with earlier ones.
-
-    // Emit event with reset count
-    this.emit('tokensUpdated', {
-      totalTokens: this.getTotalTokens(),
-      addedTokens: -previousTokens, // Negative to indicate removal
-      contentId: null,
+    const previousSpans = this.spanWindow.get();
+    clearHistoryRows({
+      journal: this.journal,
+      spans: previousSpans,
+      rollbackOnFailure: !rebuilding,
+      publish: (spans) => {
+        this.spanWindow.set(spans);
+        this.totalTokens = 0;
+        // Rebuild appends continue after observer failures, so their clear and
+        // token generation must remain committed rather than restore old rows.
+        if (rebuilding) this.invalidatePendingSyncs();
+        this.emit('tokensUpdated', {
+          totalTokens: this.getTotalTokens(),
+          addedTokens: -previousTokens,
+          contentId: null,
+        });
+        this.emitContextRangeChanged();
+        if (!rebuilding) this.invalidatePendingSyncs();
+      },
+      restore: () => {
+        this.totalTokens = previousTokens;
+        this.spanWindow.set(previousSpans);
+      },
     });
-    this.emitContextRangeChanged();
   }
 
-  /** Get the last N messages from history. */
-  getRecent(count: number): IContent[] {
-    return this.materializeHistory().slice(-count);
+  /** Cold chronological suffix stream, preserving slice(-count), including count=0. */
+  async *getRecent(
+    count: number,
+    signal?: AbortSignal,
+  ): AsyncGenerator<IContent, void, unknown> {
+    yield* this.journal.streamRows({ kind: 'recent', count }, signal);
   }
 
-  /**
-   * Get curated history (only valid, meaningful content)
-   * Matches the behavior of extractCuratedHistory in chatSession.ts:
-   * - Always includes user/human messages
-   * - Always includes tool messages
-   * - Only includes AI messages if they are valid (have content)
-   */
-  getCurated(): IContent[] {
-    return buildCuratedHistory(
-      this.logger,
-      this.materializeHistory(),
-      this.isCompressing,
-    );
+  /** Cold curated rows over journal membership pinned at the first next(). */
+  async *streamCuratedHistory(
+    signal?: AbortSignal,
+  ): AsyncGenerator<IContent, void, unknown> {
+    if (this.isCompressing) {
+      this.logger.debug(
+        'getCurated called during compression - returning snapshot',
+      );
+    }
+    for await (const row of this.journal.streamRows(undefined, signal)) {
+      if (isCuratedContent(row)) yield row;
+    }
   }
 
-  /** Get comprehensive history (all content including invalid/empty). */
-  getComprehensive(): IContent[] {
-    return this.getAll();
+  /** Count curated rows without constructing the curated history. */
+  async countCuratedRows(): Promise<number> {
+    let count = 0;
+    for await (const row of this.streamCuratedHistory()) {
+      void row;
+      count += 1;
+    }
+    return count;
+  }
+
+  /** Compare semantic AFC content with the curated prefix, stopping at the first mismatch. */
+  async matchingCuratedPrefix(incoming: readonly IContent[]): Promise<number> {
+    let index = 0;
+    if (incoming.length === 0) return index;
+    for await (const row of this.streamCuratedHistory()) {
+      if (
+        row.speaker !== incoming[index].speaker ||
+        !isDeepStrictEqual(row.blocks, incoming[index].blocks)
+      )
+        break;
+      index += 1;
+      if (index === incoming.length) return index;
+    }
+    return index;
+  }
+
+  /** Cold stream of all content, including invalid/empty, pinned at first next(). */
+  async *getComprehensive(
+    signal?: AbortSignal,
+  ): AsyncGenerator<IContent, void, unknown> {
+    yield* this.journal.streamRows(undefined, signal);
   }
 
   /**
@@ -349,45 +517,50 @@ export class HistoryService extends HistoryServiceCore {
    * by value (#854): reads materialize fresh projections, so a previously
    * added object's reference identity no longer exists to compare against.
    */
-  removeLastIfMatches(content: IContent): boolean {
-    const previous = this.materializeHistory();
-    if (
-      previous.length > 0 &&
-      isDeepStrictEqual(previous[previous.length - 1], content)
-    ) {
-      const last = previous[previous.length - 1];
-      this.journal.apply({
-        kind: 'rewind',
-        itemsRemoved: 1,
-        cutSeq: last.metadata?.chronology?.seq,
-      });
-      this.enqueueSynchronousOwnershipReconcile(previous, () =>
-        this.materializeHistory(),
-      );
-      return true;
-    }
-    return false;
+  async removeLastIfMatches(content: IContent): Promise<boolean> {
+    let removed = false;
+    await this.enqueueAsynchronousHistoryMutation(async () => {
+      removed = await this.removeLastIfMatchesInternal(content);
+    });
+    return removed;
+  }
+
+  private async removeLastIfMatchesInternal(
+    content: IContent,
+  ): Promise<boolean> {
+    const tail = this.getLastContent();
+    if (tail === undefined || !isDeepStrictEqual(tail, content)) return false;
+    return (
+      (await removeHistoryTail({
+        journal: this.journal,
+        owner: this.mediaOwner,
+        ownership: this.mutationOwnership,
+        match: content,
+      })) !== undefined
+    );
   }
 
   /** Pop the last content from history. */
-  pop(): IContent | undefined {
-    const previous = this.materializeHistory();
-    if (previous.length === 0) {
-      return undefined;
-    }
-    const removed = previous[previous.length - 1];
-    this.journal.apply({
-      kind: 'rewind',
-      itemsRemoved: 1,
-      cutSeq: removed.metadata?.chronology?.seq,
+  async pop(): Promise<IContent | undefined> {
+    let removed: IContent | undefined;
+    await this.enqueueAsynchronousHistoryMutation(async () => {
+      removed = await this.popInternal();
     });
-    this.enqueueSynchronousOwnershipReconcile(previous, () =>
-      this.materializeHistory(),
-    );
-    // Recalculate tokens since we removed content
-    // This is less efficient but ensures accuracy
-    this.observeTokenizerOperation(this.recalculateTokens());
     return removed;
+  }
+
+  private popInternal(): Promise<IContent | undefined> {
+    return removeHistoryTail({
+      journal: this.journal,
+      owner: this.mediaOwner,
+      ownership: this.mutationOwnership,
+      recalculate: () =>
+        this.recalculateTokensInternal(
+          this.activeTokenizationModel,
+          undefined,
+          true,
+        ),
+    });
   }
 
   /**
@@ -396,24 +569,45 @@ export class HistoryService extends HistoryServiceCore {
    */
   recalculateTokens(
     defaultModel = this.activeTokenizationModel,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    return this.recalculateTokensInternal(defaultModel, signal);
+  }
+
+  private recalculateTokensInternal(
+    defaultModel: string,
+    signal?: AbortSignal,
+    removal = false,
   ): Promise<void> {
     return this.runSerializedTokenOperation(async () => {
+      signal?.throwIfAborted();
       let newTotal = 0;
-      const history = this.materializeHistory();
-
-      for (const content of history) {
-        newTotal += await this.estimateContentTokens(content, defaultModel);
+      for await (const content of this.journal.streamRows(undefined, signal)) {
+        newTotal += await this.estimateContentTokens(
+          content,
+          defaultModel,
+          signal,
+        );
+        signal?.throwIfAborted();
       }
+      signal?.throwIfAborted();
 
       const oldTotal = this.totalTokens;
       this.totalTokens = newTotal;
 
-      // Emit event with updated count
-      this.emit('tokensUpdated', {
-        totalTokens: this.getTotalTokens(),
-        addedTokens: this.totalTokens - oldTotal,
-        contentId: null,
-      });
+      try {
+        this.emit('tokensUpdated', {
+          totalTokens: this.getTotalTokens(),
+          addedTokens: this.totalTokens - oldTotal,
+          contentId: null,
+        });
+      } catch (error) {
+        if (removal) {
+          this.totalTokens = oldTotal;
+          throw new RemovalObserverFailure(error);
+        }
+        throw error;
+      }
     });
   }
 
@@ -421,14 +615,23 @@ export class HistoryService extends HistoryServiceCore {
    * Get the last user (human) content
    */
   getLastUserContent(): IContent | undefined {
-    return getLastContentBySpeaker(this.materializeHistory(), 'human');
+    return this.getLastContent('human');
   }
 
   /**
    * Get the last AI content
    */
   getLastAIContent(): IContent | undefined {
-    return getLastContentBySpeaker(this.materializeHistory(), 'ai');
+    return this.getLastContent('ai');
+  }
+
+  private getLastContent(speaker?: IContent['speaker']): IContent | undefined {
+    return this.journal.withReadRows((cursor) => {
+      for (const row of cursor.rows(true)) {
+        if (speaker === undefined || row.speaker === speaker) return row;
+      }
+      return undefined;
+    });
   }
 
   /**
@@ -448,136 +651,192 @@ export class HistoryService extends HistoryServiceCore {
 
   /** Get the number of messages in history. */
   length(): number {
-    return this.materializeHistory().length;
+    return this.journal.getLength();
   }
 
   /** Check if history is empty. */
   isEmpty(): boolean {
-    return this.materializeHistory().length === 0;
+    return this.journal.getLength() === 0;
   }
 
-  /** Clone the history without serializing immutable media payloads. */
-  clone(): IContent[] {
-    return sanitizeProviderHistoryForSerialization(this.materializeHistory());
+  /** Cold sanitized copies over membership pinned at the first next(). */
+  async *clone(): AsyncGenerator<IContent, void, unknown> {
+    for await (const content of this.journal.streamRows()) {
+      yield sanitizeProviderContentForSerialization(content);
+    }
   }
 
   /**
    * Find unmatched tool calls (tool calls without responses)
    */
-  findUnmatchedToolCalls(): ToolCallBlock[] {
-    return findUnmatchedToolCallsHelper(this.logger, this.materializeHistory());
+  findUnmatchedToolCalls(
+    options: ToolPairingStreamOptions = {},
+  ): AsyncGenerator<ToolCallBlock, void, unknown> {
+    return findUnmatchedToolCallsHelper(
+      this.logger,
+      this.journal.streamRows(),
+      options,
+    );
   }
 
   /**
    * Validate and fix the history to ensure proper tool call/response pairing
    */
   validateAndFix(): void {
-    const previous = this.materializeHistory();
-    const respondedCallIds = collectRespondedCallIds(previous);
-    const next = [...previous];
-
-    let insertedCount = 0;
-
-    for (let i = 0; i < next.length; i++) {
-      const missing = getMissingToolCalls(next[i], respondedCallIds);
-      if (missing.length > 0) {
-        const stampedSynthetic = this.chronology.stamp(
-          createSyntheticToolMessage(missing),
-        );
-
-        next.splice(i + 1, 0, stampedSynthetic);
-        insertedCount += 1;
-
-        for (const tc of missing) {
-          respondedCallIds.add(tc.id);
-        }
-
-        this.observeTokenizerOperation(this.updateTokenCount(stampedSynthetic));
-        i += 1;
-      }
-    }
-
-    if (insertedCount > 0) {
-      // Durable form of the insertions (#854): plan the ops that turn the
-      // previous projection into the fixed one (wholesale rewrite — interior
-      // insertions are not a marked prefix).
-      for (const op of planHistoryMutation(previous, next)) {
-        this.journal.apply(op);
-      }
-    }
-
-    this.logger.debug('History validation complete:', {
-      insertedSyntheticToolMessages: insertedCount,
-      historyLength: next.length,
-    });
+    this.runSynchronousHistoryMutation(() => this.validateAndFixInternal());
   }
 
-  /**
-   * Get curated history with circular references removed for providers.
-   * This ensures the history can be safely serialized and sent to providers.
-   * A request-scoped override lets semantic purge prepare an isolated candidate
-   * without mutating the live conversation before provider success.
-   */
-  getCuratedForProvider(
-    tailContents: IContent[] = [],
-    historyOverride?: readonly IContent[],
-  ): IContent[] {
-    const curated =
-      historyOverride === undefined
-        ? this.getCurated()
-        : buildCuratedHistory(
-            this.logger,
-            [...historyOverride],
-            this.isCompressing,
+  private validateAndFixInternal(): void {
+    const repair = new HistoryValidationRepair(this.mutationOwnership);
+    const chronology = this.chronology.snapshot();
+    try {
+      const captured = this.journal.capturePendingFold();
+      try {
+        this.journal.adoptMutationBoundary(captured.durableTail);
+      } finally {
+        captured.release();
+      }
+      this.journal.withReadRows((cursor) =>
+        repair.capture(cursor, (row) => this.chronology.stamp(row)),
+      );
+      repair.publish(this.journal);
+    } catch (error) {
+      this.chronology.restore(chronology);
+      repair.close();
+      throw error;
+    }
+    if (repair.inserted.length === 0) {
+      repair.close();
+      return;
+    }
+    const tokens = this.runSerializedTokenOperation(async () => {
+      const oldTokens = this.totalTokens;
+      try {
+        for (const row of repair.inserted) {
+          const addedTokens = await this.estimateContentTokens(
+            row,
+            this.activeTokenizationModel,
           );
-    return buildProviderContent(curated, tailContents, this.logger);
+          this.totalTokens += addedTokens;
+          this.emit('tokensUpdated', {
+            totalTokens: this.getTotalTokens(),
+            addedTokens,
+            contentId: row.metadata?.id,
+          });
+        }
+      } catch (error) {
+        try {
+          repair.rollback(this.journal);
+        } finally {
+          this.totalTokens = oldTokens;
+          this.chronology.restore(chronology);
+          this.notifyRestoredTokens();
+        }
+        throw error;
+      } finally {
+        repair.close();
+      }
+    });
+    this.observeTokenizerOperation(tokens);
+    void this.enqueueAsynchronousHistoryMutation(() => tokens).catch(
+      (error: unknown) =>
+        this.logger.debug('Validation settlement failed', error),
+    );
+  }
+
+  private notifyRestoredTokens(): void {
+    for (const listener of this.rawListeners('tokensUpdated')) {
+      try {
+        listener.call(this, {
+          totalTokens: this.getTotalTokens(),
+          addedTokens: 0,
+          contentId: null,
+        });
+      } catch (error) {
+        this.logger.debug('Token rollback observer failed', error);
+      }
+    }
   }
 
   /**
-   * Streaming form of {@link getCuratedForProvider} (issue #854): the same
-   * curation and provider-content pipeline over a fresh journal-fold
-   * projection, yielded row by row instead of returned as a retained array.
+   * Cold provider curation over journal membership or request-scoped rows.
+   * Normalization uses disk-backed indexes and emits one sanitized row at a time.
    * Rows are sanitized clones, so cyclic tool payloads stringify safely with
    * the `_circular` marker and caller rows are never mutated.
    *
-   * @param tailContents appended after the curated rows, exactly as the
-   *   synchronous form does.
+   * @param tailContents appended after the curated rows.
    *
    * @plan PLAN-20260917-ISSUE854.P05b3
    */
   async *getCuratedForProviderStream(
     tailContents: IContent[] = [],
-  ): AsyncIterable<IContent> {
-    const curated = buildCuratedHistory(
-      this.logger,
-      this.materializeHistory(),
-      this.isCompressing,
-    );
-    const providerContents = buildProviderContent(
-      curated,
+    signal?: AbortSignal,
+    historyOverride?: Iterable<IContent> | AsyncIterable<IContent>,
+  ): AsyncGenerator<IContent, void, unknown> {
+    yield* streamProviderContent(
+      streamCuratedProviderHistory(
+        this.logger,
+        historyOverride ?? this.journal.streamRows(undefined, signal),
+        this.isCompressing,
+        signal,
+      ),
       tailContents,
       this.logger,
+      { signal },
     );
-    yield* providerContents;
   }
 
-  /** Merge two histories, handling duplicates and conflicts. */
-  merge(other: HistoryService): void {
-    // Simple append for now - could be made smarter to detect duplicates
-    this.addAll(other.getAll());
+  /** Append pinned source rows atomically, retaining duplicate values and markers. */
+  merge(other: HistoryService): Promise<void> {
+    if (this.isCompressing) {
+      return new Promise((resolve, reject) => {
+        this.queueCompressionOperation(() => {
+          void this.merge(other).then(resolve, reject);
+        });
+      });
+    }
+    return this.enqueueAsynchronousHistoryMutation(() =>
+      this.journal.withMutationSnapshot((previous) =>
+        other.withRawHistorySnapshot((incoming) =>
+          withMergedHistoryRows(
+            previous,
+            incoming,
+            async (nextHistory) => {
+              await this.waitForTokenUpdates();
+              const addedTokens = await estimateMergedAppendTokens(
+                nextHistory,
+                previous.length,
+                (row) =>
+                  this.estimateContentTokens(row, this.activeTokenizationModel),
+                this.mutationOwnership,
+              );
+              await this.commitHistoryMutation(
+                {
+                  nextHistory,
+                  nextHistoryTokens: this.totalTokens + addedTokens,
+                  publishedRowStart: previous.length,
+                  streamPublication: !previous.hasPendingRows,
+                  options: {},
+                },
+                previous,
+              );
+            },
+            this.mutationOwnership,
+          ),
+        ),
+      ),
+    );
   }
 
-  /**
-   * Get history within a token limit (for context window management)
-   */
-  getWithinTokenLimit(
+  /** Cold chronological stream of the newest contiguous suffix fitting the budget. */
+  async *getWithinTokenLimit(
     maxTokens: number,
     countTokensFn: (content: IContent) => number,
-  ): IContent[] {
-    return getWithinTokenLimitHelper(
-      this.materializeHistory(),
-      maxTokens,
-      countTokensFn,
+    signal?: AbortSignal,
+  ): AsyncGenerator<IContent, void, unknown> {
+    yield* this.journal.streamRows(
+      { kind: 'tokens', maxTokens, countTokens: countTokensFn },
+      signal,
     );
   }
 
@@ -586,30 +845,66 @@ export class HistoryService extends HistoryServiceCore {
    */
   async summarizeOldHistory(
     keepRecentCount: number,
-    summarizeFn: (contents: IContent[]) => Promise<IContent>,
+    summarizeFn: HistorySummaryCallback,
+    signal?: AbortSignal,
   ): Promise<void> {
-    const previous = this.materializeHistory();
-    const result = await summarizeOldHistoryHelper(
-      previous,
-      keepRecentCount,
-      summarizeFn,
+    return this.enqueueAsynchronousHistoryMutation(() =>
+      this.summarizeOldHistoryInternal(keepRecentCount, summarizeFn, signal),
     );
-    if (result) {
-      // Stamp every item: retained items already carry a marker and keep it,
-      // while the freshly generated summary gets a new one.
-      for (const item of result) {
-        this.chronology.stamp(item);
-      }
-      for (const op of planHistoryMutation(previous, result)) {
-        this.journal.apply(op);
-      }
-      await this.recalculateTotalTokens();
+  }
+
+  private async summarizeOldHistoryInternal(
+    keepRecentCount: number,
+    summarizeFn: HistorySummaryCallback,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    await this.waitForTokenUpdates();
+    const chronology = this.chronology.snapshot();
+    try {
+      await this.journal.withMutationSnapshot(async (previous) => {
+        for (const row of previous) {
+          if (row.metadata?.chronology !== undefined)
+            this.chronology.stamp(row);
+        }
+        await withSummaryRows(
+          previous,
+          keepRecentCount,
+          summarizeFn,
+          async (nextHistory) => {
+            const nextHistoryTokens = await this.estimateTokensForContents(
+              nextHistory.streamRows(signal),
+              this.activeTokenizationModel,
+              signal,
+            );
+            await this.commitHistoryMutation(
+              {
+                nextHistory,
+                nextHistoryTokens,
+                streamPublication: !previous.hasPendingRows,
+                signal,
+                options: {},
+              },
+              previous,
+            );
+          },
+          this.mutationOwnership,
+          signal,
+        );
+      }, signal);
+    } catch (error) {
+      this.chronology.restore(chronology);
+      throw error;
     }
   }
 
-  /** Export history to JSON. */
-  toJSON(): string {
-    return JSON.stringify(this.materializeHistory(), null, 2);
+  /** Cold JSON chunks, byte-equivalent to JSON.stringify(history, null, 2). */
+  streamJSON(signal?: AbortSignal): AsyncGenerator<string, void, unknown> {
+    return streamHistoryJson(this.streamRawHistory(signal), signal);
+  }
+
+  /** Await each sink write before pulling the next history row. */
+  writeJSON(write: HistoryJsonSink, signal?: AbortSignal): Promise<void> {
+    return writeHistoryJson(this.streamJSON(signal), write, signal);
   }
 
   /** Import history from JSON. */
@@ -643,20 +938,25 @@ export class HistoryService extends HistoryServiceCore {
 
     this.isCompressing = false;
 
-    this.pendingOperations.flush(() => {
-      // Route the release events through the same mutation FIFO as the dequeued
-      // closures: if an asynchronous mutation was in flight, its rebuild
-      // contentAdded must land BEFORE these events (staying inside the recording
-      // suppression window), then the streaming content after them (#3264). When
-      // nothing is in flight this executes inline, behavior unchanged.
-      this.runSynchronousHistoryMutation(() => {
-        this.emit('compressionLockReleased');
+    try {
+      this.pendingOperations.flush(() => {
+        // Route the release events through the same mutation FIFO as the dequeued
+        // closures: if an asynchronous mutation was in flight, its rebuild
+        // contentAdded must land BEFORE these events (staying inside the recording
+        // suppression window), then the streaming content after them (#3264). When
+        // nothing is in flight this executes inline, behavior unchanged.
+        this.runSynchronousHistoryMutation(() => {
+          this.emit('compressionLockReleased');
 
-        if (summary && itemsCompressed !== undefined) {
-          this.emit('compressionEnded', summary, itemsCompressed);
-        }
+          if (summary && itemsCompressed !== undefined) {
+            this.emit('compressionEnded', summary, itemsCompressed);
+          }
+        });
       });
-    });
+    } finally {
+      // Reconcile the completed rebuild, never its transient cleared membership.
+      this.enqueueSynchronousOwnershipSettlement();
+    }
   }
 
   /**
@@ -672,7 +972,9 @@ export class HistoryService extends HistoryServiceCore {
    * Get conversation statistics
    */
   getStatistics(): ConversationStatistics {
-    return computeStatistics(this.materializeHistory());
+    return this.journal.withReadRows((cursor) =>
+      computeStatistics(cursor.rows()),
+    );
   }
 
   /**
@@ -680,8 +982,15 @@ export class HistoryService extends HistoryServiceCore {
    * item carrying its marker fields and structural descriptors. No message
    * text, tool parameters, or tool results appear in the trace.
    */
-  getChronologyTrace(): ChronologyTraceEntry[] {
-    return buildChronologyTrace(this.materializeHistory());
+  async *getChronologyTrace(): AsyncGenerator<
+    ChronologyTraceEntry,
+    void,
+    unknown
+  > {
+    for await (const content of this.journal.streamRows()) {
+      const entry = projectChronologyTraceEntry(content);
+      if (entry !== undefined) yield entry;
+    }
   }
 
   /**

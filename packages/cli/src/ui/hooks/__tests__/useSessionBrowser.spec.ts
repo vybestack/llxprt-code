@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { displayBoot } from '../../../test-utils/resumeRows.js';
 
 /**
  * @plan PLAN-20260214-SESSIONBROWSER.P13
@@ -153,8 +154,9 @@ function makeHookProps(
       overrides.onSelect ??
       (async (): Promise<PerformResumeResult> => ({
         ok: true,
-        history: [],
+        history: displayBoot([]).streamRows(),
         metadata: {
+          kind: 'main',
           sessionId: 'resumed',
           projectHash: PROJECT_HASH,
           startTime: new Date().toISOString(),
@@ -181,28 +183,31 @@ function isCheckpointRow(
   );
 }
 
+let tempDir: string;
+let chatsDir: string;
+let lockHandles: Array<{ release: () => Promise<void> }>;
+
+async function setUpSessionBrowserFixture(): Promise<void> {
+  tempDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'use-session-browser-test-'),
+  );
+  chatsDir = path.join(tempDir, 'chats');
+  await fs.mkdir(chatsDir, { recursive: true });
+  lockHandles = [];
+}
+
+async function tearDownSessionBrowserFixture(): Promise<void> {
+  await Promise.all(lockHandles.map((handle) => handle.release()));
+  await fs.rm(tempDir, { recursive: true, force: true });
+}
+
 // ---------------------------------------------------------------------------
 // Test Suite
 // ---------------------------------------------------------------------------
 
 describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
-  let tempDir: string;
-  let chatsDir: string;
-  let lockHandles: Array<{ release: () => Promise<void> }>;
-
-  beforeEach(async () => {
-    tempDir = await fs.mkdtemp(
-      path.join(os.tmpdir(), 'use-session-browser-test-'),
-    );
-    chatsDir = path.join(tempDir, 'chats');
-    await fs.mkdir(chatsDir, { recursive: true });
-    lockHandles = [];
-  });
-
-  afterEach(async () => {
-    await Promise.all(lockHandles.map((handle) => handle.release()));
-    await fs.rm(tempDir, { recursive: true, force: true });
-  });
+  beforeEach(setUpSessionBrowserFixture);
+  afterEach(tearDownSessionBrowserFixture);
 
   describe('Loading & Listing @requirement:REQ-SB-009', () => {
     /**
@@ -289,7 +294,14 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       expect(sessionIds).not.toContain('empty-session');
       expect(sessionIds).toContain('has-content');
     });
+  });
+});
 
+describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13 (part 2)', () => {
+  beforeEach(setUpSessionBrowserFixture);
+  afterEach(tearDownSessionBrowserFixture);
+
+  describe('Loading & Listing @requirement:REQ-SB-009', () => {
     it('lists session and checkpoint rows and tombstones only the checkpoint', async () => {
       const sessionId = 'checkpoint-source-session';
       const recording = await SessionRecordingService.createLocked(
@@ -354,6 +366,14 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
         await recording.dispose();
       }
     });
+  });
+});
+
+describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13 (part 3)', () => {
+  beforeEach(setUpSessionBrowserFixture);
+  afterEach(tearDownSessionBrowserFixture);
+
+  describe('Loading & Listing @requirement:REQ-SB-009', () => {
     /**
      * Test 5: Skipped count populated (REQ-SB-008)
      * GIVEN: Some sessions are unreadable or filtered
@@ -421,7 +441,14 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       );
       expect(lockedSession?.isLocked).toBe(true);
     });
+  });
+});
 
+describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13 (part 4)', () => {
+  beforeEach(setUpSessionBrowserFixture);
+  afterEach(tearDownSessionBrowserFixture);
+
+  describe('Loading & Listing @requirement:REQ-SB-009', () => {
     /**
      * Test 6a: Stale locks cleaned during load (REQ-LK-004)
      * GIVEN: A stale lock file exists (from crashed process)
@@ -515,6 +542,14 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       // incorrectly set by delayed loads from the old page
       expect(result.current.page).toBe(1);
     });
+  });
+});
+
+describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13 (part 5)', () => {
+  beforeEach(setUpSessionBrowserFixture);
+  afterEach(tearDownSessionBrowserFixture);
+
+  describe('Loading & Listing @requirement:REQ-SB-009', () => {
     /**
      * Test 7b: Preview resolves to none (REQ-PV-005)
      * GIVEN: A session contains content but no human message
@@ -540,7 +575,14 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       });
       expect(result.current.error).toBeNull();
     });
+  });
+});
 
+describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13 (part 6)', () => {
+  beforeEach(setUpSessionBrowserFixture);
+  afterEach(tearDownSessionBrowserFixture);
+
+  describe('Loading & Listing @requirement:REQ-SB-009', () => {
     /**
      * Test 7c: Corrupt recordings are skipped without disturbing browsing
      * (REQ-SB-008)

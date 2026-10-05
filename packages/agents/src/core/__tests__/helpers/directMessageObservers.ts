@@ -21,6 +21,7 @@
  * @requirement:REQ-INT-001.3
  */
 
+import { observeHistorySynchronouslyForTest as testHistory } from '../../../../../core/src/test-utils/synchronous-history-test-observation.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type {
   IContent,
@@ -76,7 +77,7 @@ export function visibleText(result: unknown): string {
  * `IContent`-based today).
  */
 export function committedHistory(historyService: HistoryService): IContent[] {
-  return historyService.getAll().map((entry) => structuredClone(entry));
+  return testHistory(historyService).map((entry) => structuredClone(entry));
 }
 
 export interface NeutralUsageCounts {

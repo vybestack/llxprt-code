@@ -688,21 +688,14 @@ export interface AgentIdeControl {
 
 export interface AgentSessionControl {
   /**
-   * Resumes a previously recorded session (by 'latest' or a session
-   * reference/prefix) and returns the reconstructed history as readonly
-   * AgentHistoryItem[] so callers can replay the restored conversation (e.g. the Zed ACP loadSession
-   * path streaming session/update notifications) without a lossy getHistory()
-   * Gemini Content[] round-trip. Callers that ignore the return value remain
-   * source-compatible. The restored history is also fed through the client
-   * restore path, and a RecordingIntegration is subscribed so post-resume turns
-   * continue appending to the resumed JSONL file.
-   * @plan:PLAN-20260617-COREAPI.P20
-   * @requirement:REQ-010
+   * Adopts the recorded journal and returns a stream of its restored prefix.
+   * Consume the stream before stopping or switching the session, which closes
+   * its boot cursor. Subsequent history writes append through the adopted journal.
    */
   resume(
     target: 'latest' | string,
     options?: { readonly prefix?: boolean },
-  ): Promise<readonly AgentHistoryItem[]>;
+  ): Promise<AsyncIterable<AgentHistoryItem>>;
   /** Creates a durable branch point in the active recording. */
   createCheckpoint(name: string): Promise<CheckpointInfo>;
   /** Creates and activates a self-contained child session from a checkpoint. */
@@ -1038,7 +1031,10 @@ export interface Agent {
   /** @plan:PLAN-20260626-RUNTIMEBOUNDARY.P05 */
   readonly lsp: AgentLspControl;
 
-  getHistory(): Promise<readonly AgentMessage[]>;
+  /** Cold raw snapshot pinned on first next. Exhaust or return to release it. */
+  streamHistory(
+    signal?: AbortSignal,
+  ): AsyncGenerator<AgentMessage, void, unknown>;
   setHistory(
     history: readonly AgentMessage[],
     opts?: { readonly stripThoughts?: boolean },

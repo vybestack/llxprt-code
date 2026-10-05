@@ -1,3 +1,4 @@
+/// <reference lib="esnext.array" />
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -21,540 +22,105 @@
  * compression execution) are mocked.
  */
 
+import * as disk from './provider-fallback-candidate-fixture.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import {
   makeUserMessage,
   buildRuntimeContext,
 } from '../../core/__tests__/chatSession-density-helpers.js';
-import {
-  ProviderContentEnforcer,
-  type ProviderContentEnforcementDeps,
-} from '../providerContentEnforcement.js';
+
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 
 const ISSUE_CONTEXT_LIMIT = 262_144;
 const STANDARD_CONTEXT_LIMIT = 200_000;
 const COMPRESSION_THRESHOLD = 0.8;
-
-function makeLogger(): DebugLogger {
-  return {
-    debug: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-    child: vi.fn().mockReturnThis(),
-  } as unknown as DebugLogger;
-}
-
-interface EnforcerHarness {
-  enforcer: ProviderContentEnforcer;
-  deps: ProviderContentEnforcementDeps;
-  historyService: HistoryService;
-  runtimeContext: AgentRuntimeContext;
-}
-
-function buildEnforcerHarness(
-  historyService: HistoryService,
-  runtimeContext: AgentRuntimeContext,
-  overrides: Partial<ProviderContentEnforcementDeps> = {},
-): EnforcerHarness {
-  const performCompression = vi.fn();
-  const performFallbackCompression = vi.fn().mockResolvedValue(false);
-  const ensureDensityOptimized = vi.fn().mockResolvedValue(undefined);
-  const deps: ProviderContentEnforcementDeps = {
-    historyService,
-    runtimeContext,
-    generationConfig: {},
-    providerRuntimeNullable: undefined,
-    logger: makeLogger(),
-    ensureDensityOptimized,
-    performCompression,
-    performFallbackCompression,
-    getPromptTokenBaseline: () => null,
-    resetPromptTokenBaseline: () => {},
-    restorePromptTokenBaseline: () => {},
-    ...overrides,
-  };
-  return {
-    enforcer: new ProviderContentEnforcer(deps),
-    deps,
-    historyService,
-    runtimeContext,
-  };
-}
+let historyService: HistoryService;
+let runtimeContext: AgentRuntimeContext;
+let suite0_historyService: HistoryService;
+let suite1_runtimeContext: AgentRuntimeContext;
 
 describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => {
-  let historyService: HistoryService;
-  let runtimeContext: AgentRuntimeContext;
+  beforeEach(case0);
 
-  beforeEach(() => {
-    vi.clearAllMocks();
-    historyService = new HistoryService();
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
+  afterEach(case1);
 
   // -----------------------------------------------------------------------
   // Test A: Near-limit shape returns original contents (no needless compression)
   // -----------------------------------------------------------------------
   describe('near-limit 0.5% capped cushion', () => {
-    it('returns contents without overflow error for the exact issue-2588 near-limit shape', async () => {
-      // Exact scenario from the issue:
-      //   context limit   = 262144
-      //   completionBudget = 65536
-      //   projected        = 261346
-      //   old safety-adjusted limit (no cushion) = 262144 - 1000 = 261144
-      //   tokensStillNeeded with old code = 261346 - 261144 = 202
-      //
-      // With the shared 0.5% cushion policy (same as pending #2067):
-      //   safetyAdjusted = 262144 - 1000 = 261144
-      //   cushion         = floor(261144 * 0.005) = 1305
-      //   marginAdjusted  = min(262144, 261144 + 1305) = 262144
-      //   projected 261346 <= 262144 → no overflow, no needless error
-      //
-      // The projected IS over the compression threshold (222822) so compression
-      // is triggered, but even with zero reduction the capped margin keeps the
-      // payload under the hard limit — no overflow error is thrown.
-      runtimeContext = buildRuntimeContext(historyService, {
-        contextLimit: ISSUE_CONTEXT_LIMIT,
-        compressionThreshold: COMPRESSION_THRESHOLD,
-      });
+    it(
+      'returns contents without overflow error for the exact issue-2588 near-limit shape',
+      case2,
+    );
 
-      historyService.add(makeUserMessage('established history'));
-      const pending = makeUserMessage('pending request');
-      const contents = historyService.getCuratedForProvider([pending]);
-
-      const harness = buildEnforcerHarness(historyService, runtimeContext);
-      // estimate = projected - completionBudget = 261346 - 65536 = 195810
-      vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
-        195_810,
-      );
-
-      // Compression does zero reduction (simulating the issue scenario)
-      harness.deps.performCompression.mockImplementation(
-        async () => PerformCompressionResult.COMPRESSED,
-      );
-
-      const result = await harness.enforcer.enforce(
-        { contents, pendingContents: [pending] },
-        'test-prompt',
-      );
-
-      // No overflow error thrown — the capped cushion prevents the needless
-      // error that the user saw in the issue (tokensStillNeeded=202, reduced 0)
-      expect(result).toContainEqual(pending);
-      expect(harness.deps.performCompression).toHaveBeenCalledOnce();
-    });
-
-    it('still triggers compression when projected exceeds the capped cushion limit', async () => {
-      // projected = 263000 > 262144 (capped limit) → compression needed
-      runtimeContext = buildRuntimeContext(historyService, {
-        contextLimit: ISSUE_CONTEXT_LIMIT,
-        compressionThreshold: COMPRESSION_THRESHOLD,
-      });
-
-      historyService.add(makeUserMessage('established history'));
-      const pending = makeUserMessage('pending request');
-      const contents = historyService.getCuratedForProvider([pending]);
-
-      const harness = buildEnforcerHarness(historyService, runtimeContext);
-      const estimateSpy = vi
-        .spyOn(historyService, 'estimateTokensForContents')
-        .mockResolvedValue(197_464); // 197464 + 65536 = 263000 > 262144
-
-      harness.deps.performCompression.mockImplementation(async () => {
-        historyService.clear();
-        historyService.add(makeUserMessage('compressed summary'));
-        estimateSpy.mockResolvedValue(1_000);
-        return PerformCompressionResult.COMPRESSED;
-      });
-
-      const result = await harness.enforcer.enforce(
-        { contents, pendingContents: [pending] },
-        'test-prompt',
-      );
-
-      expect(result).not.toStrictEqual(contents);
-      expect(result).toContainEqual(pending);
-    });
+    it(
+      'still triggers compression when projected exceeds the capped cushion limit',
+      case3,
+    );
   });
 
   // -----------------------------------------------------------------------
   // Test B: First compression ineffective, second compression fits
   // -----------------------------------------------------------------------
   describe('one-retry-before-truncation: ineffective first compression', () => {
-    it('makes exactly one additional full compression attempt when first compression is ineffective (<5%) and second fits', async () => {
-      runtimeContext = buildRuntimeContext(historyService, {
-        contextLimit: STANDARD_CONTEXT_LIMIT,
-        compressionThreshold: COMPRESSION_THRESHOLD,
-      });
-
-      historyService.add(makeUserMessage('established history'));
-      const pending = makeUserMessage('pending request');
-      const contents = historyService.getCuratedForProvider([pending]);
-
-      const harness = buildEnforcerHarness(historyService, runtimeContext);
-      // marginAdjustedLimit with 0.5% cushion:
-      //   safetyAdjusted = 199000
-      //   cushion = floor(199000 * 0.005) = 995
-      //   marginAdjusted = min(200000, 199995) = 199995
-      // First estimate: 150000 + 65536 = 215536 > 199995
-      // After 1st compression: 148000 + 65536 = 213536 (reduction <5%, ineffective)
-      // After 2nd compression: 100000 + 65536 = 165536 < 199995 → fits!
-      const estimateSpy = vi
-        .spyOn(historyService, 'estimateTokensForContents')
-        .mockResolvedValue(150_000);
-
-      let compressionCallCount = 0;
-      harness.deps.performCompression.mockImplementation(async () => {
-        compressionCallCount++;
-        historyService.clear();
-        if (compressionCallCount === 1) {
-          historyService.add(makeUserMessage('first compressed summary'));
-          estimateSpy.mockResolvedValue(148_000); // <5% reduction, still over
-        } else {
-          historyService.add(makeUserMessage('second compressed summary'));
-          estimateSpy.mockResolvedValue(100_000); // fits now
-        }
-        return PerformCompressionResult.COMPRESSED;
-      });
-
-      const result = await harness.enforcer.enforce(
-        { contents, pendingContents: [pending] },
-        'test-prompt',
-      );
-
-      // Two full compression attempts were made (not truncation)
-      expect(compressionCallCount).toBe(2);
-
-      // Result contains the SECOND summary, not the first, and not a fallback
-      const allText = result
-        .flatMap((c) => c.blocks)
-        .filter((b) => b.type === 'text')
-        .map((b) => (b as { text: string }).text)
-        .join(' ');
-      expect(allText).toContain('second compressed summary');
-      expect(allText).not.toContain('first compressed summary');
-
-      // Pending is preserved
-      expect(result).toContainEqual(pending);
-
-      // Truncation was NOT invoked
-      expect(harness.deps.performFallbackCompression).not.toHaveBeenCalled();
-    });
+    it(
+      'makes exactly one additional full compression attempt when first compression is ineffective (<5%) and second fits',
+      case4,
+    );
   });
 
   // -----------------------------------------------------------------------
   // Test C: Retry insufficient, truncation fits
   // -----------------------------------------------------------------------
   describe('retry remains insufficient, truncation fits', () => {
-    it('falls through to truncation when both compression attempts remain over limit, and preserves pending', async () => {
-      runtimeContext = buildRuntimeContext(historyService, {
-        contextLimit: STANDARD_CONTEXT_LIMIT,
-        compressionThreshold: COMPRESSION_THRESHOLD,
-      });
-
-      historyService.add(makeUserMessage('established history'));
-      const pending = makeUserMessage('pending request');
-      const contents = historyService.getCuratedForProvider([pending]);
-
-      const harness = buildEnforcerHarness(historyService, runtimeContext);
-      const estimateSpy = vi
-        .spyOn(historyService, 'estimateTokensForContents')
-        .mockResolvedValue(150_000);
-
-      let compressionCallCount = 0;
-      harness.deps.performCompression.mockImplementation(async () => {
-        compressionCallCount++;
-        historyService.clear();
-        historyService.add(makeUserMessage('compressed still large'));
-        // Both compressions remain over limit
-        estimateSpy.mockResolvedValue(148_000);
-        return PerformCompressionResult.COMPRESSED;
-      });
-
-      // Truncation fits
-      harness.deps.performFallbackCompression.mockImplementation(
-        async (_promptId, applyResult) => {
-          estimateSpy.mockResolvedValue(50_000); // fits
-          await applyResult([makeUserMessage('truncated history')]);
-          return true;
-        },
-      );
-
-      const result = await harness.enforcer.enforce(
-        { contents, pendingContents: [pending] },
-        'test-prompt',
-      );
-
-      // Two compression attempts were made, then truncation
-      expect(compressionCallCount).toBe(2);
-      expect(harness.deps.performFallbackCompression).toHaveBeenCalled();
-
-      // Result contains truncated history and pending is preserved
-      const allText = result
-        .flatMap((c) => c.blocks)
-        .filter((b) => b.type === 'text')
-        .map((b) => (b as { text: string }).text)
-        .join(' ');
-      expect(allText).toContain('truncated history');
-      expect(result).toContainEqual(pending);
-    });
+    it(
+      'falls through to truncation when both compression attempts remain over limit, and preserves pending',
+      case5,
+    );
   });
 
   // -----------------------------------------------------------------------
   // Test D: Diagnostics for compression/truncation failures
   // -----------------------------------------------------------------------
   describe('failure diagnostics', () => {
-    it('does not redundantly retry full compression when first compression FAILED, proceeds to truncation', async () => {
-      runtimeContext = buildRuntimeContext(historyService, {
-        contextLimit: STANDARD_CONTEXT_LIMIT,
-        compressionThreshold: COMPRESSION_THRESHOLD,
-      });
+    it(
+      'does not redundantly retry full compression when first compression FAILED, proceeds to truncation',
+      case6,
+    );
 
-      historyService.add(makeUserMessage('established history'));
-      const pending = makeUserMessage('pending request');
-      const contents = historyService.getCuratedForProvider([pending]);
+    it(
+      'does not redundantly retry full compression when first compression THREW, proceeds to truncation',
+      case7,
+    );
 
-      const harness = buildEnforcerHarness(historyService, runtimeContext);
-      vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
-        150_000,
-      );
+    it(
+      'proceeds to truncation when the retry compression attempt fails, and includes compression failure diagnostics',
+      case8,
+    );
 
-      let compressionCallCount = 0;
-      harness.deps.performCompression.mockImplementation(async () => {
-        compressionCallCount++;
-        historyService.clear();
-        historyService.add(makeUserMessage('attempted compression'));
-        // First compression FAILED (non-throwing)
-        return PerformCompressionResult.FAILED;
-      });
-
-      // Truncation also fails to bring it under limit
-      harness.deps.performFallbackCompression.mockResolvedValue(false);
-
-      let thrownError: Error | undefined;
-      try {
-        await harness.enforcer.enforce(
-          { contents, pendingContents: [pending] },
-          'test-prompt',
-        );
-      } catch (error) {
-        thrownError = error as Error;
-      }
-
-      // Only ONE compression attempt (no redundant retry on FAILED)
-      expect(compressionCallCount).toBe(1);
-      expect(harness.deps.performFallbackCompression).toHaveBeenCalled();
-
-      expect(thrownError).toBeInstanceOf(Error);
-      expect(thrownError?.message).toContain(
-        'Automatic compression failed before fallback',
-      );
-    });
-
-    it('does not redundantly retry full compression when first compression THREW, proceeds to truncation', async () => {
-      runtimeContext = buildRuntimeContext(historyService, {
-        contextLimit: STANDARD_CONTEXT_LIMIT,
-        compressionThreshold: COMPRESSION_THRESHOLD,
-      });
-
-      historyService.add(makeUserMessage('established history'));
-      const pending = makeUserMessage('pending request');
-      const contents = historyService.getCuratedForProvider([pending]);
-
-      const harness = buildEnforcerHarness(historyService, runtimeContext);
-      vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
-        150_000,
-      );
-
-      let compressionCallCount = 0;
-      harness.deps.performCompression.mockImplementation(async () => {
-        compressionCallCount++;
-        throw new Error('network error during compression');
-      });
-
-      // Truncation also fails
-      harness.deps.performFallbackCompression.mockResolvedValue(false);
-
-      let thrownError: Error | undefined;
-      try {
-        await harness.enforcer.enforce(
-          { contents, pendingContents: [pending] },
-          'test-prompt',
-        );
-      } catch (error) {
-        thrownError = error as Error;
-      }
-
-      // Only ONE compression attempt (no redundant retry on thrown error)
-      expect(compressionCallCount).toBe(1);
-      expect(harness.deps.performFallbackCompression).toHaveBeenCalled();
-
-      expect(thrownError).toBeInstanceOf(Error);
-      expect(thrownError?.message).toContain(
-        'Automatic compression failed before fallback',
-      );
-      expect(thrownError?.message).toContain(
-        'network error during compression',
-      );
-    });
-
-    it('proceeds to truncation when the retry compression attempt fails, and includes compression failure diagnostics', async () => {
-      runtimeContext = buildRuntimeContext(historyService, {
-        contextLimit: STANDARD_CONTEXT_LIMIT,
-        compressionThreshold: COMPRESSION_THRESHOLD,
-      });
-
-      historyService.add(makeUserMessage('established history'));
-      const pending = makeUserMessage('pending request');
-      const contents = historyService.getCuratedForProvider([pending]);
-
-      const harness = buildEnforcerHarness(historyService, runtimeContext);
-      const estimateSpy = vi
-        .spyOn(historyService, 'estimateTokensForContents')
-        .mockResolvedValue(150_000);
-
-      let compressionCallCount = 0;
-      harness.deps.performCompression.mockImplementation(async () => {
-        compressionCallCount++;
-        historyService.clear();
-        if (compressionCallCount === 1) {
-          // First compression succeeds but is ineffective
-          historyService.add(makeUserMessage('ineffective compression'));
-          estimateSpy.mockResolvedValue(148_000);
-          return PerformCompressionResult.COMPRESSED;
-        }
-        // Second (retry) compression fails
-        throw new Error('retry compression failed');
-      });
-
-      // Truncation also fails
-      harness.deps.performFallbackCompression.mockResolvedValue(false);
-
-      let thrownError: Error | undefined;
-      try {
-        await harness.enforcer.enforce(
-          { contents, pendingContents: [pending] },
-          'test-prompt',
-        );
-      } catch (error) {
-        thrownError = error as Error;
-      }
-
-      // Two compression attempts (first succeeded, retry failed)
-      expect(compressionCallCount).toBe(2);
-      expect(harness.deps.performFallbackCompression).toHaveBeenCalled();
-
-      expect(thrownError).toBeInstanceOf(Error);
-      // Compression failure diagnostics surfaced
-      expect(thrownError?.message).toContain(
-        'Automatic compression failed before fallback',
-      );
-      expect(thrownError?.message).toContain(
-        'Additional hard-limit compression attempt failed',
-      );
-    });
-
-    it('includes truncation failure details when truncation also fails', async () => {
-      runtimeContext = buildRuntimeContext(historyService, {
-        contextLimit: STANDARD_CONTEXT_LIMIT,
-        compressionThreshold: COMPRESSION_THRESHOLD,
-      });
-
-      historyService.add(makeUserMessage('established history'));
-      const pending = makeUserMessage('pending request');
-      const contents = historyService.getCuratedForProvider([pending]);
-
-      const harness = buildEnforcerHarness(historyService, runtimeContext);
-      const estimateSpy = vi
-        .spyOn(historyService, 'estimateTokensForContents')
-        .mockResolvedValue(150_000);
-
-      harness.deps.performCompression.mockImplementation(async () => {
-        historyService.clear();
-        historyService.add(makeUserMessage('ineffective compression'));
-        estimateSpy.mockResolvedValue(148_000);
-        return PerformCompressionResult.COMPRESSED;
-      });
-
-      // Truncation rejects (throws)
-      harness.deps.performFallbackCompression.mockRejectedValue(
-        new Error('truncation broke'),
-      );
-
-      let thrownError: Error | undefined;
-      try {
-        await harness.enforcer.enforce(
-          { contents, pendingContents: [pending] },
-          'test-prompt',
-        );
-      } catch (error) {
-        thrownError = error as Error;
-      }
-
-      expect(thrownError).toBeInstanceOf(Error);
-      expect(thrownError?.message).toContain(
-        'Truncation fallback failed during hard-limit enforcement',
-      );
-      expect(thrownError?.message).toContain('truncation broke');
-    });
+    it('includes truncation failure details when truncation also fails', case9);
   });
+});
+describe('ProviderContentEnforcer pending boundaries, callbacks and restore (Issue #2588)', () => {
+  beforeEach(case0);
+  afterEach(case1);
 
   // -----------------------------------------------------------------------
   // Test E: Unrecoverable boundary regression + pending preservation
   // -----------------------------------------------------------------------
   describe('unrecoverable boundary preservation (issues #2304/#2306)', () => {
-    it('returns contents as-is when pendingContents is undefined but under capped hard limit', async () => {
-      runtimeContext = buildRuntimeContext(historyService, {
-        contextLimit: ISSUE_CONTEXT_LIMIT,
-        compressionThreshold: COMPRESSION_THRESHOLD,
-      });
+    it(
+      'returns contents as-is when pendingContents is undefined but under capped hard limit',
+      case10,
+    );
 
-      historyService.add(makeUserMessage('established history'));
-      const contents = historyService.getCuratedForProvider();
-
-      const harness = buildEnforcerHarness(historyService, runtimeContext);
-      // projected = 195810 + 65536 = 261346 <= 262144 (capped limit) → as-is
-      vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
-        195_810,
-      );
-
-      const result = await harness.enforcer.enforce(
-        { contents, pendingContents: undefined },
-        'test-prompt',
-      );
-
-      expect(result).toStrictEqual(contents);
-    });
-
-    it('throws unrecoverable-boundary error when pendingContents is undefined and over capped hard limit', async () => {
-      runtimeContext = buildRuntimeContext(historyService, {
-        contextLimit: ISSUE_CONTEXT_LIMIT,
-        compressionThreshold: COMPRESSION_THRESHOLD,
-      });
-
-      historyService.add(makeUserMessage('established history'));
-      const contents = historyService.getCuratedForProvider();
-
-      const harness = buildEnforcerHarness(historyService, runtimeContext);
-      // projected = 300000 + 65536 = 365536 > 262144 → unrecoverable
-      vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
-        300_000,
-      );
-
-      await expect(
-        harness.enforcer.enforce(
-          { contents, pendingContents: undefined },
-          'test-prompt',
-        ),
-      ).rejects.toThrow(/unrecoverable/i);
-    });
+    it(
+      'throws unrecoverable-boundary error when pendingContents is undefined and over capped hard limit',
+      case11,
+    );
   });
 
   // -----------------------------------------------------------------------
@@ -563,183 +129,30 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
   // identify the skipped result.
   // -----------------------------------------------------------------------
   describe('non-COMPRESSED skipped results (SKIPPED_EMPTY / SKIPPED_COOLDOWN)', () => {
-    it('does not make an additional full retry when first compression returns SKIPPED_EMPTY, proceeds to truncation', async () => {
-      runtimeContext = buildRuntimeContext(historyService, {
-        contextLimit: STANDARD_CONTEXT_LIMIT,
-        compressionThreshold: COMPRESSION_THRESHOLD,
-      });
+    it(
+      'does not make an additional full retry when first compression returns SKIPPED_EMPTY, proceeds to truncation',
+      case12,
+    );
 
-      historyService.add(makeUserMessage('established history'));
-      const pending = makeUserMessage('pending request');
-      const contents = historyService.getCuratedForProvider([pending]);
+    it(
+      'does not make an additional full retry when first compression returns SKIPPED_COOLDOWN, proceeds to truncation',
+      case13,
+    );
 
-      const harness = buildEnforcerHarness(historyService, runtimeContext);
-      const estimateSpy = vi
-        .spyOn(historyService, 'estimateTokensForContents')
-        .mockResolvedValue(150_000);
-
-      let compressionCallCount = 0;
-      harness.deps.performCompression.mockImplementation(async () => {
-        compressionCallCount++;
-        // First compression returns a skipped result, not FAILED.
-        return PerformCompressionResult.SKIPPED_EMPTY;
-      });
-
-      // Truncation fits so we observe the final return value.
-      harness.deps.performFallbackCompression.mockImplementation(
-        async (_promptId, applyResult) => {
-          estimateSpy.mockResolvedValue(50_000);
-          await applyResult([makeUserMessage('truncated history')]);
-          return true;
-        },
-      );
-
-      const result = await harness.enforcer.enforce(
-        { contents, pendingContents: [pending] },
-        'test-prompt',
-      );
-
-      // Only ONE compression attempt — a skipped result must NOT trigger a
-      // redundant full retry (treating it as "successful" like COMPRESSED).
-      expect(compressionCallCount).toBe(1);
-
-      // Truncation was reached.
-      expect(harness.deps.performFallbackCompression).toHaveBeenCalled();
-      expect(result).toContainEqual(pending);
-    });
-
-    it('does not make an additional full retry when first compression returns SKIPPED_COOLDOWN, proceeds to truncation', async () => {
-      runtimeContext = buildRuntimeContext(historyService, {
-        contextLimit: STANDARD_CONTEXT_LIMIT,
-        compressionThreshold: COMPRESSION_THRESHOLD,
-      });
-
-      historyService.add(makeUserMessage('established history'));
-      const pending = makeUserMessage('pending request');
-      const contents = historyService.getCuratedForProvider([pending]);
-
-      const harness = buildEnforcerHarness(historyService, runtimeContext);
-      const estimateSpy = vi
-        .spyOn(historyService, 'estimateTokensForContents')
-        .mockResolvedValue(150_000);
-
-      let compressionCallCount = 0;
-      harness.deps.performCompression.mockImplementation(async () => {
-        compressionCallCount++;
-        return PerformCompressionResult.SKIPPED_COOLDOWN;
-      });
-
-      harness.deps.performFallbackCompression.mockImplementation(
-        async (_promptId, applyResult) => {
-          estimateSpy.mockResolvedValue(50_000);
-          await applyResult([makeUserMessage('truncated history')]);
-          return true;
-        },
-      );
-
-      const result = await harness.enforcer.enforce(
-        { contents, pendingContents: [pending] },
-        'test-prompt',
-      );
-
-      expect(compressionCallCount).toBe(1);
-      expect(harness.deps.performFallbackCompression).toHaveBeenCalled();
-      expect(result).toContainEqual(pending);
-    });
-
-    it('retains actionable diagnostics identifying the skipped result when overflow remains after truncation', async () => {
-      runtimeContext = buildRuntimeContext(historyService, {
-        contextLimit: STANDARD_CONTEXT_LIMIT,
-        compressionThreshold: COMPRESSION_THRESHOLD,
-      });
-
-      historyService.add(makeUserMessage('established history'));
-      const pending = makeUserMessage('pending request');
-      const contents = historyService.getCuratedForProvider([pending]);
-
-      const harness = buildEnforcerHarness(historyService, runtimeContext);
-      vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
-        150_000,
-      );
-
-      let compressionCallCount = 0;
-      harness.deps.performCompression.mockImplementation(async () => {
-        compressionCallCount++;
-        return PerformCompressionResult.SKIPPED_EMPTY;
-      });
-
-      // Truncation does NOT bring it under limit → overflow error.
-      harness.deps.performFallbackCompression.mockResolvedValue(false);
-
-      let thrownError: Error | undefined;
-      try {
-        await harness.enforcer.enforce(
-          { contents, pendingContents: [pending] },
-          'test-prompt',
-        );
-      } catch (error) {
-        thrownError = error as Error;
-      }
-
-      expect(compressionCallCount).toBe(1);
-      expect(thrownError).toBeInstanceOf(Error);
-      // The diagnostics should identify the skipped compression result so the
-      // error is actionable.
-      expect(thrownError?.message).toContain('skipped_empty');
-    });
+    it(
+      'retains actionable diagnostics identifying the skipped result when overflow remains after truncation',
+      case14,
+    );
   });
 
   // -----------------------------------------------------------------------
   // Test G: Additional compression retry failure preserves the underlying cause
   // -----------------------------------------------------------------------
   describe('retry-failure cause preservation', () => {
-    it('preserves the underlying retry error message in final diagnostics (not just generic message)', async () => {
-      runtimeContext = buildRuntimeContext(historyService, {
-        contextLimit: STANDARD_CONTEXT_LIMIT,
-        compressionThreshold: COMPRESSION_THRESHOLD,
-      });
-
-      historyService.add(makeUserMessage('established history'));
-      const pending = makeUserMessage('pending request');
-      const contents = historyService.getCuratedForProvider([pending]);
-
-      const harness = buildEnforcerHarness(historyService, runtimeContext);
-      const estimateSpy = vi
-        .spyOn(historyService, 'estimateTokensForContents')
-        .mockResolvedValue(150_000);
-
-      let compressionCallCount = 0;
-      harness.deps.performCompression.mockImplementation(async () => {
-        compressionCallCount++;
-        historyService.clear();
-        if (compressionCallCount === 1) {
-          historyService.add(makeUserMessage('ineffective compression'));
-          estimateSpy.mockResolvedValue(148_000);
-          return PerformCompressionResult.COMPRESSED;
-        }
-        // Second (retry) compression throws a specific underlying error.
-        throw new Error('underlying retry cause: network timeout');
-      });
-
-      harness.deps.performFallbackCompression.mockResolvedValue(false);
-
-      let thrownError: Error | undefined;
-      try {
-        await harness.enforcer.enforce(
-          { contents, pendingContents: [pending] },
-          'test-prompt',
-        );
-      } catch (error) {
-        thrownError = error as Error;
-      }
-
-      expect(compressionCallCount).toBe(2);
-      expect(thrownError).toBeInstanceOf(Error);
-      // The underlying cause must be preserved in actionable diagnostics.
-      expect(thrownError?.message).toContain(
-        'underlying retry cause: network timeout',
-      );
-    });
+    it(
+      'preserves the underlying retry error message in final diagnostics (not just generic message)',
+      case15,
+    );
   });
 
   // -----------------------------------------------------------------------
@@ -756,249 +169,924 @@ describe('ProviderContentEnforcer hard-limit retry policy (Issue #2588)', () => 
   // failures for its own retry/truncation/overflow diagnostics.
   // -----------------------------------------------------------------------
   describe('compressAndRecompose callback contract (overflow surfaces compressionFailure)', () => {
-    it('reports the compression failure through the structured overflow error when performCompression throws and truncation cannot fit', async () => {
-      runtimeContext = buildRuntimeContext(historyService, {
-        contextLimit: STANDARD_CONTEXT_LIMIT,
-        compressionThreshold: COMPRESSION_THRESHOLD,
-      });
+    it(
+      'reports the compression failure through the structured overflow error when performCompression throws and truncation cannot fit',
+      case16,
+    );
 
-      historyService.add(makeUserMessage('established history'));
-      const pending = makeUserMessage('pending request');
+    it(
+      'reports a non-COMPRESSED result through the structured overflow error when truncation cannot fit',
+      case17,
+    );
 
-      const harness = buildEnforcerHarness(historyService, runtimeContext);
-      vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
-        150_000,
-      );
-
-      harness.deps.performCompression.mockRejectedValue(
-        new Error('callback compression network failure'),
-      );
-
-      await expect(
-        harness.enforcer.compressAndRecompose([pending], 'test-prompt'),
-      ).rejects.toThrow('callback compression network failure');
-    });
-
-    it('reports a non-COMPRESSED result through the structured overflow error when truncation cannot fit', async () => {
-      runtimeContext = buildRuntimeContext(historyService, {
-        contextLimit: STANDARD_CONTEXT_LIMIT,
-        compressionThreshold: COMPRESSION_THRESHOLD,
-      });
-
-      historyService.add(makeUserMessage('established history'));
-      const pending = makeUserMessage('pending request');
-
-      const harness = buildEnforcerHarness(historyService, runtimeContext);
-      vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
-        150_000,
-      );
-
-      harness.deps.performCompression.mockResolvedValue(
-        PerformCompressionResult.FAILED,
-      );
-
-      // A non-COMPRESSED result no longer throws directly; the ladder first
-      // attempts truncation, and the failure surfaces via the structured
-      // overflow error only when nothing fits.
-      await expect(
-        harness.enforcer.compressAndRecompose([pending], 'test-prompt'),
-      ).rejects.toThrow(/Auto compression did not complete/);
-    });
-
-    it('still consumes structured failures in enforce orchestration when compression fails (no rethrow from enforce)', async () => {
-      // The enforcement orchestration path (enforce) must NOT rethrow on a
-      // single compression failure; it consumes the structured failure and
-      // proceeds to truncation. This proves the rethrow is isolated to
-      // the compressAndRecompose callback entry point, not enforced globally.
-      runtimeContext = buildRuntimeContext(historyService, {
-        contextLimit: STANDARD_CONTEXT_LIMIT,
-        compressionThreshold: COMPRESSION_THRESHOLD,
-      });
-
-      historyService.add(makeUserMessage('established history'));
-      const pending = makeUserMessage('pending request');
-      const contents = historyService.getCuratedForProvider([pending]);
-
-      const harness = buildEnforcerHarness(historyService, runtimeContext);
-      vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
-        150_000,
-      );
-
-      harness.deps.performCompression.mockRejectedValue(
-        new Error('enforce compression failed'),
-      );
-
-      // Truncation also fails, so we observe the final overflow error.
-      harness.deps.performFallbackCompression.mockResolvedValue(false);
-
-      let thrownError: Error | undefined;
-      try {
-        await harness.enforcer.enforce(
-          { contents, pendingContents: [pending] },
-          'test-prompt',
-        );
-      } catch (error) {
-        thrownError = error as Error;
-      }
-
-      // enforce consumed the structured failure and proceeded to truncation;
-      // it did NOT rethrow the raw compression error. The diagnostics surface
-      // the compression failure as a structured field, not a raw throw.
-      expect(thrownError).toBeInstanceOf(Error);
-      expect(thrownError?.message).toContain(
-        'Automatic compression failed before fallback',
-      );
-      expect(thrownError?.message).toContain('enforce compression failed');
-    });
+    it(
+      'still consumes structured failures in enforce orchestration when compression fails (no rethrow from enforce)',
+      case18,
+    );
   });
 
   describe('data integrity: rejects failed fallback candidate installation', () => {
-    it('throws when candidate installation fails even when the candidate projection fits', async () => {
-      runtimeContext = buildRuntimeContext(historyService, {
-        contextLimit: STANDARD_CONTEXT_LIMIT,
-        compressionThreshold: COMPRESSION_THRESHOLD,
-      });
-
-      historyService.add(makeUserMessage('established history'));
-      const pending = makeUserMessage('pending request');
-      const contents = historyService.getCuratedForProvider([pending]);
-
-      const finalizedEstimates = [150_000, 150_000, 135_000, 50_000];
-      let estimateIndex = 0;
-      const harness = buildEnforcerHarness(historyService, runtimeContext, {
-        estimateFinalizedPromptTokens: async () =>
-          finalizedEstimates[estimateIndex++] ?? 50_000,
-      });
-
-      harness.deps.performCompression.mockImplementation(async () => {
-        historyService.clear();
-        historyService.add(makeUserMessage('compressed'));
-        return PerformCompressionResult.COMPRESSED;
-      });
-
-      harness.deps.performFallbackCompression.mockImplementation(
-        async (_promptId, applyResult) => {
-          historyService.on('tokensUpdated', () => {
-            throw new Error('history persistence layer down');
-          });
-          await applyResult([makeUserMessage('truncated history')]);
-          return true;
-        },
-      );
-
-      let thrownError: Error | undefined;
-      try {
-        await harness.enforcer.enforce(
-          { contents, pendingContents: [pending] },
-          'test-prompt',
-        );
-      } catch (error) {
-        thrownError = error as Error;
-      }
-
-      expect(thrownError).toBeInstanceOf(Error);
-      expect(thrownError?.message).toContain(
-        'Truncation fallback failed during hard-limit enforcement',
-      );
-      expect(thrownError?.message).toContain('history persistence layer down');
-    });
+    it(
+      'throws when candidate installation fails even when the candidate projection fits',
+      case19,
+    );
   });
 
   describe('ProviderContentEnforcer restore path under an active compression lock (#3338)', () => {
-    let historyService: HistoryService;
-    let runtimeContext: AgentRuntimeContext;
+    beforeEach(case20);
 
-    beforeEach(() => {
-      vi.clearAllMocks();
-      historyService = new HistoryService();
-    });
+    afterEach(case21);
 
-    afterEach(() => {
-      vi.restoreAllMocks();
-    });
-
-    it('restores fallback history inside one rebuild scope and keeps late streaming content after release', async () => {
-      runtimeContext = buildRuntimeContext(historyService, {
-        contextLimit: 2000,
-        compressionThreshold: 0.8,
-      });
-      historyService.add(makeUserMessage('established history'));
-      const pending = makeUserMessage('pending request');
-      const contents = historyService.getCuratedForProvider([pending]);
-
-      const harness = buildEnforcerHarness(historyService, runtimeContext, {
-        generationConfig: { maxOutputTokens: 100 },
-        performFallbackCompression: async (_promptId, applyResult) => {
-          // Production wiring (CompressionHandler.performFallbackCompression +
-          // executeFallbackTruncation) feeds the truncated history to
-          // restoreFallbackState, which replaces the history atomically and
-          // resets the anchor. #3264 made that path async, so the result has to
-          // be awaited before the enforcer re-projects.
-          await applyResult([
-            makeUserMessage('restored-1'),
-            makeUserMessage('restored-2'),
-          ]);
-          return true;
-        },
-      });
-
-      // Initial/post-density/post-compression stay over the hard limit so the
-      // enforcer reaches the restore path; the post-truncation projection then
-      // fits, so enforce returns the restored history.
-      const estimateSpy = vi.spyOn(historyService, 'estimateTokensForContents');
-      estimateSpy.mockResolvedValueOnce(500_000);
-      estimateSpy.mockResolvedValueOnce(500_000);
-      estimateSpy.mockResolvedValueOnce(500_000);
-      estimateSpy.mockResolvedValueOnce(100);
-
-      harness.deps.performCompression.mockResolvedValue(
-        PerformCompressionResult.FAILED,
-      );
-
-      const observed: string[] = [];
-      historyService.on('contentAdded', (content) => {
-        const block = content.blocks[0];
-        observed.push(
-          `contentAdded:${block.type === 'text' ? block.text : block.type}`,
-        );
-      });
-      historyService.on('compressionLockReleased', () => {
-        observed.push('compressionLockReleased');
-      });
-      historyService.on('compressionEnded', () => {
-        observed.push('compressionEnded');
-      });
-
-      historyService.startCompression();
-      await harness.enforcer.enforce(
-        { contents, pendingContents: [pending] },
-        'test-prompt',
-      );
-      historyService.add(makeUserMessage('late stream after restore'));
-      historyService.endCompression(makeUserMessage('truncation summary'), 2);
-
-      // #3264 replaced the clear/re-add loop with an atomic
-      // HistoryService.replaceAll, so restoring does not announce its own
-      // entries as newly added content. The entry that arrives after the lock
-      // is released -- which is what #3338 is about -- still streams.
-      expect(observed).toStrictEqual([
-        'compressionLockReleased',
-        'compressionEnded',
-        'contentAdded:late stream after restore',
-      ]);
-
-      const texts = historyService.getAll().map((entry) => {
-        const block = entry.blocks[0];
-        return block.type === 'text' ? block.text : `<${block.type}>`;
-      });
-      expect(texts).toStrictEqual([
-        'restored-1',
-        'restored-2',
-        'late stream after restore',
-      ]);
-      // The truncation restore explicitly reset the post-truncation cache anchor.
-      expect(historyService.getCacheAnchorSeq()).toBe(0);
-      estimateSpy.mockRestore();
-    });
+    it(
+      'restores fallback history inside one rebuild scope and keeps late streaming content after release',
+      case22,
+    );
   });
 });
+
+function case0(): void {
+  vi.clearAllMocks();
+  historyService = new HistoryService();
+}
+
+function case1(): void {
+  vi.restoreAllMocks();
+}
+
+async function case2(): Promise<void> {
+  // Exact scenario from the issue:
+  //   context limit   = 262144
+  //   completionBudget = 65536
+  //   projected        = 261346
+  //   old safety-adjusted limit (no cushion) = 262144 - 1000 = 261144
+  //   tokensStillNeeded with old code = 261346 - 261144 = 202
+  //
+  // With the shared 0.5% cushion policy (same as pending #2067):
+  //   safetyAdjusted = 262144 - 1000 = 261144
+  //   cushion         = floor(261144 * 0.005) = 1305
+  //   marginAdjusted  = min(262144, 261144 + 1305) = 262144
+  //   projected 261346 <= 262144 → no overflow, no needless error
+  //
+  // The projected IS over the compression threshold (222822) so compression
+  // is triggered, but even with zero reduction the capped margin keeps the
+  // payload under the hard limit — no overflow error is thrown.
+  runtimeContext = buildRuntimeContext(historyService, {
+    contextLimit: ISSUE_CONTEXT_LIMIT,
+    compressionThreshold: COMPRESSION_THRESHOLD,
+  });
+
+  historyService.add(makeUserMessage('established history'));
+  const pending = makeUserMessage('pending request');
+  const contents = await Array.fromAsync(
+    historyService.getCuratedForProviderStream([pending]),
+  );
+
+  const harness = buildEnforcerHarness(historyService, runtimeContext);
+  // estimate = projected - completionBudget = 261346 - 65536 = 195810
+  vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
+    195_810,
+  );
+
+  // Compression does zero reduction (simulating the issue scenario)
+  harness.deps.performCompression.mockImplementation(
+    async () => PerformCompressionResult.COMPRESSED,
+  );
+
+  const result = await harness.enforcer.enforce(
+    { contents, pendingContents: [pending] },
+    'test-prompt',
+  );
+
+  // No overflow error thrown — the capped cushion prevents the needless
+  // error that the user saw in the issue (tokensStillNeeded=202, reduced 0)
+  expect(result).toContainEqual(pending);
+  expect(harness.deps.performCompression).toHaveBeenCalledOnce();
+}
+
+async function case3(): Promise<void> {
+  // projected = 263000 > 262144 (capped limit) → compression needed
+  runtimeContext = buildRuntimeContext(historyService, {
+    contextLimit: ISSUE_CONTEXT_LIMIT,
+    compressionThreshold: COMPRESSION_THRESHOLD,
+  });
+
+  historyService.add(makeUserMessage('established history'));
+  const pending = makeUserMessage('pending request');
+  const contents = await Array.fromAsync(
+    historyService.getCuratedForProviderStream([pending]),
+  );
+
+  const harness = buildEnforcerHarness(historyService, runtimeContext);
+  const estimateSpy = vi
+    .spyOn(historyService, 'estimateTokensForContents')
+    .mockResolvedValue(197_464); // 197464 + 65536 = 263000 > 262144
+
+  harness.deps.performCompression.mockImplementation(async () => {
+    historyService.clear();
+    historyService.add(makeUserMessage('compressed summary'));
+    estimateSpy.mockResolvedValue(1_000);
+    return PerformCompressionResult.COMPRESSED;
+  });
+
+  const result = await harness.enforcer.enforce(
+    { contents, pendingContents: [pending] },
+    'test-prompt',
+  );
+
+  expect(result).not.toStrictEqual(contents);
+  expect(result).toContainEqual(pending);
+}
+
+async function case4(): Promise<void> {
+  runtimeContext = buildRuntimeContext(historyService, {
+    contextLimit: STANDARD_CONTEXT_LIMIT,
+    compressionThreshold: COMPRESSION_THRESHOLD,
+  });
+
+  historyService.add(makeUserMessage('established history'));
+  const pending = makeUserMessage('pending request');
+  const contents = await Array.fromAsync(
+    historyService.getCuratedForProviderStream([pending]),
+  );
+
+  const harness = buildEnforcerHarness(historyService, runtimeContext);
+  // marginAdjustedLimit with 0.5% cushion:
+  //   safetyAdjusted = 199000
+  //   cushion = floor(199000 * 0.005) = 995
+  //   marginAdjusted = min(200000, 199995) = 199995
+  // First estimate: 150000 + 65536 = 215536 > 199995
+  // After 1st compression: 148000 + 65536 = 213536 (reduction <5%, ineffective)
+  // After 2nd compression: 100000 + 65536 = 165536 < 199995 → fits!
+  const estimateSpy = vi
+    .spyOn(historyService, 'estimateTokensForContents')
+    .mockResolvedValue(150_000);
+
+  let compressionCallCount = 0;
+  harness.deps.performCompression.mockImplementation(async () => {
+    compressionCallCount++;
+    historyService.clear();
+    if (compressionCallCount === 1) {
+      historyService.add(makeUserMessage('first compressed summary'));
+      estimateSpy.mockResolvedValue(148_000); // <5% reduction, still over
+    } else {
+      historyService.add(makeUserMessage('second compressed summary'));
+      estimateSpy.mockResolvedValue(100_000); // fits now
+    }
+    return PerformCompressionResult.COMPRESSED;
+  });
+
+  const result = await harness.enforcer.enforce(
+    { contents, pendingContents: [pending] },
+    'test-prompt',
+  );
+
+  // Two full compression attempts were made (not truncation)
+  expect(compressionCallCount).toBe(2);
+
+  // Result contains the SECOND summary, not the first, and not a fallback
+  const allText = result
+    .flatMap((c) => c.blocks)
+    .filter((b) => b.type === 'text')
+    .map((b) => (b as { text: string }).text)
+    .join(' ');
+  expect(allText).toContain('second compressed summary');
+  expect(allText).not.toContain('first compressed summary');
+
+  // Pending is preserved
+  expect(result).toContainEqual(pending);
+
+  // Truncation was NOT invoked
+  expect(harness.deps.performFallbackCompression).not.toHaveBeenCalled();
+}
+
+async function case5(): Promise<void> {
+  runtimeContext = buildRuntimeContext(historyService, {
+    contextLimit: STANDARD_CONTEXT_LIMIT,
+    compressionThreshold: COMPRESSION_THRESHOLD,
+  });
+
+  historyService.add(makeUserMessage('established history'));
+  const pending = makeUserMessage('pending request');
+  const contents = await Array.fromAsync(
+    historyService.getCuratedForProviderStream([pending]),
+  );
+
+  const harness = buildEnforcerHarness(historyService, runtimeContext);
+  const estimateSpy = vi
+    .spyOn(historyService, 'estimateTokensForContents')
+    .mockResolvedValue(150_000);
+
+  let compressionCallCount = 0;
+  harness.deps.performCompression.mockImplementation(async () => {
+    compressionCallCount++;
+    historyService.clear();
+    historyService.add(makeUserMessage('compressed still large'));
+    // Both compressions remain over limit
+    estimateSpy.mockResolvedValue(148_000);
+    return PerformCompressionResult.COMPRESSED;
+  });
+
+  // Truncation fits
+  harness.deps.performFallbackCompression.mockImplementation(
+    async (_promptId, applyResult) => {
+      estimateSpy.mockResolvedValue(50_000); // fits
+      await disk.installFixtureCandidate(applyResult, [
+        makeUserMessage('truncated history'),
+      ]);
+      return true;
+    },
+  );
+
+  const result = await harness.enforcer.enforce(
+    { contents, pendingContents: [pending] },
+    'test-prompt',
+  );
+
+  // Two compression attempts were made, then truncation
+  expect(compressionCallCount).toBe(2);
+  expect(harness.deps.performFallbackCompression).toHaveBeenCalled();
+
+  // Result contains truncated history and pending is preserved
+  const allText = result
+    .flatMap((c) => c.blocks)
+    .filter((b) => b.type === 'text')
+    .map((b) => (b as { text: string }).text)
+    .join(' ');
+  expect(allText).toContain('truncated history');
+  expect(result).toContainEqual(pending);
+}
+
+async function case6(): Promise<void> {
+  runtimeContext = buildRuntimeContext(historyService, {
+    contextLimit: STANDARD_CONTEXT_LIMIT,
+    compressionThreshold: COMPRESSION_THRESHOLD,
+  });
+
+  historyService.add(makeUserMessage('established history'));
+  const pending = makeUserMessage('pending request');
+  const contents = await Array.fromAsync(
+    historyService.getCuratedForProviderStream([pending]),
+  );
+
+  const harness = buildEnforcerHarness(historyService, runtimeContext);
+  vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
+    150_000,
+  );
+
+  let compressionCallCount = 0;
+  harness.deps.performCompression.mockImplementation(async () => {
+    compressionCallCount++;
+    historyService.clear();
+    historyService.add(makeUserMessage('attempted compression'));
+    // First compression FAILED (non-throwing)
+    return PerformCompressionResult.FAILED;
+  });
+
+  // Truncation also fails to bring it under limit
+  harness.deps.performFallbackCompression.mockResolvedValue(false);
+
+  let thrownError: Error | undefined;
+  try {
+    await harness.enforcer.enforce(
+      { contents, pendingContents: [pending] },
+      'test-prompt',
+    );
+  } catch (error) {
+    thrownError = error as Error;
+  }
+
+  // Only ONE compression attempt (no redundant retry on FAILED)
+  expect(compressionCallCount).toBe(1);
+  expect(harness.deps.performFallbackCompression).toHaveBeenCalled();
+
+  expect(thrownError).toBeInstanceOf(Error);
+  expect(thrownError?.message).toContain(
+    'Automatic compression failed before fallback',
+  );
+}
+
+async function case7(): Promise<void> {
+  runtimeContext = buildRuntimeContext(historyService, {
+    contextLimit: STANDARD_CONTEXT_LIMIT,
+    compressionThreshold: COMPRESSION_THRESHOLD,
+  });
+
+  historyService.add(makeUserMessage('established history'));
+  const pending = makeUserMessage('pending request');
+  const contents = await Array.fromAsync(
+    historyService.getCuratedForProviderStream([pending]),
+  );
+
+  const harness = buildEnforcerHarness(historyService, runtimeContext);
+  vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
+    150_000,
+  );
+
+  let compressionCallCount = 0;
+  harness.deps.performCompression.mockImplementation(async () => {
+    compressionCallCount++;
+    throw new Error('network error during compression');
+  });
+
+  // Truncation also fails
+  harness.deps.performFallbackCompression.mockResolvedValue(false);
+
+  let thrownError: Error | undefined;
+  try {
+    await harness.enforcer.enforce(
+      { contents, pendingContents: [pending] },
+      'test-prompt',
+    );
+  } catch (error) {
+    thrownError = error as Error;
+  }
+
+  // Only ONE compression attempt (no redundant retry on thrown error)
+  expect(compressionCallCount).toBe(1);
+  expect(harness.deps.performFallbackCompression).toHaveBeenCalled();
+
+  expect(thrownError).toBeInstanceOf(Error);
+  expect(thrownError?.message).toContain(
+    'Automatic compression failed before fallback',
+  );
+  expect(thrownError?.message).toContain('network error during compression');
+}
+
+async function case8(): Promise<void> {
+  runtimeContext = buildRuntimeContext(historyService, {
+    contextLimit: STANDARD_CONTEXT_LIMIT,
+    compressionThreshold: COMPRESSION_THRESHOLD,
+  });
+
+  historyService.add(makeUserMessage('established history'));
+  const pending = makeUserMessage('pending request');
+  const contents = await Array.fromAsync(
+    historyService.getCuratedForProviderStream([pending]),
+  );
+
+  const harness = buildEnforcerHarness(historyService, runtimeContext);
+  const estimateSpy = vi
+    .spyOn(historyService, 'estimateTokensForContents')
+    .mockResolvedValue(150_000);
+
+  let compressionCallCount = 0;
+  harness.deps.performCompression.mockImplementation(async () => {
+    compressionCallCount++;
+    historyService.clear();
+    if (compressionCallCount === 1) {
+      // First compression succeeds but is ineffective
+      historyService.add(makeUserMessage('ineffective compression'));
+      estimateSpy.mockResolvedValue(148_000);
+      return PerformCompressionResult.COMPRESSED;
+    }
+    // Second (retry) compression fails
+    throw new Error('retry compression failed');
+  });
+
+  // Truncation also fails
+  harness.deps.performFallbackCompression.mockResolvedValue(false);
+
+  let thrownError: Error | undefined;
+  try {
+    await harness.enforcer.enforce(
+      { contents, pendingContents: [pending] },
+      'test-prompt',
+    );
+  } catch (error) {
+    thrownError = error as Error;
+  }
+
+  // Two compression attempts (first succeeded, retry failed)
+  expect(compressionCallCount).toBe(2);
+  expect(harness.deps.performFallbackCompression).toHaveBeenCalled();
+
+  expect(thrownError).toBeInstanceOf(Error);
+  // Compression failure diagnostics surfaced
+  expect(thrownError?.message).toContain(
+    'Automatic compression failed before fallback',
+  );
+  expect(thrownError?.message).toContain(
+    'Additional hard-limit compression attempt failed',
+  );
+}
+
+async function case9(): Promise<void> {
+  runtimeContext = buildRuntimeContext(historyService, {
+    contextLimit: STANDARD_CONTEXT_LIMIT,
+    compressionThreshold: COMPRESSION_THRESHOLD,
+  });
+
+  historyService.add(makeUserMessage('established history'));
+  const pending = makeUserMessage('pending request');
+  const contents = await Array.fromAsync(
+    historyService.getCuratedForProviderStream([pending]),
+  );
+
+  const harness = buildEnforcerHarness(historyService, runtimeContext);
+  const estimateSpy = vi
+    .spyOn(historyService, 'estimateTokensForContents')
+    .mockResolvedValue(150_000);
+
+  harness.deps.performCompression.mockImplementation(async () => {
+    historyService.clear();
+    historyService.add(makeUserMessage('ineffective compression'));
+    estimateSpy.mockResolvedValue(148_000);
+    return PerformCompressionResult.COMPRESSED;
+  });
+
+  // Truncation rejects (throws)
+  harness.deps.performFallbackCompression.mockRejectedValue(
+    new Error('truncation broke'),
+  );
+
+  let thrownError: Error | undefined;
+  try {
+    await harness.enforcer.enforce(
+      { contents, pendingContents: [pending] },
+      'test-prompt',
+    );
+  } catch (error) {
+    thrownError = error as Error;
+  }
+
+  expect(thrownError).toBeInstanceOf(Error);
+  expect(thrownError?.message).toContain(
+    'Truncation fallback failed during hard-limit enforcement',
+  );
+  expect(thrownError?.message).toContain('truncation broke');
+}
+
+async function case10(): Promise<void> {
+  runtimeContext = buildRuntimeContext(historyService, {
+    contextLimit: ISSUE_CONTEXT_LIMIT,
+    compressionThreshold: COMPRESSION_THRESHOLD,
+  });
+
+  historyService.add(makeUserMessage('established history'));
+  const contents = await Array.fromAsync(
+    historyService.getCuratedForProviderStream(),
+  );
+
+  const harness = buildEnforcerHarness(historyService, runtimeContext);
+  // projected = 195810 + 65536 = 261346 <= 262144 (capped limit) → as-is
+  vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
+    195_810,
+  );
+
+  const result = await harness.enforcer.enforce(
+    { contents, pendingContents: undefined },
+    'test-prompt',
+  );
+
+  expect(result).toStrictEqual(contents);
+}
+
+async function case11(): Promise<void> {
+  runtimeContext = buildRuntimeContext(historyService, {
+    contextLimit: ISSUE_CONTEXT_LIMIT,
+    compressionThreshold: COMPRESSION_THRESHOLD,
+  });
+
+  historyService.add(makeUserMessage('established history'));
+  const contents = await Array.fromAsync(
+    historyService.getCuratedForProviderStream(),
+  );
+
+  const harness = buildEnforcerHarness(historyService, runtimeContext);
+  // projected = 300000 + 65536 = 365536 > 262144 → unrecoverable
+  vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
+    300_000,
+  );
+
+  await expect(
+    harness.enforcer.enforce(
+      { contents, pendingContents: undefined },
+      'test-prompt',
+    ),
+  ).rejects.toThrow(/unrecoverable/i);
+}
+
+async function case12(): Promise<void> {
+  runtimeContext = buildRuntimeContext(historyService, {
+    contextLimit: STANDARD_CONTEXT_LIMIT,
+    compressionThreshold: COMPRESSION_THRESHOLD,
+  });
+
+  historyService.add(makeUserMessage('established history'));
+  const pending = makeUserMessage('pending request');
+  const contents = await Array.fromAsync(
+    historyService.getCuratedForProviderStream([pending]),
+  );
+
+  const harness = buildEnforcerHarness(historyService, runtimeContext);
+  const estimateSpy = vi
+    .spyOn(historyService, 'estimateTokensForContents')
+    .mockResolvedValue(150_000);
+
+  let compressionCallCount = 0;
+  harness.deps.performCompression.mockImplementation(async () => {
+    compressionCallCount++;
+    // First compression returns a skipped result, not FAILED.
+    return PerformCompressionResult.SKIPPED_EMPTY;
+  });
+
+  // Truncation fits so we observe the final return value.
+  harness.deps.performFallbackCompression.mockImplementation(
+    async (_promptId, applyResult) => {
+      estimateSpy.mockResolvedValue(50_000);
+      await disk.installFixtureCandidate(applyResult, [
+        makeUserMessage('truncated history'),
+      ]);
+      return true;
+    },
+  );
+
+  const result = await harness.enforcer.enforce(
+    { contents, pendingContents: [pending] },
+    'test-prompt',
+  );
+
+  // Only ONE compression attempt — a skipped result must NOT trigger a
+  // redundant full retry (treating it as "successful" like COMPRESSED).
+  expect(compressionCallCount).toBe(1);
+
+  // Truncation was reached.
+  expect(harness.deps.performFallbackCompression).toHaveBeenCalled();
+  expect(result).toContainEqual(pending);
+}
+
+async function case13(): Promise<void> {
+  runtimeContext = buildRuntimeContext(historyService, {
+    contextLimit: STANDARD_CONTEXT_LIMIT,
+    compressionThreshold: COMPRESSION_THRESHOLD,
+  });
+
+  historyService.add(makeUserMessage('established history'));
+  const pending = makeUserMessage('pending request');
+  const contents = await Array.fromAsync(
+    historyService.getCuratedForProviderStream([pending]),
+  );
+
+  const harness = buildEnforcerHarness(historyService, runtimeContext);
+  const estimateSpy = vi
+    .spyOn(historyService, 'estimateTokensForContents')
+    .mockResolvedValue(150_000);
+
+  let compressionCallCount = 0;
+  harness.deps.performCompression.mockImplementation(async () => {
+    compressionCallCount++;
+    return PerformCompressionResult.SKIPPED_COOLDOWN;
+  });
+
+  harness.deps.performFallbackCompression.mockImplementation(
+    async (_promptId, applyResult) => {
+      estimateSpy.mockResolvedValue(50_000);
+      await disk.installFixtureCandidate(applyResult, [
+        makeUserMessage('truncated history'),
+      ]);
+      return true;
+    },
+  );
+
+  const result = await harness.enforcer.enforce(
+    { contents, pendingContents: [pending] },
+    'test-prompt',
+  );
+
+  expect(compressionCallCount).toBe(1);
+  expect(harness.deps.performFallbackCompression).toHaveBeenCalled();
+  expect(result).toContainEqual(pending);
+}
+
+async function case14(): Promise<void> {
+  runtimeContext = buildRuntimeContext(historyService, {
+    contextLimit: STANDARD_CONTEXT_LIMIT,
+    compressionThreshold: COMPRESSION_THRESHOLD,
+  });
+
+  historyService.add(makeUserMessage('established history'));
+  const pending = makeUserMessage('pending request');
+  const contents = await Array.fromAsync(
+    historyService.getCuratedForProviderStream([pending]),
+  );
+
+  const harness = buildEnforcerHarness(historyService, runtimeContext);
+  vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
+    150_000,
+  );
+
+  let compressionCallCount = 0;
+  harness.deps.performCompression.mockImplementation(async () => {
+    compressionCallCount++;
+    return PerformCompressionResult.SKIPPED_EMPTY;
+  });
+
+  // Truncation does NOT bring it under limit → overflow error.
+  harness.deps.performFallbackCompression.mockResolvedValue(false);
+
+  let thrownError: Error | undefined;
+  try {
+    await harness.enforcer.enforce(
+      { contents, pendingContents: [pending] },
+      'test-prompt',
+    );
+  } catch (error) {
+    thrownError = error as Error;
+  }
+
+  expect(compressionCallCount).toBe(1);
+  expect(thrownError).toBeInstanceOf(Error);
+  // The diagnostics should identify the skipped compression result so the
+  // error is actionable.
+  expect(thrownError?.message).toContain('skipped_empty');
+}
+
+async function case15(): Promise<void> {
+  runtimeContext = buildRuntimeContext(historyService, {
+    contextLimit: STANDARD_CONTEXT_LIMIT,
+    compressionThreshold: COMPRESSION_THRESHOLD,
+  });
+
+  historyService.add(makeUserMessage('established history'));
+  const pending = makeUserMessage('pending request');
+  const contents = await Array.fromAsync(
+    historyService.getCuratedForProviderStream([pending]),
+  );
+
+  const harness = buildEnforcerHarness(historyService, runtimeContext);
+  const estimateSpy = vi
+    .spyOn(historyService, 'estimateTokensForContents')
+    .mockResolvedValue(150_000);
+
+  let compressionCallCount = 0;
+  harness.deps.performCompression.mockImplementation(async () => {
+    compressionCallCount++;
+    historyService.clear();
+    if (compressionCallCount === 1) {
+      historyService.add(makeUserMessage('ineffective compression'));
+      estimateSpy.mockResolvedValue(148_000);
+      return PerformCompressionResult.COMPRESSED;
+    }
+    // Second (retry) compression throws a specific underlying error.
+    throw new Error('underlying retry cause: network timeout');
+  });
+
+  harness.deps.performFallbackCompression.mockResolvedValue(false);
+
+  let thrownError: Error | undefined;
+  try {
+    await harness.enforcer.enforce(
+      { contents, pendingContents: [pending] },
+      'test-prompt',
+    );
+  } catch (error) {
+    thrownError = error as Error;
+  }
+
+  expect(compressionCallCount).toBe(2);
+  expect(thrownError).toBeInstanceOf(Error);
+  // The underlying cause must be preserved in actionable diagnostics.
+  expect(thrownError?.message).toContain(
+    'underlying retry cause: network timeout',
+  );
+}
+
+async function case16(): Promise<void> {
+  runtimeContext = buildRuntimeContext(historyService, {
+    contextLimit: STANDARD_CONTEXT_LIMIT,
+    compressionThreshold: COMPRESSION_THRESHOLD,
+  });
+
+  historyService.add(makeUserMessage('established history'));
+  const pending = makeUserMessage('pending request');
+
+  const harness = buildEnforcerHarness(historyService, runtimeContext);
+  vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
+    150_000,
+  );
+
+  harness.deps.performCompression.mockRejectedValue(
+    new Error('callback compression network failure'),
+  );
+
+  await expect(
+    harness.enforcer.compressAndRecompose([pending], 'test-prompt'),
+  ).rejects.toThrow('callback compression network failure');
+}
+
+async function case17(): Promise<void> {
+  runtimeContext = buildRuntimeContext(historyService, {
+    contextLimit: STANDARD_CONTEXT_LIMIT,
+    compressionThreshold: COMPRESSION_THRESHOLD,
+  });
+
+  historyService.add(makeUserMessage('established history'));
+  const pending = makeUserMessage('pending request');
+
+  const harness = buildEnforcerHarness(historyService, runtimeContext);
+  vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
+    150_000,
+  );
+
+  harness.deps.performCompression.mockResolvedValue(
+    PerformCompressionResult.FAILED,
+  );
+
+  // A non-COMPRESSED result no longer throws directly; the ladder first
+  // attempts truncation, and the failure surfaces via the structured
+  // overflow error only when nothing fits.
+  await expect(
+    harness.enforcer.compressAndRecompose([pending], 'test-prompt'),
+  ).rejects.toThrow(/Auto compression did not complete/);
+}
+
+async function case18(): Promise<void> {
+  // The enforcement orchestration path (enforce) must NOT rethrow on a
+  // single compression failure; it consumes the structured failure and
+  // proceeds to truncation. This proves the rethrow is isolated to
+  // the compressAndRecompose callback entry point, not enforced globally.
+  runtimeContext = buildRuntimeContext(historyService, {
+    contextLimit: STANDARD_CONTEXT_LIMIT,
+    compressionThreshold: COMPRESSION_THRESHOLD,
+  });
+
+  historyService.add(makeUserMessage('established history'));
+  const pending = makeUserMessage('pending request');
+  const contents = await Array.fromAsync(
+    historyService.getCuratedForProviderStream([pending]),
+  );
+
+  const harness = buildEnforcerHarness(historyService, runtimeContext);
+  vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
+    150_000,
+  );
+
+  harness.deps.performCompression.mockRejectedValue(
+    new Error('enforce compression failed'),
+  );
+
+  // Truncation also fails, so we observe the final overflow error.
+  harness.deps.performFallbackCompression.mockResolvedValue(false);
+
+  let thrownError: Error | undefined;
+  try {
+    await harness.enforcer.enforce(
+      { contents, pendingContents: [pending] },
+      'test-prompt',
+    );
+  } catch (error) {
+    thrownError = error as Error;
+  }
+
+  // enforce consumed the structured failure and proceeded to truncation;
+  // it did NOT rethrow the raw compression error. The diagnostics surface
+  // the compression failure as a structured field, not a raw throw.
+  expect(thrownError).toBeInstanceOf(Error);
+  expect(thrownError?.message).toContain(
+    'Automatic compression failed before fallback',
+  );
+  expect(thrownError?.message).toContain('enforce compression failed');
+}
+
+async function case19(): Promise<void> {
+  runtimeContext = buildRuntimeContext(historyService, {
+    contextLimit: STANDARD_CONTEXT_LIMIT,
+    compressionThreshold: COMPRESSION_THRESHOLD,
+  });
+
+  historyService.add(makeUserMessage('established history'));
+  const pending = makeUserMessage('pending request');
+  const contents = await Array.fromAsync(
+    historyService.getCuratedForProviderStream([pending]),
+  );
+
+  const finalizedEstimates = [150_000, 150_000, 135_000, 50_000];
+  let estimateIndex = 0;
+  const harness = buildEnforcerHarness(historyService, runtimeContext, {
+    estimateFinalizedPromptTokens: async () =>
+      finalizedEstimates[estimateIndex++] ?? 50_000,
+  });
+
+  harness.deps.performCompression.mockImplementation(async () => {
+    historyService.clear();
+    historyService.add(makeUserMessage('compressed'));
+    return PerformCompressionResult.COMPRESSED;
+  });
+
+  harness.deps.performFallbackCompression.mockImplementation(
+    async (_promptId, applyResult) => {
+      historyService.on('tokensUpdated', () => {
+        throw new Error('history persistence layer down');
+      });
+      await disk.installFixtureCandidate(applyResult, [
+        makeUserMessage('truncated history'),
+      ]);
+      return true;
+    },
+  );
+
+  let thrownError: Error | undefined;
+  try {
+    await harness.enforcer.enforce(
+      { contents, pendingContents: [pending] },
+      'test-prompt',
+    );
+  } catch (error) {
+    thrownError = error as Error;
+  }
+
+  expect(thrownError).toBeInstanceOf(Error);
+  expect(thrownError?.message).toContain(
+    'Truncation fallback failed during hard-limit enforcement',
+  );
+  expect(thrownError?.message).toContain('history persistence layer down');
+}
+
+function case20(): void {
+  vi.clearAllMocks();
+  suite0_historyService = new HistoryService();
+}
+
+function case21(): void {
+  vi.restoreAllMocks();
+}
+
+async function case22(): Promise<void> {
+  suite1_runtimeContext = buildRuntimeContext(suite0_historyService, {
+    contextLimit: 2000,
+    compressionThreshold: 0.8,
+  });
+  suite0_historyService.add(makeUserMessage('established history'));
+  const pending = makeUserMessage('pending request');
+  const contents = await Array.fromAsync(
+    suite0_historyService.getCuratedForProviderStream([pending]),
+  );
+
+  const harness = buildEnforcerHarness(
+    suite0_historyService,
+    suite1_runtimeContext,
+    {
+      generationConfig: { maxOutputTokens: 100 },
+      performFallbackCompression: disk.installRestoredFixture,
+    },
+  );
+
+  // Initial/post-density/post-compression stay over the hard limit so the
+  // enforcer reaches the restore path; the post-truncation projection then
+  // fits, so enforce returns the restored history.
+  const estimateSpy = vi.spyOn(
+    suite0_historyService,
+    'estimateTokensForContents',
+  );
+  estimateSpy.mockResolvedValueOnce(500_000);
+  estimateSpy.mockResolvedValueOnce(500_000);
+  estimateSpy.mockResolvedValueOnce(500_000);
+  estimateSpy.mockResolvedValueOnce(100);
+
+  harness.deps.performCompression.mockResolvedValue(
+    PerformCompressionResult.FAILED,
+  );
+
+  const observed: string[] = [];
+  suite0_historyService.on('contentAdded', (content) => {
+    const block = content.blocks[0];
+    observed.push(
+      `contentAdded:${block.type === 'text' ? block.text : block.type}`,
+    );
+  });
+  suite0_historyService.on('compressionLockReleased', () => {
+    observed.push('compressionLockReleased');
+  });
+  suite0_historyService.on('compressionEnded', () => {
+    observed.push('compressionEnded');
+  });
+
+  suite0_historyService.startCompression();
+  await harness.enforcer.enforce(
+    { contents, pendingContents: [pending] },
+    'test-prompt',
+  );
+  suite0_historyService.add(makeUserMessage('late stream after restore'));
+  suite0_historyService.endCompression(
+    makeUserMessage('truncation summary'),
+    2,
+  );
+
+  // #3264 replaced the clear/re-add loop with an atomic
+  // HistoryService.replaceAll, so restoring does not announce its own
+  // entries as newly added content. The entry that arrives after the lock
+  // is released -- which is what #3338 is about -- still streams.
+  expect(observed).toStrictEqual([
+    'compressionLockReleased',
+    'compressionEnded',
+    'contentAdded:late stream after restore',
+  ]);
+
+  await expectRestoredStreamingHistory(suite0_historyService);
+  estimateSpy.mockRestore();
+}
+
+import {
+  buildEnforcerHarness,
+  expectRestoredStreamingHistory,
+} from './compression-retry-provider-hardlimit-test-helpers.js';

@@ -1,3 +1,4 @@
+import { forbidHistoryMaterializationForTest } from '../../../core/src/test-utils/history-materialization-test-guard.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -9,8 +10,61 @@ import { HistoryService } from '@vybestack/llxprt-code-core/services/history/His
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { buildRequestContentsResult } from './streamRequestHelpers.js';
 
+describe('request cursor cancellation', () => {
+  it('rejects a cancelled request before preparing any provider contents', async () => {
+    const history = new HistoryService();
+    const controller = new AbortController();
+    controller.abort(new Error('request cancelled'));
+    try {
+      await expect(
+        buildRequestContentsResult(
+          { speaker: 'human', blocks: [{ type: 'text', text: 'pending' }] },
+          history,
+          undefined,
+          controller.signal,
+        ),
+      ).rejects.toThrow('request cancelled');
+    } finally {
+      history.dispose();
+    }
+  });
+});
+
 describe('buildRequestContentsResult history override', () => {
-  it('curates an isolated provider copy with complete adjacent tool responses', () => {
+  class CursorOnlyRequestHistory extends HistoryService {
+    constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {
+      super(options);
+      forbidHistoryMaterializationForTest(this, 'eager request preparation');
+    }
+  }
+
+  describe('request preparation from a journal cursor', () => {
+    it('prepares actual request rows without either eager history getter', async () => {
+      const history = new CursorOnlyRequestHistory();
+      try {
+        history.add({
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'prior' }],
+        });
+        const result = await buildRequestContentsResult(
+          { speaker: 'human', blocks: [{ type: 'text', text: 'pending' }] },
+          history,
+        );
+        expect(result.contents.map((row) => row.blocks)).toStrictEqual([
+          [{ type: 'text', text: 'prior' }],
+          [{ type: 'text', text: 'pending' }],
+        ]);
+        expect(result.pending).toHaveLength(1);
+        expect(result.contents[1].metadata).toStrictEqual(
+          result.pending[0].metadata,
+        );
+      } finally {
+        history.dispose();
+      }
+    });
+  });
+
+  it('curates an isolated provider copy with complete adjacent tool responses', async () => {
     const history = new HistoryService();
     const override: IContent[] = [
       {
@@ -34,7 +88,7 @@ describe('buildRequestContentsResult history override', () => {
       blocks: [{ type: 'text', text: 'continue' }],
     };
 
-    const result = buildRequestContentsResult(pending, history, override);
+    const result = await buildRequestContentsResult(pending, history, override);
     const toolCallIndex = result.contents.findIndex((content) =>
       content.blocks.some(
         (block) =>

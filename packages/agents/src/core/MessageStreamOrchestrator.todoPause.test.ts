@@ -23,7 +23,15 @@
  *    turns via the generic path.
  */
 
-import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
+import {
+  afterAll,
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  type Mock,
+} from 'bun:test';
 import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { ServerAgentStreamEvent, ToolCallRequestInfo } from './turn.js';
 import { AgentEventType } from './turn.js';
@@ -119,10 +127,7 @@ interface BuildOptions {
   blockingAfterHook?: boolean;
 }
 
-function buildOrchestrator(options: BuildOptions = {}): {
-  orchestrator: InstanceType<typeof MessageStreamOrchestrator>;
-  deps: MessageStreamDeps;
-} {
+function makeChat(): ChatSession {
   const mockChat = {
     getLastPromptTokenCount: vi.fn().mockReturnValue(100),
     getProjectedPromptBaseline: vi.fn().mockReturnValue(100),
@@ -130,7 +135,10 @@ function buildOrchestrator(options: BuildOptions = {}): {
     getHistory: vi.fn().mockReturnValue([]),
     getContextLimit: vi.fn(() => tokenLimit()),
   };
+  return mockChat as unknown as ChatSession;
+}
 
+function makeConfig(): Config {
   const providerManager = {
     getActiveProviderName: vi.fn(() => 'openai'),
     getActiveProvider: vi.fn(() => ({
@@ -155,35 +163,12 @@ function buildOrchestrator(options: BuildOptions = {}): {
       get: vi.fn(() => undefined),
     })),
   } as unknown as Config;
+  return config;
+}
 
-  const activeTodos = options.activeTodos ?? [
-    { id: 'todo-1', content: 'Active task', status: 'in_progress' },
-  ];
-
-  const stream =
-    options.turnStream ??
-    (async function* (): AsyncGenerator<ServerAgentStreamEvent> {
-      yield { type: AgentEventType.Content, value: 'hello' };
-      yield {
-        type: AgentEventType.Finished,
-        value: { outcome: { hadVisibleOutput: true } },
-      };
-    })();
-
-  mockTurnRun.mockReturnValue(stream);
-
-  const blockingAfterHookOutput =
-    options.blockingAfterHook === true
-      ? ({
-          isBlockingDecision: () => true,
-          shouldStopExecution: () => false,
-          getEffectiveReason: () => 'hook-says-continue',
-          shouldClearContext: () => false,
-        } as unknown as ReturnType<
-          MessageStreamDeps['agentHookManager']['fireAfterAgentHookSafe']
-        >)
-      : undefined;
-
+function makeTodoContinuationService(
+  activeTodos: Todo[],
+): MessageStreamDeps['todoContinuationService'] {
   const todoContinuationService = {
     clearPausedState: vi.fn().mockResolvedValue(undefined),
     toolActivityCount: 0,
@@ -209,10 +194,49 @@ function buildOrchestrator(options: BuildOptions = {}): {
     restore: vi.fn(),
     shouldDeferStreamEvent: vi.fn().mockReturnValue(false),
   } as unknown as MessageStreamDeps['todoContinuationService'];
+  return todoContinuationService;
+}
 
-  const deps: MessageStreamDeps = {
+function configureTurnStream(options: BuildOptions): void {
+  const stream =
+    options.turnStream ??
+    (async function* (): AsyncGenerator<ServerAgentStreamEvent> {
+      yield { type: AgentEventType.Content, value: 'hello' };
+      yield {
+        type: AgentEventType.Finished,
+        value: { outcome: { hadVisibleOutput: true } },
+      };
+    })();
+
+  mockTurnRun.mockReturnValue(stream);
+}
+
+function afterHookResult(
+  options: BuildOptions,
+):
+  | ReturnType<MessageStreamDeps['agentHookManager']['fireAfterAgentHookSafe']>
+  | undefined {
+  return options.blockingAfterHook === true
+    ? ({
+        isBlockingDecision: () => true,
+        shouldStopExecution: () => false,
+        getEffectiveReason: () => 'hook-says-continue',
+        shouldClearContext: () => false,
+      } as unknown as ReturnType<
+        MessageStreamDeps['agentHookManager']['fireAfterAgentHookSafe']
+      >)
+    : undefined;
+}
+
+function makeDeps(
+  mockChat: ChatSession,
+  config: Config,
+  todoContinuationService: MessageStreamDeps['todoContinuationService'],
+  blockingAfterHookOutput: ReturnType<typeof afterHookResult>,
+): MessageStreamDeps {
+  return {
     config,
-    getChat: () => mockChat as unknown as ChatSession,
+    getChat: () => mockChat,
     logger: {
       debug: vi.fn(),
       warn: vi.fn(),
@@ -245,7 +269,7 @@ function buildOrchestrator(options: BuildOptions = {}): {
       providerName: 'openai',
       model: 'gpt-4',
     }),
-    getHistory: vi.fn().mockResolvedValue([]),
+    async *streamHistory() {},
     getSessionTurnCount: vi.fn().mockReturnValue(1),
     incrementSessionTurnCount: vi.fn(),
     lazyInitialize: vi.fn().mockResolvedValue(undefined),
@@ -273,6 +297,27 @@ function buildOrchestrator(options: BuildOptions = {}): {
       },
     ),
   };
+}
+
+function buildOrchestrator(options: BuildOptions = {}): {
+  orchestrator: InstanceType<typeof MessageStreamOrchestrator>;
+  deps: MessageStreamDeps;
+} {
+  const mockChat = makeChat();
+  const config = makeConfig();
+  const activeTodos = options.activeTodos ?? [
+    { id: 'todo-1', content: 'Active task', status: 'in_progress' },
+  ];
+
+  configureTurnStream(options);
+  const blockingAfterHookOutput = afterHookResult(options);
+  const todoContinuationService = makeTodoContinuationService(activeTodos);
+  const deps = makeDeps(
+    mockChat,
+    config,
+    todoContinuationService,
+    blockingAfterHookOutput,
+  );
 
   return {
     orchestrator: new MessageStreamOrchestrator(deps),
@@ -316,6 +361,14 @@ function toolCallRequestOnlyStream(
 }
 
 describe('MessageStreamOrchestrator — tool-call turns (issue #2657)', () => {
+  afterAll(() => {
+    void vi.mock('./turn.js', () => __actual2);
+    void vi.mock(
+      '@vybestack/llxprt-code-core/core/tokenLimits.js',
+      () => __actual,
+    );
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     (tokenLimit as Mock<typeof tokenLimit>).mockImplementation(
@@ -374,6 +427,10 @@ describe('MessageStreamOrchestrator — tool-call turns (issue #2657)', () => {
     ]);
   });
 
+  registerToolCallTurnTests();
+});
+
+function registerToolCallTurnTests(): void {
   describe('tool-call turns route through the generic finish path', () => {
     it('treats a pause-tool request as a normal tool-call turn', async () => {
       // Turn.run() emits only ToolCallRequest for the pause tool. The
@@ -445,4 +502,4 @@ describe('MessageStreamOrchestrator — tool-call turns (issue #2657)', () => {
       ).not.toHaveBeenCalled();
     });
   });
-});
+}

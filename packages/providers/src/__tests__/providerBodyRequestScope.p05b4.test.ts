@@ -97,10 +97,21 @@ describe('P05b4 request-scoped transport body lease @plan:PLAN-20260917-ISSUE854
       return lease.release();
     };
     await probeLease();
-    Bun.gc(true);
+    const bun: unknown = Reflect.get(globalThis, 'Bun');
+    if (
+      typeof bun !== 'object' ||
+      bun === null ||
+      !('gc' in bun) ||
+      typeof bun.gc !== 'function'
+    ) {
+      throw new Error('Bun.gc is required for the weak-reference probe');
+    }
+    bun.gc(true);
     expect(probe?.deref()).toBeUndefined();
   });
+});
 
+describe('P05b4 request-scoped transport release and reuse @plan:PLAN-20260917-ISSUE854.P05b4', () => {
   it('releases the body when the consumer throws, and propagates the error', async () => {
     const rows: readonly BodyRow[] = [
       { payload: 'boom-row', blob: 'w'.repeat(64) },

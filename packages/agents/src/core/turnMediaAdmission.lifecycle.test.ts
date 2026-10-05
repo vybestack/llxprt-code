@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-core/test-utils/collect-rows-for-assertions.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -30,6 +31,7 @@ import type {
 } from '@vybestack/llxprt-code-providers/IProvider.js';
 import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
 import { resetCliRuntimeRegistryForTesting } from '@vybestack/llxprt-code-providers/runtime/runtimeRegistry.js';
+import { collectHistoryFixture } from './collect-history-test-fixture.js';
 
 const INPUT_PNG =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=';
@@ -165,14 +167,10 @@ function mediaReferences(history: readonly IContent[]): MediaReferenceBlock[] {
   );
 }
 
-async function createFixture(
-  directory: string,
-  behavior: ProviderBehavior,
-  options: {
-    readonly purgeFailure?: boolean;
-    readonly releaseFailure?: boolean;
-  } = {},
-): Promise<TurnMediaFixture> {
+function createFixtureProvider(behavior: ProviderBehavior): {
+  readonly provider: IProvider;
+  readonly providerStarted: Promise<void>;
+} {
   let markProviderStarted = (): void => undefined;
   const providerStarted = new Promise<void>((resolve) => {
     markProviderStarted = resolve;
@@ -219,6 +217,29 @@ async function createFixture(
       })();
     },
   };
+  return { provider, providerStarted };
+}
+
+function createFixtureContentGenerator(): ConstructorParameters<
+  typeof ChatSession
+>[1] {
+  return {
+    generateContent: vi.fn(),
+    generateContentStream: vi.fn(),
+    countTokens: vi.fn().mockReturnValue(1),
+    embedContent: vi.fn(),
+  };
+}
+
+async function createFixture(
+  directory: string,
+  behavior: ProviderBehavior,
+  options: {
+    readonly purgeFailure?: boolean;
+    readonly releaseFailure?: boolean;
+  } = {},
+): Promise<TurnMediaFixture> {
+  const { provider, providerStarted } = createFixtureProvider(behavior);
   const recording =
     options.purgeFailure === true
       ? new SessionRecordingService({
@@ -231,7 +252,7 @@ async function createFixture(
         })
       : undefined;
   if (recording !== undefined) {
-    recording.recordSemanticMediaPurge = () => {
+    recording.recordSemanticMediaPurgeRows = async () => {
       throw new Error('semantic purge persistence failed');
     };
   }
@@ -280,12 +301,7 @@ async function createFixture(
     mediaStore: store,
     mediaAdmission: new MediaAdmissionService(store),
   });
-  const contentGenerator = {
-    generateContent: vi.fn(),
-    generateContentStream: vi.fn(),
-    countTokens: vi.fn().mockReturnValue(1),
-    embedContent: vi.fn(),
-  };
+  const contentGenerator = createFixtureContentGenerator();
   return {
     chat: new ChatSession(runtime, contentGenerator, {}, []),
     store,
@@ -312,361 +328,450 @@ async function assertReleasedToBaseline(
   });
 }
 
+function registerMediaCase0(directory: () => string): void {
+  describe('releases admitted user media when the provider rejects a non-streaming turn', () => {
+    it('releases admitted user media when the provider rejects a non-streaming turn', async () => {
+      const fixture = await createFixture(directory(), 'reject');
+      const baselineOwners = await reservationOwnerCount(fixture.rootDirectory);
+
+      await expect(
+        fixture.chat.sendMessage(
+          { message: [inlineMediaContent(INPUT_PNG, 'image/png')] },
+          'provider-rejection',
+        ),
+      ).rejects.toThrow('provider rejected turn');
+
+      await assertReleasedToBaseline(fixture, baselineOwners);
+    });
+  });
+}
+
+function registerMediaCase1(directory: () => string): void {
+  describe('aggregates provider rejection with awaited media cleanup failure', () => {
+    it('aggregates provider rejection with awaited media cleanup failure', async () => {
+      const fixture = await createFixture(directory(), 'reject', {
+        releaseFailure: true,
+      });
+      let failure: unknown;
+
+      try {
+        await fixture.chat.sendMessage(
+          { message: [inlineMediaContent(INPUT_PNG, 'image/png')] },
+          'provider-and-cleanup-rejection',
+        );
+      } catch (error: unknown) {
+        failure = error;
+      }
+
+      expect(failure).toBeInstanceOf(AggregateError);
+      expect(errorMessages(failure)).toStrictEqual(
+        expect.arrayContaining([
+          'provider rejected turn',
+          'induced media cleanup failure',
+        ]),
+      );
+      expect(await reservationOwnerCount(fixture.rootDirectory)).toBe(0);
+    });
+  });
+}
+
+function registerMediaCase2(directory: () => string): void {
+  describe('rolls back published history when temporary media settlement fails', () => {
+    it('rolls back published history when temporary media settlement fails', async () => {
+      const fixture = await createFixture(directory(), 'success', {
+        releaseFailure: true,
+      });
+      let failure: unknown;
+
+      try {
+        await fixture.chat.sendMessage(
+          { message: [inlineMediaContent(INPUT_PNG, 'image/png')] },
+          'publication-cleanup-rejection',
+        );
+      } catch (error: unknown) {
+        failure = error;
+      }
+
+      expect(failure).toBeInstanceOf(AggregateError);
+      expect(errorMessages(failure)).toContain('induced media cleanup failure');
+      await withRows(
+        fixture.chat.getHistoryService().streamRawHistory(),
+        async (rows) => {
+          expect(rows).toStrictEqual([]);
+          expect(await reservationOwnerCount(fixture.rootDirectory)).toBe(0);
+        },
+      );
+    });
+  });
+}
+
+function registerMediaCase3(directory: () => string): void {
+  describe('awaits admitted user-media release when a non-streaming turn is aborted', () => {
+    it('awaits admitted user-media release when a non-streaming turn is aborted', async () => {
+      const fixture = await createFixture(directory(), 'abort');
+      const controller = new AbortController();
+      const baselineOwners = await reservationOwnerCount(fixture.rootDirectory);
+      const sending = fixture.chat.sendMessage(
+        {
+          message: [inlineMediaContent(INPUT_PNG, 'image/png')],
+          config: { abortSignal: controller.signal },
+        },
+        'aborted-turn',
+      );
+      await fixture.providerStarted;
+
+      controller.abort();
+      await expect(sending).rejects.toThrow(/abort/i);
+
+      await assertReleasedToBaseline(fixture, baselineOwners);
+    });
+  });
+}
+
+function registerMediaCase4(directory: () => string): void {
+  describe('releases superseded stream output and retained user media after retry exhaustion', () => {
+    it('releases superseded stream output and retained user media after retry exhaustion', async () => {
+      const fixture = await createFixture(directory(), 'invalid-stream');
+      const baselineOwners = await reservationOwnerCount(fixture.rootDirectory);
+
+      const stream = await fixture.chat.sendMessageStream(
+        { message: [inlineMediaContent(INPUT_PNG, 'image/png')] },
+        'retry-exhaustion',
+      );
+      await expect(
+        (async () => {
+          for await (const _event of stream) {
+            // Drain through the real retry and finalization paths.
+          }
+        })(),
+      ).rejects.toThrow(/stream ended/i);
+
+      await assertReleasedToBaseline(fixture, baselineOwners, new Set(), 2);
+    });
+  });
+}
+
+function registerMediaCase5(directory: () => string): void {
+  describe('retains the user admission while releasing superseded output on a successful retry', () => {
+    it('retains the user admission while releasing superseded output on a successful retry', async () => {
+      const fixture = await createFixture(directory(), 'retry-success');
+      const stream = await fixture.chat.sendMessageStream(
+        { message: [inlineMediaContent(INPUT_PNG, 'image/png')] },
+        'retry-success',
+      );
+
+      for await (const _event of stream) {
+        // Drain both attempts and the successful history commit.
+      }
+
+      const references = mediaReferences(
+        await collectHistoryFixture(fixture.chat.getHistory()),
+      );
+      await Promise.all(
+        references.map((reference) => fixture.store.readVerified(reference)),
+      );
+      expect({
+        owners: await reservationOwnerCount(fixture.rootDirectory),
+        references: references.length,
+      }).toStrictEqual({ owners: 2, references: 2 });
+    });
+  });
+}
+
+function registerMediaCase6(directory: () => string): void {
+  describe('releases admitted user and output media when a stream consumer cancels', () => {
+    it('releases admitted user and output media when a stream consumer cancels', async () => {
+      const fixture = await createFixture(directory(), 'success');
+      const baselineOwners = await reservationOwnerCount(fixture.rootDirectory);
+      const stream = await fixture.chat.sendMessageStream(
+        { message: [inlineMediaContent(INPUT_PNG, 'image/png')] },
+        'stream-cancellation',
+      );
+
+      await stream.next();
+      await stream.return(undefined);
+
+      const owners = await reservationOwnerCount(fixture.rootDirectory);
+      const reclamation = await fixture.store.reclaimUnreferenced(
+        new Set(),
+        Date.now(),
+      );
+      expect({ owners, reclaimed: reclamation.objectsRemoved }).toStrictEqual({
+        owners: baselineOwners,
+        reclaimed: 2,
+      });
+    });
+  });
+}
+
+function registerMediaCase7(directory: () => string): void {
+  describe('releases admitted user media when a stream is cancelled before consumption', () => {
+    it('releases admitted user media when a stream is cancelled before consumption', async () => {
+      const fixture = await createFixture(directory(), 'success');
+      const baselineOwners = await reservationOwnerCount(fixture.rootDirectory);
+      const stream = await fixture.chat.sendMessageStream(
+        { message: [inlineMediaContent(INPUT_PNG, 'image/png')] },
+        'stream-pre-consumption-cancellation',
+      );
+
+      await stream.return(undefined);
+
+      await assertReleasedToBaseline(fixture, baselineOwners);
+      expect(await reservationOwnerCount(fixture.rootDirectory)).toBe(0);
+    });
+  });
+}
+
+function registerMediaCase8(directory: () => string): void {
+  describe('releases admitted user media when an unstarted stream receives a thrown cancellation', () => {
+    it('releases admitted user media when an unstarted stream receives a thrown cancellation', async () => {
+      const fixture = await createFixture(directory(), 'success');
+      const stream = await fixture.chat.sendMessageStream(
+        { message: [inlineMediaContent(INPUT_PNG, 'image/png')] },
+        'stream-thrown-cancellation',
+      );
+
+      await expect(
+        stream.throw(new Error('caller cancelled stream')),
+      ).rejects.toThrow('caller cancelled stream');
+
+      const reclamation = await fixture.store.reclaimUnreferenced(
+        new Set(),
+        Date.now(),
+      );
+      expect({
+        owners: await reservationOwnerCount(fixture.rootDirectory),
+        reclaimed: reclamation.objectsRemoved,
+      }).toStrictEqual({ owners: 0, reclaimed: 1 });
+    });
+  });
+}
+
+function registerMediaCase9(directory: () => string): void {
+  describe('releases admitted user and output media when a provider stream fails', () => {
+    it('releases admitted user and output media when a provider stream fails', async () => {
+      const fixture = await createFixture(directory(), 'stream-failure');
+      const baselineOwners = await reservationOwnerCount(fixture.rootDirectory);
+
+      const stream = await fixture.chat.sendMessageStream(
+        { message: [inlineMediaContent(INPUT_PNG, 'image/png')] },
+        'stream-failure',
+      );
+      await expect(
+        (async () => {
+          for await (const _event of stream) {
+            // Drain until the provider failure crosses the real stream processor.
+          }
+        })(),
+      ).rejects.toThrow('provider stream failed');
+
+      const owners = await reservationOwnerCount(fixture.rootDirectory);
+      const reclamation = await fixture.store.reclaimUnreferenced(
+        new Set(),
+        Date.now(),
+      );
+      expect({ owners, reclaimed: reclamation.objectsRemoved }).toStrictEqual({
+        owners: baselineOwners,
+        reclaimed: 2,
+      });
+    });
+  });
+}
+
+function registerMediaCase10(directory: () => string): void {
+  describe('releases admitted user media when semantic-purge persistence rejects', () => {
+    it('releases admitted user media when semantic-purge persistence rejects', async () => {
+      const fixture = await createFixture(directory(), 'success', {
+        purgeFailure: true,
+      });
+      await fixture.chat.setHistory([
+        inlineMediaContent(OUTPUT_JPEG, 'image/jpeg'),
+      ]);
+      const retainedIds = new Set(
+        mediaReferences(
+          await collectHistoryFixture(fixture.chat.getHistory()),
+        ).map((block) => block.contentId),
+      );
+      const baselineOwners = await reservationOwnerCount(fixture.rootDirectory);
+
+      await expect(
+        fixture.chat.sendMessage(
+          { message: [inlineMediaContent(INPUT_PNG, 'image/png')] },
+          'purge-failure',
+        ),
+      ).rejects.toThrow('semantic purge persistence failed');
+
+      await assertReleasedToBaseline(fixture, baselineOwners, retainedIds);
+      await fixture.recording?.dispose();
+    });
+  });
+}
+
+function registerMediaCase11(directory: () => string): void {
+  describe('releases admitted user and output media when history commit rejects', () => {
+    it('releases admitted user and output media when history commit rejects', async () => {
+      const fixture = await createFixture(directory(), 'success');
+      fixture.chat.getHistoryService().on('contentBatchAdded', () => {
+        throw new Error('history commit rejected');
+      });
+      const baselineOwners = await reservationOwnerCount(fixture.rootDirectory);
+
+      await expect(
+        fixture.chat.sendMessage(
+          { message: [inlineMediaContent(INPUT_PNG, 'image/png')] },
+          'history-rejection',
+        ),
+      ).rejects.toThrow('history commit rejected');
+
+      const owners = await reservationOwnerCount(fixture.rootDirectory);
+      const reclamation = await fixture.store.reclaimUnreferenced(
+        new Set(),
+        Date.now(),
+      );
+      expect({
+        owners,
+        reclaimed: reclamation.objectsRemoved,
+        historyEntries: (await collectHistoryFixture(fixture.chat.getHistory()))
+          .length,
+      }).toStrictEqual({
+        owners: baselineOwners,
+        reclaimed: 2,
+        historyEntries: 0,
+      });
+    });
+  });
+}
+
+function registerMediaCase12(directory: () => string): void {
+  describe('rolls back streaming history before releasing rejected turn admissions', () => {
+    it('rolls back streaming history before releasing rejected turn admissions', async () => {
+      const fixture = await createFixture(directory(), 'success');
+      fixture.chat.getHistoryService().on('contentBatchAdded', () => {
+        throw new Error('stream history commit rejected');
+      });
+      const stream = await fixture.chat.sendMessageStream(
+        { message: [inlineMediaContent(INPUT_PNG, 'image/png')] },
+        'stream-history-rejection',
+      );
+
+      await expect(
+        (async () => {
+          for await (const _event of stream) {
+            // Drain through stream history finalization.
+          }
+        })(),
+      ).rejects.toThrow('stream history commit rejected');
+
+      const reclamation = await fixture.store.reclaimUnreferenced(
+        new Set(),
+        Date.now(),
+      );
+      expect({
+        owners: await reservationOwnerCount(fixture.rootDirectory),
+        reclaimed: reclamation.objectsRemoved,
+        historyEntries: (await collectHistoryFixture(fixture.chat.getHistory()))
+          .length,
+      }).toStrictEqual({ owners: 0, reclaimed: 2, historyEntries: 0 });
+    });
+  });
+}
+
+function registerMediaCase13(directory: () => string): void {
+  describe('transfers non-streaming user and output admissions once history commits', () => {
+    it('transfers non-streaming user and output admissions once history commits', async () => {
+      const fixture = await createFixture(directory(), 'success');
+
+      await fixture.chat.sendMessage(
+        { message: [inlineMediaContent(INPUT_PNG, 'image/png')] },
+
+        'non-stream-success',
+      );
+
+      const references = mediaReferences(
+        await collectHistoryFixture(fixture.chat.getHistory()),
+      );
+      const resolved = await Promise.all(
+        references.map((reference) => fixture.store.readVerified(reference)),
+      );
+      const reclamation = await fixture.store.reclaimUnreferenced(
+        new Set(),
+        Date.now(),
+      );
+      expect({
+        owners: await reservationOwnerCount(fixture.rootDirectory),
+        references: references.length,
+        resolvedBytes: resolved.map((bytes) => bytes.byteLength),
+        reclaimed: reclamation.objectsRemoved,
+      }).toStrictEqual({
+        owners: 2,
+        references: 2,
+        resolvedBytes: [68, 287],
+        reclaimed: 0,
+      });
+    });
+  });
+}
+
+function registerMediaCase14(directory: () => string): void {
+  describe('transfers streaming user and output admissions once final history commits', () => {
+    it('transfers streaming user and output admissions once final history commits', async () => {
+      const fixture = await createFixture(directory(), 'success');
+      const stream = await fixture.chat.sendMessageStream(
+        { message: [inlineMediaContent(INPUT_PNG, 'image/png')] },
+        'stream-success',
+      );
+
+      for await (const _event of stream) {
+        // Drain through stream finalization and history commit.
+      }
+
+      const references = mediaReferences(
+        await collectHistoryFixture(fixture.chat.getHistory()),
+      );
+      const resolved = await Promise.all(
+        references.map((reference) => fixture.store.readVerified(reference)),
+      );
+      const reclamation = await fixture.store.reclaimUnreferenced(
+        new Set(),
+        Date.now(),
+      );
+      expect({
+        owners: await reservationOwnerCount(fixture.rootDirectory),
+        references: references.length,
+        resolvedBytes: resolved.map((bytes) => bytes.byteLength),
+        reclaimed: reclamation.objectsRemoved,
+      }).toStrictEqual({
+        owners: 2,
+        references: 2,
+        resolvedBytes: [68, 287],
+        reclaimed: 0,
+      });
+    });
+  });
+}
+
 describe('turn media admission terminal lifecycle', () => {
   let directory = '';
-
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'llxprt-turn-media-lifecycle-'));
   });
-
   afterEach(async () => {
     resetCliRuntimeRegistryForTesting();
     await rm(directory, { recursive: true, force: true });
   });
-
-  it('releases admitted user media when the provider rejects a non-streaming turn', async () => {
-    const fixture = await createFixture(directory, 'reject');
-    const baselineOwners = await reservationOwnerCount(fixture.rootDirectory);
-
-    await expect(
-      fixture.chat.sendMessage(
-        { message: [inlineMediaContent(INPUT_PNG, 'image/png')] },
-        'provider-rejection',
-      ),
-    ).rejects.toThrow('provider rejected turn');
-
-    await assertReleasedToBaseline(fixture, baselineOwners);
-  });
-
-  it('aggregates provider rejection with awaited media cleanup failure', async () => {
-    const fixture = await createFixture(directory, 'reject', {
-      releaseFailure: true,
-    });
-    let failure: unknown;
-
-    try {
-      await fixture.chat.sendMessage(
-        { message: [inlineMediaContent(INPUT_PNG, 'image/png')] },
-        'provider-and-cleanup-rejection',
-      );
-    } catch (error: unknown) {
-      failure = error;
-    }
-
-    expect(failure).toBeInstanceOf(AggregateError);
-    expect(errorMessages(failure)).toStrictEqual(
-      expect.arrayContaining([
-        'provider rejected turn',
-        'induced media cleanup failure',
-      ]),
-    );
-    expect(await reservationOwnerCount(fixture.rootDirectory)).toBe(0);
-  });
-
-  it('rolls back published history when temporary media settlement fails', async () => {
-    const fixture = await createFixture(directory, 'success', {
-      releaseFailure: true,
-    });
-    let failure: unknown;
-
-    try {
-      await fixture.chat.sendMessage(
-        { message: [inlineMediaContent(INPUT_PNG, 'image/png')] },
-        'publication-cleanup-rejection',
-      );
-    } catch (error: unknown) {
-      failure = error;
-    }
-
-    expect(failure).toBeInstanceOf(AggregateError);
-    expect(errorMessages(failure)).toContain('induced media cleanup failure');
-    expect(fixture.chat.getHistoryService().getAll()).toStrictEqual([]);
-    expect(await reservationOwnerCount(fixture.rootDirectory)).toBe(0);
-  });
-  it('awaits admitted user-media release when a non-streaming turn is aborted', async () => {
-    const fixture = await createFixture(directory, 'abort');
-    const controller = new AbortController();
-    const baselineOwners = await reservationOwnerCount(fixture.rootDirectory);
-    const sending = fixture.chat.sendMessage(
-      {
-        message: [inlineMediaContent(INPUT_PNG, 'image/png')],
-        config: { abortSignal: controller.signal },
-      },
-      'aborted-turn',
-    );
-    await fixture.providerStarted;
-
-    controller.abort();
-    await expect(sending).rejects.toThrow(/abort/i);
-
-    await assertReleasedToBaseline(fixture, baselineOwners);
-  });
-
-  it('releases superseded stream output and retained user media after retry exhaustion', async () => {
-    const fixture = await createFixture(directory, 'invalid-stream');
-    const baselineOwners = await reservationOwnerCount(fixture.rootDirectory);
-
-    const stream = await fixture.chat.sendMessageStream(
-      { message: [inlineMediaContent(INPUT_PNG, 'image/png')] },
-      'retry-exhaustion',
-    );
-    await expect(
-      (async () => {
-        for await (const _event of stream) {
-          // Drain through the real retry and finalization paths.
-        }
-      })(),
-    ).rejects.toThrow(/stream ended/i);
-
-    await assertReleasedToBaseline(fixture, baselineOwners, new Set(), 2);
-  });
-
-  it('retains the user admission while releasing superseded output on a successful retry', async () => {
-    const fixture = await createFixture(directory, 'retry-success');
-    const stream = await fixture.chat.sendMessageStream(
-      { message: [inlineMediaContent(INPUT_PNG, 'image/png')] },
-      'retry-success',
-    );
-
-    for await (const _event of stream) {
-      // Drain both attempts and the successful history commit.
-    }
-
-    const references = mediaReferences(fixture.chat.getHistory());
-    await Promise.all(
-      references.map((reference) => fixture.store.readVerified(reference)),
-    );
-    expect({
-      owners: await reservationOwnerCount(fixture.rootDirectory),
-      references: references.length,
-    }).toStrictEqual({ owners: 2, references: 2 });
-  });
-  it('releases admitted user and output media when a stream consumer cancels', async () => {
-    const fixture = await createFixture(directory, 'success');
-    const baselineOwners = await reservationOwnerCount(fixture.rootDirectory);
-    const stream = await fixture.chat.sendMessageStream(
-      { message: [inlineMediaContent(INPUT_PNG, 'image/png')] },
-      'stream-cancellation',
-    );
-
-    await stream.next();
-    await stream.return(undefined);
-
-    const owners = await reservationOwnerCount(fixture.rootDirectory);
-    const reclamation = await fixture.store.reclaimUnreferenced(
-      new Set(),
-      Date.now(),
-    );
-    expect({ owners, reclaimed: reclamation.objectsRemoved }).toStrictEqual({
-      owners: baselineOwners,
-      reclaimed: 2,
-    });
-  });
-
-  it('releases admitted user media when a stream is cancelled before consumption', async () => {
-    const fixture = await createFixture(directory, 'success');
-    const baselineOwners = await reservationOwnerCount(fixture.rootDirectory);
-    const stream = await fixture.chat.sendMessageStream(
-      { message: [inlineMediaContent(INPUT_PNG, 'image/png')] },
-      'stream-pre-consumption-cancellation',
-    );
-
-    await stream.return(undefined);
-
-    await assertReleasedToBaseline(fixture, baselineOwners);
-    expect(await reservationOwnerCount(fixture.rootDirectory)).toBe(0);
-  });
-
-  it('releases admitted user media when an unstarted stream receives a thrown cancellation', async () => {
-    const fixture = await createFixture(directory, 'success');
-    const stream = await fixture.chat.sendMessageStream(
-      { message: [inlineMediaContent(INPUT_PNG, 'image/png')] },
-      'stream-thrown-cancellation',
-    );
-
-    await expect(
-      stream.throw(new Error('caller cancelled stream')),
-    ).rejects.toThrow('caller cancelled stream');
-
-    const reclamation = await fixture.store.reclaimUnreferenced(
-      new Set(),
-      Date.now(),
-    );
-    expect({
-      owners: await reservationOwnerCount(fixture.rootDirectory),
-      reclaimed: reclamation.objectsRemoved,
-    }).toStrictEqual({ owners: 0, reclaimed: 1 });
-  });
-  it('releases admitted user and output media when a provider stream fails', async () => {
-    const fixture = await createFixture(directory, 'stream-failure');
-    const baselineOwners = await reservationOwnerCount(fixture.rootDirectory);
-
-    const stream = await fixture.chat.sendMessageStream(
-      { message: [inlineMediaContent(INPUT_PNG, 'image/png')] },
-      'stream-failure',
-    );
-    await expect(
-      (async () => {
-        for await (const _event of stream) {
-          // Drain until the provider failure crosses the real stream processor.
-        }
-      })(),
-    ).rejects.toThrow('provider stream failed');
-
-    const owners = await reservationOwnerCount(fixture.rootDirectory);
-    const reclamation = await fixture.store.reclaimUnreferenced(
-      new Set(),
-      Date.now(),
-    );
-    expect({ owners, reclaimed: reclamation.objectsRemoved }).toStrictEqual({
-      owners: baselineOwners,
-      reclaimed: 2,
-    });
-  });
-
-  it('releases admitted user media when semantic-purge persistence rejects', async () => {
-    const fixture = await createFixture(directory, 'success', {
-      purgeFailure: true,
-    });
-    await fixture.chat.setHistory([
-      inlineMediaContent(OUTPUT_JPEG, 'image/jpeg'),
-    ]);
-    const retainedIds = new Set(
-      mediaReferences(fixture.chat.getHistory()).map(
-        (block) => block.contentId,
-      ),
-    );
-    const baselineOwners = await reservationOwnerCount(fixture.rootDirectory);
-
-    await expect(
-      fixture.chat.sendMessage(
-        { message: [inlineMediaContent(INPUT_PNG, 'image/png')] },
-        'purge-failure',
-      ),
-    ).rejects.toThrow('semantic purge persistence failed');
-
-    await assertReleasedToBaseline(fixture, baselineOwners, retainedIds);
-    await fixture.recording?.dispose();
-  });
-
-  it('releases admitted user and output media when history commit rejects', async () => {
-    const fixture = await createFixture(directory, 'success');
-    fixture.chat.getHistoryService().on('contentBatchAdded', () => {
-      throw new Error('history commit rejected');
-    });
-    const baselineOwners = await reservationOwnerCount(fixture.rootDirectory);
-
-    await expect(
-      fixture.chat.sendMessage(
-        { message: [inlineMediaContent(INPUT_PNG, 'image/png')] },
-        'history-rejection',
-      ),
-    ).rejects.toThrow('history commit rejected');
-
-    const owners = await reservationOwnerCount(fixture.rootDirectory);
-    const reclamation = await fixture.store.reclaimUnreferenced(
-      new Set(),
-      Date.now(),
-    );
-    expect({
-      owners,
-      reclaimed: reclamation.objectsRemoved,
-      historyEntries: fixture.chat.getHistory().length,
-    }).toStrictEqual({
-      owners: baselineOwners,
-      reclaimed: 2,
-      historyEntries: 0,
-    });
-  });
-
-  it('rolls back streaming history before releasing rejected turn admissions', async () => {
-    const fixture = await createFixture(directory, 'success');
-    fixture.chat.getHistoryService().on('contentBatchAdded', () => {
-      throw new Error('stream history commit rejected');
-    });
-    const stream = await fixture.chat.sendMessageStream(
-      { message: [inlineMediaContent(INPUT_PNG, 'image/png')] },
-      'stream-history-rejection',
-    );
-
-    await expect(
-      (async () => {
-        for await (const _event of stream) {
-          // Drain through stream history finalization.
-        }
-      })(),
-    ).rejects.toThrow('stream history commit rejected');
-
-    const reclamation = await fixture.store.reclaimUnreferenced(
-      new Set(),
-      Date.now(),
-    );
-    expect({
-      owners: await reservationOwnerCount(fixture.rootDirectory),
-      reclaimed: reclamation.objectsRemoved,
-      historyEntries: fixture.chat.getHistory().length,
-    }).toStrictEqual({ owners: 0, reclaimed: 2, historyEntries: 0 });
-  });
-
-  it('transfers non-streaming user and output admissions once history commits', async () => {
-    const fixture = await createFixture(directory, 'success');
-
-    await fixture.chat.sendMessage(
-      { message: [inlineMediaContent(INPUT_PNG, 'image/png')] },
-
-      'non-stream-success',
-    );
-
-    const references = mediaReferences(fixture.chat.getHistory());
-    const resolved = await Promise.all(
-      references.map((reference) => fixture.store.readVerified(reference)),
-    );
-    const reclamation = await fixture.store.reclaimUnreferenced(
-      new Set(),
-      Date.now(),
-    );
-    expect({
-      owners: await reservationOwnerCount(fixture.rootDirectory),
-      references: references.length,
-      resolvedBytes: resolved.map((bytes) => bytes.byteLength),
-      reclaimed: reclamation.objectsRemoved,
-    }).toStrictEqual({
-      owners: 2,
-      references: 2,
-      resolvedBytes: [68, 287],
-      reclaimed: 0,
-    });
-  });
-
-  it('transfers streaming user and output admissions once final history commits', async () => {
-    const fixture = await createFixture(directory, 'success');
-    const stream = await fixture.chat.sendMessageStream(
-      { message: [inlineMediaContent(INPUT_PNG, 'image/png')] },
-      'stream-success',
-    );
-
-    for await (const _event of stream) {
-      // Drain through stream finalization and history commit.
-    }
-
-    const references = mediaReferences(fixture.chat.getHistory());
-    const resolved = await Promise.all(
-      references.map((reference) => fixture.store.readVerified(reference)),
-    );
-    const reclamation = await fixture.store.reclaimUnreferenced(
-      new Set(),
-      Date.now(),
-    );
-    expect({
-      owners: await reservationOwnerCount(fixture.rootDirectory),
-      references: references.length,
-      resolvedBytes: resolved.map((bytes) => bytes.byteLength),
-      reclaimed: reclamation.objectsRemoved,
-    }).toStrictEqual({
-      owners: 2,
-      references: 2,
-      resolvedBytes: [68, 287],
-      reclaimed: 0,
-    });
-  });
+  registerMediaCase0(() => directory);
+  registerMediaCase1(() => directory);
+  registerMediaCase2(() => directory);
+  registerMediaCase3(() => directory);
+  registerMediaCase4(() => directory);
+  registerMediaCase5(() => directory);
+  registerMediaCase6(() => directory);
+  registerMediaCase7(() => directory);
+  registerMediaCase8(() => directory);
+  registerMediaCase9(() => directory);
+  registerMediaCase10(() => directory);
+  registerMediaCase11(() => directory);
+  registerMediaCase12(() => directory);
+  registerMediaCase13(() => directory);
+  registerMediaCase14(() => directory);
 });

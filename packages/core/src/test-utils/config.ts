@@ -47,7 +47,11 @@ function createTestAgentChat(): AgentChatContract {
     sendMessage: async () => emptyModelOutput(),
     sendMessageStream: async () => emptyChatStream(),
     generateDirectMessage: async () => emptyModelOutput(),
-    getHistory: () => [],
+    getHistory: () => emptyChatStream(),
+    async *streamHistory(signal) {
+      signal?.throwIfAborted();
+      yield* [];
+    },
     setHistory: async () => {},
     clearHistory: () => {},
     getHistoryService: () => null,
@@ -66,7 +70,11 @@ export function createTestAgentClient(
     isInitialized: () => true,
     hasChatInitialized: () => true,
     getChat: () => chat,
-    getHistory: async () => [],
+    async *getHistory() {},
+    async *streamHistory(signal) {
+      signal?.throwIfAborted();
+      yield* overrides?.getHistory?.() ?? [];
+    },
     getHistoryService: () => null,
     storeHistoryServiceForReuse: () => {},
     storeHistoryForLaterUse: async () => {},
@@ -77,7 +85,11 @@ export function createTestAgentClient(
     addHistory: async () => {},
     resetChat: async () => {},
     resumeChat: async () => {},
+    discardDeferredHistory: async () => {},
     setHistory: async () => {},
+    setHistoryFromSource: async () => {
+      throw new Error('Streamed history requires a real agent client');
+    },
     restoreHistory: async () => {},
     addDirectoryContext: async () => {},
     getContentGenerator: () => undefined as never,

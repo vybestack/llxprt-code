@@ -7,10 +7,13 @@
 import type { ModelGenerationSettings } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { ProviderContentEnvelope } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { HistoryIndexedRows } from '@vybestack/llxprt-code-core/services/history/historyMutationSnapshot.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
-  invalidateResponsesStatefulChain,
-  type IContent,
-} from '@vybestack/llxprt-code-core/services/history/IContent.js';
+  publishProviderFallbackCandidate,
+  ProviderFallbackInvariantError,
+  type ProviderFallbackCandidate,
+} from './providerFallbackCandidate.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type {
   RuntimeProvider as IProvider,
@@ -20,7 +23,6 @@ import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import { getCompletionBudget } from './compressionBudgeting.js';
 import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
-import { buildProviderContent } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
 import { buildContextOverflowError } from './contextOverflowError.js';
 import {
   INEFFECTIVE_COMPRESSION_REDUCTION_THRESHOLD,
@@ -50,7 +52,7 @@ export interface ProviderContentEnforcementDeps {
   ) => Promise<PerformCompressionResult>;
   performFallbackCompression: (
     promptId: string,
-    applyResult: (newHistory: IContent[]) => Promise<void>,
+    applyResult: (candidate: ProviderFallbackCandidate) => Promise<void>,
     targetTokenCount?: number,
   ) => Promise<boolean>;
   getPromptTokenBaseline: () => number | null;
@@ -88,7 +90,7 @@ interface OverflowReductionResult {
 }
 
 interface FallbackStateSnapshot {
-  readonly history: IContent[];
+  readonly history: HistoryIndexedRows;
   readonly cacheAnchorSeq: number;
   readonly promptTokenBaseline: number | null;
 }
@@ -394,7 +396,7 @@ export class ProviderContentEnforcer {
     if (guard === undefined) {
       const limits = this.computeContextLimits(provider, model);
       const initialProjected = await this.estimateProviderProjection(
-        this.recomposeProviderContents(pendingContents),
+        await this.recomposeProviderContents(pendingContents),
         limits.completionBudget,
         model,
         'initial',
@@ -402,7 +404,7 @@ export class ProviderContentEnforcer {
       return { limits, initialProjected };
     }
     const initialProjected = await this.estimateProviderProjection(
-      this.recomposeProviderContents(pendingContents),
+      await this.recomposeProviderContents(pendingContents),
       0,
       model,
       'initial',
@@ -441,7 +443,7 @@ export class ProviderContentEnforcer {
             model,
           ),
         computeProjected: async (workingPending) => {
-          const recomposed = this.recomposeProviderContents([
+          const recomposed = await this.recomposeProviderContents([
             ...workingPending,
           ]);
           return this.estimateProviderProjection(
@@ -490,7 +492,8 @@ export class ProviderContentEnforcer {
   ): Promise<ProjectionResult> {
     await this.deps.ensureDensityOptimized();
     await this.deps.historyService.waitForTokenUpdates();
-    const optimizedContents = this.recomposeProviderContents(pendingContents);
+    const optimizedContents =
+      await this.recomposeProviderContents(pendingContents);
     const postOptProjected = await this.estimateProviderProjection(
       optimizedContents,
       completionBudget,
@@ -625,7 +628,7 @@ export class ProviderContentEnforcer {
       targetTokenCount,
     );
     await this.deps.historyService.waitForTokenUpdates();
-    const contents = this.recomposeProviderContents(pendingContents);
+    const contents = await this.recomposeProviderContents(pendingContents);
     const projected = await this.estimateProviderProjection(
       contents,
       completionBudget,
@@ -646,19 +649,11 @@ export class ProviderContentEnforcer {
     return result;
   }
 
-  private captureFallbackState(): FallbackStateSnapshot {
-    return {
-      history: [...this.deps.historyService.getRawHistory()],
-      cacheAnchorSeq: this.deps.historyService.getCacheAnchorSeq(),
-      promptTokenBaseline: this.deps.getPromptTokenBaseline(),
-    };
-  }
-
   private async restoreFallbackState(
     snapshot: FallbackStateSnapshot,
   ): Promise<void> {
-    await this.deps.historyService.replaceAll(
-      [...snapshot.history],
+    await this.deps.historyService.detachedValues.replace(
+      snapshot.history,
       this.deps.runtimeContext.state.model,
     );
     if (snapshot.cacheAnchorSeq === 0) {
@@ -697,16 +692,39 @@ export class ProviderContentEnforcer {
     truncationApplied: boolean;
     truncationFailure?: Error;
   }> {
-    const snapshot = this.captureFallbackState();
+    const cacheAnchorSeq = this.deps.historyService.getCacheAnchorSeq();
+    const promptTokenBaseline = this.deps.getPromptTokenBaseline();
+    return this.deps.historyService.detachedValues.withCheckpoint((history) =>
+      this.executeCapturedFallback(
+        { history, cacheAnchorSeq, promptTokenBaseline },
+        promptId,
+        targetTokenCount,
+      ),
+    );
+  }
+
+  private async executeCapturedFallback(
+    snapshot: FallbackStateSnapshot,
+    promptId: string,
+    targetTokenCount: number | undefined,
+  ): Promise<{
+    truncationApplied: boolean;
+    truncationFailure?: Error;
+  }> {
     let truncationFailure: Error | undefined;
     let fallbackSucceeded = false;
     const candidate = { installed: false, committed: false };
     try {
       fallbackSucceeded = await this.deps.performFallbackCompression(
         promptId,
-        async (newHistory) => {
-          await this.deps.historyService.replaceAll(
-            [...invalidateResponsesStatefulChain(newHistory)],
+        async (rows) => {
+          if (candidate.installed)
+            throw new ProviderFallbackInvariantError(
+              'Fallback candidate may only be installed once',
+            );
+          await publishProviderFallbackCandidate(
+            this.deps.historyService,
+            rows,
             this.deps.runtimeContext.state.model,
           );
           candidate.installed = true;
@@ -721,6 +739,10 @@ export class ProviderContentEnforcer {
           'Fallback compression rejected after installing candidate history',
         );
       }
+      if (fallbackSucceeded && !candidate.committed)
+        throw new ProviderFallbackInvariantError(
+          'Fallback compression succeeded without providing candidate history',
+        );
     } catch (fallbackError) {
       truncationFailure = candidate.installed
         ? await this.restoreRejectedFallback(snapshot, fallbackError)
@@ -731,12 +753,8 @@ export class ProviderContentEnforcer {
           '[CompressionHandler] Provider truncation fallback rejected during hard-limit enforcement',
         truncationFailure,
       );
-    }
-    if (fallbackSucceeded && !candidate.committed) {
-      this.deps.logger.warn(
-        () =>
-          '[CompressionHandler] Fallback compression succeeded without providing candidate history',
-      );
+      if (fallbackError instanceof ProviderFallbackInvariantError)
+        throw truncationFailure;
     }
     return {
       truncationApplied: fallbackSucceeded && candidate.committed,
@@ -781,7 +799,7 @@ export class ProviderContentEnforcer {
     stage: string,
     compressionFailure?: Error,
   ): Promise<ProjectionResult> {
-    const contents = this.recomposeProviderContents(pendingContents);
+    const contents = await this.recomposeProviderContents(pendingContents);
     const projected = await this.estimateProviderProjection(
       contents,
       completionBudget,
@@ -793,12 +811,16 @@ export class ProviderContentEnforcer {
       : { contents, projected, compressionFailure };
   }
 
-  private recomposeProviderContents(pendingContents: IContent[]): IContent[] {
-    return buildProviderContent(
-      this.deps.historyService.getCurated(),
+  private async recomposeProviderContents(
+    pendingContents: IContent[],
+  ): Promise<IContent[]> {
+    const contents: IContent[] = [];
+    for await (const row of this.deps.historyService.getCuratedForProviderStream(
       pendingContents,
-      this.deps.logger,
-    );
+    )) {
+      contents.push(row);
+    }
+    return contents;
   }
 
   private async estimateProviderProjection(

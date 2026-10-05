@@ -13,7 +13,14 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
-import * as compressionFactory from '../compressionStrategyFactory.js';
+import {
+  installSummaryTransport,
+  failDiskFallbackEstimation,
+  regressionHistory,
+  useCompressionClock,
+  advanceCompressionClock,
+} from './compression-regression-fixtures.js';
+
 import { createChatSessionRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import * as providerRuntime from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
@@ -33,13 +40,136 @@ void vi.mock('@vybestack/llxprt-code-core/utils/delay.js', () => ({
 // Phase 4: Failure tracking and cooldown
 // ---------------------------------------------------------------------------
 
-describe('ChatSession compression cooldown @plan PLAN-20260218-COMPRESSION-RETRY.P01', () => {
-  let runtimeSetup: ReturnType<typeof createChatSessionRuntime>;
-  let providerRuntimeSnapshot: ProviderRuntimeContext;
+let runtimeSetup: ReturnType<typeof createChatSessionRuntime>;
+let providerRuntimeSnapshot: ProviderRuntimeContext;
 
+const observeResetsFailureCountAfterSuccessfulCompression = async () => {
+  const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
+
+  let shouldFail = true;
+  let compressionAttempts = 0;
+
+  installSummaryTransport(runtimeSetup.provider, async () => {
+    compressionAttempts++;
+    if (shouldFail) throw makeHttpError(500);
+    return '<state_snapshot>summary</state_snapshot>';
+  });
+  failDiskFallbackEstimation(chat.getHistoryService(), () =>
+    shouldFail ? makeHttpError(500) : undefined,
+  );
+
+  // Cause 2 failures (not yet at cooldown threshold)
+  await chat.performCompression('test-prompt');
+  await chat.performCompression('test-prompt');
+
+  // Succeed once — should reset counter
+  shouldFail = false;
+  await chat.performCompression('test-prompt');
+  await chat['historyService'].replaceAll(regressionHistory('next turn'));
+
+  // Now fail again — need 3 more failures to reach cooldown
+  shouldFail = true;
+  const countBeforeNewFailures = compressionAttempts;
+
+  await chat.performCompression('test-prompt'); // failure 1
+  await chat.performCompression('test-prompt'); // failure 2
+  await chat.performCompression('test-prompt'); // failure 3 → cooldown
+
+  const countAtCooldown = compressionAttempts;
+
+  // 4th failure after reset should be skipped (cooldown active)
+  await chat.performCompression('test-prompt');
+
+  return { compressionAttempts, countAtCooldown, countBeforeNewFailures };
+};
+
+function registerCompressionCase0(): void {
+  describe('skips compression after 3 consecutive failures within cooldown period', () => {
+    /**
+     * @requirement REQ-CR-005
+     * After 3 failures within 60 seconds, compression is skipped
+     */
+    it('skips compression after 3 consecutive failures within cooldown period', async () => {
+      const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
+
+      let compressionAttempts = 0;
+      installSummaryTransport(runtimeSetup.provider, async () => {
+        compressionAttempts++;
+        throw makeHttpError(500);
+      });
+      failDiskFallbackEstimation(chat.getHistoryService(), () =>
+        makeHttpError(500),
+      );
+
+      // Force 3 compressions to trigger cooldown
+      await chat.performCompression('test-prompt'); // attempt 1 (fails)
+      await chat.performCompression('test-prompt'); // attempt 2 (fails)
+      await chat.performCompression('test-prompt'); // attempt 3 (fails)
+
+      const attemptsAfter3 = compressionAttempts;
+
+      // 4th call should be skipped due to cooldown
+      await chat.performCompression('test-prompt');
+      // Should not have increased the counter (skipped)
+      expect(compressionAttempts).toBe(attemptsAfter3);
+    });
+  });
+}
+
+function registerCompressionCase1(): void {
+  describe('cooldown expires after 60 seconds allowing compression to resume', () => {
+    /**
+     * @requirement REQ-CR-005
+     * Cooldown expires after 60 seconds
+     */
+    it('cooldown expires after 60 seconds allowing compression to resume', async () => {
+      const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
+
+      let compressionAttempts = 0;
+      installSummaryTransport(runtimeSetup.provider, async () => {
+        compressionAttempts++;
+        throw makeHttpError(500);
+      });
+      failDiskFallbackEstimation(chat.getHistoryService(), () =>
+        makeHttpError(500),
+      );
+
+      // Trigger 3 failures to enter cooldown
+      await chat.performCompression('test-prompt');
+      await chat.performCompression('test-prompt');
+      await chat.performCompression('test-prompt');
+
+      const countAfterCooldown = compressionAttempts;
+
+      // Advance time past cooldown period (60 seconds)
+      advanceCompressionClock(61000);
+
+      // Should attempt compression again after cooldown expires
+      await chat.performCompression('test-prompt');
+      expect(compressionAttempts).toBeGreaterThan(countAfterCooldown);
+    });
+  });
+}
+
+function registerCompressionCase2(): void {
+  describe('resets failure count after successful compression', () => {
+    /**
+     * @requirement REQ-CR-005
+     * Cooldown resets on successful compression
+     */
+    it('resets failure count after successful compression', async () => {
+      const { compressionAttempts, countAtCooldown, countBeforeNewFailures } =
+        await observeResetsFailureCountAfterSuccessfulCompression();
+      expect(compressionAttempts).toBe(countAtCooldown);
+      expect(compressionAttempts).toBeGreaterThan(countBeforeNewFailures);
+    });
+  });
+}
+
+describe('ChatSession compression cooldown @plan PLAN-20260218-COMPRESSION-RETRY.P01', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.useFakeTimers();
+    useCompressionClock();
     runtimeSetup = createChatSessionRuntime();
     providerRuntimeSnapshot = {
       ...runtimeSetup.runtime,
@@ -47,141 +177,11 @@ describe('ChatSession compression cooldown @plan PLAN-20260218-COMPRESSION-RETRY
     };
     providerRuntime.setActiveProviderRuntimeContext(providerRuntimeSnapshot);
   });
-
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
   });
-
-  /**
-   * @requirement REQ-CR-005
-   * After 3 failures within 60 seconds, compression is skipped
-   */
-  it('skips compression after 3 consecutive failures within cooldown period', async () => {
-    const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
-
-    let compressionAttempts = 0;
-    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
-      () => ({
-        name: 'middle-out' as const,
-        requiresLLM: true,
-        trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
-        compress: vi.fn().mockImplementation(async () => {
-          compressionAttempts++;
-          throw makeHttpError(500);
-        }),
-      }),
-    );
-
-    // Force 3 compressions to trigger cooldown
-    await chat.performCompression('test-prompt'); // attempt 1 (fails)
-    await chat.performCompression('test-prompt'); // attempt 2 (fails)
-    await chat.performCompression('test-prompt'); // attempt 3 (fails)
-
-    const attemptsAfter3 = compressionAttempts;
-
-    // 4th call should be skipped due to cooldown
-    await chat.performCompression('test-prompt');
-    // Should not have increased the counter (skipped)
-    expect(compressionAttempts).toBe(attemptsAfter3);
-  });
-
-  /**
-   * @requirement REQ-CR-005
-   * Cooldown expires after 60 seconds
-   */
-  it('cooldown expires after 60 seconds allowing compression to resume', async () => {
-    const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
-
-    let compressionAttempts = 0;
-    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
-      () => ({
-        name: 'middle-out' as const,
-        requiresLLM: true,
-        trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
-        compress: vi.fn().mockImplementation(async () => {
-          compressionAttempts++;
-          throw makeHttpError(500);
-        }),
-      }),
-    );
-
-    // Trigger 3 failures to enter cooldown
-    await chat.performCompression('test-prompt');
-    await chat.performCompression('test-prompt');
-    await chat.performCompression('test-prompt');
-
-    const countAfterCooldown = compressionAttempts;
-
-    // Advance time past cooldown period (60 seconds)
-    vi.advanceTimersByTime(61000);
-
-    // Should attempt compression again after cooldown expires
-    await chat.performCompression('test-prompt');
-    expect(compressionAttempts).toBeGreaterThan(countAfterCooldown);
-  });
-
-  /**
-   * @requirement REQ-CR-005
-   * Cooldown resets on successful compression
-   */
-  it('resets failure count after successful compression', async () => {
-    const { compressionAttempts, countAtCooldown, countBeforeNewFailures } =
-      await observeResetsFailureCountAfterSuccessfulCompression();
-    expect(compressionAttempts).toBe(countAtCooldown);
-    expect(compressionAttempts).toBeGreaterThan(countBeforeNewFailures);
-  });
-
-  const observeResetsFailureCountAfterSuccessfulCompression = async () => {
-    const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
-
-    let shouldFail = true;
-    let compressionAttempts = 0;
-
-    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
-      () => ({
-        name: 'middle-out' as const,
-        requiresLLM: true,
-        trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
-        compress: vi.fn().mockImplementation(async () => {
-          compressionAttempts++;
-          if (shouldFail) {
-            throw makeHttpError(500);
-          }
-          return {
-            newHistory: [],
-            metadata: {
-              originalMessageCount: 10,
-              compressedMessageCount: 5,
-              strategyUsed: 'middle-out' as const,
-              llmCallMade: true,
-            },
-          };
-        }),
-      }),
-    );
-
-    // Cause 2 failures (not yet at cooldown threshold)
-    await chat.performCompression('test-prompt');
-    await chat.performCompression('test-prompt');
-
-    // Succeed once — should reset counter
-    shouldFail = false;
-    await chat.performCompression('test-prompt');
-
-    // Now fail again — need 3 more failures to reach cooldown
-    shouldFail = true;
-    const countBeforeNewFailures = compressionAttempts;
-
-    await chat.performCompression('test-prompt'); // failure 1
-    await chat.performCompression('test-prompt'); // failure 2
-    await chat.performCompression('test-prompt'); // failure 3 → cooldown
-
-    const countAtCooldown = compressionAttempts;
-
-    // 4th failure after reset should be skipped (cooldown active)
-    await chat.performCompression('test-prompt');
-
-    return { compressionAttempts, countAtCooldown, countBeforeNewFailures };
-  };
+  registerCompressionCase0();
+  registerCompressionCase1();
+  registerCompressionCase2();
 });

@@ -240,6 +240,7 @@ function renderToolGroupMessage(
   return (
     <ToolGroupMessage
       toolCalls={itemForDisplay.tools}
+      toolPage={itemForDisplay.toolPage}
       groupId={itemForDisplay.id}
       agentId={itemForDisplay.agentId}
       availableTerminalHeight={availableTerminalHeight}

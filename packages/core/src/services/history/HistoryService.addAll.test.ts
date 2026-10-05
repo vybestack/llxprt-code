@@ -1,3 +1,4 @@
+import { collectRowsForAssertions } from '../../test-utils/collect-rows-for-assertions.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -14,6 +15,7 @@
  * iterates a snapshot.
  */
 
+import { collectRawHistory } from '../../test-utils/collect-raw-history.js';
 import { describe, it, expect } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
@@ -23,40 +25,45 @@ function makeEntry(text: string): IContent {
 }
 
 describe('HistoryService.addAll', () => {
-  it('terminates and doubles the history when fed its own backing array', () => {
+  it('terminates and doubles the history when fed its own backing array', async () => {
     const service = new HistoryService();
     service.addAll([makeEntry('one'), makeEntry('two')]);
 
-    service.addAll(service.getRawHistory());
+    service.addAll(await collectRawHistory(service));
 
-    const all = service.getAll();
-    expect(all).toHaveLength(4);
-    expect(all.map((entry) => entry.blocks[0])).toMatchObject([
-      { text: 'one' },
-      { text: 'two' },
-      { text: 'one' },
-      { text: 'two' },
-    ]);
+    await collectRowsForAssertions(service.streamRawHistory(), (all) => {
+      expect(all).toHaveLength(4);
+      expect(all.map((entry) => entry.blocks[0])).toMatchObject([
+        { text: 'one' },
+        { text: 'two' },
+        { text: 'one' },
+        { text: 'two' },
+      ]);
+    });
   });
 
-  it('appends every entry of an unrelated array in order', () => {
+  it('appends every entry of an unrelated array in order', async () => {
     const service = new HistoryService();
     service.addAll([makeEntry('first')]);
     service.addAll([makeEntry('second'), makeEntry('third')]);
 
-    expect(service.getAll().map((entry) => entry.blocks[0])).toMatchObject([
-      { text: 'first' },
-      { text: 'second' },
-      { text: 'third' },
-    ]);
+    await collectRowsForAssertions(service.streamRawHistory(), (all) => {
+      expect(all.map((entry) => entry.blocks[0])).toMatchObject([
+        { text: 'first' },
+        { text: 'second' },
+        { text: 'third' },
+      ]);
+    });
   });
 
-  it('is a no-op for an empty array', () => {
+  it('is a no-op for an empty array', async () => {
     const service = new HistoryService();
     service.addAll([makeEntry('only')]);
 
     service.addAll([]);
 
-    expect(service.getAll()).toHaveLength(1);
+    await collectRowsForAssertions(service.streamRawHistory(), (all) => {
+      expect(all).toHaveLength(1);
+    });
   });
 });

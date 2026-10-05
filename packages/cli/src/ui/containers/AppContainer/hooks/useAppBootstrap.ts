@@ -25,7 +25,7 @@ import {
 } from '../../../hooks/useHistoryManager.js';
 import { useMemoryMonitor } from '../../../hooks/useMemoryMonitor.js';
 import {
-  type IContent,
+  type ResumeCursorBoot,
   type IdeInfo,
   type MessageBus,
   type RecordingIntegration,
@@ -67,7 +67,7 @@ export interface AppBootstrapProps {
   agent: Agent;
   settings: LoadedSettings;
   startupWarnings?: string[];
-  resumedHistory?: IContent[];
+  resumedBoot?: Pick<ResumeCursorBoot, 'streamRows'>;
   version: string;
   runtimeMessageBus?: MessageBus;
   appState: AppState;
@@ -133,13 +133,13 @@ export interface AppBootstrapResult {
   nightly: boolean;
   runtimeMessageBus?: MessageBus;
   startupWarnings: string[];
-  resumedHistory?: IContent[];
+  resumedBoot?: Pick<ResumeCursorBoot, 'streamRows'>;
   recordingIntegration?: RecordingIntegration;
 }
 
 /** Initializes history, session, and IO primitives */
 function useBootstrapHistory(props: AppBootstrapProps) {
-  const { uiRuntime, agent, settings, resumedHistory } = props;
+  const { uiRuntime, agent, settings, resumedBoot } = props;
   const runtime = useRuntimeApi();
   const isFocused = useFocus();
   const { isNarrow } = useResponsive();
@@ -190,7 +190,7 @@ function useBootstrapHistory(props: AppBootstrapProps) {
     agent,
     addItem,
     loadHistory,
-    resumedHistory,
+    resumedBoot,
   });
   // Store mirrors: the context summary renders from the settings store.
   useEffect(() => {
@@ -324,7 +324,7 @@ export function useAppBootstrap(props: AppBootstrapProps): AppBootstrapResult {
     settings: props.settings,
     runtimeMessageBus: props.runtimeMessageBus,
     startupWarnings: props.startupWarnings ?? [],
-    resumedHistory: props.resumedHistory,
+    resumedBoot: props.resumedBoot,
     recordingIntegration: props.recordingIntegration,
     nightly: h.nightly,
     runtime: h.runtime,

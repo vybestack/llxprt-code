@@ -314,7 +314,7 @@ function appendLimitMessage(
   return contentPayload ? `${contentPayload}\n${limitMessage}` : limitMessage;
 }
 
-function buildAnthropicToolResultContent(
+export function buildAnthropicToolResultContent(
   contentPayload: string,
   mediaBlocks: MediaBlock[],
   supportsUrlImages: boolean,
@@ -508,7 +508,7 @@ function pushHumanMessageIfPresent(
   }
 }
 
-function convertContentToMessages(
+export function convertContentToMessages(
   contents: IContent[],
   redactedIndices: Set<number>,
   options: AnthropicMessageConversionOptions,
@@ -699,7 +699,7 @@ type AnthropicContentPart =
   | { type: 'thinking'; thinking: string; signature?: string }
   | { type: 'redacted_thinking'; data: string };
 
-function convertBlockToAnthropicPart(
+export function convertBlockToAnthropicPart(
   block: ContentBlock,
   contentIndex: number,
   shouldRedact: boolean,
@@ -797,6 +797,10 @@ function buildAIMessageContent(
 /**
  * Main exported function: Convert IContent[] to AnthropicMessage[]
  */
+export type AnthropicConversationConversionOptions = Parameters<
+  typeof convertToAnthropicMessages
+>[1];
+
 export function convertToAnthropicMessages(
   contents: IContent[],
   options: {

@@ -21,8 +21,11 @@
  * or Google-shaped internals. Asserts ONLY on observable outcomes.
  */
 
+import { observeHistorySynchronouslyForTest as testHistory } from '../../../../core/src/test-utils/synchronous-history-test-observation.js';
+import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-core/test-utils/collect-rows-for-assertions.js';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import * as fc from 'fast-check';
+import { makeRuntimeContext } from './helpers/structural-access-test-fixtures.js';
 import { ConversationManager } from '../ConversationManager.js';
 import {
   extractResponseTextFromBlocks,
@@ -37,38 +40,12 @@ import type {
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ModelOutput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
-import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { CompressionHandler } from '../../compression/CompressionHandler.js';
 
 // ---------------------------------------------------------------------------
 // Runtime context factory
 // ---------------------------------------------------------------------------
-
-function makeRuntimeContext(includeThoughts: boolean): AgentRuntimeContext {
-  const state = createAgentRuntimeState({
-    runtimeId: 'p14-test',
-    provider: 'test',
-    model: 'test-model',
-    sessionId: 'test-session',
-  });
-  return createAgentRuntimeContext({
-    state,
-    history: new HistoryService(),
-    settings: {
-      compressionThreshold: 0.8,
-      contextLimit: 128000,
-      preserveThreshold: 0.2,
-      telemetry: { enabled: true, target: null },
-      'reasoning.includeInContext': includeThoughts,
-    },
-    provider: {} as never,
-    telemetry: {} as never,
-    tools: {} as never,
-    providerRuntime: {} as never,
-  });
-}
 
 // ---------------------------------------------------------------------------
 // Helper: extract observable text from committed history
@@ -79,7 +56,7 @@ function humanText(text: string): IContent {
 }
 
 function getRecordedHistoryText(history: HistoryService): string {
-  const all = history.getAll();
+  const all = testHistory(history);
   return all
     .filter((c) => c.speaker === 'ai')
     .flatMap((c) => c.blocks)
@@ -91,8 +68,7 @@ function getRecordedHistoryText(history: HistoryService): string {
 function getRecordedThinkingBlocks(
   history: HistoryService,
 ): Array<{ thought: string; signature?: string }> {
-  return history
-    .getAll()
+  return testHistory(history)
     .filter((c) => c.speaker === 'ai')
     .flatMap((c) => c.blocks)
     .filter((b) => b.type === 'thinking')
@@ -254,9 +230,11 @@ describe('REQ-005.1: ConversationManager text consolidation + thought filtering'
       usage,
     );
 
-    const aiEntries = historyService.getAll().filter((c) => c.speaker === 'ai');
-    expect(aiEntries.length).toBeGreaterThan(0);
-    expect(aiEntries[0].metadata?.usage?.totalTokens).toBe(15);
+    await withRows(historyService.streamRawHistory(), (rows) => {
+      const aiEntries = rows.filter((c) => c.speaker === 'ai');
+      expect(aiEntries.length).toBeGreaterThan(0);
+      expect(aiEntries[0].metadata?.usage?.totalTokens).toBe(15);
+    });
   });
 });
 
@@ -754,11 +732,11 @@ describe('REQ-005.2: next_speaker fallback detection (property)', () => {
         { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
       );
 
-      const aiEntries = historyService
-        .getAll()
-        .filter((c) => c.speaker === 'ai');
-      expect(aiEntries.length).toBeGreaterThan(0);
-      expect(aiEntries[0].metadata?.usage?.totalTokens).toBe(15);
+      await withRows(historyService.streamRawHistory(), (rows) => {
+        const aiEntries = rows.filter((c) => c.speaker === 'ai');
+        expect(aiEntries.length).toBeGreaterThan(0);
+        expect(aiEntries[0].metadata?.usage?.totalTokens).toBe(15);
+      });
     });
 
     it('filters thinking blocks from history when includeThoughts=false', async () => {
@@ -836,20 +814,22 @@ describe('REQ-005.2: next_speaker fallback detection (property)', () => {
         acc,
       );
 
-      expect(
-        historyService.getAll().map((content) => ({
-          speaker: content.speaker,
-          text: content.blocks
-            .filter((block) => block.type === 'text')
-            .map((block) => block.text)
-            .join(''),
-        })),
-      ).toStrictEqual([
-        { speaker: 'human', text: 'prior' },
-        { speaker: 'human', text: 'current' },
-        { speaker: 'ai', text: 'intermediate' },
-        { speaker: 'ai', text: 'final' },
-      ]);
+      await withRows(historyService.streamRawHistory(), (rows) => {
+        expect(
+          rows.map((content) => ({
+            speaker: content.speaker,
+            text: content.blocks
+              .filter((block) => block.type === 'text')
+              .map((block) => block.text)
+              .join(''),
+          })),
+        ).toStrictEqual([
+          { speaker: 'human', text: 'prior' },
+          { speaker: 'human', text: 'current' },
+          { speaker: 'ai', text: 'intermediate' },
+          { speaker: 'ai', text: 'final' },
+        ]);
+      });
     });
 
     it('does not replay an existing prefix from full AFC history', async () => {
@@ -903,20 +883,22 @@ describe('REQ-005.2: next_speaker fallback detection (property)', () => {
         },
       );
 
-      expect(
-        historyService.getAll().map((content) =>
-          content.blocks
-            .filter((block) => block.type === 'text')
-            .map((block) => block.text)
-            .join(''),
-        ),
-      ).toStrictEqual([
-        'prior question',
-        'prior answer',
-        'current question',
-        'intermediate',
-        'final answer',
-      ]);
+      await withRows(historyService.streamRawHistory(), (rows) => {
+        expect(
+          rows.map((content) =>
+            content.blocks
+              .filter((block) => block.type === 'text')
+              .map((block) => block.text)
+              .join(''),
+          ),
+        ).toStrictEqual([
+          'prior question',
+          'prior answer',
+          'current question',
+          'intermediate',
+          'final answer',
+        ]);
+      });
     });
   });
 

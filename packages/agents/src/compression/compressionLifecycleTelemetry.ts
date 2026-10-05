@@ -9,7 +9,6 @@ import type { HistoryService } from '@vybestack/llxprt-code-core/services/histor
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { CompressionProviderResult } from '@vybestack/llxprt-code-core/core/compression/types.js';
-import { findCurrentTurnMarker } from '@vybestack/llxprt-code-core/services/history/historyChronology.js';
 
 /**
  * Resolves the compression model and provider from the provider-resolver
@@ -90,7 +89,7 @@ export async function emitCompressionLifecycleEvent(
   if (!logger.isEnabled()) return;
 
   const sessionId = runtimeCtx.state.sessionId;
-  const turnMarker = findCurrentTurnMarker(history.getRawHistory());
+  const turnMarker = await history.getCurrentTurnMarker();
   const turnId = turnMarker?.turnId ?? null;
 
   const compressionProfileName = runtimeCtx.ephemerals.compressionProfile();

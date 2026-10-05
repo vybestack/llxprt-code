@@ -1,3 +1,4 @@
+/// <reference lib="esnext.array" />
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -10,8 +11,17 @@
  * closely on its structure: same vi.mock preamble, same setupAgentClient helper.
  */
 
+import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-core/test-utils/collect-rows-for-assertions.js';
 import { automock } from '@vybestack/llxprt-code-test-utils';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  afterAll,
+} from 'bun:test';
 import { AgentClient } from './client.js';
 import type { ChatSession } from './chatSession.js';
 import { AgentEventType } from './turn.js';
@@ -25,6 +35,9 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 
 const realConfigModule = {
   ...(await import('@vybestack/llxprt-code-core/config/config.js')),
+};
+const realRetryModule = {
+  ...(await import('@vybestack/llxprt-code-core/utils/retry.js')),
 };
 
 const REJECTION_400_MESSAGE =
@@ -41,6 +54,9 @@ void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
 }));
 
 // Mock clientToolGovernance module so tests can control tool name/governance returns
+const realClientToolGovernance = {
+  ...(await import('./clientToolGovernance.js')),
+};
 void vi.mock('./clientToolGovernance.js', () => ({
   getToolGovernanceEphemerals: vi.fn(() => undefined),
   readToolList: vi.fn((v: unknown) =>
@@ -106,6 +122,11 @@ void vi.mock(
   }),
 );
 
+const realTodoReminderModule = {
+  ...(await import(
+    '@vybestack/llxprt-code-core/services/todo-reminder-service.js'
+  )),
+};
 void vi.mock(
   '@vybestack/llxprt-code-core/services/todo-reminder-service.js',
   () => ({
@@ -215,41 +236,10 @@ function makeChatMock(): Partial<ChatSession> {
   };
 }
 
-describe('Agent Client (client.ts)', () => {
-  let client: AgentClient;
+let client: AgentClient;
 
-  beforeEach(async () => {
-    const ctx = await setupAgentClient({
-      mockChatCreateFn,
-      mockGenerateContentFn,
-      mockEmbedContentFn,
-    });
-    client = ctx.client;
-
-    mockTodoStoreConstructor.mockImplementation(() => ({
-      readTodos: todoStoreReadMock,
-      readPausedState: todoStoreReadPausedMock,
-      writePausedState: todoStoreWritePausedMock,
-    }));
-    todoStoreReadMock.mockResolvedValue([]);
-    todoStoreReadPausedMock.mockResolvedValue(false);
-    todoStoreWritePausedMock.mockResolvedValue(undefined);
-  });
-
-  afterEach(async () => {
-    await client.dispose();
-    vi.restoreAllMocks();
-  });
-
+function registerRecoveryCase1(): void {
   describe('sendMessageStream — tool-content 400 recovery', () => {
-    beforeEach(() => {
-      (
-        client as unknown as {
-          todoContinuationService: { todoToolsAvailable: boolean };
-        }
-      ).todoContinuationService.todoToolsAvailable = true;
-    });
-
     it('AC1/AC4: injects an advice message and re-issues after a tool-content 400', async () => {
       const { events, secondRequest, adviceText } =
         await observeAC1AC4InjectsAnAdviceMessageAndReIssuesAfterATool();
@@ -285,75 +275,73 @@ describe('Agent Client (client.ts)', () => {
       );
       expect(adviceText).toContain('read it as text');
     });
+  });
+}
 
-    const observeAC1AC4InjectsAnAdviceMessageAndReIssuesAfterATool =
-      async () => {
-        vi.spyOn(
-          client['config'],
-          'getContinueOnFailedApiCall',
-        ).mockReturnValue(true);
-        const mockStream1 = (async function* () {
-          yield {
-            type: AgentEventType.Error,
-            value: {
-              error: { message: REJECTION_400_MESSAGE, status: 400 },
-            },
-          };
-        })();
-        const mockStream2 = (async function* () {
-          yield { type: AgentEventType.Content, value: 'Retried content' };
-        })();
+const observeAC1AC4InjectsAnAdviceMessageAndReIssuesAfterATool = async () => {
+  vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(
+    true,
+  );
+  const mockStream1 = (async function* () {
+    yield {
+      type: AgentEventType.Error,
+      value: {
+        error: { message: REJECTION_400_MESSAGE, status: 400 },
+      },
+    };
+  })();
+  const mockStream2 = (async function* () {
+    yield { type: AgentEventType.Content, value: 'Retried content' };
+  })();
 
-        mockTurnRunFn
-          .mockReturnValueOnce(mockStream1)
-          .mockReturnValueOnce(mockStream2);
+  mockTurnRunFn
+    .mockReturnValueOnce(mockStream1)
+    .mockReturnValueOnce(mockStream2);
 
-        client['chat'] = makeChatMock() as ChatSession;
+  client['chat'] = makeChatMock() as ChatSession;
 
-        const initialRequest = [
-          { type: 'text', text: 'Show me the shader file' },
-          {
-            type: 'tool_response',
-            callId: 'read_file',
-            toolName: 'read_file',
-            result: { content: 'binary blob' },
-          },
-          {
-            type: 'media',
-            mimeType: 'image/png',
-            data: 'AAA',
-            encoding: 'base64',
-            filename: 'shader.fh',
-          },
-        ];
-        const signal = new AbortController().signal;
+  const initialRequest = [
+    { type: 'text', text: 'Show me the shader file' },
+    {
+      type: 'tool_response',
+      callId: 'read_file',
+      toolName: 'read_file',
+      result: { content: 'binary blob' },
+    },
+    {
+      type: 'media',
+      mimeType: 'image/png',
+      data: 'AAA',
+      encoding: 'base64',
+      filename: 'shader.fh',
+    },
+  ];
+  const signal = new AbortController().signal;
 
-        const events = await fromAsync(
-          client.sendMessageStream(
-            initialRequest,
-            signal,
-            'prompt-id-400-retry',
-          ),
-        );
+  const events = await fromAsync(
+    client.sendMessageStream(initialRequest, signal, 'prompt-id-400-retry'),
+  );
 
-        // The error event is still emitted before recovery.
+  // The error event is still emitted before recovery.
 
-        // turn.run is called twice: the failing attempt then the recovery.
+  // turn.run is called twice: the failing attempt then the recovery.
 
-        const secondCallArgs = mockTurnRunFn.mock.calls[1];
-        const secondRequest = secondCallArgs[0];
+  const secondCallArgs = mockTurnRunFn.mock.calls[1];
+  const secondRequest = secondCallArgs[0];
 
-        const adviceText =
-          (
-            secondRequest as unknown as Array<{
-              blocks: Array<{ text: string }>;
-            }>
-          )[0]?.blocks[0]?.text ?? '';
-        // The advice names the tool, the rejected media, and the alternative.
+  const adviceText =
+    (
+      secondRequest as unknown as Array<{
+        blocks: Array<{ text: string }>;
+      }>
+    )[0]?.blocks[0]?.text ?? '';
+  // The advice names the tool, the rejected media, and the alternative.
 
-        return { events, secondRequest, adviceText };
-      };
+  return { events, secondRequest, adviceText };
+};
 
+function registerRecoveryCase2(): void {
+  describe('sendMessageStream — tool-content 400 recovery — unrelated 400', () => {
     it('AC2: a non-content 400 is not recovered (turn.run called once)', async () => {
       vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(
         true,
@@ -402,7 +390,11 @@ describe('Agent Client (client.ts)', () => {
       ]);
       expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
     });
+  });
+}
 
+function registerRecoveryCase3(): void {
+  describe('sendMessageStream — tool-content 400 recovery — one retry', () => {
     it('AC5: stops after one recovery when the tool-content 400 repeats', async () => {
       const {
         events,
@@ -470,7 +462,11 @@ describe('Agent Client (client.ts)', () => {
           aC5StopsAfterOneRecoveryWhenTheToolContent400RepeatsObservation2,
         };
       };
+  });
+}
 
+function registerRecoveryCase4(): void {
+  describe('sendMessageStream — tool-content 400 recovery — tool-evidence gate', () => {
     it('AC1 gate: a content-rejection 400 whose request carried no tool evidence is not recovered', async () => {
       vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(
         true,
@@ -503,7 +499,11 @@ describe('Agent Client (client.ts)', () => {
         events.filter((e) => e.type === AgentEventType.Error),
       ).toHaveLength(1);
     });
+  });
+}
 
+function registerRecoveryCase5(): void {
+  describe('sendMessageStream — tool-content 400 recovery — disabled continuation', () => {
     it('AC6a: does not recover when getContinueOnFailedApiCall is false', async () => {
       vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(
         false,
@@ -546,7 +546,11 @@ describe('Agent Client (client.ts)', () => {
       ]);
       expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
     });
+  });
+}
 
+function registerRecoveryCase6(): void {
+  describe('sendMessageStream — tool-content 400 recovery — prior content', () => {
     it('AC6b: does not recover when content was already emitted before the 400', async () => {
       vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(
         true,
@@ -583,6 +587,68 @@ describe('Agent Client (client.ts)', () => {
       expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
     });
   });
+}
+
+describe('Agent Client (client.ts)', () => {
+  afterAll(() => {
+    void vi.mock('./clientToolGovernance.js', () => realClientToolGovernance);
+    void vi.mock('@vybestack/llxprt-code-tools', () => actual);
+    void vi.mock(
+      '@vybestack/llxprt-code-core/services/todo-reminder-service.js',
+      () => realTodoReminderModule,
+    );
+    void vi.mock('./turn', () => __actual);
+    void vi.mock(
+      '@vybestack/llxprt-code-core/config/config.js',
+      () => realConfigModule,
+    );
+    void vi.mock(
+      '@vybestack/llxprt-code-core/core/tokenLimits.js',
+      () => actual4,
+    );
+    void vi.mock(
+      '@vybestack/llxprt-code-core/utils/retry.js',
+      () => realRetryModule,
+    );
+  });
+
+  beforeEach(async () => {
+    const ctx = await setupAgentClient({
+      mockChatCreateFn,
+      mockGenerateContentFn,
+      mockEmbedContentFn,
+    });
+    client = ctx.client;
+
+    mockTodoStoreConstructor.mockImplementation(() => ({
+      readTodos: todoStoreReadMock,
+      readPausedState: todoStoreReadPausedMock,
+      writePausedState: todoStoreWritePausedMock,
+    }));
+    todoStoreReadMock.mockResolvedValue([]);
+    todoStoreReadPausedMock.mockResolvedValue(false);
+    todoStoreWritePausedMock.mockResolvedValue(undefined);
+  });
+
+  afterEach(async () => {
+    await client.dispose();
+    vi.restoreAllMocks();
+  });
+
+  beforeEach(() => {
+    (
+      client as unknown as {
+        todoContinuationService: { todoToolsAvailable: boolean };
+      }
+    ).todoContinuationService.todoToolsAvailable = true;
+  });
+
+  registerRecoveryCase1();
+  registerRecoveryCase2();
+  registerRecoveryCase3();
+  registerRecoveryCase4();
+  registerRecoveryCase5();
+  registerRecoveryCase6();
 });
 
 /**
@@ -594,7 +660,7 @@ describe('Agent Client (client.ts)', () => {
  * real HistoryService (no mocks).
  */
 describe('tool-content 400 recovery — history assumption (issue #2722)', () => {
-  it('orphaned tool calls are closed before the provider sees the recovery request (issue #2722)', () => {
+  it('orphaned tool calls are closed before the provider sees the recovery request (issue #2722)', async () => {
     const {
       aiIndex,
       humanIndex,
@@ -602,18 +668,20 @@ describe('tool-content 400 recovery — history assumption (issue #2722)', () =>
       speakerObservation,
       orphanedToolCallsAreClosedBeforeTheProviderSeesTheRecoveryRequestObservation2,
     } =
-      observeOrphanedToolCallsAreClosedBeforeTheProviderSeesTheRecoveryRequest();
+      await observeOrphanedToolCallsAreClosedBeforeTheProviderSeesTheRecoveryRequest();
     expect(aiIndex).toBeGreaterThanOrEqual(0);
     expect(speakerObservation).toBe('tool');
     expect(
       orphanedToolCallsAreClosedBeforeTheProviderSeesTheRecoveryRequestObservation2,
     ).toBe(true);
     expect(humanIndex).toBeGreaterThan(aiIndex + 1);
-    expect(history.getAll()).toHaveLength(1);
+    await withRows(history.streamRawHistory(), (rows) => {
+      expect(rows).toHaveLength(1);
+    });
   });
 
   const observeOrphanedToolCallsAreClosedBeforeTheProviderSeesTheRecoveryRequest =
-    () => {
+    async () => {
       const history = new HistoryService();
       // Seed: an AI turn issued a tool_call whose response was rejected by the
       // provider (HTTP 400), so no tool_response was ever recorded for it.
@@ -643,7 +711,9 @@ describe('tool-content 400 recovery — history assumption (issue #2722)', () =>
         },
       ];
 
-      const curated = history.getCuratedForProvider(tailContents);
+      const curated = await Array.fromAsync(
+        history.getCuratedForProviderStream(tailContents),
+      );
 
       const aiIndex = curated.findIndex(
         (c) =>

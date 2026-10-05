@@ -23,6 +23,7 @@
  */
 
 import { afterEach, describe, expect, it } from 'bun:test';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   clearActiveProviderRuntimeContext,
@@ -31,14 +32,24 @@ import {
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import {
+  createProviderCallOptions,
+  type ProviderCallOptionsInit,
+} from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { GenerateChatOptions } from '../IProvider.js';
 import { OpenAIResponsesProvider } from '../openai-responses/OpenAIResponsesProvider.js';
 import { withRequestSignal } from '../utils/abortSignal.js';
 
 const originalFetch = globalThis.fetch;
 
 const ROW_COUNT = 40;
+
+function streamCallOptions(
+  init: ProviderCallOptionsInit & { contents: AsyncIterable<IContent> },
+): GenerateChatOptions {
+  return { ...createProviderCallOptions(init), contents: init.contents };
+}
 
 interface CountingSource {
   readonly stream: AsyncIterable<IContent>;
@@ -120,16 +131,32 @@ async function waitFor(
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (condition()) return true;
-    await Bun.sleep(5);
+    await sleep(5);
   }
   return condition();
 }
 
+function countRetainedAfterGc(probes: ReadonlyArray<WeakRef<object>>): number {
+  const bun: unknown = Reflect.get(globalThis, 'Bun');
+  if (
+    typeof bun !== 'object' ||
+    bun === null ||
+    !('gc' in bun) ||
+    typeof bun.gc !== 'function'
+  ) {
+    throw new Error('Bun.gc is required for the weak-reference probe');
+  }
+  bun.gc(true);
+  return probes.filter((probe) => probe.deref() !== undefined).length;
+}
+
+function cleanup(): void {
+  clearActiveProviderRuntimeContext();
+  globalThis.fetch = originalFetch;
+}
+
 describe('P05b4 transport backpressure and cancellation @plan:PLAN-20260917-ISSUE854.P05b4', () => {
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-    globalThis.fetch = originalFetch;
-  });
+  afterEach(cleanup);
 
   it('stream pull pauses while the transport is slow (source not fully drained before transport consumes)', async () => {
     const harness = makeHarness('p05b4-backpressure');
@@ -150,7 +177,7 @@ describe('P05b4 transport backpressure and cancellation @plan:PLAN-20260917-ISSU
       providerName: 'openai-responses',
       ephemeralsSnapshot: { 'prompt-caching': 'off' },
     });
-    const options = createProviderCallOptions({
+    const options = streamCallOptions({
       providerName: 'openai-responses',
       settings: harness.settings,
       config: harness.runtime.config,
@@ -178,6 +205,10 @@ describe('P05b4 transport backpressure and cancellation @plan:PLAN-20260917-ISSU
     releaseGate?.();
     await drained;
   });
+});
+
+describe('P05b4 aborted transport and released rows @plan:PLAN-20260917-ISSUE854.P05b4', () => {
+  afterEach(cleanup);
 
   it('abort during a blocked transport surfaces the abort and does not leak the materialized rows', async () => {
     const harness = makeHarness('p05b4-abort');
@@ -214,7 +245,7 @@ describe('P05b4 transport backpressure and cancellation @plan:PLAN-20260917-ISSU
       providerName: 'openai-responses',
       ephemeralsSnapshot: { 'prompt-caching': 'off' },
     });
-    const baseOptions = createProviderCallOptions({
+    const baseOptions = streamCallOptions({
       providerName: 'openai-responses',
       settings: harness.settings,
       config: harness.runtime.config,
@@ -247,9 +278,7 @@ describe('P05b4 transport backpressure and cancellation @plan:PLAN-20260917-ISSU
     // TARGET CONTRACT: an aborted request must not have consumed the whole
     // history stream, and the pulled rows must be collectible after GC.
     expect(source.fullyDrained()).toBe(false);
-    await Bun.sleep(10);
-    Bun.gc(true);
-    const retained = probes.filter((probe) => probe.deref() !== undefined);
-    expect(retained.length).toBe(0);
+    await sleep(10);
+    expect(countRetainedAfterGc(probes)).toBe(0);
   });
 });

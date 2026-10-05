@@ -14,10 +14,16 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import { collectRowsForAssertions } from '../../../../core/src/test-utils/collect-rows-for-assertions.js';
 import { CompressionExecutionError } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { PerformCompressionResult } from '../../core/turn.js';
-import * as compressionFactory from '../compressionStrategyFactory.js';
+import {
+  installSummaryTransport,
+  failDiskFallbackEstimation,
+  observeDiskFallback,
+} from './compression-regression-fixtures.js';
+
 import { ChatSession } from '../../core/chatSession.js';
 import { createChatSessionRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import * as providerRuntime from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
@@ -27,7 +33,7 @@ import {
   makeAnthropicOverloadError,
   makeAnthropicSdkWrappedError,
   makeChatSession,
-  mockStrategyFactoryWithEmptySummaryFallback,
+  installEmptySummaryDiskFailure,
 } from './compression-retry-helpers.js';
 
 // Mock the delay utility so retryWithBackoff doesn't actually wait in tests
@@ -43,6 +49,18 @@ void vi.mock('@vybestack/llxprt-code-core/utils/delay.js', () => ({
 // ---- Shared setup/assertion helpers for the Issue #2333 fallback tests ----
 
 let restoreStrategyFactory: (() => void) | undefined;
+let runtimeSetup: ReturnType<typeof createChatSessionRuntime>;
+let providerRuntimeSnapshot: ProviderRuntimeContext;
+
+function setupCompressionRuntime(): void {
+  vi.clearAllMocks();
+  runtimeSetup = createChatSessionRuntime();
+  providerRuntimeSnapshot = {
+    ...runtimeSetup.runtime,
+    config: runtimeSetup.config,
+  };
+  providerRuntime.setActiveProviderRuntimeContext(providerRuntimeSnapshot);
+}
 
 interface EmptySummaryFallbackSetup {
   chat: ChatSession;
@@ -68,9 +86,11 @@ function setupEmptySummaryFallback(
   providerRuntimeSnapshot: ProviderRuntimeContext,
 ): EmptySummaryFallbackSetup {
   const { getFallbackCalled, getPrimaryCallCount, restore } =
-    mockStrategyFactoryWithEmptySummaryFallback();
+    installEmptySummaryDiskFailure(runtimeSetup.provider);
 
-  const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
+  const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot, [
+    { speaker: 'human', blocks: [{ type: 'text', text: 'retained request' }] },
+  ]);
   const historyService = chat.getHistoryService();
 
   return {
@@ -87,22 +107,26 @@ function setupEmptySummaryFallback(
  * fallback was used, the primary strategy ran once, and the fallback result
  * replaced the session history.
  */
-function expectEmptySummaryFallbackApplied({
+async function expectEmptySummaryFallbackApplied({
   historyService,
   getFallbackCalled,
   getPrimaryCallCount,
-}: EmptySummaryFallbackAssertions): void {
+}: EmptySummaryFallbackAssertions): Promise<void> {
   expect(getFallbackCalled()).toBe(true);
   expect(getPrimaryCallCount()).toBe(1);
 
-  const history = historyService.getAll();
-  expect(history).toHaveLength(1);
-  const [content] = history;
-  expect(content.speaker).toBe('human');
-  expect(content.blocks).toHaveLength(1);
-  const [block] = content.blocks;
-  expect(block.type).toBe('text');
-  expect(block.type === 'text' ? block.text.length : 0).toBeGreaterThan(0);
+  await collectRowsForAssertions(
+    historyService.getComprehensive(),
+    async (history) => {
+      expect(history).toHaveLength(1);
+      const [content] = history;
+      expect(content.speaker).toBe('human');
+      expect(content.blocks).toHaveLength(1);
+      const [block] = content.blocks;
+      expect(block.type).toBe('text');
+      expect(block.type === 'text' ? block.text.length : 0).toBeGreaterThan(0);
+    },
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -110,18 +134,7 @@ function expectEmptySummaryFallbackApplied({
 // ---------------------------------------------------------------------------
 
 describe('ChatSession compression retry behavior @plan PLAN-20260218-COMPRESSION-RETRY.P01', () => {
-  let runtimeSetup: ReturnType<typeof createChatSessionRuntime>;
-  let providerRuntimeSnapshot: ProviderRuntimeContext;
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    runtimeSetup = createChatSessionRuntime();
-    providerRuntimeSnapshot = {
-      ...runtimeSetup.runtime,
-      config: runtimeSetup.config,
-    };
-    providerRuntime.setActiveProviderRuntimeContext(providerRuntimeSnapshot);
-  });
+  beforeEach(setupCompressionRuntime);
 
   afterEach(() => {
     vi.restoreAllMocks();
@@ -141,28 +154,11 @@ describe('ChatSession compression retry behavior @plan PLAN-20260218-COMPRESSION
     const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
 
     let callCount = 0;
-    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
-      () => ({
-        name: 'middle-out' as const,
-        requiresLLM: true,
-        trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
-        compress: vi.fn().mockImplementation(async () => {
-          callCount++;
-          if (callCount < 3) {
-            throw makeHttpError(503);
-          }
-          return {
-            newHistory: [],
-            metadata: {
-              originalMessageCount: 10,
-              compressedMessageCount: 5,
-              strategyUsed: 'middle-out' as const,
-              llmCallMade: true,
-            },
-          };
-        }),
-      }),
-    );
+    installSummaryTransport(runtimeSetup.provider, async () => {
+      callCount++;
+      if (callCount < 3) throw makeHttpError(503);
+      return '<state_snapshot>summary</state_snapshot>';
+    });
 
     await chat.performCompression('test-prompt');
 
@@ -185,28 +181,11 @@ describe('ChatSession compression retry behavior @plan PLAN-20260218-COMPRESSION
       const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
 
       let callCount = 0;
-      vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
-        () => ({
-          name: 'middle-out' as const,
-          requiresLLM: true,
-          trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
-          compress: vi.fn().mockImplementation(async () => {
-            callCount++;
-            if (callCount < 3) {
-              throw makeAnthropicOverloadError('overloaded_error');
-            }
-            return {
-              newHistory: [],
-              metadata: {
-                originalMessageCount: 10,
-                compressedMessageCount: 5,
-                strategyUsed: 'middle-out' as const,
-                llmCallMade: true,
-              },
-            };
-          }),
-        }),
-      );
+      installSummaryTransport(runtimeSetup.provider, async () => {
+        callCount++;
+        if (callCount < 3) throw makeAnthropicOverloadError('overloaded_error');
+        return '<state_snapshot>summary</state_snapshot>';
+      });
 
       await chat.performCompression('test-prompt');
 
@@ -231,31 +210,15 @@ describe('ChatSession compression retry behavior @plan PLAN-20260218-COMPRESSION
       const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
 
       let callCount = 0;
-      vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
-        () => ({
-          name: 'middle-out' as const,
-          requiresLLM: true,
-          trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
-          compress: vi.fn().mockImplementation(async () => {
-            callCount++;
-            if (callCount < 3) {
-              throw makeAnthropicSdkWrappedError(
-                'api_error',
-                'Internal server error',
-              );
-            }
-            return {
-              newHistory: [],
-              metadata: {
-                originalMessageCount: 10,
-                compressedMessageCount: 5,
-                strategyUsed: 'middle-out' as const,
-                llmCallMade: true,
-              },
-            };
-          }),
-        }),
-      );
+      installSummaryTransport(runtimeSetup.provider, async () => {
+        callCount++;
+        if (callCount < 3)
+          throw makeAnthropicSdkWrappedError(
+            'api_error',
+            'Internal server error',
+          );
+        return '<state_snapshot>summary</state_snapshot>';
+      });
 
       await chat.performCompression('test-prompt');
 
@@ -270,20 +233,10 @@ describe('ChatSession compression retry behavior @plan PLAN-20260218-COMPRESSION
     const chat = makeChatSession(runtimeSetup, providerRuntimeSnapshot);
 
     let callCount = 0;
-    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
-      () => ({
-        name: 'middle-out' as const,
-        requiresLLM: true,
-        trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
-        compress: vi.fn().mockImplementation(async () => {
-          callCount++;
-          throw new CompressionExecutionError(
-            'middle-out',
-            'permanent failure',
-          );
-        }),
-      }),
-    );
+    installSummaryTransport(runtimeSetup.provider, async () => {
+      callCount++;
+      throw new CompressionExecutionError('middle-out', 'permanent failure');
+    });
 
     await expect(chat.performCompression('test-prompt')).rejects.toThrow(
       CompressionExecutionError,
@@ -297,18 +250,7 @@ describe('ChatSession compression retry behavior @plan PLAN-20260218-COMPRESSION
 // ---------------------------------------------------------------------------
 
 describe('ChatSession compression fallback @plan PLAN-20260218-COMPRESSION-RETRY.P01', () => {
-  let runtimeSetup: ReturnType<typeof createChatSessionRuntime>;
-  let providerRuntimeSnapshot: ProviderRuntimeContext;
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    runtimeSetup = createChatSessionRuntime();
-    providerRuntimeSnapshot = {
-      ...runtimeSetup.runtime,
-      config: runtimeSetup.config,
-    };
-    providerRuntime.setActiveProviderRuntimeContext(providerRuntimeSnapshot);
-  });
+  beforeEach(setupCompressionRuntime);
 
   afterEach(() => {
     restoreStrategyFactory?.();
@@ -334,40 +276,16 @@ describe('ChatSession compression fallback @plan PLAN-20260218-COMPRESSION-RETRY
       let fallbackCalled = false;
       let primaryCallCount = 0;
 
-      vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
-        (name) => {
-          if (name === 'top-down-truncation') {
-            fallbackCalled = true;
-            return {
-              name: 'top-down-truncation' as const,
-              requiresLLM: false,
-              trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
-              compress: vi.fn().mockResolvedValue({
-                newHistory: [],
-                metadata: {
-                  originalMessageCount: 10,
-                  compressedMessageCount: 5,
-                  strategyUsed: 'top-down-truncation' as const,
-                  llmCallMade: false,
-                },
-              }),
-            };
-          }
-          return {
-            name: 'middle-out' as const,
-            requiresLLM: true,
-            trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
-            compress: vi.fn().mockImplementation(async () => {
-              primaryCallCount++;
-              throw makeHttpError(500);
-            }),
-          };
-        },
-      );
+      const fallback = observeDiskFallback();
+      installSummaryTransport(runtimeSetup.provider, async () => {
+        primaryCallCount++;
+        throw makeHttpError(500);
+      });
 
       // performCompression internally catches and falls back
       await chat.performCompression('test-prompt');
 
+      fallbackCalled = fallback.mock.calls.length > 0;
       return { fallbackCalled, primaryCallCount };
     };
 
@@ -381,13 +299,11 @@ describe('ChatSession compression fallback @plan PLAN-20260218-COMPRESSION-RETRY
       providerRuntimeSnapshot,
     );
 
-    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
-      () => ({
-        name: 'middle-out' as const,
-        requiresLLM: true,
-        trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
-        compress: vi.fn().mockRejectedValue(makeHttpError(500)),
-      }),
+    installSummaryTransport(runtimeSetup.provider, async () => {
+      throw makeHttpError(500);
+    });
+    failDiskFallbackEstimation(chat.getHistoryService(), () =>
+      makeHttpError(500),
     );
 
     // When both primary and fallback fail, should not throw and should return FAILED
@@ -418,7 +334,7 @@ describe('ChatSession compression fallback @plan PLAN-20260218-COMPRESSION-RETRY
       PerformCompressionResult.COMPRESSED,
     );
 
-    expectEmptySummaryFallbackApplied({
+    await expectEmptySummaryFallbackApplied({
       historyService,
       getFallbackCalled,
       getPrimaryCallCount,
@@ -452,7 +368,7 @@ describe('ChatSession compression fallback @plan PLAN-20260218-COMPRESSION-RETRY
       chat.ensureCompressionBeforeSend('test-prompt', 0, 'send'),
     ).resolves.toBeUndefined();
 
-    expectEmptySummaryFallbackApplied({
+    await expectEmptySummaryFallbackApplied({
       historyService,
       getFallbackCalled,
       getPrimaryCallCount,

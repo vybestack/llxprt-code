@@ -112,10 +112,8 @@ export {
 } from './MessageConverter.js';
 
 import type { StreamEvent } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
-import type {
-  CompressionContext,
-  CompressionProviderResult,
-} from '@vybestack/llxprt-code-core/core/compression/types.js';
+import type { CompressionProviderResult } from '@vybestack/llxprt-code-core/core/compression/types.js';
+import type { CompressionAttemptContext } from '../compression/compressionContextBuilder.js';
 import { CompressionProfileNotFoundError } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { PerformCompressionResult } from './turn.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -278,7 +276,7 @@ export class ChatSession {
       this.historyService,
       this.generationConfig,
       this.resolveCompressionProvider.bind(this),
-      async (context: CompressionContext) => {
+      async (context: CompressionAttemptContext) => {
         const config = this.runtimeContext.providerRuntime.config;
         if (config) {
           await triggerCompressionHook(
@@ -599,9 +597,9 @@ export class ChatSession {
     );
   }
 
-  private _beginSemanticMediaPurge(): ReturnType<
-    SemanticMediaPurgeSession['begin']
-  > {
+  private _beginSemanticMediaPurge(
+    signal?: AbortSignal,
+  ): ReturnType<SemanticMediaPurgeSession['begin']> {
     if (!this.semanticMediaPurge.isEnabled()) return Promise.resolve(undefined);
     const active = this.runtimeContext.provider.getActiveProvider();
     const desiredName = this.runtimeState.provider;
@@ -616,6 +614,7 @@ export class ChatSession {
     }
     return this.semanticMediaPurge.begin(
       this._requiresObservedSemanticPurgeCacheWrite(provider),
+      signal,
     );
   }
 
@@ -690,7 +689,7 @@ export class ChatSession {
   ): Promise<ModelOutput> {
     return this._withResolvedSystemPrompt(() =>
       this.turnProcessor.sendMessage(params, prompt_id, () =>
-        this._beginSemanticMediaPurge(),
+        this._beginSemanticMediaPurge(params.config?.abortSignal),
       ),
     );
   }
@@ -701,7 +700,7 @@ export class ChatSession {
   ): Promise<AsyncGenerator<StreamEvent>> {
     return this._withResolvedSystemPrompt(() =>
       this.turnProcessor.sendMessageStream(params, prompt_id, () =>
-        this._beginSemanticMediaPurge(),
+        this._beginSemanticMediaPurge(params.config?.abortSignal),
       ),
     );
   }
@@ -739,8 +738,15 @@ export class ChatSession {
     this.generationConfig.tools = undefined;
   }
 
-  getHistory(curated: boolean = false): readonly IContent[] {
-    return this.conversationManager.getHistory(curated);
+  streamHistory(signal?: AbortSignal): AsyncGenerator<IContent, void, unknown> {
+    return this.conversationManager.streamHistory(signal);
+  }
+
+  getHistory(
+    curated: boolean = false,
+    signal?: AbortSignal,
+  ): AsyncGenerator<IContent, void, unknown> {
+    return this.conversationManager.getHistory(curated, signal);
   }
 
   private async admitSetHistory(
@@ -906,7 +912,7 @@ export class ChatSession {
    * capacity right after compression (which nulls lastPromptTokenCount) get an
    * accurate baseline instead of 0.
    */
-  getProjectedPromptBaseline(): number {
+  getProjectedPromptBaseline(): Promise<number> {
     return this.compressionHandler.getProjectedPromptBaseline();
   }
 
@@ -1000,7 +1006,7 @@ export class ChatSession {
     );
   }
 
-  shouldCompress(pendingTokens?: number): boolean {
+  shouldCompress(pendingTokens?: number): Promise<boolean> {
     return this.compressionHandler.shouldCompress(pendingTokens);
   }
 

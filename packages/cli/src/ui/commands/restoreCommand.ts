@@ -16,6 +16,10 @@ import {
 import { type CommandArgumentSchema } from './schema/types.js';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
+import {
+  openDiskCheckpoint,
+  type DiskCheckpoint,
+} from './checkpoint-restore-source.js';
 
 const checkpointSuggestionDescription = 'Restorable tool call checkpoint';
 
@@ -86,48 +90,48 @@ function listCheckpoints(jsonFiles: string[]): SlashCommandActionReturn {
   };
 }
 
-interface ToolCallCheckpoint {
-  history?: Parameters<NonNullable<LoadHistory>>[0];
-  clientHistory?: Parameters<
-    ReturnType<CliUiRuntime['getAgentClient']>['setHistory']
-  >[0];
-  commitHash?: string;
-  toolCall: { name: string; args: Record<string, unknown> };
-}
-
 async function applyCheckpointRestoration(
   context: CommandContext,
   config: CliUiRuntime,
-  toolCallData: ToolCallCheckpoint,
+  checkpoint: DiskCheckpoint,
 ): Promise<void> {
-  const { services, ui } = context;
-  const { git: gitService } = services;
-  const loadHistory = getRuntimeLoadHistory(ui);
-
-  if (Array.isArray(toolCallData.history)) {
-    if (loadHistory == null) {
-      throw new Error('loadHistory function is not available.');
-    }
-    loadHistory(toolCallData.history);
+  const { data, rows } = checkpoint;
+  const loadHistory = getRuntimeLoadHistory(context.ui);
+  if (Array.isArray(data.history) && loadHistory == null)
+    throw new Error('loadHistory function is not available.');
+  const snapshot =
+    typeof data.commitHash === 'string' && data.commitHash.length > 0
+      ? data.commitHash
+      : undefined;
+  const restoreProject = async (): Promise<void> => {
+    context.signal.throwIfAborted();
+    if (snapshot !== undefined)
+      await context.services.git?.restoreProjectFromSnapshot(snapshot);
+    context.signal.throwIfAborted();
+  };
+  if (rows !== undefined) {
+    // Snapshot failure rejects the admission source before durable publication.
+    await config.getAgentClient().setHistoryFromSource(
+      (async function* () {
+        yield* rows;
+        await checkpoint.close();
+        await restoreProject();
+      })(),
+      { signal: context.signal },
+    );
+  } else {
+    await checkpoint.close();
+    await restoreProject();
   }
-
-  if (Array.isArray(toolCallData.clientHistory)) {
-    await config.getAgentClient().setHistory(toolCallData.clientHistory);
-  }
-
-  if (
-    typeof toolCallData.commitHash === 'string' &&
-    toolCallData.commitHash.length > 0
-  ) {
-    await gitService?.restoreProjectFromSnapshot(toolCallData.commitHash);
-    ui.addItem(
+  if (Array.isArray(data.history)) loadHistory?.(data.history);
+  if (snapshot !== undefined)
+    context.ui.addItem(
       {
         type: 'info',
         text: 'Restored project to the state before the tool call.',
       },
       Date.now(),
     );
-  }
 }
 
 async function restoreCheckpoint(
@@ -148,16 +152,17 @@ async function restoreCheckpoint(
   }
 
   const filePath = path.join(checkpointDir, selectedFile);
-  const data = await fs.readFile(filePath, 'utf-8');
-  const toolCallData = JSON.parse(data) as ToolCallCheckpoint;
-
-  await applyCheckpointRestoration(context, config, toolCallData);
-
-  return {
-    type: 'tool',
-    toolName: toolCallData.toolCall.name,
-    toolArgs: toolCallData.toolCall.args,
-  };
+  const checkpoint = await openDiskCheckpoint(filePath, context.signal);
+  try {
+    await applyCheckpointRestoration(context, config, checkpoint);
+    return {
+      type: 'tool',
+      toolName: checkpoint.data.toolCall.name,
+      toolArgs: checkpoint.data.toolCall.args,
+    };
+  } finally {
+    await checkpoint.close();
+  }
 }
 
 async function restoreAction(

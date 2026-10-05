@@ -11,6 +11,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { CompressionHandler } from '../compression/CompressionHandler.js';
 import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
 import { logApiRequest } from './turnLogging.js';
+import { streamSemanticPurgeRequest } from './streamRequestHelpers.js';
 
 interface TurnMediaRequestOptions {
   readonly runtimeContext: AgentRuntimeContext;
@@ -20,6 +21,7 @@ interface TurnMediaRequestOptions {
   readonly provider: IProvider;
   readonly promptId: string;
   readonly semanticMediaPurge: SemanticMediaPurgeAttempt | undefined;
+  readonly signal?: AbortSignal;
   readonly estimateFinalizedPromptTokens:
     | ((contents: IContent[]) => Promise<number>)
     | undefined;
@@ -28,10 +30,14 @@ interface TurnMediaRequestOptions {
 export async function enforceTurnMediaRequestContents(
   options: TurnMediaRequestOptions,
 ): Promise<IContent[]> {
-  const requestContents = options.historyService.getCuratedForProvider(
+  const requestContents: IContent[] = [];
+  for await (const row of options.historyService.getCuratedForProviderStream(
     options.userContents,
-    options.semanticMediaPurge?.requestHistory,
-  );
+    options.signal,
+    streamSemanticPurgeRequest(options.semanticMediaPurge, options.signal),
+  )) {
+    requestContents.push(row);
+  }
   const contents = await options.compressionHandler.enforceProviderContents(
     {
       contents: requestContents,

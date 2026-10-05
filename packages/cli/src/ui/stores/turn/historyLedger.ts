@@ -5,6 +5,7 @@
  */
 
 import { Buffer } from 'node:buffer';
+import type { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import type { HistoryItem } from '../../types.js';
 import { sameRowIdentity, type RowIdentity } from '../../utils/rowIdentity.js';
 import {
@@ -323,11 +324,16 @@ export interface HistoryLedger {
 
 export function createHistoryLedger(
   initialLimits?: HistoryLimits,
+  ownership?: RowOwnership,
 ): HistoryLedger {
   let limits = initialLimits ?? normalizeHistoryLimits();
   let state = EMPTY_HISTORY_STATE;
 
   const apply = (next: HistoryState): void => {
+    if (ownership) {
+      for (const entry of next.entries) ownership.retain(entry.item);
+      for (const entry of state.entries) ownership.release(entry.item);
+    }
     state = next;
   };
 

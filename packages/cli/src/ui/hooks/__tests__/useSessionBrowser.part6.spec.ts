@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { displayBoot } from '../../../test-utils/resumeRows.js';
 
 /**
  * @plan PLAN-20260214-SESSIONBROWSER.P13
@@ -228,8 +229,9 @@ function makeHookProps(
       overrides.onSelect ??
       (async (): Promise<PerformResumeResult> => ({
         ok: true,
-        history: [],
+        history: displayBoot([]).streamRows(),
         metadata: {
+          kind: 'main',
           sessionId: 'resumed',
           projectHash: PROJECT_HASH,
           startTime: new Date().toISOString(),
@@ -247,28 +249,31 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+let tempDir: string;
+let chatsDir: string;
+let lockHandles: Array<{ release: () => Promise<void> }>;
+
+async function setUpSessionBrowserFixture(): Promise<void> {
+  tempDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'use-session-browser-test-'),
+  );
+  chatsDir = path.join(tempDir, 'chats');
+  await fs.mkdir(chatsDir, { recursive: true });
+  lockHandles = [];
+}
+
+async function tearDownSessionBrowserFixture(): Promise<void> {
+  await Promise.all(lockHandles.map((handle) => handle.release()));
+  await fs.rm(tempDir, { recursive: true, force: true });
+}
+
 // ---------------------------------------------------------------------------
 // Test Suite
 // ---------------------------------------------------------------------------
 
 describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
-  let tempDir: string;
-  let chatsDir: string;
-  let lockHandles: Array<{ release: () => Promise<void> }>;
-
-  beforeEach(async () => {
-    tempDir = await fs.mkdtemp(
-      path.join(os.tmpdir(), 'use-session-browser-test-'),
-    );
-    chatsDir = path.join(tempDir, 'chats');
-    await fs.mkdir(chatsDir, { recursive: true });
-    lockHandles = [];
-  });
-
-  afterEach(async () => {
-    await Promise.all(lockHandles.map((handle) => handle.release()));
-    await fs.rm(tempDir, { recursive: true, force: true });
-  });
+  beforeEach(setUpSessionBrowserFixture);
+  afterEach(tearDownSessionBrowserFixture);
 
   describe('Property-Based Tests @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
     /**
@@ -320,7 +325,14 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
         { numRuns: 20 },
       );
     });
+  });
+});
 
+describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13 (part 2)', () => {
+  beforeEach(setUpSessionBrowserFixture);
+  afterEach(tearDownSessionBrowserFixture);
+
+  describe('Property-Based Tests @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
     /**
      * Test 69: Property: page always in bounds
      * For any sequence of PgUp/PgDn/search/sort, page is valid
@@ -366,7 +378,14 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
         { numRuns: 20 },
       );
     });
+  });
+});
 
+describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13 (part 3)', () => {
+  beforeEach(setUpSessionBrowserFixture);
+  afterEach(tearDownSessionBrowserFixture);
+
+  describe('Property-Based Tests @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
     /**
      * Test 70: Property: filteredSessions subset of sessions
      * For any search term, filteredSessions ⊆ sessions
@@ -409,7 +428,14 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
         { numRuns: 20 },
       );
     });
+  });
+});
 
+describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13 (part 4)', () => {
+  beforeEach(setUpSessionBrowserFixture);
+  afterEach(tearDownSessionBrowserFixture);
+
+  describe('Property-Based Tests @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
     /**
      * Test 71: Property: sort order preserved
      * For any sort + filter, filteredSessions maintain sort order
@@ -468,7 +494,14 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
         { numRuns: 20 },
       );
     });
+  });
+});
 
+describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13 (part 5)', () => {
+  beforeEach(setUpSessionBrowserFixture);
+  afterEach(tearDownSessionBrowserFixture);
+
+  describe('Property-Based Tests @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
     /**
      * Test 72: Property: escape priority is strict
      * Escape handles highest-priority item only
@@ -524,7 +557,14 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       expect(deleteWithSearch.result.current.searchTerm).toBe('a');
       deleteWithSearch.unmount();
     });
+  });
+});
 
+describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13 (part 6)', () => {
+  beforeEach(setUpSessionBrowserFixture);
+  afterEach(tearDownSessionBrowserFixture);
+
+  describe('Property-Based Tests @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
     /**
      * Test 73: Property: ALL keys blocked during isResuming
      * When isResuming, no key changes state
@@ -539,8 +579,9 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
             resolveResume = () =>
               resolve({
                 ok: true as const,
-                history: [],
+                history: displayBoot([]).streamRows(),
                 metadata: {
+                  kind: 'main',
                   sessionId: 'test',
                   projectHash: PROJECT_HASH,
                   startTime: new Date().toISOString(),
@@ -609,7 +650,14 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
       // Complete
       (resolveResume as (() => void) | null)?.();
     });
+  });
+});
 
+describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13 (part 7)', () => {
+  beforeEach(setUpSessionBrowserFixture);
+  afterEach(tearDownSessionBrowserFixture);
+
+  describe('Property-Based Tests @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
     /**
      * Test 74: Property: confirmation dialogs consume only Y/N/Esc
      * During delete confirmation, only Y/N/Escape have effect

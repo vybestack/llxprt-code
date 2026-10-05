@@ -21,6 +21,7 @@
  * @requirement:G7
  */
 
+import { collectRowsForAssertions } from '../test-utils/collect-rows-for-assertions.js';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -34,13 +35,6 @@ import type { IContent } from '../services/history/IContent.js';
 const PROJECT_HASH = 'p05c-facade-hash';
 
 let fixtureDir: string | null = null;
-
-afterEach(async () => {
-  if (fixtureDir !== null) {
-    await rm(fixtureDir, { recursive: true, force: true });
-    fixtureDir = null;
-  }
-});
 
 async function makeChatsDir(): Promise<string> {
   fixtureDir = await mkdtemp(path.join(tmpdir(), 'p05c-facade-'));
@@ -78,31 +72,17 @@ function textOf(content: IContent): string {
 }
 
 describe('P05c child facade is HistoryService over its own journal @plan:PLAN-20260917-ISSUE854.P05c', () => {
-  it('keeps parent and child facades isolated to their own journals', async () => {
-    const chatsDir = await makeChatsDir();
-    const parentRecording = await startRecording(chatsDir, randomUUID());
-    const childRecording = await startRecording(chatsDir, randomUUID());
-    const parentHistory = new HistoryService({
-      recording: parentRecording,
-    });
-    const childHistory = new HistoryService({ recording: childRecording });
-
-    parentHistory.add(textContent('parent task one'));
-    childHistory.add(textContent('child task one'));
-    await parentHistory.waitForCommit();
-    await childHistory.waitForCommit();
-
-    const parentRows = parentHistory.getAll().map(textOf);
-    const childRows = childHistory.getAll().map(textOf);
-    expect(parentRows).toStrictEqual(['seed', 'parent task one']);
-    expect(childRows).toStrictEqual(['seed', 'child task one']);
-    expect(parentHistory.journalPath()).not.toBe(childHistory.journalPath());
-
-    parentHistory.dispose();
-    childHistory.dispose();
-    await parentRecording.dispose();
-    await childRecording.dispose();
+  afterEach(async () => {
+    if (fixtureDir !== null) {
+      await rm(fixtureDir, { recursive: true, force: true });
+      fixtureDir = null;
+    }
   });
+
+  it(
+    'keeps parent and child facades isolated to their own journals',
+    verifyChildFacadeCase1,
+  );
 
   it('child facade commits rows durably to its own journal', async () => {
     const chatsDir = await makeChatsDir();
@@ -123,18 +103,23 @@ describe('P05c child facade is HistoryService over its own journal @plan:PLAN-20
     history.add(textContent('pre-attach child row'));
     await history.waitForCommit();
 
-    history.attachJournal(childRecording);
+    const attachment = history.attachJournal(childRecording);
     history.add(textContent('post-attach child row'));
+    await attachment;
     await history.waitForCommit();
-
-    const rows = history.getAll().map(textOf);
-    expect(rows).toStrictEqual([
-      'seed',
-      'pre-attach child row',
-      'post-attach child row',
-    ]);
-    history.dispose();
-    await childRecording.dispose();
+    await collectRowsForAssertions(
+      history.streamRawHistory(),
+      async (contentsForAssertions) => {
+        const rows = contentsForAssertions.map(textOf);
+        expect(rows).toStrictEqual([
+          'seed',
+          'pre-attach child row',
+          'post-attach child row',
+        ]);
+        history.dispose();
+        await childRecording.dispose();
+      },
+    );
   });
 
   it('locks of both recordings release independently on dispose', async () => {
@@ -155,3 +140,40 @@ describe('P05c child facade is HistoryService over its own journal @plan:PLAN-20
     expect(await SessionLockManager.isLocked(chatsDir, parentId)).toBe(false);
   });
 });
+
+async function verifyChildFacadeCase1(): Promise<void> {
+  const chatsDir = await makeChatsDir();
+  const parentRecording = await startRecording(chatsDir, randomUUID());
+  const childRecording = await startRecording(chatsDir, randomUUID());
+  const parentHistory = new HistoryService({
+    recording: parentRecording,
+  });
+  const childHistory = new HistoryService({ recording: childRecording });
+
+  parentHistory.add(textContent('parent task one'));
+  childHistory.add(textContent('child task one'));
+  await parentHistory.waitForCommit();
+  await childHistory.waitForCommit();
+  await collectRowsForAssertions(
+    parentHistory.streamRawHistory(),
+    async (contentsForAssertions) => {
+      const parentRows = contentsForAssertions.map(textOf);
+      await collectRowsForAssertions(
+        childHistory.streamRawHistory(),
+        async (contentsForAssertions) => {
+          const childRows = contentsForAssertions.map(textOf);
+          expect(parentRows).toStrictEqual(['seed', 'parent task one']);
+          expect(childRows).toStrictEqual(['seed', 'child task one']);
+          expect(parentHistory.journalPath()).not.toBe(
+            childHistory.journalPath(),
+          );
+
+          parentHistory.dispose();
+          childHistory.dispose();
+          await parentRecording.dispose();
+          await childRecording.dispose();
+        },
+      );
+    },
+  );
+}

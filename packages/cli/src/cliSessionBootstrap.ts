@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { restoreResumeBoot } from './services/restoreResumeBoot.js';
 import { loadCliConfig } from './config/config.js';
 import chalk from 'chalk';
 import type { LoadedSettings } from './config/settings.js';
@@ -17,8 +18,9 @@ import {
   listSessions,
   deleteSession,
   getProjectHash,
+  withRecordingFailureReport,
   type ContinueTarget,
-  type IContent,
+  type ResumeCursorBoot,
   type LockHandle,
 } from '@vybestack/llxprt-code-core';
 import { sessionId, debugLogger } from '@vybestack/llxprt-code-telemetry';
@@ -93,10 +95,11 @@ export async function handleSessionListAndDelete(
 
 export interface ResolvedRecording {
   recordingService: SessionRecordingService;
-  resumedHistory: IContent[] | null;
+  resumedBoot: ResumeCursorBoot | null;
   resumedLockHandle: LockHandle | null;
   /** The resumed session's ID, or null for new/fallback sessions. */
   resumedSessionId: string | null;
+  discardOnFailure?: true;
 }
 
 export interface SessionRecordingSetup extends ResolvedRecording {
@@ -247,7 +250,7 @@ function registerRecordingCleanup(
     const failures: unknown[] = [];
     for (const operation of [
       () => stopObservationProducer(),
-      () => recordingIntegration.dispose(),
+      () => withRecordingFailureReport(recordingIntegration.dispose()),
       () => recordingService.dispose(),
       () => lockHandle?.release() ?? Promise.resolve(),
     ]) {
@@ -279,6 +282,22 @@ function activateRecording(
   return integration;
 }
 
+async function resetAfterFailedResume(
+  agentClient: ReturnType<Config['getAgentClient']>,
+): Promise<void> {
+  try {
+    await agentClient.resetChat();
+  } catch (resetErr) {
+    debugLogger.warn(
+      chalk.yellow(
+        `Failed to reset chat after restoreHistory failure: ${
+          resetErr instanceof Error ? resetErr.message : String(resetErr)
+        }`,
+      ),
+    );
+  }
+}
+
 export async function setupSessionRecording(
   config: Config,
   argv: ParsedCliArgs,
@@ -293,25 +312,29 @@ export async function setupSessionRecording(
 
   const {
     recordingService,
-    resumedHistory,
+    resumedBoot,
     resumedLockHandle,
     resumedSessionId,
+    discardOnFailure,
   } = await createOrResumeRecording(config, projectHash, chatsDir);
 
+  if (resumedBoot !== null) registerCleanup(() => resumedBoot.close());
   let activeRecordingService = recordingService;
   let activeLockHandle = resumedLockHandle;
   let didFallback = false;
 
-  if (resumedHistory && resumedHistory.length > 0) {
+  if (resumedBoot !== null) {
     const agentClient = config.getAgentClient();
     try {
-      await agentClient.restoreHistory(resumedHistory);
-      // Adoption happens here — AFTER a successful restoreHistory — so a
-      // corrupted session's ID is never adopted. TodoStore and other
-      // session-scoped services see only a successfully-resumed session ID.
-      if (resumedSessionId !== null) {
-        config.adoptSessionId(resumedSessionId);
-      }
+      await restoreResumeBoot(
+        agentClient,
+        recordingService,
+        resumedBoot,
+        () => {
+          if (resumedSessionId !== null)
+            config.adoptSessionId(resumedSessionId);
+        },
+      );
     } catch (err) {
       const messageText = err instanceof Error ? err.message : String(err);
       debugLogger.warn(
@@ -323,20 +346,15 @@ export async function setupSessionRecording(
       // Release resources FIRST so cleanup runs even if resetChat or
       // buildNewRecordingService throw (issue #1873).
       await releaseResumedResources(recordingService, resumedLockHandle);
+      const failedChild = discardOnFailure
+        ? recordingService.getFilePath()
+        : null;
+      if (failedChild !== null)
+        await fsPromises.rm(failedChild, { force: true });
       // restoreHistory is not atomic — it may have partially populated the
       // AgentClient's history before throwing. Reset so no half-restored
       // items persist into the fresh session.
-      try {
-        await agentClient.resetChat();
-      } catch (resetErr) {
-        debugLogger.warn(
-          chalk.yellow(
-            `Failed to reset chat after restoreHistory failure: ${
-              resetErr instanceof Error ? resetErr.message : String(resetErr)
-            }`,
-          ),
-        );
-      }
+      await resetAfterFailedResume(agentClient);
       // Rebuild the configured session recording after the failed resume.
       // Lock acquisition and file materialization remain fail-fast.
       try {
@@ -374,7 +392,7 @@ export async function setupSessionRecording(
   return {
     recordingService: activeRecordingService,
     recordingIntegration,
-    resumedHistory: didFallback ? null : resumedHistory,
+    resumedBoot: didFallback ? null : resumedBoot,
     resumedLockHandle: activeLockHandle,
     resumedSessionId: didFallback ? null : resumedSessionId,
   };
@@ -439,7 +457,8 @@ async function forkStartupCheckpoint(
   }
   return {
     recordingService: result.recording,
-    resumedHistory: result.history,
+    resumedBoot: result.boot,
+    discardOnFailure: true,
     resumedLockHandle: result.lockHandle,
     resumedSessionId: result.metadata.sessionId,
   };
@@ -462,7 +481,7 @@ export async function createOrResumeRecording(
         projectHash,
         chatsDir,
       ),
-      resumedHistory: null,
+      resumedBoot: null,
       resumedLockHandle: null,
       resumedSessionId: null,
     };
@@ -506,7 +525,7 @@ export async function createOrResumeRecording(
         projectHash,
         chatsDir,
       ),
-      resumedHistory: null,
+      resumedBoot: null,
       resumedLockHandle: null,
       resumedSessionId: null,
     };
@@ -517,7 +536,7 @@ export async function createOrResumeRecording(
   }
   return {
     recordingService: resumeResult.recording,
-    resumedHistory: resumeResult.history,
+    resumedBoot: resumeResult.boot,
     resumedLockHandle: resumeResult.lockHandle,
     resumedSessionId: resumeResult.metadata.sessionId,
   };

@@ -23,13 +23,16 @@
  * recording for a previously saved session.
  */
 
-import { type IContent } from '../services/history/IContent.js';
+import { stat, open, appendFile } from 'node:fs/promises';
+import { ResumeCursorBoot } from './resumeCursorBoot.js';
+export { ResumeCursorBoot } from './resumeCursorBoot.js';
 import { type SessionMetadata, type SessionSummary } from './types.js';
 import { SessionRecordingService } from './SessionRecordingService.js';
 import { SessionDiscovery } from './SessionDiscovery.js';
 import { SessionLockManager, type LockHandle } from './SessionLockManager.js';
-import { replaySession } from './ReplayEngine.js';
+import { scanResumeMetadata } from './resumeMetadata.js';
 import { RESUME_NO_SESSIONS_FOUND } from './resumeNotFoundMessages.js';
+import type { JournalReadCounters } from './journalCounters.js';
 import type { LocalMediaStore } from '../storage/local-media-store.js';
 
 /**
@@ -51,6 +54,8 @@ export interface ResumeRequest {
   workspaceDirs: string[];
   mediaStore?: LocalMediaStore;
   maxQueueBytes?: number;
+  /** Injectable read counters (issue #854 P05d); absent = uninstrumented. */
+  counters?: JournalReadCounters;
 }
 
 /**
@@ -61,7 +66,7 @@ export interface ResumeRequest {
  */
 export interface ResumeResult {
   ok: true;
-  history: IContent[];
+  boot: ResumeCursorBoot;
   metadata: SessionMetadata;
   recording: SessionRecordingService;
   lockHandle: LockHandle;
@@ -196,43 +201,73 @@ export async function resumeSession(
     lockedSession = result;
   }
 
-  // Step 4: Replay session
-  const replayResult = await replaySession(
-    lockedSession.targetFilePath,
-    request.projectHash,
-    { mediaStore: request.mediaStore },
-  );
-  if (!replayResult.ok) {
-    await lockedSession.lockHandle.release();
+  return bootLockedSession(lockedSession, request);
+}
+
+async function bootLockedSession(
+  lockedSession: LockedSession,
+  request: ResumeRequest,
+): Promise<ResumeResult | ResumeError> {
+  let boot: ResumeCursorBoot | undefined;
+  try {
+    const size = (await stat(lockedSession.targetFilePath)).size;
+    const { replay: replayResult, watermark: scannedWatermark } =
+      await scanResumeMetadata(
+        lockedSession.targetFilePath,
+        request.projectHash,
+        size,
+        request.counters,
+      );
+    if (!replayResult.ok) throw new Error(replayResult.error);
+    if (replayResult.sequenceCorrupt)
+      throw new Error('recording has non-monotonic sequences');
+    const watermark = await finishResumePrefix(
+      lockedSession.targetFilePath,
+      size,
+      scannedWatermark,
+    );
+    boot = await ResumeCursorBoot.open(
+      lockedSession.targetFilePath,
+      replayResult.lastSeq,
+      watermark,
+      request.counters,
+      request.mediaStore,
+    );
+    const ownedBoot = boot;
+    const lockHandle = {
+      ...lockedSession.lockHandle,
+      async release(): Promise<void> {
+        try {
+          await ownedBoot.close();
+        } finally {
+          await lockedSession.lockHandle.release();
+        }
+      },
+    };
+    const recording = initializeRecordingForResume(
+      { ...lockedSession, lockHandle },
+      request,
+      replayResult,
+    );
+    return {
+      ok: true,
+      boot,
+      metadata: replayResult.metadata,
+      recording,
+      lockHandle,
+      warnings: replayResult.warnings,
+    };
+  } catch (error) {
+    try {
+      await boot?.close();
+    } finally {
+      await lockedSession.lockHandle.release();
+    }
     return {
       ok: false,
-      error: `Failed to replay session: ${replayResult.error}`,
+      error: `Failed to replay session: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
-  if (replayResult.sequenceCorrupt) {
-    await lockedSession.lockHandle.release();
-    return {
-      ok: false,
-      error: 'Failed to replay session: recording has non-monotonic sequences',
-    };
-  }
-
-  // Steps 5-7: Initialize recording for append
-  const recording = initializeRecordingForResume(
-    lockedSession,
-    request,
-    replayResult,
-  );
-
-  // Step 8: Return result
-  return {
-    ok: true,
-    history: replayResult.history,
-    metadata: replayResult.metadata,
-    recording,
-    lockHandle: lockedSession.lockHandle,
-    warnings: replayResult.warnings,
-  };
 }
 
 /**
@@ -271,4 +306,22 @@ async function findFirstUnlockedSession(
     }
   }
   return null;
+}
+
+async function finishResumePrefix(
+  filePath: string,
+  size: number,
+  watermark: number,
+): Promise<number> {
+  if (size === 0) return watermark;
+  const handle = await open(filePath, 'r');
+  const last = Buffer.alloc(1);
+  try {
+    await handle.read(last, 0, 1, size - 1);
+  } finally {
+    await handle.close();
+  }
+  if (last[0] === 10) return watermark;
+  await appendFile(filePath, '\n');
+  return watermark === size ? watermark + 1 : watermark;
 }

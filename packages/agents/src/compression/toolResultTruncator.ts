@@ -16,6 +16,13 @@ import {
   simpleTokenEstimateForText,
 } from '@vybestack/llxprt-code-core/services/history/historyTokenEstimation.js';
 
+import {
+  withToolResponseRanking,
+  replaceRankedToolResponse,
+  type ToolResponseDiskRanking,
+  type DiskRankedCandidate,
+} from './toolResponseDiskRanking.js';
+
 export const CONTEXT_TRUNCATION_MARKER = 'contextTruncated';
 
 export interface RankedToolResponse {
@@ -34,6 +41,7 @@ export interface ToolResponseTruncationResult {
 export interface ToolResultTruncatorDeps {
   readonly historyService: HistoryService;
   readonly logger: DebugLogger;
+  readonly signal?: AbortSignal;
   /**
    * Async, model-aware token estimator for ranking candidates. This enables
    * model-dependent fattest-first ordering (e.g. a model whose tokenizer
@@ -169,10 +177,10 @@ export function fallbackEstimateBlockTokens(block: ContentBlock): number {
  */
 async function checkPostRankingGuard(
   deps: ToolResultTruncatorDeps,
-  isHistoryUnchanged: () => boolean,
-  ranked: readonly RankedToolResponse[],
+  isHistoryUnchanged: () => Promise<boolean>,
+  ranked: ToolResponseDiskRanking,
 ): Promise<ToolResponseTruncationResult | undefined> {
-  if (isHistoryUnchanged()) {
+  if (await isHistoryUnchanged()) {
     return undefined;
   }
   deps.logger.warn(
@@ -191,13 +199,22 @@ export async function truncateLargestToolResponses(
   deps: ToolResultTruncatorDeps,
   marginAdjustedLimit: number,
 ): Promise<ToolResponseTruncationResult> {
-  const history = deps.historyService.getRawHistory();
-  const isHistoryUnchanged = createHistoryGuard(deps.historyService);
-  const ranked = await rankToolResponses(
-    history,
+  return withToolResponseRanking(
+    deps.historyService,
+    [],
     deps.estimateBlockTokensAsync,
+    (ranked, unchanged) =>
+      truncateRankedHistory(deps, marginAdjustedLimit, ranked, unchanged),
+    deps.signal,
   );
+}
 
+async function truncateRankedHistory(
+  deps: ToolResultTruncatorDeps,
+  marginAdjustedLimit: number,
+  ranked: ToolResponseDiskRanking,
+  isHistoryUnchanged: () => Promise<boolean>,
+): Promise<ToolResponseTruncationResult> {
   const guardResult = await checkPostRankingGuard(
     deps,
     isHistoryUnchanged,
@@ -219,7 +236,7 @@ export async function truncateLargestToolResponses(
   let replacedCount = 0;
 
   for (const candidate of ranked) {
-    if (!isHistoryUnchanged()) {
+    if (!(await isHistoryUnchanged())) {
       deps.logger.warn(
         () =>
           '[CompressionHandler] History changed mid-replacement during legacy tool-response truncation; stopping to avoid stale-index corruption',
@@ -236,11 +253,12 @@ export async function truncateLargestToolResponses(
       candidate.block,
       candidate.estimatedTokens,
     );
-    const replaced = await deps.historyService.replaceToolResponseBlock(
-      candidate.entryIndex,
-      candidate.blockIndex,
+    const replaced = await replaceRankedToolResponse(
+      deps.historyService,
+      candidate,
       stub,
       model,
+      deps.signal,
     );
     if (!replaced) {
       continue;
@@ -297,6 +315,7 @@ export interface UnifiedTruncationResult {
 export interface UnifiedTruncatorDeps {
   readonly historyService: HistoryService;
   readonly logger: DebugLogger;
+  readonly signal?: AbortSignal;
   /**
    * Pending (new, unsent) contents. Tool-response blocks in these entries
    * are ranked alongside history candidates and, when selected, are
@@ -316,102 +335,6 @@ export interface UnifiedTruncatorDeps {
   ) => number | Promise<number>;
   readonly resetBaseline: () => void;
   readonly getRuntimeModel: () => string;
-}
-
-/**
- * Tagged union that marks where a ranked candidate lives — history or
- * pending — so the replacement strategy can be location-aware.
- */
-interface RankedCandidate {
-  readonly location: 'history' | 'pending';
-  readonly entryIndex: number;
-  readonly blockIndex: number;
-  readonly block: ToolResponseBlock;
-  readonly estimatedTokens: number;
-}
-
-/**
- * Snapshot the current history length to detect concurrent mutations
- * (add/clear) during async estimates. Returns a function that checks
- * whether history has changed since the snapshot.
- *
- * This addresses the concurrency/reentrancy concern (issue #1321): if
- * add/clear changes the history array length between ranking and
- * replacement, the entry/block indices become stale and could corrupt
- * history. The returned guard lets callers detect this and abort safely.
- */
-function createHistoryGuard(historyService: HistoryService): () => boolean {
-  const snapshotLength = historyService.getRawHistory().length;
-  return () => historyService.getRawHistory().length === snapshotLength;
-}
-
-/**
- * Rank tool-response candidates across both history and pending contents,
- * fattest-first with recency tie-break (later entry/block first).
- *
- * Pending candidates are assigned a synthetic entry index offset by
- * history length so the recency tie-break naturally favors pending
- * (newer) entries over equally-sized history entries.
- */
-async function rankAllToolResponses(
-  history: readonly IContent[],
-  pending: readonly IContent[],
-  estimateBlockTokensAsync: (block: ContentBlock) => Promise<number>,
-): Promise<RankedCandidate[]> {
-  const positions: Array<Omit<RankedCandidate, 'estimatedTokens'>> = [];
-
-  for (let entryIndex = 0; entryIndex < history.length; entryIndex++) {
-    const entry = history[entryIndex];
-    for (let blockIndex = 0; blockIndex < entry.blocks.length; blockIndex++) {
-      const block = entry.blocks[blockIndex];
-      if (block.type === 'tool_response' && !isAlreadyStubbed(block)) {
-        positions.push({
-          location: 'history',
-          entryIndex,
-          blockIndex,
-          block,
-        });
-      }
-    }
-  }
-
-  const historyLength = history.length;
-  for (let entryIndex = 0; entryIndex < pending.length; entryIndex++) {
-    const entry = pending[entryIndex];
-    for (let blockIndex = 0; blockIndex < entry.blocks.length; blockIndex++) {
-      const block = entry.blocks[blockIndex];
-      if (block.type === 'tool_response' && !isAlreadyStubbed(block)) {
-        positions.push({
-          location: 'pending',
-          // Offset by historyLength so the recency tie-break ordering is
-          // consistent across both sources.
-          entryIndex: historyLength + entryIndex,
-          blockIndex,
-          block,
-        });
-      }
-    }
-  }
-
-  const estimates = await Promise.all(
-    positions.map((position) => estimateBlockTokensAsync(position.block)),
-  );
-  const candidates: RankedCandidate[] = positions.map((position, index) => ({
-    ...position,
-    estimatedTokens: estimates[index],
-  }));
-
-  candidates.sort((a, b) => {
-    if (b.estimatedTokens !== a.estimatedTokens) {
-      return b.estimatedTokens - a.estimatedTokens;
-    }
-    if (b.entryIndex !== a.entryIndex) {
-      return b.entryIndex - a.entryIndex;
-    }
-    return b.blockIndex - a.blockIndex;
-  });
-
-  return candidates;
 }
 
 function clonePendingForResult(
@@ -458,7 +381,7 @@ function buildUnifiedSuccess(
  * has changed (concurrent mutation), signaling the caller to skip it.
  */
 function tryReplacePendingCandidate(
-  candidate: RankedCandidate,
+  candidate: DiskRankedCandidate,
   historyLength: number,
   workingPending: IContent[],
   stub: ToolResponseBlock,
@@ -494,7 +417,7 @@ interface UnifiedReplacementContext {
  */
 async function applyCandidateReplacement(
   ctx: UnifiedReplacementContext,
-  candidate: RankedCandidate,
+  candidate: DiskRankedCandidate,
   stub: ToolResponseBlock,
 ): Promise<boolean> {
   if (candidate.location === 'pending') {
@@ -505,11 +428,12 @@ async function applyCandidateReplacement(
       stub,
     );
   }
-  const replaced = await ctx.deps.historyService.replaceToolResponseBlock(
-    candidate.entryIndex,
-    candidate.blockIndex,
+  const replaced = await replaceRankedToolResponse(
+    ctx.deps.historyService,
+    candidate,
     stub,
     ctx.model,
+    ctx.deps.signal,
   );
   if (!replaced) {
     return false;
@@ -520,7 +444,7 @@ async function applyCandidateReplacement(
 
 function logUnifiedTruncationStep(
   deps: UnifiedTruncatorDeps,
-  candidate: RankedCandidate,
+  candidate: DiskRankedCandidate,
   projected: number,
   marginAdjustedLimit: number,
   replacedCount: number,
@@ -574,12 +498,12 @@ type CandidateOutcome =
  */
 async function processUnifiedCandidate(
   ctx: UnifiedReplacementContext,
-  candidate: RankedCandidate,
+  candidate: DiskRankedCandidate,
   replacedCountBefore: number,
   marginAdjustedLimit: number,
-  isHistoryUnchanged: () => boolean,
+  isHistoryUnchanged: () => Promise<boolean>,
 ): Promise<CandidateOutcome> {
-  if (!isHistoryUnchanged()) {
+  if (!(await isHistoryUnchanged())) {
     ctx.deps.logger.warn(
       () =>
         '[CompressionHandler] History changed mid-replacement during unified tool-response truncation; stopping to avoid stale-index corruption',
@@ -633,23 +557,37 @@ export async function truncateOversizedToolResponsesUnified(
   deps: UnifiedTruncatorDeps,
   marginAdjustedLimit: number,
 ): Promise<UnifiedTruncationResult> {
-  const history = deps.historyService.getRawHistory();
-  const pending = deps.pendingContents;
-  const model = deps.getRuntimeModel();
-  const isHistoryUnchanged = createHistoryGuard(deps.historyService);
-
-  const workingPending: IContent[] = pending.map((entry) => ({
+  const workingPending = deps.pendingContents.map((entry) => ({
     ...entry,
     blocks: [...entry.blocks],
   }));
-
-  const ranked = await rankAllToolResponses(
-    history,
-    pending,
+  return withToolResponseRanking(
+    deps.historyService,
+    workingPending,
     deps.estimateBlockTokensAsync,
+    (ranked, unchanged) =>
+      truncateRankedUnified(
+        deps,
+        marginAdjustedLimit,
+        ranked,
+        unchanged,
+        workingPending,
+      ),
+    deps.signal,
   );
+}
 
-  if (!isHistoryUnchanged()) {
+async function truncateRankedUnified(
+  deps: UnifiedTruncatorDeps,
+  marginAdjustedLimit: number,
+  ranked: ToolResponseDiskRanking,
+  isHistoryUnchanged: () => Promise<boolean>,
+  workingPending: IContent[],
+): Promise<UnifiedTruncationResult> {
+  const pending = deps.pendingContents;
+  const model = deps.getRuntimeModel();
+
+  if (!(await isHistoryUnchanged())) {
     deps.logger.warn(
       () =>
         '[CompressionHandler] History changed during unified tool-response ranking; aborting truncation to avoid stale-index corruption',
@@ -674,7 +612,7 @@ export async function truncateOversizedToolResponsesUnified(
 
   const ctx: UnifiedReplacementContext = {
     deps,
-    historyLength: history.length,
+    historyLength: ranked.historyLength,
     workingPending,
     model,
   };

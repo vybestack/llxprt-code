@@ -13,10 +13,18 @@ import { vi, describe, it, expect, type Mock } from 'bun:test';
 import { dumpcontextCommand } from './dumpcontextCommand.js';
 import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import {
+  snapshotFixture,
+  fixtureRows,
+  captureStreamingDump,
+} from './dumpcontext-test-stream.js';
 
 const actual = { ...(await import('@vybestack/llxprt-code-providers')) };
 void vi.mock('@vybestack/llxprt-code-providers', () => ({
   ...actual,
+  dumpRequestContextStream: (
+    ...args: Parameters<typeof actual.dumpRequestContextStream>
+  ) => captureStreamingDump(dumpRequestContext)(...args),
   dumpRequestContext: vi.fn().mockResolvedValue({
     baseId: '20260101-120000-anthropic-abc123',
     requestFilename: '20260101-120000-anthropic-abc123-request.json',
@@ -54,12 +62,14 @@ const TRACE = [
 
 function contextWithTrace(): CommandContext {
   const historyService = {
-    getAll: vi
-      .fn()
-      .mockReturnValue([
+    streamRawHistory: () =>
+      fixtureRows([
         { speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] },
       ]),
-    getChronologyTrace: vi.fn().mockReturnValue(TRACE),
+    getChronologyTrace: vi.fn(async function* () {
+      yield* TRACE;
+    }),
+    openDumpSnapshot: snapshotFixture,
   };
 
   return createMockCommandContext({

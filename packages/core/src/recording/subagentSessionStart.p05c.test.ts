@@ -48,13 +48,6 @@ const PROJECT_HASH = 'p05c-start-hash';
 
 let fixtureDir: string | null = null;
 
-afterEach(async () => {
-  if (fixtureDir !== null) {
-    await rm(fixtureDir, { recursive: true, force: true });
-    fixtureDir = null;
-  }
-});
-
 async function makeChatsDir(): Promise<string> {
   fixtureDir = await mkdtemp(path.join(tmpdir(), 'p05c-start-'));
   return path.join(fixtureDir, 'chats');
@@ -105,7 +98,16 @@ async function materializedRecording(
   return recording;
 }
 
+async function cleanupFixture(): Promise<void> {
+  if (fixtureDir !== null) {
+    await rm(fixtureDir, { recursive: true, force: true });
+    fixtureDir = null;
+  }
+}
+
 describe('P05c session_start payload extension @plan:PLAN-20260917-ISSUE854.P05c', () => {
+  afterEach(cleanupFixture);
+
   it('stamps kind=subagent and parentSessionId onto child journals', async () => {
     const chatsDir = await makeChatsDir();
     const parentId = randomUUID();
@@ -180,6 +182,8 @@ describe('P05c session_start payload extension @plan:PLAN-20260917-ISSUE854.P05c
 });
 
 describe('P05c lock grammar and filename bucketing @plan:PLAN-20260917-ISSUE854.P05c', () => {
+  afterEach(cleanupFixture);
+
   it('rejects the `::`/`#` child ids the orchestrator builds today', async () => {
     const chatsDir = await makeChatsDir();
     const parent = 'primary-session';

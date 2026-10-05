@@ -280,8 +280,10 @@ inject rules of its own.
 
 ### History, stats, and compression
 
-`getHistory`, `setHistory`, `addHistory`, `restoreHistory`, and `resetChat`
-manage conversation history. `compress(opts?)` runs context compression.
+`streamHistory(signal?)` reads conversation history through a scoped async
+iterator. `Agent.getHistory()` has been removed. Exhaust the iterator or call
+`return()` when stopping early. `setHistory`, `addHistory`, `restoreHistory`,
+and `resetChat` mutate history. `compress(opts?)` runs context compression.
 `getStats()` returns `SessionStats` and `onStats(cb)` subscribes to updates.
 `listProviders()` and `listTools()` are instance-scoped discovery helpers.
 

@@ -12,7 +12,10 @@
  * semantics and granular cancellation classification.
  */
 
-import type { AgentRequestInput } from '@vybestack/llxprt-code-core';
+import {
+  withRecordingFailureReport,
+  type AgentRequestInput,
+} from '@vybestack/llxprt-code-core';
 import { prepareTurnForQuery } from './turnPreparation.js';
 import { handleSubmissionError } from './streamUtils.js';
 import {
@@ -371,7 +374,9 @@ async function streamAndFinalise(
     }
     if (isCurrentTurn(cbd, turn.abortSignal)) {
       try {
-        await cbd.recordingIntegration?.flushAtTurnBoundary();
+        await withRecordingFailureReport(
+          cbd.recordingIntegration?.flushAtTurnBoundary(),
+        );
       } catch {
         /* non-fatal */
       }

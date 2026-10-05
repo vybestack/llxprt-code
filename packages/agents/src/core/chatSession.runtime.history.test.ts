@@ -1,3 +1,4 @@
+/// <reference lib="esnext.array" />
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -9,6 +10,7 @@
  * Sibling to chatSession.runtime.test.ts (split to avoid file-level max-lines disable).
  */
 
+import { collectRawHistory } from '@vybestack/llxprt-code-core/test-utils/collect-raw-history.js';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { ChatSession } from './chatSession.js';
@@ -32,662 +34,620 @@ import {
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
 
-describe('ChatSession runtime history and tool-call behavior', () => {
-  let settingsService: SettingsService;
-  let config: Config;
-  let manager: TestRuntimeProviderManager;
-  let providerRuntime: ProviderRuntimeContext;
+let settingsService: SettingsService;
+let config: Config;
+let manager: TestRuntimeProviderManager;
+let providerRuntime: ProviderRuntimeContext;
 
-  beforeEach(() => {
-    settingsService = new SettingsService();
-    config = new Config(createConfigParams(settingsService));
+function setupHistoryRuntime(): void {
+  settingsService = new SettingsService();
+  config = new Config(createConfigParams(settingsService));
 
-    settingsService.set('providers.stub.base-url', 'https://stub.example.com');
-    settingsService.set('providers.stub.auth-key', 'stub-api-key');
-    settingsService.set('providers.stub.model', 'stub-model');
+  settingsService.set('providers.stub.base-url', 'https://stub.example.com');
+  settingsService.set('providers.stub.auth-key', 'stub-api-key');
+  settingsService.set('providers.stub.model', 'stub-model');
 
-    providerRuntime = createProviderRuntimeContext({
-      settingsService,
-      config,
-      runtimeId: 'test.runtime',
-      metadata: { source: 'chatSession.runtime.history.test' },
-    });
-
-    manager = new TestRuntimeProviderManager(providerRuntime);
-    manager.setConfig(config);
-    config.setProviderManager(manager);
+  providerRuntime = createProviderRuntimeContext({
+    settingsService,
+    config,
+    runtimeId: 'test.runtime',
+    metadata: { source: 'chatSession.runtime.history.test' },
   });
 
-  it('commits tool call/response even when model returns only thinking after tool results', async () => {
-    const generateChatCompletionMock = vi.fn(async function* () {
-      yield {
-        speaker: 'ai',
-        blocks: [{ type: 'thinking', thought: 'processing tool output' }],
-      };
-    });
+  manager = new TestRuntimeProviderManager(providerRuntime);
+  manager.setConfig(config);
+  config.setProviderManager(manager);
+}
 
-    const provider: IProvider = {
-      name: 'stub',
-      isDefault: true,
-      getModels: vi.fn(async () => []),
-      getDefaultModel: () => 'stub-model',
-      generateChatCompletion: generateChatCompletionMock,
-      getAuthToken: vi.fn(async () => 'stub-auth-token'),
-    };
+function createHistoryChat(
+  historyService: HistoryService,
+  options: {
+    runtimeId?: string;
+    provider?: string;
+    model?: string;
+    sessionId?: string;
+    settings?: Parameters<typeof createAgentRuntimeContext>[0]['settings'];
+  } = {},
+): ChatSession {
+  const state = createAgentRuntimeState({
+    runtimeId: options.runtimeId ?? 'runtime-test',
+    provider: options.provider ?? 'stub',
+    model: options.model ?? config.getModel(),
+    sessionId: options.sessionId ?? config.getSessionId(),
+  });
+  const view = createAgentRuntimeContext({
+    state,
+    history: historyService,
+    settings: options.settings ?? {
+      compressionThreshold: 0.8,
+      contextLimit: 128000,
+      preserveThreshold: 0.2,
+      telemetry: { enabled: true, target: null },
+      'reasoning.includeInContext': true,
+    },
+    provider: createProviderAdapterFromManager(config.getProviderManager()),
+    telemetry: createTelemetryAdapterFromConfig(config),
+    tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
+    providerRuntime: { ...providerRuntime },
+  });
+  return new ChatSession(view, {} as unknown as ContentGenerator, {}, []);
+}
 
-    manager.registerProvider(provider);
-
-    const runtimeState = createAgentRuntimeState({
-      runtimeId: 'runtime-test',
-      provider: provider.name,
-      model: config.getModel(),
-      sessionId: config.getSessionId(),
-    });
-    const historyService = new HistoryService();
-    const view = createAgentRuntimeContext({
-      state: runtimeState,
-      history: historyService,
-      settings: {
-        compressionThreshold: 0.8,
-        contextLimit: 128000,
-        preserveThreshold: 0.2,
-        telemetry: {
-          enabled: true,
-          target: null,
-        },
-        'reasoning.includeInContext': true,
-      },
-      provider: createProviderAdapterFromManager(config.getProviderManager()),
-      telemetry: createTelemetryAdapterFromConfig(config),
-      tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
-      providerRuntime: { ...providerRuntime },
-    });
-
-    const chat = new ChatSession(
-      view,
-      {} as unknown as ContentGenerator,
-      {},
-      [],
-    );
-
-    const inputToolCall: IContent = {
+async function commitThinkingToolResults(): Promise<number> {
+  const generateChatCompletionMock = vi.fn(async function* () {
+    yield {
       speaker: 'ai',
-      blocks: [
-        {
-          type: 'tool_call',
-          id: 'toolu_123',
-          name: 'run_shell_command',
-          parameters: { command: 'ls -lt dev-docs' },
-        },
-      ],
+      blocks: [{ type: 'thinking', thought: 'processing tool output' }],
     };
-    const inputToolResponse: IContent = {
-      speaker: 'tool',
-      blocks: [
-        {
-          type: 'tool_response',
-          callId: 'toolu_123',
-          toolName: 'run_shell_command',
-          result: { stdout: 'ok', stderr: '', exitCode: 0 },
-        },
-      ],
-    };
-
-    const stream = await chat.sendMessageStream(
-      { message: [inputToolCall, inputToolResponse] },
-      'prompt-123',
-    );
-    for await (const _event of stream) {
-      // exhaust stream to trigger history recording
-    }
-
-    const curated = historyService.getCuratedForProvider();
-    const toolCallIndex = curated.findIndex(
-      (content) =>
-        content.blocks.some((b) => b.type === 'tool_call') &&
-        content.blocks.length > 0,
-    );
-    expect(toolCallIndex).toBeGreaterThanOrEqual(0);
-    const toolResponseIndex = curated.findIndex(
-      (content) =>
-        content.blocks.some((b) => b.type === 'tool_response') &&
-        content.blocks.length > 0,
-    );
-    expect(toolResponseIndex).toBeGreaterThanOrEqual(0);
-    expect(toolResponseIndex).toBe(toolCallIndex + 1);
-
-    const toolCallBlock = curated[toolCallIndex].blocks.find(
-      (block) => block.type === 'tool_call',
-    ) as { id: string; name: string };
-    const toolResponseBlock = curated[toolResponseIndex].blocks.find(
-      (block) => block.type === 'tool_response',
-    ) as { callId: string; toolName: string };
-
-    expect(toolCallBlock).toBeDefined();
-    expect(toolResponseBlock).toBeDefined();
-    expect(toolCallBlock.name).toBe('run_shell_command');
-    expect(toolResponseBlock.toolName).toBe('run_shell_command');
-    expect(toolResponseBlock.callId).toBe(toolCallBlock.id);
   });
 
-  it('eagerly records completed tool calls before the next provider stream starts', () => {
-    const historyService = new HistoryService();
-    const runtimeState = createAgentRuntimeState({
-      runtimeId: 'runtime-record-completed',
-      provider: 'stub',
-      model: 'stub-model',
-      sessionId: 'session-record-completed',
-    });
+  const provider: IProvider = {
+    name: 'stub',
+    isDefault: true,
+    getModels: vi.fn(async () => []),
+    getDefaultModel: () => 'stub-model',
+    generateChatCompletion: generateChatCompletionMock,
+    getAuthToken: vi.fn(async () => 'stub-auth-token'),
+  };
 
-    const view = createAgentRuntimeContext({
-      state: runtimeState,
-      history: historyService,
-      settings: {
-        'reasoning.enabled': false,
-        'reasoning.includeInContext': true,
-        'reasoning.includeInResponse': false,
-        'reasoning.adaptiveThinking': false,
-      },
-      provider: createProviderAdapterFromManager(config.getProviderManager()),
-      telemetry: createTelemetryAdapterFromConfig(config),
-      tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
-      providerRuntime: { ...providerRuntime },
-    });
+  manager.registerProvider(provider);
 
-    const chat = new ChatSession(
-      view,
-      {} as unknown as ContentGenerator,
-      {},
-      [],
-    );
+  const historyService = new HistoryService();
+  const chat = createHistoryChat(historyService);
 
-    const completed = [
+  const inputToolCall: IContent = {
+    speaker: 'ai',
+    blocks: [
       {
-        status: 'success' as const,
-        request: {
-          callId: 'toolu_456',
-          name: 'read_file',
-          args: {
-            absolute_path: '/test/package.json',
-          },
-          prompt_id: 'prompt-456',
-          agentId: 'default_agent',
-          isClientInitiated: false,
-        },
-        response: {
-          callId: 'toolu_456',
-          responseParts: [
-            {
-              type: 'tool_call',
-              id: 'toolu_456',
-              name: 'read_file',
-              parameters: {
-                absolute_path: '/test/package.json',
-              },
-            },
-            {
-              type: 'tool_response',
-              callId: 'toolu_456',
-              toolName: 'read_file',
-              result: { output: '{"name":"@vybestack/llxprt-code"}' },
-            },
-          ],
-          resultDisplay: '@vybestack/llxprt-code',
-        },
-        invocation: { execute: vi.fn() },
+        type: 'tool_call',
+        id: 'toolu_123',
+        name: 'run_shell_command',
+        parameters: { command: 'ls -lt dev-docs' },
       },
-    ];
-
-    chat.recordCompletedToolCalls('stub-model', completed);
-
-    const curated = historyService.getCuratedForProvider();
-
-    const toolResponseIndex = curated.findIndex(
-      (content) =>
-        content.speaker === 'tool' &&
-        content.blocks.some((block) => block.type === 'tool_response'),
-    );
-
-    expect(toolResponseIndex).toBeGreaterThanOrEqual(0);
-    const toolResponseCount = curated.reduce(
-      (count, content) =>
-        count +
-        content.blocks.filter((block) => block.type === 'tool_response').length,
-      0,
-    );
-    expect(toolResponseCount).toBe(1);
-
-    const toolResponseBlock = curated[toolResponseIndex].blocks.find(
-      (block) => block.type === 'tool_response',
-    ) as {
-      type: string;
-      callId: string;
-      toolName: string;
-      result: { output: string };
-    };
-    expect(toolResponseBlock).toMatchObject({
-      type: 'tool_response',
-      toolName: 'read_file',
-      result: { output: '{"name":"@vybestack/llxprt-code"}' },
-    });
-    expect(toolResponseBlock.callId).toBe('toolu_456');
-  });
-
-  it('does not duplicate eagerly recorded tool responses when the next stream succeeds', async () => {
-    const generateChatCompletionMock = vi.fn(async function* () {
-      yield {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'Done.' }],
-      };
-    });
-
-    const provider: IProvider = {
-      name: 'stub',
-      isDefault: true,
-      getModels: vi.fn(async () => []),
-      getDefaultModel: () => 'stub-model',
-      generateChatCompletion: generateChatCompletionMock,
-      getAuthToken: vi.fn(async () => 'stub-auth-token'),
-    };
-
-    manager.registerProvider(provider);
-
-    const historyService = new HistoryService();
-    const runtimeState = createAgentRuntimeState({
-      runtimeId: 'runtime-no-duplicate-tool-response',
-      provider: provider.name,
-      model: config.getModel(),
-      sessionId: config.getSessionId(),
-    });
-    const view = createAgentRuntimeContext({
-      state: runtimeState,
-      history: historyService,
-      settings: {
-        compressionThreshold: 0.8,
-        contextLimit: 128000,
-        preserveThreshold: 0.2,
-        telemetry: {
-          enabled: true,
-          target: null,
-        },
-        'reasoning.includeInContext': true,
-      },
-      provider: createProviderAdapterFromManager(config.getProviderManager()),
-      telemetry: createTelemetryAdapterFromConfig(config),
-      tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
-      providerRuntime: { ...providerRuntime },
-    });
-
-    const chat = new ChatSession(
-      view,
-      {} as unknown as ContentGenerator,
-      {},
-      [],
-    );
-
-    const completed = [
+    ],
+  };
+  const inputToolResponse: IContent = {
+    speaker: 'tool',
+    blocks: [
       {
-        status: 'success' as const,
-        request: {
-          callId: 'toolu_continue_1',
-          name: 'read_file',
-          args: { absolute_path: '/test/package.json' },
-          prompt_id: 'prompt-continue-1',
-          agentId: 'default_agent',
-          isClientInitiated: false,
-        },
-        response: {
-          callId: 'toolu_continue_1',
-          responseParts: [
-            {
-              type: 'tool_call',
-              id: 'toolu_continue_1',
-              name: 'read_file',
-              parameters: { absolute_path: '/test/package.json' },
-            },
-            {
-              type: 'tool_response',
-              callId: 'toolu_continue_1',
-              toolName: 'read_file',
-              result: { output: 'package-json' },
-            },
-            {
-              type: 'text',
-              text: 'Tool completed.',
-            },
-          ],
-          resultDisplay: 'package-json',
-        },
-        invocation: { execute: vi.fn() },
+        type: 'tool_response',
+        callId: 'toolu_123',
+        toolName: 'run_shell_command',
+        result: { stdout: 'ok', stderr: '', exitCode: 0 },
       },
-    ];
+    ],
+  };
 
-    chat.recordCompletedToolCalls('stub-model', completed);
+  const stream = await chat.sendMessageStream(
+    { message: [inputToolCall, inputToolResponse] },
+    'prompt-123',
+  );
+  for await (const _event of stream) {
+    // exhaust stream to trigger history recording
+  }
 
-    const stream = await chat.sendMessageStream(
-      {
-        message: {
-          speaker: 'tool',
-          blocks: [
-            {
-              type: 'tool_response',
-              callId: 'toolu_continue_1',
-              toolName: 'read_file',
-              result: { output: 'package-json' },
-            },
-            { type: 'text', text: 'Tool completed.' },
-            { type: 'text', text: 'Continue with the analysis.' },
-          ],
+  const curated = await Array.fromAsync(
+    historyService.getCuratedForProviderStream(),
+  );
+  const toolCallIndex = curated.findIndex(
+    (content) =>
+      content.blocks.some((b) => b.type === 'tool_call') &&
+      content.blocks.length > 0,
+  );
+  expect(toolCallIndex).toBeGreaterThanOrEqual(0);
+  const toolResponseIndex = curated.findIndex(
+    (content) =>
+      content.blocks.some((b) => b.type === 'tool_response') &&
+      content.blocks.length > 0,
+  );
+  expect(toolResponseIndex).toBeGreaterThanOrEqual(0);
+
+  const toolCallBlock = curated[toolCallIndex].blocks.find(
+    (block) => block.type === 'tool_call',
+  ) as { id: string; name: string };
+  const toolResponseBlock = curated[toolResponseIndex].blocks.find(
+    (block) => block.type === 'tool_response',
+  ) as { callId: string; toolName: string };
+
+  expect(toolCallBlock).toBeDefined();
+  expect(toolResponseBlock).toBeDefined();
+  expect(toolCallBlock.name).toBe('run_shell_command');
+  expect(toolResponseBlock.toolName).toBe('run_shell_command');
+  expect(toolResponseBlock.callId).toBe(toolCallBlock.id);
+  return toolResponseIndex - toolCallIndex;
+}
+
+function completedReadFileFixture() {
+  const completed = [
+    {
+      status: 'success' as const,
+      request: {
+        callId: 'toolu_456',
+        name: 'read_file',
+        args: {
+          absolute_path: '/test/package.json',
         },
+        prompt_id: 'prompt-456',
+        agentId: 'default_agent',
+        isClientInitiated: false,
       },
-      'prompt-continue-1',
-    );
-    for await (const _event of stream) {
-      // exhaust stream to trigger normal history finalization
-    }
-
-    const rawHistory = historyService.getRawHistory();
-    const toolResponseCount = rawHistory.reduce(
-      (count, content) =>
-        count +
-        content.blocks.filter(
-          (block) =>
-            block.type === 'tool_response' &&
-            block.toolName === 'read_file' &&
-            (block.result as { output?: string } | undefined)?.output ===
-              'package-json',
-        ).length,
-      0,
-    );
-    expect(toolResponseCount).toBe(1);
-
-    const completedTextCount = rawHistory.reduce(
-      (count, content) =>
-        count +
-        content.blocks.filter(
-          (block) => block.type === 'text' && block.text === 'Tool completed.',
-        ).length,
-      0,
-    );
-    expect(completedTextCount).toBe(1);
-
-    expect(
-      rawHistory.some(
-        (content) =>
-          content.speaker === 'human' &&
-          content.blocks.some(
-            (block) =>
-              block.type === 'text' &&
-              block.text === 'Continue with the analysis.',
-          ),
-      ),
-    ).toBe(true);
-  });
-
-  it('retains thinking parts alongside tool calls when includeInContext is enabled', async () => {
-    const calls: GenerateChatOptions[] = [];
-
-    const generateChatCompletionMock = vi.fn(async function* (
-      options: GenerateChatOptions,
-    ) {
-      calls.push(options);
-      yield {
-        speaker: 'ai',
-        blocks: [
-          {
-            type: 'thinking',
-            thought: 'Follow-up reasoning',
-            signature: 'sig-1',
-          },
+      response: {
+        callId: 'toolu_456',
+        responseParts: [
           {
             type: 'tool_call',
-            id: 'hist_tool_reasoned_1',
-            name: 'run_shell_command',
-            parameters: { command: 'ls -lt packages' },
+            id: 'toolu_456',
+            name: 'read_file',
+            parameters: {
+              absolute_path: '/test/package.json',
+            },
+          },
+          {
+            type: 'tool_response',
+            callId: 'toolu_456',
+            toolName: 'read_file',
+            result: { output: '{"name":"@vybestack/llxprt-code"}' },
           },
         ],
-      };
-    });
-
-    const provider: IProvider = {
-      name: 'stub',
-      isDefault: true,
-      getModels: vi.fn(async () => []),
-      getDefaultModel: () => 'stub-model',
-      generateChatCompletion: generateChatCompletionMock,
-      getAuthToken: vi.fn(async () => 'stub-auth-token'),
-    };
-
-    manager.registerProvider(provider);
-
-    const runtimeState = createAgentRuntimeState({
-      runtimeId: 'runtime-test',
-      provider: provider.name,
-      model: config.getModel(),
-      sessionId: config.getSessionId(),
-    });
-    const historyService = new HistoryService();
-    const view = createAgentRuntimeContext({
-      state: runtimeState,
-      history: historyService,
-      settings: {
-        compressionThreshold: 0.8,
-        contextLimit: 128000,
-        preserveThreshold: 0.2,
-        telemetry: {
-          enabled: true,
-          target: null,
-        },
-        'reasoning.includeInContext': true,
+        resultDisplay: '@vybestack/llxprt-code',
       },
-      provider: createProviderAdapterFromManager(config.getProviderManager()),
-      telemetry: createTelemetryAdapterFromConfig(config),
-      tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
-      providerRuntime: { ...providerRuntime },
-    });
+      invocation: { execute: vi.fn() },
+    },
+  ];
+  return completed;
+}
 
-    const chat = new ChatSession(
-      view,
-      {} as unknown as ContentGenerator,
-      {},
-      [],
-    );
+function continuedReadFileFixture() {
+  const completed = [
+    {
+      status: 'success' as const,
+      request: {
+        callId: 'toolu_continue_1',
+        name: 'read_file',
+        args: { absolute_path: '/test/package.json' },
+        prompt_id: 'prompt-continue-1',
+        agentId: 'default_agent',
+        isClientInitiated: false,
+      },
+      response: {
+        callId: 'toolu_continue_1',
+        responseParts: [
+          {
+            type: 'tool_call',
+            id: 'toolu_continue_1',
+            name: 'read_file',
+            parameters: { absolute_path: '/test/package.json' },
+          },
+          {
+            type: 'tool_response',
+            callId: 'toolu_continue_1',
+            toolName: 'read_file',
+            result: { output: 'package-json' },
+          },
+          {
+            type: 'text',
+            text: 'Tool completed.',
+          },
+        ],
+        resultDisplay: 'package-json',
+      },
+      invocation: { execute: vi.fn() },
+    },
+  ];
+  return completed;
+}
 
-    const stream = await chat.sendMessageStream(
-      { message: 'Trigger tool call' },
-      'prompt-123',
-    );
-    for await (const _event of stream) {
-      // exhaust stream to trigger history recording
-    }
-
-    const curated = historyService.getCuratedForProvider();
-    const toolCallEntry = curated.find(
-      (content) =>
-        content.speaker === 'ai' &&
-        content.blocks.some((block) => block.type === 'tool_call'),
-    );
-
-    expect(toolCallEntry).toBeDefined();
-    expect(
-      toolCallEntry?.blocks.some((block) => block.type === 'thinking'),
-    ).toBe(true);
+async function recordCompletedToolCalls(): Promise<number> {
+  const historyService = new HistoryService();
+  const chat = createHistoryChat(historyService, {
+    runtimeId: 'runtime-record-completed',
+    model: 'stub-model',
+    sessionId: 'session-record-completed',
+    settings: {
+      'reasoning.enabled': false,
+      'reasoning.includeInContext': true,
+      'reasoning.includeInResponse': false,
+      'reasoning.adaptiveThinking': false,
+    },
   });
 
-  it('closes pending tool calls in provider payload when sending a new user message', async () => {
-    const calls: GenerateChatOptions[] = [];
+  const completed = completedReadFileFixture();
 
-    const generateChatCompletionMock = vi.fn(async function* (
-      options: GenerateChatOptions,
-    ) {
-      calls.push(options);
-      yield {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'ok' }],
-      };
-    });
+  chat.recordCompletedToolCalls('stub-model', completed);
 
-    const provider: IProvider = {
-      name: 'stub',
-      isDefault: true,
-      getModels: vi.fn(async () => []),
-      getDefaultModel: () => 'stub-model',
-      generateChatCompletion: generateChatCompletionMock,
-      getAuthToken: vi.fn(async () => 'stub-auth-token'),
+  const curated = await Array.fromAsync(
+    historyService.getCuratedForProviderStream(),
+  );
+
+  const toolResponseIndex = curated.findIndex(
+    (content) =>
+      content.speaker === 'tool' &&
+      content.blocks.some((block) => block.type === 'tool_response'),
+  );
+
+  expect(toolResponseIndex).toBeGreaterThanOrEqual(0);
+  const toolResponseCount = curated.reduce(
+    (count, content) =>
+      count +
+      content.blocks.filter((block) => block.type === 'tool_response').length,
+    0,
+  );
+
+  const toolResponseBlock = curated[toolResponseIndex].blocks.find(
+    (block) => block.type === 'tool_response',
+  ) as {
+    type: string;
+    callId: string;
+    toolName: string;
+    result: { output: string };
+  };
+  expect(toolResponseBlock).toMatchObject({
+    type: 'tool_response',
+    toolName: 'read_file',
+    result: { output: '{"name":"@vybestack/llxprt-code"}' },
+  });
+  expect(toolResponseBlock.callId).toBe('toolu_456');
+  return toolResponseCount;
+}
+
+async function avoidDuplicateToolResponses(): Promise<number> {
+  const generateChatCompletionMock = vi.fn(async function* () {
+    yield {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'Done.' }],
     };
+  });
 
-    manager.registerProvider(provider);
+  const provider: IProvider = {
+    name: 'stub',
+    isDefault: true,
+    getModels: vi.fn(async () => []),
+    getDefaultModel: () => 'stub-model',
+    generateChatCompletion: generateChatCompletionMock,
+    getAuthToken: vi.fn(async () => 'stub-auth-token'),
+  };
 
-    const runtimeState = createAgentRuntimeState({
-      runtimeId: 'runtime-test',
-      provider: provider.name,
-      model: config.getModel(),
-      sessionId: config.getSessionId(),
-    });
-    const historyService = new HistoryService();
+  manager.registerProvider(provider);
 
-    // Seed a pending tool call (no tool response yet).
-    historyService.add({
+  const historyService = new HistoryService();
+  const chat = createHistoryChat(historyService, {
+    runtimeId: 'runtime-no-duplicate-tool-response',
+  });
+
+  const completed = continuedReadFileFixture();
+
+  chat.recordCompletedToolCalls('stub-model', completed);
+
+  const stream = await chat.sendMessageStream(
+    {
+      message: {
+        speaker: 'tool',
+        blocks: [
+          {
+            type: 'tool_response',
+            callId: 'toolu_continue_1',
+            toolName: 'read_file',
+            result: { output: 'package-json' },
+          },
+          { type: 'text', text: 'Tool completed.' },
+          { type: 'text', text: 'Continue with the analysis.' },
+        ],
+      },
+    },
+    'prompt-continue-1',
+  );
+  for await (const _event of stream) {
+    // exhaust stream to trigger normal history finalization
+  }
+
+  const rawHistory = await collectRawHistory(historyService);
+  const toolResponseCount = rawHistory.reduce(
+    (count, content) =>
+      count +
+      content.blocks.filter(
+        (block) =>
+          block.type === 'tool_response' &&
+          block.toolName === 'read_file' &&
+          (block.result as { output?: string } | undefined)?.output ===
+            'package-json',
+      ).length,
+    0,
+  );
+
+  const completedTextCount = rawHistory.reduce(
+    (count, content) =>
+      count +
+      content.blocks.filter(
+        (block) => block.type === 'text' && block.text === 'Tool completed.',
+      ).length,
+    0,
+  );
+  expect(completedTextCount).toBe(1);
+
+  expect(
+    rawHistory.some(
+      (content) =>
+        content.speaker === 'human' &&
+        content.blocks.some(
+          (block) =>
+            block.type === 'text' &&
+            block.text === 'Continue with the analysis.',
+        ),
+    ),
+  ).toBe(true);
+  return toolResponseCount;
+}
+
+async function retainThinkingToolCalls(): Promise<boolean> {
+  const calls: GenerateChatOptions[] = [];
+
+  const generateChatCompletionMock = vi.fn(async function* (
+    options: GenerateChatOptions,
+  ) {
+    calls.push(options);
+    yield {
       speaker: 'ai',
       blocks: [
         {
+          type: 'thinking',
+          thought: 'Follow-up reasoning',
+          signature: 'sig-1',
+        },
+        {
           type: 'tool_call',
-          id: 'hist_tool_pending_1',
+          id: 'hist_tool_reasoned_1',
           name: 'run_shell_command',
           parameters: { command: 'ls -lt packages' },
         },
       ],
-    });
-
-    const view = createAgentRuntimeContext({
-      state: runtimeState,
-      history: historyService,
-      settings: {
-        compressionThreshold: 0.8,
-        contextLimit: 128000,
-        preserveThreshold: 0.2,
-        telemetry: {
-          enabled: true,
-          target: null,
-        },
-      },
-      provider: createProviderAdapterFromManager(config.getProviderManager()),
-      telemetry: createTelemetryAdapterFromConfig(config),
-      tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
-      providerRuntime: { ...providerRuntime },
-    });
-
-    const chat = new ChatSession(
-      view,
-      {} as unknown as ContentGenerator,
-      {},
-      [],
-    );
-
-    await chat.sendMessage({ message: 'Continue' }, 'prompt-123');
-
-    expect(calls).toHaveLength(1);
-    const sent = calls[0].contents;
-    const toolCallIndex = sent.findIndex(
-      (c) =>
-        c.speaker === 'ai' &&
-        c.blocks.some(
-          (b) =>
-            b.type === 'tool_call' &&
-            (b as { id?: string }).id === 'hist_tool_pending_1',
-        ),
-    );
-    expect(toolCallIndex).toBeGreaterThanOrEqual(0);
-    expect(sent[toolCallIndex + 1]?.speaker).toBe('tool');
-    expect(
-      sent[toolCallIndex + 1]?.blocks.some(
-        (b) =>
-          b.type === 'tool_response' &&
-          (b as { callId?: string }).callId === 'hist_tool_pending_1',
-      ),
-    ).toBe(true);
+    };
   });
 
-  it('does not mutate TestRuntimeProviderManager active provider when runtimeState.provider differs', async () => {
-    const openaiCalls: GenerateChatOptions[] = [];
-    const anthropicCalls: GenerateChatOptions[] = [];
+  const provider: IProvider = {
+    name: 'stub',
+    isDefault: true,
+    getModels: vi.fn(async () => []),
+    getDefaultModel: () => 'stub-model',
+    generateChatCompletion: generateChatCompletionMock,
+    getAuthToken: vi.fn(async () => 'stub-auth-token'),
+  };
 
-    const openaiProvider: IProvider = {
-      name: 'openai',
-      isDefault: true,
-      getModels: vi.fn(async () => []),
-      getDefaultModel: () => 'openai-model',
-      generateChatCompletion: vi.fn(async function* (
-        options: GenerateChatOptions,
-      ) {
-        openaiCalls.push(options);
-        yield {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: 'openai' }],
-        };
-      }),
-      getAuthToken: vi.fn(async () => 'openai-auth-token'),
+  manager.registerProvider(provider);
+
+  const historyService = new HistoryService();
+  const chat = createHistoryChat(historyService);
+
+  const stream = await chat.sendMessageStream(
+    { message: 'Trigger tool call' },
+    'prompt-123',
+  );
+  for await (const _event of stream) {
+    // exhaust stream to trigger history recording
+  }
+
+  const curated = await Array.fromAsync(
+    historyService.getCuratedForProviderStream(),
+  );
+  const toolCallEntry = curated.find(
+    (content) =>
+      content.speaker === 'ai' &&
+      content.blocks.some((block) => block.type === 'tool_call'),
+  );
+
+  expect(toolCallEntry).toBeDefined();
+  return (
+    toolCallEntry?.blocks.some((block) => block.type === 'thinking') ?? false
+  );
+}
+
+async function closePendingToolCalls(): Promise<number> {
+  const calls: IContent[][] = [];
+
+  const generateChatCompletionMock = vi.fn(async function* (
+    options: GenerateChatOptions,
+  ) {
+    const sent: IContent[] = [];
+    for await (const content of options.contents) {
+      expect(sent.length).toBeLessThan(3);
+      sent.push(content);
+    }
+    calls.push(sent);
+    yield {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'ok' }],
     };
+  });
 
-    const anthropicProvider: IProvider = {
-      name: 'anthropic',
-      getModels: vi.fn(async () => []),
-      getDefaultModel: () => 'claude-test',
-      generateChatCompletion: vi.fn(async function* (
-        options: GenerateChatOptions,
-      ) {
-        anthropicCalls.push(options);
-        yield {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: 'anthropic' }],
-        };
-      }),
-      getAuthToken: vi.fn(async () => 'anthropic-auth-token'),
-    };
+  const provider: IProvider = {
+    name: 'stub',
+    isDefault: true,
+    getModels: vi.fn(async () => []),
+    getDefaultModel: () => 'stub-model',
+    generateChatCompletion: generateChatCompletionMock,
+    getAuthToken: vi.fn(async () => 'stub-auth-token'),
+  };
 
-    manager.registerProvider(openaiProvider);
-    manager.registerProvider(anthropicProvider);
-    settingsService.set('activeProvider', 'openai');
+  manager.registerProvider(provider);
 
-    const runtimeState = createAgentRuntimeState({
-      runtimeId: 'runtime-test',
-      provider: 'anthropic',
-      model: config.getModel(),
-      sessionId: config.getSessionId(),
-    });
+  const historyService = new HistoryService();
+  const chat = createHistoryChat(historyService, {
+    settings: {
+      compressionThreshold: 0.8,
+      contextLimit: 128000,
+      preserveThreshold: 0.2,
+      telemetry: { enabled: true, target: null },
+    },
+  });
 
-    const historyService = new HistoryService();
-    const view = createAgentRuntimeContext({
-      state: runtimeState,
-      history: historyService,
-      settings: {
-        compressionThreshold: 0.8,
-        contextLimit: 128000,
-        preserveThreshold: 0.2,
-        telemetry: {
-          enabled: true,
-          target: null,
-        },
+  // Seed a pending tool call (no tool response yet).
+  historyService.add({
+    speaker: 'ai',
+    blocks: [
+      {
+        type: 'tool_call',
+        id: 'hist_tool_pending_1',
+        name: 'run_shell_command',
+        parameters: { command: 'ls -lt packages' },
       },
-      provider: createProviderAdapterFromManager(config.getProviderManager()),
-      telemetry: createTelemetryAdapterFromConfig(config),
-      tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
-      providerRuntime: { ...providerRuntime },
-    });
+    ],
+  });
 
-    const chat = new ChatSession(
-      view,
-      {} as unknown as ContentGenerator,
-      {},
-      [],
-    );
+  await chat.sendMessage({ message: 'Continue' }, 'prompt-123');
 
-    await chat.sendMessage({ message: 'Hello there!' }, 'prompt-123');
+  expect(calls).toHaveLength(1);
+  const sent = calls[0];
+  const toolCallIndex = sent.findIndex(
+    (c) =>
+      c.speaker === 'ai' &&
+      c.blocks.some(
+        (b) =>
+          b.type === 'tool_call' &&
+          (b as { id?: string }).id === 'hist_tool_pending_1',
+      ),
+  );
+  expect(toolCallIndex).toBeGreaterThanOrEqual(0);
+  expect(sent[toolCallIndex + 1]?.speaker).toBe('tool');
+  expect(
+    sent[toolCallIndex + 1]?.blocks.some(
+      (b) =>
+        b.type === 'tool_response' &&
+        (b as { callId?: string }).callId === 'hist_tool_pending_1',
+    ),
+  ).toBe(true);
+  return sent.length;
+}
 
-    expect(openaiCalls).toHaveLength(0);
-    expect(anthropicCalls).toHaveLength(1);
+async function retainActiveProvider(): Promise<void> {
+  const openaiCalls: GenerateChatOptions[] = [];
+  const anthropicCalls: GenerateChatOptions[] = [];
+
+  const openaiProvider: IProvider = {
+    name: 'openai',
+    isDefault: true,
+    getModels: vi.fn(async () => []),
+    getDefaultModel: () => 'openai-model',
+    generateChatCompletion: vi.fn(async function* (
+      options: GenerateChatOptions,
+    ) {
+      openaiCalls.push(options);
+      yield {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'openai' }],
+      };
+    }),
+    getAuthToken: vi.fn(async () => 'openai-auth-token'),
+  };
+
+  const anthropicProvider: IProvider = {
+    name: 'anthropic',
+    getModels: vi.fn(async () => []),
+    getDefaultModel: () => 'claude-test',
+    generateChatCompletion: vi.fn(async function* (
+      options: GenerateChatOptions,
+    ) {
+      anthropicCalls.push(options);
+      yield {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'anthropic' }],
+      };
+    }),
+    getAuthToken: vi.fn(async () => 'anthropic-auth-token'),
+  };
+
+  manager.registerProvider(openaiProvider);
+  manager.registerProvider(anthropicProvider);
+  settingsService.set('activeProvider', 'openai');
+
+  const historyService = new HistoryService();
+  const chat = createHistoryChat(historyService, {
+    provider: 'anthropic',
+    settings: {
+      compressionThreshold: 0.8,
+      contextLimit: 128000,
+      preserveThreshold: 0.2,
+      telemetry: { enabled: true, target: null },
+    },
+  });
+
+  await chat.sendMessage({ message: 'Hello there!' }, 'prompt-123');
+
+  expect(openaiCalls).toHaveLength(0);
+  expect(anthropicCalls).toHaveLength(1);
+}
+
+function registerTerminalProvider(metadata: {
+  finishReason: string;
+  rawStopReason?: string;
+}): void {
+  const provider: IProvider = {
+    name: 'stub',
+    isDefault: true,
+    getModels: vi.fn(async () => []),
+    getDefaultModel: () => 'stub-model',
+    generateChatCompletion: vi.fn(async function* (
+      _options: GenerateChatOptions,
+    ) {
+      yield {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'first chunk' }],
+      };
+      yield {
+        speaker: 'ai',
+        blocks: [],
+        metadata,
+      };
+    }),
+    getAuthToken: vi.fn(async () => 'stub-auth-token'),
+  };
+  manager.registerProvider(provider);
+}
+
+describe('ChatSession runtime history and tool-call behavior', () => {
+  beforeEach(setupHistoryRuntime);
+
+  it('commits tool call/response even when model returns only thinking after tool results', async () => {
+    expect(await commitThinkingToolResults()).toBe(1);
+  });
+  it('eagerly records completed tool calls before the next provider stream starts', async () => {
+    expect(await recordCompletedToolCalls()).toBe(1);
+  });
+  it('does not duplicate eagerly recorded tool responses when the next stream succeeds', async () => {
+    expect(await avoidDuplicateToolResponses()).toBe(1);
+  });
+  it('retains thinking parts alongside tool calls when includeInContext is enabled', async () => {
+    expect(await retainThinkingToolCalls()).toBe(true);
+  });
+  it('closes pending tool calls in provider payload when sending a new user message', async () => {
+    expect(await closePendingToolCalls()).toBe(3);
+  });
+  it('does not mutate TestRuntimeProviderManager active provider when runtimeState.provider differs', async () => {
+    await retainActiveProvider();
     expect(settingsService.get('activeProvider')).toBe('openai');
   });
+});
+
+describe('ChatSession runtime terminal metadata', () => {
+  beforeEach(setupHistoryRuntime);
 
   it.each([
     {
@@ -701,61 +661,9 @@ describe('ChatSession runtime history and tool-call behavior', () => {
   ])(
     'coalesces $label metadata into a terminal Finished event in Turn stream',
     async ({ metadata }) => {
-      const provider: IProvider = {
-        name: 'stub',
-        isDefault: true,
-        getModels: vi.fn(async () => []),
-        getDefaultModel: () => 'stub-model',
-        generateChatCompletion: vi.fn(async function* (
-          _options: GenerateChatOptions,
-        ) {
-          yield {
-            speaker: 'ai',
-            blocks: [{ type: 'text', text: 'first chunk' }],
-          };
-          yield {
-            speaker: 'ai',
-            blocks: [],
-            metadata,
-          };
-        }),
-        getAuthToken: vi.fn(async () => 'stub-auth-token'),
-      };
-
-      manager.registerProvider(provider);
-
-      const runtimeState = createAgentRuntimeState({
-        runtimeId: 'runtime-test',
-        provider: provider.name,
-        model: config.getModel(),
-        sessionId: config.getSessionId(),
-      });
       const historyService = new HistoryService();
-      const view = createAgentRuntimeContext({
-        state: runtimeState,
-        history: historyService,
-        settings: {
-          compressionThreshold: 0.8,
-          contextLimit: 128000,
-          preserveThreshold: 0.2,
-          telemetry: {
-            enabled: true,
-            target: null,
-          },
-          'reasoning.includeInContext': true,
-        },
-        provider: createProviderAdapterFromManager(config.getProviderManager()),
-        telemetry: createTelemetryAdapterFromConfig(config),
-        tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
-        providerRuntime: { ...providerRuntime },
-      });
-
-      const chat = new ChatSession(
-        view,
-        {} as unknown as ContentGenerator,
-        {},
-        [],
-      );
+      registerTerminalProvider(metadata);
+      const chat = createHistoryChat(historyService);
       const { Turn, AgentEventType } = await import('./turn.js');
       const turn = new Turn(chat, 'prompt-123');
 

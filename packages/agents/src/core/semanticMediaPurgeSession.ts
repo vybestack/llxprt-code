@@ -10,12 +10,13 @@ import type {
   SemanticMediaPurgeCacheWriteEvidence,
   UsageStats,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { SemanticMediaPurgeFrontier } from '@vybestack/llxprt-code-core/services/history/semantic-media-purge.js';
 import {
-  SemanticMediaPurgeCoordinator,
-  type SemanticMediaPurgeFrontier,
-  type SemanticMediaPurgeTransaction,
-} from '@vybestack/llxprt-code-core/services/history/semantic-media-purge.js';
-import { sanitizeProviderHistoryForSerialization } from '@vybestack/llxprt-code-core/services/history/historyCloneUtils.js';
+  SemanticMediaPurgeStreamCoordinator,
+  type SemanticPurgeStreamTransaction,
+} from '@vybestack/llxprt-code-core/services/history/semantic-purge-stream.js';
+import type { SemanticPurgeRowSource } from '@vybestack/llxprt-code-core/services/history/semantic-purge-disk-rows.js';
+import type { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 
 export type SemanticMediaPurgeMode = 'off' | 'remove' | 'summary';
 
@@ -36,8 +37,9 @@ export interface SemanticMediaPurgeSessionOptions {
   readonly history: HistoryService;
   readonly mode: () => SemanticMediaPurgeMode;
   readonly requiresExplicitCacheWrite?: () => boolean;
+  readonly ownership?: RowOwnership;
   readonly persist: (
-    candidateHistory: readonly IContent[],
+    candidateHistory: SemanticPurgeRowSource,
     frontier: SemanticMediaPurgeFrontier,
   ) => Promise<void>;
 }
@@ -63,49 +65,9 @@ function matchesRequiredCacheWrite(
   return observedAnthropicCacheWrite(evidence.usage);
 }
 
-function prepareCacheEvidenceRequest(
-  transaction: SemanticMediaPurgeTransaction,
-): {
-  readonly history: readonly IContent[];
-  readonly boundary: PreparedSemanticMediaPurgeBoundary | undefined;
-} {
-  const history = sanitizeProviderHistoryForSerialization([
-    ...transaction.baseHistory,
-  ]);
-  const location = transaction.preImageBoundary;
-  const boundaryId = transaction.preImageBoundaryIdentity;
-  if (location === undefined || boundaryId === undefined) {
-    return { history, boundary: undefined };
-  }
-  if (
-    location.contentIndex < 0 ||
-    location.contentIndex >= history.length ||
-    location.blockIndex < 0 ||
-    location.blockIndex >= history[location.contentIndex].blocks.length
-  ) {
-    throw new Error('Semantic media purge pre-image boundary no longer exists');
-  }
-  const content = history[location.contentIndex];
-  content.metadata = {
-    ...content.metadata,
-    semanticMediaPurgeBoundary: {
-      blockIndex: location.blockIndex,
-      boundaryId,
-    },
-  };
-  return {
-    history,
-    boundary: {
-      contentIndex: location.contentIndex,
-      blockIndex: location.blockIndex,
-      boundaryId,
-    },
-  };
-}
-
 export class SemanticMediaPurgeAttempt {
-  readonly candidateHistory: readonly IContent[];
-  readonly requestHistory: readonly IContent[];
+  readonly candidateHistory: SemanticPurgeRowSource;
+  readonly requestHistory: SemanticPurgeRowSource;
   readonly preparedBoundary: PreparedSemanticMediaPurgeBoundary | undefined;
   private completed = false;
   private committed = false;
@@ -114,20 +76,29 @@ export class SemanticMediaPurgeAttempt {
   private released = false;
 
   constructor(
-    private readonly coordinator: SemanticMediaPurgeCoordinator,
-    private readonly transaction: SemanticMediaPurgeTransaction,
+    private readonly coordinator: SemanticMediaPurgeStreamCoordinator,
+    private readonly transaction: SemanticPurgeStreamTransaction,
     private readonly requiresExplicitCacheWrite: boolean,
     private readonly releaseAttempt: () => void,
   ) {
-    this.candidateHistory = transaction.candidateHistory;
-    if (requiresExplicitCacheWrite) {
-      const prepared = prepareCacheEvidenceRequest(transaction);
-      this.requestHistory = prepared.history;
-      this.preparedBoundary = prepared.boundary;
-    } else {
-      this.requestHistory = transaction.candidateHistory;
-      this.preparedBoundary = undefined;
-    }
+    this.candidateHistory = transaction.candidate;
+    this.requestHistory = requiresExplicitCacheWrite
+      ? Object.freeze({
+          length: transaction.base.length,
+          streamRows: (
+            signal?: AbortSignal,
+          ): AsyncGenerator<IContent, void, unknown> =>
+            transaction.requestRows(true, signal),
+        })
+      : transaction.candidate;
+    const location = transaction.preImageBoundary;
+    const boundaryId = transaction.preImageBoundaryIdentity;
+    this.preparedBoundary =
+      requiresExplicitCacheWrite &&
+      location !== undefined &&
+      boundaryId !== undefined
+        ? Object.freeze({ ...location, boundaryId })
+        : undefined;
   }
 
   markRetryHandoff(): void {
@@ -177,7 +148,11 @@ export class SemanticMediaPurgeAttempt {
   private release(): void {
     if (this.released) return;
     this.released = true;
-    this.releaseAttempt();
+    try {
+      this.transaction.close();
+    } finally {
+      this.releaseAttempt();
+    }
   }
 
   async failAfterProcessingError(): Promise<void> {
@@ -196,15 +171,19 @@ export class SemanticMediaPurgeAttempt {
 }
 
 export class SemanticMediaPurgeSession {
-  private readonly coordinator: SemanticMediaPurgeCoordinator;
+  private readonly coordinator: SemanticMediaPurgeStreamCoordinator;
   private attemptChain: Promise<void> = Promise.resolve();
 
   constructor(private readonly options: SemanticMediaPurgeSessionOptions) {
-    this.coordinator = new SemanticMediaPurgeCoordinator(options.history, {
-      enabled: true,
-      explicitCacheWriteRequired: false,
-      persist: options.persist,
-    });
+    this.coordinator = new SemanticMediaPurgeStreamCoordinator(
+      options.history,
+      {
+        enabled: true,
+        explicitCacheWriteRequired: false,
+        ownership: options.ownership,
+        persist: options.persist,
+      },
+    );
   }
 
   isEnabled(): boolean {
@@ -214,21 +193,25 @@ export class SemanticMediaPurgeSession {
   async begin(
     requiresExplicitCacheWrite = this.options.requiresExplicitCacheWrite?.() ??
       false,
+    signal?: AbortSignal,
   ): Promise<SemanticMediaPurgeAttempt | undefined> {
     if (this.options.mode() === 'off') return undefined;
+    signal?.throwIfAborted();
     const releaseAttempt = await this.acquireAttempt();
     try {
+      signal?.throwIfAborted();
       const mode = this.options.mode();
       if (mode === 'off') {
         releaseAttempt();
         return undefined;
       }
-      const transaction = this.coordinator.begin({ mode });
+      const transaction = await this.coordinator.begin({ mode }, signal);
       if (
         transaction === undefined ||
         (requiresExplicitCacheWrite &&
           transaction.preImageBoundary === undefined)
       ) {
+        transaction?.close();
         releaseAttempt();
         return undefined;
       }

@@ -17,6 +17,7 @@ import {
   expect,
   beforeEach,
   afterEach,
+  afterAll,
   type Mock,
 } from 'bun:test';
 import { SubAgentScope } from './subagent.js';
@@ -111,51 +112,11 @@ void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('Core Prompt'),
 }));
 
-describe('subagent.ts', () => {
-  let mockSendMessageStream: Mock;
+let mockSendMessageStream: Mock;
+const promptConfig: PromptConfig = { systemPrompt: 'Execute task.' };
 
+function registerExecutionCase1(): void {
   describe('runNonInteractive - Execution and Tool Use', () => {
-    const promptConfig: PromptConfig = { systemPrompt: 'Execute task.' };
-
-    beforeEach(async () => {
-      vi.clearAllMocks();
-      mockReadTodos.mockReset();
-      mockReadTodos.mockResolvedValue([]);
-      TodoStoreMock.mockClear();
-      TodoStoreMock.mockImplementation(() => ({ readTodos: mockReadTodos }));
-
-      (
-        getEnvironmentContext as Mock<typeof getEnvironmentContext>
-      ).mockResolvedValue([{ text: 'Env Context' }]);
-      (
-        createContentGenerator as Mock<typeof createContentGenerator>
-      ).mockResolvedValue({
-        getGenerativeModel: vi.fn(),
-      } as unknown as ContentGenerator);
-
-      mockSendMessageStream = vi.fn();
-      (
-        ChatSession as unknown as Mock<(...args: never[]) => unknown>
-      ).mockImplementation(
-        () =>
-          ({
-            sendMessageStream: mockSendMessageStream,
-            getHistory: vi.fn().mockReturnValue([]),
-            getHistoryService: vi.fn().mockReturnValue({
-              clear: vi.fn(),
-              findUnmatchedToolCalls: vi.fn().mockReturnValue([]),
-              getCurated: vi.fn().mockReturnValue([]),
-              getTotalTokens: vi.fn().mockReturnValue(0),
-            }),
-            getConfig: vi.fn().mockReturnValue(undefined),
-          }) as unknown as ChatSession,
-      );
-    });
-
-    afterEach(() => {
-      vi.restoreAllMocks();
-    });
-
     it('should terminate with GOAL if no outputs are expected and model stops', async () => {
       const { config } = await createMockConfig();
       mockSendMessageStream.mockImplementation(createMockStream(['stop']));
@@ -188,7 +149,11 @@ describe('subagent.ts', () => {
         },
       ]);
     });
+  });
+}
 
+function registerExecutionCase2(): void {
+  describe('runNonInteractive - Execution and Tool Use — todo completion', () => {
     it('prompts the model to finish outstanding todos before completing', async () => {
       const {
         scope,
@@ -253,7 +218,11 @@ describe('subagent.ts', () => {
           promptsTheModelToFinishOutstandingTodosBeforeCompletingObservation1,
         };
       };
+  });
+}
 
+function registerExecutionCase3(): void {
+  describe('runNonInteractive - Execution and Tool Use — emitted outputs', () => {
     it('should handle self_emitvalue and terminate with GOAL when outputs are met', async () => {
       const { config } = await createMockConfig();
       const outputConfig: OutputConfig = {
@@ -293,6 +262,11 @@ describe('subagent.ts', () => {
       expect(scope.output.final_message).toContain('result=Success');
       expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
     });
+  });
+}
+
+function registerExecutionCase4(): void {
+  describe('runNonInteractive - Execution and Tool Use — invalid output', () => {
     it('rejects a malformed self_emitvalue call with null arguments (issue 3540)', async () => {
       const { config } = await createMockConfig();
       const outputConfig: OutputConfig = {
@@ -332,21 +306,29 @@ describe('subagent.ts', () => {
         SubagentTerminateMode.GOAL,
       );
     });
+  });
+}
 
+async function createListFilesConfig() {
+  const listFilesToolDef: FunctionDeclaration = {
+    name: 'list_files',
+    description: 'Lists files',
+    parameters: { type: 'object', properties: {} },
+  };
+
+  const { config } = await createMockConfig({
+    getFunctionDeclarationsFiltered: vi
+      .fn()
+      .mockReturnValue([listFilesToolDef]),
+  });
+  return config;
+}
+
+function registerExecutionCase5(): void {
+  describe('runNonInteractive - Execution and Tool Use — external tool', () => {
     it('should execute external tools and provide the response to the model', async () => {
-      const listFilesToolDef: FunctionDeclaration = {
-        name: 'list_files',
-        description: 'Lists files',
-        parameters: { type: 'object', properties: {} },
-      };
-
-      const { config } = await createMockConfig({
-        getFunctionDeclarationsFiltered: vi
-          .fn()
-          .mockReturnValue([listFilesToolDef]),
-      });
+      const config = await createListFilesConfig();
       const toolConfig: ToolConfig = { tools: ['list_files'] };
-
       mockSendMessageStream.mockImplementation(
         createMockStream([
           [
@@ -367,7 +349,6 @@ describe('subagent.ts', () => {
           resultDisplay: 'Listed 2 files',
         }),
       });
-
       const runtimeBundle = createStatelessRuntimeBundle({
         toolRegistry: config.getToolRegistry(),
         toolsView: {
@@ -421,7 +402,11 @@ describe('subagent.ts', () => {
       expect(historyAddSpy).not.toHaveBeenCalled();
       expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.GOAL);
     });
+  });
+}
 
+function registerExecutionCase6(): void {
+  describe('runNonInteractive - Execution and Tool Use — tool error', () => {
     it('should provide specific tool error responses to the model', async () => {
       const { config } = await createMockConfig();
       const toolConfig: ToolConfig = { tools: ['failing_tool'] };
@@ -488,7 +473,11 @@ describe('subagent.ts', () => {
         },
       ]);
     });
+  });
+}
 
+function registerExecutionCase7(): void {
+  describe('runNonInteractive - Execution and Tool Use — error-part filtering', () => {
     it('should filter functionCall from error responseParts in non-interactive flow (Anthropic boundary)', async () => {
       const responsePartShape =
         await observeFilterFunctionCallFromErrorResponsePartsInNonInteractiveFlowAnthropicBoundary();
@@ -497,116 +486,125 @@ describe('subagent.ts', () => {
         toolCallParts: [],
       });
     });
+  });
+}
 
-    const observeFilterFunctionCallFromErrorResponsePartsInNonInteractiveFlowAnthropicBoundary =
-      async () => {
-        const { config } = await createMockConfig();
-        const toolConfig: ToolConfig = { tools: ['erroring_tool'] };
+const observeFilterFunctionCallFromErrorResponsePartsInNonInteractiveFlowAnthropicBoundary =
+  async () => {
+    const { config } = await createMockConfig();
+    const toolConfig: ToolConfig = { tools: ['erroring_tool'] };
 
-        mockSendMessageStream.mockImplementation(
-          createMockStream([
-            [
-              {
-                id: 'call_err',
-                name: 'erroring_tool',
-                args: {},
-              },
-            ],
-            'stop',
-          ]),
-        );
-
-        (executeToolCall as Mock<typeof executeToolCall>).mockResolvedValue({
-          ...createCompletedToolCallResponse({
-            callId: 'call_err',
-            responseParts: [
-              {
-                type: 'tool_response',
-                callId: 'call_err',
-                toolName: 'erroring_tool',
-                result: { error: 'Tool crashed' },
-              },
-            ],
-            resultDisplay: 'Tool crashed',
-            error: new Error('Tool crashed'),
-            errorType: ToolErrorType.UNHANDLED_EXCEPTION,
-          }),
-        });
-
-        const runtimeBundle = createStatelessRuntimeBundle({
-          toolRegistry: config.getToolRegistry(),
-          toolsView: {
-            listToolNames: () => ['erroring_tool'],
-            getToolMetadata: () => ({
-              name: 'erroring_tool',
-              description: 'Tool that errors',
-              parameterSchema: { type: 'object', properties: {} },
-            }),
+    mockSendMessageStream.mockImplementation(
+      createMockStream([
+        [
+          {
+            id: 'call_err',
+            name: 'erroring_tool',
+            args: {},
           },
-        });
-        const { overrides } = createRuntimeOverrides({
-          runtimeBundle,
-          toolRegistry: config.getToolRegistry(),
-        });
+        ],
+        'stop',
+      ]),
+    );
 
-        const scope = await SubAgentScope.create(
-          'test-agent',
-          config,
-          promptConfig,
-          defaultModelConfig,
-          defaultRunConfig,
-          toolConfig,
-          undefined,
-          overrides,
-        );
+    (executeToolCall as Mock<typeof executeToolCall>).mockResolvedValue({
+      ...createCompletedToolCallResponse({
+        callId: 'call_err',
+        responseParts: [
+          {
+            type: 'tool_response',
+            callId: 'call_err',
+            toolName: 'erroring_tool',
+            result: { error: 'Tool crashed' },
+          },
+        ],
+        resultDisplay: 'Tool crashed',
+        error: new Error('Tool crashed'),
+        errorType: ToolErrorType.UNHANDLED_EXCEPTION,
+      }),
+    });
 
-        await scope.runNonInteractive(new ContextState());
+    const runtimeBundle = createStatelessRuntimeBundle({
+      toolRegistry: config.getToolRegistry(),
+      toolsView: {
+        listToolNames: () => ['erroring_tool'],
+        getToolMetadata: () => ({
+          name: 'erroring_tool',
+          description: 'Tool that errors',
+          parameterSchema: { type: 'object', properties: {} },
+        }),
+      },
+    });
+    const { overrides } = createRuntimeOverrides({
+      runtimeBundle,
+      toolRegistry: config.getToolRegistry(),
+    });
 
-        const secondCallArgs = mockSendMessageStream.mock.calls[1][0];
-        const toolCallParts = secondCallArgs.message.filter(
-          (part: ContentBlock) =>
-            'type' in part &&
-            (part as Record<string, unknown>).type === 'tool_call',
-        );
-        const hasToolResponse = secondCallArgs.message.some(
-          (p: ContentBlock) =>
-            'type' in p &&
-            (p as Record<string, unknown>).type === 'tool_response',
-        );
+    const scope = await SubAgentScope.create(
+      'test-agent',
+      config,
+      promptConfig,
+      defaultModelConfig,
+      defaultRunConfig,
+      toolConfig,
+      undefined,
+      overrides,
+    );
 
-        return { hasToolResponse, toolCallParts };
-      };
+    await scope.runNonInteractive(new ContextState());
 
-    it('fails fast when a tool is disabled in the current profile', async () => {
-      const listToolNames = () => ['write_file'];
-      const getToolMetadata = () => ({
+    const secondCallArgs = mockSendMessageStream.mock.calls[1][0];
+    const toolCallParts = secondCallArgs.message.filter(
+      (part: ContentBlock) =>
+        'type' in part &&
+        (part as Record<string, unknown>).type === 'tool_call',
+    );
+    const hasToolResponse = secondCallArgs.message.some(
+      (p: ContentBlock) =>
+        'type' in p && (p as Record<string, unknown>).type === 'tool_response',
+    );
+
+    return { hasToolResponse, toolCallParts };
+  };
+
+async function createDisabledToolConfig() {
+  const listToolNames = () => ['write_file'];
+  const getToolMetadata = () => ({
+    name: 'write_file',
+    description: 'Write files to disk',
+    parameterSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string' },
+        content: { type: 'string' },
+      },
+    },
+  });
+
+  const { config } = await createMockConfig({
+    getFunctionDeclarationsFiltered: vi.fn().mockReturnValue([
+      {
         name: 'write_file',
         description: 'Write files to disk',
-        parameterSchema: {
+        parameters: {
           type: 'object',
           properties: {
             path: { type: 'string' },
             content: { type: 'string' },
           },
         },
-      });
+      } as FunctionDeclaration,
+    ]),
+    getTool: vi.fn().mockReturnValue({}),
+  });
+  return { config, listToolNames, getToolMetadata };
+}
 
-      const { config } = await createMockConfig({
-        getFunctionDeclarationsFiltered: vi.fn().mockReturnValue([
-          {
-            name: 'write_file',
-            description: 'Write files to disk',
-            parameters: {
-              type: 'object',
-              properties: {
-                path: { type: 'string' },
-                content: { type: 'string' },
-              },
-            },
-          } as FunctionDeclaration,
-        ]),
-        getTool: vi.fn().mockReturnValue({}),
-      });
+function registerExecutionCase8(): void {
+  describe('runNonInteractive - Execution and Tool Use — disabled tool', () => {
+    it('fails fast when a tool is disabled in the current profile', async () => {
+      const { config, listToolNames, getToolMetadata } =
+        await createDisabledToolConfig();
 
       const runtimeBundle = createStatelessRuntimeBundle({
         toolRegistry: config.getToolRegistry(),
@@ -676,7 +674,11 @@ describe('subagent.ts', () => {
         'Tool "write_file" is not available',
       );
     });
+  });
+}
 
+function registerExecutionCase9(): void {
+  describe('runNonInteractive - Execution and Tool Use — missing outputs', () => {
     it('should nudge the model if it stops before emitting all required variables', async () => {
       const { config } = await createMockConfig();
       const outputConfig: OutputConfig = {
@@ -725,4 +727,68 @@ describe('subagent.ts', () => {
       expect(mockSendMessageStream).toHaveBeenCalledTimes(2);
     });
   });
+}
+
+describe('subagent.ts', () => {
+  afterAll(() => {
+    void vi.mock('./chatSession.js', () => __actual);
+    void vi.mock(
+      '@vybestack/llxprt-code-core/utils/environmentContext.js',
+      () => realEnvironmentContextModule,
+    );
+    void vi.mock(
+      './nonInteractiveToolExecutor.js',
+      () => realNonInteractiveToolExecutorModule,
+    );
+    void vi.mock('@vybestack/llxprt-code-tools', () => actual);
+  });
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    mockReadTodos.mockReset();
+    mockReadTodos.mockResolvedValue([]);
+    TodoStoreMock.mockClear();
+    TodoStoreMock.mockImplementation(() => ({ readTodos: mockReadTodos }));
+
+    (
+      getEnvironmentContext as Mock<typeof getEnvironmentContext>
+    ).mockResolvedValue([{ text: 'Env Context' }]);
+    (
+      createContentGenerator as Mock<typeof createContentGenerator>
+    ).mockResolvedValue({
+      getGenerativeModel: vi.fn(),
+    } as unknown as ContentGenerator);
+
+    mockSendMessageStream = vi.fn();
+    (
+      ChatSession as unknown as Mock<(...args: never[]) => unknown>
+    ).mockImplementation(
+      () =>
+        ({
+          sendMessageStream: mockSendMessageStream,
+          getHistory: vi.fn().mockReturnValue([]),
+          getHistoryService: vi.fn().mockReturnValue({
+            clear: vi.fn(),
+            findUnmatchedToolCalls: vi.fn().mockReturnValue([]),
+            getCurated: vi.fn().mockReturnValue([]),
+            getTotalTokens: vi.fn().mockReturnValue(0),
+          }),
+          getConfig: vi.fn().mockReturnValue(undefined),
+        }) as unknown as ChatSession,
+    );
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  registerExecutionCase1();
+  registerExecutionCase2();
+  registerExecutionCase3();
+  registerExecutionCase4();
+  registerExecutionCase5();
+  registerExecutionCase6();
+  registerExecutionCase7();
+  registerExecutionCase8();
+  registerExecutionCase9();
 });

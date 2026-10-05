@@ -245,11 +245,18 @@ export function buildFetchMockBody(hoisted: HoistedConfigMocks) {
 // Shared AgentClient / CoreToolScheduler mock classes
 // ---------------------------------------------------------------------------
 
+export async function* streamConfigHistory(this: {
+  getHistory(): Iterable<unknown> | Promise<Iterable<unknown>>;
+}): AsyncGenerator<unknown, void, unknown> {
+  yield* await this.getHistory();
+}
+
 export const AgentClient = vi.fn().mockImplementation(() => ({
   initialize: vi.fn().mockResolvedValue(undefined),
   isInitialized: vi.fn().mockReturnValue(false),
   hasChatInitialized: vi.fn().mockReturnValue(false),
   getHistory: vi.fn().mockReturnValue([]),
+  streamHistory: streamConfigHistory,
   getHistoryService: vi.fn().mockReturnValue(null),
   setHistory: vi.fn(),
   storeHistoryServiceForReuse: vi.fn(),
@@ -332,6 +339,7 @@ export function resetAgentClientMock(): void {
     isInitialized: vi.fn().mockReturnValue(false),
     hasChatInitialized: vi.fn().mockReturnValue(false),
     getHistory: vi.fn().mockReturnValue([]),
+    streamHistory: streamConfigHistory,
     getHistoryService: vi.fn().mockReturnValue(null),
     setHistory: vi.fn(),
     storeHistoryServiceForReuse: vi.fn(),

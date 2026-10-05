@@ -19,7 +19,7 @@ import type { IContent } from './IContent.js';
 
 /** Build the per-block debug shape for an AI content entry. */
 function buildBlockDebug(blocks: IContent['blocks']) {
-  return blocks.map((b) => ({
+  return blocks.slice(0, 32).map((b) => ({
     type: b.type,
     textLength: b.type === 'text' ? b.text.length : null,
     textPreview: b.type === 'text' ? b.text.substring(0, 50) : null,
@@ -42,6 +42,7 @@ export function logAiMessageAnalysis(
     hasValidContent,
     blockCount: content.blocks.length,
     blocks: buildBlockDebug(content.blocks),
+    ...(content.blocks.length > 32 ? { blocksTruncated: true } : {}),
     metadata: {
       hasUsage: !!content.metadata?.usage,
       tokens: content.metadata?.usage?.totalTokens,
@@ -61,7 +62,11 @@ export function logCurationSummary(
   logger: DebugLogger,
   params: {
     totalHistory: number;
-    curated: IContent[];
+    curatedCount: number;
+    humanMessages: number;
+    toolMessages: number;
+    toolCallsInCurated: number;
+    toolResponsesInCurated: number;
     aiMessagesAnalyzed: number;
     aiMessagesIncluded: number;
     excludedCount: number;
@@ -73,7 +78,11 @@ export function logCurationSummary(
   }
   const {
     totalHistory,
-    curated,
+    curatedCount,
+    humanMessages,
+    toolMessages,
+    toolCallsInCurated,
+    toolResponsesInCurated,
     aiMessagesAnalyzed,
     aiMessagesIncluded,
     excludedCount,
@@ -82,7 +91,7 @@ export function logCurationSummary(
 
   logger.debug('=== CURATED HISTORY SUMMARY ===', {
     totalHistory,
-    curatedCount: curated.length,
+    curatedCount,
     breakdown: {
       aiMessages: {
         total: aiMessagesAnalyzed,
@@ -93,19 +102,12 @@ export function logCurationSummary(
             ? `${((excludedCount / aiMessagesAnalyzed) * 100).toFixed(1)}%`
             : '0%',
       },
-      humanMessages: curated.filter((c) => c.speaker === 'human').length,
-      toolMessages: curated.filter((c) => c.speaker === 'tool').length,
+      humanMessages,
+      toolMessages,
     },
     toolActivity: {
-      toolCallsInCurated: curated.reduce(
-        (acc, c) => acc + c.blocks.filter((b) => b.type === 'tool_call').length,
-        0,
-      ),
-      toolResponsesInCurated: curated.reduce(
-        (acc, c) =>
-          acc + c.blocks.filter((b) => b.type === 'tool_response').length,
-        0,
-      ),
+      toolCallsInCurated,
+      toolResponsesInCurated,
     },
     isCompressing,
   });
@@ -163,15 +165,19 @@ export function logQueuedDuringCompression(
 }
 
 /** Compute conversation statistics from a history array. */
-export function computeStatistics(history: IContent[]): ConversationStatistics {
+export function computeStatistics(
+  history: Iterable<IContent>,
+): ConversationStatistics {
   let userMessages = 0;
   let aiMessages = 0;
   let toolCalls = 0;
   let toolResponses = 0;
   let totalTokens = 0;
   let hasTokens = false;
+  let totalMessages = 0;
 
   for (const content of history) {
+    totalMessages++;
     if (content.speaker === 'human') {
       userMessages++;
     } else if (content.speaker === 'ai') {
@@ -194,7 +200,7 @@ export function computeStatistics(history: IContent[]): ConversationStatistics {
   }
 
   return {
-    totalMessages: history.length,
+    totalMessages,
     userMessages,
     aiMessages,
     toolCalls,

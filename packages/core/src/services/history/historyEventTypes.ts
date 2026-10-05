@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 
+import type { EventEmitter } from 'events';
 import type { IContent } from './IContent.js';
+import type { HistoryBatchValues } from './history-batch-values.js';
 import type { TokensUpdatedEvent } from './HistoryEvents.js';
 
 /**
@@ -103,6 +105,22 @@ export interface ContextSummaryInfo {
   text: string;
 }
 
+type NativeEventArguments = Parameters<Parameters<EventEmitter['on']>[1]>;
+
+export type HistoryEventRegistration<Host> = <Event extends string | symbol>(
+  event: Event,
+  listener: Event extends 'contentBatchAdded'
+    ? (contents: HistoryBatchValues) => void
+    : Parameters<EventEmitter['on']>[1],
+) => Host;
+
+export type HistoryEventEmission = <Event extends string | symbol>(
+  event: Event,
+  ...args: Event extends 'contentBatchAdded'
+    ? [contents: HistoryBatchValues]
+    : NativeEventArguments
+) => boolean;
+
 /**
  * Typed EventEmitter interface for HistoryService events.
  */
@@ -118,7 +136,7 @@ export interface HistoryServiceEventEmitter {
   ): this;
   on(
     event: 'contentBatchAdded',
-    listener: (contents: readonly IContent[]) => void,
+    listener: (contents: HistoryBatchValues) => void,
   ): this;
   on(event: 'compressionStarted', listener: () => void): this;
   on(event: 'compressionLockReleased', listener: () => void): this;
@@ -129,7 +147,7 @@ export interface HistoryServiceEventEmitter {
   emit(event: 'tokensUpdated', eventData: TokensUpdatedEvent): boolean;
   emit(event: 'contentAdded', content: IContent): boolean;
   emit(event: 'contextRangeChanged', range: ContextRange): boolean;
-  emit(event: 'contentBatchAdded', contents: readonly IContent[]): boolean;
+  emit(event: 'contentBatchAdded', contents: HistoryBatchValues): boolean;
   emit(event: 'compressionStarted'): boolean;
   emit(event: 'compressionLockReleased'): boolean;
   emit(
@@ -148,7 +166,7 @@ export interface HistoryServiceEventEmitter {
   ): this;
   off(
     event: 'contentBatchAdded',
-    listener: (contents: readonly IContent[]) => void,
+    listener: (contents: HistoryBatchValues) => void,
   ): this;
   off(event: 'compressionStarted', listener: () => void): this;
   off(event: 'compressionLockReleased', listener: () => void): this;

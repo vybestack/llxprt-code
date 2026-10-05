@@ -24,10 +24,8 @@
  * the suffix from the cut, `compressed` and `semantic_media_purge` replace
  * the whole history, and only survivor rows are decoded on the second pass.
  *
- * The eager ReplayEngine (`replaySession`) is the behavioral oracle: on every
- * generated journal the resolver's resolved row sequence must equal the
- * engine's replayed history for the same file. This is the RED session — the
- * tests pin the contract that the P05a green session implements.
+ * The extracted test-only eager fold is independent of JournalResolver.
+ * Generated journals must resolve to the same rows through both algorithms.
  */
 
 import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
@@ -35,13 +33,14 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { JournalResolver } from './journalResolver.js';
-import { replaySession } from './ReplayEngine.js';
+import { replaySession } from './eager-replay.test.helpers.js';
 import type {
   JournalResolverOptions,
   ResolvedEntry,
   ResolverFileHandle,
   ResolverIo,
   ResolverStats,
+  SurvivorInterval,
 } from './journalResolver.js';
 import type { SessionEventType } from './types.js';
 import type {
@@ -264,7 +263,7 @@ async function buildAdversarialChain(
   return { a, b, c, d, e, f };
 }
 
-/** The eager ReplayEngine on the same file is the behavioral oracle. */
+/** The test-only eager fold on the same file is the behavioral oracle. */
 async function engineHistoryFor(journalPath: string): Promise<IContent[]> {
   const result = await replaySession(journalPath, PROJECT_HASH);
   if (!result.ok) {
@@ -292,9 +291,17 @@ async function collectRows(
   return rows;
 }
 
-function intervalSeqSet(stats: ResolverStats): Set<number> {
+async function collectIntervals(
+  stats: ResolverStats,
+): Promise<SurvivorInterval[]> {
+  const intervals: SurvivorInterval[] = [];
+  for await (const interval of stats.intervals) intervals.push(interval);
+  return intervals;
+}
+
+async function intervalSeqSet(stats: ResolverStats): Promise<Set<number>> {
   const seqs = new Set<number>();
-  for (const interval of stats.intervals) {
+  for await (const interval of stats.intervals) {
     for (let seq = interval.fromSeq; seq <= interval.toSeq; seq += 1) {
       seqs.add(seq);
     }
@@ -325,7 +332,8 @@ function countingIo(): {
         },
         read: async (buffer, offset, length, position) => {
           counters.read += 1;
-          return handle.read(buffer, offset, length, position);
+          return (await handle.read(buffer, offset, length, position))
+            .bytesRead;
         },
         close: async () => {
           if (closed) return;
@@ -340,10 +348,6 @@ function countingIo(): {
 }
 
 describe('JournalResolver @plan:PLAN-20260917-ISSUE854.P05 @requirement:G2,G4', () => {
-  let tempDir = '';
-  let filePath = '';
-  let opened: JournalResolver[] = [];
-
   beforeEach(async () => {
     tempDir = await fs.mkdtemp(
       path.join(os.tmpdir(), 'journal-resolver-test-'),
@@ -359,384 +363,603 @@ describe('JournalResolver @plan:PLAN-20260917-ISSUE854.P05 @requirement:G2,G4', 
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
-  async function openResolver(
-    options: JournalResolverOptions = {},
-  ): Promise<JournalResolver> {
-    const resolver = await JournalResolver.open(filePath, options);
-    opened.push(resolver);
-    return resolver;
-  }
+  it(
+    'resolves an adversarial rewind/reappend chain to the engine history',
+    resolveAdversarialChain,
+  );
 
-  it('resolves an adversarial rewind/reappend chain to the engine history', async () => {
-    const refs = await buildAdversarialChain(new JournalBuilder(filePath));
-    const rows = await collectRows(await openResolver());
+  it(
+    'books the adversarial chain as three singleton survivor intervals',
+    bookAdversarialIntervals,
+  );
 
-    expect(rows.map((row) => textOf(row.content))).toStrictEqual([
-      'A',
-      'D',
-      'F',
-    ]);
-    expect(rows.map((row) => row.seq)).toStrictEqual([
-      refs.a.seq,
-      refs.d.seq,
-      refs.f.seq,
-    ]);
-    await expectRowsMatchEngine(rows, filePath);
-  });
+  it(
+    'resolves rewind-after-compression to the engine history',
+    rewindAfterCompression,
+  );
 
-  it('books the adversarial chain as three singleton survivor intervals', async () => {
-    const refs = await buildAdversarialChain(new JournalBuilder(filePath));
-    const resolver = await openResolver();
-    const rows = await collectRows(resolver);
-    const stats = resolver.stats();
+  it(
+    'treats compressed as whole-history replacement with a surviving head',
+    replaceWithSummaryAndHead,
+  );
 
-    expect(stats.intervals).toStrictEqual([
-      {
-        fromSeq: refs.a.seq,
-        toSeq: refs.a.seq,
-        firstOffset: refs.a.offset,
-        rowCount: 1,
-      },
-      {
-        fromSeq: refs.d.seq,
-        toSeq: refs.d.seq,
-        firstOffset: refs.d.offset,
-        rowCount: 1,
-      },
-      {
-        fromSeq: refs.f.seq,
-        toSeq: refs.f.seq,
-        firstOffset: refs.f.offset,
-        rowCount: 1,
-      },
-    ]);
-    expect(stats.resolvedRowCount).toBe(3);
-    const removedSeqs = [refs.b.seq, refs.c.seq, refs.e.seq];
-    expect(rows.some((row) => removedSeqs.includes(row.seq))).toBe(false);
-  });
+  it(
+    'applies count-only rewinds over the dense journal seq space',
+    applyCountOnlyRewinds,
+  );
 
-  it('resolves rewind-after-compression to the engine history', async () => {
-    const builder = new JournalBuilder(filePath);
-    await builder.start();
-    await builder.content('human', 'A');
-    await builder.content('ai', 'B');
-    const comp = await builder.compressed(summaryFor('summary of A and B'), 2);
-    await builder.content('human', 'H1'); // preserved head row
-    const h2 = await builder.content('ai', 'H2');
-    await builder.rewind(1, h2.chron); // cut H2, summary and head survive
+  it(
+    'empties the resolved history when a rewind count exceeds the survivors',
+    overRemoveSurvivors,
+  );
 
-    const resolver = await openResolver();
-    const rows = await collectRows(resolver);
+  it(
+    'expands semantic_media_purge into the engine-equivalent row sequence',
+    expandPurgeRows,
+  );
 
-    expect(rows.map((row) => textOf(row.content))).toStrictEqual([
-      'summary of A and B',
-      'H1',
-    ]);
-    expect(rows[0].seq).toBe(comp.seq);
-    await expectRowsMatchEngine(rows, filePath);
-  });
+  it(
+    'keeps duplicate callId group pairs as distinct resolved rows',
+    retainDuplicateCallPairs,
+  );
 
-  it('treats compressed as whole-history replacement with a surviving head', async () => {
-    const builder = new JournalBuilder(filePath);
-    await builder.start();
-    await builder.content('human', 'A');
-    await builder.content('ai', 'B');
-    await builder.content('ai', 'C');
-    const comp = await builder.compressed(summaryFor('rolled up'), 3);
-    const h1 = await builder.content('human', 'H1');
-    const h2 = await builder.content('ai', 'H2');
+  it(
+    'skips a malformed mid-file record exactly like the engine',
+    skipMalformedRecord,
+  );
 
-    const resolver = await openResolver();
-    const rows = await collectRows(resolver);
-    const stats = resolver.stats();
+  it('ignores a crash-torn tail like the engine does', ignoreTornTail);
 
-    expect(rows.map((row) => textOf(row.content))).toStrictEqual([
-      'rolled up',
-      'H1',
-      'H2',
-    ]);
-    expect(intervalSeqSet(stats)).toStrictEqual(
-      new Set([comp.seq, h1.seq, h2.seq]),
-    );
-    expect(stats.resolvedRowCount).toBe(3);
-    await expectRowsMatchEngine(rows, filePath);
-  });
+  it(
+    'rejects an unsupported recording version like the engine',
+    rejectUnsupportedVersion,
+  );
 
-  it('applies count-only rewinds over the dense journal seq space', async () => {
-    const builder = new JournalBuilder(filePath);
-    await builder.start();
-    await builder.content('human', 'A');
-    await builder.content('ai', 'B');
-    await builder.content('ai', 'C');
-    await builder.content('human', 'D');
-    await builder.rewind(2); // no cutSeq anywhere in the journal
-    await builder.content('ai', 'E');
+  it(
+    'retains no decoded payloads after full iteration while the resolver lives on',
+    releaseDecodedPayloads,
+  );
 
-    const rows = await collectRows(await openResolver());
+  it(
+    'bounds file reads to two chunked passes through the counting wrapper',
+    boundChunkedReads,
+  );
 
-    expect(rows.map((row) => textOf(row.content))).toStrictEqual([
-      'A',
-      'B',
-      'E',
-    ]);
-    await expectRowsMatchEngine(rows, filePath);
-  });
+  it(
+    'caps large requested chunks across both passes without truncating rows',
+    capLargeRequestedChunks,
+  );
 
-  it('empties the resolved history when a rewind count exceeds the survivors', async () => {
-    const builder = new JournalBuilder(filePath);
-    await builder.start();
-    await builder.content('human', 'A');
-    await builder.content('ai', 'B');
-    await builder.rewind(5);
+  it(
+    'propagates a mid-stream file read failure without yielding truncated rows',
+    failMidStreamRead,
+  );
+  it('rejects a survivor truncated after prepass', rejectTruncatedSurvivor);
 
-    const resolver = await openResolver();
-    const rows = await collectRows(resolver);
-    const stats = resolver.stats();
+  it('preserves the real read result for 512 and 8192 rows', readSizedJournals);
 
-    expect(rows).toStrictEqual([]);
-    expect(stats.intervals).toStrictEqual([]);
-    expect(stats.resolvedRowCount).toBe(0);
-    await expectRowsMatchEngine(rows, filePath);
-  });
+  it(
+    'keeps survivor interval bookkeeping consistent with the resolved rows',
+    checkSurvivorIntervals,
+  );
 
-  it('expands semantic_media_purge into the engine-equivalent row sequence', async () => {
-    const builder = new JournalBuilder(filePath);
-    await builder.start();
-    await builder.content('human', 'A');
-    await builder.content('ai', 'B');
-    await builder.content('ai', 'C');
-    const replacement = [
-      marked('human', 'A-clean', 1),
-      marked('ai', 'C-clean', 3),
-    ];
-    const purge = await builder.purge(replacement, {
-      contentIndex: 1,
-      blockIndex: 0,
-    });
+  it('accounts purge-expanded rows in interval rowCount', countPurgeIntervals);
+});
 
-    const resolver = await openResolver();
-    const rows = await collectRows(resolver);
+let tempDir = '';
 
-    expect(rows.map((row) => textOf(row.content))).toStrictEqual([
-      'A-clean',
-      'C-clean',
-    ]);
-    expect(rows.map((row) => row.seq)).toStrictEqual([purge.seq, purge.seq]);
-    expect(rows.map((row) => row.rowIndex)).toStrictEqual([0, 1]);
-    expect(rows.every((row) => row.offset === purge.offset)).toBe(true);
-    await expectRowsMatchEngine(rows, filePath);
-  });
+let filePath = '';
 
-  it('keeps duplicate callId group pairs as distinct resolved rows', async () => {
-    const builder = new JournalBuilder(filePath);
-    await builder.start();
-    await builder.content('human', 'A');
-    await builder.rawContent(callContent('call-1'));
-    await builder.rawContent(responseContent('call-1', 'one'));
-    await builder.content('human', 'B');
-    await builder.rawContent(callContent('call-1')); // duplicate callId
-    await builder.sessionEvent('between pair halves');
-    await builder.rawContent(responseContent('call-1', 'two'));
-    await builder.content('human', 'C');
+let opened: JournalResolver[] = [];
 
-    const resolver = await openResolver();
-    const rows = await collectRows(resolver);
+async function openResolver(
+  options: JournalResolverOptions = {},
+): Promise<JournalResolver> {
+  const resolver = await JournalResolver.open(filePath, options);
+  opened.push(resolver);
+  return resolver;
+}
 
-    expect(rows).toHaveLength(7);
-    const callRows = rows.filter((row) => hasToolCallBlock(row.content));
-    expect(callRows).toHaveLength(2);
-    expect(callRows[0].seq).not.toBe(callRows[1].seq);
-    await expectRowsMatchEngine(rows, filePath);
-  });
+async function resolveAdversarialChain(): Promise<void> {
+  const refs = await buildAdversarialChain(new JournalBuilder(filePath));
+  const rows = await collectRows(await openResolver());
 
-  it('skips a malformed mid-file record exactly like the engine', async () => {
-    const builder = new JournalBuilder(filePath);
-    await builder.start();
-    await builder.content('human', 'A');
-    await builder.corruptMidFileLine();
-    await builder.content('human', 'B');
+  expect(rows.map((row) => textOf(row.content))).toStrictEqual(['A', 'D', 'F']);
+  expect(rows.map((row) => row.seq)).toStrictEqual([
+    refs.a.seq,
+    refs.d.seq,
+    refs.f.seq,
+  ]);
+  await expectRowsMatchEngine(rows, filePath);
+}
 
-    const resolver = await openResolver();
-    const rows = await collectRows(resolver);
+async function bookAdversarialIntervals(): Promise<void> {
+  const refs = await buildAdversarialChain(new JournalBuilder(filePath));
+  const resolver = await openResolver();
+  const rows = await collectRows(resolver);
+  const stats = resolver.stats();
 
-    expect(rows.map((row) => textOf(row.content))).toStrictEqual(['A', 'B']);
-    expect(resolver.stats().skippedRecordCount).toBe(1);
-    await expectRowsMatchEngine(rows, filePath);
-  });
-
-  it('ignores a crash-torn tail like the engine does', async () => {
-    const builder = new JournalBuilder(filePath);
-    await builder.start();
-    await builder.content('human', 'A');
-    await builder.content('ai', 'B');
-    await builder.tornTail('C');
-
-    const resolver = await openResolver();
-    const rows = await collectRows(resolver);
-
-    expect(rows.map((row) => textOf(row.content))).toStrictEqual(['A', 'B']);
-    expect(resolver.stats().skippedRecordCount).toBe(0);
-    await expectRowsMatchEngine(rows, filePath);
-  });
-
-  it('rejects an unsupported recording version like the engine', async () => {
-    const builder = new JournalBuilder(filePath);
-    await builder.start();
-    await builder.content('human', 'A');
-    await builder.rawLine(
-      JSON.stringify({
-        v: 99,
-        seq: 3,
-        ts: TS,
-        type: 'content',
-        payload: { content: marked('ai', 'X', 2) },
-      }),
-    );
-
-    const engine = await replaySession(filePath, PROJECT_HASH);
-    expect(engine.ok).toBe(false);
-    if (engine.ok) {
-      throw new Error('engine unexpectedly replayed a v99 journal');
-    }
-    expect(engine.error).toMatch(/Unsupported recording version 99/);
-
-    const resolver = await openResolver();
-    await expect(collectRows(resolver)).rejects.toThrow(
-      /Unsupported recording version 99/,
-    );
-  });
-
-  it('retains no decoded payloads after full iteration while the resolver lives on', async () => {
-    const builder = new JournalBuilder(filePath);
-    await builder.start();
-    for (let i = 0; i < 12; i += 1) {
-      await builder.content('human', `pre-${i} ${'x'.repeat(1200)}`);
-    }
-    await builder.compressed(summaryFor('mid-session summary'), 12);
-    for (let i = 0; i < 12; i += 1) {
-      await builder.content('ai', `post-${i} ${'y'.repeat(1200)}`);
-    }
-
-    const resolver = await openResolver();
-    const probeRefs = await (async () => {
-      const refs: Array<WeakRef<object>> = [];
-      let index = 0;
-      for await (const row of resolver.resolve()) {
-        index += 1;
-        if (index % 2 === 0) {
-          refs.push(new WeakRef<object>(row.content));
-        }
-      }
-      return refs;
-    })();
-
-    expect(probeRefs.length).toBeGreaterThanOrEqual(6);
-
-    // JSC's conservative stack scan can strand a decoded pointer in a stale
-    // stack slot, which pins the payload for one full GC cycle (the collection
-    // that also relocates the object), and under the larger heap a combined
-    // test run builds the release can need several suspend+gc cycles to become
-    // observable. Poll instead of asserting on a fixed cycle count: a resolver
-    // that actually retained a payload in any live structure would never see
-    // deref() turn undefined, however long we poll.
-    for (let cycle = 0; cycle < 10; cycle += 1) {
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, 0);
-      });
-      Bun.gc(true);
-      if (probeRefs.every((ref) => ref.deref() === undefined)) {
-        break;
-      }
-    }
-    for (const ref of probeRefs) {
-      expect(ref.deref()).toBeUndefined();
-    }
-
-    // The resolver object is still alive here and still serves bookkeeping,
-    // so only interval+offset state can have survived the iteration.
-    expect(resolver.stats().resolvedRowCount).toBe(13);
-    await resolver.close();
-  });
-
-  it('bounds file reads to two chunked passes through the counting wrapper', async () => {
-    const builder = new JournalBuilder(filePath);
-    await builder.start();
-    for (let i = 0; i < 24; i += 1) {
-      await builder.content('human', `row-${i} ${'z'.repeat(400)}`);
-    }
-
-    const { io, counters } = countingIo();
-    const resolver = await openResolver({ chunkBytes: CHUNK, io });
-    const rows = await collectRows(resolver);
-
-    expect(rows).toHaveLength(24);
-    expect(counters.open).toBe(1);
-    const { size } = await fs.stat(filePath);
-    const regions = Math.ceil(size / CHUNK);
-    // Two passes (events-only prepass + survivor decode), each reading every
-    // region at most once in chunks; the +2 slack covers torn-tail scans.
-    expect(counters.read).toBeLessThanOrEqual(2 * regions + 2);
-  });
-
-  it('keeps survivor interval bookkeeping consistent with the resolved rows', async () => {
-    const refs = await buildAdversarialChain(new JournalBuilder(filePath));
-    const resolver = await openResolver();
-    const rows = await collectRows(resolver);
-    const stats = resolver.stats();
-
-    const intervals = stats.intervals;
-    for (let i = 1; i < intervals.length; i += 1) {
-      expect(intervals[i].fromSeq).toBeGreaterThan(intervals[i - 1].toSeq);
-      expect(intervals[i].firstOffset).toBeGreaterThan(
-        intervals[i - 1].firstOffset,
-      );
-    }
-    const offsetsBySeq = new Map<number, number>(
-      rows.map((row) => [row.seq, row.offset] as const),
-    );
-    let counted = 0;
-    for (const interval of intervals) {
-      expect(interval.rowCount).toBe(interval.toSeq - interval.fromSeq + 1);
-      expect(offsetsBySeq.get(interval.fromSeq)).toBe(interval.firstOffset);
-      counted += interval.rowCount;
-    }
-    expect(counted).toBe(stats.resolvedRowCount);
-    expect(stats.resolvedRowCount).toBe(rows.length);
-    expect(intervalSeqSet(stats)).toStrictEqual(
-      new Set(rows.map((row) => row.seq)),
-    );
-    expect(intervals[0]).toStrictEqual({
+  expect(await collectIntervals(stats)).toStrictEqual([
+    {
       fromSeq: refs.a.seq,
       toSeq: refs.a.seq,
       firstOffset: refs.a.offset,
       rowCount: 1,
+    },
+    {
+      fromSeq: refs.d.seq,
+      toSeq: refs.d.seq,
+      firstOffset: refs.d.offset,
+      rowCount: 1,
+    },
+    {
+      fromSeq: refs.f.seq,
+      toSeq: refs.f.seq,
+      firstOffset: refs.f.offset,
+      rowCount: 1,
+    },
+  ]);
+  expect(stats.resolvedRowCount).toBe(3);
+  const removedSeqs = [refs.b.seq, refs.c.seq, refs.e.seq];
+  expect(rows.some((row) => removedSeqs.includes(row.seq))).toBe(false);
+}
+
+async function rewindAfterCompression(): Promise<void> {
+  const builder = new JournalBuilder(filePath);
+  await builder.start();
+  await builder.content('human', 'A');
+  await builder.content('ai', 'B');
+  const comp = await builder.compressed(summaryFor('summary of A and B'), 2);
+  await builder.content('human', 'H1'); // preserved head row
+  const h2 = await builder.content('ai', 'H2');
+  await builder.rewind(1, h2.chron); // cut H2, summary and head survive
+
+  const resolver = await openResolver();
+  const rows = await collectRows(resolver);
+
+  expect(rows.map((row) => textOf(row.content))).toStrictEqual([
+    'summary of A and B',
+    'H1',
+  ]);
+  expect(rows[0].seq).toBe(comp.seq);
+  await expectRowsMatchEngine(rows, filePath);
+}
+
+async function replaceWithSummaryAndHead(): Promise<void> {
+  const builder = new JournalBuilder(filePath);
+  await builder.start();
+  await builder.content('human', 'A');
+  await builder.content('ai', 'B');
+  await builder.content('ai', 'C');
+  const comp = await builder.compressed(summaryFor('rolled up'), 3);
+  const h1 = await builder.content('human', 'H1');
+  const h2 = await builder.content('ai', 'H2');
+
+  const resolver = await openResolver();
+  const rows = await collectRows(resolver);
+  const stats = resolver.stats();
+
+  expect(rows.map((row) => textOf(row.content))).toStrictEqual([
+    'rolled up',
+    'H1',
+    'H2',
+  ]);
+  expect(await intervalSeqSet(stats)).toStrictEqual(
+    new Set([comp.seq, h1.seq, h2.seq]),
+  );
+  expect(stats.resolvedRowCount).toBe(3);
+  await expectRowsMatchEngine(rows, filePath);
+}
+
+async function applyCountOnlyRewinds(): Promise<void> {
+  const builder = new JournalBuilder(filePath);
+  await builder.start();
+  await builder.content('human', 'A');
+  await builder.content('ai', 'B');
+  await builder.content('ai', 'C');
+  await builder.content('human', 'D');
+  await builder.rewind(2); // no cutSeq anywhere in the journal
+  await builder.content('ai', 'E');
+
+  const rows = await collectRows(await openResolver());
+
+  expect(rows.map((row) => textOf(row.content))).toStrictEqual(['A', 'B', 'E']);
+  await expectRowsMatchEngine(rows, filePath);
+}
+
+async function overRemoveSurvivors(): Promise<void> {
+  const builder = new JournalBuilder(filePath);
+  await builder.start();
+  await builder.content('human', 'A');
+  await builder.content('ai', 'B');
+  await builder.rewind(5);
+
+  const resolver = await openResolver();
+  const rows = await collectRows(resolver);
+  const stats = resolver.stats();
+
+  expect(rows).toStrictEqual([]);
+  expect(await collectIntervals(stats)).toStrictEqual([]);
+  expect(stats.resolvedRowCount).toBe(0);
+  await expectRowsMatchEngine(rows, filePath);
+}
+
+async function expandPurgeRows(): Promise<void> {
+  const builder = new JournalBuilder(filePath);
+  await builder.start();
+  await builder.content('human', 'A');
+  await builder.content('ai', 'B');
+  await builder.content('ai', 'C');
+  const replacement = [
+    marked('human', 'A-clean', 1),
+    marked('ai', 'C-clean', 3),
+  ];
+  const purge = await builder.purge(replacement, {
+    contentIndex: 1,
+    blockIndex: 0,
+  });
+
+  const resolver = await openResolver();
+  const rows = await collectRows(resolver);
+
+  expect(rows.map((row) => textOf(row.content))).toStrictEqual([
+    'A-clean',
+    'C-clean',
+  ]);
+  expect(rows.map((row) => row.seq)).toStrictEqual([purge.seq, purge.seq]);
+  expect(rows.map((row) => row.rowIndex)).toStrictEqual([0, 1]);
+  expect(rows.every((row) => row.offset === purge.offset)).toBe(true);
+  await expectRowsMatchEngine(rows, filePath);
+}
+
+async function retainDuplicateCallPairs(): Promise<void> {
+  const builder = new JournalBuilder(filePath);
+  await builder.start();
+  await builder.content('human', 'A');
+  await builder.rawContent(callContent('call-1'));
+  await builder.rawContent(responseContent('call-1', 'one'));
+  await builder.content('human', 'B');
+  await builder.rawContent(callContent('call-1')); // duplicate callId
+  await builder.sessionEvent('between pair halves');
+  await builder.rawContent(responseContent('call-1', 'two'));
+  await builder.content('human', 'C');
+
+  const resolver = await openResolver();
+  const rows = await collectRows(resolver);
+
+  expect(rows).toHaveLength(7);
+  const callRows = rows.filter((row) => hasToolCallBlock(row.content));
+  expect(callRows).toHaveLength(2);
+  expect(callRows[0].seq).not.toBe(callRows[1].seq);
+  await expectRowsMatchEngine(rows, filePath);
+}
+
+async function skipMalformedRecord(): Promise<void> {
+  const builder = new JournalBuilder(filePath);
+  await builder.start();
+  await builder.content('human', 'A');
+  await builder.corruptMidFileLine();
+  await builder.content('human', 'B');
+
+  const resolver = await openResolver();
+  const rows = await collectRows(resolver);
+
+  expect(rows.map((row) => textOf(row.content))).toStrictEqual(['A', 'B']);
+  expect(resolver.stats().skippedRecordCount).toBe(1);
+  await expectRowsMatchEngine(rows, filePath);
+}
+
+async function ignoreTornTail(): Promise<void> {
+  const builder = new JournalBuilder(filePath);
+  await builder.start();
+  await builder.content('human', 'A');
+  await builder.content('ai', 'B');
+  await builder.tornTail('C');
+
+  const resolver = await openResolver();
+  const rows = await collectRows(resolver);
+
+  expect(rows.map((row) => textOf(row.content))).toStrictEqual(['A', 'B']);
+  expect(resolver.stats().skippedRecordCount).toBe(0);
+  await expectRowsMatchEngine(rows, filePath);
+}
+
+async function rejectUnsupportedVersion(): Promise<void> {
+  const builder = new JournalBuilder(filePath);
+  await builder.start();
+  await builder.content('human', 'A');
+  await builder.rawLine(
+    JSON.stringify({
+      v: 99,
+      seq: 3,
+      ts: TS,
+      type: 'content',
+      payload: { content: marked('ai', 'X', 2) },
+    }),
+  );
+
+  const engine = await replaySession(filePath, PROJECT_HASH);
+  expect(engine.ok).toBe(false);
+  if (engine.ok) {
+    throw new Error('engine unexpectedly replayed a v99 journal');
+  }
+  expect(engine.error).toMatch(/Unsupported recording version 99/);
+
+  const resolver = await openResolver();
+  await expect(collectRows(resolver)).rejects.toThrow(
+    /Unsupported recording version 99/,
+  );
+}
+
+async function releaseDecodedPayloads(): Promise<void> {
+  const builder = new JournalBuilder(filePath);
+  await builder.start();
+  for (let i = 0; i < 12; i += 1) {
+    await builder.content('human', `pre-${i} ${'x'.repeat(1200)}`);
+  }
+  await builder.compressed(summaryFor('mid-session summary'), 12);
+  for (let i = 0; i < 12; i += 1) {
+    await builder.content('ai', `post-${i} ${'y'.repeat(1200)}`);
+  }
+
+  const resolver = await openResolver();
+  const probeRefs = await (async () => {
+    const refs: Array<WeakRef<object>> = [];
+    let index = 0;
+    for await (const row of resolver.resolve()) {
+      index += 1;
+      if (index % 2 === 0) {
+        refs.push(new WeakRef<object>(row.content));
+      }
+    }
+    return refs;
+  })();
+
+  expect(probeRefs.length).toBeGreaterThanOrEqual(6);
+
+  // JSC's conservative stack scan can strand a decoded pointer in a stale
+  // stack slot, which pins the payload for one full GC cycle (the collection
+  // that also relocates the object), and under the larger heap a combined
+  // test run builds the release can need several suspend+gc cycles to become
+  // observable. Poll instead of asserting on a fixed cycle count: a resolver
+  // that actually retained a payload in any live structure would never see
+  // deref() turn undefined, however long we poll.
+  for (let cycle = 0; cycle < 10; cycle += 1) {
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 0);
     });
+    Bun.gc(true);
+    if (probeRefs.every((ref) => ref.deref() === undefined)) {
+      break;
+    }
+  }
+  for (const ref of probeRefs) {
+    expect(ref.deref()).toBeUndefined();
+  }
+
+  // The resolver object is still alive here and still serves bookkeeping,
+  // so only interval+offset state can have survived the iteration.
+  expect(resolver.stats().resolvedRowCount).toBe(13);
+  await resolver.close();
+}
+
+async function boundChunkedReads(): Promise<void> {
+  const builder = new JournalBuilder(filePath);
+  await builder.start();
+  for (let i = 0; i < 24; i += 1) {
+    await builder.content('human', `row-${i} ${'z'.repeat(400)}`);
+  }
+
+  const { io, counters } = countingIo();
+  const resolver = await openResolver({ chunkBytes: CHUNK, io });
+  const rows = await collectRows(resolver);
+
+  expect(rows).toHaveLength(24);
+  expect(counters.open).toBe(1);
+  const { size } = await fs.stat(filePath);
+  const regions = Math.ceil(size / CHUNK);
+  // Two passes (events-only prepass + survivor decode), each reading every
+  // region at most once in chunks; the +2 slack covers torn-tail scans.
+  expect(counters.read).toBeLessThanOrEqual(2 * regions + 2);
+}
+
+async function capLargeRequestedChunks(): Promise<void> {
+  const builder = new JournalBuilder(filePath);
+  await builder.start();
+  await builder.content('human', 'x'.repeat(140_000));
+  const sizes: number[] = [];
+  const io: ResolverIo = {
+    open: async (path, flags) => {
+      const handle = await fs.open(path, flags);
+      return {
+        stat: async () => ({ size: (await handle.stat()).size }),
+        read: async (buffer, offset, length, position) => {
+          const result = await handle.read(buffer, offset, length, position);
+          sizes.push(buffer.length, length);
+          return result.bytesRead;
+        },
+        close: () => handle.close(),
+      };
+    },
+  };
+  const rows = await collectRows(
+    await openResolver({ chunkBytes: 250_000, io }),
+  );
+  expect(rows).toHaveLength(1);
+  expect(rows[0].content.blocks).toContainEqual({
+    type: 'text',
+    text: 'x'.repeat(140_000),
   });
+  expect(sizes.length).toBeGreaterThan(3);
+  expect(Math.max(...sizes)).toBeLessThanOrEqual(64 * 1024);
+}
 
-  it('accounts purge-expanded rows in interval rowCount', async () => {
-    const builder = new JournalBuilder(filePath);
-    await builder.start();
-    await builder.content('human', 'A');
-    await builder.content('ai', 'B');
-    const purge = await builder.purge(
-      [marked('human', 'clean-A', 1), marked('ai', 'clean-B', 2)],
-      { contentIndex: 1, blockIndex: 0 },
-    );
+async function failMidStreamRead(): Promise<void> {
+  const builder = new JournalBuilder(filePath);
+  await builder.start();
+  await builder.content('human', 'A'.repeat(2000));
+  const second = await builder.content('ai', 'B');
 
-    const resolver = await openResolver();
-    const rows = await collectRows(resolver);
-    const stats = resolver.stats();
-
-    expect(rows).toHaveLength(2);
-    expect(stats.intervals).toStrictEqual([
-      {
-        fromSeq: purge.seq,
-        toSeq: purge.seq,
-        firstOffset: purge.offset,
-        rowCount: 2,
+  for (const faultDuringPrepass of [true, false]) {
+    let finishedPrepass = false;
+    let yielded = 0;
+    const io: ResolverIo = {
+      open: async (source, flags) => {
+        const handle = await fs.open(source, flags);
+        return {
+          stat: async () => ({ size: (await handle.stat()).size }),
+          read: async (buffer, offset, length, position) => {
+            if (
+              position >= second.offset &&
+              (faultDuringPrepass || finishedPrepass)
+            )
+              throw new Error('injected file read fault');
+            const bytesRead = (
+              await handle.read(buffer, offset, length, position)
+            ).bytesRead;
+            if (bytesRead === 0) finishedPrepass = true;
+            return bytesRead;
+          },
+          close: () => handle.close(),
+        };
       },
-    ]);
-    expect(stats.resolvedRowCount).toBe(2);
-    await expectRowsMatchEngine(rows, filePath);
+    };
+    const resolver = await openResolver({ chunkBytes: 1, io });
+    await expect(
+      (async () => {
+        for await (const row of resolver.resolve()) {
+          expect(textOf(row.content)).toBe('A'.repeat(2000));
+          yielded += 1;
+        }
+      })(),
+    ).rejects.toThrow('injected file read fault');
+    expect(finishedPrepass).toBe(!faultDuringPrepass);
+    expect(yielded).toBe(faultDuringPrepass ? 0 : 1);
+  }
+  const rows = await collectRows(await openResolver({ chunkBytes: 127 }));
+  expect(rows.map((row) => textOf(row.content))).toStrictEqual([
+    'A'.repeat(2000),
+    'B',
+  ]);
+}
+
+async function rejectTruncatedSurvivor(): Promise<void> {
+  const builder = new JournalBuilder(filePath);
+  await builder.start();
+  await builder.content('human', 'A'.repeat(2000));
+  const second = await builder.content('ai', 'B'.repeat(400));
+  let truncated = false;
+  const io: ResolverIo = {
+    open: async (source, flags) => {
+      const handle = await fs.open(source, flags);
+      return {
+        stat: async () => ({ size: (await handle.stat()).size }),
+        read: async (buffer, offset, length, position) => {
+          const bytesRead = (
+            await handle.read(buffer, offset, length, position)
+          ).bytesRead;
+          if (bytesRead === 0 && !truncated) {
+            await fs.truncate(source, second.offset + 20);
+            truncated = true;
+          }
+          return bytesRead;
+        },
+        close: () => handle.close(),
+      };
+    },
+  };
+  const resolver = await openResolver({ chunkBytes: 64, io });
+  let yielded = 0;
+  await expect(
+    (async () => {
+      for await (const row of resolver.resolve()) {
+        expect(textOf(row.content)).toBe('A'.repeat(2000));
+        yielded += 1;
+      }
+    })(),
+  ).rejects.toThrow('Resolver source truncated');
+  expect(truncated).toBe(true);
+  expect(yielded).toBe(1);
+}
+
+async function readSizedJournals(): Promise<void> {
+  for (const count of [512, 8192]) {
+    const lines = Array.from({ length: count }, (_, index) =>
+      envelopeJson(index + 1, 'content', {
+        content: marked('human', `é😀-${index}`, index + 1),
+      }),
+    );
+    await fs.writeFile(filePath, `${lines.join('\n')}\n`);
+    const resolver = await openResolver({
+      chunkBytes: count === 512 ? 7 : 250_000,
+    });
+    let seen = 0;
+    for await (const row of resolver.resolve()) {
+      expect(textOf(row.content)).toBe(`é😀-${seen}`);
+      seen += 1;
+    }
+    expect(seen).toBe(count);
+  }
+}
+
+async function checkSurvivorIntervals(): Promise<void> {
+  const refs = await buildAdversarialChain(new JournalBuilder(filePath));
+  const resolver = await openResolver();
+  const rows = await collectRows(resolver);
+  const stats = resolver.stats();
+
+  const intervals = await collectIntervals(stats);
+  for (let i = 1; i < intervals.length; i += 1) {
+    expect(intervals[i].fromSeq).toBeGreaterThan(intervals[i - 1].toSeq);
+    expect(intervals[i].firstOffset).toBeGreaterThan(
+      intervals[i - 1].firstOffset,
+    );
+  }
+  const offsetsBySeq = new Map<number, number>(
+    rows.map((row) => [row.seq, row.offset] as const),
+  );
+  let counted = 0;
+  for (const interval of intervals) {
+    expect(interval.rowCount).toBe(interval.toSeq - interval.fromSeq + 1);
+    expect(offsetsBySeq.get(interval.fromSeq)).toBe(interval.firstOffset);
+    counted += interval.rowCount;
+  }
+  expect(counted).toBe(stats.resolvedRowCount);
+  expect(stats.resolvedRowCount).toBe(rows.length);
+  expect(await intervalSeqSet(stats)).toStrictEqual(
+    new Set(rows.map((row) => row.seq)),
+  );
+  expect(intervals[0]).toStrictEqual({
+    fromSeq: refs.a.seq,
+    toSeq: refs.a.seq,
+    firstOffset: refs.a.offset,
+    rowCount: 1,
   });
-});
+}
+
+async function countPurgeIntervals(): Promise<void> {
+  const builder = new JournalBuilder(filePath);
+  await builder.start();
+  await builder.content('human', 'A');
+  await builder.content('ai', 'B');
+  const purge = await builder.purge(
+    [marked('human', 'clean-A', 1), marked('ai', 'clean-B', 2)],
+    { contentIndex: 1, blockIndex: 0 },
+  );
+
+  const resolver = await openResolver();
+  const rows = await collectRows(resolver);
+  const stats = resolver.stats();
+
+  expect(rows).toHaveLength(2);
+  expect(await collectIntervals(stats)).toStrictEqual([
+    {
+      fromSeq: purge.seq,
+      toSeq: purge.seq,
+      firstOffset: purge.offset,
+      rowCount: 2,
+    },
+  ]);
+  expect(stats.resolvedRowCount).toBe(2);
+  await expectRowsMatchEngine(rows, filePath);
+}

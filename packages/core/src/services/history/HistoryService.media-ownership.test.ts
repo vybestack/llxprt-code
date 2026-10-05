@@ -1,3 +1,4 @@
+import { collectRowsForAssertions } from '../../test-utils/collect-rows-for-assertions.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -315,14 +316,16 @@ describe('HistoryService local-media ownership lifecycle', () => {
 
     await service.applyDensityResult(densityResult);
 
-    expect({
-      history: service.getAll(),
-      removed: await store.hasReservations(removed.contentId),
-      retained: await store.hasReservations(retained.contentId),
-    }).toStrictEqual({
-      history: [contents[1]],
-      removed: false,
-      retained: true,
+    await collectRowsForAssertions(service.streamRawHistory(), async (rows) => {
+      expect({
+        history: rows,
+        removed: await store.hasReservations(removed.contentId),
+        retained: await store.hasReservations(retained.contentId),
+      }).toStrictEqual({
+        history: [contents[1]],
+        removed: false,
+        retained: true,
+      });
     });
   });
 
@@ -347,13 +350,15 @@ describe('HistoryService local-media ownership lifecycle', () => {
       }),
     ).rejects.toThrow('batch listener failed');
 
-    const restored = service.getAll()[0];
-    const restoredBlock = referenceBlockOf(restored);
-    expect(restoredBlock.contentId).toBe(previousBlock.contentId);
-    expect(await store.hasReservations(previousBlock.contentId)).toBe(true);
-    expect(
-      await store.hasReservations(referenceBlockOf(replacement[0]).contentId),
-    ).toBe(false);
+    await collectRowsForAssertions(service.streamRawHistory(), async (rows) => {
+      const restored = rows[0];
+      const restoredBlock = referenceBlockOf(restored);
+      expect(restoredBlock.contentId).toBe(previousBlock.contentId);
+      expect(await store.hasReservations(previousBlock.contentId)).toBe(true);
+      expect(
+        await store.hasReservations(referenceBlockOf(replacement[0]).contentId),
+      ).toBe(false);
+    });
   });
 
   it('aggregates the primary mutation failure with an ownership cleanup failure', async () => {
@@ -410,14 +415,18 @@ describe('HistoryService local-media ownership lifecycle', () => {
     ];
 
     await service.addBatch(legacy);
-    const before = service.getAll().map((content) => content.blocks[0].type);
+    await collectRowsForAssertions(service.streamRawHistory(), async (rows) => {
+      const before = rows.map((content) => content.blocks[0].type);
 
-    service.clear();
-    await service.waitForOwnershipSettlement();
+      service.clear();
+      await service.waitForOwnershipSettlement();
 
-    expect({ before, after: service.getAll() }).toStrictEqual({
-      before: ['media', 'media'],
-      after: [],
+      await collectRowsForAssertions(service.streamRawHistory(), (rows) => {
+        expect({ before, after: rows }).toStrictEqual({
+          before: ['media', 'media'],
+          after: [],
+        });
+      });
     });
   });
 
@@ -434,17 +443,18 @@ describe('HistoryService local-media ownership lifecycle', () => {
     ]);
     await service.waitForOwnershipSettlement();
 
-    const texts = service
-      .getAll()
-      .map((content) =>
-        content.blocks
-          .filter((block) => block.type === 'text')
-          .map((block) => block.text),
-      )
-      .flat();
-    expect(texts).toStrictEqual(['inspect', 'after']);
-    expect(
-      await store.hasReservations(referenceBlockOf(first[0]).contentId),
-    ).toBe(true);
+    await collectRowsForAssertions(service.streamRawHistory(), async (rows) => {
+      const texts = rows
+        .map((content) =>
+          content.blocks
+            .filter((block) => block.type === 'text')
+            .map((block) => block.text),
+        )
+        .flat();
+      expect(texts).toStrictEqual(['inspect', 'after']);
+      expect(
+        await store.hasReservations(referenceBlockOf(first[0]).contentId),
+      ).toBe(true);
+    });
   });
 });

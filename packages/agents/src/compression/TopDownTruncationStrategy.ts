@@ -28,6 +28,22 @@ import type {
   StrategyTrigger,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import { adjustForToolCallBoundary } from './utils.js';
+import type { HistoryIndexedRows } from '@vybestack/llxprt-code-core/services/history/historyMutationSnapshot.js';
+import type { CompressionAttemptContext } from './compressionContextBuilder.js';
+import { adjustDiskToolBoundary } from './truncationDiskBoundary.js';
+
+export interface DiskTruncationContext
+  extends Omit<CompressionAttemptContext, 'history'> {
+  readonly history: HistoryIndexedRows;
+}
+
+export type DiskTruncationResult =
+  | Extract<StrategyCompressionResult, { kind: 'noop' }>
+  | {
+      readonly kind: 'applied';
+      readonly start: number;
+      readonly metadata: StrategyCompressionResult['metadata'];
+    };
 
 export class TopDownTruncationStrategy implements CompressionStrategy {
   readonly name = 'top-down-truncation' as const;
@@ -113,10 +129,48 @@ export class TopDownTruncationStrategy implements CompressionStrategy {
     };
   }
 
+  async compressDisk(
+    context: DiskTruncationContext,
+  ): Promise<DiskTruncationResult> {
+    const { history, currentTokenCount, targetTokenCount } = context;
+    if (history.length === 0) return this.structuralNoop(0, 'empty-history');
+    const target =
+      targetTokenCount ??
+      context.runtimeContext.ephemerals.compressionThreshold() *
+        context.runtimeContext.ephemerals.contextLimit() *
+        0.6;
+    if (currentTokenCount <= target)
+      return this.structuralNoop(history.length, 'already-under-target');
+    const minKeep = Math.min(2, history.length);
+    let tokens = await context.estimateTokens(history);
+    let start = 0;
+    // HistoryService estimates a sum of per-row costs, independent of membership.
+    while (start < history.length - minKeep) {
+      tokens -= await context.estimateTokens([history.readRow(start)]);
+      start++;
+      if (targetTokenCount !== undefined ? tokens <= target : tokens < target)
+        break;
+    }
+    start = Math.min(
+      adjustDiskToolBoundary(history, start),
+      history.length - minKeep,
+    );
+    return {
+      kind: 'applied',
+      start,
+      metadata: {
+        originalMessageCount: history.length,
+        compressedMessageCount: history.length - start,
+        strategyUsed: this.name,
+        llmCallMade: false,
+      },
+    };
+  }
+
   private structuralNoop(
     originalCount: number,
     reason: StructuralNoopReason,
-  ): StrategyCompressionResult {
+  ): Extract<StrategyCompressionResult, { kind: 'noop' }> {
     return {
       kind: 'noop',
       reason,

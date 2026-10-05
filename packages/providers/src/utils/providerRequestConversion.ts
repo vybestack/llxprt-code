@@ -8,6 +8,10 @@ import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { ToolOutputSettingsProvider } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { HistoryDumpSource } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { AnthropicConversationConversionOptions as AnthropicMessageConversionOptions } from '../anthropic/AnthropicMessageNormalizer.js';
+import { buildOpenAIDumpStream } from '../openai/openAIDumpStream.js';
+import { buildAnthropicDumpStream } from '../anthropic/anthropicDumpStream.js';
 import { convertToAnthropicMessages } from '../anthropic/AnthropicMessageNormalizer.js';
 import {
   buildMessagesWithReasoning,
@@ -63,7 +67,19 @@ export function buildAnthropicDumpMessages(
   model?: string,
   baseURL?: string,
 ): unknown[] {
-  return convertToAnthropicMessages(history, {
+  return convertToAnthropicMessages(
+    history,
+    createAnthropicOptions(settings, config, model, baseURL),
+  );
+}
+
+function createAnthropicOptions(
+  settings?: unknown,
+  config?: ToolOutputSettingsProvider,
+  model?: string,
+  baseURL?: string,
+): AnthropicMessageConversionOptions {
+  return {
     isOAuth: false,
     stripFromContext:
       (asMinimalSettings(settings)?.get?.('reasoning.stripFromContext') as
@@ -81,7 +97,7 @@ export function buildAnthropicDumpMessages(
     currentBaseURL: baseURL,
     unprefixToolName: (name) => name,
     logger: new DebugLogger('llxprt:providers:dumpConversion:anthropic'),
-  });
+  };
 }
 
 function normalizeProviderName(providerName: string): string {
@@ -152,4 +168,43 @@ export function buildProviderDumpBody(params: {
   // package. Callers that need a real Gemini body must ask the runtime
   // provider (see the CLI dumpcontext command).
   return { history: params.history };
+}
+
+export function buildProviderDumpBodyStream(params: {
+  providerName: string;
+  history: HistoryDumpSource;
+  settings?: unknown;
+  config?: ToolOutputSettingsProvider;
+  model?: string;
+  baseURL?: string;
+}): Record<string, unknown> {
+  if (isOpenAICompatibleProvider(params.providerName)) {
+    return withModel(
+      {
+        messages: buildOpenAIDumpStream(
+          params.history,
+          createOptions(params.settings),
+          params.config,
+        ),
+      },
+      params.model,
+    );
+  }
+  if (isAnthropicCompatibleProvider(params.providerName)) {
+    return withModel(
+      {
+        messages: buildAnthropicDumpStream(
+          params.history,
+          createAnthropicOptions(
+            params.settings,
+            params.config,
+            params.model,
+            params.baseURL,
+          ),
+        ),
+      },
+      params.model,
+    );
+  }
+  return { history: params.history.rows() };
 }

@@ -47,7 +47,7 @@ export interface UseTokenMetricsTrackingResult {
   tokenMetrics: TokenMetrics;
 }
 type RuntimeHistoryService = Parameters<
-  RecordingIntegration['onHistoryServiceReplaced']
+  RecordingIntegration['subscribeToJournal']
 >[0];
 
 function getInitializedHistoryService(
@@ -156,7 +156,7 @@ function useRecordingSubscription(
     // The effect bails early when recordingIntegrationRef.current is null at mount
     // time, but ref identity is stable so the effect never re-runs for late-arriving
     // recording integrations. The polling interval below handles this: each tick checks
-    // recordingIntegrationRef.current?.onHistoryServiceReplaced, so a recording
+    // recordingIntegrationRef.current?.subscribeToJournal, so a recording
     // integration that arrives after mount is automatically picked up on the next tick.
     if (!recordingIntegrationRef.current) {
       return undefined;
@@ -175,8 +175,16 @@ function useRecordingSubscription(
       }
 
       recordingSubscribedServiceRef.current = historyService;
-      recordingIntegrationRef.current?.onHistoryServiceReplaced(historyService);
-      tokenLogger.debug('RecordingIntegration subscribed to HistoryService');
+      void recordingIntegrationRef.current
+        ?.subscribeToJournal(historyService)
+        .then(
+          () =>
+            tokenLogger.debug(
+              'RecordingIntegration subscribed to HistoryService',
+            ),
+          (error: unknown) =>
+            tokenLogger.error('Recording journal attachment failed', error),
+        );
     }, 100);
 
     return () => {

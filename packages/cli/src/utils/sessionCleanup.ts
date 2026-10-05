@@ -57,6 +57,7 @@ export async function cleanupExpiredSessions(
   config: Config,
   settings: Settings,
   globalTempDirOverride?: string,
+  signal?: AbortSignal,
 ): Promise<SessionCleanupResult> {
   // Configuration resolution happens before any external filesystem access so
   // invalid settings fail fast and clearly (finding D).  This throw is
@@ -67,12 +68,13 @@ export async function cleanupExpiredSessions(
   const currentSessionId = config.getSessionId();
 
   try {
-    const activeHistory = await config.getAgentClient().getHistory();
+    const activeHistory = config.getAgentClient().streamHistory(signal);
     const result = await runSessionCleanup({
       globalTempDir,
       currentSessionId,
       config: resolvedConfig,
       activeHistory,
+      signal,
     });
 
     if (config.getDebugMode() && !result.disabled) {

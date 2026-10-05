@@ -12,6 +12,7 @@ import { describe, expect, it } from 'bun:test';
 import type { IContent } from '../../packages/core/src/services/history/IContent.js';
 import { SessionRecordingService } from '../../packages/core/src/recording/SessionRecordingService.js';
 import { HistoryService } from '../../packages/core/src/services/history/HistoryService.js';
+import { collectRowsForAssertions } from '../../packages/core/src/test-utils/collect-rows-for-assertions.js';
 import { SessionPersistenceService } from '../../packages/core/src/storage/SessionPersistenceService.js';
 import { LocalMediaStore } from '../../packages/core/src/storage/local-media-store.js';
 import { RequestMediaResolver } from '../../packages/core/src/storage/request-media-resolver.js';
@@ -241,7 +242,9 @@ describe('issue 3199 media memory lifecycle', () => {
     expect(errorMessages(failure)).toEqual([
       'deterministic initialization failure',
     ]);
-    expect(history.getAll()).toEqual([]);
+    await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
+      expect(rows).toEqual([]);
+    });
     expect(resolver.accounting()).toMatchObject({ activeRequestCount: 0 });
     expect(recording.isActive()).toBe(false);
     expect(recording.getPendingByteCount()).toBe(0);

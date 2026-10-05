@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import type { DebugLogger } from '../debug/index.js';
 import type { IContent } from '../services/history/IContent.js';
 import { MediaAdmissionError } from './media-admission-service.js';
 import { MediaReferenceValidationError } from './media-reference-lifecycle.js';
@@ -82,4 +85,27 @@ export function persistenceRequestLowerBound(
     [history, metadata, uiHistory],
     new Set<object>(),
   );
+}
+
+export async function backupCorruptedSession(
+  chatsDir: string,
+  prefix: string,
+  logger: DebugLogger,
+): Promise<void> {
+  try {
+    const files = await fs.promises.readdir(chatsDir);
+    const sessionFiles = files
+      .filter((f) => f.startsWith(prefix) && f.endsWith('.json'))
+      .sort()
+      .reverse();
+
+    if (sessionFiles.length > 0) {
+      const corruptedFile = path.join(chatsDir, sessionFiles[0]);
+      const backupFile = `${corruptedFile}.corrupted-${Date.now()}`;
+      await fs.promises.rename(corruptedFile, backupFile);
+      logger.warn('Backed up corrupted session to:', backupFile);
+    }
+  } catch (backupError) {
+    logger.error('Failed to backup corrupted session:', backupError);
+  }
 }

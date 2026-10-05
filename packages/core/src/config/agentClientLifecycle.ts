@@ -12,33 +12,28 @@ import { createContentGeneratorConfig } from '../core/contentGenerator.js';
 import type {
   AgentClientContract,
   AgentClientFactory,
+  DeferredHistorySourceOptions,
 } from '../core/clientContract.js';
 import type { IContent } from '../services/history/IContent.js';
 import { createAgentRuntimeStateFromConfig } from '../runtime/runtimeStateFactory.js';
 import type { Config } from './config.js';
 
 /**
- * Removes `signature` from every thinking block in the history.
- * Used when migrating from GenAI to Vertex (Vertex does not support
- * thought signatures).
- *
- * History IContent[] is external data that was serialized/deserialized,
- * so blocks are validated at this boundary.
+ * Removes signatures from one row when moving from GenAI to Vertex.
+ * Serialized history is external data, so blocks are validated here.
  */
-export function stripThoughtSignatures(
-  history: readonly IContent[],
-): IContent[] {
-  return history.map((content) => ({
+function stripContentThoughtSignatures(content: IContent): IContent {
+  return {
     ...content,
     blocks: content.blocks.map((block) => {
       if (isBlockWithSignature(block)) {
         const newBlock = { ...block };
-        delete (newBlock as { signature?: unknown }).signature;
+        delete newBlock.signature;
         return newBlock;
       }
       return block;
     }),
-  }));
+  };
 }
 
 /**
@@ -75,13 +70,10 @@ export interface AgentClientLifecycleContext {
 }
 
 /**
- * Extracts existing history and HistoryService from the current agent client.
- *
- * Returns empty values only when no client exists or the client carries no
- * recoverable state. A client pending lazy initialization (no chat yet) may
- * still hold restored conversation in `_previousHistory` / a stored
- * HistoryService, which `getHistory()` / `getHistoryService()` surface — that
- * state must survive a rebuild so --continue keeps model context (issue #2500).
+ * Extracts a cold history source and service from the current agent client.
+ * A client pending lazy initialization may carry deferred rows. Its public
+ * stream covers that state as well as active chat, preserving --continue
+ * history during rebuilds (issue #2500).
  *
  * The agentClient parameter is accepted as `| undefined` because the Config
  * field is declared with a definite-assignment assertion but is genuinely
@@ -90,22 +82,19 @@ export interface AgentClientLifecycleContext {
 export async function extractExistingState(
   logger: DebugLogger,
   agentClient: AgentClientContract | null | undefined,
+  options: DeferredHistorySourceOptions = {},
 ): Promise<{
-  history: readonly IContent[];
+  history: AsyncIterable<IContent> | undefined;
   historyService: ReturnType<AgentClientContract['getHistoryService']>;
 }> {
   if (agentClient === null || agentClient === undefined) {
-    return { history: [], historyService: null };
+    return { history: undefined, historyService: null };
   }
 
   // A client may carry restored conversation in `_previousHistory` (e.g. a
   // prior --continue restoreHistory, or a previous rebuild's carried history)
-  // even before its chat/content generator are lazily initialized. The old
-  // `!isInitialized()` guard discarded that history on the next rebuild, so
-  // --continue lost model context (issue #2500). `getHistory()` /
-  // `getHistoryService()` already recover `_previousHistory` /
-  // `_storedHistoryService` when no chat exists, so fall through and let them
-  // surface whatever state the client holds.
+  // even before its chat/content generator are lazily initialized. The stream
+  // defers capture until consumption and covers both active and deferred rows.
   const hasInitializedChat = hasCallableProperty(
     agentClient,
     'hasChatInitialized',
@@ -113,13 +102,12 @@ export async function extractExistingState(
     ? agentClient.hasChatInitialized()
     : false;
   const existingHistory = hasInitializedChat
-    ? agentClient.getChat().getHistory()
-    : await agentClient.getHistory();
+    ? agentClient.getChat().streamHistory(options.signal)
+    : agentClient.streamHistory(options.signal);
   const existingHistoryService = hasInitializedChat
     ? null
     : agentClient.getHistoryService();
-  logger.debug('Retrieved existing state', {
-    historyLength: existingHistory.length,
+  logger.debug('Retrieved existing history source', {
     hasHistoryService: !!existingHistoryService,
   });
   return {
@@ -181,56 +169,68 @@ export function buildNewContentGeneratorConfig(
 export async function transferHistoryToNewClient(
   logger: DebugLogger,
   newAgentClient: AgentClientContract,
-  existingHistory: readonly IContent[],
+  existingHistory: AsyncIterable<IContent> | undefined,
   existingHistoryService: ReturnType<AgentClientContract['getHistoryService']>,
   newContentGeneratorConfig: ReturnType<typeof createContentGeneratorConfig>,
   previousVertexai: boolean | undefined,
-): Promise<void> {
+  options: DeferredHistorySourceOptions = {},
+): Promise<number> {
+  options.signal?.throwIfAborted();
+  if (existingHistory === undefined) return 0;
+  const source = existingHistory;
   const fromGenaiToVertex =
     previousVertexai === false && newContentGeneratorConfig.vertexai === true;
   if (existingHistoryService) {
     logger.debug('Skipping existing HistoryService reuse', {
-      historyLength: existingHistory.length,
       fromGenaiToVertex,
     });
   }
-  if (existingHistory.length === 0) {
-    return;
+  let transferred = 0;
+  async function* historyToStore(): AsyncGenerator<IContent, void, unknown> {
+    for await (const content of source) {
+      options.signal?.throwIfAborted();
+      options.ownership?.retain(content);
+      try {
+        yield fromGenaiToVertex
+          ? stripContentThoughtSignatures(content)
+          : content;
+        transferred++;
+      } finally {
+        options.ownership?.release(content);
+      }
+    }
   }
-  logger.debug('Storing history for later use', {
-    historyLength: existingHistory.length,
-    fromGenaiToVertex,
-    willStripThoughts: fromGenaiToVertex,
-  });
-  const historyToStore = fromGenaiToVertex
-    ? stripThoughtSignatures(existingHistory)
-    : existingHistory;
-  await newAgentClient.storeHistoryForLaterUse(historyToStore);
+  await newAgentClient.storeHistoryForLaterUse(historyToStore(), options);
   logger.debug('History stored in new client', {
-    storedHistoryLength: historyToStore.length,
+    storedHistoryLength: transferred,
+    fromGenaiToVertex,
   });
+  return transferred;
 }
 
 export async function prepareAgentClientReplacement(
   logger: DebugLogger,
   newAgentClient: AgentClientContract,
   previousAgentClient: AgentClientContract | null | undefined,
-  existingHistory: readonly IContent[],
+  existingHistory: AsyncIterable<IContent> | undefined,
   existingHistoryService: ReturnType<AgentClientContract['getHistoryService']>,
   newContentGeneratorConfig: ReturnType<typeof createContentGeneratorConfig>,
   previousVertexai: boolean | undefined,
-): Promise<void> {
+  options: DeferredHistorySourceOptions = {},
+): Promise<number> {
   try {
-    await transferHistoryToNewClient(
+    const transferred = await transferHistoryToNewClient(
       logger,
       newAgentClient,
       existingHistory,
       existingHistoryService,
       newContentGeneratorConfig,
       previousVertexai,
+      options,
     );
-    await newAgentClient.initialize(newContentGeneratorConfig);
+    await newAgentClient.initialize(newContentGeneratorConfig, options);
     await disposePreviousAgentClient(logger, previousAgentClient);
+    return transferred;
   } catch (error: unknown) {
     try {
       await disposePreviousAgentClient(logger, newAgentClient);

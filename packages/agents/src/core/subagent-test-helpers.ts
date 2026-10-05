@@ -249,7 +249,9 @@ function createDefaultHistory(): HistoryService {
   return {
     clear: vi.fn(),
     add: vi.fn(),
-    getCuratedForProvider: vi.fn(() => []),
+    async *getCuratedForProviderStream() {
+      yield* [];
+    },
     getIdGeneratorCallback: vi.fn(() => vi.fn()),
     findUnmatchedToolCalls: vi.fn(() => []),
     generateTurnKey: vi.fn(() => `turn-${Date.now()}`),

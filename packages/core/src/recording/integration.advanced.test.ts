@@ -24,207 +24,33 @@
  * Property-based tests use fast-check (≥30% of total).
  */
 
-import { describe, expect, beforeEach, afterEach, it } from 'bun:test';
+import { describe, expect } from 'bun:test';
 import * as fc from 'fast-check';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
-
 import { SessionRecordingService } from './SessionRecordingService.js';
 import { replaySession } from './ReplayEngine.js';
-import type { ReplayResult } from './types.js';
 import { SessionDiscovery } from './SessionDiscovery.js';
-import { SessionLockManager } from './SessionLockManager.js';
-import {
-  resumeSession,
-  CONTINUE_LATEST,
-  type ResumeRequest,
-} from './resumeSession.js';
+import { resumeSession } from './resumeSession.js';
 import { deleteSession } from './sessionManagement.js';
+import { collectRows } from './p05dTestKit.js';
+import type { IContent } from '../services/history/IContent.js';
 import {
-  type SessionRecordingServiceConfig,
-  type SessionRecordLine,
-} from './types.js';
-import { type IContent } from '../services/history/IContent.js';
-
-// Polyfill it.prop for Bun compatibility
-type ItPropOverload = {
-  <T extends Array<fc.IReadOnlyArbitrary<unknown>>>(
-    arbitraries: T,
-    options?: { numRuns?: number },
-  ): (
-    name: string,
-    callback: (
-      ...args: {
-        [K in keyof T]: T[K] extends fc.IReadOnlyArbitrary<infer U> ? U : never;
-      }
-    ) => Promise<void> | void,
-  ) => void;
-  <T extends Array<fc.IReadOnlyArbitrary<unknown>>>(
-    arbitraries: T,
-  ): (
-    name: string,
-    callback: (
-      ...args: {
-        [K in keyof T]: T[K] extends fc.IReadOnlyArbitrary<infer U> ? U : never;
-      }
-    ) => Promise<void> | void,
-  ) => void;
-};
-
-const itProp: ItPropOverload =
-  (
-    arbitraries: Array<fc.IReadOnlyArbitrary<unknown>>,
-    options?: { numRuns?: number },
-  ) =>
-  (
-    name: string,
-    callback: (...args: unknown[]) => Promise<void> | void,
-  ): void => {
-    const testFn = it;
-    testFn(name, async () => {
-      await fc.assert(
-        fc.asyncProperty(...arbitraries, async (...args: unknown[]) => {
-          await callback(...args);
-        }),
-        options,
-      );
-    });
-  };
-
-// NOTE: it.prop is replaced by itProp throughout this file for Bun
-// compatibility (Bun's `it` function is frozen and cannot be extended).
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const PROJECT_HASH = 'integration-test-project';
-
-type ReplayOkResult = Extract<ReplayResult, { ok: true }>;
-type ReplayErrorResult = Extract<ReplayResult, { ok: false }>;
-
-function assertReplayOk(
-  result: ReplayResult,
-): asserts result is ReplayOkResult {
-  expect(result.ok).toBe(true);
-}
-
-function assertReplayError(
-  result: ReplayResult,
-): asserts result is ReplayErrorResult {
-  expect(result.ok).toBe(false);
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function makeContent(
-  text: string,
-  speaker: IContent['speaker'] = 'human',
-): IContent {
-  return { speaker, blocks: [{ type: 'text', text }] };
-}
-
-function makeConfig(
-  chatsDir: string,
-  overrides: Partial<SessionRecordingServiceConfig> = {},
-): SessionRecordingServiceConfig {
-  return {
-    sessionId: overrides.sessionId ?? crypto.randomUUID(),
-    projectHash: overrides.projectHash ?? PROJECT_HASH,
-    chatsDir,
-    workspaceDirs: overrides.workspaceDirs ?? ['/test/workspace'],
-    provider: overrides.provider ?? 'anthropic',
-    model: overrides.model ?? 'claude-4',
-  };
-}
-
-/**
- * Alternating human/ai speaker for index-based content generation.
- */
-function alternatingSpeaker(i: number): 'human' | 'ai' {
-  return i % 2 === 0 ? 'human' : 'ai';
-}
-
-/**
- * Create a real session file, flush, dispose, and return file path + session ID.
- */
-async function createAndRecordSession(
-  chatsDir: string,
-  opts: {
-    sessionId?: string;
-    projectHash?: string;
-    provider?: string;
-    model?: string;
-    contents: IContent[];
-  },
-): Promise<{ filePath: string; sessionId: string }> {
-  const sid = opts.sessionId ?? crypto.randomUUID();
-  const svc = new SessionRecordingService(
-    makeConfig(chatsDir, {
-      sessionId: sid,
-      projectHash: opts.projectHash,
-      provider: opts.provider,
-      model: opts.model,
-    }),
-  );
-  for (const c of opts.contents) {
-    svc.recordContent(c);
-  }
-  await svc.flush();
-  const fp = svc.getFilePath()!;
-  await svc.dispose();
-  return { filePath: fp, sessionId: sid };
-}
-
-/**
- * Read a JSONL file and parse all lines.
- */
-async function readJsonlLines(filePath: string): Promise<SessionRecordLine[]> {
-  const raw = await fs.readFile(filePath, 'utf-8');
-  return raw
-    .trim()
-    .split('\n')
-    .filter((l) => l.trim() !== '')
-    .map((line) => JSON.parse(line) as SessionRecordLine);
-}
-
-function makeResumeRequest(
-  chatsDir: string,
-  continueRef: string | typeof CONTINUE_LATEST = CONTINUE_LATEST,
-  overrides: Partial<ResumeRequest> = {},
-): ResumeRequest {
-  return {
-    continueRef,
-    projectHash: overrides.projectHash ?? PROJECT_HASH,
-    chatsDir,
-    currentProvider: overrides.currentProvider ?? 'anthropic',
-    currentModel: overrides.currentModel ?? 'claude-4',
-    workspaceDirs: overrides.workspaceDirs ?? ['/test/workspace'],
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Test suite
-// ---------------------------------------------------------------------------
+  PROJECT_HASH,
+  itProp,
+  assertReplayOk,
+  makeContent,
+  makeConfig,
+  alternatingSpeaker,
+  createAndRecordSession,
+  readJsonlLines,
+  makeResumeRequest,
+  useIntegrationDirs,
+} from './integration-advanced.test.helpers.js';
 
 describe('integration: full session recording lifecycle', () => {
-  let tempDir: string;
-  let chatsDir: string;
-
-  beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'integration-test-'));
-    chatsDir = path.join(tempDir, 'chats');
-    await fs.mkdir(chatsDir, { recursive: true });
-  });
-
-  afterEach(async () => {
-    await fs.rm(tempDir, { recursive: true, force: true });
-  });
-
-  // =========================================================================
+  const dirs = useIntegrationDirs();
   // Test 1: Full session lifecycle — record → flush → dispose → replay
   // @plan PLAN-20260211-SESSIONRECORDING.P25
 
@@ -252,7 +78,9 @@ describe('integration: full session recording lifecycle', () => {
       const contents = items.map((item) =>
         makeContent(item.text, item.speaker),
       );
-      const { filePath } = await createAndRecordSession(chatsDir, { contents });
+      const { filePath } = await createAndRecordSession(dirs.chatsDir, {
+        contents,
+      });
 
       const replay = await replaySession(filePath, PROJECT_HASH);
       assertReplayOk(replay);
@@ -265,7 +93,6 @@ describe('integration: full session recording lifecycle', () => {
       }
     },
   );
-
   // =========================================================================
   // Test 18: Resume always preserves original history length
   // @plan PLAN-20260211-SESSIONRECORDING.P25
@@ -279,19 +106,22 @@ describe('integration: full session recording lifecycle', () => {
         contents.push(makeContent(`h-${i}`, 'human'));
         contents.push(makeContent(`a-${i}`, 'ai'));
       }
-      const { sessionId } = await createAndRecordSession(chatsDir, {
+      const { sessionId } = await createAndRecordSession(dirs.chatsDir, {
         contents,
       });
 
       const result = await resumeSession(
-        makeResumeRequest(chatsDir, sessionId),
+        makeResumeRequest(dirs.chatsDir, sessionId),
       );
       assertReplayOk(result);
-      expect(result.history).toHaveLength(turnCount * 2);
+      expect(await collectRows(result.boot)).toHaveLength(turnCount * 2);
       void result.recording.dispose();
     },
   );
+});
 
+describe('integration: full session recording lifecycle / property cases 2', () => {
+  const dirs = useIntegrationDirs();
   // =========================================================================
   // Test 19: Sequence numbers monotonic after any number of resumes
   // @plan PLAN-20260211-SESSIONRECORDING.P25
@@ -300,12 +130,15 @@ describe('integration: full session recording lifecycle', () => {
   itProp([fc.integer({ min: 1, max: 4 })], { numRuns: 8 })(
     '19: (property) seq numbers monotonic after N resumes',
     async (resumeCount) => {
-      const { filePath, sessionId } = await createAndRecordSession(chatsDir, {
-        contents: [
-          makeContent('initial-h', 'human'),
-          makeContent('initial-a', 'ai'),
-        ],
-      });
+      const { filePath, sessionId } = await createAndRecordSession(
+        dirs.chatsDir,
+        {
+          contents: [
+            makeContent('initial-h', 'human'),
+            makeContent('initial-a', 'ai'),
+          ],
+        },
+      );
 
       const currentFilePath = filePath;
       for (let r = 0; r < resumeCount; r++) {
@@ -313,7 +146,7 @@ describe('integration: full session recording lifecycle', () => {
         assertReplayOk(replay);
 
         const svc = new SessionRecordingService(
-          makeConfig(chatsDir, { sessionId }),
+          makeConfig(dirs.chatsDir, { sessionId }),
         );
         svc.initializeForResume(currentFilePath, replay.lastSeq);
         svc.recordContent(makeContent(`resume-${r}-h`, 'human'));
@@ -329,7 +162,10 @@ describe('integration: full session recording lifecycle', () => {
       }
     },
   );
+});
 
+describe('integration: full session recording lifecycle / property cases 3', () => {
+  const dirs = useIntegrationDirs();
   // =========================================================================
   // Test 20: Discovery always returns sessions sorted newest-first
   // @plan PLAN-20260211-SESSIONRECORDING.P25
@@ -366,7 +202,6 @@ describe('integration: full session recording lifecycle', () => {
       }
     },
   );
-
   // =========================================================================
   // Test 21: Compression at any point produces correct post-compression count
   // @plan PLAN-20260211-SESSIONRECORDING.P25
@@ -379,7 +214,7 @@ describe('integration: full session recording lifecycle', () => {
     async (preCount, postCount) => {
       const sid = crypto.randomUUID();
       const svc = new SessionRecordingService(
-        makeConfig(chatsDir, { sessionId: sid }),
+        makeConfig(dirs.chatsDir, { sessionId: sid }),
       );
 
       for (let i = 0; i < preCount; i++) {
@@ -399,7 +234,10 @@ describe('integration: full session recording lifecycle', () => {
       expect(replay.history).toHaveLength(1 + postCount);
     },
   );
+});
 
+describe('integration: full session recording lifecycle / property cases 4', () => {
+  const dirs = useIntegrationDirs();
   // =========================================================================
   // Test 22: Any number of provider switches are all captured in recording
   // @plan PLAN-20260211-SESSIONRECORDING.P25
@@ -410,7 +248,7 @@ describe('integration: full session recording lifecycle', () => {
     async (switchCount) => {
       const sid = crypto.randomUUID();
       const svc = new SessionRecordingService(
-        makeConfig(chatsDir, { sessionId: sid }),
+        makeConfig(dirs.chatsDir, { sessionId: sid }),
       );
       svc.recordContent(makeContent('start', 'human'));
 
@@ -433,7 +271,6 @@ describe('integration: full session recording lifecycle', () => {
       expect(switchLines).toHaveLength(switchCount);
     },
   );
-
   // =========================================================================
   // Test 23: Deferred materialization holds for any number of non-content events
   // @plan PLAN-20260211-SESSIONRECORDING.P25
@@ -442,7 +279,7 @@ describe('integration: full session recording lifecycle', () => {
   itProp([fc.integer({ min: 1, max: 15 })], { numRuns: 10 })(
     '23: (property) N non-content events → no file until first content',
     async (eventCount) => {
-      const svc = new SessionRecordingService(makeConfig(chatsDir));
+      const svc = new SessionRecordingService(makeConfig(dirs.chatsDir));
 
       for (let i = 0; i < eventCount; i++) {
         svc.recordSessionEvent('info', `event-${i}`);
@@ -469,7 +306,10 @@ describe('integration: full session recording lifecycle', () => {
       await svc.dispose();
     },
   );
+});
 
+describe('integration: full session recording lifecycle / property cases 5', () => {
+  const dirs = useIntegrationDirs();
   // =========================================================================
   // Additional Property-Based Tests for 30%+ threshold
   // =========================================================================
@@ -486,7 +326,7 @@ describe('integration: full session recording lifecycle', () => {
     async (totalItems, rewindCount) => {
       const sid = crypto.randomUUID();
       const svc = new SessionRecordingService(
-        makeConfig(chatsDir, { sessionId: sid }),
+        makeConfig(dirs.chatsDir, { sessionId: sid }),
       );
       for (let i = 0; i < totalItems; i++) {
         svc.recordContent(makeContent(`item-${i}`, alternatingSpeaker(i)));
@@ -502,7 +342,10 @@ describe('integration: full session recording lifecycle', () => {
       expect(replay.history).toHaveLength(expected);
     },
   );
+});
 
+describe('integration: full session recording lifecycle / property cases 6', () => {
+  const dirs = useIntegrationDirs();
   // =========================================================================
   // Test P2: Resume + continue preserves original + adds new for any counts
   // @plan PLAN-20260211-SESSIONRECORDING.P25
@@ -516,15 +359,18 @@ describe('integration: full session recording lifecycle', () => {
       const contents = Array.from({ length: initialCount }, (_, i) =>
         makeContent(`init-${i}`, alternatingSpeaker(i)),
       );
-      const { filePath, sessionId } = await createAndRecordSession(chatsDir, {
-        contents,
-      });
+      const { filePath, sessionId } = await createAndRecordSession(
+        dirs.chatsDir,
+        {
+          contents,
+        },
+      );
 
       const replay1 = await replaySession(filePath, PROJECT_HASH);
       assertReplayOk(replay1);
 
       const svc2 = new SessionRecordingService(
-        makeConfig(chatsDir, { sessionId }),
+        makeConfig(dirs.chatsDir, { sessionId }),
       );
       svc2.initializeForResume(filePath, replay1.lastSeq);
       for (let i = 0; i < additionalCount; i++) {
@@ -538,7 +384,10 @@ describe('integration: full session recording lifecycle', () => {
       expect(replay2.history).toHaveLength(initialCount + additionalCount);
     },
   );
+});
 
+describe('integration: full session recording lifecycle / property cases 7', () => {
+  useIntegrationDirs();
   // =========================================================================
   // Test P3: Delete always removes the file for any valid session
   // @plan PLAN-20260211-SESSIONRECORDING.P25
@@ -572,7 +421,6 @@ describe('integration: full session recording lifecycle', () => {
       }
     },
   );
-
   // =========================================================================
   // Test P4: Session ID is always preserved across record → replay cycle
   // @plan PLAN-20260211-SESSIONRECORDING.P25
@@ -599,432 +447,4 @@ describe('integration: full session recording lifecycle', () => {
       }
     },
   );
-
-  // =========================================================================
-  // Addendum Tests (24-29): Advanced scenarios
-  // =========================================================================
-
-  // =========================================================================
-  // Test 24: Flush mechanism persists committed content
-  // @plan PLAN-20260211-SESSIONRECORDING.P25
-  // @requirement REQ-INT-007, REQ-CON-005
-  // =========================================================================
-  it('24: flush persists all committed content events', async () => {
-    const sid = crypto.randomUUID();
-    const svc = new SessionRecordingService(
-      makeConfig(chatsDir, { sessionId: sid }),
-    );
-
-    // Simulate a multi-tool turn: user message + AI tool call already committed
-    svc.recordContent(makeContent('user request', 'human'));
-    svc.recordContent({
-      speaker: 'ai',
-      blocks: [
-        { type: 'text', text: 'I will help' },
-        {
-          type: 'tool_call',
-          id: 'call_1',
-          name: 'read_file',
-          parameters: { path: '/foo' },
-        },
-      ],
-    });
-    // Tool 1 result committed
-    svc.recordContent({
-      speaker: 'tool',
-      blocks: [
-        {
-          type: 'tool_response',
-          callId: 'call_1',
-          toolName: 'read_file',
-          result: 'file contents',
-        },
-      ],
-    });
-
-    // Flush (simulates signal handler running)
-    await svc.flush();
-    const fp = svc.getFilePath()!;
-    await svc.dispose();
-
-    // Verify all committed content is persisted
-    const replay = await replaySession(fp, PROJECT_HASH);
-    assertReplayOk(replay);
-    expect(replay.history).toHaveLength(3);
-    expect(replay.history[0].speaker).toBe('human');
-    expect(replay.history[1].speaker).toBe('ai');
-    expect(replay.history[2].speaker).toBe('tool');
-  });
-
-  // =========================================================================
-  // Test 25: Cancellation with partial tool output — only committed content persisted
-  // @plan PLAN-20260211-SESSIONRECORDING.P25
-  // @requirement REQ-INT-007
-  // =========================================================================
-  it('25: only committed content survives cancellation flush', async () => {
-    const sid = crypto.randomUUID();
-    const svc = new SessionRecordingService(
-      makeConfig(chatsDir, { sessionId: sid }),
-    );
-
-    // User message + AI tool call + Tool 1 result — all committed
-    svc.recordContent(makeContent('do three things', 'human'));
-    svc.recordContent({
-      speaker: 'ai',
-      blocks: [
-        { type: 'text', text: 'Running tools' },
-        { type: 'tool_call', id: 'c1', name: 'tool1', parameters: {} },
-        { type: 'tool_call', id: 'c2', name: 'tool2', parameters: {} },
-        { type: 'tool_call', id: 'c3', name: 'tool3', parameters: {} },
-      ],
-    });
-    // Only tool 1 result committed before "cancellation"
-    svc.recordContent({
-      speaker: 'tool',
-      blocks: [
-        {
-          type: 'tool_response',
-          callId: 'c1',
-          toolName: 'tool1',
-          result: 'ok',
-        },
-      ],
-    });
-
-    // Flush + dispose (simulates cancellation)
-    await svc.flush();
-    const fp = svc.getFilePath()!;
-    await svc.dispose();
-
-    const replay = await replaySession(fp, PROJECT_HASH);
-    assertReplayOk(replay);
-    // 3 items: user message, AI tool call, tool 1 result
-    expect(replay.history).toHaveLength(3);
-    // Tool 2 and Tool 3 results are absent (not committed)
-    const toolResponses = replay.history.filter((h) => h.speaker === 'tool');
-    expect(toolResponses).toHaveLength(1);
-  });
-
-  // =========================================================================
-  // Test 26: Cancel mid-tool → resume loads captured partial turn
-  // @plan PLAN-20260211-SESSIONRECORDING.P25
-  // @requirement REQ-INT-007, REQ-INT-FULL-003
-  // =========================================================================
-  it('26: cancel mid-tool → resume loads partial turn, can append', async () => {
-    const sid = crypto.randomUUID();
-    const svc1 = new SessionRecordingService(
-      makeConfig(chatsDir, { sessionId: sid }),
-    );
-
-    // Committed before "cancellation"
-    svc1.recordContent(makeContent('user msg', 'human'));
-    svc1.recordContent({
-      speaker: 'ai',
-      blocks: [
-        { type: 'tool_call', id: 'tc1', name: 'file_read', parameters: {} },
-      ],
-    });
-    // Tool was mid-execution — no tool result committed
-    await svc1.flush();
-    const fp = svc1.getFilePath()!;
-    await svc1.dispose();
-
-    // Resume: replays the partial turn
-    const replay = await replaySession(fp, PROJECT_HASH);
-    assertReplayOk(replay);
-    expect(replay.history).toHaveLength(2);
-    expect(replay.history[0].speaker).toBe('human');
-    expect(replay.history[1].speaker).toBe('ai');
-
-    // Continue recording from resume
-    const svc2 = new SessionRecordingService(
-      makeConfig(chatsDir, { sessionId: sid }),
-    );
-    svc2.initializeForResume(fp, replay.lastSeq);
-    svc2.recordContent(makeContent('new message after resume', 'human'));
-    svc2.recordContent(makeContent('new response', 'ai'));
-    await svc2.flush();
-    void svc2.dispose();
-
-    // Re-replay to verify continuation
-    const replay2 = await replaySession(fp, PROJECT_HASH);
-    assertReplayOk(replay2);
-    expect(replay2.history).toHaveLength(4);
-    expect(replay2.lastSeq).toBeGreaterThan(replay.lastSeq);
-  });
-
-  // =========================================================================
-  // Test 27: Crash with partial last JSONL line → resume discards corrupt tail → append works
-  // @plan PLAN-20260211-SESSIONRECORDING.P25
-  // @requirement REQ-RPL-003, REQ-REC-008
-  // =========================================================================
-  it('27: truncated last line → replay succeeds, new events append cleanly', async () => {
-    // Create a valid session first
-    const { filePath } = await createAndRecordSession(chatsDir, {
-      contents: [
-        makeContent('m1', 'human'),
-        makeContent('m2', 'ai'),
-        makeContent('m3', 'human'),
-        makeContent('m4', 'ai'),
-      ],
-    });
-
-    // Append a truncated line WITH trailing newline (simulating crash mid-write
-    // where the OS flushed a partial line terminated by newline)
-    const truncatedJson =
-      '{"v":1,"seq":6,"type":"content","ts":"2026-02-11T16:00:00.000Z","payload":{"conte';
-    await fs.appendFile(
-      filePath,
-      truncatedJson + String.fromCharCode(10),
-      'utf-8',
-    );
-
-    // Replay should succeed, discarding the truncated last line
-    const replay = await replaySession(filePath, PROJECT_HASH);
-    assertReplayOk(replay);
-    expect(replay.history).toHaveLength(4);
-
-    // Resume and append new content
-    const svc = new SessionRecordingService(
-      makeConfig(chatsDir, { sessionId: replay.metadata.sessionId }),
-    );
-    svc.initializeForResume(filePath, replay.lastSeq);
-    svc.recordContent(makeContent('after-crash', 'human'));
-    svc.recordContent(makeContent('response-after-crash', 'ai'));
-    await svc.flush();
-    await svc.dispose();
-
-    // Re-replay: corrupt line is skipped, original 4 + new 2 = 6
-    const replay2 = await replaySession(filePath, PROJECT_HASH);
-    assertReplayOk(replay2);
-    expect(replay2.history).toHaveLength(6);
-    expect((replay2.history[4].blocks[0] as { text: string }).text).toBe(
-      'after-crash',
-    );
-  });
-
-  // =========================================================================
-  // Test 28: Concurrent --continue while first process holds lock
-  // @plan PLAN-20260211-SESSIONRECORDING.P25
-  // @requirement REQ-CON-004
-  // =========================================================================
-  it('28: concurrent resume fails while lock is held', async () => {
-    const { filePath, sessionId } = await createAndRecordSession(chatsDir, {
-      contents: [makeContent('locked-data', 'human')],
-    });
-
-    // Process A acquires the full header-session-ID lock.
-    const lockHandle = await SessionLockManager.acquire(chatsDir, sessionId);
-
-    // Process B tries to resume the same session
-    const result = await resumeSession(makeResumeRequest(chatsDir, sessionId));
-    assertReplayError(result);
-    expect(result.error).toContain('in use');
-
-    // Process A's recording is unaffected
-    const svc = new SessionRecordingService(
-      makeConfig(chatsDir, { sessionId }),
-    );
-    const replay1 = await replaySession(filePath, PROJECT_HASH);
-    assertReplayOk(replay1);
-    svc.initializeForResume(filePath, replay1.lastSeq);
-    svc.recordContent(makeContent('from-process-a', 'human'));
-    await svc.flush();
-    await svc.dispose();
-
-    // Verify file integrity
-    const replay2 = await replaySession(filePath, PROJECT_HASH);
-    assertReplayOk(replay2);
-    expect(replay2.history).toHaveLength(2);
-
-    await lockHandle.release();
-  });
-
-  // =========================================================================
-  // Test 29: Interactive and --prompt modes produce structurally identical JSONL
-  // @plan PLAN-20260211-SESSIONRECORDING.P25
-  // @requirement REQ-INT-FULL-001, REQ-INT-007
-  // =========================================================================
-  it('29: both paths produce structurally identical JSONL', async () => {
-    // "Interactive" path: recording content via service
-    const interactiveSvc = new SessionRecordingService(
-      makeConfig(chatsDir, {
-        sessionId: 'interactive-session',
-        provider: 'anthropic',
-        model: 'claude-4',
-      }),
-    );
-    interactiveSvc.recordContent(makeContent('hello', 'human'));
-    interactiveSvc.recordContent(makeContent('world', 'ai'));
-    await interactiveSvc.flush();
-    const interactivePath = interactiveSvc.getFilePath()!;
-    void interactiveSvc.dispose();
-
-    // "--prompt" path: same content through same service (different instance)
-    const promptSvc = new SessionRecordingService(
-      makeConfig(chatsDir, {
-        sessionId: 'prompt-session',
-        provider: 'anthropic',
-        model: 'claude-4',
-      }),
-    );
-    promptSvc.recordContent(makeContent('hello', 'human'));
-    promptSvc.recordContent(makeContent('world', 'ai'));
-    await promptSvc.flush();
-    const promptPath = promptSvc.getFilePath()!;
-    void promptSvc.dispose();
-
-    // Both should replay identically
-    const replay1 = await replaySession(interactivePath, PROJECT_HASH);
-    const replay2 = await replaySession(promptPath, PROJECT_HASH);
-    expect(replay1.ok).toBe(true);
-    expect(replay2.ok).toBe(true);
-    assertReplayOk(replay1);
-    assertReplayOk(replay2);
-
-    // Same number of history items
-    expect(replay1.history).toHaveLength(2);
-    expect(replay2.history).toHaveLength(2);
-
-    // Structurally identical content (ignoring metadata timestamps)
-    for (let i = 0; i < replay1.history.length; i++) {
-      expect(replay1.history[i].speaker).toBe(replay2.history[i].speaker);
-      expect(replay1.history[i].blocks).toStrictEqual(
-        replay2.history[i].blocks,
-      );
-    }
-
-    // Both files have identical structure (session_start + 2 content)
-    const lines1 = await readJsonlLines(interactivePath);
-    const lines2 = await readJsonlLines(promptPath);
-    expect(lines1).toHaveLength(3); // session_start + 2 content
-    expect(lines2).toHaveLength(3);
-    expect(lines1.map((l) => l.type)).toStrictEqual(lines2.map((l) => l.type));
-  });
-
-  // =========================================================================
-  // Addendum: Crash recovery with truncated last JSONL line
-  // @plan PLAN-20260211-SESSIONRECORDING.P25
-  // @requirement REQ-RPL-003
-  // =========================================================================
-  it('addendum: truncated last line is silently discarded', async () => {
-    const { filePath } = await createAndRecordSession(chatsDir, {
-      contents: Array.from({ length: 10 }, (_, i) =>
-        makeContent(`msg-${i}`, alternatingSpeaker(i)),
-      ),
-    });
-
-    // Append truncated 11th line
-    await fs.appendFile(
-      filePath,
-      '{"v":1,"seq":12,"type":"content","ts":"2026-01-01","payload":{"conte',
-      'utf-8',
-    );
-
-    const replay = await replaySession(filePath, PROJECT_HASH);
-    assertReplayOk(replay);
-    expect(replay.history).toHaveLength(10);
-    // Truncated last line should be silently discarded (no warning about it)
-    const parseWarnings = replay.warnings.filter((w) =>
-      w.includes('failed to parse'),
-    );
-    expect(parseWarnings).toHaveLength(0);
-  });
-
-  // =========================================================================
-  // Addendum: Mid-file corruption — bad line in middle
-  // @plan PLAN-20260211-SESSIONRECORDING.P25
-  // @requirement REQ-RPL-003
-  // =========================================================================
-  it('addendum: mid-file garbage line is skipped with warning', async () => {
-    // Build JSONL manually to inject garbage in the middle
-    const sid = crypto.randomUUID();
-    const svc = new SessionRecordingService(
-      makeConfig(chatsDir, { sessionId: sid }),
-    );
-    svc.recordContent(makeContent('m1', 'human'));
-    svc.recordContent(makeContent('m2', 'ai'));
-    await svc.flush();
-    const fp = svc.getFilePath()!;
-    await svc.dispose();
-
-    // Read existing content, inject garbage, append more valid lines
-    const existingContent = await fs.readFile(fp, 'utf-8');
-    const existingLines = existingContent.trim().split('\n');
-    // Insert garbage after existing lines, then add more valid content
-    const garbageLine = 'GARBAGE_NOT_JSON';
-    const validLine4 = JSON.stringify({
-      v: 1,
-      seq: 4,
-      ts: new Date().toISOString(),
-      type: 'content',
-      payload: { content: makeContent('m3', 'human') },
-    });
-    const validLine5 = JSON.stringify({
-      v: 1,
-      seq: 5,
-      ts: new Date().toISOString(),
-      type: 'content',
-      payload: { content: makeContent('m4', 'ai') },
-    });
-
-    const newContent =
-      existingLines.join('\n') +
-      '\n' +
-      garbageLine +
-      '\n' +
-      validLine4 +
-      '\n' +
-      validLine5 +
-      '\n';
-    await fs.writeFile(fp, newContent, 'utf-8');
-
-    const replay = await replaySession(fp, PROJECT_HASH);
-    assertReplayOk(replay);
-    // m1, m2, m3, m4 — garbage line skipped
-    expect(replay.history).toHaveLength(4);
-    // Warning about the garbage line
-    const jsonWarnings = replay.warnings.filter((w) =>
-      w.includes('failed to parse'),
-    );
-    expect(jsonWarnings.length).toBeGreaterThanOrEqual(1);
-  });
-
-  // =========================================================================
-  // Addendum: Mixed .json and .jsonl — only .jsonl discovered
-  // @plan PLAN-20260211-SESSIONRECORDING.P25
-  // @requirement REQ-RSM-001
-  // =========================================================================
-  it('addendum: only .jsonl files discovered, .json ignored', async () => {
-    // Create real .jsonl sessions
-    await createAndRecordSession(chatsDir, {
-      contents: [makeContent('jsonl-1', 'human')],
-    });
-    await new Promise((r) => setTimeout(r, 30));
-    await createAndRecordSession(chatsDir, {
-      contents: [makeContent('jsonl-2', 'human')],
-    });
-
-    // Create fake .json files
-    await fs.writeFile(
-      path.join(chatsDir, 'session-old1.json'),
-      '{"old": true}',
-      'utf-8',
-    );
-    await fs.writeFile(
-      path.join(chatsDir, 'session-old2.json'),
-      '{"old": true}',
-      'utf-8',
-    );
-
-    const sessions = await SessionDiscovery.listSessions(
-      chatsDir,
-      PROJECT_HASH,
-    );
-    // Only .jsonl files
-    expect(sessions).toHaveLength(2);
-    for (const s of sessions) {
-      expect(s.filePath).toMatch(/\.jsonl$/);
-    }
-  });
 });

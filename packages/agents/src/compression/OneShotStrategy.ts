@@ -71,6 +71,11 @@ function destructureProviderResult(result: CompressionProviderResult): {
   };
 }
 
+import type { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
+import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
+import { withDiskSummaryRequest } from './middleOutDiskPlan.js';
+import { adjustDiskToolBoundary } from './truncationDiskBoundary.js';
+
 const MINIMUM_COMPRESS_MESSAGES = 4;
 
 // ---------------------------------------------------------------------------
@@ -85,6 +90,79 @@ export class OneShotStrategy implements CompressionStrategy {
     mode: 'threshold',
     defaultThreshold: 0.85,
   };
+
+  readonly summaryRequestOwnership = new RowOwnership();
+
+  async compressDisk(
+    context: Omit<CompressionContext, 'history'> & {
+      readonly history: HistoryDensityRows;
+    },
+    candidate: HistoryDensityRows,
+  ): Promise<
+    | { readonly kind: 'applied'; readonly top: number }
+    | { readonly kind: 'noop' }
+  > {
+    let bottom = Math.floor(
+      context.history.length *
+        (1 - context.runtimeContext.ephemerals.preserveThreshold()),
+    );
+    if (bottom < MINIMUM_COMPRESS_MESSAGES) return { kind: 'noop' };
+    bottom = adjustDiskToolBoundary(context.history, bottom);
+    if (bottom < MINIMUM_COMPRESS_MESSAGES) return { kind: 'noop' };
+    const result = destructureProviderResult(
+      await context.resolveProvider(
+        context.runtimeContext.ephemerals.compressionProfile(),
+      ),
+    );
+    const { finalSummary, usage } = await withDiskSummaryRequest(
+      context.history,
+      { top: 0, bottom, injection: [] },
+      this.resolvePrompt(context),
+      this.buildContextInjections(context),
+      this.summaryRequestOwnership,
+      async (request) => {
+        const {
+          text: summary,
+          usage,
+          diagnostics,
+        } = await this.callProvider(
+          result.provider,
+          request,
+          context,
+          result.resolvedRuntime,
+          result.resolvedConfig,
+          result.resolvedOptions,
+          result.invocation,
+        );
+        if (!summary.trim())
+          throw new EmptySummaryError('one-shot', diagnostics);
+        const finalSummary = await this.maybeVerifySummary(
+          context,
+          result.provider,
+          summary,
+          result.resolvedRuntime,
+          result.resolvedConfig,
+          result.resolvedOptions,
+          result.invocation,
+        );
+        return { finalSummary, usage };
+      },
+    );
+    const assembled = this.assembleResult(
+      [],
+      [],
+      [],
+      finalSummary,
+      usage,
+      context.activeTodos,
+    );
+    if (assembled.kind !== 'applied')
+      throw new Error('One-shot assembly did not produce a summary');
+    for (const row of assembled.newHistory) candidate.append(row);
+    for (let index = bottom; index < context.history.length; index++)
+      candidate.append(context.history.readRow(index));
+    return { kind: 'applied', top: 0 };
+  }
 
   async compress(
     context: CompressionContext,
@@ -175,7 +253,7 @@ export class OneShotStrategy implements CompressionStrategy {
   }
 
   private async maybeVerifySummary(
-    context: CompressionContext,
+    context: Omit<CompressionContext, 'history'>,
     provider: IProvider,
     summary: string,
     resolvedRuntime: ProviderRuntimeContext,
@@ -278,7 +356,7 @@ export class OneShotStrategy implements CompressionStrategy {
     };
   }
 
-  private resolvePrompt(context: CompressionContext): string {
+  private resolvePrompt(context: Omit<CompressionContext, 'history'>): string {
     const resolved = context.promptResolver.resolveFile(
       context.promptBaseDir,
       'compression.md',
@@ -303,7 +381,7 @@ export class OneShotStrategy implements CompressionStrategy {
   private async callProvider(
     provider: IProvider,
     request: IContent[],
-    context: CompressionContext,
+    context: Omit<CompressionContext, 'history'>,
     resolvedRuntime: ProviderRuntimeContext,
     resolvedConfig: Config | undefined,
     resolvedOptions: RuntimeGenerateChatOptions['resolved'] | undefined,
@@ -406,7 +484,9 @@ export class OneShotStrategy implements CompressionStrategy {
    * @plan PLAN-20260211-HIGHDENSITY.P23
    * @requirement REQ-HD-011.3, REQ-HD-012.2
    */
-  private buildContextInjections(context: CompressionContext): IContent[] {
+  private buildContextInjections(
+    context: Omit<CompressionContext, 'history'>,
+  ): IContent[] {
     const injections: IContent[] = [];
 
     if (context.activeTodos && context.activeTodos.trim().length > 0) {

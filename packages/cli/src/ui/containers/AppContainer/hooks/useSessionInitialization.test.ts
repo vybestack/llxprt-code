@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { displayBoot } from '../../../../test-utils/resumeRows.js';
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { act } from 'react';
@@ -75,6 +76,259 @@ const makeAgentWithSpy = (output: SessionStartOutput = {}) => {
 const makeAgent = (output: SessionStartOutput = {}) =>
   makeAgentWithSpy(output).agent;
 
+function registerUnmountAndMemoryTests(): void {
+  describe('unmount and memory', () => {
+    it.each([false, true])(
+      'does not publish delayed resume output after unmount (failure: %s)',
+      async (fail) => {
+        let release = (): void => {
+          throw new Error('Stream not initialized');
+        };
+        const gate = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        const displayed: string[] = [];
+        const { unmount } = renderHook(() =>
+          useSessionInitialization({
+            uiRuntime: makeConfig() as never,
+            agent: makeAgent(),
+            addItem: (item) => {
+              displayed.push(item.type);
+              return displayed.length;
+            },
+            loadHistory: (items) => {
+              displayed.push(...items.map((item) => item.type));
+            },
+            resumedBoot: {
+              async *streamRows(): AsyncIterable<IContent> {
+                await gate;
+                if (fail) throw new Error('Disk read failed');
+                yield {
+                  speaker: 'human',
+                  blocks: [{ type: 'text', text: 'old' }],
+                };
+              },
+            },
+          }),
+        );
+        unmount();
+        await act(async () => {
+          release();
+        });
+        expect(displayed).toStrictEqual([]);
+      },
+    );
+
+    it('initializes memory file counts from config', async () => {
+      const config = makeConfig(3, 5);
+      const loadHistory = vi.fn();
+      const addItem = vi.fn();
+
+      const { result } = renderHook(() =>
+        useSessionInitialization({
+          uiRuntime: config as never,
+          agent: makeAgent(),
+          addItem,
+          loadHistory,
+        }),
+      );
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(result.current.llxprtMdFileCount).toBe(3);
+      expect(result.current.coreMemoryFileCount).toBe(5);
+    });
+  });
+}
+
+function registerHistorySeedingTests(): void {
+  describe('history seeding', () => {
+    it('seeds resumed history via loadHistory when resumedHistory is provided', async () => {
+      const config = makeConfig();
+      const loadHistory = vi.fn();
+      const addItem = vi.fn();
+      const resumedHistory: IContent[] = [
+        { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
+      ];
+
+      renderHook(() =>
+        useSessionInitialization({
+          uiRuntime: config as never,
+          agent: makeAgent(),
+          addItem,
+          loadHistory,
+          resumedBoot: displayBoot(resumedHistory),
+        }),
+      );
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      // Assert against the converter's real output (the stub config resolves
+      // no emojifilter setting → 'auto') instead of hard-coding its ID scheme.
+      expect(loadHistory).toHaveBeenCalledWith(
+        iContentToHistoryItems(resumedHistory, 'auto'),
+      );
+    });
+
+    it('does not call loadHistory when resumedHistory is empty', async () => {
+      const config = makeConfig();
+      const loadHistory = vi.fn();
+      const addItem = vi.fn();
+
+      renderHook(() =>
+        useSessionInitialization({
+          uiRuntime: config as never,
+          agent: makeAgent(),
+          addItem,
+          loadHistory,
+          resumedBoot: displayBoot([]),
+        }),
+      );
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(loadHistory).not.toHaveBeenCalled();
+    });
+  });
+}
+
+function registerSessionStartTests(): void {
+  describe('session start', () => {
+    it('triggers session start hook on mount', async () => {
+      const config = makeConfig();
+      const loadHistory = vi.fn();
+      const addItem = vi.fn();
+      const { agent, triggerSessionStart } = makeAgentWithSpy();
+
+      renderHook(() =>
+        useSessionInitialization({
+          uiRuntime: config as never,
+          agent,
+          addItem,
+          loadHistory,
+        }),
+      );
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      // #2378: SessionStart is driven through the Agent's own hooks surface
+      // exactly once (the idempotency guard ref prevents duplicate triggers),
+      // NOT via the raw core triggerSessionStartHook.
+      expect(triggerSessionStart).toHaveBeenCalledTimes(1);
+      expect(triggerSessionStart).toHaveBeenCalledWith();
+    });
+
+    it('injects SessionStart output into history via the agent client', async () => {
+      const config = makeConfig();
+      const loadHistory = vi.fn();
+      const addItem = vi.fn();
+      const addHistory = vi.fn().mockResolvedValue(undefined);
+      config.agentClientSource.getAgentClient.mockReturnValue({ addHistory });
+      const { agent, triggerSessionStart } = makeAgentWithSpy({
+        systemMessage: 'welcome message',
+        additionalContext: 'extra context',
+      });
+
+      renderHook(() =>
+        useSessionInitialization({
+          uiRuntime: config as never,
+          agent,
+          addItem,
+          loadHistory,
+        }),
+      );
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      // The Agent hook is the single source of SessionStart output; its
+      // systemMessage is surfaced as an info item and its additionalContext is
+      // injected into agent-client history.
+      expect(triggerSessionStart).toHaveBeenCalledTimes(1);
+      expect(addItem).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'info', text: 'welcome message' }),
+        expect.any(Number),
+      );
+      expect(addHistory).toHaveBeenCalledWith({
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'extra context' }],
+      });
+    });
+  });
+}
+
+function registerUnmountAndRerenderTests(): void {
+  describe('unmount and rerender', () => {
+    it('aborts session initialization on unmount', async () => {
+      const config = makeConfig();
+      const loadHistory = vi.fn();
+      const addItem = vi.fn();
+
+      const { unmount } = renderHook(() =>
+        useSessionInitialization({
+          uiRuntime: config as never,
+          agent: makeAgent(),
+          addItem,
+          loadHistory,
+        }),
+      );
+
+      // Unmount should not throw and should abort cleanly
+      unmount();
+
+      // Give any pending promises time to settle
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      // The hook must not continue to load history after unmount; with no
+      // resumedHistory supplied, loadHistory is never called anyway, and the
+      // abort must not cause a spurious invocation either.
+      expect(loadHistory).not.toHaveBeenCalled();
+    });
+
+    it('does not duplicate history seeding across renders', async () => {
+      const config = makeConfig();
+      const loadHistory = vi.fn();
+      const addItem = vi.fn();
+      const resumedHistory: IContent[] = [
+        { speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] },
+      ];
+
+      const { rerender } = renderHook(() =>
+        useSessionInitialization({
+          uiRuntime: config as never,
+          agent: makeAgent(),
+          addItem,
+          loadHistory,
+          resumedBoot: displayBoot(resumedHistory),
+        }),
+      );
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      rerender();
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(loadHistory).toHaveBeenCalledTimes(1);
+    });
+  });
+}
+
 describe('useSessionInitialization', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -84,199 +338,8 @@ describe('useSessionInitialization', () => {
     vi.restoreAllMocks();
   });
 
-  it('initializes memory file counts from config', async () => {
-    const config = makeConfig(3, 5);
-    const loadHistory = vi.fn();
-    const addItem = vi.fn();
-
-    const { result } = renderHook(() =>
-      useSessionInitialization({
-        uiRuntime: config as never,
-        agent: makeAgent(),
-        addItem,
-        loadHistory,
-      }),
-    );
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(result.current.llxprtMdFileCount).toBe(3);
-    expect(result.current.coreMemoryFileCount).toBe(5);
-  });
-
-  it('seeds resumed history via loadHistory when resumedHistory is provided', async () => {
-    const config = makeConfig();
-    const loadHistory = vi.fn();
-    const addItem = vi.fn();
-    const resumedHistory: IContent[] = [
-      { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
-    ];
-
-    renderHook(() =>
-      useSessionInitialization({
-        uiRuntime: config as never,
-        agent: makeAgent(),
-        addItem,
-        loadHistory,
-        resumedHistory,
-      }),
-    );
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    // Assert against the converter's real output (the stub config resolves
-    // no emojifilter setting → 'auto') instead of hard-coding its ID scheme.
-    expect(loadHistory).toHaveBeenCalledWith(
-      iContentToHistoryItems(resumedHistory, 'auto'),
-    );
-  });
-
-  it('does not call loadHistory when resumedHistory is empty', async () => {
-    const config = makeConfig();
-    const loadHistory = vi.fn();
-    const addItem = vi.fn();
-
-    renderHook(() =>
-      useSessionInitialization({
-        uiRuntime: config as never,
-        agent: makeAgent(),
-        addItem,
-        loadHistory,
-        resumedHistory: [],
-      }),
-    );
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(loadHistory).not.toHaveBeenCalled();
-  });
-
-  it('triggers session start hook on mount', async () => {
-    const config = makeConfig();
-    const loadHistory = vi.fn();
-    const addItem = vi.fn();
-    const { agent, triggerSessionStart } = makeAgentWithSpy();
-
-    renderHook(() =>
-      useSessionInitialization({
-        uiRuntime: config as never,
-        agent,
-        addItem,
-        loadHistory,
-      }),
-    );
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    // #2378: SessionStart is driven through the Agent's own hooks surface
-    // exactly once (the idempotency guard ref prevents duplicate triggers),
-    // NOT via the raw core triggerSessionStartHook.
-    expect(triggerSessionStart).toHaveBeenCalledTimes(1);
-    expect(triggerSessionStart).toHaveBeenCalledWith();
-  });
-
-  it('injects SessionStart output into history via the agent client', async () => {
-    const config = makeConfig();
-    const loadHistory = vi.fn();
-    const addItem = vi.fn();
-    const addHistory = vi.fn().mockResolvedValue(undefined);
-    config.agentClientSource.getAgentClient.mockReturnValue({ addHistory });
-    const { agent, triggerSessionStart } = makeAgentWithSpy({
-      systemMessage: 'welcome message',
-      additionalContext: 'extra context',
-    });
-
-    renderHook(() =>
-      useSessionInitialization({
-        uiRuntime: config as never,
-        agent,
-        addItem,
-        loadHistory,
-      }),
-    );
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    // The Agent hook is the single source of SessionStart output; its
-    // systemMessage is surfaced as an info item and its additionalContext is
-    // injected into agent-client history.
-    expect(triggerSessionStart).toHaveBeenCalledTimes(1);
-    expect(addItem).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'info', text: 'welcome message' }),
-      expect.any(Number),
-    );
-    expect(addHistory).toHaveBeenCalledWith({
-      speaker: 'human',
-      blocks: [{ type: 'text', text: 'extra context' }],
-    });
-  });
-
-  it('aborts session initialization on unmount', async () => {
-    const config = makeConfig();
-    const loadHistory = vi.fn();
-    const addItem = vi.fn();
-
-    const { unmount } = renderHook(() =>
-      useSessionInitialization({
-        uiRuntime: config as never,
-        agent: makeAgent(),
-        addItem,
-        loadHistory,
-      }),
-    );
-
-    // Unmount should not throw and should abort cleanly
-    unmount();
-
-    // Give any pending promises time to settle
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    // The hook must not continue to load history after unmount; with no
-    // resumedHistory supplied, loadHistory is never called anyway, and the
-    // abort must not cause a spurious invocation either.
-    expect(loadHistory).not.toHaveBeenCalled();
-  });
-
-  it('does not duplicate history seeding across renders', async () => {
-    const config = makeConfig();
-    const loadHistory = vi.fn();
-    const addItem = vi.fn();
-    const resumedHistory: IContent[] = [
-      { speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] },
-    ];
-
-    const { rerender } = renderHook(() =>
-      useSessionInitialization({
-        uiRuntime: config as never,
-        agent: makeAgent(),
-        addItem,
-        loadHistory,
-        resumedHistory,
-      }),
-    );
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    rerender();
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(loadHistory).toHaveBeenCalledTimes(1);
-  });
+  registerUnmountAndMemoryTests();
+  registerHistorySeedingTests();
+  registerSessionStartTests();
+  registerUnmountAndRerenderTests();
 });

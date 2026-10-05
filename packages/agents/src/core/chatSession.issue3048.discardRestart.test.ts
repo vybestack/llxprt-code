@@ -24,6 +24,7 @@
  * generateChatCompletion async generator.
  */
 
+import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-core/test-utils/collect-rows-for-assertions.js';
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { ChatSession } from './chatSession.js';
 import type { StreamEvent } from './chatSession.js';
@@ -401,15 +402,6 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
    * @scenario Durable history is the successful attempt alone
    */
   it('records only the successful attempt in history', async () => {
-    const { ai, aiText, human } =
-      await observeRecordsOnlyTheSuccessfulAttemptInHistory();
-    expect(ai).toHaveLength(1);
-    expect(aiText).toBe('recovered response');
-    expect(aiText).not.toContain('partial');
-    expect(human).toHaveLength(1);
-  });
-
-  const observeRecordsOnlyTheSuccessfulAttemptInHistory = async () => {
     const history = new HistoryService();
     let attempt = 0;
     const generateChatCompletionMock = vi.fn(async function* (
@@ -439,19 +431,22 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
 
     await chat.waitForIdle();
 
-    const ai = history.getAll().filter((content) => content.speaker === 'ai');
+    await withRows(history.streamRawHistory(), (rows) => {
+      const ai = rows.filter((content) => content.speaker === 'ai');
 
-    const aiText = ai[0].blocks
-      .filter((block) => block.type === 'text')
-      .map((block) => (block as { text: string }).text)
-      .join('');
+      const aiText = ai[0].blocks
+        .filter((block) => block.type === 'text')
+        .map((block) => (block as { text: string }).text)
+        .join('');
 
-    const human = history
-      .getAll()
-      .filter((content) => content.speaker === 'human');
+      const human = rows.filter((content) => content.speaker === 'human');
 
-    return { ai, aiText, human };
-  };
+      expect(ai).toHaveLength(1);
+      expect(aiText).toBe('recovered response');
+      expect(aiText).not.toContain('partial');
+      expect(human).toHaveLength(1);
+    });
+  });
 
   /**
    * @plan PLAN-20260806-ISSUE3048.P02
@@ -745,9 +740,9 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
 
     await chat.waitForIdle();
 
-    const toolResponseCount = history
-      .getAll()
-      .reduce(
+    let toolResponseCount = 0;
+    await withRows(history.streamRawHistory(), (rows) => {
+      toolResponseCount = rows.reduce(
         (count, content) =>
           count +
           content.blocks.filter(
@@ -757,6 +752,7 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
           ).length,
         0,
       );
+    });
 
     return { attempt, toolResponseCount };
   };

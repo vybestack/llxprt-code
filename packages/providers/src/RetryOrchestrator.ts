@@ -140,6 +140,16 @@ export interface RetryOrchestratorConfig {
 export class RetryOrchestrator implements IProvider {
   readonly name: string;
   readonly wrappedProvider: IProvider;
+
+  get contextDumpVersion(): IProvider['contextDumpVersion'] {
+    return this.wrappedProvider.contextDumpVersion;
+  }
+
+  get buildContextDumpBody(): IProvider['buildContextDumpBody'] {
+    return this.wrappedProvider.buildContextDumpBody?.bind(
+      this.wrappedProvider,
+    );
+  }
   private readonly logger = new DebugLogger('llxprt:retry:orchestrator');
   private readonly config: Required<RetryOrchestratorConfig>;
 

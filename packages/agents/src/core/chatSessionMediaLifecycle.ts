@@ -23,8 +23,11 @@ export function createSemanticMediaPurgeSession(
           'Semantic media purge requires an active session recording',
         );
       }
-      recording.recordSemanticMediaPurge(candidateHistory, frontier);
-      await recording.flush();
+      await recording.recordSemanticMediaPurgeRows(
+        candidateHistory.streamRows(),
+        frontier,
+        { requireLiveFold: true },
+      );
       if (!recording.isActive()) {
         throw new Error('Semantic media purge recording did not remain active');
       }

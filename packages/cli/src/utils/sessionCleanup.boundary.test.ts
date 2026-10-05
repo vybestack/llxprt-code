@@ -51,13 +51,17 @@ function createMinimalConfig(
 ): {
   getSessionId: () => string;
   getDebugMode: () => boolean;
-  getAgentClient: () => { getHistory: () => Promise<[]> };
+  getAgentClient: () => {
+    streamHistory: () => AsyncGenerator<never, void, unknown>;
+  };
 } {
   return {
     getSessionId: () => sessionId,
     getDebugMode: () => debugMode,
     getAgentClient: () => ({
-      getHistory: async () => [],
+      async *streamHistory(): AsyncGenerator<never, void, unknown> {
+        yield* [];
+      },
     }),
   };
 }

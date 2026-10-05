@@ -1,3 +1,5 @@
+import { curatedHistoryForTest } from '../../test-utils/curated-history-fixture.js';
+/// <reference lib="esnext.array" />
 /*
  * @license
  * Copyright 2025 Vybestack LLC
@@ -7,228 +9,179 @@
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import type { IContent, ToolCallBlock, ToolResponseBlock } from './IContent.js';
+let historyService: HistoryService;
+function syntheticResponseCount(curated: IContent[]): number {
+  return curated.filter(
+    (c) => c.speaker === 'tool' && c.metadata?.synthetic === true,
+  ).length;
+}
+function hasToolResponseFor(curated: IContent[], id: string): boolean {
+  return curated.some(
+    (c) =>
+      c.speaker === 'tool' &&
+      c.blocks.some((b) => (b as ToolResponseBlock).callId === id),
+  );
+}
 
 describe('Circular Reference Bug', () => {
-  let historyService: HistoryService;
+  beforeEach(facadeCallback0);
 
-  beforeEach(() => {
-    historyService = new HistoryService();
+  it(
+    'should not create circular references when getCurated is called during tool execution',
+    facadeCallback1,
+  );
+
+  it('should handle the exact sequence that causes the bug', facadeCallback2);
+
+  it(
+    'should not create synthetic responses when tool responses exist in full history',
+    facadeCallback3,
+  );
+
+  it(
+    'should handle complex nested parameters without circular references',
+    facadeCallback4,
+  );
+
+  it(
+    'sanitizes cyclic tool call parameters without mutating stored history',
+    facadeCallback5,
+  );
+
+  it(
+    'sanitizes cyclic tool response results before provider serialization',
+    facadeCallback6,
+  );
+});
+
+function facadeCallback0(): void {
+  historyService = new HistoryService();
+}
+
+function facadeCallback1(): void {
+  // This simulates the actual flow where getCurated is called while a tool is executing
+
+  // Step 1: Add user message
+  historyService.add({
+    speaker: 'human',
+    blocks: [{ type: 'text', text: 'Do something' }],
   });
 
-  function syntheticResponseCount(curated: IContent[]): number {
-    return curated.filter(
-      (c) => c.speaker === 'tool' && c.metadata?.synthetic === true,
-    ).length;
-  }
-
-  function hasToolResponseFor(curated: IContent[], id: string): boolean {
-    return curated.some(
-      (c) =>
-        c.speaker === 'tool' &&
-        c.blocks.some((b) => (b as ToolResponseBlock).callId === id),
-    );
-  }
-
-  it('should not create circular references when getCurated is called during tool execution', () => {
-    // This simulates the actual flow where getCurated is called while a tool is executing
-
-    // Step 1: Add user message
-    historyService.add({
-      speaker: 'human',
-      blocks: [{ type: 'text', text: 'Do something' }],
-    });
-
-    // Step 2: Add AI message with tool call
-    const toolCallId = historyService.generateHistoryId(
-      'turn-test',
-      0,
-      'openai',
-      'call_some_tool_test',
-      'some_tool',
-    );
-    historyService.add({
-      speaker: 'ai',
-      blocks: [
-        { type: 'text', text: 'I will use a tool' },
-        {
-          type: 'tool_call',
-          id: toolCallId,
-          name: 'some_tool',
-          parameters: {
-            nested: {
-              data: {
-                value: 'test',
-                // Create a potential circular reference
-                parent: null as unknown,
-              },
+  // Step 2: Add AI message with tool call
+  const toolCallId = historyService.generateHistoryId(
+    'turn-test',
+    0,
+    'openai',
+    'call_some_tool_test',
+    'some_tool',
+  );
+  historyService.add({
+    speaker: 'ai',
+    blocks: [
+      { type: 'text', text: 'I will use a tool' },
+      {
+        type: 'tool_call',
+        id: toolCallId,
+        name: 'some_tool',
+        parameters: {
+          nested: {
+            data: {
+              value: 'test',
+              // Create a potential circular reference
+              parent: null as unknown,
             },
           },
-        } as ToolCallBlock,
-      ],
-    });
-
-    // Step 3: getCurated is called BEFORE tool response is added
-    // This happens during tool execution flow
-    const curated1 = historyService.getCurated();
-
-    // Should be able to stringify without circular reference
-    expect(() => JSON.stringify(curated1)).not.toThrow();
-
-    // Step 4: Tool response is added later
-    historyService.add({
-      speaker: 'tool',
-      blocks: [
-        {
-          type: 'tool_response',
-          callId: toolCallId,
-          toolName: 'some_tool',
-          result: { success: true },
         },
-      ],
-    });
-
-    // Step 5: getCurated called again after tool response
-    const curated2 = historyService.getCurated();
-
-    // Should still be serializable
-    expect(() => JSON.stringify(curated2)).not.toThrow();
+      } as ToolCallBlock,
+    ],
   });
 
-  it('should handle the exact sequence that causes the bug', () => {
-    // Reproduce the exact sequence from the logs
+  // Step 3: getCurated is called BEFORE tool response is added
+  // This happens during tool execution flow
+  const curated1 = curatedHistoryForTest(historyService);
 
-    // Initial prompt
-    historyService.add({
-      speaker: 'human',
-      blocks: [{ type: 'text', text: 'First prompt' }],
-    });
+  // Should be able to stringify without circular reference
+  expect(() => JSON.stringify(curated1)).not.toThrow();
 
-    historyService.add({
-      speaker: 'human',
-      blocks: Array(10)
-        .fill(null)
-        .map(() => ({ type: 'text', text: 'Additional context' })),
-    });
-
-    // AI makes first tool call
-    const toolCall1 = historyService.generateHistoryId(
-      'turn-test',
-      1,
-      'openai',
-      'call_raw_2',
-      'todo_read',
-    );
-    historyService.add({
-      speaker: 'ai',
-      blocks: [
-        ...Array(36)
-          .fill(null)
-          .map(() => ({ type: 'text', text: 'Thinking...' })),
-        {
-          type: 'tool_call',
-          id: toolCall1,
-          name: 'todo_read',
-          parameters: { action: 'read' },
-        } as ToolCallBlock,
-      ],
-    });
-
-    // getCurated called during tool execution (before response)
-    let curated = historyService.getCurated();
-
-    // At this point we have an orphan tool call (no response yet)
-    // The main concern is that the curated history is serializable
-    // regardless of whether synthetic responses are added or not
-    expect(() => JSON.stringify(curated)).not.toThrow();
-
-    // Tool response arrives
-    historyService.add({
-      speaker: 'tool',
-      blocks: [
-        {
-          type: 'tool_response',
-          callId: toolCall1,
-          toolName: 'todo_read',
-          result: null,
-          error: 'Tool failed',
-        },
-      ],
-    });
-
-    // getCurated called again
-    curated = historyService.getCurated();
-    expect(() => JSON.stringify(curated)).not.toThrow();
-
-    // This pattern repeats - let's do it multiple times like in the logs
-    for (let i = 0; i < 5; i++) {
-      const toolCallId = historyService.generateHistoryId(
-        'turn-test',
-        i + 2,
-        'openai',
-        `raw-loop-${i}`,
-        'read_file',
-      );
-
-      // AI makes another tool call
-      historyService.add({
-        speaker: 'ai',
-        blocks: [
-          { type: 'text', text: `Round ${i}` },
-          {
-            type: 'tool_call',
-            id: toolCallId,
-            name: 'read_file',
-            parameters: { file: `/path/${i}` },
-          } as ToolCallBlock,
-        ],
-      });
-
-      // getCurated before response (simulates tool execution)
-      const beforeResponse = historyService.getCurated();
-      expect(() => JSON.stringify(beforeResponse)).not.toThrow();
-
-      // Add tool response
-      historyService.add({
-        speaker: 'tool',
-        blocks: [
-          {
-            type: 'tool_response',
-            callId: toolCallId,
-            toolName: 'read_file',
-            result: { content: `File ${i} content` },
-          },
-        ],
-      });
-
-      // getCurated after response
-      const afterResponse = historyService.getCurated();
-      expect(() => JSON.stringify(afterResponse)).not.toThrow();
-    }
+  // Step 4: Tool response is added later
+  historyService.add({
+    speaker: 'tool',
+    blocks: [
+      {
+        type: 'tool_response',
+        callId: toolCallId,
+        toolName: 'some_tool',
+        result: { success: true },
+      },
+    ],
   });
 
-  it('should not create synthetic responses when tool responses exist in full history', () => {
-    // This tests our fix - we check full history for responses, not just curated
+  // Step 5: getCurated called again after tool response
+  const curated2 = curatedHistoryForTest(historyService);
 
+  // Should still be serializable
+  expect(() => JSON.stringify(curated2)).not.toThrow();
+}
+
+function facadeCallback2(): void {
+  // Reproduce the exact sequence from the logs
+
+  // Initial prompt
+  const toolCall1 = addCircularPrompt();
+
+  // getCurated called during tool execution (before response)
+  let curated = curatedHistoryForTest(historyService);
+
+  // At this point we have an orphan tool call (no response yet)
+  // The main concern is that the curated history is serializable
+  // regardless of whether synthetic responses are added or not
+  expect(() => JSON.stringify(curated)).not.toThrow();
+
+  // Tool response arrives
+  historyService.add({
+    speaker: 'tool',
+    blocks: [
+      {
+        type: 'tool_response',
+        callId: toolCall1,
+        toolName: 'todo_read',
+        result: null,
+        error: 'Tool failed',
+      },
+    ],
+  });
+
+  // getCurated called again
+  curated = curatedHistoryForTest(historyService);
+  expect(() => JSON.stringify(curated)).not.toThrow();
+
+  // This pattern repeats - let's do it multiple times like in the logs
+  for (let i = 0; i < 5; i++) {
     const toolCallId = historyService.generateHistoryId(
       'turn-test',
-      0,
+      i + 2,
       'openai',
-      'call_test_no_synthetic',
-      'test',
+      `raw-loop-${i}`,
+      'read_file',
     );
 
-    // Add AI message with tool call
+    // AI makes another tool call
     historyService.add({
       speaker: 'ai',
       blocks: [
+        { type: 'text', text: `Round ${i}` },
         {
           type: 'tool_call',
           id: toolCallId,
-          name: 'test',
-          parameters: {},
+          name: 'read_file',
+          parameters: { file: `/path/${i}` },
         } as ToolCallBlock,
       ],
     });
+
+    // getCurated before response (simulates tool execution)
+    const beforeResponse = curatedHistoryForTest(historyService);
+    expect(() => JSON.stringify(beforeResponse)).not.toThrow();
 
     // Add tool response
     historyService.add({
@@ -237,144 +190,232 @@ describe('Circular Reference Bug', () => {
         {
           type: 'tool_response',
           callId: toolCallId,
-          toolName: 'test',
-          result: { data: 'result' },
+          toolName: 'read_file',
+          result: { content: `File ${i} content` },
         },
       ],
     });
 
-    // Add some content that might not be included in curated
-    historyService.add({
-      speaker: 'ai',
-      blocks: [], // Empty AI message (might be excluded from curated)
-    });
+    // getCurated after response
+    const afterResponse = curatedHistoryForTest(historyService);
+    expect(() => JSON.stringify(afterResponse)).not.toThrow();
+  }
+}
 
-    const curated = historyService.getCurated();
+function facadeCallback3(): void {
+  // This tests our fix - we check full history for responses, not just curated
 
-    // Should NOT have synthetic response since real one exists
-    expect(syntheticResponseCount(curated)).toBe(0);
+  const toolCallId = historyService.generateHistoryId(
+    'turn-test',
+    0,
+    'openai',
+    'call_test_no_synthetic',
+    'test',
+  );
 
-    // Should be serializable
-    expect(() => JSON.stringify(curated)).not.toThrow();
+  // Add AI message with tool call
+  historyService.add({
+    speaker: 'ai',
+    blocks: [
+      {
+        type: 'tool_call',
+        id: toolCallId,
+        name: 'test',
+        parameters: {},
+      } as ToolCallBlock,
+    ],
   });
 
-  it('should handle complex nested parameters without circular references', () => {
-    const toolCallId = historyService.generateHistoryId(
-      'turn-test',
-      0,
-      'openai',
-      'call_complex_params',
-      'complex_tool',
-    );
-
-    // Create an object with potential circular reference
-    interface NestedData {
-      nested: {
-        value: string;
-        parent?: NestedData;
-      };
-    }
-
-    const data: NestedData = {
-      nested: {
-        value: 'test',
+  // Add tool response
+  historyService.add({
+    speaker: 'tool',
+    blocks: [
+      {
+        type: 'tool_response',
+        callId: toolCallId,
+        toolName: 'test',
+        result: { data: 'result' },
       },
+    ],
+  });
+
+  // Add some content that might not be included in curated
+  historyService.add({
+    speaker: 'ai',
+    blocks: [], // Empty AI message (might be excluded from curated)
+  });
+
+  const curated = curatedHistoryForTest(historyService);
+
+  // Should NOT have synthetic response since real one exists
+  expect(syntheticResponseCount(curated)).toBe(0);
+
+  // Should be serializable
+  expect(() => JSON.stringify(curated)).not.toThrow();
+}
+
+async function facadeCallback4(): Promise<void> {
+  const toolCallId = historyService.generateHistoryId(
+    'turn-test',
+    0,
+    'openai',
+    'call_complex_params',
+    'complex_tool',
+  );
+
+  // Create an object with potential circular reference
+  interface NestedData {
+    nested: {
+      value: string;
+      parent?: NestedData;
     };
-    // Create circular reference
-    data.nested.parent = data;
+  }
 
-    const params = { data };
+  const data: NestedData = {
+    nested: {
+      value: 'test',
+    },
+  };
+  // Create circular reference
+  data.nested.parent = data;
 
-    historyService.add({
-      speaker: 'ai',
-      blocks: [
-        {
-          type: 'tool_call',
-          id: toolCallId,
-          name: 'complex_tool',
-          parameters: params,
-        } as ToolCallBlock,
-      ],
-    });
+  const params = { data };
 
-    // getCurated does NOT add synthetic responses
-    const curated = historyService.getCurated();
-
-    // getCurated should NOT have synthetic response
-    expect(hasToolResponseFor(curated, toolCallId)).toBe(false);
-
-    // getCuratedForProvider DOES add synthetic responses for orphaned tool calls (strict mode always enabled)
-    const curatedForProvider = historyService.getCuratedForProvider();
-    expect(hasToolResponseFor(curatedForProvider, toolCallId)).toBe(true); // Synthetic response synthesized for orphaned call
-
-    // Should be able to stringify the curated-for-provider version
-    // Even though original params have circular refs - this is the main test goal
-    expect(() => JSON.stringify(curatedForProvider)).not.toThrow();
-
-    // The main goal of this test is that circular references are properly cleaned up
-    expect(() => JSON.stringify(curatedForProvider)).not.toThrow();
+  historyService.add({
+    speaker: 'ai',
+    blocks: [
+      {
+        type: 'tool_call',
+        id: toolCallId,
+        name: 'complex_tool',
+        parameters: params,
+      } as ToolCallBlock,
+    ],
   });
 
-  it('sanitizes cyclic tool call parameters without mutating stored history', () => {
-    interface CyclicValue {
-      label: string;
-      self?: CyclicValue;
-    }
-    const parameters: CyclicValue = { label: 'parameters' };
-    parameters.self = parameters;
-    historyService.add({
-      speaker: 'ai',
-      blocks: [
-        {
-          type: 'tool_call',
-          id: 'cyclic-parameters',
-          name: 'cyclic_tool',
-          parameters,
-        },
-      ],
-    });
+  // getCurated does NOT add synthetic responses
+  const curated = curatedHistoryForTest(historyService);
 
-    const first = historyService.getCuratedForProvider();
-    const second = historyService.getCuratedForProvider();
+  // getCurated should NOT have synthetic response
+  expect(hasToolResponseFor(curated, toolCallId)).toBe(false);
 
-    expect(JSON.stringify(first)).toContain('"_circular":true');
-    expect(JSON.stringify(second)).toBe(JSON.stringify(first));
-    expect(parameters.self).toBe(parameters);
+  // getCuratedForProvider DOES add synthetic responses for orphaned tool calls (strict mode always enabled)
+  const curatedForProvider = await Array.fromAsync(
+    historyService.getCuratedForProviderStream(),
+  );
+  expect(hasToolResponseFor(curatedForProvider, toolCallId)).toBe(true); // Synthetic response synthesized for orphaned call
+
+  // Should be able to stringify the curated-for-provider version
+  // Even though original params have circular refs - this is the main test goal
+  expect(() => JSON.stringify(curatedForProvider)).not.toThrow();
+
+  // The main goal of this test is that circular references are properly cleaned up
+  expect(() => JSON.stringify(curatedForProvider)).not.toThrow();
+}
+
+async function facadeCallback5(): Promise<void> {
+  interface CyclicValue {
+    label: string;
+    self?: CyclicValue;
+  }
+  const parameters: CyclicValue = { label: 'parameters' };
+  parameters.self = parameters;
+  historyService.add({
+    speaker: 'ai',
+    blocks: [
+      {
+        type: 'tool_call',
+        id: 'cyclic-parameters',
+        name: 'cyclic_tool',
+        parameters,
+      },
+    ],
   });
 
-  it('sanitizes cyclic tool response results before provider serialization', () => {
-    interface CyclicValue {
-      label: string;
-      self?: CyclicValue;
-    }
-    const result: CyclicValue = { label: 'result' };
-    result.self = result;
-    historyService.add({
-      speaker: 'ai',
-      blocks: [
-        {
-          type: 'tool_call',
-          id: 'cyclic-result',
-          name: 'cyclic_tool',
-          parameters: {},
-        },
-      ],
-    });
-    historyService.add({
-      speaker: 'tool',
-      blocks: [
-        {
-          type: 'tool_response',
-          callId: 'cyclic-result',
-          toolName: 'cyclic_tool',
-          result,
-        },
-      ],
-    });
+  const first = await Array.fromAsync(
+    historyService.getCuratedForProviderStream(),
+  );
+  const second = await Array.fromAsync(
+    historyService.getCuratedForProviderStream(),
+  );
 
-    const curated = historyService.getCuratedForProvider();
+  expect(JSON.stringify(first)).toContain('"_circular":true');
+  expect(JSON.stringify(second)).toBe(JSON.stringify(first));
+  expect(parameters.self).toBe(parameters);
+}
 
-    expect(JSON.stringify(curated)).toContain('"_circular":true');
-    expect(result.self).toBe(result);
+async function facadeCallback6(): Promise<void> {
+  interface CyclicValue {
+    label: string;
+    self?: CyclicValue;
+  }
+  const result: CyclicValue = { label: 'result' };
+  result.self = result;
+  historyService.add({
+    speaker: 'ai',
+    blocks: [
+      {
+        type: 'tool_call',
+        id: 'cyclic-result',
+        name: 'cyclic_tool',
+        parameters: {},
+      },
+    ],
   });
-});
+  historyService.add({
+    speaker: 'tool',
+    blocks: [
+      {
+        type: 'tool_response',
+        callId: 'cyclic-result',
+        toolName: 'cyclic_tool',
+        result,
+      },
+    ],
+  });
+
+  const curated = await Array.fromAsync(
+    historyService.getCuratedForProviderStream(),
+  );
+
+  expect(JSON.stringify(curated)).toContain('"_circular":true');
+  expect(result.self).toBe(result);
+}
+
+function addCircularPrompt(): string {
+  historyService.add({
+    speaker: 'human',
+    blocks: [{ type: 'text', text: 'First prompt' }],
+  });
+
+  historyService.add({
+    speaker: 'human',
+    blocks: Array(10)
+      .fill(null)
+      .map(() => ({ type: 'text', text: 'Additional context' })),
+  });
+
+  // AI makes first tool call
+  const toolCall1 = historyService.generateHistoryId(
+    'turn-test',
+    1,
+    'openai',
+    'call_raw_2',
+    'todo_read',
+  );
+  historyService.add({
+    speaker: 'ai',
+    blocks: [
+      ...Array(36)
+        .fill(null)
+        .map(() => ({ type: 'text', text: 'Thinking...' })),
+      {
+        type: 'tool_call',
+        id: toolCall1,
+        name: 'todo_read',
+        parameters: { action: 'read' },
+      } as ToolCallBlock,
+    ],
+  });
+  return toolCall1;
+}

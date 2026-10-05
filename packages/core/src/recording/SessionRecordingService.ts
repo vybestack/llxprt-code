@@ -33,6 +33,10 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { mkdirSync } from 'node:fs';
+import {
+  RecordingTicketQueue,
+  type PendingRecord,
+} from './recording-ticket-queue.js';
 import { type IContent } from '../services/history/IContent.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import {
@@ -46,12 +50,19 @@ import {
   type CompressionDetailPayload,
   type CommitWatermark,
   type RecordingWriterIo,
+  type RecordingWriterObservation,
 } from './types.js';
 import { SessionLockManager, type LockHandle } from './SessionLockManager.js';
 import { replaySession } from './ReplayEngine.js';
 import { CommitAckRegistry } from './CommitAckRegistry.js';
 import { diagnoseMissingPath, watchChatsDir } from './ChatsDirWatcher.js';
 import type { LocalMediaStore } from '../storage/local-media-store.js';
+import {
+  stagePurgeRecordingRows,
+  preparePurgeRecordingRecord,
+  validatePurgeRecordingForLiveFold,
+  type PurgeRecordingOptions,
+} from './semanticPurgeRecordingRows.js';
 
 export type { SessionRecordingServiceConfig };
 
@@ -91,17 +102,6 @@ type RecordingLifecycle =
  * write (issue #2852). Only the serialized form is retained: the live payload
  * object graph is not pinned until drain (issue #3432).
  */
-interface PendingRecord {
-  readonly seq: number;
-  readonly json: string;
-  readonly bytes: number;
-}
-
-export interface PreparedContentBatch {
-  publish(): void;
-  rollback(): void;
-  finalize(): void;
-}
 
 function toPendingRecord(line: SessionRecordLine): PendingRecord {
   const json = JSON.stringify(line);
@@ -118,26 +118,6 @@ const defaultWriterIo: RecordingWriterIo = {
     return fs.appendFile(filePath, data, encoding);
   },
 };
-
-function totalRecordBytes(records: readonly PendingRecord[]): number {
-  return records.reduce((total, record) => total + record.bytes, 0);
-}
-
-/** Serialize a content batch into pending records with consecutive seqs. */
-function toContentRecords(
-  expectedSeq: number,
-  contents: readonly IContent[],
-): PendingRecord[] {
-  return contents.map((content, index) =>
-    toPendingRecord({
-      v: recordingVersion({ content }),
-      seq: expectedSeq + index + 1,
-      ts: new Date().toISOString(),
-      type: 'content',
-      payload: { content },
-    }),
-  );
-}
 
 function containsMediaReference(
   value: unknown,
@@ -173,13 +153,14 @@ function recordingVersion(payload: unknown): number {
  */
 export class SessionRecordingService {
   /** @pseudocode session-recording-service.md lines 40-51 */
-  private queue: PendingRecord[] = [];
+  private readonly queue = new RecordingTicketQueue();
   private queueBytes: number = 0;
   private highWaterReported: boolean = false;
   private seq: number = 0;
   private filePath: string | null = null;
   private materialized: boolean = false;
   private lifecycle: RecordingLifecycle = { status: 'active' };
+  private closing = false;
   private draining: boolean = false;
   private drainPromise: Promise<void> | null = null;
   private readonly sessionId: string;
@@ -188,7 +169,12 @@ export class SessionRecordingService {
   private readonly maxQueueBytes: number;
   private readonly mediaStore: LocalMediaStore | undefined;
   private readonly io: RecordingWriterIo;
-  private preContentBuffer: PendingRecord[] = [];
+  private readonly observeWriter:
+    | ((state: RecordingWriterObservation) => void)
+    | undefined;
+  private writingBatch: readonly PendingRecord[] = [];
+  private writingLines: string | null = null;
+  private readonly preContentBuffer = new RecordingTicketQueue();
   private preContentBytes: number = 0;
   private chatsDirWatcher: { close(): void } | null = null;
   private sessionTitle: string | null | undefined;
@@ -199,6 +185,16 @@ export class SessionRecordingService {
   private readonly acks = new CommitAckRegistry();
   /** First write failure, preserved so poisoned commit()/waitForCommit() always reject with it. */
   private poisonError: unknown = null;
+  private readonly watermarkListeners = new Set<
+    (watermark: CommitWatermark) => void
+  >();
+
+  onCommitWatermark(
+    listener: (watermark: CommitWatermark) => void,
+  ): () => void {
+    this.watermarkListeners.add(listener);
+    return () => this.watermarkListeners.delete(listener);
+  }
 
   static async createLocked(
     config: SessionRecordingServiceConfig,
@@ -245,6 +241,7 @@ export class SessionRecordingService {
     this.maxQueueBytes = maxQueueBytes;
     this.mediaStore = config.mediaStore;
     this.io = config.io ?? defaultWriterIo;
+    this.observeWriter = config.observeWriter;
 
     const startPayload = {
       sessionId: config.sessionId,
@@ -281,10 +278,11 @@ export class SessionRecordingService {
       payload,
     };
     const record = toPendingRecord(line);
-    this.seq = line.seq;
     this.preContentBuffer.push(record);
+    this.seq = line.seq;
     this.preContentBytes += record.bytes;
     this.reportHighWater();
+    this.observe('pre-content');
     return line;
   }
 
@@ -297,7 +295,7 @@ export class SessionRecordingService {
    * @pseudocode session-recording-service.md lines 81-110
    */
   enqueue(type: SessionEventType, payload: unknown): SessionRecordLine | null {
-    if (this.lifecycle.status !== 'active') return null;
+    if (!this.isActive()) return null;
     if (!this.materialized && !MATERIALIZING_EVENT_TYPES.has(type)) {
       return this.bufferPreContent(type, payload);
     }
@@ -310,17 +308,7 @@ export class SessionRecordingService {
       payload,
     };
     const record = toPendingRecord(line);
-    if (!this.materialized) {
-      this.materialize();
-      this.queue.push(...this.preContentBuffer);
-      this.queueBytes += this.preContentBytes;
-      this.preContentBuffer = [];
-      this.preContentBytes = 0;
-      this.materialized = true;
-    }
-    this.seq = line.seq;
-    this.queue.push(record);
-    this.queueBytes += record.bytes;
+    this.stageRecord(record);
     this.reportHighWater();
     this.scheduleDrain();
     return line;
@@ -382,7 +370,11 @@ export class SessionRecordingService {
    * @requirement G2
    */
   waitForCommit(line: SessionRecordLine): Promise<CommitWatermark> {
-    const pending = this.acks.find(line.seq);
+    return this.waitForCommitSequence(line.seq);
+  }
+
+  waitForCommitSequence(seq: number): Promise<CommitWatermark> {
+    const pending = this.acks.find(seq);
     if (pending !== undefined) return pending.chained;
     if (this.lifecycle.status === 'disposed') {
       return Promise.reject(
@@ -394,24 +386,23 @@ export class SessionRecordingService {
       return Promise.reject(this.poisonError);
     }
     const last = this.acks.lastWatermark;
-    if (last !== null && line.seq <= this.acks.lastAckedSeq) {
+    if (last !== null && seq <= this.acks.lastAckedSeq) {
       // Already acked. Durability is monotone, so the latest watermark is a
       // valid proof for this seq (exact when it was the last record).
       return Promise.resolve(last);
     }
-    if (line.seq > this.seq) {
+    if (seq > this.seq)
       return Promise.reject(
         new Error(
-          `waitForCommit: sequence ${line.seq} was never enqueued in this recording`,
+          `waitForCommit: sequence ${seq} was never enqueued in this recording`,
         ),
       );
-    }
-    return this.acks.register(line.seq).chained;
+    return this.acks.register(seq).chained;
   }
 
   /** Throws for disposed or poisoned recorders; commit-family rejects loudly instead of returning null. */
   private requireCommittable(): void {
-    if (this.lifecycle.status === 'disposed') {
+    if (this.closing || this.lifecycle.status === 'disposed') {
       throw new Error('commit: session recording is disposed');
     }
     if (this.poisonError !== null) {
@@ -435,21 +426,33 @@ export class SessionRecordingService {
     line: SessionRecordLine,
     record: PendingRecord,
   ): Promise<CommitWatermark> {
-    if (!this.materialized) {
-      this.materialize();
-      this.queue.push(...this.preContentBuffer);
-      this.queueBytes += this.preContentBytes;
-      this.preContentBuffer = [];
-      this.preContentBytes = 0;
-      this.materialized = true;
-    }
-    this.seq = line.seq;
-    this.queue.push(record);
-    this.queueBytes += record.bytes;
+    this.stageRecord(record);
     this.reportHighWater();
     const ack = this.acks.register(line.seq);
     this.scheduleDrain();
+    this.observe('admit');
     return ack.chained;
+  }
+
+  private stageRecord(record: PendingRecord): void {
+    if (!this.materialized) {
+      this.materialize();
+      try {
+        for (const pending of this.preContentBuffer) this.queue.push(pending);
+        this.queue.push(record);
+      } catch (error) {
+        this.queue.clear();
+        throw error;
+      }
+      this.queueBytes += this.preContentBytes;
+      this.preContentBuffer.clear();
+      this.preContentBytes = 0;
+      this.materialized = true;
+    } else {
+      this.queue.push(record);
+    }
+    this.seq = record.seq;
+    this.queueBytes += record.bytes;
   }
 
   private takeRecordingFailure(): unknown | undefined {
@@ -478,9 +481,9 @@ export class SessionRecordingService {
     ) {
       this.lifecycle = { status: 'failure-reported' };
     }
-    this.queue = [];
+    this.queue.clear();
     this.queueBytes = 0;
-    this.preContentBuffer = [];
+    this.preContentBuffer.clear();
     this.preContentBytes = 0;
     try {
       this.chatsDirWatcher?.close();
@@ -531,6 +534,11 @@ export class SessionRecordingService {
     );
   }
 
+  retireIdleTicketStorage(): void {
+    this.queue.retireIdleStorage();
+    this.preContentBuffer.retireIdleStorage();
+  }
+
   /** Number of records waiting to be written. Zero once the queue has drained. */
   getPendingRecordCount(): number {
     return this.queue.length + this.preContentBuffer.length;
@@ -539,6 +547,21 @@ export class SessionRecordingService {
   /** Bytes waiting to be written. Zero once the queue has drained. */
   getPendingByteCount(): number {
     return this.queueBytes + this.preContentBytes;
+  }
+
+  private observe(phase: RecordingWriterObservation['phase']): void {
+    this.observeWriter?.({
+      phase,
+      preContent: [],
+      queue: [],
+      batch: this.writingBatch,
+      lines: this.writingLines,
+      preContentBytes: this.preContentBytes,
+      queueBytes: this.queueBytes,
+      pendingAcks: this.acks.pendingCount,
+      lastAckedSeq: this.acks.lastAckedSeq,
+      lastByteOffset: this.acks.baseOffset,
+    });
   }
 
   /**
@@ -609,27 +632,39 @@ export class SessionRecordingService {
     try {
       while (this.queue.length > 0) {
         await this.acks.ensureBaseOffset(this.filePath!);
-        const batch = [...this.queue];
-        const batchBytes = batch.reduce(
-          (total, record) => total + record.bytes,
-          0,
-        );
+        const record = this.queue.read(0);
+        const batch = [record];
+        const batchBytes = record.bytes;
         const startOffset = this.acks.baseOffset;
-        const lines = batch.map((record) => record.json).join('\n') + '\n';
-        const shouldContinue = await this.writeBatchToFile(lines);
-        if (!shouldContinue) {
-          return;
+        this.writingBatch = batch;
+        if (batch[0].staged !== undefined) {
+          await this.writeStagedRecord(batch[0]);
+        } else {
+          const lines = batch.map((record) => record.json).join('\n') + '\n';
+          this.writingLines = lines;
+          this.observe('append');
+          await this.writeBatchToFile(lines);
         }
+        if (this.lifecycle.status !== 'active') return;
         // The append resolved: this batch's bytes are durable. Ack each
         // record at its exclusive end offset before admitting the next
         // batch (read-your-write, PLAN-20260917-ISSUE854.P05b2).
         this.acks.fireBatch(batch, startOffset);
-        this.queue = this.queue.slice(batch.length);
+        const watermark = this.acks.lastWatermark;
+        if (watermark !== null)
+          this.watermarkListeners.forEach((listener) => listener(watermark));
+        this.queue.removeFirst();
         this.queueBytes -= batchBytes;
+        this.writingBatch = [];
+        this.writingLines = null;
+        this.observe('acked');
       }
     } finally {
+      this.writingBatch = [];
+      this.writingLines = null;
       this.draining = false;
       this.acks.notifyDrainCompletion();
+      this.observe('drained');
     }
   }
 
@@ -637,6 +672,25 @@ export class SessionRecordingService {
    * Write a batch of events to the file.
    * Returns true if draining should continue, false if it should stop.
    */
+  private async writeStagedRecord(record: PendingRecord): Promise<void> {
+    const staged = record.staged;
+    if (staged === undefined || record.suffix === undefined)
+      throw new Error('Missing staged semantic purge recording');
+    const append = async (text: string): Promise<void> => {
+      this.writingLines = text;
+      this.observe('append');
+      await this.io.appendFile(this.filePath!, text, 'utf8');
+      this.writingLines = null;
+    };
+    try {
+      await append(record.json);
+      for await (const chunk of staged.stream()) await append(chunk);
+      await append(record.suffix);
+    } finally {
+      staged.close();
+    }
+  }
+
   private async writeBatchToFile(lines: string): Promise<boolean> {
     try {
       await this.io.appendFile(this.filePath!, lines, 'utf8');
@@ -672,17 +726,8 @@ export class SessionRecordingService {
     if (this.lifecycle.status !== 'active') return;
     if (this.queue.length === 0 && !this.draining) return;
 
-    if (this.drainPromise) {
-      await this.drainPromise;
-      const drainFailure = this.takeRecordingFailure();
-      if (drainFailure !== undefined) throw drainFailure;
-    }
-
-    if (this.queue.length > 0) {
-      this.draining = true;
-      this.drainPromise = this.drain().catch((error: unknown) => {
-        this.transitionToFailure(error);
-      });
+    while (this.queue.length > 0 || this.draining) {
+      this.scheduleDrain();
       await this.drainPromise;
       const drainFailure = this.takeRecordingFailure();
       if (drainFailure !== undefined) throw drainFailure;
@@ -697,7 +742,7 @@ export class SessionRecordingService {
    * @pseudocode session-recording-service.md line 162-164
    */
   isActive(): boolean {
-    return this.lifecycle.status === 'active';
+    return this.lifecycle.status === 'active' && !this.closing;
   }
 
   /**
@@ -709,6 +754,10 @@ export class SessionRecordingService {
    */
   getFilePath(): string | null {
     return this.filePath;
+  }
+
+  getLastEnqueuedSequence(): number {
+    return this.seq;
   }
 
   /**
@@ -758,7 +807,7 @@ export class SessionRecordingService {
     this.filePath = filePath;
     this.seq = lastSeq;
     this.materialized = true;
-    this.preContentBuffer = [];
+    this.preContentBuffer.clear();
     this.preContentBytes = 0;
     // Watermark offsets are absolute for the (possibly different) journal
     // file; re-seed from the file size at the next drained batch.
@@ -775,6 +824,7 @@ export class SessionRecordingService {
    * @pseudocode session-recording-service.md lines 181-185
    */
   async dispose(): Promise<void> {
+    this.closing = true;
     const failures: unknown[] = [];
     if (this.lifecycle.status !== 'disposed') {
       try {
@@ -792,9 +842,10 @@ export class SessionRecordingService {
     );
     this.acks.notifyDrainCompletion();
     this.lifecycle = { status: 'disposed' };
-    this.queue = [];
+    this.watermarkListeners.clear();
+    this.queue.clear();
     this.queueBytes = 0;
-    this.preContentBuffer = [];
+    this.preContentBuffer.clear();
     this.preContentBytes = 0;
     if (this.chatsDirWatcher) {
       try {
@@ -854,95 +905,47 @@ export class SessionRecordingService {
     this.enqueue('content', { content });
   }
 
-  prepareContentBatch(contents: readonly IContent[]): PreparedContentBatch {
-    if (this.lifecycle.status !== 'active') {
-      throw new Error('Cannot record content batch: recording is not active');
-    }
-    if (this.draining) {
-      throw new Error(
-        'Cannot record content batch while recording is draining',
-      );
-    }
-
-    const expectedSeq = this.seq;
-    const records = toContentRecords(expectedSeq, contents);
-    const batchBytes = totalRecordBytes(records);
-
-    const queueBefore = this.queue;
-    const queueBytesBefore = this.queueBytes;
-    const preContentBefore = this.preContentBuffer;
-    const preContentBytesBefore = this.preContentBytes;
-    const materializedBefore = this.materialized;
-    const filePathBefore = this.filePath;
-    const watcherBefore = this.chatsDirWatcher;
-    let published = false;
-    let finalized = false;
-
-    return {
-      publish: () => {
-        if (published) throw new Error('Content batch was already published');
-        if (this.seq !== expectedSeq) {
-          throw new Error('Recording changed after content batch preflight');
-        }
-        published = true;
-        if (!this.materialized) {
-          this.materialize();
-          this.queue = [...this.preContentBuffer, ...records];
-          this.queueBytes = this.preContentBytes + batchBytes;
-          this.preContentBuffer = [];
-          this.preContentBytes = 0;
-          this.materialized = true;
-        } else {
-          this.queue = [...this.queue, ...records];
-          this.queueBytes += batchBytes;
-        }
-        this.seq = expectedSeq + records.length;
-        this.reportHighWater();
-      },
-      rollback: () => {
-        if (!published || finalized) return;
-        if (this.chatsDirWatcher !== watcherBefore) {
-          this.chatsDirWatcher?.close();
-        }
-        // Records dropped by the rollback can never become durable; reject
-        // any commit ack riding on them
-        // (PLAN-20260917-ISSUE854.P05b2).
-        for (const dropped of [
-          ...this.queue.slice(queueBefore.length),
-          ...this.preContentBuffer.slice(preContentBefore.length),
-        ]) {
-          this.acks.reject(
-            dropped.seq,
-            new Error(
-              'Content batch rolled back before the record was durable',
-            ),
-          );
-        }
-        this.queue = queueBefore;
-        this.queueBytes = queueBytesBefore;
-        this.preContentBuffer = preContentBefore;
-        this.preContentBytes = preContentBytesBefore;
-        this.materialized = materializedBefore;
-        this.filePath = filePathBefore;
-        this.chatsDirWatcher = watcherBefore;
-        this.seq = expectedSeq;
-        published = false;
-      },
-      finalize: () => {
-        if (!published) {
-          throw new Error('Cannot finalize an unpublished content batch');
-        }
-        finalized = true;
-        this.scheduleDrain();
-      },
-    };
-  }
-
   recordSemanticMediaPurge(
     history: readonly IContent[],
     frontier: { readonly contentIndex: number; readonly blockIndex: number },
   ): void {
     this.enqueue('semantic_media_purge', { history, frontier });
+  }
+
+  async recordSemanticMediaPurgeRows(
+    history: AsyncIterable<IContent>,
+    frontier: { readonly contentIndex: number; readonly blockIndex: number },
+    options: PurgeRecordingOptions = {},
+  ): Promise<void> {
+    this.requireCommittable();
+    const staged = await stagePurgeRecordingRows(history, options.signal);
+    try {
+      for (;;) {
+        this.requireCommittable();
+        options.signal?.throwIfAborted();
+        const { line, record } = preparePurgeRecordingRecord(
+          this.seq + 1,
+          staged,
+          frontier,
+        );
+        const hasRoom =
+          !this.admissionBlocked(record.bytes) || this.queueCannotDrain();
+        if (!hasRoom) await this.acks.nextDrainCompletion();
+        if (hasRoom) await validatePurgeRecordingForLiveFold(record, options);
+        this.requireCommittable();
+        options.signal?.throwIfAborted();
+        if (
+          hasRoom &&
+          record.seq === this.seq + 1 &&
+          (!this.admissionBlocked(record.bytes) || this.queueCannotDrain())
+        ) {
+          await this.admitCommitRecord(line, record);
+          return;
+        }
+      }
+    } finally {
+      staged.close();
+    }
   }
 
   /**

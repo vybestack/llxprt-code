@@ -194,6 +194,21 @@ interface Harness {
   todoContinuationService: TodoContinuationService;
 }
 
+function checkpointHookManager(
+  afterAgentTexts: string[],
+): MessageStreamDeps['agentHookManager'] {
+  return {
+    cleanupOldHookState: vi.fn(),
+    fireBeforeAgentHookSafe: vi.fn().mockResolvedValue(undefined),
+    fireAfterAgentHookSafe: vi.fn(
+      (_id: string, _promptText: string, responseText: string) => {
+        afterAgentTexts.push(responseText);
+        return Promise.resolve(undefined);
+      },
+    ),
+  } as unknown as MessageStreamDeps['agentHookManager'];
+}
+
 function buildHarness(options: HarnessOptions): Harness {
   const afterAgentTexts: string[] = [];
   const mockChat = {
@@ -236,21 +251,12 @@ function buildHarness(options: HarnessOptions): Harness {
       }),
       recordSentContext: vi.fn(),
     } as unknown as MessageStreamDeps['ideContextTracker'],
-    agentHookManager: {
-      cleanupOldHookState: vi.fn(),
-      fireBeforeAgentHookSafe: vi.fn().mockResolvedValue(undefined),
-      fireAfterAgentHookSafe: vi.fn(
-        (_id: string, _promptText: string, responseText: string) => {
-          afterAgentTexts.push(responseText);
-          return Promise.resolve(undefined);
-        },
-      ),
-    } as unknown as MessageStreamDeps['agentHookManager'],
+    agentHookManager: checkpointHookManager(afterAgentTexts),
     getEffectiveModelIdentity: () => ({
       providerName: 'openai',
       model: 'gpt-4',
     }),
-    getHistory: vi.fn().mockResolvedValue([]),
+    async *streamHistory() {},
     getSessionTurnCount: vi.fn().mockReturnValue(1),
     incrementSessionTurnCount: vi.fn(),
     lazyInitialize: vi.fn().mockResolvedValue(undefined),
@@ -313,426 +319,438 @@ const VISIBLE = (
   ...overrides,
 });
 
-describe('MessageStreamOrchestrator — attempt checkpoint rollback (issue #3048 review)', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+function resetCheckpointMocks(): void {
+  vi.clearAllMocks();
+}
+
+// ----- Finding 2: loop detection transactional rollback -----
+
+describe('MessageStreamOrchestrator attempt checkpoint rollback > replacement call forwarding (issue #3048)', () => {
+  beforeEach(resetCheckpointMocks);
+
+  /**
+   * @requirement REQ-3048-007
+   * @given a real LoopDetectionService with toolCallLoopThreshold=2.
+   * @when an abandoned tool A is fed, then a transport Retry, then a
+   *   replacement tool A (same signature).
+   * @then the replacement tool A is forwarded (not rejected as a loop),
+   *   because the abandoned attempt's detector state was rolled back.
+   */
+  it('forwards the replacement tool call after an abandoned identical one (threshold 2)', async () => {
+    const { loopDetected, forwardedToolCalls } =
+      await observeForwardsTheReplacementToolCallAfterAnAbandonedIdenticalOneThreshold2();
+    expect(loopDetected).toBe(false);
+    expect(forwardedToolCalls).toHaveLength(1);
   });
+});
 
-  // ----- Finding 2: loop detection transactional rollback -----
-
-  describe('loop detection rollback (finding 2)', () => {
-    /**
-     * @requirement REQ-3048-007
-     * @given a real LoopDetectionService with toolCallLoopThreshold=2.
-     * @when an abandoned tool A is fed, then a transport Retry, then a
-     *   replacement tool A (same signature).
-     * @then the replacement tool A is forwarded (not rejected as a loop),
-     *   because the abandoned attempt's detector state was rolled back.
-     */
-    it('forwards the replacement tool call after an abandoned identical one (threshold 2)', async () => {
-      const { loopDetected, forwardedToolCalls } =
-        await observeForwardsTheReplacementToolCallAfterAnAbandonedIdenticalOneThreshold2();
-      expect(loopDetected).toBe(false);
-      expect(forwardedToolCalls).toHaveLength(1);
-    });
-
-    const observeForwardsTheReplacementToolCallAfterAnAbandonedIdenticalOneThreshold2 =
-      async () => {
-        const loopDetector = makeRealLoopDetector(2);
-        const { orchestrator } = buildHarness({
-          loopDetector,
-          streams: [
-            [
-              toolCallRequest('abandoned-a'),
-              retryEvent(),
-              toolCallRequest('replacement-a'),
-              finishedEvent(VISIBLE()),
-            ],
-          ],
-        });
-
-        const events = await drain(orchestrator);
-
-        const loopDetected = events.some(
-          (e) => e.type === AgentEventType.LoopDetected,
-        );
-
-        const forwardedToolCalls = events.filter(
-          (event) =>
-            event.type === AgentEventType.ToolCallRequest &&
-            event.value.callId === 'replacement-a',
-        );
-
-        return { loopDetected, forwardedToolCalls };
-      };
-
-    /**
-     * @requirement REQ-3048-007
-     * @given two identical tool calls in an abandoned attempt reach the detector
-     *   threshold immediately before the transport Retry signal.
-     * @when the replacement attempt emits the same tool once.
-     * @then the pending loop verdict is discarded with the abandoned attempt and
-     *   the replacement call is forwarded.
-     */
-    it('discards a loop verdict reached by the abandoned attempt before retry', async () => {
-      const rollbackResult =
-        await observeDiscardsALoopVerdictReachedByTheAbandonedAttemptBeforeRetry();
-      expect(rollbackResult).toStrictEqual({
-        loopDetected: false,
-        replacementCallForwarded: true,
-      });
-    });
-
-    const observeDiscardsALoopVerdictReachedByTheAbandonedAttemptBeforeRetry =
-      async () => {
-        const loopDetector = makeRealLoopDetector(2);
-        const { orchestrator } = buildHarness({
-          loopDetector,
-          streams: [
-            [
-              toolCallRequest('abandoned-a-1'),
-              toolCallRequest('abandoned-a-2'),
-              retryEvent(),
-              toolCallRequest('replacement-a'),
-              finishedEvent(VISIBLE()),
-            ],
-          ],
-        });
-
-        const events = await drain(orchestrator);
-        const loopDetected = events.some(
-          (event) => event.type === AgentEventType.LoopDetected,
-        );
-        const replacementCallForwarded = events.some(
-          (event) =>
-            event.type === AgentEventType.ToolCallRequest &&
-            event.value.callId === 'replacement-a',
-        );
-
-        return { loopDetected, replacementCallForwarded };
-      };
-
-    /**
-     * @requirement REQ-3048-007
-     * @given threshold 2 and the SAME detector without rollback wiring would
-     *   flag the second identical tool call as a loop. This fence proves the
-     *   detector still catches a genuine repeated tool call within ONE attempt.
-     */
-    it('still detects a genuine repeated tool call within a single attempt', async () => {
-      const loopDetector = makeRealLoopDetector(2);
-      const { orchestrator } = buildHarness({
-        loopDetector,
-        streams: [
-          [
-            toolCallRequest('first'),
-            toolCallRequest('second'), // same signature -> 2nd -> loop
-            finishedEvent(VISIBLE()),
-          ],
+const observeForwardsTheReplacementToolCallAfterAnAbandonedIdenticalOneThreshold2 =
+  async () => {
+    const loopDetector = makeRealLoopDetector(2);
+    const { orchestrator } = buildHarness({
+      loopDetector,
+      streams: [
+        [
+          toolCallRequest('abandoned-a'),
+          retryEvent(),
+          toolCallRequest('replacement-a'),
+          finishedEvent(VISIBLE()),
         ],
-      });
-
-      const events = await drain(orchestrator);
-
-      expect(events.some((e) => e.type === AgentEventType.LoopDetected)).toBe(
-        true,
-      );
+      ],
     });
 
-    /**
-     * @requirement REQ-3048-007
-     * @scenario content detector rollback: abandoned content must not
-     *   contaminate the content-chanting detector for the replacement attempt.
-     */
-    it('rolls back content detector state on retry', async () => {
-      const loopDetector = makeRealLoopDetector(50);
-      const repeatedChunk = 'A'.repeat(50);
-      // Abandoned attempt emits the chunk once; replacement attempt emits it
-      // only once more. Without rollback, the abandoned chunk persists in the
-      // history and the second chunk could look like a repeat.
-      const { orchestrator } = buildHarness({
-        loopDetector,
-        streams: [
-          [
-            content(repeatedChunk),
-            retryEvent(),
-            content(repeatedChunk),
-            finishedEvent(VISIBLE()),
-          ],
-        ],
-      });
+    const events = await drain(orchestrator);
 
-      const events = await drain(orchestrator);
-      expect(events.some((e) => e.type === AgentEventType.LoopDetected)).toBe(
-        false,
-      );
+    const loopDetected = events.some(
+      (e) => e.type === AgentEventType.LoopDetected,
+    );
+
+    const forwardedToolCalls = events.filter(
+      (event) =>
+        event.type === AgentEventType.ToolCallRequest &&
+        event.value.callId === 'replacement-a',
+    );
+
+    return { loopDetected, forwardedToolCalls };
+  };
+
+describe('MessageStreamOrchestrator attempt checkpoint rollback > abandoned verdict removal (issue #3048)', () => {
+  beforeEach(resetCheckpointMocks);
+
+  /**
+   * @requirement REQ-3048-007
+   * @given two identical tool calls in an abandoned attempt reach the detector
+   *   threshold immediately before the transport Retry signal.
+   * @when the replacement attempt emits the same tool once.
+   * @then the pending loop verdict is discarded with the abandoned attempt and
+   *   the replacement call is forwarded.
+   */
+  it('discards a loop verdict reached by the abandoned attempt before retry', async () => {
+    const rollbackResult =
+      await observeDiscardsALoopVerdictReachedByTheAbandonedAttemptBeforeRetry();
+    expect(rollbackResult).toStrictEqual({
+      loopDetected: false,
+      replacementCallForwarded: true,
     });
   });
+});
 
-  // ----- Finding 3: earlier successful internal-loop response preservation -----
-
-  describe('response text preservation across internal iterations (finding 3)', () => {
-    /**
-     * @requirement REQ-3048-007
-     * @given an earlier internal-loop iteration contributes text, then the loop
-     *   continues; a later iteration emits abandoned text, then Retry, then
-     *   replacement text.
-     * @when the AfterAgent hook fires for the completed turn.
-     * @then its responseText is earlier + replacement text, excluding the
-     *   abandoned text.
-     */
-    it('preserves earlier iteration text and excludes abandoned text on AfterAgent', async () => {
-      const { orchestrator, afterAgentTexts } = buildHarness({
-        // Iteration 1: contributes "earlier " but is classified thinking-only
-        // (Finished outcome hadVisibleOutput:false, hadThinking:true), so the
-        // internal loop continues without firing AfterAgent.
-        streams: [
-          [
-            content('earlier '),
-            thoughtEvent(),
-            finishedEvent({ hadVisibleOutput: false, hadThinking: true }),
-          ],
-          // Iteration 2: abandoned text, then transport Retry, then replacement.
-          [
-            content('abandoned '),
-            retryEvent(),
-            content('replacement'),
-            finishedEvent(VISIBLE()),
-          ],
+const observeDiscardsALoopVerdictReachedByTheAbandonedAttemptBeforeRetry =
+  async () => {
+    const loopDetector = makeRealLoopDetector(2);
+    const { orchestrator } = buildHarness({
+      loopDetector,
+      streams: [
+        [
+          toolCallRequest('abandoned-a-1'),
+          toolCallRequest('abandoned-a-2'),
+          retryEvent(),
+          toolCallRequest('replacement-a'),
+          finishedEvent(VISIBLE()),
         ],
-      });
-
-      await drain(orchestrator);
-
-      expect(afterAgentTexts).toHaveLength(1);
-      expect(afterAgentTexts[0]).toBe('earlier replacement');
+      ],
     });
+
+    const events = await drain(orchestrator);
+    const loopDetected = events.some(
+      (event) => event.type === AgentEventType.LoopDetected,
+    );
+    const replacementCallForwarded = events.some(
+      (event) =>
+        event.type === AgentEventType.ToolCallRequest &&
+        event.value.callId === 'replacement-a',
+    );
+
+    return { loopDetected, replacementCallForwarded };
+  };
+
+describe('MessageStreamOrchestrator — attempt checkpoint rollback (issue #3048 review) > loop detection rollback (finding 2)', () => {
+  beforeEach(resetCheckpointMocks);
+
+  /**
+   * @requirement REQ-3048-007
+   * @given threshold 2 and the SAME detector without rollback wiring would
+   *   flag the second identical tool call as a loop. This fence proves the
+   *   detector still catches a genuine repeated tool call within ONE attempt.
+   */
+  it('still detects a genuine repeated tool call within a single attempt', async () => {
+    const loopDetector = makeRealLoopDetector(2);
+    const { orchestrator } = buildHarness({
+      loopDetector,
+      streams: [
+        [
+          toolCallRequest('first'),
+          toolCallRequest('second'), // same signature -> 2nd -> loop
+          finishedEvent(VISIBLE()),
+        ],
+      ],
+    });
+
+    const events = await drain(orchestrator);
+
+    expect(events.some((e) => e.type === AgentEventType.LoopDetected)).toBe(
+      true,
+    );
   });
 
-  // ----- Finding 4: TodoContinuationService transactional rollback -----
-
-  describe('task-list continuation rollback (finding 4)', () => {
-    /**
-     * @requirement REQ-3048-007
-     * @given a real TodoContinuationService whose complexity analysis has
-     *   incremented consecutiveComplexTurns to 1 at stream-iteration entry.
-     * @when an abandoned task-list write resets consecutiveComplexTurns,
-     *   then Retry occurs and the replacement produces no task-list call.
-     * @then consecutiveComplexTurns is restored to its pre-attempt value (1),
-     *   not left at the abandoned attempt's 0.
-     */
-    it('restores consecutiveComplexTurns after an abandoned todo_write on retry', async () => {
-      const todoContinuationService = makeRealTodoContinuationService();
-      // Enable complexity tracking so the entry value is non-zero.
-      todoContinuationService.updateTodoToolAvailabilityFromDeclarations([
-        { name: 'todo_write' },
-        { name: 'todo_read' },
-      ]);
-
-      const { orchestrator } = buildHarness({
-        todoContinuationService,
-        complexity: { isComplex: true, shouldSuggestTodos: true },
-        streams: [
-          [
-            todoWriteRequest('abandoned-todo', [
-              { id: 'abandoned', content: 'abandoned task', status: 'pending' },
-            ]),
-            retryEvent(),
-            finishedEvent(VISIBLE()),
-          ],
+  /**
+   * @requirement REQ-3048-007
+   * @scenario content detector rollback: abandoned content must not
+   *   contaminate the content-chanting detector for the replacement attempt.
+   */
+  it('rolls back content detector state on retry', async () => {
+    const loopDetector = makeRealLoopDetector(50);
+    const repeatedChunk = 'A'.repeat(50);
+    // Abandoned attempt emits the chunk once; replacement attempt emits it
+    // only once more. Without rollback, the abandoned chunk persists in the
+    // history and the second chunk could look like a repeat.
+    const { orchestrator } = buildHarness({
+      loopDetector,
+      streams: [
+        [
+          content(repeatedChunk),
+          retryEvent(),
+          content(repeatedChunk),
+          finishedEvent(VISIBLE()),
         ],
-      });
-
-      await drain(orchestrator);
-
-      // processComplexityAnalysis incremented this to 1 at entry; the
-      // The abandoned task-list write reset the counter; restoration must
-      // return it to the value captured at attempt entry.
-      expect(todoContinuationService.consecutiveComplexTurns).toBe(1);
+      ],
     });
 
-    /**
-     * @requirement REQ-3048-007
-     * @scenario an abandoned task-list write must not leak its snapshot:
-     *   restoration retains the snapshot captured at attempt entry.
-     */
-    it('does not leak the abandoned todo snapshot after rollback', async () => {
-      const todoContinuationService = makeRealTodoContinuationService();
-      todoContinuationService.lastTodoSnapshot = [
-        { id: 'orig', content: 'original task', status: 'in_progress' },
-      ];
+    const events = await drain(orchestrator);
+    expect(events.some((e) => e.type === AgentEventType.LoopDetected)).toBe(
+      false,
+    );
+  });
+});
 
-      const { orchestrator } = buildHarness({
-        todoContinuationService,
-        streams: [
-          [
-            todoWriteRequest('abandoned-todo', [
-              { id: 'abandoned', content: 'abandoned task', status: 'pending' },
-            ]),
-            retryEvent(),
-            // End without another task-list call so the restored snapshot can
-            // be observed without further mutation.
-            finishedEvent(VISIBLE()),
-          ],
+// ----- Finding 3: earlier successful internal-loop response preservation -----
+
+describe('MessageStreamOrchestrator — attempt checkpoint rollback (issue #3048 review) > response text preservation across internal iterations (finding 3)', () => {
+  beforeEach(resetCheckpointMocks);
+  /**
+   * @requirement REQ-3048-007
+   * @given an earlier internal-loop iteration contributes text, then the loop
+   *   continues; a later iteration emits abandoned text, then Retry, then
+   *   replacement text.
+   * @when the AfterAgent hook fires for the completed turn.
+   * @then its responseText is earlier + replacement text, excluding the
+   *   abandoned text.
+   */
+  it('preserves earlier iteration text and excludes abandoned text on AfterAgent', async () => {
+    const { orchestrator, afterAgentTexts } = buildHarness({
+      // Iteration 1: contributes "earlier " but is classified thinking-only
+      // (Finished outcome hadVisibleOutput:false, hadThinking:true), so the
+      // internal loop continues without firing AfterAgent.
+      streams: [
+        [
+          content('earlier '),
+          thoughtEvent(),
+          finishedEvent({ hadVisibleOutput: false, hadThinking: true }),
         ],
-      });
-
-      await drain(orchestrator);
-
-      expect(
-        todoContinuationService.lastTodoSnapshot.some(
-          (task) => task.id === 'abandoned',
-        ),
-      ).toBe(false);
+        // Iteration 2: abandoned text, then transport Retry, then replacement.
+        [
+          content('abandoned '),
+          retryEvent(),
+          content('replacement'),
+          finishedEvent(VISIBLE()),
+        ],
+      ],
     });
 
-    /**
-     * @requirement REQ-3048-007
-     * @scenario reminder behavior is unaffected by the rollback: the restored
-     *   lastTodoToolTurn keeps escalation logic tied to the prior value.
-     */
-    it('keeps reminder escalation behavior tied to the restored lastTodoToolTurn', async () => {
-      const todoContinuationService = makeRealTodoContinuationService();
-      todoContinuationService.consecutiveComplexTurns = 3;
-      todoContinuationService.setLastTodoToolTurn(3);
+    await drain(orchestrator);
 
-      const snapshot = todoContinuationService.checkpoint();
+    expect(afterAgentTexts).toHaveLength(1);
+    expect(afterAgentTexts[0]).toBe('earlier replacement');
+  });
+});
 
-      // Simulate an abandoned attempt mutating state.
-      todoContinuationService.setLastTodoToolTurn(99);
-      todoContinuationService.consecutiveComplexTurns = 1;
+// ----- Finding 4: TodoContinuationService transactional rollback -----
 
-      todoContinuationService.restore(snapshot);
+describe('MessageStreamOrchestrator — attempt checkpoint rollback (issue #3048 review) > task-list continuation rollback (finding 4)', () => {
+  beforeEach(resetCheckpointMocks);
+  /**
+   * @requirement REQ-3048-007
+   * @given a real TodoContinuationService whose complexity analysis has
+   *   incremented consecutiveComplexTurns to 1 at stream-iteration entry.
+   * @when an abandoned task-list write resets consecutiveComplexTurns,
+   *   then Retry occurs and the replacement produces no task-list call.
+   * @then consecutiveComplexTurns is restored to its pre-attempt value (1),
+   *   not left at the abandoned attempt's 0.
+   */
+  it('restores consecutiveComplexTurns after an abandoned todo_write on retry', async () => {
+    const todoContinuationService = makeRealTodoContinuationService();
+    // Enable complexity tracking so the entry value is non-zero.
+    todoContinuationService.updateTodoToolAvailabilityFromDeclarations([
+      { name: 'todo_write' },
+      { name: 'todo_read' },
+    ]);
 
-      // Three turns and three consecutive complex results satisfy the
-      // escalation policy after state restoration.
-      expect(todoContinuationService.shouldEscalateReminder(6)).toBe(true);
+    const { orchestrator } = buildHarness({
+      todoContinuationService,
+      complexity: { isComplex: true, shouldSuggestTodos: true },
+      streams: [
+        [
+          todoWriteRequest('abandoned-todo', [
+            { id: 'abandoned', content: 'abandoned task', status: 'pending' },
+          ]),
+          retryEvent(),
+          finishedEvent(VISIBLE()),
+        ],
+      ],
     });
+
+    await drain(orchestrator);
+
+    // processComplexityAnalysis incremented this to 1 at entry; the
+    // The abandoned task-list write reset the counter; restoration must
+    // return it to the value captured at attempt entry.
+    expect(todoContinuationService.consecutiveComplexTurns).toBe(1);
   });
 
-  // ----- Direct checkpoint/restore API contracts -----
+  /**
+   * @requirement REQ-3048-007
+   * @scenario an abandoned task-list write must not leak its snapshot:
+   *   restoration retains the snapshot captured at attempt entry.
+   */
+  it('does not leak the abandoned todo snapshot after rollback', async () => {
+    const todoContinuationService = makeRealTodoContinuationService();
+    todoContinuationService.lastTodoSnapshot = [
+      { id: 'orig', content: 'original task', status: 'in_progress' },
+    ];
 
-  describe('LoopDetectionService checkpoint/restore (direct contract)', () => {
-    it('snapshots and restores attempt-mutable tool-call state', () => {
-      const loopDetector = makeRealLoopDetector(2);
-      const toolA = {
-        type: AgentEventType.ToolCallRequest,
-        value: { callId: 'a', name: 'read_file', args: { file_path: '/x' } },
-      };
-      // Checkpoint at entry (before any event), matching the orchestrator.
-      const checkpoint = loopDetector.checkpoint();
-      // First identical tool call -> count 1 (no loop).
-      expect(loopDetector.addAndCheck(toolA)).toBe(false);
-      // Second identical -> count 2 -> loop.
-      expect(loopDetector.addAndCheck(toolA)).toBe(true);
-      // Restore undoes both abandoned calls back to entry state.
-      loopDetector.restore(checkpoint);
-      // The replacement first call is again count 1 -> no loop.
-      expect(loopDetector.addAndCheck(toolA)).toBe(false);
+    const { orchestrator } = buildHarness({
+      todoContinuationService,
+      streams: [
+        [
+          todoWriteRequest('abandoned-todo', [
+            { id: 'abandoned', content: 'abandoned task', status: 'pending' },
+          ]),
+          retryEvent(),
+          // End without another task-list call so the restored snapshot can
+          // be observed without further mutation.
+          finishedEvent(VISIBLE()),
+        ],
+      ],
     });
 
-    it('preserves prompt turn counts across checkpoint/restore (maxTurnsPerPrompt=3)', async () => {
-      const loopDetector = makeRealLoopDetector(50, 3);
-      loopDetector.reset('prompt-X');
-      // Two turns accumulate turnsInCurrentPrompt=2 (< 3 threshold).
-      await loopDetector.turnStarted(new AbortController().signal);
-      await loopDetector.turnStarted(new AbortController().signal);
-      const checkpoint = loopDetector.checkpoint();
-      // Abandoned attempt mutates attempt-scoped detector state only.
-      loopDetector.addAndCheck({
-        type: AgentEventType.Content,
-        value: 'some content',
-      });
-      // Restore undoes attempt-scoped mutations but must NOT reset
-      // turnsInCurrentPrompt (prompt-scoped, excluded from the snapshot). If
-      // restore had cleared it to 0, the next turn would be turn 1 and return
-      // false; with correct restore it is turn 3, hitting the threshold.
-      loopDetector.restore(checkpoint);
-      expect(await loopDetector.turnStarted(new AbortController().signal)).toBe(
-        true,
-      );
-    });
+    await drain(orchestrator);
 
-    it('deep-copies content stats so restore removes abandoned content', () => {
-      const loopDetector = makeRealLoopDetector(50);
-      const unique = 'Unique distinctive paragraph number one. ';
-      // Feed enough distinct content to populate the content detector.
-      loopDetector.addAndCheck({
-        type: AgentEventType.Content,
-        value: unique.repeat(2),
-      });
-      const checkpoint = loopDetector.checkpoint();
-      // Abandoned attempt adds different content.
-      loopDetector.addAndCheck({
-        type: AgentEventType.Content,
-        value: 'Completely different abandoned filler content here. ',
-      });
-      // Restore must wipe the abandoned content so the detector only sees the
-      // pre-attempt history going forward.
-      loopDetector.restore(checkpoint);
-      // Re-feeding the original content does not falsely amplify counts.
-      const result = loopDetector.addAndCheck({
-        type: AgentEventType.Content,
-        value: unique,
-      });
-      expect(result).toBe(false);
-    });
+    expect(
+      todoContinuationService.lastTodoSnapshot.some(
+        (task) => task.id === 'abandoned',
+      ),
+    ).toBe(false);
   });
 
-  describe('TodoContinuationService checkpoint/restore (direct contract)', () => {
-    it('snapshots and restores all five attempt-local fields', () => {
-      const service = makeRealTodoContinuationService();
-      service.consecutiveComplexTurns = 3;
-      service.setLastTodoToolTurn(4);
-      service.lastTodoSnapshot = [
-        { id: 'orig', content: 'task', status: 'in_progress' },
-      ];
-      // recordModelActivity mutates these mid-attempt, so they must survive a
-      // transport Retry rollback (MessageStreamOrchestrator records model
-      // activity before the Retry signal clears abandoned state).
-      service.toolActivityCount = 4;
-      service.toolCallReminderLevel = 'base';
+  /**
+   * @requirement REQ-3048-007
+   * @scenario reminder behavior is unaffected by the rollback: the restored
+   *   lastTodoToolTurn keeps escalation logic tied to the prior value.
+   */
+  it('keeps reminder escalation behavior tied to the restored lastTodoToolTurn', async () => {
+    const todoContinuationService = makeRealTodoContinuationService();
+    todoContinuationService.consecutiveComplexTurns = 3;
+    todoContinuationService.setLastTodoToolTurn(3);
 
-      const snapshot = service.checkpoint();
+    const snapshot = todoContinuationService.checkpoint();
 
-      // Simulate an abandoned attempt mutating every attempt-local field.
-      service.consecutiveComplexTurns = 9;
-      service.setLastTodoToolTurn(40);
-      service.lastTodoSnapshot = [
-        { id: 'gone', content: 'x', status: 'pending' },
-      ];
-      service.toolActivityCount = 99;
-      service.toolCallReminderLevel = 'escalated';
+    // Simulate an abandoned attempt mutating state.
+    todoContinuationService.setLastTodoToolTurn(99);
+    todoContinuationService.consecutiveComplexTurns = 1;
 
-      service.restore(snapshot);
+    todoContinuationService.restore(snapshot);
 
-      expect(service.consecutiveComplexTurns).toBe(3);
-      expect(service.toolActivityCount).toBe(4);
-      expect(service.toolCallReminderLevel).toBe('base');
-      // Restored cadence and complexity counters satisfy the escalation policy.
-      expect(service.shouldEscalateReminder(7)).toBe(true);
-      expect(service.lastTodoSnapshot[0]?.id).toBe('orig');
+    // Three turns and three consecutive complex results satisfy the
+    // escalation policy after state restoration.
+    expect(todoContinuationService.shouldEscalateReminder(6)).toBe(true);
+  });
+});
+
+// ----- Direct checkpoint/restore API contracts -----
+
+describe('MessageStreamOrchestrator — attempt checkpoint rollback (issue #3048 review) > LoopDetectionService checkpoint/restore (direct contract)', () => {
+  beforeEach(resetCheckpointMocks);
+  it('snapshots and restores attempt-mutable tool-call state', () => {
+    const loopDetector = makeRealLoopDetector(2);
+    const toolA = {
+      type: AgentEventType.ToolCallRequest,
+      value: { callId: 'a', name: 'read_file', args: { file_path: '/x' } },
+    };
+    // Checkpoint at entry (before any event), matching the orchestrator.
+    const checkpoint = loopDetector.checkpoint();
+    // First identical tool call -> count 1 (no loop).
+    expect(loopDetector.addAndCheck(toolA)).toBe(false);
+    // Second identical -> count 2 -> loop.
+    expect(loopDetector.addAndCheck(toolA)).toBe(true);
+    // Restore undoes both abandoned calls back to entry state.
+    loopDetector.restore(checkpoint);
+    // The replacement first call is again count 1 -> no loop.
+    expect(loopDetector.addAndCheck(toolA)).toBe(false);
+  });
+
+  it('preserves prompt turn counts across checkpoint/restore (maxTurnsPerPrompt=3)', async () => {
+    const loopDetector = makeRealLoopDetector(50, 3);
+    loopDetector.reset('prompt-X');
+    // Two turns accumulate turnsInCurrentPrompt=2 (< 3 threshold).
+    await loopDetector.turnStarted(new AbortController().signal);
+    await loopDetector.turnStarted(new AbortController().signal);
+    const checkpoint = loopDetector.checkpoint();
+    // Abandoned attempt mutates attempt-scoped detector state only.
+    loopDetector.addAndCheck({
+      type: AgentEventType.Content,
+      value: 'some content',
     });
+    // Restore undoes attempt-scoped mutations but must NOT reset
+    // turnsInCurrentPrompt (prompt-scoped, excluded from the snapshot). If
+    // restore had cleared it to 0, the next turn would be turn 1 and return
+    // false; with correct restore it is turn 3, hitting the threshold.
+    loopDetector.restore(checkpoint);
+    expect(await loopDetector.turnStarted(new AbortController().signal)).toBe(
+      true,
+    );
+  });
 
-    it('clones the todo snapshot so restore does not alias live state', () => {
-      const service = makeRealTodoContinuationService();
-      service.lastTodoSnapshot = [
-        { id: 'orig', content: 'task', status: 'pending' },
-      ];
-      const snapshot = service.checkpoint();
-      service.lastTodoSnapshot = [
-        { id: 'mutated', content: 'other', status: 'pending' },
-      ];
-
-      service.restore(snapshot);
-      const firstRestore = service.lastTodoSnapshot;
-      firstRestore[0] = {
-        id: 'tampered',
-        content: 'changed',
-        status: 'pending',
-      };
-      service.restore(snapshot);
-
-      expect(service.lastTodoSnapshot[0]?.id).toBe('orig');
+  it('deep-copies content stats so restore removes abandoned content', () => {
+    const loopDetector = makeRealLoopDetector(50);
+    const unique = 'Unique distinctive paragraph number one. ';
+    // Feed enough distinct content to populate the content detector.
+    loopDetector.addAndCheck({
+      type: AgentEventType.Content,
+      value: unique.repeat(2),
     });
+    const checkpoint = loopDetector.checkpoint();
+    // Abandoned attempt adds different content.
+    loopDetector.addAndCheck({
+      type: AgentEventType.Content,
+      value: 'Completely different abandoned filler content here. ',
+    });
+    // Restore must wipe the abandoned content so the detector only sees the
+    // pre-attempt history going forward.
+    loopDetector.restore(checkpoint);
+    // Re-feeding the original content does not falsely amplify counts.
+    const result = loopDetector.addAndCheck({
+      type: AgentEventType.Content,
+      value: unique,
+    });
+    expect(result).toBe(false);
+  });
+});
+
+describe('MessageStreamOrchestrator — attempt checkpoint rollback (issue #3048 review) > TodoContinuationService checkpoint/restore (direct contract)', () => {
+  beforeEach(resetCheckpointMocks);
+  it('snapshots and restores all five attempt-local fields', () => {
+    const service = makeRealTodoContinuationService();
+    service.consecutiveComplexTurns = 3;
+    service.setLastTodoToolTurn(4);
+    service.lastTodoSnapshot = [
+      { id: 'orig', content: 'task', status: 'in_progress' },
+    ];
+    // recordModelActivity mutates these mid-attempt, so they must survive a
+    // transport Retry rollback (MessageStreamOrchestrator records model
+    // activity before the Retry signal clears abandoned state).
+    service.toolActivityCount = 4;
+    service.toolCallReminderLevel = 'base';
+
+    const snapshot = service.checkpoint();
+
+    // Simulate an abandoned attempt mutating every attempt-local field.
+    service.consecutiveComplexTurns = 9;
+    service.setLastTodoToolTurn(40);
+    service.lastTodoSnapshot = [
+      { id: 'gone', content: 'x', status: 'pending' },
+    ];
+    service.toolActivityCount = 99;
+    service.toolCallReminderLevel = 'escalated';
+
+    service.restore(snapshot);
+
+    expect(service.consecutiveComplexTurns).toBe(3);
+    expect(service.toolActivityCount).toBe(4);
+    expect(service.toolCallReminderLevel).toBe('base');
+    // Restored cadence and complexity counters satisfy the escalation policy.
+    expect(service.shouldEscalateReminder(7)).toBe(true);
+    expect(service.lastTodoSnapshot[0]?.id).toBe('orig');
+  });
+
+  it('clones the todo snapshot so restore does not alias live state', () => {
+    const service = makeRealTodoContinuationService();
+    service.lastTodoSnapshot = [
+      { id: 'orig', content: 'task', status: 'pending' },
+    ];
+    const snapshot = service.checkpoint();
+    service.lastTodoSnapshot = [
+      { id: 'mutated', content: 'other', status: 'pending' },
+    ];
+
+    service.restore(snapshot);
+    const firstRestore = service.lastTodoSnapshot;
+    firstRestore[0] = {
+      id: 'tampered',
+      content: 'changed',
+      status: 'pending',
+    };
+    service.restore(snapshot);
+
+    expect(service.lastTodoSnapshot[0]?.id).toBe('orig');
   });
 });

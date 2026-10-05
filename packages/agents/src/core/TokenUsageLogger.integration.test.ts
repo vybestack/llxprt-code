@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-core/test-utils/collect-rows-for-assertions.js';
 import { assertDefined } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import * as fs from 'node:fs';
@@ -394,15 +395,17 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
     // --- The join must resolve to the turn THIS send created (AC-1/AC-2) ---
     // This is the first turn of the session: there is no earlier turn the
     // record could accidentally name, so a stale or null turn_id fails here.
-    const allHistory = historyService.getAll();
-    const sentTurn = allHistory.find((c) => c.speaker === 'human');
-    expect(sentTurn).toBeDefined();
-    assertDefined(sentTurn, 'expected a human turn in history'); // usage record -> conversation turn
-    expect(record.turn_id).not.toBeNull();
-    expect(record.turn_id).toBe(sentTurn.metadata?.turnId);
-    // conversation turn -> usage record
-    expect(sentTurn.metadata?.promptId).toBe(promptId);
-    expect(record.prompt_id).toBe(promptId);
+    await withRows(historyService.streamRawHistory(), (rows) => {
+      const allHistory = rows;
+      const sentTurn = allHistory.find((c) => c.speaker === 'human');
+      expect(sentTurn).toBeDefined();
+      assertDefined(sentTurn, 'expected a human turn in history'); // usage record -> conversation turn
+      expect(record.turn_id).not.toBeNull();
+      expect(record.turn_id).toBe(sentTurn.metadata?.turnId);
+      // conversation turn -> usage record
+      expect(sentTurn.metadata?.promptId).toBe(promptId);
+      expect(record.prompt_id).toBe(promptId);
+    });
   });
 
   // AC-12: Cached turn — provider reports Anthropic-style cache read+write.

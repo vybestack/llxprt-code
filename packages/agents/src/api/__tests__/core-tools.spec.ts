@@ -28,6 +28,7 @@
  * Property test: tool-arg projection stability (fc.dictionary).
  */
 
+import { collectAgentHistory } from './helpers/collect-agent-history.js';
 import { describe, it, expect } from 'bun:test';
 import * as fc from 'fast-check';
 import type {
@@ -89,7 +90,7 @@ describe('Core tools @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-006 @requi
       }
 
       // history round-trips the tool call + result
-      const history = await agent.getHistory();
+      const history = await collectAgentHistory(agent);
       expect(history.length).toBeGreaterThanOrEqual(2);
     } finally {
       await cleanup();
@@ -147,7 +148,7 @@ describe('Core tools @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-006 @requi
       }
 
       // history records the (denied) tool call
-      const history = await agent.getHistory();
+      const history = await collectAgentHistory(agent);
       expect(history.length).toBeGreaterThanOrEqual(1);
     } finally {
       await cleanup();

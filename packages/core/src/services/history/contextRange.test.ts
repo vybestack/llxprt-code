@@ -30,8 +30,11 @@ function textContent(speaker: 'human' | 'ai', text: string): IContent {
   return { speaker, blocks: [{ type: 'text', text }] };
 }
 
-function seqOf(service: HistoryService, positionFromEnd: number): number {
-  const entries = service.getRecent(positionFromEnd + 1);
+async function seqOf(
+  service: HistoryService,
+  positionFromEnd: number,
+): Promise<number> {
+  const entries = await Array.fromAsync(service.getRecent(positionFromEnd + 1));
   const index = entries.length - 1 - positionFromEnd;
   const entry = index >= 0 ? entries[index] : undefined;
   if (entry === undefined) {
@@ -53,8 +56,8 @@ describe('HistoryService context range', () => {
     await service.waitForTokenUpdates();
     const range = service.getContextRange();
     expect(range.totalEntries).toBe(5);
-    expect(range.firstSeq).toBe(seqOf(service, 4));
-    expect(range.lastSeq).toBe(seqOf(service, 0));
+    expect(range.firstSeq).toBe(await seqOf(service, 4));
+    expect(range.lastSeq).toBe(await seqOf(service, 0));
     expect(range.firstSeq).toBeLessThan(range.lastSeq);
   });
 
@@ -70,7 +73,9 @@ describe('HistoryService context range', () => {
       approximate: false,
     });
   });
+});
 
+describe('HistoryService context range publication', () => {
   it('emits once for the first entry and once per boundary-moving commit after', async () => {
     const service = new HistoryService();
     const events: ContextRange[] = [];
@@ -83,23 +88,27 @@ describe('HistoryService context range', () => {
     // P03: the empty→first-entry transition emits exactly once, naming the
     // first entry's seq; the follow-up single adds stay silent.
     expect(events).toHaveLength(1);
-    expect(events[0]?.firstSeq).toBe(seqOf(service, 2));
-    expect(events[0]?.lastSeq).toBe(seqOf(service, 2));
+    expect(events[0]?.firstSeq).toBe(await seqOf(service, 2));
+    expect(events[0]?.lastSeq).toBe(await seqOf(service, 2));
     expect(events[0]?.totalEntries).toBe(1);
     expect(events[0]?.removedInterior).toStrictEqual([]);
     expect(events[0]?.approximate).toBe(false);
 
-    await service.transformAll((contents) => [
-      {
-        speaker: 'ai' as const,
-        blocks: [{ type: 'text' as const, text: 'summary of three' }],
+    await service.transformAll(async (source, sink) => {
+      sink.appendDetached({
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'summary of three' }],
         metadata: {
           chronology: { seq: 99, userTurn: 1, step: 1, recordedAt: 0 },
           chronologyReplaced: { fromSeq: 1, toSeq: 3, itemCount: 3 },
         },
-      },
-      ...contents.slice(3),
-    ]);
+      });
+      let index = 0;
+      for await (const { row } of source.streamRows()) {
+        if (index >= 3) sink.appendRetained(index, row);
+        index++;
+      }
+    });
     expect(events).toHaveLength(2);
     expect(events[1]?.totalEntries).toBe(1);
     expect(events[1]?.firstSeq).toBe(99);
@@ -127,25 +136,29 @@ describe('HistoryService context range', () => {
       approximate: false,
     });
   });
+});
 
+describe('HistoryService context summaries', () => {
   it('exposes compression summaries with their replaced span and text', async () => {
     const service = new HistoryService();
     for (const text of ['one', 'two', 'three', 'four']) {
       service.add(textContent('human', text));
     }
-    expect(service.getContextSummaries()).toStrictEqual([]);
+    expect(await Array.fromAsync(service.getContextSummaries())).toStrictEqual(
+      [],
+    );
 
-    await service.transformAll(() => [
-      {
-        speaker: 'ai' as const,
-        blocks: [{ type: 'text' as const, text: 'summary of four' }],
+    await service.transformAll(async (_source, sink) => {
+      sink.appendDetached({
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'summary of four' }],
         metadata: {
           chronology: { seq: 98, userTurn: 1, step: 1, recordedAt: 0 },
           chronologyReplaced: { fromSeq: 1, toSeq: 4, itemCount: 4 },
         },
-      },
-    ]);
-    const summaries = service.getContextSummaries();
+      });
+    });
+    const summaries = await Array.fromAsync(service.getContextSummaries());
     expect(summaries).toHaveLength(1);
     const summary = summaries.length > 0 ? summaries[0] : undefined;
     if (summary === undefined) {

@@ -20,7 +20,7 @@
  * @requirement:G7
  */
 
-import { afterEach, describe, expect, it, vi } from 'bun:test';
+import { afterEach, describe, expect, it, vi, setSystemTime } from 'bun:test';
 import {
   SettingsService,
   type Profile,
@@ -38,6 +38,10 @@ import { SESSION_FILE_ID_PREFIX_LENGTH } from '@vybestack/llxprt-code-core/recor
 import type { SubAgentScope } from '../subagent.js';
 import { SubagentOrchestrator } from '../subagentOrchestrator.js';
 import { createRuntimeBundle } from './subagentOrchestrator-test-helpers.js';
+import { makeRecordingInputs } from './subagent-journal-fixture.js';
+import { readFile, readdir } from 'node:fs/promises';
+import { join } from 'node:path';
+import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
 
 const PARENT_SESSION_ID = 'primary-session';
 
@@ -75,10 +79,15 @@ const profiles: Record<string, Profile> = {
   },
 };
 
-function makeForegroundConfig(): Config {
+function makeForegroundConfig(
+  recording = true,
+  sessionId = PARENT_SESSION_ID,
+  inputs = makeRecordingInputs(),
+): Config {
   const settingsService = new SettingsService();
   return {
-    getSessionId: () => PARENT_SESSION_ID,
+    ...(recording ? inputs : {}),
+    getSessionId: () => sessionId,
     getProvider: () => 'gemini',
     getContentGeneratorConfig: () => undefined,
     getModel: () => 'gemini-1.5-flash',
@@ -92,7 +101,11 @@ type RuntimeLoaderMock = {
   mock: { calls: ReadonlyArray<readonly unknown[]> };
 };
 
-function buildOrchestrator(): {
+function buildOrchestrator(
+  config: Config = makeForegroundConfig(),
+  onLoad?: (options: AgentRuntimeLoaderOptions) => Promise<void>,
+  onScope?: () => void,
+): {
   orchestrator: SubagentOrchestrator;
   runtimeLoader: RuntimeLoaderMock;
 } {
@@ -104,20 +117,34 @@ function buildOrchestrator(): {
     .mockImplementation(async (name: string) => profiles[name]);
   const runtimeLoader = vi
     .fn()
-    .mockImplementation(async (_options: AgentRuntimeLoaderOptions) =>
-      createRuntimeBundle('sess'),
-    );
+    .mockImplementation(async (options: AgentRuntimeLoaderOptions) => {
+      await onLoad?.(options);
+      const history = options.overrides?.historyService;
+      if (history === undefined) throw new Error('Child history required');
+      history.add({
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'child' }],
+      });
+      await history.waitForCommit();
+      const bundle = createRuntimeBundle('sess');
+      return {
+        ...bundle,
+        history,
+        runtimeContext: { ...bundle.runtimeContext, history },
+      };
+    });
   const scope = {
     runtimeContext: createRuntimeBundle('sess').runtimeContext,
     getAgentId: () => 'child-agent-1',
   } as unknown as SubAgentScope;
-  const scopeFactory = vi
-    .fn<typeof SubAgentScope.create>()
-    .mockResolvedValue(scope);
+  const scopeFactory = vi.fn<typeof SubAgentScope.create>(async () => {
+    onScope?.();
+    return scope;
+  });
   const orchestrator = new SubagentOrchestrator({
     subagentManager: { loadSubagent } as unknown as SubagentManager,
     profileManager: { loadProfile } as unknown as ProfileManager,
-    foregroundConfig: makeForegroundConfig(),
+    foregroundConfig: config,
     scopeFactory,
     runtimeLoader,
     messageBus: new MessageBus(),
@@ -140,12 +167,15 @@ async function launch(
   return result.dispose;
 }
 
-afterEach(() => {
+function resetRuntimeAfterTest(): void {
+  setSystemTime();
   runtimeModule.resetRuntimeScopeForTesting();
   runtimeModule.resetCliRuntimeRegistryForTesting();
-});
+}
 
 describe('P05c orchestrator allocates fs-safe child ids @plan:PLAN-20260917-ISSUE854.P05c', () => {
+  afterEach(resetRuntimeAfterTest);
+
   it('allocates a child sessionId that passes the safe-session lock grammar', async () => {
     const { orchestrator, runtimeLoader } = buildOrchestrator();
     const dispose = await launch(orchestrator, 'helper');
@@ -153,6 +183,13 @@ describe('P05c orchestrator allocates fs-safe child ids @plan:PLAN-20260917-ISSU
     expect(state).toBeDefined();
     expect(isValidSafeSessionId(state.sessionId)).toBe(true);
     await dispose();
+  });
+
+  it('rejects launch when mandatory recording inputs are absent', async () => {
+    const { orchestrator } = buildOrchestrator(makeForegroundConfig(false));
+    await expect(orchestrator.launch({ name: 'helper' })).rejects.toThrow(
+      /getProjectTempDir/,
+    );
   });
 
   it('keeps the child sessionId distinct from the parent session id', async () => {
@@ -190,4 +227,138 @@ describe('P05c orchestrator allocates fs-safe child ids @plan:PLAN-20260917-ISSU
     expect(threaded).toBe(PARENT_SESSION_ID);
     await dispose();
   });
+});
+
+describe('mandatory launch journal lifecycle', () => {
+  afterEach(resetRuntimeAfterTest);
+
+  it('keeps parallel and nested journals separate and preserves the parent', async () => {
+    setSystemTime(new Date('2026-09-21T12:00:00Z'));
+    const config = makeForegroundConfig();
+    const chatsDir = config.storage.getProjectChatsDir();
+    const parent = await SessionRecordingService.createLocked({
+      sessionId: PARENT_SESSION_ID,
+      projectHash: 'parent',
+      chatsDir,
+      workspaceDirs: [],
+      provider: 'gemini',
+      model: 'gemini-1.5-flash',
+    });
+    await parent.commit('session_event', {
+      severity: 'info',
+      message: 'parent',
+    });
+    const parentFile = parent.getFilePath();
+    if (parentFile === null) throw new Error('Parent file missing');
+    const before = await readFile(parentFile, 'utf8');
+    const baseline = (await readdir(chatsDir)).sort();
+    const { orchestrator, runtimeLoader } = buildOrchestrator(config);
+    const [first, second] = await Promise.all([
+      orchestrator.launch({ name: 'helper' }),
+      orchestrator.launch({ name: 'scout' }),
+    ]);
+    const files = (await readdir(chatsDir)).filter((file) =>
+      file.endsWith('.jsonl'),
+    );
+    expect(new Set(files).size).toBe(3);
+    expect(new Set(files.map((file) => file.slice(0, 27))).size).toBe(1);
+    expect(
+      (await readdir(chatsDir)).filter((file) => file.endsWith('.lock')),
+    ).toHaveLength(3);
+    const headers = await Promise.all(
+      files.map(async (file) => readFile(join(chatsDir, file), 'utf8')),
+    );
+    const childHeader = headers.find((text) =>
+      text.includes('"kind":"subagent"'),
+    );
+    if (childHeader === undefined) throw new Error('Child header missing');
+    const header: unknown = JSON.parse(childHeader.split('\n')[0]);
+    expect(header).toMatchObject({
+      payload: { kind: 'subagent', parentSessionId: PARENT_SESSION_ID },
+    });
+    const childId = capturedStates(runtimeLoader)[0].sessionId;
+    const nestedConfig = makeForegroundConfig(true, childId, {
+      storage: config.storage,
+      getWorkspaceContext: () => config.getWorkspaceContext(),
+    });
+    const nested = await buildOrchestrator(nestedConfig).orchestrator.launch({
+      name: 'helper',
+    });
+    const nestedFiles = await readdir(chatsDir);
+    expect(nestedFiles.filter((file) => file.endsWith('.jsonl'))).toHaveLength(
+      4,
+    );
+    const nestedFile = nestedFiles.find(
+      (file) => file.endsWith('.jsonl') && !files.includes(file),
+    );
+    if (nestedFile === undefined) throw new Error('Nested journal missing');
+    const nestedText = await readFile(join(chatsDir, nestedFile), 'utf8');
+    const nestedHeader: unknown = JSON.parse(nestedText.split('\n')[0]);
+    expect(nestedHeader).toMatchObject({
+      payload: { kind: 'subagent', parentSessionId: childId },
+    });
+    expect(nestedText).toContain('"text":"child"');
+    await nested.dispose();
+    expect(
+      (await readdir(chatsDir)).filter((file) => file.endsWith('.jsonl')),
+    ).toHaveLength(3);
+    await first.dispose();
+    await second.dispose();
+    expect((await readdir(chatsDir)).sort()).toStrictEqual(baseline);
+    expect(await readFile(parentFile, 'utf8')).toBe(before);
+    await parent.dispose();
+  });
+});
+
+describe('mandatory launch journal failure cleanup', () => {
+  afterEach(resetRuntimeAfterTest);
+
+  it('removes the child journal when scope startup fails after runtime creation', async () => {
+    const config = makeForegroundConfig();
+    const { orchestrator } = buildOrchestrator(config, undefined, () => {
+      throw new Error('scope startup failed');
+    });
+    await expect(orchestrator.launch({ name: 'helper' })).rejects.toThrow(
+      'scope startup failed',
+    );
+    expect(await readdir(config.storage.getProjectChatsDir())).toStrictEqual(
+      [],
+    );
+  });
+
+  it.each(['failure', 'cancel', 'timeout'] as const)(
+    'removes the real file and lock after launch %s',
+    async (mode) => {
+      const config = makeForegroundConfig();
+      const controller = new AbortController();
+      const chatsDir = config.storage.getProjectChatsDir();
+      const { orchestrator } = buildOrchestrator(config, async () => {
+        const files = await readdir(chatsDir);
+        expect(files.filter((file) => file.endsWith('.jsonl'))).toHaveLength(1);
+        expect(files.filter((file) => file.endsWith('.lock'))).toHaveLength(1);
+        if (mode === 'failure') throw new Error('runtime assembly failed');
+        if (mode === 'cancel') {
+          controller.abort(new DOMException('cancelled', 'AbortError'));
+        } else {
+          const deadline = AbortSignal.timeout(1);
+          await new Promise<void>((resolve) => {
+            deadline.addEventListener(
+              'abort',
+              () => {
+                controller.abort(deadline.reason);
+                resolve();
+              },
+              { once: true },
+            );
+          });
+        }
+      });
+      await expect(
+        orchestrator.launch({ name: 'helper' }, controller.signal),
+      ).rejects.toThrow(
+        mode === 'failure' ? 'runtime assembly failed' : /aborted/,
+      );
+      expect(await readdir(chatsDir)).toStrictEqual([]);
+    },
+  );
 });

@@ -86,7 +86,7 @@ function envelope(seq: number, type: string, payload: unknown): string {
   return JSON.stringify({ v: 1, seq, ts: TS, type, payload });
 }
 
-async function useJournalFixture(): Promise<Fixture> {
+async function createJournalFixture(): Promise<Fixture> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'scrollback-pager-'));
   const filePath = path.join(dir, 'session-under-test.jsonl');
   let offset = 0;
@@ -124,79 +124,82 @@ async function useJournalFixture(): Promise<Fixture> {
   return fixture;
 }
 
+let fixture: Fixture;
+let viewport: FakeViewport;
+let stores: ScrollbackPagerStore[];
+
+function makeStore(
+  overrides: Partial<Parameters<typeof createScrollbackPagerStore>[0]> = {},
+): ScrollbackPagerStore {
+  const store = createScrollbackPagerStore({
+    filePath: fixture.filePath,
+    viewport,
+    pageRows: 4,
+    settings: {
+      marginViewports: 2,
+      byteFloorBytes: Number.POSITIVE_INFINITY,
+      purgeDebounceMs: 1500,
+    },
+    ...overrides,
+  });
+  stores.push(store);
+  return store;
+}
+
+/**
+ * Row labels for membership assertions. Fixture rows pad their text
+ * (`r-<seq>` plus x-padding so byte-floor arithmetic is deterministic)
+ * and bun's `toContain` on arrays is exact membership (verified via
+ * tmp/verify854/p02c/probe.test.ts), so padded journal rows are
+ * projected back to their `r-<seq>` label here. Design §3 keeps
+ * HistoryItem text verbatim — the projection lives in the assertion
+ * helper, never in the rendered row.
+ */
+function rowTexts(store: ScrollbackPagerStore): string[] {
+  return store.getState().rows.map((row) => {
+    const text = row.item.text ?? '';
+    const seq = row.seq;
+    return seq !== null && text.startsWith(`r-${seq}`) ? `r-${seq}` : text;
+  });
+}
+
+function seqOf(store: ScrollbackPagerStore, seq: number): string | undefined {
+  return store.getState().rows.find((row) => row.seq === seq)?.key;
+}
+
+function visibleKeysOfSeqs(
+  store: ScrollbackPagerStore,
+  seqs: readonly number[],
+): string[] {
+  const keys: string[] = [];
+  for (const seq of seqs) {
+    const key = seqOf(store, seq);
+    if (key !== undefined) keys.push(key);
+  }
+  return keys;
+}
+
+async function setupPagerFixture(): Promise<void> {
+  fixture = await createJournalFixture();
+  viewport = new FakeViewport();
+  stores = [];
+  vi.useRealTimers();
+}
+
+async function cleanupPagerFixture(): Promise<void> {
+  vi.useRealTimers();
+  for (const store of stores.splice(0)) {
+    await store.close().catch(() => undefined);
+  }
+  await fs.rm(path.dirname(fixture.filePath), {
+    recursive: true,
+    force: true,
+  });
+}
+
 describe('ScrollbackPagerStore @plan:PLAN-20260917-ISSUE854.P02c @requirement:G1,G2', () => {
-  let fixture: Fixture;
-  let viewport: FakeViewport;
-  let stores: ScrollbackPagerStore[];
-
-  beforeEach(async () => {
-    fixture = await useJournalFixture();
-    viewport = new FakeViewport();
-    stores = [];
-    vi.useRealTimers();
-  });
-
-  afterEach(async () => {
-    vi.useRealTimers();
-    for (const store of stores.splice(0)) {
-      await store.close().catch(() => undefined);
-    }
-    await fs.rm(path.dirname(fixture.filePath), {
-      recursive: true,
-      force: true,
-    });
-  });
-
-  function makeStore(
-    overrides: Partial<Parameters<typeof createScrollbackPagerStore>[0]> = {},
-  ): ScrollbackPagerStore {
-    const store = createScrollbackPagerStore({
-      filePath: fixture.filePath,
-      viewport,
-      pageRows: 4,
-      settings: {
-        marginViewports: 2,
-        byteFloorBytes: Number.POSITIVE_INFINITY,
-        purgeDebounceMs: 1500,
-      },
-      ...overrides,
-    });
-    stores.push(store);
-    return store;
-  }
-
-  /**
-   * Row labels for membership assertions. Fixture rows pad their text
-   * (`r-<seq>` plus x-padding so byte-floor arithmetic is deterministic)
-   * and bun's `toContain` on arrays is exact membership (verified via
-   * tmp/verify854/p02c/probe.test.ts), so padded journal rows are
-   * projected back to their `r-<seq>` label here. Design §3 keeps
-   * HistoryItem text verbatim — the projection lives in the assertion
-   * helper, never in the rendered row.
-   */
-  function rowTexts(store: ScrollbackPagerStore): string[] {
-    return store.getState().rows.map((row) => {
-      const text = row.item.text ?? '';
-      const seq = row.seq;
-      return seq !== null && text.startsWith(`r-${seq}`) ? `r-${seq}` : text;
-    });
-  }
-
-  function seqOf(store: ScrollbackPagerStore, seq: number): string | undefined {
-    return store.getState().rows.find((row) => row.seq === seq)?.key;
-  }
-
-  function visibleKeysOfSeqs(
-    store: ScrollbackPagerStore,
-    seqs: readonly number[],
-  ): string[] {
-    const keys: string[] = [];
-    for (const seq of seqs) {
-      const key = seqOf(store, seq);
-      if (key !== undefined) keys.push(key);
-    }
-    return keys;
-  }
+  beforeEach(() => setupPagerFixture());
+  afterEach(() => cleanupPagerFixture());
 
   it('boots with the last page of the journal resident (bounded resume projection)', async () => {
     for (let seq = 1; seq <= 10; seq += 1) {
@@ -254,6 +257,11 @@ describe('ScrollbackPagerStore @plan:PLAN-20260917-ISSUE854.P02c @requirement:G1
     expect(store.getState().loadingOlder).toBe(false);
     expect(store.getState().rows).toHaveLength(1);
   });
+});
+
+describe('ScrollbackPagerStore @plan:PLAN-20260917-ISSUE854.P02c @requirement:G1,G2 (group 2)', () => {
+  beforeEach(() => setupPagerFixture());
+  afterEach(() => cleanupPagerFixture());
 
   it('coalesces pageOut purges on a reset debounce and purges beyond-window rows once', async () => {
     vi.useFakeTimers();
@@ -314,6 +322,11 @@ describe('ScrollbackPagerStore @plan:PLAN-20260917-ISSUE854.P02c @requirement:G1
     expect(texts).toContain('r-13');
     expect(texts).toContain('r-14');
   });
+});
+
+describe('ScrollbackPagerStore @plan:PLAN-20260917-ISSUE854.P02c @requirement:G1,G2 (group 3)', () => {
+  beforeEach(() => setupPagerFixture());
+  afterEach(() => cleanupPagerFixture());
 
   it('evicts sub-context rows immediately at bottom while keeping visible rows', async () => {
     for (let seq = 1; seq <= 12; seq += 1) {
@@ -382,6 +395,11 @@ describe('ScrollbackPagerStore @plan:PLAN-20260917-ISSUE854.P02c @requirement:G1
     expect(texts).toContain('r-10');
     expect(texts).toContain('r-12');
   });
+});
+
+describe('ScrollbackPagerStore @plan:PLAN-20260917-ISSUE854.P02c @requirement:G1,G2 (group 4)', () => {
+  beforeEach(() => setupPagerFixture());
+  afterEach(() => cleanupPagerFixture());
 
   it('merges a pending live row with its paged row by identity on commit, without duplicates', async () => {
     for (let seq = 1; seq <= 8; seq += 1) {
@@ -445,6 +463,11 @@ describe('ScrollbackPagerStore @plan:PLAN-20260917-ISSUE854.P02c @requirement:G1
       }),
     ).toBe(false);
   });
+});
+
+describe('ScrollbackPagerStore @plan:PLAN-20260917-ISSUE854.P02c @requirement:G1,G2 (group 5)', () => {
+  beforeEach(() => setupPagerFixture());
+  afterEach(() => cleanupPagerFixture());
 
   it('repages file growth forward and merges new rows without duplicates', async () => {
     for (let seq = 1; seq <= 10; seq += 1) {
@@ -470,6 +493,63 @@ describe('ScrollbackPagerStore @plan:PLAN-20260917-ISSUE854.P02c @requirement:G1
       7, 8, 9, 10, 11, 12,
     ]);
   });
+
+  it('keeps the end of the complete file unchanged when pageBack sees a torn tail', async () => {
+    for (let seq = 1; seq <= 12; seq += 1) {
+      await fixture.addUser(seq);
+    }
+    const store = makeStore();
+    await store.pageBack();
+    const initialState = store.getState();
+    expect(initialState.rows.map((row) => row.seq)).toStrictEqual([
+      9, 10, 11, 12,
+    ]);
+    expect(initialState.atFileEnd).toBe(true);
+
+    const nextLine = envelope(13, 'content', {
+      content: userText('r-13', 13),
+    });
+    await fs.appendFile(fixture.filePath, nextLine, 'utf8');
+    await store.pageBack();
+    const tornState = store.getState();
+    expect(tornState.rows.map((row) => row.seq)).toStrictEqual([
+      5, 6, 7, 8, 9, 10, 11, 12,
+    ]);
+    expect(tornState.atFileEnd).toBe(true);
+  });
+
+  it('detects a completed torn-tail append on pageBack and reads it forward', async () => {
+    for (let seq = 1; seq <= 12; seq += 1) {
+      await fixture.addUser(seq);
+    }
+    const store = makeStore();
+    await store.pageBack();
+    const nextLine = envelope(13, 'content', {
+      content: userText('r-13', 13),
+    });
+    await fs.appendFile(fixture.filePath, nextLine, 'utf8');
+    await store.pageBack();
+
+    await fs.appendFile(fixture.filePath, String.fromCharCode(10), 'utf8');
+    await store.pageBack();
+    expect(store.getState().rows.map((row) => row.seq)).toStrictEqual([
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
+    ]);
+    expect(store.getState().atFileEnd).toBe(false);
+
+    await store.pageForward();
+    const state = store.getState();
+    expect(state.rows.map((row) => row.seq)).toStrictEqual([
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
+    ]);
+    expect(new Set(state.rows.map((row) => row.key)).size).toBe(13);
+    expect(state.atFileEnd).toBe(true);
+  });
+});
+
+describe('ScrollbackPagerStore @plan:PLAN-20260917-ISSUE854.P02c @requirement:G1,G2 (group 5 continued)', () => {
+  beforeEach(() => setupPagerFixture());
+  afterEach(() => cleanupPagerFixture());
 
   it('stops pageBack at the clear boundary so cleared history never resurrects', async () => {
     for (let seq = 1; seq <= 4; seq += 1) {
@@ -498,6 +578,11 @@ describe('ScrollbackPagerStore @plan:PLAN-20260917-ISSUE854.P02c @requirement:G1
     await store.pageBack();
     expect(store.getState().rows).toHaveLength(state.rows.length);
   });
+});
+
+describe('ScrollbackPagerStore @plan:PLAN-20260917-ISSUE854.P02c @requirement:G1,G2 (group 6)', () => {
+  beforeEach(() => setupPagerFixture());
+  afterEach(() => cleanupPagerFixture());
 
   it('pages through compressed boundaries and stops only at file start', async () => {
     for (let seq = 1; seq <= 4; seq += 1) {
@@ -512,6 +597,9 @@ describe('ScrollbackPagerStore @plan:PLAN-20260917-ISSUE854.P02c @requirement:G1
     await store.pageBack();
     await store.pageBack();
     await store.pageBack();
+    await store.pageBack();
+    expect(store.getState().rows).toHaveLength(8);
+    expect(store.getState().atVisibilityFloor).toBe(false);
     await store.pageBack();
 
     const state = store.getState();
@@ -542,6 +630,11 @@ describe('ScrollbackPagerStore @plan:PLAN-20260917-ISSUE854.P02c @requirement:G1
     await store.pageBack();
     expect(store.getState().loadingOlder).toBe(false);
   });
+});
+
+describe('ScrollbackPagerStore @plan:PLAN-20260917-ISSUE854.P02c @requirement:G1,G2 (group 7)', () => {
+  beforeEach(() => setupPagerFixture());
+  afterEach(() => cleanupPagerFixture());
 
   it('keeps the resident set bounded across repeated paging cycles', async () => {
     vi.useFakeTimers();
@@ -609,6 +702,11 @@ describe('ScrollbackPagerStore @plan:PLAN-20260917-ISSUE854.P02c @requirement:G1
         .map((row) => row.item.text),
     ).toStrictEqual(['legacy-1-updated', 'legacy-2']);
   });
+});
+
+describe('ScrollbackPagerStore @plan:PLAN-20260917-ISSUE854.P02c @requirement:G1,G2 (group 8)', () => {
+  beforeEach(() => setupPagerFixture());
+  afterEach(() => cleanupPagerFixture());
 
   it('keeps pending live rows resident regardless of eviction cycles', async () => {
     vi.useFakeTimers();

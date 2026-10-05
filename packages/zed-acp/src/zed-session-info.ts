@@ -10,6 +10,17 @@ import {
   type IContent,
 } from '@vybestack/llxprt-code-core';
 
+export async function* historyWithTitle(
+  items: AsyncIterable<IContent> | Iterable<IContent>,
+  tracker: SessionTitleTracker,
+): AsyncIterable<IContent> {
+  for await (const item of items) {
+    if (deriveTitleFromHistory([item]) !== null)
+      tracker.hydrateFromHistory([item]);
+    yield item;
+  }
+}
+
 /**
  * Derives a human-readable title from the first user prompt by concatenating
  * its text blocks (ignoring media/resources) and truncating to the bounded

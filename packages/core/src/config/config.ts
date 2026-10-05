@@ -14,7 +14,10 @@ import { DebugLogger } from '../debug/DebugLogger.js';
 import { getErrorMessage } from '../utils/errors.js';
 import { initializeParser } from '../utils/shell-parser.js';
 
-import type { AgentClientContract } from '../core/clientContract.js';
+import type {
+  AgentClientContract,
+  DeferredHistorySourceOptions,
+} from '../core/clientContract.js';
 import { HookSystem } from '../hooks/hookSystem.js';
 import { ContextManager } from '../services/contextManager.js';
 import type { AsyncTaskManager } from '../services/asyncTaskManager.js';
@@ -308,13 +311,15 @@ export class Config extends ConfigBase {
     }
   }
 
-  initializeContentGeneratorConfig: () => Promise<void> = async () => {
+  initializeContentGeneratorConfig: (
+    options?: DeferredHistorySourceOptions,
+  ) => Promise<void> = async (options = {}) => {
     const logger = new DebugLogger(
       'llxprt:config:initializeContentGeneratorConfig',
     );
     const previousAgentClient = this.agentClient;
     const { history: existingHistory, historyService: existingHistoryService } =
-      await extractExistingState(logger, this.agentClient);
+      await extractExistingState(logger, this.agentClient, options);
 
     const {
       contentGeneratorConfig: newContentGeneratorConfig,
@@ -325,16 +330,15 @@ export class Config extends ConfigBase {
       this.contentGeneratorFactory,
       this.runtimeState,
     );
-    this.runtimeState = newRuntimeState;
     // @plan PLAN-20260610-ISSUE1592.P01
     // @requirement REQ-INV-001
     const clientFactory = requireAgentClientFactory(
       this.agentClientFactory,
       'initializeContentGeneratorConfig',
     );
-    const newAgentClient = clientFactory(this, this.runtimeState);
+    const newAgentClient = clientFactory(this, newRuntimeState);
 
-    await prepareAgentClientReplacement(
+    const originalHistoryLength = await prepareAgentClientReplacement(
       logger,
       newAgentClient,
       previousAgentClient,
@@ -342,22 +346,26 @@ export class Config extends ConfigBase {
       existingHistoryService,
       newContentGeneratorConfig,
       this.getContentGeneratorConfig()?.vertexai,
+      options,
     );
     logger.debug('New client initialized');
 
+    this.runtimeState = newRuntimeState;
     this.contentGeneratorConfig = newContentGeneratorConfig;
     this.agentClient = newAgentClient;
 
-    const newHistory = await this.agentClient.getHistory();
+    let newHistoryLength = 0;
+    for await (const _row of this.agentClient.streamHistory())
+      newHistoryLength++;
     const newHistoryService = this.agentClient.getHistoryService();
     if (newHistoryService && this.tokenizerFactory) {
       newHistoryService.setTokenizerFactory(this.tokenizerFactory);
     }
 
     logger.debug('State verification after refreshAuth', {
-      originalHistoryLength: existingHistory.length,
-      newHistoryLength: newHistory.length,
-      historyPreserved: newHistory.length > 0,
+      originalHistoryLength,
+      newHistoryLength,
+      historyPreserved: newHistoryLength > 0,
       historyServicePreserved: existingHistoryService === newHistoryService,
     });
     this.inFallbackMode = false;

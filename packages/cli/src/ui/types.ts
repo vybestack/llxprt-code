@@ -231,6 +231,11 @@ export type HistoryItemToolGroup = HistoryItemBase & {
   type: 'tool_group';
   agentId?: string;
   tools: IndividualToolCallDisplay[];
+  toolPage?: {
+    readonly start: number;
+    readonly total: number;
+    readonly groupIndex: number;
+  };
 };
 
 export type HistoryItemUserShell = HistoryItemBase & {

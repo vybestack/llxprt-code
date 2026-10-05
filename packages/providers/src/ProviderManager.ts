@@ -405,6 +405,12 @@ export class ProviderManager implements IProviderManager {
     // 3. LoggingProviderWrapper (token tracking, telemetry)
 
     let finalProvider: IProvider = provider;
+    while (
+      finalProvider instanceof RetryOrchestrator ||
+      finalProvider instanceof LoggingProviderWrapper
+    ) {
+      finalProvider = finalProvider.wrappedProvider;
+    }
 
     // First wrap with RetryOrchestrator for centralized retry/failover
     finalProvider = new RetryOrchestrator(finalProvider, {

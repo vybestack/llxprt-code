@@ -105,6 +105,14 @@ async function resolveChatCompletionInput(
  * - Guards against missing runtime with MissingProviderRuntimeError
  */
 export class LoggingProviderWrapper implements IProvider {
+  get contextDumpVersion(): IProvider['contextDumpVersion'] {
+    return this.wrapped.contextDumpVersion;
+  }
+
+  get buildContextDumpBody(): IProvider['buildContextDumpBody'] {
+    return this.wrapped.buildContextDumpBody?.bind(this.wrapped);
+  }
+
   private conversationId: string;
   private turnNumber: number = 0;
   private redactor: ConversationDataRedactor | null = null;

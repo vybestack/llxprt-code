@@ -19,8 +19,7 @@
  * without weakening their original invariants: construction still rejects
  * invalid bounds before retaining the session header, an exact byte
  * reservation is still admitted, records held by backpressure reserve no
- * queue state and land exactly once after the gate releases, and a content
- * batch still preflights before any state change.
+ * queue state and land exactly once after the gate releases.
  */
 
 import { afterEach, describe, expect, it } from 'bun:test';
@@ -36,7 +35,7 @@ const created: string[] = [];
 const services: SessionRecordingService[] = [];
 const gates: AppendGate[] = [];
 
-function createService(): SessionRecordingService {
+function createService(maxQueueBytes?: number): SessionRecordingService {
   const chatsDir = mkdtempSync(path.join(tmpdir(), 'llxprt-recording-'));
   created.push(chatsDir);
   const service = new SessionRecordingService({
@@ -47,6 +46,7 @@ function createService(): SessionRecordingService {
     cwd: chatsDir,
     provider: 'test',
     model: 'test',
+    maxQueueBytes,
   });
   services.push(service);
   return service;
@@ -187,23 +187,112 @@ function requireWatermarks(
   return settled;
 }
 
-describe('SessionRecordingService queue retention', () => {
-  afterEach(async () => {
-    // Release held writers first so disposing a service whose drain is still
-    // gated cannot hang this cleanup, then dispose. Both happen here rather
-    // than at the end of each test body, so an assertion failure cannot leak
-    // a recording service, a gate, or a temp dir.
-    for (const gate of gates.splice(0)) {
-      gate.release();
-    }
-    for (const service of services.splice(0)) {
-      await service.dispose();
-    }
-    for (const dir of created.splice(0)) {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
+async function cleanupRecording(): Promise<void> {
+  // Release held writers first so disposing a service whose drain is still
+  // gated cannot hang this cleanup, then dispose. Both happen here rather
+  // than at the end of each test body, so an assertion failure cannot leak
+  // a recording service, a gate, or a temp dir.
+  for (const gate of gates.splice(0)) {
+    gate.release();
+  }
+  for (const service of services.splice(0)) {
+    await service.dispose();
+  }
+  for (const dir of created.splice(0)) {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
 
+function makeBounded(
+  gate: AppendGate,
+  suffix: string,
+  maxQueueBytes: number,
+): SessionRecordingService {
+  const dir = mkdtempSync(path.join(tmpdir(), `llxprt-recording-${suffix}-`));
+  created.push(dir);
+  const service = new SessionRecordingService({
+    sessionId: 'bounded-recording',
+    projectHash: 'project',
+    chatsDir: dir,
+    workspaceDirs: [],
+    provider: 'test',
+    model: 'test',
+    io: gatedWriterIo(gate),
+    maxQueueBytes,
+  });
+  services.push(service);
+  return service;
+}
+
+async function arrangeExactReservation(): Promise<{
+  gate: AppendGate;
+  exact: SessionRecordingService;
+  over: SessionRecordingService;
+  exactBytes: number;
+  outcomes: Settlement[];
+  exactCommit: Promise<CommitWatermark | null>;
+  overFirst: Promise<CommitWatermark | null>;
+  overSecond: Promise<CommitWatermark | null>;
+}> {
+  const gate = new AppendGate();
+  gates.push(gate);
+
+  const probeDir = mkdtempSync(path.join(tmpdir(), 'llxprt-recording-probe-'));
+  created.push(probeDir);
+  const probe = new SessionRecordingService({
+    sessionId: 'bounded-recording',
+    projectHash: 'project',
+    chatsDir: probeDir,
+    workspaceDirs: [],
+    provider: 'test',
+    model: 'test',
+  });
+  probe.recordProviderSwitch('bounded-provider', 'bounded-model');
+  const exactBytes = probe.getPendingByteCount();
+  await probe.dispose();
+
+  const exact = makeBounded(gate, 'exact', exactBytes);
+  const over = makeBounded(gate, 'over', exactBytes - 1);
+
+  const outcomes: Settlement[] = [];
+  const exactCommit = trackSettlement(
+    exact.commit('provider_switch', {
+      provider: 'bounded-provider',
+      model: 'bounded-model',
+    }),
+    outcomes,
+  );
+  // On a fresh recorder the first commit over the bound is still admitted:
+  // nothing can drain yet, so holding it would deadlock. The NEXT commit —
+  // the one that cannot fit while a drain is in flight — is the one held.
+  const overFirst = trackSettlement(
+    over.commit('provider_switch', {
+      provider: 'bounded-provider',
+      model: 'bounded-model',
+    }),
+    outcomes,
+  );
+  const overSecond = trackSettlement(
+    over.commit('provider_switch', {
+      provider: 'bounded-provider',
+      model: 'bounded-model',
+    }),
+    outcomes,
+  );
+  return {
+    gate,
+    exact,
+    over,
+    exactBytes,
+    outcomes,
+    exactCommit,
+    overFirst,
+    overSecond,
+  };
+}
+
+describe('SessionRecordingService queue retention: writes every record even when far more are produced than the high-water mark', () => {
+  afterEach(cleanupRecording);
   it('writes every record even when far more are produced than the high-water mark', async () => {
     const service = createService();
     const total = 10_000;
@@ -224,7 +313,10 @@ describe('SessionRecordingService queue retention', () => {
         .length,
     }).toStrictEqual({ active: true, contentRecords: total });
   });
+});
 
+describe('SessionRecordingService queue retention: keeps recording active after producing far more than the high-water mark', () => {
+  afterEach(cleanupRecording);
   it('keeps recording active after producing far more than the high-water mark', async () => {
     const service = createService();
 
@@ -234,7 +326,10 @@ describe('SessionRecordingService queue retention', () => {
 
     expect(service.isActive()).toBe(true);
   });
+});
 
+describe('SessionRecordingService queue retention: releases the pending queue once the drain completes', () => {
+  afterEach(cleanupRecording);
   it('releases the pending queue once the drain completes', async () => {
     const service = createService();
 
@@ -253,7 +348,10 @@ describe('SessionRecordingService queue retention', () => {
       pendingBytes: service.getPendingByteCount(),
     }).toStrictEqual({ pendingRecords: 0, pendingBytes: 0 });
   });
+});
 
+describe('SessionRecordingService queue retention: preserves buffered pre-content records once content materialises the file', () => {
+  afterEach(cleanupRecording);
   it('preserves buffered pre-content records once content materialises the file', async () => {
     const service = createService();
 
@@ -273,7 +371,10 @@ describe('SessionRecordingService queue retention', () => {
     );
     expect(switches).toHaveLength(5_000);
   });
+});
 
+describe('SessionRecordingService queue retention: rejects an invalid queue byte bound at construction before retaining the session header', () => {
+  afterEach(cleanupRecording);
   it('rejects an invalid queue byte bound at construction before retaining the session header', () => {
     // @plan PLAN-20260917-ISSUE854.P05b2 — the legacy synchronous throw on
     // queue-bound overflow is gone (backpressure instead), but construction
@@ -310,7 +411,10 @@ describe('SessionRecordingService queue retention', () => {
         }),
     ).toThrow(/queue byte limit/);
   });
+});
 
+describe('SessionRecordingService queue retention: admits a zero-byte queue bound and holds overflow on backpressure without dropping records', () => {
+  afterEach(cleanupRecording);
   it('admits a zero-byte queue bound and holds overflow on backpressure without dropping records', async () => {
     // @plan PLAN-20260917-ISSUE854.P05b2 — a zero-byte bound no longer
     // rejects construction: it is an ordinary finite bound, and overflow
@@ -371,83 +475,26 @@ describe('SessionRecordingService queue retention', () => {
       pendingBytes: bounded.getPendingByteCount(),
     }).toStrictEqual({ pendingRecords: 0, pendingBytes: 0 });
   });
+});
 
+describe('SessionRecordingService queue retention: accepts an exact queue-byte reservation and holds one byte over on backpressure without dropping retained records', () => {
+  afterEach(cleanupRecording);
   it('accepts an exact queue-byte reservation and holds one byte over on backpressure without dropping retained records', async () => {
     // @plan PLAN-20260917-ISSUE854.P05b2 — the bound is admission control
     // for awaitable commits: an exact reservation is admitted immediately;
     // one byte over is held (backpressure, never the legacy throw) until the
     // in-flight drain frees room, and the held record reserves no queue
     // state while it waits. Nothing retained or pended is ever dropped.
-    const gate = new AppendGate();
-    gates.push(gate);
-
-    const probeDir = mkdtempSync(
-      path.join(tmpdir(), 'llxprt-recording-probe-'),
-    );
-    created.push(probeDir);
-    const probe = new SessionRecordingService({
-      sessionId: 'bounded-recording',
-      projectHash: 'project',
-      chatsDir: probeDir,
-      workspaceDirs: [],
-      provider: 'test',
-      model: 'test',
-    });
-    probe.recordProviderSwitch('bounded-provider', 'bounded-model');
-    const exactBytes = probe.getPendingByteCount();
-    await probe.dispose();
-
-    const makeBounded = (
-      suffix: string,
-      maxQueueBytes: number,
-    ): SessionRecordingService => {
-      const dir = mkdtempSync(
-        path.join(tmpdir(), `llxprt-recording-${suffix}-`),
-      );
-      created.push(dir);
-      const service = new SessionRecordingService({
-        sessionId: 'bounded-recording',
-        projectHash: 'project',
-        chatsDir: dir,
-        workspaceDirs: [],
-        provider: 'test',
-        model: 'test',
-        io: gatedWriterIo(gate),
-        maxQueueBytes,
-      });
-      services.push(service);
-      return service;
-    };
-
-    const exact = makeBounded('exact', exactBytes);
-    const over = makeBounded('over', exactBytes - 1);
-
-    const outcomes: Settlement[] = [];
-    const exactCommit = trackSettlement(
-      exact.commit('provider_switch', {
-        provider: 'bounded-provider',
-        model: 'bounded-model',
-      }),
+    const {
+      gate,
+      exact,
+      over,
+      exactBytes,
       outcomes,
-    );
-    // On a fresh recorder the first commit over the bound is still admitted:
-    // nothing can drain yet, so holding it would deadlock. The NEXT commit —
-    // the one that cannot fit while a drain is in flight — is the one held.
-    const overFirst = trackSettlement(
-      over.commit('provider_switch', {
-        provider: 'bounded-provider',
-        model: 'bounded-model',
-      }),
-      outcomes,
-    );
-    const overSecond = trackSettlement(
-      over.commit('provider_switch', {
-        provider: 'bounded-provider',
-        model: 'bounded-model',
-      }),
-      outcomes,
-    );
-
+      exactCommit,
+      overFirst,
+      overSecond,
+    } = await arrangeExactReservation();
     // The gated drain keeps the recorder busy, so the one-byte-over commit
     // is held: it settles neither way and reserves no bytes beyond the
     // already-admitted records.
@@ -506,7 +553,10 @@ describe('SessionRecordingService queue retention', () => {
       pendingBytes: over.getPendingByteCount(),
     }).toStrictEqual({ pendingRecords: 0, pendingBytes: 0 });
   });
+});
 
+describe('SessionRecordingService queue retention: holds a materializing commit at admission until drain room frees, changing no recorded state while it waits', () => {
+  afterEach(cleanupRecording);
   it('holds a materializing commit at admission until drain room frees, changing no recorded state while it waits', async () => {
     // @plan PLAN-20260917-ISSUE854.P05b2 — the legacy synchronous throw
     // before materialization is replaced by backpressure: a materializing
@@ -599,96 +649,34 @@ describe('SessionRecordingService queue retention', () => {
       pendingBytes: bounded.getPendingByteCount(),
     }).toStrictEqual({ pendingRecords: 0, pendingBytes: 0 });
   });
+});
 
-  it('preflights the complete content batch before changing recording state', async () => {
-    // @plan PLAN-20260917-ISSUE854.P05b2 — the queue byte bound no longer
-    // rejects batches synchronously (it is backpressure for awaitable
-    // commits); the preflight contract that remains is atomicity: preparing
-    // measures and validates the whole batch without changing any state
-    // (still no file, no queue entry), publish admits the whole batch at
-    // once, rollback restores the exact prior state, and a batch over the
-    // bound lands complete — never split, dropped, or corrupted.
-    const probe = createService();
-    const contents = [
-      {
-        speaker: 'human' as const,
-        blocks: [{ type: 'text' as const, text: 'first batch item' }],
-      },
-      {
-        speaker: 'ai' as const,
-        blocks: [{ type: 'text' as const, text: 'second batch item' }],
-      },
-    ];
-    const probeHeaderBytes = probe.getPendingByteCount();
-    const prepared = probe.prepareContentBatch(contents);
-    expect(probe.getPendingRecordCount()).toBe(1);
-    expect(probe.getPendingByteCount()).toBe(probeHeaderBytes);
-    expect(probe.getFilePath()).toBeNull();
-    prepared.publish();
-    const batchBytes = probe.getPendingByteCount() - probeHeaderBytes;
-    prepared.rollback();
-    expect(probe.getPendingRecordCount()).toBe(1);
-    expect(probe.getPendingByteCount()).toBe(probeHeaderBytes);
-    expect(probe.getFilePath()).toBeNull();
-
-    const chatsDir = mkdtempSync(path.join(tmpdir(), 'llxprt-batch-bound-'));
-    created.push(chatsDir);
-    const headerProbe = new SessionRecordingService({
-      sessionId: 'bounded-recording',
-      projectHash: 'project',
-      chatsDir,
-      workspaceDirs: [chatsDir],
-      provider: 'test',
-      model: 'test',
-    });
-    services.push(headerProbe);
-    const headerBytes = headerProbe.getPendingByteCount();
-    const bounded = new SessionRecordingService({
-      sessionId: 'bounded-recording',
-      projectHash: 'project',
-      chatsDir,
-      workspaceDirs: [chatsDir],
-      provider: 'test',
-      model: 'test',
-      maxQueueBytes: headerBytes + batchBytes - 1,
-    });
-    services.push(bounded);
-
-    // Preparing a batch that exceeds the bound neither throws nor changes
-    // recording state — not even materialization.
-    const boundedPrepared = bounded.prepareContentBatch(contents);
-    expect({
-      filePath: bounded.getFilePath(),
-      records: bounded.getPendingRecordCount(),
-      bytes: bounded.getPendingByteCount(),
-    }).toStrictEqual({ filePath: null, records: 1, bytes: headerBytes });
-
-    // Publish admits the whole batch atomically, over the bound.
-    boundedPrepared.publish();
-    expect(bounded.getPendingRecordCount()).toBe(3);
-    expect(bounded.getPendingByteCount()).toBe(headerBytes + batchBytes);
-    expect(bounded.getFilePath()).not.toBeNull();
-
-    // And every record lands exactly once despite the overflow.
-    await bounded.flush();
-    const lines = readLines(bounded);
+describe('SessionRecordingService queue retention: durably commits content whose combined size exceeds the queue bound', () => {
+  afterEach(cleanupRecording);
+  it('durably commits content whose combined size exceeds the queue bound', async () => {
+    const service = createService(1024);
+    const texts = ['first', 'second'].map(
+      (label) => `${label}-${'x'.repeat(600)}`,
+    );
+    for (const text of texts) {
+      await service.commit('content', {
+        content: { speaker: 'human', blocks: [{ type: 'text', text }] },
+      });
+    }
+    const lines = readLines(service);
     expect(lines.map((line) => line.type)).toStrictEqual([
       'session_start',
       'content',
       'content',
     ]);
-    expect(lines.map((line) => contentText(line))).toStrictEqual([
-      null,
-      'first batch item',
-      'second batch item',
-    ]);
-    expect(bounded.isActive()).toBe(true);
-    expect({
-      pendingRecords: bounded.getPendingRecordCount(),
-      pendingBytes: bounded.getPendingByteCount(),
-    }).toStrictEqual({ pendingRecords: 0, pendingBytes: 0 });
+    expect(lines.map(contentText)).toStrictEqual([null, ...texts]);
+    expect(service.getPendingRecordCount()).toBe(0);
+    expect(service.getPendingByteCount()).toBe(0);
   });
+});
 
+describe('SessionRecordingService queue retention: surfaces a background write failure after releasing every queued byte', () => {
+  afterEach(cleanupRecording);
   it('surfaces a background write failure after releasing every queued byte', async () => {
     const root = mkdtempSync(
       path.join(tmpdir(), 'llxprt-recording-write-fail-'),

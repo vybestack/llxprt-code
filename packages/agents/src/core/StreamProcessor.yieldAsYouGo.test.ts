@@ -40,7 +40,6 @@ function createMockConversationManager() {
 function createMockHistoryService() {
   return {
     add: vi.fn(),
-    getAll: () => [],
     generateTurnKey: () => `turn-${crypto.randomUUID()}`,
     waitForTokenUpdates: vi.fn().mockResolvedValue(undefined),
   };
@@ -61,35 +60,9 @@ function makeFinishChunk(text: string): ModelStreamChunk {
   } as IContent);
 }
 
-describe('StreamProcessor.processStreamResponse — yield-as-you-go (#1846)', () => {
-  let processor: StreamProcessor;
+let processor: StreamProcessor;
 
-  beforeEach(() => {
-    // StreamProcessor only needs a few fields from its constructor deps.
-    // We provide minimal stubs to avoid constructing the entire runtime.
-    processor = Object.create(StreamProcessor.prototype);
-
-    // Inject required private fields
-    const ctx = createMockRuntimeContext();
-    const compression = createMockCompressionHandler();
-    const conversation = createMockConversationManager();
-    const history = createMockHistoryService();
-
-    Object.assign(processor, {
-      runtimeContext: ctx,
-      compressionHandler: compression,
-      conversationManager: conversation,
-      historyService: history,
-      logger: new DebugLogger('test'),
-      eagerlyRecordedToolResponseCallIds: new Set<string>(),
-    });
-
-    // Stub internal methods that processStreamResponse calls post-loop
-    (processor as unknown as Record<string, unknown>)[
-      '_finalizeStreamProcessing'
-    ] = vi.fn().mockResolvedValue(undefined);
-  });
-
+function registerStreamCase1(): void {
   it('yields each chunk before the source stream ends', async () => {
     // Track the order of events: source yields vs consumer receives
     const timeline: string[] = [];
@@ -142,7 +115,9 @@ describe('StreamProcessor.processStreamResponse — yield-as-you-go (#1846)', ()
 
     expect(firstConsumerIdx).toBeLessThan(secondSourceIdx);
   });
+}
 
+function registerStreamCase2(): void {
   it('yields chunks immediately even when the source stream stalls', async () => {
     const {
       result1,
@@ -203,7 +178,9 @@ describe('StreamProcessor.processStreamResponse — yield-as-you-go (#1846)', ()
         yieldsChunksImmediatelyEvenWhenTheSourceStreamStallsObservation2,
       };
     };
+}
 
+function registerStreamCase3(): void {
   it('yields an empty-block chunk after hook restrictions filter every tool call', async () => {
     const neutralChunk = toModelStreamChunk({
       speaker: 'ai',
@@ -245,7 +222,9 @@ describe('StreamProcessor.processStreamResponse — yield-as-you-go (#1846)', ()
     expect(yielded).toHaveLength(1);
     expect(yielded[0].content.blocks).toHaveLength(0);
   });
+}
 
+function registerStreamCase4(): void {
   it('yields the correct number of chunks matching the source', async () => {
     async function* threeChunks(): AsyncGenerator<ModelStreamChunk> {
       yield makeChunk('a');
@@ -268,4 +247,36 @@ describe('StreamProcessor.processStreamResponse — yield-as-you-go (#1846)', ()
 
     expect(yielded).toHaveLength(3);
   });
+}
+
+describe('StreamProcessor.processStreamResponse — yield-as-you-go (#1846)', () => {
+  beforeEach(() => {
+    // StreamProcessor only needs a few fields from its constructor deps.
+    // We provide minimal stubs to avoid constructing the entire runtime.
+    processor = Object.create(StreamProcessor.prototype);
+
+    // Inject required private fields
+    const ctx = createMockRuntimeContext();
+    const compression = createMockCompressionHandler();
+    const conversation = createMockConversationManager();
+    const history = createMockHistoryService();
+
+    Object.assign(processor, {
+      runtimeContext: ctx,
+      compressionHandler: compression,
+      conversationManager: conversation,
+      historyService: history,
+      logger: new DebugLogger('test'),
+      eagerlyRecordedToolResponseCallIds: new Set<string>(),
+    });
+
+    // Stub internal methods that processStreamResponse calls post-loop
+    (processor as unknown as Record<string, unknown>)[
+      '_finalizeStreamProcessing'
+    ] = vi.fn().mockResolvedValue(undefined);
+  });
+  registerStreamCase1();
+  registerStreamCase2();
+  registerStreamCase3();
+  registerStreamCase4();
 });

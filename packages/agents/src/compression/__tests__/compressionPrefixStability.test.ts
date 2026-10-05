@@ -23,6 +23,7 @@
  * cache-prefix proxy because chronology is never serialized to a provider.
  */
 
+import { collectRawHistory } from '@vybestack/llxprt-code-core/test-utils/collect-raw-history.js';
 import { describe, it, expect } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -96,12 +97,12 @@ const PRODUCTION_PRESERVE = 0.4;
 const PRODUCTION_TOP_PRESERVE = 0.2;
 
 /** Stamp chronology onto plain messages via a real HistoryService. */
-function stampHistory(messages: IContent[]): IContent[] {
+async function stampHistory(messages: IContent[]): Promise<IContent[]> {
   const hs = new HistoryService();
   for (const msg of messages) {
     hs.add(msg);
   }
-  return [...hs.getRawHistory()];
+  return [...(await collectRawHistory(hs))];
 }
 
 /** Build a CompressionContext from already-stamped history + anchor. */
@@ -125,10 +126,10 @@ function buildCtx(
  * new ones for the synthetic summary/continuation entries, then append
  * additional messages.
  */
-function restampAndAppend(
+async function restampAndAppend(
   newHistory: IContent[],
   extra: IContent[],
-): IContent[] {
+): Promise<IContent[]> {
   const hs = new HistoryService();
   for (const entry of newHistory) {
     hs.add(entry);
@@ -136,7 +137,7 @@ function restampAndAppend(
   for (const msg of extra) {
     hs.add(msg);
   }
-  return [...hs.getRawHistory()];
+  return [...(await collectRawHistory(hs))];
 }
 
 function assertApplied(result: StrategyCompressionResult): {
@@ -158,51 +159,17 @@ function assertApplied(result: StrategyCompressionResult): {
 // A3: trigger arithmetic (budget fraction + fail-fast)
 // ---------------------------------------------------------------------------
 
-describe('A3: completion-budget trigger arithmetic (#3070 Defect A)', () => {
-  const THRESHOLD = 0.85;
+const densityFixture1_THRESHOLD = 0.85;
 
-  function triggerFor(contextLimit: number, budget: number): number {
-    return THRESHOLD * (contextLimit - budget);
-  }
+function densityFixture2_triggerFor(
+  contextLimit: number,
+  budget: number,
+): number {
+  return densityFixture1_THRESHOLD * (contextLimit - budget);
+}
 
-  it('with an explicit 65536 budget: 200k → 114294.4, 100k → 29294.4 (ratio > 3.5)', () => {
-    const budget = getCompletionBudget(
-      { maxOutputTokens: 65_536 } as never,
-      'm',
-      undefined,
-      undefined,
-      200_000,
-    );
-    const trigger200k = triggerFor(200_000, budget);
-    const trigger100k = triggerFor(100_000, budget);
-
-    expect(budget).toBe(65_536);
-    expect(trigger200k).toBeCloseTo(114_294.4, 1);
-    expect(trigger100k).toBeCloseTo(29_294.4, 1);
-    expect(trigger200k / trigger100k).toBeGreaterThan(3.5);
-  });
-
-  it('throws InvalidContextBudgetError when an explicit budget >= context-limit', () => {
-    expect(() =>
-      getCompletionBudget(
-        { maxOutputTokens: 200_000 } as never,
-        'm',
-        undefined,
-        undefined,
-        200_000,
-      ),
-    ).toThrow(InvalidContextBudgetError);
-  });
-
-  it('throws when a live maxOutputTokens setting >= context-limit', () => {
-    const { settingsService } =
-      observeThrowsWhenALiveMaxOutputTokensSettingContextLimit();
-    expect(() =>
-      getCompletionBudget({}, 'm', undefined, settingsService, 50_000),
-    ).toThrow(InvalidContextBudgetError);
-  });
-
-  const observeThrowsWhenALiveMaxOutputTokensSettingContextLimit = () => {
+const densityFixture3_observeThrowsWhenALiveMaxOutputTokensSettingContextLimit =
+  () => {
     const settingsService = {
       get: (key: string) => (key === 'maxOutputTokens' ? 50_000 : undefined),
     };
@@ -210,14 +177,238 @@ describe('A3: completion-budget trigger arithmetic (#3070 Defect A)', () => {
     return { settingsService };
   };
 
-  it('default budget on a 32768 window produces a POSITIVE trigger (every-send loop is gone)', () => {
-    const budget = getCompletionBudget({}, 'm', undefined, undefined, 32_768);
-    const trigger = triggerFor(32_768, budget);
+const densityFixture4_observeFiveCompressionCycles = async () => {
+  const strategy = new MiddleOutStrategy();
 
-    // min(65536, floor(32768 * 0.5)) = 16384
-    expect(budget).toBe(16_384);
-    expect(trigger).toBeCloseTo(13_926.4, 1);
-    expect(trigger).toBeGreaterThan(0);
+  // Start with enough messages to compress
+  const baseHistory: IContent[] = [];
+  for (let i = 0; i < 20; i++) {
+    baseHistory.push(humanMsg(`user ${i}`));
+    baseHistory.push(aiTextMsg(`ai ${i}`));
+  }
+
+  let currentHistory = await stampHistory(baseHistory);
+  let anchor = 0;
+  let prevSerializedHead: string[] = [];
+  const checks: Array<{
+    readonly prefix: number;
+    readonly expectedLength: number;
+  }> = [];
+
+  for (let cycle = 0; cycle < 5; cycle++) {
+    const ctx = buildCtx(currentHistory, anchor);
+    const applied = assertApplied(await strategy.compress(ctx));
+    const newHistory = applied.newHistory;
+
+    const headEnd = findHeadEnd(newHistory, applied.topPreserved);
+    const head = newHistory.slice(0, headEnd);
+    const serializedHead = serializeForCache(head);
+
+    // Content prefix must be monotonically non-decreasing
+    const prefix = commonPrefixLength(prevSerializedHead, serializedHead);
+    checks.push({ prefix, expectedLength: prevSerializedHead.length });
+    prevSerializedHead = serializedHead;
+
+    // Advance anchor via the production path (resolveHeadAnchorSeq)
+    const newAnchor = resolveHeadAnchorSeq(newHistory, applied.topPreserved);
+    if (typeof newAnchor === 'number') {
+      anchor = newAnchor;
+    }
+
+    // Append 12 more and re-stamp
+    const extra: IContent[] = [];
+    for (let i = 0; i < 6; i++) {
+      extra.push(humanMsg(`cycle${cycle} user ${i}`));
+      extra.push(aiTextMsg(`cycle${cycle} ai ${i}`));
+    }
+    currentHistory = await restampAndAppend(newHistory, extra);
+  }
+  return checks;
+};
+
+const densityFixture5_observeAnchorFloorHOLDSWhenAnUNMATCHEDToolCallSitsAtTheBoundary =
+  async () => {
+    const strategy = new MiddleOutStrategy();
+
+    // Build history where an UNMATCHED tool_call sits at/near the anchor floor.
+    // The anchor floor is set to the entry just before the unmatched tool_call,
+    // so adjustForToolCallBoundary would try to move the split backward below
+    // the floor. The fix must search FORWARD for a valid split at or above the
+    // floor, or return a clean structural no-op.
+    const history: IContent[] = [
+      humanMsg('h0'),
+      aiTextMsg('a1'),
+      aiTextMsg('a2'),
+      aiTextMsg('a3'),
+      aiTextMsg('a4'),
+      aiTextMsg('a5'),
+      aiTextMsg('a6'),
+      aiTextMsg('a7'),
+      // Unmatched tool_call at index 8 — no matching tool_response follows
+      aiToolCallMsg({ id: 'tc-orphan', name: 'interrupted_tool' }),
+      humanMsg('h9'),
+      aiTextMsg('a10'),
+      humanMsg('h11'),
+      aiTextMsg('a12'),
+      humanMsg('h13'),
+      aiTextMsg('a14'),
+      humanMsg('h15'),
+      aiTextMsg('a16'),
+      humanMsg('h17'),
+      aiTextMsg('a18'),
+      humanMsg('h19'),
+      aiTextMsg('a20'),
+    ];
+
+    const stamped = await stampHistory(history);
+    // Anchor to the seq of index 7 (a7), so the floor is index 8
+    const anchorSeq = stamped[7].metadata?.chronology?.seq ?? 0;
+
+    const ctx = buildCtx(stamped, anchorSeq);
+    const result = await strategy.compress(ctx);
+
+    // Either the anchor floor held (applied with topPreserved >= 8) or a clean
+    // structural no-op was returned. The floor must NEVER be silently violated.
+
+    // The unmatched tool_call at index 8 must never be silently dropped. On the
+    // 'applied' path the preserved head must cover the floor; on the 'noop'
+    // path compression was declined so the floor is intact by definition.
+    // Expressed as a single non-conditional assertion — no sentinel fallback.
+    const floorHeld =
+      result.kind === 'noop' || (result.metadata.topPreserved ?? 0) >= 8;
+
+    return { result, floorHeld };
+  };
+
+const densityFixture6_observeKeepsAMatchedToolCallAndResponseOnTheSameSideOf =
+  async () => {
+    const strategy = new MiddleOutStrategy();
+    const history: IContent[] = [
+      humanMsg('h0'),
+      aiTextMsg('a1'),
+      aiTextMsg('a2'),
+      aiTextMsg('a3'),
+      aiTextMsg('a4'),
+      aiTextMsg('a5'),
+      aiTextMsg('a6'),
+      aiTextMsg('a7'),
+      aiToolCallMsg({ id: 'tc-matched', name: 'matched_tool' }),
+      toolResponseMsg('tc-matched', 'matched_tool', 'result'),
+      humanMsg('h10'),
+      aiTextMsg('a11'),
+      humanMsg('h12'),
+      aiTextMsg('a13'),
+      humanMsg('h14'),
+      aiTextMsg('a15'),
+      humanMsg('h16'),
+      aiTextMsg('a17'),
+      humanMsg('h18'),
+      aiTextMsg('a19'),
+      humanMsg('h20'),
+      aiTextMsg('a21'),
+    ];
+    const stamped = await stampHistory(history);
+    const anchorSeq = stamped[7].metadata?.chronology?.seq ?? 0;
+
+    const result = await strategy.compress(buildCtx(stamped, anchorSeq));
+    if (result.kind !== 'applied') {
+      throw new Error('Expected matched tool boundary compression to apply');
+    }
+
+    const preserved = result.newHistory.slice(0, result.metadata.topPreserved);
+    const callIndex = preserved.findIndex((entry) =>
+      entry.blocks.some(
+        (block) => block.type === 'tool_call' && block.id === 'tc-matched',
+      ),
+    );
+    const responseIndex = preserved.findIndex((entry) =>
+      entry.blocks.some(
+        (block) =>
+          block.type === 'tool_response' && block.callId === 'tc-matched',
+      ),
+    );
+
+    // If found, the response must come after the call
+
+    const keepsAMatchedToolCallAndResponseOnTheSameSideOfObservation1 =
+      callIndex < 0 || responseIndex > callIndex;
+    return {
+      callIndex,
+      responseIndex,
+      keepsAMatchedToolCallAndResponseOnTheSameSideOfObservation1,
+    };
+  };
+
+const densityFixture7_observeAnchorThatWouldPushPastTheBottomSplitYieldsACleanStructural =
+  async () => {
+    const strategy = new MiddleOutStrategy();
+
+    const history: IContent[] = [];
+    for (let i = 0; i < 10; i++) {
+      history.push(humanMsg(`user ${i}`));
+      history.push(aiTextMsg(`ai ${i}`));
+    }
+
+    // Stamp to get seqs, then set the anchor to the last entry's seq
+    const stamped = await stampHistory(history);
+    const anchorSeq =
+      stamped[stamped.length - 1].metadata?.chronology?.seq ?? 0;
+
+    const ctx = buildCtx(stamped, anchorSeq);
+    const result = await strategy.compress(ctx);
+
+    // An anchor at the very end pushes topSplit past bottomSplit → structural no-op
+
+    return { result };
+  };
+
+const densityFixture8_observeTheResolvedSeqIsAcceptedBySetCacheAnchorSeqAndPinsTheHead =
+  async () => {
+    const hs = new HistoryService();
+    const stamped = await stampHistory([
+      humanMsg('h0'),
+      aiTextMsg('a1'),
+      humanMsg('h2'),
+    ]);
+    const summary: IContent = {
+      ...aiTextMsg('<state_snapshot>summary</state_snapshot>'),
+      metadata: { isSummary: true },
+    };
+    const seq = resolveHeadAnchorSeq(
+      [stamped[0], stamped[1], summary, stamped[2]],
+      2,
+    );
+
+    if (seq === undefined) {
+      throw new Error('Expected a cache-anchor chronology seq');
+    }
+
+    hs.setCacheAnchorSeq(seq);
+
+    return { seq, hs };
+  };
+
+describe('A3: completion-budget trigger arithmetic (#3070 Defect A)', () => {
+  it('with an explicit 65536 budget: 200k → 114294.4, 100k → 29294.4 (ratio > 3.5)', () => {
+    const { actual, expected0 } = observeDensityCase9();
+    expect(actual).toBeGreaterThan(expected0);
+  });
+
+  it('throws InvalidContextBudgetError when an explicit budget >= context-limit', () => {
+    const { actual, expected0 } = observeDensityCase10();
+    expect(actual).toThrow(expected0);
+  });
+
+  it('throws when a live maxOutputTokens setting >= context-limit', () => {
+    const { settingsService } =
+      densityFixture3_observeThrowsWhenALiveMaxOutputTokensSettingContextLimit();
+    expect(() =>
+      getCompletionBudget({}, 'm', undefined, settingsService, 50_000),
+    ).toThrow(InvalidContextBudgetError);
+  });
+
+  it('default budget on a 32768 window produces a POSITIVE trigger (every-send loop is gone)', () => {
+    expect(observeDensityCase11()).toBeGreaterThan(0);
   });
 
   it('default budget is identical to the flat 65536 for every window >= 131072', () => {
@@ -251,11 +442,7 @@ describe('A4: HistoryService cache-anchor contract (#3070 Defect B)', () => {
   });
 
   it('setCacheAnchorSeq rejects non-positive and non-integer identities', () => {
-    const hs = new HistoryService();
-    expect(() => hs.setCacheAnchorSeq(0)).toThrow(
-      'Cache-anchor seq must be a positive integer: got 0',
-    );
-    expect(() => hs.setCacheAnchorSeq(1.5)).toThrow(
+    expect(observeDensityCase12()).toThrow(
       'Cache-anchor seq must be a positive integer: got 1.5',
     );
   });
@@ -282,110 +469,20 @@ describe('A4: HistoryService cache-anchor contract (#3070 Defect B)', () => {
 
 describe('A1: preserved head never shrinks across successive compressions (#3070 Defect B)', () => {
   it('40 messages → head preserved after second compression with anchor', async () => {
-    const strategy = new MiddleOutStrategy();
-
-    // 40 plain human/ai messages (no tool calls → boundary adjustment is no-op)
-    const baseHistory: IContent[] = [];
-    for (let i = 0; i < 20; i++) {
-      baseHistory.push(humanMsg(`user ${i}`));
-      baseHistory.push(aiTextMsg(`ai ${i}`));
-    }
-
-    // First compression, no anchor yet
-    const stamped1 = stampHistory(baseHistory);
-    const ctx1 = buildCtx(stamped1, 0);
-    const applied1 = assertApplied(await strategy.compress(ctx1));
-    const newHistory1 = applied1.newHistory;
-
-    const head1End = findHeadEnd(newHistory1, applied1.topPreserved);
-    const head1 = newHistory1.slice(0, head1End);
-    const serializedHead1 = serializeForCache(head1);
-
-    // Anchor = seq of the last preserved head entry, via the production path
-    const anchorSeq = resolveHeadAnchorSeq(newHistory1, applied1.topPreserved);
-    expect(typeof anchorSeq).toBe('number');
-
-    // Append 6 more messages and re-stamp
-    const extra: IContent[] = [];
-    for (let i = 0; i < 3; i++) {
-      extra.push(humanMsg(`new user ${i}`));
-      extra.push(aiTextMsg(`new ai ${i}`));
-    }
-    const history2 = restampAndAppend(newHistory1, extra);
-
-    // Second compression WITH the anchor
-    const ctx2 = buildCtx(history2, anchorSeq as number);
-    const applied2 = assertApplied(await strategy.compress(ctx2));
-    const newHistory2 = applied2.newHistory;
-
-    const head2End = findHeadEnd(newHistory2, applied2.topPreserved);
-    const head2 = newHistory2.slice(0, head2End);
-    const serializedHead2 = serializeForCache(head2);
-
-    // The first head must be a COMPLETE CONTENT prefix of the second head
-    const prefix = commonPrefixLength(serializedHead1, serializedHead2);
-    expect(prefix).toBe(serializedHead1.length);
+    const { actual, expected0 } = await observeDensityCase13();
+    expect(actual).toBe(expected0);
   });
 });
 
 describe('A2: serialized head content never decreases across 5 append-compress cycles (#3070 Defect B)', () => {
   it('5 cycles of append-12-then-compress keep the head content monotonically non-decreasing', async () => {
-    const checks = await observeFiveCompressionCycles();
+    const checks = await densityFixture4_observeFiveCompressionCycles();
     expect(checks[0]?.prefix).toBe(checks[0]?.expectedLength);
     expect(checks[1]?.prefix).toBe(checks[1]?.expectedLength);
     expect(checks[2]?.prefix).toBe(checks[2]?.expectedLength);
     expect(checks[3]?.prefix).toBe(checks[3]?.expectedLength);
     expect(checks[4]?.prefix).toBe(checks[4]?.expectedLength);
   });
-
-  const observeFiveCompressionCycles = async () => {
-    const strategy = new MiddleOutStrategy();
-
-    // Start with enough messages to compress
-    const baseHistory: IContent[] = [];
-    for (let i = 0; i < 20; i++) {
-      baseHistory.push(humanMsg(`user ${i}`));
-      baseHistory.push(aiTextMsg(`ai ${i}`));
-    }
-
-    let currentHistory = stampHistory(baseHistory);
-    let anchor = 0;
-    let prevSerializedHead: string[] = [];
-    const checks: Array<{
-      readonly prefix: number;
-      readonly expectedLength: number;
-    }> = [];
-
-    for (let cycle = 0; cycle < 5; cycle++) {
-      const ctx = buildCtx(currentHistory, anchor);
-      const applied = assertApplied(await strategy.compress(ctx));
-      const newHistory = applied.newHistory;
-
-      const headEnd = findHeadEnd(newHistory, applied.topPreserved);
-      const head = newHistory.slice(0, headEnd);
-      const serializedHead = serializeForCache(head);
-
-      // Content prefix must be monotonically non-decreasing
-      const prefix = commonPrefixLength(prevSerializedHead, serializedHead);
-      checks.push({ prefix, expectedLength: prevSerializedHead.length });
-      prevSerializedHead = serializedHead;
-
-      // Advance anchor via the production path (resolveHeadAnchorSeq)
-      const newAnchor = resolveHeadAnchorSeq(newHistory, applied.topPreserved);
-      if (typeof newAnchor === 'number') {
-        anchor = newAnchor;
-      }
-
-      // Append 12 more and re-stamp
-      const extra: IContent[] = [];
-      for (let i = 0; i < 6; i++) {
-        extra.push(humanMsg(`cycle${cycle} user ${i}`));
-        extra.push(aiTextMsg(`cycle${cycle} ai ${i}`));
-      }
-      currentHistory = restampAndAppend(newHistory, extra);
-    }
-    return checks;
-  };
 });
 
 // ---------------------------------------------------------------------------
@@ -395,162 +492,20 @@ describe('A2: serialized head content never decreases across 5 append-compress c
 describe('A5: anchor invariants (#3070 Defect B)', () => {
   it('anchor floor HOLDS when an UNMATCHED tool_call sits at the boundary — no silent drop below floor', async () => {
     const { result, floorHeld } =
-      await observeAnchorFloorHOLDSWhenAnUNMATCHEDToolCallSitsAtTheBoundary();
+      await densityFixture5_observeAnchorFloorHOLDSWhenAnUNMATCHEDToolCallSitsAtTheBoundary();
     expect(['applied', 'noop']).toContain(result.kind);
     expect(floorHeld).toBe(true);
   });
 
-  const observeAnchorFloorHOLDSWhenAnUNMATCHEDToolCallSitsAtTheBoundary =
-    async () => {
-      const strategy = new MiddleOutStrategy();
-
-      // Build history where an UNMATCHED tool_call sits at/near the anchor floor.
-      // The anchor floor is set to the entry just before the unmatched tool_call,
-      // so adjustForToolCallBoundary would try to move the split backward below
-      // the floor. The fix must search FORWARD for a valid split at or above the
-      // floor, or return a clean structural no-op.
-      const history: IContent[] = [
-        humanMsg('h0'),
-        aiTextMsg('a1'),
-        aiTextMsg('a2'),
-        aiTextMsg('a3'),
-        aiTextMsg('a4'),
-        aiTextMsg('a5'),
-        aiTextMsg('a6'),
-        aiTextMsg('a7'),
-        // Unmatched tool_call at index 8 — no matching tool_response follows
-        aiToolCallMsg({ id: 'tc-orphan', name: 'interrupted_tool' }),
-        humanMsg('h9'),
-        aiTextMsg('a10'),
-        humanMsg('h11'),
-        aiTextMsg('a12'),
-        humanMsg('h13'),
-        aiTextMsg('a14'),
-        humanMsg('h15'),
-        aiTextMsg('a16'),
-        humanMsg('h17'),
-        aiTextMsg('a18'),
-        humanMsg('h19'),
-        aiTextMsg('a20'),
-      ];
-
-      const stamped = stampHistory(history);
-      // Anchor to the seq of index 7 (a7), so the floor is index 8
-      const anchorSeq = stamped[7].metadata?.chronology?.seq ?? 0;
-
-      const ctx = buildCtx(stamped, anchorSeq);
-      const result = await strategy.compress(ctx);
-
-      // Either the anchor floor held (applied with topPreserved >= 8) or a clean
-      // structural no-op was returned. The floor must NEVER be silently violated.
-
-      // The unmatched tool_call at index 8 must never be silently dropped. On the
-      // 'applied' path the preserved head must cover the floor; on the 'noop'
-      // path compression was declined so the floor is intact by definition.
-      // Expressed as a single non-conditional assertion — no sentinel fallback.
-      const floorHeld =
-        result.kind === 'noop' || (result.metadata.topPreserved ?? 0) >= 8;
-
-      return { result, floorHeld };
-    };
   it('keeps a matched tool call and response on the same side of the anchor floor', async () => {
-    const {
-      callIndex,
-      responseIndex,
-      keepsAMatchedToolCallAndResponseOnTheSameSideOfObservation1,
-    } = await observeKeepsAMatchedToolCallAndResponseOnTheSameSideOf();
-    expect(callIndex === -1).toBe(responseIndex === -1);
-    expect(keepsAMatchedToolCallAndResponseOnTheSameSideOfObservation1).toBe(
-      true,
-    );
+    expect(await observeDensityCase14()).toBe(true);
   });
-
-  const observeKeepsAMatchedToolCallAndResponseOnTheSameSideOf = async () => {
-    const strategy = new MiddleOutStrategy();
-    const history: IContent[] = [
-      humanMsg('h0'),
-      aiTextMsg('a1'),
-      aiTextMsg('a2'),
-      aiTextMsg('a3'),
-      aiTextMsg('a4'),
-      aiTextMsg('a5'),
-      aiTextMsg('a6'),
-      aiTextMsg('a7'),
-      aiToolCallMsg({ id: 'tc-matched', name: 'matched_tool' }),
-      toolResponseMsg('tc-matched', 'matched_tool', 'result'),
-      humanMsg('h10'),
-      aiTextMsg('a11'),
-      humanMsg('h12'),
-      aiTextMsg('a13'),
-      humanMsg('h14'),
-      aiTextMsg('a15'),
-      humanMsg('h16'),
-      aiTextMsg('a17'),
-      humanMsg('h18'),
-      aiTextMsg('a19'),
-      humanMsg('h20'),
-      aiTextMsg('a21'),
-    ];
-    const stamped = stampHistory(history);
-    const anchorSeq = stamped[7].metadata?.chronology?.seq ?? 0;
-
-    const result = await strategy.compress(buildCtx(stamped, anchorSeq));
-    if (result.kind !== 'applied') {
-      throw new Error('Expected matched tool boundary compression to apply');
-    }
-
-    const preserved = result.newHistory.slice(0, result.metadata.topPreserved);
-    const callIndex = preserved.findIndex((entry) =>
-      entry.blocks.some(
-        (block) => block.type === 'tool_call' && block.id === 'tc-matched',
-      ),
-    );
-    const responseIndex = preserved.findIndex((entry) =>
-      entry.blocks.some(
-        (block) =>
-          block.type === 'tool_response' && block.callId === 'tc-matched',
-      ),
-    );
-
-    // If found, the response must come after the call
-
-    const keepsAMatchedToolCallAndResponseOnTheSameSideOfObservation1 =
-      callIndex < 0 || responseIndex > callIndex;
-    return {
-      callIndex,
-      responseIndex,
-      keepsAMatchedToolCallAndResponseOnTheSameSideOfObservation1,
-    };
-  };
 
   it('anchor that would push past the bottom split yields a clean structural no-op with unmodified history', async () => {
     const { result } =
-      await observeAnchorThatWouldPushPastTheBottomSplitYieldsACleanStructural();
+      await densityFixture7_observeAnchorThatWouldPushPastTheBottomSplitYieldsACleanStructural();
     expect(result.kind).toBe('noop');
   });
-
-  const observeAnchorThatWouldPushPastTheBottomSplitYieldsACleanStructural =
-    async () => {
-      const strategy = new MiddleOutStrategy();
-
-      const history: IContent[] = [];
-      for (let i = 0; i < 10; i++) {
-        history.push(humanMsg(`user ${i}`));
-        history.push(aiTextMsg(`ai ${i}`));
-      }
-
-      // Stamp to get seqs, then set the anchor to the last entry's seq
-      const stamped = stampHistory(history);
-      const anchorSeq =
-        stamped[stamped.length - 1].metadata?.chronology?.seq ?? 0;
-
-      const ctx = buildCtx(stamped, anchorSeq);
-      const result = await strategy.compress(ctx);
-
-      // An anchor at the very end pushes topSplit past bottomSplit → structural no-op
-
-      return { result };
-    };
 });
 
 // ---------------------------------------------------------------------------
@@ -558,68 +513,160 @@ describe('A5: anchor invariants (#3070 Defect B)', () => {
 // ---------------------------------------------------------------------------
 
 describe('A6: resolveHeadAnchorSeq (#3070 Defect B)', () => {
-  it('returns the seq of the last preserved head entry by topPreserved index', () => {
-    const stamped = stampHistory([
-      humanMsg('h0'),
-      aiTextMsg('a1'),
-      humanMsg('h2'),
-    ]);
-    const summary: IContent = {
-      ...aiTextMsg('<state_snapshot>summary</state_snapshot>'),
-      metadata: { isSummary: true },
-    };
-    const compressed = [stamped[0], stamped[1], summary, stamped[2]];
-
-    // topPreserved = 2 → last head entry is index 1
-    expect(resolveHeadAnchorSeq(compressed, 2)).toBe(
-      stamped[1].metadata?.chronology?.seq,
-    );
+  it('returns the seq of the last preserved head entry by topPreserved index', async () => {
+    const { actual, expected0 } = await observeDensityCase15();
+    expect(actual).toBe(expected0);
   });
 
-  it('returns undefined when topPreserved is 0 (prefix destroyed)', () => {
-    const stamped = stampHistory([humanMsg('h0'), aiTextMsg('a1')]);
+  it('returns undefined when topPreserved is 0 (prefix destroyed)', async () => {
+    const stamped = await stampHistory([humanMsg('h0'), aiTextMsg('a1')]);
 
     expect(resolveHeadAnchorSeq(stamped, 0)).toBeUndefined();
   });
 
-  it('throws when topPreserved exceeds history length', () => {
-    const stamped = stampHistory([humanMsg('h0'), aiTextMsg('a1')]);
+  it('throws when topPreserved exceeds history length', async () => {
+    const stamped = await stampHistory([humanMsg('h0'), aiTextMsg('a1')]);
 
     expect(() => resolveHeadAnchorSeq(stamped, 10)).toThrow(
       'topPreserved 10 exceeds history length 2',
     );
   });
 
-  it('the resolved seq is accepted by setCacheAnchorSeq and pins the head', () => {
+  it('the resolved seq is accepted by setCacheAnchorSeq and pins the head', async () => {
     const { seq, hs } =
-      observeTheResolvedSeqIsAcceptedBySetCacheAnchorSeqAndPinsTheHead();
+      await densityFixture8_observeTheResolvedSeqIsAcceptedBySetCacheAnchorSeqAndPinsTheHead();
     expect(seq).toBeDefined();
     expect(hs.getCacheAnchorSeq()).toBe(seq);
   });
-
-  const observeTheResolvedSeqIsAcceptedBySetCacheAnchorSeqAndPinsTheHead =
-    () => {
-      const hs = new HistoryService();
-      const stamped = stampHistory([
-        humanMsg('h0'),
-        aiTextMsg('a1'),
-        humanMsg('h2'),
-      ]);
-      const summary: IContent = {
-        ...aiTextMsg('<state_snapshot>summary</state_snapshot>'),
-        metadata: { isSummary: true },
-      };
-      const seq = resolveHeadAnchorSeq(
-        [stamped[0], stamped[1], summary, stamped[2]],
-        2,
-      );
-
-      if (seq === undefined) {
-        throw new Error('Expected a cache-anchor chronology seq');
-      }
-
-      hs.setCacheAnchorSeq(seq);
-
-      return { seq, hs };
-    };
 });
+
+function observeDensityCase9() {
+  const budget = getCompletionBudget(
+    { maxOutputTokens: 65_536 } as never,
+    'm',
+    undefined,
+    undefined,
+    200_000,
+  );
+  const trigger200k = densityFixture2_triggerFor(200_000, budget);
+  const trigger100k = densityFixture2_triggerFor(100_000, budget);
+
+  expect(budget).toBe(65_536);
+  expect(trigger200k).toBeCloseTo(114_294.4, 1);
+  expect(trigger100k).toBeCloseTo(29_294.4, 1);
+
+  return { actual: trigger200k / trigger100k, expected0: 3.5 };
+}
+
+function observeDensityCase10() {
+  return {
+    actual: () =>
+      getCompletionBudget(
+        { maxOutputTokens: 200_000 } as never,
+        'm',
+        undefined,
+        undefined,
+        200_000,
+      ),
+    expected0: InvalidContextBudgetError,
+  };
+}
+
+function observeDensityCase11() {
+  const budget = getCompletionBudget({}, 'm', undefined, undefined, 32_768);
+  const trigger = densityFixture2_triggerFor(32_768, budget);
+
+  // min(65536, floor(32768 * 0.5)) = 16384
+  expect(budget).toBe(16_384);
+  expect(trigger).toBeCloseTo(13_926.4, 1);
+
+  return trigger;
+}
+
+function observeDensityCase12() {
+  const hs = new HistoryService();
+  expect(() => hs.setCacheAnchorSeq(0)).toThrow(
+    'Cache-anchor seq must be a positive integer: got 0',
+  );
+
+  return () => hs.setCacheAnchorSeq(1.5);
+}
+
+async function observeDensityCase13() {
+  const strategy = new MiddleOutStrategy();
+
+  // 40 plain human/ai messages (no tool calls → boundary adjustment is no-op)
+  const baseHistory: IContent[] = [];
+  for (let i = 0; i < 20; i++) {
+    baseHistory.push(humanMsg(`user ${i}`));
+    baseHistory.push(aiTextMsg(`ai ${i}`));
+  }
+
+  // First compression, no anchor yet
+  const stamped1 = await stampHistory(baseHistory);
+  const ctx1 = buildCtx(stamped1, 0);
+  const applied1 = assertApplied(await strategy.compress(ctx1));
+  const newHistory1 = applied1.newHistory;
+
+  const head1End = findHeadEnd(newHistory1, applied1.topPreserved);
+  const head1 = newHistory1.slice(0, head1End);
+  const serializedHead1 = serializeForCache(head1);
+
+  // Anchor = seq of the last preserved head entry, via the production path
+  const anchorSeq = resolveHeadAnchorSeq(newHistory1, applied1.topPreserved);
+  expect(typeof anchorSeq).toBe('number');
+
+  // Append 6 more messages and re-stamp
+  const extra: IContent[] = [];
+  for (let i = 0; i < 3; i++) {
+    extra.push(humanMsg(`new user ${i}`));
+    extra.push(aiTextMsg(`new ai ${i}`));
+  }
+  const history2 = await restampAndAppend(newHistory1, extra);
+
+  // Second compression WITH the anchor
+  const ctx2 = buildCtx(history2, anchorSeq as number);
+  const applied2 = assertApplied(await strategy.compress(ctx2));
+  const newHistory2 = applied2.newHistory;
+
+  const head2End = findHeadEnd(newHistory2, applied2.topPreserved);
+  const head2 = newHistory2.slice(0, head2End);
+  const serializedHead2 = serializeForCache(head2);
+
+  // The first head must be a COMPLETE CONTENT prefix of the second head
+  const prefix = commonPrefixLength(serializedHead1, serializedHead2);
+
+  return { actual: prefix, expected0: serializedHead1.length };
+}
+
+async function observeDensityCase14() {
+  const {
+    callIndex,
+    responseIndex,
+    keepsAMatchedToolCallAndResponseOnTheSameSideOfObservation1,
+  } =
+    await densityFixture6_observeKeepsAMatchedToolCallAndResponseOnTheSameSideOf();
+  expect(callIndex === -1).toBe(responseIndex === -1);
+
+  return keepsAMatchedToolCallAndResponseOnTheSameSideOfObservation1;
+}
+
+async function observeDensityCase15() {
+  const stamped = await stampHistory([
+    humanMsg('h0'),
+    aiTextMsg('a1'),
+    humanMsg('h2'),
+  ]);
+  const summary: IContent = {
+    ...aiTextMsg('<state_snapshot>summary</state_snapshot>'),
+    metadata: { isSummary: true },
+  };
+  const compressed = [stamped[0], stamped[1], summary, stamped[2]];
+
+  // topPreserved = 2 → last head entry is index 1
+
+  return {
+    actual: resolveHeadAnchorSeq(compressed, 2),
+    expected0: stamped[1].metadata?.chronology?.seq,
+  };
+}

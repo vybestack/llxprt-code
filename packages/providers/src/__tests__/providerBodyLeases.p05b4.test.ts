@@ -27,6 +27,7 @@ import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runt
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { GenerateChatOptions } from '../IProvider.js';
 import { activeRequestBodyCount } from '../utils/requestScopedBody.js';
 import { acquireRequestScopedBody } from '../utils/requestScopedBody.js';
 import { readRawPostTestBody } from '../test-utils/rawPostTestAdapters.js';
@@ -66,27 +67,33 @@ function makeOptions(
   harness: Harness,
   contents: IContent[],
   ephemerals: Record<string, unknown>,
-): ReturnType<typeof createProviderCallOptions> {
+): GenerateChatOptions {
   const invocation = createRuntimeInvocationContext({
     runtime: harness.runtime,
     settings: harness.settings,
     providerName,
     ephemeralsSnapshot: ephemerals,
   });
-  return createProviderCallOptions({
-    providerName,
-    settings: harness.settings,
-    config: harness.runtime.config,
-    runtime: harness.runtime,
-    invocation,
-    contents,
-    systemInstruction: SYSTEM_PROMPT,
-  });
+  const stream = (async function* (): AsyncGenerator<IContent> {
+    yield* contents;
+  })();
+  return {
+    ...createProviderCallOptions({
+      providerName,
+      settings: harness.settings,
+      config: harness.runtime.config,
+      runtime: harness.runtime,
+      invocation,
+      contents: stream,
+      systemInstruction: SYSTEM_PROMPT,
+    }),
+    contents: stream,
+  };
 }
 
 async function drain(
   provider: OpenAIProvider | OpenAIVercelProvider,
-  options: ReturnType<typeof createProviderCallOptions>,
+  options: GenerateChatOptions,
 ): Promise<void> {
   for await (const _chunk of provider.generateChatCompletion(options)) {
     // drain

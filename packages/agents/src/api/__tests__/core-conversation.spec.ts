@@ -22,6 +22,7 @@
  * continuation via stream/chat).
  */
 
+import { collectAgentHistory } from './helpers/collect-agent-history.js';
 import { describe, it, expect } from 'bun:test';
 import * as fc from 'fast-check';
 import type { AgentEvent } from '@vybestack/llxprt-code-agents';
@@ -127,7 +128,7 @@ describe('Core conversation @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-001
   it('T10 generate() returns a string without mutating history or running a tool loop @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-012', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
-      const before = await agent.getHistory();
+      const before = await collectAgentHistory(agent);
       const beforeLen = before.length;
 
       const out = await agent.generate('summarize this');
@@ -139,7 +140,7 @@ describe('Core conversation @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-001
       expect(out).toBe('a plain text reply');
 
       // generate is side-channel: history length is unchanged
-      const after = await agent.getHistory();
+      const after = await collectAgentHistory(agent);
       expect(after.length).toBe(beforeLen);
     } finally {
       await cleanup();
@@ -149,7 +150,7 @@ describe('Core conversation @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-001
   it('T10b generate() is non-empty and still side-channel when given a structured input @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-012', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
-      const beforeLen = (await agent.getHistory()).length;
+      const beforeLen = (await collectAgentHistory(agent)).length;
 
       // Structured AgentInput exercises the toPartListUnion(.text) branch of
       // generate(); the response text is returned verbatim from the provider.
@@ -157,7 +158,7 @@ describe('Core conversation @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-001
       expect(out).toBe('a plain text reply');
 
       // still side-channel — no history mutation
-      expect((await agent.getHistory()).length).toBe(beforeLen);
+      expect((await collectAgentHistory(agent)).length).toBe(beforeLen);
     } finally {
       await cleanup();
     }
@@ -166,7 +167,7 @@ describe('Core conversation @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-001
   it('T10c generateJson delegates a detached snapshot to the client and surfaces the client error (no provider JSON support under the fake seam) @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-012', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
-      const beforeLen = (await agent.getHistory()).length;
+      const beforeLen = (await collectAgentHistory(agent)).length;
       const contents = [
         {
           speaker: 'human' as const,
@@ -182,7 +183,7 @@ describe('Core conversation @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-001
       ).rejects.toThrow(/Failed to generate content/);
 
       // detached: the side-channel call did not mutate the live history
-      expect((await agent.getHistory()).length).toBe(beforeLen);
+      expect((await collectAgentHistory(agent)).length).toBe(beforeLen);
     } finally {
       await cleanup();
     }

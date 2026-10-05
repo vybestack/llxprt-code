@@ -49,36 +49,10 @@ function collectFinalizedText(finalize: ReturnType<typeof vi.fn>): string[] {
   });
 }
 
-describe('StreamProcessor.processStreamResponse — stream state release (#2852)', () => {
-  let processor: StreamProcessor;
-  let finalize: ReturnType<typeof vi.fn>;
+let processor: StreamProcessor;
+let finalize: ReturnType<typeof vi.fn>;
 
-  beforeEach(() => {
-    processor = Object.create(StreamProcessor.prototype);
-    Object.assign(processor, {
-      runtimeContext: {
-        ephemerals: { reasoning: { includeInContext: () => false } },
-      },
-      compressionHandler: { lastPromptTokenCount: 0 },
-      conversationManager: {
-        recordHistory: vi.fn(),
-        recordStreamingHistory: vi.fn(),
-      },
-      historyService: {
-        add: vi.fn(),
-        getAll: () => [],
-        generateTurnKey: () => `turn-${crypto.randomUUID()}`,
-        waitForTokenUpdates: vi.fn().mockResolvedValue(undefined),
-      },
-      logger: new DebugLogger('test'),
-      eagerlyRecordedToolResponseCallIds: new Set<string>(),
-    });
-    finalize = vi.fn().mockResolvedValue(undefined);
-    (processor as unknown as Record<string, unknown>)[
-      '_finalizeStreamProcessing'
-    ] = finalize;
-  });
-
+function registerStreamCase1(): void {
   it('does not carry cancelled blocks into the next turn', async () => {
     async function* cancelledStream(): AsyncGenerator<ModelStreamChunk> {
       yield makeChunk('cancelled-a');
@@ -107,7 +81,9 @@ describe('StreamProcessor.processStreamResponse — stream state release (#2852)
 
     expect(collectFinalizedText(finalize)).toStrictEqual(['fresh-turn']);
   });
+}
 
+function registerStreamCase2(): void {
   it('does not carry blocks from an errored stream into the next turn', async () => {
     async function* failingStream(): AsyncGenerator<ModelStreamChunk> {
       yield makeChunk('errored-a');
@@ -142,7 +118,9 @@ describe('StreamProcessor.processStreamResponse — stream state release (#2852)
 
     expect(collectFinalizedText(finalize)).toStrictEqual(['recovered-turn']);
   });
+}
 
+function registerStreamCase3(): void {
   it('finalizes a stalled stream with only its own blocks', async () => {
     // A stream that ends without a finish chunk (idle timeout, truncated
     // response) still completes the generator, so it is finalized — but it must
@@ -172,7 +150,9 @@ describe('StreamProcessor.processStreamResponse — stream state release (#2852)
       'stalled-two',
     ]);
   });
+}
 
+function registerStreamCase4(): void {
   it('appends blocks in place instead of copying them per chunk', () => {
     // The envelope is folded with an empty block list, so the fold is constant
     // work per chunk and every block lands in one array. Array identity is a
@@ -189,7 +169,9 @@ describe('StreamProcessor.processStreamResponse — stream state release (#2852)
       blockCount: first.content.blocks.length,
     }).toStrictEqual({ sameBlockArray: true, blockCount: 5_000 });
   });
+}
 
+function registerStreamCase5(): void {
   it('threads each concurrent stream immutable turn identity through media admission', async () => {
     const admittedTurnByText = new Map<string, string>();
     Reflect.set(processor, 'runtimeContext', {
@@ -249,7 +231,9 @@ describe('StreamProcessor.processStreamResponse — stream state release (#2852)
       'right-last': 'turn-right',
     });
   });
+}
 
+function registerStreamCase6(): void {
   it('keeps concurrent streams from sharing accumulated blocks', async () => {
     async function* streamOf(prefix: string): AsyncGenerator<ModelStreamChunk> {
       yield makeChunk(`${prefix}-a`);
@@ -272,4 +256,37 @@ describe('StreamProcessor.processStreamResponse — stream state release (#2852)
       'right-aright-b',
     ]);
   });
+}
+
+describe('StreamProcessor.processStreamResponse — stream state release (#2852)', () => {
+  beforeEach(() => {
+    processor = Object.create(StreamProcessor.prototype);
+    Object.assign(processor, {
+      runtimeContext: {
+        ephemerals: { reasoning: { includeInContext: () => false } },
+      },
+      compressionHandler: { lastPromptTokenCount: 0 },
+      conversationManager: {
+        recordHistory: vi.fn(),
+        recordStreamingHistory: vi.fn(),
+      },
+      historyService: {
+        add: vi.fn(),
+        generateTurnKey: () => `turn-${crypto.randomUUID()}`,
+        waitForTokenUpdates: vi.fn().mockResolvedValue(undefined),
+      },
+      logger: new DebugLogger('test'),
+      eagerlyRecordedToolResponseCallIds: new Set<string>(),
+    });
+    finalize = vi.fn().mockResolvedValue(undefined);
+    (processor as unknown as Record<string, unknown>)[
+      '_finalizeStreamProcessing'
+    ] = finalize;
+  });
+  registerStreamCase1();
+  registerStreamCase2();
+  registerStreamCase3();
+  registerStreamCase4();
+  registerStreamCase5();
+  registerStreamCase6();
 });

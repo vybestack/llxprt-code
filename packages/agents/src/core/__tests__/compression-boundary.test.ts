@@ -1,9 +1,9 @@
+import { curatedHistoryForTest } from '../../../../core/src/test-utils/curated-history-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
 /**
  * @plan PLAN-20260211-COMPRESSION.P14
  * @requirement REQ-CS-006.1, REQ-CS-002.9
@@ -15,7 +15,6 @@
  * These integration tests verify that tool-call boundaries are respected
  * through the public performCompression() / middle-out strategy interface.
  */
-
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { ChatSession } from '../chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -29,7 +28,6 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import { adjustForToolCallBoundary } from '../../compression/utils.js';
-
 function createToolCallAiMessage(callIds: string[]): IContent {
   return {
     speaker: 'ai',
@@ -41,7 +39,6 @@ function createToolCallAiMessage(callIds: string[]): IContent {
     })),
   };
 }
-
 function createToolResponseMessage(callId: string): IContent {
   return {
     speaker: 'tool',
@@ -55,21 +52,18 @@ function createToolResponseMessage(callId: string): IContent {
     ],
   };
 }
-
 function createUserMessage(text: string): IContent {
   return {
     speaker: 'human',
     blocks: [{ type: 'text' as const, text }],
   };
 }
-
 function createAiTextMessage(text: string): IContent {
   return {
     speaker: 'ai',
     blocks: [{ type: 'text' as const, text }],
   };
 }
-
 function buildRuntimeContext(
   historyService: HistoryService,
 ): AgentRuntimeContext {
@@ -79,23 +73,19 @@ function buildRuntimeContext(
     model: 'test-model',
     sessionId: 'test-session',
   });
-
   const mockProviderAdapter = {
     getActiveProvider: vi.fn(() => ({
       name: 'test-provider',
       generateChatCompletion: vi.fn(),
     })),
   };
-
   const mockTelemetryAdapter = {
     recordTokenUsage: vi.fn(),
     recordEvent: vi.fn(),
   };
-
   const mockToolsView = {
     getToolRegistry: vi.fn(() => undefined),
   };
-
   return createAgentRuntimeContext({
     state: runtimeState,
     history: historyService,
@@ -114,7 +104,6 @@ function buildRuntimeContext(
     }),
   });
 }
-
 function buildMockProvider(summaryText: string): RuntimeProvider {
   return {
     name: 'test-provider',
@@ -129,7 +118,6 @@ function buildMockProvider(summaryText: string): RuntimeProvider {
     getDefaultModel: vi.fn(() => 'test-model'),
   };
 }
-
 /**
  * Builds a fully-typed ContentGenerator stub for tests.
  * `countTokens` resolves to a token count that drives compression decisions.
@@ -144,359 +132,353 @@ function createMockContentGenerator(tokenCount = 100): ContentGenerator {
     embedContent: vi.fn(),
   };
 }
-
-describe('Compression Boundary Logic (Issue #982)', () => {
-  let historyService: HistoryService;
-  let runtimeContext: AgentRuntimeContext;
-  let mockContentGenerator: ContentGenerator;
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    historyService = new HistoryService();
-    runtimeContext = buildRuntimeContext(historyService);
-
-    mockContentGenerator = createMockContentGenerator();
-  });
-
-  describe('adjustForToolCallBoundary (unit via compression/utils)', () => {
-    it('should not push splitIndex past the end of history', () => {
-      const history: IContent[] = [];
-      for (let i = 0; i < 10; i++) {
-        const toolCallId = `tool-call-${i}`;
-        history.push(createToolCallAiMessage([toolCallId]));
-        history.push(createToolResponseMessage(toolCallId));
-      }
-
-      const initialSplitIndex = Math.floor(history.length * 0.8);
-      const adjustedIndex = adjustForToolCallBoundary(
-        history,
-        initialSplitIndex,
+function legacyTest0() {
+  const history: IContent[] = [];
+  for (let i = 0; i < 10; i++) {
+    const toolCallId = `tool-call-${i}`;
+    history.push(createToolCallAiMessage([toolCallId]));
+    history.push(createToolResponseMessage(toolCallId));
+  }
+  const initialSplitIndex = Math.floor(history.length * 0.8);
+  const adjustedIndex = adjustForToolCallBoundary(history, initialSplitIndex);
+  expect(adjustedIndex).toBeLessThanOrEqual(history.length);
+  expect(adjustedIndex).toBeGreaterThanOrEqual(0);
+}
+function legacyTest1() {
+  const {
+    toolResponseIndex,
+    adjustedIndex,
+    history,
+    findValidSplitPointWhenInitialSplitIsInsideToolResponseSequenceObservation1,
+  } =
+    legacySuite3_observeFindValidSplitPointWhenInitialSplitIsInsideToolResponseSequence();
+  expect(toolResponseIndex).toBeGreaterThan(-1);
+  expect(adjustedIndex).toBeLessThanOrEqual(history.length);
+  expect(
+    findValidSplitPointWhenInitialSplitIsInsideToolResponseSequenceObservation1,
+  ).toBe(true);
+}
+function legacyTest2() {
+  const history: IContent[] = [];
+  for (let i = 0; i < 20; i++) {
+    const toolCallId = `tool-call-${i}`;
+    history.push(createToolCallAiMessage([toolCallId]));
+    history.push(createToolResponseMessage(toolCallId));
+  }
+  const midpoint = Math.floor(history.length / 2);
+  const adjusted = adjustForToolCallBoundary(history, midpoint);
+  expect(adjusted).toBeGreaterThanOrEqual(0);
+  expect(adjusted).toBeLessThanOrEqual(history.length);
+}
+const legacySuite3_observeFindValidSplitPointWhenInitialSplitIsInsideToolResponseSequence =
+  () => {
+    const history: IContent[] = [
+      createUserMessage('Initial'),
+      createAiTextMessage('Response'),
+    ];
+    for (let i = 0; i < 5; i++) {
+      const toolCallId = `tool-call-${i}`;
+      history.push(createToolCallAiMessage([toolCallId]));
+      history.push(createToolResponseMessage(toolCallId));
+    }
+    const toolResponseIndex = history.findIndex((c) => c.speaker === 'tool');
+    const adjustedIndex = adjustForToolCallBoundary(history, toolResponseIndex);
+    const messageAtAdjusted =
+      adjustedIndex < history.length ? history[adjustedIndex] : null;
+    const findValidSplitPointWhenInitialSplitIsInsideToolResponseSequenceObservation1 =
+      messageAtAdjusted === null || messageAtAdjusted.speaker !== 'tool';
+    return {
+      toolResponseIndex,
+      adjustedIndex,
+      history,
+      findValidSplitPointWhenInitialSplitIsInsideToolResponseSequenceObservation1,
+    };
+  };
+async function legacyTest4() {
+  const { afterCount, beforeCount, hasSummary } =
+    await legacySuite4_observeCompressWhenContextHasToolDominatedHistory();
+  expect(afterCount).toBeLessThan(beforeCount);
+  expect(hasSummary).toBe(true);
+}
+async function legacyTest5() {
+  const unmatchedCallIds = await legacySuite5_observePreservedToolPairs();
+  expect(unmatchedCallIds).toStrictEqual([]);
+}
+async function legacyTest6() {
+  legacySuite0_historyService.add(createUserMessage('Initial request'));
+  legacySuite0_historyService.add(createAiTextMessage('I will help'));
+  for (let i = 0; i < 12; i++) {
+    const toolCallId = `continuous-tool-${i}`;
+    legacySuite0_historyService.add(createToolCallAiMessage([toolCallId]));
+    legacySuite0_historyService.add(createToolResponseMessage(toolCallId));
+  }
+  const chat = new ChatSession(
+    legacySuite1_runtimeContext,
+    legacySuite2_mockContentGenerator,
+    {},
+    [],
+  );
+  const summaryText =
+    '<state_snapshot><overall_goal>Continuous tools</overall_goal></state_snapshot>';
+  const mockProvider = buildMockProvider(summaryText);
+  vi.spyOn(chat, 'resolveProviderForRuntime').mockReturnValue(mockProvider);
+  vi.spyOn(chat, 'providerSupportsIContent').mockReturnValue(true);
+  const beforeCount = curatedHistoryForTest(legacySuite0_historyService).length;
+  await chat.performCompression('test-prompt-id');
+  const afterCount = curatedHistoryForTest(legacySuite0_historyService).length;
+  // Should have compressed (or at minimum, not crashed)
+  expect(afterCount).toBeLessThanOrEqual(beforeCount);
+}
+async function legacyTest7() {
+  const { curated, hasSummary } =
+    await legacySuite6_observeHandleEdgeCaseWhereSplitFallsInsideLongToolSequence();
+  expect(curated.length).toBeGreaterThan(40);
+  expect(hasSummary).toBe(true);
+}
+async function legacyTest8() {
+  legacySuite0_historyService.add(createUserMessage('Start long session'));
+  legacySuite0_historyService.add(createAiTextMessage('Beginning work'));
+  for (let i = 0; i < 100; i++) {
+    const toolCallId = `session-tool-${i}`;
+    legacySuite0_historyService.add(createToolCallAiMessage([toolCallId]));
+    legacySuite0_historyService.add(createToolResponseMessage(toolCallId));
+  }
+  const curated = curatedHistoryForTest(legacySuite0_historyService);
+  expect(curated.length).toBe(202);
+  const chat = new ChatSession(
+    legacySuite1_runtimeContext,
+    legacySuite2_mockContentGenerator,
+    {},
+    [],
+  );
+  const summaryText =
+    '<state_snapshot><overall_goal>Issue 982</overall_goal></state_snapshot>';
+  const mockProvider = buildMockProvider(summaryText);
+  vi.spyOn(chat, 'resolveProviderForRuntime').mockReturnValue(mockProvider);
+  vi.spyOn(chat, 'providerSupportsIContent').mockReturnValue(true);
+  await chat.performCompression('test-prompt-id');
+  const finalHistory = curatedHistoryForTest(legacySuite0_historyService);
+  // Should have compressed: fewer messages than 202
+  expect(finalHistory.length).toBeLessThan(202);
+}
+async function legacyTest9() {
+  legacySuite0_historyService.add(createUserMessage('Start'));
+  legacySuite0_historyService.add(createAiTextMessage('Beginning'));
+  legacySuite0_historyService.add(
+    createToolCallAiMessage(['p1', 'p2', 'p3', 'p4', 'p5']),
+  );
+  for (const id of ['p1', 'p2', 'p3', 'p4', 'p5']) {
+    legacySuite0_historyService.add(createToolResponseMessage(id));
+  }
+  const chat = new ChatSession(
+    legacySuite1_runtimeContext,
+    legacySuite2_mockContentGenerator,
+    {},
+    [],
+  );
+  const summaryText =
+    '<state_snapshot><overall_goal>Edge case</overall_goal></state_snapshot>';
+  const mockProvider = buildMockProvider(summaryText);
+  vi.spyOn(chat, 'resolveProviderForRuntime').mockReturnValue(mockProvider);
+  vi.spyOn(chat, 'providerSupportsIContent').mockReturnValue(true);
+  // Should not throw - small history may or may not compress, so assert
+  // only that a valid result is produced rather than an exception.
+  const result = await chat.performCompression('test-prompt-id');
+  expect(Object.values(PerformCompressionResult)).toContain(result);
+}
+const legacySuite4_observeCompressWhenContextHasToolDominatedHistory =
+  async () => {
+    for (let i = 0; i < 100; i++) {
+      legacySuite0_historyService.add(createUserMessage(`User message ${i}`));
+      const toolCallId = `tool-call-${i}`;
+      legacySuite0_historyService.add(createToolCallAiMessage([toolCallId]));
+      legacySuite0_historyService.add(createToolResponseMessage(toolCallId));
+    }
+    const chat = new ChatSession(
+      legacySuite1_runtimeContext,
+      legacySuite2_mockContentGenerator,
+      {},
+      [],
+    );
+    const summaryText =
+      '<state_snapshot><overall_goal>Tool heavy</overall_goal></state_snapshot>';
+    const mockProvider = buildMockProvider(summaryText);
+    vi.spyOn(chat, 'resolveProviderForRuntime').mockReturnValue(mockProvider);
+    vi.spyOn(chat, 'providerSupportsIContent').mockReturnValue(true);
+    const beforeCount = curatedHistoryForTest(
+      legacySuite0_historyService,
+    ).length;
+    await chat.performCompression('test-prompt-id');
+    const afterCount = curatedHistoryForTest(
+      legacySuite0_historyService,
+    ).length;
+    const finalHistory = curatedHistoryForTest(legacySuite0_historyService);
+    const hasSummary = finalHistory.some((msg) =>
+      msg.blocks.some(
+        (b) => b.type === 'text' && b.text.includes('state_snapshot'),
+      ),
+    );
+    return { afterCount, beforeCount, hasSummary };
+  };
+const legacySuite5_observePreservedToolPairs = async () => {
+  for (let i = 0; i < 20; i++) {
+    legacySuite0_historyService.add(createUserMessage(`Message ${i}`));
+    const toolCallId = `tool-call-${i}`;
+    legacySuite0_historyService.add(createToolCallAiMessage([toolCallId]));
+    legacySuite0_historyService.add(createToolResponseMessage(toolCallId));
+  }
+  const chat = new ChatSession(
+    legacySuite1_runtimeContext,
+    legacySuite2_mockContentGenerator,
+    {},
+    [],
+  );
+  const summaryText =
+    '<state_snapshot><overall_goal>Boundary preserve</overall_goal></state_snapshot>';
+  const mockProvider = buildMockProvider(summaryText);
+  vi.spyOn(chat, 'resolveProviderForRuntime').mockReturnValue(mockProvider);
+  vi.spyOn(chat, 'providerSupportsIContent').mockReturnValue(true);
+  await chat.performCompression('test-prompt-id');
+  const finalHistory = curatedHistoryForTest(legacySuite0_historyService);
+  // In the preserved sections (non-summary), tool calls should have matching responses
+  const nonSummary = finalHistory.filter(
+    (msg) =>
+      !msg.blocks.some(
+        (b) =>
+          b.type === 'text' &&
+          (b.text.includes('state_snapshot') ||
+            b.text === 'Understood. Continuing with the current task.'),
+      ),
+  );
+  const toKeepToolCalls = nonSummary.filter(
+    (c) => c.speaker === 'ai' && c.blocks.some((b) => b.type === 'tool_call'),
+  );
+  const toKeepToolResponses = nonSummary.filter((c) => c.speaker === 'tool');
+  const unmatchedCallIds: string[] = [];
+  for (const aiMsg of toKeepToolCalls) {
+    const callIds = aiMsg.blocks
+      .filter((b) => b.type === 'tool_call')
+      .map(
+        (b) =>
+          (
+            b as {
+              id: string;
+            }
+          ).id,
       );
-
-      expect(adjustedIndex).toBeLessThanOrEqual(history.length);
-      expect(adjustedIndex).toBeGreaterThanOrEqual(0);
-    });
-
-    it('should find valid split point when initial split is inside tool response sequence', () => {
-      const {
-        toolResponseIndex,
-        adjustedIndex,
-        history,
-        findValidSplitPointWhenInitialSplitIsInsideToolResponseSequenceObservation1,
-      } =
-        observeFindValidSplitPointWhenInitialSplitIsInsideToolResponseSequence();
-      expect(toolResponseIndex).toBeGreaterThan(-1);
-      expect(adjustedIndex).toBeLessThanOrEqual(history.length);
-      expect(
-        findValidSplitPointWhenInitialSplitIsInsideToolResponseSequenceObservation1,
-      ).toBe(true);
-    });
-
-    const observeFindValidSplitPointWhenInitialSplitIsInsideToolResponseSequence =
-      () => {
-        const history: IContent[] = [
-          createUserMessage('Initial'),
-          createAiTextMessage('Response'),
-        ];
-
-        for (let i = 0; i < 5; i++) {
-          const toolCallId = `tool-call-${i}`;
-          history.push(createToolCallAiMessage([toolCallId]));
-          history.push(createToolResponseMessage(toolCallId));
-        }
-
-        const toolResponseIndex = history.findIndex(
-          (c) => c.speaker === 'tool',
-        );
-
-        const adjustedIndex = adjustForToolCallBoundary(
-          history,
-          toolResponseIndex,
-        );
-
-        const messageAtAdjusted =
-          adjustedIndex < history.length ? history[adjustedIndex] : null;
-
-        const findValidSplitPointWhenInitialSplitIsInsideToolResponseSequenceObservation1 =
-          messageAtAdjusted === null || messageAtAdjusted.speaker !== 'tool';
-        return {
-          toolResponseIndex,
-          adjustedIndex,
-          history,
-          findValidSplitPointWhenInitialSplitIsInsideToolResponseSequenceObservation1,
-        };
-      };
-
-    it('should handle history with only tool calls and responses', () => {
-      const history: IContent[] = [];
-      for (let i = 0; i < 20; i++) {
-        const toolCallId = `tool-call-${i}`;
-        history.push(createToolCallAiMessage([toolCallId]));
-        history.push(createToolResponseMessage(toolCallId));
-      }
-
-      const midpoint = Math.floor(history.length / 2);
-      const adjusted = adjustForToolCallBoundary(history, midpoint);
-
-      expect(adjusted).toBeGreaterThanOrEqual(0);
-      expect(adjusted).toBeLessThanOrEqual(history.length);
-    });
-  });
-
-  describe('performCompression with tool-heavy history', () => {
-    it('should compress when context has tool-dominated history', async () => {
-      const { afterCount, beforeCount, hasSummary } =
-        await observeCompressWhenContextHasToolDominatedHistory();
-      expect(afterCount).toBeLessThan(beforeCount);
-      expect(hasSummary).toBe(true);
-    });
-
-    const observeCompressWhenContextHasToolDominatedHistory = async () => {
-      for (let i = 0; i < 100; i++) {
-        historyService.add(createUserMessage(`User message ${i}`));
-        const toolCallId = `tool-call-${i}`;
-        historyService.add(createToolCallAiMessage([toolCallId]));
-        historyService.add(createToolResponseMessage(toolCallId));
-      }
-
-      const chat = new ChatSession(
-        runtimeContext,
-        mockContentGenerator,
-        {},
-        [],
-      );
-
-      const summaryText =
-        '<state_snapshot><overall_goal>Tool heavy</overall_goal></state_snapshot>';
-      const mockProvider = buildMockProvider(summaryText);
-      vi.spyOn(chat, 'resolveProviderForRuntime').mockReturnValue(mockProvider);
-      vi.spyOn(chat, 'providerSupportsIContent').mockReturnValue(true);
-
-      const beforeCount = historyService.getCurated().length;
-      await chat.performCompression('test-prompt-id');
-      const afterCount = historyService.getCurated().length;
-
-      const finalHistory = historyService.getCurated();
-      const hasSummary = finalHistory.some((msg) =>
-        msg.blocks.some(
-          (b) => b.type === 'text' && b.text.includes('state_snapshot'),
+    for (const callId of callIds) {
+      const hasResponse = toKeepToolResponses.some((toolMsg) =>
+        toolMsg.blocks.some(
+          (b) =>
+            b.type === 'tool_response' &&
+            (
+              b as {
+                callId: string;
+              }
+            ).callId === callId,
         ),
       );
-
-      return { afterCount, beforeCount, hasSummary };
-    };
-
-    it('should preserve tool call/response pairs in kept sections', async () => {
-      const unmatchedCallIds = await observePreservedToolPairs();
-      expect(unmatchedCallIds).toStrictEqual([]);
-    });
-
-    const observePreservedToolPairs = async () => {
-      for (let i = 0; i < 20; i++) {
-        historyService.add(createUserMessage(`Message ${i}`));
-        const toolCallId = `tool-call-${i}`;
-        historyService.add(createToolCallAiMessage([toolCallId]));
-        historyService.add(createToolResponseMessage(toolCallId));
+      if (!hasResponse) {
+        unmatchedCallIds.push(callId);
       }
-
-      const chat = new ChatSession(
-        runtimeContext,
-        mockContentGenerator,
-        {},
-        [],
-      );
-
-      const summaryText =
-        '<state_snapshot><overall_goal>Boundary preserve</overall_goal></state_snapshot>';
-      const mockProvider = buildMockProvider(summaryText);
-      vi.spyOn(chat, 'resolveProviderForRuntime').mockReturnValue(mockProvider);
-      vi.spyOn(chat, 'providerSupportsIContent').mockReturnValue(true);
-
-      await chat.performCompression('test-prompt-id');
-
-      const finalHistory = historyService.getCurated();
-
-      // In the preserved sections (non-summary), tool calls should have matching responses
-      const nonSummary = finalHistory.filter(
-        (msg) =>
-          !msg.blocks.some(
-            (b) =>
-              b.type === 'text' &&
-              (b.text.includes('state_snapshot') ||
-                b.text === 'Understood. Continuing with the current task.'),
-          ),
-      );
-
-      const toKeepToolCalls = nonSummary.filter(
-        (c) =>
-          c.speaker === 'ai' && c.blocks.some((b) => b.type === 'tool_call'),
-      );
-      const toKeepToolResponses = nonSummary.filter(
-        (c) => c.speaker === 'tool',
-      );
-
-      const unmatchedCallIds: string[] = [];
-      for (const aiMsg of toKeepToolCalls) {
-        const callIds = aiMsg.blocks
-          .filter((b) => b.type === 'tool_call')
-          .map((b) => (b as { id: string }).id);
-
-        for (const callId of callIds) {
-          const hasResponse = toKeepToolResponses.some((toolMsg) =>
-            toolMsg.blocks.some(
-              (b) =>
-                b.type === 'tool_response' &&
-                (b as { callId: string }).callId === callId,
-            ),
-          );
-          if (!hasResponse) {
-            unmatchedCallIds.push(callId);
-          }
-        }
-      }
-      return unmatchedCallIds;
-    };
-
-    it('should handle history with continuous tool call/response pairs', async () => {
-      historyService.add(createUserMessage('Initial request'));
-      historyService.add(createAiTextMessage('I will help'));
-
-      for (let i = 0; i < 12; i++) {
-        const toolCallId = `continuous-tool-${i}`;
-        historyService.add(createToolCallAiMessage([toolCallId]));
-        historyService.add(createToolResponseMessage(toolCallId));
-      }
-
-      const chat = new ChatSession(
-        runtimeContext,
-        mockContentGenerator,
-        {},
-        [],
-      );
-
-      const summaryText =
-        '<state_snapshot><overall_goal>Continuous tools</overall_goal></state_snapshot>';
-      const mockProvider = buildMockProvider(summaryText);
-      vi.spyOn(chat, 'resolveProviderForRuntime').mockReturnValue(mockProvider);
-      vi.spyOn(chat, 'providerSupportsIContent').mockReturnValue(true);
-
-      const beforeCount = historyService.getCurated().length;
-      await chat.performCompression('test-prompt-id');
-      const afterCount = historyService.getCurated().length;
-
-      // Should have compressed (or at minimum, not crashed)
-      expect(afterCount).toBeLessThanOrEqual(beforeCount);
-    });
-
-    it('should handle edge case where split falls inside long tool sequence', async () => {
-      const { curated, hasSummary } =
-        await observeHandleEdgeCaseWhereSplitFallsInsideLongToolSequence();
-      expect(curated.length).toBeGreaterThan(40);
-      expect(hasSummary).toBe(true);
-    });
-
-    const observeHandleEdgeCaseWhereSplitFallsInsideLongToolSequence =
-      async () => {
-        for (let i = 0; i < 5; i++) {
-          historyService.add(createUserMessage(`Request ${i}`));
-          historyService.add(createAiTextMessage(`Response ${i}`));
-        }
-
-        for (let i = 0; i < 20; i++) {
-          const toolCallId = `long-sequence-tool-${i}`;
-          historyService.add(createToolCallAiMessage([toolCallId]));
-          historyService.add(createToolResponseMessage(toolCallId));
-        }
-
-        const curated = historyService.getCurated();
-
-        const chat = new ChatSession(
-          runtimeContext,
-          mockContentGenerator,
-          {},
-          [],
-        );
-
-        const summaryText =
-          '<state_snapshot><overall_goal>Long tool seq</overall_goal></state_snapshot>';
-        const mockProvider = buildMockProvider(summaryText);
-        vi.spyOn(chat, 'resolveProviderForRuntime').mockReturnValue(
-          mockProvider,
-        );
-        vi.spyOn(chat, 'providerSupportsIContent').mockReturnValue(true);
-
-        await chat.performCompression('test-prompt-id');
-
-        const finalHistory = historyService.getCurated();
-        const hasSummary = finalHistory.some((msg) =>
-          msg.blocks.some(
-            (b) => b.type === 'text' && b.text.includes('state_snapshot'),
-          ),
-        );
-
-        return { curated, hasSummary };
-      };
-
-    it('should compress old tool pairs when recent history is all tool calls (reproduces issue #982)', async () => {
-      historyService.add(createUserMessage('Start long session'));
-      historyService.add(createAiTextMessage('Beginning work'));
-
-      for (let i = 0; i < 100; i++) {
-        const toolCallId = `session-tool-${i}`;
-        historyService.add(createToolCallAiMessage([toolCallId]));
-        historyService.add(createToolResponseMessage(toolCallId));
-      }
-
-      const curated = historyService.getCurated();
-      expect(curated.length).toBe(202);
-
-      const chat = new ChatSession(
-        runtimeContext,
-        mockContentGenerator,
-        {},
-        [],
-      );
-
-      const summaryText =
-        '<state_snapshot><overall_goal>Issue 982</overall_goal></state_snapshot>';
-      const mockProvider = buildMockProvider(summaryText);
-      vi.spyOn(chat, 'resolveProviderForRuntime').mockReturnValue(mockProvider);
-      vi.spyOn(chat, 'providerSupportsIContent').mockReturnValue(true);
-
-      await chat.performCompression('test-prompt-id');
-
-      const finalHistory = historyService.getCurated();
-      // Should have compressed: fewer messages than 202
-      expect(finalHistory.length).toBeLessThan(202);
-    });
-
-    it('should not crash with edge case histories', async () => {
-      historyService.add(createUserMessage('Start'));
-      historyService.add(createAiTextMessage('Beginning'));
-      historyService.add(
-        createToolCallAiMessage(['p1', 'p2', 'p3', 'p4', 'p5']),
-      );
-      for (const id of ['p1', 'p2', 'p3', 'p4', 'p5']) {
-        historyService.add(createToolResponseMessage(id));
-      }
-
-      const chat = new ChatSession(
-        runtimeContext,
-        mockContentGenerator,
-        {},
-        [],
-      );
-
-      const summaryText =
-        '<state_snapshot><overall_goal>Edge case</overall_goal></state_snapshot>';
-      const mockProvider = buildMockProvider(summaryText);
-      vi.spyOn(chat, 'resolveProviderForRuntime').mockReturnValue(mockProvider);
-      vi.spyOn(chat, 'providerSupportsIContent').mockReturnValue(true);
-
-      // Should not throw - small history may or may not compress, so assert
-      // only that a valid result is produced rather than an exception.
-      const result = await chat.performCompression('test-prompt-id');
-      expect(Object.values(PerformCompressionResult)).toContain(result);
-    });
+    }
+  }
+  return unmatchedCallIds;
+};
+const legacySuite6_observeHandleEdgeCaseWhereSplitFallsInsideLongToolSequence =
+  async () => {
+    for (let i = 0; i < 5; i++) {
+      legacySuite0_historyService.add(createUserMessage(`Request ${i}`));
+      legacySuite0_historyService.add(createAiTextMessage(`Response ${i}`));
+    }
+    for (let i = 0; i < 20; i++) {
+      const toolCallId = `long-sequence-tool-${i}`;
+      legacySuite0_historyService.add(createToolCallAiMessage([toolCallId]));
+      legacySuite0_historyService.add(createToolResponseMessage(toolCallId));
+    }
+    const curated = curatedHistoryForTest(legacySuite0_historyService);
+    const chat = new ChatSession(
+      legacySuite1_runtimeContext,
+      legacySuite2_mockContentGenerator,
+      {},
+      [],
+    );
+    const summaryText =
+      '<state_snapshot><overall_goal>Long tool seq</overall_goal></state_snapshot>';
+    const mockProvider = buildMockProvider(summaryText);
+    vi.spyOn(chat, 'resolveProviderForRuntime').mockReturnValue(mockProvider);
+    vi.spyOn(chat, 'providerSupportsIContent').mockReturnValue(true);
+    await chat.performCompression('test-prompt-id');
+    const finalHistory = curatedHistoryForTest(legacySuite0_historyService);
+    const hasSummary = finalHistory.some((msg) =>
+      msg.blocks.some(
+        (b) => b.type === 'text' && b.text.includes('state_snapshot'),
+      ),
+    );
+    return { curated, hasSummary };
+  };
+let legacySuite0_historyService: HistoryService;
+let legacySuite1_runtimeContext: AgentRuntimeContext;
+let legacySuite2_mockContentGenerator: ContentGenerator;
+const legacyHook0 = () => {
+  vi.clearAllMocks();
+  legacySuite0_historyService = new HistoryService();
+  legacySuite1_runtimeContext = buildRuntimeContext(
+    legacySuite0_historyService,
+  );
+  legacySuite2_mockContentGenerator = createMockContentGenerator();
+};
+describe('Compression Boundary Logic (Issue #982) > adjustForToolCallBoundary (unit via compression/utils) / should not push splitIndex past the end of history', () => {
+  beforeEach(legacyHook0);
+  it('should not push splitIndex past the end of history', () => {
+    expect(legacyTest0).not.toThrow();
+  });
+});
+describe('Compression Boundary Logic (Issue #982) > adjustForToolCallBoundary (unit via compression/utils) / should find valid split point when initial split is inside tool response sequence', () => {
+  beforeEach(legacyHook0);
+  it('should find valid split point when initial split is inside tool response sequence', () => {
+    expect(legacyTest1).not.toThrow();
+  });
+});
+describe('Compression Boundary Logic (Issue #982) > adjustForToolCallBoundary (unit via compression/utils) / should handle history with only tool calls and responses', () => {
+  beforeEach(legacyHook0);
+  it('should handle history with only tool calls and responses', () => {
+    expect(legacyTest2).not.toThrow();
+  });
+});
+describe('Compression Boundary Logic (Issue #982) > performCompression with tool-heavy history / should compress when context has tool-dominated history', () => {
+  beforeEach(legacyHook0);
+  it('should compress when context has tool-dominated history', async () => {
+    await expect(legacyTest4()).resolves.toBeUndefined();
+  });
+});
+describe('Compression Boundary Logic (Issue #982) > performCompression with tool-heavy history / should preserve tool call/response pairs in kept sections', () => {
+  beforeEach(legacyHook0);
+  it('should preserve tool call/response pairs in kept sections', async () => {
+    await expect(legacyTest5()).resolves.toBeUndefined();
+  });
+});
+describe('Compression Boundary Logic (Issue #982) > performCompression with tool-heavy history / should handle history with continuous tool call/response pairs', () => {
+  beforeEach(legacyHook0);
+  it('should handle history with continuous tool call/response pairs', async () => {
+    await expect(legacyTest6()).resolves.toBeUndefined();
+  });
+});
+describe('Compression Boundary Logic (Issue #982) > performCompression with tool-heavy history / should handle edge case where split falls inside long tool sequence', () => {
+  beforeEach(legacyHook0);
+  it('should handle edge case where split falls inside long tool sequence', async () => {
+    await expect(legacyTest7()).resolves.toBeUndefined();
+  });
+});
+describe('Compression Boundary Logic (Issue #982) > performCompression with tool-heavy history / should compress old tool pairs when recent history is all tool calls (reproduces issue #982)', () => {
+  beforeEach(legacyHook0);
+  it('should compress old tool pairs when recent history is all tool calls (reproduces issue #982)', async () => {
+    await expect(legacyTest8()).resolves.toBeUndefined();
+  });
+});
+describe('Compression Boundary Logic (Issue #982) > performCompression with tool-heavy history / should not crash with edge case histories', () => {
+  beforeEach(legacyHook0);
+  it('should not crash with edge case histories', async () => {
+    await expect(legacyTest9()).resolves.toBeUndefined();
   });
 });

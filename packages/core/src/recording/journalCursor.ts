@@ -37,6 +37,7 @@
 import * as fs from 'node:fs/promises';
 import { StringDecoder } from 'node:string_decoder';
 import type { IContent } from '../services/history/IContent.js';
+import type { JournalReadCounters } from './journalCounters.js';
 import type { SessionEventType, SessionRecordLine } from './types.js';
 
 /** Default read chunk size; overridable per cursor for tests. */
@@ -78,6 +79,12 @@ const SESSION_EVENT_TYPES: ReadonlySet<string> = new Set<SessionEventType>([
 export interface JournalCursorOptions {
   /** Read chunk size in bytes. Defaults to 64 KiB; injectable for tests. */
   readonly chunkBytes?: number;
+  /** Injectable read counters (issue #854 P05d); absent = uninstrumented. */
+  readonly counters?: JournalReadCounters;
+  /** Synchronous fixture observation while decoded text and envelope coexist. */
+  readonly onParsedRecord?: (text: string, envelope: SessionRecordLine) => void;
+  /** Synchronous fixture observation at the page-to-caller handoff. */
+  readonly onPageHandoff?: (page: JournalPage) => void;
 }
 
 /** One consumed journal line, retained by byte offset regardless of kind. */
@@ -217,6 +224,25 @@ function assertPageCount(count: number): void {
   }
 }
 
+/**
+ * Release every row a page holds as the page is handed to the caller: the
+ * cursor retains nothing after pageBack/pageForward returns.
+ */
+function releasePageRows(
+  counters: JournalReadCounters | null,
+  entries: readonly JournalEntry[],
+): void {
+  if (counters === null) return;
+  for (const entry of entries) {
+    if (entry.kind === 'content') {
+      counters.rowReleased();
+    } else if (entry.kind === 'group') {
+      if (entry.call !== null) counters.rowReleased();
+      if (entry.response !== null) counters.rowReleased();
+    }
+  }
+}
+
 interface JournalSide {
   readonly offset: number;
   readonly lineEnd: number;
@@ -346,6 +372,9 @@ class PageWalk {
 export class JournalCursor {
   private handle: fs.FileHandle | null;
   private readonly chunkBytes: number;
+  private readonly counters: JournalReadCounters | null;
+  private readonly onParsedRecord?: JournalCursorOptions['onParsedRecord'];
+  private readonly onPageHandoff?: JournalCursorOptions['onPageHandoff'];
   private fileSize = 0;
   private dataStart = 0;
   private bomResolved = false;
@@ -354,9 +383,17 @@ export class JournalCursor {
   private winEnd = Number.MAX_SAFE_INTEGER;
   private maxAssembledRecordBytes = 0;
 
-  private constructor(fileHandle: fs.FileHandle, chunkBytes: number) {
+  private constructor(
+    fileHandle: fs.FileHandle,
+    chunkBytes: number,
+    counters: JournalReadCounters | null,
+    options: JournalCursorOptions,
+  ) {
     this.handle = fileHandle;
     this.chunkBytes = chunkBytes;
+    this.counters = counters;
+    this.onParsedRecord = options.onParsedRecord;
+    this.onPageHandoff = options.onPageHandoff;
   }
 
   /** Open the journal read-only; the heads start at the file's bottom. */
@@ -369,7 +406,12 @@ export class JournalCursor {
       throw new RangeError('chunkBytes must be a positive safe integer');
     }
     const fileHandle = await fs.open(filePath, 'r');
-    const cursor = new JournalCursor(fileHandle, chunkBytes);
+    const cursor = new JournalCursor(
+      fileHandle,
+      Math.min(chunkBytes, DEFAULT_CHUNK_BYTES),
+      options.counters ?? null,
+      options,
+    );
     try {
       await cursor.refresh();
     } catch (error: unknown) {
@@ -401,12 +443,15 @@ export class JournalCursor {
     }
     walk.flush();
     this.winStart = end;
-    return {
+    releasePageRows(this.counters, walk.entries);
+    const page: JournalPage = {
       entries: walk.entries,
       envelopes: walk.envelopes.slice().reverse(),
       windowStart: this.winStart,
       windowEnd: this.winEnd,
     };
+    this.onPageHandoff?.(page);
+    return page;
   }
 
   /**
@@ -435,12 +480,15 @@ export class JournalCursor {
     }
     walk.flush();
     this.winEnd = pos;
-    return {
+    releasePageRows(this.counters, walk.entries);
+    const page: JournalPage = {
       entries: walk.entries,
       envelopes: walk.envelopes,
       windowStart: this.winStart,
       windowEnd: this.winEnd,
     };
+    this.onPageHandoff?.(page);
+    return page;
   }
 
   /** Raw byte length of the journal at the last paging call or open. */
@@ -499,9 +547,10 @@ export class JournalCursor {
 
   private async detectBomStart(): Promise<number> {
     if (this.fileSize < 3) return 0;
-    const buf = await this.readChunk(0, 3);
+    const buf = Buffer.alloc(3);
+    const bytesRead = await this.readChunk(buf, 0, 3);
     const isBom =
-      buf.length === 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf;
+      bytesRead === 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf;
     return isBom ? 3 : 0;
   }
 
@@ -513,12 +562,13 @@ export class JournalCursor {
    * line's terminator sits just before it.
    */
   private async computeLineEndLimit(): Promise<number> {
+    const buf = Buffer.alloc(this.chunkBytes);
     let chunkEnd = this.fileSize;
     while (chunkEnd > this.dataStart) {
       const length = Math.min(this.chunkBytes, chunkEnd - this.dataStart);
       const start = chunkEnd - length;
-      const buf = await this.readChunk(start, length);
-      for (let i = buf.length - 1; i >= 0; i -= 1) {
+      const bytesRead = await this.readChunk(buf, start, length);
+      for (let i = bytesRead - 1; i >= 0; i -= 1) {
         if (buf[i] === NEWLINE_BYTE) return start + i + 1;
       }
       chunkEnd = start;
@@ -532,13 +582,14 @@ export class JournalCursor {
    * any later chunk means the line begins exactly at that chunk boundary.
    */
   private async findLineStartBefore(end: number): Promise<number> {
+    const buf = Buffer.alloc(this.chunkBytes);
     let chunkEnd = end;
     let skipOwnTerminator = true;
     while (chunkEnd > this.dataStart) {
       const length = Math.min(this.chunkBytes, chunkEnd - this.dataStart);
       const start = chunkEnd - length;
-      const buf = await this.readChunk(start, length);
-      const last = skipOwnTerminator ? buf.length - 2 : buf.length - 1;
+      const bytesRead = await this.readChunk(buf, start, length);
+      const last = skipOwnTerminator ? bytesRead - 2 : bytesRead - 1;
       for (let i = last; i >= 0; i -= 1) {
         if (buf[i] === NEWLINE_BYTE) return start + i + 1;
       }
@@ -550,35 +601,41 @@ export class JournalCursor {
 
   /** End offset (past the newline) of the line starting at `pos`. */
   private async findNextLineEnd(pos: number): Promise<number | null> {
+    const buf = Buffer.alloc(this.chunkBytes);
     let start = pos;
     while (start < this.lineEndLimit) {
       const length = Math.min(this.chunkBytes, this.lineEndLimit - start);
-      const buf = await this.readChunk(start, length);
-      const idx = buf.indexOf(NEWLINE_BYTE);
+      const bytesRead = await this.readChunk(buf, start, length);
+      if (bytesRead === 0) return null;
+      const idx = buf.subarray(0, bytesRead).indexOf(NEWLINE_BYTE);
       if (idx !== -1) return start + idx + 1;
-      start += buf.length;
+      start += bytesRead;
     }
     return null;
   }
 
-  private async readChunk(start: number, length: number): Promise<Buffer> {
+  private async readChunk(
+    buffer: Buffer,
+    start: number,
+    length: number,
+  ): Promise<number> {
     const handle = this.assertOpen();
-    const buf = Buffer.alloc(length);
-    const { bytesRead } = await handle.read(buf, 0, length, start);
-    return buf.subarray(0, bytesRead);
+    const { bytesRead } = await handle.read(buffer, 0, length, start);
+    return bytesRead;
   }
 
   /** Decode [start, end) forward so multi-byte UTF-8 splits survive. */
   private async decodeRange(start: number, end: number): Promise<string> {
     const decoder = new StringDecoder('utf-8');
+    const buf = Buffer.alloc(this.chunkBytes);
     let text = '';
     let pos = start;
     while (pos < end) {
       const length = Math.min(this.chunkBytes, end - pos);
-      const buf = await this.readChunk(pos, length);
-      if (buf.length === 0) break;
-      text += decoder.write(buf);
-      pos += buf.length;
+      const bytesRead = await this.readChunk(buf, pos, length);
+      if (bytesRead === 0) break;
+      text += decoder.write(buf.subarray(0, bytesRead));
+      pos += bytesRead;
     }
     text += decoder.end();
     return text;
@@ -610,6 +667,8 @@ export class JournalCursor {
       walk.addEnvelope({ offset: start, length, seq: null, type: null });
       return;
     }
+    this.onParsedRecord?.(text, envelope);
+    this.counters?.recordDecoded();
     walk.addEnvelope({
       offset: start,
       length,
@@ -617,7 +676,9 @@ export class JournalCursor {
       type: envelope.type,
     });
     if (envelope.type === 'content') {
-      walk.onContent(start, end, envelope, extractContent(envelope.payload));
+      const content = extractContent(envelope.payload);
+      if (content !== null) this.counters?.rowDecoded();
+      walk.onContent(start, end, envelope, content);
       return;
     }
     if (envelope.type === 'compressed' || envelope.type === 'rewind') {

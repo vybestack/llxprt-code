@@ -56,6 +56,7 @@ export type SessionEventType =
   | 'session_named'
   | 'semantic_media_purge'
   | 'density_mutation'
+  | 'chronology_bind'
   | 'synthetic_insert'
   | 'compression_detail';
 
@@ -352,6 +353,32 @@ export interface RecordingWriterIo {
   appendFile(filePath: string, data: string, encoding: 'utf8'): Promise<void>;
 }
 
+/** Synchronous, opt-in observation of references already held by the writer. */
+export interface RecordingWriterObservation {
+  readonly phase: 'pre-content' | 'admit' | 'append' | 'acked' | 'drained';
+  readonly preContent: ReadonlyArray<{
+    readonly seq: number;
+    readonly json: string;
+    readonly bytes: number;
+  }>;
+  readonly queue: ReadonlyArray<{
+    readonly seq: number;
+    readonly json: string;
+    readonly bytes: number;
+  }>;
+  readonly batch: ReadonlyArray<{
+    readonly seq: number;
+    readonly json: string;
+    readonly bytes: number;
+  }>;
+  readonly lines: string | null;
+  readonly preContentBytes: number;
+  readonly queueBytes: number;
+  readonly pendingAcks: number;
+  readonly lastAckedSeq: number;
+  readonly lastByteOffset: number;
+}
+
 // ---------------------------------------------------------------------------
 // Service configuration
 // ---------------------------------------------------------------------------
@@ -381,6 +408,8 @@ export interface SessionRecordingServiceConfig {
   mediaStore?: LocalMediaStore;
   /** Write seam for journal appends. Defaults to `fs/promises.appendFile`. */
   readonly io?: RecordingWriterIo;
+  /** Optional synchronous queue observation for controlled-pause fixtures. */
+  readonly observeWriter?: (state: RecordingWriterObservation) => void;
 }
 
 // ---------------------------------------------------------------------------

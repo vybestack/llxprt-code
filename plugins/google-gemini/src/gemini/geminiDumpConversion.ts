@@ -12,7 +12,11 @@
 
 import type { ToolOutputSettingsProvider } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { convertHistoryToGeminiFormat } from './GeminiMessageConverter.js';
+import {
+  convertHistoryToGeminiFormat,
+  convertGeminiRow,
+} from './GeminiMessageConverter.js';
+import type { HistoryDumpSource } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 
 export function isGeminiCompatibleProvider(providerName: string): boolean {
   const provider = providerName.toLowerCase().trim();
@@ -25,4 +29,13 @@ export function buildGeminiDumpContents(
   config?: ToolOutputSettingsProvider,
 ): unknown[] {
   return convertHistoryToGeminiFormat(history, model, config);
+}
+
+export async function* buildGeminiDumpContentsStream(
+  source: HistoryDumpSource,
+  model?: string,
+  config?: ToolOutputSettingsProvider,
+): AsyncIterable<unknown> {
+  for await (const row of source.rows())
+    yield* convertGeminiRow(row, model, config);
 }

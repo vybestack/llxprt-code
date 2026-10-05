@@ -8,11 +8,10 @@
  * Shared helpers for client test files. Extracted from the original
  * monolithic client.test.ts so no file-level max-lines disable is needed.
  *
- * IMPORTANT: vi.mock() registrations are file-scoped. Each test file that
- * exercises AgentClient must declare its own vi.mock() calls and the mock fns
- * they reference at the top of the file, before the module under test is
- * imported. The setup function below receives those mock fns as arguments so
- * it can wire them into the shared Config and content-generator mocks.
+ * Bun vi.mock() registrations can affect other files in a shared test process.
+ * Tests that need real Config or Turn modules should inject their Config fixture
+ * and Turn factory instead of mocking those modules. The legacy setup still
+ * supports client tests that register their own module mocks.
  */
 
 import { vi, type Mock } from 'bun:test';
@@ -116,19 +115,13 @@ function resetAndApplyServiceMocks(): void {
   setSimulate429(false);
 }
 
-/** Build and register the mock Config implementation. */
-function setupConfigMock(mockFns: ClientMockFns): ContentGeneratorConfig {
-  const mockToolRegistry = {
-    getFunctionDeclarations: vi.fn().mockReturnValue([]),
-    getTool: vi.fn().mockReturnValue(null),
-    getAllTools: vi.fn().mockReturnValue([]),
-  };
-  const fileService = new FileDiscoveryService('/test/dir');
-  const MockedConfig = Config as unknown as Mock<(...args: never[]) => unknown>;
+function buildClientContentGeneratorConfig(
+  mockFns: ClientMockFns,
+): ContentGeneratorConfig {
   const contentGenerator = buildMockContentGenerator();
   contentGenerator.generateContent = mockFns.mockGenerateContentFn;
   contentGenerator.embedContent = mockFns.mockEmbedContentFn;
-  const contentGeneratorConfig: ContentGeneratorConfig = {
+  return {
     model: 'test-model',
     apiKey: 'test-key',
     vertexai: false,
@@ -137,6 +130,20 @@ function setupConfigMock(mockFns: ClientMockFns): ContentGeneratorConfig {
       createContentGenerator: () => contentGenerator,
     },
   };
+}
+
+/** Build the Config fixture, optionally injecting it without a module mock. */
+function setupConfigMock(
+  mockFns: ClientMockFns,
+  useInjectedConfig: boolean,
+): { contentGeneratorConfig: ContentGeneratorConfig; config: Config } {
+  const mockToolRegistry = {
+    getFunctionDeclarations: vi.fn().mockReturnValue([]),
+    getTool: vi.fn().mockReturnValue(null),
+    getAllTools: vi.fn().mockReturnValue([]),
+  };
+  const fileService = new FileDiscoveryService('/test/dir');
+  const contentGeneratorConfig = buildClientContentGeneratorConfig(mockFns);
   const mockConfigObject = {
     getContentGeneratorConfig: vi.fn().mockReturnValue(contentGeneratorConfig),
     getToolRegistry: vi.fn().mockReturnValue(mockToolRegistry),
@@ -189,18 +196,25 @@ function setupConfigMock(mockFns: ClientMockFns): ContentGeneratorConfig {
     }),
     getModelRouterService: vi.fn().mockReturnValue(undefined),
   };
-  MockedConfig.mockImplementation(() => mockConfigObject as unknown as Config);
-  return contentGeneratorConfig;
+  const config = mockConfigObject as unknown as Config;
+  if (!useInjectedConfig) {
+    const MockedConfig = Config as unknown as Mock<
+      (...args: never[]) => unknown
+    >;
+    MockedConfig.mockImplementation(() => config);
+  }
+  return { contentGeneratorConfig, config };
 }
 
 /** Instantiate the AgentClient and wire its chat mock. */
 async function createAndInitClient(
   contentGeneratorConfig: ContentGeneratorConfig,
   createTurn?: MessageStreamDeps['createTurn'],
+  injectedConfig?: Config,
 ): Promise<AgentClient> {
-  const mockConfig = new Config({
-    sessionId: 'test-session-id',
-  } as ConfigParameters);
+  const mockConfig =
+    injectedConfig ??
+    new Config({ sessionId: 'test-session-id' } as ConfigParameters);
   const runtimeState = createAgentRuntimeState({
     runtimeId: 'test-runtime',
     provider: 'gemini',
@@ -215,7 +229,10 @@ async function createAndInitClient(
   );
   await client.initialize(contentGeneratorConfig);
 
-  client.getHistory = vi.fn().mockReturnValue([]);
+  client.getHistory = vi.fn(async function* () {});
+  vi.spyOn(client, 'streamHistory').mockImplementation(async function* () {
+    yield* client.getHistory();
+  });
 
   const mockChat = {
     addHistory: vi.fn(),
@@ -247,12 +264,19 @@ async function createAndInitClient(
  */
 export async function setupAgentClient(
   mockFns: ClientMockFns,
+  options: { useInjectedConfig?: boolean } = {},
 ): Promise<ClientTestContext> {
-  resetAndApplyServiceMocks();
-  const contentGeneratorConfig = setupConfigMock(mockFns);
+  if (options.useInjectedConfig !== true) {
+    resetAndApplyServiceMocks();
+  }
+  const { contentGeneratorConfig, config } = setupConfigMock(
+    mockFns,
+    options.useInjectedConfig === true,
+  );
   const client = await createAndInitClient(
     contentGeneratorConfig,
     mockFns.createTurn,
+    options.useInjectedConfig === true ? config : undefined,
   );
   const mockConfig = client['config'];
   return { client, mockConfig };

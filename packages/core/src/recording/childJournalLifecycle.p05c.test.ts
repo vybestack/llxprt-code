@@ -41,13 +41,6 @@ const PROJECT_HASH = 'p05c-lifecycle-hash';
 
 let fixtureDir: string | null = null;
 
-afterEach(async () => {
-  if (fixtureDir !== null) {
-    await rm(fixtureDir, { recursive: true, force: true });
-    fixtureDir = null;
-  }
-});
-
 async function makeChatsDir(): Promise<string> {
   fixtureDir = await mkdtemp(path.join(tmpdir(), 'p05c-lifecycle-'));
   return path.join(fixtureDir, 'chats');
@@ -109,7 +102,16 @@ async function jsonlCount(chatsDir: string): Promise<number> {
   return entries.filter((entry) => entry.startsWith('session-')).length;
 }
 
-describe('P05c child journal lifecycle @plan:PLAN-20260917-ISSUE854.P05c', () => {
+async function cleanupFixture(): Promise<void> {
+  if (fixtureDir !== null) {
+    await rm(fixtureDir, { recursive: true, force: true });
+    fixtureDir = null;
+  }
+}
+
+describe('P05c child journal creation and disposal @plan:PLAN-20260917-ISSUE854.P05c', () => {
+  afterEach(cleanupFixture);
+
   it('materializes a locked child journal under its own file', async () => {
     const chatsDir = await makeChatsDir();
     const journal = await createChildSessionJournal(journalOptions(chatsDir));
@@ -143,6 +145,10 @@ describe('P05c child journal lifecycle @plan:PLAN-20260917-ISSUE854.P05c', () =>
     await journal.dispose();
     await expect(journal.dispose()).resolves.toBeUndefined();
   });
+});
+
+describe('P05c child journal failure cleanup and isolation @plan:PLAN-20260917-ISSUE854.P05c', () => {
+  afterEach(cleanupFixture);
 
   it('an init failure leaves no journal or lock behind', async () => {
     const chatsDir = await makeChatsDir();

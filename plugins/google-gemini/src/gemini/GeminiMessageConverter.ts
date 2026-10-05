@@ -128,34 +128,42 @@ export function convertHistoryToGeminiFormat(
   currentModel = 'gemini-2.5-pro',
   configForMessages?: unknown,
 ): Array<{ role: string; parts: Part[] }> {
+  return content.flatMap((row) =>
+    convertGeminiRow(row, currentModel, configForMessages),
+  );
+}
+
+export function convertGeminiRow(
+  c: IContent,
+  currentModel = 'gemini-2.5-pro',
+  configForMessages?: unknown,
+): Array<{ role: string; parts: Part[] }> {
   const contents: Array<{ role: string; parts: Part[] }> = [];
-  for (const c of content) {
-    switch (c.speaker) {
-      case 'human': {
-        const parts = convertHumanBlocksToGeminiParts(c.blocks);
-        if (parts.length > 0) {
-          contents.push({ role: 'user', parts });
-        }
-        break;
+  switch (c.speaker) {
+    case 'human': {
+      const parts = convertHumanBlocksToGeminiParts(c.blocks);
+      if (parts.length > 0) {
+        contents.push({ role: 'user', parts });
       }
-      case 'ai': {
-        const parts = convertAiBlocksToGeminiParts(c.blocks);
-        if (parts.length > 0) {
-          contents.push({ role: 'model', parts });
-        }
-        break;
-      }
-      case 'tool':
-        convertToolContentToGeminiContents(
-          c,
-          currentModel,
-          configForMessages,
-          contents,
-        );
-        break;
-      default:
-        break;
+      break;
     }
+    case 'ai': {
+      const parts = convertAiBlocksToGeminiParts(c.blocks);
+      if (parts.length > 0) {
+        contents.push({ role: 'model', parts });
+      }
+      break;
+    }
+    case 'tool':
+      convertToolContentToGeminiContents(
+        c,
+        currentModel,
+        configForMessages,
+        contents,
+      );
+      break;
+    default:
+      break;
   }
   return contents;
 }

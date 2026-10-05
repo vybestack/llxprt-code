@@ -51,678 +51,731 @@ function createIContent(text: string): IContent {
     blocks: [{ type: 'text', text }],
   };
 }
+let processor: StreamProcessor;
+let mockProvider: {
+  name: string;
+  generateChatCompletion: ReturnType<typeof vi.fn>;
+};
 
 describe('StreamProcessor._buildAndSendStreamRequest — stream retry boundary (#1750)', () => {
-  let processor: StreamProcessor;
-  let mockProvider: {
-    name: string;
-    generateChatCompletion: ReturnType<typeof vi.fn>;
-  };
+  beforeEach(facadeCallback0);
 
-  beforeEach(() => {
-    vi.clearAllMocks();
-
-    // Create minimal mock provider
-    mockProvider = {
-      name: 'test-provider',
-      generateChatCompletion: vi.fn(),
-    };
-
-    // Create processor with minimal mocks
-    processor = Object.create(StreamProcessor.prototype);
-
-    const mockRuntimeContext = {
-      state: {
-        model: 'test-model',
-        baseUrl: 'https://test.example.com',
-        runtimeId: 'test-runtime',
-        sessionId: 'test-session',
-        provider: 'test-provider',
-      },
-      providerRuntime: {
-        config: {
-          getEnableHooks: () => false,
-          getHookSystem: () => null,
-        },
-        runtimeId: 'test-runtime',
-      },
-      ephemerals: {
-        reasoning: {
-          includeInContext: () => false,
-        },
-      },
-      tools: {
-        listToolNames: () => [],
-        getToolMetadata: () => undefined,
-      },
-      telemetry: {
-        logApiRequest: vi.fn(),
-        logApiResponse: vi.fn(),
-        logApiError: vi.fn(),
-      },
-    };
-
-    const mockCompressionHandler = {
-      enforceProviderContents: vi
-        .fn()
-        .mockImplementation((envelope: { contents: IContent[] }) =>
-          Promise.resolve(envelope.contents),
-        ),
-      clearProviderCompressionCallback: vi.fn(),
-      lastPromptTokenCount: 0,
-    };
-
-    const mockConversationManager = {
-      makePositionMatcher: () => ({}),
-      recordHistory: vi.fn(),
-    };
-
-    const mockHistoryService = {
-      generateTurnKey: () => 'test-turn',
-      getIdGeneratorCallback: () => () => 'test-id',
-      getCuratedForProvider: (contents: IContent[]) => contents,
-      add: vi.fn(),
-      getAll: () => [],
-      waitForTokenUpdates: vi.fn().mockResolvedValue(undefined),
-    };
-
-    const mockProviderRuntimeBuilder = () => ({
-      config: {
-        getEnableHooks: () => false,
-        getHookSystem: () => null,
-        getUserMemory: () => undefined,
-      },
-      settingsService: {},
-      metadata: {},
-    });
-
-    Object.assign(processor, {
-      runtimeContext: mockRuntimeContext,
-      compressionHandler: mockCompressionHandler,
-      conversationManager: mockConversationManager,
-      historyService: mockHistoryService,
-      providerResolver: () => mockProvider,
-      providerRuntimeBuilder: mockProviderRuntimeBuilder,
-      generationConfig: {},
-      turnIdByPromptId: new Map<string, string>(),
-      logger: { debug: () => {}, warn: () => {} },
-    });
-
-    // Mock retryWithBackoff to capture and execute the API call
-    (retryWithBackoff as ReturnType<typeof vi.fn>).mockImplementation(
-      async <T>(fn: () => Promise<T>) => fn(),
+  describe('runtime config handoff', () => {
+    it(
+      'preserves the Config instance when GenAI request config carries abort state',
+      facadeCallback1,
     );
   });
 
-  describe('runtime config handoff', () => {
-    it('preserves the Config instance when GenAI request config carries abort state', () => {
-      const configInstance = {
-        getEnableHooks: () => false,
-        getHookSystem: () => null,
-        getUserMemory: () => undefined,
-        getConversationLoggingEnabled: () => false,
-      };
-      const abortController = new AbortController();
-      const tools = [{ functionDeclarations: [] }];
-      const baseRuntimeContext = {
-        config: configInstance,
-        settingsService: {},
-        runtimeId: 'test-runtime',
-        metadata: { source: 'test' },
-      };
-
-      const buildRuntimeContext = (
-        processor as unknown as {
-          _buildRuntimeContext: (
-            baseRuntimeContext: unknown,
-            params: { config?: { abortSignal?: AbortSignal; tools?: unknown } },
-          ) => { config?: unknown; metadata?: Record<string, unknown> };
-        }
-      )._buildRuntimeContext;
-
-      const runtimeContext = buildRuntimeContext.call(
-        processor,
-        baseRuntimeContext,
-        {
-          config: { abortSignal: abortController.signal, tools },
-        },
-      );
-
-      expect(runtimeContext.config).toBe(configInstance);
-      expect(runtimeContext.config).not.toHaveProperty('abortSignal');
-      expect(runtimeContext.config).not.toHaveProperty('tools');
-      expect(runtimeContext.metadata?.['abortSignal']).toBe(
-        abortController.signal,
-      );
-    });
-  });
-
   describe('first chunk consumption within retry boundary', () => {
-    it('forwards cancellation to the wrapped source iterator before first next', async () => {
-      let sourceClosed = false;
+    it(
+      'forwards cancellation to the wrapped source iterator before first next',
+      facadeCallback2,
+    );
 
-      async function* source(): AsyncGenerator<number> {
-        try {
-          yield 2;
-          await new Promise<void>(() => {
-            // keep source pending to mimic a live stream
-          });
-        } finally {
-          sourceClosed = true;
-        }
-      }
+    it(
+      'should consume first chunk inside _buildAndSendStreamRequest before returning',
+      facadeCallback3,
+    );
 
-      const sourceIterator = source();
-      const firstResult = await sourceIterator.next();
-      expect(firstResult.done).toBe(false);
-
-      const wrapped = prependAsyncGenerator(firstResult.value, sourceIterator);
-
-      const cancelResult = await wrapped.return();
-      expect(cancelResult.done).toBe(true);
-      expect(sourceClosed).toBe(true);
-    });
-
-    it('should consume first chunk inside _buildAndSendStreamRequest before returning', async () => {
-      // Track when the provider is called vs when the stream yields
-      const timeline: string[] = [];
-
-      async function* mockStream(): AsyncGenerator<IContent> {
-        timeline.push('provider:started');
-        yield createIContent('first chunk');
-        timeline.push('provider:yielded:first');
-        yield createIContent('second chunk');
-        timeline.push('provider:yielded:second');
-      }
-
-      mockProvider.generateChatCompletion.mockImplementation(() => {
-        timeline.push('generateChatCompletion:called');
-        return mockStream();
-      });
-
-      // Access private method for testing
-      const buildAndSend = (
-        processor as unknown as {
-          _buildAndSendStreamRequest: (
-            params: unknown,
-            promptId: string,
-            userContent: IContent,
-            provider: typeof mockProvider,
-          ) => Promise<AsyncGenerator<ModelStreamChunk>>;
-        }
-      )._buildAndSendStreamRequest;
-
-      const params = { contents: [] };
-      const userContent: IContent = {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'test' }],
-      };
-
-      // Call the method directly (this will be wrapped by retryWithBackoff in real usage)
-      const result = await buildAndSend.call(
-        processor,
-        params,
-        'test-prompt',
-        userContent,
-        mockProvider,
-      );
-
-      // The stream should be returned but first chunk should already be consumed
-      timeline.push('method:returned');
-
-      // Now consume from the returned generator
-      const firstResult = await result.next();
-      timeline.push('consumer:received:first');
-
-      // The first chunk from _convertIContentStream should be already available
-      // without needing to wait for the provider to yield again
-      expect(firstResult.done).toBe(false);
-      expect(firstResult.value).toBeDefined();
-
-      // Verify the timeline shows first chunk was consumed before method returned
-      // This is the key fix - the first chunk establishes the HTTP connection
-      const providerStartedIdx = timeline.indexOf('provider:started');
-      const methodReturnedIdx = timeline.indexOf('method:returned');
-      expect(providerStartedIdx).toBeGreaterThan(-1);
-      expect(providerStartedIdx).toBeLessThan(methodReturnedIdx);
-    });
-
-    it('should throw EmptyStreamError when stream is immediately exhausted', async () => {
-      // Create a stream that immediately returns (empty)
-      async function* emptyStream(): AsyncGenerator<IContent> {
-        yield* [];
-        return;
-      }
-
-      mockProvider.generateChatCompletion.mockReturnValue(emptyStream());
-
-      const buildAndSend = (
-        processor as unknown as {
-          _buildAndSendStreamRequest: (
-            params: unknown,
-            promptId: string,
-            userContent: IContent,
-            provider: typeof mockProvider,
-          ) => Promise<AsyncGenerator<ModelStreamChunk>>;
-        }
-      )._buildAndSendStreamRequest;
-
-      const params = { contents: [] };
-      const userContent: IContent = {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'test' }],
-      };
-
-      // Should throw EmptyStreamError since stream is empty
-      await expect(
-        buildAndSend.call(
-          processor,
-          params,
-          'test-prompt',
-          userContent,
-          mockProvider,
-        ),
-      ).rejects.toThrow(EmptyStreamError);
-
-      // Ensure empty attempts are not logged as successful responses.
-      expect(logApiResponse).not.toHaveBeenCalled();
-    });
+    it(
+      'should throw EmptyStreamError when stream is immediately exhausted',
+      facadeCallback4,
+    );
   });
 
   describe('execute stream call retry classification', () => {
-    it('should classify EmptyStreamError as retryable in the retry policy', async () => {
-      let capturedShouldRetryOnError: ((error: unknown) => boolean) | undefined;
-      (retryWithBackoff as ReturnType<typeof vi.fn>).mockImplementation(
-        async <T>(
-          fn: () => Promise<T>,
-          options?: {
-            shouldRetryOnError?: (error: unknown) => boolean;
-          },
-        ) => {
-          capturedShouldRetryOnError = options?.shouldRetryOnError;
-          return fn();
-        },
-      );
+    it(
+      'should classify EmptyStreamError as retryable in the retry policy',
+      facadeCallback5,
+    );
 
-      const executeStreamApiCall = (
-        processor as unknown as {
-          _executeStreamApiCall: (
-            params: { config?: { abortSignal?: AbortSignal } },
-            promptId: string,
-            userContent: IContent,
-            provider: { name: string },
-          ) => Promise<AsyncGenerator<ModelStreamChunk>>;
-        }
-      )._executeStreamApiCall;
-
-      const providerStub = { name: 'test-provider' };
-      await executeStreamApiCall
-        .call(
-          processor,
-          { config: {} },
-          'test-prompt',
-          { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
-          providerStub,
-        )
-        .catch(() => {
-          // ignore - _buildAndSendStreamRequest internals are not relevant to this assertion
-        });
-
-      expect(capturedShouldRetryOnError).toBeDefined();
-      expect(
-        capturedShouldRetryOnError?.(
-          new EmptyStreamError(
-            'Model stream ended immediately with no content.',
-          ),
-        ),
-      ).toBe(true);
-    });
-
-    it('should classify fetch-failed errors as retryable via centralized transient detection', async () => {
-      let capturedShouldRetryOnError: ((error: unknown) => boolean) | undefined;
-
-      (retryWithBackoff as ReturnType<typeof vi.fn>).mockImplementation(
-        async <T>(
-          fn: () => Promise<T>,
-          options?: {
-            shouldRetryOnError?: (error: unknown) => boolean;
-          },
-        ) => {
-          capturedShouldRetryOnError = options?.shouldRetryOnError;
-          return fn();
-        },
-      );
-
-      const executeStreamApiCall = (
-        processor as unknown as {
-          _executeStreamApiCall: (
-            params: { config?: { abortSignal?: AbortSignal } },
-            promptId: string,
-            userContent: IContent,
-            provider: { name: string },
-          ) => Promise<AsyncGenerator<ModelStreamChunk>>;
-        }
-      )._executeStreamApiCall;
-
-      const providerStub = { name: 'test-provider' };
-      await executeStreamApiCall
-        .call(
-          processor,
-          { config: {} },
-          'test-prompt',
-          { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
-          providerStub,
-        )
-        .catch(() => {
-          // ignore - _buildAndSendStreamRequest internals are not relevant to this assertion
-        });
-
-      expect(capturedShouldRetryOnError).toBeDefined();
-      // "fetch failed" is now classified as a network-transient condition
-      // centrally (issue #2161), so it is always retryable.
-      expect(
-        capturedShouldRetryOnError?.(new Error('fetch failed sending request')),
-      ).toBe(true);
-      // A genuinely non-transient error is still not retryable.
-      expect(
-        capturedShouldRetryOnError?.(new Error('totally unrelated error')),
-      ).toBe(false);
-    });
+    it(
+      'should classify fetch-failed errors as retryable via centralized transient detection',
+      facadeCallback6,
+    );
   });
 
   describe('error handling during first chunk retrieval', () => {
-    it('should throw network errors during first chunk consumption so they can be caught by retry', async () => {
-      // Simulate a network error when consuming the first chunk
-      async function* failingStream(): AsyncGenerator<IContent> {
-        // First yield simulates establishing connection
-        yield createIContent('first');
-        // Second yield throws network error
-        throw new Error('Connection reset');
-      }
+    it(
+      'should throw network errors during first chunk consumption so they can be caught by retry',
+      facadeCallback7,
+    );
 
-      mockProvider.generateChatCompletion.mockReturnValue(failingStream());
-
-      const buildAndSend = (
-        processor as unknown as {
-          _buildAndSendStreamRequest: (
-            params: unknown,
-            promptId: string,
-            userContent: IContent,
-            provider: typeof mockProvider,
-          ) => Promise<AsyncGenerator<ModelStreamChunk>>;
-        }
-      )._buildAndSendStreamRequest;
-
-      const params = { contents: [] };
-      const userContent: IContent = {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'test' }],
-      };
-
-      // First chunk succeeds, but the error during iteration should be handled
-      const result = await buildAndSend.call(
-        processor,
-        params,
-        'test-prompt',
-        userContent,
-        mockProvider,
-      );
-
-      // Consume first chunk (succeeds)
-      const first = await result.next();
-      expect(first.done).toBe(false);
-
-      // Second chunk should throw
-      await expect(result.next()).rejects.toThrow('Connection reset');
-    });
-
-    it('should wrap lazy generators so errors occur within retry boundary', async () => {
-      // This test verifies that a lazy async generator (where the actual API call
-      // happens on first iteration) has its first chunk consumed within the
-      // retry boundary, ensuring connection errors trigger retry logic.
-
-      let apiCallMade = false;
-
-      async function* lazyGenerator(): AsyncGenerator<IContent> {
-        // This simulates the actual API call happening when iteration starts
-        apiCallMade = true;
-        yield* [];
-        // Simulate connection error during first chunk
-        throw new Error('ECONNRESET');
-      }
-
-      mockProvider.generateChatCompletion.mockReturnValue(lazyGenerator());
-
-      const buildAndSend = (
-        processor as unknown as {
-          _buildAndSendStreamRequest: (
-            params: unknown,
-            promptId: string,
-            userContent: IContent,
-            provider: typeof mockProvider,
-          ) => Promise<AsyncGenerator<ModelStreamChunk>>;
-        }
-      )._buildAndSendStreamRequest;
-
-      const params = { contents: [] };
-      const userContent: IContent = {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'test' }],
-      };
-
-      // The error should occur during _buildAndSendStreamRequest
-      // (inside the retry boundary), not when the caller later iterates
-      await expect(
-        buildAndSend.call(
-          processor,
-          params,
-          'test-prompt',
-          userContent,
-          mockProvider,
-        ),
-      ).rejects.toThrow('ECONNRESET');
-
-      // Verify the API call was actually attempted and provider callback cleanup ran.
-      expect(apiCallMade).toBe(true);
-      expect(
-        (
-          processor as unknown as {
-            compressionHandler: {
-              clearProviderCompressionCallback: ReturnType<typeof vi.fn>;
-            };
-          }
-        ).compressionHandler.clearProviderCompressionCallback,
-      ).toHaveBeenCalledWith(mockProvider);
-    });
+    it(
+      'should wrap lazy generators so errors occur within retry boundary',
+      facadeCallback8,
+    );
   });
 });
 
 describe('StreamProcessor.makeApiCallAndProcessStream — cancellation before first next', () => {
-  it('should forward return to the preloaded stream without creating the processed stream', async () => {
-    let sourceClosed = false;
-
-    async function* source(): AsyncGenerator<ModelStreamChunk> {
-      try {
-        yield {
-          content: {
-            speaker: 'ai',
-            blocks: [{ type: 'text', text: 'prefetched' }],
-          },
-        } as ModelStreamChunk;
-        await new Promise<void>(() => {
-          // Keep source pending to mimic an active stream.
-        });
-      } finally {
-        sourceClosed = true;
-      }
-    }
-
-    const sourceIterator = source();
-    const prefetched = await sourceIterator.next();
-    expect(prefetched.done).toBe(false);
-
-    const preloadedStream = prependAsyncGenerator(
-      prefetched.value,
-      sourceIterator,
-    );
-
-    const processStreamResponse = vi.fn(() => {
-      async function* processed(): AsyncGenerator<ModelStreamChunk> {
-        yield {
-          content: {
-            speaker: 'ai',
-            blocks: [{ type: 'text', text: 'processed' }],
-          },
-        } as ModelStreamChunk;
-      }
-      return processed();
-    });
-
-    const executeStreamApiCall = vi.fn().mockResolvedValue(preloadedStream);
-
-    const provider = {
-      name: 'test-provider',
-      generateChatCompletion: vi.fn(),
-    };
-
-    const processor = Object.create(
-      StreamProcessor.prototype,
-    ) as StreamProcessor;
-    Object.assign(processor, {
-      runtimeContext: {
-        state: {
-          model: 'test-model',
-          baseUrl: 'https://test.example.com',
-        },
-      },
-      compressionHandler: {},
-      historyService: {
-        generateTurnKey: () => 'turn-test',
-      },
-      providerResolver: vi.fn(() => provider),
-      _executeStreamApiCall: executeStreamApiCall,
-      processStreamResponse,
-      turnIdByPromptId: new Map<string, string>(),
-      logger: { debug: () => {}, warn: () => {} },
-    });
-
-    const stream = await processor.makeApiCallAndProcessStream(
-      { config: {} } as SendMessageParams,
-      'test-prompt',
-      { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
-    );
-
-    const returnResult = await stream.return();
-
-    expect(returnResult.done).toBe(true);
-    expect(processStreamResponse).not.toHaveBeenCalled();
-    expect(sourceClosed).toBe(true);
-    expect(executeStreamApiCall).toHaveBeenCalledTimes(1);
-  });
+  it(
+    'should forward return to the preloaded stream without creating the processed stream',
+    facadeCallback9,
+  );
 });
+const observeHaveAPICallErrorsCaughtByRetryWithBackoff = async () => {
+  // Import the actual retryWithBackoff to test integration
+  const { retryWithBackoff: actualRetry } = realRetryModule;
 
-describe('StreamProcessor._executeStreamApiCall — retry integration (#1750)', () => {
-  it('should have API call errors caught by retryWithBackoff', async () => {
-    const { _attemptCount, mockApiCall, firstChunk } =
-      await observeHaveAPICallErrorsCaughtByRetryWithBackoff();
-    expect(_attemptCount).toBe(3);
-    expect(mockApiCall).toHaveBeenCalledTimes(3);
-    expect(firstChunk.done).toBe(false);
-    expect(firstChunk.value).toBeDefined();
+  // Track retry attempts
+  let _attemptCount = 0;
+  const mockApiCall = vi.fn().mockImplementation(async () => {
+    _attemptCount++;
+    if (_attemptCount < 3) {
+      const error = new Error('429 Rate Limited') as Error & {
+        status: number;
+      };
+      error.status = 429;
+      throw error;
+    }
+    // Return a generator on success
+    async function* successStream(): AsyncGenerator<ModelStreamChunk> {
+      yield {
+        content: {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'success' }],
+        },
+      } as ModelStreamChunk;
+    }
+    return successStream();
   });
 
-  const observeHaveAPICallErrorsCaughtByRetryWithBackoff = async () => {
-    // Import the actual retryWithBackoff to test integration
-    const { retryWithBackoff: actualRetry } = realRetryModule;
+  // Use actual retry logic with limited attempts
+  const result = await actualRetry(mockApiCall, {
+    maxAttempts: 3,
+    initialDelayMs: 10,
+    maxDelayMs: 100,
+  });
 
-    // Track retry attempts
-    let _attemptCount = 0;
-    const mockApiCall = vi.fn().mockImplementation(async () => {
-      _attemptCount++;
-      if (_attemptCount < 3) {
-        const error = new Error('429 Rate Limited') as Error & {
-          status: number;
-        };
-        error.status = 429;
-        throw error;
-      }
-      // Return a generator on success
-      async function* successStream(): AsyncGenerator<ModelStreamChunk> {
-        yield {
-          content: {
-            speaker: 'ai',
-            blocks: [{ type: 'text', text: 'success' }],
-          },
-        } as ModelStreamChunk;
-      }
-      return successStream();
-    });
+  // Verify retries happened
 
-    // Use actual retry logic with limited attempts
-    const result = await actualRetry(mockApiCall, {
-      maxAttempts: 3,
+  // Verify we got a working generator
+  const firstChunk = await result.next();
+
+  return { _attemptCount, mockApiCall, firstChunk };
+};
+const observeTriggerBucketFailoverOnPersistent429Errors = async () => {
+  const { retryWithBackoff: actualRetry } = realRetryModule;
+
+  let _failoverCalled = false;
+  const mockOnPersistent429 = vi.fn().mockResolvedValue(true); // Simulate successful failover
+
+  let _attemptCount = 0;
+  const mockApiCall = vi.fn().mockImplementation(async () => {
+    _attemptCount++;
+    if (!_failoverCalled) {
+      const error = new Error('429 Rate Limited') as Error & {
+        status: number;
+      };
+      error.status = 429;
+      throw error;
+    }
+    async function* successStream(): AsyncGenerator<ModelStreamChunk> {
+      yield {
+        content: {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'after failover' }],
+        },
+      } as ModelStreamChunk;
+    }
+    return successStream();
+  });
+
+  try {
+    await actualRetry(mockApiCall, {
+      maxAttempts: 5,
       initialDelayMs: 10,
       maxDelayMs: 100,
+      onPersistent429: async () => {
+        _failoverCalled = true;
+        return mockOnPersistent429();
+      },
     });
+  } catch {
+    // Expected to potentially fail in this test setup
+  }
 
-    // Verify retries happened
+  // Verify failover was attempted
 
-    // Verify we got a working generator
-    const firstChunk = await result.next();
+  return { _failoverCalled, mockOnPersistent429 };
+};
 
-    return { _attemptCount, mockApiCall, firstChunk };
+describe('StreamProcessor._executeStreamApiCall — retry integration (#1750)', () => {
+  it(
+    'should have API call errors caught by retryWithBackoff',
+    facadeCallback10,
+  );
+
+  it(
+    'should trigger bucket failover on persistent 429 errors',
+    facadeCallback11,
+  );
+});
+
+function facadeCallback0(): void {
+  vi.clearAllMocks();
+
+  // Create minimal mock provider
+  mockProvider = {
+    name: 'test-provider',
+    generateChatCompletion: vi.fn(),
   };
 
-  it('should trigger bucket failover on persistent 429 errors', async () => {
-    const { _failoverCalled, mockOnPersistent429 } =
-      await observeTriggerBucketFailoverOnPersistent429Errors();
-    expect(_failoverCalled).toBe(true);
-    expect(mockOnPersistent429).toHaveBeenCalled();
+  // Create processor with minimal mocks
+  processor = Object.create(StreamProcessor.prototype);
+
+  const mockRuntimeContext = retryRuntimeContext();
+
+  const mockCompressionHandler = {
+    enforceProviderContents: vi
+      .fn()
+      .mockImplementation((envelope: { contents: IContent[] }) =>
+        Promise.resolve(envelope.contents),
+      ),
+    clearProviderCompressionCallback: vi.fn(),
+    lastPromptTokenCount: 0,
+  };
+
+  const mockConversationManager = {
+    makePositionMatcher: () => ({}),
+    recordHistory: vi.fn(),
+  };
+
+  const mockHistoryService = {
+    generateTurnKey: () => 'test-turn',
+    getIdGeneratorCallback: () => () => 'test-id',
+    async *getCuratedForProviderStream(contents: IContent[]) {
+      yield* contents;
+    },
+    add: vi.fn(),
+    waitForTokenUpdates: vi.fn().mockResolvedValue(undefined),
+  };
+
+  const mockProviderRuntimeBuilder = () => ({
+    config: {
+      getEnableHooks: () => false,
+      getHookSystem: () => null,
+      getUserMemory: () => undefined,
+    },
+    settingsService: {},
+    metadata: {},
   });
 
-  const observeTriggerBucketFailoverOnPersistent429Errors = async () => {
-    const { retryWithBackoff: actualRetry } = realRetryModule;
+  Object.assign(processor, {
+    runtimeContext: mockRuntimeContext,
+    compressionHandler: mockCompressionHandler,
+    conversationManager: mockConversationManager,
+    historyService: mockHistoryService,
+    providerResolver: () => mockProvider,
+    providerRuntimeBuilder: mockProviderRuntimeBuilder,
+    generationConfig: {},
+    turnIdByPromptId: new Map<string, string>(),
+    logger: { debug: () => {}, warn: () => {} },
+  });
 
-    let _failoverCalled = false;
-    const mockOnPersistent429 = vi.fn().mockResolvedValue(true); // Simulate successful failover
+  // Mock retryWithBackoff to capture and execute the API call
+  (retryWithBackoff as ReturnType<typeof vi.fn>).mockImplementation(
+    async <T>(fn: () => Promise<T>) => fn(),
+  );
+}
 
-    let _attemptCount = 0;
-    const mockApiCall = vi.fn().mockImplementation(async () => {
-      _attemptCount++;
-      if (!_failoverCalled) {
-        const error = new Error('429 Rate Limited') as Error & {
-          status: number;
-        };
-        error.status = 429;
-        throw error;
-      }
-      async function* successStream(): AsyncGenerator<ModelStreamChunk> {
-        yield {
-          content: {
-            speaker: 'ai',
-            blocks: [{ type: 'text', text: 'after failover' }],
-          },
-        } as ModelStreamChunk;
-      }
-      return successStream();
+function facadeCallback1(): void {
+  const configInstance = {
+    getEnableHooks: () => false,
+    getHookSystem: () => null,
+    getUserMemory: () => undefined,
+    getConversationLoggingEnabled: () => false,
+  };
+  const abortController = new AbortController();
+  const tools = [{ functionDeclarations: [] }];
+  const baseRuntimeContext = {
+    config: configInstance,
+    settingsService: {},
+    runtimeId: 'test-runtime',
+    metadata: { source: 'test' },
+  };
+
+  const buildRuntimeContext = (
+    processor as unknown as {
+      _buildRuntimeContext: (
+        baseRuntimeContext: unknown,
+        params: { config?: { abortSignal?: AbortSignal; tools?: unknown } },
+      ) => { config?: unknown; metadata?: Record<string, unknown> };
+    }
+  )._buildRuntimeContext;
+
+  const runtimeContext = buildRuntimeContext.call(
+    processor,
+    baseRuntimeContext,
+    {
+      config: { abortSignal: abortController.signal, tools },
+    },
+  );
+
+  expect(runtimeContext.config).toBe(configInstance);
+  expect(runtimeContext.config).not.toHaveProperty('abortSignal');
+  expect(runtimeContext.config).not.toHaveProperty('tools');
+  expect(runtimeContext.metadata?.['abortSignal']).toBe(abortController.signal);
+}
+
+async function facadeCallback2(): Promise<void> {
+  let sourceClosed = false;
+
+  async function* source(): AsyncGenerator<number> {
+    try {
+      yield 2;
+      await new Promise<void>(() => {
+        // keep source pending to mimic a live stream
+      });
+    } finally {
+      sourceClosed = true;
+    }
+  }
+
+  const sourceIterator = source();
+  const firstResult = await sourceIterator.next();
+  expect(firstResult.done).toBe(false);
+
+  const wrapped = prependAsyncGenerator(firstResult.value, sourceIterator);
+
+  const cancelResult = await wrapped.return();
+  expect(cancelResult.done).toBe(true);
+  expect(sourceClosed).toBe(true);
+}
+
+async function facadeCallback3(): Promise<void> {
+  // Track when the provider is called vs when the stream yields
+  const timeline: string[] = [];
+
+  async function* mockStream(): AsyncGenerator<IContent> {
+    timeline.push('provider:started');
+    yield createIContent('first chunk');
+    timeline.push('provider:yielded:first');
+    yield createIContent('second chunk');
+    timeline.push('provider:yielded:second');
+  }
+
+  mockProvider.generateChatCompletion.mockImplementation(() => {
+    timeline.push('generateChatCompletion:called');
+    return mockStream();
+  });
+
+  // Access private method for testing
+  const buildAndSend = (
+    processor as unknown as {
+      _buildAndSendStreamRequest: (
+        params: unknown,
+        promptId: string,
+        userContent: IContent,
+        provider: typeof mockProvider,
+      ) => Promise<AsyncGenerator<ModelStreamChunk>>;
+    }
+  )._buildAndSendStreamRequest;
+
+  const params = { contents: [] };
+  const userContent: IContent = {
+    speaker: 'human',
+    blocks: [{ type: 'text', text: 'test' }],
+  };
+
+  // Call the method directly (this will be wrapped by retryWithBackoff in real usage)
+  const result = await buildAndSend.call(
+    processor,
+    params,
+    'test-prompt',
+    userContent,
+    mockProvider,
+  );
+
+  // The stream should be returned but first chunk should already be consumed
+  timeline.push('method:returned');
+
+  // Now consume from the returned generator
+  const firstResult = await result.next();
+  timeline.push('consumer:received:first');
+
+  // The first chunk from _convertIContentStream should be already available
+  // without needing to wait for the provider to yield again
+  expect(firstResult.done).toBe(false);
+  expect(firstResult.value).toBeDefined();
+
+  // Verify the timeline shows first chunk was consumed before method returned
+  // This is the key fix - the first chunk establishes the HTTP connection
+  const providerStartedIdx = timeline.indexOf('provider:started');
+  const methodReturnedIdx = timeline.indexOf('method:returned');
+  expect(providerStartedIdx).toBeGreaterThan(-1);
+  expect(providerStartedIdx).toBeLessThan(methodReturnedIdx);
+}
+
+async function facadeCallback4(): Promise<void> {
+  // Create a stream that immediately returns (empty)
+  async function* emptyStream(): AsyncGenerator<IContent> {
+    yield* [];
+    return;
+  }
+
+  mockProvider.generateChatCompletion.mockReturnValue(emptyStream());
+
+  const buildAndSend = (
+    processor as unknown as {
+      _buildAndSendStreamRequest: (
+        params: unknown,
+        promptId: string,
+        userContent: IContent,
+        provider: typeof mockProvider,
+      ) => Promise<AsyncGenerator<ModelStreamChunk>>;
+    }
+  )._buildAndSendStreamRequest;
+
+  const params = { contents: [] };
+  const userContent: IContent = {
+    speaker: 'human',
+    blocks: [{ type: 'text', text: 'test' }],
+  };
+
+  // Should throw EmptyStreamError since stream is empty
+  await expect(
+    buildAndSend.call(
+      processor,
+      params,
+      'test-prompt',
+      userContent,
+      mockProvider,
+    ),
+  ).rejects.toThrow(EmptyStreamError);
+
+  // Ensure empty attempts are not logged as successful responses.
+  expect(logApiResponse).not.toHaveBeenCalled();
+}
+
+async function facadeCallback5(): Promise<void> {
+  let capturedShouldRetryOnError: ((error: unknown) => boolean) | undefined;
+  (retryWithBackoff as ReturnType<typeof vi.fn>).mockImplementation(
+    async <T>(
+      fn: () => Promise<T>,
+      options?: {
+        shouldRetryOnError?: (error: unknown) => boolean;
+      },
+    ) => {
+      capturedShouldRetryOnError = options?.shouldRetryOnError;
+      return fn();
+    },
+  );
+
+  const executeStreamApiCall = (
+    processor as unknown as {
+      _executeStreamApiCall: (
+        params: { config?: { abortSignal?: AbortSignal } },
+        promptId: string,
+        userContent: IContent,
+        provider: { name: string },
+      ) => Promise<AsyncGenerator<ModelStreamChunk>>;
+    }
+  )._executeStreamApiCall;
+
+  const providerStub = { name: 'test-provider' };
+  await executeStreamApiCall
+    .call(
+      processor,
+      { config: {} },
+      'test-prompt',
+      { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+      providerStub,
+    )
+    .catch(() => {
+      // ignore - _buildAndSendStreamRequest internals are not relevant to this assertion
     });
 
-    try {
-      await actualRetry(mockApiCall, {
-        maxAttempts: 5,
-        initialDelayMs: 10,
-        maxDelayMs: 100,
-        onPersistent429: async () => {
-          _failoverCalled = true;
-          return mockOnPersistent429();
-        },
-      });
-    } catch {
-      // Expected to potentially fail in this test setup
+  expect(capturedShouldRetryOnError).toBeDefined();
+  expect(
+    capturedShouldRetryOnError?.(
+      new EmptyStreamError('Model stream ended immediately with no content.'),
+    ),
+  ).toBe(true);
+}
+
+async function facadeCallback6(): Promise<void> {
+  let capturedShouldRetryOnError: ((error: unknown) => boolean) | undefined;
+
+  (retryWithBackoff as ReturnType<typeof vi.fn>).mockImplementation(
+    async <T>(
+      fn: () => Promise<T>,
+      options?: {
+        shouldRetryOnError?: (error: unknown) => boolean;
+      },
+    ) => {
+      capturedShouldRetryOnError = options?.shouldRetryOnError;
+      return fn();
+    },
+  );
+
+  const executeStreamApiCall = (
+    processor as unknown as {
+      _executeStreamApiCall: (
+        params: { config?: { abortSignal?: AbortSignal } },
+        promptId: string,
+        userContent: IContent,
+        provider: { name: string },
+      ) => Promise<AsyncGenerator<ModelStreamChunk>>;
     }
+  )._executeStreamApiCall;
 
-    // Verify failover was attempted
+  const providerStub = { name: 'test-provider' };
+  await executeStreamApiCall
+    .call(
+      processor,
+      { config: {} },
+      'test-prompt',
+      { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+      providerStub,
+    )
+    .catch(() => {
+      // ignore - _buildAndSendStreamRequest internals are not relevant to this assertion
+    });
 
-    return { _failoverCalled, mockOnPersistent429 };
+  expect(capturedShouldRetryOnError).toBeDefined();
+  // "fetch failed" is now classified as a network-transient condition
+  // centrally (issue #2161), so it is always retryable.
+  expect(
+    capturedShouldRetryOnError?.(new Error('fetch failed sending request')),
+  ).toBe(true);
+  // A genuinely non-transient error is still not retryable.
+  expect(
+    capturedShouldRetryOnError?.(new Error('totally unrelated error')),
+  ).toBe(false);
+}
+
+async function facadeCallback7(): Promise<void> {
+  // Simulate a network error when consuming the first chunk
+  async function* failingStream(): AsyncGenerator<IContent> {
+    // First yield simulates establishing connection
+    yield createIContent('first');
+    // Second yield throws network error
+    throw new Error('Connection reset');
+  }
+
+  mockProvider.generateChatCompletion.mockReturnValue(failingStream());
+
+  const buildAndSend = (
+    processor as unknown as {
+      _buildAndSendStreamRequest: (
+        params: unknown,
+        promptId: string,
+        userContent: IContent,
+        provider: typeof mockProvider,
+      ) => Promise<AsyncGenerator<ModelStreamChunk>>;
+    }
+  )._buildAndSendStreamRequest;
+
+  const params = { contents: [] };
+  const userContent: IContent = {
+    speaker: 'human',
+    blocks: [{ type: 'text', text: 'test' }],
   };
-});
+
+  // First chunk succeeds, but the error during iteration should be handled
+  const result = await buildAndSend.call(
+    processor,
+    params,
+    'test-prompt',
+    userContent,
+    mockProvider,
+  );
+
+  // Consume first chunk (succeeds)
+  const first = await result.next();
+  expect(first.done).toBe(false);
+
+  // Second chunk should throw
+  await expect(result.next()).rejects.toThrow('Connection reset');
+}
+
+async function facadeCallback8(): Promise<void> {
+  // This test verifies that a lazy async generator (where the actual API call
+  // happens on first iteration) has its first chunk consumed within the
+  // retry boundary, ensuring connection errors trigger retry logic.
+
+  let apiCallMade = false;
+
+  async function* lazyGenerator(): AsyncGenerator<IContent> {
+    // This simulates the actual API call happening when iteration starts
+    apiCallMade = true;
+    yield* [];
+    // Simulate connection error during first chunk
+    throw new Error('ECONNRESET');
+  }
+
+  mockProvider.generateChatCompletion.mockReturnValue(lazyGenerator());
+
+  const buildAndSend = (
+    processor as unknown as {
+      _buildAndSendStreamRequest: (
+        params: unknown,
+        promptId: string,
+        userContent: IContent,
+        provider: typeof mockProvider,
+      ) => Promise<AsyncGenerator<ModelStreamChunk>>;
+    }
+  )._buildAndSendStreamRequest;
+
+  const params = { contents: [] };
+  const userContent: IContent = {
+    speaker: 'human',
+    blocks: [{ type: 'text', text: 'test' }],
+  };
+
+  // The error should occur during _buildAndSendStreamRequest
+  // (inside the retry boundary), not when the caller later iterates
+  await expect(
+    buildAndSend.call(
+      processor,
+      params,
+      'test-prompt',
+      userContent,
+      mockProvider,
+    ),
+  ).rejects.toThrow('ECONNRESET');
+
+  // Verify the API call was actually attempted and provider callback cleanup ran.
+  expect(apiCallMade).toBe(true);
+  expect(
+    (
+      processor as unknown as {
+        compressionHandler: {
+          clearProviderCompressionCallback: ReturnType<typeof vi.fn>;
+        };
+      }
+    ).compressionHandler.clearProviderCompressionCallback,
+  ).toHaveBeenCalledWith(mockProvider);
+}
+
+async function facadeCallback9(): Promise<void> {
+  let sourceClosed = false;
+
+  async function* source(): AsyncGenerator<ModelStreamChunk> {
+    try {
+      yield {
+        content: {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'prefetched' }],
+        },
+      } as ModelStreamChunk;
+      await new Promise<void>(() => {
+        // Keep source pending to mimic an active stream.
+      });
+    } finally {
+      sourceClosed = true;
+    }
+  }
+
+  const sourceIterator = source();
+  const prefetched = await sourceIterator.next();
+  expect(prefetched.done).toBe(false);
+
+  const preloadedStream = prependAsyncGenerator(
+    prefetched.value,
+    sourceIterator,
+  );
+
+  const processStreamResponse = vi.fn(() => {
+    async function* processed(): AsyncGenerator<ModelStreamChunk> {
+      yield {
+        content: {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'processed' }],
+        },
+      } as ModelStreamChunk;
+    }
+    return processed();
+  });
+
+  const executeStreamApiCall = vi.fn().mockResolvedValue(preloadedStream);
+
+  const provider = {
+    name: 'test-provider',
+    generateChatCompletion: vi.fn(),
+  };
+
+  const processor = Object.create(StreamProcessor.prototype) as StreamProcessor;
+  Object.assign(processor, {
+    runtimeContext: {
+      state: {
+        model: 'test-model',
+        baseUrl: 'https://test.example.com',
+      },
+    },
+    compressionHandler: {},
+    historyService: {
+      generateTurnKey: () => 'turn-test',
+    },
+    providerResolver: vi.fn(() => provider),
+    _executeStreamApiCall: executeStreamApiCall,
+    processStreamResponse,
+    turnIdByPromptId: new Map<string, string>(),
+    logger: { debug: () => {}, warn: () => {} },
+  });
+
+  const stream = await processor.makeApiCallAndProcessStream(
+    { config: {} } as SendMessageParams,
+    'test-prompt',
+    { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
+  );
+
+  const returnResult = await stream.return();
+
+  expect(returnResult.done).toBe(true);
+  expect(processStreamResponse).not.toHaveBeenCalled();
+  expect(sourceClosed).toBe(true);
+  expect(executeStreamApiCall).toHaveBeenCalledTimes(1);
+}
+
+async function facadeCallback10(): Promise<void> {
+  const { _attemptCount, mockApiCall, firstChunk } =
+    await observeHaveAPICallErrorsCaughtByRetryWithBackoff();
+  expect(_attemptCount).toBe(3);
+  expect(mockApiCall).toHaveBeenCalledTimes(3);
+  expect(firstChunk.done).toBe(false);
+  expect(firstChunk.value).toBeDefined();
+}
+
+async function facadeCallback11(): Promise<void> {
+  const { _failoverCalled, mockOnPersistent429 } =
+    await observeTriggerBucketFailoverOnPersistent429Errors();
+  expect(_failoverCalled).toBe(true);
+  expect(mockOnPersistent429).toHaveBeenCalled();
+}
+
+function retryRuntimeContext(): Record<string, unknown> {
+  return {
+    state: {
+      model: 'test-model',
+      baseUrl: 'https://test.example.com',
+      runtimeId: 'test-runtime',
+      sessionId: 'test-session',
+      provider: 'test-provider',
+    },
+    providerRuntime: {
+      config: {
+        getEnableHooks: () => false,
+        getHookSystem: () => null,
+      },
+      runtimeId: 'test-runtime',
+    },
+    ephemerals: {
+      reasoning: {
+        includeInContext: () => false,
+      },
+    },
+    tools: {
+      listToolNames: () => [],
+      getToolMetadata: () => undefined,
+    },
+    telemetry: {
+      logApiRequest: vi.fn(),
+      logApiResponse: vi.fn(),
+      logApiError: vi.fn(),
+    },
+  };
+}

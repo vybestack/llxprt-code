@@ -18,7 +18,6 @@
  * - config/configBaseCore.ts (getAgentClient return type)
  * - utils/summarizer.ts (generateContent)
  * - agents/src/api/agentImpl.ts (generateJson)
- * - utils/checkpointUtils.ts (getHistory)
  * - CLI consumers (14+ files: sendMessageStream, setTools, updateSystemInstruction, etc.)
  */
 
@@ -38,6 +37,14 @@ import type { ToolSchedulerFactory } from './toolSchedulerContract.js';
 import type { TaskToolRegistration } from '../config/toolRegistryFactory.js';
 import type { ModelOutput } from '../llm-types/modelEnvelope.js';
 import type { AgentMessageInput } from '../llm-types/agentMessageInput.js';
+import type { JournalReadCounters } from '../recording/journalCounters.js';
+import type { RowOwnership } from '../recording/rowOwnership.js';
+
+export interface DeferredHistorySourceOptions {
+  readonly signal?: AbortSignal;
+  readonly counters?: JournalReadCounters;
+  readonly ownership?: RowOwnership;
+}
 
 /**
  * Neutral request-input type for the agent-client send surface.
@@ -91,7 +98,12 @@ export interface AgentChatContract {
     params: AgentClientMessageParams,
     prompt_id: string,
   ): Promise<ModelOutput>;
-  getHistory(): readonly IContent[];
+  getHistory(
+    curated?: boolean,
+    signal?: AbortSignal,
+  ): AsyncGenerator<IContent, void, unknown>;
+  /** Raw rows pinned on first next. Exhaust or return to release; abort is checked during iteration. */
+  streamHistory(signal?: AbortSignal): AsyncGenerator<IContent, void, unknown>;
   setHistory(history: readonly IContent[]): Promise<void>;
   clearHistory(): void;
   getHistoryService(): HistoryService | null;
@@ -108,24 +120,41 @@ export interface AgentChatContract {
  * Core-owned; the concrete AgentClient class implements this.
  */
 export interface AgentClientContract {
-  initialize(config: ContentGeneratorConfig): Promise<void>;
+  initialize(
+    config: ContentGeneratorConfig,
+    options?: DeferredHistorySourceOptions,
+  ): Promise<void>;
   isInitialized(): boolean;
   hasChatInitialized(): boolean;
   getChat(): AgentChatContract;
-  getHistory(): Promise<readonly IContent[]>;
+  getHistory(
+    curated?: false,
+    signal?: AbortSignal,
+  ): AsyncGenerator<IContent, void, unknown>;
+  streamHistory(signal?: AbortSignal): AsyncGenerator<IContent, void, unknown>;
   getHistoryService(): HistoryService | null;
   storeHistoryServiceForReuse(service: HistoryService): void;
-  storeHistoryForLaterUse(history: readonly IContent[]): Promise<void>;
+  storeHistoryForLaterUse(
+    history: readonly IContent[] | AsyncIterable<IContent>,
+    options?: DeferredHistorySourceOptions,
+  ): Promise<void>;
   dispose(): Promise<void>;
   setTools(): Promise<void>;
   clearTools(): void;
   updateSystemInstruction(): Promise<void>;
   addHistory(content: IContent): Promise<void>;
-  resetChat(): Promise<void>;
+  resetChat(
+    preserveHistory?: readonly IContent[] | AsyncIterable<IContent>,
+  ): Promise<void>;
   resumeChat(history: readonly IContent[]): Promise<void>;
+  discardDeferredHistory(): Promise<void>;
   setHistory(
     history: readonly IContent[],
     options?: { stripThoughts?: boolean },
+  ): Promise<void>;
+  setHistoryFromSource(
+    history: AsyncIterable<IContent>,
+    options?: DeferredHistorySourceOptions,
   ): Promise<void>;
   restoreHistory(historyItems: readonly IContent[]): Promise<void>;
   addDirectoryContext(): Promise<void>;

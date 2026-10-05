@@ -1,3 +1,5 @@
+import { observeHistorySynchronouslyForTest as testHistory } from '../../test-utils/synchronous-history-test-observation.js';
+import { collectRowsForAssertions } from '../../test-utils/collect-rows-for-assertions.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -8,14 +10,43 @@ import {
   assertDefined,
   assertInstanceOf,
 } from '@vybestack/llxprt-code-test-utils';
-import { describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import { annotateCompressionSpan } from './historyChronology.js';
 import type { IContent, MediaBlock } from './IContent.js';
-import {
-  SemanticMediaPurgeCoordinator,
-  type SemanticMediaPurgeOutcome,
+import type {
+  SemanticMediaPurgeOutcome,
+  SemanticMediaPurgeOptions,
 } from './semantic-media-purge.js';
+import {
+  SemanticMediaPurgeStreamCoordinator,
+  type SemanticPurgeStreamTransaction,
+} from './semantic-purge-stream.js';
+import type { SemanticPurgeRowSource } from './semantic-purge-disk-rows.js';
+
+const histories: HistoryService[] = [];
+const transactions: SemanticPurgeStreamTransaction[] = [];
+
+function trackedHistory(): HistoryService {
+  const history = new HistoryService();
+  histories.push(history);
+  return history;
+}
+async function begin(
+  coordinator: SemanticMediaPurgeStreamCoordinator,
+  options: SemanticMediaPurgeOptions,
+): Promise<SemanticPurgeStreamTransaction | undefined> {
+  const transaction = await coordinator.begin(options);
+  if (transaction) transactions.push(transaction);
+  return transaction;
+}
+async function collect(
+  source: SemanticPurgeRowSource | undefined,
+): Promise<IContent[]> {
+  const rows: IContent[] = [];
+  if (source) for await (const row of source.streamRows()) rows.push(row);
+  return rows;
+}
 
 const firstImage: MediaBlock = {
   type: 'media',
@@ -52,7 +83,7 @@ function content(
 }
 
 function createHistory(): HistoryService {
-  const history = new HistoryService();
+  const history = trackedHistory();
   history.add(content('human', 'before', [{ type: 'text', text: 'before' }]));
   history.add(
     content('ai', 'parent', [{ type: 'text', text: 'parent' }], true),
@@ -81,7 +112,7 @@ function requireAggregateError(error: unknown): AggregateError {
 
 function expectOriginalHistory(history: HistoryService): void {
   expect(
-    history.getAll().map((entry) => ({
+    testHistory(history).map((entry) => ({
       speaker: entry.speaker,
       id: entry.metadata?.id,
       responsesStored: entry.metadata?.responsesStored === true,
@@ -120,158 +151,193 @@ const success: SemanticMediaPurgeOutcome = {
   cachePrefixWritten: true,
 };
 
-describe('SemanticMediaPurgeCoordinator', () => {
-  it('is disabled unless explicitly enabled', () => {
+function cleanupPurge(): void {
+  for (const transaction of transactions.splice(0)) transaction.close();
+  for (const history of histories.splice(0)) history.dispose();
+}
+
+describe('SemanticMediaPurgeStreamCoordinator: is disabled unless explicitly enabled', () => {
+  afterEach(cleanupPurge);
+  it('is disabled unless explicitly enabled', async () => {
     const history = createHistory();
-    const coordinator = new SemanticMediaPurgeCoordinator(history, {
+    const coordinator = new SemanticMediaPurgeStreamCoordinator(history, {
       explicitCacheWriteRequired: false,
     });
 
-    expect(coordinator.begin({ mode: 'remove' })).toBeUndefined();
+    expect(await begin(coordinator, { mode: 'remove' })).toBeUndefined();
   });
+});
 
+describe('SemanticMediaPurgeStreamCoordinator: does nothing until an explicit transaction is begun and committed', () => {
+  afterEach(cleanupPurge);
   it('does nothing until an explicit transaction is begun and committed', async () => {
     const history = createHistory();
-    const coordinator = new SemanticMediaPurgeCoordinator(history, {
+    const coordinator = new SemanticMediaPurgeStreamCoordinator(history, {
       enabled: true,
       explicitCacheWriteRequired: true,
     });
 
-    const transaction = coordinator.begin({ mode: 'remove' });
+    const transaction = await begin(coordinator, { mode: 'remove' });
 
     expectOriginalHistory(history);
-    expect(transaction?.candidateHistory[2]?.blocks).toStrictEqual([
+    expect((await collect(transaction?.candidate))[2]?.blocks).toStrictEqual([
       { type: 'text', text: 'inspect' },
       secondImage,
     ]);
-    expect(Object.isFrozen(transaction?.candidateHistory)).toBe(true);
-    expect(Object.isFrozen(transaction?.candidateHistory[2]?.blocks)).toBe(
-      true,
-    );
+    expect(Object.isFrozen(transaction?.candidate)).toBe(true);
+    expect(
+      Object.isFrozen((await collect(transaction?.candidate))[2]?.blocks),
+    ).toBe(true);
     expect(coordinator.frontier).toStrictEqual({
       contentIndex: 0,
       blockIndex: 0,
     });
   });
+});
 
+describe('SemanticMediaPurgeStreamCoordinator: commits a structured summary and preserves stored parents before the changed image', () => {
+  afterEach(cleanupPurge);
   it('commits a structured summary and preserves stored parents before the changed image', async () => {
     const history = createHistory();
-    const coordinator = new SemanticMediaPurgeCoordinator(history, {
+    const coordinator = new SemanticMediaPurgeStreamCoordinator(history, {
       enabled: true,
       explicitCacheWriteRequired: true,
     });
-    const transaction = coordinator.begin({
+    const transaction = await begin(coordinator, {
       mode: 'summary',
       summaryText: 'Screenshot showed a green build.',
     });
     assertDefined(transaction, 'Expected a purge transaction');
 
     const committed = await coordinator.commit(transaction, success);
-    const result = history.getAll();
+    await collectRowsForAssertions(history.streamRawHistory(), async (rows) => {
+      const result = rows;
 
-    expect(committed).toBe(true);
-    expect(result[1]?.metadata?.responsesStored).toBe(true);
-    expect(result[3]?.metadata?.responsesStored).toBeUndefined();
-    expect(result[2]?.blocks).toStrictEqual([
-      { type: 'text', text: 'inspect' },
-      { type: 'text', text: 'Screenshot showed a green build.' },
-      secondImage,
-    ]);
-    expect(coordinator.frontier).toStrictEqual({
-      contentIndex: 2,
-      blockIndex: 2,
-      contentId: 'images',
-      mediaId:
-        'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      expect(committed).toBe(true);
+      expect(result[1]?.metadata?.responsesStored).toBe(true);
+      expect(result[3]?.metadata?.responsesStored).toBeUndefined();
+      expect(result[2]?.blocks).toStrictEqual([
+        { type: 'text', text: 'inspect' },
+        { type: 'text', text: 'Screenshot showed a green build.' },
+        secondImage,
+      ]);
+      expect(coordinator.frontier).toStrictEqual({
+        contentIndex: 2,
+        blockIndex: 2,
+        contentId: 'images',
+        mediaId:
+          'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      });
     });
   });
+});
 
+describe('SemanticMediaPurgeStreamCoordinator: advances oldest-first across two successful transactions', () => {
+  afterEach(cleanupPurge);
   it('advances oldest-first across two successful transactions', async () => {
     const history = createHistory();
-    const coordinator = new SemanticMediaPurgeCoordinator(history, {
+    const coordinator = new SemanticMediaPurgeStreamCoordinator(history, {
       enabled: true,
       explicitCacheWriteRequired: false,
     });
-    const first = coordinator.begin({ mode: 'remove' });
+    const first = await begin(coordinator, { mode: 'remove' });
     assertDefined(first, 'Expected the first purge transaction');
     await coordinator.commit(first, {
       status: 'success',
       cachePrefixWritten: false,
     });
 
-    const second = coordinator.begin({ mode: 'remove' });
+    const second = await begin(coordinator, { mode: 'remove' });
     assertDefined(second, 'Expected the second purge transaction');
     await coordinator.commit(second, {
       status: 'success',
       cachePrefixWritten: false,
     });
 
-    expect(history.getAll()[2]?.blocks).toStrictEqual([
-      { type: 'text', text: 'inspect' },
-    ]);
-    expect(coordinator.begin({ mode: 'remove' })).toBeUndefined();
+    await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
+      expect(rows[2]?.blocks).toStrictEqual([
+        { type: 'text', text: 'inspect' },
+      ]);
+    });
+    expect(await begin(coordinator, { mode: 'remove' })).toBeUndefined();
   });
+});
 
+describe('SemanticMediaPurgeStreamCoordinator: rebases the durable frontier after earlier contents and blocks are compressed', () => {
+  afterEach(cleanupPurge);
   it('rebases the durable frontier after earlier contents and blocks are compressed', async () => {
     const history = createHistory();
-    const coordinator = new SemanticMediaPurgeCoordinator(history, {
+    const coordinator = new SemanticMediaPurgeStreamCoordinator(history, {
       enabled: true,
       explicitCacheWriteRequired: false,
     });
-    const first = coordinator.begin({ mode: 'remove' });
+    const first = await begin(coordinator, { mode: 'remove' });
     assertDefined(first, 'Expected the first purge transaction');
     await coordinator.commit(first, success);
-    const afterFirstPurge = history.getAll();
-    const compressed = annotateCompressionSpan(afterFirstPurge, [
-      {
-        speaker: 'ai',
-        blocks: [
+    await collectRowsForAssertions(history.streamRawHistory(), async (rows) => {
+      const afterFirstPurge = rows;
+      const compressed = annotateCompressionSpan(
+        [...afterFirstPurge],
+        [
           {
-            ...firstImage,
-            data: 'Y29tcHJlc3NlZC1lYXJsaWVyLWltYWdl',
-            sourceContentId:
-              'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+            speaker: 'ai',
+            blocks: [
+              {
+                ...firstImage,
+                data: 'Y29tcHJlc3NlZC1lYXJsaWVyLWltYWdl',
+                sourceContentId:
+                  'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+              },
+            ],
+            metadata: {
+              id: 'compressed-summary',
+              isSummary: true,
+            },
           },
+          content('human', 'images', [secondImage]),
         ],
-        metadata: {
-          id: 'compressed-summary',
-          isSummary: true,
-        },
-      },
-      content('human', 'images', [secondImage]),
-    ]);
-    history.startCompression();
-    history.clear();
-    history.addAll(compressed);
-    history.endCompression();
+      );
+      history.startCompression();
+      history.clear();
+      history.addAll(compressed);
+      history.endCompression();
 
-    const next = coordinator.begin({ mode: 'remove' });
+      const next = await begin(coordinator, { mode: 'remove' });
 
-    expect(next?.changedContentIndex).toBe(1);
-    expect(next?.changedBlockIndex).toBe(0);
-    expect(next?.candidateHistory[0]?.metadata?.id).toBe('compressed-summary');
-    expect(next?.candidateHistory[1]).toBeUndefined();
+      expect(next?.changedContentIndex).toBe(1);
+      expect(next?.changedBlockIndex).toBe(0);
+      expect((await collect(next?.candidate))[0]?.metadata?.id).toBe(
+        'compressed-summary',
+      );
+      expect((await collect(next?.candidate))[1]).toBeUndefined();
+    });
   });
+});
 
-  it('retains legacy parameterized image MIME recognition', () => {
-    const history = new HistoryService();
+describe('SemanticMediaPurgeStreamCoordinator: retains legacy parameterized image MIME recognition', () => {
+  afterEach(cleanupPurge);
+  it('retains legacy parameterized image MIME recognition', async () => {
+    const history = trackedHistory();
     history.add(
       content('human', 'parameterized-image', [
         { ...firstImage, mimeType: 'image/png; charset=utf-8' },
       ]),
     );
-    const coordinator = new SemanticMediaPurgeCoordinator(history, {
+    const coordinator = new SemanticMediaPurgeStreamCoordinator(history, {
       enabled: true,
       explicitCacheWriteRequired: false,
     });
 
-    const transaction = coordinator.begin({ mode: 'remove' });
+    const transaction = await begin(coordinator, { mode: 'remove' });
 
     expect(transaction?.changedContentIndex).toBe(0);
     expect(transaction?.changedBlockIndex).toBe(0);
   });
+});
 
-  it('reports malformed image MIME data with purge location context', () => {
+describe('SemanticMediaPurgeStreamCoordinator: reports malformed image MIME data with purge location context', () => {
+  afterEach(cleanupPurge);
+  it('reports malformed image MIME data with purge location context', async () => {
     const malformedMimeValues: readonly unknown[] = [undefined, 42, 'image'];
 
     for (const malformedMime of malformedMimeValues) {
@@ -281,16 +347,16 @@ describe('SemanticMediaPurgeCoordinator', () => {
       } else {
         Reflect.set(malformedImage, 'mimeType', malformedMime);
       }
-      const history = new HistoryService();
+      const history = trackedHistory();
       history.add(content('human', 'malformed-image', [malformedImage]));
-      const coordinator = new SemanticMediaPurgeCoordinator(history, {
+      const coordinator = new SemanticMediaPurgeStreamCoordinator(history, {
         enabled: true,
         explicitCacheWriteRequired: false,
       });
 
       let captured: unknown;
       try {
-        coordinator.begin({ mode: 'remove' });
+        await begin(coordinator, { mode: 'remove' });
       } catch (error) {
         captured = error;
       }
@@ -302,9 +368,12 @@ describe('SemanticMediaPurgeCoordinator', () => {
       );
     }
   });
+});
 
+describe('SemanticMediaPurgeStreamCoordinator: skips an uncaptioned image in summary mode and advances to a later captioned image', () => {
+  afterEach(cleanupPurge);
   it('skips an uncaptioned image in summary mode and advances to a later captioned image', async () => {
-    const history = new HistoryService();
+    const history = trackedHistory();
     const { caption: _caption, ...uncaptionedImage } = firstImage;
     history.add(content('human', 'uncaptioned-image', [uncaptionedImage]));
     history.add(
@@ -312,26 +381,33 @@ describe('SemanticMediaPurgeCoordinator', () => {
         { ...firstImage, caption: 'A green build result.' },
       ]),
     );
-    const coordinator = new SemanticMediaPurgeCoordinator(history, {
+    const coordinator = new SemanticMediaPurgeStreamCoordinator(history, {
       enabled: true,
       explicitCacheWriteRequired: false,
     });
 
-    const transaction = coordinator.begin({ mode: 'summary' });
+    const transaction = await begin(coordinator, { mode: 'summary' });
     assertDefined(
       transaction,
       'Expected the captioned image to produce a transaction',
     );
     await coordinator.commit(transaction, success);
 
-    expect(history.getAll()[0]?.blocks).toStrictEqual([uncaptionedImage]);
-    expect(history.getAll()[1]?.blocks).toStrictEqual([
-      { type: 'text', text: 'A green build result.' },
-    ]);
+    await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
+      expect(rows[0]?.blocks).toStrictEqual([uncaptionedImage]);
+    });
+    await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
+      expect(rows[1]?.blocks).toStrictEqual([
+        { type: 'text', text: 'A green build result.' },
+      ]);
+    });
   });
+});
 
+describe('SemanticMediaPurgeStreamCoordinator: preserves every earlier stored response when removing an image-only final content', () => {
+  afterEach(cleanupPurge);
   it('preserves every earlier stored response when removing an image-only final content', async () => {
-    const history = new HistoryService();
+    const history = trackedHistory();
     history.add(
       content('ai', 'first-parent', [{ type: 'text', text: 'first' }], true),
     );
@@ -339,20 +415,25 @@ describe('SemanticMediaPurgeCoordinator', () => {
       content('ai', 'second-parent', [{ type: 'text', text: 'second' }], true),
     );
     history.add(content('human', 'final-image', [firstImage]));
-    const coordinator = new SemanticMediaPurgeCoordinator(history, {
+    const coordinator = new SemanticMediaPurgeStreamCoordinator(history, {
       enabled: true,
       explicitCacheWriteRequired: false,
     });
-    const transaction = coordinator.begin({ mode: 'remove' });
+    const transaction = await begin(coordinator, { mode: 'remove' });
     assertDefined(transaction, 'Expected a purge transaction');
 
     await coordinator.commit(transaction, success);
 
-    expect(
-      history.getAll().map((entry) => entry.metadata?.responsesStored),
-    ).toStrictEqual([true, true]);
+    await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
+      expect(
+        rows.map((entry) => entry.metadata?.responsesStored),
+      ).toStrictEqual([true, true]);
+    });
   });
+});
 
+describe('SemanticMediaPurgeStreamCoordinator: leaves history and frontier unchanged for errors, cancellation, retry handoff, and missing cache proof', () => {
+  afterEach(cleanupPurge);
   it('leaves history and frontier unchanged for errors, cancellation, retry handoff, and missing cache proof', async () => {
     const outcomes: SemanticMediaPurgeOutcome[] = [
       { status: 'error', cachePrefixWritten: true },
@@ -363,11 +444,11 @@ describe('SemanticMediaPurgeCoordinator', () => {
 
     for (const outcome of outcomes) {
       const history = createHistory();
-      const coordinator = new SemanticMediaPurgeCoordinator(history, {
+      const coordinator = new SemanticMediaPurgeStreamCoordinator(history, {
         enabled: true,
         explicitCacheWriteRequired: true,
       });
-      const transaction = coordinator.begin({ mode: 'remove' });
+      const transaction = await begin(coordinator, { mode: 'remove' });
       assertDefined(transaction, 'Expected a purge transaction');
 
       const committed = await coordinator.commit(transaction, outcome);
@@ -380,14 +461,17 @@ describe('SemanticMediaPurgeCoordinator', () => {
       });
     }
   });
+});
 
+describe('SemanticMediaPurgeStreamCoordinator: rehydrates the frontier after wholesale history replacement and clear', () => {
+  afterEach(cleanupPurge);
   it('rehydrates the frontier after wholesale history replacement and clear', async () => {
     const history = createHistory();
-    const coordinator = new SemanticMediaPurgeCoordinator(history, {
+    const coordinator = new SemanticMediaPurgeStreamCoordinator(history, {
       enabled: true,
       explicitCacheWriteRequired: false,
     });
-    const first = coordinator.begin({ mode: 'remove' });
+    const first = await begin(coordinator, { mode: 'remove' });
     assertDefined(first, 'Expected first purge transaction');
     await coordinator.commit(first, success);
 
@@ -398,44 +482,52 @@ describe('SemanticMediaPurgeCoordinator', () => {
       ]),
     ]);
 
-    const afterReplacement = coordinator.begin({ mode: 'remove' });
+    const afterReplacement = await begin(coordinator, { mode: 'remove' });
     expect(afterReplacement?.changedContentIndex).toBe(0);
     expect(afterReplacement?.changedBlockIndex).toBe(1);
 
     history.clear();
     history.add(content('human', 'after-clear-image', [firstImage]));
 
-    const afterClear = coordinator.begin({ mode: 'remove' });
+    const afterClear = await begin(coordinator, { mode: 'remove' });
     expect(afterClear?.changedContentIndex).toBe(0);
     expect(afterClear?.changedBlockIndex).toBe(0);
   });
+});
 
+describe('SemanticMediaPurgeStreamCoordinator: rejects a stale transaction without replacing newer history', () => {
+  afterEach(cleanupPurge);
   it('rejects a stale transaction without replacing newer history', async () => {
     const history = createHistory();
-    const coordinator = new SemanticMediaPurgeCoordinator(history, {
+    const coordinator = new SemanticMediaPurgeStreamCoordinator(history, {
       enabled: true,
       explicitCacheWriteRequired: false,
     });
-    const transaction = coordinator.begin({ mode: 'remove' });
+    const transaction = await begin(coordinator, { mode: 'remove' });
     assertDefined(transaction, 'Expected a purge transaction');
     history.add(content('human', 'newer', [{ type: 'text', text: 'newer' }]));
 
     await expect(coordinator.commit(transaction, success)).rejects.toThrow(
       /history changed/i,
     );
-    const currentHistory = history.getAll();
-    expect(currentHistory[currentHistory.length - 1]?.metadata?.id).toBe(
-      'newer',
-    );
+    await collectRowsForAssertions(history.streamRawHistory(), async (rows) => {
+      const currentHistory = rows;
+      expect(currentHistory[currentHistory.length - 1]?.metadata?.id).toBe(
+        'newer',
+      );
+    });
   });
+});
 
+describe('SemanticMediaPurgeStreamCoordinator: rejects stale rollback without overwriting history added after purge commit', () => {
+  afterEach(cleanupPurge);
   it('rejects stale rollback without overwriting history added after purge commit', async () => {
     const history = createHistory();
-    const coordinator = new SemanticMediaPurgeCoordinator(history, {
+    const coordinator = new SemanticMediaPurgeStreamCoordinator(history, {
       enabled: true,
       explicitCacheWriteRequired: false,
     });
-    const transaction = coordinator.begin({ mode: 'remove' });
+    const transaction = await begin(coordinator, { mode: 'remove' });
     assertDefined(transaction, 'Expected a purge transaction');
     await coordinator.commit(transaction, success);
     history.add(content('human', 'newer', [{ type: 'text', text: 'newer' }]));
@@ -444,13 +536,18 @@ describe('SemanticMediaPurgeCoordinator', () => {
       /history changed/i,
     );
 
-    const currentHistory = history.getAll();
-    expect(currentHistory[currentHistory.length - 1]?.metadata?.id).toBe(
-      'newer',
-    );
-    expect(coordinator.frontier).toStrictEqual(transaction.nextFrontier);
+    await collectRowsForAssertions(history.streamRawHistory(), async (rows) => {
+      const currentHistory = rows;
+      expect(currentHistory[currentHistory.length - 1]?.metadata?.id).toBe(
+        'newer',
+      );
+      expect(coordinator.frontier).toStrictEqual(transaction.nextFrontier);
+    });
   });
+});
 
+describe('SemanticMediaPurgeStreamCoordinator: does not overwrite a synchronous add made while durable purge persistence is pending', () => {
+  afterEach(cleanupPurge);
   it('does not overwrite a synchronous add made while durable purge persistence is pending', async () => {
     const history = createHistory();
     let persistenceStarted: (() => void) | undefined;
@@ -461,7 +558,7 @@ describe('SemanticMediaPurgeCoordinator', () => {
     const persistenceGate = new Promise<void>((resolve) => {
       releasePersistence = resolve;
     });
-    const coordinator = new SemanticMediaPurgeCoordinator(history, {
+    const coordinator = new SemanticMediaPurgeStreamCoordinator(history, {
       enabled: true,
       explicitCacheWriteRequired: false,
       persist: async () => {
@@ -469,7 +566,7 @@ describe('SemanticMediaPurgeCoordinator', () => {
         await persistenceGate;
       },
     });
-    const transaction = coordinator.begin({ mode: 'remove' });
+    const transaction = await begin(coordinator, { mode: 'remove' });
     assertDefined(transaction, 'Expected a purge transaction');
     const newer = content('human', 'newer-during-persist', [
       { type: 'text', text: 'newer' },
@@ -482,16 +579,21 @@ describe('SemanticMediaPurgeCoordinator', () => {
     const committed = await committing;
 
     expect(committed).toBe(true);
-    expect(history.getAll()[history.getAll().length - 1]).toBe(newer);
+    await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
+      expect(rows[rows.length - 1]).toBe(newer);
+    });
   });
+});
 
+describe('SemanticMediaPurgeStreamCoordinator: persists candidate history and frontier before committing and restores the session frontier', () => {
+  afterEach(cleanupPurge);
   it('persists candidate history and frontier before committing and restores the session frontier', async () => {
     const history = createHistory();
-    let durableHistory: readonly IContent[] | undefined;
+    let durableHistory: SemanticPurgeRowSource | undefined;
     let durableFrontier:
       | { readonly contentIndex: number; readonly blockIndex: number }
       | undefined;
-    const coordinator = new SemanticMediaPurgeCoordinator(history, {
+    const coordinator = new SemanticMediaPurgeStreamCoordinator(history, {
       enabled: true,
       explicitCacheWriteRequired: false,
       persist: (candidateHistory, frontier) => {
@@ -500,30 +602,36 @@ describe('SemanticMediaPurgeCoordinator', () => {
         return Promise.resolve();
       },
     });
-    const transaction = coordinator.begin({ mode: 'remove' });
+    const transaction = await begin(coordinator, { mode: 'remove' });
     assertDefined(transaction, 'Expected purge transaction');
     const committed = await coordinator.commit(transaction, success);
 
     expect(committed).toBe(true);
-    expect(durableHistory).toBe(transaction.candidateHistory);
+    expect(durableHistory).toBe(transaction.candidate);
     expect(durableFrontier).toStrictEqual(coordinator.frontier);
-    const resumedHistory = new HistoryService();
-    resumedHistory.addAll(history.getAll());
-    const resumed = new SemanticMediaPurgeCoordinator(resumedHistory, {
+    const resumedHistory = trackedHistory();
+    await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
+      resumedHistory.addAll([...rows]);
+    });
+    const resumed = new SemanticMediaPurgeStreamCoordinator(resumedHistory, {
       enabled: true,
       explicitCacheWriteRequired: false,
     });
+    await begin(resumed, { mode: 'remove' });
     expect(resumed.frontier).toStrictEqual(coordinator.frontier);
   });
+});
 
+describe('SemanticMediaPurgeStreamCoordinator: rolls back when durable session state cannot be written', () => {
+  afterEach(cleanupPurge);
   it('rolls back when durable session state cannot be written', async () => {
     const history = createHistory();
-    const coordinator = new SemanticMediaPurgeCoordinator(history, {
+    const coordinator = new SemanticMediaPurgeStreamCoordinator(history, {
       enabled: true,
       explicitCacheWriteRequired: false,
       persist: () => Promise.reject(new Error('recording unavailable')),
     });
-    const transaction = coordinator.begin({ mode: 'remove' });
+    const transaction = await begin(coordinator, { mode: 'remove' });
     assertDefined(transaction, 'Expected purge transaction');
     await expect(coordinator.commit(transaction, success)).rejects.toThrow(
       'recording unavailable',
@@ -534,17 +642,20 @@ describe('SemanticMediaPurgeCoordinator', () => {
       blockIndex: 0,
     });
   });
+});
 
+describe('SemanticMediaPurgeStreamCoordinator: compensates durable state when live history replacement fails', () => {
+  afterEach(cleanupPurge);
   it('compensates durable state when live history replacement fails', async () => {
     const history = createHistory();
     const persisted: Array<{
-      readonly history: readonly IContent[];
+      readonly history: SemanticPurgeRowSource;
       readonly frontier: {
         readonly contentIndex: number;
         readonly blockIndex: number;
       };
     }> = [];
-    const coordinator = new SemanticMediaPurgeCoordinator(history, {
+    const coordinator = new SemanticMediaPurgeStreamCoordinator(history, {
       enabled: true,
       explicitCacheWriteRequired: false,
       persist: (candidateHistory, frontier) => {
@@ -552,7 +663,7 @@ describe('SemanticMediaPurgeCoordinator', () => {
         return Promise.resolve();
       },
     });
-    const transaction = coordinator.begin({ mode: 'remove' });
+    const transaction = await begin(coordinator, { mode: 'remove' });
     assertDefined(transaction, 'Expected purge transaction');
     history.on('tokensUpdated', () => {
       throw new Error('listener failure');
@@ -564,8 +675,8 @@ describe('SemanticMediaPurgeCoordinator', () => {
 
     expectOriginalHistory(history);
     expect(persisted).toHaveLength(2);
-    expect(persisted[0]?.history).toBe(transaction.candidateHistory);
-    expect(persisted[1]?.history).toBe(transaction.baseHistory);
+    expect(persisted[0]?.history).toBe(transaction.candidate);
+    expect(persisted[1]?.history).toBe(transaction.base);
     expect(persisted[1]?.frontier).toStrictEqual({
       contentIndex: 0,
       blockIndex: 0,
@@ -575,11 +686,14 @@ describe('SemanticMediaPurgeCoordinator', () => {
       blockIndex: 0,
     });
   });
+});
 
+describe('SemanticMediaPurgeStreamCoordinator: compensates durable state when committed purge rollback cannot replace live history', () => {
+  afterEach(cleanupPurge);
   it('compensates durable state when committed purge rollback cannot replace live history', async () => {
     const history = createHistory();
-    const persisted: Array<readonly IContent[]> = [];
-    const coordinator = new SemanticMediaPurgeCoordinator(history, {
+    const persisted: SemanticPurgeRowSource[] = [];
+    const coordinator = new SemanticMediaPurgeStreamCoordinator(history, {
       enabled: true,
       explicitCacheWriteRequired: false,
       persist: (candidateHistory) => {
@@ -587,7 +701,7 @@ describe('SemanticMediaPurgeCoordinator', () => {
         return Promise.resolve();
       },
     });
-    const transaction = coordinator.begin({ mode: 'remove' });
+    const transaction = await begin(coordinator, { mode: 'remove' });
     assertDefined(transaction, 'Expected purge transaction');
     await coordinator.commit(transaction, success);
     history.on('tokensUpdated', () => {
@@ -598,17 +712,22 @@ describe('SemanticMediaPurgeCoordinator', () => {
       'rollback listener failure',
     );
 
-    expect(history.getAll()).toStrictEqual([...transaction.candidateHistory]);
+    await collectRowsForAssertions(history.streamRawHistory(), async (rows) => {
+      expect(rows).toStrictEqual(await collect(transaction.candidate));
+    });
     expect(persisted).toHaveLength(3);
-    expect(persisted[1]).toBe(transaction.baseHistory);
-    expect(persisted[2]).toBe(transaction.candidateHistory);
+    expect(persisted[1]).toBe(transaction.base);
+    expect(persisted[2]).toBe(transaction.candidate);
     expect(coordinator.frontier).toStrictEqual(transaction.nextFrontier);
   });
+});
 
+describe('SemanticMediaPurgeStreamCoordinator: reports both live replacement and durable compensation failures', () => {
+  afterEach(cleanupPurge);
   it('reports both live replacement and durable compensation failures', async () => {
     const history = createHistory();
     let persistenceAttempt = 0;
-    const coordinator = new SemanticMediaPurgeCoordinator(history, {
+    const coordinator = new SemanticMediaPurgeStreamCoordinator(history, {
       enabled: true,
       explicitCacheWriteRequired: false,
       persist: () => {
@@ -618,7 +737,7 @@ describe('SemanticMediaPurgeCoordinator', () => {
           : Promise.reject(new Error('compensation unavailable'));
       },
     });
-    const transaction = coordinator.begin({ mode: 'remove' });
+    const transaction = await begin(coordinator, { mode: 'remove' });
     assertDefined(transaction, 'Expected purge transaction');
     history.on('tokensUpdated', () => {
       throw new Error('listener failure');

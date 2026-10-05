@@ -26,11 +26,17 @@ import type { DebugLogger } from '../../debug/index.js';
 export function sanitizeProviderHistoryForSerialization(
   contents: IContent[],
 ): IContent[] {
-  return contents.map((content) => ({
+  return contents.map(sanitizeProviderContentForSerialization);
+}
+
+export function sanitizeProviderContentForSerialization(
+  content: IContent,
+): IContent {
+  return {
     speaker: content.speaker,
     blocks: content.blocks.map(cloneBlock),
     metadata: content.metadata ? { ...content.metadata } : {},
-  }));
+  };
 }
 
 /** Clone a single block, sanitizing tool_call/tool_response payloads. */

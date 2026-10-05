@@ -17,6 +17,8 @@
 import { type IModel } from './IModel.js';
 import { type ITool } from './ITool.js';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { HistoryDumpSource } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { ToolOutputSettingsProvider } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
@@ -136,6 +138,12 @@ export interface MetadataBearingOptions {
  * @pseudocode base-provider-call-contract.md lines 3-5
  */
 export interface IProvider {
+  readonly contextDumpVersion?: 2;
+  buildContextDumpBody?(
+    history: HistoryDumpSource,
+    model?: string,
+    config?: ToolOutputSettingsProvider,
+  ): Promise<Record<string, unknown>>;
   name: string;
   isDefault?: boolean;
   transportAttemptOwnership?: 'provider';

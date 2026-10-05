@@ -287,7 +287,7 @@ export class SubagentOrchestrator {
     profile: Profile;
     agentRuntimeId: string;
     childSessionId: string;
-    childJournal: ChildSessionJournal | null;
+    childJournal: ChildSessionJournal;
     signal?: AbortSignal;
   }): Promise<SubagentLaunchResult> {
     const {
@@ -361,12 +361,11 @@ export class SubagentOrchestrator {
   private async cleanupAfterLaunchFailure(
     scope: SubAgentScopeInstance | undefined,
     bundle: RuntimeBundle | undefined,
-    childJournal: ChildSessionJournal | null,
+    childJournal: ChildSessionJournal,
   ): Promise<void> {
     try {
       if (bundle === undefined) {
-        // Assembly never started; only the journal (if any) needs teardown.
-        await childJournal?.dispose();
+        await childJournal.dispose();
         return;
       }
       if (scope !== undefined) {
@@ -724,7 +723,7 @@ export class SubagentOrchestrator {
       modelConfig: ModelConfig;
       agentRuntimeId: string;
       childSessionId: string;
-      childJournal: ChildSessionJournal | null;
+      childJournal: ChildSessionJournal;
     },
     signal?: AbortSignal,
   ): Promise<RuntimeBundle> {
@@ -800,7 +799,7 @@ export class SubagentOrchestrator {
     runtimeStateProfile: Profile;
     effectiveProfile: Profile;
     modelConfig: ModelConfig;
-    childJournal: ChildSessionJournal | null;
+    childJournal: ChildSessionJournal;
     signal?: AbortSignal;
   }): Promise<AgentRuntimeLoaderResult> {
     const providerRuntime = createSettingsProviderRuntimeContext({
@@ -846,7 +845,7 @@ export class SubagentOrchestrator {
     settingsSnapshot: ReadonlySettingsSnapshot;
     providerRuntime: ProviderRuntimeContext;
     contentGeneratorConfig: ContentGeneratorConfig;
-    childJournal: ChildSessionJournal | null;
+    childJournal: ChildSessionJournal;
     signal?: AbortSignal;
   }): AgentRuntimeLoaderOptions {
     const toolRegistry: ToolRegistry | undefined =
@@ -866,14 +865,11 @@ export class SubagentOrchestrator {
       },
       // The child's HistoryService is the facade over its own ephemeral
       // journal instead of a throwaway temp journal (#854 P05c).
-      overrides:
-        params.childJournal === null
-          ? undefined
-          : {
-              historyService: new HistoryService({
-                recording: params.childJournal.recording,
-              }),
-            },
+      overrides: {
+        historyService: new HistoryService({
+          recording: params.childJournal.recording,
+        }),
+      },
       signal: params.signal,
     };
   }

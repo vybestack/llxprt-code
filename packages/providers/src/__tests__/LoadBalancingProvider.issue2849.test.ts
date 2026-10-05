@@ -27,7 +27,6 @@ import { describe, it, expect, beforeEach } from 'bun:test';
 import { ProviderManager } from '../ProviderManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   LoadBalancingProvider,
   type LoadBalancingProviderConfig,
@@ -35,6 +34,7 @@ import {
 import type { IProvider } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { GenerateChatOptions } from '../GenerateChatOptions.js';
+import { replayableContents } from '../utils/collectContents.js';
 
 /** Build a fake delegate whose per-invocation behavior is supplied inline. */
 function makeFakeProvider(
@@ -88,6 +88,10 @@ function makeOptions(): GenerateChatOptions {
   return {
     prompt: 'test prompt',
     messages: [{ role: 'user' as const, content: 'test' }],
+    contents: replayableContents([
+      { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+      { speaker: 'human', blocks: [{ type: 'text', text: 'test prompt' }] },
+    ]),
   };
 }
 
@@ -150,16 +154,16 @@ async function consumeStream(
   }
   return chunks;
 }
+function makeProviderManager(): ProviderManager {
+  const settingsService = new SettingsService();
+  const config = createRuntimeConfigStub(settingsService);
+  return new ProviderManager({ settingsService, config });
+}
 
-describe('LoadBalancingProvider issue #2849: LB reliability for transient 429', () => {
-  let settingsService: SettingsService;
-  let config: Config;
+describe('LoadBalancingProvider issue #2849: LB reliability for transient 429 [part 1]', () => {
   let providerManager: ProviderManager;
-
   beforeEach(() => {
-    settingsService = new SettingsService();
-    config = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager({ settingsService, config });
+    providerManager = makeProviderManager();
   });
 
   /**
@@ -200,6 +204,13 @@ describe('LoadBalancingProvider issue #2849: LB reliability for transient 429', 
     expect(exhausted2.counter.value).toBe(0);
     // Stayed on zai — no failover.
     expect(lb.getCurrentFailoverIndex()).toBe(0);
+  });
+});
+
+describe('LoadBalancingProvider issue #2849: LB reliability for transient 429 [part 2]', () => {
+  let providerManager: ProviderManager;
+  beforeEach(() => {
+    providerManager = makeProviderManager();
   });
 
   /**
@@ -267,6 +278,13 @@ describe('LoadBalancingProvider issue #2849: LB reliability for transient 429', 
     expect(makora.counter.value).toBe(1);
     expect(lb.getCurrentFailoverIndex()).toBe(1);
   });
+});
+
+describe('LoadBalancingProvider issue #2849: LB reliability for transient 429 [part 3]', () => {
+  let providerManager: ProviderManager;
+  beforeEach(() => {
+    providerManager = makeProviderManager();
+  });
 
   /**
    * Full reliability scenario from the issue: zai is healthy but sometimes
@@ -309,6 +327,13 @@ describe('LoadBalancingProvider issue #2849: LB reliability for transient 429', 
     expect(ollama.counter.value).toBe(0);
     expect(lb.getCurrentFailoverIndex()).toBe(0);
   });
+});
+
+describe('LoadBalancingProvider issue #2849: LB reliability for transient 429 [part 4]', () => {
+  let providerManager: ProviderManager;
+  beforeEach(() => {
+    providerManager = makeProviderManager();
+  });
 
   /**
    * When all backends are persistently exhausted (all 429 on every attempt),
@@ -340,6 +365,13 @@ describe('LoadBalancingProvider issue #2849: LB reliability for transient 429', 
     // Each backend tried 2 times (retryCount=2). 3 backends × 2 = 6 total.
     const total = counters.reduce((sum, c) => sum + c.value, 0);
     expect(total).toBe(6);
+  });
+});
+
+describe('LoadBalancingProvider issue #2849: LB reliability for transient 429 [part 5]', () => {
+  let providerManager: ProviderManager;
+  beforeEach(() => {
+    providerManager = makeProviderManager();
   });
 
   /**

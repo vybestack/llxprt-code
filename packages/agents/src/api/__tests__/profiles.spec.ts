@@ -23,6 +23,7 @@
  *        full raw>keyName>inline>keyfile>oauth>none chain.
  */
 
+import { collectAgentHistory } from './helpers/collect-agent-history.js';
 import { describe, it, expect } from 'bun:test';
 import * as fc from 'fast-check';
 import { buildAgent, drain, countType } from './helpers/agentHarness.js';
@@ -61,14 +62,14 @@ describe('Profiles/auth-winner @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-
       // seed a turn so there is real context to preserve across apply
       const first = await drain(agent.stream('seed context'));
       expect(countType(first, 'done')).toBe(1);
-      const beforeHistory = await agent.getHistory();
+      const beforeHistory = await collectAgentHistory(agent);
       expect(beforeHistory.length).toBeGreaterThanOrEqual(1);
 
       // apply the profile
       await agent.profiles.apply('crud-profile');
 
       // context preserved: history length is at least what it was before apply
-      const afterHistory = await agent.getHistory();
+      const afterHistory = await collectAgentHistory(agent);
       expect(afterHistory.length).toBeGreaterThanOrEqual(beforeHistory.length);
 
       // delete the profile — durable store changes

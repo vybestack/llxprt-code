@@ -16,7 +16,14 @@
 
 import type { IContent, ToolCallBlock, ToolResponseBlock } from './IContent.js';
 import type { DebugLogger } from '../../debug/index.js';
+import type { RowOwnership } from '../../recording/rowOwnership.js';
 import { HistoryToolNormalization } from './historyToolNormalization.js';
+import { ToolPairingIndex } from './tool-pairing-index.js';
+
+export interface ToolPairingStreamOptions {
+  readonly root?: string;
+  readonly ownership?: RowOwnership;
+}
 
 /**
  * Helper predicate: checks if content has valid blocks array with at least one element.
@@ -83,40 +90,35 @@ export function createSyntheticToolMessage(
   };
 }
 
-/**
- * Find unmatched tool calls (tool calls without responses) in a history array.
- */
-export function findUnmatchedToolCalls(
+function indexToolBlocks(index: ToolPairingIndex, row: IContent): void {
+  if (!hasValidBlocks(row)) return;
+  for (const block of row.blocks) {
+    if (block.type === 'tool_response') index.respond(block.callId);
+    else if (block.type === 'tool_call') index.add(block);
+  }
+}
+
+/** Scan the captured history before yielding: even its last row can answer a call. */
+export async function* findUnmatchedToolCalls(
   logger: DebugLogger,
-  history: readonly IContent[],
-): ToolCallBlock[] {
-  const respondedCallIds = collectRespondedCallIds(history);
-
-  const unmatched: ToolCallBlock[] = [];
-  const seenToolCallIds = new Set<string>();
-
-  const toolCalls = history.flatMap((content) =>
-    hasValidBlocks(content)
-      ? content.blocks.filter(
-          (block): block is ToolCallBlock => block.type === 'tool_call',
-        )
-      : [],
-  );
-
-  for (const block of toolCalls) {
-    if (!seenToolCallIds.has(block.id)) {
-      seenToolCallIds.add(block.id);
-
-      if (!respondedCallIds.has(block.id)) {
-        unmatched.push(block);
+  history: AsyncIterable<IContent>,
+  options: ToolPairingStreamOptions = {},
+): AsyncGenerator<ToolCallBlock, void, unknown> {
+  const index = new ToolPairingIndex(options.root);
+  let unmatchedCount = 0;
+  try {
+    for await (const row of history) indexToolBlocks(index, row);
+    for (const block of index.unmatched()) {
+      options.ownership?.retain(block);
+      try {
+        unmatchedCount += 1;
+        yield block;
+      } finally {
+        options.ownership?.release(block);
       }
     }
+    logger.debug('Unmatched tool calls detected:', { unmatchedCount });
+  } finally {
+    index.close();
   }
-
-  logger.debug('Unmatched tool calls detected:', {
-    unmatchedCount: unmatched.length,
-    unmatchedIds: unmatched.map((c) => c.id),
-  });
-
-  return unmatched;
 }

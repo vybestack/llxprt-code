@@ -16,7 +16,7 @@
  * @requirement REQ-3048-007
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, afterAll } from 'bun:test';
 import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type {
   ServerAgentStreamEvent,
@@ -115,16 +115,50 @@ interface Harness {
   afterAgentTexts: string[];
 }
 
-function buildHarness(options: BuildOptions): Harness {
-  const afterAgentTexts: string[] = [];
+function createTodoContinuationDeps(): MessageStreamDeps['todoContinuationService'] {
+  return {
+    clearPausedState: vi.fn().mockResolvedValue(undefined),
+    toolActivityCount: 0,
+    toolCallReminderLevel: 'none',
+    consecutiveComplexTurns: 0,
+    lastTodoSnapshot: [],
+    recordModelActivity: vi.fn(),
+    isTodoToolCall: vi.fn().mockReturnValue(false),
+    applyPendingReminder: vi.fn((r: AgentMessageInput) => Promise.resolve(r)),
+    getTodoReminderForCurrentState: vi.fn().mockResolvedValue({
+      todos: [],
+      activeTodos: [],
+      reminder: undefined,
+    }),
+    areTodoSnapshotsEqual: vi.fn().mockReturnValue(true),
+    processComplexityAnalysis: vi.fn().mockReturnValue(undefined),
+    appendTodoSuffixToRequest: vi.fn(),
+    appendSystemReminderToRequest: vi.fn(),
+    updateTodoToolAvailabilityFromDeclarations: vi.fn(),
+    setLastTodoToolTurn: vi.fn(),
+    checkpoint: vi.fn().mockReturnValue({}),
+    restore: vi.fn(),
+    // Faithful to production: Finished and Citation are deferred.
+    shouldDeferStreamEvent: vi.fn(
+      (event: ServerAgentStreamEvent) =>
+        event.type === AgentEventType.Finished ||
+        event.type === AgentEventType.Citation,
+    ),
+  } as unknown as MessageStreamDeps['todoContinuationService'];
+}
 
-  const mockChat = {
-    addHistory: vi.fn(),
-    getHistory: vi.fn().mockReturnValue([]),
-    getContextLimit: vi.fn().mockReturnValue(1_000_000),
-  };
+function createLoopDetector(): LoopDetectionService {
+  return {
+    reset: vi.fn(),
+    turnStarted: vi.fn().mockResolvedValue(false),
+    addAndCheck: vi.fn().mockReturnValue(false),
+    checkpoint: vi.fn().mockReturnValue({}),
+    restore: vi.fn(),
+  } as unknown as LoopDetectionService;
+}
 
-  const config = {
+function createHarnessConfig(options: BuildOptions): Config {
+  return {
     getMaxSessionTurns: vi.fn(() => 100),
     getIdeMode: vi.fn(() => false),
     getContinueOnFailedApiCall: vi.fn(
@@ -135,6 +169,18 @@ function buildHarness(options: BuildOptions): Harness {
       get: vi.fn(() => undefined),
     })),
   } as unknown as Config;
+}
+
+function buildHarness(options: BuildOptions): Harness {
+  const afterAgentTexts: string[] = [];
+
+  const mockChat = {
+    addHistory: vi.fn(),
+    getHistory: vi.fn().mockReturnValue([]),
+    getContextLimit: vi.fn().mockReturnValue(1_000_000),
+  };
+
+  const config = createHarnessConfig(options);
 
   mockTurnRun.mockReturnValue(streamFrom(options.stream));
 
@@ -147,42 +193,8 @@ function buildHarness(options: BuildOptions): Harness {
       error: vi.fn(),
       info: vi.fn(),
     } as unknown as DebugLogger,
-    loopDetector: {
-      reset: vi.fn(),
-      turnStarted: vi.fn().mockResolvedValue(false),
-      addAndCheck: vi.fn().mockReturnValue(false),
-      checkpoint: vi.fn().mockReturnValue({}),
-      restore: vi.fn(),
-    } as unknown as LoopDetectionService,
-    todoContinuationService: {
-      clearPausedState: vi.fn().mockResolvedValue(undefined),
-      toolActivityCount: 0,
-      toolCallReminderLevel: 'none',
-      consecutiveComplexTurns: 0,
-      lastTodoSnapshot: [],
-      recordModelActivity: vi.fn(),
-      isTodoToolCall: vi.fn().mockReturnValue(false),
-      applyPendingReminder: vi.fn((r: AgentMessageInput) => Promise.resolve(r)),
-      getTodoReminderForCurrentState: vi.fn().mockResolvedValue({
-        todos: [],
-        activeTodos: [],
-        reminder: undefined,
-      }),
-      areTodoSnapshotsEqual: vi.fn().mockReturnValue(true),
-      processComplexityAnalysis: vi.fn().mockReturnValue(undefined),
-      appendTodoSuffixToRequest: vi.fn(),
-      appendSystemReminderToRequest: vi.fn(),
-      updateTodoToolAvailabilityFromDeclarations: vi.fn(),
-      setLastTodoToolTurn: vi.fn(),
-      checkpoint: vi.fn().mockReturnValue({}),
-      restore: vi.fn(),
-      // Faithful to production: Finished and Citation are deferred.
-      shouldDeferStreamEvent: vi.fn(
-        (event: ServerAgentStreamEvent) =>
-          event.type === AgentEventType.Finished ||
-          event.type === AgentEventType.Citation,
-      ),
-    } as unknown as MessageStreamDeps['todoContinuationService'],
+    loopDetector: createLoopDetector(),
+    todoContinuationService: createTodoContinuationDeps(),
     ideContextTracker: {
       getContextParts: vi.fn().mockReturnValue({
         contextParts: [],
@@ -204,7 +216,7 @@ function buildHarness(options: BuildOptions): Harness {
       providerName: 'openai',
       model: 'gpt-4',
     }),
-    getHistory: vi.fn().mockResolvedValue([]),
+    async *streamHistory() {},
     getSessionTurnCount: vi.fn().mockReturnValue(1),
     incrementSessionTurnCount: vi.fn(),
     lazyInitialize: vi.fn().mockResolvedValue(undefined),
@@ -266,7 +278,54 @@ const VISIBLE = (
   ...overrides,
 });
 
+const observeDropsDeferredCitationsFromTheAbandonedAttempt = async () => {
+  const { orchestrator } = buildHarness({
+    stream: [
+      content('abandoned '),
+      citation('abandoned-citation'),
+      retryEvent(),
+      content('kept'),
+      finishedEvent(VISIBLE()),
+    ],
+  });
+
+  const events = await drain(orchestrator);
+  const citations = events.filter((e) => e.type === AgentEventType.Citation);
+  const keptContentPresent = events.some(
+    (e) => e.type === AgentEventType.Content && e.value === 'kept',
+  );
+
+  return {
+    citationCount: citations.length,
+    keptContentPresent,
+  };
+};
+
+const observeStillYieldsTheRetryEventToConsumersBeforeReplacementContent =
+  async () => {
+    const { orchestrator } = buildHarness({
+      stream: [
+        content('abandoned'),
+        retryEvent(),
+        content('kept'),
+        finishedEvent(VISIBLE()),
+      ],
+    });
+
+    const events = await drain(orchestrator);
+    const retryIndex = events.findIndex((e) => e.type === AgentEventType.Retry);
+    const keptIndex = events.findIndex(
+      (e) => e.type === AgentEventType.Content && e.value === 'kept',
+    );
+
+    return { retryIndex, keptIndex };
+  };
+
 describe('MessageStreamOrchestrator — per-attempt discard on Retry (issue #3048)', () => {
+  afterAll(() => {
+    void vi.mock('./turn.js', () => realTurnJsModule);
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -295,29 +354,6 @@ describe('MessageStreamOrchestrator — per-attempt discard on Retry (issue #304
       keptContentPresent: true,
     });
   });
-
-  const observeDropsDeferredCitationsFromTheAbandonedAttempt = async () => {
-    const { orchestrator } = buildHarness({
-      stream: [
-        content('abandoned '),
-        citation('abandoned-citation'),
-        retryEvent(),
-        content('kept'),
-        finishedEvent(VISIBLE()),
-      ],
-    });
-
-    const events = await drain(orchestrator);
-    const citations = events.filter((e) => e.type === AgentEventType.Citation);
-    const keptContentPresent = events.some(
-      (e) => e.type === AgentEventType.Content && e.value === 'kept',
-    );
-
-    return {
-      citationCount: citations.length,
-      keptContentPresent,
-    };
-  };
 
   it('reports hadContent false when the only content belonged to the abandoned attempt', async () => {
     // An InvalidStream after the retry can only trigger recovery when
@@ -356,28 +392,6 @@ describe('MessageStreamOrchestrator — per-attempt discard on Retry (issue #304
     expect(retryIndex).toBeGreaterThanOrEqual(0);
     expect(retryIndex).toBeLessThan(keptIndex);
   });
-
-  const observeStillYieldsTheRetryEventToConsumersBeforeReplacementContent =
-    async () => {
-      const { orchestrator } = buildHarness({
-        stream: [
-          content('abandoned'),
-          retryEvent(),
-          content('kept'),
-          finishedEvent(VISIBLE()),
-        ],
-      });
-
-      const events = await drain(orchestrator);
-      const retryIndex = events.findIndex(
-        (e) => e.type === AgentEventType.Retry,
-      );
-      const keptIndex = events.findIndex(
-        (e) => e.type === AgentEventType.Content && e.value === 'kept',
-      );
-
-      return { retryIndex, keptIndex };
-    };
 
   it('does not reset finishedOutcome when discarding an abandoned attempt', async () => {
     // Fence: a Finished outcome set before the retry must survive the

@@ -1,3 +1,4 @@
+import { curatedHistoryForTest } from '../../../../core/src/test-utils/curated-history-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -16,6 +17,7 @@
  * IProvider port. No assertions on mock call records.
  */
 
+import { collectRawHistory } from '@vybestack/llxprt-code-core/test-utils/collect-raw-history.js';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -63,7 +65,7 @@ function aiMsg(text: string): IContent {
  */
 function extractHeadByAnchor(hs: HistoryService): string[] {
   const anchorSeq = hs.getCacheAnchorSeq();
-  const curated = hs.getCurated();
+  const curated = curatedHistoryForTest(hs);
   let headEnd = 0;
   if (anchorSeq > 0) {
     const anchorIndex = curated.findIndex(
@@ -211,7 +213,7 @@ describe('Defect 5: prefix-destroying compression resets the anchor and next com
     }
 
     // Advance the anchor to simulate a prior compression having set it
-    const stamped = historyService.getRawHistory();
+    const stamped = await collectRawHistory(historyService);
     const lastSeq = stamped[stamped.length - 1].metadata?.chronology?.seq ?? 0;
     historyService.setCacheAnchorSeq(lastSeq);
 

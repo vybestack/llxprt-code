@@ -27,6 +27,8 @@ import type {
 import { collectMediaReferences } from './media-reference-lifecycle.js';
 import { historyOwnerIdFor } from './media-admission-service.js';
 import type { LocalMediaStore } from './local-media-store.js';
+import { HistoryMediaIndex } from './history-media-index.js';
+import type { RowOwnership } from '../recording/rowOwnership.js';
 
 interface TrackedMediaReservation {
   readonly contentId: string;
@@ -34,25 +36,17 @@ interface TrackedMediaReservation {
   readonly reference: MediaReferenceBlock;
 }
 
-function reservationsOf(
-  contents: readonly IContent[],
-): readonly TrackedMediaReservation[] {
-  return collectMediaReferences(contents).map((reference) => ({
-    contentId: reference.contentId,
-    ownerId: historyOwnerIdFor(reference.contentId),
-    reference,
-  }));
-}
-
-function reservationMap(
-  contents: readonly IContent[],
-): ReadonlyMap<string, TrackedMediaReservation> {
-  return new Map(
-    reservationsOf(contents).map((reservation) => [
-      reservation.contentId,
-      reservation,
-    ]),
-  );
+function* reservationsOf(
+  contents: Iterable<IContent>,
+): Iterable<TrackedMediaReservation> {
+  for (const content of contents) {
+    for (const reference of collectMediaReferences([content]))
+      yield {
+        contentId: reference.contentId,
+        ownerId: historyOwnerIdFor(reference.contentId),
+        reference,
+      };
+  }
 }
 
 function throwOwnershipFailures(failures: readonly unknown[]): void {
@@ -63,105 +57,217 @@ function throwOwnershipFailures(failures: readonly unknown[]): void {
 }
 
 export class HistoryMediaOwnership implements HistoryMediaOwner {
-  private readonly owned = new Map<string, MediaReferenceBlock>();
-  private readonly reserved = new Set<string>();
-  private readonly released = new Set<string>();
+  private owned = new HistoryMediaIndex();
+  private readonly reserved = new HistoryMediaIndex();
+  private pending: HistoryMediaIndex | undefined;
+  private retired: HistoryMediaIndex | undefined;
+  private ownership: RowOwnership | undefined;
 
   constructor(private readonly store: LocalMediaStore) {}
 
   prepareReplacement(input: {
-    readonly previous: readonly IContent[];
-    readonly next: readonly IContent[];
+    readonly previous: Iterable<IContent> & { readonly length: number };
+    readonly next: Iterable<IContent> & { readonly length: number };
     readonly adopted: readonly HistoryOwnedMediaReservation[];
+    readonly ownership?: RowOwnership;
   }): PreparedHistoryBatchEffect {
-    const previousIds = new Set(
-      reservationsOf(input.previous).map(({ contentId }) => contentId),
-    );
+    const ownership = input.ownership;
+    const next = this.captureTarget(input.next, ownership);
+    const previous = input.previous;
+    const adopted = input.adopted;
     let publicationAttempted = false;
     return {
       publish: async () => {
         publicationAttempted = true;
-        await this.transition(input.next);
+        await this.transitionTarget(next, false, ownership);
       },
-      rollback: () =>
-        publicationAttempted
-          ? this.transition(input.previous)
-          : this.releaseUnpublishedAdoptions(input.adopted, previousIds),
+      rollback: async () => {
+        try {
+          if (publicationAttempted)
+            await this.transition(previous, false, ownership);
+          else await this.releaseUnpublishedAdoptions(adopted, previous);
+        } finally {
+          next.close();
+        }
+      },
+      finalize: () => next.close(),
     };
   }
 
+  prepareReferenceReplacement(
+    references:
+      | AsyncIterable<MediaReferenceBlock>
+      | Iterable<MediaReferenceBlock>,
+    ownership?: RowOwnership,
+  ): PreparedHistoryBatchEffect {
+    if (this.pending || this.retired)
+      throw new Error('Unsettled media replacement');
+    this.ownership = ownership;
+    const previous = this.owned;
+    const next = new HistoryMediaIndex();
+    this.pending = next;
+    return {
+      publish: async () => {
+        for await (const reference of references) {
+          ownership?.retain(reference);
+          try {
+            next.set(reference);
+            await this.store.reserve(
+              reference,
+              historyOwnerIdFor(reference.contentId),
+            );
+          } finally {
+            ownership?.release(reference);
+          }
+        }
+      },
+      rollback: async () => {
+        await this.releaseDifference(next, previous, ownership);
+        next.close();
+        this.pending = undefined;
+      },
+      finalize: async () => {
+        this.owned = next;
+        this.pending = undefined;
+        this.retired = previous;
+        this.reserved.close();
+        await this.releaseDifference(previous, next, ownership);
+        previous.close();
+        this.retired = undefined;
+      },
+    };
+  }
+
+  private async releaseDifference(
+    from: HistoryMediaIndex,
+    keep: HistoryMediaIndex,
+    ownership?: RowOwnership,
+  ): Promise<void> {
+    for (const reference of from.values(ownership ?? this.ownership)) {
+      if (!keep.has(reference.contentId))
+        await this.store.release(
+          reference.contentId,
+          historyOwnerIdFor(reference.contentId),
+        );
+    }
+  }
+
   reconcile(
-    _previous: readonly IContent[],
-    getNext: () => readonly IContent[],
+    _previous: Iterable<IContent>,
+    getNext: () => Iterable<IContent>,
   ): Promise<void> {
     return this.transition(getNext());
   }
 
-  releaseAll(): Promise<void> {
-    return this.transition([], true);
+  async releaseAll(): Promise<void> {
+    const empty = new HistoryMediaIndex();
+    for (const index of [this.pending, this.retired]) {
+      if (index === undefined) continue;
+      await this.releaseDifference(index, empty);
+      index.close();
+    }
+    this.pending = undefined;
+    this.retired = undefined;
+    await this.transition([], true);
   }
 
-  adopt(contents: readonly IContent[]): void {
+  adopt(contents: Iterable<IContent>): void {
     for (const reservation of reservationsOf(contents)) {
       this.track(reservation);
     }
   }
 
   private track(reservation: TrackedMediaReservation): void {
-    this.released.delete(reservation.contentId);
-    this.owned.set(reservation.contentId, reservation.reference);
+    this.owned.set(reservation.reference);
   }
 
   private async releaseUnpublishedAdoptions(
     adopted: readonly HistoryOwnedMediaReservation[],
-    previousIds: ReadonlySet<string>,
+    previous: Iterable<IContent>,
   ): Promise<void> {
     const failures: unknown[] = [];
-    const released = new Set<string>();
+    const previousIds = new HistoryMediaIndex();
+    for (const { reference } of reservationsOf(previous))
+      previousIds.set(reference);
     for (const reservation of adopted) {
-      if (
-        previousIds.has(reservation.contentId) ||
-        released.has(reservation.contentId)
-      ) {
-        continue;
-      }
-      released.add(reservation.contentId);
+      if (previousIds.has(reservation.contentId)) continue;
       try {
         await this.store.release(reservation.contentId, reservation.ownerId);
-        this.released.add(reservation.contentId);
       } catch (error: unknown) {
         failures.push(error);
       }
     }
+    previousIds.close();
     throwOwnershipFailures(failures);
   }
 
+  private captureTarget(
+    next: Iterable<IContent>,
+    ownership?: RowOwnership,
+  ): HistoryMediaIndex {
+    const target = new HistoryMediaIndex();
+    try {
+      for (const { reference } of reservationsOf(next)) {
+        ownership?.retain(reference);
+        try {
+          target.set(reference);
+        } finally {
+          ownership?.release(reference);
+        }
+      }
+      return target;
+    } catch (error) {
+      target.close();
+      throw error;
+    }
+  }
+
   private async transition(
-    next: readonly IContent[],
+    next: Iterable<IContent>,
     releaseEverything = false,
+    ownership = this.ownership,
   ): Promise<void> {
-    const target = reservationMap(next);
+    const target = this.captureTarget(next, ownership);
+    try {
+      await this.transitionTarget(target, releaseEverything, ownership);
+    } finally {
+      target.close();
+    }
+  }
+
+  private async transitionTarget(
+    target: HistoryMediaIndex,
+    releaseEverything = false,
+    ownership = this.ownership,
+  ): Promise<void> {
     const failures: unknown[] = [];
 
-    for (const [contentId] of [...this.owned]) {
+    for (const { contentId } of this.owned.values(ownership)) {
       if (!releaseEverything && target.has(contentId)) continue;
       try {
         await this.store.release(contentId, historyOwnerIdFor(contentId));
         this.owned.delete(contentId);
         this.reserved.delete(contentId);
-        this.released.add(contentId);
       } catch (error: unknown) {
         failures.push(error);
       }
     }
 
     if (!releaseEverything) {
-      for (const reservation of target.values()) {
-        const failure = await this.adoptTarget(reservation);
+      for (const reference of target.values(ownership)) {
+        const failure = await this.adoptTarget({
+          reference,
+          contentId: reference.contentId,
+          ownerId: historyOwnerIdFor(reference.contentId),
+        });
         if (failure !== undefined) failures.push(failure);
       }
     }
 
+    if (releaseEverything && failures.length === 0) {
+      this.owned.close();
+      this.reserved.close();
+    }
     throwOwnershipFailures(failures);
   }
 
@@ -169,7 +275,7 @@ export class HistoryMediaOwnership implements HistoryMediaOwner {
     reservation: TrackedMediaReservation,
   ): Promise<unknown | undefined> {
     if (this.reserved.has(reservation.contentId)) {
-      this.owned.set(reservation.contentId, reservation.reference);
+      this.owned.set(reservation.reference);
       return undefined;
     }
     try {
@@ -177,8 +283,7 @@ export class HistoryMediaOwnership implements HistoryMediaOwner {
     } catch (error: unknown) {
       return error;
     }
-    this.reserved.add(reservation.contentId);
-    this.released.delete(reservation.contentId);
+    this.reserved.set(reservation.reference);
     this.track(reservation);
     return undefined;
   }

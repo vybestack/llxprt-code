@@ -36,13 +36,6 @@ const PROJECT_HASH = 'p05c-discovery-hash';
 
 let fixtureDir: string | null = null;
 
-afterEach(async () => {
-  if (fixtureDir !== null) {
-    await rm(fixtureDir, { recursive: true, force: true });
-    fixtureDir = null;
-  }
-});
-
 interface StartFields {
   sessionId: string;
   startTime: string;
@@ -141,6 +134,13 @@ async function makeFixture(): Promise<{
 }
 
 describe('P05c discovery filters child journals @plan:PLAN-20260917-ISSUE854.P05c', () => {
+  afterEach(async () => {
+    if (fixtureDir !== null) {
+      await rm(fixtureDir, { recursive: true, force: true });
+      fixtureDir = null;
+    }
+  });
+
   it('listSessions returns only main sessions', async () => {
     const { chatsDir, parentId, childId } = await makeFixture();
     const sessions = await SessionDiscovery.listSessions(
@@ -168,10 +168,13 @@ describe('P05c discovery filters child journals @plan:PLAN-20260917-ISSUE854.P05
       chatsDir,
       PROJECT_HASH,
     );
-    if (targets.length === 0) return;
+    expect(targets.length).toBeGreaterThan(0);
     const latest = targets[0];
-    expect(latest.kind).toBe('session');
-    if (latest.kind !== 'session') return;
+    if (latest.kind !== 'session') {
+      throw new Error(
+        'Expected the latest continuation target to be a session',
+      );
+    }
     expect(latest.session.sessionId).toBe(parentId);
   });
 

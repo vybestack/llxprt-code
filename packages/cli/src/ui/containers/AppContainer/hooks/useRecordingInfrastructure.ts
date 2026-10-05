@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
   RecordingIntegration,
   SessionRecordingService,
@@ -40,6 +40,7 @@ export function useRecordingInfrastructure(
    * These refs hold the current recording service, integration, and lock handle,
    * allowing performResume to swap them during session resume.
    */
+  const [, setRevision] = useState(0);
   const recordingServiceRef = useRef<SessionRecordingService | null>(
     initialRecordingService ?? null,
   );
@@ -80,6 +81,7 @@ export function useRecordingInfrastructure(
         recordingServiceRef.current = recording;
         recordingIntegrationRef.current = integration;
         lockHandleRef.current = lock;
+        setRevision((value) => value + 1);
       },
     }),
     [],

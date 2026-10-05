@@ -1,3 +1,4 @@
+/// <reference lib="esnext.array" />
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -12,6 +13,7 @@
  * that mock functions were called.
  */
 
+import { installFixtureCandidate } from './provider-fallback-candidate-fixture.js';
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import {
@@ -87,388 +89,469 @@ function buildEnforcerHarness(
  *   initialProjected      = OVERFLOW_TOKENS + 65_536 = 200_536 > 199_995
  */
 const OVERFLOW_TOKENS = 135_000;
+let historyService: HistoryService;
+let runtimeContext: AgentRuntimeContext;
 
 describe('ProviderContentEnforcer envelope-based enforcement (issue #2304)', () => {
-  let historyService: HistoryService;
-  let runtimeContext: AgentRuntimeContext;
+  beforeEach(facadeCallback0);
 
-  beforeEach(() => {
-    vi.clearAllMocks();
-    historyService = new HistoryService();
-    runtimeContext = buildRuntimeContext(historyService, {
-      contextLimit: 200_000,
-      compressionThreshold: 0.8,
-    });
+  it(
+    'preserves pending content in returned contents when compression resolves overflow',
+    facadeCallback1,
+  );
+
+  it(
+    'reports a non-zero token reduction in the error when compression succeeds but the payload still exceeds the limit',
+    facadeCallback2,
+  );
+
+  it(
+    'applies fallback truncation and reports a non-zero reduction when the payload still exceeds the limit',
+    facadeCallback3,
+  );
+
+  it(
+    'compressAndRecompose returns recomposed contents reflecting compressed history',
+    facadeCallback4,
+  );
+
+  it(
+    'preserves pending after normalization shift (tool-call/tool-response structure)',
+    facadeCallback5,
+  );
+
+  it(
+    'compresses successfully when pendingContents came from differential recovery',
+    facadeCallback6,
+  );
+
+  it(
+    'throws a clear error when pendingContents is undefined and compression is needed',
+    facadeCallback7,
+  );
+
+  it(
+    'returns contents as-is when pendingContents is undefined but under hard limit',
+    facadeCallback8,
+  );
+
+  it(
+    'enforces the modified-history UNRECOVERABLE policy: undefined pending (from modified-history outcome) is returned as-is under the limit',
+    facadeCallback9,
+  );
+
+  it(
+    'enforces the modified-history UNRECOVERABLE policy: undefined pending throws the clear unrecoverable-boundary error when over the limit',
+    facadeCallback10,
+  );
+
+  it(
+    'pure-prepend outcome (undefined pending) returns contents as-is INCLUDING preamble when under the limit',
+    facadeCallback11,
+  );
+
+  it(
+    'pure-prepend outcome (undefined pending) throws the clear unrecoverable-boundary error when over the limit',
+    facadeCallback12,
+  );
+});
+
+function facadeCallback0(): void {
+  vi.clearAllMocks();
+  historyService = new HistoryService();
+  runtimeContext = buildRuntimeContext(historyService, {
+    contextLimit: 200_000,
+    compressionThreshold: 0.8,
+  });
+}
+
+async function facadeCallback1(): Promise<void> {
+  historyService.add(makeUserMessage('established history'));
+  const pending = makeUserMessage('new pending request');
+  const contents = await Array.fromAsync(
+    historyService.getCuratedForProviderStream([pending]),
+  );
+
+  const harness = buildEnforcerHarness(historyService, runtimeContext);
+  const estimateSpy = vi
+    .spyOn(historyService, 'estimateTokensForContents')
+    .mockResolvedValue(OVERFLOW_TOKENS);
+
+  harness.deps.performCompression.mockImplementation(async () => {
+    historyService.clear();
+    historyService.add(makeUserMessage('compressed summary'));
+    estimateSpy.mockResolvedValue(1_000);
+    return PerformCompressionResult.COMPRESSED;
   });
 
-  it('preserves pending content in returned contents when compression resolves overflow', async () => {
-    historyService.add(makeUserMessage('established history'));
-    const pending = makeUserMessage('new pending request');
-    const contents = historyService.getCuratedForProvider([pending]);
+  const result = await harness.enforcer.enforce(
+    { contents, pendingContents: [pending] },
+    'test-prompt',
+  );
 
-    const harness = buildEnforcerHarness(historyService, runtimeContext);
-    const estimateSpy = vi
-      .spyOn(historyService, 'estimateTokensForContents')
-      .mockResolvedValue(OVERFLOW_TOKENS);
+  expect(Array.isArray(result)).toBe(true);
+  expect(result.length).toBeGreaterThan(0);
+  expect(result).toContainEqual(pending);
+}
 
-    harness.deps.performCompression.mockImplementation(async () => {
-      historyService.clear();
-      historyService.add(makeUserMessage('compressed summary'));
-      estimateSpy.mockResolvedValue(1_000);
-      return PerformCompressionResult.COMPRESSED;
-    });
+async function facadeCallback2(): Promise<void> {
+  historyService.add(makeUserMessage('established history'));
+  const pending = makeUserMessage('new pending request');
+  const contents = await Array.fromAsync(
+    historyService.getCuratedForProviderStream([pending]),
+  );
 
-    const result = await harness.enforcer.enforce(
-      { contents, pendingContents: [pending] },
-      'test-prompt',
-    );
+  const harness = buildEnforcerHarness(historyService, runtimeContext);
+  const estimateSpy = vi
+    .spyOn(historyService, 'estimateTokensForContents')
+    .mockResolvedValue(140_000);
 
-    expect(Array.isArray(result)).toBe(true);
-    expect(result.length).toBeGreaterThan(0);
-    expect(result).toContainEqual(pending);
-  });
-
-  it('reports a non-zero token reduction in the error when compression succeeds but the payload still exceeds the limit', async () => {
-    historyService.add(makeUserMessage('established history'));
-    const pending = makeUserMessage('new pending request');
-    const contents = historyService.getCuratedForProvider([pending]);
-
-    const harness = buildEnforcerHarness(historyService, runtimeContext);
-    const estimateSpy = vi
-      .spyOn(historyService, 'estimateTokensForContents')
-      .mockResolvedValue(140_000);
-
-    harness.deps.performCompression.mockImplementation(async () => {
-      historyService.clear();
-      historyService.add(
-        makeUserMessage('compressed summary that is still large'),
-      );
-      estimateSpy.mockResolvedValue(136_000);
-      return PerformCompressionResult.COMPRESSED;
-    });
-
-    let thrownError: Error | undefined;
-    try {
-      await harness.enforcer.enforce(
-        { contents, pendingContents: [pending] },
-        'test-prompt',
-      );
-    } catch (error) {
-      thrownError = error as Error;
-    }
-
-    expect(thrownError).toBeInstanceOf(Error);
-    const message = thrownError?.message;
-    expect(message).toContain('reduced');
-    expect(message).not.toContain('reduced 0 tokens');
-  });
-
-  it('applies fallback truncation and reports a non-zero reduction when the payload still exceeds the limit', async () => {
-    historyService.add(makeUserMessage('established history'));
-    const pending = makeUserMessage('new pending request');
-    const contents = historyService.getCuratedForProvider([pending]);
-
-    const harness = buildEnforcerHarness(historyService, runtimeContext);
-    const estimateSpy = vi
-      .spyOn(historyService, 'estimateTokensForContents')
-      .mockResolvedValue(140_000);
-
-    harness.deps.performCompression.mockImplementation(async () => {
-      historyService.clear();
-      historyService.add(
-        makeUserMessage('compressed summary that is still large'),
-      );
-      estimateSpy.mockResolvedValue(136_000);
-      return PerformCompressionResult.COMPRESSED;
-    });
-
-    harness.deps.performFallbackCompression.mockImplementation(
-      async (_promptId, applyResult) => {
-        await applyResult([makeUserMessage('truncated history')]);
-        return true;
-      },
-    );
-
-    const error = await harness.enforcer
-      .enforce({ contents, pendingContents: [pending] }, 'test-prompt')
-      .catch((e: Error) => e);
-
-    expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toContain('reduced');
-    expect((error as Error).message).not.toContain('reduced 0 tokens');
-  });
-
-  it('compressAndRecompose returns recomposed contents reflecting compressed history', async () => {
-    historyService.add(makeUserMessage('established history before pending'));
-    const pending = makeUserMessage('new pending request');
-
-    const harness = buildEnforcerHarness(historyService, runtimeContext);
-    const estimateSpy = vi
-      .spyOn(historyService, 'estimateTokensForContents')
-      .mockResolvedValue(135_000);
-
-    harness.deps.performCompression.mockImplementation(async () => {
-      historyService.clear();
-      historyService.add(makeUserMessage('compressed summary'));
-      // Post-compression estimate fits the margin-adjusted limit, so the
-      // callback ladder returns after the compression round.
-      estimateSpy.mockResolvedValue(100_000);
-      return PerformCompressionResult.COMPRESSED;
-    });
-
-    const result = await harness.enforcer.compressAndRecompose(
-      [pending],
-      'test-prompt',
-    );
-
-    const allText = result
-      .map((c) =>
-        c.blocks
-          .filter((b) => b.type === 'text')
-          .map((b) => (b as { text: string }).text)
-          .join(' '),
-      )
-      .join(' ');
-    expect(allText).toContain('compressed summary');
-    expect(allText).not.toContain('established history before pending');
-    expect(result).toContainEqual(pending);
-  });
-
-  it('preserves pending after normalization shift (tool-call/tool-response structure)', async () => {
-    const readCall = makeAiToolCall('read_file', {
-      file_path: '/tmp/data.txt',
-    });
-    historyService.add(readCall.entry);
+  harness.deps.performCompression.mockImplementation(async () => {
+    historyService.clear();
     historyService.add(
-      makeToolResponse(readCall.callId, 'read_file', 'file contents'),
+      makeUserMessage('compressed summary that is still large'),
     );
-    historyService.add(makeUserMessage('established user turn'));
+    estimateSpy.mockResolvedValue(136_000);
+    return PerformCompressionResult.COMPRESSED;
+  });
 
-    const pending = makeUserMessage('new pending request after normalization');
-    const contents = historyService.getCuratedForProvider([pending]);
-
-    const harness = buildEnforcerHarness(historyService, runtimeContext);
-    const estimateSpy = vi
-      .spyOn(historyService, 'estimateTokensForContents')
-      .mockResolvedValue(OVERFLOW_TOKENS);
-
-    harness.deps.performCompression.mockImplementation(async () => {
-      historyService.clear();
-      historyService.add(makeUserMessage('compressed summary'));
-      estimateSpy.mockResolvedValue(1_000);
-      return PerformCompressionResult.COMPRESSED;
-    });
-
-    const result = await harness.enforcer.enforce(
+  let thrownError: Error | undefined;
+  try {
+    await harness.enforcer.enforce(
       { contents, pendingContents: [pending] },
       'test-prompt',
     );
+  } catch (error) {
+    thrownError = error as Error;
+  }
 
-    expect(result.at(-1)).toStrictEqual(pending);
+  expect(thrownError).toBeInstanceOf(Error);
+  const message = thrownError?.message;
+  expect(message).toContain('reduced');
+  expect(message).not.toContain('reduced 0 tokens');
+}
+
+async function facadeCallback3(): Promise<void> {
+  historyService.add(makeUserMessage('established history'));
+  const pending = makeUserMessage('new pending request');
+  const contents = await Array.fromAsync(
+    historyService.getCuratedForProviderStream([pending]),
+  );
+
+  const harness = buildEnforcerHarness(historyService, runtimeContext);
+  const estimateSpy = vi
+    .spyOn(historyService, 'estimateTokensForContents')
+    .mockResolvedValue(140_000);
+
+  harness.deps.performCompression.mockImplementation(async () => {
+    historyService.clear();
+    historyService.add(
+      makeUserMessage('compressed summary that is still large'),
+    );
+    estimateSpy.mockResolvedValue(136_000);
+    return PerformCompressionResult.COMPRESSED;
   });
 
-  it('compresses successfully when pendingContents came from differential recovery', async () => {
-    // Simulate the hook-modified path: an envelope whose pendingContents was
-    // recovered via differential analysis (a text-only round-trip equivalent).
-    // Compression must still work and preserve the recovered pending item.
-    historyService.add(makeUserMessage('established history one'));
-    historyService.add(makeAiText('established ai reply'));
-    const pending = makeUserMessage('recovered pending request');
-    const contents = historyService.getCuratedForProvider([pending]);
+  harness.deps.performFallbackCompression.mockImplementation(
+    async (_promptId, applyResult) => {
+      await installFixtureCandidate(applyResult, [
+        makeUserMessage('truncated history'),
+      ]);
+      return true;
+    },
+  );
 
-    const harness = buildEnforcerHarness(historyService, runtimeContext);
-    const estimateSpy = vi
-      .spyOn(historyService, 'estimateTokensForContents')
-      .mockResolvedValue(OVERFLOW_TOKENS);
+  const error = await harness.enforcer
+    .enforce({ contents, pendingContents: [pending] }, 'test-prompt')
+    .catch((e: Error) => e);
 
-    harness.deps.performCompression.mockImplementation(async () => {
-      historyService.clear();
-      historyService.add(makeUserMessage('compressed summary'));
-      estimateSpy.mockResolvedValue(1_000);
-      return PerformCompressionResult.COMPRESSED;
-    });
+  expect(error).toBeInstanceOf(Error);
+  expect((error as Error).message).toContain('reduced');
+  expect((error as Error).message).not.toContain('reduced 0 tokens');
+}
 
-    // The recovered pending is a projection-equivalent text-only IContent
-    // (metadata/ids stripped, as the hook translator would produce).
-    const recoveredPending: IContent = {
-      speaker: 'human',
-      blocks: [{ type: 'text', text: 'recovered pending request' }],
-    };
-    const result = await harness.enforcer.enforce(
-      { contents, pendingContents: [recoveredPending] },
-      'test-prompt',
-    );
+async function facadeCallback4(): Promise<void> {
+  historyService.add(makeUserMessage('established history before pending'));
+  const pending = makeUserMessage('new pending request');
 
-    // The recovered pending text is preserved as the final message even though
-    // buildProviderContent deep-clones (so the object identity differs).
-    const lastText = result
-      .at(-1)
-      ?.blocks.filter((b) => b.type === 'text')
-      .map((b) => (b as { text: string }).text)
-      .join(' ');
-    expect(lastText).toBe('recovered pending request');
+  const harness = buildEnforcerHarness(historyService, runtimeContext);
+  const estimateSpy = vi
+    .spyOn(historyService, 'estimateTokensForContents')
+    .mockResolvedValue(135_000);
+
+  harness.deps.performCompression.mockImplementation(async () => {
+    historyService.clear();
+    historyService.add(makeUserMessage('compressed summary'));
+    // Post-compression estimate fits the margin-adjusted limit, so the
+    // callback ladder returns after the compression round.
+    estimateSpy.mockResolvedValue(100_000);
+    return PerformCompressionResult.COMPRESSED;
   });
 
-  it('throws a clear error when pendingContents is undefined and compression is needed', async () => {
-    historyService.add(makeUserMessage('established history'));
-    const contents = historyService.getCuratedForProvider();
+  const result = await harness.enforcer.compressAndRecompose(
+    [pending],
+    'test-prompt',
+  );
 
-    const harness = buildEnforcerHarness(historyService, runtimeContext);
-    vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
-      OVERFLOW_TOKENS,
-    );
+  const allText = result
+    .map((c) =>
+      c.blocks
+        .filter((b) => b.type === 'text')
+        .map((b) => (b as { text: string }).text)
+        .join(' '),
+    )
+    .join(' ');
+  expect(allText).toContain('compressed summary');
+  expect(allText).not.toContain('established history before pending');
+  expect(result).toContainEqual(pending);
+}
 
-    let thrownError: Error | undefined;
-    try {
-      await harness.enforcer.enforce(
-        { contents, pendingContents: undefined },
-        'test-prompt',
-      );
-    } catch (error) {
-      thrownError = error as Error;
-    }
+async function facadeCallback5(): Promise<void> {
+  const readCall = makeAiToolCall('read_file', {
+    file_path: '/tmp/data.txt',
+  });
+  historyService.add(readCall.entry);
+  historyService.add(
+    makeToolResponse(readCall.callId, 'read_file', 'file contents'),
+  );
+  historyService.add(makeUserMessage('established user turn'));
 
-    expect(thrownError).toBeInstanceOf(Error);
-    expect(thrownError?.message.toLowerCase()).toContain('unrecoverable');
-    expect(thrownError?.message.toLowerCase()).toContain(
-      'llm_request_boundary',
-    );
-    expect(thrownError?.message.toLowerCase()).toContain('compression');
+  const pending = makeUserMessage('new pending request after normalization');
+  const contents = await Array.fromAsync(
+    historyService.getCuratedForProviderStream([pending]),
+  );
+
+  const harness = buildEnforcerHarness(historyService, runtimeContext);
+  const estimateSpy = vi
+    .spyOn(historyService, 'estimateTokensForContents')
+    .mockResolvedValue(OVERFLOW_TOKENS);
+
+  harness.deps.performCompression.mockImplementation(async () => {
+    historyService.clear();
+    historyService.add(makeUserMessage('compressed summary'));
+    estimateSpy.mockResolvedValue(1_000);
+    return PerformCompressionResult.COMPRESSED;
   });
 
-  it('returns contents as-is when pendingContents is undefined but under hard limit', async () => {
-    historyService.add(makeUserMessage('established history'));
-    const contents = historyService.getCuratedForProvider();
+  const result = await harness.enforcer.enforce(
+    { contents, pendingContents: [pending] },
+    'test-prompt',
+  );
 
-    const harness = buildEnforcerHarness(historyService, runtimeContext);
-    // Over the compression threshold (172_107) but under the margin-adjusted
-    // limit (199_000): 180_000 - 65_536 = 114_464 for the estimate.
-    vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
-      114_464,
-    );
+  expect(result.at(-1)).toStrictEqual(pending);
+}
 
-    const result = await harness.enforcer.enforce(
+async function facadeCallback6(): Promise<void> {
+  // Simulate the hook-modified path: an envelope whose pendingContents was
+  // recovered via differential analysis (a text-only round-trip equivalent).
+  // Compression must still work and preserve the recovered pending item.
+  historyService.add(makeUserMessage('established history one'));
+  historyService.add(makeAiText('established ai reply'));
+  const pending = makeUserMessage('recovered pending request');
+  const contents = await Array.fromAsync(
+    historyService.getCuratedForProviderStream([pending]),
+  );
+
+  const harness = buildEnforcerHarness(historyService, runtimeContext);
+  const estimateSpy = vi
+    .spyOn(historyService, 'estimateTokensForContents')
+    .mockResolvedValue(OVERFLOW_TOKENS);
+
+  harness.deps.performCompression.mockImplementation(async () => {
+    historyService.clear();
+    historyService.add(makeUserMessage('compressed summary'));
+    estimateSpy.mockResolvedValue(1_000);
+    return PerformCompressionResult.COMPRESSED;
+  });
+
+  // The recovered pending is a projection-equivalent text-only IContent
+  // (metadata/ids stripped, as the hook translator would produce).
+  const recoveredPending: IContent = {
+    speaker: 'human',
+    blocks: [{ type: 'text', text: 'recovered pending request' }],
+  };
+  const result = await harness.enforcer.enforce(
+    { contents, pendingContents: [recoveredPending] },
+    'test-prompt',
+  );
+
+  // The recovered pending text is preserved as the final message even though
+  // buildProviderContent deep-clones (so the object identity differs).
+  const lastText = result
+    .at(-1)
+    ?.blocks.filter((b) => b.type === 'text')
+    .map((b) => (b as { text: string }).text)
+    .join(' ');
+  expect(lastText).toBe('recovered pending request');
+}
+
+async function facadeCallback7(): Promise<void> {
+  historyService.add(makeUserMessage('established history'));
+  const contents = await Array.fromAsync(
+    historyService.getCuratedForProviderStream(),
+  );
+
+  const harness = buildEnforcerHarness(historyService, runtimeContext);
+  vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
+    OVERFLOW_TOKENS,
+  );
+
+  let thrownError: Error | undefined;
+  try {
+    await harness.enforcer.enforce(
       { contents, pendingContents: undefined },
       'test-prompt',
     );
+  } catch (error) {
+    thrownError = error as Error;
+  }
 
-    expect(result).toStrictEqual(contents);
-  });
+  expect(thrownError).toBeInstanceOf(Error);
+  expect(thrownError?.message.toLowerCase()).toContain('unrecoverable');
+  expect(thrownError?.message.toLowerCase()).toContain('llm_request_boundary');
+  expect(thrownError?.message.toLowerCase()).toContain('compression');
+}
 
-  it('enforces the modified-history UNRECOVERABLE policy: undefined pending (from modified-history outcome) is returned as-is under the limit', async () => {
-    // R1 enforcement-policy test: when recoverPendingBoundary returns
-    // classification 'modified-history' with pendingContents undefined (history
-    // prefix changed but pending suffix intact), compression must NOT recompose
-    // (which would discard history edits). Under the margin-adjusted limit the
-    // envelope is returned as-is.
-    historyService.add(makeUserMessage('established history'));
-    const pending = makeUserMessage('new pending');
-    const contents = historyService.getCuratedForProvider([pending]);
+async function facadeCallback8(): Promise<void> {
+  historyService.add(makeUserMessage('established history'));
+  const contents = await Array.fromAsync(
+    historyService.getCuratedForProviderStream(),
+  );
 
-    const harness = buildEnforcerHarness(historyService, runtimeContext);
-    vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
-      114_464,
-    );
+  const harness = buildEnforcerHarness(historyService, runtimeContext);
+  // Over the compression threshold (172_107) but under the margin-adjusted
+  // limit (199_000): 180_000 - 65_536 = 114_464 for the estimate.
+  vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
+    114_464,
+  );
 
-    // pendingContents undefined, as produced by a modified-history outcome.
-    const result = await harness.enforcer.enforce(
+  const result = await harness.enforcer.enforce(
+    { contents, pendingContents: undefined },
+    'test-prompt',
+  );
+
+  expect(result).toStrictEqual(contents);
+}
+
+async function facadeCallback9(): Promise<void> {
+  // R1 enforcement-policy test: when recoverPendingBoundary returns
+  // classification 'modified-history' with pendingContents undefined (history
+  // prefix changed but pending suffix intact), compression must NOT recompose
+  // (which would discard history edits). Under the margin-adjusted limit the
+  // envelope is returned as-is.
+  historyService.add(makeUserMessage('established history'));
+  const pending = makeUserMessage('new pending');
+  const contents = await Array.fromAsync(
+    historyService.getCuratedForProviderStream([pending]),
+  );
+
+  const harness = buildEnforcerHarness(historyService, runtimeContext);
+  vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
+    114_464,
+  );
+
+  // pendingContents undefined, as produced by a modified-history outcome.
+  const result = await harness.enforcer.enforce(
+    { contents, pendingContents: undefined },
+    'test-prompt',
+  );
+
+  expect(result).toStrictEqual(contents);
+}
+
+async function facadeCallback10(): Promise<void> {
+  // R1 enforcement-policy test: over the margin-adjusted limit, the
+  // modified-history outcome (pendingContents undefined) must throw the clear
+  // unrecoverable-boundary error rather than attempting compression.
+  historyService.add(makeUserMessage('established history'));
+  const pending = makeUserMessage('new pending');
+  const contents = await Array.fromAsync(
+    historyService.getCuratedForProviderStream([pending]),
+  );
+
+  const harness = buildEnforcerHarness(historyService, runtimeContext);
+  vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
+    OVERFLOW_TOKENS,
+  );
+
+  let thrownError: Error | undefined;
+  try {
+    await harness.enforcer.enforce(
       { contents, pendingContents: undefined },
       'test-prompt',
     );
+  } catch (error) {
+    thrownError = error as Error;
+  }
 
-    expect(result).toStrictEqual(contents);
-  });
+  expect(thrownError).toBeInstanceOf(Error);
+  expect(thrownError?.message.toLowerCase()).toContain('unrecoverable');
+}
 
-  it('enforces the modified-history UNRECOVERABLE policy: undefined pending throws the clear unrecoverable-boundary error when over the limit', async () => {
-    // R1 enforcement-policy test: over the margin-adjusted limit, the
-    // modified-history outcome (pendingContents undefined) must throw the clear
-    // unrecoverable-boundary error rather than attempting compression.
-    historyService.add(makeUserMessage('established history'));
-    const pending = makeUserMessage('new pending');
-    const contents = historyService.getCuratedForProvider([pending]);
+async function facadeCallback11(): Promise<void> {
+  // F1 regression: a pure-prepend outcome produces pendingContents undefined
+  // (the prepended content lives on the history side and would be silently
+  // dropped by recomposition). Under the margin-adjusted limit, enforcement
+  // must return the hook-modified contents as-is — nothing silently lost.
+  historyService.add(makeUserMessage('established history'));
+  const pending = makeUserMessage('new pending');
+  // Simulate the hook-modified contents: a preamble prepended before the
+  // original history + pending.
+  const preamble = makeUserMessage('preamble from hook');
+  const baseContents = await Array.fromAsync(
+    historyService.getCuratedForProviderStream([pending]),
+  );
+  const prependModifiedContents = [preamble, ...baseContents];
 
-    const harness = buildEnforcerHarness(historyService, runtimeContext);
-    vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
-      OVERFLOW_TOKENS,
-    );
+  const harness = buildEnforcerHarness(historyService, runtimeContext);
+  // Under the margin-adjusted limit (199_000): estimate < 199_000 - 65_536.
+  vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
+    114_464,
+  );
 
-    let thrownError: Error | undefined;
-    try {
-      await harness.enforcer.enforce(
-        { contents, pendingContents: undefined },
-        'test-prompt',
-      );
-    } catch (error) {
-      thrownError = error as Error;
-    }
+  // pendingContents undefined, as recoverPendingBoundary now produces for a
+  // pure-prepend outcome.
+  const result = await harness.enforcer.enforce(
+    { contents: prependModifiedContents, pendingContents: undefined },
+    'test-prompt',
+  );
 
-    expect(thrownError).toBeInstanceOf(Error);
-    expect(thrownError?.message.toLowerCase()).toContain('unrecoverable');
-  });
+  // The ENTIRE hook-modified contents are returned as-is — including the
+  // prepended preamble. Nothing is silently dropped.
+  expect(result).toStrictEqual(prependModifiedContents);
+  expect(result).toContainEqual(preamble);
+  expect(result).toContainEqual(pending);
+}
 
-  it('pure-prepend outcome (undefined pending) returns contents as-is INCLUDING preamble when under the limit', async () => {
-    // F1 regression: a pure-prepend outcome produces pendingContents undefined
-    // (the prepended content lives on the history side and would be silently
-    // dropped by recomposition). Under the margin-adjusted limit, enforcement
-    // must return the hook-modified contents as-is — nothing silently lost.
-    historyService.add(makeUserMessage('established history'));
-    const pending = makeUserMessage('new pending');
-    // Simulate the hook-modified contents: a preamble prepended before the
-    // original history + pending.
-    const preamble = makeUserMessage('preamble from hook');
-    const baseContents = historyService.getCuratedForProvider([pending]);
-    const prependModifiedContents = [preamble, ...baseContents];
+async function facadeCallback12(): Promise<void> {
+  // F1 regression: over the margin-adjusted limit, a pure-prepend outcome
+  // (pendingContents undefined) must throw the clear unrecoverable-boundary
+  // error mentioning llm_request_boundary rather than silently dropping the
+  // preamble via recomposition.
+  historyService.add(makeUserMessage('established history'));
+  const pending = makeUserMessage('new pending');
+  const preamble = makeUserMessage('preamble from hook');
+  const baseContents = await Array.fromAsync(
+    historyService.getCuratedForProviderStream([pending]),
+  );
+  const prependModifiedContents = [preamble, ...baseContents];
 
-    const harness = buildEnforcerHarness(historyService, runtimeContext);
-    // Under the margin-adjusted limit (199_000): estimate < 199_000 - 65_536.
-    vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
-      114_464,
-    );
+  const harness = buildEnforcerHarness(historyService, runtimeContext);
+  vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
+    OVERFLOW_TOKENS,
+  );
 
-    // pendingContents undefined, as recoverPendingBoundary now produces for a
-    // pure-prepend outcome.
-    const result = await harness.enforcer.enforce(
+  let thrownError: Error | undefined;
+  try {
+    await harness.enforcer.enforce(
       { contents: prependModifiedContents, pendingContents: undefined },
       'test-prompt',
     );
+  } catch (error) {
+    thrownError = error as Error;
+  }
 
-    // The ENTIRE hook-modified contents are returned as-is — including the
-    // prepended preamble. Nothing is silently dropped.
-    expect(result).toStrictEqual(prependModifiedContents);
-    expect(result).toContainEqual(preamble);
-    expect(result).toContainEqual(pending);
-  });
-
-  it('pure-prepend outcome (undefined pending) throws the clear unrecoverable-boundary error when over the limit', async () => {
-    // F1 regression: over the margin-adjusted limit, a pure-prepend outcome
-    // (pendingContents undefined) must throw the clear unrecoverable-boundary
-    // error mentioning llm_request_boundary rather than silently dropping the
-    // preamble via recomposition.
-    historyService.add(makeUserMessage('established history'));
-    const pending = makeUserMessage('new pending');
-    const preamble = makeUserMessage('preamble from hook');
-    const baseContents = historyService.getCuratedForProvider([pending]);
-    const prependModifiedContents = [preamble, ...baseContents];
-
-    const harness = buildEnforcerHarness(historyService, runtimeContext);
-    vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
-      OVERFLOW_TOKENS,
-    );
-
-    let thrownError: Error | undefined;
-    try {
-      await harness.enforcer.enforce(
-        { contents: prependModifiedContents, pendingContents: undefined },
-        'test-prompt',
-      );
-    } catch (error) {
-      thrownError = error as Error;
-    }
-
-    expect(thrownError).toBeInstanceOf(Error);
-    expect(thrownError?.message.toLowerCase()).toContain('unrecoverable');
-    expect(thrownError?.message.toLowerCase()).toContain(
-      'llm_request_boundary',
-    );
-  });
-});
+  expect(thrownError).toBeInstanceOf(Error);
+  expect(thrownError?.message.toLowerCase()).toContain('unrecoverable');
+  expect(thrownError?.message.toLowerCase()).toContain('llm_request_boundary');
+}

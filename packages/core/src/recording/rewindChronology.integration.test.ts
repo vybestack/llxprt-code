@@ -27,12 +27,12 @@
  * @issue #2934
  */
 
+import { collectRowsForAssertions } from '../test-utils/collect-rows-for-assertions.js';
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { SessionRecordingService } from './SessionRecordingService.js';
-import { RecordingIntegration } from './RecordingIntegration.js';
 import { HistoryMutationService } from './HistoryMutationService.js';
 import { replaySession } from './ReplayEngine.js';
 import { type SessionRecordingServiceConfig } from './types.js';
@@ -42,146 +42,145 @@ import {
   type DensityResult,
   type DensityResultMetadata,
 } from '../core/compression/types.js';
+const PROJECT_HASH = 'rewind-chronology-hash';
+// ---------------------------------------------------------------------------
 
-describe('rewind-chronology', () => {
-  const PROJECT_HASH = 'rewind-chronology-hash';
+function makeContent(
+  text: string,
+  speaker: IContent['speaker'] = 'human',
+): IContent {
+  return { speaker, blocks: [{ type: 'text', text }] };
+}
 
-  // ---------------------------------------------------------------------------
-  // Helpers
-  // ---------------------------------------------------------------------------
+function makeDensityMetadata(): DensityResultMetadata {
+  return {
+    readWritePairsPruned: 0,
+    fileDeduplicationsPruned: 0,
+    recencyPruned: 0,
+  };
+}
 
-  function makeContent(
-    text: string,
-    speaker: IContent['speaker'] = 'human',
-  ): IContent {
-    return { speaker, blocks: [{ type: 'text', text }] };
+function makeDensityResult(
+  removals: readonly number[],
+  replacements: ReadonlyMap<number, IContent> = new Map(),
+): DensityResult {
+  return { removals, replacements, metadata: makeDensityMetadata() };
+}
+
+/**
+ * Project the first text block, or '' for a blockless or non-text entry.
+ * The length check precedes the index because `blocks[0]` is not typed as
+ * possibly-undefined, so an `undefined` guard trips no-unnecessary-condition.
+ */
+function textOf(content: IContent): string {
+  if (content.blocks.length === 0) {
+    return '';
   }
+  const block = content.blocks[0];
+  return block.type === 'text' ? block.text : '';
+}
 
-  function makeDensityMetadata(): DensityResultMetadata {
-    return {
-      readWritePairsPruned: 0,
-      fileDeduplicationsPruned: 0,
-      recencyPruned: 0,
-    };
+function textsOf(history: readonly IContent[]): string[] {
+  return history.map(textOf);
+}
+
+function seqsOf(history: readonly IContent[]): Array<number | undefined> {
+  return history.map((item) => item.metadata?.chronology?.seq);
+}
+
+function requireReplaySuccess(
+  result: Awaited<ReturnType<typeof replaySession>>,
+): asserts result is Extract<
+  Awaited<ReturnType<typeof replaySession>>,
+  { ok: true }
+> {
+  if (!result.ok) throw new Error(`Expected replay success: ${result.error}`);
+}
+
+function requireMutationSuccess<T extends { ok: boolean }>(
+  result: T,
+): asserts result is T & { ok: true } {
+  if (!result.ok) throw new Error('Expected history mutation success');
+}
+
+/**
+ * Returns temp-dir lifecycle callbacks and a lazy chats-directory accessor.
+ */
+function useChatsDir(): {
+  chatsDir: () => string;
+  setup: () => Promise<void>;
+  teardown: () => Promise<void>;
+} {
+  let dir = '';
+  const setup = async (): Promise<void> => {
+    dir = await fs.mkdtemp(path.join(os.tmpdir(), 'rewind-chronology-'));
+    await fs.mkdir(path.join(dir, 'chats'), { recursive: true });
+  };
+  const teardown = async (): Promise<void> => {
+    await fs.rm(dir, { recursive: true, force: true });
+  };
+  return { chatsDir: () => path.join(dir, 'chats'), setup, teardown };
+}
+
+function makeConfig(chatsDir: string): SessionRecordingServiceConfig {
+  return {
+    sessionId: crypto.randomUUID(),
+    projectHash: PROJECT_HASH,
+    chatsDir,
+    workspaceDirs: ['/test/workspace'],
+    provider: 'anthropic',
+    model: 'claude-4',
+  };
+}
+
+/**
+ * A live session: a real HistoryService whose additions are journalled by a
+ * real SessionRecordingService through the real RecordingIntegration bridge.
+ */
+interface LiveSession {
+  readonly history: HistoryService;
+  readonly recording: SessionRecordingService;
+}
+
+function startSession(chatsDir: string): LiveSession {
+  const recording = new SessionRecordingService(makeConfig(chatsDir));
+  const history = new HistoryService({ recording });
+  return { history, recording };
+}
+
+async function addTurns(
+  session: LiveSession,
+  entries: readonly IContent[],
+): Promise<void> {
+  for (const entry of entries) {
+    session.history.add(entry);
   }
+  await session.history.waitForTokenUpdates();
+  await session.recording.flush();
+}
 
-  function makeDensityResult(
-    removals: readonly number[],
-    replacements: ReadonlyMap<number, IContent> = new Map(),
-  ): DensityResult {
-    return { removals, replacements, metadata: makeDensityMetadata() };
-  }
+/** Replay the session file from disk after closing the recording. */
+async function replayFromDisk(
+  session: LiveSession,
+): Promise<readonly IContent[]> {
+  const filePath = session.recording.getFilePath();
+  expect(filePath).not.toBeNull();
+  await session.recording.dispose();
+  const replay = await replaySession(filePath as string, PROJECT_HASH);
+  requireReplaySuccess(replay);
+  return replay.history;
+}
 
-  /**
-   * Project the first text block, or '' for a blockless or non-text entry.
-   * The length check precedes the index because `blocks[0]` is not typed as
-   * possibly-undefined, so an `undefined` guard trips no-unnecessary-condition.
-   */
-  function textOf(content: IContent): string {
-    if (content.blocks.length === 0) {
-      return '';
-    }
-    const block = content.blocks[0];
-    return block.type === 'text' ? block.text : '';
-  }
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
 
-  function textsOf(history: readonly IContent[]): string[] {
-    return history.map(textOf);
-  }
-
-  function seqsOf(history: readonly IContent[]): Array<number | undefined> {
-    return history.map((item) => item.metadata?.chronology?.seq);
-  }
-
-  function requireReplaySuccess(
-    result: Awaited<ReturnType<typeof replaySession>>,
-  ): asserts result is Extract<
-    Awaited<ReturnType<typeof replaySession>>,
-    { ok: true }
-  > {
-    if (!result.ok) throw new Error(`Expected replay success: ${result.error}`);
-  }
-
-  function requireMutationSuccess<T extends { ok: boolean }>(
-    result: T,
-  ): asserts result is T & { ok: true } {
-    if (!result.ok) throw new Error('Expected history mutation success');
-  }
-
-  /**
-   * Registers the temp-dir lifecycle hooks and returns a lazy accessor for the
-   * chats directory.
-   */
-  function useChatsDir(): () => string {
-    let dir = '';
-    beforeEach(async () => {
-      dir = await fs.mkdtemp(path.join(os.tmpdir(), 'rewind-chronology-'));
-      await fs.mkdir(path.join(dir, 'chats'), { recursive: true });
-    });
-    afterEach(async () => {
-      await fs.rm(dir, { recursive: true, force: true });
-    });
-    return () => path.join(dir, 'chats');
-  }
-
-  function makeConfig(chatsDir: string): SessionRecordingServiceConfig {
-    return {
-      sessionId: crypto.randomUUID(),
-      projectHash: PROJECT_HASH,
-      chatsDir,
-      workspaceDirs: ['/test/workspace'],
-      provider: 'anthropic',
-      model: 'claude-4',
-    };
-  }
-
-  /**
-   * A live session: a real HistoryService whose additions are journalled by a
-   * real SessionRecordingService through the real RecordingIntegration bridge.
-   */
-  interface LiveSession {
-    readonly history: HistoryService;
-    readonly recording: SessionRecordingService;
-  }
-
-  function startSession(chatsDir: string): LiveSession {
-    const recording = new SessionRecordingService(makeConfig(chatsDir));
-    const history = new HistoryService();
-    new RecordingIntegration(recording).subscribeToHistory(history);
-    return { history, recording };
-  }
-
-  async function addTurns(
-    session: LiveSession,
-    entries: readonly IContent[],
-  ): Promise<void> {
-    for (const entry of entries) {
-      session.history.add(entry);
-    }
-    await session.history.waitForTokenUpdates();
-    await session.recording.flush();
-  }
-
-  /** Replay the session file from disk after closing the recording. */
-  async function replayFromDisk(
-    session: LiveSession,
-  ): Promise<readonly IContent[]> {
-    const filePath = session.recording.getFilePath();
-    expect(filePath).not.toBeNull();
-    await session.recording.dispose();
-    const replay = await replaySession(filePath as string, PROJECT_HASH);
-    requireReplaySuccess(replay);
-    return replay.history;
-  }
-
-  // ---------------------------------------------------------------------------
-  // Tests
-  // ---------------------------------------------------------------------------
-
+describe('rewind-chronology: restore keeps the removed turns removed after replay', () => {
   describe('rewindChronology', () => {
     describe('rewind survives density divergence @issue:2934', () => {
-      const chatsDir = useChatsDir();
-
+      const { chatsDir, setup, teardown } = useChatsDir();
+      beforeEach(setup);
+      afterEach(teardown);
       it('restore keeps the removed turns removed after replay', async () => {
         const session = startSession(chatsDir());
         // Turn 3 owns a tool result that density will prune from live history.
@@ -202,38 +201,56 @@ describe('rewind-chronology', () => {
         // learns nothing about it, so live history is now one item shorter.
         await session.history.applyDensityResult(makeDensityResult([6]));
         await session.history.waitForTokenUpdates();
-        expect(textsOf(session.history.getAll())).toStrictEqual([
-          'Q1',
-          'A1',
-          'Q2',
-          'A2',
-          'Q3',
-          'A3',
-          'A3-followup',
-        ]);
+        await collectRowsForAssertions(
+          session.history.streamRawHistory(),
+          async (contentsForAssertions) => {
+            expect(textsOf(contentsForAssertions)).toStrictEqual([
+              'Q1',
+              'A1',
+              'Q2',
+              'A2',
+              'Q3',
+              'A3',
+              'A3-followup',
+            ]);
+            await collectRowsForAssertions(
+              session.history.streamRawHistory(),
+              async (contentsForAssertions) => {
+                const live = [...contentsForAssertions];
+                const result = await new HistoryMutationService().restore(
+                  live,
+                  1,
+                  session.recording,
+                );
+                requireMutationSuccess(result);
+                expect(textsOf(result.remainingHistory)).toStrictEqual([
+                  'Q1',
+                  'A1',
+                  'Q2',
+                  'A2',
+                ]);
 
-        const live = [...session.history.getAll()];
-        const result = await new HistoryMutationService().restore(
-          live,
-          1,
-          session.recording,
+                const replayed = await replayFromDisk(session);
+
+                expect(textsOf(replayed)).toStrictEqual(
+                  textsOf(result.remainingHistory),
+                );
+                expect(textsOf(replayed)).not.toContain('Q3');
+              },
+            );
+          },
         );
-        requireMutationSuccess(result);
-        expect(textsOf(result.remainingHistory)).toStrictEqual([
-          'Q1',
-          'A1',
-          'Q2',
-          'A2',
-        ]);
-
-        const replayed = await replayFromDisk(session);
-
-        expect(textsOf(replayed)).toStrictEqual(
-          textsOf(result.remainingHistory),
-        );
-        expect(textsOf(replayed)).not.toContain('Q3');
       });
+    });
+  });
+});
 
+describe('rewind-chronology: clear does not resurrect cleared turns after replay', () => {
+  describe('rewindChronology', () => {
+    describe('rewind survives density divergence @issue:2934', () => {
+      const { chatsDir, setup, teardown } = useChatsDir();
+      beforeEach(setup);
+      afterEach(teardown);
       it('clear does not resurrect cleared turns after replay', async () => {
         const session = startSession(chatsDir());
         await addTurns(session, [
@@ -249,28 +266,41 @@ describe('rewind-chronology', () => {
         // Density prunes a tool result that belongs to a turn the clear removes.
         await session.history.applyDensityResult(makeDensityResult([5]));
         await session.history.waitForTokenUpdates();
+        await collectRowsForAssertions(
+          session.history.streamRawHistory(),
+          async (contentsForAssertions) => {
+            const live = [...contentsForAssertions];
+            const result = await new HistoryMutationService().clear(
+              live,
+              session.recording,
+            );
+            requireMutationSuccess(result);
+            expect(textsOf(result.remainingHistory)).toStrictEqual([
+              'Q1',
+              'A1',
+              'T1',
+            ]);
 
-        const live = [...session.history.getAll()];
-        const result = await new HistoryMutationService().clear(
-          live,
-          session.recording,
+            const replayed = await replayFromDisk(session);
+
+            expect(textsOf(replayed)).toStrictEqual(
+              textsOf(result.remainingHistory),
+            );
+            expect(textsOf(replayed)).not.toContain('Q2');
+            expect(textsOf(replayed)).not.toContain('Q3');
+          },
         );
-        requireMutationSuccess(result);
-        expect(textsOf(result.remainingHistory)).toStrictEqual([
-          'Q1',
-          'A1',
-          'T1',
-        ]);
-
-        const replayed = await replayFromDisk(session);
-
-        expect(textsOf(replayed)).toStrictEqual(
-          textsOf(result.remainingHistory),
-        );
-        expect(textsOf(replayed)).not.toContain('Q2');
-        expect(textsOf(replayed)).not.toContain('Q3');
       });
+    });
+  });
+});
 
+describe('rewind-chronology: token total after replay matches the token total after the live restore', () => {
+  describe('rewindChronology', () => {
+    describe('rewind survives density divergence @issue:2934', () => {
+      const { chatsDir, setup, teardown } = useChatsDir();
+      beforeEach(setup);
+      afterEach(teardown);
       it('token total after replay matches the token total after the live restore', async () => {
         const session = startSession(chatsDir());
         await addTurns(session, [
@@ -286,29 +316,42 @@ describe('rewind-chronology', () => {
 
         await session.history.applyDensityResult(makeDensityResult([6]));
         await session.history.waitForTokenUpdates();
+        await collectRowsForAssertions(
+          session.history.streamRawHistory(),
+          async (contentsForAssertions) => {
+            const live = [...contentsForAssertions];
+            const result = await new HistoryMutationService().restore(
+              live,
+              1,
+              session.recording,
+            );
+            requireMutationSuccess(result);
 
-        const live = [...session.history.getAll()];
-        const result = await new HistoryMutationService().restore(
-          live,
-          1,
-          session.recording,
+            const replayed = await replayFromDisk(session);
+
+            const estimator = new HistoryService();
+            const liveTokens = await estimator.estimateTokensForContents([
+              ...result.remainingHistory,
+            ]);
+            const replayedTokens = await estimator.estimateTokensForContents([
+              ...replayed,
+            ]);
+
+            expect(liveTokens).toBeGreaterThan(0);
+            expect(replayedTokens).toBe(liveTokens);
+          },
         );
-        requireMutationSuccess(result);
-
-        const replayed = await replayFromDisk(session);
-
-        const estimator = new HistoryService();
-        const liveTokens = await estimator.estimateTokensForContents([
-          ...result.remainingHistory,
-        ]);
-        const replayedTokens = await estimator.estimateTokensForContents([
-          ...replayed,
-        ]);
-
-        expect(liveTokens).toBeGreaterThan(0);
-        expect(replayedTokens).toBe(liveTokens);
       });
+    });
+  });
+});
 
+describe('rewind-chronology: keeps the cut aligned when density replaced an item before the cut', () => {
+  describe('rewindChronology', () => {
+    describe('rewind survives density divergence @issue:2934', () => {
+      const { chatsDir, setup, teardown } = useChatsDir();
+      beforeEach(setup);
+      afterEach(teardown);
       it('keeps the cut aligned when density replaced an item before the cut', async () => {
         const session = startSession(chatsDir());
         await addTurns(session, [
@@ -326,28 +369,43 @@ describe('rewind-chronology', () => {
           makeDensityResult([4], new Map([[2, truncated]])),
         );
         await session.history.waitForTokenUpdates();
+        await collectRowsForAssertions(
+          session.history.streamRawHistory(),
+          async (contentsForAssertions) => {
+            const live = [...contentsForAssertions];
+            const result = await new HistoryMutationService().clear(
+              live,
+              session.recording,
+            );
+            requireMutationSuccess(result);
+            expect(textsOf(result.remainingHistory)).toStrictEqual([
+              'Q1',
+              'A1',
+              'T1 (truncated)',
+            ]);
 
-        const live = [...session.history.getAll()];
-        const result = await new HistoryMutationService().clear(
-          live,
-          session.recording,
+            const replayed = await replayFromDisk(session);
+
+            // The journal never learned about the truncation (issue #1393), so the
+            // replayed tool result still carries its original text. What must hold is
+            // that the cut landed on the same chronology positions.
+            expect(seqsOf(replayed)).toStrictEqual(
+              seqsOf(result.remainingHistory),
+            );
+            expect(textsOf(replayed)).not.toContain('Q2');
+          },
         );
-        requireMutationSuccess(result);
-        expect(textsOf(result.remainingHistory)).toStrictEqual([
-          'Q1',
-          'A1',
-          'T1 (truncated)',
-        ]);
-
-        const replayed = await replayFromDisk(session);
-
-        // The journal never learned about the truncation (issue #1393), so the
-        // replayed tool result still carries its original text. What must hold is
-        // that the cut landed on the same chronology positions.
-        expect(seqsOf(replayed)).toStrictEqual(seqsOf(result.remainingHistory));
-        expect(textsOf(replayed)).not.toContain('Q2');
       });
+    });
+  });
+});
 
+describe('rewind-chronology: restoring more turns than exist empties the replayed history', () => {
+  describe('rewindChronology', () => {
+    describe('rewind survives density divergence @issue:2934', () => {
+      const { chatsDir, setup, teardown } = useChatsDir();
+      beforeEach(setup);
+      afterEach(teardown);
       it('restoring more turns than exist empties the replayed history', async () => {
         const session = startSession(chatsDir());
         await addTurns(session, [
@@ -359,20 +417,33 @@ describe('rewind-chronology', () => {
 
         await session.history.applyDensityResult(makeDensityResult([2]));
         await session.history.waitForTokenUpdates();
+        await collectRowsForAssertions(
+          session.history.streamRawHistory(),
+          async (contentsForAssertions) => {
+            const live = [...contentsForAssertions];
+            const result = await new HistoryMutationService().restore(
+              live,
+              5,
+              session.recording,
+            );
+            requireMutationSuccess(result);
+            expect(result.remainingHistory).toStrictEqual([]);
 
-        const live = [...session.history.getAll()];
-        const result = await new HistoryMutationService().restore(
-          live,
-          5,
-          session.recording,
+            const replayed = await replayFromDisk(session);
+            expect(replayed).toStrictEqual([]);
+          },
         );
-        requireMutationSuccess(result);
-        expect(result.remainingHistory).toStrictEqual([]);
-
-        const replayed = await replayFromDisk(session);
-        expect(replayed).toStrictEqual([]);
       });
+    });
+  });
+});
 
+describe('rewind-chronology: records no cut marker when the cut item carries no chronology marker', () => {
+  describe('rewindChronology', () => {
+    describe('rewind survives density divergence @issue:2934', () => {
+      const { chatsDir, setup, teardown } = useChatsDir();
+      beforeEach(setup);
+      afterEach(teardown);
       it('records no cut marker when the cut item carries no chronology marker', async () => {
         const recording = new SessionRecordingService(makeConfig(chatsDir()));
         // Unmarked history: recorded directly, never passed through HistoryService,

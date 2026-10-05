@@ -110,7 +110,18 @@ function buildScriptedChat(state: ScriptedClientState): AgentChatContract {
       return emptyStream();
     },
     generateDirectMessage: async () => emptyModelOutput(),
-    getHistory: () => history,
+    async *getHistory(_curated, signal) {
+      for (const row of history) {
+        signal?.throwIfAborted();
+        yield row;
+      }
+    },
+    async *streamHistory(signal) {
+      for (const row of history) {
+        signal?.throwIfAborted();
+        yield row;
+      }
+    },
     setHistory: async (nextHistory: readonly IContent[]) => {
       history.splice(0, history.length, ...nextHistory);
     },
@@ -135,9 +146,10 @@ function buildScriptedClient(state: ScriptedClientState): AgentClientContract {
     isInitialized: () => true,
     hasChatInitialized: () => true,
     getChat: () => chat,
-    async getHistory() {
-      return history;
+    async *getHistory() {
+      yield* history;
     },
+    streamHistory: (signal) => chat.streamHistory(signal),
     getHistoryService: () => null,
     storeHistoryServiceForReuse: () => {},
     storeHistoryForLaterUse: async (h: IContent[]) => {
@@ -152,7 +164,11 @@ function buildScriptedClient(state: ScriptedClientState): AgentClientContract {
     },
     resetChat: async () => {},
     resumeChat: async () => {},
+    discardDeferredHistory: async () => {},
     setHistory: async () => {},
+    setHistoryFromSource: async () => {
+      throw new Error('Streamed history requires a real agent client');
+    },
     restoreHistory: async () => {},
     addDirectoryContext: async () => {},
     getContentGenerator: () => {

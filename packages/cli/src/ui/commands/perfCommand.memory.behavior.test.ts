@@ -30,9 +30,10 @@ function contextWithHistory(history: readonly IContent[]): CommandContext {
       config: {
         getAgentClient: () => ({
           getHistoryService: () => ({
-            getAll: () => history,
-            getChronologyTrace: () => [],
-            getRawHistory: () => history,
+            async *getChronologyTrace() {},
+            async *streamRawHistory() {
+              yield* history;
+            },
           }),
         }),
       },

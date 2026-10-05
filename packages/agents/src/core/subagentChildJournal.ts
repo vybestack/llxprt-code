@@ -23,14 +23,6 @@
  * outside the orchestrator file so the over-cap orchestrator is not grown by
  * the wiring.
  *
- * The orchestrator's foreground Config is a wide interface whose host supplies
- * a varying subset (the same file feature-detects getSessionId,
- * getEphemeralSetting, and getToolRegistry at this boundary). Recording inputs
- * ride the same convention: when the config cannot supply them the host has
- * opted out of session recording, and the child runs without a journal rather
- * than failing the launch. The child session id itself is allocated
- * unconditionally by the caller — fs-safe ids are required even when no
- * journal is opened.
  */
 
 import { basename } from 'node:path';
@@ -51,48 +43,17 @@ interface RecordingInputs {
   readonly workspaceDirs: readonly string[];
 }
 
-/**
- * Structural view of the recording capability surface on Config, mirroring
- * the session-control accessors (storage.getProjectChatsDir is the single
- * source of truth for the chats directory).
- */
-interface RecordingConfigLike {
-  readonly storage?:
-    | {
-        getProjectChatsDir: () => string;
-        getProjectTempDir: () => string;
-      }
-    | undefined;
-  getWorkspaceContext?:
-    | (() => { getDirectories: () => readonly string[] })
-    | undefined;
-}
-
-/**
- * Probe the foreground config for the journal inputs. Returns null when the
- * host does not expose session recording.
- */
-function resolveRecordingInputs(config: Config): RecordingInputs | null {
-  const candidate = config as unknown as RecordingConfigLike;
-  const storage = candidate.storage;
-  if (
-    storage === undefined ||
-    typeof candidate.getWorkspaceContext !== 'function'
-  ) {
-    return null;
-  }
-  const workspaceDirs = candidate.getWorkspaceContext().getDirectories();
+function resolveRecordingInputs(config: Config): RecordingInputs {
   return {
-    projectHash: basename(storage.getProjectTempDir()),
-    chatsDir: storage.getProjectChatsDir(),
-    workspaceDirs: [...workspaceDirs],
+    projectHash: basename(config.storage.getProjectTempDir()),
+    chatsDir: config.storage.getProjectChatsDir(),
+    workspaceDirs: [...config.getWorkspaceContext().getDirectories()],
   };
 }
 
 /**
  * Open the ephemeral journal for one subagent launch under the given
- * pre-allocated fs-safe id, or null when the foreground config does not
- * expose recording inputs. The caller owns the returned journal's dispose
+ * pre-allocated fs-safe id. The caller owns the returned journal's dispose
  * for the whole launch lifecycle (success, failure, timeout, cancellation).
  */
 export async function openChildSessionJournal(params: {
@@ -101,11 +62,8 @@ export async function openChildSessionJournal(params: {
   readonly parentSessionId: string;
   readonly provider: string;
   readonly model: string;
-}): Promise<ChildSessionJournal | null> {
+}): Promise<ChildSessionJournal> {
   const inputs = resolveRecordingInputs(params.config);
-  if (inputs === null) {
-    return null;
-  }
   return createChildSessionJournal({
     sessionId: params.childSessionId,
     parentSessionId: params.parentSessionId,
@@ -122,7 +80,7 @@ export interface ScopeTeardownParams {
   readonly scope: SubAgentScope;
   readonly runtimeResult: AgentRuntimeLoaderResult;
   readonly isolatedHandle: IsolatedRuntimeContextHandle;
-  readonly childJournal: ChildSessionJournal | null;
+  readonly childJournal: ChildSessionJournal;
 }
 
 /**
@@ -146,7 +104,7 @@ export function buildScopeTeardown(
       },
       () => disposeHistoryLike(history),
       () => params.isolatedHandle.cleanup(),
-      () => params.childJournal?.dispose(),
+      () => params.childJournal.dispose(),
     ]);
   };
 }
@@ -158,12 +116,12 @@ export function buildScopeTeardown(
 export function teardownRuntimeArtifacts(
   runtimeResult: AgentRuntimeLoaderResult,
   isolatedHandle: IsolatedRuntimeContextHandle,
-  childJournal: ChildSessionJournal | null,
+  childJournal: ChildSessionJournal,
 ): Promise<void> {
   return runCleanupSteps([
     () => disposeHistoryLike(runtimeResult.history),
     () => isolatedHandle.cleanup(),
-    () => childJournal?.dispose(),
+    () => childJournal.dispose(),
   ]);
 }
 

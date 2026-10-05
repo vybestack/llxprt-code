@@ -399,21 +399,20 @@ export class LoadBalancingProvider implements IProvider {
   generateChatCompletion(
     content: AsyncIterable<IContent>,
     tools?: ProviderToolset,
+    signal?: AbortSignal,
   ): AsyncIterableIterator<IContent>;
   async *generateChatCompletion(
     optionsOrContent: GenerateChatOptions | AsyncIterable<IContent>,
     tools?: ProviderToolset,
+    signal?: AbortSignal,
   ): AsyncIterableIterator<IContent> {
-    // The history is collected once at the failover boundary (issue #854)
-    // and re-opened per backend attempt, so every attempt and estimate
-    // streams the same request-scoped contents. A caller omitting contents
-    // violates the provider contract and fails the collection here.
-    const options: GenerateChatOptions = isAsyncIterableContents(
-      optionsOrContent,
-    )
+    // Collect history once; replay for each attempt (issue #854).
+    const positional = isAsyncIterableContents(optionsOrContent);
+    const options: GenerateChatOptions = positional
       ? {
           contents: replayableContents(await collectContents(optionsOrContent)),
           tools,
+          ...(signal && { metadata: { abortSignal: signal } }),
         }
       : {
           ...optionsOrContent,

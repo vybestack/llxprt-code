@@ -1,3 +1,4 @@
+/// <reference lib="esnext.array" />
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -8,7 +9,8 @@
  * max-lines/no-console disable).
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-core/test-utils/collect-rows-for-assertions.js';
+import { afterAll, describe, it, expect, vi, beforeEach } from 'bun:test';
 import { ChatSession } from './chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
@@ -35,15 +37,25 @@ import type {
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createConfigParams } from './chatSession-thinking-helpers.js';
 
+const realRetryModule = {
+  ...(await import('@vybestack/llxprt-code-core/utils/retry.js')),
+};
 void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   retryWithBackoff: vi.fn((fn: () => unknown) => fn()),
 }));
 
+let settingsService: SettingsService;
+let config: Config;
+let manager: TestRuntimeProviderManager;
+let providerRuntime: ProviderRuntimeContext;
+
 describe('Issue #1150 REPRO: thinking/tool-call round-trip and history persistence', () => {
-  let settingsService: SettingsService;
-  let config: Config;
-  let manager: TestRuntimeProviderManager;
-  let providerRuntime: ProviderRuntimeContext;
+  afterAll(() => {
+    void vi.mock(
+      '@vybestack/llxprt-code-core/utils/retry.js',
+      () => realRetryModule,
+    );
+  });
 
   beforeEach(() => {
     settingsService = new SettingsService();
@@ -70,348 +82,365 @@ describe('Issue #1150 REPRO: thinking/tool-call round-trip and history persisten
     config.setProviderManager(manager);
   });
 
-  it('ISSUE #1150 REPRO: thinking blocks must survive history curation with signature and ordering before tool calls', async () => {
-    const historyService = new HistoryService();
+  it(
+    'ISSUE #1150 REPRO: thinking blocks must survive history curation with signature and ordering before tool calls',
+    testSplitCase1,
+  );
 
-    // Simulate what recordHistory does: add an AI message with thinking + tool calls
-    historyService.add({
-      speaker: 'ai',
-      blocks: [
-        {
-          type: 'thinking',
-          thought: 'Let me think about this...',
-          sourceField: 'thinking',
-          signature: 'sig-test-123',
-        } as ThinkingBlock,
-        {
-          type: 'text',
-          text: "I'll help you with that.",
-        },
-        {
-          type: 'tool_call',
-          id: 'hist_tool_repro_001',
-          name: 'list_directory',
-          parameters: { path: '/tmp' },
-        },
-      ],
-    });
+  it(
+    'ISSUE #1150 REPRO: second API call must include thinking block from first turn',
+    testSplitCase2,
+  );
 
-    // Add tool response
-    historyService.add({
-      speaker: 'tool',
-      blocks: [
-        {
-          type: 'tool_response',
-          callId: 'hist_tool_repro_001',
-          toolName: 'list_directory',
-          result: { output: 'file1.txt' },
-        },
-      ],
-    });
+  it(
+    'ISSUE #1150 REAL BUG: thinking block NOT in error dump - the Turn.run contextForReport shows Gemini format not IContent',
+    testSplitCase3,
+  );
 
-    // Get curated history (what would be sent to provider on the next turn)
-    const curated = historyService.getCuratedForProvider();
+  it(
+    'ISSUE #1150 THE ACTUAL BUG: processStreamResponse loses thinking when text check fails',
+    testSplitCase4,
+  );
 
-    // Find the AI message with tool calls
-    const modelMessage = curated.find(
-      (content) =>
-        content.speaker === 'ai' &&
-        content.blocks.some((block) => block.type === 'tool_call'),
-    );
+  it(
+    'ISSUE #1150 ROOT CAUSE: thinking blocks must survive history curation with signature and sourceField intact',
+    testSplitCase5,
+  );
+});
 
-    expect(modelMessage).toBeDefined();
+async function testSplitCase1(): Promise<void> {
+  const historyService = new HistoryService();
 
-    // THE KEY CHECK: The thinking block must survive curation with its signature
-    const thinkingBlock = modelMessage?.blocks.find(
-      (block) => block.type === 'thinking',
-    );
-
-    expect(thinkingBlock).toBeDefined();
-    expect((thinkingBlock as { signature?: string }).signature).toBe(
-      'sig-test-123',
-    );
-
-    // Also verify order: thinking must come BEFORE tool calls
-    const thinkingIndex = modelMessage?.blocks.findIndex(
-      (block) => block.type === 'thinking',
-    );
-    const toolCallIndex = modelMessage?.blocks.findIndex(
-      (block) => block.type === 'tool_call',
-    );
-
-    expect(thinkingIndex).toBeLessThan(toolCallIndex!);
-  });
-
-  it('ISSUE #1150 REPRO: second API call must include thinking block from first turn', async () => {
-    let callCount = 0;
-    const capturedContents: IContent[][] = [];
-
-    const generateChatCompletionMock = vi.fn(async function* (
-      options: GenerateChatOptions,
-    ) {
-      callCount++;
-      const turnContents: IContent[] = [];
-      for await (const content of options.contents) {
-        turnContents.push(content);
-      }
-      capturedContents.push(turnContents);
-
-      if (callCount === 1) {
-        yield {
-          speaker: 'ai',
-          blocks: [
-            {
-              type: 'thinking',
-              thought: 'First turn thinking - must appear in second call',
-              sourceField: 'thinking',
-              signature: 'sig-first-turn-abc',
-            } as ThinkingBlock,
-          ],
-        } as IContent;
-
-        yield {
-          speaker: 'ai',
-          blocks: [
-            {
-              type: 'tool_call',
-              id: 'hist_tool_turn1',
-              name: 'read_file',
-              parameters: { absolute_path: '/test.txt' },
-            },
-          ],
-        } as IContent;
-      } else {
-        yield {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: 'Done!' }],
-        } as IContent;
-      }
-    });
-
-    const provider: IProvider = {
-      name: 'anthropic',
-      isDefault: true,
-      getModels: vi.fn(async () => []),
-      getDefaultModel: () => 'claude-sonnet-4-5-20250929',
-      generateChatCompletion: generateChatCompletionMock,
-      getAuthToken: vi.fn(async () => 'test-auth-token'),
-    };
-
-    manager.registerProvider(provider);
-
-    const runtimeState = createAgentRuntimeState({
-      runtimeId: 'runtime-issue1150-multiturn-repro',
-      provider: provider.name,
-      model: 'claude-sonnet-4-5-20250929',
-      sessionId: config.getSessionId(),
-    });
-
-    const historyService = new HistoryService();
-    const view = createAgentRuntimeContext({
-      state: runtimeState,
-      history: historyService,
-      settings: {
-        compressionThreshold: 0.8,
-        contextLimit: 200000,
-        preserveThreshold: 0.2,
-        telemetry: { enabled: true, target: null },
-      },
-      provider: createProviderAdapterFromManager(config.getProviderManager()),
-      telemetry: createTelemetryAdapterFromConfig(config),
-      tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
-      providerRuntime: { ...providerRuntime },
-    });
-
-    const chat = new ChatSession(
-      view,
-      {} as unknown as ContentGenerator,
-      {},
-      [],
-    );
-
-    // First turn
-    const stream1 = await chat.sendMessageStream(
-      { message: 'Read a file' },
-      'prompt-turn1',
-    );
-    for await (const _event of stream1) {
-      // exhaust
-    }
-
-    // Add tool response to history (simulating what coreToolScheduler does)
-    historyService.add({
-      speaker: 'tool',
-      blocks: [
-        {
-          type: 'tool_response',
-          callId: 'hist_tool_turn1',
-          toolName: 'read_file',
-          result: { output: 'file contents' },
-        },
-      ],
-    });
-
-    // Second turn - this is where the bug manifests
-    const stream2 = await chat.sendMessageStream(
-      { message: 'What did you find?' },
-      'prompt-turn2',
-    );
-    for await (const _event of stream2) {
-      // exhaust
-    }
-
-    expect(callCount).toBe(2);
-
-    // THE CRITICAL CHECK: The second API call must include the thinking block
-    const secondCallContents = capturedContents[1];
-
-    const aiWithToolCall = secondCallContents.find(
-      (content) =>
-        content.speaker === 'ai' &&
-        content.blocks.some((block) => block.type === 'tool_call'),
-    );
-
-    expect(aiWithToolCall).toBeDefined();
-
-    const hasThinkingBlock = aiWithToolCall?.blocks.some(
-      (block) => block.type === 'thinking',
-    );
-
-    // This assertion will FAIL with the current code, exposing the bug
-    expect(hasThinkingBlock).toBe(true);
-
-    const thinkingBlock = aiWithToolCall?.blocks.find(
-      (block) => block.type === 'thinking',
-    );
-
-    expect(thinkingBlock?.signature).toBe('sig-first-turn-abc');
-  });
-
-  it('ISSUE #1150 REAL BUG: thinking block NOT in error dump - the Turn.run contextForReport shows Gemini format not IContent', async () => {
-    // Verify recordHistory extracts thinking correctly from neutral
-    // ContentBlocks by exercising the neutral block extraction path against
-    // consolidated model output that mixes thinking, text, and tool-call blocks.
-
-    const consolidatedBlocks: ContentBlock[] = [
+  // Simulate what recordHistory does: add an AI message with thinking + tool calls
+  historyService.add({
+    speaker: 'ai',
+    blocks: [
       {
         type: 'thinking',
-        thought: 'Let me analyze this request...',
-        sourceField: 'thinking' as ThinkingBlock['sourceField'],
-        signature: 'sig-anthropic-abc',
-      },
+        thought: 'Let me think about this...',
+        sourceField: 'thinking',
+        signature: 'sig-test-123',
+      } as ThinkingBlock,
       {
         type: 'text',
         text: "I'll help you with that.",
       },
       {
         type: 'tool_call',
-        id: 'hist_tool_verify_001',
+        id: 'hist_tool_repro_001',
         name: 'list_directory',
         parameters: { path: '/tmp' },
       },
-    ];
-
-    const thoughtBlocks = consolidatedBlocks.filter(
-      (b): b is ThinkingBlock => b.type === 'thinking',
-    );
-
-    expect(thoughtBlocks.length).toBe(1);
-    expect(thoughtBlocks[0].thought).toBe('Let me analyze this request...');
-    expect(thoughtBlocks[0].signature).toBe('sig-anthropic-abc');
-    expect(thoughtBlocks[0].sourceField).toBe('thinking');
-
-    // So recordHistory SHOULD work correctly IF it receives consolidatedBlocks
-    // with thinking blocks. The bug must be that the thinking block
-    // is NOT making it into consolidatedBlocks in the first place!
+    ],
   });
 
-  it('ISSUE #1150 THE ACTUAL BUG: processStreamResponse loses thinking when text check fails', async () => {
-    const generateChatCompletionMock = vi.fn(async function* () {
-      // Yield thinking block (like Anthropic does)
+  // Add tool response
+  historyService.add({
+    speaker: 'tool',
+    blocks: [
+      {
+        type: 'tool_response',
+        callId: 'hist_tool_repro_001',
+        toolName: 'list_directory',
+        result: { output: 'file1.txt' },
+      },
+    ],
+  });
+
+  // Get curated history (what would be sent to provider on the next turn)
+  const curated = await Array.fromAsync(
+    historyService.getCuratedForProviderStream(),
+  );
+
+  // Find the AI message with tool calls
+  const modelMessage = curated.find(
+    (content) =>
+      content.speaker === 'ai' &&
+      content.blocks.some((block) => block.type === 'tool_call'),
+  );
+
+  expect(modelMessage).toBeDefined();
+
+  // THE KEY CHECK: The thinking block must survive curation with its signature
+  const thinkingBlock = modelMessage?.blocks.find(
+    (block) => block.type === 'thinking',
+  );
+
+  expect(thinkingBlock).toBeDefined();
+  expect((thinkingBlock as { signature?: string }).signature).toBe(
+    'sig-test-123',
+  );
+
+  // Also verify order: thinking must come BEFORE tool calls
+  const thinkingIndex = modelMessage?.blocks.findIndex(
+    (block) => block.type === 'thinking',
+  );
+  const toolCallIndex = modelMessage?.blocks.findIndex(
+    (block) => block.type === 'tool_call',
+  );
+
+  expect(thinkingIndex).toBeLessThan(toolCallIndex!);
+}
+
+function createRoundTripProvider(
+  callState: { count: number },
+  capturedContents: IContent[][],
+): IProvider {
+  const generateChatCompletionMock = vi.fn(async function* (
+    options: GenerateChatOptions,
+  ) {
+    callState.count++;
+    const turnContents: IContent[] = [];
+    for await (const content of options.contents) {
+      turnContents.push(content);
+    }
+    capturedContents.push(turnContents);
+
+    if (callState.count === 1) {
       yield {
         speaker: 'ai',
         blocks: [
           {
             type: 'thinking',
-            thought: 'This thinking should be in history',
+            thought: 'First turn thinking - must appear in second call',
             sourceField: 'thinking',
-            signature: 'sig-must-survive',
+            signature: 'sig-first-turn-abc',
           } as ThinkingBlock,
         ],
       } as IContent;
 
-      // Yield text (like Anthropic does)
-      yield {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'Response text' }],
-      } as IContent;
-
-      // Yield tool call (like Anthropic does)
       yield {
         speaker: 'ai',
         blocks: [
           {
             type: 'tool_call',
-            id: 'hist_tool_actual_bug_001',
-            name: 'test_tool',
-            parameters: {},
+            id: 'hist_tool_turn1',
+            name: 'read_file',
+            parameters: { absolute_path: '/test.txt' },
           },
         ],
       } as IContent;
-    });
-
-    const provider: IProvider = {
-      name: 'anthropic',
-      isDefault: true,
-      getModels: vi.fn(async () => []),
-      getDefaultModel: () => 'claude-sonnet-4-5-20250929',
-      generateChatCompletion: generateChatCompletionMock,
-      getAuthToken: vi.fn(async () => 'test-auth-token'),
-    };
-
-    manager.registerProvider(provider);
-
-    const runtimeState = createAgentRuntimeState({
-      runtimeId: 'runtime-actual-bug',
-      provider: provider.name,
-      model: 'claude-sonnet-4-5-20250929',
-      sessionId: config.getSessionId(),
-    });
-
-    const historyService = new HistoryService();
-    const view = createAgentRuntimeContext({
-      state: runtimeState,
-      history: historyService,
-      settings: {
-        compressionThreshold: 0.8,
-        contextLimit: 200000,
-        preserveThreshold: 0.2,
-        telemetry: { enabled: true, target: null },
-      },
-      provider: createProviderAdapterFromManager(config.getProviderManager()),
-      telemetry: createTelemetryAdapterFromConfig(config),
-      tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
-      providerRuntime: { ...providerRuntime },
-    });
-
-    const chat = new ChatSession(
-      view,
-      {} as unknown as ContentGenerator,
-      {},
-      [],
-    );
-
-    const stream = await chat.sendMessageStream(
-      { message: 'Test message' },
-      'prompt-actual-bug',
-    );
-
-    for await (const _event of stream) {
-      // exhaust stream - this triggers recordHistory at the end
+    } else {
+      yield {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'Done!' }],
+      } as IContent;
     }
+  });
 
-    // NOW CHECK: What's in the history?
-    const allHistory = historyService.getAll();
+  const provider: IProvider = {
+    name: 'anthropic',
+    isDefault: true,
+    getModels: vi.fn(async () => []),
+    getDefaultModel: () => 'claude-sonnet-4-5-20250929',
+    generateChatCompletion: generateChatCompletionMock,
+    getAuthToken: vi.fn(async () => 'test-auth-token'),
+  };
+
+  return provider;
+}
+
+function createThinkingChat(
+  provider: IProvider,
+  runtimeId: string,
+  historyService: HistoryService,
+): ChatSession {
+  manager.registerProvider(provider);
+  const runtimeState = createAgentRuntimeState({
+    runtimeId,
+    provider: provider.name,
+    model: 'claude-sonnet-4-5-20250929',
+    sessionId: config.getSessionId(),
+  });
+  const view = createAgentRuntimeContext({
+    state: runtimeState,
+    history: historyService,
+    settings: {
+      compressionThreshold: 0.8,
+      contextLimit: 200000,
+      preserveThreshold: 0.2,
+      telemetry: { enabled: true, target: null },
+    },
+    provider: createProviderAdapterFromManager(config.getProviderManager()),
+    telemetry: createTelemetryAdapterFromConfig(config),
+    tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
+    providerRuntime: { ...providerRuntime },
+  });
+  return new ChatSession(view, {} as unknown as ContentGenerator, {}, []);
+}
+
+async function testSplitCase2(): Promise<void> {
+  const callState = { count: 0 };
+  const capturedContents: IContent[][] = [];
+
+  const provider = createRoundTripProvider(callState, capturedContents);
+
+  const historyService = new HistoryService();
+  const chat = createThinkingChat(
+    provider,
+    'runtime-issue1150-multiturn-repro',
+    historyService,
+  );
+
+  // First turn
+  const stream1 = await chat.sendMessageStream(
+    { message: 'Read a file' },
+    'prompt-turn1',
+  );
+  for await (const _event of stream1) {
+    // exhaust
+  }
+
+  // Add tool response to history (simulating what coreToolScheduler does)
+  historyService.add({
+    speaker: 'tool',
+    blocks: [
+      {
+        type: 'tool_response',
+        callId: 'hist_tool_turn1',
+        toolName: 'read_file',
+        result: { output: 'file contents' },
+      },
+    ],
+  });
+
+  // Second turn - this is where the bug manifests
+  const stream2 = await chat.sendMessageStream(
+    { message: 'What did you find?' },
+    'prompt-turn2',
+  );
+  for await (const _event of stream2) {
+    // exhaust
+  }
+
+  expect(callState.count).toBe(2);
+
+  // THE CRITICAL CHECK: The second API call must include the thinking block
+  const secondCallContents = capturedContents[1];
+
+  const aiWithToolCall = secondCallContents.find(
+    (content) =>
+      content.speaker === 'ai' &&
+      content.blocks.some((block) => block.type === 'tool_call'),
+  );
+
+  expect(aiWithToolCall).toBeDefined();
+
+  const hasThinkingBlock = aiWithToolCall?.blocks.some(
+    (block) => block.type === 'thinking',
+  );
+
+  // This assertion will FAIL with the current code, exposing the bug
+  expect(hasThinkingBlock).toBe(true);
+
+  const thinkingBlock = aiWithToolCall?.blocks.find(
+    (block) => block.type === 'thinking',
+  );
+
+  expect(thinkingBlock?.signature).toBe('sig-first-turn-abc');
+}
+
+async function testSplitCase3(): Promise<void> {
+  // Verify recordHistory extracts thinking correctly from neutral
+  // ContentBlocks by exercising the neutral block extraction path against
+  // consolidated model output that mixes thinking, text, and tool-call blocks.
+
+  const consolidatedBlocks: ContentBlock[] = [
+    {
+      type: 'thinking',
+      thought: 'Let me analyze this request...',
+      sourceField: 'thinking' as ThinkingBlock['sourceField'],
+      signature: 'sig-anthropic-abc',
+    },
+    {
+      type: 'text',
+      text: "I'll help you with that.",
+    },
+    {
+      type: 'tool_call',
+      id: 'hist_tool_verify_001',
+      name: 'list_directory',
+      parameters: { path: '/tmp' },
+    },
+  ];
+
+  const thoughtBlocks = consolidatedBlocks.filter(
+    (b): b is ThinkingBlock => b.type === 'thinking',
+  );
+
+  expect(thoughtBlocks.length).toBe(1);
+  expect(thoughtBlocks[0].thought).toBe('Let me analyze this request...');
+  expect(thoughtBlocks[0].signature).toBe('sig-anthropic-abc');
+  expect(thoughtBlocks[0].sourceField).toBe('thinking');
+
+  // So recordHistory SHOULD work correctly IF it receives consolidatedBlocks
+  // with thinking blocks. The bug must be that the thinking block
+  // is NOT making it into consolidatedBlocks in the first place!
+}
+
+async function testSplitCase4(): Promise<void> {
+  const generateChatCompletionMock = vi.fn(async function* () {
+    // Yield thinking block (like Anthropic does)
+    yield {
+      speaker: 'ai',
+      blocks: [
+        {
+          type: 'thinking',
+          thought: 'This thinking should be in history',
+          sourceField: 'thinking',
+          signature: 'sig-must-survive',
+        } as ThinkingBlock,
+      ],
+    } as IContent;
+
+    // Yield text (like Anthropic does)
+    yield {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'Response text' }],
+    } as IContent;
+
+    // Yield tool call (like Anthropic does)
+    yield {
+      speaker: 'ai',
+      blocks: [
+        {
+          type: 'tool_call',
+          id: 'hist_tool_actual_bug_001',
+          name: 'test_tool',
+          parameters: {},
+        },
+      ],
+    } as IContent;
+  });
+
+  const provider: IProvider = {
+    name: 'anthropic',
+    isDefault: true,
+    getModels: vi.fn(async () => []),
+    getDefaultModel: () => 'claude-sonnet-4-5-20250929',
+    generateChatCompletion: generateChatCompletionMock,
+    getAuthToken: vi.fn(async () => 'test-auth-token'),
+  };
+
+  const historyService = new HistoryService();
+  const chat = createThinkingChat(
+    provider,
+    'runtime-actual-bug',
+    historyService,
+  );
+
+  const stream = await chat.sendMessageStream(
+    { message: 'Test message' },
+    'prompt-actual-bug',
+  );
+
+  for await (const _event of stream) {
+    // exhaust stream - this triggers recordHistory at the end
+  }
+
+  // NOW CHECK: What's in the history?
+  await withRows(historyService.streamRawHistory(), (rows) => {
+    const allHistory = rows;
 
     // Find AI messages
     const aiMessages = allHistory.filter((c) => c.speaker === 'ai');
@@ -438,86 +467,90 @@ describe('Issue #1150 REPRO: thinking/tool-call round-trip and history persisten
 
     expect(thinkingBlock?.signature).toBe('sig-must-survive');
   });
+}
 
-  it('ISSUE #1150 ROOT CAUSE: thinking blocks must survive history curation with signature and sourceField intact', async () => {
-    const historyService = new HistoryService();
+function makeSimulatedBlocks(): ContentBlock[] {
+  return [
+    {
+      type: 'thinking',
+      thought: 'Let me think about this...',
+      sourceField: 'thinking' as ThinkingBlock['sourceField'],
+      signature: 'sig-abc-123',
+    },
+    {
+      type: 'text',
+      text: "I'll help you.",
+    },
+    {
+      type: 'tool_call',
+      id: 'hist_tool_test_001',
+      name: 'list_directory',
+      parameters: { path: '/tmp' },
+    },
+  ];
+}
 
-    // Simulate the neutral ContentBlock[] that recordHistory would receive:
-    const simulatedBlocks: ContentBlock[] = [
-      {
-        type: 'thinking',
-        thought: 'Let me think about this...',
-        sourceField: 'thinking' as ThinkingBlock['sourceField'],
-        signature: 'sig-abc-123',
-      },
-      {
-        type: 'text',
-        text: "I'll help you.",
-      },
+async function testSplitCase5(): Promise<void> {
+  const historyService = new HistoryService();
+  // Simulate the neutral ContentBlock[] that recordHistory would receive:
+  const simulatedBlocks = makeSimulatedBlocks();
+  const thoughtBlocks = simulatedBlocks.filter(
+    (b): b is ThinkingBlock => b.type === 'thinking',
+  );
+
+  // recordHistory uses thinking blocks directly:
+  const _thinkingBlocksForHistory = thoughtBlocks.map((block) => ({
+    type: 'thinking' as const,
+    thought: block.thought.trim(),
+    sourceField: block.sourceField,
+    signature: block.signature,
+  }));
+
+  const iContent: IContent = {
+    speaker: 'ai',
+    blocks: [
+      ...thoughtBlocks,
+      { type: 'text', text: "I'll help you." },
       {
         type: 'tool_call',
         id: 'hist_tool_test_001',
         name: 'list_directory',
         parameters: { path: '/tmp' },
       },
-    ];
+    ],
+  };
 
-    const thoughtBlocks = simulatedBlocks.filter(
-      (b): b is ThinkingBlock => b.type === 'thinking',
-    );
+  historyService.add(iContent);
 
-    // recordHistory uses thinking blocks directly:
-    const _thinkingBlocksForHistory = thoughtBlocks.map((block) => ({
-      type: 'thinking' as const,
-      thought: block.thought.trim(),
-      sourceField: block.sourceField,
-      signature: block.signature,
-    }));
-
-    const iContent: IContent = {
-      speaker: 'ai',
-      blocks: [
-        ...thoughtBlocks,
-        { type: 'text', text: "I'll help you." },
-        {
-          type: 'tool_call',
-          id: 'hist_tool_test_001',
-          name: 'list_directory',
-          parameters: { path: '/tmp' },
-        },
-      ],
-    };
-
-    historyService.add(iContent);
-
-    // Add tool response
-    historyService.add({
-      speaker: 'tool',
-      blocks: [
-        {
-          type: 'tool_response',
-          callId: 'hist_tool_test_001',
-          toolName: 'list_directory',
-          result: { output: 'file1.txt' },
-        },
-      ],
-    });
-
-    // Now get curated for provider (what would be sent on next turn)
-    const curated = historyService.getCuratedForProvider();
-
-    // Find the AI message with tool calls
-    const aiMessage = curated.find(
-      (c) => c.speaker === 'ai' && c.blocks.some((b) => b.type === 'tool_call'),
-    );
-
-    expect(aiMessage).toBeDefined();
-
-    // THE KEY CHECK: thinking block must be present with sourceField and signature
-    const thinkingBlock = aiMessage?.blocks.find((b) => b.type === 'thinking');
-
-    expect(thinkingBlock).toBeDefined();
-    expect(thinkingBlock?.sourceField).toBe('thinking');
-    expect(thinkingBlock?.signature).toBe('sig-abc-123');
+  // Add tool response
+  historyService.add({
+    speaker: 'tool',
+    blocks: [
+      {
+        type: 'tool_response',
+        callId: 'hist_tool_test_001',
+        toolName: 'list_directory',
+        result: { output: 'file1.txt' },
+      },
+    ],
   });
-});
+
+  // Now get curated for provider (what would be sent on next turn)
+  const curated = await Array.fromAsync(
+    historyService.getCuratedForProviderStream(),
+  );
+
+  // Find the AI message with tool calls
+  const aiMessage = curated.find(
+    (c) => c.speaker === 'ai' && c.blocks.some((b) => b.type === 'tool_call'),
+  );
+
+  expect(aiMessage).toBeDefined();
+
+  // THE KEY CHECK: thinking block must be present with sourceField and signature
+  const thinkingBlock = aiMessage?.blocks.find((b) => b.type === 'thinking');
+
+  expect(thinkingBlock).toBeDefined();
+  expect(thinkingBlock?.sourceField).toBe('thinking');
+  expect(thinkingBlock?.signature).toBe('sig-abc-123');
+}

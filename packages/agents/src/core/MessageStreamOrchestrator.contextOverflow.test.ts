@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeEach, describe, expect, it, vi, type Mock } from 'bun:test';
+import {
+  afterAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from 'bun:test';
 import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
@@ -92,10 +100,7 @@ function contentStream(text: string): AsyncGenerator<ServerAgentStreamEvent> {
   })();
 }
 
-function buildOrchestrator(options: BuildOptions): {
-  orchestrator: InstanceType<typeof MessageStreamOrchestrator>;
-  deps: MessageStreamDeps;
-} {
+function makeChat(): ChatSession {
   const mockChat = {
     getLastPromptTokenCount: vi.fn().mockReturnValue(100),
     getProjectedPromptBaseline: vi.fn().mockReturnValue(100),
@@ -103,6 +108,9 @@ function buildOrchestrator(options: BuildOptions): {
     getHistory: vi.fn().mockReturnValue([]),
     getContextLimit: vi.fn(() => tokenLimit('gpt-4')),
   };
+  return mockChat as unknown as ChatSession;
+}
+function makeConfig(): Config {
   const providerManager = {
     getActiveProviderName: vi.fn(() => 'openai'),
     getActiveProvider: vi.fn(() => ({
@@ -126,22 +134,15 @@ function buildOrchestrator(options: BuildOptions): {
       get: vi.fn(() => undefined),
     })),
   } as unknown as Config;
+  return config;
+}
 
+function makeTodoContinuationService(
+  options: BuildOptions,
+): MessageStreamDeps['todoContinuationService'] {
   const activeTodos = options.activeTodos ?? [
     { id: 'todo-1', content: 'Active task', status: 'in_progress' },
   ];
-  const turnStreamFactory = options.turnStreamFactory ?? overflowStream;
-  mockTurnRun.mockImplementation(() => turnStreamFactory());
-
-  const afterHookOutput =
-    options.shouldClearContext === true
-      ? {
-          isBlockingDecision: () => false,
-          shouldStopExecution: () => false,
-          getEffectiveReason: () => 'context cleared',
-          shouldClearContext: () => true,
-        }
-      : undefined;
   const raisedReminderLevel = options.raisedReminderLevel;
   const reminderState: { level: 'none' | 'base' | 'escalated' } = {
     level: 'none',
@@ -185,10 +186,31 @@ function buildOrchestrator(options: BuildOptions): {
     restore: vi.fn(),
     shouldDeferStreamEvent: vi.fn().mockReturnValue(false),
   } as unknown as MessageStreamDeps['todoContinuationService'];
+  return todoContinuationService;
+}
+
+function buildOrchestrator(options: BuildOptions): {
+  orchestrator: InstanceType<typeof MessageStreamOrchestrator>;
+  deps: MessageStreamDeps;
+} {
+  const mockChat = makeChat();
+  const config = makeConfig();
+  const turnStreamFactory = options.turnStreamFactory ?? overflowStream;
+  mockTurnRun.mockImplementation(() => turnStreamFactory());
+  const afterHookOutput =
+    options.shouldClearContext === true
+      ? {
+          isBlockingDecision: () => false,
+          shouldStopExecution: () => false,
+          getEffectiveReason: () => 'context cleared',
+          shouldClearContext: () => true,
+        }
+      : undefined;
+  const todoContinuationService = makeTodoContinuationService(options);
 
   const deps: MessageStreamDeps = {
     config,
-    getChat: () => mockChat as unknown as ChatSession,
+    getChat: () => mockChat,
     logger: {
       debug: vi.fn(),
       warn: vi.fn(),
@@ -219,7 +241,7 @@ function buildOrchestrator(options: BuildOptions): {
       providerName: 'openai',
       model: 'gpt-4',
     }),
-    getHistory: vi.fn().mockResolvedValue([]),
+    async *streamHistory() {},
     getSessionTurnCount: vi.fn().mockReturnValue(2),
     incrementSessionTurnCount: vi.fn(),
     lazyInitialize: vi.fn().mockResolvedValue(undefined),
@@ -268,6 +290,14 @@ async function collectEvents(
 }
 
 describe('MessageStreamOrchestrator context-overflow terminal handling', () => {
+  afterAll(() => {
+    void vi.mock('./turn.js', () => actualTurn);
+    void vi.mock(
+      '@vybestack/llxprt-code-core/core/tokenLimits.js',
+      () => actualTokenLimits,
+    );
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     (tokenLimit as Mock<typeof tokenLimit>).mockImplementation(

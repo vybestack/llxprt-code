@@ -1,3 +1,4 @@
+import { curatedHistoryForTest } from '../../../../core/src/test-utils/curated-history-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -20,6 +21,7 @@
  *   6. The metadata-only stub does not leak original payload content.
  */
 
+import { collectRawHistory } from '@vybestack/llxprt-code-core/test-utils/collect-raw-history.js';
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type {
@@ -194,16 +196,8 @@ async function computeActualTokens(
   return historyService.estimateTokensForContents(contents, 'test-model');
 }
 
-describe('ProviderContentEnforcer last-resort tool-response truncation (issue #1321)', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('recovers by truncating the fattest tool_response when compression and fallback fail', async () => {
-    // Use a context limit large enough to leave room after the safety margin.
-    // marginAdjustedLimit = 15000 - 1000 (safety) = 14000.
-    // The 100000-char tool response is ~25000 tokens, which overflows 14000.
-    // Truncating it brings the payload well under 14000.
+const densityFixture1_observePreservesProviderToolCallResponsePairingIDsAndNamesAfterTruncation =
+  async () => {
     const harness = buildEnforcerHarness({
       compressionThreshold: 0.01,
       contextLimit: 15000,
@@ -220,211 +214,52 @@ describe('ProviderContentEnforcer last-resort tool-response truncation (issue #1
     );
 
     const pending = textContent('human', 'pending');
-    const envelope = buildEnvelope([...historyService.getCurated()], [pending]);
+    const envelope = buildEnvelope(
+      [...curatedHistoryForTest(historyService)],
+      [pending],
+    );
 
-    const result = await harness.enforcer.enforce(envelope, 'prompt-1');
+    const result = await harness.enforcer.enforce(envelope, 'prompt-pairing');
 
-    expect(result).toBeDefined();
-    expect(result.length).toBeGreaterThan(0);
+    // Every tool call in the payload must have a matching tool response.
+    const toolCalls = result
+      .flatMap((c) => c.blocks)
+      .filter((b): b is ToolCallBlock => b.type === 'tool_call');
+    const toolResponses = result
+      .flatMap((c) => c.blocks)
+      .filter((b): b is ToolResponseBlock => b.type === 'tool_response');
 
-    // The tool response in history should be stubbed.
-    const raw = historyService.getRawHistory();
-    const toolResponses = raw
+    const unmatchedToolCallIds = toolCalls
+      .filter(
+        (call) =>
+          !toolResponses.some(
+            (response) =>
+              response.callId === call.id ||
+              response.callId === `hist_${call.id}`,
+          ),
+      )
+      .map((call) => call.id);
+
+    // The stubbed response preserves callId and toolName.
+    const rawResponses = (await collectRawHistory(historyService))
       .flatMap((e) => e.blocks)
       .filter((b): b is ToolResponseBlock => b.type === 'tool_response');
-    expect(toolResponses.length).toBeGreaterThan(0);
-    const stubbed = toolResponses.find(
+    const stubbed = rawResponses.find(
       (b) => b.providerMetadata?.[CONTEXT_TRUNCATION_MARKER] === true,
     );
-    expect(stubbed).toBeDefined();
 
-    // Final budget should be under the marginAdjustedLimit (15000 - 1000 = 14000).
-    const finalTokens = await computeActualTokens(historyService, result);
-    expect(finalTokens).toBeLessThan(14000);
-  });
-
-  it('preserves provider tool-call/response pairing IDs and names after truncation', async () => {
-    const {
+    const callIdObservation = stubbed?.callId;
+    const toolNameObservation = stubbed?.toolName;
+    return {
       stubbed,
       callIdObservation,
       toolNameObservation,
       unmatchedToolCallIds,
-    } =
-      await observePreservesProviderToolCallResponsePairingIDsAndNamesAfterTruncation();
-    expect(unmatchedToolCallIds).toStrictEqual([]);
-    expect(stubbed).toBeDefined();
-    expect(callIdObservation).toBe('call-1');
-    expect(toolNameObservation).toBe('read_file');
-  });
-
-  const observePreservesProviderToolCallResponsePairingIDsAndNamesAfterTruncation =
-    async () => {
-      const harness = buildEnforcerHarness({
-        compressionThreshold: 0.01,
-        contextLimit: 15000,
-        generationConfig: { maxOutputTokens: 100 },
-        performCompressionResult: PerformCompressionResult.FAILED,
-        performFallbackCompressionResult: false,
-      });
-      const { historyService } = harness;
-
-      historyService.add(textContent('human', 'question'));
-      historyService.add(makeToolCallEntry('call-1', 'read_file'));
-      historyService.add(
-        makeToolResponseEntry('call-1', 'read_file', 'x'.repeat(100000)),
-      );
-
-      const pending = textContent('human', 'pending');
-      const envelope = buildEnvelope(
-        [...historyService.getCurated()],
-        [pending],
-      );
-
-      const result = await harness.enforcer.enforce(envelope, 'prompt-pairing');
-
-      // Every tool call in the payload must have a matching tool response.
-      const toolCalls = result
-        .flatMap((c) => c.blocks)
-        .filter((b): b is ToolCallBlock => b.type === 'tool_call');
-      const toolResponses = result
-        .flatMap((c) => c.blocks)
-        .filter((b): b is ToolResponseBlock => b.type === 'tool_response');
-
-      const unmatchedToolCallIds = toolCalls
-        .filter(
-          (call) =>
-            !toolResponses.some(
-              (response) =>
-                response.callId === call.id ||
-                response.callId === `hist_${call.id}`,
-            ),
-        )
-        .map((call) => call.id);
-
-      // The stubbed response preserves callId and toolName.
-      const rawResponses = historyService
-        .getRawHistory()
-        .flatMap((e) => e.blocks)
-        .filter((b): b is ToolResponseBlock => b.type === 'tool_response');
-      const stubbed = rawResponses.find(
-        (b) => b.providerMetadata?.[CONTEXT_TRUNCATION_MARKER] === true,
-      );
-
-      const callIdObservation = stubbed?.callId;
-      const toolNameObservation = stubbed?.toolName;
-      return {
-        stubbed,
-        callIdObservation,
-        toolNameObservation,
-        unmatchedToolCallIds,
-      };
     };
+  };
 
-  it('asserts minimal replacements: only the fattest candidate is stubbed', async () => {
-    const harness = buildEnforcerHarness({
-      compressionThreshold: 0.01,
-      contextLimit: 15000,
-      generationConfig: { maxOutputTokens: 100 },
-      performCompressionResult: PerformCompressionResult.FAILED,
-      performFallbackCompressionResult: false,
-    });
-    const { historyService } = harness;
-
-    historyService.add(textContent('human', 'question'));
-    historyService.add(makeToolCallEntry('call-big', 'read_file'));
-    historyService.add(
-      makeToolResponseEntry('call-big', 'read_file', 'B'.repeat(100000)),
-    );
-    historyService.add(makeToolCallEntry('call-small', 'list_files'));
-    historyService.add(
-      makeToolResponseEntry('call-small', 'list_files', 'small output'),
-    );
-
-    const pending = textContent('human', 'pending');
-    const envelope = buildEnvelope([...historyService.getCurated()], [pending]);
-
-    await harness.enforcer.enforce(envelope, 'prompt-minimal');
-
-    const rawResponses = historyService
-      .getRawHistory()
-      .flatMap((e) => e.blocks)
-      .filter((b): b is ToolResponseBlock => b.type === 'tool_response');
-
-    const stubbedCallIds = rawResponses
-      .filter((b) => b.providerMetadata?.[CONTEXT_TRUNCATION_MARKER] === true)
-      .map((b) => b.callId);
-    const unstubbedCallIds = rawResponses
-      .filter(
-        (b) => !(b.providerMetadata?.[CONTEXT_TRUNCATION_MARKER] === true),
-      )
-      .map((b) => b.callId);
-
-    // Only the big one should be stubbed.
-    expect(stubbedCallIds).toContain('call-big');
-    expect(stubbedCallIds).not.toContain('call-small');
-    expect(unstubbedCallIds).toContain('call-small');
-  });
-
-  it('throws a context-overflow error when tool-response truncation exhausts all candidates', async () => {
-    // Set an extremely small context limit so even after truncating the
-    // only tool response, the remaining payload exceeds the limit.
-    // marginAdjustedLimit = 200 - 1000 (safety) = max(1, -800) = 1.
-    // Nothing can fit under 1 token.
-    const harness = buildEnforcerHarness({
-      compressionThreshold: 0.01,
-      contextLimit: 200,
-      generationConfig: { maxOutputTokens: 10 },
-      performCompressionResult: PerformCompressionResult.FAILED,
-      performFallbackCompressionResult: false,
-    });
-    const { historyService } = harness;
-
-    historyService.add(textContent('human', 'question'));
-    historyService.add(makeToolCallEntry('call-1', 'read_file'));
-    historyService.add(
-      makeToolResponseEntry('call-1', 'read_file', 'small output'),
-    );
-
-    const pending = textContent('human', 'pending');
-    const envelope = buildEnvelope([...historyService.getCurated()], [pending]);
-
-    await expect(
-      harness.enforcer.enforce(envelope, 'prompt-exhausted'),
-    ).rejects.toThrow(/context limit/i);
-  });
-
-  it('throws when there are no tool-response candidates to truncate', async () => {
-    const harness = buildEnforcerHarness({
-      compressionThreshold: 0.01,
-      contextLimit: 200,
-      generationConfig: { maxOutputTokens: 10 },
-      performCompressionResult: PerformCompressionResult.FAILED,
-      performFallbackCompressionResult: false,
-    });
-    const { historyService } = harness;
-
-    historyService.add(textContent('human', 'question'));
-    historyService.add(textContent('ai', 'answer'));
-
-    const pending = textContent('human', 'pending');
-    const envelope = buildEnvelope([...historyService.getCurated()], [pending]);
-
-    await expect(
-      harness.enforcer.enforce(envelope, 'prompt-no-candidates'),
-    ).rejects.toThrow(/context limit/i);
-  });
-
-  it('metadata-only stub does not leak original payload content', async () => {
-    const { stubbed, stubResult, secretPayload, resultLeaks, errorLeaks } =
-      await observeMetadataOnlyStubDoesNotLeakOriginalPayloadContent();
-    expect(resultLeaks).toStrictEqual([]);
-    expect(errorLeaks).toStrictEqual([]);
-    expect(stubbed).toBeDefined();
-    expect(stubResult.length).toBeLessThan(secretPayload.length);
-    expect(stubResult.length).toBeLessThan(500);
-  });
-
-  const observeMetadataOnlyStubDoesNotLeakOriginalPayloadContent = async () => {
+const densityFixture2_observeMetadataOnlyStubDoesNotLeakOriginalPayloadContent =
+  async () => {
     const harness = buildEnforcerHarness({
       compressionThreshold: 0.01,
       contextLimit: 15000,
@@ -442,7 +277,10 @@ describe('ProviderContentEnforcer last-resort tool-response truncation (issue #1
     );
 
     const pending = textContent('human', 'pending');
-    const envelope = buildEnvelope([...historyService.getCurated()], [pending]);
+    const envelope = buildEnvelope(
+      [...curatedHistoryForTest(historyService)],
+      [pending],
+    );
 
     const result = await harness.enforcer.enforce(envelope, 'prompt-stub');
 
@@ -464,8 +302,7 @@ describe('ProviderContentEnforcer last-resort tool-response truncation (issue #1
       .map((response) => response.callId);
 
     // The stub remains bounded.
-    const rawResponses = historyService
-      .getRawHistory()
+    const rawResponses = (await collectRawHistory(historyService))
       .flatMap((e) => e.blocks)
       .filter((b): b is ToolResponseBlock => b.type === 'tool_response');
     const stubbed = rawResponses.find(
@@ -484,114 +321,335 @@ describe('ProviderContentEnforcer last-resort tool-response truncation (issue #1
     };
   };
 
+const densityFixture3_observeTruncatesPendingToolResponseCandidatesEmptyHistoryTurn1 =
+  async () => {
+    // This is the key test for finding (1): when history is empty and
+    // the oversized tool response is in pendingContents, the enforcer
+    // should still truncate it.
+    const harness = buildEnforcerHarness({
+      compressionThreshold: 0.01,
+      contextLimit: 15000,
+      generationConfig: { maxOutputTokens: 100 },
+      performCompressionResult: PerformCompressionResult.FAILED,
+      performFallbackCompressionResult: false,
+    });
+
+    // Empty history — oversized response is only in pending.
+    const pending: IContent[] = [
+      makeToolCallEntry('call-pending', 'read_file'),
+      makeToolResponseEntry('call-pending', 'read_file', 'x'.repeat(100000)),
+    ];
+    const envelope = buildEnvelope([...pending], pending);
+
+    const result = await harness.enforcer.enforce(envelope, 'prompt-turn1');
+
+    // The pending tool response should have been truncated.
+    const toolResponses = result
+      .flatMap((c) => c.blocks)
+      .filter((b): b is ToolResponseBlock => b.type === 'tool_response');
+
+    // buildProviderContent deep-clones and strips providerMetadata, so
+    // we check for the canonical truncation stub message which contains
+    // both "truncated" and "successfully" (the success-path stub pattern).
+    const stubbed = toolResponses.find((tr) => {
+      const r = typeof tr.result === 'string' ? tr.result : '';
+      return r.includes('truncated') && r.includes('successfully');
+    });
+
+    const callIdObservation = stubbed?.callId;
+    const toolNameObservation = stubbed?.toolName;
+    return { result, stubbed, callIdObservation, toolNameObservation };
+  };
+
+describe('ProviderContentEnforcer last-resort tool-response truncation (issue #1321)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('recovers by truncating the fattest tool_response when compression and fallback fail', async () => {
+    expect(await observeDensityCase4()).toBeLessThan(14000);
+  });
+
+  it('preserves provider tool-call/response pairing IDs and names after truncation', async () => {
+    expect(await observeDensityCase5()).toBe('read_file');
+  });
+
+  it('asserts minimal replacements: only the fattest candidate is stubbed', async () => {
+    expect(await observeDensityCase6()).toContain('call-small');
+  });
+
+  it('throws a context-overflow error when tool-response truncation exhausts all candidates', async () => {
+    const { actual, expected0 } = await observeDensityCase7();
+    await expect(actual).rejects.toThrow(expected0);
+  });
+
+  it('throws when there are no tool-response candidates to truncate', async () => {
+    const { actual, expected0 } = await observeDensityCase8();
+    await expect(actual).rejects.toThrow(expected0);
+  });
+
+  it('metadata-only stub does not leak original payload content', async () => {
+    expect(await observeDensityCase9()).toBeLessThan(500);
+  });
+
   it('truncates pending tool-response candidates (empty-history turn-1)', async () => {
     const { result, stubbed, callIdObservation, toolNameObservation } =
-      await observeTruncatesPendingToolResponseCandidatesEmptyHistoryTurn1();
+      await densityFixture3_observeTruncatesPendingToolResponseCandidatesEmptyHistoryTurn1();
     expect(result).toBeDefined();
     expect(stubbed).toBeDefined();
     expect(callIdObservation).toBe('call-pending');
     expect(toolNameObservation).toBe('read_file');
   });
 
-  const observeTruncatesPendingToolResponseCandidatesEmptyHistoryTurn1 =
-    async () => {
-      // This is the key test for finding (1): when history is empty and
-      // the oversized tool response is in pendingContents, the enforcer
-      // should still truncate it.
-      const harness = buildEnforcerHarness({
-        compressionThreshold: 0.01,
-        contextLimit: 15000,
-        generationConfig: { maxOutputTokens: 100 },
-        performCompressionResult: PerformCompressionResult.FAILED,
-        performFallbackCompressionResult: false,
-      });
-
-      // Empty history — oversized response is only in pending.
-      const pending: IContent[] = [
-        makeToolCallEntry('call-pending', 'read_file'),
-        makeToolResponseEntry('call-pending', 'read_file', 'x'.repeat(100000)),
-      ];
-      const envelope = buildEnvelope([...pending], pending);
-
-      const result = await harness.enforcer.enforce(envelope, 'prompt-turn1');
-
-      // The pending tool response should have been truncated.
-      const toolResponses = result
-        .flatMap((c) => c.blocks)
-        .filter((b): b is ToolResponseBlock => b.type === 'tool_response');
-
-      // buildProviderContent deep-clones and strips providerMetadata, so
-      // we check for the canonical truncation stub message which contains
-      // both "truncated" and "successfully" (the success-path stub pattern).
-      const stubbed = toolResponses.find((tr) => {
-        const r = typeof tr.result === 'string' ? tr.result : '';
-        return r.includes('truncated') && r.includes('successfully');
-      });
-
-      const callIdObservation = stubbed?.callId;
-      const toolNameObservation = stubbed?.toolName;
-      return { result, stubbed, callIdObservation, toolNameObservation };
-    };
-
   it('final budget is under the limit after successful truncation', async () => {
-    const harness = buildEnforcerHarness({
-      compressionThreshold: 0.01,
-      contextLimit: 15000,
-      generationConfig: { maxOutputTokens: 100 },
-      performCompressionResult: PerformCompressionResult.FAILED,
-      performFallbackCompressionResult: false,
-    });
-    const { historyService } = harness;
-
-    historyService.add(textContent('human', 'question'));
-    historyService.add(makeToolCallEntry('call-1', 'read_file'));
-    historyService.add(
-      makeToolResponseEntry('call-1', 'read_file', 'x'.repeat(100000)),
-    );
-
-    const pending = textContent('human', 'pending');
-    const envelope = buildEnvelope([...historyService.getCurated()], [pending]);
-
-    const result = await harness.enforcer.enforce(envelope, 'prompt-budget');
-
-    // marginAdjustedLimit = 15000 - 1000 (safety) = 14000.
-    // After truncation the payload should be well under that.
-    const finalTokens = await computeActualTokens(historyService, result);
-    expect(finalTokens).toBeLessThan(14000);
+    expect(await observeDensityCase10()).toBeLessThan(14000);
   });
 
   it('provider-ready pairing is preserved in the returned payload', async () => {
-    const harness = buildEnforcerHarness({
-      compressionThreshold: 0.01,
-      contextLimit: 15000,
-      generationConfig: { maxOutputTokens: 100 },
-      performCompressionResult: PerformCompressionResult.FAILED,
-      performFallbackCompressionResult: false,
-    });
-    const { historyService } = harness;
-
-    historyService.add(textContent('human', 'question'));
-    historyService.add(makeToolCallEntry('call-1', 'read_file'));
-    historyService.add(
-      makeToolResponseEntry('call-1', 'read_file', 'x'.repeat(100000)),
-    );
-
-    const pending: IContent[] = [
-      makeToolCallEntry('call-pending', 'search'),
-      makeToolResponseEntry('call-pending', 'search', 'pending result'),
-    ];
-    const envelope = buildEnvelope(
-      [...historyService.getCurated(), ...pending],
-      pending,
-    );
-
-    const result = await harness.enforcer.enforce(envelope, 'prompt-ready');
-
-    const allText = result
-      .flatMap((c) => c.blocks)
-      .filter((b): b is TextBlock => b.type === 'text')
-      .map((b) => b.text)
-      .join('');
-    expect(allText).toContain('question');
+    expect(await observeDensityCase11()).toContain('question');
   });
 });
+
+async function observeDensityCase4() {
+  // Use a context limit large enough to leave room after the safety margin.
+  // marginAdjustedLimit = 15000 - 1000 (safety) = 14000.
+  // The 100000-char tool response is ~25000 tokens, which overflows 14000.
+  // Truncating it brings the payload well under 14000.
+  const harness = buildEnforcerHarness({
+    compressionThreshold: 0.01,
+    contextLimit: 15000,
+    generationConfig: { maxOutputTokens: 100 },
+    performCompressionResult: PerformCompressionResult.FAILED,
+    performFallbackCompressionResult: false,
+  });
+  const { historyService } = harness;
+
+  historyService.add(textContent('human', 'question'));
+  historyService.add(makeToolCallEntry('call-1', 'read_file'));
+  historyService.add(
+    makeToolResponseEntry('call-1', 'read_file', 'x'.repeat(100000)),
+  );
+
+  const pending = textContent('human', 'pending');
+  const envelope = buildEnvelope(
+    [...curatedHistoryForTest(historyService)],
+    [pending],
+  );
+
+  const result = await harness.enforcer.enforce(envelope, 'prompt-1');
+
+  expect(result).toBeDefined();
+  expect(result.length).toBeGreaterThan(0);
+
+  // The tool response in history should be stubbed.
+  const raw = await collectRawHistory(historyService);
+  const toolResponses = raw
+    .flatMap((e) => e.blocks)
+    .filter((b): b is ToolResponseBlock => b.type === 'tool_response');
+  expect(toolResponses.length).toBeGreaterThan(0);
+  const stubbed = toolResponses.find(
+    (b) => b.providerMetadata?.[CONTEXT_TRUNCATION_MARKER] === true,
+  );
+  expect(stubbed).toBeDefined();
+
+  // Final budget should be under the marginAdjustedLimit (15000 - 1000 = 14000).
+  const finalTokens = await computeActualTokens(historyService, result);
+
+  return finalTokens;
+}
+
+async function observeDensityCase5() {
+  const {
+    stubbed,
+    callIdObservation,
+    toolNameObservation,
+    unmatchedToolCallIds,
+  } =
+    await densityFixture1_observePreservesProviderToolCallResponsePairingIDsAndNamesAfterTruncation();
+  expect(unmatchedToolCallIds).toStrictEqual([]);
+  expect(stubbed).toBeDefined();
+  expect(callIdObservation).toBe('call-1');
+
+  return toolNameObservation;
+}
+
+async function observeDensityCase6() {
+  const harness = buildEnforcerHarness({
+    compressionThreshold: 0.01,
+    contextLimit: 15000,
+    generationConfig: { maxOutputTokens: 100 },
+    performCompressionResult: PerformCompressionResult.FAILED,
+    performFallbackCompressionResult: false,
+  });
+  const { historyService } = harness;
+
+  historyService.add(textContent('human', 'question'));
+  historyService.add(makeToolCallEntry('call-big', 'read_file'));
+  historyService.add(
+    makeToolResponseEntry('call-big', 'read_file', 'B'.repeat(100000)),
+  );
+  historyService.add(makeToolCallEntry('call-small', 'list_files'));
+  historyService.add(
+    makeToolResponseEntry('call-small', 'list_files', 'small output'),
+  );
+
+  const pending = textContent('human', 'pending');
+  const envelope = buildEnvelope(
+    [...curatedHistoryForTest(historyService)],
+    [pending],
+  );
+
+  await harness.enforcer.enforce(envelope, 'prompt-minimal');
+
+  const rawResponses = (await collectRawHistory(historyService))
+    .flatMap((e) => e.blocks)
+    .filter((b): b is ToolResponseBlock => b.type === 'tool_response');
+
+  const stubbedCallIds = rawResponses
+    .filter((b) => b.providerMetadata?.[CONTEXT_TRUNCATION_MARKER] === true)
+    .map((b) => b.callId);
+  const unstubbedCallIds = rawResponses
+    .filter((b) => !(b.providerMetadata?.[CONTEXT_TRUNCATION_MARKER] === true))
+    .map((b) => b.callId);
+
+  // Only the big one should be stubbed.
+  expect(stubbedCallIds).toContain('call-big');
+  expect(stubbedCallIds).not.toContain('call-small');
+
+  return unstubbedCallIds;
+}
+
+async function observeDensityCase7() {
+  // Set an extremely small context limit so even after truncating the
+  // only tool response, the remaining payload exceeds the limit.
+  // marginAdjustedLimit = 200 - 1000 (safety) = max(1, -800) = 1.
+  // Nothing can fit under 1 token.
+  const harness = buildEnforcerHarness({
+    compressionThreshold: 0.01,
+    contextLimit: 200,
+    generationConfig: { maxOutputTokens: 10 },
+    performCompressionResult: PerformCompressionResult.FAILED,
+    performFallbackCompressionResult: false,
+  });
+  const { historyService } = harness;
+
+  historyService.add(textContent('human', 'question'));
+  historyService.add(makeToolCallEntry('call-1', 'read_file'));
+  historyService.add(
+    makeToolResponseEntry('call-1', 'read_file', 'small output'),
+  );
+
+  const pending = textContent('human', 'pending');
+  const envelope = buildEnvelope(
+    [...curatedHistoryForTest(historyService)],
+    [pending],
+  );
+
+  return {
+    actual: harness.enforcer.enforce(envelope, 'prompt-exhausted'),
+    expected0: /context limit/i,
+  };
+}
+
+async function observeDensityCase8() {
+  const harness = buildEnforcerHarness({
+    compressionThreshold: 0.01,
+    contextLimit: 200,
+    generationConfig: { maxOutputTokens: 10 },
+    performCompressionResult: PerformCompressionResult.FAILED,
+    performFallbackCompressionResult: false,
+  });
+  const { historyService } = harness;
+
+  historyService.add(textContent('human', 'question'));
+  historyService.add(textContent('ai', 'answer'));
+
+  const pending = textContent('human', 'pending');
+  const envelope = buildEnvelope(
+    [...curatedHistoryForTest(historyService)],
+    [pending],
+  );
+
+  return {
+    actual: harness.enforcer.enforce(envelope, 'prompt-no-candidates'),
+    expected0: /context limit/i,
+  };
+}
+
+async function observeDensityCase9() {
+  const { stubbed, stubResult, secretPayload, resultLeaks, errorLeaks } =
+    await densityFixture2_observeMetadataOnlyStubDoesNotLeakOriginalPayloadContent();
+  expect(resultLeaks).toStrictEqual([]);
+  expect(errorLeaks).toStrictEqual([]);
+  expect(stubbed).toBeDefined();
+  expect(stubResult.length).toBeLessThan(secretPayload.length);
+
+  return stubResult.length;
+}
+
+async function observeDensityCase10() {
+  const harness = buildEnforcerHarness({
+    compressionThreshold: 0.01,
+    contextLimit: 15000,
+    generationConfig: { maxOutputTokens: 100 },
+    performCompressionResult: PerformCompressionResult.FAILED,
+    performFallbackCompressionResult: false,
+  });
+  const { historyService } = harness;
+
+  historyService.add(textContent('human', 'question'));
+  historyService.add(makeToolCallEntry('call-1', 'read_file'));
+  historyService.add(
+    makeToolResponseEntry('call-1', 'read_file', 'x'.repeat(100000)),
+  );
+
+  const pending = textContent('human', 'pending');
+  const envelope = buildEnvelope(
+    [...curatedHistoryForTest(historyService)],
+    [pending],
+  );
+
+  const result = await harness.enforcer.enforce(envelope, 'prompt-budget');
+
+  // marginAdjustedLimit = 15000 - 1000 (safety) = 14000.
+  // After truncation the payload should be well under that.
+  const finalTokens = await computeActualTokens(historyService, result);
+
+  return finalTokens;
+}
+
+async function observeDensityCase11() {
+  const harness = buildEnforcerHarness({
+    compressionThreshold: 0.01,
+    contextLimit: 15000,
+    generationConfig: { maxOutputTokens: 100 },
+    performCompressionResult: PerformCompressionResult.FAILED,
+    performFallbackCompressionResult: false,
+  });
+  const { historyService } = harness;
+
+  historyService.add(textContent('human', 'question'));
+  historyService.add(makeToolCallEntry('call-1', 'read_file'));
+  historyService.add(
+    makeToolResponseEntry('call-1', 'read_file', 'x'.repeat(100000)),
+  );
+
+  const pending: IContent[] = [
+    makeToolCallEntry('call-pending', 'search'),
+    makeToolResponseEntry('call-pending', 'search', 'pending result'),
+  ];
+  const envelope = buildEnvelope(
+    [...curatedHistoryForTest(historyService), ...pending],
+    pending,
+  );
+
+  const result = await harness.enforcer.enforce(envelope, 'prompt-ready');
+
+  const allText = result
+    .flatMap((c) => c.blocks)
+    .filter((b): b is TextBlock => b.type === 'text')
+    .map((b) => b.text)
+    .join('');
+
+  return allText;
+}

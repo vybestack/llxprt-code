@@ -18,6 +18,8 @@ import {
   type ProviderCallOptionsInit,
 } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
 import { createOpenAIRawPostTestAdapter } from '../../test-utils/rawPostTestAdapters.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { GenerateChatOptions } from '../../IProvider.js';
 
 void vi.mock('openai', () => {
   class FakeOpenAI {
@@ -103,31 +105,42 @@ const createSettings = (overrides: { callId: string; baseUrl?: string }) => {
 
 function buildCallOptions(
   provider: OpenAIProvider,
-  overrides: Omit<ProviderCallOptionsInit, 'providerName'> = {},
-) {
+  overrides: Omit<ProviderCallOptionsInit, 'providerName' | 'contents'> & {
+    contents?: readonly IContent[];
+  } = {},
+): GenerateChatOptions {
   const { contents = [], ...rest } = overrides;
-  return createProviderCallOptions({
-    providerName: provider.name,
-    contents,
-    ...rest,
-  });
+  const stream = (async function* (): AsyncGenerator<IContent> {
+    yield* contents;
+  })();
+  return {
+    ...createProviderCallOptions({
+      providerName: provider.name,
+      contents: stream,
+      ...rest,
+    }),
+    contents: stream,
+  };
+}
+
+function resetRuntime(): void {
+  FakeOpenAIClass.reset();
+  // Set up default runtime context for tests
+  setActiveProviderRuntimeContext(
+    createProviderRuntimeContext({
+      settingsService: new SettingsService(),
+      runtimeId: 'openai-stateless-test',
+    }),
+  );
+}
+
+function cleanupRuntime(): void {
+  clearActiveProviderRuntimeContext();
 }
 
 describe('OpenAI provider stateless contract tests', () => {
-  beforeEach(() => {
-    FakeOpenAIClass.reset();
-    // Set up default runtime context for tests
-    setActiveProviderRuntimeContext(
-      createProviderRuntimeContext({
-        settingsService: new SettingsService(),
-        runtimeId: 'openai-stateless-test',
-      }),
-    );
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
+  beforeEach(resetRuntime);
+  afterEach(cleanupRuntime);
 
   it('creates client per runtime @plan:PLAN-20251018-STATELESSPROVIDER2.P08 @requirement:REQ-SP2-001 @pseudocode openai-responses-stateless.md lines 1-4', async () => {
     const provider = new TestOpenAIProvider(
@@ -182,6 +195,11 @@ describe('OpenAI provider stateless contract tests', () => {
     expect(FakeOpenAIClass.created).toHaveLength(2);
     expect(FakeOpenAIClass.instances.size).toBe(2);
   });
+});
+
+describe('OpenAI provider stateless contract: model parameters', () => {
+  beforeEach(resetRuntime);
+  afterEach(cleanupRuntime);
 
   it('attaches per-call model parameters from runtime config @plan:PLAN-20251023-STATELESS-HARDENING.P07 @requirement:REQ-SP4-002 @requirement:REQ-SP4-003 @pseudocode provider-cache-elimination.md lines 10-12', async () => {
     const provider = new TestOpenAIProvider(
@@ -238,6 +256,11 @@ describe('OpenAI provider stateless contract tests', () => {
     expect(secondRequest?.temperature).toBe(0.85);
     expect(secondRequest?.['max_tokens']).toBe(128);
   });
+});
+
+describe('OpenAI provider stateless contract: ephemeral overrides', () => {
+  beforeEach(resetRuntime);
+  afterEach(cleanupRuntime);
 
   it('does not translate legacy max-tokens ephemerals into max_tokens on the wire', async () => {
     const provider = new TestOpenAIProvider('token-legacy');

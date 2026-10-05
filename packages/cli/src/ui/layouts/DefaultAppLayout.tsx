@@ -274,7 +274,7 @@ function useTranscriptContent(props: TranscriptProps) {
 }
 
 type HistoryServiceHandle = Parameters<
-  RecordingIntegration['onHistoryServiceReplaced']
+  RecordingIntegration['subscribeToJournal']
 >[0];
 
 function getInitializedHistoryService(

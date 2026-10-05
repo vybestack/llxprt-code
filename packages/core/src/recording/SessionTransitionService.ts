@@ -1,29 +1,18 @@
-/**
- * Copyright 2026 Vybestack LLC
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as fs from 'node:fs/promises';
-import { type IContent } from '../services/history/IContent.js';
-import { replaySession, replaySessionThroughSequence } from './ReplayEngine.js';
+import { join } from 'node:path';
 import { SessionLockManager, type LockHandle } from './SessionLockManager.js';
 import { SessionRecordingService } from './SessionRecordingService.js';
+import { ResumeCursorBoot } from './resumeCursorBoot.js';
+import { scanResumeMetadata } from './resumeMetadata.js';
+import { copyCheckpointRange } from './checkpointJournalTransfer.js';
+import { JournalResolver } from './journalResolver.js';
+import type { JournalReadCounters } from './journalCounters.js';
 import type { LocalMediaStore } from '../storage/local-media-store.js';
-import {
-  type CheckpointMetadataView,
-  type ContinueTarget,
-  type SessionMetadata,
+import type {
+  CheckpointMetadataView,
+  ContinueTarget,
+  SessionMetadata,
 } from './types.js';
 
 export type { ContinueTarget } from './types.js';
@@ -32,7 +21,7 @@ export interface ForkResult {
   ok: true;
   recording: SessionRecordingService;
   lockHandle: LockHandle;
-  history: IContent[];
+  boot: ResumeCursorBoot;
   metadata: SessionMetadata;
 }
 
@@ -41,201 +30,151 @@ export interface ForkError {
   error: string;
 }
 
-interface ForkRuntime {
-  chatsDir: string;
-  projectHash: string;
-  provider: string;
-  model: string;
-  workspaceDirs: string[];
-  mediaStore?: LocalMediaStore;
-  maxQueueBytes?: number;
-}
-
 type CheckpointTarget = Extract<ContinueTarget, { kind: 'checkpoint' }>;
-type HistoryResult =
-  | {
-      ok: true;
-      history: IContent[];
-      checkpoint: CheckpointMetadataView;
-    }
-  | ForkError;
 
-async function loadCheckpointHistory(
-  target: CheckpointTarget,
-  projectHash: string,
-  mediaStore: LocalMediaStore | undefined,
-): Promise<HistoryResult> {
-  const fullReplay = await replaySession(target.source.filePath, projectHash, {
-    mediaStore,
-  });
-  if (!fullReplay.ok) {
-    return {
-      ok: false,
-      error: `Failed to replay source session: ${fullReplay.error}`,
-    };
-  }
-  if (fullReplay.sequenceCorrupt) {
-    return {
-      ok: false,
-      error: 'Failed to replay source session: non-monotonic sequences',
-    };
-  }
-  const liveCheckpoint = fullReplay.checkpoints?.find(
-    (checkpoint) =>
-      checkpoint.checkpointId === target.checkpointId && !checkpoint.deleted,
-  );
-  if (liveCheckpoint === undefined) {
-    return {
-      ok: false,
-      error: `Checkpoint '${target.checkpointName}' (${target.checkpointId}) is not live`,
-    };
-  }
-  const boundedReplay = await replaySessionThroughSequence(
-    target.source.filePath,
-    projectHash,
-    liveCheckpoint.sequence,
-    { mediaStore },
-  );
-  if (!boundedReplay.ok) {
-    return {
-      ok: false,
-      error: `Failed to replay source through checkpoint: ${boundedReplay.error}`,
-    };
-  }
-  if (boundedReplay.sequenceCorrupt) {
-    return {
-      ok: false,
-      error:
-        'Failed to replay source through checkpoint: non-monotonic sequences',
-    };
-  }
-  if (boundedReplay.history.length === 0) {
-    return { ok: false, error: 'Checkpoint has no conversation history' };
-  }
-  return {
-    ok: true,
-    history: boundedReplay.history,
-    checkpoint: liveCheckpoint,
-  };
-}
-
-async function cleanupFailedChild(
-  recording: SessionRecordingService | null,
-  lockHandle: LockHandle | null,
-): Promise<unknown[]> {
-  const failures: unknown[] = [];
-  const filePath = recording?.getFilePath() ?? null;
-  if (recording !== null) {
-    try {
-      await recording.dispose();
-    } catch (error: unknown) {
-      failures.push(error);
-    }
-  } else if (lockHandle !== null) {
-    try {
-      await lockHandle.release();
-    } catch (error: unknown) {
-      failures.push(error);
-    }
-  }
-  if (filePath !== null) {
-    try {
-      await fs.rm(filePath, { recursive: true, force: true });
-    } catch (error: unknown) {
-      failures.push(error);
-    }
-  }
-  return failures;
+export interface SessionTransitionServiceOptions {
+  readonly mediaStore?: LocalMediaStore;
+  readonly maxQueueBytes?: number;
+  readonly counters?: JournalReadCounters;
 }
 
 function failureDetail(error: unknown): string {
-  if (error instanceof AggregateError) {
+  if (error instanceof AggregateError)
     return error.errors.map(failureDetail).join('; ');
-  }
   return error instanceof Error ? error.message : String(error);
 }
 
-async function materializeChild(
+async function requireHistory(
+  filePath: string,
+  counters?: JournalReadCounters,
+): Promise<void> {
+  const resolver = await JournalResolver.open(filePath, { counters });
+  try {
+    if ((await resolver.countRows()) === 0)
+      throw new Error('Checkpoint has no conversation history');
+  } finally {
+    await resolver.close();
+  }
+}
+
+async function failedChild(
+  error: unknown,
+  cleanups: Array<() => Promise<unknown> | undefined>,
+): Promise<ForkError> {
+  const failures = [error];
+  for (const cleanup of cleanups) {
+    try {
+      await cleanup();
+    } catch (failure) {
+      failures.push(failure);
+    }
+  }
+  return {
+    ok: false,
+    error: `Failed to create child session: ${failures.map(failureDetail).join('; ')}`,
+  };
+}
+
+async function releaseSource(
+  sourceLock: LockHandle | undefined,
+  result: ForkResult | ForkError,
+): Promise<ForkResult | ForkError> {
+  try {
+    await sourceLock?.release();
+    return result;
+  } catch (error) {
+    return failedChild(
+      error,
+      result.ok
+        ? [
+            () => result.recording.dispose(),
+            () => result.lockHandle.release(),
+            () => fs.rm(result.boot.filePath, { force: true }),
+          ]
+        : [],
+    );
+  }
+}
+
+async function prepareChild(
   target: CheckpointTarget,
   checkpoint: CheckpointMetadataView,
-  history: IContent[],
-  runtime: ForkRuntime,
+  watermark: number,
+  chatsDir: string,
+  metadata: SessionMetadata,
+  options: SessionTransitionServiceOptions,
 ): Promise<ForkResult | ForkError> {
-  const childSessionId = crypto.randomUUID();
-  let recording: SessionRecordingService | null = null;
+  const timestamp = metadata.startTime.slice(0, 19).replace(/:/g, '-');
+  const filePath = join(
+    chatsDir,
+    `session-${timestamp}-${metadata.sessionId}.jsonl`,
+  );
+  let recording: SessionRecordingService | undefined;
+  let lock: LockHandle | undefined;
+  let boot: ResumeCursorBoot | undefined;
+  let created = false;
   try {
-    recording = await SessionRecordingService.createLocked({
-      sessionId: childSessionId,
-      projectHash: runtime.projectHash,
-      chatsDir: runtime.chatsDir,
-      workspaceDirs: runtime.workspaceDirs,
-      provider: runtime.provider,
-      model: runtime.model,
-      ...(runtime.mediaStore === undefined
-        ? {}
-        : { mediaStore: runtime.mediaStore }),
-      ...(runtime.maxQueueBytes === undefined
-        ? {}
-        : { maxQueueBytes: runtime.maxQueueBytes }),
+    lock = await SessionLockManager.acquire(chatsDir, metadata.sessionId);
+    const file = await fs.open(filePath, 'wx');
+    created = true;
+    try {
+      await file.writeFile(
+        `${JSON.stringify({ v: 1, seq: 0, ts: metadata.startTime, type: 'session_start', payload: metadata })}\n`,
+      );
+    } finally {
+      await file.close();
+    }
+    await copyCheckpointRange(
+      target.source.filePath,
+      filePath,
+      watermark,
+      checkpoint.sequence,
+      options.counters,
+    );
+    await requireHistory(filePath, options.counters);
+    recording = new SessionRecordingService({
+      ...metadata,
+      chatsDir,
+      ...options,
     });
+    recording.initializeForResume(filePath, checkpoint.sequence);
+    const childLock = lock;
+    const lockHandle: LockHandle = {
+      ...childLock,
+      async release(): Promise<void> {
+        try {
+          await boot?.close();
+        } finally {
+          await childLock.release();
+        }
+      },
+    };
+    recording.adoptLock(lockHandle);
     recording.recordSessionFork({
       parentSessionId: target.source.sessionId,
       parentSequence: checkpoint.sequence,
       checkpointId: checkpoint.checkpointId,
       checkpointName: checkpoint.name,
     });
-    for (const content of history) recording.recordContent(content);
     await recording.flush();
-    if (!recording.isActive()) {
+    if (!recording.isActive())
       throw new Error('Child recording failed during flush');
-    }
-    const childFilePath = recording.getFilePath();
-    if (childFilePath === null) {
-      throw new Error('Child recording did not materialize');
-    }
-    await fs.access(childFilePath);
-  } catch (error: unknown) {
-    const cleanupFailures = await cleanupFailedChild(recording, null);
-    const failures = [error, ...cleanupFailures];
-    return {
-      ok: false,
-      error: `Failed to create child session: ${failures.map(failureDetail).join('; ')}`,
-    };
+    boot = await ResumeCursorBoot.open(
+      filePath,
+      checkpoint.sequence + 1,
+      (await fs.stat(filePath)).size,
+      options.counters,
+      options.mediaStore,
+    );
+    return { ok: true, recording, lockHandle, boot, metadata };
+  } catch (error) {
+    return failedChild(error, [
+      () => boot?.close(),
+      () => recording?.dispose(),
+      () => lock?.release(),
+      () => (created ? fs.rm(filePath, { force: true }) : undefined),
+    ]);
   }
-
-  const lockHandle = recording.getOwnedLockHandle();
-  if (lockHandle === null) {
-    const cleanupFailures = await cleanupFailedChild(recording, null);
-    const detail = cleanupFailures.map(failureDetail).join('; ');
-    return {
-      ok: false,
-      error:
-        detail.length === 0
-          ? 'Failed to retain child session lock'
-          : `Failed to retain child session lock; cleanup failed: ${detail}`,
-    };
-  }
-  return {
-    ok: true,
-    recording,
-    lockHandle,
-    history,
-    metadata: {
-      sessionId: childSessionId,
-      projectHash: runtime.projectHash,
-      provider: runtime.provider,
-      model: runtime.model,
-      workspaceDirs: runtime.workspaceDirs,
-      startTime: new Date().toISOString(),
-      // A forked child is a user-visible, resumable session: main lineage.
-      kind: 'main',
-    },
-  };
-}
-
-export interface SessionTransitionServiceOptions {
-  readonly mediaStore?: LocalMediaStore;
-  readonly maxQueueBytes?: number;
 }
 
 export class SessionTransitionService {
@@ -250,7 +189,7 @@ export class SessionTransitionService {
     workspaceDirs: string[],
     activeSource?: SessionRecordingService | null,
   ): Promise<ForkResult | ForkError> {
-    let sourceLock: LockHandle | null = null;
+    let sourceLock: LockHandle | undefined;
     if (
       activeSource?.getSessionId() !== target.source.sessionId ||
       !activeSource.ownsLockFor(target.source.sessionId)
@@ -260,38 +199,61 @@ export class SessionTransitionService {
           chatsDir,
           target.source.sessionId,
         );
-      } catch (error: unknown) {
-        const detail = error instanceof Error ? `: ${error.message}` : '';
-        return { ok: false, error: `Source session is in use${detail}` };
+      } catch (error) {
+        return {
+          ok: false,
+          error: `Source session is in use: ${failureDetail(error)}`,
+        };
       }
     }
     try {
-      const history = await loadCheckpointHistory(
-        target,
+      if (sourceLock === undefined) await activeSource?.flush();
+      const { replay, watermark } = await scanResumeMetadata(
+        target.source.filePath,
         projectHash,
-        this.options.mediaStore,
+        (await fs.stat(target.source.filePath)).size,
+        this.options.counters,
       );
-      if (!history.ok) return history;
-      return await materializeChild(
+      if (!replay.ok)
+        return {
+          ok: false,
+          error: `Failed to replay source session: ${replay.error}`,
+        };
+      if (replay.sequenceCorrupt)
+        return {
+          ok: false,
+          error: 'Failed to replay source session: non-monotonic sequences',
+        };
+      const checkpoint = replay.checkpoints?.find(
+        (candidate) =>
+          candidate.checkpointId === target.checkpointId && !candidate.deleted,
+      );
+      if (checkpoint === undefined)
+        return {
+          ok: false,
+          error: `Checkpoint '${target.checkpointName}' (${target.checkpointId}) is not live`,
+        };
+      const result = await prepareChild(
         target,
-        history.checkpoint,
-        history.history,
+        checkpoint,
+        watermark,
+        chatsDir,
         {
-          chatsDir,
+          sessionId: crypto.randomUUID(),
           projectHash,
           provider: currentProvider,
           model: currentModel,
           workspaceDirs,
-          ...(this.options.mediaStore === undefined
-            ? {}
-            : { mediaStore: this.options.mediaStore }),
-          ...(this.options.maxQueueBytes === undefined
-            ? {}
-            : { maxQueueBytes: this.options.maxQueueBytes }),
+          startTime: new Date().toISOString(),
+          kind: 'main',
         },
+        this.options,
       );
+      const ownedSource = sourceLock;
+      sourceLock = undefined;
+      return await releaseSource(ownedSource, result);
     } finally {
-      await sourceLock?.release().catch(() => undefined);
+      await sourceLock?.release();
     }
   }
 }

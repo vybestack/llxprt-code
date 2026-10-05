@@ -15,9 +15,13 @@
 
 import { vi } from 'bun:test';
 import {
-  EmptySummaryError,
-  type CompressionContext,
-} from '@vybestack/llxprt-code-core/core/compression/types.js';
+  regressionHistory,
+  installSummaryTransport,
+  observeDiskFallback,
+} from './compression-regression-fixtures.js';
+import { OneShotStrategy } from '../OneShotStrategy.js';
+import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import { EmptySummaryError } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import * as compressionFactory from '../compressionStrategyFactory.js';
 import { ChatSession } from '../../core/chatSession.js';
@@ -96,11 +100,12 @@ export function makeAnthropicSdkWrappedError(
 
 /**
  * Creates a minimal ChatSession instance for compression behavior testing.
- * Uses vi.spyOn on getCompressionStrategy to control compression outcomes.
+ * Provider transport and fallback estimation control compression outcomes.
  */
 export function makeChatSession(
   runtimeSetup: ReturnType<typeof createChatSessionRuntime>,
   providerRuntimeSnapshot: ProviderRuntimeContext,
+  rows: IContent[] = regressionHistory(),
 ): ChatSession {
   const runtimeState = createAgentRuntimeState({
     runtimeId: runtimeSetup.runtime.runtimeId ?? 'test-chatSession-runtime',
@@ -119,20 +124,14 @@ export function makeChatSession(
     toolCalls: 0,
     toolResponses: 0,
   });
-  vi.spyOn(historyService, 'startCompression').mockImplementation(() => {});
-  vi.spyOn(historyService, 'endCompression').mockImplementation(() => {});
-  vi.spyOn(historyService, 'getCurated').mockReturnValue([
-    { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
-    { speaker: 'ai', blocks: [{ type: 'text', text: 'hi' }] },
-  ]);
-  vi.spyOn(historyService, 'clear').mockImplementation(() => {});
-  vi.spyOn(historyService, 'add').mockImplementation(() => {});
+  historyService.addAll(rows);
   vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(0);
 
   const view = createAgentRuntimeContext({
     state: runtimeState,
     history: historyService,
     settings: {
+      compressionStrategy: 'one-shot',
       compressionThreshold: 0.5, // Low threshold so shouldCompress() returns true
       contextLimit: 200000,
       preserveThreshold: 0.2,
@@ -164,67 +163,175 @@ export function makeChatSession(
 // ---------------------------------------------------------------------------
 
 /**
- * Installs a `vi.spyOn` mock on {@link compressionFactory.getCompressionStrategy}
- * that returns a deterministic primary (middle-out) strategy throwing
- * {@link EmptySummaryError} and a non-LLM top-down-truncation fallback
- * strategy that succeeds. This is the shared mock for the two Issue #2333
- * tests (performCompression and ensureCompressionBeforeSend).
+ * Injects an EmptySummaryError at the provider boundary against a one-row disk
+ * source. The disk strategy seam keeps that source eligible for the fault:
+ * real top-down truncation must publish the single retained row unchanged.
+ * This preserves the original Issue #2333 fallback consequence without a
+ * fabricated fallback candidate or eager primary dispatch.
  *
  * @plan PLAN-20260218-COMPRESSION-RETRY.P01
  * @requirement REQ-CR-004
  */
-export function mockStrategyFactoryWithEmptySummaryFallback(): {
+export function installEmptySummaryDiskFailure(provider: RuntimeProvider): {
   getFallbackCalled: () => boolean;
   getPrimaryCallCount: () => number;
   restore: () => void;
 } {
-  let fallbackCalled = false;
   let primaryCallCount = 0;
+  const transport = installSummaryTransport(provider, async () => {
+    primaryCallCount++;
+    throw new EmptySummaryError('middle-out');
+  });
+  const fallback = observeDiskFallback();
+  const primary = vi
+    .spyOn(OneShotStrategy.prototype, 'compressDisk')
+    .mockImplementation(async (context) => {
+      const { provider } = await context.resolveProvider(undefined);
+      for await (const _row of provider.generateChatCompletion({
+        contents: (async function* () {
+          yield context.history.readRow(0);
+        })(),
+        runtime: context.runtimeContext.providerRuntime,
+      })) {
+        throw new Error(
+          'Empty-summary failure transport unexpectedly returned a row',
+        );
+      }
+      throw new Error('Empty-summary failure transport unexpectedly completed');
+    });
+  return {
+    getFallbackCalled: () => fallback.mock.calls.length > 0,
+    getPrimaryCallCount: () => primaryCallCount,
+    restore: () => {
+      primary.mockRestore();
+      fallback.mockRestore();
+      transport.mockRestore();
+    },
+  };
+}
 
-  const spy = vi
-    .spyOn(compressionFactory, 'getCompressionStrategy')
-    .mockImplementation((name: string) => {
+/**
+ * Helper: build a ChatSession with mocked history for enforceContextWindow tests.
+ * The token counts are controlled so projected > marginAdjustedLimit.
+ */
+export function makeChatForEnforceContextWindow(
+  runtimeSetup: ReturnType<typeof createChatSessionRuntime>,
+  providerRuntimeSnapshot: ProviderRuntimeContext,
+  overrides?: {
+    totalTokens?: number;
+    contextLimit?: number;
+    maxOutputTokens?: number;
+  },
+): ChatSession {
+  const totalTokens = overrides?.totalTokens ?? 100000;
+  const contextLimit = overrides?.contextLimit ?? 200000;
+  const maxOutputTokens = overrides?.maxOutputTokens ?? 65_536;
+
+  const runtimeState = createAgentRuntimeState({
+    runtimeId: runtimeSetup.runtime.runtimeId ?? 'test-chatSession-runtime',
+    provider: runtimeSetup.provider.name,
+    model: 'test-model',
+    sessionId: 'test-session-id',
+  });
+
+  const historyService = new HistoryService();
+  vi.spyOn(historyService, 'getTotalTokens').mockReturnValue(totalTokens);
+  vi.spyOn(historyService, 'waitForTokenUpdates').mockResolvedValue(undefined);
+  vi.spyOn(historyService, 'getStatistics').mockReturnValue({
+    totalMessages: 10,
+    userMessages: 5,
+    aiMessages: 5,
+    toolCalls: 0,
+    toolResponses: 0,
+  });
+  historyService.addAll(regressionHistory());
+
+  vi.spyOn(historyService, 'applyDensityResult').mockResolvedValue(undefined);
+  vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(0);
+
+  const view = createAgentRuntimeContext({
+    state: runtimeState,
+    history: historyService,
+    settings: {
+      compressionStrategy: 'one-shot',
+      compressionThreshold: 0.5,
+      contextLimit,
+      preserveThreshold: 0.2,
+      telemetry: {
+        enabled: false,
+        target: null,
+      },
+    },
+    provider: createProviderAdapterFromManager(
+      runtimeSetup.config.getProviderManager(),
+    ),
+    telemetry: createTelemetryAdapterFromConfig(runtimeSetup.config),
+    tools: createToolRegistryViewFromRegistry(),
+    providerRuntime: providerRuntimeSnapshot,
+  });
+
+  const mockContentGenerator = {
+    generateContent: vi.fn(),
+    generateContentStream: vi.fn(),
+    countTokens: vi.fn().mockResolvedValue({ totalTokens: 100 }),
+    embedContent: vi.fn(),
+  };
+
+  return new ChatSession(view, mockContentGenerator, { maxOutputTokens }, []);
+}
+
+export function hardLimitReplacement(): IContent[] {
+  return [{ speaker: 'human', blocks: [{ type: 'text', text: 'truncated' }] }];
+}
+
+export function mockHardLimitRewriteStrategy(): () => boolean {
+  let fallbackApplied = false;
+  vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
+    (name) => {
       if (name === 'top-down-truncation') {
         return {
           name: 'top-down-truncation' as const,
           requiresLLM: false,
           trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
-          compress: vi
-            .fn()
-            .mockImplementation(async (context: CompressionContext) => {
-              fallbackCalled = true;
-              const newHistory: IContent[] = [
+          compress: vi.fn().mockImplementation(async () => {
+            fallbackApplied = true;
+            return {
+              newHistory: [
                 {
                   speaker: 'human',
-                  blocks: [{ type: 'text', text: 'mock truncated summary' }],
+                  blocks: [{ type: 'text', text: 'truncated' }],
                 },
-              ];
-              return {
-                newHistory,
-                metadata: {
-                  originalMessageCount: context.history.length,
-                  compressedMessageCount: newHistory.length,
-                  strategyUsed: 'top-down-truncation' as const,
-                  llmCallMade: false,
-                },
-              };
-            }),
+              ],
+              metadata: {
+                originalMessageCount: 10,
+                compressedMessageCount: 2,
+                strategyUsed: 'top-down-truncation' as const,
+                llmCallMade: false,
+              },
+            };
+          }),
         };
       }
+
       return {
         name: 'middle-out' as const,
         requiresLLM: true,
         trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
-        compress: vi.fn().mockImplementation(async () => {
-          primaryCallCount++;
-          throw new EmptySummaryError('middle-out');
+        compress: vi.fn().mockResolvedValue({
+          // Insufficient compression triggers hard-limit truncation.
+          newHistory: [
+            { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
+            { speaker: 'ai', blocks: [{ type: 'text', text: 'hi' }] },
+          ],
+          metadata: {
+            originalMessageCount: 10,
+            compressedMessageCount: 9,
+            strategyUsed: 'middle-out' as const,
+            llmCallMade: true,
+          },
         }),
       };
-    });
-
-  return {
-    getFallbackCalled: () => fallbackCalled,
-    getPrimaryCallCount: () => primaryCallCount,
-    restore: () => spy.mockRestore(),
-  };
+    },
+  );
+  return () => fallbackApplied;
 }
