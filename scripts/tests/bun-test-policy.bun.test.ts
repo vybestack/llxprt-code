@@ -223,3 +223,78 @@ describe('runner invariants (issue #3139)', () => {
     expect(offenders).toStrictEqual([]);
   });
 });
+
+import { runTestFileWithTimeoutRetry as cliRetry } from '../../packages/cli/run-bun-tests.js';
+import { runTestFileWithTimeoutRetry as agentsRetry } from '../../packages/agents/run-bun-tests.js';
+import { runTestFileWithTimeoutRetry as authRetry } from '../../packages/auth/run-bun-tests.js';
+import { runTestFileWithTimeoutRetry as coreRetry } from '../../packages/core/run-bun-tests.js';
+
+describe('bespoke retry environment isolation', () => {
+  it.each(['0', 'invalid'])(
+    'ignores shared retry env %s in every fixed adapter',
+    async (value) => {
+      const previous = process.env.LLXPRT_BUN_TEST_TIMEOUT_RETRIES;
+      process.env.LLXPRT_BUN_TEST_TIMEOUT_RETRIES = value;
+      try {
+        for (const retry of [cliRetry, agentsRetry, authRetry, coreRetry]) {
+          let attempts = 0;
+          const logs: string[] = [];
+          const result = await retry(
+            'fixed.ts',
+            async () => ({
+              passed: ++attempts === 2,
+              timedOut: attempts === 1,
+              timeoutMs: 3,
+              reapFailed: false,
+              ordinal: attempts,
+            }),
+            (line) => logs.push(line),
+          );
+          expect(result).toEqual({
+            passed: true,
+            timedOut: false,
+            timeoutMs: 3,
+            reapFailed: false,
+            ordinal: 2,
+          });
+          expect(attempts).toBe(2);
+          expect(logs).toEqual([
+            'RETRY (2/2): fixed.ts after per-file timeout',
+          ]);
+        }
+      } finally {
+        if (previous === undefined)
+          delete process.env.LLXPRT_BUN_TEST_TIMEOUT_RETRIES;
+        else process.env.LLXPRT_BUN_TEST_TIMEOUT_RETRIES = previous;
+      }
+    },
+  );
+});
+
+import { resolveRunnerTimeouts } from '../lib/bun-test-retry.js';
+describe('fixed runner file-budget environment isolation', () => {
+  it.each(['1', 'invalid'])(
+    'core and auth do not consume file env %s',
+    (value) => {
+      const previous = process.env.LLXPRT_TEST_FILE_TIMEOUT_MS;
+      process.env.LLXPRT_TEST_FILE_TIMEOUT_MS = value;
+      try {
+        expect(resolveRunnerTimeouts({ runner: 'core' })).toEqual({
+          perTestMs: 180000,
+          perFileMs: 300000,
+        });
+        expect(resolveRunnerTimeouts({ runner: 'auth' })).toEqual({
+          perTestMs: 180000,
+          perFileMs: 300000,
+        });
+        expect(
+          resolveRunnerTimeouts({ runner: 'core', timeoutMs: 456 }),
+        ).toEqual({ perTestMs: 180000, perFileMs: 456 });
+      } finally {
+        if (previous === undefined)
+          delete process.env.LLXPRT_TEST_FILE_TIMEOUT_MS;
+        else process.env.LLXPRT_TEST_FILE_TIMEOUT_MS = previous;
+      }
+    },
+  );
+});
