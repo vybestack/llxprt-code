@@ -36,6 +36,7 @@ export interface TurnState {
   /** Items still pending commit (streaming, confirmations). */
   pendingHistoryItems: HistoryItemWithoutId[];
   streamingState: StreamingState;
+  loadingState: StreamingState;
   thought: ThoughtSummary | null;
   queuedSubmissions: readonly QueuedSubmission[];
   elapsedTime: number;
@@ -91,6 +92,7 @@ export interface TurnCommands {
   consumePendingAddRequest: (seq: number) => PendingAddRequest | null;
   setPendingHistoryItems: (items: HistoryItemWithoutId[]) => void;
   setStreamingState: (state: StreamingState) => void;
+  setLoadingState: (state: StreamingState) => void;
   setThought: (thought: ThoughtSummary | null) => void;
   setQueuedSubmissions: (submissions: readonly QueuedSubmission[]) => void;
   setElapsedTime: (seconds: number) => void;
@@ -115,6 +117,7 @@ function initialTurnState(): TurnState {
     historyEpoch: 0,
     pendingHistoryItems: [],
     streamingState: StreamingState.Idle,
+    loadingState: StreamingState.Idle,
     thought: null,
     queuedSubmissions: [],
     elapsedTime: 0,
@@ -147,6 +150,7 @@ type TurnStatusCommands = Pick<
   TurnCommands,
   | 'setPendingHistoryItems'
   | 'setStreamingState'
+  | 'setLoadingState'
   | 'setThought'
   | 'setQueuedSubmissions'
   | 'setElapsedTime'
@@ -266,6 +270,10 @@ function createTurnStatusCommands(store: Store<TurnState>): TurnStatusCommands {
     store.setState((prev) => ({ ...prev, pendingHistoryItems: items }));
   };
 
+  const setLoadingState = (state: StreamingState): void => {
+    store.setState((prev) => ({ ...prev, loadingState: state }));
+  };
+
   const setStreamingState = (state: StreamingState): void => {
     store.setState((prev) => ({ ...prev, streamingState: state }));
   };
@@ -311,6 +319,7 @@ function createTurnStatusCommands(store: Store<TurnState>): TurnStatusCommands {
   return {
     setPendingHistoryItems,
     setStreamingState,
+    setLoadingState,
     setThought,
     setQueuedSubmissions,
     setElapsedTime,

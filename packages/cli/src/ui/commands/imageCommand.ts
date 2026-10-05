@@ -31,6 +31,7 @@ export const imageCommand: SlashCommand = {
   description:
     'Generate or edit an image. Syntax: /image <output.png> [<input.png> ...] "<prompt>". Zero inputs generates; one-to-five inputs edits. Existing output files are NOT overwritten. Examples: /image out.png "draw a cat" | /image fixed.png original.png "fix the text"',
   kind: CommandKind.BUILT_IN,
+  showProgress: true,
 
   action: async (context, args): Promise<void> => {
     let parsed;

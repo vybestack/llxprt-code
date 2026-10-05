@@ -10,6 +10,16 @@ import { usePhraseCycler } from './usePhraseCycler.js';
 import { type WittyPhraseStyle } from '../constants/phrasesCollections.js';
 import { useState, useEffect, useRef } from 'react'; // Added useRef
 
+/** Busy slash commands affect only loading UI; model confirmations take precedence. */
+export function getLoadingState(
+  streamingState: StreamingState,
+  isSlashCommandRunning: boolean,
+): StreamingState {
+  return streamingState === StreamingState.Idle && isSlashCommandRunning
+    ? StreamingState.Responding
+    : streamingState;
+}
+
 export const useLoadingIndicator = (
   streamingState: StreamingState,
   wittyPhraseStyle: WittyPhraseStyle = 'default',
