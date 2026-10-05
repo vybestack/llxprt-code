@@ -94,8 +94,9 @@ const standardProfileSchema: z.ZodType<StandardProfile> = z
   .object({
     version: z.literal(1),
     type: z.literal('standard').optional(),
-    provider: z.string().min(1),
-    model: z.string().min(1),
+    // parseProfile enforces either a complete selection or a blank setup draft.
+    provider: z.string(),
+    model: z.string(),
     modelParams: modelParamsSchema,
     ephemeralSettings: ephemeralSettingsSchema,
     auth: authConfigSchema.optional(),
@@ -290,10 +291,14 @@ export function parseProfile(input: unknown): Profile {
   if (isMissingVersion(input.version)) {
     throw new Error('missing required fields');
   }
-  if (typeof input.provider !== 'string' || input.provider === '') {
+  // Transactional setup drafts intentionally have no provider or model yet.
+  // Preserve them on load so the controller can take its no-binding path,
+  // while still rejecting incomplete selections and non-string values.
+  const blankDraft = input.provider === '' && input.model === '';
+  if (typeof input.provider !== 'string' || typeof input.model !== 'string') {
     throw new Error('missing required fields');
   }
-  if (typeof input.model !== 'string' || input.model === '') {
+  if (!blankDraft && (input.provider === '' || input.model === '')) {
     throw new Error('missing required fields');
   }
   // Historical compatibility (#2477): standard version 1 profiles produced
