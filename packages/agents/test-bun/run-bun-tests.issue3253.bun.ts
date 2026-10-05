@@ -16,6 +16,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { runTestFile, runTestFileWithTimeoutRetry } from '../run-bun-tests.js';
+import {
+  buildSessionEnv,
+  createTestSessionRoot,
+  removeSessionRoot,
+} from '../../../scripts/lib/test-session-isolation.js';
 
 interface RetryOutcome {
   readonly passed: boolean;
@@ -225,4 +230,85 @@ describe('real agents test-file child retries', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   }, 40_000);
+});
+
+describe('external signal classification', () => {
+  it.skipIf(process.platform === 'win32')(
+    'retains a real SIGTERM close and does not timeout-retry it',
+    async () => {
+      const root = mkdtempSync(join(tmpdir(), 'agents-signal-policy-'));
+      try {
+        const file = join(root, 'signal.test.ts');
+        const marker = join(root, 'attempts');
+        writeFileSync(
+          file,
+          `import { appendFileSync } from 'node:fs'; appendFileSync(${JSON.stringify(marker)}, 'attempt'); process.kill(process.pid, 'SIGTERM');`,
+        );
+        const logs: string[] = [];
+        const result = await runTestFileWithTimeoutRetry(
+          file,
+          () => runTestFile(file, join(root, 'junit.xml')),
+          (line) => logs.push(line),
+        );
+        expect(result.passed).toBe(false);
+        expect(result.timedOut).toBe(false);
+        expect(result.signal).toBe('SIGTERM');
+        expect(readFileSync(marker, 'utf8')).toBe('attempt');
+        expect(logs).toEqual([]);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  );
+});
+
+describe('runner timeout environment', () => {
+  it('uses the runner budget rather than a supplied child override', async () => {
+    const session = createTestSessionRoot();
+    const root = session.root;
+    const runnerHome = process.env.HOME;
+    const marker = join(root, 'child-env.json');
+    const childEnv = buildSessionEnv(
+      { ...process.env, LLXPRT_TEST_FILE_TIMEOUT_MS: '0' },
+      session,
+    );
+    try {
+      const file = join(root, 'passes.test.ts');
+      writeFileSync(
+        file,
+        `import { it } from 'bun:test';
+import { writeFileSync } from 'node:fs';
+writeFileSync(${JSON.stringify(marker)}, JSON.stringify({ home: process.env.HOME, tmp: process.env.TMPDIR }));
+it('passes', async () => { await Bun.sleep(50); });`,
+      );
+      const result = await withShortPerFileTimeout(() =>
+        runTestFile(file, join(root, 'junit.xml'), childEnv),
+      );
+      expect(result.passed).toBe(true);
+      expect(result.timedOut).toBe(false);
+      expect(result.timeoutMs).toBe(4000);
+      expect(JSON.parse(readFileSync(marker, 'utf8'))).toEqual({
+        home: session.homeDir,
+        tmp: session.tmpDir,
+      });
+      expect(process.env.HOME).toBe(runnerHome);
+      expect(readFileSync(join(root, 'junit.xml'), 'utf8')).toContain(
+        'tests="1"',
+      );
+      rmSync(marker);
+      const saved = process.env.LLXPRT_TEST_FILE_TIMEOUT_MS;
+      process.env.LLXPRT_TEST_FILE_TIMEOUT_MS = '0';
+      try {
+        expect(() =>
+          runTestFile(file, join(root, 'junit.xml'), childEnv),
+        ).toThrow('LLXPRT_TEST_FILE_TIMEOUT_MS');
+        expect(existsSync(marker)).toBe(false);
+      } finally {
+        if (saved === undefined) delete process.env.LLXPRT_TEST_FILE_TIMEOUT_MS;
+        else process.env.LLXPRT_TEST_FILE_TIMEOUT_MS = saved;
+      }
+    } finally {
+      removeSessionRoot(session);
+    }
+  });
 });

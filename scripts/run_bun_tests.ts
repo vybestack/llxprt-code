@@ -36,7 +36,6 @@ import {
   isRunnerActive,
   installRunnerSignalHandlers,
   trackRunnerChild,
-  killRunnerChild,
 } from './lib/bespoke-runner-isolation.js';
 import {
   statSync,
@@ -49,11 +48,12 @@ import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolveBunTestFiles, type BunTestFile } from './bun-test-roots.js';
 import { DEFAULT_PER_TEST_TIMEOUT_MS } from './lib/bun-test-policy.js';
-import { reapStaleBunTestProcesses } from './lib/bun-test-reaper.js';
 import {
-  planNextAttempt,
-  resolveTimeoutRetryBudget,
-  wasKilledByTimeoutSignal,
+  runEntryRetries,
+  classifyAttempt,
+  resolveRunnerTimeouts,
+  reapStaleBunTestProcesses,
+  killTimedOutChild,
 } from './lib/bun-test-retry.js';
 import {
   buildSessionEnv,
@@ -74,7 +74,7 @@ import {
 import {
   createJunitTempDirectory,
   writeJUnitReport,
-} from './lib/junit-report-writer.js';
+} from './lib/bun-test-retry.js';
 
 // The reaper implementation moved to scripts/lib/bun-test-reaper.ts; it is
 // re-exported here so the pre-existing import surface of this module is
@@ -102,7 +102,6 @@ export interface ChildExitInfo {
  * Bun's process from exiting even after all tests pass. A generous timeout
  * lets slow files complete while catching genuine hangs.
  */
-const PER_FILE_PROCESS_TIMEOUT_MS = 120_000;
 
 /**
  * Safely decodes a Bun.spawnSync output buffer, handling null values
@@ -129,33 +128,6 @@ export interface FileTestResult {
 }
 
 /**
- * Regex that matches Bun's "0 fail" summary line, which appears in stdout
- * when all tests pass. Used to detect "tests passed but process didn't
- * exit" scenarios.
- */
-const ZERO_FAIL_PATTERN = /\b0 fail\b/;
-
-/**
- * Regex that matches Bun's "Ran N tests" completion summary line, printed
- * after every finished test run regardless of pass/fail count.
- */
-const RAN_TESTS_PATTERN = /\bRan \d+ tests?\b/;
-
-/**
- * Detects whether the child process output contains a completed Bun summary.
- *
- * Bun prints both a failure count and a "Ran N tests" line after every
- * finished run. A signaled process is accepted only when both lines prove
- * the full run completed with zero failures; either line alone is ambiguous.
- * Their absence means execution was partial when the process was killed, so
- * remaining tests must not be reported green.
- */
-function outputShowsCompleteSummary(stdout?: string, stderr?: string): boolean {
-  const combined = `${stdout ?? ''}\n${stderr ?? ''}`;
-  return ZERO_FAIL_PATTERN.test(combined) && RAN_TESTS_PATTERN.test(combined);
-}
-
-/**
  * Returns true when the spawned child process completed successfully.
  * Bun's SyncSubprocess.exitCode is `null` when the process was terminated
  * by a signal rather than exiting voluntarily, so we also treat a null
@@ -166,13 +138,7 @@ function outputShowsCompleteSummary(stdout?: string, stderr?: string): boolean {
  * success, because partial execution silently skips the remaining tests.
  */
 export function isChildSuccess(child: ChildExitInfo): boolean {
-  if (child.exitCode === 0) {
-    return true;
-  }
-  if (!wasKilledByTimeoutSignal(child)) {
-    return false;
-  }
-  return outputShowsCompleteSummary(child.stdout, child.stderr);
+  return classifyAttempt({ runner: 'shared', ...child }).passed;
 }
 
 /**
@@ -415,7 +381,7 @@ export function buildSpawnArgs(
  * `PER_FILE_PROCESS_TIMEOUT_MS`.
  */
 export function processTimeoutFor(testTimeoutMs: number): number {
-  return Math.max(PER_FILE_PROCESS_TIMEOUT_MS, testTimeoutMs * 2);
+  return resolveRunnerTimeouts({ runner: 'shared', testTimeoutMs }).perFileMs;
 }
 
 /** CLI options that apply to every file in a run. */
@@ -457,13 +423,13 @@ async function spawnTestFileOnce(
         timeout: processTimeoutFor(entry.timeout ?? run.timeout),
       },
     );
-    const passed = isChildSuccess(child);
+    const { passed, timedOut } = classifyAttempt({
+      runner: 'shared',
+      ...child,
+    });
     return {
       passed,
-      // A signal kill that did NOT yield a complete passing summary (the
-      // isChildSuccess call above already accounted for that case) is the
-      // per-file timeout firing.
-      timedOut: !passed && wasKilledByTimeoutSignal(child),
+      timedOut,
       stdout: child.stdout ?? '',
       diagnostic: formatFailureDiagnostic(child),
       junitPath: junitOutfile,
@@ -490,34 +456,12 @@ async function runSingleTestFile(
   junitOutfile?: string,
 ): Promise<FileTestResult> {
   const relativeName = entry.file.replace(entry.cwd + '/', '');
-  // Two independent retry budgets: `entry.retries` retries any failure
-  // (pre-existing opt-in used by the e2e configs), while the timeout budget
-  // retries only per-file timeout kills (issue #3439) and defaults to 1.
-  // planNextAttempt owns the exact retry decision and messages.
-  const failureAttempts = (entry.retries ?? 0) + 1;
-  let timeoutRetriesLeft = resolveTimeoutRetryBudget();
-  let attempt = 1;
-  const runAttempt = () =>
-    spawnTestFileOnce(entry, run, sessionEnv, dependencies, junitOutfile);
-  let last = await runAttempt();
-  let retry = planNextAttempt(
-    last,
-    { attempt, failureAttempts, timeoutRetriesLeft },
+  const last = await runEntryRetries(
     entry.file,
+    entry.retries ?? 0,
+    () => spawnTestFileOnce(entry, run, sessionEnv, dependencies, junitOutfile),
+    dependencies.stderr,
   );
-  while (retry !== null) {
-    if (retry.kind === 'timeout') {
-      timeoutRetriesLeft--;
-    }
-    dependencies.stderr(retry.message);
-    attempt++;
-    last = await runAttempt();
-    retry = planNextAttempt(
-      last,
-      { attempt, failureAttempts, timeoutRetriesLeft },
-      entry.file,
-    );
-  }
   if (!last.passed) {
     dependencies.stderr(
       `Native Bun test failed: ${entry.file}${last.diagnostic}`,
@@ -1011,7 +955,7 @@ async function main(): Promise<void> {
             ? undefined
             : setTimeout(() => {
                 try {
-                  killRunnerChild(child);
+                  killTimedOutChild({ runner: 'shared', child });
                 } catch (error) {
                   console.error(
                     `Failed to kill timed-out test child ${child.pid}: ${String(error)}`,

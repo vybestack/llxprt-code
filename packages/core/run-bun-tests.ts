@@ -23,22 +23,23 @@
  * Exit code is 0 if all files pass, 1 if any file fails.
  */
 
-import { Buffer } from 'node:buffer';
-import { spawn, type ChildProcess } from 'node:child_process';
 import {
-  closeSync,
-  mkdtempSync,
-  openSync,
-  readdirSync,
-  readSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from 'node:fs';
+  resolveRunnerTimeouts,
+  classifyAttempt,
+  runCoreTimeoutRetry,
+  renderJUnitReport,
+  buildCoreJUnitCases,
+  cleanupAttemptDirectory,
+  observeChildClose,
+  killChildTreeAndWait,
+  junitReportContainsPerTestTimeout,
+  JUNIT_SCAN_CHUNK_BYTES,
+} from '../../scripts/lib/bun-test-retry.js';
+import { spawn, type ChildProcess } from 'node:child_process';
+import { mkdtempSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import {
-  DEFAULT_PER_FILE_TIMEOUT_MS,
   DEFAULT_PER_TEST_TIMEOUT_MS,
   resolveTestConcurrency,
 } from '../../scripts/lib/bun-test-policy.js';
@@ -70,7 +71,6 @@ const CONCURRENCY = resolveTestConcurrency({
   maxConcurrency: MAX_CONCURRENCY,
 });
 const PER_TEST_TIMEOUT_MS = DEFAULT_PER_TEST_TIMEOUT_MS;
-const PER_FILE_TIMEOUT_MS = DEFAULT_PER_FILE_TIMEOUT_MS;
 
 const TEST_ROOTS = ['src', 'test'] as const;
 
@@ -152,70 +152,6 @@ export interface RunTestFileOptions {
   readonly env?: NodeJS.ProcessEnv;
 }
 
-const REAP_TIMEOUT_MS = 10_000;
-const TASKKILL_TIMEOUT_MS = 10_000;
-
-// Windows can transiently refuse removal of a directory whose report file
-// was just closed (AV scanners, search indexers, reporter teardown still
-// holding handles), reporting EBUSY/EPERM/EACCES/ENOTEMPTY. Removal gets a
-// bounded number of retries for exactly those errors; anything else
-// propagates immediately.
-const RETRYABLE_CLEANUP_ERROR_CODES: ReadonlySet<string> = new Set([
-  'EBUSY',
-  'EPERM',
-  'EACCES',
-  'ENOTEMPTY',
-]);
-const DEFAULT_CLEANUP_ATTEMPTS = 3;
-const DEFAULT_CLEANUP_RETRY_DELAY_MS = 100;
-
-function isRetryableCleanupError(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    'code' in error &&
-    typeof error.code === 'string' &&
-    RETRYABLE_CLEANUP_ERROR_CODES.has(error.code)
-  );
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
-async function cleanupAttemptDir(
-  attemptDir: string,
-  options: RunTestFileOptions,
-): Promise<void> {
-  const remove =
-    options.removeAttemptDir ??
-    ((dir: string) => {
-      rmSync(dir, { recursive: true, force: true });
-    });
-  const attempts = options.cleanupAttempts ?? DEFAULT_CLEANUP_ATTEMPTS;
-  const retryDelayMs =
-    options.cleanupRetryDelayMs ?? DEFAULT_CLEANUP_RETRY_DELAY_MS;
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= attempts; attempt++) {
-    try {
-      remove(attemptDir);
-      return;
-    } catch (error) {
-      if (!isRetryableCleanupError(error)) throw error;
-      lastError = error;
-      if (attempt < attempts) {
-        await delay(retryDelayMs);
-      }
-    }
-  }
-  const lastDetail =
-    lastError instanceof Error ? lastError.message : String(lastError);
-  throw new Error(`removal failed after ${attempts} attempts: ${lastDetail}`, {
-    cause: lastError,
-  });
-}
-
 function cleanupFailureMessage(
   file: string,
   attemptDir: string,
@@ -223,189 +159,6 @@ function cleanupFailureMessage(
 ): string {
   const detail = error instanceof Error ? error.message : String(error);
   return `attempt cleanup failed for ${file}: could not remove ${attemptDir}: ${detail}`;
-}
-
-const BUN_JUNIT_TIMEOUT_MARKER = '<failure type="TimeoutError"';
-export const JUNIT_SCAN_CHUNK_BYTES = 64 * 1024;
-const JUNIT_SCAN_OVERLAP_CHARS = BUN_JUNIT_TIMEOUT_MARKER.length - 1;
-
-function isNoSuchFileError(error: unknown): boolean {
-  return error instanceof Error && 'code' in error && error.code === 'ENOENT';
-}
-
-export function junitReportContainsPerTestTimeout(reportPath: string): boolean {
-  const chunk = Buffer.alloc(JUNIT_SCAN_CHUNK_BYTES);
-  let overlap = '';
-  let descriptor: number | undefined;
-  try {
-    descriptor = openSync(reportPath, 'r');
-    for (;;) {
-      const bytesRead = readSync(
-        descriptor,
-        chunk,
-        0,
-        JUNIT_SCAN_CHUNK_BYTES,
-        null,
-      );
-      if (bytesRead === 0) return false;
-      // A chunk edge can split a multi-byte UTF-8 sequence; continuation
-      // bytes never decode to ASCII, so the split can neither fabricate nor
-      // destroy the ASCII marker.
-      const text = overlap + chunk.toString('utf8', 0, bytesRead);
-      if (text.includes(BUN_JUNIT_TIMEOUT_MARKER)) return true;
-      overlap =
-        text.length > JUNIT_SCAN_OVERLAP_CHARS
-          ? text.slice(-JUNIT_SCAN_OVERLAP_CHARS)
-          : text;
-    }
-  } catch (error) {
-    // An absent report is the killed-before-writing case, not a read failure.
-    if (isNoSuchFileError(error)) return false;
-    throw error;
-  } finally {
-    if (descriptor !== undefined) closeSync(descriptor);
-  }
-}
-
-function withTimeout<T>(
-  promise: Promise<T>,
-  timeoutMs: number,
-  operation: string,
-): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(new Error(`${operation} did not complete within ${timeoutMs}ms`));
-    }, timeoutMs);
-    promise.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      (error: unknown) => {
-        clearTimeout(timer);
-        reject(error);
-      },
-    );
-  });
-}
-
-export function observeChildClose(child: ChildProcess): Promise<void> {
-  return new Promise<void>((resolve) => {
-    child.once('close', () => resolve());
-  });
-}
-
-export async function killChildTreeAndWait(
-  child: ChildProcess,
-  childClosed: Promise<void>,
-  options: Pick<RunTestFileOptions, 'reapTimeoutMs' | 'taskkillTimeoutMs'> = {},
-): Promise<void> {
-  const pid = child.pid;
-  if (pid === undefined) {
-    throw new Error('Cannot reap test process without a PID');
-  }
-
-  if (process.platform === 'win32') {
-    const killer = spawn('taskkill', ['/T', '/F', '/PID', String(pid)], {
-      stdio: 'ignore',
-      windowsHide: true,
-    });
-    let taskkillError: Error | null = null;
-    killer.once('error', (error: Error) => {
-      taskkillError = error;
-    });
-    const killerClosed = new Promise<number | null>((resolve) => {
-      killer.once('close', resolve);
-    });
-    let taskkillCode: number | null;
-    try {
-      taskkillCode = await withTimeout(
-        killerClosed,
-        options.taskkillTimeoutMs ?? TASKKILL_TIMEOUT_MS,
-        `taskkill for test process ${pid}`,
-      );
-    } catch (error) {
-      let forcedKillError: Error | null = null;
-      const recordForcedKillError = (killError: Error): void => {
-        forcedKillError = killError;
-      };
-      killer.once('error', recordForcedKillError);
-      try {
-        if (killer.exitCode === null && killer.signalCode === null) {
-          killer.kill('SIGKILL');
-        }
-        await withTimeout(
-          killerClosed,
-          options.reapTimeoutMs ?? REAP_TIMEOUT_MS,
-          `Timed-out taskkill (pid ${killer.pid ?? 'unknown'}) close lifecycle`,
-        );
-      } catch (closeError) {
-        throw new AggregateError(
-          [error, closeError],
-          `taskkill for test process ${pid} failed and did not close`,
-        );
-      } finally {
-        killer.off('error', recordForcedKillError);
-      }
-      if (forcedKillError !== null) {
-        throw new AggregateError(
-          [error, forcedKillError],
-          `taskkill for test process ${pid} timed out and could not be terminated`,
-        );
-      }
-      throw error;
-    }
-    if (taskkillError !== null) {
-      throw taskkillError;
-    }
-    // A nonzero taskkill code is not by itself a reap failure: the usual cause
-    // is that the tree already exited between the timeout firing and taskkill
-    // running, which is the POSIX ESRCH case handled below. What matters is
-    // the invariant — that nothing is left alive holding the child's pipes —
-    // so verify that directly by waiting for close, and report the code only
-    // if the tree genuinely outlives the reap.
-    if (taskkillCode !== 0) {
-      try {
-        await withTimeout(
-          childClosed,
-          options.reapTimeoutMs ?? REAP_TIMEOUT_MS,
-          `Timed-out child (pid ${pid}) close lifecycle`,
-        );
-      } catch (closeError) {
-        throw new AggregateError(
-          [
-            new Error(
-              `taskkill /T /F /PID ${pid} exited with code ${taskkillCode}`,
-            ),
-            closeError,
-          ],
-          `taskkill for test process ${pid} reported failure and its tree did not close`,
-        );
-      }
-      return;
-    }
-  } else {
-    // POSIX: kill the entire per-test process group by negative PID. The
-    // child was spawned with detached: true (see runTestFile) so it leads
-    // its own group; this sends SIGKILL to every descendant that inherited
-    // it (e.g. grandchildren spawned via Bun.spawn), which child.kill()
-    // alone would orphan.
-    try {
-      process.kill(-pid, 'SIGKILL');
-    } catch (error) {
-      const code =
-        error instanceof Error && 'code' in error ? error.code : undefined;
-      if (code !== 'ESRCH') {
-        throw error;
-      }
-    }
-  }
-
-  await withTimeout(
-    childClosed,
-    options.reapTimeoutMs ?? REAP_TIMEOUT_MS,
-    `Timed-out child (pid ${pid}) close lifecycle`,
-  );
 }
 
 export async function runTestFileWithTimeoutRetry<
@@ -421,35 +174,7 @@ export async function runTestFileWithTimeoutRetry<
   runAttempt: () => Promise<T>,
   logRetry: (message: string) => void = (message) => console.log(message),
 ): Promise<T> {
-  const firstAttempt = await runAttempt();
-  if (!firstAttempt.timedOut) {
-    return firstAttempt;
-  }
-
-  // Retry on every timeout, including one whose reap failed: the second
-  // attempt's outcome decides whether the run can continue. The freeze class
-  // this guards against (issue #3439) kills the child on one attempt and
-  // behaves normally on the next; a first-attempt reap failure is frequently
-  // just taskkill losing a race with an already-dying tree.
-  const timeoutOrigin =
-    firstAttempt.timeoutMs === null ? 'per-test' : 'per-file';
-  logRetry(`RETRY (2/2): ${file} after ${timeoutOrigin} timeout`);
-  const secondAttempt = await runAttempt();
-
-  // First attempt failed to reap but the retry reaped cleanly: the suspect
-  // tree is gone. Keep the file red — it genuinely timed out — and carry the
-  // first attempt's reapError so the summary can explain the retry, but let
-  // the shard continue instead of aborting.
-  if (firstAttempt.reapFailed && !secondAttempt.reapFailed) {
-    return {
-      ...secondAttempt,
-      passed: false,
-      timedOut: true,
-      reapFailed: false,
-      reapError: firstAttempt.reapError ?? null,
-    };
-  }
-  return secondAttempt;
+  return runCoreTimeoutRetry(file, runAttempt, logRetry);
 }
 
 export function runTestFile(
@@ -457,7 +182,10 @@ export function runTestFile(
   options: RunTestFileOptions = {},
 ): Promise<TestResult> {
   assertRunnerActive();
-  const timeoutMs = options.timeoutMs ?? PER_FILE_TIMEOUT_MS;
+  const timeoutMs = resolveRunnerTimeouts({
+    runner: 'core',
+    timeoutMs: options.timeoutMs,
+  }).perFileMs;
   return new Promise((resolve, reject) => {
     let resolved = false;
     let spawnError: Error | null = null;
@@ -473,7 +201,7 @@ export function runTestFile(
       reapFailed: boolean,
       reapError: string | null,
     ): void => {
-      void cleanupAttemptDir(attemptDir, options).then(
+      void cleanupAttemptDirectory(attemptDir, options).then(
         () => {
           resolve({ ...classified, reapFailed, reapError });
         },
@@ -536,10 +264,15 @@ export function runTestFile(
       resolved = true;
       const classified: Omit<TestResult, 'reapFailed' | 'reapError'> = {
         file,
-        passed: false,
+        ...classifyAttempt({
+          runner: 'core',
+          spawnFailed: false,
+          killedByTimer: true,
+          exitCode: null,
+          perTestTimeout: false,
+          fileTimeoutMs: timeoutMs,
+        }),
         exitCode: null,
-        timedOut: true,
-        timeoutMs,
       };
       void reapTimedOutChild(child, childClosed).then(
         () => settleAfterCleanup(classified, false, null),
@@ -572,10 +305,15 @@ export function runTestFile(
           spawnError === null && code !== 0 && scanReport(reportPath);
         classified = {
           file,
-          passed: spawnError === null && code === 0,
+          ...classifyAttempt({
+            runner: 'core',
+            spawnFailed: spawnError !== null,
+            killedByTimer: false,
+            exitCode: code,
+            perTestTimeout,
+            fileTimeoutMs: timeoutMs,
+          }),
           exitCode: spawnError === null ? code : -1,
-          timedOut: perTestTimeout,
-          timeoutMs: perTestTimeout ? null : timeoutMs,
         };
       } catch (error) {
         scanError = error;
@@ -588,7 +326,7 @@ export function runTestFile(
       // failures, not test outcomes. Cleanup runs exactly once before the
       // rejection, and a cleanup failure is preserved alongside the scan
       // error instead of surfacing as an unhandled rejection.
-      void cleanupAttemptDir(attemptDir, options).then(
+      void cleanupAttemptDirectory(attemptDir, options).then(
         () => {
           reject(scanError);
         },
@@ -605,65 +343,22 @@ export function runTestFile(
   });
 }
 
-function escapeXml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
 function timeoutExceededLabel(result: TestResult): string {
   return result.timeoutMs === null
     ? 'per-test timeout'
     : `${result.timeoutMs / 1000}s`;
 }
 
-function buildFailureXml(result: TestResult): string {
-  if (result.passed) {
-    return '';
-  }
-  if (result.timedOut && result.reapFailed) {
-    const message = escapeXml(
-      result.reapError ?? 'Process tree reaping failed',
-    );
-    return `<failure message="${message}">TIMEOUT+REAP_FAILED</failure>`;
-  }
-  if (result.timedOut) {
-    // A per-test timeout has no file-level number to cite: the test that
-    // timed out may have overridden Bun's per-test budget.
-    const message =
-      result.timeoutMs === null
-        ? 'Timed out: per-test timeout'
-        : `Timed out after ${result.timeoutMs / 1000}s`;
-    return `<failure message="${message}">TIMEOUT</failure>`;
-  }
-  return `<failure message="Exit code ${result.exitCode ?? -1}">FAILED</failure>`;
-}
-
 export function generateJUnit(results: TestResult[]): string {
-  const newlines = '\n';
   const totalFiles = results.length;
   const failedCount = results.filter((result) => !result.passed).length;
-  const testCases = results
-    .map((r) => {
-      const className = escapeXml(
-        r.file.replace(/^src\//, '').replace(/\.(test|spec)\.tsx?$/, ''),
-      );
-      const failureXml = buildFailureXml(r);
-      const timeAttr = r.passed ? '' : ' time="0"';
-      return `    <testcase classname="${className}" name="${className}"${timeAttr}>${failureXml}</testcase>`;
-    })
-    .join(newlines);
-
-  return [
-    '<?xml version="1.0" encoding="UTF-8"?>',
-    `<testsuites tests="${totalFiles}" failures="${failedCount}">`,
-    `  <testsuite name="core" tests="${totalFiles}" failures="${failedCount}">`,
-    testCases,
-    '  </testsuite>',
-    '</testsuites>',
-  ].join(newlines);
+  return renderJUnitReport({
+    kind: 'workspace-summary',
+    workspace: 'core',
+    cases: buildCoreJUnitCases(results),
+    totalFiles,
+    failedCount,
+  });
 }
 
 async function main(): Promise<void> {
@@ -773,3 +468,10 @@ async function main(): Promise<void> {
 if (import.meta.main) {
   await main();
 }
+
+export {
+  observeChildClose,
+  killChildTreeAndWait,
+  junitReportContainsPerTestTimeout,
+  JUNIT_SCAN_CHUNK_BYTES,
+};
