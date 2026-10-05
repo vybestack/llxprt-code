@@ -364,6 +364,44 @@ jobs:
           GIT_CEILING_DIRECTORIES: '${{ github.workspace }}/.integration-tests'
           LLXPRT_FORCE_FILE_STORAGE: 'true'
           LLXPRT_E2E_MODEL_LEDGER: '${{ runner.temp }}/release-model-ledger.jsonl'
+
+      - name: Capture release model diagnostics
+        if: ${{ always() && steps.duplicate_check.outputs.is_duplicate != 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          diagnostics="$RUNNER_TEMP/release-diagnostics"
+          mkdir -p "$diagnostics"
+          date --utc --iso-8601=seconds > "$diagnostics/captured-at.txt"
+          for source in /proc/cpuinfo /proc/loadavg /proc/meminfo /proc/stat; do
+            if [[ -r "$source" ]]; then
+              cp "$source" "$diagnostics/$(basename "$source").txt"
+            fi
+          done
+          if [[ -r /sys/fs/cgroup/cpu.stat ]]; then
+            cp /sys/fs/cgroup/cpu.stat "$diagnostics/cgroup-cpu-stat.txt"
+          fi
+          if [[ -r /sys/fs/cgroup/cpu.max ]]; then
+            cp /sys/fs/cgroup/cpu.max "$diagnostics/cgroup-cpu-max.txt"
+          fi
+          for source in \
+            "$RUNNER_TEMP/ollama-server.log" \
+            "$RUNNER_TEMP/ollama-inference.json" \
+            "$RUNNER_TEMP/release-model-ledger.jsonl"; do
+            if [[ -f "$source" ]]; then
+              cp "$source" "$diagnostics/"
+            fi
+          done
+
+      - name: Upload release model diagnostics
+        if: ${{ always() && steps.duplicate_check.outputs.is_duplicate != 'true' }}
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # ratchet:actions/upload-artifact@v4
+        with:
+          name: release-model-diagnostics-${{ github.run_id }}
+          path: ${{ runner.temp }}/release-diagnostics/
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Configure Git User
         if: ${{ steps.duplicate_check.outputs.is_duplicate != 'true' }}
         run: |

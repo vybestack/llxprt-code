@@ -232,6 +232,30 @@ describe('.github/workflows/release.yml', () => {
     expect(asString(integrations.run)).not.toContain('--exclude');
   });
 
+  it('captures and uploads local-model diagnostics after integration failures', () => {
+    const capture = stepByName('Capture release model diagnostics');
+    const upload = stepByName('Upload release model diagnostics');
+    expect(asString(capture['if'])).toContain('always()');
+    expect(asString(upload['if'])).toContain('always()');
+    expect(asString(capture.run)).toContain('release-model-ledger.jsonl');
+    expect(asString(capture.run)).toContain('ollama-server.log');
+    expect(asString(capture.run)).toContain('/proc/loadavg');
+    expect(asString(capture.run)).toContain('/sys/fs/cgroup/cpu.stat');
+    expect(asString(upload.with?.path)).toBe(
+      '${{ runner.temp }}/release-diagnostics/',
+    );
+    expect(asString(upload.with?.['if-no-files-found'])).toBe('error');
+    expect(releaseSteps.indexOf(capture)).toBeGreaterThan(
+      releaseSteps.indexOf(stepByName('Run Integration Tests')),
+    );
+    expect(releaseSteps.indexOf(upload)).toBeGreaterThan(
+      releaseSteps.indexOf(capture),
+    );
+    expect(releaseSteps.indexOf(upload)).toBeLessThan(
+      releaseSteps.indexOf(stepByName('Configure Git User')),
+    );
+  });
+
   it('skips the release pipeline for scheduled nightlies when the version is already published', () => {
     const duplicateCheck = stepById('duplicate_check');
     expect(asString(duplicateCheck['if'])).toBe(
