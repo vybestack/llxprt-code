@@ -202,6 +202,11 @@ describe('.github/workflows/release.yml', () => {
     expect(asString(cpuProof.run)).toContain('/proc/$pid/maps');
     expect(asString(cpuProof.run)).toContain('libggml-cpu-haswell.so');
     const ollama = stepByName('Start pinned local Gemma model');
+    expect(asString(ollama.run)).toContain('server_pid=$!');
+    expect(asString(ollama.run)).toContain('kill -0 "$server_pid"');
+    expect(asString(ollama.run)).toContain(
+      'cat "$RUNNER_TEMP/ollama-server.log" >&2',
+    );
     expect(releaseSteps.some((step) => step.id === 'quota')).toBe(false);
     expect(releaseSteps.indexOf(ollama)).toBeLessThan(
       releaseSteps.indexOf(preflight),
