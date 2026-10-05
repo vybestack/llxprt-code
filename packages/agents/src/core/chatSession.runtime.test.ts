@@ -6,10 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import type { ChatSessionConfig } from './chatSession.js';
-import type {
-  ToolDeclaration,
-  LegacyToolsetLike,
-} from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { ChatSession } from './chatSession.js';
 import type { TextBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { getToolCalls } from '@vybestack/llxprt-code-core/llm-types/index.js';
@@ -110,15 +107,18 @@ describe('ChatSession runtime context', () => {
 
     manager.registerProvider(provider);
 
-    const tools = [
+    const tools: ToolDeclaration[] = [
       {
-        functionDeclarations: [{ name: 'doThing' } as Record<string, unknown>],
+        name: 'doThing',
+        description: 'Do a thing',
+        parametersJsonSchema: {
+          type: 'object',
+          properties: { value: { type: 'string' } },
+        },
       },
-    ] as unknown as LegacyToolsetLike;
+    ];
 
-    const generationConfig: ChatSessionConfig = {
-      tools: tools as unknown as ToolDeclaration[],
-    };
+    const generationConfig: ChatSessionConfig = { tools };
 
     const runtimeState = createAgentRuntimeState({
       runtimeId: 'runtime-test',
@@ -231,13 +231,9 @@ describe('ChatSession runtime context', () => {
     manager.registerProvider(provider);
 
     const tools = [
-      {
-        functionDeclarations: [
-          { name: 'read_file' } as Record<string, unknown>,
-          { name: 'run_shell_command' } as Record<string, unknown>,
-        ],
-      },
-    ] as unknown as LegacyToolsetLike;
+      { name: 'read_file', parametersJsonSchema: {} },
+      { name: 'run_shell_command', parametersJsonSchema: {} },
+    ];
     const runtimeState = createAgentRuntimeState({
       runtimeId: 'runtime-test',
       provider: provider.name,
@@ -348,13 +344,9 @@ describe('ChatSession runtime context', () => {
     manager.registerProvider(provider);
 
     const tools = [
-      {
-        functionDeclarations: [
-          { name: 'read_file' } as Record<string, unknown>,
-          { name: 'run_shell_command' } as Record<string, unknown>,
-        ],
-      },
-    ] as unknown as LegacyToolsetLike;
+      { name: 'read_file', parametersJsonSchema: {} },
+      { name: 'run_shell_command', parametersJsonSchema: {} },
+    ];
     const hookConfig = Object.create(config) as Config;
     Object.defineProperties(hookConfig, {
       getEnableHooks: { value: () => true },

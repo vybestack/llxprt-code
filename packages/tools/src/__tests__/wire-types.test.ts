@@ -112,25 +112,19 @@ describe('provider-neutral wire types', () => {
 
   describe('ToolDeclarations', () => {
     it('accepts a list of function declarations', () => {
-      const tool: ToolDeclarations = {
-        functionDeclarations: [{ name: 'tool_a' }, { name: 'tool_b' }],
-      };
-      expect(tool.functionDeclarations).toHaveLength(2);
+      const tool: ToolDeclarations = [{ name: 'tool_a' }, { name: 'tool_b' }];
+      expect(tool).toHaveLength(2);
     });
   });
 
   describe('CallableTool interface', () => {
     it('returns neutral declarations and response parts', async () => {
       const fake: CallableTool = {
-        tool: async () => ({
-          functionDeclarations: [{ name: 'x' }],
-        }),
+        tool: async () => [{ name: 'x' }],
         callTool: async () => [{ text: 'result' }],
       };
 
-      await expect(fake.tool()).resolves.toStrictEqual({
-        functionDeclarations: [{ name: 'x' }],
-      });
+      await expect(fake.tool()).resolves.toStrictEqual([{ name: 'x' }]);
       await expect(fake.callTool([])).resolves.toStrictEqual([
         { text: 'result' },
       ]);

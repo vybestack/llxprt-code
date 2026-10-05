@@ -18,8 +18,6 @@
 export type {
   RuntimeCompressionGuardInfo,
   RuntimeProvider,
-  RuntimeToolDeclaration,
-  RuntimeToolset,
 } from './RuntimeProvider.js';
 export type {
   RuntimeProviderManager,

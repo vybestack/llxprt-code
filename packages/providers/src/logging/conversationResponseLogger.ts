@@ -20,6 +20,7 @@ export interface ConversationLogContext {
   readonly generatePromptId: () => string;
   readonly redactor: ConversationDataRedactor | null;
   readonly debug: DebugLogger;
+  readonly conversationLogEmptyTools?: boolean;
 }
 
 /**
@@ -76,6 +77,7 @@ export async function logRequestEntry(
       turnNumber: ctx.turnNumber,
       generatePromptId: ctx.generatePromptId,
       redactor: ctx.redactor,
+      conversationLogEmptyTools: ctx.conversationLogEmptyTools,
     });
   } catch (error) {
     ctx.debug.warn(() => `Failed to log conversation request: ${error}`);

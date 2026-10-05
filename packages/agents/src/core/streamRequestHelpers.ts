@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
+
 /**
  * @fileoverview Pure request-preparation helpers extracted from StreamProcessor.
  *
@@ -14,7 +16,6 @@
 
 import type { BeforeModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 import {
-  toolDeclarationsFromLegacyToolset,
   type ToolChoice,
   type ModelStreamChunk,
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
@@ -35,22 +36,18 @@ import {
   SCOPE_LOCAL_EMIT_TOOL_NAME,
 } from './toolGovernance.js';
 
-export type ToolGroupArray = Array<{
-  functionDeclarations?: Array<{
-    name: string;
-    description?: string;
-    parametersJsonSchema?: unknown;
-  }>;
-}>;
-
 export interface ToolSelectionHookResult {
-  tools: unknown;
+  tools: ToolDeclaration[] | undefined;
   allowedFunctionNames: string[] | undefined;
+  conversationLogEmptyTools?: boolean;
 }
 
 /** Result of preparing a request payload with its runtime contexts. */
 export interface PreparedRequest {
-  requestPayload: { contents: IContent[]; tools: unknown };
+  requestPayload: {
+    contents: IContent[];
+    tools: ToolDeclaration[] | undefined;
+  };
   baseRuntimeContext: ProviderRuntimeContext;
 }
 
@@ -90,8 +87,8 @@ export function buildRequestContentsResult(
  */
 export function selectRequestTools(
   params: SendMessageParams,
-  fallbackTools: unknown,
-): unknown {
+  fallbackTools: ToolDeclaration[] | undefined,
+): ToolDeclaration[] | undefined {
   return params.config?.tools ?? fallbackTools;
 }
 
@@ -132,11 +129,11 @@ export async function applyToolSelectionHook(
   }
 
   await hookSystem.initialize();
-  const toolsFromConfig = Array.isArray(tools) ? (tools as ToolGroupArray) : [];
+  const toolsFromConfig = Array.isArray(tools) ? tools : [];
   const toolSelectionResult = await hookSystem.fireBeforeToolSelectionEvent({
     model,
     contents: [],
-    tools: toolDeclarationsFromLegacyToolset(toolsFromConfig),
+    tools: toolsFromConfig,
   });
   const modifiedConfig = toolSelectionResult?.applyToolChoiceModifications({
     tools: toolsFromConfig,
@@ -144,19 +141,24 @@ export async function applyToolSelectionHook(
 
   const toolChoice: ToolChoice | undefined = modifiedConfig?.toolChoice;
   if (toolChoice?.mode === 'none') {
-    return { tools: [], allowedFunctionNames: [] };
+    return {
+      tools: [],
+      allowedFunctionNames: [],
+      conversationLogEmptyTools: true,
+    };
   }
   const allowedFunctions = extractAllowedToolNames(toolChoice);
   if (allowedFunctions === undefined) {
-    return { tools: toolsFromConfig, allowedFunctionNames: undefined };
+    return {
+      tools,
+      allowedFunctionNames: undefined,
+      conversationLogEmptyTools: tools === undefined,
+    };
   }
 
   const emitterName = canonicalizeToolName(SCOPE_LOCAL_EMIT_TOOL_NAME);
   const hasScopeLocalEmitter = toolsFromConfig.some(
-    (toolGroup) =>
-      toolGroup.functionDeclarations?.some(
-        (declaration) => canonicalizeToolName(declaration.name) === emitterName,
-      ) === true,
+    (decl) => canonicalizeToolName(decl.name) === emitterName,
   );
   const effectiveAllowedFunctions = hasScopeLocalEmitter
     ? Array.from(new Set([...allowedFunctions, SCOPE_LOCAL_EMIT_TOOL_NAME]))
@@ -164,21 +166,13 @@ export async function applyToolSelectionHook(
   const allowedNames = new Set(
     effectiveAllowedFunctions.map(canonicalizeToolName),
   );
-  const filteredTools = toolsFromConfig
-    .map((toolGroup) => ({
-      ...toolGroup,
-      functionDeclarations: Array.isArray(toolGroup.functionDeclarations)
-        ? toolGroup.functionDeclarations.filter(
-            (fn) =>
-              typeof fn.name === 'string' &&
-              allowedNames.has(canonicalizeToolName(fn.name)),
-          )
-        : [],
-    }))
-    .filter((group) => group.functionDeclarations.length > 0) as ToolGroupArray;
+  const filteredTools = toolsFromConfig.filter((decl) =>
+    allowedNames.has(canonicalizeToolName(decl.name)),
+  );
   return {
     tools: filteredTools,
     allowedFunctionNames: effectiveAllowedFunctions,
+    conversationLogEmptyTools: filteredTools.length === 0,
   };
 }
 
@@ -203,7 +197,7 @@ export function buildRuntimeContext(
 
 interface PrepareRequestPayloadParams {
   requestContents: IContent[];
-  tools: unknown;
+  tools: ToolDeclaration[] | undefined;
   logger: DebugLogger;
   providerRuntimeBuilder: (
     source: string,

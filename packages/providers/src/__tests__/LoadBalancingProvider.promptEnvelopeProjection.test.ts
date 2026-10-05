@@ -149,7 +149,7 @@ function serializedEnvelopeTokens(options: GenerateChatOptions): number {
     .map((content) => JSON.stringify(content.blocks))
     .join('\n');
   const toolText = (options.tools ?? [])
-    .map((toolset) => JSON.stringify(toolset.functionDeclarations))
+    .map((tool) => JSON.stringify(tool))
     .join('\n');
   return Math.ceil((contentText.length + toolText.length) / 4);
 }
@@ -453,13 +453,9 @@ describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () =>
       contents: [createTextContent('analyze this request')],
       tools: [
         {
-          functionDeclarations: [
-            {
-              name: 'read_file',
-              description: 'Reads a file from the workspace',
-              parametersJsonSchema: { type: 'object', properties: {} },
-            },
-          ],
+          name: 'read_file',
+          description: 'Reads a file from the workspace',
+          parametersJsonSchema: { type: 'object', properties: {} },
         },
       ],
     });

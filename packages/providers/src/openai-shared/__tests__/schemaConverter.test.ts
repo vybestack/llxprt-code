@@ -1,3 +1,4 @@
+import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -467,16 +468,12 @@ describe('convertSchemaToOpenAI — existing normalizations still apply', () => 
 describe('convertToolDeclarations — description strategy', () => {
   const tools = [
     {
-      functionDeclarations: [
-        {
-          name: 'read_file',
-          parametersJsonSchema: {
-            type: 'object',
-            properties: { path: { type: 'string' } },
-            required: ['path'],
-          },
-        },
-      ],
+      name: 'read_file',
+      parametersJsonSchema: {
+        type: 'object',
+        properties: { path: { type: 'string' } },
+        required: ['path'],
+      },
     },
   ];
 
@@ -500,9 +497,13 @@ describe('convertToolDeclarations — description strategy', () => {
 
   it('throws when parametersJsonSchema is missing', () => {
     const badTools = [
-      {
-        functionDeclarations: [{ name: 'no_schema', description: 'no schema' }],
-      },
+      Object.assign<ToolDeclaration, { parametersJsonSchema: unknown }>(
+        {
+          ...{ name: 'no_schema', description: 'no schema' },
+          parametersJsonSchema: {},
+        },
+        { parametersJsonSchema: undefined },
+      ),
     ];
 
     expect(() =>
@@ -512,15 +513,14 @@ describe('convertToolDeclarations — description strategy', () => {
 
   it('throws when parametersJsonSchema is a non-object value', () => {
     const badTools = [
-      {
-        functionDeclarations: [
-          {
-            name: 'null_schema',
-            description: 'null schema',
-            parametersJsonSchema: null,
-          },
-        ],
-      },
+      Object.assign<ToolDeclaration, { parametersJsonSchema: unknown }>(
+        {
+          name: 'null_schema',
+          description: 'null schema',
+          parametersJsonSchema: {},
+        },
+        { parametersJsonSchema: null },
+      ),
     ];
 
     expect(() =>
@@ -536,45 +536,12 @@ describe('convertToolDeclarations — description strategy', () => {
     ).toBeUndefined();
   });
 
-  it('returns undefined when functionDeclarations is an empty array', () => {
+  it('returns undefined for an empty declaration list', () => {
     expect(
-      convertToolDeclarations([{ functionDeclarations: [] }], {
+      convertToolDeclarations([], {
         descriptionStrategy: 'preserve',
       }),
     ).toBeUndefined();
-  });
-
-  it('passes through a declaration missing the name property', () => {
-    // documents current behavior
-    const result = convertToolDeclarations(
-      [
-        {
-          functionDeclarations: [
-            {
-              description: 'no name',
-              parametersJsonSchema: { type: 'object', properties: {} },
-            },
-          ],
-        },
-      ],
-      { descriptionStrategy: 'preserve' },
-    );
-
-    expect(result).toBeDefined();
-    expect(result![0].function.name).toBeUndefined();
-  });
-
-  it('throws when functionDeclarations is not an array', () => {
-    expect(() =>
-      convertToolDeclarations(
-        [
-          {
-            functionDeclarations: 'not-an-array' as unknown as never[],
-          },
-        ],
-        { descriptionStrategy: 'preserve' },
-      ),
-    ).toThrow('undefined');
   });
 });
 
@@ -582,28 +549,24 @@ describe('convertToolDeclarations — full output mapping', () => {
   it('converts a complex nested tool declaration end-to-end', () => {
     const tools = [
       {
-        functionDeclarations: [
-          {
-            name: 'search',
-            description: 'Search things',
-            parametersJsonSchema: {
+        name: 'search',
+        description: 'Search things',
+        parametersJsonSchema: {
+          type: 'object',
+          properties: {
+            query: { type: 'string', description: 'Query text' },
+            filters: {
               type: 'object',
               properties: {
-                query: { type: 'string', description: 'Query text' },
-                filters: {
-                  type: 'object',
-                  properties: {
-                    region: { type: 'STRING' },
-                    tags: { type: 'ARRAY', items: { type: 'STRING' } },
-                  },
-                  required: ['region'],
-                },
-                mode: { anyOf: [{ type: 'STRING' }, { type: 'NULL' }] },
+                region: { type: 'STRING' },
+                tags: { type: 'ARRAY', items: { type: 'STRING' } },
               },
-              required: ['query'],
+              required: ['region'],
             },
+            mode: { anyOf: [{ type: 'STRING' }, { type: 'NULL' }] },
           },
-        ],
+          required: ['query'],
+        },
       },
     ];
 

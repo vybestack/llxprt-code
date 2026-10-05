@@ -1,3 +1,4 @@
+import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -22,20 +23,16 @@ describe('issue #1844 – OpenAI-Vercel schema converter schema source', () => {
   it('should use parametersJsonSchema when present', () => {
     const tools = [
       {
-        functionDeclarations: [
-          {
-            name: 'write_file',
-            description: 'Write a file to disk',
-            parametersJsonSchema: {
-              type: 'object',
-              properties: {
-                path: { type: 'string', description: 'File path' },
-                content: { type: 'string', description: 'File content' },
-              },
-              required: ['path', 'content'],
-            },
+        name: 'write_file',
+        description: 'Write a file to disk',
+        parametersJsonSchema: {
+          type: 'object',
+          properties: {
+            path: { type: 'string', description: 'File path' },
+            content: { type: 'string', description: 'File content' },
           },
-        ],
+          required: ['path', 'content'],
+        },
       },
     ];
 
@@ -51,21 +48,21 @@ describe('issue #1844 – OpenAI-Vercel schema converter schema source', () => {
 
   it('should throw when parametersJsonSchema is absent', () => {
     const tools = [
-      {
-        functionDeclarations: [
-          {
+      Object.assign<ToolDeclaration, { parametersJsonSchema: unknown }>(
+        {
+          ...{
             name: 'no_schema_tool',
             description: 'No schema',
             parameters: {
               type: 'object',
-              properties: {
-                ignored: { type: 'string' },
-              },
+              properties: { ignored: { type: 'string' } },
               required: ['ignored'],
             },
           },
-        ],
-      },
+          parametersJsonSchema: {},
+        },
+        { parametersJsonSchema: undefined },
+      ),
     ];
 
     expect(() => convertToolsToOpenAIVercel(tools)).toThrow(

@@ -378,13 +378,9 @@ describe('Gemini provider stateless contract tests', () => {
           runtime,
           tools: [
             {
-              functionDeclarations: [
-                {
-                  name: 'fetchSomething',
-                  description: 'fetch data',
-                  parametersJsonSchema: {},
-                },
-              ],
+              name: 'fetchSomething',
+              description: 'fetch data',
+              parametersJsonSchema: {},
             },
           ],
         }),

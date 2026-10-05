@@ -59,14 +59,7 @@ export interface AnthropicTool {
   input_schema: AnthropicInputSchema;
 }
 
-/**
- * Input format from Gemini-style tool declarations
- */
-interface ToolDeclaration {
-  name: string;
-  description?: string;
-  parametersJsonSchema?: unknown;
-}
+import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 
 /**
  * Convert a Gemini-style schema to Anthropic input_schema format.
@@ -254,9 +247,7 @@ function toNumber(value: unknown): number | undefined {
  * Convert an array of Gemini-style tool declarations to Anthropic format
  */
 export function convertToolsToAnthropic(
-  toolDeclarations?: Array<{
-    functionDeclarations?: ToolDeclaration[];
-  }>,
+  toolDeclarations?: ToolDeclaration[],
   isOAuth?: boolean,
 ): AnthropicTool[] | undefined {
   if (!toolDeclarations || toolDeclarations.length === 0) {
@@ -265,30 +256,24 @@ export function convertToolsToAnthropic(
 
   const anthropicTools: AnthropicTool[] = [];
 
-  for (const toolGroup of toolDeclarations) {
-    if (!toolGroup.functionDeclarations) {
-      continue;
+  for (const decl of toolDeclarations) {
+    if (!isSchemaObject(decl.parametersJsonSchema)) {
+      throw new Error(
+        `Tool "${decl.name}" is missing parametersJsonSchema — legacy schema fallback has been removed. ` +
+          `Ensure all tool declarations provide parametersJsonSchema at construction time.`,
+      );
     }
+    const inputSchema = convertSchemaToAnthropic(decl.parametersJsonSchema);
 
-    for (const decl of toolGroup.functionDeclarations) {
-      if (!isSchemaObject(decl.parametersJsonSchema)) {
-        throw new Error(
-          `Tool "${decl.name}" is missing parametersJsonSchema — legacy schema fallback has been removed. ` +
-            `Ensure all tool declarations provide parametersJsonSchema at construction time.`,
-        );
-      }
-      const inputSchema = convertSchemaToAnthropic(decl.parametersJsonSchema);
+    // Prefix tool names for OAuth to avoid conflicts with Claude Code built-in tools
+    const toolName =
+      isOAuth === true ? `${TOOL_PREFIX}${decl.name}` : decl.name;
 
-      // Prefix tool names for OAuth to avoid conflicts with Claude Code built-in tools
-      const toolName =
-        isOAuth === true ? `${TOOL_PREFIX}${decl.name}` : decl.name;
-
-      anthropicTools.push({
-        name: toolName,
-        description: decl.description ?? '',
-        input_schema: inputSchema,
-      });
-    }
+    anthropicTools.push({
+      name: toolName,
+      description: decl.description ?? '',
+      input_schema: inputSchema,
+    });
   }
 
   if (logger.enabled && anthropicTools.length > 0) {

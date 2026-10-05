@@ -505,13 +505,9 @@ describe('AnthropicProvider', () => {
       ];
       const tools = [
         {
-          functionDeclarations: [
-            {
-              name: 'get_weather',
-              description: 'Get the weather',
-              parametersJsonSchema: { type: 'object', properties: {} },
-            },
-          ],
+          name: 'get_weather',
+          description: 'Get the weather',
+          parametersJsonSchema: { type: 'object', properties: {} },
         },
       ];
 

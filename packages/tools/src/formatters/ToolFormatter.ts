@@ -72,44 +72,36 @@ export class ToolFormatter implements IToolFormatter {
    */
   convertToolDeclarationsToOpenAI(
     toolDeclarations?: Array<{
-      functionDeclarations: Array<{
-        name: string;
-        description?: string;
-        parametersJsonSchema?: unknown;
-      }>;
+      name: string;
+      description?: string;
+      parametersJsonSchema?: unknown;
     }>,
   ): OpenAITool[] | undefined {
     if (!toolDeclarations) {
       return undefined;
     }
 
-    const openAITools = toolDeclarations.flatMap((toolGroup) => {
-      if (!Array.isArray(toolGroup.functionDeclarations)) {
-        return [];
+    const openAITools = toolDeclarations.map((decl) => {
+      const schema: unknown = decl.parametersJsonSchema;
+      if (isMissingSchema(schema)) {
+        throw new Error(
+          `Tool "${decl.name}" is missing parametersJsonSchema — legacy schema fallback has been removed. ` +
+            `Ensure all tool declarations provide parametersJsonSchema at construction time.`,
+        );
       }
+      const convertedParams = this.convertSchemaToStandard(schema) as Record<
+        string,
+        unknown
+      >;
 
-      return toolGroup.functionDeclarations.map((decl) => {
-        const schema: unknown = decl.parametersJsonSchema;
-        if (isMissingSchema(schema)) {
-          throw new Error(
-            `Tool "${decl.name}" is missing parametersJsonSchema — legacy schema fallback has been removed. ` +
-              `Ensure all tool declarations provide parametersJsonSchema at construction time.`,
-          );
-        }
-        const convertedParams = this.convertSchemaToStandard(schema) as Record<
-          string,
-          unknown
-        >;
-
-        return {
-          type: 'function' as const,
-          function: {
-            name: decl.name,
-            description: decl.description ?? '',
-            parameters: convertedParams,
-          },
-        };
-      });
+      return {
+        type: 'function' as const,
+        function: {
+          name: decl.name,
+          description: decl.description ?? '',
+          parameters: convertedParams,
+        },
+      };
     });
 
     return openAITools;
@@ -120,11 +112,9 @@ export class ToolFormatter implements IToolFormatter {
    */
   convertToolDeclarationsToAnthropic(
     toolDeclarations?: Array<{
-      functionDeclarations: Array<{
-        name: string;
-        description?: string;
-        parametersJsonSchema?: unknown;
-      }>;
+      name: string;
+      description?: string;
+      parametersJsonSchema?: unknown;
     }>,
   ):
     | Array<{
@@ -135,30 +125,28 @@ export class ToolFormatter implements IToolFormatter {
     | undefined {
     if (!toolDeclarations) return undefined;
 
-    const anthropicTools = toolDeclarations.flatMap((toolGroup) =>
-      toolGroup.functionDeclarations.map((decl) => {
-        const schema: unknown = decl.parametersJsonSchema;
-        if (isMissingSchema(schema)) {
-          throw new Error(
-            `Tool "${decl.name}" is missing parametersJsonSchema — legacy schema fallback has been removed. ` +
-              `Ensure all tool declarations provide parametersJsonSchema at construction time.`,
-          );
-        }
-        const convertedParams = this.convertSchemaToStandard(schema) as Record<
-          string,
-          unknown
-        >;
+    const anthropicTools = toolDeclarations.map((decl) => {
+      const schema: unknown = decl.parametersJsonSchema;
+      if (isMissingSchema(schema)) {
+        throw new Error(
+          `Tool "${decl.name}" is missing parametersJsonSchema — legacy schema fallback has been removed. ` +
+            `Ensure all tool declarations provide parametersJsonSchema at construction time.`,
+        );
+      }
+      const convertedParams = this.convertSchemaToStandard(schema) as Record<
+        string,
+        unknown
+      >;
 
-        return {
-          name: decl.name,
-          description: decl.description ?? '',
-          input_schema: {
-            type: 'object' as const,
-            ...convertedParams,
-          },
-        };
-      }),
-    );
+      return {
+        name: decl.name,
+        description: decl.description ?? '',
+        input_schema: {
+          type: 'object' as const,
+          ...convertedParams,
+        },
+      };
+    });
 
     return anthropicTools;
   }
@@ -168,11 +156,9 @@ export class ToolFormatter implements IToolFormatter {
    */
   convertToolDeclarationsToFormat(
     toolDeclarations?: Array<{
-      functionDeclarations: Array<{
-        name: string;
-        description?: string;
-        parametersJsonSchema?: unknown;
-      }>;
+      name: string;
+      description?: string;
+      parametersJsonSchema?: unknown;
     }>,
     format: ToolFormat = 'openai',
   ): unknown {
@@ -194,28 +180,22 @@ export class ToolFormatter implements IToolFormatter {
     }
 
     // For other formats, convert to generic then use toProviderFormat
-    const itools = toolDeclarations.flatMap((toolGroup) => {
-      if (!Array.isArray(toolGroup.functionDeclarations)) {
-        return [];
+    const itools = toolDeclarations.map((decl) => {
+      const schema: unknown = decl.parametersJsonSchema;
+      if (isMissingSchema(schema)) {
+        throw new Error(
+          `Tool "${decl.name}" is missing parametersJsonSchema — legacy schema fallback has been removed. ` +
+            `Ensure all tool declarations provide parametersJsonSchema at construction time.`,
+        );
       }
-
-      return toolGroup.functionDeclarations.map((decl) => {
-        const schema: unknown = decl.parametersJsonSchema;
-        if (isMissingSchema(schema)) {
-          throw new Error(
-            `Tool "${decl.name}" is missing parametersJsonSchema — legacy schema fallback has been removed. ` +
-              `Ensure all tool declarations provide parametersJsonSchema at construction time.`,
-          );
-        }
-        return {
-          type: 'function' as const,
-          function: {
-            name: decl.name,
-            description: decl.description ?? '',
-            parameters: schema,
-          },
-        };
-      });
+      return {
+        type: 'function' as const,
+        function: {
+          name: decl.name,
+          description: decl.description ?? '',
+          parameters: schema,
+        },
+      };
     });
 
     return this.toProviderFormat(itools as FormatterTool[], format);

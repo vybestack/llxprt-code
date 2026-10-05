@@ -97,6 +97,8 @@ export async function logRequestIfEnabled(
         generatePromptId: ctx.generatePromptId,
         redactor,
         debug: ctx.debug,
+        conversationLogEmptyTools:
+          normalizedOptions.metadata?.conversationLogEmptyTools === true,
       },
     );
   } catch (error) {

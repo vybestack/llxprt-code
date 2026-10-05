@@ -108,9 +108,7 @@ export interface FunctionDeclaration {
  * A collection of function declarations, forming the complete tool set
  * offered to the model.
  */
-export interface ToolDeclarations {
-  functionDeclarations?: FunctionDeclaration[];
-}
+export type ToolDeclarations = FunctionDeclaration[];
 
 /**
  * Interface for an object that can be called as a tool by the model layer.

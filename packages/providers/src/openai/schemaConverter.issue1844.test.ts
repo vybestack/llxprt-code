@@ -1,3 +1,4 @@
+import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -22,19 +23,15 @@ describe('issue #1844 – OpenAI schema converter schema source', () => {
   it('should use parametersJsonSchema when present', () => {
     const tools = [
       {
-        functionDeclarations: [
-          {
-            name: 'read_file',
-            description: 'Read a file from disk',
-            parametersJsonSchema: {
-              type: 'object',
-              properties: {
-                path: { type: 'string', description: 'File path' },
-              },
-              required: ['path'],
-            },
+        name: 'read_file',
+        description: 'Read a file from disk',
+        parametersJsonSchema: {
+          type: 'object',
+          properties: {
+            path: { type: 'string', description: 'File path' },
           },
-        ],
+          required: ['path'],
+        },
       },
     ];
 
@@ -48,14 +45,16 @@ describe('issue #1844 – OpenAI schema converter schema source', () => {
 
   it('should throw when parametersJsonSchema is absent', () => {
     const tools = [
-      {
-        functionDeclarations: [
-          {
+      Object.assign<ToolDeclaration, { parametersJsonSchema: unknown }>(
+        {
+          ...{
             name: 'no_schema_tool',
             description: 'No schema',
           },
-        ],
-      },
+          parametersJsonSchema: {},
+        },
+        { parametersJsonSchema: undefined },
+      ),
     ];
 
     expect(() => convertToolsToOpenAI(tools)).toThrow(
@@ -65,15 +64,14 @@ describe('issue #1844 – OpenAI schema converter schema source', () => {
 
   it('should throw when parametersJsonSchema is a non-plain object', () => {
     const tools = [
-      {
-        functionDeclarations: [
-          {
-            name: 'date_schema_tool',
-            description: 'Invalid schema',
-            parametersJsonSchema: new Date(),
-          },
-        ],
-      },
+      Object.assign<ToolDeclaration, { parametersJsonSchema: unknown }>(
+        {
+          name: 'date_schema_tool',
+          description: 'Invalid schema',
+          parametersJsonSchema: {},
+        },
+        { parametersJsonSchema: new Date() },
+      ),
     ];
 
     expect(() => convertToolsToOpenAI(tools)).toThrow(

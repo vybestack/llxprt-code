@@ -24,19 +24,6 @@ import type {
 } from './RuntimeProviderChat.js';
 import type { PromptEnvelopeProjection } from './PromptEstimation.js';
 
-/**
- * Minimal set of tool declaration shapes that core runtime passes through.
- */
-export interface RuntimeToolDeclaration {
-  name: string;
-  description?: string;
-  parametersJsonSchema?: unknown;
-}
-
-export interface RuntimeToolset {
-  functionDeclarations: RuntimeToolDeclaration[];
-}
-
 /** Guard facts a provider supplies when its context guard invokes the compression callback (issue #3499). */
 export interface RuntimeCompressionGuardInfo {
   readonly estimatedTokens: number;

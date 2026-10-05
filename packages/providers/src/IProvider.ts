@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 import { type IModel } from './IModel.js';
 import { type ITool } from './ITool.js';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -33,14 +34,7 @@ import type {
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { ProviderMediaTransportCapabilities } from './providerMediaTransportCapabilities.js';
 
-export type ProviderToolset = Array<{
-  functionDeclarations: Array<{
-    name: string;
-    description?: string;
-    parametersJsonSchema?: unknown;
-    parameters?: unknown;
-  }>;
-}>;
+export type ProviderToolset = ToolDeclaration[];
 
 /**
  * @plan PLAN-20251018-STATELESSPROVIDER2.P06

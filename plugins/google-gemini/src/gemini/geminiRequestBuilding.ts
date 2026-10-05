@@ -47,34 +47,40 @@ export function buildGeminiTools(
   if (tools === undefined) {
     return { geminiTools: undefined, toolNamesForPrompt: undefined };
   }
-  const geminiTools = tools.map((toolGroup) => ({
-    functionDeclarations: toolGroup.functionDeclarations.map((decl) => {
-      const schema: unknown = decl.parametersJsonSchema;
-      if (isMissingGeminiSchema(schema)) {
-        throw new Error(
-          `Tool "${decl.name}" is missing parametersJsonSchema — legacy schema fallback has been removed. ` +
-            `Ensure all tool declarations provide parametersJsonSchema at construction time.`,
-        );
-      }
-      let parameters = cleanGeminiSchema(schema);
-      const parametersRecord = parameters as Record<string, unknown>;
-      if (!('type' in parametersRecord) && !('anyOf' in parametersRecord)) {
-        parameters = { type: SchemaType.OBJECT, ...parameters };
-      }
-      return {
-        name: decl.name,
-        description: decl.description,
-        parameters,
-      };
-    }),
-  }));
+  const geminiTools =
+    tools.length === 0
+      ? []
+      : [
+          {
+            functionDeclarations: tools.map((decl) => {
+              const schema: unknown = decl.parametersJsonSchema;
+              if (isMissingGeminiSchema(schema)) {
+                throw new Error(
+                  `Tool "${decl.name}" is missing parametersJsonSchema — legacy schema fallback has been removed. ` +
+                    `Ensure all tool declarations provide parametersJsonSchema at construction time.`,
+                );
+              }
+              let parameters = cleanGeminiSchema(schema);
+              const parametersRecord = parameters as Record<string, unknown>;
+              if (
+                !('type' in parametersRecord) &&
+                !('anyOf' in parametersRecord)
+              ) {
+                parameters = { type: SchemaType.OBJECT, ...parameters };
+              }
+              return {
+                name: decl.name,
+                description: decl.description,
+                parameters,
+              };
+            }),
+          },
+        ];
   const toolNamesForPrompt = Array.from(
     new Set(
-      tools.flatMap((group) =>
-        group.functionDeclarations
-          .map((decl) => decl.name)
-          .filter((name): name is string => Boolean(name)),
-      ),
+      tools
+        .map((decl) => decl.name)
+        .filter((name): name is string => Boolean(name)),
     ),
   );
   return { geminiTools, toolNamesForPrompt };

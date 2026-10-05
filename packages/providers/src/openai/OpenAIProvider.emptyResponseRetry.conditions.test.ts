@@ -141,22 +141,18 @@ describe('OpenAIProvider empty response retry conditions (issue #584)', () => {
 
     const tools: ITool[] = [
       {
-        functionDeclarations: [
-          {
-            name: 'FindFiles',
-            description: 'Find files matching a pattern',
-            parametersJsonSchema: {
-              type: 'object',
-              properties: {
-                pattern: {
-                  type: 'string',
-                  description: 'The glob pattern to match',
-                },
-              },
-              required: ['pattern'],
+        name: 'FindFiles',
+        description: 'Find files matching a pattern',
+        parametersJsonSchema: {
+          type: 'object',
+          properties: {
+            pattern: {
+              type: 'string',
+              description: 'The glob pattern to match',
             },
           },
-        ],
+          required: ['pattern'],
+        },
       },
     ];
 
@@ -249,22 +245,18 @@ describe('OpenAIProvider empty response retry conditions (issue #584)', () => {
 
     const tools: ITool[] = [
       {
-        functionDeclarations: [
-          {
-            name: 'FindFiles',
-            description: 'Find files matching a pattern',
-            parametersJsonSchema: {
-              type: 'object',
-              properties: {
-                pattern: {
-                  type: 'string',
-                  description: 'The glob pattern to match',
-                },
-              },
-              required: ['pattern'],
+        name: 'FindFiles',
+        description: 'Find files matching a pattern',
+        parametersJsonSchema: {
+          type: 'object',
+          properties: {
+            pattern: {
+              type: 'string',
+              description: 'The glob pattern to match',
             },
           },
-        ],
+          required: ['pattern'],
+        },
       },
     ];
 

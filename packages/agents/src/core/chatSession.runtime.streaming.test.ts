@@ -85,13 +85,9 @@ describe('ChatSession runtime streaming and abort behavior', () => {
     };
 
     const tools = [
-      {
-        functionDeclarations: [
-          { name: 'read_file' } as Record<string, unknown>,
-          { name: 'run_shell_command' } as Record<string, unknown>,
-        ],
-      },
-    ] as unknown as Array<{ functionDeclarations: Array<{ name: string }> }>;
+      { name: 'read_file', parametersJsonSchema: {} },
+      { name: 'run_shell_command', parametersJsonSchema: {} },
+    ];
     const hookConfig = config;
     Object.defineProperties(hookConfig, {
       getConversationLoggingEnabled: { value: () => false },
@@ -161,9 +157,7 @@ describe('ChatSession runtime streaming and abort behavior', () => {
     }
 
     expect(calls[0].tools).toStrictEqual([
-      {
-        functionDeclarations: [{ name: 'read_file' }],
-      },
+      { name: 'read_file', parametersJsonSchema: {} },
     ]);
   });
 

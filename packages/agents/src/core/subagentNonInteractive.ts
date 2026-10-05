@@ -414,7 +414,7 @@ export async function runNonInteractiveTurn(
     message: blocks,
     config: {
       abortSignal: abortController.signal,
-      tools: [{ functionDeclarations: toolsList }],
+      tools: toolsList,
     },
   } as unknown as Parameters<typeof chat.sendMessageStream>[0];
 

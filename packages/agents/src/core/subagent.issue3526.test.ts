@@ -1,3 +1,4 @@
+import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -11,10 +12,7 @@ import type {
   ContentBlock,
   IContent,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type {
-  RuntimeProvider as IProvider,
-  RuntimeToolDeclaration,
-} from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type {
   RuntimeGenerateChatOptions as GenerateChatOptions,
   RuntimeProviderToolset,
@@ -219,13 +217,11 @@ function stopped(text = 'Done.'): IContent {
   return { speaker: 'ai', blocks: [{ type: 'text', text }] };
 }
 
-function declarationsFrom(
-  options: GenerateChatOptions,
-): RuntimeToolDeclaration[] {
+function declarationsFrom(options: GenerateChatOptions): ToolDeclaration[] {
   if (options.tools === undefined) {
     throw new Error('Expected provider request tool declarations.');
   }
-  return options.tools.flatMap((group) => group.functionDeclarations);
+  return options.tools;
 }
 
 function requestText(options: GenerateChatOptions): string {

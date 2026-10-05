@@ -41,6 +41,10 @@ export function normalizeChatCompletionOptions(
   let normalizedOptions: GenerateChatOptions = Array.isArray(contentOrOptions)
     ? { contents: contentOrOptions, tools: maybeTools }
     : { ...contentOrOptions };
+  normalizedOptions.metadata = {
+    ...normalizedOptions.runtime?.metadata,
+    ...normalizedOptions.metadata,
+  };
 
   const injectedRuntime = ctx.runtimeContextResolver?.();
   const providedRuntime = normalizedOptions.runtime;

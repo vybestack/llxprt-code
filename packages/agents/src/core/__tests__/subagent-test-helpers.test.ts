@@ -19,7 +19,7 @@ import {
 function createCallableTool(): CallableTool {
   return {
     async tool() {
-      return {};
+      return [];
     },
     async callTool() {
       return [];
