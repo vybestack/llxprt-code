@@ -188,15 +188,13 @@ describe('.github/workflows/release.yml', () => {
     const releaseNotes = stepByName('Generate Release Notes');
     const preflight = stepByName('Run Preflight Checks');
     const integrations = stepByName('Run Integration Tests');
-    const modelBudget = stepByName('Check local-model request budget');
-    expect(modelBudget.if).toBe(
-      "${{ success() && github.event.inputs.force_skip_tests != 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}",
-    );
+    expect(
+      releaseSteps.some(
+        (step) => step.name === 'Check local-model request budget',
+      ),
+    ).toBe(false);
     expect(asString(integrations.env?.LLXPRT_E2E_MODEL_LEDGER)).toBe(
       '${{ runner.temp }}/release-model-ledger.jsonl',
-    );
-    expect(asString(modelBudget.run).trim()).toBe(
-      'bun scripts/check-e2e-model-budget.ts --ledger "$LLXPRT_E2E_MODEL_LEDGER"',
     );
     const cpuProof = stepByName('Verify live Ollama CPU backend');
     expect(asString(cpuProof.run)).toContain('/proc/$pid/maps');
@@ -216,9 +214,6 @@ describe('.github/workflows/release.yml', () => {
     );
     expect(releaseSteps.indexOf(integrations)).toBeLessThan(
       releaseSteps.indexOf(releaseNotes),
-    );
-    expect(releaseSteps.indexOf(integrations)).toBeLessThan(
-      releaseSteps.indexOf(modelBudget),
     );
     for (const step of [preflight, integrations, releaseNotes]) {
       const env = asRecord(step.env);

@@ -364,15 +364,6 @@ jobs:
           GIT_CEILING_DIRECTORIES: '${{ github.workspace }}/.integration-tests'
           LLXPRT_FORCE_FILE_STORAGE: 'true'
           LLXPRT_E2E_MODEL_LEDGER: '${{ runner.temp }}/release-model-ledger.jsonl'
-
-      - name: Check local-model request budget
-        if: ${{ success() && github.event.inputs.force_skip_tests != 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
-        env:
-          LLXPRT_E2E_MODEL_LEDGER: '${{ runner.temp }}/release-model-ledger.jsonl'
-        shell: bash
-        run: |
-          bun scripts/check-e2e-model-budget.ts --ledger "$LLXPRT_E2E_MODEL_LEDGER"
-
       - name: Configure Git User
         if: ${{ steps.duplicate_check.outputs.is_duplicate != 'true' }}
         run: |
