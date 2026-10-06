@@ -187,19 +187,9 @@ jobs:
       - name: Check for duplicate scheduled nightly
         id: duplicate_check
         if: github.event_name == 'schedule'
-        run: |
-          RELEASE_VERSION="${{ steps.version.outputs.RELEASE_VERSION }}"
-          if OUTPUT=$(npm view "@vybestack/llxprt-code-tools@${RELEASE_VERSION}" version 2>&1); then
-            echo "::notice::Scheduled nightly ${RELEASE_VERSION} is already published; skipping the release pipeline."
-            echo "is_duplicate=true" >> "$GITHUB_OUTPUT"
-          elif echo "$OUTPUT" | grep -qiE 'E404|404|not found|no match'; then
-            echo "Version ${RELEASE_VERSION} is not published yet; proceeding with release."
-            echo "is_duplicate=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "::error::Unable to verify whether ${RELEASE_VERSION} is already published; npm registry check was inconclusive."
-            echo "$OUTPUT" >&2
-            exit 1
-          fi
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.RELEASE_VERSION }}
+        run: bun scripts/check-nightly-release.ts
 
       - name: Determine if release branch should be created
         id: branch_decision
@@ -220,31 +210,141 @@ jobs:
           fi
           echo "should_create_branch=${should_create_branch}" >> "$GITHUB_OUTPUT"
 
-      - name: Check API quota and select optimal key
-        id: quota
-        if: >-
-          (
-            github.event.inputs.force_skip_tests != 'true' ||
-            (github.event.inputs.dry_run != 'true' && github.event.inputs.publish_vscode_only != 'true')
-          ) && steps.duplicate_check.outputs.is_duplicate != 'true'
-        continue-on-error: ${{ github.event.inputs.force_skip_tests == 'true' }}
-        run: bun scripts/ci-quota-check.ts
+      - name: Install pinned local Ollama runtime for release model checks
+        if: steps.duplicate_check.outputs.is_duplicate != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = 'x86_64'
+          mkdir -p "$RUNNER_TEMP/ollama"
+          curl --fail --show-error --location --retry 3 \
+            'https://ollama.com/download/ollama-linux-amd64.tar.zst?version=0.31.1' \
+            -o "$RUNNER_TEMP/ollama-linux-amd64.tar.zst"
+          printf '%s  %s\n' 'd297381efc136451f6fabb9dd644a67f70fe51c16815a0c4a95ff0e327a3afb4' "$RUNNER_TEMP/ollama-linux-amd64.tar.zst" | sha256sum --check -
+          tar --zstd --exclude='lib/ollama/cuda_v12/*' --exclude='lib/ollama/cuda_v13/*' --exclude='lib/ollama/vulkan/*' -xf "$RUNNER_TEMP/ollama-linux-amd64.tar.zst" -C "$RUNNER_TEMP/ollama"
+          rm "$RUNNER_TEMP/ollama-linux-amd64.tar.zst"
+          echo "$RUNNER_TEMP/ollama/bin" >>"$GITHUB_PATH"
+          "$RUNNER_TEMP/ollama/bin/ollama" --version
+
+      - name: Select local Ollama CPU backend
+        if: steps.duplicate_check.outputs.is_duplicate != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! grep -qm1 '^vendor_id[[:space:]]*: GenuineIntel$' /proc/cpuinfo; then
+            echo 'Host is not Intel; leaving Ollama CPU variants untouched'
+            exit 0
+          fi
+          libdir="$RUNNER_TEMP/ollama/lib/ollama"
+          test -f "$libdir/libggml-cpu-haswell.so"
+          shopt -s nullglob
+          variants=("$libdir"/libggml-cpu-*.so)
+          (( ${#variants[@]} > 1 )) || { echo 'Expected multiple CPU variants in pinned Ollama runtime' >&2; exit 1; }
+          mkdir -p "$RUNNER_TEMP/ollama-disabled-cpu-backends"
+          for library in "${variants[@]}"; do
+            if [[ "$library" != "$libdir/libggml-cpu-haswell.so" ]]; then
+              mv "$library" "$RUNNER_TEMP/ollama-disabled-cpu-backends/"
+            fi
+          done
+
+      - name: Start pinned local Gemma model
+        if: steps.duplicate_check.outputs.is_duplicate != 'true'
         env:
-          KEY_VAR_NAME: ${{ vars.KEY_VAR_NAME }}
-          OPENAI_API_KEY: ${{ secrets[vars.KEY_VAR_NAME] }}
-          OPENAI_API_KEY_2: ${{ secrets[vars.KEY_VAR_NAME_2] }}
+          OLLAMA_HOST: '127.0.0.1:12644'
+          OLLAMA_CONTEXT_LENGTH: '32768'
+          OLLAMA_NUM_PARALLEL: '1'
+          OLLAMA_MODELS: '${{ runner.temp }}/ollama-models'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$OLLAMA_MODELS"
+          nohup ollama serve >"$RUNNER_TEMP/ollama-server.log" 2>&1 &
+          server_pid=$!
+          for _ in {1..60}; do
+            if curl --fail --silent "http://$OLLAMA_HOST/api/version"; then break; fi
+            kill -0 "$server_pid" 2>/dev/null || { cat "$RUNNER_TEMP/ollama-server.log" >&2; exit 1; }
+            sleep 2
+          done
+          curl --fail --silent "http://$OLLAMA_HOST/api/version" | jq -e '.version == "0.31.1"'
+          ollama pull gemma4:e2b-it-qat
+          curl --fail --silent "http://$OLLAMA_HOST/api/tags" | jq -e '.models[] | select(.name == "gemma4:e2b-it-qat" and .digest == "07ea59a474013479c8b6b802bef095c40e964a1d776ba02f264c0e30e1aede0c")'
+          df -h "$RUNNER_TEMP"
+      # Source-checkout CLI integration tests discover runtime plugins only
+      # after their plugin-local dependencies have been installed. Use the
+      # plugin lockfile's required Bun version, then restore the repository pin
+      # so preflight runs with the same Bun version as the rest of the project.
+      - name: Setup Bun for runtime plugin dependencies
+        if: steps.duplicate_check.outputs.is_duplicate != 'true'
+        uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6' # ratchet:oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.2'
+
+      - name: Install runtime plugin dependencies for preflight
+        if: steps.duplicate_check.outputs.is_duplicate != 'true'
+        run: |
+          for plugin in plugins/google-gemini plugins/google-mcp-auth; do
+            (cd "$plugin" && bun install --omit=peer)
+          done
+
+      - name: Restore repository Bun version
+        if: steps.duplicate_check.outputs.is_duplicate != 'true'
+        uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6' # ratchet:oven-sh/setup-bun@v2
+        with:
+          bun-version-file: '.bun-version'
+
+      - name: Verify local model CPU inference before release tests
+        if: steps.duplicate_check.outputs.is_duplicate != 'true'
+        shell: bash
+        env:
+          OLLAMA_HOST: '127.0.0.1:12644'
+        run: |
+          set -euo pipefail
+          curl --fail --show-error --silent --max-time 300 \
+            "http://$OLLAMA_HOST/api/generate" \
+            -H 'Content-Type: application/json' \
+            -d '{"model":"gemma4:e2b-it-qat","prompt":"Reply with one word.","stream":false,"think":false,"options":{"num_ctx":32768,"num_predict":16}}' \
+            -o "$RUNNER_TEMP/ollama-inference.json"
+          jq -e '.done == true and .error == null and (.response | length > 0)' "$RUNNER_TEMP/ollama-inference.json" || {
+            cat "$RUNNER_TEMP/ollama-inference.json" >&2
+            exit 1
+          }
+          curl --fail --show-error --silent "http://$OLLAMA_HOST/api/ps" |
+            jq -e '.models[] | select(.name == "gemma4:e2b-it-qat" and .size_vram == 0)'
+
+      - name: Verify live Ollama CPU backend
+        if: steps.duplicate_check.outputs.is_duplicate != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          vendor="$(awk -F: '/^vendor_id[[:space:]]*:/ { gsub(/[[:space:]]/, "", $2); print $2; exit }' /proc/cpuinfo)"
+          pid="$(pgrep -f "^$RUNNER_TEMP/ollama/lib/ollama/llama-server --model " | head -1)"
+          [[ -n "$pid" ]] || { echo 'Live llama-server process not found' >&2; exit 1; }
+          maps="/proc/$pid/maps"
+          [[ -r "$maps" ]] || { echo "Live llama-server maps are unavailable: $maps" >&2; exit 1; }
+          backends="$(grep -Eo '/[^ ]+/libggml-cpu(-[^ ]+)?\.so( \(deleted\))?' "$maps" | sort -u || true)"
+          [[ -n "$backends" ]] || { echo 'No mapped llama-server CPU backend' >&2; exit 1; }
+          if [[ "$vendor" == GenuineIntel ]]; then
+            expected="$RUNNER_TEMP/ollama/lib/ollama/libggml-cpu-haswell.so"
+            grep -Fxq "$expected" <<< "$backends" || { echo 'Expected haswell CPU library is not mapped' >&2; exit 1; }
+            while IFS= read -r backend; do [[ "$backend" == "$expected" ]] || { echo "Unexpected mapped CPU library: $backend" >&2; exit 1; }; done <<< "$backends"
+          elif [[ "$vendor" == AuthenticAMD ]]; then
+            echo "AMD native CPU backend: $backends"
+          else
+            echo "Unsupported CPU vendor: $vendor" >&2
+            exit 1
+          fi
 
       - name: Run Preflight Checks
         if: ${{ github.event.inputs.force_skip_tests != 'true' && steps.duplicate_check.outputs.is_duplicate != 'true' }}
         run: bun scripts/preflight-ci.ts
         env:
-          OPENAI_API_KEY: ${{ steps.quota.outputs.selected_key == 'primary' && secrets[vars.KEY_VAR_NAME] || steps.quota.outputs.selected_key == 'secondary' && secrets[vars.KEY_VAR_NAME_2] || '' }}
-          OPENAI_API_KEY_2: ${{ secrets[vars.KEY_VAR_NAME_2] }}
-          KEY_VAR_NAME: ${{ vars.KEY_VAR_NAME }}
-          OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
-          LLXPRT_DEFAULT_MODEL: ${{ vars.LLXPRT_DEFAULT_MODEL }}
-          LLXPRT_DEFAULT_PROVIDER: ${{ vars.LLXPRT_DEFAULT_PROVIDER }}
+          OPENAI_API_KEY: ollama-local-only
+          OPENAI_BASE_URL: http://127.0.0.1:12644/v1
+          LLXPRT_DEFAULT_MODEL: gemma4:e2b-it-qat
+          LLXPRT_DEFAULT_PROVIDER: openai
           LLXPRT_AUTH_TYPE: none
+          LLXPRT_CONTEXT_LIMIT: '32768'
+          LLXPRT_MAX_OUTPUT_TOKENS: '8192'
           LLXPRT_SKIP_IMAGE_HARNESS: 'true' # Avoid libspng flake on Linux runners (issue #816)
 
       - name: Run Integration Tests
@@ -254,13 +354,53 @@ jobs:
           # Skipping Docker tests due to flakiness
           # npm run test:integration:sandbox:docker
         env:
-          OPENAI_API_KEY: ${{ steps.quota.outputs.selected_key == 'primary' && secrets[vars.KEY_VAR_NAME] || steps.quota.outputs.selected_key == 'secondary' && secrets[vars.KEY_VAR_NAME_2] || '' }}
-          OPENAI_API_KEY_2: ${{ secrets[vars.KEY_VAR_NAME_2] }}
-          KEY_VAR_NAME: ${{ vars.KEY_VAR_NAME }}
-          OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
-          LLXPRT_DEFAULT_MODEL: ${{ vars.LLXPRT_DEFAULT_MODEL }}
-          LLXPRT_DEFAULT_PROVIDER: ${{ vars.LLXPRT_DEFAULT_PROVIDER }}
+          OPENAI_API_KEY: ollama-local-only
+          OPENAI_BASE_URL: http://127.0.0.1:12644/v1
+          LLXPRT_DEFAULT_MODEL: gemma4:e2b-it-qat
+          LLXPRT_DEFAULT_PROVIDER: openai
           LLXPRT_AUTH_TYPE: none
+          LLXPRT_CONTEXT_LIMIT: '32768'
+          LLXPRT_MAX_OUTPUT_TOKENS: '8192'
+          GIT_CEILING_DIRECTORIES: '${{ github.workspace }}/.integration-tests'
+          LLXPRT_FORCE_FILE_STORAGE: 'true'
+          LLXPRT_E2E_MODEL_LEDGER: '${{ runner.temp }}/release-model-ledger.jsonl'
+
+      - name: Capture release model diagnostics
+        if: ${{ always() && steps.duplicate_check.outputs.is_duplicate != 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          diagnostics="$RUNNER_TEMP/release-diagnostics"
+          mkdir -p "$diagnostics"
+          date --utc --iso-8601=seconds > "$diagnostics/captured-at.txt"
+          for source in /proc/cpuinfo /proc/loadavg /proc/meminfo /proc/stat; do
+            if [[ -r "$source" ]]; then
+              cp "$source" "$diagnostics/$(basename "$source").txt"
+            fi
+          done
+          if [[ -r /sys/fs/cgroup/cpu.stat ]]; then
+            cp /sys/fs/cgroup/cpu.stat "$diagnostics/cgroup-cpu-stat.txt"
+          fi
+          if [[ -r /sys/fs/cgroup/cpu.max ]]; then
+            cp /sys/fs/cgroup/cpu.max "$diagnostics/cgroup-cpu-max.txt"
+          fi
+          for source in \
+            "$RUNNER_TEMP/ollama-server.log" \
+            "$RUNNER_TEMP/ollama-inference.json" \
+            "$RUNNER_TEMP/release-model-ledger.jsonl"; do
+            if [[ -f "$source" ]]; then
+              cp "$source" "$diagnostics/"
+            fi
+          done
+
+      - name: Upload release model diagnostics
+        if: ${{ always() && steps.duplicate_check.outputs.is_duplicate != 'true' }}
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # ratchet:actions/upload-artifact@v4
+        with:
+          name: release-model-diagnostics-${{ github.run_id }}
+          path: ${{ runner.temp }}/release-diagnostics/
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Configure Git User
         if: ${{ steps.duplicate_check.outputs.is_duplicate != 'true' }}
@@ -340,11 +480,12 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           RELEASE_TAG: ${{ steps.version.outputs.RELEASE_TAG }}
           IS_NIGHTLY: ${{ steps.vars.outputs.is_nightly }}
-          KEY_VAR_NAME: ${{ vars.KEY_VAR_NAME }}
-          LLXPRT_DEFAULT_PROVIDER: ${{ vars.LLXPRT_DEFAULT_PROVIDER }}
-          LLXPRT_DEFAULT_MODEL: ${{ vars.LLXPRT_DEFAULT_MODEL }}
-          OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
-          OPENAI_API_KEY: ${{ steps.quota.outputs.selected_key == 'primary' && secrets[vars.KEY_VAR_NAME] || steps.quota.outputs.selected_key == 'secondary' && secrets[vars.KEY_VAR_NAME_2] || '' }}
+          LLXPRT_DEFAULT_PROVIDER: openai
+          LLXPRT_DEFAULT_MODEL: gemma4:e2b-it-qat
+          OPENAI_BASE_URL: http://127.0.0.1:12644/v1
+          OPENAI_API_KEY: ollama-local-only
+          LLXPRT_CONTEXT_LIMIT: '32768'
+          LLXPRT_MAX_OUTPUT_TOKENS: '8192'
         run: bun scripts/generate-release-notes.ts
 
       # Marketplace publishing authenticates via Microsoft Entra ID using GitHub
