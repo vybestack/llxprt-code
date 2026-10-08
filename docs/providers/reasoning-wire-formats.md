@@ -275,7 +275,9 @@ Claude Opus 5 aliases select `thinking` enablement and `anthropic` effort:
 If `reasoning.includeInResponse` is `false`, adaptive thinking uses
 `"display": "omitted"`. `reasoning.enabled=false` emits
 `{ "thinking": { "type": "disabled" } }` only on models that support disabled
-thinking, and effort is omitted.
+thinking. On Claude Opus 5, `reasoning.enabled=false` emits
+`output_config.effort`; Opus 5 accepts disabled thinking only at effort `high`
+or lower, so `xhigh` and `max` are clamped to `high`.
 
 ### Sonnet 5.5 thinking off
 

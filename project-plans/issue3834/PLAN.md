@@ -162,10 +162,9 @@ silent downgrade is still caught.
 
 File: `packages/providers/src/anthropic/AnthropicModelData.ts`
 
-Keep the anchored-regex discipline. No substring matching. Near-misses
-(`claude-opus-5-50`, `claude-opus-5-5-mini`, `claude-sonnet-5-50`,
-`claude-haiku-5-50`, `anthropic/claude-opus-5-5`, leading/trailing whitespace)
-must not match any new predicate.
+Keep the anchored-regex discipline. No substring matching. Near-misses (`claude-opus-5-50`, `claude-sonnet-5-50`,
+`claude-haiku-5-50`, `anthropic/claude-opus-5-5`, and leading/trailing
+whitespace) must not match any new predicate.
 
 1. `isOpus46Plus` must accept `claude-opus-5-5`. Extend the version alternation
    in `OPUS_46_PLUS_PATTERN`; do not loosen the anchor.
@@ -452,15 +451,6 @@ Nothing in PASS 4 touches `claudeModelIdentity.ts` or
 - Do not sweep every `/model claude-opus-5` example in tutorials and recipes;
   those are illustrative, not catalogs.
 
-### WP6 — Smoke profiles
-
-These already exist (created during an earlier pass) and are user-global files
-outside the repo. Verify, do not commit:
-
-- `~/Library/Preferences/llxprt-code/profiles/opus.json` → `claude-opus-5-5`
-- `~/Library/Preferences/llxprt-code/profiles/sonnet.json` → `claude-sonnet-5-5`
-- `~/Library/Preferences/llxprt-code/profiles/haiku.json` → `claude-haiku-5-5`
-
 ### Pass 4 tests
 
 1. `modelSupportsPrefill` false for all three 5.5 IDs; still true for
@@ -606,11 +596,8 @@ anything from a whole-directory `bun test`.
 using real sibling models (`claude-opus-5` against `claude-opus-5-5`,
 `claude-haiku-4-5-20251001` against `claude-haiku-5-5`) and the minimal lexical
 neighbours needed to show the boundary is exact, such as a trailing-digit
-variant, a vendor prefix, or surrounding whitespace. `claude-opus-5-5-mini` is
-not a model and never will be. Writing tests around a fabricated ID sent one run
-down a design rabbit hole about claim-versus-identity semantics for something
-that cannot occur. Keep the regexes strict; do not build test suites or change
-production matching semantics around invented names.
+variant, a vendor prefix, or surrounding whitespace. Fabricated suffixes are not useful evidence. Keep regexes strict and test real
+sibling IDs, trailing-digit variants, vendor prefixes, and surrounding whitespace.
 
 ## Test discipline
 
@@ -646,27 +633,6 @@ bun scripts/start.ts --profile-load sonnet "write me a haiku and nothing else"
 bun scripts/start.ts --profile-load haiku  "write me a haiku and nothing else"
 ```
 
-Smoke-test status: all three passed on 2026-10-08 after the PASS 1 header and
-`supportsAdaptiveThinking` changes, against the live subscription endpoint.
-Recorded output:
-
-```
-[opus:claude-opus-5-5]     Morning code compiles, / silent tests turn green like leaves, / commit, push, and rest.
-[sonnet:claude-sonnet-5-5] Quiet morning code, / tests bloom green in the terminal, / commits drift like soft rain
-[haiku:claude-haiku-5-5]   Autumn wind lifts the leaves / Quiet streets hold the last light / Cold rain softens stone
-```
-
-This confirms the User-Agent floor and the adaptive-thinking wire shape end to
-end, and confirms that live Anthropic access works on this machine, which PASS 5
-depends on. Re-run all three after every later pass. If a run fails on
-authentication rather than on the model path, report it as an environment
-blocker with the exact error. Never mark a smoke test passed without its output.
-
-Long-command note for this machine: an external watchdog can SIGTERM a
-foreground process group after roughly two minutes regardless of the tool
-timeout. Launch anything longer (full test suite, build) with `nohup ... &` into
-a log under the repo's gitignored `tmp/` directory and poll, and never write
-verification logs to bare `/tmp` paths, which sibling checkouts truncate.
 
 ## Nothing is deferred
 

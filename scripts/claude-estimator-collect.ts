@@ -96,6 +96,7 @@ export const CLAUDE_TARGETS: readonly ClaudeTargetSpec[] = Object.freeze([
 ]);
 
 export interface ClaudeSanitizedRow {
+  readonly issue: number;
   readonly target: string;
   readonly model: string;
   readonly activeProvider: string;
@@ -404,6 +405,7 @@ async function collectOne(
   target: ClaudeTargetSpec,
   item: ClaudeCorpusItem,
   runDir: string,
+  issue: number,
 ): Promise<ClaudeSanitizedRow> {
   const cacheHome = path.join(runDir, 'cache');
   await fsp.mkdir(cacheHome, { recursive: true });
@@ -426,6 +428,7 @@ async function collectOne(
   const features = extractClaudeContentFeatures(promptText);
 
   return {
+    issue,
     target: target.key,
     model: target.model,
     activeProvider: usage.provider,
@@ -469,6 +472,7 @@ async function collectWithRetries(
   target: ClaudeTargetSpec,
   item: ClaudeCorpusItem,
   artifactsDir: string,
+  issue: number,
 ): Promise<ClaudeSanitizedRow> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -476,7 +480,7 @@ async function collectWithRetries(
       path.join(artifactsDir, `${target.key}-${item.id}-`),
     );
     try {
-      const row = await collectOne(target, item, runDir);
+      const row = await collectOne(target, item, runDir, issue);
       await fsp.rm(runDir, { recursive: true, force: true });
       return row;
     } catch (error) {
@@ -526,6 +530,7 @@ export interface CollectOptions {
   readonly artifactsDir: string;
   readonly target?: string;
   readonly corpusId?: number;
+  readonly issue: number;
 }
 
 export async function collectClaude(options: CollectOptions): Promise<void> {
@@ -552,7 +557,12 @@ export async function collectClaude(options: CollectOptions): Promise<void> {
     for (const item of items) {
       const key = `${target.key}:${item.id}`;
       if (done.has(key)) continue;
-      const row = await collectWithRetries(target, item, artifactsDir);
+      const row = await collectWithRetries(
+        target,
+        item,
+        artifactsDir,
+        options.issue,
+      );
       await fsp.mkdir(path.dirname(options.resultsPath), { recursive: true });
       await fsp.appendFile(
         options.resultsPath,
@@ -591,6 +601,7 @@ async function main(): Promise<void> {
     artifactsDir: flags['artifacts'],
     target: flags['target'],
     corpusId: flags['id'] === undefined ? undefined : Number(flags['id']),
+    issue: Number(flags['issue'] ?? 2835),
   });
 }
 

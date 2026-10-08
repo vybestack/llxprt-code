@@ -158,10 +158,7 @@ export function buildAnthropicNativeReasoningConfig(
 
   const resolved = resolveReasoningConfiguration({
     nativeAdapter: 'anthropic',
-    allowEffortWhenDisabled:
-      input.settings.enabled === false &&
-      resolveThinkingOffMode(input.model) !== undefined &&
-      thinkingOffRequiresEffortAtOrBelowHigh(input.model),
+    allowEffortWhenDisabled: isCappedThinkingOffRequest(input),
     reasoning: {
       enabled: input.settings.enabled,
       effort: input.settings.effort,
@@ -504,24 +501,24 @@ function readSelectedEffort(
  * Caps only thinking-off requests for models whose API rejects high effort
  * in that mode; adaptive-thinking requests keep their normal effort range.
  */
+function isCappedThinkingOffRequest(input: NativeConfigInput): boolean {
+  return (
+    input.settings.enabled === false &&
+    resolveThinkingOffMode(input.model) !== undefined &&
+    thinkingOffRequiresEffortAtOrBelowHigh(input.model)
+  );
+}
+
 function shouldCapThinkingOffEffort(
   input: NativeConfigInput,
   resolved: ResolvedReasoningConfiguration,
   effort: string,
 ): boolean {
-  if (
-    input.settings.enabled !== false ||
-    resolved.enabled.state !== 'emitted'
-  ) {
-    return false;
-  }
-  if (resolveThinkingOffMode(input.model) === undefined) {
-    return false;
-  }
-  if (!thinkingOffRequiresEffortAtOrBelowHigh(input.model)) {
-    return false;
-  }
-  return effort === 'max' || effort === 'xhigh';
+  return (
+    resolved.enabled.state === 'emitted' &&
+    isCappedThinkingOffRequest(input) &&
+    (effort === 'max' || effort === 'xhigh')
+  );
 }
 
 function readNormalizedEffort(

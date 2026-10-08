@@ -267,29 +267,30 @@ export function modelSupportsPrefill(modelId: string | undefined): boolean {
   );
 }
 
-/**
- * Whether the model supports adaptive thinking (the Anthropic `effort`
- * parameter). Currently Opus 4.6+, Sonnet 5, and Fable 5.
- */
 const ADAPTIVE_THINKING_PREDICATES: ReadonlyArray<
   (modelId: string) => boolean
 > = [isOpus46Plus, isSonnet5, isSonnet55, isHaiku55, isFable5];
 
+/**
+ * Whether the model supports adaptive thinking (the Anthropic `effort` parameter).
+ * Currently Opus 4.6+, Sonnet 5/5.5, Haiku 5.5, and Fable 5.
+ */
 export function supportsAdaptiveThinking(modelId: string): boolean {
   return ADAPTIVE_THINKING_PREDICATES.some((predicate) => predicate(modelId));
 }
 
 const OPUS_5_PATTERN = /^claude-opus-5(-latest|-\d{8})?$/i;
 
-/**
- * Whether the model accepts the explicit disabled thinking mode. This is kept
- * narrower than adaptive-thinking support because those capabilities differ.
- */
+/** The model-supported representation for turning off up-front thinking. */
 export type ThinkingOffMode = 'disabled' | 'between_tools';
 
 /**
  * Selects the API's distinct thinking-off representation; some newer models
  * accept neither disabled mode and must retain the existing omit behavior.
+ */
+/**
+ * Whether the model accepts an explicit disabled thinking mode. This is kept
+ * narrower than adaptive-thinking support because those capabilities differ.
  */
 export function resolveThinkingOffMode(
   modelId: string,

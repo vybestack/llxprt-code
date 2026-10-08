@@ -1,6 +1,6 @@
 {
   "source": {
-    "issue": 2835,
+    "issue": 3834,
     "canonicalModel": "claude-haiku-5-5",
     "activeProvider": "claudecode",
     "endpointHost": "api.anthropic.com",

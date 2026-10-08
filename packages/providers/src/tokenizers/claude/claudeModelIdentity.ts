@@ -103,7 +103,10 @@ function matchesAnchoredPointRelease(prefix: string, model: string): boolean {
 }
 
 export function isClaudeOpus5PointReleaseModel(model: string): boolean {
-  return matchesAnchoredPointRelease(OPUS_5_PREFIX, model);
+  return (
+    !isSanctionedClaudeOpus5Point5Model(model) &&
+    matchesAnchoredPointRelease(OPUS_5_PREFIX, model)
+  );
 }
 
 export function isClaudeFable5PointReleaseModel(model: string): boolean {

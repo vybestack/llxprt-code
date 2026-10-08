@@ -151,6 +151,22 @@ describe('Anthropic thinking-off modes and effort caps (@issue:3834)', () => {
     expect(logger.warnings.length).toBeGreaterThan(0);
   });
 
+  it('emits disabled thinking with effort clamped to high on Opus 5 @issue:3834', async () => {
+    const { body } = await prepare({
+      model: 'claude-opus-5',
+      modelBehavior: {
+        'reasoning.enabled': false,
+        'reasoning.effort': 'max',
+        'reasoning.effortWireFormat': 'anthropic',
+        'reasoning.enabledWireFormat': 'thinking',
+      },
+    });
+    expect(reasoningFields(body)).toStrictEqual({
+      thinking: { type: 'disabled' },
+      output_config: { effort: 'high' },
+    });
+  });
+
   it('keeps disabled thinking on Opus 5 @issue:3834', async () => {
     const { body } = await prepare({
       model: 'claude-opus-5',

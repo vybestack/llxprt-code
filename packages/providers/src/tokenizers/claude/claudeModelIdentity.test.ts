@@ -171,6 +171,11 @@ describe('Claude 5 point-release model identity', () => {
     expect(isClaudeOpus5PointReleaseModel('claude-fable-5-1')).toBe(false);
   });
 
+  it('keeps Opus 5.5 out of Opus 5 point-release calibration inheritance @issue:3834', () => {
+    expect(isClaudeOpus5PointReleaseModel('claude-opus-5-5')).toBe(false);
+    expect(isSanctionedClaudeOpus5Model('claude-opus-5-5')).toBe(false);
+  });
+
   it('keeps point releases outside the sanctioned identity', () => {
     expect(isClaudeOpus5PointReleaseModel('claude-opus-5-1')).toBe(true);
     expect(isSanctionedClaudeOpus5Model('claude-opus-5-1')).toBe(false);
