@@ -35,6 +35,7 @@ import {
   type AnthropicThinkingParameter,
 } from './AnthropicRequestBuilder.js';
 import {
+  enforcesPreservedThinkingPrefixCheck,
   isFable5,
   supportsAdaptiveThinking,
   resolveThinkingOffMode,
@@ -157,6 +158,10 @@ export function buildAnthropicNativeReasoningConfig(
 
   const resolved = resolveReasoningConfiguration({
     nativeAdapter: 'anthropic',
+    allowEffortWhenDisabled:
+      input.settings.enabled === false &&
+      resolveThinkingOffMode(input.model) !== undefined &&
+      thinkingOffRequiresEffortAtOrBelowHigh(input.model),
     reasoning: {
       enabled: input.settings.enabled,
       effort: input.settings.effort,
@@ -174,8 +179,12 @@ export function buildAnthropicNativeReasoningConfig(
     input.settings.enabled !== undefined
       ? buildLegacyAutoConfig(input, resolved)
       : buildSelectedConfig(input, resolved);
+  const thinking = applyPreservedThinkingPolicy(
+    input.model,
+    translated.thinking,
+  );
   return {
-    thinking: translated.thinking,
+    thinking,
     outputConfig: mergeOutputConfig(
       explicit.outputConfig,
       translated.outputConfig,
@@ -220,6 +229,23 @@ function readExplicitThinking(value: unknown): AnthropicThinkingParameter {
   // thinking modes keep working and generic translation stands down
   // (issue #3255).
   return { ...value, type };
+}
+
+function applyPreservedThinkingPolicy(
+  model: string,
+  thinking: AnthropicThinkingParameter | undefined,
+): AnthropicThinkingParameter | undefined {
+  if (
+    thinking === undefined ||
+    (thinking.type !== 'adaptive' && thinking.type !== 'enabled') ||
+    !enforcesPreservedThinkingPrefixCheck(model)
+  ) {
+    return thinking;
+  }
+  return {
+    ...thinking,
+    block_binding: { prefix_mismatch_behavior: 'drop_block' },
+  };
 }
 
 function readExplicitOutputConfig(
@@ -464,16 +490,30 @@ function readSelectedEffort(
     typeof mappedEffort === 'string'
       ? effort
       : normalizeEffort(input.model, effort);
-  const mode = resolveThinkingOffMode(input.model);
-  if (
-    input.settings.enabled === false &&
-    mode !== undefined &&
-    thinkingOffRequiresEffortAtOrBelowHigh(input.model) &&
-    normalized === 'max'
-  ) {
+  if (shouldCapThinkingOffEffort(input, resolved, normalized)) {
     return 'high';
   }
   return normalized;
+}
+
+function shouldCapThinkingOffEffort(
+  input: NativeConfigInput,
+  resolved: ResolvedReasoningConfiguration,
+  effort: string,
+): boolean {
+  if (
+    input.settings.enabled !== false ||
+    resolved.enabled.state !== 'emitted'
+  ) {
+    return false;
+  }
+  if (resolveThinkingOffMode(input.model) === undefined) {
+    return false;
+  }
+  if (!thinkingOffRequiresEffortAtOrBelowHigh(input.model)) {
+    return false;
+  }
+  return effort === 'max' || effort === 'xhigh';
 }
 
 function readNormalizedEffort(

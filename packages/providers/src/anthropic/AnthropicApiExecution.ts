@@ -40,12 +40,13 @@ export const CLAUDE_CLI_USER_AGENT = 'claude-cli/2.1.293 (external, cli)';
 export function mergePreservedThinkingBetaHeader(
   headers: Record<string, string>,
   model: string,
-  thinkingType: unknown,
+  thinking: unknown,
 ): void {
-  if (
-    enforcesPreservedThinkingPrefixCheck(model) &&
-    (thinkingType === 'adaptive' || thinkingType === 'enabled')
-  ) {
+  const carriesBinding =
+    typeof thinking === 'object' &&
+    thinking !== null &&
+    'block_binding' in thinking;
+  if (enforcesPreservedThinkingPrefixCheck(model) && carriesBinding) {
     headers['anthropic-beta'] = mergeBetaHeaders(
       headers['anthropic-beta'],
       'thinking-binding-controls-2026-08-01',
@@ -63,11 +64,7 @@ export function buildAnthropicRequestHeaders(params: {
   thinking: unknown;
 }): Record<string, string> {
   const headers = buildAnthropicCustomHeaders(params);
-  const thinkingType =
-    typeof params.thinking === 'object' && params.thinking !== null
-      ? (params.thinking as { type?: unknown }).type
-      : undefined;
-  mergePreservedThinkingBetaHeader(headers, params.model, thinkingType);
+  mergePreservedThinkingBetaHeader(headers, params.model, params.thinking);
   return headers;
 }
 

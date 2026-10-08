@@ -187,6 +187,50 @@ describe('Anthropic thinking-off modes and effort caps (@issue:3834)', () => {
     },
   );
 
+  it('caps mapped xhigh only when a capped thinking-off mode is emitted @issue:3834', async () => {
+    const capped = await prepare({
+      model: 'claude-sonnet-5-5',
+      modelBehavior: {
+        'reasoning.enabled': false,
+        'reasoning.effort': 'xhigh',
+        'reasoning.effortMap': { xhigh: 'xhigh' },
+        'reasoning.effortWireFormat': 'anthropic',
+        'reasoning.enabledWireFormat': 'thinking',
+      },
+    });
+    expect(reasoningFields(capped.body)).toStrictEqual({
+      thinking: { type: 'between_tools' },
+      output_config: { effort: 'high' },
+    });
+
+    const omitted = await prepare({
+      model: 'claude-sonnet-5-5',
+      modelBehavior: {
+        'reasoning.enabled': false,
+        'reasoning.enabledMap': { false: null },
+        'reasoning.effort': 'max',
+        'reasoning.effortWireFormat': 'anthropic',
+        'reasoning.enabledWireFormat': 'thinking',
+      },
+    });
+    expect(reasoningFields(omitted.body)).toStrictEqual({
+      output_config: { effort: 'max' },
+    });
+  });
+
+  it('keeps unrelated Sonnet 4.5 disabled effort suppressed @issue:3834', async () => {
+    const { body } = await prepare({
+      model: 'claude-sonnet-4-5-20250929',
+      modelBehavior: {
+        'reasoning.enabled': false,
+        'reasoning.effort': 'high',
+        'reasoning.effortWireFormat': 'anthropic',
+        'reasoning.enabledWireFormat': 'thinking',
+      },
+    });
+    expect(reasoningFields(body)).toStrictEqual({});
+  });
+
   it('does not cap selected-path Sonnet 5 disabled effort @issue:3834', async () => {
     const { body } = await prepare({
       model: 'claude-sonnet-5',
@@ -200,9 +244,7 @@ describe('Anthropic thinking-off modes and effort caps (@issue:3834)', () => {
       },
     });
 
-    expect(reasoningFields(body)).toStrictEqual({
-      output_config: { effort: 'max' },
-    });
+    expect(reasoningFields(body)).toStrictEqual({});
   });
 
   it.each([

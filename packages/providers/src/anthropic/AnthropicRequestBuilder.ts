@@ -15,11 +15,7 @@ import type {
   AnthropicMessage,
   AnthropicMessageBlock,
 } from './AnthropicMessageNormalizer.js';
-import {
-  enforcesPreservedThinkingPrefixCheck,
-  isFable5,
-  supportsAdaptiveThinking,
-} from './AnthropicModelData.js';
+import { isFable5, supportsAdaptiveThinking } from './AnthropicModelData.js';
 
 /**
  * Top-level sampling parameters the Anthropic Messages API accepts on the
@@ -346,9 +342,6 @@ function buildAdaptiveConfig(
   };
   if (display) {
     thinking.display = display;
-  }
-  if (enforcesPreservedThinkingPrefixCheck(model)) {
-    thinking.block_binding = { prefix_mismatch_behavior: 'drop_block' };
   }
   const config: AnthropicThinkingConfig = { thinking };
   if (thinkingEffort) {

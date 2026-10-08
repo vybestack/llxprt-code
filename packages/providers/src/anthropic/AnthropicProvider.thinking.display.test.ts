@@ -51,8 +51,10 @@ describe('AnthropicProvider thinking display field @plan:PLAN-ANTHROPIC-THINKING
       }),
     );
     await generator.next();
-    expect(mockMessagesCreate).toHaveBeenCalled();
-    return mockMessagesCreate.mock.calls[0][0] as AnthropicRequestBody;
+    const calls = mockMessagesCreate.mock.calls;
+    const latestCall = calls[calls.length - 1];
+    expect(latestCall).toBeDefined();
+    return latestCall[0] as AnthropicRequestBody;
   }
 
   it('should set display:summarized for Opus 4.8 when reasoning.includeInResponse is true @issue:1723', async () => {
@@ -133,9 +135,10 @@ describe('AnthropicProvider thinking display field @plan:PLAN-ANTHROPIC-THINKING
       'claude-haiku-5-5',
     ]) {
       const request = await captureRequest(model);
-      expect(request.thinking).toStrictEqual({
+      expect(request.thinking as Record<string, unknown>).toStrictEqual({
         type: 'adaptive',
         display: 'summarized',
+        block_binding: { prefix_mismatch_behavior: 'drop_block' },
       });
       expect(request.thinking?.type).not.toBe('enabled');
       expect(request.thinking).not.toHaveProperty('budget_tokens');

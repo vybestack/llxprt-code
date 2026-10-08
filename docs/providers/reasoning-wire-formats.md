@@ -664,8 +664,10 @@ Anthropic, and OpenRouter reasoning shapes together.
 
 ## Disablement, suppression, and warnings
 
-`reasoning.enabled=false` suppresses generic effort. If the selected format and
-model support a disable form, LLxprt Code emits it. If no disable form exists,
+`reasoning.enabled=false` normally suppresses generic effort. Anthropic's
+selected `anthropic` effort plus `thinking` enablement path retains effort only
+when it emits a model-supported `disabled` or `between_tools` mode; models with
+an effort cap clamp `xhigh` and `max` to `high`. If no disable form exists,
 LLxprt Code omits effort and logs a warning.
 
 A warning is also logged when:

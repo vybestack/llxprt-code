@@ -82,6 +82,17 @@ describe('@issue:3834 Claude 5.5 estimator identities', () => {
         expect(registry.claimsModel(model)).toBe(true);
         expect(result.family).toBe(family);
         expect(result.estimatorVersion).toBe(calibration.estimatorVersion);
+        const varied = await registry.estimatePrompt({
+          ...request(model),
+          finalizedProjection: {
+            kind: 'llxprt-provider-prompt-v3',
+            protocol: 'anthropic-messages',
+            promptText: `${promptText}
+${'distinct input '.repeat(300)}`,
+          },
+        });
+        expect(varied.count).toBeGreaterThan(result.count);
+        expect(result.count).toBeGreaterThan(0);
         expect(warning).not.toHaveBeenCalled();
       } finally {
         warning.mockRestore();
