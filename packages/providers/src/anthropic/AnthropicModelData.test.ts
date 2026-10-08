@@ -406,8 +406,12 @@ describe('Claude 5.5 model data @issue:3834', () => {
       'claude-haiku-5-5',
     ]) {
       expect(enforcesPreservedThinkingPrefixCheck(model)).toBe(true);
-      expect(enforcesPreservedThinkingPrefixCheck(`${model}-latest`)).toBe(true);
-      expect(enforcesPreservedThinkingPrefixCheck(`${model}-20261008`)).toBe(true);
+      expect(enforcesPreservedThinkingPrefixCheck(`${model}-latest`)).toBe(
+        true,
+      );
+      expect(enforcesPreservedThinkingPrefixCheck(`${model}-20261008`)).toBe(
+        true,
+      );
     }
     for (const model of [
       'claude-opus-5',
