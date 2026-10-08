@@ -12,6 +12,7 @@ import {
   isSonnet55,
   isHaiku55,
   isFable5,
+  enforcesPreservedThinkingPrefixCheck,
   thinkingOffRequiresEffortAtOrBelowHigh,
   supportsAdaptiveThinking,
   modelSupportsPrefill,
@@ -396,6 +397,30 @@ describe('AnthropicModelData Claude Fable 5 @issue:2328', () => {
 
 describe('Claude 5.5 model data @issue:3834', () => {
   const models = ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'];
+
+  it('enforces preserved-thinking checks across exact model qualifiers @issue:3834', () => {
+    for (const model of [
+      'claude-fable-5-1',
+      'claude-opus-5-5',
+      'claude-sonnet-5-5',
+      'claude-haiku-5-5',
+    ]) {
+      expect(enforcesPreservedThinkingPrefixCheck(model)).toBe(true);
+      expect(enforcesPreservedThinkingPrefixCheck(`${model}-latest`)).toBe(true);
+      expect(enforcesPreservedThinkingPrefixCheck(`${model}-20261008`)).toBe(true);
+    }
+    for (const model of [
+      'claude-opus-5',
+      'claude-fable-5',
+      'claude-sonnet-5',
+      'claude-opus-4-8',
+      'anthropic/claude-opus-5-5',
+      ' claude-opus-5-5',
+      'claude-opus-5-5 ',
+    ]) {
+      expect(enforcesPreservedThinkingPrefixCheck(model)).toBe(false);
+    }
+  });
 
   it('supports adaptive thinking only for exact 5.5 model IDs', () => {
     for (const model of models)

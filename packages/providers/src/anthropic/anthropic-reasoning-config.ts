@@ -231,6 +231,10 @@ function readExplicitThinking(value: unknown): AnthropicThinkingParameter {
   return { ...value, type };
 }
 
+/**
+ * Adds drop behavior only to thinking modes that carry preserved signed blocks;
+ * thinking-off modes reject the binding field.
+ */
 function applyPreservedThinkingPolicy(
   model: string,
   thinking: AnthropicThinkingParameter | undefined,
@@ -496,6 +500,10 @@ function readSelectedEffort(
   return normalized;
 }
 
+/**
+ * Caps only thinking-off requests for models whose API rejects high effort
+ * in that mode; adaptive-thinking requests keep their normal effort range.
+ */
 function shouldCapThinkingOffEffort(
   input: NativeConfigInput,
   resolved: ResolvedReasoningConfiguration,

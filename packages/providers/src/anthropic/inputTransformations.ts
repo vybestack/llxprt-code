@@ -8,6 +8,10 @@ export interface InputTransformationLogger {
   debug: (message: () => string) => void;
 }
 
+/**
+ * Logs API-reported prompt transformations for diagnosing prefix-binding drops.
+ * Unknown entry values remain visible because the API may add new variants.
+ */
 export function logInputTransformations(
   response: unknown,
   logger: InputTransformationLogger,

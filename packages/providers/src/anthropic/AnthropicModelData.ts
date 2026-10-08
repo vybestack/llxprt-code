@@ -208,18 +208,24 @@ export function isSonnet5(modelId: string): boolean {
 }
 
 const SONNET_55_PATTERN = /^claude-sonnet-5-5$/i;
+/** Matches the dateless Sonnet 5.5 identity used by its distinct API rules. */
 export function isSonnet55(modelId: string): boolean {
   return SONNET_55_PATTERN.test(modelId);
 }
 
 const HAIKU_55_PATTERN = /^claude-haiku-5-5$/i;
+/** Matches the dateless Haiku 5.5 identity used by its distinct API rules. */
 export function isHaiku55(modelId: string): boolean {
   return HAIKU_55_PATTERN.test(modelId);
 }
 
 const PRESERVED_THINKING_PREFIX_CHECK_PATTERN =
-  /^(?:claude-fable-5-1|claude-opus-5-5|claude-sonnet-5-5|claude-haiku-5-5)$/i;
+  /^(?:claude-fable-5-1|claude-opus-5-5|claude-sonnet-5-5|claude-haiku-5-5)(?:-latest|-\d{8})?$/i;
 
+/**
+ * Identifies models where prefix changes can invalidate preserved thinking.
+ * Qualifiers follow the same exact snapshot boundary as sibling predicates.
+ */
 export function enforcesPreservedThinkingPrefixCheck(modelId: string): boolean {
   return PRESERVED_THINKING_PREFIX_CHECK_PATTERN.test(modelId);
 }
@@ -281,6 +287,10 @@ const OPUS_5_PATTERN = /^claude-opus-5(-latest|-\d{8})?$/i;
  */
 export type ThinkingOffMode = 'disabled' | 'between_tools';
 
+/**
+ * Selects the API's distinct thinking-off representation; some newer models
+ * accept neither disabled mode and must retain the existing omit behavior.
+ */
 export function resolveThinkingOffMode(
   modelId: string,
 ): ThinkingOffMode | undefined {
@@ -303,6 +313,9 @@ const THINKING_OFF_EFFORT_CAP_PATTERNS: readonly RegExp[] = [
   /^claude-haiku-5-5$/i,
 ];
 
+/**
+ * Identifies thinking-off modes whose API contract caps effort at `high`.
+ */
 export function thinkingOffRequiresEffortAtOrBelowHigh(
   modelId: string,
 ): boolean {

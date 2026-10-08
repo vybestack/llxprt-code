@@ -332,6 +332,7 @@ type AnthropicThinkingConfig = {
  * summaries, or 'omitted' when `includeInResponse` is explicitly false.
  * Fable 5 never returns raw chain-of-thought regardless of this setting.
  */
+/** Builds the adaptive wire shape, whose accepted fields differ from budgeted thinking. */
 function buildAdaptiveConfig(
   model: string,
   thinkingEffort?: 'low' | 'medium' | 'high' | 'max',

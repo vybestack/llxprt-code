@@ -46,6 +46,7 @@ function matchesAnchoredIdentity(prefix: string, model: string): boolean {
   return qualifier.startsWith('-') && isCompactDateSnapshot(qualifier.slice(1));
 }
 
+/** Keeps Opus 5.5 identities out of the broader Opus 5 calibration family. */
 export function isSanctionedClaudeOpus5Model(model: string): boolean {
   return (
     !isSanctionedClaudeOpus5Point5Model(model) &&
@@ -53,14 +54,17 @@ export function isSanctionedClaudeOpus5Model(model: string): boolean {
   );
 }
 
+/** Accepts only Opus 5.5 aliases and valid dated snapshots for its own fit. */
 export function isSanctionedClaudeOpus5Point5Model(model: string): boolean {
   return matchesAnchoredIdentity(OPUS_5_5_PREFIX, model);
 }
 
+/** Restricts Sonnet's calibration to its own sanctioned model identity. */
 export function isSanctionedClaudeSonnet5Point5Model(model: string): boolean {
   return matchesAnchoredIdentity(SONNET_5_5_PREFIX, model);
 }
 
+/** Restricts Haiku's calibration to its own sanctioned model identity. */
 export function isSanctionedClaudeHaiku5Point5Model(model: string): boolean {
   return matchesAnchoredIdentity(HAIKU_5_5_PREFIX, model);
 }

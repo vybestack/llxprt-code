@@ -36,6 +36,7 @@ export interface GenericReasoningSettings {
 
 export interface ReasoningResolverInput {
   readonly nativeAdapter: NativeReasoningAdapter;
+  /** Preserve Anthropic effort when the selected thinking-off mode allows it. */
   readonly allowEffortWhenDisabled?: boolean;
   readonly chatBaseUrl?: string;
   readonly reasoning: GenericReasoningSettings;

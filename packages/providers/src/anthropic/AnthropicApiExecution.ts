@@ -37,6 +37,7 @@ export const CLAUDE_CLI_USER_AGENT = 'claude-cli/2.1.293 (external, cli)';
 /**
  * Merge beta headers, ensuring no duplicates
  */
+/** Adds binding controls only when a request uses preserved-thinking validation. */
 export function mergePreservedThinkingBetaHeader(
   headers: Record<string, string>,
   model: string,
@@ -54,6 +55,7 @@ export function mergePreservedThinkingBetaHeader(
   }
 }
 
+/** Builds request headers and adds the binding beta only for eligible models. */
 export function buildAnthropicRequestHeaders(params: {
   baseHeaders: Record<string, string>;
   isOAuth: boolean;
