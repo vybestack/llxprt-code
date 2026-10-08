@@ -136,10 +136,11 @@ Max output tokens configured: **128,000**.
 Reasoning is enabled by default for `claude-(opus|sonnet|haiku|fable)` models,
 with `reasoning.effort` set to **`high`** only for `claude-opus-5`,
 `claude-opus-5-5`, `claude-opus-4-8`, `claude-fable-5-1`, `claude-fable-5`,
-`claude-sonnet-4-6`, `claude-sonnet-5-5`, `claude-sonnet-5`, and
-`claude-haiku-5-5`.
-Other matching models (for example, `claude-haiku-4-5`) get reasoning enabled
-without a default effort. Temperature, `top_p`, and `top_k` are disallowed for
+`claude-sonnet-4-6`, `claude-sonnet-5-5`, and `claude-sonnet-5`.
+Other matching models (for example, `claude-haiku-4-5` and
+`claude-haiku-5-5`) get reasoning enabled without a default effort. Anthropic's
+documented default effort for Haiku 5.5 is `medium`; llxprt leaves effort unset
+so that default applies. Temperature, `top_p`, and `top_k` are disallowed for
 all `claude-(opus|sonnet|haiku|fable)` models (reasoning models manage sampling
 internally).
 

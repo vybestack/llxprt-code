@@ -684,11 +684,7 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
       const entry = findBuiltinAliasEntry(alias);
       expect(entry).toBeDefined();
       const rules = configuredModelDefaultRules(entry);
-      for (const model of [
-        'claude-opus-5-5',
-        'claude-sonnet-5-5',
-        'claude-haiku-5-5',
-      ]) {
+      for (const model of ['claude-opus-5-5', 'claude-sonnet-5-5']) {
         const defaults = computeMatchedDefaults(model, rules);
         expect(defaults['reasoning.effort']).toBe('high');
         expect(defaults['context-limit']).toBe(1000000);
@@ -697,6 +693,14 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
         expect(defaults['reasoning.adaptiveThinking']).toBe(true);
         expect(defaults['reasoning.includeInContext']).toBe(true);
       }
+
+      const haikuDefaults = computeMatchedDefaults('claude-haiku-5-5', rules);
+      expect(haikuDefaults['reasoning.enabled']).toBe(true);
+      expect(haikuDefaults['reasoning.adaptiveThinking']).toBe(true);
+      expect(haikuDefaults['reasoning.includeInContext']).toBe(true);
+      expect(haikuDefaults['reasoning.effort']).toBeUndefined();
+      expect(haikuDefaults['context-limit']).toBe(1000000);
+      expect(haikuDefaults['maxOutputTokens']).toBe(128000);
     }
   });
 

@@ -218,9 +218,10 @@ Files: `packages/providers/src/composition/aliases/claudecode.config` and
 3. The rule `"claude-(opus-5|opus-4-8|fable-5-1|fable-5|sonnet-4-6|sonnet-5)"`
    (effort high / `context-limit` 1000000 / `maxOutputTokens` 128000) is an
    unanchored regex, so `claude-opus-5-5` and `claude-sonnet-5-5` already match
-   via their `claude-opus-5` / `claude-sonnet-5` prefixes. `claude-haiku-5-5`
-   does not — add `haiku-5-5` to the alternation. Prove all three match with a
-   test rather than by inspection.
+   via their `claude-opus-5` / `claude-sonnet-5` prefixes. Give
+   `claude-haiku-5-5` a separate anchored rule with only `context-limit` and
+   `maxOutputTokens`, preserving broad reasoning defaults without pinning effort.
+   Prove all three resolve correctly with a test rather than by inspection.
 4. The rule `"^claude-(opus-5|opus-4-8|sonnet-5)$"` (`max-image-dimension: 2000`)
    must extend to `opus-5-5`, `sonnet-5-5`, `haiku-5-5`. These are
    current-generation models and take the hard cap, not legacy advisory resize.
@@ -283,9 +284,10 @@ File: `packages/cli/src/ui/components/ProfileCreateWizard/constants.ts`
 6. `providerAliases.claudecode.factory.test.ts`: update
    `EXPECTED_CLAUDECODE_CATALOG` (it pins the whole ordered catalog literally)
    and the `defaultModel` assertion.
-7. `providerAliases.modelDefaults.test.ts`: all three resolve
-   `reasoning.effort: "high"`, `context-limit: 1000000`,
-   `maxOutputTokens: 128000`, plus the broad adaptive-thinking settings.
+7. `providerAliases.modelDefaults.test.ts`: Opus 5.5 and Sonnet 5.5 resolve
+   `reasoning.effort: "high"`; all three resolve `context-limit: 1000000`,
+   `maxOutputTokens: 128000`, and the broad adaptive-thinking settings. Haiku
+   5.5 has no default `reasoning.effort`.
 8. `providerAliases.claudecode.imageBudget.test.ts`: all three get
    `max-image-dimension: 2000` and **no** `image-resize.*` keys; every model
    currently on each side of that boundary keeps its current treatment.
