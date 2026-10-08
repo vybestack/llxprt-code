@@ -60,6 +60,7 @@ function configuredStaticModelIds(entry: ProviderAliasEntry): string[] {
 // entry's id, contextWindow, and maxOutputTokens is asserted so any catalog
 // drift (retired models, geometry changes) is caught here.
 const EXPECTED_CLAUDECODE_CATALOG = [
+  { id: 'claude-opus-5-5', contextWindow: 1000000, maxOutputTokens: 128000 },
   { id: 'claude-opus-5', contextWindow: 1000000, maxOutputTokens: 128000 },
   { id: 'claude-fable-5-1', contextWindow: 1000000, maxOutputTokens: 128000 },
   { id: 'claude-fable-5', contextWindow: 1000000, maxOutputTokens: 128000 },
@@ -72,6 +73,7 @@ const EXPECTED_CLAUDECODE_CATALOG = [
     maxOutputTokens: 32000,
   },
   { id: 'claude-opus-4-5', contextWindow: 500000, maxOutputTokens: 32000 },
+  { id: 'claude-sonnet-5-5', contextWindow: 1000000, maxOutputTokens: 128000 },
   { id: 'claude-sonnet-5', contextWindow: 1000000, maxOutputTokens: 128000 },
   { id: 'claude-sonnet-4-6', contextWindow: 1000000, maxOutputTokens: 128000 },
   {
@@ -86,6 +88,7 @@ const EXPECTED_CLAUDECODE_CATALOG = [
     maxOutputTokens: 64000,
   },
   { id: 'claude-sonnet-4', contextWindow: 400000, maxOutputTokens: 64000 },
+  { id: 'claude-haiku-5-5', contextWindow: 1000000, maxOutputTokens: 128000 },
   {
     id: 'claude-haiku-4-5-20251001',
     contextWindow: 500000,
@@ -119,7 +122,7 @@ describe('claudecode alias config (@issue:2274)', () => {
   it('has a defaultModel consistent with the current catalog (A1)', () => {
     const entry = findAliasEntry('claudecode');
 
-    expect(entry.config.defaultModel).toBe('claude-opus-5');
+    expect(entry.config.defaultModel).toBe('claude-opus-5-5');
   });
 
   it('does not declare an apiKeyEnv (OAuth-only identity) (A7)', () => {

@@ -123,7 +123,7 @@ Explicit `image-resize.*` resizing runs **first**; the hard check runs **after**
 
 When neither key is set, no hard budget is enforced and image reads follow legacy/resize behavior. Both keys are independent: set one or both. Invalid values (zero, negatives, non-integers) are rejected by the settings registry.
 
-**claudecode alias defaults:** The claudecode OAuth alias applies `max-image-dimension: 2000` to `claude-opus-5`, `claude-opus-4-8`, and `claude-sonnet-5` only. These three models also do **not** receive implicit `image-resize.*` defaults (so a 3000-pixel image is hard-rejected, not silently downscaled). Older claudecode Opus/Sonnet models keep the advisory `1568`/`1568`/`1229312` resize defaults and no hard cap. Direct `anthropic` alias Opus/Sonnet models also keep the advisory resize defaults.
+**claudecode alias defaults:** The claudecode OAuth alias applies `max-image-dimension: 2000` to `claude-opus-5`, `claude-opus-5-5`, `claude-opus-4-8`, `claude-sonnet-5`, `claude-sonnet-5-5`, and `claude-haiku-5-5`. These six models also do **not** receive implicit `image-resize.*` defaults (so a 3000-pixel image is hard-rejected, not silently downscaled). Older claudecode Opus/Sonnet models keep the advisory `1568`/`1568`/`1229312` resize defaults and no hard cap. Direct `anthropic` alias Opus/Sonnet models also keep the advisory resize defaults.
 
 ## Shell Output Acquisition
 

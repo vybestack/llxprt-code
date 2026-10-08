@@ -1,6 +1,9 @@
 {
   "defaultLimit": 200000,
   "exactLimits": {
+    "claude-opus-5-5": 200000,
+    "claude-sonnet-5-5": 200000,
+    "claude-haiku-5-5": 200000,
     "glm-5.2": 200000,
     "glm-5.1": 200000,
     "glm-5": 200000,
@@ -43,13 +46,34 @@
     "claude-3-5-haiku-20241022": 200000
   },
   "prefixLimits": [
-    { "prefix": "gpt-4.1", "limit": 1000000 },
-    { "prefix": "gpt-3.5-turbo", "limit": 16385 },
-    { "prefix": "gemini-2.5-pro", "limit": 1048576 },
-    { "prefix": "gemini-2.5-flash", "limit": 1048576 },
-    { "prefix": "gemini-2.0-flash", "limit": 1048576 },
-    { "prefix": "glm-5", "limit": 200000 },
-    { "prefix": "glm-4", "limit": 128000 }
+    {
+      "prefix": "gpt-4.1",
+      "limit": 1000000
+    },
+    {
+      "prefix": "gpt-3.5-turbo",
+      "limit": 16385
+    },
+    {
+      "prefix": "gemini-2.5-pro",
+      "limit": 1048576
+    },
+    {
+      "prefix": "gemini-2.5-flash",
+      "limit": 1048576
+    },
+    {
+      "prefix": "gemini-2.0-flash",
+      "limit": 1048576
+    },
+    {
+      "prefix": "glm-5",
+      "limit": 200000
+    },
+    {
+      "prefix": "glm-4",
+      "limit": 128000
+    }
   ],
   "orderedRules": [
     {

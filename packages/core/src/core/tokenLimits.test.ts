@@ -197,6 +197,17 @@ describe('tokenLimit', () => {
     });
   });
 
+  it('pins exact limits for Claude 5.5 models independently of defaultLimit @issue:3834', () => {
+    for (const id of [
+      'claude-opus-5-5',
+      'claude-sonnet-5-5',
+      'claude-haiku-5-5',
+    ]) {
+      expect(tokenLimit(id)).toBe(200_000);
+      expect(catalogData.exactLimits[id]).toBe(200_000);
+    }
+  });
+
   describe('Codex (gpt-5.x) models', () => {
     it('should return 256K limit for gpt-5.3-codex', () => {
       expect(tokenLimit('gpt-5.3-codex')).toBe(262_144);

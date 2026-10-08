@@ -63,7 +63,7 @@ import { firstTruthyString } from '../utils/falsyFallback.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { projectAnthropicPromptEnvelope } from '../runtime/promptEnvelopeProjections.js';
 import {
-  buildAnthropicCustomHeaders,
+  buildAnthropicRequestHeaders,
   createAnthropicApiCall,
   executeAnthropicApiCall,
 } from './AnthropicApiExecution.js';
@@ -637,7 +637,15 @@ export class AnthropicProvider extends BaseProvider {
       (await this.prepareRequestContext(effectiveOptions, isOAuth, authToken));
     registerAnthropicRequestCleanup(mediaRequest, requestContext.requestBody);
 
-    const customHeaders = this.buildCustomHeaders(requestContext, isOAuth);
+    const customHeaders = buildAnthropicRequestHeaders({
+      baseHeaders: this.getCustomHeaders() ?? {},
+      isOAuth,
+      wantCaching: requestContext.wantCaching,
+      ttl: requestContext.ttl,
+      cacheLogger: requestContext.cacheLogger,
+      model: String(requestContext.requestBody['model']),
+      thinking: requestContext.requestBody['thinking'],
+    });
     const rateLimitLogger = this.getRateLimitLogger();
     await this.applyRateLimitThrottling(
       requestContext,
@@ -911,19 +919,6 @@ export class AnthropicProvider extends BaseProvider {
     } catch (error) {
       return finishMediaRequest(mediaRequest, { status: 'failed', error });
     }
-  }
-
-  private buildCustomHeaders(
-    requestContext: Awaited<ReturnType<typeof prepareAnthropicRequest>>,
-    isOAuth: boolean,
-  ) {
-    return buildAnthropicCustomHeaders({
-      baseHeaders: this.getCustomHeaders() ?? {},
-      isOAuth,
-      wantCaching: requestContext.wantCaching,
-      ttl: requestContext.ttl,
-      cacheLogger: requestContext.cacheLogger,
-    });
   }
 
   private async applyRateLimitThrottling(

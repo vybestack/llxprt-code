@@ -466,9 +466,28 @@ describe('AnthropicProvider', () => {
       const options = call[1];
       expect(options).toBeDefined();
       expect(options?.headers).toBeDefined();
-      expect(options?.headers?.['User-Agent']).toBe(
-        'claude-cli/2.1.257 (external, cli)',
+      const userAgent = options?.headers?.['User-Agent'];
+      expect(userAgent).toBe('claude-cli/2.1.293 (external, cli)');
+      const match = userAgent?.match(
+        /^claude-cli\/(\d+)\.(\d+)\.(\d+) \(external, cli\)$/,
       );
+      expect(match).not.toBeNull();
+      const version = [
+        Number(match?.[1]),
+        Number(match?.[2]),
+        Number(match?.[3]),
+      ];
+      const minimum = [2, 1, 280];
+      const compareVersions = (left: number[], right: number[]): number => {
+        for (const [index, component] of left.entries()) {
+          const difference = component - (right[index] ?? 0);
+          if (difference !== 0) {
+            return difference;
+          }
+        }
+        return 0;
+      };
+      expect(compareVersions(version, minimum)).toBeGreaterThanOrEqual(0);
     });
 
     it('should include both oauth-2025-04-20 AND interleaved-thinking-2025-05-14 in anthropic-beta headers for OAuth', async () => {

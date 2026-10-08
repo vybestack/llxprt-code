@@ -62,6 +62,13 @@ function stripTrailingDateSegment(modelId: string): string {
  */
 export const DEFAULT_MODELS: Array<Omit<IModel, 'provider'>> = [
   {
+    id: 'claude-opus-5-5',
+    name: 'Claude Opus 5.5',
+    supportedToolFormats: ['anthropic'],
+    contextWindow: 200000,
+    maxOutputTokens: 128000,
+  },
+  {
     id: 'claude-opus-5',
     name: 'Claude Opus 5',
     supportedToolFormats: ['anthropic'],
@@ -97,6 +104,13 @@ export const DEFAULT_MODELS: Array<Omit<IModel, 'provider'>> = [
     maxOutputTokens: 32000,
   },
   {
+    id: 'claude-sonnet-5-5',
+    name: 'Claude Sonnet 5.5',
+    supportedToolFormats: ['anthropic'],
+    contextWindow: 200000,
+    maxOutputTokens: 128000,
+  },
+  {
     id: 'claude-sonnet-5',
     name: 'Claude Sonnet 5',
     supportedToolFormats: ['anthropic'],
@@ -118,6 +132,13 @@ export const DEFAULT_MODELS: Array<Omit<IModel, 'provider'>> = [
     maxOutputTokens: 64000,
   },
   {
+    id: 'claude-haiku-5-5',
+    name: 'Claude Haiku 5.5',
+    supportedToolFormats: ['anthropic'],
+    contextWindow: 200000,
+    maxOutputTokens: 128000,
+  },
+  {
     id: 'claude-haiku-4-5-20251001',
     name: 'Claude Haiku 4.5',
     supportedToolFormats: ['anthropic'],
@@ -137,14 +158,13 @@ export function getLatestClaudeModel(
 ): string {
   switch (tier) {
     case 'opus':
-      return 'claude-opus-5-latest';
+      return 'claude-opus-5-5';
     case 'sonnet':
-      return 'claude-sonnet-5-latest';
+      return 'claude-sonnet-5-5';
     case 'haiku':
-      // Haiku 4 not yet available, but future-proofed
-      return 'claude-haiku-4-latest';
+      return 'claude-haiku-5-5';
     default:
-      return 'claude-sonnet-5-latest';
+      return 'claude-sonnet-5-5';
   }
 }
 
@@ -155,7 +175,7 @@ export function getLatestClaudeModel(
  * regex is used instead of a substring test so version boundaries are exact.
  */
 const OPUS_46_PLUS_PATTERN =
-  /^claude-opus-(4-latest|5-latest|4-6|4-7|4-8|5)(-\d{8})?$/i;
+  /^claude-opus-(4-latest|5-latest|4-6|4-7|4-8|5|5-5)(-\d{8})?$/i;
 
 /**
  * Whether the model is Claude Opus 4.6 or later (supports adaptive thinking,
@@ -187,6 +207,23 @@ export function isSonnet5(modelId: string): boolean {
   return SONNET_5_PATTERN.test(modelId);
 }
 
+const SONNET_55_PATTERN = /^claude-sonnet-5-5$/i;
+export function isSonnet55(modelId: string): boolean {
+  return SONNET_55_PATTERN.test(modelId);
+}
+
+const HAIKU_55_PATTERN = /^claude-haiku-5-5$/i;
+export function isHaiku55(modelId: string): boolean {
+  return HAIKU_55_PATTERN.test(modelId);
+}
+
+const PRESERVED_THINKING_PREFIX_CHECK_PATTERN =
+  /^(?:claude-fable-5-1|claude-opus-5-5|claude-sonnet-5-5|claude-haiku-5-5)$/i;
+
+export function enforcesPreservedThinkingPrefixCheck(modelId: string): boolean {
+  return PRESERVED_THINKING_PREFIX_CHECK_PATTERN.test(modelId);
+}
+
 /**
  * Anchored Fable 5 identifier: matches the bare `claude-fable-5` alias, the
  * `claude-fable-5-latest` pointer, dated snapshots
@@ -215,15 +252,25 @@ export function isFable5(modelId: string): boolean {
  * behavior for unrecognized endpoints.
  */
 export function modelSupportsPrefill(modelId: string | undefined): boolean {
-  return modelId === undefined || !isFable5(modelId);
+  // Opus 5 and Sonnet 5 also default to thinking and reject prefill in practice,
+  // but changing their existing behavior is unrelated here. Keep that
+  // inconsistency bounded to this PR.
+  return (
+    modelId === undefined ||
+    (!isFable5(modelId) && !/^claude-(?:opus|sonnet|haiku)-5-5$/i.test(modelId))
+  );
 }
 
 /**
  * Whether the model supports adaptive thinking (the Anthropic `effort`
  * parameter). Currently Opus 4.6+, Sonnet 5, and Fable 5.
  */
+const ADAPTIVE_THINKING_PREDICATES: ReadonlyArray<
+  (modelId: string) => boolean
+> = [isOpus46Plus, isSonnet5, isSonnet55, isHaiku55, isFable5];
+
 export function supportsAdaptiveThinking(modelId: string): boolean {
-  return isOpus46Plus(modelId) || isSonnet5(modelId) || isFable5(modelId);
+  return ADAPTIVE_THINKING_PREDICATES.some((predicate) => predicate(modelId));
 }
 
 const OPUS_5_PATTERN = /^claude-opus-5(-latest|-\d{8})?$/i;
@@ -232,8 +279,36 @@ const OPUS_5_PATTERN = /^claude-opus-5(-latest|-\d{8})?$/i;
  * Whether the model accepts the explicit disabled thinking mode. This is kept
  * narrower than adaptive-thinking support because those capabilities differ.
  */
+export type ThinkingOffMode = 'disabled' | 'between_tools';
+
+export function resolveThinkingOffMode(
+  modelId: string,
+): ThinkingOffMode | undefined {
+  if (isSonnet55(modelId)) {
+    return 'between_tools';
+  }
+  if (OPUS_5_PATTERN.test(modelId) || isHaiku55(modelId)) {
+    return 'disabled';
+  }
+  return undefined;
+}
+
 export function supportsDisabledThinking(modelId: string): boolean {
-  return OPUS_5_PATTERN.test(modelId);
+  return resolveThinkingOffMode(modelId) === 'disabled';
+}
+
+const THINKING_OFF_EFFORT_CAP_PATTERNS: readonly RegExp[] = [
+  /^claude-opus-5(?:-latest|-\d{8})?$/i,
+  /^claude-sonnet-5-5$/i,
+  /^claude-haiku-5-5$/i,
+];
+
+export function thinkingOffRequiresEffortAtOrBelowHigh(
+  modelId: string,
+): boolean {
+  return THINKING_OFF_EFFORT_CAP_PATTERNS.some((pattern) =>
+    pattern.test(modelId),
+  );
 }
 
 /**
@@ -245,6 +320,9 @@ export function getMaxTokensForModel(modelId: string): number {
   // API-only and can be raised via /set or a profile (maxOutputTokens).
   // isOpus46Plus uses an anchored regex so speculative IDs like
   // claude-opus-5-mini do not accidentally inherit this default.
+  if (/^claude-opus-5-5$/i.test(modelId)) {
+    return 128000;
+  }
   if (modelId.includes('claude-opus-4') || isOpus46Plus(modelId)) {
     return 32000;
   }
@@ -256,7 +334,7 @@ export function getMaxTokensForModel(modelId: string): number {
   }
   // Claude Sonnet 5 supports up to 128K max output (also matches the -latest
   // alias and dated snapshot IDs like claude-sonnet-5-YYYYMMDD).
-  if (isSonnet5(modelId)) {
+  if (isSonnet5(modelId) || isSonnet55(modelId) || isHaiku55(modelId)) {
     return 128000;
   }
   // Claude Fable 5 defaults to 40K max output on the Claude Code /
@@ -285,7 +363,7 @@ export function getContextWindowForModel(modelId: string): number {
   // Claude Opus 4.6/4.7/4.8 and Opus 5 (and the "latest" alias) default to the
   // Claude Code / subscription 200K context window. The 1M window is
   // API-only and plan-gated; raise it via /set or a profile (context-limit).
-  if (isOpus46Plus(modelId)) {
+  if (isOpus46Plus(modelId) || isSonnet55(modelId) || isHaiku55(modelId)) {
     return 200000;
   }
   // Other Claude 4 opus models have larger context windows

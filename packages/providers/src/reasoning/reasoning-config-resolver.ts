@@ -410,7 +410,14 @@ function resolveEffort(
     return { state: 'absent' };
   }
 
-  if (enabled === false) {
+  if (
+    enabled === false &&
+    !(
+      input.nativeAdapter === 'anthropic' &&
+      input.effortWireFormat === 'anthropic' &&
+      input.enabledWireFormat === 'thinking'
+    )
+  ) {
     return { state: 'suppressed', reason: 'reasoning-disabled' };
   }
 

@@ -38,10 +38,12 @@ import {
 } from '../packages/providers/src/tokenizers/claude/claudeContentFeatures.js';
 import { CLAUDE_CORPUS_VERSION } from './claude-estimator-corpus.js';
 
-const SOURCE_RESULTS = 'research/issue2835/claude5-live-results.jsonl';
-const REPORT_DIR = 'research/issue2835';
+const SOURCE_RESULTS =
+  process.argv[2] ?? 'research/issue2835/claude5-live-results.jsonl';
+const REPORT_DIR = process.argv[3] ?? 'research/issue2835';
 const FIXTURE_DIR = 'packages/providers/src/tokenizers/claude/fixtures';
-const EXPECTED_PROJECTION_REVISION = 3;
+// Keep fitting pinned to the projector that stamps newly collected rows.
+const EXPECTED_PROJECTION_REVISION = 4;
 
 interface LiveRow {
   readonly target: string;

@@ -121,4 +121,24 @@ describe('AnthropicProvider thinking display field @plan:PLAN-ANTHROPIC-THINKING
     expect(request.thinking?.type).toBe('adaptive');
     expect(request.thinking?.display).toBe('omitted');
   });
+
+  it('builds adaptive summarized thinking without a token budget for Claude 5.5 @issue:3834', async () => {
+    settingsService.set('reasoning.enabled', true);
+    settingsService.set('reasoning.adaptiveThinking', true);
+    settingsService.set('reasoning.includeInContext', true);
+    settingsService.set('reasoning.effort', 'high');
+    for (const model of [
+      'claude-opus-5-5',
+      'claude-sonnet-5-5',
+      'claude-haiku-5-5',
+    ]) {
+      const request = await captureRequest(model);
+      expect(request.thinking).toStrictEqual({
+        type: 'adaptive',
+        display: 'summarized',
+      });
+      expect(request.thinking?.type).not.toBe('enabled');
+      expect(request.thinking).not.toHaveProperty('budget_tokens');
+    }
+  });
 });

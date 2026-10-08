@@ -53,9 +53,9 @@ export interface ClaudeTargetSpec {
 }
 
 /**
- * Both targets run over the OAuth-backed `claudecode` provider against
- * `api.anthropic.com`, so the two models differ only by model identity. Fable
- * 5 is collected independently and is never allowed to reuse Opus data.
+ * All five targets run over the OAuth-backed `claudecode` provider against
+ * `api.anthropic.com`. Each model identity is collected independently; no
+ * model, including Fable 5, may reuse another model's observations.
  */
 export const CLAUDE_TARGETS: readonly ClaudeTargetSpec[] = Object.freeze([
   {
@@ -69,6 +69,27 @@ export const CLAUDE_TARGETS: readonly ClaudeTargetSpec[] = Object.freeze([
     key: 'fable5',
     profile: 'opusthinking-claudecode',
     model: 'claude-fable-5',
+    endpointHost: 'api.anthropic.com',
+    activeProvider: 'claudecode',
+  },
+  {
+    key: 'opus5_5',
+    profile: 'opus',
+    model: 'claude-opus-5-5',
+    endpointHost: 'api.anthropic.com',
+    activeProvider: 'claudecode',
+  },
+  {
+    key: 'sonnet5_5',
+    profile: 'sonnet',
+    model: 'claude-sonnet-5-5',
+    endpointHost: 'api.anthropic.com',
+    activeProvider: 'claudecode',
+  },
+  {
+    key: 'haiku5_5',
+    profile: 'haiku',
+    model: 'claude-haiku-5-5',
     endpointHost: 'api.anthropic.com',
     activeProvider: 'claudecode',
   },

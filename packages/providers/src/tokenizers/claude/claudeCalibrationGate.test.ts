@@ -22,6 +22,11 @@ import {
 import {
   CLAUDE_FABLE_5_CALIBRATION,
   CLAUDE_OPUS_5_CALIBRATION,
+  CLAUDE_OPUS_5_5_CALIBRATION,
+  CLAUDE_SONNET_5_5_CALIBRATION,
+  CLAUDE_HAIKU_5_5_CALIBRATION,
+  CLAUDE_5_FAMILY_SPECS,
+  isActivatedClaude5Spec,
 } from './claudeCalibrationAssets.js';
 
 interface CorpusObservation {
@@ -148,6 +153,21 @@ const MODELS = [
     name: 'claude-fable-5',
     calibration: CLAUDE_FABLE_5_CALIBRATION,
     corpus: loadCorpus('claude-fable-5'),
+  },
+  {
+    name: 'claude-opus-5-5',
+    calibration: CLAUDE_OPUS_5_5_CALIBRATION,
+    corpus: loadCorpus('claude-opus-5-5'),
+  },
+  {
+    name: 'claude-sonnet-5-5',
+    calibration: CLAUDE_SONNET_5_5_CALIBRATION,
+    corpus: loadCorpus('claude-sonnet-5-5'),
+  },
+  {
+    name: 'claude-haiku-5-5',
+    calibration: CLAUDE_HAIKU_5_5_CALIBRATION,
+    corpus: loadCorpus('claude-haiku-5-5'),
   },
 ] as const;
 
@@ -363,5 +383,29 @@ describe('Claude 5 model independence', () => {
     );
     expect(crossOpus).toBeLessThan(2);
     expect(crossFable).toBeLessThan(2);
+  });
+});
+
+describe('@issue:3834 Claude 5.5 activation independence', () => {
+  it('activates every 5.5 calibration and gives each family its own feature coefficient array', () => {
+    const specs = CLAUDE_5_FAMILY_SPECS.filter((spec) =>
+      spec.canonicalModelFamily.endsWith('-5-5'),
+    );
+    expect(
+      specs.map((spec) => [
+        spec.canonicalModelFamily,
+        isActivatedClaude5Spec(spec),
+      ]),
+    ).toStrictEqual([
+      ['claude-opus-5-5', true],
+      ['claude-sonnet-5-5', true],
+      ['claude-haiku-5-5', true],
+    ]);
+    const arrays = [
+      CLAUDE_OPUS_5_5_CALIBRATION.featureCoefficients,
+      CLAUDE_SONNET_5_5_CALIBRATION.featureCoefficients,
+      CLAUDE_HAIKU_5_5_CALIBRATION.featureCoefficients,
+    ];
+    expect(new Set(arrays).size).toBe(3);
   });
 });

@@ -37,7 +37,8 @@ import {
 import {
   isFable5,
   supportsAdaptiveThinking,
-  supportsDisabledThinking,
+  resolveThinkingOffMode,
+  thinkingOffRequiresEffortAtOrBelowHigh,
 } from './AnthropicModelData.js';
 
 export interface AnthropicReasoningFallbacks {
@@ -249,8 +250,9 @@ function buildLegacyAutoConfig(
   resolved: ResolvedReasoningConfiguration,
 ): AnthropicNativeReasoningConfig {
   if (input.settings.enabled === false) {
-    if (supportsDisabledThinking(input.model)) {
-      return { thinking: { type: 'disabled' } };
+    const mode = resolveThinkingOffMode(input.model);
+    if (mode !== undefined) {
+      return { thinking: { type: mode } };
     }
     warnUnsupportedDisablement(input, resolved.enabledFormat);
     return {};
@@ -346,16 +348,20 @@ function buildDisabledThinking(
   if (typeof resolved.enabled.value !== 'string') {
     throw new Error('Anthropic thinking enablement must resolve to a string');
   }
-  if (resolved.enabled.value !== 'disabled') {
+  if (
+    resolved.enabled.value !== 'disabled' &&
+    resolved.enabled.value !== 'between_tools'
+  ) {
     throw new Error(
       `reasoning.enabledMap.false value '${resolved.enabled.value}' is not supported by the Anthropic adapter`,
     );
   }
-  if (!supportsDisabledThinking(input.model)) {
+  const mode = resolveThinkingOffMode(input.model);
+  if (mode === undefined) {
     warnUnsupportedDisablement(input, resolved.enabledFormat);
     return undefined;
   }
-  return { type: 'disabled' };
+  return { type: mode };
 }
 
 function buildBudgetThinking(
@@ -454,9 +460,20 @@ function readSelectedEffort(
     input.settings.effort === undefined
       ? undefined
       : input.settings.effortMap?.[input.settings.effort];
-  return typeof mappedEffort === 'string'
-    ? effort
-    : normalizeEffort(input.model, effort);
+  const normalized =
+    typeof mappedEffort === 'string'
+      ? effort
+      : normalizeEffort(input.model, effort);
+  const mode = resolveThinkingOffMode(input.model);
+  if (
+    input.settings.enabled === false &&
+    mode !== undefined &&
+    thinkingOffRequiresEffortAtOrBelowHigh(input.model) &&
+    normalized === 'max'
+  ) {
+    return 'high';
+  }
+  return normalized;
 }
 
 function readNormalizedEffort(

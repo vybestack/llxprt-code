@@ -277,6 +277,28 @@ If `reasoning.includeInResponse` is `false`, adaptive thinking uses
 `{ "thinking": { "type": "disabled" } }` only on models that support disabled
 thinking, and effort is omitted.
 
+### Sonnet 5.5 thinking off
+
+Claude Sonnet 5.5 uses `thinking.type: "between_tools"` for its lowest
+thinking setting, which disables up-front thinking while allowing thinking
+between tool calls. This mode is accepted only at effort `low`, `medium`, or
+`high`; `xhigh` and `max` return 400. It takes no additional fields: adding
+`display`, `budget_tokens`, or `block_binding` returns 400. It requires no beta
+header.
+
+### Preserved Anthropic thinking
+
+For Claude Fable 5.1, Opus 5.5, Sonnet 5.5, and Haiku 5.5, LLxprt Code sends
+`thinking.block_binding.prefix_mismatch_behavior: "drop_block"` with the
+`thinking-binding-controls-2026-08-01` beta header. The API enforces the prefix
+check for these four models on accounts created on or after 2026-08-31.
+
+LLxprt Code renders the current date and environment into the system prompt and
+compacts conversation history client-side. Both operations change the checked
+prefix. Without `drop_block`, an enforced account receives a 400 on the first
+request after compaction or a date rollover. With `drop_block`, the API drops
+the invalid thinking block and later thinking blocks, then continues.
+
 ### Explicit Anthropic budget
 
 A legacy model with budgeted thinking needs a direct budget or a numeric

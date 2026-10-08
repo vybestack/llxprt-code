@@ -15,7 +15,11 @@ import type {
   AnthropicMessage,
   AnthropicMessageBlock,
 } from './AnthropicMessageNormalizer.js';
-import { isFable5, supportsAdaptiveThinking } from './AnthropicModelData.js';
+import {
+  enforcesPreservedThinkingPrefixCheck,
+  isFable5,
+  supportsAdaptiveThinking,
+} from './AnthropicModelData.js';
 
 /**
  * Top-level sampling parameters the Anthropic Messages API accepts on the
@@ -314,9 +318,10 @@ export type AnthropicOutputConfigParameter = Readonly<Record<string, unknown>>;
 
 type AnthropicThinkingConfig = {
   thinking?: {
-    type: 'adaptive' | 'enabled' | 'disabled';
+    type: 'adaptive' | 'enabled' | 'disabled' | 'between_tools';
     budget_tokens?: number;
     display?: 'summarized' | 'omitted';
+    block_binding?: { prefix_mismatch_behavior: 'drop_block' };
   };
   output_config?: { effort: AnthropicEffortLiteral };
 };
@@ -332,6 +337,7 @@ type AnthropicThinkingConfig = {
  * Fable 5 never returns raw chain-of-thought regardless of this setting.
  */
 function buildAdaptiveConfig(
+  model: string,
   thinkingEffort?: 'low' | 'medium' | 'high' | 'max',
   display?: 'summarized' | 'omitted',
 ): AnthropicThinkingConfig {
@@ -340,6 +346,9 @@ function buildAdaptiveConfig(
   };
   if (display) {
     thinking.display = display;
+  }
+  if (enforcesPreservedThinkingPrefixCheck(model)) {
+    thinking.block_binding = { prefix_mismatch_behavior: 'drop_block' };
   }
   const config: AnthropicThinkingConfig = { thinking };
   if (thinkingEffort) {
@@ -404,7 +413,7 @@ export function buildThinkingConfig(options: {
   // never returns raw thinking, so request `display: 'summarized'` to get
   // readable summaries instead of empty thinking blocks.
   if (isFable5(options.model)) {
-    return buildAdaptiveConfig(options.thinkingEffort, display);
+    return buildAdaptiveConfig(options.model, options.thinkingEffort, display);
   }
 
   const adaptiveCapable = supportsAdaptiveThinking(options.model);
@@ -414,7 +423,7 @@ export function buildThinkingConfig(options: {
     options.reasoningBudgetTokens == null &&
     options.adaptiveThinking !== false
   ) {
-    return buildAdaptiveConfig(options.thinkingEffort, display);
+    return buildAdaptiveConfig(options.model, options.thinkingEffort, display);
   }
 
   assertAdaptiveManualBudget(options.model, options.reasoningBudgetTokens);

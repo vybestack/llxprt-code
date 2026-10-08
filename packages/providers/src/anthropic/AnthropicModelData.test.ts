@@ -9,7 +9,10 @@ import {
   DEFAULT_MODELS,
   isOpus46Plus,
   isSonnet5,
+  isSonnet55,
+  isHaiku55,
   isFable5,
+  thinkingOffRequiresEffortAtOrBelowHigh,
   supportsAdaptiveThinking,
   modelSupportsPrefill,
   getLatestClaudeModel,
@@ -171,15 +174,15 @@ describe('AnthropicModelData Claude Sonnet 5 @issue:2289', () => {
 
   describe('getLatestClaudeModel', () => {
     it('returns the Sonnet 5 latest alias for the sonnet tier', () => {
-      expect(getLatestClaudeModel('sonnet')).toBe('claude-sonnet-5-latest');
+      expect(getLatestClaudeModel('sonnet')).toBe('claude-sonnet-5-5');
     });
 
     it('defaults to the sonnet tier', () => {
-      expect(getLatestClaudeModel()).toBe('claude-sonnet-5-latest');
+      expect(getLatestClaudeModel()).toBe('claude-sonnet-5-5');
     });
 
     it('returns the Opus latest alias for the opus tier', () => {
-      expect(getLatestClaudeModel('opus')).toBe('claude-opus-5-latest');
+      expect(getLatestClaudeModel('opus')).toBe('claude-opus-5-5');
     });
   });
 });
@@ -245,12 +248,33 @@ describe('AnthropicModelData Claude Opus 5 @issue:2665', () => {
 
   describe('getLatestClaudeModel', () => {
     it('returns the Opus 5 latest alias for the opus tier', () => {
-      expect(getLatestClaudeModel('opus')).toBe('claude-opus-5-latest');
+      expect(getLatestClaudeModel('opus')).toBe('claude-opus-5-5');
     });
   });
 });
 
 describe('modelSupportsPrefill @issue:1977', () => {
+  it('returns false for Claude 5.5 ids @issue:3834', () => {
+    for (const model of [
+      'claude-opus-5-5',
+      'claude-sonnet-5-5',
+      'claude-haiku-5-5',
+    ]) {
+      expect(modelSupportsPrefill(model)).toBe(false);
+    }
+    for (const nearMiss of [
+      'claude-opus-5-50',
+      'claude-opus-5-5-mini',
+      'claude-sonnet-5-50',
+      'claude-haiku-5-50',
+      'anthropic/claude-opus-5-5',
+      ' claude-opus-5-5',
+      'claude-opus-5-5 ',
+    ]) {
+      expect(modelSupportsPrefill(nearMiss)).toBe(true);
+    }
+  });
+
   it('returns false for Fable 5 ids (they reject assistant prefill)', () => {
     expect(modelSupportsPrefill('claude-fable-5')).toBe(false);
     expect(modelSupportsPrefill('claude-fable-5-latest')).toBe(false);
@@ -261,6 +285,7 @@ describe('modelSupportsPrefill @issue:1977', () => {
 
   it('returns true for prefill-capable Claude models', () => {
     expect(modelSupportsPrefill('claude-opus-4-8')).toBe(true);
+    expect(modelSupportsPrefill('claude-opus-5')).toBe(true);
     expect(modelSupportsPrefill('claude-sonnet-5')).toBe(true);
     expect(modelSupportsPrefill('claude-haiku-4-5-20251001')).toBe(true);
   });
@@ -364,6 +389,100 @@ describe('AnthropicModelData Claude Fable 5 @issue:2328', () => {
       expect(getContextWindowForModel('claude-fable-5-1-latest')).toBe(200000);
       expect(getContextWindowForModel('claude-fable-5-1-20260901')).toBe(
         200000,
+      );
+    });
+  });
+});
+
+describe('Claude 5.5 model data @issue:3834', () => {
+  const models = ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'];
+
+  it('supports adaptive thinking only for exact 5.5 model IDs', () => {
+    for (const model of models)
+      expect(supportsAdaptiveThinking(model)).toBe(true);
+    for (const model of [
+      'claude-opus-5-50',
+      'claude-opus-5-5-mini',
+      'claude-sonnet-5-50',
+      'claude-sonnet-5-5-mini',
+      'claude-haiku-5-50',
+      'claude-haiku-5-5-mini',
+      'anthropic/claude-opus-5-5',
+      ' claude-opus-5-5',
+      'claude-opus-5-5 ',
+    ])
+      expect(supportsAdaptiveThinking(model)).toBe(false);
+  });
+
+  it('keeps new family predicates anchored @issue:3834', () => {
+    for (const model of models) {
+      expect(isOpus46Plus(model)).toBe(model === 'claude-opus-5-5');
+      expect(isSonnet55(model)).toBe(model === 'claude-sonnet-5-5');
+      expect(isHaiku55(model)).toBe(model === 'claude-haiku-5-5');
+    }
+    for (const model of [
+      'claude-opus-5-50',
+      'claude-opus-5-5-mini',
+      'claude-sonnet-5-50',
+      'claude-sonnet-5-5-mini',
+      'claude-haiku-5-50',
+      'claude-haiku-5-5-mini',
+      'anthropic/claude-opus-5-5',
+      ' claude-opus-5-5',
+      'claude-opus-5-5 ',
+    ]) {
+      expect(isOpus46Plus(model)).toBe(false);
+      expect(isSonnet55(model)).toBe(false);
+      expect(isHaiku55(model)).toBe(false);
+    }
+  });
+
+  it('uses subscription geometry and lists each model in DEFAULT_MODELS @issue:3834', () => {
+    for (const id of models) {
+      expect(getMaxTokensForModel(id)).toBe(128000);
+      expect(getContextWindowForModel(id)).toBe(200000);
+      const model = DEFAULT_MODELS.find((candidate) => candidate.id === id);
+      expect(model).toBeDefined();
+      expect(model?.contextWindow).toBe(200000);
+      expect(model?.maxOutputTokens).toBe(128000);
+    }
+  });
+
+  it('returns the newest model for each tier and defaults to Sonnet @issue:3834', () => {
+    expect(getLatestClaudeModel('opus')).toBe('claude-opus-5-5');
+    expect(getLatestClaudeModel('sonnet')).toBe('claude-sonnet-5-5');
+    expect(getLatestClaudeModel('haiku')).toBe('claude-haiku-5-5');
+    expect(getLatestClaudeModel()).toBe('claude-sonnet-5-5');
+  });
+
+  describe('thinking-off effort cap predicate @issue:3834', () => {
+    it('matches only the capped thinking-off model identifiers', () => {
+      expect(thinkingOffRequiresEffortAtOrBelowHigh('claude-opus-5')).toBe(
+        true,
+      );
+      expect(
+        thinkingOffRequiresEffortAtOrBelowHigh('claude-opus-5-20261008'),
+      ).toBe(true);
+      expect(thinkingOffRequiresEffortAtOrBelowHigh('claude-sonnet-5-5')).toBe(
+        true,
+      );
+      expect(thinkingOffRequiresEffortAtOrBelowHigh('claude-haiku-5-5')).toBe(
+        true,
+      );
+      expect(thinkingOffRequiresEffortAtOrBelowHigh('claude-sonnet-5')).toBe(
+        false,
+      );
+      expect(thinkingOffRequiresEffortAtOrBelowHigh('claude-opus-5-mini')).toBe(
+        false,
+      );
+      expect(thinkingOffRequiresEffortAtOrBelowHigh('claude-opus-50')).toBe(
+        false,
+      );
+      expect(thinkingOffRequiresEffortAtOrBelowHigh('claude-sonnet-5-50')).toBe(
+        false,
+      );
+      expect(thinkingOffRequiresEffortAtOrBelowHigh('claude-haiku-5-50')).toBe(
+        false,
       );
     });
   });

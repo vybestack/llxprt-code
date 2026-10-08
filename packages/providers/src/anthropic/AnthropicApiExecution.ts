@@ -12,6 +12,7 @@
  */
 
 import type Anthropic from '@anthropic-ai/sdk';
+import { enforcesPreservedThinkingPrefixCheck } from './AnthropicModelData.js';
 import type { DumpMode } from '../utils/dumpContext.js';
 import { withBoundedJsonHttpBody } from '../utils/boundedJsonBody.js';
 import {
@@ -31,9 +32,45 @@ import {
   formatRateLimitSummary,
 } from './AnthropicRateLimitHandler.js';
 
+export const CLAUDE_CLI_USER_AGENT = 'claude-cli/2.1.293 (external, cli)';
+
 /**
  * Merge beta headers, ensuring no duplicates
  */
+export function mergePreservedThinkingBetaHeader(
+  headers: Record<string, string>,
+  model: string,
+  thinkingType: unknown,
+): void {
+  if (
+    enforcesPreservedThinkingPrefixCheck(model) &&
+    (thinkingType === 'adaptive' || thinkingType === 'enabled')
+  ) {
+    headers['anthropic-beta'] = mergeBetaHeaders(
+      headers['anthropic-beta'],
+      'thinking-binding-controls-2026-08-01',
+    );
+  }
+}
+
+export function buildAnthropicRequestHeaders(params: {
+  baseHeaders: Record<string, string>;
+  isOAuth: boolean;
+  wantCaching: boolean;
+  ttl: '5m' | '1h';
+  cacheLogger: { debug: (fn: () => string) => void };
+  model: string;
+  thinking: unknown;
+}): Record<string, string> {
+  const headers = buildAnthropicCustomHeaders(params);
+  const thinkingType =
+    typeof params.thinking === 'object' && params.thinking !== null
+      ? (params.thinking as { type?: unknown }).type
+      : undefined;
+  mergePreservedThinkingBetaHeader(headers, params.model, thinkingType);
+  return headers;
+}
+
 export function mergeBetaHeaders(
   existing: string | undefined,
   addition: string,
@@ -75,9 +112,8 @@ export function buildAnthropicCustomHeaders(params: {
     customHeaders = {
       ...customHeaders,
       'anthropic-beta': betaWithThinking,
-      // Fable 5.1 and other subscription models reject clients below
-      // claude-cli 2.1.255; 2.1.257 is the released version that includes it.
-      'User-Agent': 'claude-cli/2.1.257 (external, cli)',
+      // Claude subscription endpoints require at least 2.1.280 (#3834).
+      'User-Agent': CLAUDE_CLI_USER_AGENT,
     };
   }
 
