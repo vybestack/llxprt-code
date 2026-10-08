@@ -6,6 +6,7 @@
  */
 
 import { mapStopReason } from './finishReasonMapping.js';
+import { logInputTransformations } from './inputTransformations.js';
 import type Anthropic from '@anthropic-ai/sdk';
 import type {
   IContent,
@@ -153,6 +154,7 @@ export function parseAnthropicResponse(
   message: Anthropic.Message,
   options: ResponseParserOptions,
 ): IContent {
+  logInputTransformations(message, options.cacheLogger);
   const blocks = parseContentBlocks(message.content, options);
 
   const result: IContent = {

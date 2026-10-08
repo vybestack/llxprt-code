@@ -12,6 +12,7 @@
  */
 
 import type Anthropic from '@anthropic-ai/sdk';
+import { enforcesPreservedThinkingPrefixCheck } from './AnthropicModelData.js';
 import type { DumpMode } from '../utils/dumpContext.js';
 import { withBoundedJsonHttpBody } from '../utils/boundedJsonBody.js';
 import {
@@ -31,9 +32,42 @@ import {
   formatRateLimitSummary,
 } from './AnthropicRateLimitHandler.js';
 
-/**
- * Merge beta headers, ensuring no duplicates
- */
+export const CLAUDE_CLI_USER_AGENT = 'claude-cli/2.1.293 (external, cli)';
+
+/** Adds binding controls only when a request uses preserved-thinking validation. */
+export function mergePreservedThinkingBetaHeader(
+  headers: Record<string, string>,
+  model: string,
+  thinking: unknown,
+): void {
+  const carriesBinding =
+    typeof thinking === 'object' &&
+    thinking !== null &&
+    'block_binding' in thinking;
+  if (enforcesPreservedThinkingPrefixCheck(model) && carriesBinding) {
+    headers['anthropic-beta'] = mergeBetaHeaders(
+      headers['anthropic-beta'],
+      'thinking-binding-controls-2026-08-01',
+    );
+  }
+}
+
+/** Builds request headers and adds the binding beta only for eligible models. */
+export function buildAnthropicRequestHeaders(params: {
+  baseHeaders: Record<string, string>;
+  isOAuth: boolean;
+  wantCaching: boolean;
+  ttl: '5m' | '1h';
+  cacheLogger: { debug: (fn: () => string) => void };
+  model: string;
+  thinking: unknown;
+}): Record<string, string> {
+  const headers = buildAnthropicCustomHeaders(params);
+  mergePreservedThinkingBetaHeader(headers, params.model, params.thinking);
+  return headers;
+}
+
+/** Merge beta headers, ensuring no duplicates. */
 export function mergeBetaHeaders(
   existing: string | undefined,
   addition: string,
@@ -75,9 +109,8 @@ export function buildAnthropicCustomHeaders(params: {
     customHeaders = {
       ...customHeaders,
       'anthropic-beta': betaWithThinking,
-      // Fable 5.1 and other subscription models reject clients below
-      // claude-cli 2.1.255; 2.1.257 is the released version that includes it.
-      'User-Agent': 'claude-cli/2.1.257 (external, cli)',
+      // Claude subscription endpoints require at least 2.1.280 (#3834).
+      'User-Agent': CLAUDE_CLI_USER_AGENT,
     };
   }
 

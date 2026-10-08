@@ -1,6 +1,9 @@
 {
   "defaultLimit": 200000,
   "exactLimits": {
+    "claude-opus-5-5": 200000,
+    "claude-sonnet-5-5": 200000,
+    "claude-haiku-5-5": 200000,
     "glm-5.2": 200000,
     "glm-5.1": 200000,
     "glm-5": 200000,

@@ -29,13 +29,17 @@ function claudecodeModelDefaults() {
 }
 
 describe('claudecode max-image-dimension exact-ID anchoring (@issue:3216 M1)', () => {
-  it.each(['claude-opus-5', 'claude-opus-4-8', 'claude-sonnet-5'])(
-    'applies max-image-dimension 2000 for exact target ID %s',
-    (model) => {
-      const defaults = computeModelDefaults(model, claudecodeModelDefaults());
-      expect(defaults['max-image-dimension']).toBe(2000);
-    },
-  );
+  it.each([
+    'claude-opus-5',
+    'claude-opus-5-5',
+    'claude-opus-4-8',
+    'claude-sonnet-5',
+    'claude-sonnet-5-5',
+    'claude-haiku-5-5',
+  ])('applies max-image-dimension 2000 for exact target ID %s', (model) => {
+    const defaults = computeModelDefaults(model, claudecodeModelDefaults());
+    expect(defaults['max-image-dimension']).toBe(2000);
+  });
 
   it.each([
     'claude-opus-50',
@@ -53,15 +57,19 @@ describe('claudecode max-image-dimension exact-ID anchoring (@issue:3216 M1)', (
 });
 
 describe('claudecode target models get no implicit resize (@issue:3216 M1)', () => {
-  it.each(['claude-opus-5', 'claude-opus-4-8', 'claude-sonnet-5'])(
-    'does NOT set image-resize.* for %s',
-    (model) => {
-      const defaults = computeModelDefaults(model, claudecodeModelDefaults());
-      expect(defaults['image-resize.maxLongEdge']).toBeUndefined();
-      expect(defaults['image-resize.maxShortEdge']).toBeUndefined();
-      expect(defaults['image-resize.maxPixels']).toBeUndefined();
-    },
-  );
+  it.each([
+    'claude-opus-5',
+    'claude-opus-5-5',
+    'claude-opus-4-8',
+    'claude-sonnet-5',
+    'claude-sonnet-5-5',
+    'claude-haiku-5-5',
+  ])('does NOT set image-resize.* for %s', (model) => {
+    const defaults = computeModelDefaults(model, claudecodeModelDefaults());
+    expect(defaults['image-resize.maxLongEdge']).toBeUndefined();
+    expect(defaults['image-resize.maxShortEdge']).toBeUndefined();
+    expect(defaults['image-resize.maxPixels']).toBeUndefined();
+  });
 });
 
 describe('claudecode older Opus/Sonnet models keep resize defaults (@issue:3216 M2)', () => {
@@ -107,8 +115,11 @@ describe('claudecode older Opus/Sonnet models keep resize defaults (@issue:3216 
     // Later rules overwrite earlier ones; verify resize stays off for targets.
     for (const model of [
       'claude-opus-5',
+      'claude-opus-5-5',
       'claude-opus-4-8',
       'claude-sonnet-5',
+      'claude-sonnet-5-5',
+      'claude-haiku-5-5',
     ]) {
       const defaults = computeModelDefaults(model, claudecodeModelDefaults());
       expect(defaults['image-resize.maxLongEdge']).toBeUndefined();
@@ -137,8 +148,11 @@ describe('claudecode 4-8 exclusion is Opus-only (@issue:3216)', () => {
   it('the three exact target IDs remain unchanged (hard cap, no resize)', () => {
     for (const model of [
       'claude-opus-5',
+      'claude-opus-5-5',
       'claude-opus-4-8',
       'claude-sonnet-5',
+      'claude-sonnet-5-5',
+      'claude-haiku-5-5',
     ]) {
       const defaults = computeModelDefaults(model, claudecodeModelDefaults());
       expect(defaults['max-image-dimension']).toBe(2000);

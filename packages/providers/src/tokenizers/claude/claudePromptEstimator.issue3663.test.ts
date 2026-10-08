@@ -243,6 +243,32 @@ describe('Claude image entries (issue #3663)', () => {
     );
   });
 
+  it('@issue:3834 keeps Opus 5 and Fable 5 family resolution and Fable point-release warning behavior', async () => {
+    const opus = await estimateClaude5Prompt(
+      request(
+        { promptText: PROSE_PROMPT_TEXT },
+        { canonicalModel: 'claude-opus-5' },
+      ),
+      OPUS_SPEC,
+    );
+    expect(opus.family).toBe(OPUS_SPEC.family);
+    expect(opus.estimatorVersion).toBe(
+      CLAUDE_OPUS_5_CALIBRATION.estimatorVersion,
+    );
+
+    const fablePointRelease = await estimateClaude5Prompt(
+      request(
+        { promptText: PROSE_PROMPT_TEXT },
+        { canonicalModel: 'claude-fable-5-1' },
+      ),
+      FABLE_SPEC,
+    );
+    expect(fablePointRelease.family).toBe(FABLE_SPEC.family);
+    expect(fablePointRelease.estimatorVersion).toBe(
+      CLAUDE_FABLE_5_CALIBRATION.estimatorVersion,
+    );
+  });
+
   it('adds the image cost on top of the Fable calibration', async () => {
     const result = await estimateClaude5Prompt(
       imageRequest([{ dimensions: { width: 800, height: 600 } }], {

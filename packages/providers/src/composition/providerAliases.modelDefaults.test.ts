@@ -514,9 +514,9 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
     expect(entry.config.modelDefaults!.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('builtin anthropic.config declares claude-opus-5 as defaultModel @issue:2665', () => {
+  it('builtin anthropic.config declares claude-opus-5-5 as defaultModel @issue:3834', () => {
     const entry = getAnthropicEntry();
-    expect(entry.config.defaultModel).toBe('claude-opus-5');
+    expect(entry.config.defaultModel).toBe('claude-opus-5-5');
   });
 
   it('claude-opus-5 matches a rule with reasoning.effort: "high"', () => {
@@ -666,6 +666,7 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
         candidate.alias === 'claudecode' && candidate.source === 'builtin',
     );
     expect(entry).toBeDefined();
+
     const defaults = computeMatchedDefaults(
       'claude-fable-5-1',
       entry?.config.modelDefaults ?? [],
@@ -676,6 +677,31 @@ describe('anthropic.config modelDefaults (Phase 02)', () => {
     expect(defaults['reasoning.effort']).toBe('high');
     expect(defaults['context-limit']).toBe(1000000);
     expect(defaults['maxOutputTokens']).toBe(128000);
+  });
+
+  it('resolves Claude 5.5 model defaults on both aliases @issue:3834', () => {
+    for (const alias of ['claudecode', 'anthropic']) {
+      const entry = findBuiltinAliasEntry(alias);
+      expect(entry).toBeDefined();
+      const rules = configuredModelDefaultRules(entry);
+      for (const model of ['claude-opus-5-5', 'claude-sonnet-5-5']) {
+        const defaults = computeMatchedDefaults(model, rules);
+        expect(defaults['reasoning.effort']).toBe('high');
+        expect(defaults['context-limit']).toBe(1000000);
+        expect(defaults['maxOutputTokens']).toBe(128000);
+        expect(defaults['reasoning.enabled']).toBe(true);
+        expect(defaults['reasoning.adaptiveThinking']).toBe(true);
+        expect(defaults['reasoning.includeInContext']).toBe(true);
+      }
+
+      const haikuDefaults = computeMatchedDefaults('claude-haiku-5-5', rules);
+      expect(haikuDefaults['reasoning.enabled']).toBe(true);
+      expect(haikuDefaults['reasoning.adaptiveThinking']).toBe(true);
+      expect(haikuDefaults['reasoning.includeInContext']).toBe(true);
+      expect(haikuDefaults['reasoning.effort']).toBeUndefined();
+      expect(haikuDefaults['context-limit']).toBe(1000000);
+      expect(haikuDefaults['maxOutputTokens']).toBe(128000);
+    }
   });
 
   it('anthropic applies image-resize limits to Opus and Sonnet families only', () => {

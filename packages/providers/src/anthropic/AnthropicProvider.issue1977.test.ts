@@ -96,6 +96,20 @@ describe('Issue #1977: prefill guard for models without prefill support', () => 
     expect(request.thinking?.type).toBe('adaptive');
   });
 
+  it.each([
+    'claude-opus-5-5',
+    'claude-sonnet-5-5',
+    'claude-haiku-5-5',
+  ] satisfies readonly string[])(
+    'appends a user placeholder for %s when history ends with assistant @issue:3834',
+    async (model) => {
+      const request = await generateRequest(trailingAssistantHistory, model);
+      const lastMessage = request.messages[request.messages.length - 1];
+      expect(lastMessage.role).toBe('user');
+      expect(messageTextContent(lastMessage)).toBe('Continue the conversation');
+    },
+  );
+
   it('keeps the trailing assistant message for prefill-capable sonnet with reasoning disabled @issue:1977', async () => {
     const request = await generateRequest(
       trailingAssistantHistory,

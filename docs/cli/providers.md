@@ -8,7 +8,7 @@ LLxprt Code ships with aliases for these providers — just use `/provider <name
 
 | Provider                      | Alias           | Default / Notable Models           | Auth                 |
 | ----------------------------- | --------------- | ---------------------------------- | -------------------- |
-| Anthropic                     | `anthropic`     | claude-opus-5                      | OAuth or API key     |
+| Anthropic                     | `anthropic`     | claude-opus-5-5                    | OAuth or API key     |
 | Google Gemini                 | `gemini`        | gemini-2.5-pro                     | API key or Vertex AI |
 | OpenAI (API)                  | `openai`        | gpt-5.5                            | API key              |
 | OpenAI (ChatGPT subscription) | `codex`         | gpt-5.6-sol (default); gpt-6-astra | OAuth                |

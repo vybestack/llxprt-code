@@ -27,6 +27,9 @@ import {
   CLAUDE_FABLE_5_ESTIMATOR_FAMILY,
   CLAUDE_OPUS_5_CALIBRATION,
   CLAUDE_OPUS_5_ESTIMATOR_FAMILY,
+  CLAUDE_OPUS_5_5_ESTIMATOR_FAMILY,
+  CLAUDE_SONNET_5_5_ESTIMATOR_FAMILY,
+  CLAUDE_HAIKU_5_5_ESTIMATOR_FAMILY,
 } from './claudeCalibrationAssets.js';
 import {
   CLAUDE_5_PROMPT_ESTIMATOR_REGISTRATIONS,
@@ -505,7 +508,13 @@ describe('Claude 5 registry composition', () => {
     expect(
       CLAUDE_5_PROMPT_ESTIMATOR_REGISTRATIONS.map((r) => r.family).sort(),
     ).toStrictEqual(
-      [CLAUDE_FABLE_5_ESTIMATOR_FAMILY, CLAUDE_OPUS_5_ESTIMATOR_FAMILY].sort(),
+      [
+        CLAUDE_FABLE_5_ESTIMATOR_FAMILY,
+        CLAUDE_OPUS_5_ESTIMATOR_FAMILY,
+        CLAUDE_OPUS_5_5_ESTIMATOR_FAMILY,
+        CLAUDE_SONNET_5_5_ESTIMATOR_FAMILY,
+        CLAUDE_HAIKU_5_5_ESTIMATOR_FAMILY,
+      ].sort(),
     );
   });
 
@@ -515,12 +524,18 @@ describe('Claude 5 registry composition', () => {
     );
     expect(
       registrations.map((spec) => spec.canonicalModelFamily),
-    ).toStrictEqual(['claude-opus-5']);
+    ).toStrictEqual([
+      'claude-opus-5',
+      'claude-opus-5-5',
+      'claude-sonnet-5-5',
+      'claude-haiku-5-5',
+    ]);
   });
 
   it('claims sanctioned Opus 5 aliases and snapshots', () => {
     for (const model of [
       'claude-opus-5',
+
       'claude-opus-5-latest',
       'claude-opus-5-20260731',
     ]) {

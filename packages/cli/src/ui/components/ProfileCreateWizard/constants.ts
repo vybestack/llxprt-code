@@ -13,6 +13,9 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
     needsBaseUrl: false,
     supportsOAuth: false,
     knownModels: [
+      'claude-opus-5-5',
+      'claude-sonnet-5-5',
+      'claude-haiku-5-5',
       'claude-opus-5',
       'claude-sonnet-5',
       'claude-sonnet-4-5-20250929',
@@ -25,7 +28,11 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
     label: 'Claude Code (Claude.ai OAuth)',
     needsBaseUrl: false,
     supportsOAuth: true,
-    knownModels: ['claude-opus-5', 'claude-sonnet-4-20250514'],
+    knownModels: [
+      'claude-opus-5-5',
+      'claude-opus-5',
+      'claude-sonnet-4-20250514',
+    ],
   },
   {
     value: 'gemini',
