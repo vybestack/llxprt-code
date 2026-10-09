@@ -314,22 +314,17 @@ export type AnthropicOutputConfigParameter = Readonly<Record<string, unknown>>;
 
 type AnthropicThinkingConfig = {
   thinking?: {
-    type: 'adaptive' | 'enabled' | 'disabled';
+    type: 'adaptive' | 'enabled' | 'disabled' | 'between_tools';
     budget_tokens?: number;
     display?: 'summarized' | 'omitted';
+    block_binding?: { prefix_mismatch_behavior: 'drop_block' };
   };
   output_config?: { effort: AnthropicEffortLiteral };
 };
 
 /**
- * Build the adaptive-thinking config shared by Fable 5 and other
- * adaptive-capable models. Centralizes the `{ type: 'adaptive' }` literal and
- * the `effort` mapping so future thinking-field changes have one source.
- *
- * `display` controls whether the API returns thinking text. All adaptive-
- * capable models pass 'summarized' (default) to get readable thinking
- * summaries, or 'omitted' when `includeInResponse` is explicitly false.
- * Fable 5 never returns raw chain-of-thought regardless of this setting.
+ * Builds adaptive thinking with the requested effort and response display.
+ * Fable 5 never returns raw chain-of-thought regardless of display.
  */
 function buildAdaptiveConfig(
   thinkingEffort?: 'low' | 'medium' | 'high' | 'max',

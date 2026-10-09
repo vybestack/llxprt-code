@@ -35,9 +35,11 @@ import {
   type AnthropicThinkingParameter,
 } from './AnthropicRequestBuilder.js';
 import {
+  enforcesPreservedThinkingPrefixCheck,
   isFable5,
   supportsAdaptiveThinking,
-  supportsDisabledThinking,
+  resolveThinkingOffMode,
+  thinkingOffRequiresEffortAtOrBelowHigh,
 } from './AnthropicModelData.js';
 
 export interface AnthropicReasoningFallbacks {
@@ -156,6 +158,7 @@ export function buildAnthropicNativeReasoningConfig(
 
   const resolved = resolveReasoningConfiguration({
     nativeAdapter: 'anthropic',
+    allowEffortWhenDisabled: isCappedThinkingOffRequest(input),
     reasoning: {
       enabled: input.settings.enabled,
       effort: input.settings.effort,
@@ -173,8 +176,12 @@ export function buildAnthropicNativeReasoningConfig(
     input.settings.enabled !== undefined
       ? buildLegacyAutoConfig(input, resolved)
       : buildSelectedConfig(input, resolved);
+  const thinking = applyPreservedThinkingPolicy(
+    input.model,
+    translated.thinking,
+  );
   return {
-    thinking: translated.thinking,
+    thinking,
     outputConfig: mergeOutputConfig(
       explicit.outputConfig,
       translated.outputConfig,
@@ -221,6 +228,27 @@ function readExplicitThinking(value: unknown): AnthropicThinkingParameter {
   return { ...value, type };
 }
 
+/**
+ * Adds drop behavior only to thinking modes that carry preserved signed blocks;
+ * thinking-off modes reject the binding field.
+ */
+function applyPreservedThinkingPolicy(
+  model: string,
+  thinking: AnthropicThinkingParameter | undefined,
+): AnthropicThinkingParameter | undefined {
+  if (
+    thinking === undefined ||
+    (thinking.type !== 'adaptive' && thinking.type !== 'enabled') ||
+    !enforcesPreservedThinkingPrefixCheck(model)
+  ) {
+    return thinking;
+  }
+  return {
+    ...thinking,
+    block_binding: { prefix_mismatch_behavior: 'drop_block' },
+  };
+}
+
 function readExplicitOutputConfig(
   value: unknown,
 ): Readonly<Record<string, unknown>> {
@@ -249,8 +277,9 @@ function buildLegacyAutoConfig(
   resolved: ResolvedReasoningConfiguration,
 ): AnthropicNativeReasoningConfig {
   if (input.settings.enabled === false) {
-    if (supportsDisabledThinking(input.model)) {
-      return { thinking: { type: 'disabled' } };
+    const mode = resolveThinkingOffMode(input.model);
+    if (mode !== undefined) {
+      return { thinking: { type: mode } };
     }
     warnUnsupportedDisablement(input, resolved.enabledFormat);
     return {};
@@ -346,16 +375,20 @@ function buildDisabledThinking(
   if (typeof resolved.enabled.value !== 'string') {
     throw new Error('Anthropic thinking enablement must resolve to a string');
   }
-  if (resolved.enabled.value !== 'disabled') {
+  if (
+    resolved.enabled.value !== 'disabled' &&
+    resolved.enabled.value !== 'between_tools'
+  ) {
     throw new Error(
       `reasoning.enabledMap.false value '${resolved.enabled.value}' is not supported by the Anthropic adapter`,
     );
   }
-  if (!supportsDisabledThinking(input.model)) {
+  const mode = resolveThinkingOffMode(input.model);
+  if (mode === undefined) {
     warnUnsupportedDisablement(input, resolved.enabledFormat);
     return undefined;
   }
-  return { type: 'disabled' };
+  return { type: mode };
 }
 
 function buildBudgetThinking(
@@ -454,9 +487,38 @@ function readSelectedEffort(
     input.settings.effort === undefined
       ? undefined
       : input.settings.effortMap?.[input.settings.effort];
-  return typeof mappedEffort === 'string'
-    ? effort
-    : normalizeEffort(input.model, effort);
+  const normalized =
+    typeof mappedEffort === 'string'
+      ? effort
+      : normalizeEffort(input.model, effort);
+  if (shouldCapThinkingOffEffort(input, resolved, normalized)) {
+    return 'high';
+  }
+  return normalized;
+}
+
+/**
+ * Caps only thinking-off requests for models whose API rejects high effort
+ * in that mode; adaptive-thinking requests keep their normal effort range.
+ */
+function isCappedThinkingOffRequest(input: NativeConfigInput): boolean {
+  return (
+    input.settings.enabled === false &&
+    resolveThinkingOffMode(input.model) !== undefined &&
+    thinkingOffRequiresEffortAtOrBelowHigh(input.model)
+  );
+}
+
+function shouldCapThinkingOffEffort(
+  input: NativeConfigInput,
+  resolved: ResolvedReasoningConfiguration,
+  effort: string,
+): boolean {
+  return (
+    resolved.enabled.state === 'emitted' &&
+    isCappedThinkingOffRequest(input) &&
+    (effort === 'max' || effort === 'xhigh')
+  );
 }
 
 function readNormalizedEffort(

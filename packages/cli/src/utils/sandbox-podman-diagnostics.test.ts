@@ -201,7 +201,6 @@ describe('Podman tunnel startup diagnostics', () => {
           `while [ ! -f ${shellQuote(readinessStarted)} ]; do sleep 0.01; done`,
           "printf 'probe-overlap diagnostic\\n' >&2",
           "yes 'chatty tunnel output' | head -c 8388608",
-          'sleep 0.4',
           'exit 23',
         ].join('\n'),
       );

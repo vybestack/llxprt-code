@@ -14,8 +14,14 @@ import {
 import {
   CLAUDE_FABLE_5_CLAIM,
   CLAUDE_OPUS_5_CLAIM,
+  CLAUDE_OPUS_5_5_CLAIM,
+  CLAUDE_SONNET_5_5_CLAIM,
+  CLAUDE_HAIKU_5_5_CLAIM,
   isClaudeFable5PointReleaseModel,
   isClaudeOpus5PointReleaseModel,
+  isSanctionedClaudeOpus5Point5Model,
+  isSanctionedClaudeSonnet5Point5Model,
+  isSanctionedClaudeHaiku5Point5Model,
   isSanctionedClaudeFable5Model,
   isSanctionedClaudeOpus5Model,
 } from './claudeModelIdentity.js';
@@ -41,6 +47,9 @@ export const CLAUDE_5_ANTHROPIC_PROTOCOLS: ReadonlySet<PromptEnvelopeProtocol> =
 
 export const CLAUDE_OPUS_5_ESTIMATOR_FAMILY = 'anthropic-claude-opus-5';
 export const CLAUDE_FABLE_5_ESTIMATOR_FAMILY = 'anthropic-claude-fable-5';
+export const CLAUDE_OPUS_5_5_ESTIMATOR_FAMILY = 'anthropic-claude-opus-5-5';
+export const CLAUDE_SONNET_5_5_ESTIMATOR_FAMILY = 'anthropic-claude-sonnet-5-5';
+export const CLAUDE_HAIKU_5_5_ESTIMATOR_FAMILY = 'anthropic-claude-haiku-5-5';
 
 export const CLAUDE_OPUS_5_CALIBRATION: ClaudeCalibration = Object.freeze({
   canonicalModelFamily: 'claude-opus-5',
@@ -126,6 +135,123 @@ export const CLAUDE_FABLE_5_CALIBRATION: ClaudeCalibration = Object.freeze({
   }),
 });
 
+export const CLAUDE_HAIKU_5_5_CALIBRATION: ClaudeCalibration = Object.freeze({
+  canonicalModelFamily: 'claude-haiku-5-5',
+  protocol: 'anthropic-messages',
+  estimatorVersion: 'claude-haiku-5-5-o200k-calibrated-2026-10-08-v1',
+  baseCounterAssetRevision: O200K_BASE_ASSET_REVISION,
+  projectionRevision: PROJECTION_REVISION,
+  intercept: -925.214912,
+  baseTokenCoefficient: 0.678264,
+  featureCoefficients: Object.freeze([
+    Object.freeze({ feature: 'codePoints', coefficient: 0.230573 } as const),
+    Object.freeze({
+      feature: 'nonAsciiCodePoints',
+      coefficient: 0.262484,
+    } as const),
+  ]),
+  heldOut: Object.freeze({
+    sampleCount: 13,
+    mapePercent: 0.615805,
+    rmse: 123.404276,
+    underestimationP95Percent: 1.413781,
+    baselineEstimator: 'AnthropicTokenizer character heuristic',
+    baselineMapePercent: 33.286321,
+    baselineRmse: 5593.766668,
+    baselineUnderestimationP95Percent: 34.113794,
+    relativeMapeImprovementPercent: 98.149974,
+  }),
+  provenance: Object.freeze({
+    corpusId: 'claude-haiku-5-5-provider-usage-v1',
+    corpusObservations: 42,
+    endpointHost: 'api.anthropic.com',
+    groundTruth:
+      'complete provider promptTokens including cached prompt tokens',
+    fittedAt: '2026-10-08',
+    modelSelection:
+      'leave-one-category-out cross-validation over training rows only, across seven candidate feature sets',
+    validatedBaseTokenRange: Object.freeze([9195, 13753] as const),
+  }),
+});
+
+export const CLAUDE_OPUS_5_5_CALIBRATION: ClaudeCalibration = Object.freeze({
+  canonicalModelFamily: 'claude-opus-5-5',
+  protocol: 'anthropic-messages',
+  estimatorVersion: 'claude-opus-5-5-o200k-calibrated-2026-10-08-v1',
+  baseCounterAssetRevision: O200K_BASE_ASSET_REVISION,
+  projectionRevision: PROJECTION_REVISION,
+  intercept: -925.984339,
+  baseTokenCoefficient: 0.678264,
+  featureCoefficients: Object.freeze([
+    Object.freeze({ feature: 'codePoints', coefficient: 0.230573 } as const),
+    Object.freeze({
+      feature: 'nonAsciiCodePoints',
+      coefficient: 0.262484,
+    } as const),
+  ]),
+  heldOut: Object.freeze({
+    sampleCount: 13,
+    mapePercent: 0.615844,
+    rmse: 123.404276,
+    underestimationP95Percent: 1.413874,
+    baselineEstimator: 'AnthropicTokenizer character heuristic',
+    baselineMapePercent: 33.283183,
+    baselineRmse: 5592.924314,
+    baselineUnderestimationP95Percent: 34.109533,
+    relativeMapeImprovementPercent: 98.149685,
+  }),
+  provenance: Object.freeze({
+    corpusId: 'claude-opus-5-5-provider-usage-v1',
+    corpusObservations: 42,
+    endpointHost: 'api.anthropic.com',
+    groundTruth:
+      'complete provider promptTokens including cached prompt tokens',
+    fittedAt: '2026-10-08',
+    modelSelection:
+      'leave-one-category-out cross-validation over training rows only, across seven candidate feature sets',
+    validatedBaseTokenRange: Object.freeze([9195, 13753] as const),
+  }),
+});
+
+export const CLAUDE_SONNET_5_5_CALIBRATION: ClaudeCalibration = Object.freeze({
+  canonicalModelFamily: 'claude-sonnet-5-5',
+  protocol: 'anthropic-messages',
+  estimatorVersion: 'claude-sonnet-5-5-o200k-calibrated-2026-10-08-v1',
+  baseCounterAssetRevision: O200K_BASE_ASSET_REVISION,
+  projectionRevision: PROJECTION_REVISION,
+  intercept: -924.445485,
+  baseTokenCoefficient: 0.678264,
+  featureCoefficients: Object.freeze([
+    Object.freeze({ feature: 'codePoints', coefficient: 0.230573 } as const),
+    Object.freeze({
+      feature: 'nonAsciiCodePoints',
+      coefficient: 0.262484,
+    } as const),
+  ]),
+  heldOut: Object.freeze({
+    sampleCount: 13,
+    mapePercent: 0.615767,
+    rmse: 123.404276,
+    underestimationP95Percent: 1.413689,
+    baselineEstimator: 'AnthropicTokenizer character heuristic',
+    baselineMapePercent: 33.28648,
+    baselineRmse: 5594.175701,
+    baselineUnderestimationP95Percent: 34.111588,
+    relativeMapeImprovementPercent: 98.150098,
+  }),
+  provenance: Object.freeze({
+    corpusId: 'claude-sonnet-5-5-provider-usage-v1',
+    corpusObservations: 42,
+    endpointHost: 'api.anthropic.com',
+    groundTruth:
+      'complete provider promptTokens including cached prompt tokens',
+    fittedAt: '2026-10-08',
+    modelSelection:
+      'leave-one-category-out cross-validation over training rows only, across seven candidate feature sets',
+    validatedBaseTokenRange: Object.freeze([9195, 13753] as const),
+  }),
+});
+
 /**
  * Providers whose Claude requests these calibrations were measured against.
  *
@@ -184,6 +310,36 @@ export const CLAUDE_5_FAMILY_SPECS: readonly Claude5FamilySpec[] =
       protocols: CLAUDE_5_ANTHROPIC_PROTOCOLS,
       appliesToProvider: isClaude5CalibratedProvider,
       calibration: CLAUDE_FABLE_5_CALIBRATION,
+      withheldReason: undefined,
+    }),
+    Object.freeze({
+      family: CLAUDE_OPUS_5_5_ESTIMATOR_FAMILY,
+      canonicalModelFamily: 'claude-opus-5-5',
+      claim: CLAUDE_OPUS_5_5_CLAIM,
+      matches: isSanctionedClaudeOpus5Point5Model,
+      protocols: CLAUDE_5_ANTHROPIC_PROTOCOLS,
+      appliesToProvider: isClaude5CalibratedProvider,
+      calibration: CLAUDE_OPUS_5_5_CALIBRATION,
+      withheldReason: undefined,
+    }),
+    Object.freeze({
+      family: CLAUDE_SONNET_5_5_ESTIMATOR_FAMILY,
+      canonicalModelFamily: 'claude-sonnet-5-5',
+      claim: CLAUDE_SONNET_5_5_CLAIM,
+      matches: isSanctionedClaudeSonnet5Point5Model,
+      protocols: CLAUDE_5_ANTHROPIC_PROTOCOLS,
+      appliesToProvider: isClaude5CalibratedProvider,
+      calibration: CLAUDE_SONNET_5_5_CALIBRATION,
+      withheldReason: undefined,
+    }),
+    Object.freeze({
+      family: CLAUDE_HAIKU_5_5_ESTIMATOR_FAMILY,
+      canonicalModelFamily: 'claude-haiku-5-5',
+      claim: CLAUDE_HAIKU_5_5_CLAIM,
+      matches: isSanctionedClaudeHaiku5Point5Model,
+      protocols: CLAUDE_5_ANTHROPIC_PROTOCOLS,
+      appliesToProvider: isClaude5CalibratedProvider,
+      calibration: CLAUDE_HAIKU_5_5_CALIBRATION,
       withheldReason: undefined,
     }),
   ]);

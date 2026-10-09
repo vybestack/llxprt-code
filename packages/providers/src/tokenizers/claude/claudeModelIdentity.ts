@@ -17,6 +17,9 @@ import { isCompactDateSnapshot } from '../../modelIdentity/snapshotDate.js';
  */
 
 const OPUS_5_PREFIX = 'claude-opus-5';
+const OPUS_5_5_PREFIX = 'claude-opus-5-5';
+const SONNET_5_5_PREFIX = 'claude-sonnet-5-5';
+const HAIKU_5_5_PREFIX = 'claude-haiku-5-5';
 const FABLE_5_PREFIX = 'claude-fable-5';
 
 /**
@@ -25,7 +28,10 @@ const FABLE_5_PREFIX = 'claude-fable-5';
  * warned legacy fallback instead of silently falling through to a generic
  * character heuristic.
  */
-export const CLAUDE_OPUS_5_CLAIM = /^claude-opus-5(?:$|-)/i;
+export const CLAUDE_OPUS_5_CLAIM = /^claude-opus-5(?:$|-(?!5(?:$|-)))/i;
+export const CLAUDE_OPUS_5_5_CLAIM = /^claude-opus-5-5(?:$|-)/i;
+export const CLAUDE_SONNET_5_5_CLAIM = /^claude-sonnet-5-5(?:$|-)/i;
+export const CLAUDE_HAIKU_5_5_CLAIM = /^claude-haiku-5-5(?:$|-)/i;
 export const CLAUDE_FABLE_5_CLAIM = /^claude-fable-5(?:$|-)/i;
 
 /**
@@ -40,8 +46,27 @@ function matchesAnchoredIdentity(prefix: string, model: string): boolean {
   return qualifier.startsWith('-') && isCompactDateSnapshot(qualifier.slice(1));
 }
 
+/** Keeps Opus 5.5 identities out of the broader Opus 5 calibration family. */
 export function isSanctionedClaudeOpus5Model(model: string): boolean {
-  return matchesAnchoredIdentity(OPUS_5_PREFIX, model);
+  return (
+    !isSanctionedClaudeOpus5Point5Model(model) &&
+    matchesAnchoredIdentity(OPUS_5_PREFIX, model)
+  );
+}
+
+/** Accepts only Opus 5.5 aliases and valid dated snapshots for its own fit. */
+export function isSanctionedClaudeOpus5Point5Model(model: string): boolean {
+  return matchesAnchoredIdentity(OPUS_5_5_PREFIX, model);
+}
+
+/** Restricts Sonnet's calibration to its own sanctioned model identity. */
+export function isSanctionedClaudeSonnet5Point5Model(model: string): boolean {
+  return matchesAnchoredIdentity(SONNET_5_5_PREFIX, model);
+}
+
+/** Restricts Haiku's calibration to its own sanctioned model identity. */
+export function isSanctionedClaudeHaiku5Point5Model(model: string): boolean {
+  return matchesAnchoredIdentity(HAIKU_5_5_PREFIX, model);
 }
 
 export function isSanctionedClaudeFable5Model(model: string): boolean {
@@ -78,7 +103,10 @@ function matchesAnchoredPointRelease(prefix: string, model: string): boolean {
 }
 
 export function isClaudeOpus5PointReleaseModel(model: string): boolean {
-  return matchesAnchoredPointRelease(OPUS_5_PREFIX, model);
+  return (
+    !isSanctionedClaudeOpus5Point5Model(model) &&
+    matchesAnchoredPointRelease(OPUS_5_PREFIX, model)
+  );
 }
 
 export function isClaudeFable5PointReleaseModel(model: string): boolean {

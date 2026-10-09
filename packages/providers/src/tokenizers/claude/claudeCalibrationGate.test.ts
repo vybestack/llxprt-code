@@ -22,6 +22,11 @@ import {
 import {
   CLAUDE_FABLE_5_CALIBRATION,
   CLAUDE_OPUS_5_CALIBRATION,
+  CLAUDE_OPUS_5_5_CALIBRATION,
+  CLAUDE_SONNET_5_5_CALIBRATION,
+  CLAUDE_HAIKU_5_5_CALIBRATION,
+  CLAUDE_5_FAMILY_SPECS,
+  isActivatedClaude5Spec,
 } from './claudeCalibrationAssets.js';
 
 interface CorpusObservation {
@@ -148,6 +153,21 @@ const MODELS = [
     name: 'claude-fable-5',
     calibration: CLAUDE_FABLE_5_CALIBRATION,
     corpus: loadCorpus('claude-fable-5'),
+  },
+  {
+    name: 'claude-opus-5-5',
+    calibration: CLAUDE_OPUS_5_5_CALIBRATION,
+    corpus: loadCorpus('claude-opus-5-5'),
+  },
+  {
+    name: 'claude-sonnet-5-5',
+    calibration: CLAUDE_SONNET_5_5_CALIBRATION,
+    corpus: loadCorpus('claude-sonnet-5-5'),
+  },
+  {
+    name: 'claude-haiku-5-5',
+    calibration: CLAUDE_HAIKU_5_5_CALIBRATION,
+    corpus: loadCorpus('claude-haiku-5-5'),
   },
 ] as const;
 
@@ -363,5 +383,111 @@ describe('Claude 5 model independence', () => {
     );
     expect(crossOpus).toBeLessThan(2);
     expect(crossFable).toBeLessThan(2);
+  });
+});
+
+function rederiveCoefficients(
+  observations: readonly CorpusObservation[],
+): number[] {
+  const rows = observations.filter((row) => row.split === 'train');
+  const width = 4;
+  const matrix = Array.from({ length: width }, () =>
+    new Array<number>(width + 1).fill(0),
+  );
+  for (const row of rows) {
+    const design = [
+      1,
+      row.projectionBaseTokens,
+      row.codePoints,
+      row.nonAsciiCodePoints,
+    ];
+    for (let i = 0; i < width; i++) {
+      matrix[i][width] += design[i] * row.providerPromptTokens;
+      for (let j = 0; j < width; j++) matrix[i][j] += design[i] * design[j];
+    }
+  }
+  for (let column = 0; column < width; column++) {
+    let pivot = column;
+    for (let row = column + 1; row < width; row++)
+      if (Math.abs(matrix[row][column]) > Math.abs(matrix[pivot][column]))
+        pivot = row;
+    [matrix[column], matrix[pivot]] = [matrix[pivot], matrix[column]];
+    const scale = matrix[column][column];
+    for (let entry = column; entry <= width; entry++)
+      matrix[column][entry] /= scale;
+    for (let row = 0; row < width; row++) {
+      if (row === column) continue;
+      const factor = matrix[row][column];
+      for (let entry = column; entry <= width; entry++)
+        matrix[row][entry] -= factor * matrix[column][entry];
+    }
+  }
+  return matrix.map((row) => Number(row[width].toFixed(6)));
+}
+
+describe('@issue:3834 Claude 5.5 activation independence', () => {
+  it('re-derives each family fit and held-out metrics from its own corpus @issue:3834', () => {
+    const families = [
+      {
+        corpus: loadCorpus('claude-opus-5-5'),
+        calibration: CLAUDE_OPUS_5_5_CALIBRATION,
+        intercept: -925.984339,
+      },
+      {
+        corpus: loadCorpus('claude-sonnet-5-5'),
+        calibration: CLAUDE_SONNET_5_5_CALIBRATION,
+        intercept: -924.445485,
+      },
+      {
+        corpus: loadCorpus('claude-haiku-5-5'),
+        calibration: CLAUDE_HAIKU_5_5_CALIBRATION,
+        intercept: -925.214912,
+      },
+    ];
+    for (const { corpus, calibration, intercept } of families) {
+      const [fitIntercept, base, code, nonAscii] = rederiveCoefficients(
+        corpus.observations,
+      );
+      expect(fitIntercept).toBe(intercept);
+      expect(fitIntercept).toBe(calibration.intercept);
+      expect(base).toBe(calibration.baseTokenCoefficient);
+      expect(code).toBe(calibration.featureCoefficients[0]?.coefficient);
+      expect(nonAscii).toBe(calibration.featureCoefficients[1]?.coefficient);
+      const heldOut = predict(corpus, calibration, 'heldout');
+      expect(mape(heldOut, (p) => p.calibrated)).toBeCloseTo(
+        calibration.heldOut.mapePercent,
+        3,
+      );
+      expect(rmse(heldOut, (p) => p.calibrated)).toBeCloseTo(
+        calibration.heldOut.rmse,
+        3,
+      );
+      expect(underestimationP95(heldOut, (p) => p.calibrated)).toBeCloseTo(
+        calibration.heldOut.underestimationP95Percent,
+        3,
+      );
+    }
+  });
+
+  it('activates every 5.5 calibration and gives each family its own feature coefficient array', () => {
+    const specs = CLAUDE_5_FAMILY_SPECS.filter((spec) =>
+      spec.canonicalModelFamily.endsWith('-5-5'),
+    );
+    expect(
+      specs.map((spec) => [
+        spec.canonicalModelFamily,
+        isActivatedClaude5Spec(spec),
+      ]),
+    ).toStrictEqual([
+      ['claude-opus-5-5', true],
+      ['claude-sonnet-5-5', true],
+      ['claude-haiku-5-5', true],
+    ]);
+    const arrays = [
+      CLAUDE_OPUS_5_5_CALIBRATION.featureCoefficients,
+      CLAUDE_SONNET_5_5_CALIBRATION.featureCoefficients,
+      CLAUDE_HAIKU_5_5_CALIBRATION.featureCoefficients,
+    ];
+    expect(new Set(arrays).size).toBe(3);
   });
 });

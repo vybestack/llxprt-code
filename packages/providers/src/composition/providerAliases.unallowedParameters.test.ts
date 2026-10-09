@@ -155,6 +155,25 @@ describe('providerAliases unallowedParameters', () => {
   });
 
   describe('computeUnallowedParameters', () => {
+    it('marks the Claude 5.5 generation sampling parameters unallowed on claudecode @issue:3834', () => {
+      const rules =
+        loadProviderAliasEntries().find((entry) => entry.alias === 'claudecode')
+          ?.config.modelDefaults ?? [];
+      for (const model of [
+        'claude-opus-5-5',
+        'claude-sonnet-5-5',
+        'claude-haiku-5-5',
+      ]) {
+        expect(
+          [...computeUnallowedParameters(model, rules)].sort(),
+        ).toStrictEqual(['temperature', 'top_k', 'top_p']);
+      }
+      expect(computeUnallowedParameters('claude-opus-5', rules).size).toBe(0);
+      expect(
+        computeUnallowedParameters('claude-sonnet-4-5-20250929', rules).size,
+      ).toBe(0);
+    });
+
     const rules = [
       {
         pattern: 'kimi|k3',

@@ -34,6 +34,7 @@ import {
   StreamTruncatedError,
 } from '../streamProtocolErrors.js';
 import type { RequestCommitState } from '../retryRequestContext.js';
+import { logInputTransformations } from './inputTransformations.js';
 
 export type StreamProcessorOptions = {
   isOAuth: boolean;
@@ -297,6 +298,7 @@ function* handleMessageStart(
   chunk: Anthropic.MessageStreamEvent & { type: 'message_start' },
   cacheLogger: { debug: (fn: () => string) => void },
 ): Generator<IContent> {
+  logInputTransformations(chunk.message, cacheLogger);
   const usage = chunk.message.usage;
   const cacheRead = usage.cache_read_input_tokens ?? 0;
   const cacheCreation = usage.cache_creation_input_tokens ?? 0;

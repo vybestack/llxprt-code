@@ -36,6 +36,8 @@ export interface GenericReasoningSettings {
 
 export interface ReasoningResolverInput {
   readonly nativeAdapter: NativeReasoningAdapter;
+  /** Preserve Anthropic effort when the selected thinking-off mode allows it. */
+  readonly allowEffortWhenDisabled?: boolean;
   readonly chatBaseUrl?: string;
   readonly reasoning: GenericReasoningSettings;
   readonly effortWireFormat: ReasoningEffortWireFormat;
@@ -410,7 +412,12 @@ function resolveEffort(
     return { state: 'absent' };
   }
 
-  if (enabled === false) {
+  const preserveAnthropicEffort =
+    input.nativeAdapter === 'anthropic' &&
+    input.allowEffortWhenDisabled === true &&
+    input.effortWireFormat === 'anthropic' &&
+    input.enabledWireFormat === 'thinking';
+  if (enabled === false && !preserveAnthropicEffort) {
     return { state: 'suppressed', reason: 'reasoning-disabled' };
   }
 

@@ -7,6 +7,8 @@
 import { describe, it, expect } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'node:os';
+import { execFileSync } from 'node:child_process';
 import {
   asString,
   asStringArray,
@@ -182,24 +184,75 @@ describe('.github/workflows/release.yml', () => {
     releaseSteps.find((s) => s.name === name) ??
     raiseMissing(`missing step: ${name}`);
 
-  it('selects keys before standard release notes without blocking skipped-test fallback', () => {
-    const quota = stepById('quota');
+  it('runs release tests and release-note generation against the pinned local model without paid-provider credentials', () => {
     const releaseNotes = stepByName('Generate Release Notes');
-    const quotaIndex = releaseSteps.indexOf(quota);
-    const releaseNotesIndex = releaseSteps.indexOf(releaseNotes);
-    expect(asString(quota['if']).replace(/\s+/g, ' ').trim()).toBe(
-      "( github.event.inputs.force_skip_tests != 'true' || (github.event.inputs.dry_run != 'true' && github.event.inputs.publish_vscode_only != 'true') ) && steps.duplicate_check.outputs.is_duplicate != 'true'",
+    const preflight = stepByName('Run Preflight Checks');
+    const integrations = stepByName('Run Integration Tests');
+    expect(
+      releaseSteps.some(
+        (step) => step.name === 'Check local-model request budget',
+      ),
+    ).toBe(false);
+    expect(asString(integrations.env?.LLXPRT_E2E_MODEL_LEDGER)).toBe(
+      '${{ runner.temp }}/release-model-ledger.jsonl',
     );
-    expect(quotaIndex >= 0 && releaseNotesIndex > quotaIndex).toBe(true);
-    expect(asString(quota['continue-on-error'])).toBe(
-      "${{ github.event.inputs.force_skip_tests == 'true' }}",
+    const cpuProof = stepByName('Verify live Ollama CPU backend');
+    expect(asString(cpuProof.run)).toContain('/proc/$pid/maps');
+    expect(asString(cpuProof.run)).toContain('libggml-cpu-haswell.so');
+    const ollama = stepByName('Start pinned local Gemma model');
+    expect(asString(ollama.run)).toContain('server_pid=$!');
+    expect(asString(ollama.run)).toContain('kill -0 "$server_pid"');
+    expect(asString(ollama.run)).toContain(
+      'cat "$RUNNER_TEMP/ollama-server.log" >&2',
     );
-    expect(asString(quota.run)).toBe('bun scripts/ci-quota-check.ts');
-    expect(asRecord(releaseNotes.env).OPENAI_API_KEY).toContain(
-      "steps.quota.outputs.selected_key == 'secondary'",
+    expect(releaseSteps.some((step) => step.id === 'quota')).toBe(false);
+    expect(releaseSteps.indexOf(ollama)).toBeLessThan(
+      releaseSteps.indexOf(preflight),
     );
-    expect(asRecord(quota.env).OPENAI_API_KEY).toBe(
-      '${{ secrets[vars.KEY_VAR_NAME] }}',
+    expect(releaseSteps.indexOf(preflight)).toBeLessThan(
+      releaseSteps.indexOf(integrations),
+    );
+    expect(releaseSteps.indexOf(integrations)).toBeLessThan(
+      releaseSteps.indexOf(releaseNotes),
+    );
+    for (const step of [preflight, integrations, releaseNotes]) {
+      const env = asRecord(step.env);
+      expect(env.OPENAI_BASE_URL).toBe('http://127.0.0.1:12644/v1');
+      expect(env.OPENAI_API_KEY).toBe('ollama-local-only');
+      expect(env.LLXPRT_DEFAULT_PROVIDER).toBe('openai');
+      expect(env.LLXPRT_DEFAULT_MODEL).toBe('gemma4:e2b-it-qat');
+    }
+    expect(JSON.stringify(releaseSteps)).not.toContain('ci-quota-check.ts');
+    expect(JSON.stringify(releaseSteps)).not.toContain(
+      'secrets[vars.KEY_VAR_NAME',
+    );
+    expect(asString(integrations.run)).toContain(
+      'npm run test:integration:sandbox:none',
+    );
+    expect(asString(integrations.run)).not.toContain('--exclude');
+  });
+
+  it('captures and uploads local-model diagnostics after integration failures', () => {
+    const capture = stepByName('Capture release model diagnostics');
+    const upload = stepByName('Upload release model diagnostics');
+    expect(asString(capture['if'])).toContain('always()');
+    expect(asString(upload['if'])).toContain('always()');
+    expect(asString(capture.run)).toContain('release-model-ledger.jsonl');
+    expect(asString(capture.run)).toContain('ollama-server.log');
+    expect(asString(capture.run)).toContain('/proc/loadavg');
+    expect(asString(capture.run)).toContain('/sys/fs/cgroup/cpu.stat');
+    expect(asString(upload.with?.path)).toBe(
+      '${{ runner.temp }}/release-diagnostics/',
+    );
+    expect(asString(upload.with?.['if-no-files-found'])).toBe('error');
+    expect(releaseSteps.indexOf(capture)).toBeGreaterThan(
+      releaseSteps.indexOf(stepByName('Run Integration Tests')),
+    );
+    expect(releaseSteps.indexOf(upload)).toBeGreaterThan(
+      releaseSteps.indexOf(capture),
+    );
+    expect(releaseSteps.indexOf(upload)).toBeLessThan(
+      releaseSteps.indexOf(stepByName('Configure Git User')),
     );
   });
 
@@ -208,13 +261,16 @@ describe('.github/workflows/release.yml', () => {
     expect(asString(duplicateCheck['if'])).toBe(
       "github.event_name == 'schedule'",
     );
-    expect(asString(duplicateCheck.run)).toContain('npm view');
-    expect(asString(duplicateCheck.run)).toContain(
-      '@vybestack/llxprt-code-tools@',
+    expect(asString(duplicateCheck.run)).toBe(
+      'bun scripts/check-nightly-release.ts',
     );
 
     const guardedSteps = [
-      stepById('quota'),
+      stepByName(
+        'Install pinned local Ollama runtime for release model checks',
+      ),
+      stepByName('Select local Ollama CPU backend'),
+      stepByName('Start pinned local Gemma model'),
       stepByName('Run Preflight Checks'),
       stepByName('Run Integration Tests'),
       stepByName('Update package versions'),
@@ -237,6 +293,106 @@ describe('.github/workflows/release.yml', () => {
     expect(asString(stepByName('Create Issue on Failure')['if'])).toBe(
       'failure()',
     );
+  });
+
+  it('installs first-party runtime plugin dependencies before preflight and restores the repository Bun version', () => {
+    const pluginBunSetup = stepByName(
+      'Setup Bun for runtime plugin dependencies',
+    );
+    const pluginInstall = stepByName(
+      'Install runtime plugin dependencies for preflight',
+    );
+    const bunRestore = stepByName('Restore repository Bun version');
+    const preflight = stepByName('Run Preflight Checks');
+
+    expect(asString(pluginBunSetup.uses)).toContain('oven-sh/setup-bun@');
+    expect(asString(pluginBunSetup['if'])).toContain(
+      "steps.duplicate_check.outputs.is_duplicate != 'true'",
+    );
+    expect(asString(pluginInstall['if'])).toContain(
+      "steps.duplicate_check.outputs.is_duplicate != 'true'",
+    );
+    expect(asString(asRecord(pluginBunSetup.with)['bun-version'])).toBe(
+      '1.4.2',
+    );
+    expect(asString(pluginInstall.run)).toContain(
+      'plugins/google-gemini plugins/google-mcp-auth',
+    );
+    expect(asString(pluginInstall.run)).toContain('bun install --omit=peer');
+    expect(asString(asRecord(bunRestore.with)['bun-version-file'])).toBe(
+      '.bun-version',
+    );
+    expect(releaseSteps.indexOf(pluginBunSetup)).toBeLessThan(
+      releaseSteps.indexOf(pluginInstall),
+    );
+    expect(releaseSteps.indexOf(pluginInstall)).toBeLessThan(
+      releaseSteps.indexOf(bunRestore),
+    );
+    expect(releaseSteps.indexOf(bunRestore)).toBeLessThan(
+      releaseSteps.indexOf(preflight),
+    );
+  });
+
+  it('executes plugin installation in each plugin directory with peer omission and stops on either install failure', () => {
+    const shell = asString(
+      stepByName('Install runtime plugin dependencies for preflight').run,
+    );
+    const fixture = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'release-plugin-install-'),
+    );
+    const bin = path.join(fixture, 'bin');
+    fs.mkdirSync(bin);
+    for (const plugin of ['google-gemini', 'google-mcp-auth']) {
+      fs.mkdirSync(path.join(fixture, 'plugins', plugin), { recursive: true });
+    }
+    const log = path.join(fixture, 'installs.log');
+    const installer = path.join(bin, 'bun');
+    fs.writeFileSync(
+      installer,
+      `#!/bin/sh
+printf "%s|%s\n" "$PWD" "$*" >> "$INSTALL_LOG"
+if [ -n "$FAIL_PLUGIN" ]; then case "$PWD" in */"$FAIL_PLUGIN") exit 17 ;; esac; fi
+`,
+    );
+    fs.chmodSync(installer, 0o755);
+    const run = (failPlugin: string): string => {
+      try {
+        execFileSync('bash', ['-e', '-c', shell], {
+          cwd: fixture,
+          env: {
+            ...process.env,
+            PATH: `${bin}:${process.env.PATH ?? ''}`,
+            INSTALL_LOG: log,
+            FAIL_PLUGIN: failPlugin,
+          },
+          stdio: 'pipe',
+        });
+        return 'success';
+      } catch (error) {
+        if (typeof error === 'object' && error !== null && 'status' in error)
+          return String(error.status);
+        return 'unknown failure';
+      }
+    };
+
+    try {
+      expect(run('')).toBe('success');
+      const realFixture = fs.realpathSync(fixture);
+      expect(fs.readFileSync(log, 'utf8')).toBe(
+        `${path.join(realFixture, 'plugins/google-gemini')}|install --omit=peer
+${path.join(realFixture, 'plugins/google-mcp-auth')}|install --omit=peer
+`,
+      );
+      for (const plugin of ['google-gemini', 'google-mcp-auth']) {
+        fs.writeFileSync(log, '');
+        expect(run(plugin)).toBe('17');
+        expect(fs.readFileSync(log, 'utf8').trim().split('\n')).toHaveLength(
+          plugin === 'google-gemini' ? 1 : 2,
+        );
+      }
+    } finally {
+      fs.rmSync(fixture, { recursive: true, force: true });
+    }
   });
 
   it('publishes every npm release package', () => {

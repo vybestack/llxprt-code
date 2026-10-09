@@ -51,8 +51,10 @@ describe('AnthropicProvider thinking display field @plan:PLAN-ANTHROPIC-THINKING
       }),
     );
     await generator.next();
-    expect(mockMessagesCreate).toHaveBeenCalled();
-    return mockMessagesCreate.mock.calls[0][0] as AnthropicRequestBody;
+    const calls = mockMessagesCreate.mock.calls;
+    const latestCall = calls[calls.length - 1];
+    expect(latestCall).toBeDefined();
+    return latestCall[0] as AnthropicRequestBody;
   }
 
   it('should set display:summarized for Opus 4.8 when reasoning.includeInResponse is true @issue:1723', async () => {
@@ -120,5 +122,26 @@ describe('AnthropicProvider thinking display field @plan:PLAN-ANTHROPIC-THINKING
     expect(request.thinking).toBeDefined();
     expect(request.thinking?.type).toBe('adaptive');
     expect(request.thinking?.display).toBe('omitted');
+  });
+
+  it('builds adaptive summarized thinking without a token budget for Claude 5.5 @issue:3834', async () => {
+    settingsService.set('reasoning.enabled', true);
+    settingsService.set('reasoning.adaptiveThinking', true);
+    settingsService.set('reasoning.includeInContext', true);
+    settingsService.set('reasoning.effort', 'high');
+    for (const model of [
+      'claude-opus-5-5',
+      'claude-sonnet-5-5',
+      'claude-haiku-5-5',
+    ]) {
+      const request = await captureRequest(model);
+      expect(request.thinking as Record<string, unknown>).toStrictEqual({
+        type: 'adaptive',
+        display: 'summarized',
+        block_binding: { prefix_mismatch_behavior: 'drop_block' },
+      });
+      expect(request.thinking?.type).not.toBe('enabled');
+      expect(request.thinking).not.toHaveProperty('budget_tokens');
+    }
   });
 });
