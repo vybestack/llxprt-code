@@ -185,9 +185,27 @@ describe('SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
       `${JSON.stringify(incompatibleLine)}\n`,
     );
 
-    await expect(
-      SessionDiscovery.listContinueTargets(chatsDir, PROJECT_HASH),
-    ).rejects.toThrow(/unsupported recording version/i);
+    const targets = await SessionDiscovery.listContinueTargets(
+      chatsDir,
+      PROJECT_HASH,
+    );
+    const detailed = await SessionDiscovery.listContinueTargetsDetailed(
+      chatsDir,
+      PROJECT_HASH,
+    );
+
+    expect(targets).toStrictEqual([]);
+    expect({
+      skippedCount: detailed.skippedCount,
+      reportedFile: detailed.recordingErrors.map((error) =>
+        error.startsWith(`${created.filePath}: `),
+      ),
+      reason: detailed.recordingErrors.join(';'),
+    }).toStrictEqual({
+      skippedCount: 1,
+      reportedFile: [true],
+      reason: expect.stringMatching(/unsupported recording version/i),
+    });
   });
 
   // -------------------------------------------------------------------------

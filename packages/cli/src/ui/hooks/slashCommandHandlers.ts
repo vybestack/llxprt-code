@@ -685,13 +685,6 @@ async function performSessionResume(
     return { type: 'handled' };
   }
 
-  for (const warning of resumeResult.warnings) {
-    deps.addMessage({
-      type: MessageType.INFO,
-      content: `Warning: ${warning}`,
-      timestamp: new Date(),
-    });
-  }
   const uiHistory = iContentToHistoryItems(
     resumeResult.history,
     resolveEmojiFilterMode(deps.config),
@@ -700,6 +693,14 @@ async function performSessionResume(
   uiHistory.forEach((item, index) => {
     context.ui.addItem(item, index);
   });
+  // After the restore: clearing history would erase warnings added before it.
+  for (const warning of resumeResult.warnings) {
+    deps.addMessage({
+      type: MessageType.INFO,
+      content: `Warning: ${warning}`,
+      timestamp: new Date(),
+    });
+  }
   return { type: 'handled' };
 }
 

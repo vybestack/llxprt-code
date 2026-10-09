@@ -4,10 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useState, type MutableRefObject } from 'react';
+import type { RecordingIntegration } from '@vybestack/llxprt-code-core';
 import { MessageType } from '../types.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
+import { recordActiveProviderSwitch } from '../utils/recordActiveProviderSwitch.js';
 
 interface UseLoadProfileDialogParams {
   addMessage: (msg: {
@@ -16,6 +18,8 @@ interface UseLoadProfileDialogParams {
     timestamp: Date;
   }) => void;
   dialogs: DialogOpeners;
+  /** The live recording integration; it is swapped when a session is resumed. */
+  recordingIntegrationRef: MutableRefObject<RecordingIntegration | null>;
 }
 
 function formatInfoMessages(result: { infoMessages: string[] }): string {
@@ -69,6 +73,7 @@ function handleProfileLoadError(
 export const useLoadProfileDialog = ({
   addMessage,
   dialogs,
+  recordingIntegrationRef,
 }: UseLoadProfileDialogParams) => {
   const runtime = useRuntimeApi();
   const [profiles, setProfiles] = useState<string[]>([]);
@@ -102,6 +107,7 @@ export const useLoadProfileDialog = ({
     async (profileName: string) => {
       try {
         const result = await runtime.loadProfileByName(profileName);
+        recordActiveProviderSwitch(recordingIntegrationRef.current, runtime);
         const extra = formatInfoMessages(result);
         addMessage({
           type: MessageType.INFO,
@@ -120,7 +126,7 @@ export const useLoadProfileDialog = ({
       }
       dialogs.loadProfile.close();
     },
-    [addMessage, dialogs, runtime],
+    [addMessage, dialogs, runtime, recordingIntegrationRef],
   );
 
   return {

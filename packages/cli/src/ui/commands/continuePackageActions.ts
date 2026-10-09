@@ -5,12 +5,15 @@
  */
 
 import {
+  describeUnreadableRecording,
   exportSessionMediaPackage,
+  matchUnreadableRecordings,
   SessionDiscovery,
   validateSessionMediaPackage,
 } from '@vybestack/llxprt-code-core';
 import { basename } from 'node:path';
 import type { CommandContext, SlashCommandActionReturn } from './types.js';
+import { warnUnreadableRecordings } from '../utils/warnUnreadableRecordings.js';
 
 type PackageAction =
   | { readonly kind: 'import'; readonly packageDirectory: string }
@@ -86,16 +89,29 @@ async function exportPackage(
   const chatsDir = config.storage.getProjectChatsDir();
   const projectHash = basename(config.storage.getProjectTempDir());
   const mediaStore = config.getLocalMediaStore();
-  const targets = await SessionDiscovery.listContinueTargets(
-    chatsDir,
-    projectHash,
-    mediaStore,
-  );
+  const { targets, unreadableRecordings } =
+    await SessionDiscovery.listContinueTargetsDetailed(
+      chatsDir,
+      projectHash,
+      mediaStore,
+    );
+  warnUnreadableRecordings('/continue export', unreadableRecordings);
   const resolved = SessionDiscovery.resolveContinueRef(
     action.sessionRef,
     targets,
   );
-  if ('error' in resolved) throw new Error(resolved.error);
+  if ('error' in resolved) {
+    const named = matchUnreadableRecordings(
+      action.sessionRef,
+      resolved.error,
+      unreadableRecordings,
+    );
+    throw new Error(
+      named.length === 0
+        ? resolved.error
+        : `${resolved.error} (unreadable recording skipped: ${named.map(describeUnreadableRecording).join('; ')})`,
+    );
+  }
   const source =
     resolved.target.kind === 'session'
       ? resolved.target.session

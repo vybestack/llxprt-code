@@ -49,6 +49,14 @@ export {
   type SessionResolutionError,
 } from './SessionDiscovery.js';
 export {
+  INVALID_SESSION_START_MESSAGE,
+  isSessionStartHeader,
+} from './sessionStartHeader.js';
+export {
+  describeUnreadableRecording,
+  matchUnreadableRecordings,
+} from './unreadableRecordings.js';
+export {
   resumeSession,
   CONTINUE_LATEST,
   type ResumeRequest,

@@ -91,7 +91,11 @@ function renderLoadProfileDialog(
   const addMessage = vi.fn<(message: AddMessageCall) => void>();
   useRuntimeApiMock.mockReturnValue(runtime);
   const { result } = renderHook(() =>
-    useLoadProfileDialog({ addMessage, dialogs }),
+    useLoadProfileDialog({
+      addMessage,
+      dialogs,
+      recordingIntegrationRef: { current: null },
+    }),
   );
   return { result, store, visibility, addMessage };
 }

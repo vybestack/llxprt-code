@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type MutableRefObject } from 'react';
+import type { RecordingIntegration } from '@vybestack/llxprt-code-core';
 import { MessageType } from '../types.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 import type { Profile } from '@vybestack/llxprt-code-settings';
@@ -12,6 +13,7 @@ import type { ProfileListItem } from '../components/ProfileListDialog.js';
 import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
+import { recordActiveProviderSwitch } from '../utils/recordActiveProviderSwitch.js';
 
 const debug = new DebugLogger('llxprt:ui:useProfileManagement');
 
@@ -68,6 +70,8 @@ interface AddMessageFn {
 interface UseProfileManagementParams {
   addMessage: AddMessageFn;
   dialogs: DialogOpeners;
+  /** The live recording integration; it is swapped when a session is resumed. */
+  recordingIntegrationRef: MutableRefObject<RecordingIntegration | null>;
 }
 
 function useProfileDataStates() {
@@ -288,11 +292,13 @@ function useLoadProfileAction(
   dialogs: DialogOpeners,
   runtime: ReturnType<typeof useRuntimeApi>,
   setActiveProfileName: React.Dispatch<React.SetStateAction<string | null>>,
+  recordingIntegrationRef: MutableRefObject<RecordingIntegration | null>,
 ) {
   return useCallback(
     async (profileName: string) => {
       try {
         const result = await runtime.loadProfileByName(profileName);
+        recordActiveProviderSwitch(recordingIntegrationRef.current, runtime);
         const extra = result.infoMessages
           .map((message: string) => `\n- ${message}`)
           .join('');
@@ -319,7 +325,13 @@ function useLoadProfileAction(
         });
       }
     },
-    [addMessage, dialogs, runtime, setActiveProfileName],
+    [
+      addMessage,
+      dialogs,
+      runtime,
+      setActiveProfileName,
+      recordingIntegrationRef,
+    ],
   );
 }
 
@@ -514,12 +526,14 @@ function useProfileDispatchActions(
   loadProfiles: (options?: { showLoading?: boolean }) => Promise<void>,
   dataStates: ReturnType<typeof useProfileDataStates>,
   viewProfileDetail: (name: string, direct: boolean) => Promise<void>,
+  recordingIntegrationRef: MutableRefObject<RecordingIntegration | null>,
 ) {
   const loadProfile = useLoadProfileAction(
     addMessage,
     dialogs,
     runtime,
     dataStates.setActiveProfileName,
+    recordingIntegrationRef,
   );
   const deleteProfile = useDeleteProfileAction(
     addMessage,
@@ -596,6 +610,7 @@ function buildProfileManagementResult<TActions extends object>(
 export const useProfileManagement = ({
   addMessage,
   dialogs,
+  recordingIntegrationRef,
 }: UseProfileManagementParams) => {
   const runtime = useRuntimeApi();
 
@@ -642,6 +657,7 @@ export const useProfileManagement = ({
     loadProfiles,
     dataStates,
     viewProfileDetail,
+    recordingIntegrationRef,
   );
 
   return buildProfileManagementResult(dataStates, {

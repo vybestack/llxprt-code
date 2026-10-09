@@ -40,6 +40,7 @@ import {
   type SessionRecordingServiceConfig,
   type SessionEventType,
   type SessionRecordLine,
+  type SessionStartPayload,
   type RecordingCheckpointInfo,
   type SessionForkedPayload,
 } from './types.js';
@@ -80,6 +81,20 @@ interface PendingRecord {
   readonly bytes: number;
 }
 
+/** The session_start line as built at construction, before any rebinding. */
+interface PendingSessionStart {
+  readonly line: SessionRecordLine;
+  readonly payload: SessionStartPayload;
+  readonly record: PendingRecord;
+}
+
+/** A session_start header rebuilt for the provider/model at materialization. */
+interface HeaderRebind {
+  readonly record: PendingRecord;
+  /** Byte growth of the rebuilt header over the buffered one. */
+  readonly growth: number;
+}
+
 export interface PreparedContentBatch {
   publish(): void;
   rollback(): void;
@@ -89,6 +104,21 @@ export interface PreparedContentBatch {
 function toPendingRecord(line: SessionRecordLine): PendingRecord {
   const json = JSON.stringify(line);
   return { json, bytes: Buffer.byteLength(json, 'utf8') + 1 };
+}
+
+function toContentBatchRecords(
+  contents: readonly IContent[],
+  lastSeq: number,
+): PendingRecord[] {
+  return contents.map((content, index) =>
+    toPendingRecord({
+      v: recordingVersion({ content }),
+      seq: lastSeq + index + 1,
+      ts: new Date().toISOString(),
+      type: 'content',
+      payload: { content },
+    }),
+  );
 }
 
 function totalRecordBytes(records: readonly PendingRecord[]): number {
@@ -148,6 +178,10 @@ export class SessionRecordingService {
   private chatsDirWatcher: { close(): void } | null = null;
   private sessionTitle: string | null | undefined;
   private lockHandle: LockHandle | null = null;
+  private readonly pendingSessionStart: PendingSessionStart;
+  private readonly resolveProviderModel:
+    | (() => { provider: string; model: string })
+    | undefined;
 
   static async createLocked(
     config: SessionRecordingServiceConfig,
@@ -190,8 +224,9 @@ export class SessionRecordingService {
     this.chatsDir = config.chatsDir;
     this.maxQueueBytes = maxQueueBytes;
     this.mediaStore = config.mediaStore;
+    this.resolveProviderModel = config.resolveProviderModel;
 
-    const startPayload = {
+    const startPayload: SessionStartPayload = {
       sessionId: config.sessionId,
       projectHash: config.projectHash,
       workspaceDirs: config.workspaceDirs,
@@ -200,7 +235,12 @@ export class SessionRecordingService {
       model: config.model,
       startTime: new Date().toISOString(),
     };
-    this.bufferPreContent('session_start', startPayload);
+    const line = this.bufferPreContent('session_start', startPayload);
+    this.pendingSessionStart = {
+      line,
+      payload: startPayload,
+      record: this.preContentBuffer[0],
+    };
   }
 
   /**
@@ -214,13 +254,7 @@ export class SessionRecordingService {
     type: SessionEventType,
     payload: unknown,
   ): SessionRecordLine {
-    const line: SessionRecordLine = {
-      v: type === 'semantic_media_purge' ? 2 : recordingVersion(payload),
-      seq: this.seq + 1,
-      ts: new Date().toISOString(),
-      type,
-      payload,
-    };
+    const line = this.nextLine(type, payload);
     const record = toPendingRecord(line);
     this.reserveQueueBytes(record.bytes);
     this.seq = line.seq;
@@ -244,19 +278,14 @@ export class SessionRecordingService {
       return this.bufferPreContent(type, payload);
     }
 
-    const line: SessionRecordLine = {
-      v: type === 'semantic_media_purge' ? 2 : recordingVersion(payload),
-      seq: this.seq + 1,
-      ts: new Date().toISOString(),
-      type,
-      payload,
-    };
+    const line = this.nextLine(type, payload);
     const record = toPendingRecord(line);
-    this.reserveQueueBytes(record.bytes);
+    const rebind = this.materialized ? null : this.planHeaderRebind();
+    this.reserveQueueBytes(record.bytes + (rebind?.growth ?? 0));
     if (!this.materialized) {
       this.materialize();
-      this.queue.push(...this.preContentBuffer);
-      this.queueBytes += this.preContentBytes;
+      this.queue.push(...this.withReboundHeader(rebind));
+      this.queueBytes += this.preContentBytes + (rebind?.growth ?? 0);
       this.preContentBuffer = [];
       this.preContentBytes = 0;
       this.materialized = true;
@@ -267,6 +296,54 @@ export class SessionRecordingService {
     this.reportHighWater();
     this.scheduleDrain();
     return line;
+  }
+
+  private nextLine(
+    type: SessionEventType,
+    payload: unknown,
+  ): SessionRecordLine {
+    return {
+      v: type === 'semantic_media_purge' ? 2 : recordingVersion(payload),
+      seq: this.seq + 1,
+      ts: new Date().toISOString(),
+      type,
+      payload,
+    };
+  }
+
+  /**
+   * The session_start header for the provider/model in effect at
+   * materialization, or null when it matches the buffered header. The
+   * recording's own state is untouched: the caller reserves the byte growth
+   * (so the queue limit rejects an overflow before anything changes) and then
+   * applies the plan with {@link withReboundHeader}. `sessionId`, `seq`,
+   * `ts` and `startTime` stay those of the original header.
+   */
+  private planHeaderRebind(): HeaderRebind | null {
+    if (this.resolveProviderModel === undefined) return null;
+    const { provider, model } = this.resolveProviderModel();
+    const pending = this.pendingSessionStart;
+    if (
+      provider === pending.payload.provider &&
+      model === pending.payload.model
+    ) {
+      return null;
+    }
+    const record = toPendingRecord({
+      ...pending.line,
+      payload: { ...pending.payload, provider, model },
+    });
+    return { record, growth: record.bytes - pending.record.bytes };
+  }
+
+  private planHeaderGrowth(): number {
+    return this.planHeaderRebind()?.growth ?? 0;
+  }
+
+  /** The pre-content records with the header swapped for the rebind, if any. */
+  private withReboundHeader(rebind: HeaderRebind | null): PendingRecord[] {
+    if (rebind === null) return this.preContentBuffer;
+    return [rebind.record, ...this.preContentBuffer.slice(1)];
   }
 
   private reserveQueueBytes(bytes: number): void {
@@ -710,22 +787,11 @@ export class SessionRecordingService {
     }
 
     const expectedSeq = this.seq;
-    const records = contents.map((content, index) =>
-      toPendingRecord({
-        v: recordingVersion({ content }),
-        seq: expectedSeq + index + 1,
-        ts: new Date().toISOString(),
-        type: 'content',
-        payload: { content },
-      }),
-    );
+    const records = toContentBatchRecords(contents, expectedSeq);
     const batchBytes = totalRecordBytes(records);
-    const pendingBytes = this.queueBytes + this.preContentBytes;
-    if (batchBytes > this.maxQueueBytes - pendingBytes) {
-      throw new Error(
-        `Session recording queue byte limit exceeded: ${pendingBytes} + ${batchBytes} > ${this.maxQueueBytes}`,
-      );
-    }
+    this.reserveQueueBytes(
+      batchBytes + (this.materialized ? 0 : this.planHeaderGrowth()),
+    );
 
     const queueBefore = this.queue;
     const queueBytesBefore = this.queueBytes;
@@ -743,11 +809,16 @@ export class SessionRecordingService {
         if (this.seq !== expectedSeq) {
           throw new Error('Recording changed after content batch preflight');
         }
+        // The live provider/model may have changed since prepare, so the
+        // header is rebuilt and its growth reserved before any state mutates.
+        const rebind = this.materialized ? null : this.planHeaderRebind();
+        this.reserveQueueBytes(batchBytes + (rebind?.growth ?? 0));
         published = true;
         if (!this.materialized) {
           this.materialize();
-          this.queue = [...this.preContentBuffer, ...records];
-          this.queueBytes = this.preContentBytes + batchBytes;
+          this.queue = [...this.withReboundHeader(rebind), ...records];
+          this.queueBytes =
+            this.preContentBytes + (rebind?.growth ?? 0) + batchBytes;
           this.preContentBuffer = [];
           this.preContentBytes = 0;
           this.materialized = true;

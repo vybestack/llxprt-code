@@ -192,6 +192,7 @@ function makeResumeResult(historyText = 'resumed'): ResumeResult {
       release: vi.fn().mockResolvedValue(undefined),
     } as unknown as ResumeResult['lockHandle'],
     warnings: [],
+    skippedRecordings: [],
   };
 }
 
