@@ -580,7 +580,7 @@ describe('SemanticMediaPurgeStreamCoordinator: does not overwrite a synchronous 
 
     expect(committed).toBe(true);
     await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
-      expect(rows[rows.length - 1]).toBe(newer);
+      expect(rows[rows.length - 1]).toStrictEqual(newer);
     });
   });
 });

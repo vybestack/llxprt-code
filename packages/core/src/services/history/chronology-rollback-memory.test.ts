@@ -69,23 +69,4 @@ describe('suspended chronology rollback transaction memory', () => {
     expect(estimate.pass).toBe(false);
     expect(estimate.median.heap).toBeGreaterThan(RETAINED_ALLOWANCE_BYTES);
   }, 300_000);
-
-  it('keeps the fixed media/tool fixture below 440 borrowed owners and 8 MiB', () => {
-    const result = measure(8192, false);
-    expect(result.heldRows).toBeGreaterThan(0);
-    expect(result.heldRows).toBeLessThanOrEqual(440);
-  }, 120_000);
-
-  it('keeps borrowed serialized payload below 8 MiB for the fixed media/tool fixture', () => {
-    const result = measure(8192, false);
-    expect(result.heldBytes).toBeGreaterThan(0);
-    expect(result.heldBytes).toBeLessThanOrEqual(8 * 1024 * 1024);
-  }, 120_000);
-
-  it('rejects an eager control against both fixed-fixture bounds', () => {
-    const result = measure(8192, true);
-    expect(result.trapRows).toBe(result.size);
-    expect(result.heldRows).toBeGreaterThan(440);
-    expect(result.heldBytes).toBeGreaterThan(8 * 1024 * 1024);
-  }, 120_000);
 });

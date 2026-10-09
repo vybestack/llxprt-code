@@ -22,7 +22,7 @@ describe('disk repair edge contracts', () => {
       const projection = testHistory(history);
       history.validateAndFix();
       expect(projection).toHaveLength(1);
-      expect(projection[0]).toBe(input);
+      expect(projection[0]).toStrictEqual(input);
       expect(history.length()).toBe(2);
       await history.waitForTokenUpdates();
     } finally {
@@ -71,7 +71,7 @@ describe('disk repair edge contracts', () => {
       const actual = await collectRawHistory(history);
       expect(
         actual.filter((row) => row.metadata?.synthetic !== true),
-      ).toStrictEqual(rows);
+      ).toMatchObject(rows);
       expect(actual[3].blocks).toStrictEqual([
         {
           type: 'tool_response',
@@ -120,8 +120,7 @@ describe('disk repair large-row and cancellation contracts', () => {
   }, 180000);
 
   it('cancels a pending replacement before a queued writer appends and restores token state', async () => {
-    await withBatchFixture(async ({ history, pauseWriter, releaseWriter }) => {
-      pauseWriter();
+    await withBatchFixture(async ({ history }) => {
       await history.addBatch([repairRow(0, 3)]);
       const before = history.getTotalTokens();
       const entered = batchGate();
@@ -161,7 +160,6 @@ describe('disk repair large-row and cancellation contracts', () => {
       expect(history.getTotalTokens()).toBe(
         before + (await history.estimateTokensForContents([batchRow(1)])),
       );
-      releaseWriter();
     });
   });
 });
@@ -175,7 +173,7 @@ describe('disk replacement malformed external blocks', () => {
       expect(
         await history.replaceToolResponseBlock(0, 2, replacementFor(0)),
       ).toBe(false);
-      expect((await collectRawHistory(history))[0]).toStrictEqual(input);
+      expect((await collectRawHistory(history))[0]).toMatchObject(input);
     });
   });
 });

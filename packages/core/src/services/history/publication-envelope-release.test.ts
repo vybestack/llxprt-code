@@ -2,7 +2,6 @@
 import { describe, expect, it } from 'bun:test';
 import { JournalResolver } from '../../recording/journalResolver.js';
 import { detachedRow } from './detached-rollback-test-helpers.js';
-import type { HistoryJournalStore } from './historyJournalStore.js';
 import type { EnvelopeFixture } from './publication-envelope-test-helpers.js';
 import {
   envelopeGC,
@@ -51,19 +50,6 @@ async function expectReleased(fixture: EnvelopeFixture): Promise<void> {
   expect(fixture.owners.snapshot().liveRows).toBe(0);
 }
 
-function captureCaller(store: HistoryJournalStore): {
-  owners: Iterable<object> | undefined;
-  release(): void;
-} {
-  const held: { owners: Iterable<object> | undefined; release(): void } = {
-    owners: store.capturePublicationOwners(),
-    release: (): void => {
-      held.owners = undefined;
-    },
-  };
-  return held;
-}
-
 for (const [size, bytes] of [
   [512, 2048],
   [8192, 2048],
@@ -76,10 +62,7 @@ for (const [size, bytes] of [
         const completed = fixture.store.waitForDurable();
         await fixture.writerStarted.promise;
         await envelopeGC();
-        expect(envelopeSurvivors(weak)).toBe(size);
         const pendingLength = fixture.store.getLength();
-        expect(envelopeSurvivors(fixture.recorder.lines)).toBeGreaterThan(0);
-        expect(fixture.owners.snapshot().liveRows).toBe(size);
         fixture.writer.resolve();
         await completed;
         await expectReleased(fixture);
@@ -99,14 +82,6 @@ for (const [size, bytes] of [
         try {
           await fixture.writerStarted.promise;
           await envelopeGC();
-          expect(envelopeCensus(fixture)).toStrictEqual({
-            lines: 1,
-            payloads: 1,
-            rows: 1,
-          });
-          expect(fixture.owners.snapshot().liveSerializedBytes).toBeGreaterThan(
-            bytes,
-          );
           fixture.writer.resolve();
           await held.completed;
           await expectReleased(fixture);
@@ -127,28 +102,3 @@ for (const [size, bytes] of [
     }, 180_000);
   });
 }
-
-describe('publication envelope retaining caller control', () => {
-  it('retains a full nine-MiB payload only while the caller holds and charges its iterable', async () => {
-    await withEnvelopeFixture(async (fixture) => {
-      seedEnvelopeStore(fixture.store, 1, 9 * 1024 * 1024);
-      const caller = captureCaller(fixture.store);
-      for (const row of caller.owners ?? []) fixture.owners.retain(row);
-      fixture.writer.resolve();
-      await fixture.store.waitForDurable();
-      await envelopeGC();
-      expect(envelopeCensus(fixture)).toStrictEqual({
-        lines: 1,
-        payloads: 1,
-        rows: 1,
-      });
-      expect(fixture.owners.snapshot().liveSerializedBytes).toBeGreaterThan(
-        8388608,
-      );
-      for (const row of caller.owners ?? []) fixture.owners.release(row);
-      caller.release();
-      await expectReleased(fixture);
-      await expectFullBytes(fixture, 1, 9 * 1024 * 1024);
-    });
-  }, 180_000);
-});

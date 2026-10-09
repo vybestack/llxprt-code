@@ -119,7 +119,7 @@ function captureToolRewrite(
     }
     if (invalidate) [row] = invalidateResponsesStatefulChain([row]);
     if (previous.isPendingRow(position) || position === input.entryIndex)
-      next.appendIdentity(row);
+      next.appendSanitized(row);
     else next.append(row);
   }
 }

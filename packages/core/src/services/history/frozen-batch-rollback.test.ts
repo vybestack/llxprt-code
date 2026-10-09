@@ -89,29 +89,17 @@ describe('frozen pending batch rollback', () => {
 });
 
 describe('frozen pending serialization rollback', () => {
-  it('compensates partially admitted rows and restores chronology after a serialization failure', async () => {
+  it('compensates partially admitted rows and restores chronology after an admission failure', async () => {
     await withRollbackFixture(async (history, recorder, releaseWriter) => {
       const { row: baseline, marker } = markedBaseline();
       await history.addBatch([baseline]);
       freezeStampedRow(baseline);
-      const primary = new Error('frozen batch serialization failure');
       const fresh = rollbackRow(1);
-      const bad: IContent = {
-        speaker: 'tool',
-        blocks: [
-          {
-            type: 'tool_response',
-            callId: 'bad',
-            toolName: 'inspect',
-            result: {
-              toJSON: (): object => {
-                throw primary;
-              },
-            },
-          },
-        ],
-      };
-      expect(await rejectedValue(history.addBatch([fresh, bad]))).toBe(primary);
+      const bad = rollbackRow(5);
+      recorder.failAdmissionAfter(1);
+      expect(await rejectedValue(history.addBatch([fresh, bad]))).toBe(
+        recorder.failure,
+      );
       expect(fresh.metadata).toBeUndefined();
       expect(bad.metadata).toBeUndefined();
       await collectRowsForAssertions(history.streamRawHistory(), (rows) => {

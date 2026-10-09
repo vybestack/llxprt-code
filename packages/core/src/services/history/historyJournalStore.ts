@@ -645,6 +645,7 @@ export class HistoryJournalStore {
     const recorder = binding.recorder;
     if (recorder === undefined) return;
     const watermark = await recorder.waitForCommitSequence(seq);
+    if (this.disposed || this.binding !== binding) return;
     absorbHistoryPending(binding, seq, watermark);
   }
 

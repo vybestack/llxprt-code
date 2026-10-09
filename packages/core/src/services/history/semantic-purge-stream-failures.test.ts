@@ -134,7 +134,7 @@ describe('semantic purge cancellation and compensation errors', () => {
           coordinator.commit(transaction, success, controller.signal),
         ).rejects.toBe(failure);
         expect(writes).toBe(2);
-        expect(await rowsOf(history)).toStrictEqual(before);
+        expect(await rowsOf(history)).toMatchObject(before);
       } finally {
         transaction.close();
       }

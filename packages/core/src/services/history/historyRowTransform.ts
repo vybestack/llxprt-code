@@ -8,7 +8,6 @@ import {
   validateHistoryEntry,
   type HistoryBatchOptions,
 } from './historyBatchContracts.js';
-import { sanitizeProviderContentForSerialization } from './historyCloneUtils.js';
 import type { HistoryMutationSnapshot } from './historyMutationSnapshot.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 
@@ -47,10 +46,6 @@ export interface HistoryTransformSink {
   appendRetained(sourceIndex: number, row: IContent): void;
   /** Serialize a sanitized value now. The caller's row is never stamped. */
   appendDetached(row: IContent): void;
-  /** Keep the caller's exact row strongly alive and charge it until completion. */
-  appendBorrowed(row: IContent): void;
-  /** Keep the exact row and its original marker for rollback, even after GC. */
-  appendIdentity(row: IContent): void;
 }
 
 export interface HistoryRowTransformOptions extends HistoryBatchOptions {
@@ -99,13 +94,11 @@ function appendRetainedRow(
     !isDeepStrictEqual(row.blocks, original.blocks)
   )
     throw new Error('Retained history row blocks or speaker changed');
-  if (previous.isPendingRow(sourceIndex)) candidate.appendIdentity(row);
-  else candidate.append(sanitizeProviderContentForSerialization(row));
+  candidate.appendSanitized(row);
 }
 
-/** Scoped repeatable source and disk sink. Borrowing does not waive owner charge:
- * both reference writer operations pin the row and protect its original marker.
- * Pending source rows are caller-owned references; durable source rows are values.
+/** Scoped repeatable source and disk sink. Every appended row is serialized to a
+ * detached value; no sink operation retains the caller's row object.
  */
 export async function withHistoryRowTransform(
   previous: HistoryMutationSnapshot,
@@ -121,11 +114,6 @@ export async function withHistoryRowTransform(
     if (!active)
       throw new Error('History transform cursor and sink are closed');
     signal?.throwIfAborted();
-  };
-  const pin = (row: IContent): void => {
-    assertActive();
-    validateHistoryEntry(row, candidate.length);
-    candidate.appendIdentity(row);
   };
   const source: HistoryTransformSource = {
     length: previous.length,
@@ -155,10 +143,8 @@ export async function withHistoryRowTransform(
     appendDetached: (row): void => {
       assertActive();
       validateHistoryEntry(row, candidate.length);
-      candidate.append(sanitizeProviderContentForSerialization(row));
+      candidate.appendSanitized(row);
     },
-    appendBorrowed: pin,
-    appendIdentity: pin,
   };
   try {
     await transform(source, sink);

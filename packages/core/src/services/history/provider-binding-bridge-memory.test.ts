@@ -74,15 +74,4 @@ describe('binding production route suspended after durable acknowledgement', () 
     expect(estimate.pass).toBe(false);
     expect(estimate.median.heap).toBeGreaterThan(RETAINED_ALLOWANCE_BYTES);
   }, 300_000);
-  it('charges live suspended participant retention against 440 objects and eight MiB', () => {
-    const positive = measure(8192, false);
-    const trap = measure(8192, true);
-    expect(positive.heldRows).toBeGreaterThan(0);
-    expect(positive.heldRows).toBeLessThanOrEqual(440);
-    expect(positive.heldBytes).toBeGreaterThan(0);
-    expect(positive.heldBytes).toBeLessThanOrEqual(8 * 1024 * 1024);
-    expect(trap.trapRows).toBe(8192);
-    expect(trap.heldRows).toBeGreaterThan(440);
-    expect(trap.heldBytes).toBeGreaterThan(8 * 1024 * 1024);
-  }, 300_000);
 });

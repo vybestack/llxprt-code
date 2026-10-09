@@ -29,19 +29,19 @@ import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership
 `;
 
 describe('public density rows under default Node exports', () => {
-  it('round-trips disk rows and retains identity rows until close', () => {
+  it('round-trips disk rows and detached sanitized rows without retaining owners', () => {
     const result = nodeProbe(`${imports}
 const ownership = new RowOwnership();
 const rows = new HistoryDensityRows(ownership);
 const input = ${JSON.stringify(fixture)};
 try {
   rows.append(input);
-  rows.appendIdentity(input);
+  rows.appendSanitized(input);
   assert.equal(rows.length, 2);
   assert.notEqual(rows.readRow(0), input);
-  assert.equal(rows.readRow(1), input);
+  assert.notEqual(rows.readRow(1), input);
   assert.deepEqual([...rows], [input, input]);
-  assert.equal(ownership.snapshot().liveRows, 1);
+  assert.equal(ownership.snapshot().liveRows, 0);
   console.log(JSON.stringify(rows.readRow(0)));
 } finally {
   rows.close();

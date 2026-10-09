@@ -9,24 +9,15 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import {
-  invalidateResponsesStatefulChain,
-  type IContent,
-  type ChronologyMarker,
-} from './IContent.js';
-import type { ChronologyRollbackEntry } from './historyBatchContracts.js';
-import type { DensityResult } from '../../core/compression/types.js';
-import type { HistoryMutationSnapshot } from './historyMutationSnapshot.js';
+import type { IContent } from './IContent.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 import { isSpeakerContent } from './historyJournalGuards.js';
+import { sanitizeProviderContentForSerialization } from './historyCloneUtils.js';
 
 export class HistoryDensityRows implements Iterable<IContent> {
   private readonly root: string;
   private readonly rows: number;
   private readonly index: number;
-  private readonly chronologyFile: number;
-  private readonly identities = new Map<number, IContent>();
-  private readonly originalMarkers = new Map<number, ChronologyMarker>();
   private offset = 0;
   private count = 0;
   private closed = false;
@@ -38,7 +29,6 @@ export class HistoryDensityRows implements Iterable<IContent> {
     try {
       rows = openSync(join(this.root, 'rows'), 'w+');
       index = openSync(join(this.root, 'index'), 'w+');
-      this.chronologyFile = openSync(join(this.root, 'chronology'), 'w+');
       this.rows = rows;
       this.index = index;
     } catch (error) {
@@ -67,25 +57,14 @@ export class HistoryDensityRows implements Iterable<IContent> {
     return this.count;
   }
 
-  get hasIdentityRows(): boolean {
-    return this.identities.size > 0;
-  }
-
   append(row: IContent): void {
     this.writeRow(this.count, row);
     this.count++;
   }
 
-  isIdentityRow(index: number): boolean {
-    this.assertOpen();
-    return this.identities.has(index);
-  }
-
-  appendIdentity(row: IContent): void {
-    this.assertOpen();
-    this.ownership?.retain(row);
-    this.identities.set(this.count, row);
-    this.count++;
+  /** Serialize a sanitized value of a caller-owned row; the caller's row is never retained. */
+  appendSanitized(row: IContent): void {
+    this.append(sanitizeProviderContentForSerialization(row));
   }
 
   async *streamRows(
@@ -98,58 +77,8 @@ export class HistoryDensityRows implements Iterable<IContent> {
     }
   }
 
-  prepareChronologyRollback(): Iterable<ChronologyRollbackEntry> {
-    for (const [index, row] of this.identities) {
-      transfer(
-        this.chronologyFile,
-        Buffer.from([row.metadata === undefined ? 0 : 1]),
-        index,
-        true,
-      );
-      const marker = row.metadata?.chronology;
-      if (marker !== undefined) this.originalMarkers.set(index, marker);
-    }
-    return { [Symbol.iterator]: () => this.chronologyEntries() };
-  }
-
-  private *chronologyEntries(): Generator<
-    ChronologyRollbackEntry,
-    void,
-    unknown
-  > {
-    for (const [index, content] of this.identities) {
-      const flag = Buffer.alloc(1);
-      transfer(this.chronologyFile, flag, index, false);
-      yield {
-        content,
-        hadMetadata: flag[0] === 1,
-        chronology: this.originalMarkers.get(index),
-      };
-    }
-  }
-
-  capture(previous: HistoryMutationSnapshot, result: DensityResult): void {
-    const removed = new Set(result.removals);
-    for (let index = 0; index < previous.length; index++) {
-      if (removed.has(index)) continue;
-      const original =
-        result.replacements.get(index) ?? previous.readRow(index);
-      this.ownership?.retain(original);
-      try {
-        const [row] = invalidateResponsesStatefulChain([original]);
-        const identity =
-          result.replacements.has(index) || previous.isPendingRow(index);
-        if (identity) this.appendIdentity(row);
-        else this.append(row);
-      } finally {
-        this.ownership?.release(original);
-      }
-    }
-  }
-
   writeRow(index: number, row: IContent): void {
     this.assertOpen();
-    if (this.identities.has(index)) return;
     const bytes = Buffer.from(JSON.stringify(row));
     const position = Buffer.alloc(16);
     position.writeDoubleLE(this.offset, 0);
@@ -161,8 +90,6 @@ export class HistoryDensityRows implements Iterable<IContent> {
 
   readRow(index: number): IContent {
     this.assertOpen();
-    const identity = this.identities.get(index);
-    if (identity !== undefined) return identity;
     const position = Buffer.alloc(16);
     transfer(this.index, position, index * 16, false);
     const bytes = Buffer.alloc(position.readDoubleLE(8));
@@ -189,14 +116,7 @@ export class HistoryDensityRows implements Iterable<IContent> {
 
   close(): void {
     this.closed = true;
-    for (const row of this.identities.values()) this.ownership?.release(row);
-    this.identities.clear();
-    this.originalMarkers.clear();
-    try {
-      closeSync(this.chronologyFile);
-    } finally {
-      this.closeRows();
-    }
+    this.closeRows();
   }
 
   private closeRows(): void {

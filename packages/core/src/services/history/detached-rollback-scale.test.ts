@@ -1,6 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { setImmediate } from 'node:timers/promises';
 import { appendFileSync } from 'node:fs';
 import {
   detachedDigest,
@@ -107,54 +106,6 @@ async function rollbackScale(size: number, stage: string): Promise<number> {
   });
 }
 
-async function pendingScale(size: number): Promise<number> {
-  return withDetachedFixture(
-    async ({ history, recorder, owners, releaseWriter }) => {
-      for (let index = 0; index < size; index++)
-        history.add(detachedRow(index));
-      await history.waitForTokenUpdates();
-      let ack: RowOwnershipStats | undefined;
-      const failure = new Error('pending source rollback');
-      const operation = rejectedValue(
-        history.detachedValues.transform(
-          async (source, sink) => {
-            for await (const row of source.streamRows()) sink.appendValue(row);
-          },
-          undefined,
-          {
-            onAcknowledged: () => {
-              ack = owners.snapshot();
-              throw failure;
-            },
-          },
-        ),
-      );
-      try {
-        while (owners.snapshot().liveRows < size) await setImmediate();
-        const pre = owners.snapshot();
-        expect(pre.liveRows).toBeGreaterThanOrEqual(size);
-        expect(pre.liveSerializedBytes).toBeGreaterThan(size * 2048);
-        releaseWriter();
-        expect(await operation).toBe(failure);
-        if (ack === undefined) throw new Error('Missing ack census');
-        expect(bounded(ack)).toBe(true);
-        const expected = await detachedDigest(detachedRows(size));
-        expect(await detachedDigest(history.streamRawHistory())).toStrictEqual(
-          expected,
-        );
-        expect(await detachedDurableDigest(recorder)).toStrictEqual(expected);
-        expect(owners.snapshot().liveRows).toBe(0);
-        record({ kind: 'pending', size, pre, ack, expected });
-        return expected.count;
-      } finally {
-        releaseWriter();
-        await operation;
-      }
-    },
-    true,
-  );
-}
-
 for (const size of [512, 8192]) {
   describe('detached acknowledged live ownership', () => {
     it(`charges ${size} accepted borrowed array inputs before capture and releases them before acknowledgement`, async () => {
@@ -165,9 +116,6 @@ for (const size of [512, 8192]) {
         expect(await rollbackScale(size, stage)).toBe(size);
       }, 180_000);
     }
-    it(`charges a ${size}-row pending original source before its recording ack without retaining it after ack`, async () => {
-      expect(await pendingScale(size)).toBe(size);
-    }, 180_000);
   });
 }
 

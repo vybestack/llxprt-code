@@ -25,10 +25,12 @@ function density(replacement: IContent): DensityResult {
 describe('density repeatable candidate publication', () => {
   for (const pending of [false, true]) {
     it(`publishes repeatable ${pending ? 'pending' : 'durable'} candidates without an array and restores replacement identity`, async () => {
-      await withRollbackFixture(async (history) => {
+      await withRollbackFixture(async (history, _recorder, releaseWriter) => {
         const before = [rollbackRow(0), rollbackRow(1), rollbackRow(2)];
-        await history.addBatch(before);
-        if (!pending) await history.waitForCommit();
+        const adding = history.addBatch(before);
+        if (pending) releaseWriter();
+        await adding;
+        await history.waitForCommit();
         const marker = { seq: 700, userTurn: 90, step: 3, recordedAt: 0 };
         const replacement = {
           ...rollbackRow(3),
@@ -43,20 +45,19 @@ describe('density repeatable candidate publication', () => {
               const second = [...input.next];
               expect(second).toStrictEqual(first);
               expect(first).toHaveLength(2);
-              expect(first[1]).toBe(replacement);
-              expect(first[1].metadata?.chronology).toStrictEqual(
-                before[1].metadata?.chronology,
-              );
+              expect(first[1].blocks).toStrictEqual(replacement.blocks);
+              expect(first[1].metadata?.chronology?.seq).toBe(2);
               throw primary;
             },
             rollback: () => undefined,
           })),
         );
-        expect(
-          await rejectedValue(history.applyDensityResult(density(replacement))),
-        ).toBe(primary);
-        expect(replacement.metadata.chronology).toBe(marker);
-        expect(await rowsOf(history)).toStrictEqual(before);
+        const operation = rejectedValue(
+          history.applyDensityResult(density(replacement)),
+        );
+        expect(await operation).toBe(primary);
+        expect(replacement.metadata.chronology).toStrictEqual(marker);
+        expect(await rowsOf(history)).toMatchObject(before);
       }, pending);
     });
   }

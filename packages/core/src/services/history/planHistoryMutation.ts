@@ -43,11 +43,7 @@ export function* planMutation(
     for (const content of input.nextHistory) yield { kind: 'content', content };
     return;
   }
-  const density =
-    input.densityResult === undefined
-      ? null
-      : planDensityMutation(previous, input.densityResult);
-  yield* density ?? planHistoryMutation(previous, input.nextHistory, ownership);
+  yield* planHistoryMutation(previous, input.nextHistory, ownership);
 }
 
 export function planDensityMutation(
@@ -164,8 +160,7 @@ function preferDetachedReplay(
   previous: HistoryRowSource,
   next: HistoryRowSource,
 ): boolean {
-  if (!(next instanceof HistoryDensityRows) || next.hasIdentityRows)
-    return false;
+  if (!(next instanceof HistoryDensityRows)) return false;
   let changes = 0;
   for (let index = 0; index < Math.min(previous.length, next.length); index++) {
     const original = historyRowAt(previous, index);

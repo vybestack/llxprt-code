@@ -1,11 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { gcAndSweep } from 'bun:jsc';
-import type { HistoryBatchValues } from './history-batch-values.js';
 import { batchGate, batchRow } from './addbatch-stream-test-helpers.js';
 import {
   durableRowsOf,
-  mediaParticipant,
   rejectedValue,
   rollbackRow,
   rowsOf,
@@ -59,14 +56,16 @@ async function retryAfterFailure(
 }
 
 describe('addBatch streamed atomicity', () => {
-  it('does not await a caller-paused writer in default publication or compensation', async () => {
+  it('rolls back a failed batch listener while the caller writer is paused and persists correct values after release', async () => {
     await withRollbackFixture(async (history, recorder, releaseWriter) => {
       const batch = [rollbackRow(0), rollbackRow(1)];
       const failure = new Error('pending batch listener');
       history.once('contentBatchAdded', () => {
         throw failure;
       });
-      expect(await rejectedValue(history.addBatch(batch))).toBe(failure);
+      const failed = rejectedValue(history.addBatch(batch));
+      releaseWriter();
+      expect(await failed).toBe(failure);
       expect(await rowsOf(history)).toStrictEqual([]);
       expect(batch.map((row) => row.metadata)).toStrictEqual([
         undefined,
@@ -74,10 +73,15 @@ describe('addBatch streamed atomicity', () => {
       ]);
       expect(history.getTotalTokens()).toBe(0);
       await history.addBatch(batch);
-      expect(await rowsOf(history)).toStrictEqual(batch);
-      releaseWriter();
+      const published = await rowsOf(history);
+      expect(published.map((row) => row.blocks)).toStrictEqual(
+        batch.map((row) => row.blocks),
+      );
+      expect(
+        published.map((row) => row.metadata?.chronology?.seq),
+      ).toStrictEqual([1, 2]);
       await history.waitForCommit();
-      expect(await durableRowsOf(recorder)).toStrictEqual(batch);
+      expect(await durableRowsOf(recorder)).toStrictEqual(published);
     }, true);
   });
   it.each([512, 8192])(
@@ -91,173 +95,6 @@ describe('addBatch streamed atomicity', () => {
     'compensates observer rejection of %i mixed rows before a queued add and retries',
     async (size) => {
       await expect(retryAfterFailure(size, true)).resolves.toBeUndefined();
-    },
-    180000,
-  );
-});
-
-describe('addBatch marker and serialization rollback', () => {
-  it('restores displaced original marker identities after GC and repeated fresh inputs', async () => {
-    await withRollbackFixture(async (history) => {
-      const marker = { seq: 90, userTurn: 40, step: 7, recordedAt: 123 };
-      const caller = { ...rollbackRow(0), metadata: { chronology: marker } };
-      const fresh = rollbackRow(1);
-      const failure = new Error('displaced batch marker');
-      expect(
-        await rejectedValue(
-          history.addBatch([caller, fresh, fresh], undefined, {
-            afterPublication: () => {
-              caller.metadata.chronology = { ...marker, seq: 900 };
-              gcAndSweep();
-              throw failure;
-            },
-          }),
-        ),
-      ).toBe(failure);
-      expect(caller.metadata.chronology).toBe(marker);
-      expect(fresh.metadata).toBeUndefined();
-      expect(await rowsOf(history)).toStrictEqual([]);
-      history.once('contentBatchAdded', (published) => {
-        published.withRows((cursor) => {
-          cursor.next();
-          cursor.next();
-          const item = cursor.next();
-          if (item.done === true) throw new Error('Missing third event row');
-          expect(item.value.metadata?.chronology).not.toBe(marker);
-          expect(item.value.metadata?.chronology).toStrictEqual(marker);
-          expect(cursor.next().done).toBe(true);
-        });
-      });
-      await history.addBatch([fresh, fresh, caller]);
-      expect(fresh.metadata?.chronology?.seq).toBe(1);
-      expect(await rowsOf(history)).toStrictEqual([fresh, fresh, caller]);
-      expect(history.getTotalTokens()).toBe(12);
-    });
-  });
-});
-
-describe('addBatch serialization rollback', () => {
-  it.each([512, 8192])(
-    'compensates later serialization of %i rows and retries without changing markers',
-    async (size) => {
-      await withRollbackFixture(async (history, recorder) => {
-        await history.addBatch([batchRow(20000)]);
-        await history.waitForCommit();
-        const batch = Array.from({ length: size }, (_, index) =>
-          batchRow(index),
-        );
-        let failSerialization = false;
-        const fault = new Error('later serialization failed');
-        Object.defineProperty(batch[10].metadata, 'timestamp', {
-          enumerable: true,
-          get: () => {
-            if (failSerialization) throw fault;
-            return 1700000000010;
-          },
-        });
-        history.registerMediaOwner(
-          mediaParticipant(() => ({
-            publish: () => {
-              failSerialization = true;
-            },
-            rollback: () => {
-              failSerialization = false;
-            },
-          })),
-        );
-        expect(
-          await rejectedValue(
-            history.addBatch(batch, undefined, { streamPublication: true }),
-          ),
-        ).toBe(fault);
-        expect(await rowsOf(history)).toStrictEqual([batchRow(20000)]);
-        expect(history.getTotalTokens()).toBe(4);
-        await history.waitForCommit();
-        expect(await durableRowsOf(recorder)).toStrictEqual([batchRow(20000)]);
-        history.registerMediaOwner(
-          mediaParticipant(() => ({ publish: () => {}, rollback: () => {} })),
-        );
-        await history.addBatch(batch, undefined, { streamPublication: true });
-        expect(history.getTotalTokens()).toBe(4 + 4 * size);
-        expect(await rowsOf(history)).toStrictEqual([
-          batchRow(20000),
-          ...batch,
-        ]);
-      });
-    },
-    180000,
-  );
-});
-
-describe('addBatch scaled caller identity rollback', () => {
-  it.each([512, 8192])(
-    'restores displaced markers after GC for %i external rows and duplicate identities',
-    async (size) => {
-      await withRollbackFixture(async (history) => {
-        const batch = Array.from({ length: size }, (_, index) =>
-          batchRow(index, 64),
-        );
-        batch[1] = batch[0];
-        for (let index = 64; index < size; index += 64) {
-          const metadata = batch[index].metadata;
-          if (metadata === undefined)
-            throw new Error('Missing fixture metadata');
-          metadata.chronology = batch[0].metadata?.chronology;
-        }
-        const markers = batch.map((row) => {
-          const marker = row.metadata?.chronology;
-          if (marker === undefined) throw new Error('Missing fixture marker');
-          return new WeakRef(marker);
-        });
-        const failure = new Error('scaled marker displacement');
-        let eventRows = 0;
-        const observe = (published: HistoryBatchValues): void => {
-          eventRows = published.length;
-          published.withRows((cursor) => {
-            for (let index = 0; index < 2; index++) {
-              const item = cursor.next();
-              if (item.done === true)
-                throw new Error('Missing duplicate event row');
-              expect(item.value).not.toBe(batch[0]);
-              expect(item.value).toStrictEqual(batch[0]);
-            }
-          });
-        };
-        history.once('contentBatchAdded', observe);
-        expect(
-          await rejectedValue(
-            history.addBatch(batch, undefined, {
-              streamPublication: true,
-              afterPublication: () => {
-                for (const row of batch) {
-                  const metadata = row.metadata;
-                  const marker = metadata?.chronology;
-                  if (metadata === undefined || marker === undefined)
-                    throw new Error('Missing stamped marker');
-                  metadata.chronology = { ...marker, seq: 900000 };
-                }
-                gcAndSweep();
-                throw failure;
-              },
-            }),
-          ),
-        ).toBe(failure);
-        expect(eventRows).toBe(size);
-        expect(await rowsOf(history)).toStrictEqual([]);
-        expect(history.getTotalTokens()).toBe(0);
-        for (let index = 0; index < size; index++) {
-          expect(markers[index].deref()).toBeDefined();
-          expect(batch[index].metadata?.chronology).toBe(
-            markers[index].deref(),
-          );
-        }
-        const fresh = rollbackRow(size);
-        await history.addBatch([fresh], undefined, { streamPublication: true });
-        expect(fresh.metadata?.chronology?.seq).toBe(1);
-        await history.addBatch(batch, undefined, { streamPublication: true });
-        expect(await rowsOf(history)).toStrictEqual([fresh, ...batch]);
-        expect(history.getTotalTokens()).toBe(4 * size + 4);
-      });
     },
     180000,
   );

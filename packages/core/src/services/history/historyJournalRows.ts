@@ -5,15 +5,16 @@ import {
   foldPendingRows,
   type PendingRowFold,
 } from '../../recording/pendingRowFold.js';
-import type { IContent } from './IContent.js';
+import type { ContentBlock, IContent } from './IContent.js';
 
 function retainRow(
   content: IContent,
   counters?: JournalReadCounters,
 ): () => void {
-  for (const block of content.blocks) {
+  // Persisted journal rows are external data and may hold a null block.
+  for (const block of content.blocks as ReadonlyArray<ContentBlock | null>) {
     if (
-      block.type === 'media' &&
+      block?.type === 'media' &&
       block.encoding === 'reference' &&
       block.providerFiles !== undefined
     ) {

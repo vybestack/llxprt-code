@@ -19,11 +19,7 @@
  * core and the durable media owner.
  */
 
-import type {
-  IContent,
-  MediaReferenceBlock,
-  ChronologyMarker,
-} from './IContent.js';
+import type { IContent, MediaReferenceBlock } from './IContent.js';
 
 import type { HistoryDensityRows } from './historyDensityRows.js';
 import {
@@ -41,7 +37,6 @@ export interface HistoryServiceJournalOptions {
   readonly attachmentCounters?: JournalReadCounters;
   readonly mutationOwnership?: RowOwnership;
 }
-import type { DensityResult } from '../../core/compression/types.js';
 import type {
   RemovedInteriorSpan,
   HistoryServiceEventEmitter,
@@ -131,7 +126,6 @@ export interface HistoryMutationInput {
   readonly publishedBatch?: HistoryBatchRows;
   readonly publishedRowStart?: number;
   readonly extraRemovedInterior?: readonly RemovedInteriorSpan[];
-  readonly densityResult?: DensityResult;
   readonly diskDensityResult?: DiskDensityResult;
   readonly diskDensitySpans?: DensitySpanRows;
   readonly streamPublication?: boolean;
@@ -163,9 +157,3 @@ export type QueuedHistoryMutation =
       resolve: () => void;
       reject: (error: unknown) => void;
     };
-
-export interface ChronologyRollbackEntry {
-  readonly content: IContent;
-  readonly hadMetadata: boolean;
-  readonly chronology: ChronologyMarker | undefined;
-}

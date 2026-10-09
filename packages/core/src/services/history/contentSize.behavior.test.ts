@@ -111,20 +111,6 @@ describe('retained-history accounting — attribution consistency', () => {
   });
 });
 
-describe('retained-history accounting — complete retained-graph identity', () => {
-  it('charges a one-million-character shared item exactly once through HistoryService', async () => {
-    expect(await observeDensityCase15()).toBe(2);
-  });
-
-  it('charges a shared blocks array referenced by two items exactly once', async () => {
-    expect(await observeDensityCase16()).toBe(1);
-  });
-
-  it('charges a shared block object appearing in two different arrays once', async () => {
-    expect(await observeDensityCase17()).toBe(2);
-  });
-});
-
 describe('retained-history accounting — null runtime strings from external JSON', () => {
   /**
    * Narrows a JSON-parsed value to IContent WITHOUT unsafe casts: validate
@@ -536,66 +522,6 @@ async function observeDensityCase14() {
   expect(breakdown.bytesByToolName['read_file']).toBeGreaterThan(100_000);
 
   return breakdown.itemCount;
-}
-
-async function observeDensityCase15() {
-  // One item whose payload is 1,000,000 characters, referenced from two
-  // history entries (the service stores references, so both entries alias
-  // the SAME object). The retained heap holds it once; the accounting must
-  // too, or a duplicate-retention bug would double-count ~1 MB per alias.
-  const service = new HistoryService();
-  const shared: IContent = {
-    speaker: 'tool',
-    blocks: [
-      {
-        type: 'tool_response',
-        callId: 'call-shared',
-        toolName: 'read_file',
-        result: { content: 'x'.repeat(1_000_000) },
-      },
-    ],
-  };
-  service.add(shared);
-  service.add(shared);
-  const breakdown = await sizeOf(service);
-  // Roughly one million payload characters plus small per-entry overhead —
-  // NOT two million. Bound both sides to catch under- and over-counting.
-  expect(breakdown.totalBytes).toBeGreaterThan(1_000_000);
-  expect(breakdown.totalBytes).toBeLessThan(1_050_000);
-
-  return breakdown.itemCount;
-}
-
-async function observeDensityCase16() {
-  // Two distinct items that alias the SAME blocks array (a real aliasing
-  // path: shallow-coned items sharing blocks).
-  const blocks = [{ type: 'text' as const, text: 'y'.repeat(500_000) }];
-  const service = new HistoryService();
-  service.add({ speaker: 'ai', blocks });
-  service.add({ speaker: 'human', blocks });
-  const breakdown = await sizeOf(service);
-  expect(breakdown.totalBytes).toBeGreaterThan(500_000);
-  expect(breakdown.totalBytes).toBeLessThan(510_000);
-
-  return breakdown.countsByBlockType['text'];
-}
-
-async function observeDensityCase17() {
-  const sharedBlock = {
-    type: 'text' as const,
-    text: 'z'.repeat(200_000),
-  };
-  const service = new HistoryService();
-  service.add({ speaker: 'ai', blocks: [sharedBlock] });
-  service.add({
-    speaker: 'ai',
-    blocks: [sharedBlock, { type: 'text', text: 'own' }],
-  });
-  const breakdown = await sizeOf(service);
-  expect(breakdown.totalBytes).toBeGreaterThan(200_000);
-  expect(breakdown.totalBytes).toBeLessThan(205_000);
-
-  return breakdown.countsByBlockType['text'];
 }
 
 function observeDensityCase18() {

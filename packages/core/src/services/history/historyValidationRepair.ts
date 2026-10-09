@@ -52,15 +52,12 @@ export class HistoryValidationRepair {
       if (seq === undefined || !this.index.add('sequence-', String(seq)))
         this.addressed = false;
       if (seq !== undefined) stamp(row);
-      if (cursor.isPendingRow(position++)) this.previous.appendIdentity(row);
+      if (cursor.isPendingRow(position++)) this.previous.appendSanitized(row);
       else this.previous.append(row);
       this.collectResponses(row);
     }
-    position = 0;
     for (const row of this.previous) {
-      if (this.previous.isIdentityRow(position++))
-        this.next.appendIdentity(row);
-      else this.next.append(row);
+      this.next.append(row);
       const missing =
         row.speaker !== 'ai' || !hasValidBlocks(row)
           ? []

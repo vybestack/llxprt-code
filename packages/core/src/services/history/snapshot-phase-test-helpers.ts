@@ -57,45 +57,18 @@ export class PhaseOwners extends RowOwnership {
   }
 }
 
-export function expectPendingAdmission(
+export function expectDetachedAdmission(
   owners: PhaseOwners,
   transaction: PhaseOwners,
-  row: object,
 ): void {
-  const bytes = Buffer.byteLength(JSON.stringify(row), 'utf8');
   expect({ ...owners.snapshot(), references: owners.references }).toMatchObject(
-    {
-      liveRows: 1,
-      liveSerializedBytes: bytes,
-      acquisitions: 4,
-      references: 1,
-    },
+    { liveRows: 0, liveSerializedBytes: 0, references: 0 },
   );
+  expect(owners.snapshot().acquisitions).toBeGreaterThan(0);
   expect({
     ...transaction.snapshot(),
     references: transaction.references,
-  }).toMatchObject({
-    liveRows: 0,
-    liveSerializedBytes: 0,
-    acquisitions: 2,
-    references: 0,
-  });
-  expect(owners.events.map((event) => event.rowId)).toStrictEqual(
-    Array(7).fill(owners.identity(row)),
-  );
-  expect(owners.events.map((event) => event.references)).toStrictEqual([
-    1, 2, 3, 2, 3, 2, 1,
-  ]);
-  expect(owners.events[0].stack).toContain('admitHistoryPending');
-  expect(owners.events[1].stack).toContain('captureHistoryMutationSnapshot');
-  expect(owners.events[2].stack).toContain('captureMutationRow');
-  expect(owners.events[3].stack).toContain('captureMutationRow');
-  expect(owners.events[4].stack).toContain('readRows');
-  expect(owners.events[5].stack).toContain('readRows');
-  expect(owners.events[6].stack).toContain('historyMutationSnapshot.ts');
-  expect(transaction.events.map((event) => event.references)).toStrictEqual([
-    1, 2, 1, 0,
-  ]);
+  }).toMatchObject({ liveRows: 0, liveSerializedBytes: 0, references: 0 });
 }
 
 export function expectPhaseEmpty(owners: PhaseOwners): void {

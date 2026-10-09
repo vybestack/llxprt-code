@@ -78,9 +78,7 @@ import {
 import { getTokenizerForModel } from './historyTokenizerAdapter.js';
 import {
   ChronologyStamper,
-  restoreMutationChronology,
   stampMutationChronology,
-  type ChronologyState,
 } from './historyChronology.js';
 import {
   HistoryJournalStore,
@@ -98,10 +96,6 @@ import {
 } from './historyMutationEffects.js';
 import type { HistoryMutationSnapshot } from './historyMutationSnapshot.js';
 import type { HistoryMutationInput } from './historyBatchContracts.js';
-import {
-  chronologyOwners,
-  trackMutationOwners,
-} from './historyMutationOwnership.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 
 // Preserve the CompressionConfig export from the same path for consumers.
@@ -123,7 +117,6 @@ import type {
   PreparedHistoryBatchEffect,
   HistoryMediaOwner,
   HistoryBatchOptions,
-  ChronologyRollbackEntry,
 } from './historyBatchContracts.js';
 
 /**
@@ -938,18 +931,6 @@ export abstract class HistoryServiceCore
     );
   }
 
-  private snapshotMutationChronology(
-    next: HistoryMutationInput['nextHistory'],
-  ): {
-    readonly state: ChronologyState;
-    readonly entries: Iterable<ChronologyRollbackEntry>;
-  } {
-    return {
-      state: this.chronology.snapshot(),
-      entries: next.prepareChronologyRollback(),
-    };
-  }
-
   protected async commitHistoryMutation(
     input: HistoryMutationInput,
     previousHistory?: HistoryMutationSnapshot,
@@ -962,11 +943,7 @@ export abstract class HistoryServiceCore
     }
     const previousTokens = this.totalTokens;
     const previousSpans = this.spanWindow.get();
-    const chronology = this.snapshotMutationChronology(input.nextHistory);
-    const releaseOwners = trackMutationOwners(
-      chronologyOwners(chronology.entries),
-      this.mutationOwnership,
-    );
+    const chronology = this.chronology.snapshot();
     const nextHistory = input.nextHistory;
     const effects: PreparedHistoryBatchEffect[] = [];
     const publication = new HistoryMutationPublication(
@@ -975,7 +952,7 @@ export abstract class HistoryServiceCore
     );
     try {
       input.signal?.throwIfAborted();
-      stampMutationChronology(this.chronology, input, previousHistory);
+      stampMutationChronology(this.chronology, input);
       const nextHistoryTokens =
         input.nextHistoryTokens ??
         (await this.estimateTokensForContents(nextHistory));
@@ -1009,22 +986,54 @@ export abstract class HistoryServiceCore
     } catch (error: unknown) {
       const failures: unknown[] = [];
       restorePendingChronologyFailure(previousHistory, failures);
-      if (publication.admittedCount > 0) {
-        this.invalidatePendingSyncs();
-        try {
-          await compensateMutation(this.journal, previousHistory, input);
-        } catch (compensationError: unknown) {
-          failures.push(compensationError);
-        }
-      }
-      this.totalTokens = previousTokens;
+      const compensated = await this.compensateAdmittedMutation(
+        publication,
+        previousHistory,
+        input,
+        failures,
+      );
+      this.totalTokens = compensated
+        ? previousTokens
+        : await this.journalTokensAfterFailedCompensation(failures);
       this.spanWindow.set(previousSpans);
-      restoreMutationChronology(this.chronology, chronology, failures);
+      this.chronology.restore(chronology);
       failures.push(...(await rollbackMutationEffects(effects)));
       throw historyMutationFailure(error, failures);
     } finally {
       publication.close();
-      releaseOwners();
+    }
+  }
+
+  /**
+   * Undo journal admissions of a failed mutation. When compensation itself
+   * fails the journal is no longer the previous history, so the saved token
+   * total is not claimed; the caller re-derives it from the journal rows.
+   */
+  private async compensateAdmittedMutation(
+    publication: HistoryMutationPublication,
+    previousHistory: HistoryMutationSnapshot,
+    input: HistoryMutationInput,
+    failures: unknown[],
+  ): Promise<boolean> {
+    if (publication.admittedCount === 0) return true;
+    this.invalidatePendingSyncs();
+    try {
+      await compensateMutation(this.journal, previousHistory, input);
+      return true;
+    } catch (compensationError: unknown) {
+      failures.push(compensationError);
+      return false;
+    }
+  }
+
+  private async journalTokensAfterFailedCompensation(
+    failures: unknown[],
+  ): Promise<number> {
+    try {
+      return await this.estimateTokensForContents(this.journal.streamRows());
+    } catch (estimateError: unknown) {
+      failures.push(estimateError);
+      return 0;
     }
   }
 

@@ -93,6 +93,12 @@ export function sanitizeParams(params: unknown): unknown {
       return { _circular: true };
     }
     seen.add(obj);
+    // Journal rows are JSON values, so honor toJSON (Date -> ISO string)
+    // exactly as JSON.stringify would instead of flattening to an empty object.
+    const toJSON = (obj as { toJSON?: unknown }).toJSON;
+    if (typeof toJSON === 'function') {
+      return sanitize(toJSON.call(obj));
+    }
     if (Array.isArray(obj)) {
       return obj.map((item) => sanitize(item));
     }

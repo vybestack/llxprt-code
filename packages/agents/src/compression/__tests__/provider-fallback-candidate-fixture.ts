@@ -22,7 +22,7 @@ export async function installFixtureCandidate(
 ): Promise<void> {
   const rows = new HistoryDensityRows();
   try {
-    for (const row of values) rows.appendIdentity(row);
+    for (const row of values) rows.appendSanitized(row);
     await install({ rows, start: 0, hasPendingRows: true });
   } finally {
     rows.close();

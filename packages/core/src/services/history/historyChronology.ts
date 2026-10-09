@@ -21,67 +21,18 @@ import type {
   ChronologyMarker,
   ChronologyReplacedSpan,
 } from './IContent.js';
-import type {
-  ChronologyRollbackEntry,
-  HistoryMutationInput,
-} from './historyBatchContracts.js';
-import {
-  historyRowAt,
-  type HistoryRowSource,
-} from './historyMutationSnapshot.js';
+import type { HistoryMutationInput } from './historyBatchContracts.js';
 
 export function stampMutationChronology(
   stamper: ChronologyStamper,
   input: HistoryMutationInput,
-  previous: HistoryRowSource,
 ): void {
   const next = input.nextHistory;
-  for (const [index, replacement] of input.densityResult?.replacements ?? []) {
-    const marker = historyRowAt(previous, index).metadata?.chronology;
-    if (marker !== undefined) stamper.inherit(replacement, marker);
-  }
   let index = 0;
   for (const content of next) {
     stamper.stamp(content);
     if ('readRow' in next) next.writeRow(index, content);
     index++;
-  }
-}
-
-export function restoreChronologyEntry(entry: ChronologyRollbackEntry): void {
-  if (!entry.hadMetadata) {
-    delete entry.content.metadata;
-    return;
-  }
-  if (entry.chronology === undefined) {
-    if (entry.content.metadata?.chronology !== undefined) {
-      delete entry.content.metadata.chronology;
-    }
-    return;
-  }
-  if (
-    entry.content.metadata !== undefined &&
-    entry.content.metadata.chronology !== entry.chronology
-  ) {
-    entry.content.metadata.chronology = entry.chronology;
-  }
-}
-
-export function restoreMutationChronology(
-  stamper: ChronologyStamper,
-  input: {
-    readonly state: ChronologyState;
-    readonly entries: Iterable<ChronologyRollbackEntry>;
-  },
-  failures: unknown[],
-): void {
-  stamper.restore(input.state);
-  for (const entry of input.entries) {
-    try {
-      restoreChronologyEntry(entry);
-    } catch (error: unknown) {
-      failures.push(error);
-    }
   }
 }
 

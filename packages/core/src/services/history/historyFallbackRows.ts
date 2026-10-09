@@ -3,7 +3,7 @@ import type { HistoryMutationSnapshot } from './historyMutationSnapshot.js';
 import { HistoryDensityRows } from './historyDensityRows.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 
-/** Durable values are serialized; pending caller identities keep their existing charge. */
+/** Durable values are serialized as-is; pending caller rows are sanitized into detached values. */
 export async function withFallbackRestoreRows(
   snapshot: HistoryMutationSnapshot,
   execute: (rows: HistoryDensityRows) => Promise<void>,
@@ -16,7 +16,7 @@ export async function withFallbackRestoreRows(
     for (const row of snapshot) {
       const pending = snapshot.isPendingRow(index++);
       if (!Array.isArray(row.blocks) || row.blocks.length === 0) continue;
-      if (pending) rows.appendIdentity(row);
+      if (pending) rows.appendSanitized(row);
       else rows.append(row);
     }
     await execute(rows);

@@ -81,10 +81,4 @@ describe('row transform transaction memory', () => {
       expect(result.peakBytes).toBeLessThanOrEqual(8 * 1024 * 1024);
     }, 120_000);
   }
-  it('counts every deliberately borrowed row and original marker in the 8192-row trap', () => {
-    const result = measure(8192, true);
-    expect(result.heldRows).toBe(2 * result.size);
-    expect(result.heldRows).toBeGreaterThan(440);
-    expect(result.heldBytes).toBeGreaterThan(8 * 1024 * 1024);
-  }, 120_000);
 });

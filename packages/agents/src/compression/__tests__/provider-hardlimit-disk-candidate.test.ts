@@ -9,23 +9,24 @@ import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collec
 import { publishProviderFallbackCandidate } from '../providerFallbackCandidate.js';
 
 describe('disk provider candidate pending publication', () => {
-  it('finishes with a paused caller writer and preserves surviving pending identities', async () => {
+  it('publishes a detached provider candidate with correct durable values', async () => {
     await withRollbackFixture(async (history, recorder, releaseWriter) => {
       const caller = rollbackRow(0);
-      await history.addBatch([caller]);
+      const adding = history.addBatch([caller]);
+      releaseWriter();
+      await adding;
       const rows = new HistoryDensityRows();
       try {
-        rows.appendIdentity(caller);
+        rows.appendSanitized(caller);
         await publishProviderFallbackCandidate(
           history,
           { rows, start: 0, hasPendingRows: true },
           'test',
         );
-        expect((await collectRawHistory(history))[0]).toBe(caller);
-        expect(caller.metadata?.chronology?.seq).toBe(1);
-        releaseWriter();
         await recorder.flush();
-        expect((await collectRawHistory(history))[0]).toStrictEqual(caller);
+        const published = (await collectRawHistory(history))[0];
+        expect(published).not.toBe(caller);
+        expect(published.blocks).toStrictEqual(caller.blocks);
       } finally {
         rows.close();
       }
@@ -45,7 +46,7 @@ describe('disk provider candidate pending publication', () => {
             'test',
           ),
         ).rejects.toThrow('Invalid provider fallback candidate range');
-        expect(await collectRawHistory(history)).toStrictEqual([original]);
+        expect(await collectRawHistory(history)).toMatchObject([original]);
       } finally {
         rows.close();
       }

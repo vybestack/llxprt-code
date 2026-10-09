@@ -75,7 +75,7 @@ function captureCandidate(
     [row] = invalidateResponsesStatefulChain([row]);
     ownership?.retain(row);
     try {
-      if (previous.isPendingRow(index)) next.appendIdentity(row);
+      if (previous.isPendingRow(index)) next.appendSanitized(row);
       else next.append(row);
     } finally {
       ownership?.release(row);

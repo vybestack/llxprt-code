@@ -81,13 +81,13 @@ export async function withSummaryRows(
   const summary = await runSummaryCallback(previous, start, summarize, signal);
   const candidate = new HistoryDensityRows(ownership);
   try {
-    candidate.appendIdentity(summary);
+    candidate.appendSanitized(summary);
     let index = 0;
     for (const row of previous) {
       signal?.throwIfAborted();
       const pending = previous.isPendingRow(index);
       if (index++ < start) continue;
-      if (pending) candidate.appendIdentity(row);
+      if (pending) candidate.appendSanitized(row);
       else candidate.append(row);
     }
     signal?.throwIfAborted();

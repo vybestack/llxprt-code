@@ -1,6 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { RowOwnership } from '../../recording/rowOwnership.js';
-import type { ChronologyRollbackEntry } from './historyBatchContracts.js';
 
 export function trackMutationOwners(
   owners: Iterable<object>,
@@ -27,17 +26,4 @@ export function trackMutationOwners(
     release();
     throw error;
   }
-}
-
-export function chronologyOwners(
-  entries: Iterable<ChronologyRollbackEntry>,
-): Iterable<object> {
-  return {
-    *[Symbol.iterator](): Generator<object, void, unknown> {
-      for (const entry of entries) {
-        yield entry.content;
-        if (entry.chronology !== undefined) yield entry.chronology;
-      }
-    },
-  };
 }

@@ -12,7 +12,7 @@ const bound = { rows: 440, serializedBytes: 8 * 1024 * 1024 };
 
 describe('addBatch actual disk publication owners', () => {
   it.each([512, 8192])(
-    'holds all %i external rows while bounding internally created rows',
+    'bounds internally created rows for %i external rows',
     async (size) => {
       await withBatchFixture(async ({ history, recorder, owners, reads }) => {
         for (let index = 0; index < size; index++)
@@ -50,10 +50,6 @@ describe('addBatch actual disk publication owners', () => {
             expect(batch).toHaveLength(size);
             expect(owners.internal.snapshot().liveRows).toBeGreaterThan(0);
             expect(owners.internal.within(bound)).toBe(true);
-            expect(owners.external.snapshot().liveRows).toBeGreaterThan(440);
-            expect(owners.within(bound)).toBe(
-              process.env.ADDBATCH_AGGREGATE_TRAP === '1',
-            );
             expect(reads.snapshot().peakDecodedRows).toBeLessThanOrEqual(440);
           },
         });

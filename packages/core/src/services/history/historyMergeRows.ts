@@ -35,7 +35,7 @@ function appendSnapshot(
       Array.isArray(row.blocks) &&
       row.blocks.length > 0;
     if (!acceptedOnly || accepted) {
-      if (source.isPendingRow(index)) candidate.appendIdentity(row);
+      if (source.isPendingRow(index)) candidate.appendSanitized(row);
       else candidate.append(row);
     }
     index++;
