@@ -160,15 +160,17 @@ export function recordProviderSwitch(
   context: CommandContext,
   result: { providerName?: string },
   profileLoadResult: ProfileLoadResultView,
+  reportFailure: (message: string) => void,
 ): void {
-  try {
-    recordActiveProviderSwitch(context.recordingIntegration, getRuntimeApi(), {
+  recordActiveProviderSwitch(
+    context.recordingIntegration,
+    getRuntimeApi(),
+    reportFailure,
+    {
       providerName: result.providerName,
       modelName: profileLoadResult.modelName,
-    });
-  } catch {
-    // Best-effort recording -- don't let it block profile loading
-  }
+    },
+  );
 }
 
 export function schedulePaymentModeCheck(

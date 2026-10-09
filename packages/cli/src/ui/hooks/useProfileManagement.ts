@@ -298,7 +298,6 @@ function useLoadProfileAction(
     async (profileName: string) => {
       try {
         const result = await runtime.loadProfileByName(profileName);
-        recordActiveProviderSwitch(recordingIntegrationRef.current, runtime);
         const extra = result.infoMessages
           .map((message: string) => `\n- ${message}`)
           .join('');
@@ -317,6 +316,16 @@ function useLoadProfileAction(
         setActiveProfileName(profileName);
         dialogs.profileDetail.close();
         dialogs.profileList.close();
+        recordActiveProviderSwitch(
+          recordingIntegrationRef.current,
+          runtime,
+          (content) =>
+            addMessage({
+              type: MessageType.ERROR,
+              content,
+              timestamp: new Date(),
+            }),
+        );
       } catch (error) {
         addMessage({
           type: MessageType.ERROR,

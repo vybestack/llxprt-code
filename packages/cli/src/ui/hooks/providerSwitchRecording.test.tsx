@@ -31,6 +31,7 @@ import { renderHook, waitFor } from '../../__tests__/render.js';
 import { hasDialogRequest } from '../../__tests__/dialogStore.js';
 import { buildNewRecordingService } from '../../cliSessionBootstrap.js';
 import { MessageType } from '../types.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { createDialogStore } from '../stores/dialog/dialogStore.js';
 import { createDialogOpeners } from '../stores/dialog/dialogOpeners.js';
 
@@ -107,12 +108,14 @@ function requireRuntime(): ConfigBackedRuntime {
 
 void vi.mock('../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: () => runtimeHolder.current,
+  getRuntimeApi: () => runtimeHolder.current,
 }));
 
 // Import after mocks are set up
 import { useModelDialogHandler } from '../components/modelDialogHandler.js';
 import { useLoadProfileDialog } from './useLoadProfileDialog.js';
 import { useProfileManagement } from './useProfileManagement.js';
+import { profileCommand } from '../commands/profileCommand.js';
 
 const PROJECT_HASH = 'provider-switch-recording';
 
@@ -330,5 +333,179 @@ describe('provider changes made in dialogs reach the session recording (issue #3
     expect((await recordedFile()).switches).toStrictEqual([
       { provider: 'codex', model: 'gpt-6-luna' },
     ]);
+  });
+
+  describe('when the session recording cannot accept the switch', () => {
+    const FAILURE_TEXT = 'recording the switch in the session file failed';
+
+    beforeEach(async () => {
+      // A queue limit equal to the bytes already held makes the switch itself
+      // the thing that exceeds it.
+      const heldBytes = recording.getPendingByteCount();
+      await integration.dispose();
+      await recording.dispose();
+      config.setEphemeralSetting(
+        'session-recording-queue-max-bytes',
+        heldBytes,
+      );
+      recording = await buildNewRecordingService(
+        config,
+        PROJECT_HASH,
+        chatsDir,
+      );
+      integration = new RecordingIntegration(recording);
+    });
+
+    it('keeps a model picker switch successful and reports the recording failure as an error item', async () => {
+      const items: Array<{ type: string; text: string }> = [];
+      const store = createDialogStore();
+      store.commands.openDialog({ kind: 'models', payload: {} });
+      const { result } = renderHook(() =>
+        useModelDialogHandler(
+          requireRuntime(),
+          (item) => {
+            items.push({ type: String(item.type), text: String(item.text) });
+            return 0;
+          },
+          store,
+          null,
+          { recordingIntegration: integration },
+        ),
+      );
+
+      result.current(pickerModel('codex', 'gpt-6-luna'));
+      await waitFor(() => {
+        expect(hasDialogRequest(store, 'modelConfig')).toBe(true);
+      });
+
+      expect(config.getProvider()).toBe('codex');
+      expect(config.getModel()).toBe('gpt-6-luna');
+      expect(items.some((item) => item.text.includes('Failed to switch'))).toBe(
+        false,
+      );
+      const failures = items.filter((item) => item.type === 'error');
+      expect(failures).toHaveLength(1);
+      expect(failures[0].text).toContain(
+        `Switched to codex/gpt-6-luna, but ${FAILURE_TEXT}: Session recording queue byte limit exceeded`,
+      );
+    });
+
+    it('keeps a same-provider model picker switch successful and reports the recording failure', async () => {
+      config.setProvider('codex');
+      const items: Array<{ type: string; text: string }> = [];
+      const store = createDialogStore();
+      store.commands.openDialog({ kind: 'models', payload: {} });
+      const { result } = renderHook(() =>
+        useModelDialogHandler(
+          requireRuntime(),
+          (item) => {
+            items.push({ type: String(item.type), text: String(item.text) });
+            return 0;
+          },
+          store,
+          'codex',
+          { recordingIntegration: integration },
+        ),
+      );
+
+      result.current(pickerModel('codex', 'gpt-6-luna'));
+      await waitFor(() => {
+        expect(hasDialogRequest(store, 'modelConfig')).toBe(true);
+      });
+
+      expect(items.some((item) => item.text.includes('Failed to switch'))).toBe(
+        false,
+      );
+      expect(
+        items.filter(
+          (item) => item.type === 'error' && item.text.includes(FAILURE_TEXT),
+        ),
+      ).toHaveLength(1);
+    });
+
+    it('reports the load-profile dialog switch as loaded, closes the dialog and shows the recording failure', async () => {
+      const store = createDialogStore();
+      const dialogs = createDialogOpeners(store);
+      dialogs.loadProfile.open({});
+      const { result } = renderHook(() =>
+        useLoadProfileDialog({
+          addMessage: (message) => {
+            addedMessages.push(`${message.type}:${message.content}`);
+          },
+          dialogs,
+          recordingIntegrationRef: { current: integration },
+        }),
+      );
+
+      await act(async () => {
+        await result.current.handleSelect('lunahigh');
+      });
+
+      expect(config.getProvider()).toBe('codex');
+      expect(hasDialogRequest(store, 'loadProfile')).toBe(false);
+      expect(addedMessages).toHaveLength(2);
+      expect(addedMessages[0]).toBe(
+        `${MessageType.INFO}:Profile 'lunahigh' loaded`,
+      );
+      expect(addedMessages[1]).toStartWith(
+        `${MessageType.ERROR}:Switched to codex/gpt-6-luna, but ${FAILURE_TEXT}:`,
+      );
+      expect(addedMessages.join('\n')).not.toContain('Failed to load profile');
+    });
+
+    it('sets the active profile name and closes the profile dialogs when only the recording fails', async () => {
+      const store = createDialogStore();
+      const dialogs = createDialogOpeners(store);
+      dialogs.profileDetail.open({ profileName: 'lunahigh' });
+      const { result } = renderHook(() =>
+        useProfileManagement({
+          addMessage: (message) => {
+            addedMessages.push(`${message.type}:${message.content}`);
+          },
+          dialogs,
+          recordingIntegrationRef: { current: integration },
+        }),
+      );
+
+      await act(async () => {
+        await result.current.loadProfile('lunahigh');
+      });
+
+      expect(result.current.activeProfileName).toBe('lunahigh');
+      expect(hasDialogRequest(store, 'profileDetail')).toBe(false);
+      expect(addedMessages[0]).toBe(
+        `${MessageType.INFO}:Profile 'lunahigh' loaded`,
+      );
+      expect(addedMessages).toHaveLength(2);
+      expect(addedMessages[1]).toStartWith(
+        `${MessageType.ERROR}:Switched to codex/gpt-6-luna, but ${FAILURE_TEXT}:`,
+      );
+    });
+
+    it('returns the /profile load result as loaded with the recording failure in its text', async () => {
+      const loadCommand = profileCommand.subCommands?.find(
+        (command) => command.name === 'load',
+      );
+      if (loadCommand?.action === undefined) {
+        throw new Error('/profile load is not defined');
+      }
+      const context = createMockCommandContext({
+        recordingIntegration: integration,
+      });
+
+      const result = await loadCommand.action(context, 'lunahigh');
+
+      expect(config.getProvider()).toBe('codex');
+      expect(result).toMatchObject({
+        type: 'message',
+        messageType: 'info',
+      });
+      const content =
+        result !== undefined && 'content' in result ? result.content : '';
+      expect(content).toContain("Profile 'lunahigh' loaded");
+      expect(content).toContain(
+        `Switched to codex/gpt-6-luna, but ${FAILURE_TEXT}: Session recording queue byte limit exceeded`,
+      );
+    });
   });
 });

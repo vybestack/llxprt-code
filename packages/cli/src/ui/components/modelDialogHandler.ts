@@ -8,6 +8,7 @@ import { useCallback } from 'react';
 import type { HydratedModel } from '@vybestack/llxprt-code-core';
 import type { DialogStore } from '../stores/dialog/dialogStore.js';
 import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
+import { recordProviderSwitchReportingFailure } from '../utils/recordActiveProviderSwitch.js';
 
 interface ModelDialogCommandContext {
   recordingIntegration?: {
@@ -65,11 +66,24 @@ function addInfoItem(
   }
 }
 
+/** A failure report must not turn a successful switch into a failed one. */
+function addErrorItem(
+  addItem: UseHistoryManagerReturn['addItem'],
+  text: string,
+): void {
+  try {
+    addItem({ type: 'error', text });
+  } catch {
+    // History rendering failure is isolated from the switch itself.
+  }
+}
+
 /**
  * Handler invoked when a user selects a model in the ModelsDialog browser.
  * Performs the provider/model switch, records it, and opens the
  * ModelConfigDialog on success. History rendering failures are isolated;
- * a recording failure is reported like any other switch failure.
+ * a recording failure is reported as its own error item and never turns a
+ * successful switch into a failed one.
  */
 export function useModelDialogHandler(
   runtime: ModelSwitchRuntime,
@@ -97,9 +111,11 @@ export function useModelDialogHandler(
             )) {
               addInfoItem(addItem, message);
             }
-            recordingIntegration?.recordProviderSwitch(
+            recordProviderSwitchReportingFailure(
+              recordingIntegration,
               selectedProvider,
               model.id,
+              (text) => addErrorItem(addItem, text),
             );
           } else {
             const result = await runtime.setActiveModel(model.id);
@@ -108,9 +124,11 @@ export function useModelDialogHandler(
               addItem,
               `Active model is '${result.nextModel}' for provider '${result.providerName}'.`,
             );
-            recordingIntegration?.recordProviderSwitch(
+            recordProviderSwitchReportingFailure(
+              recordingIntegration,
               result.providerName,
               result.nextModel,
+              (text) => addErrorItem(addItem, text),
             );
           }
         } catch (e) {

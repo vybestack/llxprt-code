@@ -107,7 +107,6 @@ export const useLoadProfileDialog = ({
     async (profileName: string) => {
       try {
         const result = await runtime.loadProfileByName(profileName);
-        recordActiveProviderSwitch(recordingIntegrationRef.current, runtime);
         const extra = formatInfoMessages(result);
         addMessage({
           type: MessageType.INFO,
@@ -121,6 +120,16 @@ export const useLoadProfileDialog = ({
             timestamp: new Date(),
           });
         }
+        recordActiveProviderSwitch(
+          recordingIntegrationRef.current,
+          runtime,
+          (content) =>
+            addMessage({
+              type: MessageType.ERROR,
+              content,
+              timestamp: new Date(),
+            }),
+        );
       } catch (error) {
         handleProfileLoadError(error, profileName, addMessage);
       }
