@@ -34,19 +34,15 @@ function makeDeclarations(
 ) {
   return [
     {
-      functionDeclarations: [
-        {
-          name: overrides.name ?? 'get_weather',
-          description: overrides.description ?? 'Get the weather',
-          parametersJsonSchema: overrides.parametersJsonSchema ?? {
-            type: 'object',
-            properties: {
-              city: { type: 'string', description: 'City name' },
-            },
-            required: ['city'],
-          },
+      name: overrides.name ?? 'get_weather',
+      description: overrides.description ?? 'Get the weather',
+      parametersJsonSchema: overrides.parametersJsonSchema ?? {
+        type: 'object',
+        properties: {
+          city: { type: 'string', description: 'City name' },
         },
-      ],
+        required: ['city'],
+      },
     },
   ];
 }
@@ -81,13 +77,9 @@ describe('ToolFormatter four conversion mappings', () => {
       expect(() =>
         formatter.convertToolDeclarationsToOpenAI([
           {
-            functionDeclarations: [
-              {
-                name: 'no-schema',
-                description: 'd',
-                parametersJsonSchema: undefined,
-              },
-            ],
+            name: 'no-schema',
+            description: 'd',
+            parametersJsonSchema: undefined,
           },
         ]),
       ).toThrow(/missing parametersJsonSchema/);
@@ -124,11 +116,7 @@ describe('ToolFormatter four conversion mappings', () => {
     it('throws when parametersJsonSchema is missing', () => {
       expect(() =>
         formatter.convertToolDeclarationsToAnthropic([
-          {
-            functionDeclarations: [
-              { name: 'x', description: 'd', parametersJsonSchema: null },
-            ],
-          },
+          { name: 'x', description: 'd', parametersJsonSchema: null },
         ]),
       ).toThrow(/missing parametersJsonSchema/);
     });

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { hasDialogRequest } from '../../test-utils/dialogStore.js';
+import { hasDialogRequest } from '../../__tests__/dialogStore.js';
 
 import {
   advanceTimersByTimeAsync,
@@ -22,7 +22,7 @@ import {
   vi,
   type Mock,
 } from 'bun:test';
-import { renderHook } from '../../test-utils/render.js';
+import { renderHook } from '../../__tests__/render.js';
 import { act } from 'react';
 import { type FolderTrustRuntime, useFolderTrust } from './useFolderTrust.js';
 import { ExitCodes } from '@vybestack/llxprt-code-core';
@@ -35,7 +35,7 @@ import { createDialogStore } from '../stores/dialog/dialogStore.js';
 import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
 import { createDialogOpeners } from '../stores/dialog/dialogOpeners.js';
 import { createSettingsProfileStore } from '../stores/settings/settingsStore.js';
-import { createDeferred } from '../../test-utils/async.js';
+import { createDeferred } from '../../__tests__/async.js';
 
 const realNodeProcessModule = { ...(await import('node:process')) };
 

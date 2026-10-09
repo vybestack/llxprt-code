@@ -12,13 +12,13 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
-import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 import {
   createMockMessageBus,
   createMockPolicyEngine,
   waitForStatus,
-} from './coreToolScheduler-test-helpers.js';
+} from './__tests__/coreToolScheduler-test-helpers.js';
 
 describe('CoreToolScheduler cancellation prevents continuation', () => {
   it('should not process tool completions after cancelAll is called', async () => {

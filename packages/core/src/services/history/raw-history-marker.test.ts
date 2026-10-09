@@ -1,6 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { suffixRow, withSuffixFixture } from './history-suffix-test-helpers.js';
+import {
+  suffixRow,
+  withSuffixFixture,
+} from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 
 for (const size of [512, 8192]) {
   describe(`raw chronology marker over ${size} real journal rows`, () => {

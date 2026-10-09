@@ -26,7 +26,8 @@ import {
 import type { ToolConfirmationRequest } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import type { ToolSchedulerContract } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
+import type { SchedulerHandle } from '@vybestack/llxprt-code-core/session/sessionExecutionServices.js';
+import type { SchedulerPurpose } from '@vybestack/llxprt-code-core/session/sessionSchedulerRegistry.js';
 import type {
   SchedulerCallbacks,
   SchedulerOptions,
@@ -117,16 +118,26 @@ export interface AgenticLoopRuntime {
   getSessionId(): string;
   getModel(): string;
   getImagePayloadBudgetBytes(): number;
-  disposeScheduler(sessionId: string): void;
+  /**
+   * Releases the loop's scheduler acquisition. Callers holding their
+   * acquired scheduler handle should pass it so a stale release cannot
+   * dispose a replacement entry installed under the same owner/purpose.
+   */
+  disposeScheduler(
+    owner: object,
+    purpose: SchedulerPurpose,
+    handle?: object,
+  ): void;
   getOrCreateScheduler(
-    sessionId: string,
+    owner: object,
+    purpose: SchedulerPurpose,
     callbacks: SchedulerCallbacks,
     options?: SchedulerOptions,
     dependencies?: {
       messageBus?: MessageBus;
       toolRegistry?: ToolRegistry;
     },
-  ): Promise<ToolSchedulerContract>;
+  ): Promise<SchedulerHandle>;
 }
 
 /**

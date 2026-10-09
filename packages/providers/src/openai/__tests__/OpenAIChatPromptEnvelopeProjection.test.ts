@@ -16,15 +16,9 @@
  * @requirement:REQ-PE-001 (issue #2817 acceptance A4, A10)
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { describe, expect, it, vi } from 'bun:test';
 import { OpenAIProvider } from '../OpenAIProvider.js';
-import {
-  clearActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { PROJECTION_REVISION } from '../../runtime/promptEnvelopeProjections.js';
 
 void vi.mock('openai', () => {
@@ -76,19 +70,6 @@ function buildCallOptions(
 }
 
 describe('OpenAIProvider.projectPromptEnvelope (issue #2817 A4)', () => {
-  beforeEach(() => {
-    setActiveProviderRuntimeContext(
-      createProviderRuntimeContext({
-        settingsService: new SettingsService(),
-        runtimeId: 'openai-envelope-test',
-      }),
-    );
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
-
   it('identifies openai-chat protocol, chat/completions/v1 method, and the model', async () => {
     const provider = new TestOpenAIProvider();
     const options = buildCallOptions(provider, {
@@ -162,16 +143,12 @@ describe('OpenAIProvider.projectPromptEnvelope (issue #2817 A4)', () => {
         contents: baseContents,
         tools: [
           {
-            functionDeclarations: [
-              {
-                name: 'get_weather',
-                description: 'Get the weather for a city',
-                parametersJsonSchema: {
-                  type: 'object',
-                  properties: { city: { type: 'string' } },
-                },
-              },
-            ],
+            name: 'get_weather',
+            description: 'Get the weather for a city',
+            parametersJsonSchema: {
+              type: 'object',
+              properties: { city: { type: 'string' } },
+            },
           },
         ],
       }),

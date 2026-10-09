@@ -129,6 +129,8 @@ export interface ApiRequestEvent {
   model: string;
   promptId?: string;
   requestText?: string;
+  requestArtifact?: RuntimeRequestArtifact;
+  signal?: AbortSignal;
   sessionId?: string;
   runtimeId?: string;
   provider?: string;
@@ -317,6 +319,7 @@ export interface AgentRuntimeContextFactoryOptions {
 }
 
 // Type imports (these will be resolved from existing modules)
+import type { RuntimeRequestArtifact } from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
 import type { AgentRuntimeState } from './AgentRuntimeState.js';
 import type { HistoryService } from '../services/history/HistoryService.js';
 import type { MediaAdmissionService } from '../storage/media-admission-service.js';
@@ -354,7 +357,9 @@ export interface AgentRuntimeProviderAdapter {
  * Telemetry adapter interface supplied to runtime context.
  */
 export interface AgentRuntimeTelemetryAdapter {
-  logApiRequest(event: ApiRequestEvent): void;
+  /** Artifact events require an awaited adapter; scalar-only implementations remain compatible. */
+  logApiRequest(event: ApiRequestEvent): void | Promise<void>;
+  readonly requestArtifactSchemaVersion?: 3;
   logApiResponse(event: ApiResponseEvent): void;
   logApiError(event: ApiErrorEvent): void;
 }

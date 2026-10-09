@@ -215,6 +215,38 @@ describe('parseDiffManifest and resolveOriginalPath (HIGH 3)', () => {
 });
 
 describe('gateSequenceDiagram', () => {
+  it('considers multi-module runtime flow in one package without depending on model layer names', () => {
+    expect(
+      gateSequenceDiagram(
+        [
+          {
+            layer: 'cleanup',
+            files: [
+              'packages/cli/src/sandbox-exec.ts',
+              'packages/cli/src/sandbox-containers.ts',
+            ],
+            summary: 'startup recovery',
+          },
+        ],
+        [
+          'packages/cli/src/sandbox-exec.ts',
+          'packages/cli/src/sandbox-containers.ts',
+        ],
+      ),
+    ).toBe(true);
+  });
+  it('does not request runtime diagrams for tests and documentation alone', () => {
+    expect(
+      gateSequenceDiagram(
+        [],
+        [
+          'packages/cli/src/a.test.ts',
+          'packages/cli/src/b.bun.test.ts',
+          'project-plans/plan.md',
+        ],
+      ),
+    ).toBe(false);
+  });
   it('returns true for multi-package cross-layer changes', () => {
     expect(
       gateSequenceDiagram(

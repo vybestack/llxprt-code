@@ -17,7 +17,9 @@
       "@vybestack/llxprt-code-mcp": ["../mcp/dist/mcp/index.d.ts"],
       "@vybestack/llxprt-code-mcp/*": ["../mcp/dist/mcp/src/*"],
       "@vybestack/llxprt-code-settings": ["../settings/index.ts"],
-      "@vybestack/llxprt-code-settings/*": ["../settings/src/*"]
+      "@vybestack/llxprt-code-settings/*": ["../settings/src/*"],
+      "@vybestack/llxprt-code-test-utils": ["../test-utils/dist/index.d.ts"],
+      "@vybestack/llxprt-code-test-utils/*": ["../test-utils/dist/src/*"]
     }
   },
   "include": [
@@ -52,7 +54,6 @@
     "../settings/src/__tests__/settingsRegistry.issue2896.test.ts",
     "../settings/src/__tests__/settingsRegistry.redaction.test.ts",
     "../settings/src/__tests__/settingsRegistry.test.ts",
-    "../settings/src/__tests__/settingsServiceInstance.test.ts",
     "../settings/src/profiles/ProfileManager.isolation.test.ts",
     "../settings/src/profiles/__tests__/ProfileManager.test.ts",
     "../settings/src/profiles/__tests__/canonicalProfileRepair.outcomes.test.ts",

@@ -41,7 +41,7 @@ import {
   mockToken,
   mockTokenResponse,
   setupOAuthTestSpies,
-} from './oauthProviderTestSetup.js';
+} from './__tests__/oauthProviderTestSetup.js';
 import { registerMcpHostServices } from '../host/hostServices.js';
 
 // Exercises the real host seam instead of mocking a module (#3305).

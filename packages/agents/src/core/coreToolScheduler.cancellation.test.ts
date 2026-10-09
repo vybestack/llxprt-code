@@ -7,7 +7,7 @@
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, afterEach } from 'bun:test';
 import { CoreToolScheduler, type ToolCall } from './coreToolScheduler.js';
-import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 
 function createMockMessageBus() {

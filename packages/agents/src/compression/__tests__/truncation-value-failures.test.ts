@@ -7,7 +7,7 @@ import {
   transformProbes,
   transformPhaseSampler,
 } from '@vybestack/llxprt-code-core/services/history/transform-value-test-helpers.js';
-import { probedTransformInput } from '@vybestack/llxprt-code-core/services/history/transform-value-fixtures.js';
+import { probedTransformInput } from '@vybestack/llxprt-code-core/services/history/transform-value-test-helpers-fixtures.js';
 import {
   detachedDigest,
   detachedDurableDigest,

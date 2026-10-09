@@ -10,6 +10,7 @@ import type {
 } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import type { RuntimeTokenizer } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizer.js';
 import type { PromptEnvelopeProtocol } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import { estimateImageTokens } from '@vybestack/llxprt-code-tools/utils/imageTokenEstimation.js';
 import {
   PROJECTION_REVISION,
   type ProviderFinalizedPromptProjection,
@@ -67,7 +68,7 @@ const OPENAI_CHAT_AND_ANTHROPIC: ReadonlySet<PromptEnvelopeProtocol> =
 const OFFICIAL_FAMILY_SPECS: readonly OfficialFamilySpec[] = Object.freeze([
   {
     family: 'moonshot-kimi-k3',
-    estimatorVersion: 'kimi-k3-tiktoken-v1',
+    estimatorVersion: 'kimi-k3-tiktoken-v2',
     manifest: KIMI_K3_MANIFEST,
     claim: /^(?:[a-z0-9_.-]+\/)?kimi-k3(?:$|-)/i,
     identity: /^(?:[a-z0-9_.-]+\/)?kimi-k3(?:-[a-z0-9.-]+)?$/i,
@@ -76,7 +77,7 @@ const OFFICIAL_FAMILY_SPECS: readonly OfficialFamilySpec[] = Object.freeze([
   },
   {
     family: 'zai-glm-5.2',
-    estimatorVersion: 'glm-5.2-tiktoken-v1',
+    estimatorVersion: 'glm-5.2-tiktoken-v2',
     manifest: GLM_MANIFEST,
     claim: /^(?:[a-z0-9_.-]+\/)?glm-5\.2(?:$|-)/i,
     identity: /^(?:[a-z0-9_.-]+\/)?glm-5\.2(?:-[a-z0-9.-]+)?$/i,
@@ -85,7 +86,7 @@ const OFFICIAL_FAMILY_SPECS: readonly OfficialFamilySpec[] = Object.freeze([
   },
   {
     family: 'minimax-m3',
-    estimatorVersion: 'minimax-m3-tiktoken-v1',
+    estimatorVersion: 'minimax-m3-tiktoken-v2',
     manifest: MINIMAX_MANIFEST,
     claim: /^(?:[a-z0-9_.-]+\/)?minimax-m3(?:$|-)/i,
     identity: /^(?:[a-z0-9_.-]+\/)?minimax-m3(?:-[a-z0-9.-]+)?$/i,
@@ -191,6 +192,31 @@ function countProjection(
   );
 }
 
+/**
+ * Per-entry image cost for the finalized projection (issue #3663).
+ *
+ * The literal 'openai' is deliberate: these models are served over
+ * OpenAI-compatible chat framing, and none of the three model names
+ * classifies as an OpenAI legacy model, so the patch family is selected as
+ * the conservative-high approximation (#3477/#3663). Passing the real
+ * provider names (moonshot/zai/minimax) would instead resolve to the flat
+ * default family (1000).
+ */
+function countProjectionImageTokens(
+  projection: ProviderFinalizedPromptProjection,
+  canonicalModel: string,
+): number {
+  let total = 0;
+  for (const entry of projection.imageEntries ?? []) {
+    total += estimateImageTokens({
+      provider: 'openai',
+      model: canonicalModel,
+      dimensions: entry.dimensions,
+    });
+  }
+  return total;
+}
+
 async function estimateOfficialPrompt(
   request: RuntimePromptEstimateRequest,
   spec: OfficialFamilySpec,
@@ -199,7 +225,9 @@ async function estimateOfficialPrompt(
   const counter = getCounter(request, spec);
   try {
     return {
-      count: countProjection(counter, projection),
+      count:
+        countProjection(counter, projection) +
+        countProjectionImageTokens(projection, request.canonicalModel),
       method: 'exact',
       family: spec.family,
       estimatorVersion: spec.estimatorVersion,

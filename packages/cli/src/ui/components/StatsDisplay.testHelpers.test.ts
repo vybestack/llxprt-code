@@ -9,7 +9,7 @@ import {
   withTokenTracking,
   defaultZeroMetrics,
   createMockRuntimeApi,
-} from './StatsDisplay.testHelpers.js';
+} from './__tests__/StatsDisplay.testHelpers.js';
 
 describe('StatsDisplay.testHelpers', () => {
   describe('withTokenTracking', () => {

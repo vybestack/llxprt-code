@@ -14,7 +14,7 @@ import {
 } from './ToolShared.js';
 import { ToolCallStatus, StreamingState } from '../../types.js';
 import { StreamingContext } from '../../contexts/StreamingContext.js';
-import { renderWithProviders } from '../../../test-utils/render.js';
+import { renderWithProviders } from '../../../__tests__/render.js';
 
 void vi.mock('../RespondingSpinner.js', () => ({
   RespondingSpinner: ({

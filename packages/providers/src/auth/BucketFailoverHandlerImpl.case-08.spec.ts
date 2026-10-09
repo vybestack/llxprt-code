@@ -9,7 +9,7 @@ import { BucketFailoverHandlerImpl } from './BucketFailoverHandlerImpl.js';
 import {
   createBucketFailoverFixture,
   makeToken,
-} from './BucketFailoverHandlerImpl.test-helpers.js';
+} from './__tests__/BucketFailoverHandlerImpl.test-helpers.js';
 
 describe('BucketFailoverHandlerImpl #8', () => {
   it('clears the tried-buckets tracking so failover can try buckets again', async () => {

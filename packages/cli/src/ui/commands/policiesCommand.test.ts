@@ -12,7 +12,7 @@ import {
   type OpenDialogActionReturn,
 } from './types.js';
 import { PolicyDecision, type PolicyEngine } from '@vybestack/llxprt-code-core';
-import { assertDefined } from '../../test-utils/assertions.js';
+import { assertDefined } from '../../__tests__/assertions.js';
 
 function makeMockEngine(): PolicyEngine {
   return {

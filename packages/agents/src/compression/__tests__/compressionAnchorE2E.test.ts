@@ -1,4 +1,4 @@
-import { curatedHistoryForTest } from '../../../../core/src/test-utils/curated-history-fixture.js';
+import { curatedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -17,7 +17,7 @@ import { curatedHistoryForTest } from '../../../../core/src/test-utils/curated-h
  * IProvider port. No assertions on mock call records.
  */
 
-import { collectRawHistory } from '@vybestack/llxprt-code-core/test-utils/collect-raw-history.js';
+import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -26,7 +26,7 @@ import { buildRuntimeContext } from '../../core/__tests__/chatSession-density-he
 import {
   createCaptureProvider,
   testProviderRuntime,
-} from '../MiddleOutStrategy-test-helpers.js';
+} from './MiddleOutStrategy-test-helpers.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 
 // ---------------------------------------------------------------------------

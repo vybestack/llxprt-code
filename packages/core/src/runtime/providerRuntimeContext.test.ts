@@ -1,40 +1,26 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
 /**
- * @plan:PLAN-20250218-STATELESSPROVIDER.P03
- * @requirement:REQ-SP-002.1
+ * Issue #2616 PR A: providerRuntimeContext is explicit-only.
+ *
+ * The module must construct contexts solely from the init the caller
+ * supplies. The former ambient surface (module-level activeContext
+ * pointer, set/clear/peek/get accessors, and the defaultRuntimeStateFactory
+ * fallback) is deleted — importing the module registers no factory and
+ * mutates no module state.
  */
 
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { resetSettingsService } from '@vybestack/llxprt-code-settings';
 import type { Config } from '../config/config.js';
-import {
-  clearActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
-  getActiveProviderRuntimeContext,
-  peekActiveProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from './providerRuntimeContext.js';
+import { createProviderRuntimeContext } from './providerRuntimeContext.js';
 
-describe('providerRuntimeContext', () => {
-  beforeEach(() => {
-    resetSettingsService();
-    clearActiveProviderRuntimeContext();
-  });
-
-  it('throws when no active context is registered', () => {
-    expect(() => getActiveProviderRuntimeContext()).toThrow(
-      /MissingProviderRuntimeError\(provider-runtime\)/,
-    );
-    expect(peekActiveProviderRuntimeContext()).toBeNull();
-  });
-
-  it('returns explicitly registered context with injected settings and config', () => {
+describe('createProviderRuntimeContext', () => {
+  it('builds a context from explicitly injected settings and config', () => {
     const injectedSettings = new SettingsService();
     const mockConfig = {
       getSessionId: () => 'runtime-test',
@@ -47,37 +33,67 @@ describe('providerRuntimeContext', () => {
       metadata: { source: 'unit-test' },
     });
 
-    setActiveProviderRuntimeContext(context);
-
-    const active = getActiveProviderRuntimeContext();
-    expect(active).toBe(context);
-    expect(active.settingsService).toBe(injectedSettings);
-    expect(active.config).toBe(mockConfig);
+    expect(context.settingsService).toBe(injectedSettings);
+    expect(context.config).toBe(mockConfig);
+    expect(context.runtimeId).toBe('injected-runtime');
+    expect(context.metadata).toStrictEqual({ source: 'unit-test' });
   });
 
-  it('core resetSettingsService does NOT clear provider runtime context (P06 single-owner)', () => {
-    const injectedSettings = new SettingsService();
-
-    setActiveProviderRuntimeContext(
-      createProviderRuntimeContext({ settingsService: injectedSettings }),
+  it('throws MissingRuntimeProviderError when settingsService is absent', () => {
+    expect(() => createProviderRuntimeContext({})).toThrow(
+      /MissingProviderRuntimeError\(provider-runtime\)/,
     );
-
-    expect(getActiveProviderRuntimeContext().settingsService).toBe(
-      injectedSettings,
+    expect(() => createProviderRuntimeContext()).toThrow(
+      /MissingProviderRuntimeError.*requires settings/,
     );
+  });
 
-    // P06 single-owner: settings reset only clears the settings singleton,
-    // NOT the provider runtime context. Only settingsRuntimeAdapter bridges both.
-    resetSettingsService();
+  it('carries the optional carrier fields it is given', () => {
+    const settings = new SettingsService();
+    const context = createProviderRuntimeContext({
+      settingsService: settings,
+      runtimeId: 'carrier-fields',
+      requestMediaBudgetBytes: 1024,
+    });
 
-    // Provider runtime context is still active — core reset doesn't touch it
-    expect(peekActiveProviderRuntimeContext()).not.toBeNull();
-    expect(peekActiveProviderRuntimeContext()?.settingsService).toBe(
-      injectedSettings,
+    expect(context.requestMediaBudgetBytes).toBe(1024);
+  });
+
+  it('exposes no ambient surface on the module namespace', async () => {
+    const mod = await import('./providerRuntimeContext.js');
+
+    const deletedSymbols = [
+      'setActiveProviderRuntimeContext',
+      'clearActiveProviderRuntimeContext',
+      'peekActiveProviderRuntimeContext',
+      'getActiveProviderRuntimeContext',
+      'setProviderRuntimeStateFactory',
+    ];
+
+    for (const symbol of deletedSymbols) {
+      expect(symbol in mod).toBe(false);
+    }
+
+    // The surviving factory is null by construction: creating a context
+    // without settings fails even after the module (and any import-time
+    // side effects it may once have had) has fully loaded.
+    expect(() => createProviderRuntimeContext({})).toThrow(
+      /MissingProviderRuntimeError/,
     );
+  });
 
-    // Explicitly clear runtime context for test isolation
-    clearActiveProviderRuntimeContext();
-    expect(peekActiveProviderRuntimeContext()).toBeNull();
+  it('keeps the constructed context untouched by later context creations', () => {
+    const first = createProviderRuntimeContext({
+      settingsService: new SettingsService(),
+      runtimeId: 'first',
+    });
+    const second = createProviderRuntimeContext({
+      settingsService: new SettingsService(),
+      runtimeId: 'second',
+    });
+
+    expect(first.runtimeId).toBe('first');
+    expect(second.runtimeId).toBe('second');
+    expect(first.settingsService).not.toBe(second.settingsService);
   });
 });

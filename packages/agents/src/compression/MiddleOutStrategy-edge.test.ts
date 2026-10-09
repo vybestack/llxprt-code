@@ -25,7 +25,7 @@ import {
   aiToolCallMsg,
   toolResponseMsg,
   testProviderRuntime,
-} from './MiddleOutStrategy-test-helpers.js';
+} from './__tests__/MiddleOutStrategy-test-helpers.js';
 
 describe('MiddleOutStrategy edge cases', () => {
   // -----------------------------------------------------------------------

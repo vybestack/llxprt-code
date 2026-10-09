@@ -18,7 +18,7 @@ import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
-import { initializeTestConfig } from '@vybestack/llxprt-code-core/test-utils/config.js';
+import { initializeTestConfig } from '@vybestack/llxprt-code-test-utils/core/config.js';
 import { ToolRegistry } from '@vybestack/llxprt-code-tools/tools/tool-registry.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';

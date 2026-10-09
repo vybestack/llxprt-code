@@ -18,6 +18,13 @@
  * Updated to import MissingRuntimeProviderError from the core-owned
  * runtime errors module instead of the providers package.
  */
+
+/**
+ * Issue #2616 PR A: this module is explicit-only. The former module-level
+ * activeContext pointer, its set/clear/peek/get accessors, and the
+ * defaultRuntimeStateFactory fallback are deleted — a context exists only
+ * when a caller supplies its settings service.
+ */
 import type { Config } from '../config/config.js';
 import { MissingRuntimeProviderError } from './errors/MissingRuntimeProviderError.js';
 import type { RequestMediaResolutionService } from '../storage/request-media-resolver.js';
@@ -66,8 +73,6 @@ export interface ProviderRuntimeContext {
   providerFileBindings?: ProviderFileBindingStore;
 }
 
-let activeContext: ProviderRuntimeContext | null = null;
-
 /**
  * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P11
  * @requirement REQ-D01-002
@@ -84,42 +89,18 @@ export interface ProviderRuntimeContextInit {
   providerFileBindings?: ProviderFileBindingStore;
 }
 
-/**
- * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P11
- * @requirement REQ-D01-002
- * @requirement REQ-D01-003
- * @pseudocode lines 122-133
- */
-let defaultRuntimeStateFactory: (() => RuntimeSettingsState) | null = null;
-
-export function setProviderRuntimeStateFactory(
-  factory: (() => RuntimeSettingsState) | null,
-): void {
-  defaultRuntimeStateFactory = factory;
-}
-
 export function createProviderRuntimeContext(
   init: ProviderRuntimeContextInit = {},
 ): ProviderRuntimeContext {
-  const settingsService =
-    init.settingsService ?? defaultRuntimeStateFactory?.();
+  const settingsService = init.settingsService;
   if (!settingsService) {
-    const missingReasons = [];
-    if (init.settingsService === undefined || init.settingsService === null) {
-      missingReasons.push('init.settingsService is not provided');
-    }
-    if (defaultRuntimeStateFactory === null) {
-      missingReasons.push(
-        'defaultRuntimeStateFactory is not set via setProviderRuntimeStateFactory()',
-      );
-    }
     throw new MissingRuntimeProviderError({
       providerKey: 'provider-runtime',
       missingFields: ['settings'],
       requirement: 'REQ-SP4-004',
       stage: 'createProviderRuntimeContext',
       metadata: {
-        hint: `${missingReasons.join('; ')}. Provide settingsService or initialise the settings runtime adapter before creating provider runtime contexts.`,
+        hint: 'init.settingsService is not provided. Construct the service at the composition site (e.g. via the runtime settings adapter) and pass it explicitly before creating provider runtime contexts.',
       },
       message:
         'MissingProviderRuntimeError(provider-runtime): provider runtime context creation requires settings (REQ-SP4-004).',
@@ -135,36 +116,4 @@ export function createProviderRuntimeContext(
     requestMediaBudgetBytes: init.requestMediaBudgetBytes,
     providerFileBindings: init.providerFileBindings,
   };
-}
-
-export function setActiveProviderRuntimeContext(
-  context: ProviderRuntimeContext | null,
-): void {
-  activeContext = context;
-}
-
-export function clearActiveProviderRuntimeContext(): void {
-  activeContext = null;
-}
-
-export function peekActiveProviderRuntimeContext(): ProviderRuntimeContext | null {
-  return activeContext;
-}
-
-export function getActiveProviderRuntimeContext(): ProviderRuntimeContext {
-  if (activeContext) {
-    return activeContext;
-  }
-
-  throw new MissingRuntimeProviderError({
-    providerKey: 'provider-runtime',
-    missingFields: ['settings'],
-    requirement: 'REQ-SP4-004',
-    stage: 'getActiveProviderRuntimeContext',
-    metadata: {
-      hint: 'Call setActiveProviderRuntimeContext() before provider operations.',
-    },
-    message:
-      'MissingProviderRuntimeError(provider-runtime): active provider runtime context is missing settings (REQ-SP4-004).',
-  });
 }

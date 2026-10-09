@@ -11,10 +11,20 @@
  * precedent as resolvePendingBoundaryFromHook in boundaryRecovery.ts).
  */
 
+import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import type { HookModelSnapshotOutput } from '@vybestack/llxprt-code-core/hooks/hookSnapshotAggregator.js';
+import type { HookModelRowsInput } from '@vybestack/llxprt-code-core/hooks/hookModelInputStream.js';
+import {
+  resolvePendingBoundarySnapshot,
+  type BoundarySnapshotResult,
+} from './boundary-recovery-snapshot.js';
+import {
+  AgentExecutionStoppedError,
+  AgentExecutionBlockedError,
+} from './chatSession.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeProviderToolset as ProviderToolset } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
-import { toolDeclarationsFromLegacyToolset } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import {
   resolvePendingBoundaryFromHook,
   snapshotContents,
@@ -93,9 +103,7 @@ export async function fireBeforeModelHook(
   const beforeModelResult = await hookSystem.fireBeforeModelEvent({
     model,
     contents: requestContents,
-    ...(tools !== undefined
-      ? { tools: toolDeclarationsFromLegacyToolset(tools) }
-      : {}),
+    ...(tools !== undefined ? { tools } : {}),
   });
 
   enforceBeforeModelHookDecision(beforeModelResult, hookRestrictedAllowedTools);
@@ -114,4 +122,101 @@ export async function fireBeforeModelHook(
     snapshot,
   );
   return { contents, pendingContents };
+}
+
+export interface BeforeModelSnapshotHookOptions
+  extends Pick<
+    BeforeModelHookFireOptions,
+    'configForHooks' | 'model' | 'tools' | 'log'
+  > {
+  readonly requestContents: ProviderRequestRows;
+  readonly rawPending: ProviderRequestRows;
+  readonly root: string;
+  readonly signal?: AbortSignal;
+}
+
+function enforceSnapshotDecision(
+  output: HookModelSnapshotOutput | undefined,
+): void {
+  if (output?.shouldStopExecution() === true)
+    throw new AgentExecutionStoppedError(output.getEffectiveReason());
+  if (output?.isBlockingDecision() === true) {
+    const reason = output.getEffectiveReason();
+    throw new AgentExecutionBlockedError(reason, {
+      content: { speaker: 'ai', blocks: [{ type: 'text', text: reason }] },
+      finishReason: 'stop',
+      rawStopReason: reason || undefined,
+    });
+  }
+}
+
+/** Returned selections own disk copies independently of the hook command output. */
+export async function fireBeforeModelSnapshotHook(
+  options: BeforeModelSnapshotHookOptions,
+): Promise<BoundarySnapshotResult> {
+  options.signal?.throwIfAborted();
+  const config = options.configForHooks;
+  const system =
+    config?.getEnableHooks() === true ? config.getHookSystem() : undefined;
+  if (system === undefined) {
+    return resolvePendingBoundarySnapshot({
+      before: options.requestContents,
+      after: options.requestContents,
+      rawPending: options.rawPending,
+      root: options.root,
+      signal: options.signal,
+    });
+  }
+  await system.initialize(options.signal);
+  const hook = await system.fireBeforeModelSnapshotEvent(
+    {
+      model: options.model,
+      contents: options.requestContents,
+      ...(options.tools !== undefined ? { tools: options.tools } : {}),
+    },
+    options.signal,
+  );
+  let resolved: BoundarySnapshotResult | undefined;
+  try {
+    enforceSnapshotDecision(hook.finalOutput);
+    if (!hook.success)
+      throw new AggregateError(
+        hook.errors,
+        `Source BeforeModel hook execution failed: ${hook.errors.map((error) => error.message).join('; ')}`,
+      );
+    const target: HookModelRowsInput['llm_request'] = {
+      version: 2,
+      model: options.model,
+      contents: options.requestContents,
+      ...(options.tools === undefined ? {} : { tools: options.tools }),
+    };
+    hook.finalOutput?.assertTextRequest(target);
+    const request = hook.finalOutput?.applyRequestRows(target);
+    // The eager caller discards explicit empty contents despite the documented
+    // replacement contract. Reject that incompatible override before transport.
+    if (request?.contents.count === 0 && request.contents !== target.contents)
+      throw new Error(
+        'Unsupported source BeforeModel hook output: empty contents replacement conflicts with eager request semantics',
+      );
+    resolved = await resolvePendingBoundarySnapshot({
+      before: options.requestContents,
+      after: request?.contents ?? options.requestContents,
+      rawPending: options.rawPending,
+      boundary: hook.finalOutput?.readValue([
+        'hookSpecificOutput',
+        'llm_request_boundary',
+      ]),
+      root: options.root,
+      signal: options.signal,
+    });
+    options.log(
+      `[BeforeModelSnapshot] Pending boundary classification=${resolved.classification} recovered=${resolved.pendingSelection !== undefined}`,
+    );
+    return resolved;
+  } catch (error) {
+    resolved?.close();
+    throw error;
+  } finally {
+    hook.close();
+  }
 }

@@ -8,7 +8,7 @@ import type { Mock } from 'bun:test';
 import { vi, describe, it, expect, beforeEach } from 'bun:test';
 import { memoryCommand } from './memoryCommand.js';
 import type { SlashCommand, CommandContext } from './types.js';
-import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { MessageType } from '../types.js';
 import type { LoadedSettings } from '../../config/settings.js';
 import {
@@ -17,7 +17,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import type { FileDiscoveryService } from '@vybestack/llxprt-code-storage';
 import { loadHierarchicalLlxprtMemory } from '../../config/environmentLoader.js';
-import { assertDefined } from '../../test-utils/assertions.js';
+import { assertDefined } from '../../__tests__/assertions.js';
 
 const original = { ...(await import('@vybestack/llxprt-code-core')) };
 void vi.mock('@vybestack/llxprt-code-core', () => ({

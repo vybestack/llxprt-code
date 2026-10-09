@@ -1,8 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { gcAndSweep, heapSize } from 'bun:jsc';
 import { readFileSync } from 'node:fs';
-import { withSuffixFixture } from '../../packages/core/src/services/history/history-suffix-test-helpers.js';
-import { ownerFixtureRow } from '../../packages/core/src/services/history/chronology-rollback-owner-helpers.js';
+import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
+import { ownerFixtureRow } from '../../packages/core/src/services/history/chronology-rollback-owner-test-helpers.js';
 import { SemanticMediaPurgeStreamCoordinator } from '../../packages/core/src/services/history/semantic-purge-stream.js';
 import type { IContent } from '../../packages/core/src/services/history/IContent.js';
 import { RowOwnership } from '../../packages/core/src/recording/rowOwnership.js';

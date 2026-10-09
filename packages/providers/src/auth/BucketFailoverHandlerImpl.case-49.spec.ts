@@ -10,7 +10,7 @@ import { OAuthManager } from './oauth-manager.js';
 import {
   makeToken,
   MemoryTokenStore,
-} from './BucketFailoverHandlerImpl.test-helpers.js';
+} from './__tests__/BucketFailoverHandlerImpl.test-helpers.js';
 
 async function authenticateBucketB(
   tokenStore: MemoryTokenStore,

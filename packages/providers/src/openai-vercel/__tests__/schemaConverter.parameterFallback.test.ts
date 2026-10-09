@@ -1,3 +1,4 @@
+import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 import { describe, it, expect } from 'bun:test';
 import { convertToolsToOpenAIVercel } from '../schemaConverter.js';
 
@@ -5,19 +6,15 @@ describe('convertToolsToOpenAIVercel — parametersJsonSchema source', () => {
   it('uses parametersJsonSchema when present', () => {
     const tools = [
       {
-        functionDeclarations: [
-          {
-            name: 'read_file',
-            description: 'Read a file',
-            parametersJsonSchema: {
-              type: 'object',
-              properties: {
-                path: { type: 'string', description: 'File path' },
-              },
-              required: ['path'],
-            },
+        name: 'read_file',
+        description: 'Read a file',
+        parametersJsonSchema: {
+          type: 'object',
+          properties: {
+            path: { type: 'string', description: 'File path' },
           },
-        ],
+          required: ['path'],
+        },
       },
     ];
 
@@ -30,29 +27,25 @@ describe('convertToolsToOpenAIVercel — parametersJsonSchema source', () => {
     expect(result![0].function.parameters.required).toContain('path');
   });
 
-  it('uses parametersJsonSchema when both fields are present', () => {
+  it('uses parametersJsonSchema when both schema fields are present', () => {
     const tools = [
       {
-        functionDeclarations: [
-          {
-            name: 'dual_field_tool',
-            description: 'Has both fields',
-            parametersJsonSchema: {
-              type: 'object',
-              properties: {
-                fromJsonSchema: { type: 'string' },
-              },
-              required: [],
-            },
-            parameters: {
-              type: 'object',
-              properties: {
-                fromParameters: { type: 'string' },
-              },
-              required: [],
-            },
+        name: 'dual_field_tool',
+        description: 'Has both schema fields',
+        parametersJsonSchema: {
+          type: 'object',
+          properties: {
+            fromJsonSchema: { type: 'string' },
           },
-        ],
+          required: [],
+        },
+        parameters: {
+          type: 'object',
+          properties: {
+            fromParameters: { type: 'string' },
+          },
+          required: [],
+        },
       },
     ];
 
@@ -69,14 +62,16 @@ describe('convertToolsToOpenAIVercel — parametersJsonSchema source', () => {
 
   it('throws when parametersJsonSchema is absent', () => {
     const tools = [
-      {
-        functionDeclarations: [
-          {
+      Object.assign<ToolDeclaration, { parametersJsonSchema: unknown }>(
+        {
+          ...{
             name: 'search_code',
             description: 'Search the codebase',
           },
-        ],
-      },
+          parametersJsonSchema: {},
+        },
+        { parametersJsonSchema: undefined },
+      ),
     ];
 
     expect(() => convertToolsToOpenAIVercel(tools)).toThrow(
@@ -86,15 +81,14 @@ describe('convertToolsToOpenAIVercel — parametersJsonSchema source', () => {
 
   it('throws when parametersJsonSchema is a non-plain object', () => {
     const tools = [
-      {
-        functionDeclarations: [
-          {
-            name: 'date_schema_tool',
-            description: 'Invalid schema',
-            parametersJsonSchema: new Date(),
-          },
-        ],
-      },
+      Object.assign<ToolDeclaration, { parametersJsonSchema: unknown }>(
+        {
+          name: 'date_schema_tool',
+          description: 'Invalid schema',
+          parametersJsonSchema: {},
+        },
+        { parametersJsonSchema: new Date() },
+      ),
     ];
 
     expect(() => convertToolsToOpenAIVercel(tools)).toThrow(

@@ -5,8 +5,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
-import { hasDialogRequest } from '../../test-utils/dialogStore.js';
-import { renderHook } from '../../test-utils/render.js';
+import { hasDialogRequest } from '../../__tests__/dialogStore.js';
+import { renderHook } from '../../__tests__/render.js';
 import { useOAuthOrchestration } from './useOAuthOrchestration.js';
 import type { AppAction } from '../reducers/appReducer.js';
 import {

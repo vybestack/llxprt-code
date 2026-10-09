@@ -6,7 +6,7 @@ import {
   pendingGate,
   type PendingFixture,
 } from './pending-window-disk-helpers.js';
-import { collectRawHistory } from '../../../../core/src/test-utils/collect-raw-history.js';
+import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { mediaParticipant } from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
 
 function pausePublication(history: PendingFixture['history']): {

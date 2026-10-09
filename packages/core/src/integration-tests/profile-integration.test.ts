@@ -4,37 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-  vi,
-  type Mock,
-} from 'bun:test';
-import {
-  ProfileManager,
-  type SettingsService,
-  type Profile,
-  getSettingsService,
-} from '@vybestack/llxprt-code-settings';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import { ProfileManager, type Profile } from '@vybestack/llxprt-code-settings';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-
-const __actual = { ...(await import('@vybestack/llxprt-code-settings')) };
-void vi.mock('@vybestack/llxprt-code-settings', () => {
-  const actual = __actual as typeof import('@vybestack/llxprt-code-settings');
-  return {
-    ...actual,
-    getSettingsService: vi.fn(),
-  };
-});
-
-const mockGetSettingsService = getSettingsService as Mock<
-  typeof getSettingsService
->;
 
 class MockSettingsRepository {
   private settings: Record<string, unknown> = {
@@ -173,11 +147,6 @@ describe('Profile Integration Tests', () => {
     settingsService = new MockSettingsService(
       mockRepository,
     ) as unknown as MockSettingsService;
-
-    // Mock the getSettingsService to return our mock
-    mockGetSettingsService.mockReturnValue(
-      settingsService as unknown as SettingsService,
-    );
 
     // Wait for initialization
     await new Promise((resolve) => {

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { AnthropicProvider } from './AnthropicProvider.js';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 
 const realLlxprtCodeSettingsModule = {
   ...(await import('@vybestack/llxprt-code-settings')),
@@ -37,7 +38,6 @@ void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
 
 void vi.mock('@vybestack/llxprt-code-settings', () => ({
   ...realLlxprtCodeSettingsModule,
-  getSettingsService: () => mockSettingsService,
   SETTINGS_REGISTRY: [],
 }));
 
@@ -50,6 +50,11 @@ describe('AnthropicProvider tool format detection', () => {
     mockSettingsService.getProviderSettings.mockReturnValue({});
     mockSettingsService.get.mockReturnValue(undefined);
     provider = new AnthropicProvider('test-key');
+    // Issue #2616: the ambient singleton is gone — the provider receives the
+    // mocked settings explicitly, reproducing the old ambient read path.
+    provider.setRuntimeSettingsService(
+      mockSettingsService as unknown as SettingsService,
+    );
   });
 
   it('detects qwen format for GLM models', () => {

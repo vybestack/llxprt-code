@@ -1,5 +1,5 @@
-import { observeHistorySynchronouslyForTest } from '../../test-utils/synchronous-history-test-observation.js';
-import { forbidHistoryMaterializationForTest } from '../../test-utils/history-materialization-test-guard.js';
+import { observeHistorySynchronouslyForTest } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
+import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
@@ -7,7 +7,7 @@ import { DebugLogger } from '../../debug/index.js';
 import { HistoryService } from './HistoryService.js';
 import { buildProviderContent } from './historyProviderPipeline.js';
 import type { IContent } from './IContent.js';
-import { withSuffixFixture } from './history-suffix-test-helpers.js';
+import { withCoreSuffixFixture } from './core-suffix-fixture-test-helpers.js';
 import { providerFixtureRow } from './provider-curated-test-helpers.js';
 
 class CursorOnlyProviderHistory extends HistoryService {
@@ -53,7 +53,7 @@ describe('journal-backed provider normalization', () => {
         [],
         logger,
       );
-      await withSuffixFixture(
+      await withCoreSuffixFixture(
         size,
         async (history, owners, counters) => {
           expect(await digest(history.getCuratedForProviderStream())).toBe(

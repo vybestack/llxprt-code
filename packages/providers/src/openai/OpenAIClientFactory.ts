@@ -26,9 +26,20 @@ import OpenAI from 'openai';
 import * as http from 'http';
 import * as https from 'https';
 import * as net from 'net';
+import { createRequire } from 'node:module';
+import { Readable } from 'node:stream';
+import type * as Undici from 'undici';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { OPENAI_TRANSPORT_SELECTOR_KEYS } from './openaiModelPolicy.js';
 import { createReaderBasedStreamFetch } from './openaiStreamFetchSafety.js';
+import { readRequestBody, responseBody } from './openai-transport-streams.js';
+
+// Bun's 'undici' shim does not apply dispatcher headersTimeout; load the
+// installed package's public entry instead of the shim.
+const undiciRequire = createRequire(
+  createRequire(import.meta.url).resolve('undici/package.json'),
+);
+const { request: undiciRequest } = undiciRequire('./') as typeof Undici;
 
 /**
  * Create HTTP/HTTPS agents with socket configuration for local AI servers
@@ -163,6 +174,54 @@ export function resolveRuntimeKey(
   return 'openai.runtime.unscoped';
 }
 
+function fetchWithHeadersTimeout(headersTimeoutMs: number): typeof fetch {
+  if (!Number.isSafeInteger(headersTimeoutMs) || headersTimeoutMs <= 0) {
+    throw new Error('openai-headers-timeout-ms must be a positive integer');
+  }
+  return Object.assign(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (input instanceof Request) {
+        throw new Error('Scoped OpenAI transport requires a URL');
+      }
+      const body = init?.body;
+      if (
+        body !== undefined &&
+        body !== null &&
+        typeof body !== 'string' &&
+        !(body instanceof ReadableStream)
+      ) {
+        throw new Error('Scoped OpenAI transport requires a JSON body');
+      }
+      const result = await undiciRequest(String(input), {
+        method: init?.method ?? 'GET',
+        headers: Object.fromEntries(new Headers(init?.headers)),
+        body:
+          body instanceof ReadableStream
+            ? Readable.from(readRequestBody(body))
+            : body,
+        signal: init?.signal ?? undefined,
+        headersTimeout: headersTimeoutMs,
+      });
+      const headers = new Headers();
+      for (const [key, value] of Object.entries(result.headers)) {
+        if (Array.isArray(value)) {
+          for (const item of value) headers.append(key, item);
+        } else if (value !== undefined) {
+          headers.append(key, String(value));
+        }
+      }
+      return new Response(
+        result.statusCode === 204 ? null : responseBody(result.body),
+        { status: result.statusCode, headers },
+      );
+    },
+    {
+      preconnect: (...args: Parameters<typeof fetch.preconnect>) =>
+        globalThis.fetch.preconnect(...args),
+    },
+  );
+}
+
 /**
  * @plan:PLAN-20251023-STATELESS-HARDENING.P09
  * @requirement:REQ-SP4-002
@@ -173,13 +232,31 @@ export function instantiateClient(
   baseURL?: string,
   agents?: { httpAgent: http.Agent; httpsAgent: https.Agent },
   headers?: Record<string, string>,
+  transport?: {
+    headersTimeoutMs?: number;
+    requestTimeoutMs?: number;
+    fetch?: typeof fetch;
+  },
 ): OpenAI {
   const clientOptions: Record<string, unknown> = {
     apiKey: authToken || '',
     maxRetries: 0,
   };
+  if (transport?.requestTimeoutMs !== undefined) {
+    if (
+      !Number.isSafeInteger(transport.requestTimeoutMs) ||
+      transport.requestTimeoutMs <= 0
+    ) {
+      throw new Error('openai-request-timeout-ms must be a positive integer');
+    }
+    clientOptions.timeout = transport.requestTimeoutMs;
+  }
 
-  clientOptions.fetch = createReaderBasedStreamFetch();
+  const scopedFetch =
+    transport?.headersTimeoutMs === undefined
+      ? transport?.fetch
+      : fetchWithHeadersTimeout(transport.headersTimeoutMs);
+  clientOptions.fetch = createReaderBasedStreamFetch(scopedFetch);
 
   if (headers && Object.keys(headers).length > 0) {
     // Ensure headers like User-Agent are applied even if the SDK call-site

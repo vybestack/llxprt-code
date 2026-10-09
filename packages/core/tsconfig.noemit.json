@@ -38,7 +38,6 @@
     "../settings/src/__tests__/settingsRegistry.issue2896.test.ts",
     "../settings/src/__tests__/settingsRegistry.redaction.test.ts",
     "../settings/src/__tests__/settingsRegistry.test.ts",
-    "../settings/src/__tests__/settingsServiceInstance.test.ts",
     "../settings/src/profiles/ProfileManager.isolation.test.ts",
     "../settings/src/profiles/__tests__/ProfileManager.test.ts",
     "../settings/src/profiles/__tests__/canonicalProfileRepair.outcomes.test.ts",

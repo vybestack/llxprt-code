@@ -18,7 +18,10 @@ import { AgentClient } from './client.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ChatSession } from './chatSession.js';
 import { AgentEventType, Turn } from './turn.js';
-import { fromAsync, setupAgentClient } from './client-test-helpers.js';
+import {
+  fromAsync,
+  setupAgentClient,
+} from './__tests__/client-test-helpers.js';
 
 const mockChatCreateFn = vi.fn();
 const mockGenerateContentFn = vi.fn();
@@ -82,7 +85,7 @@ describe('AgentClient (client.ts) - sendMessageStream - InvalidStream continuati
     };
     client['chat'] = mockChat as ChatSession;
 
-    const initialRequest = [{ type: 'text', text: 'Hi' }];
+    const initialRequest: ContentBlock[] = [{ type: 'text', text: 'Hi' }];
     const promptId = 'prompt-id-invalid-stream';
     const signal = new AbortController().signal;
 
@@ -157,7 +160,7 @@ describe('AgentClient (client.ts) - InvalidStream after content', () => {
 
     const events = await fromAsync(
       client.sendMessageStream(
-        [{ text: 'Hi' }],
+        [{ type: 'text', text: 'Hi' }],
         new AbortController().signal,
         'prompt-id-invalid-stream-after-content',
       ),
@@ -195,7 +198,7 @@ describe('AgentClient (client.ts) - InvalidStream with retry disabled', () => {
     };
     client['chat'] = mockChat as ChatSession;
 
-    const initialRequest = [{ type: 'text', text: 'Hi' }];
+    const initialRequest: ContentBlock[] = [{ type: 'text', text: 'Hi' }];
     const promptId = 'prompt-id-invalid-stream';
     const signal = new AbortController().signal;
 
@@ -343,7 +346,7 @@ describe('AgentClient (client.ts) - repeated InvalidStream', () => {
     };
     client['chat'] = mockChat as ChatSession;
 
-    const initialRequest = [{ type: 'text', text: 'Hi' }];
+    const initialRequest: ContentBlock[] = [{ type: 'text', text: 'Hi' }];
     const promptId = 'prompt-id-infinite-invalid-stream';
     const signal = new AbortController().signal;
 

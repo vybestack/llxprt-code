@@ -9,15 +9,14 @@
  * @issue #2328
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { vi, describe, it, expect, beforeEach } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { AnthropicRequestBody } from './test-utils/anthropicTestUtils.js';
+import type { AnthropicRequestBody } from './__tests__/anthropicTestUtils.js';
 import {
   mockMessagesCreate,
   setupThinkingProvider,
   type ThinkingTestSetup,
-} from './test-utils/anthropicThinkingTestSetup.js';
-import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+} from './__tests__/anthropicThinkingTestSetup.js';
 
 describe('AnthropicProvider Fable 5 Extended Thinking @issue:2328', () => {
   let provider: ThinkingTestSetup['provider'];
@@ -30,10 +29,6 @@ describe('AnthropicProvider Fable 5 Extended Thinking @issue:2328', () => {
     provider = setup.provider;
     settingsService = setup.settingsService;
     buildCallOptions = setup.buildCallOptions;
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
   });
 
   // Shared harness: pin Fable 5, apply reasoning settings, run one turn, and

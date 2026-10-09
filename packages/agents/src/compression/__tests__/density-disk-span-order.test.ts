@@ -6,7 +6,7 @@ import {
   collectDensitySpans,
   mergeRemovedInteriorSpans,
 } from '@vybestack/llxprt-code-core/services/history/contextRange.js';
-import { withSuffixFixture } from '../../../../core/src/services/history/history-suffix-test-helpers.js';
+import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { HighDensityStrategy } from '../HighDensityStrategy.js';
 import {
   densityConfig,

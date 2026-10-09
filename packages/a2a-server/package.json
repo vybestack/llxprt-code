@@ -15,7 +15,7 @@
   },
   "scripts": {
     "start": "node dist/src/http/server.js",
-    "build": "bun ../../scripts/build_package.ts",
+    "build": "bun ../../scripts/build_package.ts && bun ./scripts/dist-test-artifact-guard.ts",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
     "test": "bun ../../scripts/run_bun_tests.ts --workspace a2a-server --junit junit.xml",
@@ -24,7 +24,23 @@
     "typecheck": "tsc --noEmit"
   },
   "files": [
-    "dist"
+    "dist",
+    "!**/*.test.ts",
+    "!**/*.test.tsx",
+    "!**/*.spec.ts",
+    "!**/*.spec.tsx",
+    "!**/*.bun.ts",
+    "!**/*.test-d.ts",
+    "!**/__tests__/**",
+    "!**/__mocks__/**",
+    "!**/*test-helpers*",
+    "!**/*.testHelpers.ts",
+    "!**/*.test-helper.ts",
+    "!**/*.fixtures.ts",
+    "!**/src/test-utils/**",
+    "!**/test-support/**",
+    "!**/mcpClientTestHelpers.ts",
+    "!**/*.bun.tsx"
   ],
   "dependencies": {
     "@a2a-js/sdk": "^0.3.7",

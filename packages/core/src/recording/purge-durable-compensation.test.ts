@@ -1,13 +1,13 @@
-import { observeHistorySynchronouslyForTest } from '../test-utils/synchronous-history-test-observation.js';
-import { forbidHistoryMaterializationForTest } from '../test-utils/history-materialization-test-guard.js';
+import { observeHistorySynchronouslyForTest } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
+import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { statSync } from 'node:fs';
 import type { SessionRecordingService } from './SessionRecordingService.js';
 import { foldDurableRows } from './durableRowFold.js';
 import { SemanticMediaPurgeStreamCoordinator } from '../services/history/semantic-purge-stream.js';
-import { withSuffixFixture } from '../services/history/history-suffix-test-helpers.js';
-import { ownerFixtureRow } from '../services/history/chronology-rollback-owner-helpers.js';
+import { withCoreSuffixFixture } from '../services/history/core-suffix-fixture-test-helpers.js';
+import { ownerFixtureRow } from '../services/history/chronology-rollback-owner-test-helpers.js';
 import { RowOwnership } from './rowOwnership.js';
 import type { IContent } from '../services/history/IContent.js';
 import { HistoryService } from '../services/history/HistoryService.js';
@@ -49,7 +49,7 @@ function imageRow(index: number, bytes: number): IContent {
 async function verifyCompensation(size: number): Promise<number> {
   let recording: SessionRecordingService | undefined;
   const owners = new RowOwnership();
-  await withSuffixFixture(
+  await withCoreSuffixFixture(
     size,
     async (history) => {
       const controller = new AbortController();

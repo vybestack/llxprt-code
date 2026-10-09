@@ -21,7 +21,7 @@ import { hooksCommand } from './hooksCommand.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core';
 import { MessageType } from '../types.js';
 import type { CommandContext } from './types.js';
-import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 
 function buildContextWithAgent(agent: Partial<Agent>): CommandContext {
   return createMockCommandContext({

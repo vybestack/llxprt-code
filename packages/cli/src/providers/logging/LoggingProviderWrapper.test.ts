@@ -10,6 +10,7 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
+import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import type { IContent, Config } from '@vybestack/llxprt-code-core';
 import type {
@@ -23,13 +24,7 @@ import type {
 interface LoggingProviderWrapper {
   generateChatCompletion(
     messages: IContent[],
-    tools?: Array<{
-      functionDeclarations: Array<{
-        name: string;
-        description?: string;
-        parameters?: unknown;
-      }>;
-    }>,
+    tools?: ToolDeclaration[],
   ): AsyncIterableIterator<IContent>;
   getWrappedProvider(): IProvider;
 }
@@ -97,13 +92,7 @@ class MockLoggingProviderWrapper implements LoggingProviderWrapper {
 
   async *generateChatCompletion(
     messages: IContent[],
-    tools?: Array<{
-      functionDeclarations: Array<{
-        name: string;
-        description?: string;
-        parameters?: unknown;
-      }>;
-    }>,
+    tools?: ToolDeclaration[],
   ): AsyncIterableIterator<IContent> {
     // This should log the conversation request when logging is enabled
     if (this.config.getConversationLoggingEnabled()) {
@@ -367,21 +356,11 @@ describe('Multi-Provider Conversation Logging: tools', () => {
     const messages: IContent[] = [
       { speaker: 'human', blocks: [{ type: 'text', text: 'Test' }] },
     ];
-    const tools: Array<{
-      functionDeclarations: Array<{
-        name: string;
-        description?: string;
-        parameters?: unknown;
-      }>;
-    }> = [
+    const tools: ToolDeclaration[] = [
       {
-        functionDeclarations: [
-          {
-            name: 'test_tool',
-            description: 'A test tool',
-            parameters: { type: 'object', properties: {} },
-          },
-        ],
+        name: 'test_tool',
+        description: 'A test tool',
+        parametersJsonSchema: { type: 'object', properties: {} },
       },
     ];
 

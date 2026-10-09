@@ -13,13 +13,12 @@ import type {
   TextBlock,
   ToolCallBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import { resetSettingsService } from '@vybestack/llxprt-code-settings';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type OpenAI from 'openai';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
-import { createOpenAIRawPostTestAdapter } from '../../test-utils/rawPostTestAdapters.js';
+import { createOpenAIRawPostTestAdapter } from '../../__tests__/rawPostTestAdapters.js';
 
 // Mock OpenAI client at the instance level
 const mockChatCompletionsCreate = vi.fn();
@@ -56,7 +55,6 @@ describe('OpenAIProvider E2E Tests @plan:PLAN-20251202-THINKING.P16', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockChatCompletionsCreate.mockClear();
-    resetSettingsService();
 
     const runtime = initializeTestProviderRuntime({
       runtimeId: `openai-e2e-${Math.random().toString(36).slice(2, 10)}`,

@@ -53,7 +53,6 @@
     "../tools/src/tools/todo-store-injection.test.ts",
     "../tools/src/tools/tools.test.ts",
     "../tools/src/utils/fileUtils.test.ts",
-    "src/auth/google-auth-provider.test.ts",
     "src/auth/oauth-provider.authenticate.test.ts",
     "src/auth/oauth-provider.token.test.ts",
     "src/auth/token-storage/base-token-storage.test.ts",

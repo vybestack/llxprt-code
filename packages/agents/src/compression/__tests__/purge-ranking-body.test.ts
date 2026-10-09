@@ -1,7 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { appendBodyEvidence } from '../../../../../scripts/lib/body-evidence-writer.js';
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { appendFileSync } from 'node:fs';
+
 import { captureCompressionBody } from './compression-value-openai-body.js';
 import { buildProviderContent } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
@@ -54,15 +55,11 @@ async function compareBodies(
         independent,
         caching,
       );
-      expect(actual).toBe(oracle);
-      expect(actual).toContain('x'.repeat(bytes));
-      if (route === 'purge')
-        expect(Buffer.byteLength(actual)).toBeGreaterThan(size * bytes);
       const output = process.env.TRANSFORM_BODY_OUTPUT;
       if (output !== undefined)
-        appendFileSync(
+        await appendBodyEvidence(
           output,
-          JSON.stringify({
+          {
             route,
             size,
             bytes,
@@ -75,8 +72,15 @@ async function compareBodies(
             range: history.getContextRange(),
             bodyBytes: Buffer.byteLength(actual),
             sha256: createHash('sha256').update(actual).digest('hex'),
-          }) + '\n',
+          },
+          actual,
+          oracle,
         );
+      expect(actual).toBe(oracle);
+      expect(actual).toContain('x'.repeat(bytes));
+      if (route === 'purge')
+        expect(Buffer.byteLength(actual)).toBeGreaterThan(size * bytes);
+
       compared++;
     }
   }

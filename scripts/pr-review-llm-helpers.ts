@@ -7,17 +7,8 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
-// Issue #2742: 4000 was too small — the LLM's JSON output for large diffs or
-// complex prompts could be truncated mid-object, causing unparseable JSON.
-// 16384 (16k) is large enough for any walkthrough JSON payload without being
-// wasteful. step-3.7-flash supports up to 256K output tokens, so 16k is well
-// within the model's capacity.
-export const DEFAULT_MAX_TOKENS = 16384;
-
-// Issue #2742: step-3.7-flash has a 256K context window. If no LLXPRT_CONTEXT_LIMIT
-// env var is set, fall back to 256000 (the documented context length) rather
-// than the 200000 default that only applies to models not in the catalog.
-export const DEFAULT_CONTEXT_LIMIT = 256000;
+export const DEFAULT_MAX_TOKENS = 8192;
+export const DEFAULT_CONTEXT_LIMIT = 32768;
 
 const TRANSIENT_ERROR_CODES = new Set([
   'EAI_AGAIN',
@@ -77,7 +68,9 @@ export function isParseError(error: unknown): boolean {
   return (
     message === 'Cannot parse JSON from response' ||
     message === 'Empty response: cannot parse JSON' ||
-    /^Invalid (map|group) response:/.test(message) ||
+    /^Invalid (map|group|synthesis|diagram|related|pre-merge|acceptance-evidence) response:/.test(
+      message,
+    ) ||
     NON_OBJECT_PARSE_PREFIXES.some((prefix) => message.startsWith(prefix))
   );
 }
@@ -140,7 +133,12 @@ export async function runLlxprtPromptWithParse<T>(
         );
         throw error;
       }
-      await delayMs(attempt);
+      const delay = delayMs(attempt);
+      if (typeof delay === 'number') {
+        await new Promise<void>((resolve) => setTimeout(resolve, delay));
+      } else {
+        await delay;
+      }
     }
   }
   throw new Error('unreachable');
@@ -205,4 +203,28 @@ export async function saveParseFailureArtifact(
       writeError,
     );
   }
+}
+
+export function sanitizeErrorMessage(
+  error: string | Error,
+  secret = process.env.OPENAI_API_KEY,
+): Error {
+  const source = error instanceof Error ? error : new Error(String(error));
+  const hasSecret =
+    typeof secret === 'string' &&
+    secret.length > 0 &&
+    source.message.includes(secret);
+  if (!source.message.includes('--key') && !hasSecret) return source;
+  let sanitized = source.message
+    .replace(/--key=(?:"[^"]*"|'[^']*'|[^\s]+)/g, '--key=[REDACTED]')
+    .replace(/(--key\b)(?:\s+)(?!-)(\S+)/g, '$1 [REDACTED]');
+  if (hasSecret && secret)
+    sanitized = sanitized.split(secret).join('[REDACTED]');
+  const clean = new Error(sanitized);
+  for (const prop of ['code', 'exitCode', 'signal', 'killed']) {
+    const descriptor = Object.getOwnPropertyDescriptor(source, prop);
+    if (descriptor && descriptor.value !== undefined)
+      Object.defineProperty(clean, prop, descriptor);
+  }
+  return clean;
 }

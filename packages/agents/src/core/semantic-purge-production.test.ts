@@ -1,11 +1,11 @@
-import { observeHistorySynchronouslyForTest } from '../../../core/src/test-utils/synchronous-history-test-observation.js';
-import { forbidHistoryMaterializationForTest } from '../../../core/src/test-utils/history-materialization-test-guard.js';
+import { observeHistorySynchronouslyForTest } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
+import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { withSuffixFixture } from '@vybestack/llxprt-code-core/services/history/history-suffix-test-helpers.js';
-import { ownerFixtureRow } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-owner-helpers.js';
+import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
+import { ownerFixtureRow } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-owner-test-helpers.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
 import type { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';

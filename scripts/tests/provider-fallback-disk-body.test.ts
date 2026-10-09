@@ -1,10 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { installFixtureCandidate } from '../../packages/agents/src/compression/__tests__/provider-fallback-candidate-fixture.js';
+import { writeBodyFile } from '../lib/body-evidence-writer.js';
 import { describe, it, expect } from 'bun:test';
-import { writeFileSync } from 'node:fs';
+
 import { join } from 'node:path';
 import { DebugLogger } from '../../packages/core/src/debug/index.js';
-import { withSuffixFixture } from '../../packages/core/src/services/history/history-suffix-test-helpers.js';
+import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { exactTokenizer } from '../../packages/core/src/services/history/chronology-rollback-test-helpers.js';
 import { buildProviderContent } from '../../packages/core/src/services/history/historyProviderPipeline.js';
 import { buildCuratedHistory } from '../../packages/core/src/services/history/historyCuration.js';
@@ -121,8 +122,8 @@ async function verifyFallbackBody(
       const output = process.env.FALLBACK_BODY_OUTPUT;
       if (output !== undefined) {
         const name = `fallback-${provider}-${size}-${caching}-${accepted}`;
-        writeFileSync(join(output, name + '-actual.json'), actual);
-        writeFileSync(join(output, name + '-expected.json'), expected);
+        await writeBodyFile(join(output, name + '-actual.json'), actual);
+        await writeBodyFile(join(output, name + '-expected.json'), expected);
       }
       expect(actual).toBe(expected);
       if (provider === 'anthropic' && caching)

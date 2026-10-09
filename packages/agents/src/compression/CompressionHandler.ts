@@ -67,6 +67,10 @@ import {
 
 import { runDiskProviderFallback } from './diskProviderFallback.js';
 import { ProviderFallbackInvariantError } from './providerFallbackCandidate.js';
+import {
+  ProviderSourceEnforcer,
+  type ProviderSourceLimits,
+} from './provider-source-enforcement.js';
 
 const diskRunners = {
   'middle-out': runDiskMiddleOut,
@@ -481,6 +485,33 @@ export class CompressionHandler {
         }
       },
     });
+  }
+
+  sourceContextLimits(provider: IProvider): ProviderSourceLimits {
+    return this.createProviderContentEnforcer().sourceContextLimits(provider);
+  }
+
+  /** The first disk route rejects escalation rather than returning an eager replacement. */
+  async enforceProviderSource(
+    provider: IProvider,
+    estimate: () => Promise<number>,
+  ): Promise<void> {
+    try {
+      provider.setCompressionCallback?.(async () => {
+        throw new Error(
+          'Disk source compression callback requires array replacement contracts',
+        );
+      });
+      await this.historyService.waitForTokenUpdates();
+      await new ProviderSourceEnforcer({
+        limits: this.sourceContextLimits(provider),
+        estimate,
+        getHistoryTokens: () => this.historyService.getTotalTokens(),
+      }).enforce();
+    } catch (error) {
+      this.clearProviderCompressionCallback(provider);
+      throw error;
+    }
   }
 
   /**

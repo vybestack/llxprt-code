@@ -28,7 +28,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { Config } from '../config/config.js';
 import type { ConfigParameters } from '../config/configTypes.js';
-import { attachTestAgentFactories } from '../test-utils/config.js';
+import { attachTestAgentFactories } from '../__tests__/config-test-helpers.js';
 import { discoverSkillsForConfig } from './skillDiscovery.js';
 
 async function writeProjectSkill(

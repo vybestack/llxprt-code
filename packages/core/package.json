@@ -181,6 +181,11 @@
       "bun": "./src/services/history/IContent.ts",
       "import": "./dist/src/services/history/IContent.js"
     },
+    "./services/history/provider-request-snapshot.js": {
+      "types": "./dist/src/services/history/provider-request-snapshot.d.ts",
+      "bun": "./src/services/history/provider-request-snapshot.ts",
+      "import": "./dist/src/services/history/provider-request-snapshot.js"
+    },
     "./services/history/semantic-media-purge.js": {
       "bun": "./src/services/history/semantic-media-purge.ts",
       "import": "./dist/src/services/history/semantic-media-purge.js"
@@ -195,13 +200,41 @@
       "bun": "./src/services/history/historyCloneUtils.ts",
       "import": "./dist/src/services/history/historyCloneUtils.js"
     },
+    "./services/history/historyDensityRows.js": {
+      "types": "./dist/src/services/history/historyDensityRows.d.ts",
+      "bun": "./src/services/history/historyDensityRows.ts",
+      "import": "./dist/src/services/history/historyDensityRows.js"
+    },
     "./llm-types/index.js": {
       "bun": "./src/llm-types/index.ts",
       "import": "./dist/src/llm-types/index.js"
     },
+    "./llm-types/toolDeclaration.js": {
+      "types": "./dist/src/llm-types/toolDeclaration.d.ts",
+      "bun": "./src/llm-types/toolDeclaration.ts",
+      "import": "./dist/src/llm-types/toolDeclaration.js"
+    },
+    "./recording/childJournal.js": {
+      "types": "./dist/src/recording/childJournal.d.ts",
+      "bun": "./src/recording/childJournal.ts",
+      "import": "./dist/src/recording/childJournal.js"
+    },
+    "./recording/childSessionIds.js": {
+      "types": "./dist/src/recording/childSessionIds.d.ts",
+      "bun": "./src/recording/childSessionIds.ts",
+      "import": "./dist/src/recording/childSessionIds.js"
+    },
+    "./llm-types/modelEnvelope.js": {
+      "bun": "./src/llm-types/modelEnvelope.ts",
+      "import": "./dist/src/llm-types/modelEnvelope.js"
+    },
     "./llm-types/finishReasons.js": {
       "bun": "./src/llm-types/finishReasons.ts",
       "import": "./dist/src/llm-types/finishReasons.js"
+    },
+    "./recording/SessionRecordingService.js": {
+      "bun": "./src/recording/SessionRecordingService.ts",
+      "import": "./dist/src/recording/SessionRecordingService.js"
     },
     "./services/history/historyProviderPipeline.js": {
       "bun": "./src/services/history/historyProviderPipeline.ts",
@@ -289,30 +322,6 @@
     "./telemetry/file-exporters.js": {
       "bun": "./src/telemetry/file-exporters.ts",
       "import": "./dist/src/telemetry/file-exporters.js"
-    },
-    "./test-utils/providerCallOptions.js": {
-      "bun": "./src/test-utils/providerCallOptions.ts",
-      "import": "./dist/src/test-utils/providerCallOptions.js"
-    },
-    "./test-utils/config.js": {
-      "bun": "./src/test-utils/config.ts",
-      "import": "./dist/src/test-utils/config.js"
-    },
-    "./test-utils/mock-tool.js": {
-      "bun": "./src/test-utils/mock-tool.ts",
-      "import": "./dist/src/test-utils/mock-tool.js"
-    },
-    "./test-utils/runtime.js": {
-      "bun": "./src/test-utils/runtime.ts",
-      "import": "./dist/src/test-utils/runtime.js"
-    },
-    "./test-utils/retained-growth.js": {
-      "bun": "./src/test-utils/retained-growth.ts",
-      "import": "./dist/src/test-utils/retained-growth.js"
-    },
-    "./test-utils/collect-raw-history.js": {
-      "bun": "./src/test-utils/collect-raw-history.ts",
-      "import": "./dist/src/test-utils/collect-raw-history.js"
     },
     "./utils/debugLogger.js": {
       "bun": "./src/utils/debugLogger.ts",
@@ -413,10 +422,6 @@
     "./scheduler/liveOutput.js": {
       "bun": "./src/scheduler/liveOutput.ts",
       "import": "./dist/src/scheduler/liveOutput.js"
-    },
-    "./config/schedulerSingleton.js": {
-      "bun": "./src/config/schedulerSingleton.ts",
-      "import": "./dist/src/config/schedulerSingleton.js"
     },
     "./config/subagentManager.js": {
       "bun": "./src/config/subagentManager.ts",
@@ -588,6 +593,21 @@
       "bun": "./src/recording/rowOwnership.ts",
       "import": "./dist/src/recording/rowOwnership.js"
     },
+    "./recording/journalResolver.js": {
+      "types": "./dist/src/recording/journalResolver.d.ts",
+      "bun": "./src/recording/journalResolver.ts",
+      "import": "./dist/src/recording/journalResolver.js"
+    },
+    "./services/history/historyCuration.js": {
+      "types": "./dist/src/services/history/historyCuration.d.ts",
+      "bun": "./src/services/history/historyCuration.ts",
+      "import": "./dist/src/services/history/historyCuration.js"
+    },
+    "./services/history/historyJournalStore.js": {
+      "types": "./dist/src/services/history/historyJournalStore.d.ts",
+      "bun": "./src/services/history/historyJournalStore.ts",
+      "import": "./dist/src/services/history/historyJournalStore.js"
+    },
     "./storage/history-media-ownership.js": {
       "types": "./dist/src/storage/history-media-ownership.d.ts",
       "bun": "./src/storage/history-media-ownership.ts",
@@ -597,6 +617,36 @@
       "types": "./dist/src/storage/SessionPersistenceService.d.ts",
       "bun": "./src/storage/SessionPersistenceService.ts",
       "import": "./dist/src/storage/SessionPersistenceService.js"
+    },
+    "./services/history/detachedHistoryJournal.js": {
+      "types": "./dist/src/services/history/detachedHistoryJournal.d.ts",
+      "bun": "./src/services/history/detachedHistoryJournal.ts",
+      "import": "./dist/src/services/history/detachedHistoryJournal.js"
+    },
+    "./services/history/compression-span-index.js": {
+      "types": "./dist/src/services/history/compression-span-index.d.ts",
+      "bun": "./src/services/history/compression-span-index.ts",
+      "import": "./dist/src/services/history/compression-span-index.js"
+    },
+    "./services/history/historyMutationOwnership.js": {
+      "types": "./dist/src/services/history/historyMutationOwnership.d.ts",
+      "bun": "./src/services/history/historyMutationOwnership.ts",
+      "import": "./dist/src/services/history/historyMutationOwnership.js"
+    },
+    "./services/history/historyBatchContracts.js": {
+      "types": "./dist/src/services/history/historyBatchContracts.d.ts",
+      "bun": "./src/services/history/historyBatchContracts.ts",
+      "import": "./dist/src/services/history/historyBatchContracts.js"
+    },
+    "./storage/history-media-index.js": {
+      "types": "./dist/src/storage/history-media-index.d.ts",
+      "bun": "./src/storage/history-media-index.ts",
+      "import": "./dist/src/storage/history-media-index.js"
+    },
+    "./storage/media-reference-lifecycle.js": {
+      "types": "./dist/src/storage/media-reference-lifecycle.d.ts",
+      "bun": "./src/storage/media-reference-lifecycle.ts",
+      "import": "./dist/src/storage/media-reference-lifecycle.js"
     }
   },
   "scripts": {
@@ -610,12 +660,17 @@
   "files": [
     "index.ts",
     "src",
-    "!**/*.test.ts",
-    "!**/*.test.tsx",
-    "!**/*.spec.ts",
-    "!**/*.spec.tsx",
+    "!**/*.test.*",
+    "!**/*.spec.*",
     "!**/__tests__/**",
     "!**/__snapshots__/**",
+    "!**/*.bun.ts",
+    "!**/*.test-d.ts",
+    "!**/__mocks__/**",
+    "!**/*.testHelpers.ts",
+    "!**/*.test-helper.ts",
+    "!**/*.fixtures.ts",
+    "!**/test-utils/**",
     "dist"
   ],
   "dependencies": {

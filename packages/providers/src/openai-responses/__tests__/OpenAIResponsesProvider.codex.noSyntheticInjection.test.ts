@@ -29,17 +29,13 @@
  * mocked `fetch` — never on internal function calls or spy counts.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  clearActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ResponsesInputItem } from '../OpenAIResponsesTypes.js';
 
@@ -92,6 +88,8 @@ function buildCodexProviderWithOAuth(): OpenAIResponsesProvider {
     CODEX_BASE_URL,
     undefined,
     oauthManager as unknown as object,
+    undefined,
+    'codex',
   );
 }
 
@@ -233,23 +231,14 @@ function basicCodexContents(): IContent[] {
 function setupRequestCaptureEnvironment(): void {
   vi.clearAllMocks();
   global.fetch = mockFetch as unknown as typeof fetch;
-
-  setActiveProviderRuntimeContext(
-    createProviderRuntimeContext({
-      settingsService: new SettingsService(),
-      runtimeId: TEST_RUNTIME_ID,
-    }),
-  );
 }
 
 function teardownRequestCaptureEnvironment(): void {
-  clearActiveProviderRuntimeContext();
   global.fetch = originalFetch;
 }
 
 describe('OpenAIResponsesProvider Codex mode does not inject synthetic AGENTS.md read (#3131)', () => {
   beforeEach(setupRequestCaptureEnvironment);
-
   afterEach(teardownRequestCaptureEnvironment);
 
   it('AC1: no synthetic read_file/AGENTS.md function_call and no synthetic call id', async () => {
@@ -388,7 +377,6 @@ describe('OpenAIResponsesProvider Codex mode does not inject synthetic AGENTS.md
 
 describe('OpenAIResponsesProvider non-Codex mode is unchanged by Codex-only input shaping (#3131)', () => {
   beforeEach(setupRequestCaptureEnvironment);
-
   afterEach(teardownRequestCaptureEnvironment);
 
   it('AC5: non-Codex input preserves original ordering and does not hoist reasoning items', async () => {

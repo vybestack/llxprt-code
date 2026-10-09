@@ -6,7 +6,7 @@
 
 import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import { act } from 'react';
-import { renderWithProviders as render } from '../../test-utils/render.js';
+import { renderWithProviders as render } from '../../__tests__/render.js';
 import { useKeypress } from './useKeypress.js';
 import { KeypressProvider } from '../contexts/KeypressContext.js';
 import { useStdin } from 'ink';

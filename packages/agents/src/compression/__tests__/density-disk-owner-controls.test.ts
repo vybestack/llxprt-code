@@ -4,7 +4,7 @@ import { HistoryService } from '@vybestack/llxprt-code-core/services/history/His
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { DiskDensityOptimizer } from '@vybestack/llxprt-code-core/services/history/historyDiskDensity.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
-import { withSuffixFixture } from '../../../../core/src/services/history/history-suffix-test-helpers.js';
+import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { densityHandler, densityRow } from './density-disk-helpers.js';
 
 class RetainingDensityHistory extends HistoryService {

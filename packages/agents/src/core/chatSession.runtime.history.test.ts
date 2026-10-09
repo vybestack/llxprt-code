@@ -10,7 +10,7 @@
  * Sibling to chatSession.runtime.test.ts (split to avoid file-level max-lines disable).
  */
 
-import { collectRawHistory } from '@vybestack/llxprt-code-core/test-utils/collect-raw-history.js';
+import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { ChatSession } from './chatSession.js';

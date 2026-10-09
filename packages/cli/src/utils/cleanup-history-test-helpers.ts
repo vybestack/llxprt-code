@@ -1,4 +1,4 @@
-import { forbidHistoryMaterializationForTest } from '../../../core/src/test-utils/history-materialization-test-guard.js';
+import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createHash } from 'node:crypto';
 import { appendFileSync } from 'node:fs';
@@ -13,7 +13,7 @@ import type {
 import {
   withSuffixFixture,
   suffixRow,
-} from '@vybestack/llxprt-code-core/services/history/history-suffix-test-helpers.js';
+} from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import {
   deferred,
   accountingFactory,

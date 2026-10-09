@@ -23,7 +23,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { renderHook } from '../../../test-utils/render.js';
+import { renderHook } from '../../../__tests__/render.js';
 import type { HistoryItemWithoutId } from '../../types.js';
 import {
   useMemoryMonitor,

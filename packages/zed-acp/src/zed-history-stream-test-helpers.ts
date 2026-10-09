@@ -1,9 +1,7 @@
-import { forbidHistoryMaterializationForTest } from '../../core/src/test-utils/history-materialization-test-guard.js';
+import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createHash } from 'node:crypto';
-import { AgentClient } from '@vybestack/llxprt-code-agents/internals.js';
-import { makeFakeConfig } from '@vybestack/llxprt-code-core/test-utils/config.js';
-import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import { accountingRow } from '@vybestack/llxprt-code-core/services/history/token-accounting-stream-test-helpers.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { mapHistoryToSessionUpdates } from './zed-session-replay.js';
@@ -27,17 +25,13 @@ export function replayOracle(size: number): string {
     .digest('hex');
 }
 
-export function replayClient(history: HistoryService): AgentClient {
-  const config = makeFakeConfig();
-  const client = new AgentClient(
-    config,
-    createAgentRuntimeState({
-      runtimeId: 'replay-cursor',
-      sessionId: 'replay-cursor',
-      provider: 'test',
-      model: 'test',
-    }),
-  );
-  client.storeHistoryServiceForReuse(history);
-  return client;
+export function replayClient(
+  history: HistoryService,
+): Pick<Agent, 'streamHistory'> & { dispose(): Promise<void> } {
+  return {
+    streamHistory: (signal) => history.streamRawHistory(signal),
+    dispose: async () => {
+      history.dispose();
+    },
+  };
 }

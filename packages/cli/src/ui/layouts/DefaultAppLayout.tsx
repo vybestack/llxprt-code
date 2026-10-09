@@ -13,7 +13,7 @@ import type {
 import { Box, type DOMElement, Static, Text } from 'ink';
 import type { LoadedSettings } from '../../config/settings.js';
 import type { UpdateObject } from '../utils/updateCheck.js';
-import { Colors } from '../colors.js';
+import { Colors, SemanticColors } from '../colors.js';
 import { useTerminalStore } from '../stores/terminal/TerminalContext.js';
 import { useTurnStore } from '../stores/turn/TurnContext.js';
 import { useSettingsProfileStore } from '../stores/settings/SettingsContext.js';
@@ -25,8 +25,8 @@ import type {
 import { ScrollbackViewport } from '../components/ScrollbackViewport.js';
 import { SCROLLBACK_VIEWPORT_POLL_MS } from '../../constants/scrollbackLimits.js';
 import { StreamingContext } from '../contexts/StreamingContext.js';
-import { OverflowProvider } from '../contexts/OverflowContext.js';
-import { ShowMoreLines } from '../components/ShowMoreLines.js';
+import { AppHeader } from '../components/AppHeader.js';
+import { HistoryItemDisplay } from '../components/HistoryItemDisplay.js';
 import { ScrollableList } from '../components/shared/ScrollableList.js';
 import { SCROLL_TO_ITEM_END } from '../components/shared/VirtualizedList.js';
 import {
@@ -35,6 +35,7 @@ import {
   estimateScrollableMainContentItemHeight,
   useHasActiveDialog,
   useScrollableContent,
+  usePendingElement,
   QuittingDisplay,
   type ScrollableMainContentItem,
 } from './DefaultAppLayoutHelpers.js';
@@ -232,7 +233,7 @@ interface TranscriptProps extends DefaultAppLayoutProps {
   staticKey: number;
 }
 
-function useTranscriptContent(props: TranscriptProps) {
+function useTranscriptGeometry() {
   const { store } = useTerminalStore();
   const settings = useSettingsProfileStore();
   const terminalWidth = useStoreSelector(store, (s) => s.terminalWidth);
@@ -252,6 +253,29 @@ function useTranscriptContent(props: TranscriptProps) {
     settings.store,
     (s) => s.slashCommands,
   );
+  return {
+    terminalWidth,
+    terminalHeight,
+    mainAreaWidth,
+    constrainHeight,
+    availableHeight,
+    activeShellPtyId,
+    embeddedShellFocused,
+    slashCommands,
+  };
+}
+
+function AlternateTranscript(props: TranscriptProps) {
+  const {
+    terminalWidth,
+    terminalHeight,
+    mainAreaWidth,
+    constrainHeight,
+    availableHeight,
+    activeShellPtyId,
+    embeddedShellFocused,
+    slashCommands,
+  } = useTranscriptGeometry();
   const content = useScrollableContent(
     props.slashCommandRuntime,
     props.settings,
@@ -270,7 +294,7 @@ function useTranscriptContent(props: TranscriptProps) {
     activeShellPtyId,
     embeddedShellFocused,
   );
-  return { ...content, constrainHeight, availableHeight };
+  return <TranscriptScroll data={content.listItems} />;
 }
 
 type HistoryServiceHandle = Parameters<
@@ -336,45 +360,170 @@ function useContextRangeSnapshot(uiRuntime: UiRuntime): ContextRange | null {
   return range;
 }
 
+function PagerTranscript({
+  pager,
+  ...props
+}: TranscriptProps & { pager: ScrollbackPagerLayoutBinding }) {
+  const { store } = useTerminalStore();
+  const availableHeight = useStoreSelector(
+    store,
+    (s) => s.availableTerminalHeight,
+  );
+  const contextRange = useContextRangeSnapshot(props.uiRuntime);
+  return (
+    <ScrollbackViewport
+      store={pager.store}
+      viewport={pager.viewport}
+      viewportLines={Math.max(1, availableHeight)}
+      pollMs={SCROLLBACK_VIEWPORT_POLL_MS}
+      range={contextRange ?? undefined}
+      config={props.slashCommandRuntime}
+    />
+  );
+}
+
 function TranscriptViewport(props: TranscriptProps) {
   const {
-    listItems,
-    staticItems,
-    pendingItems,
+    mainAreaWidth,
     constrainHeight,
     availableHeight,
-  } = useTranscriptContent(props);
-  const contextRange = useContextRangeSnapshot(props.uiRuntime);
+    activeShellPtyId,
+    embeddedShellFocused,
+    slashCommands,
+  } = useTranscriptGeometry();
+  const pending = usePendingElement(
+    props.pendingHistoryItems,
+    props.pendingHistoryItemRef,
+    props.slashCommandRuntime,
+    mainAreaWidth,
+    constrainHeight,
+    availableHeight,
+    slashCommands,
+    props.settings.merged.ui.showTodoPanel ?? true,
+    activeShellPtyId,
+    embeddedShellFocused,
+  );
   if (usesAlternateBuffer(props)) {
-    const pager = props.scrollbackPager;
-    if (pager) {
-      return (
-        <ScrollbackViewport
-          store={pager.store}
-          viewport={pager.viewport}
-          viewportLines={Math.max(1, availableHeight)}
-          pollMs={SCROLLBACK_VIEWPORT_POLL_MS}
-          range={contextRange ?? undefined}
-          config={props.slashCommandRuntime}
-        />
-      );
-    }
-    return <TranscriptScroll data={listItems} />;
+    return props.scrollbackPager ? (
+      <PagerTranscript {...props} pager={props.scrollbackPager} />
+    ) : (
+      <AlternateTranscript {...props} />
+    );
   }
   return (
     <>
-      {staticItems.length > 0 ? (
-        <Static key={props.staticKey} items={staticItems}>
-          {(item) => item}
-        </Static>
-      ) : null}
-      <OverflowProvider>
-        <Box ref={props.pendingHistoryItemRef} flexDirection="column">
-          {pendingItems}
-          <ShowMoreLines constrainHeight={constrainHeight} />
-        </Box>
-      </OverflowProvider>
+      <StandardStatic {...props} />
+      {pending}
     </>
+  );
+}
+
+interface StaticSnapshot {
+  history: HistoryItem[];
+  epoch: number;
+  refresh: number;
+  truncatedItems: number;
+  chunk: number;
+}
+
+function staticDelta(
+  history: HistoryItem[],
+  committed: StaticSnapshot | null,
+  replay: boolean,
+): HistoryItem[] {
+  if (committed === null || replay) return history;
+  if (committed.history === history) return [];
+  let priorIndex = 0;
+  for (let index = 0; index < history.length; index += 1) {
+    while (
+      priorIndex < committed.history.length &&
+      committed.history[priorIndex].id !== history[index].id
+    ) {
+      priorIndex += 1;
+    }
+    if (priorIndex === committed.history.length) return history.slice(index);
+    priorIndex += 1;
+  }
+  return [];
+}
+
+function StandardStatic(props: TranscriptProps) {
+  const turn = useTurnStore();
+  const geometry = useTerminalStore().store.getState();
+  const settings = useSettingsProfileStore();
+  const epoch = useStoreSelector(turn.store, (s) => s.historyEpoch);
+  const truncatedItems = useStoreSelector(
+    turn.store,
+    (s) => s.historyTruncatedItems,
+  );
+  const previous = React.useRef<StaticSnapshot | null>(null);
+  const [, releaseChunk] = React.useReducer((n: number) => n + 1, 0);
+  const committed = previous.current;
+  const replay =
+    committed === null ||
+    committed.epoch !== epoch ||
+    committed.refresh !== props.staticKey;
+  const changed =
+    replay ||
+    committed.history !== props.history ||
+    committed.truncatedItems !== truncatedItems;
+  const delta = staticDelta(props.history, committed, replay);
+  const items: React.ReactElement[] = [];
+  if (replay && process.env.LLXPRT_CODE_SUPPRESS_STATIC_HEADER !== 'true') {
+    items.push(
+      <AppHeader
+        key="header"
+        config={props.slashCommandRuntime}
+        settings={props.settings}
+        version={props.version}
+        nightly={props.nightly}
+        terminalWidth={geometry.terminalWidth}
+      />,
+    );
+  }
+  if (
+    changed &&
+    truncatedItems > 0 &&
+    (replay || truncatedItems !== committed.truncatedItems)
+  ) {
+    items.push(
+      <Text key="truncation" color={SemanticColors.text.secondary}>
+        [{truncatedItems} earlier messages truncated]
+      </Text>,
+    );
+  }
+  items.push(
+    ...delta.map((item) => (
+      <HistoryItemDisplay
+        key={item.id}
+        item={item}
+        isPending={false}
+        config={props.slashCommandRuntime}
+        terminalWidth={geometry.mainAreaWidth}
+        availableTerminalHeight={Math.max(geometry.terminalHeight * 4, 100)}
+        slashCommands={settings.store.getState().slashCommands}
+        showTodoPanel={props.settings.merged.ui.showTodoPanel ?? true}
+        activeShellPtyId={geometry.activeShellPtyId}
+        embeddedShellFocused={geometry.embeddedShellFocused}
+      />
+    )),
+  );
+  const chunk = (committed?.chunk ?? 0) + (items.length > 0 ? 1 : 0);
+  React.useLayoutEffect(() => {
+    if (!changed) return;
+    previous.current = {
+      history: props.history,
+      epoch,
+      refresh: props.staticKey,
+      truncatedItems,
+      chunk,
+    };
+    if (items.length > 0) releaseChunk();
+  });
+  return (
+    <Static key={chunk} items={items}>
+      {(item) => item}
+    </Static>
   );
 }
 

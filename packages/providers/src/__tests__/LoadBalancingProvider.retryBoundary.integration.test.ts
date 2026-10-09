@@ -18,7 +18,7 @@
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { ProviderManager } from '../ProviderManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   LoadBalancingProvider,
@@ -28,7 +28,7 @@ import type { IProvider } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { GenerateChatOptions } from '../GenerateChatOptions.js';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 
 /** A mutable handle onto the fake delegate's behavior. */
 interface FakeBehavior {

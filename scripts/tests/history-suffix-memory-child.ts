@@ -2,7 +2,7 @@
 import { gcAndSweep, heapSize } from 'bun:jsc';
 import { readFileSync } from 'node:fs';
 import type { IContent } from '../../packages/core/src/services/history/IContent.js';
-import { withSuffixFixture } from '../../packages/core/src/services/history/history-suffix-test-helpers.js';
+import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 
 async function settleHeap(): Promise<NodeJS.MemoryUsage> {
   await new Promise<void>((resolve) => setTimeout(resolve, 0));

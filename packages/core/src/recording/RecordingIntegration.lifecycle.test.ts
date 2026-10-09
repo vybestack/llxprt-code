@@ -29,7 +29,7 @@
  * These tests are expected to fail against the Phase 12 stub implementation.
  */
 
-import { collectRowsForAssertions } from '../test-utils/collect-rows-for-assertions.js';
+import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import {
   assertDefined,
   blockTextOrEmpty,
@@ -44,7 +44,7 @@ import { type IContent } from '../services/history/IContent.js';
 import { RecordingIntegration } from './RecordingIntegration.js';
 import { withRecordingFailureReport } from './recording-failure-consumer.js';
 import { replaySession } from './ReplayEngine.js';
-import { assertReplayOk } from './replay-test-helpers.js';
+import { assertReplayOk } from './__tests__/replay-test-helpers.js';
 import { SessionRecordingService } from './SessionRecordingService.js';
 import { type SessionRecordingServiceConfig } from './types.js';
 import { SessionPersistenceService } from '../storage/SessionPersistenceService.js';

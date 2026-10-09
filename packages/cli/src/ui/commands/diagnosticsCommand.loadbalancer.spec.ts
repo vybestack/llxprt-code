@@ -12,7 +12,7 @@ import {
   setupDiagnosticsTest,
   teardownDiagnosticsTest,
   type DiagnosticsTestSetup,
-} from './diagnosticsCommand-test-helpers.js';
+} from './__tests__/diagnosticsCommand-test-helpers.js';
 
 const runtimeMocks = {
   getRuntimeApiMock: vi.fn(),

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 /** @plan PLAN-20260917-ISSUE854.P05 @requirement G2 */
-import { collectRowsForAssertions } from '../test-utils/collect-rows-for-assertions.js';
+import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { describe, expect, it } from 'bun:test';
 import {
   makeContent,

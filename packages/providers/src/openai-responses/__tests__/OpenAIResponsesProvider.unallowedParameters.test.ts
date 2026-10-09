@@ -6,7 +6,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'bun:test';
 import type { OAuthManager } from '../../auth/index.js';
-import { streamCallOptions } from '../../test-utils/streamCallOptions.js';
+import { streamCallOptions } from '../../__tests__/streamCallOptions.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createOpenAIResponsesAliasProvider } from '../../composition/aliasProviderFactory.js';
 import {
@@ -85,18 +85,21 @@ async function captureSerializedRequest(
 ): Promise<Record<string, unknown>> {
   let requestBody: string | undefined;
   vi.spyOn(globalThis, 'fetch').mockImplementation(
-    async (
-      _input: RequestInfo | URL,
-      init?: RequestInit,
-    ): Promise<Response> => {
-      if (init?.body !== undefined && init.body !== null) {
-        requestBody =
-          typeof init.body === 'string'
-            ? init.body
-            : await new Response(init.body).text();
-      }
-      return streamingResponse();
-    },
+    Object.assign(
+      async (
+        _input: RequestInfo | URL,
+        init?: RequestInit,
+      ): Promise<Response> => {
+        if (init?.body !== undefined && init.body !== null) {
+          requestBody =
+            typeof init.body === 'string'
+              ? init.body
+              : await new Response(init.body).text();
+        }
+        return streamingResponse();
+      },
+      { preconnect: globalThis.fetch.preconnect },
+    ),
   );
 
   const settings = new SettingsService();
@@ -153,10 +156,22 @@ describe('OpenAI Responses unallowed model parameters', () => {
     const codexEntry = findCodexAlias();
     const provider = createCodexProvider({
       ...codexEntry,
-      alias: 'construction-rules-codex',
+      config: {
+        ...codexEntry.config,
+        modelDefaults: [
+          {
+            pattern: '^construction-rules-model$',
+            ephemeralSettings: {},
+            unallowedParameters: Object.keys(SAMPLING_PARAMETERS),
+          },
+        ],
+      },
     });
 
-    const body = await captureSerializedRequest(provider, 'gpt-5.6-sol');
+    const body = await captureSerializedRequest(
+      provider,
+      'construction-rules-model',
+    );
 
     for (const parameter of Object.keys(SAMPLING_PARAMETERS)) {
       expect(body).not.toHaveProperty(parameter);

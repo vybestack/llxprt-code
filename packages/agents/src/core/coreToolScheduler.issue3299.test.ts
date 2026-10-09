@@ -41,7 +41,7 @@ import {
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { ToolCallConfirmationDetails } from '@vybestack/llxprt-code-tools';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
-import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { waitFor, assertDefined } from '@vybestack/llxprt-code-test-utils';
 
 // ── Fixtures ───────────────────────────────────────────────────────────────

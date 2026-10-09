@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { withSuffixFixture } from '../services/history/history-suffix-test-helpers.js';
+import { withCoreSuffixFixture } from '../services/history/core-suffix-fixture-test-helpers.js';
 import { MediaLifecycleMetrics } from './media-lifecycle-metrics.js';
 import {
   metricRow,
@@ -16,7 +16,7 @@ for (const size of [512, 8192]) {
   describe(`raw media metric stream ${size}`, () => {
     it('counts unique references and every inline occurrence without retaining history', async () => {
       await withMetricStore(async (store) =>
-        withSuffixFixture(
+        withCoreSuffixFixture(
           size,
           async (history, owners, counters) => {
             const before = metricScratch();
@@ -54,7 +54,7 @@ for (const size of [512, 8192]) {
 
     it('leaves raw serialization byte-equivalent', async () => {
       await withMetricStore(async (store) =>
-        withSuffixFixture(
+        withCoreSuffixFixture(
           size,
           async (history) => {
             await new MediaLifecycleMetrics(

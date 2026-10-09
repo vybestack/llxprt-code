@@ -17,7 +17,7 @@ import {
   removalReferences,
   removalRow,
 } from './history-removals-test-helpers.js';
-import { observeHistorySynchronouslyForTest } from '../../test-utils/synchronous-history-test-observation.js';
+import { observeHistorySynchronouslyForTest } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
 
 interface ClearFixture {
   readonly history: HistoryService;

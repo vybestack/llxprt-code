@@ -16,7 +16,7 @@ import {
   RETAINED_ALLOWANCE_BYTES,
   type PairedDelta,
   type RetainedMeasurement,
-} from '@vybestack/llxprt-code-core/test-utils/retained-growth.js';
+} from '@vybestack/llxprt-code-test-utils/core/retained-growth.js';
 import { localTransport } from './childaccept-transport.js';
 
 const repoRoot = resolve(import.meta.dir, '..', '..', '..', '..', '..');

@@ -4,9 +4,9 @@ import { withBatchFixture } from '@vybestack/llxprt-code-core/services/history/a
 import {
   publicChat,
   publicCommandContext,
-} from '../../test-utils/public-history-cursor.js';
+} from '../../__tests__/public-history-cursor.js';
 import { chatCommand } from './chatCommand.js';
-import { withChatMutationFixture } from './chat-mutation-test-fixture.js';
+import { withChatMutationFixture } from './chat-mutation-test-helpers.js';
 
 const clear = chatCommand.subCommands?.find(
   (command) => command.name === 'clear',

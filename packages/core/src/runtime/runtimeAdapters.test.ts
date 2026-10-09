@@ -14,11 +14,11 @@ import {
 import type { RuntimeProviderManager } from './contracts/RuntimeProviderManager.js';
 import type { RuntimeProvider } from './contracts/RuntimeProvider.js';
 import { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import { MockTool } from '../test-utils/tools.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/tools.js';
 import {
   makeFakeConfig,
   getTestRuntimeMessageBus,
-} from '../test-utils/config.js';
+} from '../__tests__/config-test-helpers.js';
 import * as loggers from '../telemetry/loggers.js';
 
 /**

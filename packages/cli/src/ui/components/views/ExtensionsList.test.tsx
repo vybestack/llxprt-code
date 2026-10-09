@@ -8,10 +8,10 @@ import { render } from 'ink-testing-library';
 import { describe, it, expect } from 'bun:test';
 import { ExtensionUpdateState } from '../../state/extensions.js';
 import { ExtensionsList } from './ExtensionsList.js';
-import { createMockCommandContext } from '../../../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
 import { useTextBuffer } from '../shared/text-buffer.js';
 import { AppCommandsProvider } from '../../contexts/AppCommandsContext.js';
-import { createAppCommandBindings } from '../../../test-utils/appCommandBindings.js';
+import { createAppCommandBindings } from '../../../__tests__/appCommandBindings.js';
 import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
 
 function ExtensionsListHarness({

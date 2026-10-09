@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import crypto from 'node:crypto';
-import { renderHook } from '../../test-utils/render.js';
+import { renderHook } from '../../__tests__/render.js';
 import { useBanner } from './useBanner.js';
 import { persistentState } from '../../utils/persistentState.js';
 

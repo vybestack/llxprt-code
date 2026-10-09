@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import {
   withSuffixFixture,
   suffixRow,
-} from '../../packages/core/src/services/history/history-suffix-test-helpers.js';
+} from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import type { HistoryService } from '../../packages/core/src/services/history/HistoryService.js';
 import type { IContent } from '../../packages/core/src/services/history/IContent.js';
 import { retainHistoryForMemoryTrap } from './retaining-history-test-helper.js';

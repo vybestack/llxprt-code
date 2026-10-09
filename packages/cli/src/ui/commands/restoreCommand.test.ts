@@ -18,10 +18,10 @@ import * as os from 'os';
 import * as path from 'path';
 import { restoreCommand } from './restoreCommand.js';
 import { type CommandContext } from './types.js';
-import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import type { Config, GitService } from '@vybestack/llxprt-code-core';
 import { createCompletionHandler } from './schema/index.js';
-import { assertDefined } from '../../test-utils/assertions.js';
+import { assertDefined } from '../../__tests__/assertions.js';
 
 describe('restoreCommand', () => {
   let mockContext: CommandContext;

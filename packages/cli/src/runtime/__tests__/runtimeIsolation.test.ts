@@ -11,6 +11,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { SettingsService, type Profile } from '@vybestack/llxprt-code-settings';
+import { Config } from '@vybestack/llxprt-code-core';
 import type { IProvider } from '@vybestack/llxprt-code-providers';
 import {
   activateIsolatedRuntimeContext,
@@ -35,7 +36,7 @@ import {
   cleanupTempDirectory,
   createTempDirectory,
 } from '../../integration-tests/test-utils.js';
-import { testRegex } from '../../test-utils/regex.js';
+import { testRegex } from '../../__tests__/regex.js';
 
 interface RuntimeFixture {
   id: string;
@@ -496,9 +497,16 @@ async function bootstrapRuntimeFixture(options: {
   const tempDir = await createTempDirectory();
   const handle = createIsolatedRuntimeContext({
     runtimeId: options.id,
-    workspaceDir: tempDir,
-    model: options.primaryModel,
-    settingsService: new SettingsService(),
+    // The caller supplies the Config (issue #3222): providers no longer
+    // constructs one for isolated runtimes.
+    config: new Config({
+      sessionId: options.id,
+      targetDir: tempDir,
+      cwd: tempDir,
+      model: options.primaryModel,
+      debugMode: false,
+      settingsService: new SettingsService(),
+    }),
     metadata: {
       profileName: options.profileName,
     },

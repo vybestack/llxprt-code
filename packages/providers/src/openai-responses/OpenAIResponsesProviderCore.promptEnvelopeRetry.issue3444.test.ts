@@ -29,7 +29,7 @@ import { describe, it, beforeEach, afterEach, expect, vi } from 'bun:test';
 import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { streamCallOptions } from '../test-utils/streamCallOptions.js';
+import { streamCallOptions } from '../__tests__/streamCallOptions.js';
 
 const realLlxprtCodeSettingsModule = {
   ...(await import('@vybestack/llxprt-code-settings')),
@@ -131,144 +131,162 @@ describe('OpenAIResponsesProvider prompt-envelope retry (@issue:3444)', () => {
     vi.restoreAllMocks();
   });
 
-  it('an orchestrator outer retry sends a freshly projected envelope, not the spent one', async () => {
-    const provider = new OpenAIResponsesProvider('test-key', undefined, {
-      getEphemeralSettings: () => ({}),
-    });
+  registerBehavior1();
 
-    const callOptions = streamCallOptions({
-      providerName: provider.name,
-      contents: mediaMessages(),
-      ephemerals: {
-        retrywait: 0,
-      },
-      resolved: { model: 'gpt-5' },
-    });
+  registerBehavior2();
 
-    const projection = await provider.projectPromptEnvelope(callOptions);
-    expect(projection.transportToken).toBeDefined();
+  registerBehavior3();
+});
 
-    // Orchestrator cap (7) exceeds the executor's internal streaming-retry
-    // cap (6): the outer retry gets the seventh and final budget slot.
-    const orchestrator = new RetryOrchestrator(provider, {
-      maxAttempts: 7,
-      initialDelayMs: 0,
-    });
-
-    const chunks: string[] = [];
-    let threw = false;
-    let error: unknown;
-    try {
-      const gen = orchestrator.generateChatCompletion({
-        ...callOptions,
-        promptEnvelopeTransportToken: projection.transportToken,
+function registerBehavior1(): void {
+  describe('OpenAIResponsesProvider prompt-envelope retry (@issue:3444) [1]', () => {
+    it('an orchestrator outer retry sends a freshly projected envelope, not the spent one', async () => {
+      const provider = new OpenAIResponsesProvider('test-key', undefined, {
+        getEphemeralSettings: () => ({}),
       });
-      for await (const chunk of gen) {
-        chunks.push(JSON.stringify(chunk));
-      }
-    } catch (e) {
-      threw = true;
-      error = e;
-    }
 
-    // Six internal 429s + the orchestrator's outer retry: seven physical
-    // sends, and the seventh succeeded.
-    expect(threw).toBe(false);
-    expect(fetchMock).toHaveBeenCalledTimes(7);
-    expect(chunks.join('')).toContain('recovered');
+      const callOptions = streamCallOptions({
+        providerName: provider.name,
+        contents: mediaMessages(),
+        ephemerals: {
+          retrywait: 0,
+        },
+        resolved: { model: 'gpt-5' },
+      });
 
-    // The original send carried the projected input...
-    expect(requestBodies[0]).toContain('hello-retry-payload');
-    // ...and so did the outer retry. Replaying the spent token would have
-    // spliced `input` to an empty array and silently dropped the payload.
-    expect(requestBodies[6]).toContain('hello-retry-payload');
-    expect(requestBodies[6]).toContain('input_image');
-    expect(requestBodies[6]).toContain(
-      'data:image/png;base64,aValidBase64Chunk==',
-    );
-    expect(String(error)).not.toContain(
-      'Cannot consume media request contents after release',
-    );
-  });
+      const projection = await provider.projectPromptEnvelope(callOptions);
+      expect(projection.transportToken).toBeDefined();
 
-  it('surfaces a refresh projection failure without consuming the released media again', async () => {
-    const provider = new OpenAIResponsesProvider('test-key', undefined, {
-      getEphemeralSettings: () => ({}),
-    });
-    const options = streamCallOptions({
-      providerName: provider.name,
-      contents: mediaMessages(),
-      ephemerals: { retrywait: 0 },
-      resolved: { model: 'gpt-5' },
-    });
-    const projection = await provider.projectPromptEnvelope(options);
-    const failure = new Error('responses refresh projection unavailable');
-    provider.projectPromptEnvelope = async () => {
-      throw failure;
-    };
-    const chunks: IContent[] = [];
-    let caught: unknown;
-    try {
-      for await (const chunk of new RetryOrchestrator(provider, {
+      // Orchestrator cap (7) exceeds the executor's internal streaming-retry
+      // cap (6): the outer retry gets the seventh and final budget slot.
+      const orchestrator = new RetryOrchestrator(provider, {
         maxAttempts: 7,
         initialDelayMs: 0,
-      }).generateChatCompletion({
-        ...options,
-        promptEnvelopeTransportToken: projection.transportToken,
-      }))
-        chunks.push(chunk);
-    } catch (error) {
-      caught = error;
-    }
-    expect(chunks).toHaveLength(0);
-    expect(caught).toBe(failure);
-    expect(String(caught)).not.toContain(
-      'Cannot consume media request contents after release',
-    );
-  });
-
-  it('preserves the last transport failure when the outer retry exhausts', async () => {
-    let sends = 0;
-    fetchMock.mockImplementation(() => {
-      sends += 1;
-      return new Response(`rate limit on physical send ${sends}`, {
-        status: 429,
-        headers: { 'retry-after': '0' },
       });
+
+      const chunks: string[] = [];
+      let threw = false;
+      let error: unknown;
+      try {
+        const gen = orchestrator.generateChatCompletion({
+          ...callOptions,
+          promptEnvelopeTransportToken: projection.transportToken,
+        });
+        for await (const chunk of gen) {
+          chunks.push(JSON.stringify(chunk));
+        }
+      } catch (e) {
+        threw = true;
+        error = e;
+      }
+
+      // Six internal 429s + the orchestrator's outer retry: seven physical
+      // sends, and the seventh succeeded.
+      expect(threw).toBe(false);
+      expect(fetchMock).toHaveBeenCalledTimes(7);
+      expect(chunks.join('')).toContain('recovered');
+
+      // The original send carried the projected input...
+      expect(requestBodies[0]).toContain('hello-retry-payload');
+      // ...and so did the outer retry. Replaying the spent token would have
+      // spliced `input` to an empty array and silently dropped the payload.
+      expect(requestBodies[6]).toContain('hello-retry-payload');
+      expect(requestBodies[6]).toContain('input_image');
+      expect(requestBodies[6]).toContain(
+        'data:image/png;base64,aValidBase64Chunk==',
+      );
+      expect(String(error)).not.toContain(
+        'Cannot consume media request contents after release',
+      );
     });
-    const provider = new OpenAIResponsesProvider('test-key', undefined, {
-      getEphemeralSettings: () => ({}),
-    });
-    const options = streamCallOptions({
-      providerName: provider.name,
-      contents: mediaMessages(),
-      ephemerals: { retrywait: 0 },
-      resolved: { model: 'gpt-5' },
-    });
-    const projection = await provider.projectPromptEnvelope(options);
-    const orchestrator = new RetryOrchestrator(provider, {
-      maxAttempts: 7,
-      initialDelayMs: 0,
-    });
-    let caught: unknown;
-    const chunks: IContent[] = [];
-    try {
-      for await (const chunk of orchestrator.generateChatCompletion({
-        ...options,
-        promptEnvelopeTransportToken: projection.transportToken,
-      }))
-        chunks.push(chunk);
-    } catch (error) {
-      caught = error;
-    }
-    expect(chunks).toHaveLength(0);
-    expect(sends).toBe(7);
-    expect(caught).toBeInstanceOf(Error);
-    expect(caught instanceof Error ? caught.message : '').toContain(
-      'rate limit on physical send 7',
-    );
-    expect(String(caught)).not.toContain(
-      'Cannot consume media request contents after release',
-    );
   });
-});
+}
+
+function registerBehavior2(): void {
+  describe('OpenAIResponsesProvider prompt-envelope retry (@issue:3444) [2]', () => {
+    it('surfaces a refresh projection failure without consuming the released media again', async () => {
+      const provider = new OpenAIResponsesProvider('test-key', undefined, {
+        getEphemeralSettings: () => ({}),
+      });
+      const options = streamCallOptions({
+        providerName: provider.name,
+        contents: mediaMessages(),
+        ephemerals: { retrywait: 0 },
+        resolved: { model: 'gpt-5' },
+      });
+      const projection = await provider.projectPromptEnvelope(options);
+      const failure = new Error('responses refresh projection unavailable');
+      provider.projectPromptEnvelope = async () => {
+        throw failure;
+      };
+      const chunks: IContent[] = [];
+      let caught: unknown;
+      try {
+        for await (const chunk of new RetryOrchestrator(provider, {
+          maxAttempts: 7,
+          initialDelayMs: 0,
+        }).generateChatCompletion({
+          ...options,
+          promptEnvelopeTransportToken: projection.transportToken,
+        }))
+          chunks.push(chunk);
+      } catch (error) {
+        caught = error;
+      }
+      expect(chunks).toHaveLength(0);
+      expect(caught).toBe(failure);
+      expect(String(caught)).not.toContain(
+        'Cannot consume media request contents after release',
+      );
+    });
+  });
+}
+
+function registerBehavior3(): void {
+  describe('OpenAIResponsesProvider prompt-envelope retry (@issue:3444) [3]', () => {
+    it('preserves the last transport failure when the outer retry exhausts', async () => {
+      let sends = 0;
+      fetchMock.mockImplementation(() => {
+        sends += 1;
+        return new Response(`rate limit on physical send ${sends}`, {
+          status: 429,
+          headers: { 'retry-after': '0' },
+        });
+      });
+      const provider = new OpenAIResponsesProvider('test-key', undefined, {
+        getEphemeralSettings: () => ({}),
+      });
+      const options = streamCallOptions({
+        providerName: provider.name,
+        contents: mediaMessages(),
+        ephemerals: { retrywait: 0 },
+        resolved: { model: 'gpt-5' },
+      });
+      const projection = await provider.projectPromptEnvelope(options);
+      const orchestrator = new RetryOrchestrator(provider, {
+        maxAttempts: 7,
+        initialDelayMs: 0,
+      });
+      let caught: unknown;
+      const chunks: IContent[] = [];
+      try {
+        for await (const chunk of orchestrator.generateChatCompletion({
+          ...options,
+          promptEnvelopeTransportToken: projection.transportToken,
+        }))
+          chunks.push(chunk);
+      } catch (error) {
+        caught = error;
+      }
+      expect(chunks).toHaveLength(0);
+      expect(sends).toBe(7);
+      expect(caught).toBeInstanceOf(Error);
+      expect(caught instanceof Error ? caught.message : '').toContain(
+        'rate limit on physical send 7',
+      );
+      expect(String(caught)).not.toContain(
+        'Cannot consume media request contents after release',
+      );
+    });
+  });
+}

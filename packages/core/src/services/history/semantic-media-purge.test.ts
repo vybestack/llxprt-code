@@ -1,5 +1,5 @@
-import { observeHistorySynchronouslyForTest as testHistory } from '../../test-utils/synchronous-history-test-observation.js';
-import { collectRowsForAssertions } from '../../test-utils/collect-rows-for-assertions.js';
+import { observeHistorySynchronouslyForTest as testHistory } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
+import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC

@@ -20,7 +20,7 @@ import {
   options,
   request,
   textContent,
-} from './openAIResponsesWebSocketTransport.test-helpers.js';
+} from './__tests__/openAIResponsesWebSocketTransport.test-helpers.js';
 
 describe('Codex Responses WebSocket stream idle timeout', () => {
   it('interrupts a silent stream, closes its socket, and reconnects for the next request', async () => {

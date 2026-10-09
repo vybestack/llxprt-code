@@ -1,7 +1,7 @@
 {
   "name": "@vybestack/llxprt-plugin-google-mcp-auth",
   "version": "0.12.0",
-  "description": "Reserved LLxprt Code runtime plugin context for Google MCP auth contributions.",
+  "description": "LLxprt Code runtime plugin: Google ADC and service-account impersonation MCP auth providers.",
   "license": "Apache-2.0",
   "type": "module",
   "engines": {
@@ -39,8 +39,13 @@
     "pack:smoke": "npm pack --dry-run"
   },
   "peerDependencies": {
-    "@vybestack/llxprt-code-core": "^0.12.0",
-    "@vybestack/llxprt-code-providers": "^0.12.0"
+    "@vybestack/llxprt-code-auth": "^0.12.0",
+    "@vybestack/llxprt-code-mcp": "^0.12.0",
+    "@vybestack/llxprt-code-providers": "^0.12.0",
+    "@vybestack/llxprt-code-telemetry": "^0.12.0"
+  },
+  "dependencies": {
+    "google-auth-library": "^9.11.0"
   },
   "devDependencies": {
     "@types/bun": "1.3.14",

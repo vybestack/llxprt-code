@@ -5,7 +5,7 @@
  */
 
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { RecordingConnection } from './zed-test-helpers.js';
+import { RecordingConnection } from './__tests__/zed-test-helpers.js';
 import {
   emptyChatsLister,
   mockFromConfig,

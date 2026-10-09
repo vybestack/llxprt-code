@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
-import { renderWithProviders } from '../../../test-utils/render.js';
+import { renderWithProviders } from '../../../__tests__/render.js';
 import type React from 'react';
 import {
   RadioButtonSelect,

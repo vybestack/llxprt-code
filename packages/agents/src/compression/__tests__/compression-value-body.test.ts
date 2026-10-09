@@ -4,7 +4,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import { buildProviderContent } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import { withSuffixFixture } from '../../../../core/src/services/history/history-suffix-test-helpers.js';
+import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { captureCompressionBody } from './compression-value-openai-body.js';
 import {
   middleoutRow,

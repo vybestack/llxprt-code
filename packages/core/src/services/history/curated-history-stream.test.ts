@@ -1,4 +1,4 @@
-import { curatedHistoryForTest } from '../../test-utils/curated-history-fixture.js';
+import { curatedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { existsSync } from 'node:fs';
@@ -7,7 +7,10 @@ import { HistoryService } from './HistoryService.js';
 import { buildProviderContent } from './historyProviderPipeline.js';
 import { DebugLogger } from '../../debug/index.js';
 import { scratchDirectories } from './history-clone-trace-test-helpers.js';
-import { suffixRow, withSuffixFixture } from './history-suffix-test-helpers.js';
+import {
+  suffixRow,
+  withSuffixFixture,
+} from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import {
   curatedFixtureRow,
   fixtureIncluded,

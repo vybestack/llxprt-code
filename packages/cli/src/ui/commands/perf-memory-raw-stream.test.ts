@@ -6,9 +6,9 @@
 import {
   suffixRow,
   withSuffixFixture,
-} from '@vybestack/llxprt-code-core/services/history/history-suffix-test-helpers.js';
+} from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { describe, expect, it } from 'bun:test';
-import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { createPerfCommand } from './perfCommand.js';
 import { formatHistoryMemoryBreakdown } from './perfMemoryBreakdown.js';
 

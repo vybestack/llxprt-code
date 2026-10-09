@@ -9,7 +9,7 @@ import { BucketFailoverHandlerImpl } from './BucketFailoverHandlerImpl.js';
 import {
   createBucketFailoverFixture,
   makeToken,
-} from './BucketFailoverHandlerImpl.test-helpers.js';
+} from './__tests__/BucketFailoverHandlerImpl.test-helpers.js';
 
 describe('BucketFailoverHandlerImpl #1', () => {
   it('sets the session bucket to the first bucket when none is set', async () => {

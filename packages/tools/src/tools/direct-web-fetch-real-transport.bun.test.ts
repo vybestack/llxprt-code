@@ -17,7 +17,7 @@ import type http from 'node:http';
 import { describe, it, expect } from 'bun:test';
 import { DirectWebFetchTool } from './direct-web-fetch.js';
 import type { IToolHost } from '../index.js';
-import { createLoopbackHarness } from '../test-utils/loopback-test-helpers.js';
+import { createLoopbackHarness } from '../__tests__/loopback-test-helpers.js';
 
 const loopback = createLoopbackHarness();
 

@@ -16,6 +16,17 @@
 
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { collectContents } from './collectContents.js';
+import {
+  closeSync,
+  mkdtempSync,
+  openSync,
+  readSync,
+  rmSync,
+  writeSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { deserialize, serialize } from 'node:v8';
 
 /** Any object graph handed to a provider SDK as a request body. */
 type BodyGraph = Record<string, unknown>;
@@ -129,30 +140,160 @@ export function activeRequestBodyCount(): number {
 }
 
 /**
- * Memoized materialization of a one-shot history source (issue #854 P05b4).
- * The transport holds one of these per request: the first `materialize()`
- * drains the source inside the request-scoped lease, and every later consumer
- * (input rebuilds, retry recovery, stateless fallbacks) resolves the SAME
- * array instead of draining the exhausted source again.
+ * Request-owned history with a disk-backed replay prefix. Each upload opens
+ * a cursor and pulls rows on demand; retries reread the snapshot before
+ * advancing the one-shot source. Context-dependent rebuilds still materialize
+ * an array explicitly. Disposal closes the source, cursors and snapshot.
  */
 export interface RequestScopedContents {
-  /** Drains the source exactly once; later calls resolve the same array. */
   materialize(): Promise<IContent[]>;
-  /** True once the source has been drained (or a drain is in flight). */
   readonly isMaterialized: boolean;
+  stream(): AsyncIterable<IContent>;
+  dispose(): Promise<void>;
+}
+
+class ProgressiveRequestContents implements RequestScopedContents {
+  private storage: { root: string; path: string; fd: number } | undefined;
+  private readonly cursors = new Set<number>();
+  private rowCount = 0;
+  private byteLength = 0;
+  private reader: AsyncIterator<IContent> | undefined;
+  private nextRow: Promise<void> | undefined;
+  private drain: Promise<IContent[]> | undefined;
+  private disposal: Promise<void> | undefined;
+  private exhausted = false;
+  private disposed = false;
+
+  constructor(
+    private readonly source: AsyncIterable<IContent>,
+    private readonly signal?: AbortSignal,
+  ) {}
+
+  get isMaterialized(): boolean {
+    return this.drain !== undefined;
+  }
+
+  private assertLive(): void {
+    this.signal?.throwIfAborted();
+    if (this.disposed) throw new Error('Request contents were disposed');
+  }
+
+  private readNext(): Promise<void> {
+    this.assertLive();
+    this.reader ??= this.source[Symbol.asyncIterator]();
+    this.nextRow ??= this.reader.next().then((next) => {
+      this.assertLive();
+      if (next.done === true) this.exhausted = true;
+      else this.append(next.value);
+      this.nextRow = undefined;
+    });
+    return this.nextRow;
+  }
+
+  private ensureStorage(): { root: string; path: string; fd: number } {
+    if (this.storage !== undefined) return this.storage;
+    const root = mkdtempSync(join(tmpdir(), 'responses-request-snapshot-'));
+    const path = join(root, 'rows');
+    try {
+      this.storage = { root, path, fd: openSync(path, 'w+', 0o600) };
+      return this.storage;
+    } catch (error) {
+      rmSync(root, { recursive: true, force: true });
+      throw error;
+    }
+  }
+
+  private append(row: IContent): void {
+    const { fd } = this.ensureStorage();
+    // Binary rows preserve undefined, nonfinite numbers and signed strings;
+    // JSON snapshots would silently change the converter's inputs.
+    const bytes = serialize(row);
+    const header = Buffer.alloc(8);
+    header.writeDoubleLE(bytes.length);
+    transferRowBytes(fd, header, this.byteLength, true);
+    transferRowBytes(fd, bytes, this.byteLength + 8, true);
+    this.byteLength += 8 + bytes.length;
+    this.rowCount += 1;
+  }
+
+  async *stream(): AsyncIterableIterator<IContent> {
+    this.assertLive();
+    const cursor = openSync(this.ensureStorage().path, 'r');
+    this.cursors.add(cursor);
+    let offset = 0;
+    try {
+      for (let index = 0; ; index += 1) {
+        this.assertLive();
+        if (index === this.rowCount && !this.exhausted) await this.readNext();
+        this.assertLive();
+        if (index === this.rowCount) return;
+        const header = Buffer.alloc(8);
+        transferRowBytes(cursor, header, offset, false);
+        const bytes = Buffer.alloc(header.readDoubleLE());
+        transferRowBytes(cursor, bytes, offset + 8, false);
+        offset += 8 + bytes.length;
+        const row: IContent = deserialize(bytes);
+        yield row;
+      }
+    } finally {
+      if (this.cursors.delete(cursor)) closeSync(cursor);
+    }
+  }
+
+  async materialize(): Promise<IContent[]> {
+    this.assertLive();
+    this.drain ??= collectContents(this.stream());
+    return this.drain;
+  }
+
+  dispose(): Promise<void> {
+    if (this.disposal !== undefined) return this.disposal;
+    this.disposed = true;
+    this.disposal = this.closeReader();
+    return this.disposal;
+  }
+
+  private async closeReader(): Promise<void> {
+    try {
+      await this.reader?.return?.();
+    } finally {
+      this.reader = undefined;
+      this.nextRow = undefined;
+      this.drain = undefined;
+      for (const cursor of this.cursors) closeSync(cursor);
+      this.cursors.clear();
+      const storage = this.storage;
+      this.storage = undefined;
+      if (storage !== undefined) {
+        try {
+          closeSync(storage.fd);
+        } finally {
+          rmSync(storage.root, { recursive: true, force: true });
+        }
+      }
+    }
+  }
+}
+
+function transferRowBytes(
+  fd: number,
+  bytes: Buffer,
+  offset: number,
+  write: boolean,
+): void {
+  let done = 0;
+  while (done < bytes.length) {
+    const count = write
+      ? writeSync(fd, bytes, done, bytes.length - done, offset + done)
+      : readSync(fd, bytes, done, bytes.length - done, offset + done);
+    if (count === 0) throw new Error('Request snapshot I/O made no progress');
+    done += count;
+  }
 }
 
 export function requestScopedContents(
   source: AsyncIterable<IContent>,
+  signal?: AbortSignal,
 ): RequestScopedContents {
-  let drain: Promise<IContent[]> | undefined;
-  return {
-    get isMaterialized(): boolean {
-      return drain !== undefined;
-    },
-    materialize(): Promise<IContent[]> {
-      drain ??= collectContents(source);
-      return drain;
-    },
-  };
+  return new ProgressiveRequestContents(source, signal);
 }

@@ -8,7 +8,7 @@ import {
   checkpointTool,
 } from '../hooks/agentStream/checkpoint-disk-test-helpers.js';
 import { restoreCommand } from './restoreCommand.js';
-import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 const png =

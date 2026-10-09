@@ -28,8 +28,8 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 // Mock the 'ai' module

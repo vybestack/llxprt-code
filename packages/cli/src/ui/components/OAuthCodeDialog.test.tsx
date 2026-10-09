@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi, afterEach } from 'bun:test';
 import { runAllTimersAsync } from '@vybestack/llxprt-code-test-utils';
-import { renderWithProviders, waitFor } from '../../test-utils/render.js';
+import { renderWithProviders, waitFor } from '../../__tests__/render.js';
 import { act } from 'react';
 import { OAuthCodeDialog } from './OAuthCodeDialog.js';
 

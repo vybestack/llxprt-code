@@ -10,16 +10,15 @@
  * @pseudocode:analysis/pseudocode/02-hook-event-handler-flow.md
  */
 
-import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import type { Mock } from 'bun:test';
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { HookEventName, HookType } from './types.js';
-import type { HookConfig } from './types.js';
-import type { Config } from '../config/config.js';
-import type { HookInput } from './types.js';
-import type { Readable, Writable } from 'node:stream';
+import { spawn } from 'node:child_process';
+import { HookEventName } from './types.js';
+import { writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+import type { HookRunner as HookRunnerInstance } from './hookRunner.js';
+import type { MockChildProcessWithoutNullStreams } from './hookRunner-test-helpers.js';
 
 const realDebugModule = { ...(await import('../debug/index.js')) };
 
@@ -27,41 +26,14 @@ function restoreHookRunnerGlobals(): void {
   restoreGlobals();
 }
 
-function decodeSpawnCommand(args: readonly string[]): string {
-  const shellCommand = String(args.at(-1) ?? '');
-  const encodedCommand = shellCommand.match(
-    /FromBase64String\('([^']+)'\)/,
-  )?.[1];
-  return encodedCommand
-    ? Buffer.from(encodedCommand, 'base64').toString('utf8')
-    : shellCommand;
-}
-
-/** Checks for escaped version of malicious path in ls command. */
-function isMaliciousPathEscaped(s: string): boolean {
-  if (!s.startsWith('ls ')) {
-    return false;
-  }
-  if (!s.includes('echo') || !s.includes('pwned')) {
-    return false;
-  }
-  return s.includes("'") || s.includes('"');
-}
-
-// Mock type for the child_process spawn
-type MockChildProcessWithoutNullStreams = ChildProcessWithoutNullStreams & {
-  mockStdoutOn: ReturnType<typeof vi.fn>;
-  mockStderrOn: ReturnType<typeof vi.fn>;
-  mockProcessOn: ReturnType<typeof vi.fn>;
-};
-
 // Mock child_process with sync importOriginal for partial mocking
 const __actual = { ...(await import('node:child_process')) };
+const spawnMock = vi.fn(__actual.spawn);
 void vi.mock('node:child_process', () => {
   const actual = __actual as typeof import('node:child_process');
   return {
     ...actual,
-    spawn: vi.fn(),
+    spawn: spawnMock,
   };
 });
 
@@ -97,778 +69,561 @@ setGlobal('console', mockConsole);
 
 // Dynamic import AFTER vi.mock calls so mocks are applied.
 const { HookRunner } = await import('./hookRunner.js');
+const {
+  configureRunnerTests,
+  registerExecuteHookTests,
+  registerParallelTests,
+  registerSequentialTests,
+  registerInvalidJsonTests,
+} = await import('./hookRunner-legacy-test-helpers.js');
+const {
+  rich,
+  large,
+  command,
+  fixture,
+  input,
+  createMockSpawn,
+  mockInput,
+  mockConfig,
+  registerInputParity,
+  registerInputFailures,
+  registerCancellationInputTest,
+} = await import('./hookRunner-test-helpers.js');
+
+let hookRunner: HookRunnerInstance;
+
+let mockSpawn: MockChildProcessWithoutNullStreams;
+
+function setupRunner(): void {
+  vi.resetAllMocks();
+
+  hookRunner = new HookRunner(mockConfig);
+
+  mockSpawn = createMockSpawn();
+  configureRunnerTests(hookRunner, mockSpawn, mockDebugLogger, spawnMock);
+
+  (spawn as Mock<typeof spawn>).mockReturnValue(mockSpawn);
+}
+
+function teardownRunner(): void {
+  vi.restoreAllMocks();
+  restoreHookRunnerGlobals();
+}
 
 describe('HookRunner', () => {
-  let hookRunner: HookRunner;
-  let mockSpawn: MockChildProcessWithoutNullStreams;
-
-  const mockInput: HookInput = {
-    session_id: 'test-session',
-    transcript_path: '/path/to/transcript',
-    cwd: '/test/project',
-    hook_event_name: 'BeforeTool',
-    timestamp: '2025-01-01T00:00:00.000Z',
-  };
-
-  // Mock Config object with required methods
-  const mockConfig = {
-    isTrustedFolder: () => true,
-    getSanitizationConfig: () => ({
-      enableEnvironmentVariableRedaction: false,
-      allowedEnvironmentVariables: [],
-      blockedEnvironmentVariables: [],
-    }),
-  } as unknown as Config;
-
-  beforeEach(() => {
-    vi.resetAllMocks();
-
-    hookRunner = new HookRunner(mockConfig);
-
-    // Mock spawn with accessible mock functions
-    const mockStdoutOn = vi.fn();
-    const mockStderrOn = vi.fn();
-    const mockProcessOn = vi.fn();
-
-    mockSpawn = {
-      stdin: {
-        write: vi.fn(),
-        end: vi.fn(),
-        on: vi.fn(),
-      } as unknown as Writable,
-      stdout: {
-        on: mockStdoutOn,
-      } as unknown as Readable,
-      stderr: {
-        on: mockStderrOn,
-      } as unknown as Readable,
-      on: mockProcessOn,
-      kill: vi.fn(),
-      killed: false,
-      mockStdoutOn,
-      mockStderrOn,
-      mockProcessOn,
-    } as unknown as MockChildProcessWithoutNullStreams;
-
-    (spawn as Mock<typeof spawn>).mockReturnValue(mockSpawn);
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-    restoreHookRunnerGlobals();
-  });
-
-  /** Configures mockProcessOn to fire the `close` event with the given exit code. */
-  const onClose = (
-    exitCode: number,
-    schedule: (cb: () => void) => void = (cb) => setTimeout(cb, 20),
-  ): void => {
-    mockSpawn.mockProcessOn.mockImplementation(
-      (event: string, callback: (code: number) => void) => {
-        if (event === 'close') {
-          schedule(() => callback(exitCode));
-        }
-      },
-    );
-  };
-
-  /** Configures mockStdoutOn to emit `data` with the given payload. */
-  const onStdoutData = (data: string, delay = 10): void => {
-    mockSpawn.mockStdoutOn.mockImplementation(
-      (event: string, callback: (data: Buffer) => void) => {
-        if (event === 'data') {
-          setTimeout(() => callback(Buffer.from(data)), delay);
-        }
-      },
-    );
-  };
-
-  /** Configures mockStderrOn to emit `data` with the given payload. */
-  const onStderrData = (data: string, delay = 10): void => {
-    mockSpawn.mockStderrOn.mockImplementation(
-      (event: string, callback: (data: Buffer) => void) => {
-        if (event === 'data') {
-          setTimeout(() => callback(Buffer.from(data)), delay);
-        }
-      },
-    );
-  };
-
-  const configureTimeoutProcess = (): { readonly wasKilled: () => boolean } => {
-    let closeCallback: ((code: number) => void) | undefined;
-    let killWasCalled = false;
-    mockSpawn.mockProcessOn.mockImplementation(
-      (event: string, callback: (code: number) => void) => {
-        if (event === 'close') closeCallback = callback;
-      },
-    );
-    mockSpawn.kill = vi.fn().mockImplementation((_signal: string) => {
-      killWasCalled = true;
-      const callback = closeCallback;
-      if (callback) setTimeout(() => callback(128), 5);
-      return true;
-    });
-    return { wasKilled: () => killWasCalled };
-  };
-
-  const configureSigkillEscalation = (signals: string[]): void => {
-    let closeCallback: ((code: number) => void) | undefined;
-    mockSpawn.mockProcessOn.mockImplementation(
-      (event: string, callback: (code: number) => void) => {
-        if (event === 'close') closeCallback = callback;
-      },
-    );
-    mockSpawn.kill = vi.fn().mockImplementation((signal: string) => {
-      signals.push(signal);
-      mockSpawn.killed = true;
-      const callback = closeCallback;
-      if (signal === 'SIGKILL' && callback) {
-        mockSpawn.exitCode = null;
-        mockSpawn.signalCode = 'SIGKILL';
-        queueMicrotask(() => callback(137));
-      }
-      return true;
-    });
-  };
-
-  const expandedProjectCommand = (): string =>
-    process.platform === 'win32'
-      ? "'/test/project'/hooks/test.sh"
-      : '/test/project/hooks/test.sh';
-
-  const configureMixedCloseResults = (): void => {
-    let callCount = 0;
-    mockSpawn.mockProcessOn.mockImplementation(
-      (event: string, callback: (code: number) => void) => {
-        if (event === 'close') {
-          const exitCode = callCount++ === 0 ? 0 : 1;
-          setTimeout(() => callback(exitCode), 10);
-        }
-      },
-    );
-  };
-
-  const configureSequentialOrder = (executionOrder: string[]): void => {
-    mockSpawn.mockProcessOn.mockImplementation(
-      (event: string, callback: (code: number) => void) => {
-        if (event === 'close') {
-          const call = (spawn as Mock<typeof spawn>).mock.calls[
-            executionOrder.length
-          ];
-          executionOrder.push(decodeSpawnCommand(call[1]));
-          setImmediate(() => callback(0));
-        }
-      },
-    );
-  };
-
-  const configureContinueAfterFailure = (): void => {
-    let callCount = 0;
-    mockSpawn.mockStderrOn.mockImplementation(
-      (event: string, callback: (data: Buffer) => void) => {
-        if (event === 'data' && callCount === 1) {
-          setTimeout(() => callback(Buffer.from('Hook 2 failed')), 10);
-        }
-      },
-    );
-    mockSpawn.mockProcessOn.mockImplementation(
-      (event: string, callback: (code: number) => void) => {
-        if (event === 'close') {
-          const exitCode = callCount++ === 1 ? 1 : 0;
-          setTimeout(() => callback(exitCode), 20);
-        }
-      },
-    );
-  };
-
-  const configureFirstHookOutput = (output: unknown): void => {
-    let hookCallCount = 0;
-    mockSpawn.mockStdoutOn.mockImplementation(
-      (event: string, callback: (data: Buffer) => void) => {
-        if (event === 'data' && hookCallCount === 0) {
-          setTimeout(() => callback(Buffer.from(JSON.stringify(output))), 10);
-        }
-      },
-    );
-    mockSpawn.mockProcessOn.mockImplementation(
-      (event: string, callback: (code: number) => void) => {
-        if (event === 'close') {
-          hookCallCount++;
-          setTimeout(() => callback(0), 20);
-        }
-      },
-    );
-  };
-
-  describe('executeHook', () => {
-    describe('command hooks', () => {
-      const commandConfig: HookConfig = {
-        type: HookType.Command,
-        command: './hooks/test.sh',
-        timeout: 5000,
-      };
-
-      describe.skipIf(process.platform !== 'win32')('on Windows', () => {
-        it('should preserve native and PowerShell command failures', async () => {
-          onClose(2, (callback) => setImmediate(callback));
-
-          const result = await hookRunner.executeHook(
-            commandConfig,
-            HookEventName.BeforeTool,
-            mockInput,
-          );
-
-          expect(result.success).toBe(false);
-          expect(result.exitCode).toBe(2);
-          expect(spawn).toHaveBeenCalledWith(
-            expect.stringMatching(/powershell/i),
-            expect.arrayContaining([
-              expect.stringContaining('[Convert]::FromBase64String'),
-              expect.stringContaining('[ScriptBlock]::Create'),
-              expect.stringContaining('$global:LASTEXITCODE = 0'),
-              expect.stringContaining('$global:__LLXPRT_HOOK_SUCCEEDED = $?'),
-              expect.stringContaining(
-                '$global:__LLXPRT_HOOK_EXIT_CODE = $LASTEXITCODE',
-              ),
-              expect.stringContaining(
-                'if ($global:__LLXPRT_HOOK_SUCCEEDED) { exit 0 }',
-              ),
-              expect.stringContaining(
-                'if ($global:__LLXPRT_HOOK_EXIT_CODE -ne 0) { exit $global:__LLXPRT_HOOK_EXIT_CODE }',
-              ),
-              expect.stringContaining('exit 1'),
-            ]),
-            expect.objectContaining({ shell: false }),
-          );
-        });
-      });
-
-      it('should execute command hook successfully', async () => {
-        const mockOutput = { decision: 'allow', reason: 'All good' };
-
-        // Mock successful execution
-        onStdoutData(JSON.stringify(mockOutput));
-        onClose(0);
-
-        const result = await hookRunner.executeHook(
-          commandConfig,
-          HookEventName.BeforeTool,
-          mockInput,
-        );
-
-        expect(result.success).toBe(true);
-        expect(result.output).toStrictEqual(mockOutput);
-        expect(result.exitCode).toBe(0);
-        expect(mockSpawn.stdin.write).toHaveBeenCalledWith(
-          JSON.stringify(mockInput),
-        );
-      });
-
-      it('should handle command hook failure', async () => {
-        const errorMessage = 'Command failed';
-
-        onStderrData(errorMessage);
-        onClose(1);
-
-        const result = await hookRunner.executeHook(
-          commandConfig,
-          HookEventName.BeforeTool,
-          mockInput,
-        );
-
-        expect(result.success).toBe(false);
-        expect(result.exitCode).toBe(1);
-        expect(result.stderr).toBe(errorMessage);
-      });
-
-      it('should use hook name in error messages if available', async () => {
-        const namedConfig: HookConfig = {
-          name: 'my-friendly-hook',
-          type: HookType.Command,
-          command: './hooks/fail.sh',
-        };
-
-        // Mock error during spawn
-        (spawn as Mock<typeof spawn>).mockImplementationOnce(() => {
-          throw new Error('Spawn error');
-        });
-
-        await hookRunner.executeHook(
-          namedConfig,
-          HookEventName.BeforeTool,
-          mockInput,
-        );
-
-        expect(mockDebugLogger.warn).toHaveBeenCalledWith(
-          expect.stringContaining(
-            '(hook: my-friendly-hook): Error: Spawn error',
-          ),
-        );
-      });
-
-      it('should handle command hook timeout', async () => {
-        const shortTimeoutConfig: HookConfig = {
-          type: HookType.Command,
-          command: './hooks/slow.sh',
-          timeout: 50, // Very short timeout for testing
-        };
-
-        const timeoutProcess = configureTimeoutProcess();
-
-        const result = await hookRunner.executeHook(
-          shortTimeoutConfig,
-          HookEventName.BeforeTool,
-          mockInput,
-        );
-
-        expect(result.success).toBe(false);
-        expect(timeoutProcess.wasKilled()).toBe(true);
-        expect(result.error?.message).toContain('timed out');
-        expect(mockSpawn.kill).toHaveBeenCalledWith('SIGTERM');
-      });
-
-      it('should escalate to SIGKILL when the process ignores SIGTERM', async () => {
-        vi.useFakeTimers();
-        const shortTimeoutConfig: HookConfig = {
-          type: HookType.Command,
-          command: './hooks/slow.sh',
-          timeout: 50,
-        };
-
-        const signals: string[] = [];
-
-        Object.assign(mockSpawn, {
-          exitCode: null,
-          signalCode: null,
-          killed: false,
-        });
-        configureSigkillEscalation(signals);
-
-        try {
-          const resultPromise = hookRunner.executeHook(
-            shortTimeoutConfig,
-            HookEventName.BeforeTool,
-            mockInput,
-          );
-
-          // Let the async executeHook start and set up timers.
-          // Under fake timers, we need to flush microtasks for the async
-          // operation to proceed and register the setTimeout.
-          await advanceTimersByTimeAsync(0);
-
-          // Advance timers to trigger SIGTERM (timeout=50ms)
-          vi.advanceTimersByTime(50);
-          expect(signals).toStrictEqual(['SIGTERM']);
-          expect(mockSpawn.killed).toBe(true);
-
-          // Advance timers to trigger SIGKILL escalation (5000ms after SIGTERM)
-          vi.advanceTimersByTime(5000);
-          expect(signals).toStrictEqual(['SIGTERM', 'SIGKILL']);
-
-          const result = await resultPromise;
-          expect(result.success).toBe(false);
-          expect(result.error?.message).toContain('timed out');
-        } finally {
-          vi.useRealTimers();
-        }
-      });
-
-      it('should expand environment variables in commands', async () => {
-        const configWithEnvVar: HookConfig = {
-          type: HookType.Command,
-          command: '$LLXPRT_PROJECT_DIR/hooks/test.sh',
-        };
-
-        onClose(0, (cb) => setImmediate(cb));
-
-        await hookRunner.executeHook(
-          configWithEnvVar,
-          HookEventName.BeforeTool,
-          mockInput,
-        );
-
-        // SECURITY: Verify spawn is called with shell executable and expanded path
-        const spawnCall = (spawn as Mock<typeof spawn>).mock.calls[0];
-        expect(spawnCall[0]).toMatch(/bash|powershell/i);
-        expect(spawnCall[2]).toStrictEqual(
-          expect.objectContaining({
-            shell: false,
-            env: expect.objectContaining({
-              LLXPRT_PROJECT_DIR: '/test/project',
-            }),
-          }),
-        );
-        const expandedCommand = decodeSpawnCommand(spawnCall[1]);
-        expect(expandedCommand).toContain(expandedProjectCommand());
-      });
-
-      it('should not allow command injection via LLXPRT_PROJECT_DIR (SECURITY)', async () => {
-        const maliciousCwd = '/test/project; echo "pwned" > /tmp/pwned';
-        const mockMaliciousInput: HookInput = {
-          ...mockInput,
-          cwd: maliciousCwd,
-        };
-
-        const config: HookConfig = {
-          type: HookType.Command,
-          command: 'ls $LLXPRT_PROJECT_DIR',
-        };
-
-        onClose(0, (cb) => setImmediate(cb));
-
-        await hookRunner.executeHook(
-          config,
-          HookEventName.BeforeTool,
-          mockMaliciousInput,
-        );
-
-        // SECURITY: If secure, spawn will be called with escaped command
-        // The malicious "; echo pwned" must appear as LITERAL TEXT, not executed
-        expect(spawn).toHaveBeenCalledWith(
-          expect.stringMatching(/bash|powershell/),
-          expect.arrayContaining([expect.any(String)]),
-          expect.objectContaining({
-            shell: false, // CRITICAL: shell must be false
-          }),
-        );
-
-        // Verify the decoded command contains the escaped malicious path.
-        const commandArgs = (spawn as Mock<typeof spawn>).mock.calls[0][1];
-        expect(isMaliciousPathEscaped(decodeSpawnCommand(commandArgs))).toBe(
-          true,
-        );
-      });
-    });
-  });
-
-  describe('executeHooksParallel', () => {
-    it('should execute multiple hooks in parallel', async () => {
-      const configs: HookConfig[] = [
-        { type: HookType.Command, command: './hook1.sh' },
-        { type: HookType.Command, command: './hook2.sh' },
-      ];
-
-      // Mock both commands to succeed
-      onClose(0, (cb) => setTimeout(cb, 10));
-
-      const results = await hookRunner.executeHooksParallel(
-        configs,
-        HookEventName.BeforeTool,
-        mockInput,
-      );
-
-      expect(results).toHaveLength(2);
-      expect(results.every((r) => r.success)).toBe(true);
-      expect(spawn).toHaveBeenCalledTimes(2);
-    });
-
-    it('should handle mixed success and failure', async () => {
-      const configs: HookConfig[] = [
-        { type: HookType.Command, command: './hook1.sh' },
-        { type: HookType.Command, command: './hook2.sh' },
-      ];
-
-      configureMixedCloseResults();
-
-      const results = await hookRunner.executeHooksParallel(
-        configs,
-        HookEventName.BeforeTool,
-        mockInput,
-      );
-
-      expect(results).toHaveLength(2);
-      expect(results[0].success).toBe(true);
-      expect(results[1].success).toBe(false);
-    });
-  });
-
-  describe('executeHooksSequential', () => {
-    it('should execute multiple hooks in sequence', async () => {
-      const configs: HookConfig[] = [
-        { type: HookType.Command, command: './hook1.sh' },
-        { type: HookType.Command, command: './hook2.sh' },
-      ];
-
-      const executionOrder: string[] = [];
-
-      // Mock both commands to succeed
-      configureSequentialOrder(executionOrder);
-
-      const results = await hookRunner.executeHooksSequential(
-        configs,
-        HookEventName.BeforeTool,
-        mockInput,
-      );
-
-      expect(results).toHaveLength(2);
-      expect(results.every((r) => r.success)).toBe(true);
-      expect(spawn).toHaveBeenCalledTimes(2);
-      // Verify they were called sequentially
-      expect(executionOrder).toStrictEqual(['./hook1.sh', './hook2.sh']);
-    });
-
-    it('should continue execution even if a hook fails', async () => {
-      const configs: HookConfig[] = [
-        { type: HookType.Command, command: './hook1.sh' },
-        { type: HookType.Command, command: './hook2.sh' },
-        { type: HookType.Command, command: './hook3.sh' },
-      ];
-
-      configureContinueAfterFailure();
-
-      const results = await hookRunner.executeHooksSequential(
-        configs,
-        HookEventName.BeforeTool,
-        mockInput,
-      );
-
-      expect(results).toHaveLength(3);
-      expect(results[0].success).toBe(true);
-      expect(results[1].success).toBe(false);
-      expect(results[2].success).toBe(true);
-      expect(spawn).toHaveBeenCalledTimes(3);
-    });
-
-    it('should pass modified input from one hook to the next for BeforeAgent', async () => {
-      const configs: HookConfig[] = [
-        { type: HookType.Command, command: './hook1.sh' },
-        { type: HookType.Command, command: './hook2.sh' },
-      ];
-
-      const mockBeforeAgentInput = {
-        ...mockInput,
-        prompt: 'Original prompt',
-      };
-
-      const mockOutput1 = {
-        decision: 'allow' as const,
-        hookSpecificOutput: {
-          additionalContext: 'Context from hook 1',
-        },
-      };
-
-      configureFirstHookOutput(mockOutput1);
-
-      const results = await hookRunner.executeHooksSequential(
-        configs,
-        HookEventName.BeforeAgent,
-        mockBeforeAgentInput,
-      );
-
-      expect(results).toHaveLength(2);
-      expect(results[0].success).toBe(true);
-      expect(results[0].output).toStrictEqual(mockOutput1);
-
-      // Verify that the second hook received modified input
-      const secondHookInput = JSON.parse(
-        (mockSpawn.stdin.write as Mock<typeof mockSpawn.stdin.write>).mock
-          .calls[1][0],
-      );
-      expect(secondHookInput.prompt).toContain('Original prompt');
-      expect(secondHookInput.prompt).toContain('Context from hook 1');
-    });
-
-    it('should pass modified LLM request from one hook to the next for BeforeModel', async () => {
-      const configs: HookConfig[] = [
-        { type: HookType.Command, command: './hook1.sh' },
-        { type: HookType.Command, command: './hook2.sh' },
-      ];
-
-      const mockBeforeModelInput = {
-        ...mockInput,
-        llm_request: {
-          version: 2,
-          model: 'gemini-1.5-pro',
-          contents: [
-            { speaker: 'user', blocks: [{ type: 'text', text: 'Hello' }] },
-          ],
-        },
-      };
-
-      const mockOutput1 = {
-        decision: 'allow' as const,
-        hookSpecificOutput: {
-          llm_request: {
-            settings: { temperature: 0.7 },
-          },
-        },
-      };
-
-      configureFirstHookOutput(mockOutput1);
-
-      const results = await hookRunner.executeHooksSequential(
-        configs,
-        HookEventName.BeforeModel,
-        mockBeforeModelInput,
-      );
-
-      expect(results).toHaveLength(2);
-      expect(results[0].success).toBe(true);
-
-      // Verify that the second hook received modified input
-      const secondHookInput = JSON.parse(
-        (mockSpawn.stdin.write as Mock<typeof mockSpawn.stdin.write>).mock
-          .calls[1][0],
-      );
-      expect(secondHookInput.llm_request.model).toBe('gemini-1.5-pro');
-      expect(secondHookInput.llm_request.settings.temperature).toBe(0.7);
-      expect(secondHookInput.llm_request.contents).toHaveLength(1);
-    });
-
-    it('should not modify input if hook fails', async () => {
-      const configs: HookConfig[] = [
-        { type: HookType.Command, command: './hook1.sh' },
-        { type: HookType.Command, command: './hook2.sh' },
-      ];
-
-      onStderrData('Hook failed');
-
-      onClose(1, (callback) => setTimeout(callback, 20));
-
-      const results = await hookRunner.executeHooksSequential(
-        configs,
-        HookEventName.BeforeTool,
-        mockInput,
-      );
-
-      expect(results).toHaveLength(2);
-      expect(results.every((r) => r.success === false)).toBe(true);
-
-      // Verify that both hooks received the same original input
-      const firstHookInput = JSON.parse(
-        (mockSpawn.stdin.write as Mock<typeof mockSpawn.stdin.write>).mock
-          .calls[0][0],
-      );
-      const secondHookInput = JSON.parse(
-        (mockSpawn.stdin.write as Mock<typeof mockSpawn.stdin.write>).mock
-          .calls[1][0],
-      );
-      expect(firstHookInput).toStrictEqual(secondHookInput);
-    });
-  });
-
-  describe('invalid JSON handling', () => {
-    const commandConfig: HookConfig = {
-      type: HookType.Command,
-      command: './hooks/test.sh',
-    };
-
-    it('should handle invalid JSON output gracefully', async () => {
-      const invalidJson = '{ "decision": "allow", incomplete';
-
-      onStdoutData(invalidJson);
-
-      onClose(0);
-
-      const result = await hookRunner.executeHook(
-        commandConfig,
-        HookEventName.BeforeTool,
-        mockInput,
-      );
-
-      expect(result.success).toBe(true);
-      expect(result.exitCode).toBe(0);
-      // Should convert plain text to structured output
-      expect(result.output).toStrictEqual({
-        decision: 'allow',
-        systemMessage: invalidJson,
-      });
-    });
-
-    it('should handle malformed JSON with exit code 0', async () => {
-      const malformedJson = 'not json at all';
-
-      onStdoutData(malformedJson);
-
-      onClose(0);
-
-      const result = await hookRunner.executeHook(
-        commandConfig,
-        HookEventName.BeforeTool,
-        mockInput,
-      );
-
-      expect(result.success).toBe(true);
-      expect(result.output).toStrictEqual({
-        decision: 'allow',
-        systemMessage: malformedJson,
-      });
-    });
-
-    it('should handle invalid JSON with exit code 1 (non-blocking error)', async () => {
-      const invalidJson = '{ broken json';
-
-      onStderrData(invalidJson);
-
-      onClose(1);
-
-      const result = await hookRunner.executeHook(
-        commandConfig,
-        HookEventName.BeforeTool,
-        mockInput,
-      );
-
-      expect(result.success).toBe(false);
-      expect(result.exitCode).toBe(1);
-      expect(result.output).toStrictEqual({
-        decision: 'allow',
-        systemMessage: `Warning: ${invalidJson}`,
-      });
-    });
-
-    it('should handle invalid JSON with exit code 2 (blocking error)', async () => {
-      const invalidJson = '{ "error": incomplete';
-
-      onStderrData(invalidJson);
-
-      onClose(2);
-
-      const result = await hookRunner.executeHook(
-        commandConfig,
-        HookEventName.BeforeTool,
-        mockInput,
-      );
-
-      expect(result.success).toBe(false);
-      expect(result.exitCode).toBe(2);
-      expect(result.output).toStrictEqual({
-        decision: 'deny',
-        reason: invalidJson,
-      });
-    });
-
-    it('should handle empty JSON output', async () => {
-      onStdoutData('');
-
-      onClose(0);
-
-      const result = await hookRunner.executeHook(
-        commandConfig,
-        HookEventName.BeforeTool,
-        mockInput,
-      );
-
-      expect(result.success).toBe(true);
-      expect(result.exitCode).toBe(0);
-      expect(result.output).toBeUndefined();
-    });
-
-    it('should handle double-encoded JSON string', async () => {
-      const mockOutput = { decision: 'allow', reason: 'All good' };
-      const doubleEncodedJson = JSON.stringify(JSON.stringify(mockOutput));
-
-      onStdoutData(doubleEncodedJson);
-
-      onClose(0);
-
-      const result = await hookRunner.executeHook(
-        commandConfig,
-        HookEventName.BeforeTool,
-        mockInput,
-      );
-
-      expect(result.success).toBe(true);
-      expect(result.output).toStrictEqual(mockOutput);
-    });
-  });
+  beforeEach(setupRunner);
+  afterEach(teardownRunner);
+  registerDiskSourceTests();
+  registerExecuteHookTests();
+  registerParallelTests();
+  registerSequentialTests();
+  registerInvalidJsonTests();
 });
+
+function registerDiskSourceTests(): void {
+  describe('disk-source command input', () => {
+    registerDiskOutputLifecycleTests();
+    beforeEach(() => {
+      spawnMock.mockImplementation(__actual.spawn);
+    });
+
+    registerInputParity(() => hookRunner);
+    it('preserves legacy real child receipt', async () => {
+      await fixture([], async (_snapshot, _owners, root) => {
+        const result = await hookRunner.executeHook(
+          command("process.stdout.write('receipt')"),
+          HookEventName.BeforeModel,
+          { ...mockInput, cwd: root },
+        );
+        expect(result.stdout).toBe('receipt');
+      });
+    });
+    registerDiskOutputTests();
+    registerCancellationInputTest(() => hookRunner);
+
+    registerInputFailures(() => hookRunner);
+
+    it('closes a real command on disk reader failure', async () => {
+      await fixture([rich], async (snapshot, owners, root) => {
+        snapshot.close();
+        const result = await hookRunner.executeHookWithRequestRows(
+          command('setInterval(() => {}, 1000)'),
+          HookEventName.BeforeModel,
+          input(mockInput, snapshot, root, HookEventName.BeforeModel),
+        );
+        expect(result.success).toBe(false);
+        expect(result.error?.message).toContain('snapshot is closed');
+        result.dispose();
+        expect(owners.snapshot().liveRows).toBe(0);
+      });
+    });
+  });
+}
+
+function registerDiskOutputTests(): void {
+  describe('disk output contract', () => {
+    for (const rows of [
+      Array.from({ length: 64 }, (_, index) => ({
+        ...rich,
+        metadata: { ...rich.metadata, id: `replacement-${index}` },
+      })),
+      [large],
+    ]) {
+      it(`reads ${rows.length} distinct fragmented replacement rows independently`, async () => {
+        await fixture([], async (snapshot, _owners, root) => {
+          writeFileSync(
+            join(root, 'response.json'),
+            JSON.stringify({
+              decision: 'allow',
+              hookSpecificOutput: {
+                llm_request: { version: 2, contents: rows },
+              },
+            }),
+          );
+          const result = await hookRunner.executeHookWithRequestRows(
+            command(`(async () => {
+              require('node:fs').writeFileSync('output-child-started', 'started');
+              for await (const _ of process.stdin) {}
+              const fs=require('node:fs'), fd=fs.openSync('response.json','r');
+              fs.writeFileSync('output-child-input-finished','yes');
+              const chunk=Buffer.alloc(8191); let n, total=0;
+              fs.writeFileSync('output-child-size',JSON.stringify({size:fs.fstatSync(fd).size, node:process.execPath, options:process.env.NODE_OPTIONS}));
+              while ((n=fs.readSync(fd,chunk,0,chunk.length,null))>0) {
+                total+=n; await new Promise(r=>process.stdout.write(chunk.subarray(0,n),r));
+              }
+              fs.writeFileSync('output-child-output-finished',JSON.stringify({total,n}));
+            })();`),
+            HookEventName.BeforeModel,
+            input(mockInput, snapshot, root, HookEventName.BeforeModel),
+          );
+          try {
+            expect(result.success).toBe(true);
+            expect(result.stdout.readText().length).toBe(
+              readFileSync(join(root, 'response.json'), 'utf8').length,
+            );
+            expect(result.output?.replacement?.count).toBe(rows.length);
+            expect(() => result.output?.readValue([])).toThrow('field or row');
+            expect(() =>
+              result.output?.readValue(['hookSpecificOutput']),
+            ).toThrow('field or row');
+            const controller = new AbortController();
+            const cancelled = result.output?.replacement?.openReader(
+              controller.signal,
+            );
+            await cancelled?.next();
+            controller.abort(new Error('reader cancelled'));
+            await expect(cancelled?.next()).rejects.toThrow('reader cancelled');
+            const first = result.output?.replacement?.openReader();
+            const second = result.output?.replacement?.openReader();
+            expect(first).toBeDefined();
+            expect(second).toBeDefined();
+            for (const row of rows) {
+              const expected = JSON.parse(JSON.stringify(row));
+              expect((await first?.next())?.value).toStrictEqual(expected);
+              expect((await second?.next())?.value).toStrictEqual(expected);
+            }
+            expect((await first?.next())?.done).toBe(true);
+            expect((await second?.next())?.done).toBe(true);
+            const abandoned = result.output?.replacement?.openReader();
+            await abandoned?.next();
+            result.dispose();
+            await expect(abandoned?.next()).rejects.toThrow('disposed');
+            expect(() => result.output?.replacement?.openReader()).toThrow(
+              'disposed',
+            );
+          } finally {
+            result.dispose();
+          }
+        });
+      });
+    }
+    registerDiskOutputSyntaxTests();
+  });
+}
+
+function diskOutputSyntaxCases(): Array<
+  [string, string, number | undefined, string | undefined]
+> {
+  const row = JSON.stringify(rich);
+  return [
+    [
+      'JavaScript trim margins',
+      `\ufeff\u00a0{"hookSpecificOutput":{"llm_request":{"contents":[${row}]}}}\u2028`,
+      1,
+      undefined,
+    ],
+    [
+      'inner margins are not trimmed',
+      JSON.stringify(
+        `\ufeff{"hookSpecificOutput":{"llm_request":{"contents":[${row}]}}}`,
+      ),
+      undefined,
+      'allow',
+    ],
+    ...extraDiskSyntaxCases(row),
+    [
+      'escaped keys',
+      `{"hookSpecificOutput":{"llm_request":{"cont\\u0065nts":[${row}]}}}`,
+      1,
+      undefined,
+    ],
+    [
+      'duplicates',
+      `{"hookSpecificOutput":{"llm_request":{"contents":[${row}],"contents":[]}}}`,
+      0,
+      undefined,
+    ],
+    [
+      'duplicate parents',
+      `{"hookSpecificOutput":{"llm_request":{"contents":[${row}]}},"hookSpecificOutput":{}}`,
+      undefined,
+      undefined,
+    ],
+    [
+      'wrong type last',
+      `{"hookSpecificOutput":{"llm_request":{"contents":[],"contents":"wrong"}}}`,
+      undefined,
+      undefined,
+    ],
+    [
+      'nested decoy',
+      `{"decoy":{"hookSpecificOutput":{"llm_request":{"contents":[${row}]}}}}`,
+      undefined,
+      undefined,
+    ],
+    [
+      'empty',
+      '{"hookSpecificOutput":{"llm_request":{"contents":[]}}}',
+      0,
+      undefined,
+    ],
+    [
+      'trailing malformed',
+      `{"hookSpecificOutput":{"llm_request":{"contents":[${row}]}}} trailing`,
+      undefined,
+      'allow',
+    ],
+    ['plain text', '  plain 雪 😀  ', undefined, 'allow'],
+    [
+      'double encoded',
+      JSON.stringify(
+        `{"decision":"deny","hookSpecificOutput":{"llm_request":{"contents":[${row}]}}}`,
+      ),
+      1,
+      'deny',
+    ],
+  ];
+}
+
+function registerDiskOutputSyntaxTests(): void {
+  describe('output syntax', () => {
+    for (const [label, text, count, decision] of diskOutputSyntaxCases()) {
+      it(`publishes exact semantics for ${label}`, async () => {
+        await fixture([], async (snapshot, _owners, root) => {
+          writeFileSync(join(root, 'response.json'), text);
+          const result = await hookRunner.executeHookWithRequestRows(
+            command(`(async()=>{for await(const _ of process.stdin){};
+            const b=require('node:fs').readFileSync('response.json');
+            for(let i=0;i<b.length;i++) await new Promise(r=>process.stdout.write(b.subarray(i,i+1),r));
+          })();`),
+            HookEventName.BeforeModel,
+            input(mockInput, snapshot, root, HookEventName.BeforeModel),
+          );
+          try {
+            expect(result.output?.replacement?.count).toBe(count);
+            expect(result.output?.readValue(['decision'])).toBe(decision);
+            expect(result.stdout.readText()).toBe(text);
+            const expectedText = decision === 'allow' ? text.trim() : undefined;
+            expect(result.output?.readValue(['systemMessage'])).toBe(
+              expectedText,
+            );
+            const reader = result.output?.replacement?.openReader();
+            const decoded = (await reader?.next())?.value;
+            expect(JSON.stringify(decoded)).toBe(
+              count === 1 ? JSON.stringify(rich) : undefined,
+            );
+            await reader?.return();
+          } finally {
+            result.dispose();
+          }
+        });
+      });
+    }
+  });
+}
+
+function registerDiskOutputLifecycleTests(): void {
+  describe('disk output lifecycle', () => {
+    registerDiskExitTests();
+    registerDiskOutputStopTests();
+    registerLargeDiskOutputTests();
+    registerDiskMergeTest();
+  });
+}
+function registerLargeDiskOutputTests(): void {
+  describe('large output and disk failure', () => {
+    it('does not impose the metadata projection token limit', async () => {
+      await fixture([], async (snapshot, _owners, root) => {
+        const result = await hookRunner.executeHookWithRequestRows(
+          command(`(async()=>{
+          for await(const _ of process.stdin){}
+          const put=s=>new Promise(r=>process.stdout.write(s,r));
+          await put('{"ignored":"');
+          for(let i=0;i<17;i++) await put('z'.repeat(1024*1024));
+          await put('","hookSpecificOutput":{"llm_request":{"contents":[{"speaker":"human","blocks":[{"type":"text","text":"');
+          for(let i=0;i<17;i++) await put('x'.repeat(1024*1024));
+          await put('尾"}]}]}}}');
+        })();`),
+          HookEventName.BeforeModel,
+          input(mockInput, snapshot, root, HookEventName.BeforeModel),
+        );
+        try {
+          expect(result.success).toBe(true);
+          const reader = result.output?.replacement?.openReader();
+          const row = (await reader?.next())?.value;
+          expect(row).toMatchObject({ speaker: 'human' });
+          expect(JSON.stringify(row).length).toBeGreaterThan(17 * 1024 * 1024);
+          await reader?.return();
+        } finally {
+          result.dispose();
+        }
+      });
+    });
+    it('rejects disk I/O failure rather than treating it as invalid JSON', async () => {
+      await fixture([], async (snapshot, _owners, root) => {
+        await expect(
+          hookRunner.executeHookWithRequestRows(
+            command(`(async()=>{
+          for await(const _ of process.stdin){}
+          const fs=require('node:fs');
+          const dir=fs.readdirSync('.').find(n=>n.startsWith('hook-output-'));
+          fs.mkdirSync(dir+'/document.utf16');
+          process.stdout.write('{"decision":"allow"}');
+        })();`),
+            HookEventName.BeforeModel,
+            input(mockInput, snapshot, root, HookEventName.BeforeModel),
+          ),
+        ).rejects.toThrow('EISDIR');
+      });
+    });
+  });
+}
+function registerDiskMergeTest(): void {
+  describe('sequential disk output', () => {
+    it('merges a disk replacement into the next real hook without collecting its rows', async () => {
+      await fixture([], async (snapshot, _owners, root) => {
+        const source = input(
+          mockInput,
+          snapshot,
+          root,
+          HookEventName.BeforeModel,
+        );
+        writeFileSync(
+          join(root, 'response.json'),
+          JSON.stringify({
+            hookSpecificOutput: {
+              llm_request: {
+                contents: [rich],
+                model: 'next',
+                tools: [],
+                settings: { top_p: 0.2 },
+              },
+            },
+          }),
+        );
+        const first = await hookRunner.executeHookWithRequestRows(
+          command(
+            `(async()=>{for await(const _ of process.stdin){};process.stdout.write(require('node:fs').readFileSync('response.json'));})();`,
+          ),
+          HookEventName.BeforeModel,
+          source,
+        );
+        try {
+          const request = first.output?.mergeRequestRows(source.llm_request);
+          expect(request).toBeDefined();
+          if (request === undefined) throw new Error('Missing merged request');
+          const second = await hookRunner.executeHookWithRequestRows(
+            command(`(async()=>{
+            let b='';for await(const c of process.stdin)b+=c;
+            const q=JSON.parse(b).llm_request;
+            process.stdout.write(JSON.stringify({systemMessage:JSON.stringify({count:q.contents.length,id:q.contents[0].metadata.id,model:q.model,tools:q.tools,settings:q.settings})}));
+          })();`),
+            HookEventName.BeforeModel,
+            { ...source, llm_request: request },
+          );
+          try {
+            expect(
+              JSON.parse(String(second.output?.readValue(['systemMessage']))),
+            ).toStrictEqual({
+              count: 1,
+              id: 'rich',
+              model: 'next',
+              tools: [],
+              settings: { temperature: 0, top_p: 0.2 },
+            });
+          } finally {
+            second.dispose();
+          }
+        } finally {
+          first.dispose();
+        }
+      });
+    });
+  });
+}
+
+function registerDiskExitTests(): void {
+  describe('registerDiskExitTests', () => {
+    for (const [code, message, decision, field, value] of [
+      [
+        1,
+        '  failure 雪 😀  ',
+        'allow',
+        'systemMessage',
+        'Warning: failure 雪 😀',
+      ],
+      [
+        2,
+        '',
+        'deny',
+        'reason',
+        'Hook exited with code 2 without an error message',
+      ],
+      [2, '  denied 雪 😀  ', 'deny', 'reason', 'denied 雪 😀'],
+    ] satisfies Array<[number, string, string, string, string]>) {
+      it(`preserves exit ${code} and its stderr message`, async () => {
+        await fixture([], async (snapshot, _owners, root) => {
+          const result = await hookRunner.executeHookWithRequestRows(
+            command(
+              `(async()=>{for await(const _ of process.stdin){};process.stdout.write('{"decision":"allow"}');await new Promise(r=>process.stderr.write(${JSON.stringify(message)},r));process.exit(${code});})();`,
+            ),
+            HookEventName.BeforeModel,
+            input(mockInput, snapshot, root, HookEventName.BeforeModel),
+          );
+          try {
+            expect(result.success).toBe(false);
+            expect(result.exitCode).toBe(code);
+            expect(result.stderr.readText()).toBe(message);
+            expect(result.output?.readValue(['decision'])).toBe(decision);
+            expect(result.output?.readValue([field])).toBe(value);
+            expect(result.output?.replacement).toBeUndefined();
+          } finally {
+            result.dispose();
+          }
+        });
+      });
+    }
+  });
+}
+function registerDiskOutputStopTests(): void {
+  describe('registerDiskOutputStopTests', () => {
+    for (const mode of ['cancel', 'timeout']) {
+      it(`preserves partial output and stderr on output-side ${mode}`, async () => {
+        await fixture([], async (snapshot, _owners, root) => {
+          const controller = new AbortController();
+          const reason = new Error('cancel hook output');
+          const source = input(
+            mockInput,
+            snapshot,
+            root,
+            HookEventName.BeforeModel,
+          );
+          const hook = command(`(async()=>{
+          for await(const _ of process.stdin){}
+          await new Promise(r=>process.stdout.write('{"hookSpecificOutput":{"llm_request":{"contents":[',r));
+          await new Promise(r=>process.stderr.write('  progress 雪 😀  ',r));
+          require('node:fs').writeFileSync('output-ready',String(process.pid));
+          setInterval(()=>{},1000);
+        })();`);
+          const pending = hookRunner.executeHookWithRequestRows(
+            { ...hook, timeout: mode === 'timeout' ? 250 : 10000 },
+            HookEventName.BeforeModel,
+            source,
+            controller.signal,
+          );
+          if (mode === 'cancel') {
+            while (!existsSync(join(root, 'output-ready')))
+              await new Promise((r) => setTimeout(r, 5));
+            controller.abort(reason);
+          }
+          const result = await pending;
+          try {
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toBe(
+              mode === 'cancel' ? reason.message : 'Hook timed out after 250ms',
+            );
+            expect(result.error === reason).toBe(mode === 'cancel');
+            expect(result.stdout.readText()).toBe(
+              '{"hookSpecificOutput":{"llm_request":{"contents":[',
+            );
+            expect(result.stderr.readText()).toBe('  progress 雪 😀  ');
+            expect(result.output?.replacement).toBeUndefined();
+            expect(result.output?.readValue(['systemMessage'])).toBe(
+              mode === 'cancel' ? 'Warning: progress 雪 😀' : undefined,
+            );
+            expect(result.output === undefined).toBe(mode === 'timeout');
+            const pid = Number(
+              readFileSync(join(root, 'output-ready'), 'utf8'),
+            );
+            expect(() => process.kill(pid, 0)).toThrow('ESRCH');
+          } finally {
+            result.dispose();
+          }
+        });
+      });
+    }
+  });
+}
+
+function extraDiskSyntaxCases(
+  row: string,
+): Array<[string, string, number | undefined, string | undefined]> {
+  return [
+    [
+      'last array replaces rows',
+      `{"hookSpecificOutput":{"llm_request":{"contents":[{"speaker":"human","blocks":[]}],"contents":[${row}]}}}`,
+      1,
+      undefined,
+    ],
+    [
+      'last request is null',
+      `{"hookSpecificOutput":{"llm_request":{"contents":[${row}]},"llm_request":null}}`,
+      undefined,
+      undefined,
+    ],
+    [
+      'last request replaces rows',
+      `{"hookSpecificOutput":{"llm_request":{"contents":[]},"llm_request":{"contents":[${row}]}}}`,
+      1,
+      undefined,
+    ],
+    [
+      'wrong first type then array',
+      '{"hookSpecificOutput":{"llm_request":{"contents":false,"contents":[]}}}',
+      0,
+      undefined,
+    ],
+    [
+      'malformed ignored field',
+      `{"hookSpecificOutput":{"llm_request":{"contents":[${row}]}},"ignored":[1,]}`,
+      undefined,
+      'allow',
+    ],
+    [
+      'double encoded lone surrogate',
+      JSON.stringify(
+        `{"hookSpecificOutput":{"llm_request":{"contents":[${row.replace('\\ud800', '\ud800')}]}}}`,
+      ),
+      1,
+      undefined,
+    ],
+    [
+      'double encoded invalid inner text',
+      JSON.stringify('not JSON 雪'),
+      undefined,
+      'allow',
+    ],
+    ['null JSON', 'null', undefined, undefined],
+    ['whitespace only', ' \r\n\t ', undefined, undefined],
+  ];
+}

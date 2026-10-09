@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'bun:test';
 import { readFile, readdir } from 'node:fs/promises';
 import type { IContent } from '../services/history/IContent.js';
-import { withSuffixFixture } from '../services/history/history-suffix-test-helpers.js';
+import { withCoreSuffixFixture } from '../services/history/core-suffix-fixture-test-helpers.js';
 import { mergeRow } from '../services/history/history-merge-test-helpers.js';
 import {
   createCursorPersistence,
@@ -17,7 +17,7 @@ async function* rowsForSave(
 
 describe('streamed session row persistence failures', () => {
   it('observes actual charged row writes and compensates a rejecting observer', async () => {
-    await withSuffixFixture(1, async (history) => {
+    await withCoreSuffixFixture(1, async (history) => {
       const persistence = createCursorPersistence(history, 'write-observation');
       const before = await seedCursorPersistence(persistence, mergeRow(0));
       let observed = 0;
@@ -36,7 +36,7 @@ describe('streamed session row persistence failures', () => {
     });
   });
   it('leaves the prior target intact when the row producer fails after a written row', async () => {
-    await withSuffixFixture(1, async (history) => {
+    await withCoreSuffixFixture(1, async (history) => {
       const persistence = createCursorPersistence(history, 'producer-failure');
       const before = await seedCursorPersistence(persistence, mergeRow(0));
       const primary = new Error('producer failure after row');
@@ -66,7 +66,7 @@ describe('streamed session row persistence failures', () => {
 
 describe('streamed persistence queue and budget', () => {
   it('releases a failed streaming transaction before processing a queued array save', async () => {
-    await withSuffixFixture(1, async (history) => {
+    await withCoreSuffixFixture(1, async (history) => {
       const persistence = createCursorPersistence(history, 'queued-save');
       const primary = new Error('queued producer failure');
       async function* failedRows(): AsyncGenerator<IContent, void, unknown> {
@@ -87,7 +87,7 @@ describe('streamed persistence queue and budget', () => {
   });
 
   it('enforces the existing write budget without replacing a valid target or retaining charges', async () => {
-    await withSuffixFixture(1, async (history) => {
+    await withCoreSuffixFixture(1, async (history) => {
       const persistence = createCursorPersistence(history, 'write-budget', {
         maxQueueBytes: 8192,
       });

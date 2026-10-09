@@ -17,8 +17,8 @@
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
-import { createOpenAIRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { createOpenAIRawPostTestAdapter } from '../__tests__/rawPostTestAdapters.js';
 import { replayableContents } from '../utils/collectContents.js';
 
 const realLlxprtCodeSettingsModule = {
@@ -79,503 +79,479 @@ describe('OpenAIProvider - MediaBlock support', () => {
     delete process.env.OPENAI_API_KEY;
   });
 
-  it('converts MediaBlock in user messages to image_url content parts', async () => {
-    const fakeStream = {
-      async *[Symbol.asyncIterator]() {
-        yield {
-          choices: [
-            {
-              delta: {
-                content: 'I see the image',
-              },
-            },
-          ],
-        };
-      },
-    };
-    mockChatCompletionsCreate.mockResolvedValueOnce(fakeStream);
-    process.env.OPENAI_API_KEY = 'test-key';
+  registerProviderBehavior1();
 
-    const provider = new OpenAIProvider('test-key');
-    const contents: IContent[] = [
-      {
-        speaker: 'human',
-        blocks: [
-          { type: 'text', text: 'What is in this image?' },
-          {
-            type: 'media',
-            mimeType: 'image/png',
-            data: 'data1',
-            encoding: 'base64' as const,
-          },
-          {
-            type: 'media',
-            mimeType: 'image/jpeg',
-            data: 'data2',
-            encoding: 'base64' as const,
-          },
-        ],
-      },
-    ];
+  registerProviderBehavior2();
 
-    const generator = provider.generateChatCompletion({
-      ...createProviderCallOptions({
-        providerName: provider.name,
-        contents,
-      }),
-      contents: replayableContents(contents),
-    });
+  registerProviderBehavior3();
 
-    const chunks = [];
-    for await (const chunk of generator) {
-      chunks.push(chunk);
-    }
+  registerProviderBehavior4();
 
-    expect(mockChatCompletionsCreate).toHaveBeenCalledTimes(1);
-    const callArgs = mockChatCompletionsCreate.mock.calls[0][0];
-    const userMessage = callArgs.messages.find(
-      (m: { role: string }) => m.role === 'user',
-    );
-    expect(userMessage.content).toHaveLength(3);
-    expect(userMessage.content[1]).toStrictEqual({
-      type: 'image_url',
-      image_url: {
-        url: 'data:image/png;base64,data1',
-      },
-    });
-    expect(userMessage.content[2]).toStrictEqual({
-      type: 'image_url',
-      image_url: {
-        url: 'data:image/jpeg;base64,data2',
-      },
-    });
-  });
+  registerProviderBehavior5();
 
-  it('tool responses only contain text (OpenAI Chat Completions limitation)', async () => {
-    const fakeStream = {
-      async *[Symbol.asyncIterator]() {
-        yield {
-          choices: [
-            {
-              delta: {
-                content: 'I see the screenshot',
-              },
-            },
-          ],
-        };
-      },
-    };
-    mockChatCompletionsCreate.mockResolvedValueOnce(fakeStream);
-    process.env.OPENAI_API_KEY = 'test-key';
+  registerProviderBehavior6();
 
-    const provider = new OpenAIProvider('test-key');
-    const contents: IContent[] = [
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'Take a screenshot' }],
-      },
-      {
-        speaker: 'ai',
-        blocks: [
-          {
-            type: 'tool_call',
-            id: 'call_123',
-            name: 'screenshot',
-            parameters: {},
-          },
-        ],
-      },
-      {
-        speaker: 'tool',
-        blocks: [
-          {
-            type: 'tool_response',
-            callId: 'call_123',
-            toolName: 'screenshot',
-            result: 'Screenshot taken',
-          },
-          {
-            type: 'media',
-            mimeType: 'image/png',
-            data: 'screenshotdata',
-            encoding: 'base64',
-          },
-        ],
-      },
-    ];
+  registerProviderBehavior7();
 
-    const generator = provider.generateChatCompletion({
-      ...createProviderCallOptions({
-        providerName: provider.name,
-        contents,
-      }),
-      contents: replayableContents(contents),
-    });
-
-    const chunks = [];
-    for await (const chunk of generator) {
-      chunks.push(chunk);
-    }
-
-    expect(mockChatCompletionsCreate).toHaveBeenCalledTimes(1);
-    const callArgs = mockChatCompletionsCreate.mock.calls[0][0];
-
-    // Tool message should NOT contain image placeholder (images go to synthetic user message)
-    const toolMessage = callArgs.messages.find(
-      (m: { role: string }) => m.role === 'tool',
-    );
-    expect(toolMessage).toBeDefined();
-    expect(typeof toolMessage.content).toBe('string');
-    expect(toolMessage.content).toContain('Screenshot taken');
-    expect(toolMessage.content).not.toContain('Unsupported');
-    expect(toolMessage.content).not.toContain('image/png');
-
-    // Synthetic user message should contain the image
-    const syntheticUserMessage = callArgs.messages.find(
-      isSyntheticToolImageMessage,
-    );
-    expect(syntheticUserMessage).toBeDefined();
-    expect(syntheticUserMessage.content).toHaveLength(2);
-    expect(syntheticUserMessage.content[1]).toStrictEqual({
-      type: 'image_url',
-      image_url: {
-        url: 'data:image/png;base64,screenshotdata',
-      },
-    });
-  });
-
-  it('handles user message with only MediaBlocks (no text)', async () => {
-    const fakeStream = {
-      async *[Symbol.asyncIterator]() {
-        yield {
-          choices: [
-            {
-              delta: {
-                content: 'Image only message received',
-              },
-            },
-          ],
-        };
-      },
-    };
-    mockChatCompletionsCreate.mockResolvedValueOnce(fakeStream);
-    process.env.OPENAI_API_KEY = 'test-key';
-
-    const provider = new OpenAIProvider('test-key');
-    const contents: IContent[] = [
-      {
-        speaker: 'human',
-        blocks: [
-          {
-            type: 'media',
-            mimeType: 'image/png',
-            data: 'imagedata',
-            encoding: 'base64',
-          },
-        ],
-      },
-    ];
-
-    const generator = provider.generateChatCompletion({
-      ...createProviderCallOptions({
-        providerName: provider.name,
-        contents,
-      }),
-      contents: replayableContents(contents),
-    });
-
-    const chunks = [];
-    for await (const chunk of generator) {
-      chunks.push(chunk);
-    }
-
-    expect(mockChatCompletionsCreate).toHaveBeenCalledTimes(1);
-    const callArgs = mockChatCompletionsCreate.mock.calls[0][0];
-    const userMessage = callArgs.messages.find(
-      (m: { role: string }) => m.role === 'user',
-    );
-    expect(userMessage.content).toHaveLength(1);
-    expect(userMessage.content[0]).toStrictEqual({
-      type: 'image_url',
-      image_url: {
-        url: 'data:image/png;base64,imagedata',
-      },
-    });
-  });
-
-  it('handles MediaBlock with URL encoding', async () => {
-    const fakeStream = {
-      async *[Symbol.asyncIterator]() {
-        yield {
-          choices: [
-            {
-              delta: {
-                content: 'URL image received',
-              },
-            },
-          ],
-        };
-      },
-    };
-    mockChatCompletionsCreate.mockResolvedValueOnce(fakeStream);
-    process.env.OPENAI_API_KEY = 'test-key';
-
-    const provider = new OpenAIProvider('test-key');
-    const contents: IContent[] = [
-      {
-        speaker: 'human',
-        blocks: [
-          {
-            type: 'media',
-            mimeType: 'image/png',
-            data: 'https://example.com/image.png',
-            encoding: 'url',
-          },
-        ],
-      },
-    ];
-
-    const generator = provider.generateChatCompletion({
-      ...createProviderCallOptions({
-        providerName: provider.name,
-        contents,
-      }),
-      contents: replayableContents(contents),
-    });
-
-    const chunks = [];
-    for await (const chunk of generator) {
-      chunks.push(chunk);
-    }
-
-    expect(mockChatCompletionsCreate).toHaveBeenCalledTimes(1);
-    const callArgs = mockChatCompletionsCreate.mock.calls[0][0];
-    const userMessage = callArgs.messages.find(
-      (m: { role: string }) => m.role === 'user',
-    );
-    expect(userMessage.content[0]).toStrictEqual({
-      type: 'image_url',
-      image_url: {
-        url: 'https://example.com/image.png',
-      },
-    });
-  });
-
-  it('converts PDF MediaBlock in user message to file content part', async () => {
-    const fakeStream = {
-      async *[Symbol.asyncIterator]() {
-        yield {
-          choices: [{ delta: { content: 'PDF received' } }],
-        };
-      },
-    };
-    mockChatCompletionsCreate.mockResolvedValueOnce(fakeStream);
-    process.env.OPENAI_API_KEY = 'test-key';
-
-    const provider = new OpenAIProvider('test-key');
-    const contents: IContent[] = [
-      {
-        speaker: 'human',
-        blocks: [
-          { type: 'text', text: 'Summarize this document' },
-          {
-            type: 'media',
-            mimeType: 'application/pdf',
-            data: 'JVBERi0xLjQ=',
-            encoding: 'base64',
-            filename: 'report.pdf',
-          },
-        ],
-      },
-    ];
-
-    const generator = provider.generateChatCompletion({
-      ...createProviderCallOptions({ providerName: provider.name, contents }),
-      contents: replayableContents(contents),
-    });
-    for await (const _chunk of generator) {
-      /* drain */
-    }
-
-    const callArgs = mockChatCompletionsCreate.mock.calls[0][0];
-    const userMessage = callArgs.messages.find(
-      (m: { role: string }) => m.role === 'user',
-    );
-    expect(userMessage.content).toHaveLength(2);
-    expect(userMessage.content[1]).toStrictEqual({
-      type: 'file',
-      file: {
-        filename: 'report.pdf',
-        file_data: 'data:application/pdf;base64,JVBERi0xLjQ=',
-      },
-    });
-  });
-
-  it('uses an unsupported placeholder for URL-backed PDF MediaBlocks', async () => {
-    const fakeStream = {
-      async *[Symbol.asyncIterator]() {
-        yield {
-          choices: [{ delta: { content: 'PDF fallback' } }],
-        };
-      },
-    };
-    mockChatCompletionsCreate.mockResolvedValueOnce(fakeStream);
-    process.env.OPENAI_API_KEY = 'test-key';
-
-    const provider = new OpenAIProvider('test-key');
-    const contents: IContent[] = [
-      {
-        speaker: 'human',
-        blocks: [
-          {
-            type: 'media',
-            mimeType: 'application/pdf',
-            data: 'https://example.com/report.pdf',
-            encoding: 'url',
-            filename: 'report.pdf',
-          },
-        ],
-      },
-    ];
-
-    const generator = provider.generateChatCompletion({
-      ...createProviderCallOptions({ providerName: provider.name, contents }),
-      contents: replayableContents(contents),
-    });
-    for await (const _chunk of generator) {
-      /* drain */
-    }
-
-    const callArgs = mockChatCompletionsCreate.mock.calls[0][0];
-    const userMessage = callArgs.messages.find(
-      (m: { role: string }) => m.role === 'user',
-    );
-    expect(userMessage.content[0]).toMatchObject({
-      type: 'text',
-      text: expect.stringContaining('[Unsupported PDF:'),
-    });
-  });
-
-  it('produces text placeholder for unsupported media in user message', async () => {
-    const fakeStream = {
-      async *[Symbol.asyncIterator]() {
-        yield {
-          choices: [{ delta: { content: 'ok' } }],
-        };
-      },
-    };
-    mockChatCompletionsCreate.mockResolvedValueOnce(fakeStream);
-    process.env.OPENAI_API_KEY = 'test-key';
-
-    const provider = new OpenAIProvider('test-key');
-    const contents: IContent[] = [
-      {
-        speaker: 'human',
-        blocks: [
-          { type: 'text', text: 'Listen' },
-          {
-            type: 'media',
-            mimeType: 'audio/mpeg',
-            data: 'audiodata',
-            encoding: 'base64',
-            filename: 'song.mp3',
-          },
-        ],
-      },
-    ];
-
-    const generator = provider.generateChatCompletion({
-      ...createProviderCallOptions({ providerName: provider.name, contents }),
-      contents: replayableContents(contents),
-    });
-    for await (const _chunk of generator) {
-      /* drain */
-    }
-
-    const callArgs = mockChatCompletionsCreate.mock.calls[0][0];
-    const userMessage = callArgs.messages.find(
-      (m: { role: string }) => m.role === 'user',
-    );
-    expect(userMessage.content).toHaveLength(2);
-    const placeholder = userMessage.content[1];
-    expect(placeholder.type).toBe('text');
-    expect(placeholder.text).toContain('audio/mpeg');
-    expect(placeholder.text).toContain('song.mp3');
-  });
-
-  it('never silently drops media - each MediaBlock produces output', async () => {
-    const fakeStream = {
-      async *[Symbol.asyncIterator]() {
-        yield {
-          choices: [{ delta: { content: 'ok' } }],
-        };
-      },
-    };
-    mockChatCompletionsCreate.mockResolvedValueOnce(fakeStream);
-    process.env.OPENAI_API_KEY = 'test-key';
-
-    const provider = new OpenAIProvider('test-key');
-    const contents: IContent[] = [
-      {
-        speaker: 'human',
-        blocks: [
-          { type: 'text', text: 'Mixed' },
-          {
-            type: 'media',
-            mimeType: 'image/png',
-            data: 'img',
-            encoding: 'base64',
-          },
-          {
-            type: 'media',
-            mimeType: 'application/pdf',
-            data: 'pdf',
-            encoding: 'base64',
-          },
-          {
-            type: 'media',
-            mimeType: 'video/mp4',
-            data: 'vid',
-            encoding: 'base64',
-          },
-        ],
-      },
-    ];
-
-    const generator = provider.generateChatCompletion({
-      ...createProviderCallOptions({ providerName: provider.name, contents }),
-      contents: replayableContents(contents),
-    });
-    for await (const _chunk of generator) {
-      /* drain */
-    }
-
-    const callArgs = mockChatCompletionsCreate.mock.calls[0][0];
-    const userMessage = callArgs.messages.find(
-      (m: { role: string }) => m.role === 'user',
-    );
-    expect(userMessage.content).toHaveLength(4);
-    expect(userMessage.content[1].type).toBe('image_url');
-    expect(userMessage.content[2].type).toBe('file');
-    expect(userMessage.content[3].type).toBe('text');
-    expect(userMessage.content[3].text).toContain('video/mp4');
-  });
+  registerProviderBehavior8();
 
   describe('tool response image injection', () => {
-    it('injects images as synthetic user message', async () => {
-      const fakeStream = {
-        async *[Symbol.asyncIterator]() {
-          yield {
-            choices: [
-              {
-                delta: {
-                  content: 'I see the screenshot',
-                },
-              },
-            ],
-          };
+    registerProviderBehavior9();
+
+    registerProviderBehavior10();
+
+    registerProviderBehavior11();
+  });
+});
+
+function registerProviderBehavior1(): void {
+  describe('provider fixture 1', () => {
+    it('converts MediaBlock in user messages to image_url content parts', async () => {
+      const fakeStream = createMediaStreamFixture('I see the image');
+      mockChatCompletionsCreate.mockResolvedValueOnce(fakeStream);
+      process.env.OPENAI_API_KEY = 'test-key';
+
+      const provider = new OpenAIProvider('test-key');
+      const contents: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [
+            { type: 'text', text: 'What is in this image?' },
+            {
+              type: 'media',
+              mimeType: 'image/png',
+              data: 'data1',
+              encoding: 'base64' as const,
+            },
+            {
+              type: 'media',
+              mimeType: 'image/jpeg',
+              data: 'data2',
+              encoding: 'base64' as const,
+            },
+          ],
         },
-      };
+      ];
+
+      const generator = provider.generateChatCompletion({
+        ...createProviderCallOptions({
+          providerName: provider.name,
+          contents,
+        }),
+        contents: replayableContents(contents),
+      });
+
+      const chunks = [];
+      for await (const chunk of generator) {
+        chunks.push(chunk);
+      }
+
+      expect(mockChatCompletionsCreate).toHaveBeenCalledTimes(1);
+      const callArgs = mockChatCompletionsCreate.mock.calls[0][0];
+      const userMessage = callArgs.messages.find(
+        (m: { role: string }) => m.role === 'user',
+      );
+      expect(userMessage.content).toHaveLength(3);
+      expect(userMessage.content[1]).toStrictEqual({
+        type: 'image_url',
+        image_url: {
+          url: 'data:image/png;base64,data1',
+        },
+      });
+      expect(userMessage.content[2]).toStrictEqual({
+        type: 'image_url',
+        image_url: {
+          url: 'data:image/jpeg;base64,data2',
+        },
+      });
+    });
+  });
+}
+
+function registerProviderBehavior2(): void {
+  describe('provider fixture 2', () => {
+    it('tool responses only contain text (OpenAI Chat Completions limitation)', async () => {
+      const fakeStream = createMediaStreamFixture('I see the screenshot');
+      mockChatCompletionsCreate.mockResolvedValueOnce(fakeStream);
+      process.env.OPENAI_API_KEY = 'test-key';
+
+      const provider = new OpenAIProvider('test-key');
+      const contents: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Take a screenshot' }],
+        },
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'call_123',
+              name: 'screenshot',
+              parameters: {},
+            },
+          ],
+        },
+        {
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: 'call_123',
+              toolName: 'screenshot',
+              result: 'Screenshot taken',
+            },
+            {
+              type: 'media',
+              mimeType: 'image/png',
+              data: 'screenshotdata',
+              encoding: 'base64',
+            },
+          ],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion({
+        ...createProviderCallOptions({
+          providerName: provider.name,
+          contents,
+        }),
+        contents: replayableContents(contents),
+      });
+
+      const chunks = [];
+      for await (const chunk of generator) {
+        chunks.push(chunk);
+      }
+
+      expect(mockChatCompletionsCreate).toHaveBeenCalledTimes(1);
+      const callArgs = mockChatCompletionsCreate.mock.calls[0][0];
+
+      // Tool message should NOT contain image placeholder (images go to synthetic user message)
+      const toolMessage = callArgs.messages.find(
+        (m: { role: string }) => m.role === 'tool',
+      );
+      expect(toolMessage).toBeDefined();
+      expect(typeof toolMessage.content).toBe('string');
+      expect(toolMessage.content).toContain('Screenshot taken');
+      expect(toolMessage.content).not.toContain('Unsupported');
+      expect(toolMessage.content).not.toContain('image/png');
+
+      // Synthetic user message should contain the image
+      const syntheticUserMessage = callArgs.messages.find(
+        isSyntheticToolImageMessage,
+      );
+      expect(syntheticUserMessage).toBeDefined();
+      expect(syntheticUserMessage.content).toHaveLength(2);
+      expect(syntheticUserMessage.content[1]).toStrictEqual({
+        type: 'image_url',
+        image_url: {
+          url: 'data:image/png;base64,screenshotdata',
+        },
+      });
+    });
+  });
+}
+
+function registerProviderBehavior3(): void {
+  describe('provider fixture 3', () => {
+    it('handles user message with only MediaBlocks (no text)', async () => {
+      const fakeStream = createMediaStreamFixture(
+        'Image only message received',
+      );
+      mockChatCompletionsCreate.mockResolvedValueOnce(fakeStream);
+      process.env.OPENAI_API_KEY = 'test-key';
+
+      const provider = new OpenAIProvider('test-key');
+      const contents: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [
+            {
+              type: 'media',
+              mimeType: 'image/png',
+              data: 'imagedata',
+              encoding: 'base64',
+            },
+          ],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion({
+        ...createProviderCallOptions({
+          providerName: provider.name,
+          contents,
+        }),
+        contents: replayableContents(contents),
+      });
+
+      const chunks = [];
+      for await (const chunk of generator) {
+        chunks.push(chunk);
+      }
+
+      expect(mockChatCompletionsCreate).toHaveBeenCalledTimes(1);
+      const callArgs = mockChatCompletionsCreate.mock.calls[0][0];
+      const userMessage = callArgs.messages.find(
+        (m: { role: string }) => m.role === 'user',
+      );
+      expect(userMessage.content).toHaveLength(1);
+      expect(userMessage.content[0]).toStrictEqual({
+        type: 'image_url',
+        image_url: {
+          url: 'data:image/png;base64,imagedata',
+        },
+      });
+    });
+  });
+}
+
+function registerProviderBehavior4(): void {
+  describe('provider fixture 4', () => {
+    it('handles MediaBlock with URL encoding', async () => {
+      const fakeStream = createMediaStreamFixture('URL image received');
+      mockChatCompletionsCreate.mockResolvedValueOnce(fakeStream);
+      process.env.OPENAI_API_KEY = 'test-key';
+
+      const provider = new OpenAIProvider('test-key');
+      const contents: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [
+            {
+              type: 'media',
+              mimeType: 'image/png',
+              data: 'https://example.com/image.png',
+              encoding: 'url',
+            },
+          ],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion({
+        ...createProviderCallOptions({
+          providerName: provider.name,
+          contents,
+        }),
+        contents: replayableContents(contents),
+      });
+
+      const chunks = [];
+      for await (const chunk of generator) {
+        chunks.push(chunk);
+      }
+
+      expect(mockChatCompletionsCreate).toHaveBeenCalledTimes(1);
+      const callArgs = mockChatCompletionsCreate.mock.calls[0][0];
+      const userMessage = callArgs.messages.find(
+        (m: { role: string }) => m.role === 'user',
+      );
+      expect(userMessage.content[0]).toStrictEqual({
+        type: 'image_url',
+        image_url: {
+          url: 'https://example.com/image.png',
+        },
+      });
+    });
+  });
+}
+
+function registerProviderBehavior5(): void {
+  describe('provider fixture 5', () => {
+    it('converts PDF MediaBlock in user message to file content part', async () => {
+      const fakeStream = createMediaStreamFixture('PDF received');
+      mockChatCompletionsCreate.mockResolvedValueOnce(fakeStream);
+      process.env.OPENAI_API_KEY = 'test-key';
+
+      const provider = new OpenAIProvider('test-key');
+      const contents: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [
+            { type: 'text', text: 'Summarize this document' },
+            {
+              type: 'media',
+              mimeType: 'application/pdf',
+              data: 'JVBERi0xLjQ=',
+              encoding: 'base64',
+              filename: 'report.pdf',
+            },
+          ],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion({
+        ...createProviderCallOptions({ providerName: provider.name, contents }),
+        contents: replayableContents(contents),
+      });
+      for await (const _chunk of generator) {
+        /* drain */
+      }
+
+      const callArgs = mockChatCompletionsCreate.mock.calls[0][0];
+      const userMessage = callArgs.messages.find(
+        (m: { role: string }) => m.role === 'user',
+      );
+      expect(userMessage.content).toHaveLength(2);
+      expect(userMessage.content[1]).toStrictEqual({
+        type: 'file',
+        file: {
+          filename: 'report.pdf',
+          file_data: 'data:application/pdf;base64,JVBERi0xLjQ=',
+        },
+      });
+    });
+  });
+}
+
+function registerProviderBehavior6(): void {
+  describe('provider fixture 6', () => {
+    it('uses an unsupported placeholder for URL-backed PDF MediaBlocks', async () => {
+      const fakeStream = createMediaStreamFixture('PDF fallback');
+      mockChatCompletionsCreate.mockResolvedValueOnce(fakeStream);
+      process.env.OPENAI_API_KEY = 'test-key';
+
+      const provider = new OpenAIProvider('test-key');
+      const contents: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [
+            {
+              type: 'media',
+              mimeType: 'application/pdf',
+              data: 'https://example.com/report.pdf',
+              encoding: 'url',
+              filename: 'report.pdf',
+            },
+          ],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion({
+        ...createProviderCallOptions({ providerName: provider.name, contents }),
+        contents: replayableContents(contents),
+      });
+      for await (const _chunk of generator) {
+        /* drain */
+      }
+
+      const callArgs = mockChatCompletionsCreate.mock.calls[0][0];
+      const userMessage = callArgs.messages.find(
+        (m: { role: string }) => m.role === 'user',
+      );
+      expect(userMessage.content[0]).toMatchObject({
+        type: 'text',
+        text: expect.stringContaining('[Unsupported PDF:'),
+      });
+    });
+  });
+}
+
+function registerProviderBehavior7(): void {
+  describe('provider fixture 7', () => {
+    it('produces text placeholder for unsupported media in user message', async () => {
+      const fakeStream = createMediaStreamFixture('ok');
+      mockChatCompletionsCreate.mockResolvedValueOnce(fakeStream);
+      process.env.OPENAI_API_KEY = 'test-key';
+
+      const provider = new OpenAIProvider('test-key');
+      const contents: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [
+            { type: 'text', text: 'Listen' },
+            {
+              type: 'media',
+              mimeType: 'audio/mpeg',
+              data: 'audiodata',
+              encoding: 'base64',
+              filename: 'song.mp3',
+            },
+          ],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion({
+        ...createProviderCallOptions({ providerName: provider.name, contents }),
+        contents: replayableContents(contents),
+      });
+      for await (const _chunk of generator) {
+        /* drain */
+      }
+
+      const callArgs = mockChatCompletionsCreate.mock.calls[0][0];
+      const userMessage = callArgs.messages.find(
+        (m: { role: string }) => m.role === 'user',
+      );
+      expect(userMessage.content).toHaveLength(2);
+      const placeholder = userMessage.content[1];
+      expect(placeholder.type).toBe('text');
+      expect(placeholder.text).toContain('audio/mpeg');
+      expect(placeholder.text).toContain('song.mp3');
+    });
+  });
+}
+
+function registerProviderBehavior8(): void {
+  describe('provider fixture 8', () => {
+    it('never silently drops media - each MediaBlock produces output', async () => {
+      const fakeStream = createMediaStreamFixture('ok');
+      mockChatCompletionsCreate.mockResolvedValueOnce(fakeStream);
+      process.env.OPENAI_API_KEY = 'test-key';
+
+      const provider = new OpenAIProvider('test-key');
+      const contents: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [
+            { type: 'text', text: 'Mixed' },
+            {
+              type: 'media',
+              mimeType: 'image/png',
+              data: 'img',
+              encoding: 'base64',
+            },
+            {
+              type: 'media',
+              mimeType: 'application/pdf',
+              data: 'pdf',
+              encoding: 'base64',
+            },
+            {
+              type: 'media',
+              mimeType: 'video/mp4',
+              data: 'vid',
+              encoding: 'base64',
+            },
+          ],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion({
+        ...createProviderCallOptions({ providerName: provider.name, contents }),
+        contents: replayableContents(contents),
+      });
+      for await (const _chunk of generator) {
+        /* drain */
+      }
+
+      const callArgs = mockChatCompletionsCreate.mock.calls[0][0];
+      const userMessage = callArgs.messages.find(
+        (m: { role: string }) => m.role === 'user',
+      );
+      expect(userMessage.content).toHaveLength(4);
+      expect(userMessage.content[1].type).toBe('image_url');
+      expect(userMessage.content[2].type).toBe('file');
+      expect(userMessage.content[3].type).toBe('text');
+      expect(userMessage.content[3].text).toContain('video/mp4');
+    });
+  });
+}
+
+function registerProviderBehavior9(): void {
+  describe('provider fixture 9', () => {
+    it('injects images as synthetic user message', async () => {
+      const fakeStream = createMediaStreamFixture('I see the screenshot');
       mockChatCompletionsCreate.mockResolvedValueOnce(fakeStream);
       process.env.OPENAI_API_KEY = 'test-key';
 
@@ -661,21 +637,13 @@ describe('OpenAIProvider - MediaBlock support', () => {
         },
       });
     });
+  });
+}
 
+function registerProviderBehavior10(): void {
+  describe('provider fixture 10', () => {
     it('does not inject synthetic message when no images in tool response', async () => {
-      const fakeStream = {
-        async *[Symbol.asyncIterator]() {
-          yield {
-            choices: [
-              {
-                delta: {
-                  content: 'Done',
-                },
-              },
-            ],
-          };
-        },
-      };
+      const fakeStream = createMediaStreamFixture('Done');
       mockChatCompletionsCreate.mockResolvedValueOnce(fakeStream);
       process.env.OPENAI_API_KEY = 'test-key';
 
@@ -735,66 +703,19 @@ describe('OpenAIProvider - MediaBlock support', () => {
       expect(userMessages).toHaveLength(1);
       expect(userMessages[0].content).toBe('Run command');
     });
+  });
+}
 
+function registerProviderBehavior11(): void {
+  describe('provider fixture 11', () => {
     it('handles mixed media types', async () => {
-      const fakeStream = {
-        async *[Symbol.asyncIterator]() {
-          yield {
-            choices: [
-              {
-                delta: {
-                  content: 'I see the files',
-                },
-              },
-            ],
-          };
-        },
-      };
+      const fakeStream = createMediaStreamFixture('I see the files');
       mockChatCompletionsCreate.mockResolvedValueOnce(fakeStream);
       process.env.OPENAI_API_KEY = 'test-key';
 
       const provider = new OpenAIProvider('test-key');
 
-      const contents: IContent[] = [
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'Process files' }],
-        },
-        {
-          speaker: 'ai',
-          blocks: [
-            {
-              type: 'tool_call',
-              id: 'call_123',
-              name: 'process_files',
-              parameters: {},
-            },
-          ],
-        },
-        {
-          speaker: 'tool',
-          blocks: [
-            {
-              type: 'tool_response',
-              callId: 'call_123',
-              toolName: 'process_files',
-              result: 'Files processed',
-            },
-            {
-              type: 'media',
-              mimeType: 'image/png',
-              data: 'imagedata',
-              encoding: 'base64',
-            },
-            {
-              type: 'media',
-              mimeType: 'video/mp4',
-              data: 'videodata',
-              encoding: 'base64',
-            },
-          ],
-        },
-      ];
+      const contents = mixedMediaContents();
 
       const generator = provider.generateChatCompletion({
         ...createProviderCallOptions({
@@ -841,4 +762,57 @@ describe('OpenAIProvider - MediaBlock support', () => {
       });
     });
   });
-});
+}
+
+function createMediaStreamFixture(
+  content: string,
+): AsyncIterable<{ choices: Array<{ delta: { content: string } }> }> {
+  return {
+    async *[Symbol.asyncIterator]() {
+      yield { choices: [{ delta: { content } }] };
+    },
+  };
+}
+
+function mixedMediaContents(): IContent[] {
+  return [
+    {
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'Process files' }],
+    },
+    {
+      speaker: 'ai',
+      blocks: [
+        {
+          type: 'tool_call',
+          id: 'call_123',
+          name: 'process_files',
+          parameters: {},
+        },
+      ],
+    },
+    {
+      speaker: 'tool',
+      blocks: [
+        {
+          type: 'tool_response',
+          callId: 'call_123',
+          toolName: 'process_files',
+          result: 'Files processed',
+        },
+        {
+          type: 'media',
+          mimeType: 'image/png',
+          data: 'imagedata',
+          encoding: 'base64',
+        },
+        {
+          type: 'media',
+          mimeType: 'video/mp4',
+          data: 'videodata',
+          encoding: 'base64',
+        },
+      ],
+    },
+  ];
+}

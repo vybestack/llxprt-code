@@ -43,7 +43,7 @@ import {
   SubagentTerminateMode,
   type OutputConfig,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
 import { SubAgentScope } from './subagent.js';
 import { executeToolCall } from './nonInteractiveToolExecutor.js';
@@ -54,7 +54,7 @@ import {
   createStatelessRuntimeBundle,
   defaultModelConfig,
   defaultRunConfig,
-} from './subagent-test-helpers.js';
+} from './__tests__/subagent-test-helpers.js';
 
 const realNonInteractiveToolExecutorModule = {
   ...(await import('./nonInteractiveToolExecutor.js')),

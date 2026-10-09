@@ -53,6 +53,17 @@ export function buildExtraArgs(
     return extraArgs;
   }
 
+  // The inline local model E2E profile owns provider, credentials and runtime ephemerals.
+  // An explicit --provider prevents the CLI from applying those ephemerals.
+  if (env['LLXPRT_LOCAL_MODEL_E2E'] === 'true') {
+    if (getProfileName() === undefined) {
+      throw new Error(
+        'LLXPRT_TEST_PROFILE is required for the local model E2E',
+      );
+    }
+    return extraArgs;
+  }
+
   const provider = requireEnvString('LLXPRT_DEFAULT_PROVIDER');
   const model = requireEnvString('LLXPRT_DEFAULT_MODEL');
   const baseUrl = readEnvString('OPENAI_BASE_URL');

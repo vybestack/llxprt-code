@@ -592,6 +592,101 @@ function registerAgentTools(
 }
 
 /**
+ * Carries a task-tool registration that arrived AFTER the tool registry was
+ * built into the LIVE registry (issue #3222).
+ *
+ * The registration is consumed only at registry construction, so a Config
+ * that was initialized before a registration was installed (for example the
+ * fromConfig adoption path, whose ensureInitialized is a no-op for
+ * already-initialized Configs) built its registry without the task tool.
+ * This registers the missing tool against the EXISTING registry under the
+ * same governance rules as build time — it never overrides an existing task
+ * tool, smuggles the tool past coreTools/excludeTools exclusions, or touches
+ * any other registry contents — and replaces the stale
+ * missing-registration diagnostic record so the settings surface reflects the
+ * reconciled truth.
+ *
+ * @plan PLAN-20260610-ISSUE1592.P01
+ * @requirement REQ-INV-003
+ *
+ * @returns true when this call registered the task tool.
+ */
+export function reconcileTaskToolRegistration(
+  host: ToolRegistryHost,
+  config: ConfigBaseCore,
+  registry: ToolRegistry,
+  allPotentialTools: ToolRecord[],
+  messageBus: MessageBus,
+): boolean {
+  const registration = host.getTaskToolRegistration();
+  if (registration === undefined) {
+    return false;
+  }
+
+  const profileManager = host.getProfileManager();
+  const subagentManager = host.getSubagentManager();
+  if (profileManager === undefined || subagentManager === undefined) {
+    // Same missing-manager skip registerAgentTools applies at build time.
+    return false;
+  }
+
+  // Never override registry contents: a task tool the caller's own
+  // construction registered (or an earlier reconciliation) always wins.
+  const className = registration.className;
+  const displayName = registration.staticName || className;
+  if (
+    registry.getTool(displayName) !== undefined ||
+    registry.getTool(className) !== undefined
+  ) {
+    return false;
+  }
+
+  // Re-derive build-time governance so a late registration cannot smuggle
+  // the tool past a caller's allow-list or deny-list.
+  const baseCoreTools = host.getCoreTools();
+  const effectiveCoreTools =
+    baseCoreTools && baseCoreTools.length > 0 ? [...baseCoreTools] : undefined;
+  ensureCoreToolIncluded(effectiveCoreTools, TASK_TOOL_CLASS_NAME);
+  ensureCoreToolIncluded(effectiveCoreTools, TASK_TOOL_NAME);
+
+  // Drop the stale missing-registration record pushed at build time so the
+  // record registerTaskTool appends is the single TaskTool entry.
+  for (let i = allPotentialTools.length - 1; i >= 0; i--) {
+    if (allPotentialTools[i]?.toolName === TASK_TOOL_CLASS_NAME) {
+      allPotentialTools.splice(i, 1);
+    }
+  }
+
+  const taskToolArgs: TaskToolArgs = {
+    profileManager,
+    subagentManager,
+    schedulerFactoryProvider: () =>
+      host.getInteractiveSubagentSchedulerFactory(),
+    getAsyncTaskManager: () => host.getAsyncTaskManager(),
+    messageBus,
+  };
+
+  registerTaskTool(
+    registry,
+    effectiveCoreTools,
+    host.getExcludeTools(),
+    allPotentialTools,
+    registration,
+    config as Config,
+    taskToolArgs,
+  );
+  // registerTaskTool silently declines under coreTools/excludeTools
+  // governance (pushing an isRegistered=false record instead of throwing),
+  // so report the LIVE registry truth — probed the same way the
+  // existing-tool guard above does — or the caller pushes a spurious
+  // client.setTools() for a tool that never registered.
+  return (
+    registry.getTool(displayName) !== undefined ||
+    registry.getTool(className) !== undefined
+  );
+}
+
+/**
  * Creates and populates a ToolRegistry with all core tools.
  *
  * Applies coreTools allow-list and excludeTools deny-list governance.

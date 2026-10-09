@@ -12,11 +12,11 @@ import type {
   ContextAwareTool,
   ToolContext,
 } from '@vybestack/llxprt-code-tools';
-import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import {
   createMockMessageBus,
   createMockPolicyEngine,
-} from './coreToolScheduler-test-helpers.js';
+} from './__tests__/coreToolScheduler-test-helpers.js';
 
 describe('CoreToolScheduler context-aware tools', () => {
   it('injects agentId into ContextAwareTool context', async () => {

@@ -15,6 +15,7 @@ import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { StreamProcessor } from './StreamProcessor.js';
 import { EmptyStreamError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { SendMessageParams } from './chatSession.js';
 
@@ -121,26 +122,28 @@ const observeHaveAPICallErrorsCaughtByRetryWithBackoff = async () => {
 
   // Track retry attempts
   let _attemptCount = 0;
-  const mockApiCall = vi.fn().mockImplementation(async () => {
-    _attemptCount++;
-    if (_attemptCount < 3) {
-      const error = new Error('429 Rate Limited') as Error & {
-        status: number;
-      };
-      error.status = 429;
-      throw error;
-    }
-    // Return a generator on success
-    async function* successStream(): AsyncGenerator<ModelStreamChunk> {
-      yield {
-        content: {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: 'success' }],
-        },
-      } as ModelStreamChunk;
-    }
-    return successStream();
-  });
+  const mockApiCall = vi.fn(
+    async (): Promise<AsyncGenerator<ModelStreamChunk>> => {
+      _attemptCount++;
+      if (_attemptCount < 3) {
+        const error = new Error('429 Rate Limited') as Error & {
+          status: number;
+        };
+        error.status = 429;
+        throw error;
+      }
+      // Return a generator on success
+      async function* successStream(): AsyncGenerator<ModelStreamChunk> {
+        yield {
+          content: {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'success' }],
+          },
+        } as ModelStreamChunk;
+      }
+      return successStream();
+    },
+  );
 
   // Use actual retry logic with limited attempts
   const result = await actualRetry(mockApiCall, {
@@ -289,7 +292,7 @@ function facadeCallback1(): void {
     getConversationLoggingEnabled: () => false,
   };
   const abortController = new AbortController();
-  const tools = [{ functionDeclarations: [] }];
+  const tools: ToolDeclaration[] = [];
   const baseRuntimeContext = {
     config: configInstance,
     settingsService: {},
@@ -340,7 +343,7 @@ async function facadeCallback2(): Promise<void> {
 
   const wrapped = prependAsyncGenerator(firstResult.value, sourceIterator);
 
-  const cancelResult = await wrapped.return();
+  const cancelResult = await wrapped.return(undefined);
   expect(cancelResult.done).toBe(true);
   expect(sourceClosed).toBe(true);
 }
@@ -723,7 +726,7 @@ async function facadeCallback9(): Promise<void> {
     { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
   );
 
-  const returnResult = await stream.return();
+  const returnResult = await stream.return(undefined);
 
   expect(returnResult.done).toBe(true);
   expect(processStreamResponse).not.toHaveBeenCalled();

@@ -14,7 +14,7 @@ import {
   afterEach,
   type Mock,
 } from 'bun:test';
-import { renderHook } from '../../test-utils/render.js';
+import { renderHook } from '../../__tests__/render.js';
 import { act } from 'react';
 import {
   useSelectionList,
@@ -23,7 +23,7 @@ import {
 import { useKeypress } from './useKeypress.js';
 
 import type { KeypressHandler, Key } from '../contexts/KeypressContext.js';
-import { assertDefined } from '../../test-utils/assertions.js';
+import { assertDefined } from '../../__tests__/assertions.js';
 
 const realUseKeypressModule = { ...(await import('./useKeypress.js')) };
 

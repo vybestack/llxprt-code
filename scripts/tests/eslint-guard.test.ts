@@ -8785,7 +8785,7 @@ describe('eslint-guard ceiling override guard (#3718)', () => {
     );
   });
 
-  it('produces zero current-state violations for the repository config; the four waivers are baselined', () => {
+  it('produces zero current-state violations for the repository config; the five waivers are baselined', () => {
     const configSource = readFileSync(
       join(repoRoot, 'eslint.config.js'),
       'utf8',
@@ -8795,6 +8795,7 @@ describe('eslint-guard ceiling override guard (#3718)', () => {
       overrides.map((override) => override.files + ' ' + override.rule).sort(),
     ).toEqual([
       'packages/*/src/**/*.{test,spec,bun}.{ts,tsx} max-lines-per-function',
+      'scripts/check-settings-boundary.ts max-lines',
       'scripts/test-audit/scan.ts complexity',
       'scripts/test-audit/scan.ts max-lines',
       'scripts/test-audit/scan.ts max-lines-per-function',

@@ -5,19 +5,19 @@
  * Executable static-scan test encoding the no-deep-import boundary across the
  * whole remediated `packages/agents/src/api/__tests__` set. It reads each
  * `*.spec.ts` / `*.test.ts` file from disk as a STRING and asserts import
- * discipline (it does NOT import internals itself — it is a Path-A file).
+ * discipline (it does NOT import the package boundary subjects — it is a
+ * Path-A file).
  *
- * MIN-3 (Path A vs Path B): the PUBLIC-AGENT path under test (and the eventual
- * #1595 production CLI) imports ONLY the curated public root
- * `@vybestack/llxprt-code-agents` (no ./internals.js, no /src/). The TEST-ONLY
- * reference-drive path (Path B) MAY import the documented ./internals.js
- * subpath. Neither path may ever import /src/, core/src, or providers/src.
+ * Every discovered file (Path-A public-consumer and test-only alike) imports
+ * ONLY the curated public root `@vybestack/llxprt-code-agents` or a subpath
+ * DECLARED in the package's own exports map. There is NO test-only meta
+ * category exempt from this rule: the retired low-level subpath (issue #3222)
+ * is forbidden absolutely, and so is every other undeclared subpath. No file
+ * may ever import /src/, core/src, or providers/src.
  *
- * Two TEST-ONLY meta categories are the PERMITTED ./internals.js consumers
- * (neither is a Path-A public-consumer surface):
- *   (1) the reference drive (Path B), filename contains `.reference-drive.`;
- *   (2) the non-breaking export-surface characterization, filename matches
- *       `nonbreaking` / `nonBreaking` (case-insensitive).
+ * The allowed-subpath set is derived at runtime from packages/agents's own
+ * package.json exports map — the package's real public surface — so this guard
+ * can never drift from what the package actually ships.
  *
  * Plain-string import-specifier parsing mirrors cli-turn-parity.spec.ts's
  * extractFromSpecifiers idiom (no regex — this branch's sonarjs rule prefers
@@ -31,6 +31,36 @@ import { dirname, join, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+
+const AGENTS_ROOT_SPECIFIER = '@vybestack/llxprt-code-agents';
+
+// The retired low-level subpath prefix, assembled from fragments so scanners
+// reading THIS file never see the contiguous forbidden literal. The rule it
+// feeds is ABSOLUTE: even while the exports map still declares the subpath, no
+// discovered file may import it.
+const RETIRED_SUBPATH_PREFIX = AGENTS_ROOT_SPECIFIER + '/internals';
+
+/**
+ * The allowed agents-package specifiers: the bare root plus every subpath key
+ * declared in the package's own exports map (e.g. the app-service and
+ * constants subpaths). Read from disk so the guard tracks the real public
+ * surface instead of a hand-maintained list.
+ */
+function resolvePublicAgentsSpecifiers(): ReadonlySet<string> {
+  const pkgJson = JSON.parse(
+    readFileSync(join(HERE, '..', '..', '..', 'package.json'), 'utf8'),
+  ) as { exports?: Record<string, unknown> };
+  const allowed = new Set<string>([AGENTS_ROOT_SPECIFIER]);
+  for (const key of Object.keys(pkgJson.exports ?? {})) {
+    if (key !== '.') {
+      // Export keys are './<subpath>'; the import specifier drops the dot.
+      allowed.add(AGENTS_ROOT_SPECIFIER + key.slice(1));
+    }
+  }
+  return allowed;
+}
+
+const PUBLIC_AGENTS_SPECIFIERS = resolvePublicAgentsSpecifiers();
 
 /**
  * Extracts import specifiers from a single source line using plain string
@@ -80,20 +110,22 @@ function isDeepImport(specifier: string): boolean {
   return DEEP_IMPORT_FRAGMENTS.some((frag) => specifier.includes(frag));
 }
 
-function isInternalsSubpath(specifier: string): boolean {
+/**
+ * True for any agents-package import that is NOT the bare root or a subpath
+ * declared in the package's own exports map, PLUS the retired low-level
+ * subpath absolutely (an exports-map edit can never resurrect it). This is
+ * the absolute rule of issue #3222: no filename-based exemptions of any kind.
+ */
+function isNonPublicAgentsImport(specifier: string): boolean {
+  if (specifier.startsWith(RETIRED_SUBPATH_PREFIX)) {
+    return true;
+  }
+  if (specifier === AGENTS_ROOT_SPECIFIER) {
+    return false;
+  }
   return (
-    specifier.startsWith('@vybestack/llxprt-code-agents/internals') ||
-    specifier.endsWith('/internals.js') ||
-    specifier === '../internals.js' ||
-    specifier === './internals.js'
-  );
-}
-
-/** A Path-B / meta file is one of the two permitted internals consumers. */
-function isPermittedInternalsConsumer(fileName: string): boolean {
-  const lower = fileName.toLowerCase();
-  return (
-    fileName.includes('.reference-drive.') || lower.includes('nonbreaking')
+    specifier.startsWith(AGENTS_ROOT_SPECIFIER + '/') &&
+    !PUBLIC_AGENTS_SPECIFIERS.has(specifier)
   );
 }
 
@@ -133,14 +165,12 @@ function inspectDeepImports(file: FileSpecifiers): ImportBoundaryObservation {
   };
 }
 
-function inspectInternalsImports(
+function inspectNonPublicAgentsImports(
   file: FileSpecifiers,
 ): ImportBoundaryObservation {
   return {
     fileName: file.fileName,
-    offendingSpecifiers: isPermittedInternalsConsumer(file.fileName)
-      ? []
-      : file.specifiers.filter(isInternalsSubpath),
+    offendingSpecifiers: file.specifiers.filter(isNonPublicAgentsImport),
   };
 }
 
@@ -157,12 +187,12 @@ function collectDeepImportOffenders(
   return offenders;
 }
 
-function collectUnpermittedInternalsImporters(
+function collectNonPublicAgentsImporters(
   files: readonly FileSpecifiers[],
 ): string[] {
   const offenders: string[] = [];
   for (const file of files) {
-    const observation = inspectInternalsImports(file);
+    const observation = inspectNonPublicAgentsImports(file);
     for (const specifier of observation.offendingSpecifiers) {
       offenders.push(`${observation.fileName} -> ${specifier}`);
     }
@@ -170,13 +200,11 @@ function collectUnpermittedInternalsImporters(
   return offenders;
 }
 
-function findPathARootImporters(
+function findRootImporters(
   files: readonly FileSpecifiers[],
 ): readonly FileSpecifiers[] {
-  return files.filter(
-    ({ fileName, specifiers }) =>
-      !isPermittedInternalsConsumer(fileName) &&
-      specifiers.includes('@vybestack/llxprt-code-agents'),
+  return files.filter(({ specifiers }) =>
+    specifiers.includes(AGENTS_ROOT_SPECIFIER),
   );
 }
 
@@ -185,21 +213,18 @@ function selectDiscoveredFile(fileIndex: number): FileSpecifiers {
 }
 
 describe('REQ-INT-004 @plan:PLAN-20260621-COREAPIREMED.P21 — no-deep-import boundary across the remediated set', () => {
-  it('Test A (Path A AND Path B): NO file deep-imports /src/, core/src, or providers/src', () => {
+  it('Test A: NO file deep-imports /src/, core/src, or providers/src', () => {
     const offenders = collectDeepImportOffenders(FILES);
     expect(offenders).toStrictEqual([]);
   });
 
-  it('Test B (CRIT-6, Path A): NO Path-A file imports ./internals.js (only *.reference-drive.* or *nonbreaking* may)', () => {
-    const offenders = collectUnpermittedInternalsImporters(FILES);
+  it('Test B (CRIT-6, absolute — issue #3222): NO file imports a non-public agents subpath (the retired internals escape hatch is forbidden everywhere, with no exemptions)', () => {
+    const offenders = collectNonPublicAgentsImporters(FILES);
     expect(offenders).toStrictEqual([]);
   });
 
-  it('Test C: at least one Path-A file imports the public root @vybestack/llxprt-code-agents', () => {
-    // Restrict to genuine Path-A files: a Path-B/meta internals consumer must
-    // not be able to satisfy this assertion and mask a missing Path-A root
-    // import.
-    const rootImporters = findPathARootImporters(FILES);
+  it('Test C: at least one file imports the public root @vybestack/llxprt-code-agents', () => {
+    const rootImporters = findRootImporters(FILES);
     expect(rootImporters.length).toBeGreaterThan(0);
   });
 
@@ -216,15 +241,12 @@ describe('REQ-INT-004 @plan:PLAN-20260621-COREAPIREMED.P21 — no-deep-import bo
     );
   }, 30000);
 
-  it('PROP: every permitted-internals-consumer exemption is justified by filename convention', () => {
-    // For every file that imports internals, it MUST be a permitted consumer
-    // (reference-drive or nonbreaking). This is the contrapositive lock that
-    // keeps the exemption set honest.
+  it('PROP: no discovered file contains a non-public agents-subpath import specifier (issue #3222 absolute rule)', () => {
     fc.assert(
       fc.property(
         fc.integer({ min: 0, max: Math.max(0, FILES.length - 1) }),
         (fileIdx) => {
-          const observation = inspectInternalsImports(
+          const observation = inspectNonPublicAgentsImports(
             selectDiscoveredFile(fileIdx),
           );
           expect(observation.offendingSpecifiers).toStrictEqual([]);

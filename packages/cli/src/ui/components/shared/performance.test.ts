@@ -5,7 +5,7 @@
  */
 import { describe, it, expect, afterEach, vi } from 'bun:test';
 import { act } from 'react';
-import { renderHook } from '../../../test-utils/render.js';
+import { renderHook } from '../../../__tests__/render.js';
 import { useTextBuffer } from './text-buffer.js';
 import { parseInputForHighlighting } from '../../utils/highlight.js';
 

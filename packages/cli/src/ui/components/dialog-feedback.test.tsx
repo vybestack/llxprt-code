@@ -10,7 +10,7 @@ await import('ink-testing-library');
 const ink = await import('../../../test-utils/real-ink.js');
 void vi.mock('ink', () => ink);
 const { createMockSettings, renderWithProviders } = await import(
-  '../../test-utils/render.js'
+  '../../__tests__/render.js'
 );
 const { AppDispatchProvider } = await import(
   '../contexts/AppDispatchContext.js'

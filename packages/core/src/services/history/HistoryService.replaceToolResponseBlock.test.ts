@@ -1,11 +1,11 @@
-import { collectRowsForAssertions } from '../../test-utils/collect-rows-for-assertions.js';
+import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { collectRawHistory } from '../../test-utils/collect-raw-history.js';
+import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import type { IContent, ToolResponseBlock } from './IContent.js';

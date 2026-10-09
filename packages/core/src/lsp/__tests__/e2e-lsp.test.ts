@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 import type { ConfigParameters } from '../../config/config.js';
 import { Config } from '../../config/config.js';
 import type { LspConfig } from '@vybestack/llxprt-code-ide-integration';
-import { initializeTestConfig } from '../../test-utils/config.js';
+import { initializeTestConfig } from '../../__tests__/config-test-helpers.js';
 
 import type { Diagnostic } from '@vybestack/llxprt-code-ide-integration';
 import * as lspServiceClientModule from '@vybestack/llxprt-code-ide-integration';
@@ -152,45 +152,16 @@ void vi.mock('../../utils/extensionLoader.js', () => ({
   })),
 }));
 
+const __actualSettings = {
+  ...(await import('@vybestack/llxprt-code-settings')),
+};
+
 void vi.mock('../../runtime/providerRuntimeContext.js', () => ({
-  setProviderRuntimeStateFactory: vi.fn(),
-  setActiveProviderRuntimeContext: vi.fn(),
-  peekActiveProviderRuntimeContext: vi.fn().mockReturnValue(null),
   createProviderRuntimeContext: vi.fn().mockReturnValue({}),
-  getActiveProviderRuntimeContext: vi.fn().mockReturnValue({
-    settingsService: {
-      get: vi.fn(),
-      set: vi.fn(),
-      getAllGlobalSettings: vi.fn().mockReturnValue({}),
-      getProviderSettings: vi.fn().mockReturnValue({}),
-      getProviderConfig: vi.fn().mockReturnValue({
-        includeDirectories: [],
-        mcpServers: {},
-        contextFileName: undefined,
-      }),
-      setProviderSetting: vi.fn(),
-    },
-    config: null,
-    runtimeId: 'p36-runtime',
-    metadata: {},
-  }),
 }));
 
 void vi.mock('@vybestack/llxprt-code-settings', () => ({
-  getSettingsService: vi.fn().mockReturnValue({
-    get: vi.fn(),
-    set: vi.fn(),
-    getAllGlobalSettings: vi.fn().mockReturnValue({}),
-    getProviderSettings: vi.fn().mockReturnValue({}),
-    getProviderConfig: vi.fn().mockReturnValue({
-      includeDirectories: [],
-      mcpServers: {},
-      contextFileName: undefined,
-    }),
-    setProviderSetting: vi.fn(),
-    clear: vi.fn(),
-  }),
-  registerSettingsService: vi.fn(),
+  ...__actualSettings,
 }));
 
 void vi.mock('@modelcontextprotocol/sdk/client/index.js', () => ({

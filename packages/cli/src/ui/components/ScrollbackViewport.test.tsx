@@ -52,7 +52,7 @@ import type {
 } from '../stores/turn/scrollbackPager.js';
 import type { RowIdentity } from '../utils/rowIdentity.js';
 
-const { waitFor } = await import('../../test-utils/render.js');
+const { waitFor } = await import('../../__tests__/render.js');
 const { render } = await import('ink-testing-library');
 const { createScrollbackPagerStore } = await import(
   '../stores/turn/scrollbackPager.js'

@@ -18,8 +18,16 @@
  * base first.
  */
 
+import type { McpAuthProviderFactory } from '@vybestack/llxprt-code-mcp';
+
 /** Mirrors providers/src/composition/runtimePlugins/types.ts. */
 export type ProviderAliasFactory = (entry: never, context: never) => never;
+
+/** Mirrors providers/src/composition/runtimePlugins/types.ts. */
+export interface RuntimeMcpAuthFactoryContribution {
+  readonly authProviderType: string;
+  readonly createAuthProvider: McpAuthProviderFactory;
+}
 
 /** Mirrors providers/src/composition/runtimePlugins/types.ts. */
 export interface RuntimePluginManifest {
@@ -28,5 +36,10 @@ export interface RuntimePluginManifest {
   readonly providers: readonly {
     readonly providerId: string;
     readonly createProvider: ProviderAliasFactory;
+    readonly builtinAliases?: readonly {
+      readonly alias: string;
+      readonly config: Record<string, unknown>;
+    }[];
   }[];
+  readonly mcpAuthFactories?: readonly RuntimeMcpAuthFactoryContribution[];
 }

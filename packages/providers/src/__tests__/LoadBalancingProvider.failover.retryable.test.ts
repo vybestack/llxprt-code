@@ -16,7 +16,7 @@
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { ProviderManager } from '../ProviderManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import {
   LoadBalancingProvider,
   type LoadBalancingProviderConfig,
@@ -28,7 +28,7 @@ import {
 } from '../loadBalancing/contextLimitError.js';
 import type { IProvider } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { GenerateChatOptions } from '../GenerateChatOptions.js';
+import type { GenerateChatOptions } from '../IProvider.js';
 import { replayableContents } from '../utils/collectContents.js';
 import {
   isRetryableError,
@@ -73,8 +73,6 @@ function overloadError(type: string): Error {
 
 function makeOptions(): GenerateChatOptions {
   return {
-    prompt: 'test prompt',
-    messages: [{ role: 'user' as const, content: 'test' }],
     contents: replayableContents([
       { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
       { speaker: 'human', blocks: [{ type: 'text', text: 'test prompt' }] },
@@ -266,7 +264,7 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450) 
   it('classifies an all-429 aggregate as retryable and does not masquerade as an HTTP 429', async () => {
     const { error, counter } = await captureFailoverError(
       providerManager,
-      function* (): AsyncGenerator<IContent> {
+      async function* (): AsyncGenerator<IContent> {
         throw statusError('rate limited', 429);
         yield undefined as unknown as IContent; // eslint require-yield; unreachable after throw
       },
@@ -307,7 +305,7 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450) 
   it('classifies an all-5xx aggregate as retryable', async () => {
     const { error, counter } = await captureFailoverError(
       providerManager,
-      function* (): AsyncGenerator<IContent> {
+      async function* (): AsyncGenerator<IContent> {
         throw statusError('service unavailable', 503);
         yield undefined as unknown as IContent; // eslint require-yield; unreachable after throw
       },
@@ -361,7 +359,7 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450) 
   it('classifies an all-overload (Anthropic body-level "overloaded_error", no HTTP status) aggregate as retryable', async () => {
     const { error, counter } = await captureFailoverError(
       providerManager,
-      function* (): AsyncGenerator<IContent> {
+      async function* (): AsyncGenerator<IContent> {
         throw overloadError('overloaded_error');
         yield undefined as unknown as IContent; // eslint require-yield; unreachable after throw
       },
@@ -376,7 +374,7 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450) 
   it('classifies an all-overload (Anthropic body-level "rate_limit_error", no HTTP status) aggregate as retryable', async () => {
     const { error, counter } = await captureFailoverError(
       providerManager,
-      function* (): AsyncGenerator<IContent> {
+      async function* (): AsyncGenerator<IContent> {
         throw overloadError('rate_limit_error');
         yield undefined as unknown as IContent; // eslint require-yield; unreachable after throw
       },
@@ -400,12 +398,12 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450) 
   it('classifies an all-RetryableQuotaError aggregate as retryable (Google quota, no HTTP status)', async () => {
     const quotaError = new RetryableQuotaError(
       'quota exceeded',
-      { code: 429, message: 'Rate limit exceeded' },
+      { code: 429, message: 'Rate limit exceeded', details: [] },
       1,
     );
     const { error, counter } = await captureFailoverError(
       providerManager,
-      function* (): AsyncGenerator<IContent> {
+      async function* (): AsyncGenerator<IContent> {
         throw quotaError;
         yield undefined as unknown as IContent; // eslint require-yield; unreachable after throw
       },
@@ -455,7 +453,7 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450) 
   it('classifies an all-network-transient aggregate as retryable', async () => {
     const { error, counter } = await captureFailoverError(
       providerManager,
-      function* (): AsyncGenerator<IContent> {
+      async function* (): AsyncGenerator<IContent> {
         throw new Error('socket hang up');
         yield undefined as unknown as IContent; // eslint require-yield; unreachable after throw
       },
@@ -470,7 +468,7 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450) 
   it('classifies an all-plain-Error (no status) aggregate as NON-retryable', async () => {
     const { error, counter } = await captureFailoverError(
       providerManager,
-      function* (): AsyncGenerator<IContent> {
+      async function* (): AsyncGenerator<IContent> {
         throw new Error('backend failed');
         yield undefined as unknown as IContent; // eslint require-yield; unreachable after throw
       },
@@ -550,7 +548,7 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450) 
     async (_label, status, message, coreRetryable) => {
       const { error, counter } = await captureFailoverError(
         providerManager,
-        function* (): AsyncGenerator<IContent> {
+        async function* (): AsyncGenerator<IContent> {
           throw statusError(message, status);
           yield undefined as unknown as IContent; // eslint require-yield; unreachable after throw
         },

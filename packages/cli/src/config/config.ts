@@ -280,8 +280,8 @@ async function resolveConfigBuildPieces(
 
 /**
  * Narrow the bootstrap runtime's structural settings state to the
- * SettingsService surface Config consumes (profileBootstrap resolves it via
- * resolveRuntimeSettingsService). Fails fast with a clear message instead of
+ * SettingsService surface Config consumes (profileBootstrap composes it via
+ * createRuntimeSettingsService). Fails fast with a clear message instead of
  * letting a malformed runtime surface as an opaque error inside buildConfig.
  */
 function isSettingsServiceLike(

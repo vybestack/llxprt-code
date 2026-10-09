@@ -24,7 +24,7 @@ import { HistoryService } from '@vybestack/llxprt-code-core/services/history/His
 import { MediaAdmissionService } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ReadonlySettingsSnapshot } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import { createSettingsProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
 import { getErrorMessage } from '@vybestack/llxprt-code-core/utils/errors.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
@@ -141,6 +141,7 @@ export async function buildSystemInstruction(
     mcpInstructions,
     model,
     provider,
+    settings: config.getSettingsService(),
     tools: enabledToolNames,
     includeSubagentDelegation,
     interactionMode,
@@ -284,7 +285,7 @@ async function buildChatFromRuntime(
   );
 
   const settings = buildSettingsSnapshot(config);
-  const providerRuntime = createSettingsProviderRuntimeContext({
+  const providerRuntime = createProviderRuntimeContext({
     settingsService: config.getSettingsService(),
     config,
     runtimeId: runtimeState.runtimeId,
@@ -311,7 +312,7 @@ async function buildChatFromRuntime(
   todoContinuationService.updateTodoToolAvailabilityFromDeclarations(
     filteredDeclarations,
   );
-  const tools = [{ functionDeclarations: filteredDeclarations }];
+  const tools = filteredDeclarations;
 
   const chat = createChatSessionInstance(
     runtimeBundle.runtimeContext,

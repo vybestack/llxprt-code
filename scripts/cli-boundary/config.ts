@@ -103,7 +103,10 @@ export const PUBLIC_SUBPATHS_BY_PACKAGE: {
   '@vybestack/llxprt-code-core': [],
   '@vybestack/llxprt-code-agents': [],
   '@vybestack/llxprt-code-settings': [],
-  '@vybestack/llxprt-code-mcp': ['host/hostServices.js'],
+  '@vybestack/llxprt-code-mcp': [
+    'host/hostServices.js',
+    'auth/mcp-auth-factory.js',
+  ],
 };
 
 /**

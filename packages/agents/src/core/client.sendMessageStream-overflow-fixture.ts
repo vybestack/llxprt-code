@@ -22,7 +22,7 @@ import {
 } from './turn.js';
 import { uiTelemetryService } from '@vybestack/llxprt-code-core/telemetry/uiTelemetry.js';
 import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
-import { fromAsync } from './client-test-helpers.js';
+import { fromAsync } from './__tests__/client-test-helpers.js';
 
 export async function testShouldDeferOverflowDecisionsToFinalizedProviderEnforcement1(
   client: AgentClient,

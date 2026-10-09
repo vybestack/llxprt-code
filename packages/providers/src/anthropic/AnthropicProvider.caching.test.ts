@@ -7,17 +7,16 @@
  * Split from AnthropicProvider.test.ts for max-lines compliance.
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { vi, describe, it, expect, beforeEach } from 'bun:test';
 import { AnthropicProvider } from './AnthropicProvider.js';
-import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
-import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { TEST_PROVIDER_CONFIG } from '../__tests__/providerTestConfig.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   setupAnthropicProvider,
   type AnthropicMessage,
   type AnthropicTestSetup,
   createAnthropicRawPostTestAdapter,
-} from './test-utils/anthropicProviderTestSetup.js';
+} from './__tests__/anthropicProviderTestSetup.js';
 // Shared mock instance for messages.create - using vi.hoisted so it's
 // available when vi.mock factories run.
 const mockMessagesCreate = vi.fn();
@@ -152,9 +151,6 @@ describe('AnthropicProvider', () => {
     runtimeContext.config.streaming = 'disabled';
   });
 
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
   describe('Prompt Caching - Structure', () => {
     it('should add cache_control to sanitized empty string content', async () => {
       settingsService.setProviderSetting('anthropic', 'prompt-caching', '5m');
@@ -889,23 +885,19 @@ describe('AnthropicProvider', () => {
 
         const tools = [
           {
-            functionDeclarations: [
-              {
-                name: 'zebra_tool',
-                description: 'Z tool',
-                parametersJsonSchema: { type: 'object', properties: {} },
-              },
-              {
-                name: 'alpha_tool',
-                description: 'A tool',
-                parametersJsonSchema: { type: 'object', properties: {} },
-              },
-              {
-                name: 'middle_tool',
-                description: 'M tool',
-                parametersJsonSchema: { type: 'object', properties: {} },
-              },
-            ],
+            name: 'zebra_tool',
+            description: 'Z tool',
+            parametersJsonSchema: { type: 'object', properties: {} },
+          },
+          {
+            name: 'alpha_tool',
+            description: 'A tool',
+            parametersJsonSchema: { type: 'object', properties: {} },
+          },
+          {
+            name: 'middle_tool',
+            description: 'M tool',
+            parametersJsonSchema: { type: 'object', properties: {} },
           },
         ];
 
@@ -945,20 +937,16 @@ describe('AnthropicProvider', () => {
 
         const tools = [
           {
-            functionDeclarations: [
-              {
-                name: 'test_tool',
-                description: 'Test',
-                parametersJsonSchema: {
-                  type: 'object',
-                  properties: {
-                    zebra: { type: 'string' },
-                    apple: { type: 'number' },
-                    middle: { type: 'boolean' },
-                  },
-                },
+            name: 'test_tool',
+            description: 'Test',
+            parametersJsonSchema: {
+              type: 'object',
+              properties: {
+                zebra: { type: 'string' },
+                apple: { type: 'number' },
+                middle: { type: 'boolean' },
               },
-            ],
+            },
           },
         ];
 

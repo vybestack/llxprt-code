@@ -29,11 +29,10 @@ const { NodeFileSystem } = await import(
 );
 // Also deferred: this barrel transitively pulls in the alias consumers, and a
 // static import would be hoisted above the re-registration above.
-const {
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-  clearActiveProviderRuntimeContext,
-} = await import('@vybestack/llxprt-code-core');
+const { createProviderRuntimeContext } = await import(
+  '@vybestack/llxprt-code-core'
+);
+const { SettingsService } = await import('@vybestack/llxprt-code-settings');
 
 describe('Provider alias integration', () => {
   let tempDir: string;
@@ -88,8 +87,11 @@ describe('Provider alias integration', () => {
     setFileSystem(new NodeFileSystem());
 
     // After DI migration, set up runtime context and create/register ProviderManager
-    const runtimeContext = createProviderRuntimeContext();
-    setActiveProviderRuntimeContext(runtimeContext);
+    // Issue #2616: the runtime context carries its settings service
+    // explicitly (no ambient install or teardown).
+    const runtimeContext = createProviderRuntimeContext({
+      settingsService: new SettingsService(),
+    });
     const { manager, oauthManager } = createProviderManager(runtimeContext);
     registerProviderManagerSingleton(manager, oauthManager);
   });
@@ -122,7 +124,6 @@ describe('Provider alias integration', () => {
     }
 
     resetProviderManager();
-    clearActiveProviderRuntimeContext();
 
     fs.rmSync(tempDir, { recursive: true, force: true });
   });

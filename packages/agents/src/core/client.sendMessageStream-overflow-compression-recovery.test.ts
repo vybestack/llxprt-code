@@ -26,7 +26,7 @@ import {
   makeUserMessage,
   makeAiText,
 } from './__tests__/chatSession-density-helpers.js';
-import { fromAsync } from './client-test-helpers.js';
+import { fromAsync } from './__tests__/client-test-helpers.js';
 import {
   client,
   initializeClient,

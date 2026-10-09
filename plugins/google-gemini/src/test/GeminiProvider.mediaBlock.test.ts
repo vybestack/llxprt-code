@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { assertInstanceOf } from '@vybestack/llxprt-code-test-utils/index.js';
+import { assertInstanceOf } from './testSupport.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { GeminiProvider } from '../gemini/GeminiProvider.js';
 import type {
@@ -24,20 +24,18 @@ import type {
 import {
   createProviderCallOptions as createOptions,
   type ProviderCallOptionsInit,
-} from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+} from './testSupport.js';
 function isStream(
   value: readonly IContent[] | AsyncIterable<IContent>,
 ): value is AsyncIterable<IContent> {
   return Symbol.asyncIterator in value;
 }
-function createProviderCallOptions(init: ProviderCallOptionsInit): Omit<
-  ReturnType<typeof createOptions>,
-  'contents'
-> & {
-  contents: AsyncIterable<IContent>;
-} {
-  const options = createOptions(init);
-  const rows = options.contents;
+function createProviderCallOptions(
+  init: Omit<ProviderCallOptionsInit, 'contents'> & {
+    contents?: readonly IContent[] | AsyncIterable<IContent>;
+  },
+): ReturnType<typeof createOptions> {
+  const rows = init.contents ?? [];
   const contents: AsyncIterable<IContent> = isStream(rows)
     ? rows
     : {
@@ -45,8 +43,9 @@ function createProviderCallOptions(init: ProviderCallOptionsInit): Omit<
           yield* rows;
         },
       };
-  return { ...options, contents };
+  return createOptions({ ...init, contents });
 }
+
 import type {
   RequestMediaResolutionService,
   ResolvedMediaRequest,

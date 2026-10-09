@@ -8,9 +8,10 @@ import { type Config, createInkStdio } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import * as acp from '@agentclientprotocol/sdk';
 import { Readable, Writable } from 'node:stream';
-import * as process from 'node:process';
+import process from 'node:process';
 import { setCliRuntimeContext } from '@vybestack/llxprt-code-providers/runtime.js';
 import { ZedAgent } from './zedIntegration.js';
+import { toAcpReadableStream } from './acp-readable-stream.js';
 
 /**
  * The package-owned runtime id registered by the ACP client when it claims the
@@ -135,7 +136,7 @@ export async function runZedIntegration(
   // locked web stream) is the only way to make the ACP ndJsonStream reader
   // observe EOF/abort so connection.closed settles.
   const stdinSource = process.stdin;
-  const stdin = Readable.toWeb(stdinSource) as ReadableStream<Uint8Array>;
+  const stdin = toAcpReadableStream(Readable.toWeb(stdinSource));
   registerZedAcpRuntime(config);
   const agents: ZedAgent[] = [];
   const removeSignalHandlers = installDisposalSignalHandlers(

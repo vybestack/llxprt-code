@@ -19,7 +19,7 @@
  *
  * These tests document the exact bugs that need to be fixed.
  */
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { vi, describe, it, expect, beforeEach } from 'bun:test';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import type {
   IContent,
@@ -27,26 +27,22 @@ import type {
   ToolCallBlock,
   ToolResponseBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
+import { TEST_PROVIDER_CONFIG } from '../__tests__/providerTestConfig.js';
 import {
   createProviderWithRuntime,
   createRuntimeConfigStub,
-} from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+} from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import {
   createProviderCallOptions,
   type ProviderCallOptionsInit,
-} from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+} from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  clearActiveProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type {
   AnthropicContentBlock,
   AnthropicMessage,
   AnthropicRequestBody,
-} from './test-utils/anthropicTestUtils.js';
+} from './__tests__/anthropicTestUtils.js';
 
 // Mock dependencies
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
@@ -61,7 +57,7 @@ void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   isNetworkTransientError: vi.fn(() => false),
 }));
 
-import { createAnthropicRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
+import { createAnthropicRawPostTestAdapter } from '../__tests__/rawPostTestAdapters.js';
 
 const mockMessagesCreate = vi.fn();
 
@@ -128,17 +124,11 @@ describe('AnthropicProvider Issue #1150: API Shape Validation', () => {
       return settingsService.get(key);
     };
 
-    setActiveProviderRuntimeContext(runtimeContext);
-
     // Enable extended thinking
     settingsService.set('reasoning.enabled', true);
     settingsService.set('reasoning.budgetTokens', 10000);
     settingsService.set('reasoning.includeInContext', true);
     settingsService.set('reasoning.stripFromContext', 'none');
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
   });
 
   const buildCallOptions = (

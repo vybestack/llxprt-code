@@ -3,22 +3,18 @@
  * @requirement REQ-SP2-001
  * @project-plans/debuglogging/requirements.md
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  clearActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import Anthropic from '@anthropic-ai/sdk';
 import {
   createProviderCallOptions,
   type ProviderCallOptionsInit,
-} from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
-import { createAnthropicRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
+} from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { createAnthropicRawPostTestAdapter } from '../__tests__/rawPostTestAdapters.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { GenerateChatOptions } from '../IProvider.js';
 
@@ -204,22 +200,10 @@ function buildCallOptions(
 
 function resetRuntime(): void {
   FakeAnthropicClass.reset();
-  // Set up default runtime context for tests
-  setActiveProviderRuntimeContext(
-    createProviderRuntimeContext({
-      settingsService: new SettingsService(),
-      runtimeId: 'anthropic-stateless-test',
-    }),
-  );
-}
-
-function cleanupRuntime(): void {
-  clearActiveProviderRuntimeContext();
 }
 
 describe('Anthropic provider stateless contract tests', () => {
   beforeEach(resetRuntime);
-  afterEach(cleanupRuntime);
 
   it('scopes client cache by runtime id @plan:PLAN-20251018-STATELESSPROVIDER2.P11 @requirement:REQ-SP2-001 @pseudocode anthropic-gemini-stateless.md lines 1-3', async () => {
     const provider = new TestAnthropicProvider();
@@ -255,7 +239,6 @@ describe('Anthropic provider stateless contract tests', () => {
 
 describe('Anthropic provider stateless contract: fresh clients', () => {
   beforeEach(resetRuntime);
-  afterEach(cleanupRuntime);
 
   it('creates fresh client for each call @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-002', async () => {
     const provider = new TestAnthropicProvider();
@@ -320,7 +303,6 @@ describe('Anthropic provider stateless contract: fresh clients', () => {
 
 describe('Anthropic provider stateless contract: request settings', () => {
   beforeEach(resetRuntime);
-  afterEach(cleanupRuntime);
 
   it('gets model params from SettingsService without caching @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-003', async () => {
     const provider = new TestAnthropicProvider();
@@ -384,7 +366,6 @@ describe('Anthropic provider stateless contract: request settings', () => {
 
 describe('Anthropic provider stateless contract: auth tokens', () => {
   beforeEach(resetRuntime);
-  afterEach(cleanupRuntime);
 
   it('reuses the projected runtime token for the prepared transport attempt', async () => {
     const provider = new TestAnthropicProvider();

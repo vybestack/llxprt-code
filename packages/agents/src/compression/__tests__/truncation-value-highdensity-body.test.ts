@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { appendBodyEvidence } from '../../../../../scripts/lib/body-evidence-writer.js';
 import { describe, expect, it } from 'bun:test';
-import { appendFileSync } from 'node:fs';
+
 import { createHash } from 'node:crypto';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { withValueTransformFixture } from '@vybestack/llxprt-code-core/services/history/transform-value-test-helpers.js';
@@ -61,18 +62,11 @@ async function compare(size: number): Promise<number> {
           false,
           expectedResponse,
         );
-        expect(actual).toBe(expected);
-        expect(JSON.stringify(response)).toBe(JSON.stringify(expectedResponse));
-        expect(
-          response
-            .flatMap((row) => row.blocks)
-            .filter((block) => block.type === 'text').length,
-        ).toBeGreaterThan(0);
         const output = process.env.TRUNCATION_HIGHDENSITY_BODY_OUTPUT;
         if (output !== undefined)
-          appendFileSync(
+          await appendBodyEvidence(
             output,
-            JSON.stringify({
+            {
               size,
               candidateRows: oracle.length,
               provider,
@@ -80,8 +74,18 @@ async function compare(size: number): Promise<number> {
               bodyBytes: Buffer.byteLength(actual),
               sha256: createHash('sha256').update(actual).digest('hex'),
               response: JSON.stringify(response),
-            }) + '\n',
+            },
+            actual,
+            expected,
           );
+        expect(actual).toBe(expected);
+        expect(JSON.stringify(response)).toBe(JSON.stringify(expectedResponse));
+        expect(
+          response
+            .flatMap((row) => row.blocks)
+            .filter((block) => block.type === 'text').length,
+        ).toBeGreaterThan(0);
+
         count++;
       }
     }

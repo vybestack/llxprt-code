@@ -24,7 +24,7 @@ import {
   parsedObject,
   request,
   textContent,
-} from './openAIResponsesWebSocketTransport.test-helpers.js';
+} from './__tests__/openAIResponsesWebSocketTransport.test-helpers.js';
 
 function concurrentCompletionScript(
   firstRequestSent: () => void,

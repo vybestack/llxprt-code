@@ -6,7 +6,7 @@
 
 import { act, useCallback, useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
-import { renderHook, waitFor } from '../../test-utils/render.js';
+import { renderHook, waitFor } from '../../__tests__/render.js';
 import { CommandKind, type SlashCommand } from '../commands/types.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { CoreEvent, coreEvents } from '@vybestack/llxprt-code-core';

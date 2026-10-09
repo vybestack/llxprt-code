@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { RequestArtifactDescriptor } from '../request-artifact.js';
+
 import type {
   ProviderCapabilities,
   ProviderContext,
@@ -18,7 +20,7 @@ export class ConversationRequestEvent {
   conversation_id: string;
   turn_number: number;
   prompt_id: string;
-  redacted_messages: unknown[];
+  request_artifact: RequestArtifactDescriptor;
   redacted_tools?: Array<{
     functionDeclarations: Array<{
       name: string;
@@ -34,7 +36,7 @@ export class ConversationRequestEvent {
     conversation_id: string,
     turn_number: number,
     prompt_id: string,
-    redacted_messages: unknown[],
+    request_artifact: RequestArtifactDescriptor,
     redacted_tools?: Array<{
       functionDeclarations: Array<{
         name: string;
@@ -51,7 +53,7 @@ export class ConversationRequestEvent {
     this.conversation_id = conversation_id;
     this.turn_number = turn_number;
     this.prompt_id = prompt_id;
-    this.redacted_messages = redacted_messages;
+    this.request_artifact = request_artifact;
     this.redacted_tools = redacted_tools;
     this.tool_format = tool_format;
     this.provider_switched = provider_switched;

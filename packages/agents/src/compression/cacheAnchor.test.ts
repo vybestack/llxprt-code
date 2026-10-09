@@ -20,8 +20,8 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { observeHistorySynchronouslyForTest as testHistory } from '../../../core/src/test-utils/synchronous-history-test-observation.js';
-import { collectRowsForAssertions } from '../../../core/src/test-utils/collect-rows-for-assertions.js';
+import { observeHistorySynchronouslyForTest as testHistory } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
+import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { applyCompressionWithAnchor } from './cacheAnchor.js';

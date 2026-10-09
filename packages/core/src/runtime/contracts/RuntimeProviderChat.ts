@@ -16,6 +16,7 @@
  * @requirement:REQ-SHIM-001
  */
 
+import type { ToolDeclaration } from '../../llm-types/toolDeclaration.js';
 import type { Config } from '../../config/config.js';
 import type { IContent } from '../../services/history/IContent.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -34,13 +35,7 @@ export interface RuntimeProviderTool {
   };
 }
 
-export type RuntimeProviderToolset = Array<{
-  functionDeclarations: Array<{
-    name: string;
-    description?: string;
-    parametersJsonSchema?: unknown;
-  }>;
-}>;
+export type RuntimeProviderToolset = ToolDeclaration[];
 
 export interface RuntimeAuthTokenProvider {
   provide: () => Promise<string | undefined> | string | undefined;

@@ -8,9 +8,9 @@ import { automock } from '../../../test-utils/src/automock.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import * as SdkClientStdioLib from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { beforeEach, describe, expect, it, vi, type Mock } from 'bun:test';
+import type { OAuthClientMetadata } from '@modelcontextprotocol/sdk/shared/auth.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { AuthProviderType } from '@vybestack/llxprt-code-auth/mcp-auth-provider-type.js';
-import { GoogleCredentialProvider } from '../auth/google-auth-provider.js';
 
 import {
   createTransport,
@@ -22,6 +22,13 @@ import {
   getTransportHeaders,
 } from './mcpClientTestHelpers.js';
 import { registerMcpHostServices } from '../host/hostServices.js';
+import type { McpAuthProvider } from '../auth/auth-provider.js';
+import type { MCPServerConfig } from '../config/mcpServerConfig.js';
+import {
+  registerMcpAuthFactories,
+  resetRegisteredMcpAuthFactories,
+} from '../auth/mcp-auth-factory.js';
+import { MCPOAuthProvider } from '../auth/oauth-provider.js';
 
 // Exercises the real host seam instead of mocking a module (#3305).
 const mockEmitFeedback = vi.fn();
@@ -55,16 +62,38 @@ void vi.mock('../auth/oauth-token-storage.js', () =>
 );
 void vi.mock('../auth/oauth-utils.js', () => automock(realOauthUtilsModule));
 
-const { MockGoogleAuth } = (() => {
-  class MockGoogleAuth {
-    constructor(..._args: unknown[]) {}
+const CUSTOM_AUTH_TYPE = 'custom_auth';
+
+const FAKE_CLIENT_METADATA: OAuthClientMetadata = {
+  client_name: 'test (fake)',
+  redirect_uris: [],
+  grant_types: [],
+  response_types: [],
+  token_endpoint_auth_method: 'none',
+};
+
+/** Local auth provider double dispatched through the factory registry seam. */
+class FakeAuthProvider implements McpAuthProvider {
+  readonly redirectUrl = '';
+  readonly clientMetadata = FAKE_CLIENT_METADATA;
+  constructor(readonly config?: MCPServerConfig) {}
+  clientInformation() {
+    return undefined;
   }
-  MockGoogleAuth.prototype.getClient = vi.fn();
-  return { MockGoogleAuth };
-})();
-void vi.mock('google-auth-library', () => ({
-  GoogleAuth: MockGoogleAuth,
-}));
+  saveClientInformation() {}
+  async tokens() {
+    return undefined;
+  }
+  saveTokens() {}
+  redirectToAuthorization() {}
+  saveCodeVerifier() {}
+  codeVerifier() {
+    return '';
+  }
+  async getRequestHeaders() {
+    return { 'X-Fake-Project': 'provider-project' };
+  }
+}
 
 describe('mcp-client', () => {
   describe('createTransport', () => {
@@ -182,85 +211,73 @@ describe('mcp-client', () => {
       });
     });
 
-    describe('useGoogleCredentialProvider', () => {
+    describe('custom authProviderType dispatch', () => {
       beforeEach(() => {
-        // Mock GoogleAuth client
-        const mockClient = {
-          getAccessToken: vi.fn().mockResolvedValue({ token: 'test-token' }),
-          quotaProjectId: 'myproject',
-        };
-
-        (
-          MockGoogleAuth.prototype.getClient as Mock<
-            typeof MockGoogleAuth.prototype.getClient
-          >
-        ).mockResolvedValue(mockClient);
+        resetRegisteredMcpAuthFactories();
+      });
+      afterEach(() => {
+        resetRegisteredMcpAuthFactories();
       });
 
-      it('should use GoogleCredentialProvider when specified', async () => {
+      it('uses the registered factory auth provider when one matches', async () => {
+        registerMcpAuthFactories([
+          {
+            authProviderType: CUSTOM_AUTH_TYPE,
+            createAuthProvider: (config) => new FakeAuthProvider(config),
+          },
+        ]);
+
         const transport = await createTransport(
           'test-server',
           {
-            httpUrl: 'http://test.googleapis.com',
-            authProviderType: AuthProviderType.GOOGLE_CREDENTIALS,
-            oauth: {
-              scopes: ['scope1'],
-            },
+            httpUrl: 'http://test-server',
+            authProviderType: CUSTOM_AUTH_TYPE,
           },
           false,
         );
 
         expect(transport).toBeInstanceOf(StreamableHTTPClientTransport);
         const authProvider = getTransportAuthProvider(transport);
-        expect(authProvider).toBeInstanceOf(GoogleCredentialProvider);
+        expect(authProvider).toBeInstanceOf(FakeAuthProvider);
       });
 
-      it('should use headers from GoogleCredentialProvider', async () => {
-        const mockGetRequestHeaders = vi.fn().mockResolvedValue({
-          'X-Goog-User-Project': 'provider-project',
-        });
-        vi.spyOn(
-          GoogleCredentialProvider.prototype,
-          'getRequestHeaders',
-        ).mockImplementation(mockGetRequestHeaders);
+      it('uses headers from the factory auth provider', async () => {
+        registerMcpAuthFactories([
+          {
+            authProviderType: CUSTOM_AUTH_TYPE,
+            createAuthProvider: (config) => new FakeAuthProvider(config),
+          },
+        ]);
 
         const transport = await createTransport(
           'test-server',
           {
-            httpUrl: 'http://test.googleapis.com',
-            authProviderType: AuthProviderType.GOOGLE_CREDENTIALS,
-            oauth: {
-              scopes: ['scope1'],
-            },
+            httpUrl: 'http://test-server',
+            authProviderType: CUSTOM_AUTH_TYPE,
           },
           false,
         );
 
         expect(transport).toBeInstanceOf(StreamableHTTPClientTransport);
-        expect(mockGetRequestHeaders).toHaveBeenCalled();
         const headers = getTransportHeaders(transport);
-        expect(headers['X-Goog-User-Project']).toBe('provider-project');
+        expect(headers['X-Fake-Project']).toBe('provider-project');
       });
 
-      it('should prioritize provider headers over config headers', async () => {
-        const mockGetRequestHeaders = vi.fn().mockResolvedValue({
-          'X-Goog-User-Project': 'provider-project',
-        });
-        vi.spyOn(
-          GoogleCredentialProvider.prototype,
-          'getRequestHeaders',
-        ).mockImplementation(mockGetRequestHeaders);
+      it('prioritizes factory provider headers over config headers', async () => {
+        registerMcpAuthFactories([
+          {
+            authProviderType: CUSTOM_AUTH_TYPE,
+            createAuthProvider: (config) => new FakeAuthProvider(config),
+          },
+        ]);
 
         const transport = await createTransport(
           'test-server',
           {
-            httpUrl: 'http://test.googleapis.com',
-            authProviderType: AuthProviderType.GOOGLE_CREDENTIALS,
-            oauth: {
-              scopes: ['scope1'],
-            },
+            httpUrl: 'http://test-server',
+            authProviderType: CUSTOM_AUTH_TYPE,
             headers: {
-              'X-Goog-User-Project': 'config-project',
+              'X-Fake-Project': 'config-project',
             },
           },
           false,
@@ -268,29 +285,195 @@ describe('mcp-client', () => {
 
         expect(transport).toBeInstanceOf(StreamableHTTPClientTransport);
         const headers = getTransportHeaders(transport);
-        expect(headers['X-Goog-User-Project']).toBe('provider-project');
+        expect(headers['X-Fake-Project']).toBe('provider-project');
       });
 
-      it('should use GoogleCredentialProvider with SSE transport', async () => {
+      it('uses the factory auth provider with SSE transport', async () => {
+        registerMcpAuthFactories([
+          {
+            authProviderType: CUSTOM_AUTH_TYPE,
+            createAuthProvider: (config) => new FakeAuthProvider(config),
+          },
+        ]);
+
         const transport = await createTransport(
           'test-server',
           {
-            url: 'http://test.googleapis.com',
+            url: 'http://test-server',
             type: 'sse',
-            authProviderType: AuthProviderType.GOOGLE_CREDENTIALS,
-            oauth: {
-              scopes: ['scope1'],
-            },
+            authProviderType: CUSTOM_AUTH_TYPE,
           },
           false,
         );
 
         expect(transport).toBeInstanceOf(SSEClientTransport);
         const authProvider = getTransportAuthProvider(transport);
-        expect(authProvider).toBeInstanceOf(GoogleCredentialProvider);
+        expect(authProvider).toBeInstanceOf(FakeAuthProvider);
       });
 
-      it('should throw an error if no URL is provided with GoogleCredentialProvider', async () => {
+      it('throws a terminal error naming the server and type for an unknown custom type', async () => {
+        await expect(
+          createTransport(
+            'test-server',
+            {
+              httpUrl: 'http://test-server',
+              authProviderType: CUSTOM_AUTH_TYPE,
+            },
+            false,
+          ),
+        ).rejects.toThrow(/test-server.*custom_auth.*no auth provider/i);
+      });
+
+      it('does not fall back to standard OAuth for an unknown custom type', async () => {
+        // oauth.enabled would previously route to the standard OAuth path;
+        // the unknown custom type must remain terminal either way.
+        const error = await createTransport(
+          'test-server',
+          {
+            httpUrl: 'http://test-server',
+            authProviderType: CUSTOM_AUTH_TYPE,
+            oauth: { enabled: true } as MCPServerConfig['oauth'],
+          },
+          false,
+        ).then(
+          () => undefined,
+          (e: unknown) => e,
+        );
+
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toMatch(
+          /test-server.*custom_auth.*no auth provider/i,
+        );
+      });
+
+      it('throws a terminal error naming the google plugin for google_credentials without a factory', async () => {
+        await expect(
+          createTransport(
+            'test-server',
+            {
+              httpUrl: 'http://test.googleapis.com',
+              authProviderType: AuthProviderType.GOOGLE_CREDENTIALS,
+              oauth: {
+                scopes: ['scope1'],
+              },
+            },
+            false,
+          ),
+        ).rejects.toThrow(/google-mcp-auth/i);
+      });
+
+      it('throws a terminal error naming the google plugin for service_account_impersonation without a factory', async () => {
+        await expect(
+          createTransport(
+            'test-server',
+            {
+              url: 'http://test.googleapis.com',
+              authProviderType: AuthProviderType.SERVICE_ACCOUNT_IMPERSONATION,
+              targetAudience: 'audience',
+              targetServiceAccount: 'sa@project.iam.gserviceaccount.com',
+            },
+            false,
+          ),
+        ).rejects.toThrow(/google-mcp-auth/i);
+      });
+
+      it('propagates a factory failure as a terminal error carrying the cause', async () => {
+        const factoryError = new Error('factory exploded');
+        registerMcpAuthFactories([
+          {
+            authProviderType: CUSTOM_AUTH_TYPE,
+            createAuthProvider: () => {
+              throw factoryError;
+            },
+          },
+        ]);
+
+        const error = await createTransport(
+          'test-server',
+          {
+            httpUrl: 'http://test-server',
+            authProviderType: CUSTOM_AUTH_TYPE,
+          },
+          false,
+        ).then(
+          () => undefined,
+          (e: unknown) => e,
+        );
+
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toMatch(/test-server.*custom_auth/i);
+        expect((error as Error).cause).toBe(factoryError);
+      });
+
+      it('throws a terminal error when the factory returns undefined and never resolves OAuth', async () => {
+        // A malformed JS plugin can pass manifest validation (the factory is
+        // a function) yet return nothing; that must not be read as "no custom
+        // authentication selected" and fall through to stored OAuth tokens.
+        const getValidToken = vi
+          .spyOn(MCPOAuthProvider, 'getValidToken')
+          .mockResolvedValue('oauth-token-must-not-resolve');
+        registerMcpAuthFactories([
+          {
+            authProviderType: CUSTOM_AUTH_TYPE,
+            createAuthProvider: () => undefined as unknown as McpAuthProvider,
+          },
+        ]);
+
+        const error = await createTransport(
+          'test-server',
+          {
+            httpUrl: 'http://test-server',
+            authProviderType: CUSTOM_AUTH_TYPE,
+            oauth: { enabled: true } as MCPServerConfig['oauth'],
+          },
+          false,
+        ).then(
+          () => undefined,
+          (e: unknown) => e,
+        );
+
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toMatch(
+          /test-server.*custom_auth.*runtime plugin.*undefined/i,
+        );
+        expect(getValidToken).not.toHaveBeenCalled();
+        getValidToken.mockRestore();
+      });
+
+      it('throws a terminal error when the factory returns a non-object', async () => {
+        const getValidToken = vi
+          .spyOn(MCPOAuthProvider, 'getValidToken')
+          .mockResolvedValue('oauth-token-must-not-resolve');
+        registerMcpAuthFactories([
+          {
+            authProviderType: CUSTOM_AUTH_TYPE,
+            createAuthProvider: () =>
+              'not-a-provider' as unknown as McpAuthProvider,
+          },
+        ]);
+
+        const error = await createTransport(
+          'test-server',
+          {
+            httpUrl: 'http://test-server',
+            authProviderType: CUSTOM_AUTH_TYPE,
+            oauth: { enabled: true } as MCPServerConfig['oauth'],
+          },
+          false,
+        ).then(
+          () => undefined,
+          (e: unknown) => e,
+        );
+
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toMatch(
+          /test-server.*custom_auth.*runtime plugin.*string/i,
+        );
+        expect(getValidToken).not.toHaveBeenCalled();
+        getValidToken.mockRestore();
+      });
+
+      it('throws the Google Credentials missing-URL error without a factory', async () => {
         await expect(
           createTransport(
             'test-server',
@@ -305,6 +488,32 @@ describe('mcp-client', () => {
         ).rejects.toThrow(
           'URL must be provided in the config for Google Credentials provider',
         );
+      });
+
+      it('throws the ServiceAccountImpersonation missing-URL error without a factory', async () => {
+        await expect(
+          createTransport(
+            'test-server',
+            {
+              authProviderType: AuthProviderType.SERVICE_ACCOUNT_IMPERSONATION,
+            },
+            false,
+          ),
+        ).rejects.toThrow(
+          'No URL configured for ServiceAccountImpersonation MCP Server',
+        );
+      });
+
+      it('throws a generic missing-URL error for other custom types', async () => {
+        await expect(
+          createTransport(
+            'test-server',
+            {
+              authProviderType: CUSTOM_AUTH_TYPE,
+            },
+            false,
+          ),
+        ).rejects.toThrow(/URL must be provided.*custom_auth/);
       });
     });
   });

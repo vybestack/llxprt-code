@@ -13,7 +13,7 @@ import {
   buildContext,
   createFakeProvider,
   generateHistory,
-} from './MiddleOutStrategy-test-helpers.js';
+} from './__tests__/MiddleOutStrategy-test-helpers.js';
 
 describe('One-shot finish diagnostics', () => {
   it('retains the normalized and native reasons when thinking exhausts the output budget', async () => {

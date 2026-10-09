@@ -1,4 +1,4 @@
-import { forbidHistoryMaterializationForTest } from '../../../../core/src/test-utils/history-materialization-test-guard.js';
+import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -6,7 +6,7 @@ import {
   invalidateResponsesStatefulChain,
   type IContent,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { withSuffixFixture } from '../../../../core/src/services/history/history-suffix-test-helpers.js';
+import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { buildCuratedHistory } from '@vybestack/llxprt-code-core/services/history/historyCuration.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { buildCompressionMetadata } from '../compressionContextBuilder.js';

@@ -11,7 +11,6 @@ export * from './safety/index.js';
 export * from './config/config.js';
 export * from './config/models.js';
 export * from './config/subagentManager.js';
-export * from './config/schedulerSingleton.js';
 export * from './policy/index.js';
 export { PolicyEngine } from './policy/policy-engine.js';
 export {
@@ -170,7 +169,6 @@ export {
 export * from './utils/browser-profile-discovery.js';
 export * from './utils/errorParsing.js';
 export * from './utils/ignorePatterns.js';
-export * from './utils/partUtils.js';
 export * from './utils/ide-trust.js';
 export * from './utils/thoughtUtils.js';
 export * from './utils/events.js';
@@ -602,13 +600,8 @@ export type {
 } from '@vybestack/llxprt-code-tools';
 export { ToolFormatter } from '@vybestack/llxprt-code-tools';
 
-export {
-  createProviderRuntimeContext,
-  getActiveProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-  clearActiveProviderRuntimeContext,
-  peekActiveProviderRuntimeContext,
-} from './runtime/providerRuntimeContext.js';
+export { createProviderRuntimeContext } from './runtime/providerRuntimeContext.js';
+export { createRuntimeSettingsService } from './runtime/settingsRuntimeAdapter.js';
 export type {
   ProviderRuntimeContext,
   ProviderRuntimeContextInit,
@@ -653,14 +646,6 @@ export type {
   AgentRuntimeTelemetryAdapter,
 } from './runtime/AgentRuntimeContext.js';
 export { createAgentRuntimeContext } from './runtime/createAgentRuntimeContext.js';
-
-// Export settings runtime adapter helpers so CLI code can resolve/activate the
-// ambient settings runtime context via the public barrel rather than deep
-// imports (#2378).
-export {
-  resolveRuntimeSettingsService,
-  activateSettingsRuntimeContext,
-} from './runtime/settingsRuntimeAdapter.js';
 
 // Export profile contracts and ports
 export * from './profiles/index.js';

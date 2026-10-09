@@ -5,7 +5,7 @@ import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.
 import {
   withSuffixFixture,
   suffixRow,
-} from '../../../../core/src/services/history/history-suffix-test-helpers.js';
+} from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import {
   AttemptHistory,
   attemptHandler,

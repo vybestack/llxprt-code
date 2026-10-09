@@ -23,14 +23,13 @@ import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import type OpenAI from 'openai';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { OpenAIProvider } from '../OpenAIProvider.js';
-import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import { resetSettingsService } from '@vybestack/llxprt-code-settings';
-import { streamCallOptions } from '../../test-utils/streamCallOptions.js';
+import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import { streamCallOptions } from '../../__tests__/streamCallOptions.js';
 import {
   ATTEMPT_LIFECYCLE_KEY,
   type AttemptLifecycleObserver,
 } from '../../logging/attemptLifecycle.js';
-import { createOpenAIRawPostTestAdapter } from '../../test-utils/rawPostTestAdapters.js';
+import { createOpenAIRawPostTestAdapter } from '../../__tests__/rawPostTestAdapters.js';
 
 const mockChatCompletionsCreate = vi.fn();
 
@@ -176,153 +175,187 @@ function collectText(chunks: readonly IContent[]): string {
   return out;
 }
 
-describe('issue #3473: continuation raw-delta timing through the lifecycle notifier', () => {
-  let provider: OpenAIProvider;
-  let settingsService: ReturnType<
-    typeof initializeTestProviderRuntime
-  >['settingsService'];
+registerContinuationTimingCase1();
+registerContinuationTimingCase2();
+registerContinuationTimingCase3();
+registerContinuationTimingCase4();
+registerContinuationTimingCase5();
 
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockChatCompletionsCreate.mockReset();
-    resetSettingsService();
+function beforeEachContinuationTiming1(): void {
+  vi.clearAllMocks();
+  mockChatCompletionsCreate.mockReset();
 
-    const runtime = initializeTestProviderRuntime({
-      runtimeId: `openai-continuation-timing-${Math.random().toString(36).slice(2, 10)}`,
-      metadata: { suite: 'OpenAIProvider.continuationTiming.test' },
-      configOverrides: {
-        getProvider: () => 'openai',
-        getModel: () => 'gpt-4o',
-        getEphemeralSettings: () => ({ model: 'gpt-4o' }),
-      },
+  const runtime = initializeTestProviderRuntime({
+    runtimeId: `openai-continuation-timing-${Math.random().toString(36).slice(2, 10)}`,
+    metadata: { suite: 'OpenAIProvider.continuationTiming.test' },
+    configOverrides: {
+      getProvider: () => 'openai',
+      getModel: () => 'gpt-4o',
+      getEphemeralSettings: () => ({ model: 'gpt-4o' }),
+    },
+  });
+
+  settingsService = runtime.settingsService;
+  provider = new OpenAIProvider('test-api-key', 'https://api.openai.com/v1');
+  provider.setRuntimeSettingsService(settingsService);
+  provider.setConfig?.(runtime.config);
+
+  settingsService.set('activeProvider', provider.name);
+  settingsService.set('model', 'gpt-4o');
+  settingsService.setProviderSetting(provider.name, 'model', 'gpt-4o');
+}
+
+let provider: OpenAIProvider;
+
+let settingsService: ReturnType<
+  typeof initializeTestProviderRuntime
+>['settingsService'];
+
+async function runWithContinuation(
+  observer: AttemptLifecycleObserver,
+  continuationChunks: readonly OpenAI.Chat.Completions.ChatCompletionChunk[],
+): Promise<IContent[]> {
+  mockChatCompletionsCreate
+    .mockReturnValueOnce(primaryToolCallStream())
+    .mockReturnValueOnce(
+      streamOf([...continuationChunks, continuationFinishChunk()]),
+    );
+
+  const results: IContent[] = [];
+  for await (const chunk of provider.generateChatCompletion(
+    streamCallOptions({
+      providerName: provider.name,
+      settings: settingsService,
+      contents: [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'call the tool' }],
+        },
+      ],
+      metadata: { [ATTEMPT_LIFECYCLE_KEY]: observer },
+    }),
+  )) {
+    results.push(chunk);
+  }
+  return results;
+}
+
+function expectToolCallBlocks(results: readonly IContent[]): void {
+  const toolCallBlocks = results
+    .flatMap((chunk) => chunk.blocks)
+    .filter((block) => block.type === 'tool_call');
+  expect(toolCallBlocks).toHaveLength(1);
+}
+
+function registerContinuationTimingCase1(): void {
+  describe('issue #3473: continuation raw-delta timing through the lifecycle notifier [1]', () => {
+    beforeEach(beforeEachContinuationTiming1);
+
+    it('CT-1: content-only continuation deltas fire the notifier exactly once per delta', async () => {
+      const { observer, rawDeltaCount } = makeCountingObserver();
+
+      const results = await runWithContinuation(observer, [
+        makeChunk({ content: 'Hello ' }, null),
+        makeChunk({ content: 'world' }, null),
+      ]);
+
+      // 1 primary tool-call fragment + 2 continuation content deltas.
+      expect(rawDeltaCount()).toBe(3);
+      expect(collectText(results)).toBe('Hello world');
+      expectToolCallBlocks(results);
     });
-
-    settingsService = runtime.settingsService;
-    provider = new OpenAIProvider('test-api-key', 'https://api.openai.com/v1');
-    provider.setRuntimeSettingsService(settingsService);
-    provider.setConfig?.(runtime.config);
-
-    settingsService.set('activeProvider', provider.name);
-    settingsService.set('model', 'gpt-4o');
-    settingsService.setProviderSetting(provider.name, 'model', 'gpt-4o');
   });
+}
 
-  async function runWithContinuation(
-    observer: AttemptLifecycleObserver,
-    continuationChunks: readonly OpenAI.Chat.Completions.ChatCompletionChunk[],
-  ): Promise<IContent[]> {
-    mockChatCompletionsCreate
-      .mockReturnValueOnce(primaryToolCallStream())
-      .mockReturnValueOnce(
-        streamOf([...continuationChunks, continuationFinishChunk()]),
-      );
+function registerContinuationTimingCase2(): void {
+  describe('issue #3473: continuation raw-delta timing through the lifecycle notifier [2]', () => {
+    beforeEach(beforeEachContinuationTiming1);
 
-    const results: IContent[] = [];
-    for await (const chunk of provider.generateChatCompletion(
-      streamCallOptions({
-        providerName: provider.name,
-        settings: settingsService,
-        contents: [
-          {
-            speaker: 'human',
-            blocks: [{ type: 'text', text: 'call the tool' }],
-          },
-        ],
-        metadata: { [ATTEMPT_LIFECYCLE_KEY]: observer },
-      }),
-    )) {
-      results.push(chunk);
-    }
-    return results;
-  }
+    it('CT-2: reasoning-only continuation deltas fire the notifier exactly once per delta', async () => {
+      const { observer, rawDeltaCount } = makeCountingObserver();
 
-  function expectToolCallBlocks(results: readonly IContent[]): void {
-    const toolCallBlocks = results
-      .flatMap((chunk) => chunk.blocks)
-      .filter((block) => block.type === 'tool_call');
-    expect(toolCallBlocks).toHaveLength(1);
-  }
+      const results = await runWithContinuation(observer, [
+        makeChunk({ reasoning_content: 'step 1' }, null),
+        makeChunk({ reasoning_content: ' step 2' }, null),
+        makeChunk({ reasoning_content: ' step 3' }, null),
+      ]);
 
-  it('CT-1: content-only continuation deltas fire the notifier exactly once per delta', async () => {
-    const { observer, rawDeltaCount } = makeCountingObserver();
-
-    const results = await runWithContinuation(observer, [
-      makeChunk({ content: 'Hello ' }, null),
-      makeChunk({ content: 'world' }, null),
-    ]);
-
-    // 1 primary tool-call fragment + 2 continuation content deltas.
-    expect(rawDeltaCount()).toBe(3);
-    expect(collectText(results)).toBe('Hello world');
-    expectToolCallBlocks(results);
+      // 1 primary fragment + 3 reasoning deltas.
+      expect(rawDeltaCount()).toBe(4);
+      // Visible output unchanged: reasoning deltas yield nothing.
+      expect(collectText(results)).toBe('');
+      expectToolCallBlocks(results);
+    });
   });
+}
 
-  it('CT-2: reasoning-only continuation deltas fire the notifier exactly once per delta', async () => {
-    const { observer, rawDeltaCount } = makeCountingObserver();
+function registerContinuationTimingCase3(): void {
+  describe('issue #3473: continuation raw-delta timing through the lifecycle notifier [3]', () => {
+    beforeEach(beforeEachContinuationTiming1);
 
-    const results = await runWithContinuation(observer, [
-      makeChunk({ reasoning_content: 'step 1' }, null),
-      makeChunk({ reasoning_content: ' step 2' }, null),
-      makeChunk({ reasoning_content: ' step 3' }, null),
-    ]);
+    it('CT-3: tool-call-only continuation deltas fire the notifier exactly once per delta', async () => {
+      const { observer, rawDeltaCount } = makeCountingObserver();
 
-    // 1 primary fragment + 3 reasoning deltas.
-    expect(rawDeltaCount()).toBe(4);
-    // Visible output unchanged: reasoning deltas yield nothing.
-    expect(collectText(results)).toBe('');
-    expectToolCallBlocks(results);
+      const results = await runWithContinuation(observer, [
+        makeChunk(makeToolFragmentDelta(), null),
+        makeChunk(makeToolFragmentDelta(), null),
+        makeChunk(makeToolFragmentDelta(), null),
+      ]);
+
+      // 1 primary fragment + 3 continuation fragments.
+      expect(rawDeltaCount()).toBe(4);
+      // Visible output unchanged: continuation fragments yield nothing and
+      // the primary's single tool call still surfaces exactly once.
+      expect(collectText(results)).toBe('');
+      expectToolCallBlocks(results);
+    });
   });
+}
 
-  it('CT-3: tool-call-only continuation deltas fire the notifier exactly once per delta', async () => {
-    const { observer, rawDeltaCount } = makeCountingObserver();
+function registerContinuationTimingCase4(): void {
+  describe('issue #3473: continuation raw-delta timing through the lifecycle notifier [4]', () => {
+    beforeEach(beforeEachContinuationTiming1);
 
-    const results = await runWithContinuation(observer, [
-      makeChunk(makeToolFragmentDelta(), null),
-      makeChunk(makeToolFragmentDelta(), null),
-      makeChunk(makeToolFragmentDelta(), null),
-    ]);
+    it('CT-4: mixed continuation deltas fire exactly once per raw delta with no double-stamping', async () => {
+      const { observer, rawDeltaCount } = makeCountingObserver();
 
-    // 1 primary fragment + 3 continuation fragments.
-    expect(rawDeltaCount()).toBe(4);
-    // Visible output unchanged: continuation fragments yield nothing and
-    // the primary's single tool call still surfaces exactly once.
-    expect(collectText(results)).toBe('');
-    expectToolCallBlocks(results);
+      const results = await runWithContinuation(observer, [
+        makeChunk({ content: 'Answer.', reasoning_content: 'why' }, null),
+        makeChunk({ reasoning_content: ' more' }, null),
+        makeChunk(makeToolFragmentDelta(), null),
+      ]);
+
+      // 1 primary fragment + 3 continuation deltas. The first continuation
+      // delta carries content AND reasoning and must still count once, so a
+      // double-stamp would surface as 5.
+      expect(rawDeltaCount()).toBe(4);
+      expect(collectText(results)).toBe('Answer.');
+      expectToolCallBlocks(results);
+    });
   });
+}
 
-  it('CT-4: mixed continuation deltas fire exactly once per raw delta with no double-stamping', async () => {
-    const { observer, rawDeltaCount } = makeCountingObserver();
+function registerContinuationTimingCase5(): void {
+  describe('issue #3473: continuation raw-delta timing through the lifecycle notifier [5]', () => {
+    beforeEach(beforeEachContinuationTiming1);
 
-    const results = await runWithContinuation(observer, [
-      makeChunk({ content: 'Answer.', reasoning_content: 'why' }, null),
-      makeChunk({ reasoning_content: ' more' }, null),
-      makeChunk(makeToolFragmentDelta(), null),
-    ]);
+    it('CT-5: custom reasoning.fieldName continuation deltas fire the notifier exactly once per delta', async () => {
+      settingsService.set('reasoning.fieldName', 'custom_thoughts');
+      const { observer, rawDeltaCount } = makeCountingObserver();
 
-    // 1 primary fragment + 3 continuation deltas. The first continuation
-    // delta carries content AND reasoning and must still count once, so a
-    // double-stamp would surface as 5.
-    expect(rawDeltaCount()).toBe(4);
-    expect(collectText(results)).toBe('Answer.');
-    expectToolCallBlocks(results);
+      const results = await runWithContinuation(observer, [
+        makeChunk({ custom_thoughts: 'plan the call' }, null),
+        makeChunk({ custom_thoughts: ' then answer' }, null),
+      ]);
+
+      // 1 primary fragment + 2 custom-field reasoning deltas. When the
+      // configured field name is not propagated into continuation
+      // classification, reasoning-only deltas look non-token-bearing and the
+      // count drops to 1, freezing last_token_ms at the primary fragment.
+      expect(rawDeltaCount()).toBe(3);
+      // Visible output unchanged: reasoning deltas yield nothing.
+      expect(collectText(results)).toBe('');
+      expectToolCallBlocks(results);
+    });
   });
-
-  it('CT-5: custom reasoning.fieldName continuation deltas fire the notifier exactly once per delta', async () => {
-    settingsService.set('reasoning.fieldName', 'custom_thoughts');
-    const { observer, rawDeltaCount } = makeCountingObserver();
-
-    const results = await runWithContinuation(observer, [
-      makeChunk({ custom_thoughts: 'plan the call' }, null),
-      makeChunk({ custom_thoughts: ' then answer' }, null),
-    ]);
-
-    // 1 primary fragment + 2 custom-field reasoning deltas. When the
-    // configured field name is not propagated into continuation
-    // classification, reasoning-only deltas look non-token-bearing and the
-    // count drops to 1, freezing last_token_ms at the primary fragment.
-    expect(rawDeltaCount()).toBe(3);
-    // Visible output unchanged: reasoning deltas yield nothing.
-    expect(collectText(results)).toBe('');
-    expectToolCallBlocks(results);
-  });
-});
+}

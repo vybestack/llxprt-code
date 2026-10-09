@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { chatCommand } from './chatCommand.js';
-import { withChatMutationFixture } from './chat-mutation-test-fixture.js';
+import { withChatMutationFixture } from './chat-mutation-test-helpers.js';
 
 for (const name of ['clear', 'restore']) {
   describe(`chat ${name} cache anchor`, () => {

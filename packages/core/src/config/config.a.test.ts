@@ -10,16 +10,14 @@ import { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { Config } from './config.js';
 import { GitService } from '../services/gitService.js';
 import { ResourceRegistry } from '../resources/resource-registry.js';
-import { getSettingsService } from '@vybestack/llxprt-code-settings';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import { initializeTestConfig } from '../test-utils/config.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { initializeTestConfig } from '../__tests__/config-test-helpers.js';
 import {
   buildFsMockBody,
   buildToolsMockBody,
   buildContentGeneratorMockBody,
   buildTelemetryMockBody,
   buildGitServiceMockBody,
-  buildSettingsMockBody,
   buildIdeIntegrationMockBody,
   buildMemoryDiscoveryMockBody,
   buildEventsMockBody,
@@ -27,7 +25,7 @@ import {
   createBaseParams,
   resetAgentClientMock,
   type HoistedConfigMocks,
-} from './configTestHarness.js';
+} from './__tests__/configTestHarness.js';
 
 // Hoisted mocks referenced by mock factories below (vitest hoist-safe).
 const hoistedConfigMocks = {
@@ -73,8 +71,6 @@ void vi.mock('../telemetry/index.js', () => buildTelemetryMockBody());
 
 void vi.mock('../services/gitService.js', () => buildGitServiceMockBody());
 
-void vi.mock('@vybestack/llxprt-code-settings', () => buildSettingsMockBody());
-
 const __actual4 = {
   ...(await import('@vybestack/llxprt-code-ide-integration')),
 };
@@ -94,9 +90,7 @@ void vi.mock('../utils/events.js', () =>
 void vi.mock('../utils/fetch.js', () => buildFetchMockBody(hoistedConfigMocks));
 
 describe('Server Config (config.ts)', () => {
-  const baseParams = createBaseParams(
-    getSettingsService() as unknown as SettingsService,
-  );
+  const baseParams = createBaseParams(new SettingsService());
 
   beforeEach(() => {
     resetAgentClientMock();

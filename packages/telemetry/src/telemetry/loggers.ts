@@ -4,11 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  logs,
-  type LogRecord,
-  type LogAttributes,
-} from '@opentelemetry/api-logs';
+import type { LogRecord, LogAttributes } from '@opentelemetry/api-logs';
 import { SemanticAttributes } from '@opentelemetry/semantic-conventions';
 import type {
   TelemetryConfig,
@@ -23,7 +19,6 @@ import {
   EVENT_TOOL_CALL,
   EVENT_USER_PROMPT,
   EVENT_NEXT_SPEAKER_CHECK,
-  SERVICE_NAME,
   EVENT_SLASH_COMMAND,
   EVENT_TOOL_OUTPUT_TRUNCATED,
   EVENT_FILE_OPERATION,
@@ -70,8 +65,20 @@ import {
   recordFileOperationMetric,
   recordModelRoutingMetrics,
 } from './metrics.js';
-import { isTelemetrySdkInitialized } from './sdk.js';
-import { uiTelemetryService, type UiEvent } from './uiTelemetry.js';
+import {
+  isTelemetrySdkInitialized,
+  assertRequestArtifactExporter,
+  flushRequestArtifactTelemetry,
+} from './sdk.js';
+import { artifactAttributes, emitRequestArtifact } from './request-artifact.js';
+import { logTelemetryEvent } from './telemetry-event.js';
+import type { UiEvent } from './uiTelemetry.js';
+import {
+  aggregateLocally,
+  emitLogRecord,
+  recordSafely,
+} from './log-record-emission.js';
+export { acknowledgeTerminalTelemetry } from './log-record-emission.js';
 import { safeJsonStringify } from '../utils/safeJsonStringify.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import { getPerfPhaseObserver } from '../perf/perfPhaseObserver.js';
@@ -82,60 +89,6 @@ type ToolLoggingConfig = SessionConfig & TelemetryPromptConfig;
 
 const shouldLogUserPrompts = (config: TelemetryPromptConfig): boolean =>
   config.getTelemetryLogPromptsEnabled();
-
-/**
- * Fail-open wrapper for local aggregation. Errors in the telemetry
- * service must never break the calling stream/tool/api path.
- */
-function aggregateLocally(event: UiEvent): void {
-  try {
-    uiTelemetryService.addEvent(event);
-  } catch (err) {
-    try {
-      debugLogger.error(
-        `[TELEMETRY] Local aggregation failed (fail-open): ${err instanceof Error ? err.message : String(err)}`,
-      );
-    } catch {
-      // Secondary logger failure must not escape the fail-open wrapper
-    }
-  }
-}
-
-/**
- * Fail-open wrapper for SDK export. Errors in the export pipeline must
- * never break the calling stream/tool/api path.
- */
-function emitLogRecord(logRecord: LogRecord): void {
-  try {
-    logs.getLogger(SERVICE_NAME).emit(logRecord);
-  } catch (err) {
-    try {
-      debugLogger.error(
-        `[TELEMETRY] SDK export failed (fail-open): ${err instanceof Error ? err.message : String(err)}`,
-      );
-    } catch {
-      // Secondary logger failure must not escape the fail-open wrapper
-    }
-  }
-}
-
-/**
- * Fail-open wrapper for SDK metric recording. Errors in metric instruments
- * must never break the calling stream/tool/api/file/routing path.
- */
-function recordSafely(fn: () => void, context: string): void {
-  try {
-    fn();
-  } catch (err) {
-    try {
-      debugLogger.error(
-        `[TELEMETRY] ${context} failed (fail-open): ${err instanceof Error ? err.message : String(err)}`,
-      );
-    } catch {
-      // Secondary logger failure must not escape the fail-open wrapper
-    }
-  }
-}
 
 function getCommonAttributes(config: SessionConfig): LogAttributes {
   return {
@@ -377,20 +330,42 @@ export function logFileOperation(
   );
 }
 
-export function logApiRequest(config: Config, event: ApiRequestEvent): void {
+export function logApiRequest(
+  config: Config,
+  event: ApiRequestEvent,
+  signal?: AbortSignal,
+  acknowledged = false,
+): void | Promise<void> {
+  if (acknowledged) assertRequestArtifactExporter();
   if (!isTelemetrySdkInitialized()) return;
 
-  // Strip the body before spreading: every other field stays exported as
-  // before; only request_text is gated behind the explicit opt-in.
-  const { request_text, ...eventWithoutBody } = event;
+  // Strip bodies and local paths before export; both opt-ins govern API content.
+  const { request_text, request_artifact, ...eventWithoutBody } = event;
   const attributes: LogAttributes = {
     ...getCommonAttributes(config),
     ...eventWithoutBody,
     'event.name': EVENT_API_REQUEST,
     'event.timestamp': new Date().toISOString(),
-    request_chars: request_text?.length ?? 0,
+    request_chars: request_artifact?.content_chars ?? request_text?.length ?? 0,
   };
 
+  if (isApiBodyExportAllowed(config) && request_artifact !== undefined) {
+    Object.assign(attributes, artifactAttributes(request_artifact));
+    const emit = acknowledged
+      ? (record: LogRecord): Promise<void> =>
+          flushRequestArtifactTelemetry(record, signal)
+      : emitLogRecord;
+    const base = emit({ body: `API request to ${event.model}.`, attributes });
+    return Promise.resolve(base).then(() =>
+      emitRequestArtifact(
+        request_artifact,
+        attributes,
+        emit,
+        signal,
+        acknowledged,
+      ),
+    );
+  }
   if (isApiBodyExportAllowed(config) && request_text !== undefined) {
     attributes.request_text = truncateBody(
       request_text,
@@ -402,6 +377,7 @@ export function logApiRequest(config: Config, event: ApiRequestEvent): void {
     body: `API request to ${event.model}.`,
     attributes,
   };
+  if (acknowledged) return flushRequestArtifactTelemetry(logRecord, signal);
   emitLogRecord(logRecord);
 }
 
@@ -643,55 +619,36 @@ export function logSlashCommand(
   emitLogRecord(logRecord);
 }
 
-// Generic function to log telemetry events to the configured system
-function logTelemetryEvent(config: Config, event: unknown): void {
-  if (!isTelemetrySdkInitialized()) return;
-
-  const eventObj = event as Record<string, unknown>;
-  const attributes: LogAttributes = {
-    ...getCommonAttributes(config),
-    'event.name': eventObj['event.name'] as string,
-    'event.timestamp': eventObj['event.timestamp'] as string,
-  };
-
-  // Add other event properties, ensuring they are compatible with LogAttributes
-  Object.keys(eventObj).forEach((key) => {
-    if (
-      key !== 'event.name' &&
-      key !== 'event.timestamp' &&
-      eventObj[key] !== undefined
-    ) {
-      const value = eventObj[key];
-      // Convert complex objects to strings to ensure compatibility with LogAttributes
-      if (typeof value === 'object' && value !== null) {
-        attributes[key] = JSON.stringify(value);
-      } else if (
-        typeof value === 'string' ||
-        typeof value === 'number' ||
-        typeof value === 'boolean'
-      ) {
-        attributes[key] = value;
-      }
-    }
-  });
-
-  const logRecord: LogRecord = {
-    body: `Telemetry event: ${eventObj['event.name']}`,
-    attributes,
-  };
-  emitLogRecord(logRecord);
-}
-
-export function logConversationRequest(
+export async function logConversationRequest(
   config: Config,
   event: ConversationRequestEvent,
-): void {
+  signal?: AbortSignal,
+  acknowledged = false,
+): Promise<void> {
   if (!config.getConversationLoggingEnabled()) {
+    return;
+  }
+  if (acknowledged) {
+    assertRequestArtifactExporter();
+    await logTelemetryEvent(
+      config,
+      event,
+      (record) => flushRequestArtifactTelemetry(record, signal),
+      event.request_artifact,
+      signal,
+      true,
+    );
     return;
   }
 
   try {
-    logTelemetryEvent(config, event);
+    await logTelemetryEvent(
+      config,
+      event,
+      emitLogRecord,
+      event.request_artifact,
+      signal,
+    );
   } catch (error) {
     debugLogger.warn('Failed to log conversation request:', error);
   }
@@ -706,7 +663,7 @@ export function logConversationResponse(
   }
 
   try {
-    logTelemetryEvent(config, event);
+    logTelemetryEvent(config, event, emitLogRecord);
   } catch (error) {
     debugLogger.warn('Failed to log conversation response:', error);
   }
@@ -721,7 +678,7 @@ export function logProviderSwitch(
   }
 
   try {
-    logTelemetryEvent(config, event);
+    logTelemetryEvent(config, event, emitLogRecord);
   } catch (error) {
     debugLogger.warn('Failed to log provider switch:', error);
   }
@@ -736,7 +693,7 @@ export function logProviderCapability(
   }
 
   try {
-    logTelemetryEvent(config, event);
+    logTelemetryEvent(config, event, emitLogRecord);
   } catch (error) {
     debugLogger.warn('Failed to log provider capability:', error);
   }

@@ -13,7 +13,7 @@ import {
   enableFailedApiCallRetry,
 } from './client-send-stream-test-helpers.js';
 import { AgentEventType, PerformCompressionResult } from './turn.js';
-import { fromAsync } from './client-test-helpers.js';
+import { fromAsync } from './__tests__/client-test-helpers.js';
 
 export async function testToolNameRetry(
   client: AgentClient,

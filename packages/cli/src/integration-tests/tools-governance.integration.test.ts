@@ -13,9 +13,9 @@ import {
   SettingsService,
 } from '@vybestack/llxprt-code-settings';
 import { toolsCommand } from '../ui/commands/toolsCommand.js';
-import { createMockCommandContext } from '../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../__tests__/mockCommandContext.js';
 import type { Config } from '@vybestack/llxprt-code-core';
-import { assertDefined } from '../test-utils/assertions.js';
+import { assertDefined } from '../__tests__/assertions.js';
 
 const PROFILE_NAME = 'dev-profile';
 

@@ -12,7 +12,8 @@
 
 import type {
   IProvider,
-  MaterializedGenerateChatOptions,
+  GenerateChatOptions,
+  ProviderRuntimeOptions,
 } from './IProvider.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -104,11 +105,11 @@ export interface RuntimeNormalizerDeps {
  * This enforces that all runtime context is provided per-call and that
  * providers cannot rely on stored state.
  */
-export function normalizeRuntimeInputs(
-  rawOptions: MaterializedGenerateChatOptions,
+export function normalizeRuntimeInputs<Contents>(
+  rawOptions: ProviderRuntimeOptions & { contents: Contents },
   deps: RuntimeNormalizerDeps,
   providerName?: string,
-): MaterializedGenerateChatOptions {
+): ProviderRuntimeOptions & { contents: Contents } {
   const runtimeId = rawOptions.runtime?.runtimeId ?? 'unknown';
   const targetProvider = providerName ?? deps.getActiveProviderName();
 
@@ -151,7 +152,7 @@ export function normalizeRuntimeInputs(
 
 /** REQ-SP4-002: Validate and extract required settings service and config. */
 function requireRuntimeContext(
-  rawOptions: MaterializedGenerateChatOptions,
+  rawOptions: ProviderRuntimeOptions,
   runtimeId: string,
 ): { settingsService: SettingsService; config: Config } {
   const settingsService =
@@ -191,7 +192,7 @@ function requireRuntimeContext(
 
 /** REQ-SP4-003: Compose normalized.resolved with runtime helpers. */
 function resolveFields(
-  rawOptions: MaterializedGenerateChatOptions,
+  rawOptions: ProviderRuntimeOptions,
   settingsService: SettingsService,
   config: Config,
   targetProvider: string,
@@ -254,7 +255,7 @@ function resolveFields(
 
 /** Resolve model field, treating empty/whitespace strings as absent. */
 function resolveModelField(
-  rawOptions: MaterializedGenerateChatOptions,
+  rawOptions: ProviderRuntimeOptions,
   providerSettings: Record<string, unknown>,
   config: Config,
   providerInstance: IProvider | undefined,
@@ -285,7 +286,7 @@ function resolveModelField(
 
 /** Resolve baseURL field, treating empty/whitespace strings as absent. */
 function resolveBaseURLField(
-  rawOptions: MaterializedGenerateChatOptions,
+  rawOptions: ProviderRuntimeOptions,
   providerSettings: Record<string, unknown>,
 ): string | undefined {
   const fromResolved = rawOptions.resolved?.baseURL;
@@ -320,7 +321,7 @@ function computeShouldApplyGlobalEphemerals(
 /** Apply global auth-key from ephemeral settings if no token is set. */
 function applyGlobalAuthKey(
   resolved: Record<string, unknown>,
-  rawOptions: MaterializedGenerateChatOptions,
+  rawOptions: ProviderRuntimeOptions,
   config: Config,
   shouldApplyGlobalEphemerals: boolean,
   targetProvider: string,
@@ -365,7 +366,7 @@ function applyGlobalAuthKey(
 /** Resolve base URL from config, provider, and sandbox settings. */
 function resolveBaseURL(
   resolved: Record<string, unknown>,
-  rawOptions: MaterializedGenerateChatOptions,
+  rawOptions: ProviderRuntimeOptions,
   config: Config,
   providerSettings: Record<string, unknown>,
   providerInstance: IProvider | undefined,
@@ -466,14 +467,14 @@ function getAbortSignal(
 }
 
 /** REQ-SP4-005: Build final normalized options with runtime context. */
-function buildNormalizedOptions(
-  rawOptions: MaterializedGenerateChatOptions,
+function buildNormalizedOptions<Contents>(
+  rawOptions: ProviderRuntimeOptions & { contents: Contents },
   settingsService: SettingsService,
   config: Config,
   resolved: Record<string, unknown>,
   targetProvider: string,
   runtimeId: string,
-): MaterializedGenerateChatOptions {
+): ProviderRuntimeOptions & { contents: Contents } {
   const configUserMemory = readConfigUserMemory(config);
   const userMemory = rawOptions.userMemory ?? configUserMemory;
   const metadata = {
@@ -526,7 +527,7 @@ function buildNormalizedOptions(
     settings: settingsService,
     config,
     runtime: normalizedRuntime,
-    resolved: resolved as MaterializedGenerateChatOptions['resolved'],
+    resolved: resolved as GenerateChatOptions['resolved'],
     userMemory,
     metadata,
     invocation,

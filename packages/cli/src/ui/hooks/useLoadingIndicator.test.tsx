@@ -6,7 +6,7 @@
 
 import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
-import { renderHook } from '../../test-utils/render.js';
+import { renderHook } from '../../__tests__/render.js';
 import { act } from 'react';
 import { useLoadingIndicator } from './useLoadingIndicator.js';
 import { StreamingState } from '../types.js';

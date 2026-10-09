@@ -6,8 +6,8 @@
 
 import { describe, expect, it, vi } from 'bun:test';
 import { act } from 'react';
-import { renderHook } from '../../test-utils/render.js';
-import { hasDialogRequest } from '../../test-utils/dialogStore.js';
+import { renderHook } from '../../__tests__/render.js';
+import { hasDialogRequest } from '../../__tests__/dialogStore.js';
 import { createDialogStore } from '../stores/dialog/dialogStore.js';
 import { createDialogOpeners } from '../stores/dialog/dialogOpeners.js';
 import { MessageType } from '../types.js';

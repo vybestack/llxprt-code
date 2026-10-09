@@ -1,10 +1,4 @@
 /**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-
-/**
  * @plan PLAN-20260909-ISSUE3444
  *
  * Issue #3444 — a RetryOrchestrator retry must not replay a spent
@@ -20,8 +14,14 @@ import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { streamCallOptions } from '../test-utils/streamCallOptions.js';
-import { createOpenAIRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
+import { streamCallOptions } from '../__tests__/streamCallOptions.js';
+import { createOpenAIRawPostTestAdapter } from '../__tests__/rawPostTestAdapters.js';
+
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 const RELEASE_ERROR = 'Cannot consume media request contents after release';
 
@@ -108,125 +108,143 @@ describe('OpenAIProvider prompt-envelope retry (@issue:3444)', () => {
     delete process.env.OPENAI_API_KEY;
   });
 
-  it('retries a projected media turn with a fresh envelope instead of the spent token', async () => {
-    process.env.OPENAI_API_KEY = 'test-key';
-    mockChatCompletionsCreate
-      .mockRejectedValueOnce(make429RateLimitError())
-      .mockResolvedValueOnce(createMockChatStream('recovered'));
+  registerProviderBehavior1();
 
-    const provider = new OpenAIProvider('test-key');
+  registerProviderBehavior2();
 
-    const callOptions = streamCallOptions({
-      providerName: provider.name,
-      contents: mediaMessages(),
-      ephemerals: { retries: 2, retrywait: 0 },
-      resolved: { model: 'gpt-4o' },
-    });
+  registerProviderBehavior3();
+});
 
-    const projection = await provider.projectPromptEnvelope(callOptions);
-    expect(projection.transportToken).toBeDefined();
+function registerProviderBehavior1(): void {
+  describe('provider fixture 1', () => {
+    it('retries a projected media turn with a fresh envelope instead of the spent token', async () => {
+      process.env.OPENAI_API_KEY = 'test-key';
+      mockChatCompletionsCreate
+        .mockRejectedValueOnce(make429RateLimitError())
+        .mockResolvedValueOnce(createMockChatStream('recovered'));
 
-    const orchestrator = new RetryOrchestrator(provider, {
-      maxAttempts: 2,
-      initialDelayMs: 0,
-    });
+      const provider = new OpenAIProvider('test-key');
 
-    const chunks: string[] = [];
-    let threw = false;
-    let error: unknown;
-    try {
-      const gen = orchestrator.generateChatCompletion({
-        ...callOptions,
-        promptEnvelopeTransportToken: projection.transportToken,
+      const callOptions = streamCallOptions({
+        providerName: provider.name,
+        contents: mediaMessages(),
+        ephemerals: { retries: 2, retrywait: 0 },
+        resolved: { model: 'gpt-4o' },
       });
-      for await (const chunk of gen) {
-        const text = chunk.blocks.find((b) => b.type === 'text');
-        if (text !== undefined) chunks.push(text.text);
-      }
-    } catch (e) {
-      threw = true;
-      error = e;
-    }
 
-    expect(threw).toBe(false);
-    expect(chunks.join('')).toContain('recovered');
-    // Attempt 1 (429) + attempt 2 (recovered): both reached the transport.
-    expect(mockChatCompletionsCreate).toHaveBeenCalledTimes(2);
-    // The retried request still carries the image payload.
-    const retryArgs = mockChatCompletionsCreate.mock.calls[1][0];
-    expect(JSON.stringify(retryArgs.messages)).toContain('image_url');
-    expect(errorMessage(error)).not.toContain(RELEASE_ERROR);
-  });
+      const projection = await provider.projectPromptEnvelope(callOptions);
+      expect(projection.transportToken).toBeDefined();
 
-  it('surfaces a refresh projection failure without consuming the released media again', async () => {
-    process.env.OPENAI_API_KEY = 'test-key';
-    mockChatCompletionsCreate.mockRejectedValueOnce(make429RateLimitError());
-    const provider = new OpenAIProvider('test-key');
-    const options = streamCallOptions({
-      providerName: provider.name,
-      contents: mediaMessages(),
-      ephemerals: { retries: 2, retrywait: 0 },
-      resolved: { model: 'gpt-4o' },
-    });
-    const projection = await provider.projectPromptEnvelope(options);
-    const failure = new Error('chat refresh projection unavailable');
-    provider.projectPromptEnvelope = async () => {
-      throw failure;
-    };
-    const chunks: IContent[] = [];
-    let caught: unknown;
-    try {
-      for await (const chunk of new RetryOrchestrator(provider, {
+      const orchestrator = new RetryOrchestrator(provider, {
         maxAttempts: 2,
         initialDelayMs: 0,
-      }).generateChatCompletion({
-        ...options,
-        promptEnvelopeTransportToken: projection.transportToken,
-      }))
-        chunks.push(chunk);
-    } catch (error) {
-      caught = error;
-    }
-    expect(chunks).toHaveLength(0);
-    expect(caught).toBe(failure);
-    expect(errorMessage(caught)).not.toContain(RELEASE_ERROR);
-  });
+      });
 
-  it('preserves the last transport failure when projected media retries exhaust', async () => {
-    process.env.OPENAI_API_KEY = 'test-key';
-    const lastFailure = Object.assign(
-      new Error('Rate limit on final chat send'),
-      { status: 429 },
-    );
-    mockChatCompletionsCreate
-      .mockRejectedValueOnce(make429RateLimitError())
-      .mockRejectedValueOnce(lastFailure);
-    const provider = new OpenAIProvider('test-key');
-    const options = streamCallOptions({
-      providerName: provider.name,
-      contents: mediaMessages(),
-      ephemerals: { retries: 2, retrywait: 0 },
-      resolved: { model: 'gpt-4o' },
+      const chunks: string[] = [];
+      let threw = false;
+      let error: unknown;
+      try {
+        const gen = orchestrator.generateChatCompletion({
+          ...callOptions,
+          promptEnvelopeTransportToken: projection.transportToken,
+        });
+        for await (const chunk of gen) {
+          const text = chunk.blocks.find((b) => b.type === 'text');
+          if (text !== undefined) chunks.push(text.text);
+        }
+      } catch (e) {
+        threw = true;
+        error = e;
+      }
+
+      expect(threw).toBe(false);
+      expect(chunks.join('')).toContain('recovered');
+      // Attempt 1 (429) + attempt 2 (recovered): both reached the transport.
+      expect(mockChatCompletionsCreate).toHaveBeenCalledTimes(2);
+      // The retried request still carries the image payload.
+      const retryArgs = mockChatCompletionsCreate.mock.calls[1][0];
+      expect(JSON.stringify(retryArgs.messages)).toContain('image_url');
+      expect(errorMessage(error)).not.toContain(RELEASE_ERROR);
     });
-    const projection = await provider.projectPromptEnvelope(options);
-    const orchestrator = new RetryOrchestrator(provider, {
-      maxAttempts: 2,
-      initialDelayMs: 0,
-    });
-    let caught: unknown;
-    const chunks: IContent[] = [];
-    try {
-      for await (const chunk of orchestrator.generateChatCompletion({
-        ...options,
-        promptEnvelopeTransportToken: projection.transportToken,
-      }))
-        chunks.push(chunk);
-    } catch (error) {
-      caught = error;
-    }
-    expect(chunks).toHaveLength(0);
-    expect(mockChatCompletionsCreate.mock.calls).toHaveLength(2);
-    expect(errorMessage(caught)).toContain(lastFailure.message);
-    expect(errorMessage(caught)).not.toContain(RELEASE_ERROR);
   });
-});
+}
+
+function registerProviderBehavior2(): void {
+  describe('provider fixture 2', () => {
+    it('surfaces a refresh projection failure without consuming the released media again', async () => {
+      process.env.OPENAI_API_KEY = 'test-key';
+      mockChatCompletionsCreate.mockRejectedValueOnce(make429RateLimitError());
+      const provider = new OpenAIProvider('test-key');
+      const options = streamCallOptions({
+        providerName: provider.name,
+        contents: mediaMessages(),
+        ephemerals: { retries: 2, retrywait: 0 },
+        resolved: { model: 'gpt-4o' },
+      });
+      const projection = await provider.projectPromptEnvelope(options);
+      const failure = new Error('chat refresh projection unavailable');
+      provider.projectPromptEnvelope = async () => {
+        throw failure;
+      };
+      const chunks: IContent[] = [];
+      let caught: unknown;
+      try {
+        for await (const chunk of new RetryOrchestrator(provider, {
+          maxAttempts: 2,
+          initialDelayMs: 0,
+        }).generateChatCompletion({
+          ...options,
+          promptEnvelopeTransportToken: projection.transportToken,
+        }))
+          chunks.push(chunk);
+      } catch (error) {
+        caught = error;
+      }
+      expect(chunks).toHaveLength(0);
+      expect(caught).toBe(failure);
+      expect(errorMessage(caught)).not.toContain(RELEASE_ERROR);
+    });
+  });
+}
+
+function registerProviderBehavior3(): void {
+  describe('provider fixture 3', () => {
+    it('preserves the last transport failure when projected media retries exhaust', async () => {
+      process.env.OPENAI_API_KEY = 'test-key';
+      const lastFailure = Object.assign(
+        new Error('Rate limit on final chat send'),
+        { status: 429 },
+      );
+      mockChatCompletionsCreate
+        .mockRejectedValueOnce(make429RateLimitError())
+        .mockRejectedValueOnce(lastFailure);
+      const provider = new OpenAIProvider('test-key');
+      const options = streamCallOptions({
+        providerName: provider.name,
+        contents: mediaMessages(),
+        ephemerals: { retries: 2, retrywait: 0 },
+        resolved: { model: 'gpt-4o' },
+      });
+      const projection = await provider.projectPromptEnvelope(options);
+      const orchestrator = new RetryOrchestrator(provider, {
+        maxAttempts: 2,
+        initialDelayMs: 0,
+      });
+      let caught: unknown;
+      const chunks: IContent[] = [];
+      try {
+        for await (const chunk of orchestrator.generateChatCompletion({
+          ...options,
+          promptEnvelopeTransportToken: projection.transportToken,
+        }))
+          chunks.push(chunk);
+      } catch (error) {
+        caught = error;
+      }
+      expect(chunks).toHaveLength(0);
+      expect(mockChatCompletionsCreate.mock.calls).toHaveLength(2);
+      expect(errorMessage(caught)).toContain(lastFailure.message);
+      expect(errorMessage(caught)).not.toContain(RELEASE_ERROR);
+    });
+  });
+}

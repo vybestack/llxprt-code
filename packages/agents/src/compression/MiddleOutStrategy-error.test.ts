@@ -25,7 +25,7 @@ import {
   createFakeProvider,
   generateHistory,
   testProviderRuntime,
-} from './MiddleOutStrategy-test-helpers.js';
+} from './__tests__/MiddleOutStrategy-test-helpers.js';
 
 /**
  * Helper: runs compress and returns the thrown error, asserting it throws.

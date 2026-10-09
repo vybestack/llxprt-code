@@ -16,13 +16,7 @@ import {
 } from 'bun:test';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {
-  ShellTool,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-  clearActiveProviderRuntimeContext,
-  isRipgrepAvailable,
-} from '@vybestack/llxprt-code-core';
+import { ShellTool, isRipgrepAvailable } from '@vybestack/llxprt-code-core';
 import { loadCliConfig } from './config.js';
 import { parseArguments } from './cliArgParser.js';
 import type { Settings } from './settings.js';
@@ -121,8 +115,6 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
     } as unknown as ServerConfig.RuntimeProviderManager);
 
   return {
-    registerAgentRuntimeFactories: vi.fn(),
-    resetAgentRuntimeFactories: vi.fn(),
     ephemeralSettingHelp: {},
     parseEphemeralSettingValue: vi.fn((_key: string, rawValue: string) => ({
       success: true,
@@ -301,14 +293,12 @@ describe('loadCliConfig chatCompression', () => {
     vi.resetAllMocks();
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue('/mock/home/user');
     setEnv('GEMINI_API_KEY', 'test-api-key');
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
   });
 
   afterEach(() => {
     process.argv = originalArgv;
     restoreEnv();
     vi.restoreAllMocks();
-    clearActiveProviderRuntimeContext();
   });
 
   it('should pass chatCompression settings to the core config', async () => {
@@ -360,7 +350,6 @@ describe('loadCliConfig useRipgrep', () => {
     vi.resetAllMocks();
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue('/mock/home/user');
     setEnv('GEMINI_API_KEY', 'test-api-key');
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
     // Default: ripgrep is available
     (isRipgrepAvailable as Mock<typeof isRipgrepAvailable>).mockResolvedValue(
       true,
@@ -371,7 +360,6 @@ describe('loadCliConfig useRipgrep', () => {
     process.argv = originalArgv;
     restoreEnv();
     vi.restoreAllMocks();
-    clearActiveProviderRuntimeContext();
   });
 
   it('should auto-enable ripgrep when available and not set in settings', async () => {
@@ -463,14 +451,12 @@ describe('screenReader configuration', () => {
     vi.resetAllMocks();
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue('/mock/home/user');
     setEnv('GEMINI_API_KEY', 'test-api-key');
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
   });
 
   afterEach(() => {
     process.argv = originalArgv;
     restoreEnv();
     vi.restoreAllMocks();
-    clearActiveProviderRuntimeContext();
   });
 
   it('should use screenReader value from settings if CLI flag is not present (settings true)', async () => {
@@ -561,7 +547,6 @@ describe('loadCliConfig tool exclusions', () => {
     (isWorkspaceTrusted as Mock<typeof isWorkspaceTrusted>).mockReturnValue(
       true,
     );
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
   });
 
   afterEach(() => {
@@ -569,7 +554,6 @@ describe('loadCliConfig tool exclusions', () => {
     process.stdin.isTTY = originalIsTTY;
     restoreEnv();
     vi.restoreAllMocks();
-    clearActiveProviderRuntimeContext();
   });
 
   it('should not exclude interactive tools in interactive mode without YOLO', async () => {

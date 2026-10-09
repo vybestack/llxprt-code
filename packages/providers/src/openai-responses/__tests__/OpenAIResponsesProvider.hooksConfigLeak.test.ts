@@ -20,14 +20,10 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'bun:test';
 import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-  clearActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import { streamCallOptions } from '../../test-utils/streamCallOptions.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import { streamCallOptions } from '../../__tests__/streamCallOptions.js';
 import type {
   CodexOAuthToken,
   OAuthManager,
@@ -66,143 +62,162 @@ const MOCK_CODEX_TOKEN: CodexOAuthToken = {
   account_id: 'test-account-id',
 };
 
-describe('OpenAIResponsesProvider hooksConfig leak @issue:3218', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockFetch.mockClear();
-    global.fetch = mockFetch as unknown as typeof fetch;
+registerHooksLeakCase1();
+registerHooksLeakCase2();
+registerHooksLeakCase3();
 
-    setActiveProviderRuntimeContext(
-      createProviderRuntimeContext({
-        settingsService: new SettingsService(),
-        runtimeId: 'test-runtime-id-3218',
-      }),
-    );
+function beforeEachHooksLeak1(): void {
+  vi.clearAllMocks();
+  mockFetch.mockClear();
+  global.fetch = mockFetch as unknown as typeof fetch;
+}
+
+function afterEachHooksLeak2(): void {
+  global.fetch = originalFetch;
+}
+
+async function generateAndCaptureBody(
+  provider: OpenAIResponsesProvider,
+  settings: SettingsService,
+  ephemeralsSnapshot: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  let capturedBody: string | undefined;
+  mockFetch.mockImplementation(
+    async (
+      _input: RequestInfo | URL,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      if (init?.body != null) {
+        capturedBody =
+          typeof init.body === 'string'
+            ? init.body
+            : await new Response(init.body).text();
+      }
+      return createMockStreamingResponse();
+    },
+  );
+
+  const config = createRuntimeConfigStub(settings);
+  const runtime = createProviderRuntimeContext({
+    settingsService: settings,
+    runtimeId: 'test-runtime-id-3218',
+    config,
   });
 
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-    global.fetch = originalFetch;
+  const invocation = createRuntimeInvocationContext({
+    runtime,
+    settings,
+    providerName: provider.name,
+    ephemeralsSnapshot,
   });
 
-  async function generateAndCaptureBody(
-    provider: OpenAIResponsesProvider,
-    settings: SettingsService,
-    ephemeralsSnapshot: Record<string, unknown>,
-  ): Promise<Record<string, unknown>> {
-    let capturedBody: string | undefined;
-    mockFetch.mockImplementation(
-      async (
-        _input: RequestInfo | URL,
-        init?: RequestInit,
-      ): Promise<Response> => {
-        if (init?.body != null) {
-          capturedBody =
-            typeof init.body === 'string'
-              ? init.body
-              : await new Response(init.body).text();
-        }
-        return createMockStreamingResponse();
+  const options = streamCallOptions({
+    settings,
+    config,
+    runtime,
+    invocation,
+    providerName: provider.name,
+    contents: [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'hi' }],
       },
-    );
+    ],
+  });
 
-    const config = createRuntimeConfigStub(settings);
-    const runtime = createProviderRuntimeContext({
-      settingsService: settings,
-      runtimeId: 'test-runtime-id-3218',
-      config,
-    });
-
-    const invocation = createRuntimeInvocationContext({
-      runtime,
-      settings,
-      providerName: provider.name,
-      ephemeralsSnapshot,
-    });
-
-    const options = streamCallOptions({
-      settings,
-      config,
-      runtime,
-      invocation,
-      providerName: provider.name,
-      contents: [
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'hi' }],
-        },
-      ],
-    });
-
-    const generator = provider.generateChatCompletion(options);
-    for await (const _content of generator) {
-      // drain
-    }
-
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-    expect(capturedBody).toBeDefined();
-    return JSON.parse(capturedBody!);
+  const generator = provider.generateChatCompletion(options);
+  for await (const _content of generator) {
+    // drain
   }
 
-  it('does not send hooksConfig in the Codex request body', async () => {
-    const provider = new OpenAIResponsesProvider(
-      'test-access-token',
-      'https://chatgpt.com/backend-api/codex',
-      undefined,
-      {
-        getOAuthToken: vi.fn().mockResolvedValue(MOCK_CODEX_TOKEN),
-      } as unknown as OAuthManager,
-    );
+  expect(mockFetch).toHaveBeenCalledTimes(1);
+  expect(capturedBody).toBeDefined();
+  return JSON.parse(capturedBody!);
+}
 
-    const settings = new SettingsService();
-    settings.set('activeProvider', provider.name);
-    settings.setProviderSetting(provider.name, 'model', 'gpt-5.6-sol');
+function registerHooksLeakCase1(): void {
+  describe('OpenAIResponsesProvider hooksConfig leak @issue:3218 [1]', () => {
+    beforeEach(beforeEachHooksLeak1);
+    afterEach(afterEachHooksLeak2);
 
-    const requestBody = await generateAndCaptureBody(provider, settings, {
-      hooksConfig: { enabled: true, notifications: false },
-      service_tier: 'priority',
+    it('does not send hooksConfig in the Codex request body', async () => {
+      const provider = new OpenAIResponsesProvider(
+        'test-access-token',
+        'https://chatgpt.com/backend-api/codex',
+        undefined,
+        {
+          getOAuthToken: vi.fn().mockResolvedValue(MOCK_CODEX_TOKEN),
+        } as unknown as OAuthManager,
+        undefined,
+        'codex',
+      );
+
+      const settings = new SettingsService();
+      settings.set('activeProvider', provider.name);
+      settings.setProviderSetting(provider.name, 'model', 'gpt-5.6-sol');
+
+      const requestBody = await generateAndCaptureBody(provider, settings, {
+        hooksConfig: { enabled: true, notifications: false },
+        service_tier: 'priority',
+      });
+
+      expect(requestBody.hooksConfig).toBeUndefined();
+      // Legitimate model params still pass through
+      expect(requestBody.service_tier).toBe('priority');
     });
-
-    expect(requestBody.hooksConfig).toBeUndefined();
-    // Legitimate model params still pass through
-    expect(requestBody.service_tier).toBe('priority');
   });
+}
 
-  it('does not send hooks (event definitions) in the Codex request body', async () => {
-    const provider = new OpenAIResponsesProvider(
-      'test-access-token',
-      'https://chatgpt.com/backend-api/codex',
-      undefined,
-      {
-        getOAuthToken: vi.fn().mockResolvedValue(MOCK_CODEX_TOKEN),
-      } as unknown as OAuthManager,
-    );
+function registerHooksLeakCase2(): void {
+  describe('OpenAIResponsesProvider hooksConfig leak @issue:3218 [2]', () => {
+    beforeEach(beforeEachHooksLeak1);
+    afterEach(afterEachHooksLeak2);
 
-    const settings = new SettingsService();
-    settings.set('activeProvider', provider.name);
-    settings.setProviderSetting(provider.name, 'model', 'gpt-5.6-sol');
+    it('does not send hooks (event definitions) in the Codex request body', async () => {
+      const provider = new OpenAIResponsesProvider(
+        'test-access-token',
+        'https://chatgpt.com/backend-api/codex',
+        undefined,
+        {
+          getOAuthToken: vi.fn().mockResolvedValue(MOCK_CODEX_TOKEN),
+        } as unknown as OAuthManager,
+        undefined,
+        'codex',
+      );
 
-    const requestBody = await generateAndCaptureBody(provider, settings, {
-      hooks: { beforeModel: [{ command: 'echo hi', type: 'command' }] },
+      const settings = new SettingsService();
+      settings.set('activeProvider', provider.name);
+      settings.setProviderSetting(provider.name, 'model', 'gpt-5.6-sol');
+
+      const requestBody = await generateAndCaptureBody(provider, settings, {
+        hooks: { beforeModel: [{ command: 'echo hi', type: 'command' }] },
+      });
+
+      expect(requestBody.hooks).toBeUndefined();
     });
-
-    expect(requestBody.hooks).toBeUndefined();
   });
+}
 
-  it('does not send hooksConfig in a non-Codex Responses request body', async () => {
-    const provider = new OpenAIResponsesProvider(
-      'test-api-key',
-      'https://api.openai.com/v1',
-    );
+function registerHooksLeakCase3(): void {
+  describe('OpenAIResponsesProvider hooksConfig leak @issue:3218 [3]', () => {
+    beforeEach(beforeEachHooksLeak1);
+    afterEach(afterEachHooksLeak2);
 
-    const settings = new SettingsService();
-    settings.set('activeProvider', provider.name);
-    settings.setProviderSetting(provider.name, 'model', 'o3-mini');
+    it('does not send hooksConfig in a non-Codex Responses request body', async () => {
+      const provider = new OpenAIResponsesProvider(
+        'test-api-key',
+        'https://api.openai.com/v1',
+      );
 
-    const requestBody = await generateAndCaptureBody(provider, settings, {
-      hooksConfig: { enabled: true },
+      const settings = new SettingsService();
+      settings.set('activeProvider', provider.name);
+      settings.setProviderSetting(provider.name, 'model', 'o3-mini');
+
+      const requestBody = await generateAndCaptureBody(provider, settings, {
+        hooksConfig: { enabled: true },
+      });
+
+      expect(requestBody.hooksConfig).toBeUndefined();
     });
-
-    expect(requestBody.hooksConfig).toBeUndefined();
   });
-});
+}

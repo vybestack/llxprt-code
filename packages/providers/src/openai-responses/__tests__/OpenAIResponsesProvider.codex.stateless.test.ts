@@ -26,17 +26,13 @@
  * parent is available or the user explicitly opts out.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  clearActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ResponsesInputItem } from '../OpenAIResponsesTypes.js';
 import type { OpenAIResponsesRequest } from '../OpenAIResponsesTypes.js';
@@ -88,7 +84,14 @@ class TestableCodexProvider extends OpenAIResponsesProvider {
   readonly recordingTransport = new RecordingTransport();
 
   constructor(oauthManager: object) {
-    super('codex-api-key', CODEX_BASE_URL, undefined, oauthManager);
+    super(
+      'codex-api-key',
+      CODEX_BASE_URL,
+      undefined,
+      oauthManager,
+      undefined,
+      'codex',
+    );
   }
 
   protected override createWebSocketTransport(): WebSocketTransport {
@@ -201,19 +204,6 @@ function assistantMessages(items: ResponsesInputItem[]): string[] {
 }
 
 describe('OpenAIResponsesProvider Codex stateful conversations @issue:3134', () => {
-  beforeEach(() => {
-    setActiveProviderRuntimeContext(
-      createProviderRuntimeContext({
-        settingsService: new SettingsService(),
-        runtimeId: TEST_RUNTIME_ID,
-      }),
-    );
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
-
   it('T1: sends previous_response_id and omits the parent turn when a stored parent exists', async () => {
     const provider = new TestableCodexProvider(buildCodexOAuthManager());
 

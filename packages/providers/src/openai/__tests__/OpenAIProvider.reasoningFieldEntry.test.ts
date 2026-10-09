@@ -28,12 +28,11 @@ import type {
   IContent,
   ThinkingBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import { resetSettingsService } from '@vybestack/llxprt-code-settings';
-import { streamCallOptions } from '../../test-utils/streamCallOptions.js';
+import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import { streamCallOptions } from '../../__tests__/streamCallOptions.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type OpenAI from 'openai';
-import { createOpenAIRawPostTestAdapter } from '../../test-utils/rawPostTestAdapters.js';
+import { createOpenAIRawPostTestAdapter } from '../../__tests__/rawPostTestAdapters.js';
 
 const mockChatCompletionsCreate = vi.fn();
 
@@ -100,124 +99,144 @@ async function collectResults(
   return results;
 }
 
-describe('OpenAIProvider reasoning.fieldName entry wiring (#2524)', () => {
-  let provider: OpenAIProvider;
-  let settingsService: SettingsService;
+registerReasoningEntryCase1();
+registerReasoningEntryCase2();
+registerReasoningEntryCase3();
 
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockChatCompletionsCreate.mockClear();
-    resetSettingsService();
+function beforeEachReasoningEntry1(): void {
+  vi.clearAllMocks();
+  mockChatCompletionsCreate.mockClear();
 
-    const runtime = initializeTestProviderRuntime({
-      runtimeId: `openai-reasoning-entry-${Math.random().toString(36).slice(2, 10)}`,
-      metadata: { suite: 'OpenAIProvider.reasoningFieldEntry.test' },
-      configOverrides: {
-        getProvider: () => 'openai',
-        getModel: () => 'gpt-4o',
-        getEphemeralSettings: () => ({ model: 'gpt-4o' }),
-      },
+  const runtime = initializeTestProviderRuntime({
+    runtimeId: `openai-reasoning-entry-${Math.random().toString(36).slice(2, 10)}`,
+    metadata: { suite: 'OpenAIProvider.reasoningFieldEntry.test' },
+    configOverrides: {
+      getProvider: () => 'openai',
+      getModel: () => 'gpt-4o',
+      getEphemeralSettings: () => ({ model: 'gpt-4o' }),
+    },
+  });
+
+  settingsService = runtime.settingsService;
+  provider = new OpenAIProvider('test-api-key', 'https://api.openai.com/v1');
+  provider.setRuntimeSettingsService(settingsService);
+  provider.setConfig?.(runtime.config);
+
+  settingsService.set('activeProvider', provider.name);
+  settingsService.set('model', 'gpt-4o');
+  settingsService.setProviderSetting(provider.name, 'model', 'gpt-4o');
+}
+
+let provider: OpenAIProvider;
+
+let settingsService: SettingsService;
+
+function registerReasoningEntryCase1(): void {
+  describe('OpenAIProvider reasoning.fieldName entry wiring (#2524) [1]', () => {
+    beforeEach(beforeEachReasoningEntry1);
+
+    it('forwards reasoning.fieldName to capture delta.reasoning with sourceField provenance', async () => {
+      settingsService.set('reasoning.fieldName', 'reasoning');
+
+      const chunks = [
+        makeReasoningStreamChunk({ reasoning: 'ollama thinking trace' }, null),
+        makeReasoningStreamChunk({}, 'stop'),
+      ];
+      mockChatCompletionsCreate.mockReturnValue(makeStream(chunks));
+
+      const messages: IContent[] = [
+        { speaker: 'human', blocks: [{ type: 'text', text: 'Test question' }] },
+      ];
+
+      const results = await collectResults(
+        provider.generateChatCompletion(
+          streamCallOptions({
+            providerName: provider.name,
+            settings: settingsService,
+            contents: messages,
+          }),
+        ),
+      );
+
+      const thinking = findThinkingBlock(results);
+      expect(thinking).toBeDefined();
+      expect(thinking?.thought).toBe('ollama thinking trace');
+      expect(thinking?.sourceField).toBe('reasoning');
     });
-
-    settingsService = runtime.settingsService;
-    provider = new OpenAIProvider('test-api-key', 'https://api.openai.com/v1');
-    provider.setRuntimeSettingsService(settingsService);
-    provider.setConfig?.(runtime.config);
-
-    settingsService.set('activeProvider', provider.name);
-    settingsService.set('model', 'gpt-4o');
-    settingsService.setProviderSetting(provider.name, 'model', 'gpt-4o');
   });
+}
 
-  it('forwards reasoning.fieldName to capture delta.reasoning with sourceField provenance', async () => {
-    settingsService.set('reasoning.fieldName', 'reasoning');
+function registerReasoningEntryCase2(): void {
+  describe('OpenAIProvider reasoning.fieldName entry wiring (#2524) [2]', () => {
+    beforeEach(beforeEachReasoningEntry1);
 
-    const chunks = [
-      makeReasoningStreamChunk({ reasoning: 'ollama thinking trace' }, null),
-      makeReasoningStreamChunk({}, 'stop'),
-    ];
-    mockChatCompletionsCreate.mockReturnValue(makeStream(chunks));
+    it('does NOT capture reasoning_content when fieldName is explicitly "reasoning"', async () => {
+      settingsService.set('reasoning.fieldName', 'reasoning');
 
-    const messages: IContent[] = [
-      { speaker: 'human', blocks: [{ type: 'text', text: 'Test question' }] },
-    ];
+      // Emit ONLY reasoning_content (not reasoning) — should produce NO thinking block
+      // because the explicit field 'reasoning' is absent and no fallback applies.
+      const chunks = [
+        makeReasoningStreamChunk(
+          { reasoning_content: 'should be ignored' },
+          null,
+        ),
+        makeReasoningStreamChunk({}, 'stop'),
+      ];
+      mockChatCompletionsCreate.mockReturnValue(makeStream(chunks));
 
-    const results = await collectResults(
-      provider.generateChatCompletion(
-        streamCallOptions({
-          providerName: provider.name,
-          settings: settingsService,
-          contents: messages,
-        }),
-      ),
-    );
+      const messages: IContent[] = [
+        { speaker: 'human', blocks: [{ type: 'text', text: 'Test question' }] },
+      ];
 
-    const thinking = findThinkingBlock(results);
-    expect(thinking).toBeDefined();
-    expect(thinking?.thought).toBe('ollama thinking trace');
-    expect(thinking?.sourceField).toBe('reasoning');
+      const results = await collectResults(
+        provider.generateChatCompletion(
+          streamCallOptions({
+            providerName: provider.name,
+            settings: settingsService,
+            contents: messages,
+          }),
+        ),
+      );
+
+      const thinking = findThinkingBlock(results);
+      expect(thinking).toBeUndefined();
+    });
   });
+}
 
-  it('does NOT capture reasoning_content when fieldName is explicitly "reasoning"', async () => {
-    settingsService.set('reasoning.fieldName', 'reasoning');
+function registerReasoningEntryCase3(): void {
+  describe('OpenAIProvider reasoning.fieldName entry wiring (#2524) [3]', () => {
+    beforeEach(beforeEachReasoningEntry1);
 
-    // Emit ONLY reasoning_content (not reasoning) — should produce NO thinking block
-    // because the explicit field 'reasoning' is absent and no fallback applies.
-    const chunks = [
-      makeReasoningStreamChunk(
-        { reasoning_content: 'should be ignored' },
-        null,
-      ),
-      makeReasoningStreamChunk({}, 'stop'),
-    ];
-    mockChatCompletionsCreate.mockReturnValue(makeStream(chunks));
+    it('captures reasoning_content with sourceField provenance when fieldName is unset (default path)', async () => {
+      // Leave reasoning.fieldName unset — standard provider default behavior
+      const chunks = [
+        makeReasoningStreamChunk(
+          { reasoning_content: 'standard reasoning' },
+          null,
+        ),
+        makeReasoningStreamChunk({}, 'stop'),
+      ];
+      mockChatCompletionsCreate.mockReturnValue(makeStream(chunks));
 
-    const messages: IContent[] = [
-      { speaker: 'human', blocks: [{ type: 'text', text: 'Test question' }] },
-    ];
+      const messages: IContent[] = [
+        { speaker: 'human', blocks: [{ type: 'text', text: 'Test question' }] },
+      ];
 
-    const results = await collectResults(
-      provider.generateChatCompletion(
-        streamCallOptions({
-          providerName: provider.name,
-          settings: settingsService,
-          contents: messages,
-        }),
-      ),
-    );
+      const results = await collectResults(
+        provider.generateChatCompletion(
+          streamCallOptions({
+            providerName: provider.name,
+            settings: settingsService,
+            contents: messages,
+          }),
+        ),
+      );
 
-    const thinking = findThinkingBlock(results);
-    expect(thinking).toBeUndefined();
+      const thinking = findThinkingBlock(results);
+      expect(thinking).toBeDefined();
+      expect(thinking?.thought).toBe('standard reasoning');
+      expect(thinking?.sourceField).toBe('reasoning_content');
+    });
   });
-
-  it('captures reasoning_content with sourceField provenance when fieldName is unset (default path)', async () => {
-    // Leave reasoning.fieldName unset — standard provider default behavior
-    const chunks = [
-      makeReasoningStreamChunk(
-        { reasoning_content: 'standard reasoning' },
-        null,
-      ),
-      makeReasoningStreamChunk({}, 'stop'),
-    ];
-    mockChatCompletionsCreate.mockReturnValue(makeStream(chunks));
-
-    const messages: IContent[] = [
-      { speaker: 'human', blocks: [{ type: 'text', text: 'Test question' }] },
-    ];
-
-    const results = await collectResults(
-      provider.generateChatCompletion(
-        streamCallOptions({
-          providerName: provider.name,
-          settings: settingsService,
-          contents: messages,
-        }),
-      ),
-    );
-
-    const thinking = findThinkingBlock(results);
-    expect(thinking).toBeDefined();
-    expect(thinking?.thought).toBe('standard reasoning');
-    expect(thinking?.sourceField).toBe('reasoning_content');
-  });
-});
+}

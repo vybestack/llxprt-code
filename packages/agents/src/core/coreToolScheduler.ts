@@ -189,7 +189,14 @@ export class CoreToolScheduler implements ToolSchedulerContract {
     this.confirmationCoordinator.subscribe();
   }
 
-  setCallbacks(options: CoreToolSchedulerOptions): void {
+  /**
+   * Swaps the five UI callbacks only. The messageBus and toolRegistry
+   * construction deps are readonly and bound in the constructor; they
+   * cannot be refreshed after creation.
+   */
+  setCallbacks(
+    options: Omit<CoreToolSchedulerOptions, 'messageBus' | 'toolRegistry'>,
+  ): void {
     this.outputUpdateHandler = options.outputUpdateHandler;
     this.onAllToolCallsComplete = options.onAllToolCallsComplete;
     this.onToolCallsUpdate = options.onToolCallsUpdate;

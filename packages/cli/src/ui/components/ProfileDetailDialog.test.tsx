@@ -16,7 +16,7 @@ import { act } from 'react';
 import { KeypressProvider } from '../contexts/KeypressContext.js';
 import { ProfileDetailDialog } from './ProfileDetailDialog.js';
 import type { Profile } from '@vybestack/llxprt-code-settings';
-import { render as renderActWrapped } from '../../test-utils/render.js';
+import { render as renderActWrapped } from '../../__tests__/render.js';
 
 // A lone ESC byte only decodes to an 'escape' keypress after the
 // KeypressProvider's escape timeout, so tests drive the synchronous kitty/CSI-u

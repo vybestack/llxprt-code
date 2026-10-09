@@ -28,7 +28,7 @@
  * unchanged and are the regression fence for that boundary.
  */
 
-import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-core/test-utils/collect-rows-for-assertions.js';
+import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { ChatSession } from './chatSession.js';
 import type { StreamEvent } from './chatSession.js';

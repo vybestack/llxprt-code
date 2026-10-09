@@ -22,7 +22,7 @@ import { dynamicSettingsRegistry } from './utils/dynamicSettings.js';
 import type { Config, ResumeResult } from '@vybestack/llxprt-code-core';
 import { OutputFormat } from '@vybestack/llxprt-code-core';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { createTestSessionMediaConfig } from './test-utils/sessionMediaConfig.js';
+import { createTestSessionMediaConfig } from './__tests__/sessionMediaConfig.js';
 
 const actual = { ...(await import('./config/settings.js')) };
 void vi.mock('./config/settings.js', () => ({
@@ -301,6 +301,10 @@ async function observeContinueRestore(failAdoption: boolean) {
   const adoptResumeBootSpy = vi.spyOn(history, 'adoptResumeBoot');
   const agentClient = {
     getHistoryService: vi.fn(() => history),
+    hasChatInitialized: () => true,
+    storeHistoryForLaterUse: async () => {
+      throw new Error('Unexpected deferred admission for active history');
+    },
     resumeChat,
     resetChat,
   };

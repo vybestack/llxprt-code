@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import type React from 'react';
 import { act } from 'react';
-import { renderHook } from '../../test-utils/render.js';
+import { renderHook } from '../../__tests__/render.js';
 import { useVim } from './vim.js';
 import type { TextBuffer } from '../components/shared/buffer-types.js';
 

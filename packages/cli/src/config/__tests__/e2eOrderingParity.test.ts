@@ -39,11 +39,6 @@ import {
 } from 'bun:test';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-  clearActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core';
 import * as ServerConfig from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderManager } from '@vybestack/llxprt-code-providers';
@@ -276,8 +271,6 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
     } as unknown as ProviderManager);
 
   return {
-    registerAgentRuntimeFactories: vi.fn(),
-    resetAgentRuntimeFactories: vi.fn(),
     ephemeralSettingHelp: {},
     parseEphemeralSettingValue: vi.fn((_key: string, rawValue: string) => ({
       success: true,
@@ -490,7 +483,6 @@ describe('e2eOrderingParity: step ordering constraints', () => {
     // Provide a fallback model so non-gemini providers don't fail with model.missing
     setEnv('LLXPRT_DEFAULT_MODEL', 'mock-default-model');
     process.argv = ['node', 'script.js'];
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
     runtimeSettingsState.context = null;
     runtimeSettingsState.providerManager = null;
     runtimeSettingsState.oauthManager = null;
@@ -500,7 +492,6 @@ describe('e2eOrderingParity: step ordering constraints', () => {
     process.argv = originalArgv;
     restoreEnv();
     vi.restoreAllMocks();
-    clearActiveProviderRuntimeContext();
   });
 
   it('setCliRuntimeContext happens before switchActiveProvider', async () => {
@@ -563,7 +554,6 @@ describe('e2eOrderingParity: full precedence chain end-to-end', () => {
     // Provide a fallback model so non-gemini providers don't fail with model.missing
     setEnv('LLXPRT_DEFAULT_MODEL', 'mock-default-model');
     process.argv = ['node', 'script.js'];
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
     runtimeSettingsState.context = null;
     runtimeSettingsState.providerManager = null;
     runtimeSettingsState.oauthManager = null;
@@ -573,7 +563,6 @@ describe('e2eOrderingParity: full precedence chain end-to-end', () => {
     process.argv = originalArgv;
     restoreEnv();
     vi.restoreAllMocks();
-    clearActiveProviderRuntimeContext();
   });
 
   it('CLI --provider wins over LLXPRT_DEFAULT_PROVIDER env', async () => {

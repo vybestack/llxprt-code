@@ -1,10 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { captureBodyAttempt } from '../../../../../scripts/lib/body-evidence-writer.js';
+import { randomUUID } from 'node:crypto';
+import { withFetchPreconnect } from '../../../../test-utils/src/fetch-test-helpers.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings/settings/SettingsService.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { OpenAIProvider } from '../../../../providers/src/openai/OpenAIProvider.js';
 import { RetryOrchestrator } from '../../../../providers/src/RetryOrchestrator.js';
 import { captureCuratedBody } from '../../../../../scripts/tests/provider-curated-body-helpers.js';
@@ -26,6 +29,25 @@ function chatResponse(): Response {
       usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
     }),
     { headers: { 'content-type': 'application/json' } },
+  );
+}
+
+function createBodyCaptureFetch(
+  bodies: string[],
+  retry: boolean,
+): typeof fetch {
+  const captureId = randomUUID();
+  return withFetchPreconnect(
+    async (
+      _input: RequestInfo | URL,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      if (init?.body === undefined || init.body === null)
+        throw new Error('Missing OpenAI request BODY');
+      await captureBodyAttempt(bodies, init.body, 'openai', captureId);
+      if (retry && bodies.length === 1) throw new TypeError('fetch failed');
+      return chatResponse();
+    },
   );
 }
 
@@ -82,16 +104,7 @@ export async function captureCompressionBody(
     : provider;
   const original = globalThis.fetch;
   const bodies: string[] = [];
-  globalThis.fetch = async (
-    _input: RequestInfo | URL,
-    init?: RequestInit,
-  ): Promise<Response> => {
-    if (init?.body === undefined || init.body === null)
-      throw new Error('Missing OpenAI request BODY');
-    bodies.push(await new Response(init.body).text());
-    if (retry && bodies.length === 1) throw new TypeError('fetch failed');
-    return chatResponse();
-  };
+  globalThis.fetch = createBodyCaptureFetch(bodies, retry);
   try {
     for await (const _chunk of selected.generateChatCompletion({
       ...options,

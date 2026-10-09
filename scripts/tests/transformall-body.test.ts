@@ -1,14 +1,15 @@
-import { observeHistorySynchronouslyForTest } from '../../packages/core/src/test-utils/synchronous-history-test-observation.js';
-import { forbidHistoryMaterializationForTest } from '../../packages/core/src/test-utils/history-materialization-test-guard.js';
+import { observeHistorySynchronouslyForTest } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
+import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { writeBodyFile } from '../lib/body-evidence-writer.js';
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
-import { writeFileSync } from 'node:fs';
+
 import { DebugLogger } from '../../packages/core/src/debug/index.js';
 import { HistoryService } from '../../packages/core/src/services/history/HistoryService.js';
 import type { IContent } from '../../packages/core/src/services/history/IContent.js';
 import { exactTokenizer } from '../../packages/core/src/services/history/chronology-rollback-test-helpers.js';
-import { withSuffixFixture } from '../../packages/core/src/services/history/history-suffix-test-helpers.js';
+import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import {
   providerFarFixtureRow,
   providerPendingFixture,
@@ -84,8 +85,8 @@ async function compareBodies(
       const output = process.env.TRANSFORMALL_BODY_OUTPUT;
       if (output !== undefined) {
         const name = `${provider}-${size}-${caching}`;
-        writeFileSync(join(output, `${name}-actual.json`), actual);
-        writeFileSync(join(output, `${name}-expected.json`), expected);
+        await writeBodyFile(join(output, `${name}-actual.json`), actual);
+        await writeBodyFile(join(output, `${name}-expected.json`), expected);
       }
       expect(actual).toBe(expected);
       if (caching && provider === 'anthropic')

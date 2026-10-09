@@ -15,7 +15,7 @@ import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import { replayableContents } from '../utils/collectContents.js';
 import { ProviderManager } from '../ProviderManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import {
   LoadBalancingProvider,
   type LoadBalancingProviderConfig,

@@ -9,7 +9,7 @@ import { ChatSession } from './chatSession.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { DEFAULT_TOKEN_LIMIT } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 import * as tokenLimitsModule from '@vybestack/llxprt-code-core/core/tokenLimits.js';
-import { createChatSessionRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import {
   createAgentRuntimeState,
   type AgentRuntimeState,
@@ -21,7 +21,6 @@ import {
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import * as providerRuntime from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
 describe('ChatSession Context Limit Enforcement', () => {
@@ -89,7 +88,6 @@ describe('ChatSession Context Limit Enforcement', () => {
       ...runtimeSetup.runtime,
       config: mockConfig,
     };
-    providerRuntime.setActiveProviderRuntimeContext(providerRuntimeSnapshot);
 
     // Create mock ContentGenerator
     mockContentGenerator = {

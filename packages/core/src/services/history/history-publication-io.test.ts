@@ -1,13 +1,16 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, vi } from 'bun:test';
 import * as fs from 'node:fs';
-import { withSuffixFixture, suffixRow } from './history-suffix-test-helpers.js';
+import {
+  withSuffixFixture,
+  suffixRow,
+} from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import {
   exactTokenizer,
   withRollbackFixture,
 } from './chronology-rollback-test-helpers.js';
 import { HistoryJournalStore } from './historyJournalStore.js';
-import { collectRawHistory } from '../../test-utils/collect-raw-history.js';
+import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 
 async function measuredReads(action: () => Promise<void>): Promise<number> {
   const original = fs.readSync;

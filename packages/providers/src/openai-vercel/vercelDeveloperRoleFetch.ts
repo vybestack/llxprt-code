@@ -48,47 +48,53 @@ function isDeveloperRoleMessage(
 export function createDeveloperRoleToSystemFetch(
   innerFetch: typeof fetch,
 ): typeof fetch {
-  return async (input: RequestInfo | URL, init?: RequestInit) => {
-    if (!init || typeof init.body !== 'string') {
-      return innerFetch(input, init);
-    }
+  return Object.assign(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (!init || typeof init.body !== 'string') {
+        return innerFetch(input, init);
+      }
 
-    let parsedBody: unknown;
-    try {
-      parsedBody = JSON.parse(init.body) as unknown;
-    } catch {
-      return innerFetch(input, init);
-    }
+      let parsedBody: unknown;
+      try {
+        parsedBody = JSON.parse(init.body) as unknown;
+      } catch {
+        return innerFetch(input, init);
+      }
 
-    if (!isMessagesBody(parsedBody)) {
-      return innerFetch(input, init);
-    }
+      if (!isMessagesBody(parsedBody)) {
+        return innerFetch(input, init);
+      }
 
-    const developerMessages = (
-      parsedBody as { messages: unknown[] }
-    ).messages.filter(isDeveloperRoleMessage);
-    if (developerMessages.length === 0) {
-      return innerFetch(input, init);
-    }
+      const developerMessages = (
+        parsedBody as { messages: unknown[] }
+      ).messages.filter(isDeveloperRoleMessage);
+      if (developerMessages.length === 0) {
+        return innerFetch(input, init);
+      }
 
-    const rewrittenMessages = (
-      parsedBody as { messages: unknown[] }
-    ).messages.map((message: unknown) =>
-      isDeveloperRoleMessage(message)
-        ? { ...message, role: 'system' }
-        : message,
-    );
+      const rewrittenMessages = (
+        parsedBody as { messages: unknown[] }
+      ).messages.map((message: unknown) =>
+        isDeveloperRoleMessage(message)
+          ? { ...message, role: 'system' }
+          : message,
+      );
 
-    const headers = new Headers(init.headers);
-    headers.delete('content-length');
+      const headers = new Headers(init.headers);
+      headers.delete('content-length');
 
-    return innerFetch(input, {
-      ...init,
-      headers,
-      body: JSON.stringify({
-        ...(parsedBody as Record<string, unknown>),
-        messages: rewrittenMessages,
-      }),
-    });
-  };
+      return innerFetch(input, {
+        ...init,
+        headers,
+        body: JSON.stringify({
+          ...(parsedBody as Record<string, unknown>),
+          messages: rewrittenMessages,
+        }),
+      });
+    },
+    {
+      preconnect: (...args: Parameters<typeof fetch.preconnect>) =>
+        innerFetch.preconnect(...args),
+    },
+  );
 }

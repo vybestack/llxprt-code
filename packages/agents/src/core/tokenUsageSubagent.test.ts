@@ -20,7 +20,7 @@
  * called at the send seams) so they exercise the actual wiring.
  */
 
-import { collectRawHistory } from '@vybestack/llxprt-code-core/test-utils/collect-raw-history.js';
+import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';

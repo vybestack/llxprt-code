@@ -30,7 +30,7 @@ import {
   fromAsync,
   setupAgentClient,
   type MockResponseShape,
-} from './client-test-helpers.js';
+} from './__tests__/client-test-helpers.js';
 
 // Mock prompts module before imports
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({

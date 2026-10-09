@@ -45,8 +45,7 @@ import { isTerminalRetryError } from '../retryErrorClassification.js';
 import {
   setupAnthropicProvider,
   type AnthropicTestSetup,
-} from './test-utils/anthropicProviderTestSetup.js';
-import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+} from './__tests__/anthropicProviderTestSetup.js';
 
 const baseProcessorOptions: StreamProcessorOptions = {
   isOAuth: false,
@@ -647,7 +646,6 @@ describe('AnthropicStreamProcessor terminal-event validation (issue #2532) > too
 describe('AnthropicStreamProcessor terminal-event validation (issue #2532) > AnthropicProvider wiring', () => {
   afterEach(() => {
     restoreGlobals();
-    clearActiveProviderRuntimeContext();
   });
 
   it('marks terminalSeen on the shared request commit state through the real provider stream', async () => {

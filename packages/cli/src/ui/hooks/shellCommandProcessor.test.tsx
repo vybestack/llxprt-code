@@ -8,7 +8,7 @@ import {
   automock,
   advanceTimersByTimeAsync,
 } from '@vybestack/llxprt-code-test-utils';
-import { renderHook } from '../../test-utils/render.js';
+import { renderHook } from '../../__tests__/render.js';
 import { act } from 'react';
 import {
   vi,
@@ -66,7 +66,7 @@ import {
   type ShellExecutionResult,
   type ShellOutputEvent,
 } from '@vybestack/llxprt-code-core';
-import { createFakeAgentFromMockClient } from './useAgentStream-test-helpers.js';
+import { createFakeAgentFromMockClient } from './__tests__/useAgentStream-test-helpers.js';
 import * as fs from 'fs';
 // import os from 'os'; // Not needed - mocked above
 // import * as path from 'path';
@@ -74,7 +74,7 @@ import * as crypto from 'crypto';
 import { ToolCallStatus } from '../types.js';
 import type { HistoryItemWithoutId, HistoryItemToolGroup } from '../types.js';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
-import { testRegex } from '../../test-utils/regex.js';
+import { testRegex } from '../../__tests__/regex.js';
 
 describe('useShellCommandProcessor', () => {
   let addItemToHistoryMock: Mock<UseHistoryManagerReturn['addItem']>;

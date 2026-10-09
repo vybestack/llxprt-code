@@ -1,8 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { writeBodyFile } from '../lib/body-evidence-writer.js';
 import { describe, expect, it } from 'bun:test';
-import { writeFileSync } from 'node:fs';
+
 import { join } from 'node:path';
-import { withSuffixFixture } from '../../packages/core/src/services/history/history-suffix-test-helpers.js';
+import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import {
   middleoutRow,
   MiddleoutDiskHistory,
@@ -29,13 +30,16 @@ async function pair(
       const output = process.env.MIDDLEOUT_DISK_BODY_OUTPUT;
       if (output !== undefined) {
         const name = `invoked-summary-${provider}-${size}-${caching}`;
-        writeFileSync(join(output, name + '-actual.json'), result.actual);
-        writeFileSync(join(output, name + '-expected.json'), result.expected);
-        writeFileSync(
+        await writeBodyFile(join(output, name + '-actual.json'), result.actual);
+        await writeBodyFile(
+          join(output, name + '-expected.json'),
+          result.expected,
+        );
+        await writeBodyFile(
           join(output, name + '-after-actual.json'),
           result.afterActual,
         );
-        writeFileSync(
+        await writeBodyFile(
           join(output, name + '-after-expected.json'),
           result.afterExpected,
         );

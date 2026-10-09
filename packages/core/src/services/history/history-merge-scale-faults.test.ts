@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { withSuffixFixture } from './history-suffix-test-helpers.js';
+import { withCoreSuffixFixture } from './core-suffix-fixture-test-helpers.js';
 import {
   withRollbackFixture,
   rowsOf,
@@ -13,7 +13,7 @@ import { mergeRow, MergeRowHistory } from './history-merge-test-helpers.js';
 describe('history merge scale partial admission', () => {
   for (const size of [512, 8192]) {
     it(`compensates a partial append from ${size} mixed input rows before replaying queued work`, async () => {
-      await withSuffixFixture(
+      await withCoreSuffixFixture(
         size,
         async (source) => {
           await withRollbackFixture(async (target, recorder) => {
@@ -54,7 +54,7 @@ describe('history merge scale partial admission', () => {
 
 describe('history merge chronology stamping', () => {
   it('stamps unmarked source rows in append order and reconciles the next new marker', async () => {
-    await withSuffixFixture(
+    await withCoreSuffixFixture(
       3,
       async (source) => {
         await withRollbackFixture(async (target) => {

@@ -18,7 +18,7 @@ import { GeminiProvider } from '../plugins/google-gemini/src/gemini/GeminiProvid
 import { buildGeminiDumpContents } from '../plugins/google-gemini/src/gemini/geminiDumpConversion.js';
 import { createMockCommandContext } from '../packages/cli/src/test-utils/mockCommandContext.js';
 import { dumpcontextCommand } from '../packages/cli/src/ui/commands/dumpcontextCommand.js';
-import { collectJournalRowsForAssertions } from '../packages/core/src/test-utils/collect-rows-for-assertions.js';
+import { collectJournalRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 
 class WatchedHistory extends HistoryService {
   opened = 0;

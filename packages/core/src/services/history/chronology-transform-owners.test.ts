@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { pausedDensity } from './chronology-rollback-owner-helpers.js';
+import { pausedDensity } from './chronology-rollback-owner-test-helpers.js';
 
 describe('public transform rollback full transaction owner bounds', () => {
   for (const size of [512, 8192]) {

@@ -33,14 +33,14 @@ import {
   type SessionMetadata,
 } from '@vybestack/llxprt-code-core';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { collectRowsForAssertions } from '../../../../core/src/test-utils/collect-rows-for-assertions.js';
+import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { continueCommand } from '../commands/continueCommand.js';
 import type { SlashCommandProcessorActions } from './slashCommandProcessor.js';
 import {
   processSlashCommand,
   type SlashCommandHandlerDeps,
 } from './slashCommandHandlers.js';
-import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import type { RecordingSwapCallbacks } from '../../services/performResume.js';
 import type { Message } from '../types.js';
 

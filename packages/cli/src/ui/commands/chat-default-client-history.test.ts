@@ -2,7 +2,7 @@
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { describe, expect, it } from 'bun:test';
 import { chatCommand } from './chatCommand.js';
-import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import {
   withCleanupHistory,
   cleanupBounds,

@@ -1,9 +1,9 @@
-import { observeHistorySynchronouslyForTest as testHistory } from '../../test-utils/synchronous-history-test-observation.js';
+import { observeHistorySynchronouslyForTest as testHistory } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
 import {
   collectRowsForAssertions,
   collectJournalRowsForAssertions,
-} from '../../test-utils/collect-rows-for-assertions.js';
-import { curatedHistoryForTest } from '../../test-utils/curated-history-fixture.js';
+} from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
+import { curatedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 /// <reference lib="esnext.array" />
 /**
  * Copyright 2025 Vybestack LLC

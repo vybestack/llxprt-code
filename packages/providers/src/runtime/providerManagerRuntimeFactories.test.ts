@@ -5,8 +5,8 @@
  */
 
 import { describe, expect, it } from 'bun:test';
+import { Config } from '@vybestack/llxprt-code-core';
 import type {
-  Config,
   RuntimeContentGeneratorFactory,
   RuntimeTokenizerFactory,
 } from '@vybestack/llxprt-code-core';
@@ -90,8 +90,13 @@ describe('configureProviderRuntimeFactories', () => {
   it('injects providers-backed content generator and tokenizer factories into CLI config', async () => {
     const runtimeHandle = createIsolatedRuntimeContext({
       runtimeId: 'provider-runtime-factory-injection',
-      workspaceDir: process.cwd(),
-      model: 'gpt-4.1',
+      config: new Config({
+        sessionId: 'provider-runtime-factory-injection',
+        targetDir: process.cwd(),
+        cwd: process.cwd(),
+        model: 'gpt-4.1',
+        debugMode: false,
+      }),
       metadata: { source: 'issue1584-p16a' },
       prepare: async () => {},
     });
@@ -150,8 +155,13 @@ describe('configureProviderRuntimeFactories', () => {
   it('composes a separately calibrated estimator for each Claude 5 model', async () => {
     const runtimeHandle = createIsolatedRuntimeContext({
       runtimeId: 'provider-runtime-factory-claude5',
-      workspaceDir: process.cwd(),
-      model: 'claude-opus-5',
+      config: new Config({
+        sessionId: 'provider-runtime-factory-claude5',
+        targetDir: process.cwd(),
+        cwd: process.cwd(),
+        model: 'claude-opus-5',
+        debugMode: false,
+      }),
       metadata: { source: 'issue2835' },
       prepare: async () => {},
     });
@@ -216,8 +226,13 @@ describe('configureProviderRuntimeFactories', () => {
   it('preserves an explicitly injected tokenizer factory as the authoritative runtime factory', async () => {
     const runtimeHandle = createIsolatedRuntimeContext({
       runtimeId: 'provider-runtime-injected-tokenizer-factory',
-      workspaceDir: process.cwd(),
-      model: 'gpt-5.6-sol',
+      config: new Config({
+        sessionId: 'provider-runtime-injected-tokenizer-factory',
+        targetDir: process.cwd(),
+        cwd: process.cwd(),
+        model: 'gpt-5.6-sol',
+        debugMode: false,
+      }),
       prepare: async () => {},
     });
     await activateIsolatedRuntimeContext(runtimeHandle, {

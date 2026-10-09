@@ -16,7 +16,7 @@
 
 import { describe, it, expect, vi } from 'bun:test';
 import { TaskTool } from './task.js';
-import { createTaskToolConfig } from './task-test-helpers.js';
+import { createTaskToolConfig } from './__tests__/task-test-helpers.js';
 import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { SubagentTerminateMode } from '@vybestack/llxprt-code-core/core/subagentTypes.js';

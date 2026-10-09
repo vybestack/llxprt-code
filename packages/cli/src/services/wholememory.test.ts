@@ -129,7 +129,7 @@ import {
   pairedEstimate,
   RETAINED_ALLOWANCE_BYTES,
   type PairedDelta,
-} from '@vybestack/llxprt-code-core/test-utils/retained-growth.js';
+} from '@vybestack/llxprt-code-test-utils/core/retained-growth.js';
 
 /** Paired fixture lengths both require complete decode coverage. */
 function accepted(report: Measurement, workload: MemoryWorkload): boolean {

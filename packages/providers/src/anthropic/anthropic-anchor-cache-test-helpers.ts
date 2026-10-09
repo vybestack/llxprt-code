@@ -5,7 +5,7 @@ import { convertToAnthropicMessages } from './AnthropicMessageNormalizer.js';
 import { attachAnchorCacheControl } from './AnthropicAnchorCache.js';
 import { attachPromptCaching } from './AnthropicRequestBuilder.js';
 import { prepareAnthropicRequest } from './AnthropicRequestPreparation.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import type { AnthropicMessage } from './AnthropicMessageNormalizer.js';
 type CacheTestLogger = { debug: (fn: () => string) => void };
 

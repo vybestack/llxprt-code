@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi } from 'bun:test';
 import { BucketFailoverHandlerImpl } from './BucketFailoverHandlerImpl.js';
-import { createBucketFailoverFixture } from './BucketFailoverHandlerImpl.test-helpers.js';
+import { createBucketFailoverFixture } from './__tests__/BucketFailoverHandlerImpl.test-helpers.js';
 
 describe('BucketFailoverHandlerImpl #37', () => {
   /**

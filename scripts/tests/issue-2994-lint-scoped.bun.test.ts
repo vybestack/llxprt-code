@@ -371,14 +371,21 @@ describe('issue-2994 changed-files mode (real hermetic temporary git repos)', ()
       '--dry-run',
     ]);
     expect(result.status).toBe(0);
-    // reverseClosure('core') = {a2a-server, agents, cli, providers, zed-acp}
+    // reverseClosure('core') = {a2a-server, agents, auth, cli, mcp,
+    // providers, test-utils, tools, zed-acp}: auth/mcp/tools join via their
+    // test-only imports of test-utils (which itself imports core), and
+    // test-utils imports core directly.
     expect(extractScopedTargets(result.stdout)).toEqual([
       'integration-tests',
       'packages/a2a-server',
       'packages/agents',
+      'packages/auth',
       'packages/cli',
       'packages/core',
+      'packages/mcp',
       'packages/providers',
+      'packages/test-utils',
+      'packages/tools',
       'packages/zed-acp',
     ]);
   }, 120_000);

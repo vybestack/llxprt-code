@@ -28,10 +28,6 @@ import {
   type MessageBus,
   type RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
-import {
-  createSettingsProviderRuntimeContext,
-  setSettingsProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
 import type {
   SettingsService,
   ProfileManager,
@@ -219,12 +215,6 @@ export function setCliRuntimeContext(
   validateRuntimeId(runtimeId);
   const metadata = { source: 'cli-runtime', ...(options.metadata ?? {}) };
   enterRuntimeScope({ runtimeId, metadata });
-  const nextContext = createSettingsProviderRuntimeContext({
-    settingsService,
-    config,
-    runtimeId,
-    metadata,
-  });
   logger.debug(() => {
     const providerLabel =
       config && typeof config.getProvider === 'function'
@@ -232,7 +222,6 @@ export function setCliRuntimeContext(
         : '';
     return `[cli-runtime] Registering runtime context ${runtimeId}${providerLabel}`;
   });
-  setSettingsProviderRuntimeContext(nextContext);
 
   upsertRuntimeEntry(runtimeId, {
     runtimeKind: resolveRuntimeKind(

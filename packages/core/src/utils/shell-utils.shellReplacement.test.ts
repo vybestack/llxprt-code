@@ -11,7 +11,6 @@ import {
 } from './shell-utils.js';
 import { Config } from '../config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { clearActiveProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 import {
   initializeParser as initializeShellParsers,
   isParserAvailable,
@@ -40,7 +39,6 @@ describe('Shell replacement settings', () => {
   });
 
   beforeEach(() => {
-    clearActiveProviderRuntimeContext();
     settingsService = new SettingsService();
 
     config = new Config({

@@ -1,6 +1,6 @@
-import { collectRowsForAssertions } from '../../test-utils/collect-rows-for-assertions.js';
-import { curatedHistoryForTest } from '../../test-utils/curated-history-fixture.js';
-import { observeHistorySynchronouslyForTest } from '../../test-utils/synchronous-history-test-observation.js';
+import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
+import { curatedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
+import { observeHistorySynchronouslyForTest } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
 /**
  * Test that compression locking prevents race conditions
  */

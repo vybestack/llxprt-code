@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { collectRawHistory } from '../../../../core/src/test-utils/collect-raw-history.js';
+import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { mediaParticipant } from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import {
   withPendingFixture,

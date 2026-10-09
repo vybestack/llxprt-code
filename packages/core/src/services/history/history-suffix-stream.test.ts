@@ -7,7 +7,7 @@ import {
   suffixRow,
   tokenWeight,
   withSuffixFixture,
-} from './history-suffix-test-helpers.js';
+} from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 
 describe('lazy chronological recent journal suffix', () => {
   for (const size of [512, 8192]) {

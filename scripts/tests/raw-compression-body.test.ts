@@ -1,9 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { writeBodyFile } from '../lib/body-evidence-writer.js';
 import { describe, expect, it } from 'bun:test';
-import { writeFileSync } from 'node:fs';
+
 import { join } from 'node:path';
 import { DebugLogger } from '../../packages/core/src/debug/index.js';
-import { withSuffixFixture } from '../../packages/core/src/services/history/history-suffix-test-helpers.js';
+import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { annotateCompressionSpan } from '../../packages/core/src/services/history/historyChronology.js';
 import {
   invalidateResponsesStatefulChain,
@@ -83,8 +84,8 @@ async function bodies(
       const output = process.env.RAW_COMPRESSION_BODY_OUTPUT;
       if (output !== undefined) {
         const name = `compressed-${provider}-${size}-${caching}`;
-        writeFileSync(join(output, name + '-actual.json'), actual);
-        writeFileSync(join(output, name + '-expected.json'), expected);
+        await writeBodyFile(join(output, name + '-actual.json'), actual);
+        await writeBodyFile(join(output, name + '-expected.json'), expected);
       }
       return { actual, expected };
     },

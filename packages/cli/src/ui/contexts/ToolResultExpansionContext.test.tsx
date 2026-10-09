@@ -22,7 +22,7 @@ import {
   type IContent,
 } from '@vybestack/llxprt-code-core';
 import { act } from 'react';
-import { render, waitFor } from '../../test-utils/render.js';
+import { render, waitFor } from '../../__tests__/render.js';
 import { Colors } from '../colors.js';
 
 (

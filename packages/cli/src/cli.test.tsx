@@ -37,7 +37,7 @@ import { relaunchAppInChildProcess } from './utils/relaunch.js';
 import { getCliVersion } from './utils/version.js';
 import { createForegroundAgent } from './cliAgentBootstrap.js';
 import { __setRenderForTesting } from './session/interactiveUI.js';
-import { createTestSessionMediaConfig } from './test-utils/sessionMediaConfig.js';
+import { createTestSessionMediaConfig } from './__tests__/sessionMediaConfig.js';
 
 // Custom error to identify mock process.exit calls
 class MockProcessExitError extends Error {

@@ -12,17 +12,13 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'bun:test';
 import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
 import { sanitizePromptCacheKey } from '../sanitizePromptCacheKey.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-  clearActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import {
   createProviderCallOptions,
   type ProviderCallOptionsInit,
-} from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+} from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 import type { CodexOAuthToken } from '@vybestack/llxprt-code-auth';
 
@@ -104,17 +100,9 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
     vi.clearAllMocks();
     mockFetch.mockClear();
     global.fetch = mockFetch as unknown as typeof fetch;
-
-    setActiveProviderRuntimeContext(
-      createProviderRuntimeContext({
-        settingsService: new SettingsService(),
-        runtimeId: 'test-runtime-id-123',
-      }),
-    );
   });
 
   afterEach(() => {
-    clearActiveProviderRuntimeContext();
     global.fetch = originalFetch;
   });
 
@@ -137,6 +125,8 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
       'https://chatgpt.com/backend-api/codex',
       undefined,
       mockOAuthManager as never,
+      undefined,
+      'codex',
     );
 
     let capturedBody: string | undefined;
@@ -274,6 +264,8 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
       'https://chatgpt.com/backend-api/codex',
       undefined,
       mockOAuthManager as never,
+      undefined,
+      'codex',
     );
 
     let capturedBody: string | undefined;
@@ -349,6 +341,8 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
       'https://chatgpt.com/backend-api/codex',
       undefined,
       mockOAuthManager as never,
+      undefined,
+      'codex',
     );
 
     let capturedBody: string | undefined;

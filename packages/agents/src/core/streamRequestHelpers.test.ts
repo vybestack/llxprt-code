@@ -1,4 +1,4 @@
-import { forbidHistoryMaterializationForTest } from '../../../core/src/test-utils/history-materialization-test-guard.js';
+import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -6,10 +6,216 @@ import { forbidHistoryMaterializationForTest } from '../../../core/src/test-util
  */
 
 import { describe, expect, it } from 'bun:test';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createHash, randomUUID } from 'node:crypto';
+import { readdirSync, rmSync } from 'node:fs';
+import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { buildProviderContent } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
+import { withCoreSuffixFixture } from '@vybestack/llxprt-code-core/services/history/core-suffix-fixture-test-helpers.js';
+import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { buildRequestContentsResult } from './streamRequestHelpers.js';
+import {
+  buildRequestContentsResult,
+  withRequestContentsSnapshot,
+  type RequestContentsSnapshot,
+} from './streamRequestHelpers.js';
 
+function snapshotHistoryRow(index: number): IContent {
+  return {
+    speaker: index === 0 || index === 31 ? 'ai' : 'human',
+    blocks:
+      index === 0 || index === 31
+        ? [
+            {
+              type: 'tool_call',
+              id: `far-${index}`,
+              name: 'inspect',
+              parameters: { index },
+            },
+          ]
+        : [{ type: 'text', text: `row-${index}:"\\\n雪` }],
+    metadata: {
+      id: `history-${index}`,
+      turnId: `history-turn-${index}`,
+      cacheAnchor: index === 0,
+    },
+  };
+}
+
+function snapshotPendingRows(): IContent[] {
+  return [0, 31, 64].map((index) => ({
+    speaker: index === 64 ? 'human' : 'tool',
+    blocks:
+      index === 64
+        ? [{ type: 'text', text: 'pending' }]
+        : [
+            {
+              type: 'tool_response',
+              callId: `far-${index}`,
+              toolName: 'inspect',
+              result: { index },
+              isComplete: true,
+            },
+          ],
+    metadata: {
+      id: `input-${index}`,
+      turnId: `input-turn-${index}`,
+      cacheAnchor: index === 31,
+      providerMetadata: { pendingIndex: index },
+    },
+  }));
+}
+
+function snapshotOracleBytes(row: IContent): string {
+  const index = row.metadata?.providerMetadata?.pendingIndex;
+  if (typeof index !== 'number') return JSON.stringify(row);
+  return JSON.stringify({
+    ...row,
+    metadata: {
+      ...row.metadata,
+      id: `input-${index}`,
+      turnId: `input-turn-${index}`,
+    },
+  });
+}
+
+async function inspectSnapshotPass(
+  request: RequestContentsSnapshot,
+  ownership: RowOwnership,
+  oracle: readonly IContent[],
+): Promise<string> {
+  const hash = createHash('sha256');
+  const pendingIds = new Set<string>();
+  let index = 0;
+  for await (const row of request.contents.openReader()) {
+    expect(ownership.snapshot().liveRows).toBe(1);
+    expect(snapshotOracleBytes(row)).toBe(JSON.stringify(oracle[index]));
+    expect(request.pending.isPending(index)).toBe(
+      index === 1 || index === 33 || index === 66,
+    );
+    if (row.metadata?.providerMetadata?.pendingIndex !== undefined) {
+      expect(row.metadata.turnId).toMatch(/^turn_/);
+      expect(row.metadata.id).toMatch(/^hist_tool_/);
+      if (row.metadata.id === undefined) throw new Error('Missing pending ID');
+      pendingIds.add(row.metadata.id);
+    }
+    hash.update(`${JSON.stringify(row)}\n`);
+    index += 1;
+  }
+  expect(index).toBe(67);
+  expect(pendingIds.size).toBe(1);
+  expect(ownership.snapshot().liveRows).toBe(0);
+  return hash.digest('hex');
+}
+
+async function checkSnapshotReaders(
+  request: RequestContentsSnapshot,
+  ownership: RowOwnership,
+  oracle: readonly IContent[],
+): Promise<void> {
+  expect(request.contents.count).toBe(67);
+  expect(Object.isFrozen(request.contents)).toBe(true);
+  expect('close' in request.contents).toBe(false);
+  expect('close' in request.pending).toBe(false);
+  expect(request.pending.inputCount).toBe(3);
+  expect(request.pending.firstOutputIndex).toBe(1);
+  expect(
+    [1, 33, 66].map((index) => request.pending.isPending(index)),
+  ).toStrictEqual([true, true, true]);
+  expect(request.pending.isPending(32)).toBe(false);
+  const estimationHash = await inspectSnapshotPass(request, ownership, oracle);
+  const bodyHash = await inspectSnapshotPass(request, ownership, oracle);
+  expect(bodyHash).toBe(estimationHash);
+  const left = request.contents.openReader();
+  const right = request.contents.openReader();
+  for (let index = 0; index < request.contents.count; index += 1) {
+    const a = await left.next();
+    const b = await right.next();
+    expect(a.value).toStrictEqual(b.value);
+    expect(a.value).not.toBe(b.value);
+    expect(ownership.snapshot().liveRows).toBe(2);
+  }
+  expect((await left.next()).done).toBe(true);
+  expect((await right.next()).done).toBe(true);
+  expect(ownership.snapshot().peakRows).toBe(2);
+  expect(ownership.snapshot().liveRows).toBe(0);
+  await request.contents.openReader().next();
+}
+
+describe('scoped repeatable request snapshot', () => {
+  it('reopens estimation and body readers over disk history with reordered pending membership and releases on close or cancel', async () => {
+    await withCoreSuffixFixture(
+      64,
+      async (history, sourceOwnership, counters) => {
+        const root = mkdtempSync(
+          join(process.cwd(), 'tmp/request-slice1-fixture-'),
+        );
+        const ownership = new RowOwnership();
+        let escaped: ProviderRequestRows | undefined;
+        const oracle = buildProviderContent(
+          Array.from({ length: 64 }, (_, index) => snapshotHistoryRow(index)),
+          snapshotPendingRows(),
+          new DebugLogger('slice1-eager-oracle'),
+        );
+        try {
+          await withRequestContentsSnapshot(
+            snapshotPendingRows(),
+            history,
+            async (request) => {
+              escaped = request.contents;
+              await checkSnapshotReaders(request, ownership, oracle);
+            },
+            { root, ownership },
+          );
+          expect(ownership.snapshot().liveRows).toBe(0);
+          expect(sourceOwnership.snapshot().liveRows).toBe(0);
+          expect(counters.snapshot().peakDecodedRows).toBe(1);
+          expect(readdirSync(root)).toHaveLength(0);
+          if (escaped === undefined) throw new Error('Missing escaped view');
+          expect(() => escaped?.openReader()).toThrow('snapshot is closed');
+          const controller = new AbortController();
+          await expect(
+            withRequestContentsSnapshot(
+              snapshotPendingRows(),
+              history,
+              async (request) => {
+                const left = request.contents.openReader();
+                const right = request.contents.openReader();
+                await left.next();
+                await right.next();
+                expect(ownership.snapshot().liveRows).toBe(2);
+                controller.abort(new Error('scoped request cancelled'));
+                expect(ownership.snapshot().liveRows).toBe(0);
+                expect(readdirSync(root)).toHaveLength(0);
+                expect(() => request.pending.isPending(1)).toThrow(
+                  'scoped request cancelled',
+                );
+                await expect(right.next()).rejects.toThrow(
+                  'scoped request cancelled',
+                );
+                await left.next();
+              },
+              { root, ownership, signal: controller.signal },
+            ),
+          ).rejects.toThrow('scoped request cancelled');
+          expect({
+            files: readdirSync(root),
+            liveRows: ownership.snapshot().liveRows,
+          }).toStrictEqual({ files: [], liveRows: 0 });
+        } finally {
+          rmSync(root, { recursive: true, force: true });
+        }
+      },
+      0,
+      snapshotHistoryRow,
+    );
+  });
+});
 describe('request cursor cancellation', () => {
   it('rejects a cancelled request before preparing any provider contents', async () => {
     const history = new HistoryService();
@@ -108,5 +314,98 @@ describe('buildRequestContentsResult history override', () => {
     expect(result.contents[result.contents.length - 1]?.speaker).toBe('human');
     expect(result.contents[0]).not.toBe(override[0]);
     expect(result.contents[0]?.blocks[0]).not.toBe(override[0]?.blocks[0]);
+  });
+});
+
+async function* observedHistoryRows(
+  history: HistoryService,
+  demand: { yielded: number; closed: boolean },
+): AsyncGenerator<IContent, void, unknown> {
+  try {
+    for await (const row of history.streamRawHistory()) {
+      demand.yielded += 1;
+      yield row;
+    }
+  } finally {
+    demand.closed = true;
+  }
+}
+
+describe('issue854 helper-level RED send-time history demand', () => {
+  it('does not exhaust disk history before the first gated request body pull', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'issue854-send-time-'));
+    const recording = new SessionRecordingService({
+      sessionId: randomUUID(),
+      projectHash: 'issue854-helper-red',
+      chatsDir: root,
+      workspaceDirs: [root],
+      provider: 'test',
+      model: 'test',
+    });
+    const history = new HistoryService({ recording });
+    const rowCount = 64;
+    try {
+      for (let index = 0; index < rowCount; index += 1) {
+        history.add({
+          speaker: 'human',
+          blocks: [{ type: 'text', text: `disk history row ${index}` }],
+        });
+      }
+      await history.waitForCommit();
+
+      const cancelledDemand = { yielded: 0, closed: false };
+      const cancelledSource = observedHistoryRows(history, cancelledDemand);
+      await cancelledSource.next();
+      await cancelledSource.return();
+      if (cancelledDemand.yielded !== 1 || !cancelledDemand.closed) {
+        throw new Error(
+          'Independent disk source return did not stop after one row',
+        );
+      }
+
+      const demand = { yielded: 0, closed: false };
+      const result = await buildRequestContentsResult(
+        { speaker: 'human', blocks: [{ type: 'text', text: 'pending' }] },
+        history,
+        observedHistoryRows(history, demand),
+      );
+      const rowsReadBeforeBodyPull = demand.yielded;
+      const bodyGate = new AbortController();
+      async function* requestBody(
+        contents: Iterable<IContent> | AsyncIterable<IContent>,
+      ): AsyncGenerator<string, void, unknown> {
+        await new Promise<void>((resolve) => {
+          bodyGate.signal.addEventListener('abort', () => resolve(), {
+            once: true,
+          });
+        });
+        for await (const row of contents) {
+          yield JSON.stringify(row);
+        }
+      }
+      const body = requestBody(result.contents);
+      try {
+        const firstBodyPull = body.next();
+        bodyGate.abort();
+        await firstBodyPull;
+        writeFileSync(
+          join(root, 'demand.json'),
+          JSON.stringify({
+            bodyPulls: 1,
+            expectedHistoryRowsLessThan: rowCount,
+            rowsReadBeforeBodyPull,
+            rowsReadAtFirstBodyPull: demand.yielded,
+            sourceClosed: demand.closed,
+            independentReturn: cancelledDemand,
+          }),
+        );
+        expect(demand.yielded).toBeLessThan(rowCount);
+      } finally {
+        await body.return();
+      }
+    } finally {
+      history.dispose();
+      await recording.dispose();
+    }
   });
 });

@@ -7,7 +7,7 @@ import {
   durableRowsOf,
 } from './chronology-rollback-test-helpers.js';
 import { mergeRow } from './history-merge-test-helpers.js';
-import { withSuffixFixture } from './history-suffix-test-helpers.js';
+import { withCoreSuffixFixture } from './core-suffix-fixture-test-helpers.js';
 
 describe('history merge pending source identities', () => {
   it('keeps the pending source caller identity and marker on append', async () => {
@@ -82,7 +82,7 @@ describe('history merge pending source identities', () => {
 describe('history merge source membership pinning', () => {
   for (const size of [512, 8192]) {
     it(`preserves pinned ${size} source rows across source clear and replacement`, async () => {
-      await withSuffixFixture(
+      await withCoreSuffixFixture(
         size,
         async (source) => {
           await withRollbackFixture(async (target) => {

@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { forbidHistoryMaterializationForTest } from '../../../../core/src/test-utils/history-materialization-test-guard.js';
-import { collectRowsForAssertions } from '../../../../core/src/test-utils/collect-rows-for-assertions.js';
-import { collectResumeRows } from '../../test-utils/resumeRows.js';
+import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
+import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
+import { collectResumeRows } from '../../__tests__/resumeRows.js';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { readdir } from 'node:fs/promises';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';

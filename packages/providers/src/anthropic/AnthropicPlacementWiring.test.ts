@@ -22,14 +22,9 @@
  *    classes, using rotating values to prove single resolution.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  clearActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import Anthropic from '@anthropic-ai/sdk';
 import type {
@@ -38,7 +33,7 @@ import type {
 } from '../types/providerRuntime.js';
 import type { SystemPromptPlacement } from '../utils/systemPromptPlacement.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { createAnthropicRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
+import { createAnthropicRawPostTestAdapter } from '../__tests__/rawPostTestAdapters.js';
 import { replayableContents } from '../utils/collectContents.js';
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
@@ -186,269 +181,326 @@ function firstMessageText(messages: unknown): string {
 }
 
 describe('Anthropic system-prompt placement wiring (issue #3172)', () => {
-  let settingsService: SettingsService;
-
   beforeEach(() => {
     FakeAnthropicClass.reset();
     settingsService = new SettingsService();
     settingsService.setProviderSetting('anthropic', 'prompt-caching', 'off');
-    setActiveProviderRuntimeContext(
-      createProviderRuntimeContext({
-        settingsService,
-        runtimeId: 'anthropic-placement-wiring-test',
-      }),
-    );
   });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
-
-  function buildOptions(
-    authToken: ResolvedAuthToken,
-    systemInstruction = ASSEMBLED_PROMPT,
-  ) {
-    const contents: IContent[] = [
-      { speaker: 'human', blocks: [{ type: 'text', text: 'Hi' }] },
-    ];
-    const options = createProviderCallOptions({
-      providerName: 'anthropic',
-      contents,
-      settings: settingsService,
-      systemInstruction,
-      resolved: {
-        model: 'claude-opus-5',
-        baseURL: 'https://api.anthropic.com',
-        authToken,
-        telemetry: { providerName: 'anthropic' },
-      },
-    });
-    // Issue #854: the provider-facing contract is a history stream.
-    return { ...options, contents: replayableContents(contents) };
-  }
-
-  async function captureWirePayload(
-    authToken: ResolvedAuthToken,
-  ): Promise<Record<string, unknown>> {
-    const provider = new PlacementTestProvider();
-    for await (const _chunk of provider.generateChatCompletion(
-      buildOptions(authToken),
-    )) {
-      void _chunk;
-    }
-    const request = lastItem(FakeAnthropicClass.requests)?.request;
-    if (!isObject(request)) {
-      throw new Error('Expected an SDK request payload');
-    }
-    return request;
-  }
-
-  async function exhaustCompletion(
-    provider: AnthropicProvider,
-    authToken: ResolvedAuthToken,
-  ): Promise<void> {
-    for await (const _chunk of provider.generateChatCompletion(
-      buildOptions(authToken),
-    )) {
-      void _chunk;
-    }
-  }
-
   // -------------------------------------------------------------------------
   // Placement wiring: direct strings
   // -------------------------------------------------------------------------
 
-  it('places the assembled instruction in the system field for a direct API-key string', async () => {
-    const { system } = await captureWirePayload(API_KEY);
-    expect(systemFieldText(system)).toBe(ASSEMBLED_PROMPT);
-  });
+  registerAnthropicBehavior1();
 
-  it('reserves the system field and context-prefixes the instruction for a direct OAuth string', async () => {
-    const { system, messages } = await captureWirePayload(OAUTH_TOKEN);
-    expect(systemFieldText(system)).toBe(OAUTH_SYSTEM_FIELD);
-    expect(firstMessageText(messages)).toContain(
-      `<system>\n${ASSEMBLED_PROMPT}\n</system>`,
-    );
-  });
+  registerAnthropicBehavior2();
 
-  it('resolves a rotating runtime provider once before API-key placement', async () => {
-    const tokens = [API_KEY, OAUTH_TOKEN];
-    let callIndex = 0;
-    const runtimeProvider: RuntimeAuthTokenProvider = {
-      provide: () =>
-        Promise.resolve(tokens[Math.min(callIndex++, tokens.length - 1)]),
-    };
-    const { system } = await captureWirePayload(runtimeProvider);
-    expect(systemFieldText(system)).toBe(ASSEMBLED_PROMPT);
-    expect(callIndex).toBe(1);
-  });
+  registerAnthropicBehavior3();
 
-  it('resolves a rotating runtime provider once before OAuth placement', async () => {
-    const tokens = [OAUTH_TOKEN, API_KEY];
-    let callIndex = 0;
-    const runtimeProvider: RuntimeAuthTokenProvider = {
-      provide: () =>
-        Promise.resolve(tokens[Math.min(callIndex++, tokens.length - 1)]),
-    };
-    const { system, messages } = await captureWirePayload(runtimeProvider);
-    expect(systemFieldText(system)).toBe(OAUTH_SYSTEM_FIELD);
-    expect(firstMessageText(messages)).toContain(
-      `<system>\n${ASSEMBLED_PROMPT}\n</system>`,
-    );
-    expect(callIndex).toBe(1);
-  });
+  registerAnthropicBehavior4();
 
   // -------------------------------------------------------------------------
   // Deep-compare parity: direct string vs runtime provider
   // -------------------------------------------------------------------------
 
-  it('produces byte-identical SDK payloads for a direct API-key string and a runtime provider resolving to the same key', async () => {
-    const direct = await captureWirePayload(API_KEY);
-    const runtimeProvider: RuntimeAuthTokenProvider = {
-      provide: () => Promise.resolve(API_KEY),
-    };
-    const runtime = await captureWirePayload(runtimeProvider);
-    expect(runtime).toStrictEqual(direct);
-  });
+  registerAnthropicBehavior5();
 
-  it('produces byte-identical SDK payloads for a direct OAuth string and a runtime provider resolving to the same token', async () => {
-    const direct = await captureWirePayload(OAUTH_TOKEN);
-    const runtimeProvider: RuntimeAuthTokenProvider = {
-      provide: () => Promise.resolve(OAUTH_TOKEN),
-    };
-    const runtime = await captureWirePayload(runtimeProvider);
-    expect(runtime).toStrictEqual(direct);
-  });
+  registerAnthropicBehavior6();
 
   // -------------------------------------------------------------------------
   // Blocker-fix: declaration controls placement, not the vendor system string
   // -------------------------------------------------------------------------
 
-  it('context-prefixes the instruction but does NOT emit the OAuth-only Claude Code system string when declaration is context-prefix and auth is API-key', async () => {
-    const provider = new ContextPrefixApiKeyProvider();
-    for await (const _chunk of provider.generateChatCompletion(
-      buildOptions(API_KEY),
-    )) {
-      void _chunk;
-    }
-    const request = requireSdkRequest(
-      lastItem(FakeAnthropicClass.requests)?.request,
-    );
-    // Declaration drove placement: prompt is in the context prefix.
-    expect(firstMessageText(request['messages'])).toContain(
-      `<system>\n${ASSEMBLED_PROMPT}\n</system>`,
-    );
-    // Auth classification independently controls the vendor system field:
-    // API-key auth does NOT emit the OAuth-only Claude Code string.
-    expect(request['system']).toBeUndefined();
-  });
+  registerAnthropicBehavior7();
 
-  it('fails fast before transport when OAuth is declared as system-field', async () => {
-    const provider = new SystemFieldOAuthProvider();
-    await expect(exhaustCompletion(provider, OAUTH_TOKEN)).rejects.toThrow(
-      'OAuth requires context-prefix placement',
-    );
-    expect(FakeAnthropicClass.requests).toHaveLength(0);
-  });
+  registerAnthropicBehavior8();
 
-  it('fails fast before transport for an unsupported placement declaration', async () => {
-    const provider = new InvalidPlacementProvider();
-    await expect(exhaustCompletion(provider, API_KEY)).rejects.toThrow(
-      'unsupported placement declaration invalid-placement',
-    );
-    expect(FakeAnthropicClass.requests).toHaveLength(0);
-  });
+  registerAnthropicBehavior9();
 
   // -------------------------------------------------------------------------
   // Prompt-envelope transport: single resolution and exact transport replay
   // -------------------------------------------------------------------------
 
-  it('resolves the API-key runtime provider once and transports the already-prepared exact request', async () => {
-    // Rotating values: if provide() is called twice the constructor receives
-    // the second value and the deep comparison fails — proving single
-    // resolution without mock-call-count.
-    const rotatingTokens = [API_KEY, 'sk-ant-api03-SHOULD-NOT-APPEAR'];
-    let callIndex = 0;
-    const rotatingProvider: RuntimeAuthTokenProvider = {
-      provide: () =>
-        Promise.resolve(
-          rotatingTokens[Math.min(callIndex++, rotatingTokens.length - 1)],
-        ),
-    };
+  registerAnthropicBehavior10();
 
-    const provider = new PlacementTestProvider();
-    const options = buildOptions(rotatingProvider);
-
-    // Projection resolves the token but creates no SDK client.
-    const createdBeforeProjection = FakeAnthropicClass.created.length;
-    const projection = await provider.projectPromptEnvelope(options);
-    expect(FakeAnthropicClass.created.length).toBe(createdBeforeProjection);
-
-    // Transport uses the prepared token without resolving again.
-    await provider
-      .generateChatCompletion({
-        ...options,
-        promptEnvelopeTransportToken: projection.transportToken,
-      })
-      .next();
-
-    // The SDK constructor received the FIRST token, proving provide() ran once.
-    const transportOpts = lastItem(FakeAnthropicClass.created)?.options;
-    expect(transportOpts?.['apiKey']).toBe(API_KEY);
-    expect(callIndex).toBe(1);
-
-    // Deep-compare against the direct-string baseline.
-    const transportRequest = lastItem(FakeAnthropicClass.requests)?.request;
-    FakeAnthropicClass.reset();
-    const baselineProvider = new PlacementTestProvider();
-    await baselineProvider.generateChatCompletion(buildOptions(API_KEY)).next();
-    const baselineRequest = lastItem(FakeAnthropicClass.requests)?.request;
-
-    expect(isObject(transportRequest)).toBe(true);
-    expect(isObject(baselineRequest)).toBe(true);
-    expect(transportRequest).toStrictEqual(baselineRequest);
-  });
-
-  it('resolves the OAuth runtime provider once and transports the already-prepared exact request', async () => {
-    const rotatingTokens = [OAUTH_TOKEN, 'sk-ant-oat01-SHOULD-NOT-APPEAR'];
-    let callIndex = 0;
-    const rotatingProvider: RuntimeAuthTokenProvider = {
-      provide: () =>
-        Promise.resolve(
-          rotatingTokens[Math.min(callIndex++, rotatingTokens.length - 1)],
-        ),
-    };
-
-    const provider = new PlacementTestProvider();
-    const options = buildOptions(rotatingProvider);
-
-    const createdBeforeProjection = FakeAnthropicClass.created.length;
-    const projection = await provider.projectPromptEnvelope(options);
-    expect(FakeAnthropicClass.created.length).toBe(createdBeforeProjection);
-
-    await provider
-      .generateChatCompletion({
-        ...options,
-        promptEnvelopeTransportToken: projection.transportToken,
-      })
-      .next();
-
-    // The SDK constructor received the FIRST token (OAuth uses authToken).
-    const transportOpts = lastItem(FakeAnthropicClass.created)?.options;
-    expect(transportOpts?.['authToken']).toBe(OAUTH_TOKEN);
-    expect(callIndex).toBe(1);
-
-    // Deep-compare against the direct-string baseline.
-    const transportRequest = lastItem(FakeAnthropicClass.requests)?.request;
-    FakeAnthropicClass.reset();
-    const baselineProvider = new PlacementTestProvider();
-    await baselineProvider
-      .generateChatCompletion(buildOptions(OAUTH_TOKEN))
-      .next();
-    const baselineRequest = lastItem(FakeAnthropicClass.requests)?.request;
-
-    expect(isObject(transportRequest)).toBe(true);
-    expect(isObject(baselineRequest)).toBe(true);
-    expect(transportRequest).toStrictEqual(baselineRequest);
-  });
+  registerAnthropicBehavior11();
 });
+
+let settingsService: SettingsService;
+
+function buildOptions(
+  authToken: ResolvedAuthToken,
+  systemInstruction = ASSEMBLED_PROMPT,
+) {
+  const contents: IContent[] = [
+    { speaker: 'human', blocks: [{ type: 'text', text: 'Hi' }] },
+  ];
+  const options = createProviderCallOptions({
+    providerName: 'anthropic',
+    contents,
+    settings: settingsService,
+    systemInstruction,
+    resolved: {
+      model: 'claude-opus-5',
+      baseURL: 'https://api.anthropic.com',
+      authToken,
+      telemetry: { providerName: 'anthropic' },
+    },
+  });
+  // Issue #854: the provider-facing contract is a history stream.
+  return { ...options, contents: replayableContents(contents) };
+}
+
+async function captureWirePayload(
+  authToken: ResolvedAuthToken,
+): Promise<Record<string, unknown>> {
+  const provider = new PlacementTestProvider();
+  for await (const _chunk of provider.generateChatCompletion(
+    buildOptions(authToken),
+  )) {
+    void _chunk;
+  }
+  const request = lastItem(FakeAnthropicClass.requests)?.request;
+  if (!isObject(request)) {
+    throw new Error('Expected an SDK request payload');
+  }
+  return request;
+}
+
+async function exhaustCompletion(
+  provider: AnthropicProvider,
+  authToken: ResolvedAuthToken,
+): Promise<void> {
+  for await (const _chunk of provider.generateChatCompletion(
+    buildOptions(authToken),
+  )) {
+    void _chunk;
+  }
+}
+
+function registerAnthropicBehavior1(): void {
+  describe('behavior 1', () => {
+    it('places the assembled instruction in the system field for a direct API-key string', async () => {
+      const { system } = await captureWirePayload(API_KEY);
+      expect(systemFieldText(system)).toBe(ASSEMBLED_PROMPT);
+    });
+  });
+}
+
+function registerAnthropicBehavior2(): void {
+  describe('behavior 2', () => {
+    it('reserves the system field and context-prefixes the instruction for a direct OAuth string', async () => {
+      const { system, messages } = await captureWirePayload(OAUTH_TOKEN);
+      expect(systemFieldText(system)).toBe(OAUTH_SYSTEM_FIELD);
+      expect(firstMessageText(messages)).toContain(
+        `<system>\n${ASSEMBLED_PROMPT}\n</system>`,
+      );
+    });
+  });
+}
+
+function registerAnthropicBehavior3(): void {
+  describe('behavior 3', () => {
+    it('resolves a rotating runtime provider once before API-key placement', async () => {
+      const tokens = [API_KEY, OAUTH_TOKEN];
+      let callIndex = 0;
+      const runtimeProvider: RuntimeAuthTokenProvider = {
+        provide: () =>
+          Promise.resolve(tokens[Math.min(callIndex++, tokens.length - 1)]),
+      };
+      const { system } = await captureWirePayload(runtimeProvider);
+      expect(systemFieldText(system)).toBe(ASSEMBLED_PROMPT);
+      expect(callIndex).toBe(1);
+    });
+  });
+}
+
+function registerAnthropicBehavior4(): void {
+  describe('behavior 4', () => {
+    it('resolves a rotating runtime provider once before OAuth placement', async () => {
+      const tokens = [OAUTH_TOKEN, API_KEY];
+      let callIndex = 0;
+      const runtimeProvider: RuntimeAuthTokenProvider = {
+        provide: () =>
+          Promise.resolve(tokens[Math.min(callIndex++, tokens.length - 1)]),
+      };
+      const { system, messages } = await captureWirePayload(runtimeProvider);
+      expect(systemFieldText(system)).toBe(OAUTH_SYSTEM_FIELD);
+      expect(firstMessageText(messages)).toContain(
+        `<system>\n${ASSEMBLED_PROMPT}\n</system>`,
+      );
+      expect(callIndex).toBe(1);
+    });
+  });
+}
+
+function registerAnthropicBehavior5(): void {
+  describe('behavior 5', () => {
+    it('produces byte-identical SDK payloads for a direct API-key string and a runtime provider resolving to the same key', async () => {
+      const direct = await captureWirePayload(API_KEY);
+      const runtimeProvider: RuntimeAuthTokenProvider = {
+        provide: () => Promise.resolve(API_KEY),
+      };
+      const runtime = await captureWirePayload(runtimeProvider);
+      expect(runtime).toStrictEqual(direct);
+    });
+  });
+}
+
+function registerAnthropicBehavior6(): void {
+  describe('behavior 6', () => {
+    it('produces byte-identical SDK payloads for a direct OAuth string and a runtime provider resolving to the same token', async () => {
+      const direct = await captureWirePayload(OAUTH_TOKEN);
+      const runtimeProvider: RuntimeAuthTokenProvider = {
+        provide: () => Promise.resolve(OAUTH_TOKEN),
+      };
+      const runtime = await captureWirePayload(runtimeProvider);
+      expect(runtime).toStrictEqual(direct);
+    });
+  });
+}
+
+function registerAnthropicBehavior7(): void {
+  describe('behavior 7', () => {
+    it('context-prefixes the instruction but does NOT emit the OAuth-only Claude Code system string when declaration is context-prefix and auth is API-key', async () => {
+      const provider = new ContextPrefixApiKeyProvider();
+      for await (const _chunk of provider.generateChatCompletion(
+        buildOptions(API_KEY),
+      )) {
+        void _chunk;
+      }
+      const request = requireSdkRequest(
+        lastItem(FakeAnthropicClass.requests)?.request,
+      );
+      // Declaration drove placement: prompt is in the context prefix.
+      expect(firstMessageText(request['messages'])).toContain(
+        `<system>\n${ASSEMBLED_PROMPT}\n</system>`,
+      );
+      // Auth classification independently controls the vendor system field:
+      // API-key auth does NOT emit the OAuth-only Claude Code string.
+      expect(request['system']).toBeUndefined();
+    });
+  });
+}
+
+function registerAnthropicBehavior8(): void {
+  describe('behavior 8', () => {
+    it('fails fast before transport when OAuth is declared as system-field', async () => {
+      const provider = new SystemFieldOAuthProvider();
+      await expect(exhaustCompletion(provider, OAUTH_TOKEN)).rejects.toThrow(
+        'OAuth requires context-prefix placement',
+      );
+      expect(FakeAnthropicClass.requests).toHaveLength(0);
+    });
+  });
+}
+
+function registerAnthropicBehavior9(): void {
+  describe('behavior 9', () => {
+    it('fails fast before transport for an unsupported placement declaration', async () => {
+      const provider = new InvalidPlacementProvider();
+      await expect(exhaustCompletion(provider, API_KEY)).rejects.toThrow(
+        'unsupported placement declaration invalid-placement',
+      );
+      expect(FakeAnthropicClass.requests).toHaveLength(0);
+    });
+  });
+}
+
+function registerAnthropicBehavior10(): void {
+  describe('behavior 10', () => {
+    it('resolves the API-key runtime provider once and transports the already-prepared exact request', async () => {
+      // Rotating values: if provide() is called twice the constructor receives
+      // the second value and the deep comparison fails — proving single
+      // resolution without mock-call-count.
+      const rotatingTokens = [API_KEY, 'sk-ant-api03-SHOULD-NOT-APPEAR'];
+      let callIndex = 0;
+      const rotatingProvider: RuntimeAuthTokenProvider = {
+        provide: () =>
+          Promise.resolve(
+            rotatingTokens[Math.min(callIndex++, rotatingTokens.length - 1)],
+          ),
+      };
+
+      const provider = new PlacementTestProvider();
+      const options = buildOptions(rotatingProvider);
+
+      // Projection resolves the token but creates no SDK client.
+      const createdBeforeProjection = FakeAnthropicClass.created.length;
+      const projection = await provider.projectPromptEnvelope(options);
+      expect(FakeAnthropicClass.created.length).toBe(createdBeforeProjection);
+
+      // Transport uses the prepared token without resolving again.
+      await provider
+        .generateChatCompletion({
+          ...options,
+          promptEnvelopeTransportToken: projection.transportToken,
+        })
+        .next();
+
+      // The SDK constructor received the FIRST token, proving provide() ran once.
+      const transportOpts = lastItem(FakeAnthropicClass.created)?.options;
+      expect(transportOpts?.['apiKey']).toBe(API_KEY);
+      expect(callIndex).toBe(1);
+
+      // Deep-compare against the direct-string baseline.
+      const transportRequest = lastItem(FakeAnthropicClass.requests)?.request;
+      FakeAnthropicClass.reset();
+      const baselineProvider = new PlacementTestProvider();
+      await baselineProvider
+        .generateChatCompletion(buildOptions(API_KEY))
+        .next();
+      const baselineRequest = lastItem(FakeAnthropicClass.requests)?.request;
+
+      expect(isObject(transportRequest)).toBe(true);
+      expect(isObject(baselineRequest)).toBe(true);
+      expect(transportRequest).toStrictEqual(baselineRequest);
+    });
+  });
+}
+
+function registerAnthropicBehavior11(): void {
+  describe('behavior 11', () => {
+    it('resolves the OAuth runtime provider once and transports the already-prepared exact request', async () => {
+      const rotatingTokens = [OAUTH_TOKEN, 'sk-ant-oat01-SHOULD-NOT-APPEAR'];
+      let callIndex = 0;
+      const rotatingProvider: RuntimeAuthTokenProvider = {
+        provide: () =>
+          Promise.resolve(
+            rotatingTokens[Math.min(callIndex++, rotatingTokens.length - 1)],
+          ),
+      };
+
+      const provider = new PlacementTestProvider();
+      const options = buildOptions(rotatingProvider);
+
+      const createdBeforeProjection = FakeAnthropicClass.created.length;
+      const projection = await provider.projectPromptEnvelope(options);
+      expect(FakeAnthropicClass.created.length).toBe(createdBeforeProjection);
+
+      await provider
+        .generateChatCompletion({
+          ...options,
+          promptEnvelopeTransportToken: projection.transportToken,
+        })
+        .next();
+
+      // The SDK constructor received the FIRST token (OAuth uses authToken).
+      const transportOpts = lastItem(FakeAnthropicClass.created)?.options;
+      expect(transportOpts?.['authToken']).toBe(OAUTH_TOKEN);
+      expect(callIndex).toBe(1);
+
+      // Deep-compare against the direct-string baseline.
+      const transportRequest = lastItem(FakeAnthropicClass.requests)?.request;
+      FakeAnthropicClass.reset();
+      const baselineProvider = new PlacementTestProvider();
+      await baselineProvider
+        .generateChatCompletion(buildOptions(OAUTH_TOKEN))
+        .next();
+      const baselineRequest = lastItem(FakeAnthropicClass.requests)?.request;
+
+      expect(isObject(transportRequest)).toBe(true);
+      expect(isObject(baselineRequest)).toBe(true);
+      expect(transportRequest).toStrictEqual(baselineRequest);
+    });
+  });
+}

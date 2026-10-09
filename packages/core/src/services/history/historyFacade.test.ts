@@ -1,5 +1,5 @@
-import { collectRowsForAssertions } from '../../test-utils/collect-rows-for-assertions.js';
-import { withCuratedHistoryForTest } from '../../test-utils/curated-history-fixture.js';
+import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
+import { withCuratedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 /**
  * Copyright 2026 Vybestack LLC
  *

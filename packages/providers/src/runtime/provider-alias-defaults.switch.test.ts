@@ -225,13 +225,6 @@ void vi.mock('../composition/providerAliases.js', () => {
 void vi.mock('@vybestack/llxprt-code-core', () => {
   const actual = realLlxprtCodeCoreModule;
 
-  let activeContext: {
-    settingsService: StubSettingsServiceInstance;
-    config?: StubConfigInstance;
-    runtimeId?: string;
-    metadata?: Record<string, unknown>;
-  } | null = null;
-
   return {
     ...actual,
     SettingsService: StubSettingsServiceClass,
@@ -241,27 +234,7 @@ void vi.mock('@vybestack/llxprt-code-core', () => {
       config?: StubConfigInstance;
       runtimeId?: string;
       metadata?: Record<string, unknown>;
-    }) => {
-      activeContext = context;
-      return context;
-    },
-    getActiveProviderRuntimeContext: () => {
-      if (!activeContext) {
-        throw new Error(
-          'MissingProviderRuntimeError(provider-runtime): runtime registration missing',
-        );
-      }
-      return activeContext;
-    },
-    setActiveProviderRuntimeContext: (context: {
-      settingsService: StubSettingsServiceInstance;
-      config?: StubConfigInstance;
-      runtimeId?: string;
-      metadata?: Record<string, unknown>;
-    }) => {
-      activeContext = context;
-    },
-    peekActiveProviderRuntimeContext: () => activeContext,
+    }) => context,
     getCurrentRuntimeScope: () => undefined,
   };
 });

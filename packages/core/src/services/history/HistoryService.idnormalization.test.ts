@@ -1,4 +1,4 @@
-import { collectRowsForAssertions } from '../../test-utils/collect-rows-for-assertions.js';
+import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 /// <reference lib="esnext.array" />
 /**
  * Copyright 2025 Vybestack LLC

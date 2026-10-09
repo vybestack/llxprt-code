@@ -1,4 +1,4 @@
-import { collectJournalRowsForAssertions } from '../../test-utils/collect-rows-for-assertions.js';
+import { collectJournalRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { existsSync } from 'node:fs';
@@ -6,7 +6,10 @@ import {
   journalShapeRow,
   scratchDirectories,
 } from './history-clone-trace-test-helpers.js';
-import { suffixRow, withSuffixFixture } from './history-suffix-test-helpers.js';
+import {
+  suffixRow,
+  withSuffixFixture,
+} from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import type { IContent } from './IContent.js';
 
 function comprehensiveRow(index: number, payloadBytes: number): IContent {

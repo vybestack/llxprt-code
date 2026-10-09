@@ -15,7 +15,7 @@ import {
   type Mock,
 } from 'bun:test';
 import { act, useEffect, useState, useCallback } from 'react';
-import { renderHook, waitFor } from '../../test-utils/render.js';
+import { renderHook, waitFor } from '../../__tests__/render.js';
 import { useCommandCompletion } from './useCommandCompletion.js';
 import type { CommandContext } from '../commands/types.js';
 import type { Config } from '@vybestack/llxprt-code-core';

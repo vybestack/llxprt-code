@@ -5,14 +5,15 @@
  */
 
 import { describe, expect, it, vi } from 'bun:test';
+import { replayableContents } from '../utils/collectContents.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import type { CircuitBreakerState } from '../LoadBalancingProvider.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import {
   extractFailoverSettings,
   isImmediateFailoverError,
@@ -98,7 +99,7 @@ async function collectChunks(
   return chunks;
 }
 
-describe('extracted provider helper behavior', () => {
+describe('extracted provider helper behavior: group 1', () => {
   it('reports every reason that makes a backend ineligible', () => {
     expect(
       getBackendSkipReasons(
@@ -135,7 +136,9 @@ describe('extracted provider helper behavior', () => {
     expect(shouldFailover(statusError(409), custom)).toBe(true);
     expect(shouldFailover(statusError(502), custom)).toBe(false);
   });
+});
 
+describe('extracted provider helper behavior: group 2', () => {
   it('derives load-balancer target policy from the failure taxonomy (issue #2532)', () => {
     const defaults = extractFailoverSettings(undefined);
 
@@ -193,7 +196,9 @@ describe('extracted provider helper behavior', () => {
       shouldFailoverNow(twoConsecutive, 6, inBandApiError, handlerStub, 1),
     ).toBe(true);
   });
+});
 
+describe('extracted provider helper behavior: group 3', () => {
   it('gates half-open probes and returns immutable circuit-breaker snapshots', () => {
     const states = new Map<string, CircuitBreakerState>();
     const manager = new CircuitBreakerManager(
@@ -259,7 +264,9 @@ describe('extracted provider helper behavior', () => {
     typedTimeout.message = 'localized timeout text';
     expect(isTimeoutError(typedTimeout)).toBe(true);
   });
+});
 
+describe('extracted provider helper behavior: group 4', () => {
   it('uses the attempt controller supplied by its owner', async () => {
     const controller = new AbortController();
     async function* delayedFirstChunk(): AsyncIterableIterator<IContent> {
@@ -302,12 +309,18 @@ describe('extracted provider helper behavior', () => {
       tokens: 5,
     });
   });
+});
 
+describe('extracted provider helper behavior: group 5', () => {
   it('preserves logging option normalization and missing-config fail-fast behavior', () => {
     const settingsService = new SettingsService();
     const config = { getConversationLoggingEnabled: () => false } as Config;
     const normalized = normalizeChatCompletionOptions(
-      [{ speaker: 'user', blocks: [{ type: 'text', text: 'hello' }] }],
+      {
+        contents: replayableContents([
+          { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
+        ]),
+      },
       undefined,
       {
         providerName: 'provider-a',
@@ -336,7 +349,7 @@ describe('extracted provider helper behavior', () => {
 
     expect(() =>
       ensureRuntimeContext(
-        { contents: [], runtime: { settingsService } },
+        { contents: replayableContents([]), runtime: { settingsService } },
         'provider-a',
         debugLoggerStub(),
       ),
@@ -376,7 +389,9 @@ describe('extracted provider helper behavior', () => {
       }),
     );
   });
+});
 
+describe('extracted provider helper behavior: group 6', () => {
   it('redacts URLs/custom patterns and extracts text from IContent chunks', () => {
     const redactor = new ConfigBasedRedactor({
       redactApiKeys: false,
@@ -411,7 +426,9 @@ describe('extracted provider helper behavior', () => {
       }),
     ).toBe('hello world');
   });
+});
 
+describe('extracted provider helper behavior: group 7', () => {
   it('preserves provider base-url chain traversal and capability fallbacks', () => {
     const settingsService = new SettingsService();
     settingsService.setProviderSetting('openai', 'toolFormat', 'json_schema');
@@ -456,7 +473,9 @@ describe('extracted provider helper behavior', () => {
       isPaidMode: false,
     });
   });
+});
 
+describe('extracted provider helper behavior: group 8', () => {
   it('preserves runtime normalization precedence and invocation snapshot behavior', () => {
     const settingsService = new SettingsService();
     settingsService.set('activeProvider', 'provider-a');
@@ -510,7 +529,9 @@ describe('extracted provider helper behavior', () => {
       },
     });
   });
+});
 
+describe('extracted provider helper behavior: group 9', () => {
   it('adds a metadata signal to an existing valid invocation', () => {
     const settingsService = new SettingsService();
     settingsService.set('activeProvider', 'provider-a');
@@ -547,7 +568,9 @@ describe('extracted provider helper behavior', () => {
 
     expect(normalized.invocation?.signal).toBe(controller.signal);
   });
+});
 
+describe('extracted provider helper behavior: group 10', () => {
   it('does not apply global ephemeral settings when config owns a different SettingsService', () => {
     const invocationSettingsService = new SettingsService();
     invocationSettingsService.setProviderSetting(
@@ -600,7 +623,9 @@ describe('extracted provider helper behavior', () => {
     // because the config-bound SettingsService differs from the invocation one.
     expect(normalized.resolved.authToken).toBe('provider-scoped-token');
   });
+});
 
+describe('extracted provider helper behavior: group 11', () => {
   it('fails closed instead of looping on cyclic wrapped-provider chains', () => {
     const settingsService = new SettingsService();
     settingsService.setProviderSetting('provider-a', 'model', 'settings-model');
@@ -637,7 +662,9 @@ describe('extracted provider helper behavior', () => {
       ),
     ).toThrow(/authToken/);
   });
+});
 
+describe('extracted provider helper behavior: group 12', () => {
   it('preserves load-balancer resolved delegate option construction', () => {
     const settingsService = new SettingsService();
     const config = { getConversationLoggingEnabled: () => false } as Config;
@@ -694,7 +721,9 @@ describe('extracted provider helper behavior', () => {
     });
     expect(resolved.invocation?.runtimeId).toBe('lb-runtime');
   });
+});
 
+describe('extracted provider helper behavior: group 13', () => {
   it('carries the member profileId on delegate metadata alongside loadBalancerDelegate (#2643)', () => {
     const settingsService = new SettingsService();
     const config = { getConversationLoggingEnabled: () => false } as Config;

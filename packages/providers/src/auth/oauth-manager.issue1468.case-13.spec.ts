@@ -11,7 +11,7 @@ import {
   createIssue1468Fixture,
   mockLoadProfile,
   mockFetchAnthropicUsage,
-} from './oauth-manager.issue1468.test-helpers.js';
+} from './__tests__/oauth-manager.issue1468.test-helpers.js';
 
 describe('Issue #1468 getProfileBuckets case 13', () => {
   it('prefers the current profile only bucket over a stale unscoped session bucket', async () => {

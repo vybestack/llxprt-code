@@ -20,7 +20,7 @@ import { Text } from 'ink';
 import {
   renderWithProviders,
   type RenderStoreSeeds,
-} from '../../../test-utils/render.js';
+} from '../../../__tests__/render.js';
 import { useStoreSelector } from '../useStoreSelector.js';
 import { useDialogStore } from '../dialog/DialogContext.js';
 import { useTerminalStore } from '../terminal/TerminalContext.js';

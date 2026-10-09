@@ -5,7 +5,6 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
-import type { Mock } from 'bun:test';
 import type { ConfigParameters } from './configTypes.js';
 import type { IContent } from '../services/history/IContent.js';
 import {
@@ -19,16 +18,14 @@ import * as path from 'node:path';
 import { setLlxprtMdFilename as mockSetLlxprtMdFilename } from '@vybestack/llxprt-code-tools';
 import type { ContentGeneratorConfig } from '../core/contentGenerator.js';
 import { createContentGeneratorConfig } from '../core/contentGenerator.js';
-import { getSettingsService } from '@vybestack/llxprt-code-settings';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import { initializeTestConfig } from '../test-utils/config.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { initializeTestConfig } from '../__tests__/config-test-helpers.js';
 import {
   buildFsMockBody,
   buildToolsMockBody,
   buildContentGeneratorMockBody,
   buildTelemetryMockBody,
   buildGitServiceMockBody,
-  buildSettingsMockBody,
   buildIdeIntegrationMockBody,
   buildMemoryDiscoveryMockBody,
   buildFetchMockBody,
@@ -38,7 +35,7 @@ import {
   streamConfigHistory,
   sharedConfigTestConstants,
   type HoistedConfigMocks,
-} from './configTestHarness.js';
+} from './__tests__/configTestHarness.js';
 
 const { USER_MEMORY, TARGET_DIR, TELEMETRY_SETTINGS } =
   sharedConfigTestConstants;
@@ -66,15 +63,12 @@ void vi.mock('@vybestack/llxprt-code-tools', () =>
 // Mock individual tools if their constructors are complex or have side effects
 
 const __actual3 = { ...(await import('../core/contentGenerator.js')) };
-void vi.mock('../core/contentGenerator.js', () =>
-  buildContentGeneratorMockBody(__actual3),
-);
+const contentGeneratorMockBody = buildContentGeneratorMockBody(__actual3);
+void vi.mock('../core/contentGenerator.js', () => contentGeneratorMockBody);
 
 void vi.mock('../telemetry/index.js', () => buildTelemetryMockBody());
 
 void vi.mock('../services/gitService.js', () => buildGitServiceMockBody());
-
-void vi.mock('@vybestack/llxprt-code-settings', () => buildSettingsMockBody());
 
 const __actual4 = {
   ...(await import('@vybestack/llxprt-code-ide-integration')),
@@ -89,9 +83,7 @@ void vi.mock('../utils/memoryDiscovery.js', () =>
 
 void vi.mock('../utils/fetch.js', () => buildFetchMockBody(hoistedConfigMocks));
 
-const baseParams = createBaseParams(
-  getSettingsService() as unknown as SettingsService,
-);
+const baseParams = createBaseParams(new SettingsService());
 
 describe('Server Config (config.ts)', () => {
   beforeEach(() => {
@@ -208,9 +200,9 @@ async function configCase0(): Promise<void> {
     apiKey: 'test-key',
   };
 
-  (
-    createContentGeneratorConfig as Mock<(...args: never[]) => unknown>
-  ).mockReturnValue(mockContentConfig);
+  contentGeneratorMockBody.createContentGeneratorConfig.mockReturnValue(
+    mockContentConfig,
+  );
 
   // Set fallback mode to true to ensure it gets reset
   config.setFallbackMode(true);
@@ -241,9 +233,9 @@ async function configCase1(): Promise<void> {
     apiKey: 'test-key',
   };
 
-  (
-    createContentGeneratorConfig as Mock<(...args: never[]) => unknown>
-  ).mockReturnValue(mockContentConfig);
+  contentGeneratorMockBody.createContentGeneratorConfig.mockReturnValue(
+    mockContentConfig,
+  );
 
   // Mock the existing client with some history
   const mockExistingHistory = configHistoryRows(
@@ -262,10 +254,10 @@ async function configCase1(): Promise<void> {
   const mockNewClient = {
     isInitialized: vi.fn().mockReturnValue(true),
     getHistory: vi.fn().mockReturnValue([]),
-    streamHistory: streamConfigHistory,
+
     getHistoryService: vi.fn().mockReturnValue(null),
     setHistory: vi.fn(),
-    initialize: vi.fn().mockResolvedValue(undefined),
+
     ...captureConfigHistory(),
   };
 
@@ -313,9 +305,9 @@ async function configCase2(): Promise<void> {
     model: 'gemini-pro',
     apiKey: 'test-key',
   };
-  (
-    createContentGeneratorConfig as Mock<(...args: never[]) => unknown>
-  ).mockReturnValue(mockContentConfig);
+  contentGeneratorMockBody.createContentGeneratorConfig.mockReturnValue(
+    mockContentConfig,
+  );
 
   const carriedHistory = configHistoryRows(
     {
@@ -339,9 +331,9 @@ async function configCase2(): Promise<void> {
   const mockNewClient = {
     isInitialized: vi.fn().mockReturnValue(true),
     getHistory: vi.fn().mockResolvedValue([]),
-    streamHistory: streamConfigHistory,
+
     getHistoryService: vi.fn().mockReturnValue(null),
-    initialize: vi.fn().mockResolvedValue(undefined),
+
     ...captureConfigHistory(),
   };
 
@@ -384,9 +376,9 @@ async function configCase3(): Promise<void> {
     },
   ];
 
-  (
-    createContentGeneratorConfig as Mock<(...args: never[]) => unknown>
-  ).mockReturnValue(mockContentConfig);
+  contentGeneratorMockBody.createContentGeneratorConfig.mockReturnValue(
+    mockContentConfig,
+  );
 
   const chatGetHistory = vi.fn().mockReturnValue(committedHistory);
   const chatStreamHistory = async function* (): AsyncGenerator<
@@ -414,9 +406,9 @@ async function configCase3(): Promise<void> {
   const mockNewClient = {
     isInitialized: vi.fn().mockReturnValue(true),
     getHistory: vi.fn().mockReturnValue(committedHistory),
-    streamHistory: streamConfigHistory,
+
     getHistoryService: vi.fn().mockReturnValue(null),
-    initialize: vi.fn().mockResolvedValue(undefined),
+
     ...captureConfigHistory(),
     storeHistoryServiceForReuse: vi.fn(),
   };
@@ -446,17 +438,17 @@ async function configCase4(): Promise<void> {
     apiKey: 'test-key',
   };
 
-  (
-    createContentGeneratorConfig as Mock<(...args: never[]) => unknown>
-  ).mockReturnValue(mockContentConfig);
+  contentGeneratorMockBody.createContentGeneratorConfig.mockReturnValue(
+    mockContentConfig,
+  );
 
   const mockNewClient = {
     isInitialized: vi.fn().mockReturnValue(true),
     getHistory: vi.fn().mockReturnValue([]),
-    streamHistory: streamConfigHistory,
+
     getHistoryService: vi.fn().mockReturnValue(null),
     setHistory: vi.fn(),
-    initialize: vi.fn().mockResolvedValue(undefined),
+
     ...captureConfigHistory(),
   };
 
@@ -490,9 +482,7 @@ async function configCase5(): Promise<void> {
     config as unknown as { contentGeneratorConfig: ContentGeneratorConfig }
   ).contentGeneratorConfig = mockContentConfig;
 
-  (
-    createContentGeneratorConfig as Mock<(...args: never[]) => unknown>
-  ).mockReturnValue({
+  contentGeneratorMockBody.createContentGeneratorConfig.mockReturnValue({
     ...mockContentConfig,
     vertexai: true,
   });
@@ -518,10 +508,10 @@ async function configCase5(): Promise<void> {
   const mockNewClient = {
     isInitialized: vi.fn().mockReturnValue(true),
     getHistory: vi.fn().mockReturnValue([]),
-    streamHistory: streamConfigHistory,
+
     getHistoryService: vi.fn().mockReturnValue(null),
     setHistory: vi.fn(),
-    initialize: vi.fn().mockResolvedValue(undefined),
+
     ...captureConfigHistory(),
     storeHistoryServiceForReuse: vi.fn(),
   };
@@ -562,9 +552,7 @@ async function configCase6(): Promise<void> {
     config as unknown as { contentGeneratorConfig: ContentGeneratorConfig }
   ).contentGeneratorConfig = mockContentConfig;
 
-  (
-    createContentGeneratorConfig as Mock<(...args: never[]) => unknown>
-  ).mockReturnValue({
+  contentGeneratorMockBody.createContentGeneratorConfig.mockReturnValue({
     ...mockContentConfig,
     vertexai: false,
   });
@@ -582,10 +570,10 @@ async function configCase6(): Promise<void> {
   const mockNewClient = {
     isInitialized: vi.fn().mockReturnValue(true),
     getHistory: vi.fn().mockReturnValue([]),
-    streamHistory: streamConfigHistory,
+
     getHistoryService: vi.fn().mockReturnValue(null),
     setHistory: vi.fn(),
-    initialize: vi.fn().mockResolvedValue(undefined),
+
     ...captureConfigHistory(),
   };
 
@@ -636,16 +624,16 @@ async function configCase7(): Promise<void> {
     oauthManager: mockOAuthManager,
   };
 
-  (
-    createContentGeneratorConfig as Mock<(...args: never[]) => unknown>
-  ).mockReturnValue(mockContentConfig);
+  contentGeneratorMockBody.createContentGeneratorConfig.mockReturnValue(
+    mockContentConfig,
+  );
 
   const mockNewClient = {
     isInitialized: vi.fn().mockReturnValue(true),
     getHistory: vi.fn().mockReturnValue([]),
-    streamHistory: streamConfigHistory,
+
     getHistoryService: vi.fn().mockReturnValue(null),
-    initialize: vi.fn().mockResolvedValue(undefined),
+
     ...captureConfigHistory(),
     storeHistoryServiceForReuse: vi.fn(),
   };
@@ -703,16 +691,16 @@ async function configCase8(): Promise<void> {
     oauthManager: mockOAuthManager,
   };
 
-  (
-    createContentGeneratorConfig as Mock<(...args: never[]) => unknown>
-  ).mockReturnValue(mockContentConfig);
+  contentGeneratorMockBody.createContentGeneratorConfig.mockReturnValue(
+    mockContentConfig,
+  );
 
   const mockNewClient = {
     isInitialized: vi.fn().mockReturnValue(true),
     getHistory: vi.fn().mockReturnValue(mockExistingHistory),
-    streamHistory: streamConfigHistory,
+
     getHistoryService: vi.fn().mockReturnValue(mockHistoryService),
-    initialize: vi.fn().mockResolvedValue(undefined),
+
     ...captureConfigHistory(),
     storeHistoryServiceForReuse: vi.fn(),
   };
@@ -747,9 +735,9 @@ async function configCase9(): Promise<void> {
     apiKey: 'test-key',
   };
 
-  (
-    createContentGeneratorConfig as Mock<(...args: never[]) => unknown>
-  ).mockReturnValue(mockContentConfig);
+  contentGeneratorMockBody.createContentGeneratorConfig.mockReturnValue(
+    mockContentConfig,
+  );
 
   const dispose = vi.fn();
   const mockExistingClient = {
@@ -763,10 +751,9 @@ async function configCase9(): Promise<void> {
   const mockNewClient = {
     isInitialized: vi.fn().mockReturnValue(true),
     getHistory: vi.fn().mockReturnValue([]),
-    streamHistory: streamConfigHistory,
+
     getHistoryService: vi.fn().mockReturnValue(null),
     ...captureConfigHistory(),
-    initialize: vi.fn().mockResolvedValue(undefined),
   };
 
   (

@@ -11,7 +11,7 @@ import { join } from 'node:path';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import { RequestMediaResolver } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
-import { streamCallOptions } from '../test-utils/streamCallOptions.js';
+import { streamCallOptions } from '../__tests__/streamCallOptions.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createOpenAIAliasProvider } from '../composition/aliasProviderFactory.js';
 import type { ProviderAliasEntry } from '../composition/providerAliases.js';
@@ -23,6 +23,115 @@ import {
   runtimeRegistry,
   upsertRuntimeEntry,
 } from '../runtime/runtimeRegistry.js';
+
+function inputUrl(input: string | URL | Request): string {
+  if (typeof input === 'string') return input;
+  if (input instanceof URL) return input.toString();
+  return input.url;
+}
+
+async function bodyText(body: BodyInit | null | undefined): Promise<string> {
+  if (body === null || body === undefined) return '';
+  return new Response(body).text();
+}
+
+function isRecordedChatRequest(value: unknown): value is RecordedChatRequest {
+  return typeof value === 'object' && value !== null;
+}
+
+function createKimiProvider(): OpenAIProvider {
+  const entry = {
+    alias: 'kimi',
+    filePath: '/registered/kimi.config',
+    source: 'builtin',
+    config: {
+      baseProvider: 'openai',
+      'base-url': 'https://api.kimi.test/v1',
+      mediaSupport: {
+        inlineImages: true,
+        fileUpload: true,
+        videoSupport: true,
+      },
+      mediaTransportCapabilities: declaredMediaTransportCapabilities('kimi'),
+    },
+  } satisfies ProviderAliasEntry;
+  const provider = createOpenAIAliasProvider(
+    entry,
+    'test-key',
+    undefined,
+    {},
+    false,
+  );
+  return provider;
+}
+
+function mediaHistory(includeImage: boolean): IContent[] {
+  const blocks: IContent['blocks'] = [{ type: 'text', text: 'inspect media' }];
+  if (includeImage) {
+    blocks.push({
+      type: 'media',
+      encoding: 'base64',
+      mimeType: 'image/png',
+      data: 'QUJD',
+    });
+  }
+  blocks.push({
+    type: 'media',
+    encoding: 'base64',
+    mimeType: 'video/mp4',
+    data: 'VklERU8=',
+    filename: 'clip.mp4',
+  });
+  return [{ speaker: 'human', blocks }];
+}
+
+async function send(
+  provider: OpenAIProvider,
+  settings: SettingsService,
+  contents: IContent[],
+  runtimeId: string,
+): Promise<IContent[]> {
+  if (!runtimeRegistry.has(runtimeId)) upsertRuntimeEntry(runtimeId, {});
+  const output: IContent[] = [];
+  const iterator = provider.generateChatCompletion(
+    streamCallOptions({
+      providerName: 'kimi',
+      settings,
+      contents,
+      runtimeId,
+      configOverrides: { getTargetDir: () => '/workspace/test' },
+      systemInstruction: 'stable system prompt',
+      ephemerals: { streaming: 'disabled' },
+      resolved: {
+        model: 'kimi-k3',
+        baseURL: 'https://api.kimi.test/v1',
+        authToken: 'test-key',
+      },
+    }),
+  );
+  for await (const content of iterator) output.push(content);
+  return output;
+}
+
+interface FetchRoute {
+  readonly match: string;
+  readonly respond: () => Response;
+}
+
+function routedFetch(
+  routes: readonly FetchRoute[],
+  fallback: () => Response = () =>
+    new Response('unexpected request', { status: 500 }),
+): typeof globalThis.fetch {
+  return Object.assign(
+    async (input: string | URL | Request) => {
+      const url = inputUrl(input);
+      const route = routes.find((candidate) => url.includes(candidate.match));
+      return route === undefined ? fallback() : route.respond();
+    },
+    { preconnect: originalFetch.preconnect },
+  );
+}
 
 interface RecordedChatRequest {
   readonly model?: unknown;
@@ -38,121 +147,36 @@ describe('OpenAIProvider', () => {
     resetCliRuntimeRegistryForTesting();
   });
 
-  function inputUrl(input: string | URL | Request): string {
-    if (typeof input === 'string') return input;
-    if (input instanceof URL) return input.toString();
-    return input.url;
-  }
-
-  async function bodyText(body: BodyInit | null | undefined): Promise<string> {
-    if (body === null || body === undefined) return '';
-    return new Response(body).text();
-  }
-
-  function isRecordedChatRequest(value: unknown): value is RecordedChatRequest {
-    return typeof value === 'object' && value !== null;
-  }
-
-  function createKimiProvider(): OpenAIProvider {
-    const entry = {
-      alias: 'kimi',
-      filePath: '/registered/kimi.config',
-      source: 'builtin',
-      config: {
-        baseProvider: 'openai',
-        'base-url': 'https://api.kimi.test/v1',
-        mediaSupport: {
-          inlineImages: true,
-          fileUpload: true,
-          videoSupport: true,
-        },
-        mediaTransportCapabilities: declaredMediaTransportCapabilities('kimi'),
-      },
-    } satisfies ProviderAliasEntry;
-    const provider = createOpenAIAliasProvider(
-      entry,
-      'test-key',
-      undefined,
-      {},
-      false,
-    );
-    return provider;
-  }
-
-  function mediaHistory(includeImage: boolean): IContent[] {
-    const blocks: IContent['blocks'] = [
-      { type: 'text', text: 'inspect media' },
-    ];
-    if (includeImage) {
-      blocks.push({
-        type: 'media',
-        encoding: 'base64',
-        mimeType: 'image/png',
-        data: 'QUJD',
-      });
-    }
-    blocks.push({
-      type: 'media',
-      encoding: 'base64',
-      mimeType: 'video/mp4',
-      data: 'VklERU8=',
-      filename: 'clip.mp4',
-    });
-    return [{ speaker: 'human', blocks }];
-  }
-
-  async function send(
-    provider: OpenAIProvider,
-    settings: SettingsService,
-    contents: IContent[],
-    runtimeId: string,
-  ): Promise<IContent[]> {
-    if (!runtimeRegistry.has(runtimeId)) upsertRuntimeEntry(runtimeId, {});
-    const output: IContent[] = [];
-    const iterator = provider.generateChatCompletion(
-      streamCallOptions({
-        providerName: 'kimi',
-        settings,
-        contents,
-        runtimeId,
-        configOverrides: { getTargetDir: () => '/workspace/test' },
-        systemInstruction: 'stable system prompt',
-        ephemerals: { streaming: 'disabled' },
-        resolved: {
-          model: 'kimi-k3',
-          baseURL: 'https://api.kimi.test/v1',
-          authToken: 'test-key',
-        },
-      }),
-    );
-    for await (const content of iterator) output.push(content);
-    return output;
-  }
-
   /**
    * Builds a fetch stub that dispatches on URL substring. Tests declare their
    * routes instead of writing the dispatch inline, which is what
    * jest/no-conditional-in-test is pointing at (#3129): the branching belongs to
    * the stub, not to the test body.
    */
-  interface FetchRoute {
-    readonly match: string;
-    readonly respond: () => Response;
-  }
-
-  function routedFetch(
-    routes: readonly FetchRoute[],
-    fallback: () => Response = () =>
-      new Response('unexpected request', { status: 500 }),
-  ): typeof globalThis.fetch {
-    return (async (input: string | URL | Request) => {
-      const url = inputUrl(input);
-      const route = routes.find((candidate) => url.includes(candidate.match));
-      return route === undefined ? fallback() : route.respond();
-    }) as typeof globalThis.fetch;
-  }
 
   describe('Kimi explicit Files failures', () => {
+    registerProviderBehavior1();
+  });
+
+  describe('Kimi deterministic cache transport', () => {
+    registerProviderBehavior2();
+
+    registerProviderBehavior3();
+
+    registerProviderBehavior4();
+
+    registerProviderBehavior5();
+
+    registerProviderBehavior6();
+
+    registerProviderBehavior7();
+
+    registerProviderBehavior8();
+  });
+});
+
+function registerProviderBehavior1(): void {
+  describe('provider fixture 1', () => {
     it('fails before chat submission when an explicitly enabled upload rejects', async () => {
       let chatSubmissions = 0;
       globalThis.fetch = routedFetch([
@@ -181,50 +205,13 @@ describe('OpenAIProvider', () => {
       expect(chatSubmissions).toBe(0);
     });
   });
+}
 
-  describe('Kimi deterministic cache transport', () => {
+function registerProviderBehavior2(): void {
+  describe('provider fixture 2', () => {
     it('keeps affinity, system prefix, and ms references stable across replay and media changes', async () => {
       const recorded: RecordedChatRequest[] = [];
-      globalThis.fetch = async (input, init) => {
-        const url = inputUrl(input);
-        if (url.includes('/files')) {
-          return Response.json({
-            id: 'file-stable-video',
-            object: 'file',
-            bytes: 5,
-            created_at: 1,
-            filename: 'clip.mp4',
-            purpose: 'video',
-            status: 'processed',
-          });
-        }
-        const body =
-          init?.body ?? (input instanceof Request ? input.body : null);
-        const parsed: unknown = JSON.parse(await bodyText(body));
-        if (!isRecordedChatRequest(parsed)) {
-          return new Response('invalid fixture request', { status: 400 });
-        }
-        recorded.push(parsed);
-        return Response.json({
-          id: `chat-${recorded.length}`,
-          object: 'chat.completion',
-          created: 1,
-          model: 'kimi-k3',
-          choices: [
-            {
-              index: 0,
-              message: { role: 'assistant', content: 'ok' },
-              finish_reason: 'stop',
-            },
-          ],
-          usage: {
-            prompt_tokens: 10,
-            completion_tokens: 1,
-            total_tokens: 11,
-            cached_tokens: 7,
-          },
-        });
-      };
+      installKimiTransportFixture1(recorded);
       const provider = createKimiProvider();
       const settings = new SettingsService();
       settings.set('provider-files', 'session');
@@ -280,41 +267,51 @@ describe('OpenAIProvider', () => {
         );
       expect(cachedTokenTotal).toBe(35);
     });
+  });
+}
 
+function registerProviderBehavior3(): void {
+  describe('provider fixture 3', () => {
     it('makes no Files request before explicit workspace opt-in', async () => {
       const recorded: string[] = [];
       const requestedUrls: string[] = [];
-      globalThis.fetch = async (input, init) => {
-        const url = inputUrl(input);
-        requestedUrls.push(url);
-        if (url.includes('/files')) {
+      globalThis.fetch = Object.assign(
+        async (
+          input: Parameters<typeof fetch>[0],
+          init: Parameters<typeof fetch>[1],
+        ) => {
+          const url = inputUrl(input);
+          requestedUrls.push(url);
+          if (url.includes('/files')) {
+            return Response.json({
+              id: 'file-explicit-pdf',
+              object: 'file',
+              bytes: 3,
+              created_at: 1,
+              filename: 'notes.pdf',
+              purpose: 'file-extract',
+              status: 'processed',
+            });
+          }
+          const body =
+            init?.body ?? (input instanceof Request ? input.body : null);
+          recorded.push(await bodyText(body));
           return Response.json({
-            id: 'file-explicit-pdf',
-            object: 'file',
-            bytes: 3,
-            created_at: 1,
-            filename: 'notes.pdf',
-            purpose: 'file-extract',
-            status: 'processed',
+            id: `chat-pdf-${recorded.length}`,
+            object: 'chat.completion',
+            created: 1,
+            model: 'kimi-k3',
+            choices: [
+              {
+                index: 0,
+                message: { role: 'assistant', content: 'ok' },
+                finish_reason: 'stop',
+              },
+            ],
           });
-        }
-        const body =
-          init?.body ?? (input instanceof Request ? input.body : null);
-        recorded.push(await bodyText(body));
-        return Response.json({
-          id: `chat-pdf-${recorded.length}`,
-          object: 'chat.completion',
-          created: 1,
-          model: 'kimi-k3',
-          choices: [
-            {
-              index: 0,
-              message: { role: 'assistant', content: 'ok' },
-              finish_reason: 'stop',
-            },
-          ],
-        });
-      };
+        },
+        { preconnect: originalFetch.preconnect },
+      );
       const provider = createKimiProvider();
       const settings = new SettingsService();
       const contents: IContent[] = [
@@ -349,38 +346,15 @@ describe('OpenAIProvider', () => {
       expect(chatRequests[1]).toContain('file-explicit-pdf');
       expect(chatRequests[1]).toContain('stable system prompt');
     });
+  });
+}
 
+function registerProviderBehavior4(): void {
+  describe('provider fixture 4', () => {
     it('uploads and binds a selected prepared Kimi projection exactly once', async () => {
       const requestedUrls: string[] = [];
       const boundFileIds: string[] = [];
-      globalThis.fetch = async (input) => {
-        const url = inputUrl(input);
-        requestedUrls.push(url);
-        if (url.includes('/files')) {
-          return Response.json({
-            id: 'file-prepared-projection',
-            object: 'file',
-            bytes: 3,
-            created_at: 1,
-            filename: 'notes.pdf',
-            purpose: 'file-extract',
-            status: 'processed',
-          });
-        }
-        return Response.json({
-          id: 'chat-prepared-projection',
-          object: 'chat.completion',
-          created: 1,
-          model: 'kimi-k3',
-          choices: [
-            {
-              index: 0,
-              message: { role: 'assistant', content: 'ok' },
-              finish_reason: 'stop',
-            },
-          ],
-        });
-      };
+      installKimiTransportFixture2(requestedUrls);
       const provider = createKimiProvider();
       const settings = new SettingsService();
       settings.set('provider-files', 'workspace');
@@ -445,7 +419,11 @@ describe('OpenAIProvider', () => {
       ).toHaveLength(1);
       expect(boundFileIds).toStrictEqual(['file-prepared-projection']);
     });
+  });
+}
 
+function registerProviderBehavior5(): void {
+  describe('provider fixture 5', () => {
     it('propagates provider-file maintenance failures without switching transport', async () => {
       const runtimeId = 'runtime-maintenance-failure';
       const entry = upsertRuntimeEntry(runtimeId, {});
@@ -472,9 +450,12 @@ describe('OpenAIProvider', () => {
       });
       await retained.lease.release();
       await entry.providerFileLifecycle.cleanupScope('session', runtimeId);
-      globalThis.fetch = async () => {
-        throw new Error('transport must not run after maintenance failure');
-      };
+      globalThis.fetch = Object.assign(
+        async () => {
+          throw new Error('transport must not run after maintenance failure');
+        },
+        { preconnect: originalFetch.preconnect },
+      );
       const settings = new SettingsService();
       settings.set('provider-files', 'session');
 
@@ -499,32 +480,44 @@ describe('OpenAIProvider', () => {
 
       await expect(request).rejects.toThrow('failed-cleanup-file');
     });
+  });
+}
 
+function registerProviderBehavior6(): void {
+  describe('provider fixture 6', () => {
     it('streams exact bounded JSON bytes through the real Kimi Chat entry', async () => {
       let wireBody = '';
       let streamed = false;
       const contentLength: { value: string | null } = { value: null };
-      globalThis.fetch = async (input, init) => {
-        const body =
-          init?.body ?? (input instanceof Request ? input.body : null);
-        streamed = body instanceof ReadableStream;
-        contentLength.value = new Headers(init?.headers).get('content-length');
+      globalThis.fetch = Object.assign(
+        async (
+          input: Parameters<typeof fetch>[0],
+          init: Parameters<typeof fetch>[1],
+        ) => {
+          const body =
+            init?.body ?? (input instanceof Request ? input.body : null);
+          streamed = body instanceof ReadableStream;
+          contentLength.value = new Headers(init?.headers).get(
+            'content-length',
+          );
 
-        wireBody = await bodyText(body);
-        return Response.json({
-          id: 'chat-bounded',
-          object: 'chat.completion',
-          created: 1,
-          model: 'kimi-k3',
-          choices: [
-            {
-              index: 0,
-              message: { role: 'assistant', content: 'ok' },
-              finish_reason: 'stop',
-            },
-          ],
-        });
-      };
+          wireBody = await bodyText(body);
+          return Response.json({
+            id: 'chat-bounded',
+            object: 'chat.completion',
+            created: 1,
+            model: 'kimi-k3',
+            choices: [
+              {
+                index: 0,
+                message: { role: 'assistant', content: 'ok' },
+                finish_reason: 'stop',
+              },
+            ],
+          });
+        },
+        { preconnect: originalFetch.preconnect },
+      );
       const provider = createKimiProvider();
       const contents: IContent[] = [
         {
@@ -555,7 +548,11 @@ describe('OpenAIProvider', () => {
       expect(wireBody).toBe(JSON.stringify(JSON.parse(wireBody)));
       expect(wireBody).toContain('data:image/png;base64,QUJD');
     });
+  });
+}
 
+function registerProviderBehavior7(): void {
+  describe('provider fixture 7', () => {
     it('releases request media ownership when Chat upload is cancelled', async () => {
       const directory = await mkdtemp(join(tmpdir(), 'llxprt-kimi-cancel-'));
       try {
@@ -570,15 +567,21 @@ describe('OpenAIProvider', () => {
         });
         const resolver = new RequestMediaResolver(store);
         const controller = new AbortController();
-        globalThis.fetch = async (_input, init) => {
-          controller.abort();
-          const error = new Error('cancelled transport');
-          error.name = 'AbortError';
-          if (init?.body instanceof ReadableStream) {
-            await init.body.cancel(error);
-          }
-          throw error;
-        };
+        globalThis.fetch = Object.assign(
+          async (
+            _input: Parameters<typeof fetch>[0],
+            init: Parameters<typeof fetch>[1],
+          ) => {
+            controller.abort();
+            const error = new Error('cancelled transport');
+            error.name = 'AbortError';
+            if (init?.body instanceof ReadableStream) {
+              await init.body.cancel(error);
+            }
+            throw error;
+          },
+          { preconnect: originalFetch.preconnect },
+        );
         const provider = createKimiProvider();
         const options = streamCallOptions({
           providerName: 'kimi',
@@ -623,23 +626,33 @@ describe('OpenAIProvider', () => {
         await rm(directory, { recursive: true, force: true });
       }
     });
+  });
+}
 
+function registerProviderBehavior8(): void {
+  describe('provider fixture 8', () => {
     it('streams a bounded JSON body on a declared Responses HTTP transport', async () => {
       let wireBody = '';
 
       let streamed = false;
       let contentLength: string | null = 'missing';
-      globalThis.fetch = async (input, init) => {
-        const body =
-          init?.body ?? (input instanceof Request ? input.body : null);
-        streamed = body instanceof ReadableStream;
-        contentLength = new Headers(init?.headers).get('content-length');
-        wireBody = await bodyText(body);
-        return new Response(
-          'data: {"type":"response.completed","response":{"id":"resp-streamed","status":"completed","usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}\n\n',
-          { status: 200 },
-        );
-      };
+      globalThis.fetch = Object.assign(
+        async (
+          input: Parameters<typeof fetch>[0],
+          init: Parameters<typeof fetch>[1],
+        ) => {
+          const body =
+            init?.body ?? (input instanceof Request ? input.body : null);
+          streamed = body instanceof ReadableStream;
+          contentLength = new Headers(init?.headers).get('content-length');
+          wireBody = await bodyText(body);
+          return new Response(
+            'data: {"type":"response.completed","response":{"id":"resp-streamed","status":"completed","usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}\n\n',
+            { status: 200 },
+          );
+        },
+        { preconnect: originalFetch.preconnect },
+      );
       const provider = new OpenAIResponsesProvider(
         'test-key',
         'https://api.openai.com/v1',
@@ -680,4 +693,86 @@ describe('OpenAIProvider', () => {
       expect(wireBody).toContain('data:image/png;base64,QUJD');
     });
   });
-});
+}
+
+function installKimiTransportFixture1(recorded: RecordedChatRequest[]): void {
+  globalThis.fetch = Object.assign(
+    async (
+      input: Parameters<typeof fetch>[0],
+      init: Parameters<typeof fetch>[1],
+    ) => {
+      const url = inputUrl(input);
+      if (url.includes('/files')) {
+        return Response.json({
+          id: 'file-stable-video',
+          object: 'file',
+          bytes: 5,
+          created_at: 1,
+          filename: 'clip.mp4',
+          purpose: 'video',
+          status: 'processed',
+        });
+      }
+      const body = init?.body ?? (input instanceof Request ? input.body : null);
+      const parsed: unknown = JSON.parse(await bodyText(body));
+      if (!isRecordedChatRequest(parsed)) {
+        return new Response('invalid fixture request', { status: 400 });
+      }
+      recorded.push(parsed);
+      return Response.json({
+        id: `chat-${recorded.length}`,
+        object: 'chat.completion',
+        created: 1,
+        model: 'kimi-k3',
+        choices: [
+          {
+            index: 0,
+            message: { role: 'assistant', content: 'ok' },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 1,
+          total_tokens: 11,
+          cached_tokens: 7,
+        },
+      });
+    },
+    { preconnect: originalFetch.preconnect },
+  );
+}
+
+function installKimiTransportFixture2(requestedUrls: string[]): void {
+  globalThis.fetch = Object.assign(
+    async (input: Parameters<typeof fetch>[0]) => {
+      const url = inputUrl(input);
+      requestedUrls.push(url);
+      if (url.includes('/files')) {
+        return Response.json({
+          id: 'file-prepared-projection',
+          object: 'file',
+          bytes: 3,
+          created_at: 1,
+          filename: 'notes.pdf',
+          purpose: 'file-extract',
+          status: 'processed',
+        });
+      }
+      return Response.json({
+        id: 'chat-prepared-projection',
+        object: 'chat.completion',
+        created: 1,
+        model: 'kimi-k3',
+        choices: [
+          {
+            index: 0,
+            message: { role: 'assistant', content: 'ok' },
+            finish_reason: 'stop',
+          },
+        ],
+      });
+    },
+    { preconnect: originalFetch.preconnect },
+  );
+}

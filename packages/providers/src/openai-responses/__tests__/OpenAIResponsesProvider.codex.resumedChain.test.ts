@@ -35,28 +35,21 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { replaySession } from '@vybestack/llxprt-code-core';
-import {
-  clearActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   SocketHarness,
   completingScript,
   drain as drainHarness,
   userTextsOf,
-} from '../openAIResponsesWebSocketTransport.test-helpers.js';
+} from './openAIResponsesWebSocketTransport.test-helpers.js';
 import { createCodexResponsesWebSocketTransport } from '../openAIResponsesWebSocketTransport.js';
 import { executeOpenAIResponsesRequest } from '../openAIResponsesExecutor.js';
 import {
   CODEX_BASE_URL,
-  TEST_RUNTIME_ID,
   buildDeps,
   buildOptions,
   metadataOf,
-} from '../codexStateful.test-helpers.js';
+} from './codexStateful.test-helpers.js';
 
 const PROJECT_HASH = 'issue3160projecthash';
 
@@ -115,17 +108,10 @@ describe('OpenAIResponsesProvider Codex resumed chain @issue:3160', () => {
   let tempDir: string;
 
   beforeEach(async () => {
-    setActiveProviderRuntimeContext(
-      createProviderRuntimeContext({
-        settingsService: new SettingsService(),
-        runtimeId: TEST_RUNTIME_ID,
-      }),
-    );
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'codex-resumed-chain-'));
   });
 
   afterEach(async () => {
-    clearActiveProviderRuntimeContext();
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 

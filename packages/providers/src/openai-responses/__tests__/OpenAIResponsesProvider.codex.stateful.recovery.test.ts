@@ -27,47 +27,27 @@ import {
   assertDefined,
   blockTextOrEmpty,
 } from '@vybestack/llxprt-code-test-utils';
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import {
-  clearActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   SocketHarness,
   completingScript,
   drain as drainHarness,
   userTextsOf,
-} from '../openAIResponsesWebSocketTransport.test-helpers.js';
+} from './openAIResponsesWebSocketTransport.test-helpers.js';
 import { createCodexResponsesWebSocketTransport } from '../openAIResponsesWebSocketTransport.js';
 import { executeOpenAIResponsesRequest } from '../openAIResponsesExecutor.js';
 import {
   CODEX_BASE_URL,
-  TEST_RUNTIME_ID,
   buildDeps,
   buildOptions,
   drain,
   errorResponse,
   sseResponse,
-} from '../codexStateful.test-helpers.js';
-import { readRawPostTestBody } from '../../test-utils/rawPostTestAdapters.js';
+} from './codexStateful.test-helpers.js';
+import { readRawPostTestBody } from '../../__tests__/rawPostTestAdapters.js';
 
 describe('OpenAIResponsesProvider Codex stateful — parent rejection recovery and endpoint scoping @issue:3134', () => {
-  beforeEach(() => {
-    setActiveProviderRuntimeContext(
-      createProviderRuntimeContext({
-        settingsService: new SettingsService(),
-        runtimeId: TEST_RUNTIME_ID,
-      }),
-    );
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
-
   describe('Fix 1 — one-shot recovery when previous_response_id is rejected', () => {
     it('retries once with full history when the API rejects a stored parent', async () => {
       let fetchCalls = 0;
@@ -411,19 +391,6 @@ describe('OpenAIResponsesProvider Codex stateful — parent rejection recovery a
  * tests pin that so it cannot silently regress into the (broken) HTTP form.
  */
 describe('Codex statefulness is WebSocket-bound @issue:3134', () => {
-  beforeEach(() => {
-    setActiveProviderRuntimeContext(
-      createProviderRuntimeContext({
-        settingsService: new SettingsService(),
-        runtimeId: TEST_RUNTIME_ID,
-      }),
-    );
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
-
   const contentsWithParent: IContent[] = [
     { speaker: 'human', blocks: [{ type: 'text', text: 'q1' }] },
     {

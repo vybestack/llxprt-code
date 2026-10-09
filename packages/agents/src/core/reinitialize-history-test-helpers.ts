@@ -3,7 +3,7 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ContentGeneratorConfig } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import { createHash } from 'node:crypto';
 import { appendFileSync } from 'node:fs';
-import { withSuffixFixture } from '@vybestack/llxprt-code-core/services/history/history-suffix-test-helpers.js';
+import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import {
   accountingFactory,
   accountingRow,

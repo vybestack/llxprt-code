@@ -35,7 +35,7 @@ import type {
   EnrichedSessionSummary,
   PreviewState,
 } from '../../hooks/useSessionBrowser.js';
-import { testRegex } from '../../../test-utils/regex.js';
+import { testRegex } from '../../../__tests__/regex.js';
 
 // Terminal key codes
 enum TerminalKeys {

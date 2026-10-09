@@ -21,10 +21,9 @@
  * then finishes; turn 2 just finishes.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect } from 'bun:test';
 import { AgenticLoop } from '../AgenticLoop.js';
-import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
-import { clearAllSchedulers } from '@vybestack/llxprt-code-core/config/schedulerSingleton.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { mapLoopStream } from '../../../api/eventAdapter.js';
@@ -39,13 +38,6 @@ import {
 } from './agenticLoop-test-helpers.js';
 
 describe('AgenticLoop done ordering through mapLoopStream (issue #3087)', () => {
-  beforeEach(() => {
-    clearAllSchedulers();
-  });
-  afterEach(() => {
-    clearAllSchedulers();
-  });
-
   it('emits exactly one done AFTER every tool event for a normal tool call then a clean finish', async () => {
     const {
       doneEvents,

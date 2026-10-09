@@ -8,16 +8,15 @@
  */
 
 import { assertDefined } from '@vybestack/llxprt-code-test-utils';
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { vi, describe, it, expect, beforeEach } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   setupAnthropicProvider,
   type AnthropicContentBlock,
   type AnthropicMessage,
   type AnthropicTestSetup,
-} from './test-utils/anthropicProviderTestSetup.js';
-import { createAnthropicRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
+} from './__tests__/anthropicProviderTestSetup.js';
+import { createAnthropicRawPostTestAdapter } from '../__tests__/rawPostTestAdapters.js';
 
 // Shared mock instance for messages.create - using vi.hoisted so it's
 // available when vi.mock factories run.
@@ -142,9 +141,6 @@ describe('AnthropicProvider tool payload handling', () => {
     buildCallOptions = setup.buildCallOptions;
   });
 
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
   describe('generateChatCompletion', () => {
     it('should sanitize tool_use IDs to be Anthropic-compatible', async () => {
       settingsService.setProviderSetting('anthropic', 'prompt-caching', 'off');

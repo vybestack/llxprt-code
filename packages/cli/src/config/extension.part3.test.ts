@@ -34,7 +34,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { execSync } from 'node:child_process';
 import { isWorkspaceTrusted } from './trustedFolders.js';
-import { createExtension } from '../test-utils/createExtension.js';
+import { createExtension } from '../__tests__/createExtension.js';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
 
 function normalizePreviousExtensionConfig(

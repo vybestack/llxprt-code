@@ -14,8 +14,8 @@ import {
   createMockSettings,
   renderHook,
   renderWithProviders,
-} from '../../../../test-utils/render.js';
-import { createMockCommandContext } from '../../../../test-utils/mockCommandContext.js';
+} from '../../../../__tests__/render.js';
+import { createMockCommandContext } from '../../../../__tests__/mockCommandContext.js';
 import { AppDispatchProvider } from '../../../contexts/AppDispatchContext.js';
 import { useThemeCommand } from '../../../hooks/useThemeCommand.js';
 import { processSlashCommand } from '../../../hooks/slashCommandHandlers.js';

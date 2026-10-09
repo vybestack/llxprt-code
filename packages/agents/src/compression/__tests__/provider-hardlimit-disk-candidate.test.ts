@@ -5,7 +5,7 @@ import {
   withRollbackFixture,
   rollbackRow,
 } from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
-import { collectRawHistory } from '../../../../core/src/test-utils/collect-raw-history.js';
+import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { publishProviderFallbackCandidate } from '../providerFallbackCandidate.js';
 
 describe('disk provider candidate pending publication', () => {

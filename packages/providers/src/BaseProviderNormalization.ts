@@ -137,7 +137,22 @@ export async function materializeCallOptions(
   contentsOrOptions: AsyncIterable<IContent> | GenerateChatOptions,
   maybeTools: ProviderToolset | undefined,
   lazyWireContents: boolean,
+  diskTextSource = false,
 ): Promise<MaterializedGenerateChatOptions> {
+  if (diskTextSource && !isAsyncIterableContents(contentsOrOptions)) {
+    return {
+      ...contentsOrOptions,
+      contents: [],
+      ...(contentsOrOptions.promptEnvelopeTransportToken === undefined
+        ? {}
+        : {
+            systemInstruction: '',
+            tools: [],
+            userMemory: undefined,
+            systemPromptAssembler: undefined,
+          }),
+    };
+  }
   const historySource: AsyncIterable<IContent> = isAsyncIterableContents(
     contentsOrOptions,
   )

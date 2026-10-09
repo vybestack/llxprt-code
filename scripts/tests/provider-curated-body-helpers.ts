@@ -1,4 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { captureBodyAttempt } from '../lib/body-evidence-writer.js';
+import { randomUUID } from 'node:crypto';
+import { withFetchPreconnect } from '../../packages/test-utils/src/fetch-test-helpers.js';
 import type { IContent } from '../../packages/core/src/services/history/IContent.js';
 import { SettingsService } from '../../packages/settings/src/settings/SettingsService.js';
 import {
@@ -6,8 +9,8 @@ import {
   type ProviderRuntimeContext,
 } from '../../packages/core/src/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '../../packages/core/src/runtime/RuntimeInvocationContext.js';
-import { createRuntimeConfigStub } from '../../packages/core/src/test-utils/runtime.js';
-import { createProviderCallOptions } from '../../packages/core/src/test-utils/providerCallOptions.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { OpenAIResponsesProvider } from '../../packages/providers/src/openai-responses/OpenAIResponsesProvider.js';
 import { AnthropicProvider } from '../../packages/providers/src/anthropic/AnthropicProvider.js';
 import { GeminiProvider } from '../../plugins/google-gemini/src/gemini/GeminiProvider.js';
@@ -114,15 +117,18 @@ export async function captureCuratedBody(
   });
   const original = globalThis.fetch;
   const bodies: string[] = [];
-  globalThis.fetch = async (
-    _input: RequestInfo | URL,
-    init?: RequestInit,
-  ): Promise<Response> => {
-    if (!init?.body) throw new Error('Missing real provider request body');
-    bodies.push(await new Response(init.body).text());
-    if (retry && bodies.length === 1) throw new TypeError('fetch failed');
-    return response(name);
-  };
+  const captureId = randomUUID();
+  globalThis.fetch = withFetchPreconnect(
+    async (
+      _input: RequestInfo | URL,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      if (!init?.body) throw new Error('Missing real provider request body');
+      await captureBodyAttempt(bodies, init.body, name, captureId);
+      if (retry && bodies.length === 1) throw new TypeError('fetch failed');
+      return response(name);
+    },
+  );
   const provider = orchestrated
     ? new RetryOrchestrator(makeProvider(name), {
         maxAttempts: 2,

@@ -41,7 +41,7 @@ import {
   defaultRunConfig,
   createStatelessRuntimeBundle,
   createRuntimeOverrides,
-} from './subagent-test-helpers.js';
+} from './__tests__/subagent-test-helpers.js';
 
 const realEnvironmentContextModule = {
   ...(await import('@vybestack/llxprt-code-core/utils/environmentContext.js')),

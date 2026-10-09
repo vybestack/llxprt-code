@@ -7,7 +7,7 @@
 import { describe, it, expect, vi } from 'bun:test';
 import { BucketFailoverHandlerImpl } from './BucketFailoverHandlerImpl.js';
 import { OAuthManager } from './oauth-manager.js';
-import { MemoryTokenStore } from './BucketFailoverHandlerImpl.test-helpers.js';
+import { MemoryTokenStore } from './__tests__/BucketFailoverHandlerImpl.test-helpers.js';
 
 describe('BucketFailoverHandlerImpl #43', () => {
   it('coalesces concurrent ensureBucketsAuthenticated calls into one in-flight auth run', async () => {

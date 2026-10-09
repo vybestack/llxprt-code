@@ -8,7 +8,7 @@ import {
   withRollbackFixture,
   rowsOf,
 } from './chronology-rollback-test-helpers.js';
-import { suffixRow } from './history-suffix-test-helpers.js';
+import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import type { IContent } from './IContent.js';
 import type { DensityRowDecision } from './historyDiskDensity.js';
 import type { HistoryJournalOp } from './historyJournalStore.js';

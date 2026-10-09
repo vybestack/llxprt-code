@@ -45,7 +45,7 @@ import type {
 } from '../print/staticPrintLedger.js';
 
 const { Text, Colors } = ink;
-const { waitFor } = await import('../../test-utils/render.js');
+const { waitFor } = await import('../../__tests__/render.js');
 const { render } = await import('ink-testing-library');
 const { createStaticPrintLedger, StaticPrintProtocol, REMOUNT_NOTICE_KEY } =
   await import('../print/staticPrintLedger.js');

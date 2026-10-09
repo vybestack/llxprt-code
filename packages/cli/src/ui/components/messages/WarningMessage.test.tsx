@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { renderWithProviders } from '../../../test-utils/render.js';
+import { renderWithProviders } from '../../../__tests__/render.js';
 import { WarningMessage } from './WarningMessage.js';
 
 describe('WarningMessage', () => {

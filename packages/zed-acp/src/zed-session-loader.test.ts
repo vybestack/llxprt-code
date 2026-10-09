@@ -18,7 +18,7 @@ import { afterEach, describe, expect, it, vi } from 'bun:test';
 import * as path from 'node:path';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import type { Config } from '@vybestack/llxprt-code-core';
-import { withSuffixFixture } from '@vybestack/llxprt-code-core/services/history/history-suffix-test-helpers.js';
+import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { accountingRow } from '@vybestack/llxprt-code-core/services/history/token-accounting-stream-test-helpers.js';
 import { replayClient } from './zed-history-stream-test-helpers.js';
 import {

@@ -31,7 +31,7 @@ import { afterEach, describe, expect, it, vi, type Mock } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { renderHook } from '../../../../test-utils/render.js';
+import { renderHook } from '../../../../__tests__/render.js';
 import { LoadedSettings, SettingScope } from '../../../../config/settings.js';
 import type { RecordingSwapCallbacks } from '../../../../services/performResume.js';
 import type { SessionRecordingService } from '@vybestack/llxprt-code-core';

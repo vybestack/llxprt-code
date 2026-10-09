@@ -10,7 +10,7 @@ import { UserMessage } from './UserMessage.js';
 import { themeManager } from '../../themes/theme-manager.js';
 import { AtomOneDark } from '../../themes/atom-one-dark.js';
 import { Text } from 'ink';
-import { assertTrue } from '../../../test-utils/assertions.js';
+import { assertTrue } from '../../../__tests__/assertions.js';
 
 type TextNode = {
   color?: string;

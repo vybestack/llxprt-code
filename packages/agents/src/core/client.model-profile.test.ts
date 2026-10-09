@@ -36,7 +36,7 @@ import {
   fromAsync,
   setupAgentClient,
   type MockResponseShape,
-} from './client-test-helpers.js';
+} from './__tests__/client-test-helpers.js';
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(() =>

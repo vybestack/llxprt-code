@@ -5,9 +5,9 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import '../../../test-utils/customMatchers.js';
+import '../../../__tests__/customMatchers.js';
 import { handleVimAction } from './vim-buffer-actions.js';
-import { createTestState } from './vim-buffer-actions-test-helpers.js';
+import { createTestState } from './__tests__/vim-buffer-actions-test-helpers.js';
 
 describe('vim-buffer-actions', () => {
   describe('Insert mode commands', () => {

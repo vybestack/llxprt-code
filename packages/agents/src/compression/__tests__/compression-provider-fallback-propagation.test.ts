@@ -26,7 +26,7 @@
  */
 
 import { installFixtureCandidate } from './provider-fallback-candidate-fixture.js';
-import { collectRawHistory } from '@vybestack/llxprt-code-core/test-utils/collect-raw-history.js';
+import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import {
@@ -462,7 +462,7 @@ async function testBody3(): Promise<void> {
   expect(suite0Handler['compressionFailureCount']).toBe(3);
   control.activateCandidateAfter(2);
   suite0Handler.setLastPromptTokenCount(150_000);
-  vi.spyOn(suite0HistoryService, 'transformRows').mockRejectedValue(
+  vi.spyOn(suite0HistoryService.detachedValues, 'transform').mockRejectedValue(
     new Error('pending candidate commit rejected'),
   );
 
@@ -486,7 +486,7 @@ async function testBody4(): Promise<void> {
   const control = await seedFallbackCooldown(suite0Handler, [snapshot]);
   expect(suite0Handler['compressionFailureCount']).toBe(3);
   control.activateCandidateAfter(1);
-  vi.spyOn(suite0HistoryService, 'transformRows').mockRejectedValue(
+  vi.spyOn(suite0HistoryService.detachedValues, 'transform').mockRejectedValue(
     new Error('provider candidate commit rejected'),
   );
   const pending = makeUserMessage('pending request');

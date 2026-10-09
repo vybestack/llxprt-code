@@ -7,8 +7,8 @@
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { act } from 'react';
 import type { HydratedModel } from '@vybestack/llxprt-code-core';
-import { createDeferred, waitFor } from '../../test-utils/async.js';
-import { render } from '../../test-utils/render.js';
+import { createDeferred, waitFor } from '../../__tests__/async.js';
+import { render } from '../../__tests__/render.js';
 import { KeypressProvider } from '../contexts/KeypressContext.js';
 import { ModelsDialog, type ModelsDialogProps } from './ModelDialog.js';
 

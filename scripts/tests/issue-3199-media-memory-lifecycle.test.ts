@@ -12,7 +12,7 @@ import { describe, expect, it } from 'bun:test';
 import type { IContent } from '../../packages/core/src/services/history/IContent.js';
 import { SessionRecordingService } from '../../packages/core/src/recording/SessionRecordingService.js';
 import { HistoryService } from '../../packages/core/src/services/history/HistoryService.js';
-import { collectRowsForAssertions } from '../../packages/core/src/test-utils/collect-rows-for-assertions.js';
+import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { SessionPersistenceService } from '../../packages/core/src/storage/SessionPersistenceService.js';
 import { LocalMediaStore } from '../../packages/core/src/storage/local-media-store.js';
 import { RequestMediaResolver } from '../../packages/core/src/storage/request-media-resolver.js';

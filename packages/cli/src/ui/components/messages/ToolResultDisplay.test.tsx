@@ -8,7 +8,7 @@ import React from 'react';
 import { describe, it, expect, vi } from 'bun:test';
 import { Text } from 'ink';
 import { ToolResultDisplay } from './ToolResultDisplay.js';
-import { renderWithProviders } from '../../../test-utils/render.js';
+import { renderWithProviders } from '../../../__tests__/render.js';
 
 void vi.mock('../../utils/MarkdownDisplay.js', () => ({
   MarkdownDisplay: function MockMarkdownDisplay({ text }: { text: string }) {

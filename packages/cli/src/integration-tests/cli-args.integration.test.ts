@@ -15,8 +15,8 @@ import {
   createTempKeyfile,
 } from './test-utils.js';
 import { Storage } from '@vybestack/llxprt-code-storage';
-import { runCli } from './cli-args-test-helpers.js';
-import { testRegex } from '../test-utils/regex.js';
+import { runCli } from './__tests__/cli-args-test-helpers.js';
+import { testRegex } from '../__tests__/regex.js';
 
 // Asserts that stdout contains a semantic-version string like "1.2.3".
 function expectVersionOutput(stdout: string): void {

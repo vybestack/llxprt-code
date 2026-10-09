@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { hasDialogRequest } from '../../test-utils/dialogStore.js';
+import { hasDialogRequest } from '../../__tests__/dialogStore.js';
 
 import {
   afterEach,
@@ -17,7 +17,7 @@ import {
 } from 'bun:test';
 import type React from 'react';
 import { act } from 'react';
-import { renderHook } from '../../test-utils/render.js';
+import { renderHook } from '../../__tests__/render.js';
 import { useEditorSettings } from './useEditorSettings.js';
 import type { LoadedSettings } from '../../config/settings.js';
 import { SettingScope } from '../../config/settings.js';

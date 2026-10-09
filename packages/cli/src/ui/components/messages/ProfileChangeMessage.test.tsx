@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { renderWithProviders, waitFor } from '../../../test-utils/render.js';
+import { renderWithProviders, waitFor } from '../../../__tests__/render.js';
 import { ProfileChangeMessage } from './ProfileChangeMessage.js';
 
 type RenderStdout = {

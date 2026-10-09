@@ -30,8 +30,7 @@ import { buildRoundRobinResolvedOptions } from '../../loadBalancing/resolvedOpti
 import type { ResolvedSubProfile } from '../../LoadBalancingProvider.js';
 import type { GenerateChatOptions } from '../../IProvider.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import {
   BaseProvider,
   type NormalizedGenerateChatOptions,
@@ -282,7 +281,6 @@ describe('load balancer member OAuth identity (#2643)', () => {
       ).toStrictEqual('acct-beta');
     } finally {
       flushRuntimeAuthScope(lbParentName);
-      clearActiveProviderRuntimeContext();
     }
   });
 

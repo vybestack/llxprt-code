@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from '../services/history/IContent.js';
-import { withSuffixFixture } from '../services/history/history-suffix-test-helpers.js';
+import { withCoreSuffixFixture } from '../services/history/core-suffix-fixture-test-helpers.js';
 import { MediaLifecycleMetrics } from './media-lifecycle-metrics.js';
 import {
   metricReference,
@@ -70,7 +70,7 @@ describe('media metric snapshot lifetime', () => {
   it('rejects late inconsistent duplicate byte lengths and cleans scratch and readers', async () => {
     const before = metricScratch();
     await withMetricStore(async (store) =>
-      withSuffixFixture(
+      withCoreSuffixFixture(
         512,
         async (history, owners) => {
           await expect(
@@ -98,7 +98,7 @@ describe('media metric snapshot lifetime', () => {
 describe('media metric byte validation', () => {
   it('accepts a valid row larger than eight MiB without capping input', async () => {
     await withMetricStore(async (store) =>
-      withSuffixFixture(
+      withCoreSuffixFixture(
         1,
         async (history, owners) => {
           const snapshot = await new MediaLifecycleMetrics(

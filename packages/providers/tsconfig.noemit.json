@@ -20,7 +20,6 @@
   "exclude": [
     "node_modules",
     "dist",
-    "../mcp/src/auth/google-auth-provider.test.ts",
     "../mcp/src/auth/oauth-provider.authenticate.test.ts",
     "../mcp/src/auth/oauth-provider.token.test.ts",
     "../mcp/src/auth/token-storage/base-token-storage.test.ts",

@@ -23,13 +23,23 @@ import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contra
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import type { ToolGroupArray } from './streamRequestHelpers.js';
+import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 import {
   extractSystemInstructionText,
   resolveUserMemory,
 } from './streamRequestHelpers.js';
 
 export type { PromptEnvelopeEstimate };
+
+export {
+  buildSourceProviderChatOptions,
+  createSourcePromptEnvelopePreparer,
+  prepareSourcePromptEnvelopeAfterEnforcement,
+  enforceAndStreamSourcePromptEnvelopeRetries,
+  type PromptEnvelopeSource,
+  type PreparedSourcePromptEnvelopeSend,
+  type SourceProviderChatOptions,
+} from './prompt-envelope-source-send.js';
 
 export interface PreparedPromptEnvelopeSend {
   readonly estimate: PromptEnvelopeEstimate | null;
@@ -73,7 +83,7 @@ export interface PromptEnvelopePreparer {
  */
 export function buildProviderChatOptions(
   requestContents: IContent[],
-  tools: ToolGroupArray | undefined,
+  tools: ToolDeclaration[] | undefined,
   runtimeContext: ProviderRuntimeContext,
   invocation: RuntimeGenerateChatOptions['invocation'],
   requestContext: Record<string, unknown> | undefined,

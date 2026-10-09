@@ -6,8 +6,8 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   createProviderCallOptions,
   type ProviderCallOptionsInit,
-} from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
-import { createOpenAIRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
+} from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { createOpenAIRawPostTestAdapter } from '../__tests__/rawPostTestAdapters.js';
 import type { GenerateChatOptions } from '../IProvider.js';
 
 const realLlxprtCodeSettingsModule = {

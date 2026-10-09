@@ -25,12 +25,24 @@ export type {
   MCPOAuthCredentials as MCPOAuthCredentialsInterface,
 } from './token-store.js';
 
-export { OAuthUtils, ResourceMismatchError } from './oauth-utils.js';
+export {
+  OAuthUtils,
+  ResourceMismatchError,
+  FIVE_MIN_BUFFER_MS,
+} from './oauth-utils.js';
 export type {
   OAuthAuthorizationServerMetadata,
   OAuthProtectedResourceMetadata,
 } from './oauth-utils.js';
 export type { McpAuthProvider } from './auth-provider.js';
-export { GoogleCredentialProvider } from './google-auth-provider.js';
-export { ServiceAccountImpersonationProvider } from './sa-impersonation-provider.js';
 export { AuthProviderType } from './auth-types.js';
+export type {
+  McpAuthProviderFactory,
+  McpAuthFactoryContribution,
+  McpAuthFactoryRegistry,
+} from './mcp-auth-factory.js';
+export {
+  buildMcpAuthFactoryRegistry,
+  registerMcpAuthFactories,
+  getRegisteredMcpAuthFactoryRegistry,
+} from './mcp-auth-factory.js';

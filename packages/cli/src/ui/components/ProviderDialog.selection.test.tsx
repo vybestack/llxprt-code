@@ -5,7 +5,7 @@
  */
 
 import { automock } from '@vybestack/llxprt-code-test-utils';
-import { renderWithProviders as render } from '../../test-utils/render.js';
+import { renderWithProviders as render } from '../../__tests__/render.js';
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { act } from 'react';
 import { ProviderDialog } from './ProviderDialog.js';

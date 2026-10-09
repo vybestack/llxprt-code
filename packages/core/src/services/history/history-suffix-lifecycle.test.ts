@@ -6,7 +6,8 @@ import { join } from 'node:path';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 import { HistoryJournalStore } from './historyJournalStore.js';
-import { rowIndex, withSuffixFixture } from './history-suffix-test-helpers.js';
+import { rowIndex } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
+import { withCoreSuffixFixture } from './core-suffix-fixture-test-helpers.js';
 
 type Query = 'recent' | 'tokens';
 type Exit = 'return' | 'break' | 'throw' | 'abort';
@@ -60,7 +61,7 @@ async function exitStream(
 }
 
 async function verifyExit(query: Query, exit: Exit): Promise<number> {
-  return withSuffixFixture(512, async (service, ownership) => {
+  return withCoreSuffixFixture(512, async (service, ownership) => {
     const controller = new AbortController();
     const before = scratchDirectories();
     const iterator = queryStream(service, query, controller.signal);
@@ -99,7 +100,7 @@ for (const query of ['recent', 'tokens'] as const) {
       });
     }
     it('does not open a cursor after pre-cancellation or return-before-next', async () => {
-      await withSuffixFixture(4, async (service, ownership) => {
+      await withCoreSuffixFixture(4, async (service, ownership) => {
         const controller = new AbortController();
         controller.abort(new Error('already cancelled'));
         const before = scratchDirectories();
@@ -120,7 +121,7 @@ for (const query of ['recent', 'tokens'] as const) {
 
 describe('token suffix selection failures', () => {
   it('propagates a token callback failure and closes its row and scratch', async () => {
-    await withSuffixFixture(4, async (service, ownership) => {
+    await withCoreSuffixFixture(4, async (service, ownership) => {
       const before = scratchDirectories();
       const stream = service.getWithinTokenLimit(100, (row) => {
         if (rowIndex(row) === 2) throw new Error('token count failed');
@@ -135,7 +136,7 @@ describe('token suffix selection failures', () => {
     });
   });
   it('cancels during reverse selection without evaluating the remaining rows', async () => {
-    await withSuffixFixture(512, async (service, ownership) => {
+    await withCoreSuffixFixture(512, async (service, ownership) => {
       const controller = new AbortController();
       let evaluated = 0;
       const stream = service.getWithinTokenLimit(
@@ -155,7 +156,7 @@ describe('token suffix selection failures', () => {
 });
 
 async function verifyBoundedTraversal(size: number): Promise<number> {
-  return withSuffixFixture(
+  return withCoreSuffixFixture(
     size,
     async (service, ownership, counters) => {
       const eager = spyOn(
@@ -197,7 +198,7 @@ describe('bounded suffix traversal without eager journal reads', () => {
     }, 120_000);
   }
   it('rejects the same owner bound when a consumer retains the full suffix', async () => {
-    await withSuffixFixture(
+    await withCoreSuffixFixture(
       512,
       async (service, ownership) => {
         const retained: IContent[] = [];

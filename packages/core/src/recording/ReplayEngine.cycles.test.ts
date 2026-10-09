@@ -17,7 +17,7 @@ import {
   contentLine,
   sessionEventLine,
   writeJsonlFile,
-} from './replay-test-helpers.js';
+} from './__tests__/replay-test-helpers.js';
 
 describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
   let tempDir: string;

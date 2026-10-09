@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'bun:test';
 import { readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { withSuffixFixture } from '../../../../core/src/services/history/history-suffix-test-helpers.js';
+import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { truncateLargestToolResponses } from '../toolResultTruncator.js';
 import {
   BoundedToolHistory,

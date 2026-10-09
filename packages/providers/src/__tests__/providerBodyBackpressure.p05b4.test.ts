@@ -25,17 +25,13 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  clearActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import {
   createProviderCallOptions,
   type ProviderCallOptionsInit,
-} from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+} from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { GenerateChatOptions } from '../IProvider.js';
 import { OpenAIResponsesProvider } from '../openai-responses/OpenAIResponsesProvider.js';
@@ -98,7 +94,6 @@ function makeHarness(runtimeId: string): ProviderHarness {
     runtimeId,
     config: createRuntimeConfigStub(settings),
   });
-  setActiveProviderRuntimeContext(runtime);
   return { settings, runtime };
 }
 
@@ -151,7 +146,6 @@ function countRetainedAfterGc(probes: ReadonlyArray<WeakRef<object>>): number {
 }
 
 function cleanup(): void {
-  clearActiveProviderRuntimeContext();
   globalThis.fetch = originalFetch;
 }
 
@@ -166,11 +160,14 @@ describe('P05b4 transport backpressure and cancellation @plan:PLAN-20260917-ISSU
       releaseGate = resolve;
     });
     let fetchEntered = false;
-    globalThis.fetch = async (): Promise<Response> => {
-      fetchEntered = true;
-      await gate;
-      return sseSuccess();
-    };
+    globalThis.fetch = Object.assign(
+      async (): Promise<Response> => {
+        fetchEntered = true;
+        await gate;
+        return sseSuccess();
+      },
+      { preconnect: originalFetch.preconnect },
+    );
     const invocation = createRuntimeInvocationContext({
       runtime: harness.runtime,
       settings: harness.settings,
@@ -235,10 +232,13 @@ describe('P05b4 aborted transport and released rows @plan:PLAN-20260917-ISSUE854
       },
       { once: true },
     );
-    globalThis.fetch = async (): Promise<Response> => {
-      fetchEntered = true;
-      return fetchGate;
-    };
+    globalThis.fetch = Object.assign(
+      async (): Promise<Response> => {
+        fetchEntered = true;
+        return fetchGate;
+      },
+      { preconnect: originalFetch.preconnect },
+    );
     const invocation = createRuntimeInvocationContext({
       runtime: harness.runtime,
       settings: harness.settings,

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { ContentPart } from '@vybestack/llxprt-code-tools';
 import { describe, it, expect } from 'bun:test';
 import {
   analyzeResponseOutcome,
@@ -340,7 +341,7 @@ describe('generateContentResponseUtilities', () => {
     });
 
     it('converts legacy function call and response parts', () => {
-      const blocks = legacyPartsToBlocks([
+      const parts: ContentPart[] = [
         { functionCall: { id: 'call-a', name: 'lookup', args: { q: 'x' } } },
         {
           functionResponse: {
@@ -349,7 +350,8 @@ describe('generateContentResponseUtilities', () => {
             response: { output: 'found' },
           },
         },
-      ]);
+      ];
+      const blocks = legacyPartsToBlocks(parts);
 
       expect(blocks).toStrictEqual([
         toolCallBlock('lookup', { q: 'x' }, 'call-a'),
@@ -374,6 +376,28 @@ describe('generateContentResponseUtilities', () => {
           type: 'media',
           mimeType: 'text/plain',
           data: 'gs://bucket/file.txt',
+          encoding: 'url',
+        },
+      ]);
+    });
+
+    it('retains defaults for unknown external parts with incomplete calls and file data', () => {
+      expect(
+        legacyPartsToBlocks([
+          null,
+          undefined,
+          42,
+          { functionCall: { args: { query: 'term' } } },
+          { functionResponse: {} },
+          { fileData: {} },
+        ]),
+      ).toStrictEqual([
+        { type: 'tool_call', id: '', name: '', parameters: { query: 'term' } },
+        { type: 'tool_response', callId: '', toolName: '', result: {} },
+        {
+          type: 'media',
+          mimeType: 'application/octet-stream',
+          data: '',
           encoding: 'url',
         },
       ]);

@@ -21,7 +21,7 @@
  * @requirement:REQ-INT-001.3
  */
 
-import { observeHistorySynchronouslyForTest as testHistory } from '../../../../../core/src/test-utils/synchronous-history-test-observation.js';
+import { observeHistorySynchronouslyForTest as testHistory } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type {
   IContent,

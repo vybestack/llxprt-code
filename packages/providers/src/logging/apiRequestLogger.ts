@@ -7,43 +7,63 @@
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { logApiRequest } from '@vybestack/llxprt-code-core/telemetry/loggers.js';
 import { ApiRequestEvent } from '@vybestack/llxprt-code-core/telemetry/types.js';
-import type { MaterializedGenerateChatOptions } from '../IProvider.js';
+import type { GenerateChatOptions } from '../IProvider.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import { sanitizeDiagnosticData } from '../utils/mediaDiagnostics.js';
+import {
+  writeRedactedRequest,
+  type ConversationLogContext,
+} from './conversationLogger.js';
+import { getRequestSignal } from '../utils/abortSignal.js';
+import {
+  isTelemetrySdkInitialized,
+  assertRequestArtifactExporter,
+} from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
+import type { RequestLoggingPolicy } from './requestLoggingPolicy.js';
+import type { RequestArtifactDescriptor } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
 
-/**
- * Log API request telemetry event. The entire telemetry block is wrapped
- * fail-open so JSON.stringify, model resolution, or logApiRequest failures
- * never prevent provider invocation.
- */
-export function logApiRequestTelemetry(
+/** Log opted-in API content from a redacted, media-sanitized durable artifact. */
+export async function logApiRequestTelemetry(
   activeConfig: Config,
-  normalizedOptions: MaterializedGenerateChatOptions,
+  normalizedOptions: GenerateChatOptions,
   promptId: string,
   defaultModelName: string,
   debug: DebugLogger,
-): void {
+  ctx: ConversationLogContext,
+  policy: RequestLoggingPolicy,
+  requestArtifact?: RequestArtifactDescriptor,
+): Promise<void> {
   debug.log(() => `Before API request telemetry section`);
   try {
-    const requestText = JSON.stringify(
-      sanitizeDiagnosticData(normalizedOptions.contents),
-    );
-    debug.log(
-      () => `After JSON.stringify: requestText length=${requestText.length}`,
-    );
+    const signal = getRequestSignal(normalizedOptions);
+    if (policy.strictTelemetry) assertRequestArtifactExporter();
+    let artifact: RequestArtifactDescriptor | undefined;
+    if (
+      isTelemetrySdkInitialized() &&
+      activeConfig.getTelemetryLogApiBodiesEnabled() &&
+      activeConfig.getTelemetryLogPromptsEnabled()
+    ) {
+      artifact = policy.strictPreSend ? requestArtifact : undefined;
+      artifact ??= await writeRedactedRequest(
+        activeConfig,
+        normalizedOptions.contents,
+        normalizedOptions.tools,
+        promptId,
+        { ...ctx, sanitizeMedia: true },
+        signal,
+      );
+    }
     const modelName = normalizedOptions.resolved?.model ?? defaultModelName;
-    debug.log(
-      () => `Logging API request: model=${modelName}, promptId=${promptId}`,
-    );
-    logApiRequest(
-      activeConfig,
-      new ApiRequestEvent(modelName, promptId, requestText),
-    );
+    const event = new ApiRequestEvent(modelName, promptId, undefined, artifact);
+    if (policy.strictTelemetry)
+      await logApiRequest(activeConfig, event, signal, true);
+    else await logApiRequest(activeConfig, event, signal);
     debug.log(
       () =>
-        `After API request logged: contents length=${normalizedOptions.contents.length}`,
+        `After API request logged: contents length=${normalizedOptions.contentCount ?? 'unknown'}`,
     );
   } catch (error) {
+    getRequestSignal(normalizedOptions)?.throwIfAborted();
+    if (policy.strictPreSend) throw error;
     debug.warn(
       () => `API request telemetry failed (fail-open): ${String(error)}`,
     );

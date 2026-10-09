@@ -21,8 +21,8 @@ import {
   CoreToolScheduler,
   type CompletedToolCall,
 } from './coreToolScheduler.js';
-import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
-import { getTestRuntimeMessageBus } from '@vybestack/llxprt-code-core/test-utils/config.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
+import { getTestRuntimeMessageBus } from '@vybestack/llxprt-code-test-utils/core/config.js';
 
 import type {
   ContextAwareTool,

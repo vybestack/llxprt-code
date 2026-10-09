@@ -6,6 +6,12 @@
 
 import { promises as fsp } from 'fs';
 import * as path from 'path';
+import {
+  stageRequestArtifact,
+  appendArtifact,
+  type RequestArtifactDescriptor,
+} from './request-artifact.js';
+export type { RequestArtifactDescriptor } from './request-artifact.js';
 import type { StorageLogger } from '../types/logger.js';
 import { NullStorageLoggerImpl } from '../types/logger.js';
 import { Storage } from '../config/storage.js';
@@ -37,15 +43,13 @@ export class ConversationFileWriter {
   }
 
   async writeEntry(entry: Record<string, unknown>): Promise<void> {
-    // Serialize writes through a per-instance chain so concurrent callers
-    // append in invocation order, preserving the guarantee the synchronous
-    // implementation had implicitly. The trailing .catch() guarantees the
-    // chain and the returned promise never reject — a throwing logger or a
-    // filesystem error cannot poison subsequent writes.
-    this.writeChain = this.writeChain
-      .then(() => this.appendEntry(entry))
-      .catch(() => {});
-    return this.writeChain;
+    return this.writeEntryAcknowledged(entry).catch(() => {});
+  }
+
+  writeEntryAcknowledged(entry: Record<string, unknown>): Promise<void> {
+    const pending = this.writeChain.then(() => this.appendEntry(entry));
+    this.writeChain = pending.catch(() => {});
+    return pending;
   }
 
   private async appendEntry(entry: Record<string, unknown>): Promise<void> {
@@ -58,7 +62,12 @@ export class ConversationFileWriter {
       await fsp.mkdir(this.logPath, { recursive: true });
       await fsp.appendFile(this.currentLogFile, line);
     } catch (error) {
-      this.logger.error('Failed to write log entry:', error);
+      try {
+        this.logger.error('Failed to write log entry:', error);
+      } catch {
+        throw error;
+      }
+      throw error;
     }
   }
 
@@ -73,6 +82,28 @@ export class ConversationFileWriter {
       messages,
       context,
     });
+  }
+
+  async writeRequestStream(
+    provider: string,
+    messages: AsyncIterable<unknown>,
+    context?: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): Promise<RequestArtifactDescriptor> {
+    const pending = this.writeChain.then(async () => {
+      await fsp.mkdir(this.logPath, { recursive: true, mode: 0o700 });
+      const artifact = await stageRequestArtifact(
+        this.logPath,
+        provider,
+        messages,
+        context,
+        signal,
+      );
+      await appendArtifact(artifact, this.currentLogFile);
+      return artifact;
+    });
+    this.writeChain = pending.then(() => undefined).catch(() => {});
+    return pending;
   }
 
   async writeResponse(

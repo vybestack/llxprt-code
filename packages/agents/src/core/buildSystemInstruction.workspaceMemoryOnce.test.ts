@@ -24,7 +24,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { randomUUID } from 'node:crypto';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { initializeTestConfig } from '@vybestack/llxprt-code-core/test-utils/config.js';
+import { initializeTestConfig } from '@vybestack/llxprt-code-test-utils/core/config.js';
 import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import { loadServerHierarchicalMemory } from '@vybestack/llxprt-code-core/utils/memoryDiscovery.js';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';

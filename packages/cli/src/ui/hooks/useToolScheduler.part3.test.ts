@@ -20,17 +20,17 @@ import {
   afterEach,
   type Mock,
 } from 'bun:test';
-import { renderHook, cleanup } from '../../test-utils/render.js';
+import { renderHook, cleanup } from '../../__tests__/render.js';
 import { act } from 'react';
 import { useReactToolScheduler } from './useReactToolScheduler.js';
 import {
   ApprovalMode,
   type CompletedToolCall,
   type Config,
-  type MessageBus,
   DebugLogger,
   PolicyDecision,
   type SchedulerCallbacks as SchedulerCallbacksCore,
+  type SchedulerPurpose,
   type ToolCall,
   ToolConfirmationOutcome,
   type ToolCallConfirmationDetails,
@@ -40,7 +40,7 @@ import {
   type ToolSchedulerContract,
   type WaitingToolCall,
 } from '@vybestack/llxprt-code-core';
-import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { createReactToolSchedulerRuntimeForTest } from './agentStream/__tests__/streamRuntimeTestHelper.js';
 import type { HistoryItemWithoutId } from '../types.js';
 
@@ -293,7 +293,7 @@ type MockScheduler = Pick<
   toolRegistry: ToolRegistry;
 };
 
-const createdSchedulers = new Map<string, MockScheduler>();
+const createdSchedulers = new Map<object, MockScheduler>();
 
 const buildMockScheduler = (
   config: Config,
@@ -411,27 +411,29 @@ const mockConfig = {
     evaluate: vi.fn(() => PolicyDecision.ASK_USER),
   })),
   getOrCreateScheduler: vi.fn(
-    (sessionId: string, callbacks: SchedulerCallbacks) => {
-      const existing = createdSchedulers.get(sessionId);
+    (
+      owner: object,
+      _purpose: SchedulerPurpose,
+      callbacks: SchedulerCallbacks,
+    ) => {
+      const existing = createdSchedulers.get(owner);
       if (existing) {
         existing.setCallbacks({
           ...callbacks,
           config: mockConfig,
-          messageBus: mockMessageBus as unknown as MessageBus,
-          toolRegistry: mockToolRegistry as unknown as ToolRegistry,
         });
         return Promise.resolve(existing);
       }
 
       const scheduler = buildMockScheduler(mockConfig, callbacks);
-      createdSchedulers.set(sessionId, scheduler);
+      createdSchedulers.set(owner, scheduler);
       return Promise.resolve(scheduler);
     },
   ),
-  disposeScheduler: vi.fn((sessionId: string) => {
-    const scheduler = createdSchedulers.get(sessionId);
+  disposeScheduler: vi.fn((owner: object, _purpose: SchedulerPurpose) => {
+    const scheduler = createdSchedulers.get(owner);
     scheduler?.dispose();
-    createdSchedulers.delete(sessionId);
+    createdSchedulers.delete(owner);
   }),
   setInteractiveSubagentSchedulerFactory: vi.fn(),
 } as unknown as Config;
@@ -530,9 +532,9 @@ describe('useReactToolScheduler (split)', () => {
   afterEach(() => {
     cleanup();
     vi.useRealTimers();
-    for (const [sessionId, scheduler] of createdSchedulers.entries()) {
+    for (const [owner, scheduler] of createdSchedulers.entries()) {
       scheduler.dispose();
-      createdSchedulers.delete(sessionId);
+      createdSchedulers.delete(owner);
     }
     DebugLogger.disposeAll();
   });

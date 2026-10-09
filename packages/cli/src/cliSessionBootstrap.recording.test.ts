@@ -3,7 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { collectResumeRows } from './test-utils/resumeRows.js';
+import { collectResumeRows } from './__tests__/resumeRows.js';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';

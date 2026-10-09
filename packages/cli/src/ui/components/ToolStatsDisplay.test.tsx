@@ -12,7 +12,7 @@ import * as SessionContext from '../contexts/SessionContext.js';
 import {
   withTokenTracking,
   type TestMetricsInput,
-} from './StatsDisplay.testHelpers.js';
+} from './__tests__/StatsDisplay.testHelpers.js';
 
 // Mock the context to provide controlled data for testing
 const actual = { ...(await import('../contexts/SessionContext.js')) };

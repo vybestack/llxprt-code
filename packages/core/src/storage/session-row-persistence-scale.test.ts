@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { withSuffixFixture } from '../services/history/history-suffix-test-helpers.js';
+import { withCoreSuffixFixture } from '../services/history/core-suffix-fixture-test-helpers.js';
 import {
   mergeRow,
   MergeRowHistory,
@@ -32,7 +32,7 @@ function digest(value: string): string {
 describe('streamed session row persistence scale', () => {
   for (const size of [512, 8192]) {
     it(`persists ${size} complete mixed media and tool rows against an independent fixture oracle`, async () => {
-      await withSuffixFixture(
+      await withCoreSuffixFixture(
         size,
         async (history, owners) => {
           const persistence = createCursorPersistence(history, 'scale-save');
@@ -70,7 +70,7 @@ describe('streamed session row persistence scale', () => {
 describe('streamed persistence accepts large rows', () => {
   it('persists a valid nine MiB row when the configured queue permits it', async () => {
     const bytes = 9 * 1024 * 1024;
-    await withSuffixFixture(
+    await withCoreSuffixFixture(
       1,
       async (history) => {
         const persistence = createCursorPersistence(history, 'large-save');

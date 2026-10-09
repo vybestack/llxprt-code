@@ -12,98 +12,29 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
-import {
-  SettingsService,
-  registerSettingsService,
-  resetSettingsService,
-} from '@vybestack/llxprt-code-settings';
-import {
-  clearActiveProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { resolveToolFormat } from '../utils/toolFormatDetection.js';
-
-function createTestConfig(settingsService: SettingsService): Config {
-  const noop = () => {};
-  return {
-    getSettingsService: () => settingsService,
-    getEphemeralSettings: () => ({}),
-    getEphemeralSetting: () => undefined,
-    setEphemeralSetting: noop,
-    getModel: () => 'gpt-4o',
-    setModel: noop,
-    getConversationLoggingEnabled: () => false,
-    setConversationLoggingEnabled: noop,
-    getTelemetryLogPromptsEnabled: () => false,
-    setTelemetryLogPromptsEnabled: noop,
-    getUsageStatisticsEnabled: () => false,
-    setUsageStatisticsEnabled: noop,
-    getDebugMode: () => false,
-    setDebugMode: noop,
-    isInteractive: () => false,
-    getSessionId: () => 'test-session',
-    setSessionId: noop,
-    getFlashFallbackMode: () => 'off',
-    setFlashFallbackMode: noop,
-    getProvider: () => 'openaivercel',
-    setProvider: noop,
-    getProviderSettings: () => ({}),
-    setProviderSettings: noop,
-    getProviderConfig: () => ({}),
-    setProviderConfig: noop,
-    resetProvider: noop,
-    resetProviderSettings: noop,
-    resetProviderConfig: noop,
-    getActiveWorkspace: () => undefined,
-    setActiveWorkspace: noop,
-    clearActiveWorkspace: noop,
-    getExtensionConfig: () => ({}),
-    setExtensionConfig: noop,
-    getFeatures: () => ({}),
-    setFeatures: noop,
-    setProviderManager: noop,
-    getProviderManager: () => undefined,
-    getProviderSetting: () => undefined,
-    getUserMemory: () => '',
-    getJitMemoryForPath: () => Promise.resolve(''),
-    setUserMemory: noop,
-    getQuotaErrorOccurred: () => false,
-    setQuotaErrorOccurred: noop,
-    getLlxprtMdFilePaths: () => [],
-    getLlxprtMdFileCount: () => 0,
-    getCoreMemoryFileCount: () => 0,
-  } as unknown as Config;
-}
 
 describe('OpenAIVercelProvider.getToolFormat() - override vs auto-detection (issue #1943)', () => {
   let settingsService: SettingsService;
-  let runtime: ProviderRuntimeContext;
 
   beforeEach(() => {
     settingsService = new SettingsService();
-    const config = createTestConfig(settingsService);
-    runtime = createProviderRuntimeContext({
-      settingsService,
-      config,
-      runtimeId: 'test.openaivercel.runtime',
-      metadata: { source: 'test' },
-    });
-    setActiveProviderRuntimeContext(runtime);
-    registerSettingsService(settingsService);
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
-    clearActiveProviderRuntimeContext();
-    resetSettingsService();
   });
+
+  const createWiredProvider = (): OpenAIVercelProvider => {
+    const wired = new OpenAIVercelProvider('test-key');
+    wired.setRuntimeSettingsService(settingsService);
+    return wired;
+  };
 
   it('returns "openai" override for a kimi model when provider toolFormat is set to "openai"', () => {
     settingsService.setProviderSetting('openaivercel', 'toolFormat', 'openai');
-    const provider = new OpenAIVercelProvider('test-key');
+    const provider = createWiredProvider();
     vi.spyOn(provider, 'getModel').mockReturnValue('moonshot-v1-kimi-k2');
 
     expect(provider.getToolFormat()).toBe('openai');
@@ -111,14 +42,14 @@ describe('OpenAIVercelProvider.getToolFormat() - override vs auto-detection (iss
 
   it('auto-detects "kimi" format when provider toolFormat is "auto"', () => {
     settingsService.setProviderSetting('openaivercel', 'toolFormat', 'auto');
-    const provider = new OpenAIVercelProvider('test-key');
+    const provider = createWiredProvider();
     vi.spyOn(provider, 'getModel').mockReturnValue('moonshot-v1-kimi-k2');
 
     expect(provider.getToolFormat()).toBe('kimi');
   });
 
   it('auto-detects "kimi" format when no toolFormat override is set', () => {
-    const provider = new OpenAIVercelProvider('test-key');
+    const provider = createWiredProvider();
     vi.spyOn(provider, 'getModel').mockReturnValue('moonshot-v1-kimi-k2');
 
     expect(provider.getToolFormat()).toBe('kimi');
@@ -126,21 +57,21 @@ describe('OpenAIVercelProvider.getToolFormat() - override vs auto-detection (iss
 
   it('returns explicit "kimi" override even for a standard model', () => {
     settingsService.setProviderSetting('openaivercel', 'toolFormat', 'kimi');
-    const provider = new OpenAIVercelProvider('test-key');
+    const provider = createWiredProvider();
     vi.spyOn(provider, 'getModel').mockReturnValue('gpt-4o');
 
     expect(provider.getToolFormat()).toBe('kimi');
   });
 
   it('returns "openai" by default for standard models', () => {
-    const provider = new OpenAIVercelProvider('test-key');
+    const provider = createWiredProvider();
     vi.spyOn(provider, 'getModel').mockReturnValue('gpt-4o');
 
     expect(provider.getToolFormat()).toBe('openai');
   });
 
   it('auto-detects "mistral" format for mistral model when no override', () => {
-    const provider = new OpenAIVercelProvider('test-key');
+    const provider = createWiredProvider();
     vi.spyOn(provider, 'getModel').mockReturnValue('mistral-large-latest');
 
     expect(provider.getToolFormat()).toBe('mistral');
@@ -148,7 +79,7 @@ describe('OpenAIVercelProvider.getToolFormat() - override vs auto-detection (iss
 
   it('returns "openai" for GLM models when override is set to "openai"', () => {
     settingsService.setProviderSetting('openaivercel', 'toolFormat', 'openai');
-    const provider = new OpenAIVercelProvider('test-key');
+    const provider = createWiredProvider();
     vi.spyOn(provider, 'getModel').mockReturnValue('openai:hf:zai-org/GLM-4.6');
 
     expect(provider.getToolFormat()).toBe('openai');

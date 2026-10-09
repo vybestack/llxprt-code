@@ -7,22 +7,21 @@
  * Split from AnthropicProvider.test.ts for max-lines compliance.
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { vi, describe, it, expect, beforeEach } from 'bun:test';
 import { AnthropicProvider } from './AnthropicProvider.js';
-import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
-import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { TEST_PROVIDER_CONFIG } from '../__tests__/providerTestConfig.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { sanitizeBlockForCacheControl } from './AnthropicRequestBuilder.js';
 
 import {
   setupAnthropicProvider,
   type AnthropicTestSetup,
-} from './test-utils/anthropicProviderTestSetup.js';
+} from './__tests__/anthropicProviderTestSetup.js';
 
 // Shared mock instance for messages.create - using vi.hoisted so it's
 // available when vi.mock factories run.
-import { createAnthropicRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
+import { createAnthropicRawPostTestAdapter } from '../__tests__/rawPostTestAdapters.js';
 
 const mockMessagesCreate = vi.fn();
 
@@ -142,9 +141,6 @@ describe('AnthropicProvider', () => {
     runtimeContext = setup.runtimeContext;
   });
 
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
   describe('OAuth Compatibility', () => {
     it('should prefix tool names with llxprt_ for OAuth requests', async () => {
       // Create provider with OAuth token
@@ -183,13 +179,9 @@ describe('AnthropicProvider', () => {
 
       const tools = [
         {
-          functionDeclarations: [
-            {
-              name: 'read_file',
-              description: 'Read a file',
-              parametersJsonSchema: { type: 'object', properties: {} },
-            },
-          ],
+          name: 'read_file',
+          description: 'Read a file',
+          parametersJsonSchema: { type: 'object', properties: {} },
         },
       ];
 
@@ -232,13 +224,9 @@ describe('AnthropicProvider', () => {
 
       const tools = [
         {
-          functionDeclarations: [
-            {
-              name: 'read_file',
-              description: 'Read a file',
-              parametersJsonSchema: { type: 'object', properties: {} },
-            },
-          ],
+          name: 'read_file',
+          description: 'Read a file',
+          parametersJsonSchema: { type: 'object', properties: {} },
         },
       ];
 

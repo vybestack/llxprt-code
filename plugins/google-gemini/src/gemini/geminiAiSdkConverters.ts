@@ -282,14 +282,17 @@ function lowerGeminiType(value: unknown): unknown {
  *   any_of[0].required[0]: property is not defined
  *
  * Gemini needs each branch to be an object schema that itself defines the
- * properties it marks required, so the referenced definitions are copied down
- * from the parent. Branches that already declare a type are left alone.
+ * properties it marks required. Copy common requirements and all parent
+ * properties so each branch also constrains optional supplied fields.
+ * Branches that already declare a type are left alone.
  */
 function repairRequiredOnlyAnyOf(
   branches: readonly unknown[],
   parentProperties: unknown,
+  parentRequired: unknown,
 ): unknown[] {
-  const parent = isRecord(parentProperties) ? parentProperties : undefined;
+  const parent = isRecord(parentProperties) ? parentProperties : {};
+  const commonRequired = Array.isArray(parentRequired) ? parentRequired : [];
   return branches.map((branch) => {
     if (!isRecord(branch)) {
       return branch;
@@ -302,15 +305,12 @@ function repairRequiredOnlyAnyOf(
     ) {
       return branch;
     }
-    const properties: Record<string, unknown> = {};
-    for (const name of required) {
-      if (typeof name === 'string') {
-        // An unconstrained fallback still defines the name, which is what
-        // Gemini objects to when it is missing.
-        properties[name] = parent?.[name] ?? {};
-      }
-    }
-    return { ...branch, type: 'object', properties };
+    return {
+      ...branch,
+      type: 'object',
+      properties: { ...parent },
+      required: [...new Set([...commonRequired, ...required])],
+    };
   });
 }
 
@@ -322,13 +322,31 @@ function normaliseSchemaTypes(node: unknown): unknown {
     return node;
   }
   const out: Record<string, unknown> = {};
+  const requiredOnlyAnyOf =
+    Array.isArray(node['anyOf']) &&
+    node['anyOf'].length > 0 &&
+    node['anyOf'].every(
+      (branch) =>
+        isRecord(branch) &&
+        Object.keys(branch).every((key) => key === 'required') &&
+        Array.isArray(branch['required']) &&
+        branch['required'].length > 0,
+    );
   for (const [key, value] of Object.entries(node)) {
+    if (
+      requiredOnlyAnyOf &&
+      (key === 'type' || key === 'properties' || key === 'required')
+    ) {
+      continue;
+    }
     if (key === 'type') {
       out[key] = lowerGeminiType(value);
-    } else if (key === 'anyOf' && Array.isArray(value)) {
-      out[key] = repairRequiredOnlyAnyOf(value, node['properties']).map(
-        normaliseSchemaTypes,
-      );
+    } else if (key === 'anyOf' && requiredOnlyAnyOf && Array.isArray(value)) {
+      out[key] = repairRequiredOnlyAnyOf(
+        value,
+        node['properties'],
+        node['required'],
+      ).map(normaliseSchemaTypes);
     } else {
       out[key] = normaliseSchemaTypes(value);
     }

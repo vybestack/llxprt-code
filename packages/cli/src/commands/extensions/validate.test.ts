@@ -16,7 +16,7 @@ import {
 } from 'bun:test';
 import { handleValidate, validateCommand } from './validate.js';
 import yargs from 'yargs';
-import { createExtension } from '../../test-utils/createExtension.js';
+import { createExtension } from '../../__tests__/createExtension.js';
 import path from 'node:path';
 import * as os from 'node:os';
 import { DebugLogger } from '@vybestack/llxprt-code-core';

@@ -22,6 +22,7 @@ function* compressionValues(
   for (let position = start; position < candidate.length; position++) {
     signal?.throwIfAborted();
     const row = candidate.readRow(position);
+    if (row.speaker === 'ai' && row.blocks.length === 0) continue;
     const metadata = { ...row.metadata };
     if (
       annotation.span.itemCount > 0 &&

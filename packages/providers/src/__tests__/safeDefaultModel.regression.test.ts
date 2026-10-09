@@ -18,7 +18,7 @@ import { LoggingProviderWrapper } from '../LoggingProviderWrapper.js';
 import { safeGetDefaultModel } from '../utils/safeDefaultModel.js';
 import type { IProvider, GenerateChatOptions } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 /**

@@ -13,7 +13,7 @@ import {
 } from '@vybestack/llxprt-code-core/hooks/types.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import { AgentEventType } from './turn.js';
-import { createChatSessionRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
@@ -22,7 +22,6 @@ import {
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import * as providerRuntime from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
 describe('ChatSession hook execution control', () => {
   let mockHookSystem: HookSystem;
@@ -84,7 +83,6 @@ describe('ChatSession hook execution control', () => {
       ...runtimeSetup.runtime,
       config: mockConfig,
     };
-    providerRuntime.setActiveProviderRuntimeContext(providerRuntimeSnapshot);
 
     // Create mock ContentGenerator
     mockContentGenerator = {
@@ -347,12 +345,8 @@ describe('ChatSession hook execution control', () => {
       mockContentGenerator,
       {
         tools: [
-          {
-            functionDeclarations: [
-              { name: 'read_file' },
-              { name: 'run_shell_command' },
-            ],
-          },
+          { name: 'read_file', parametersJsonSchema: {} },
+          { name: 'run_shell_command', parametersJsonSchema: {} },
         ],
       },
       [],

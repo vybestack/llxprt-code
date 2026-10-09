@@ -16,7 +16,7 @@
 import { runAllTimersAsync } from '@vybestack/llxprt-code-test-utils';
 import path from 'node:path';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
-import { renderHook } from '../../../../test-utils/render.js';
+import { renderHook } from '../../../../__tests__/render.js';
 import { act } from 'react';
 import { readdir } from 'node:fs/promises';
 import {
@@ -25,7 +25,7 @@ import {
   trackingFs,
 } from '../checkpoint-disk-test-helpers.js';
 import type { Config, GitService } from '@vybestack/llxprt-code-core';
-import { createFakeAgentFromMockClient } from '../../useAgentStream-test-helpers.js';
+import { createFakeAgentFromMockClient } from '../../__tests__/useAgentStream-test-helpers.js';
 import type { TrackedToolCall } from '../../useReactToolScheduler.js';
 import type { HistoryItem } from '../../../types.js';
 import {

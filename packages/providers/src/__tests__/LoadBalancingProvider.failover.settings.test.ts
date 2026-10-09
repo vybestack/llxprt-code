@@ -7,14 +7,14 @@
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { ProviderManager } from '../ProviderManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import {
   LoadBalancingProvider,
   type LoadBalancingProviderConfig,
 } from '../LoadBalancingProvider.js';
 import type { IProvider } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { GenerateChatOptions } from '../GenerateChatOptions.js';
+import type { GenerateChatOptions } from '../IProvider.js';
 import { replayableContents } from '../utils/collectContents.js';
 
 const requestContents = replayableContents([
@@ -37,7 +37,7 @@ describe('LoadBalancingProvider - Failover Strategy [part 1]', () => {
       const mockProvider: IProvider = {
         name: 'test-provider',
         async *generateChatCompletion(): AsyncGenerator<IContent> {
-          yield { type: 'text' as const, content: 'success' };
+          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'success' }] };
         },
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
@@ -71,8 +71,6 @@ describe('LoadBalancingProvider - Failover Strategy [part 1]', () => {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
         contents: requestContents,
       };
 
@@ -96,7 +94,7 @@ describe('LoadBalancingProvider - Failover Strategy [part 2]', () => {
       const mockProvider: IProvider = {
         name: 'test-provider',
         async *generateChatCompletion(): AsyncGenerator<IContent> {
-          yield { type: 'text' as const, content: 'success' };
+          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'success' }] };
         },
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
@@ -127,8 +125,6 @@ describe('LoadBalancingProvider - Failover Strategy [part 2]', () => {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
         contents: requestContents,
       };
 
@@ -152,7 +148,7 @@ describe('LoadBalancingProvider - Failover Strategy [part 3]', () => {
       const mockProvider: IProvider = {
         name: 'test-provider',
         async *generateChatCompletion(): AsyncGenerator<IContent> {
-          yield { type: 'text' as const, content: 'success' };
+          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'success' }] };
         },
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
@@ -186,8 +182,6 @@ describe('LoadBalancingProvider - Failover Strategy [part 3]', () => {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
         contents: requestContents,
       };
 
@@ -211,7 +205,7 @@ describe('LoadBalancingProvider - Failover Strategy [part 4]', () => {
       const mockProvider: IProvider = {
         name: 'test-provider',
         async *generateChatCompletion(): AsyncGenerator<IContent> {
-          yield { type: 'text' as const, content: 'success' };
+          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'success' }] };
         },
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
@@ -242,8 +236,6 @@ describe('LoadBalancingProvider - Failover Strategy [part 4]', () => {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
         contents: requestContents,
       };
 
@@ -295,7 +287,7 @@ describe('LoadBalancingProvider - Failover Strategy [part 6]', () => {
       const mockProvider: IProvider = {
         name: 'test-provider',
         async *generateChatCompletion(): AsyncGenerator<IContent> {
-          yield { type: 'text' as const, content: 'success' };
+          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'success' }] };
         },
         getModels: async () => [],
         getDefaultModel: () => 'test-model',
@@ -329,8 +321,6 @@ describe('LoadBalancingProvider - Failover Strategy [part 6]', () => {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
         contents: requestContents,
       };
 
@@ -374,8 +364,6 @@ describe('LoadBalancingProvider - Failover Strategy [part 7]', () => {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
       const options: GenerateChatOptions = {
-        prompt: 'test prompt',
-        messages: [{ role: 'user' as const, content: 'test' }],
         contents: requestContents,
       };
 

@@ -33,6 +33,14 @@ export interface FirstPartyRuntimePluginRelease {
   readonly name: string;
   /** Repo-relative package directory, outside the root workspaces. */
   readonly dir: string;
+  /**
+   * Host packages this plugin's manifest peer-depends on. Release binding
+   * rewrites exactly these ranges, and a manifest that drops one of them is
+   * a packaging mistake that fails the release. Plugins touch different host
+   * surfaces (google-mcp-auth peers on auth/mcp/providers/telemetry, not
+   * core, since #2764), so the set is per release.
+   */
+  readonly hostPeers: readonly string[];
 }
 
 export const FIRST_PARTY_RUNTIME_PLUGIN_RELEASES: readonly FirstPartyRuntimePluginRelease[] =
@@ -40,10 +48,20 @@ export const FIRST_PARTY_RUNTIME_PLUGIN_RELEASES: readonly FirstPartyRuntimePlug
     {
       name: '@vybestack/llxprt-plugin-google-gemini',
       dir: 'plugins/google-gemini',
+      hostPeers: [
+        '@vybestack/llxprt-code-core',
+        '@vybestack/llxprt-code-providers',
+      ],
     },
     {
       name: '@vybestack/llxprt-plugin-google-mcp-auth',
       dir: 'plugins/google-mcp-auth',
+      hostPeers: [
+        '@vybestack/llxprt-code-auth',
+        '@vybestack/llxprt-code-mcp',
+        '@vybestack/llxprt-code-providers',
+        '@vybestack/llxprt-code-telemetry',
+      ],
     },
   ];
 

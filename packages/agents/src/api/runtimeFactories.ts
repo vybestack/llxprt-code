@@ -8,15 +8,12 @@
  * @plan:PLAN-20260629-ISSUE2204.P01
  * @requirement:REQ-2204-001
  *
- * Curated public factories for the agent runtime construction primitives the
- * CLI (and other non-CLI clients) need at composition time: the agent-client
- * factory, the tool-scheduler factory, the task-tool registration descriptor,
- * and the multi-turn agentic loop.
- *
- * Exposing these as PUBLIC functions/types means consumers no longer import
- * the internal `AgentClient`, `CoreToolScheduler`, `createTaskToolRegistration`,
- * or concrete `AgenticLoop` class from the package root — they call a curated
- * public helper instead (#2204).
+ * Curated public factories for the agent runtime construction primitives
+ * non-CLI clients need at composition time: the agent-client factory, the
+ * tool-scheduler factory, the task-tool registration descriptor, and the
+ * multi-turn agentic loop. The Agent API itself assembles its own runtimes
+ * (issue #3222); these helpers remain for composition roots that build
+ * Configs or standalone primitives directly.
  */
 
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -30,7 +27,6 @@ import type {
   TaskToolArgs,
   TaskToolRegistration,
 } from '@vybestack/llxprt-code-core/config/toolRegistryFactory.js';
-import type { AgentRuntimeFactoryBindings } from '@vybestack/llxprt-code-core';
 import { AgentClient } from '../core/client.js';
 import { CoreToolScheduler } from '../core/coreToolScheduler.js';
 import { TaskTool } from '../tools/task.js';
@@ -45,8 +41,6 @@ import type {
   DisplayCallbacks,
 } from '../core/agenticLoop/types.js';
 
-export type { AgentRuntimeFactoryBindings } from '@vybestack/llxprt-code-core';
-
 function assertConfig(
   value: unknown,
   context: string,
@@ -54,24 +48,6 @@ function assertConfig(
   if (!(value instanceof Config)) {
     throw new TypeError(`${context}: expected Config instance`);
   }
-}
-
-/**
- * Builds the {@link AgentRuntimeFactoryBindings} descriptor wiring the
- * agents-owned concrete primitives (AgentClient, CoreToolScheduler,
- * TaskToolRegistration) behind the core-owned contract types.
- *
- * Consumers that need to register agent runtime factories with a runtime
- * composition seam call this once at bootstrap and pass the result to that
- * seam — they never import the concrete classes directly (#2204).
- */
-export function createAgentRuntimeFactoryBindings(): AgentRuntimeFactoryBindings {
-  return {
-    agentClientFactory: (config, runtimeState) =>
-      new AgentClient(config, runtimeState),
-    toolSchedulerFactory: (options) => new CoreToolScheduler(options),
-    taskToolRegistration: () => createTaskRegistration(),
-  };
 }
 
 /**

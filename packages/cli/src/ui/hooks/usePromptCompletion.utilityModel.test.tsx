@@ -12,7 +12,7 @@
 import { describe, it, expect, vi, afterEach } from 'bun:test';
 import { act } from 'react';
 import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
-import { renderHook } from '../../test-utils/render.js';
+import { renderHook } from '../../__tests__/render.js';
 import {
   usePromptCompletion,
   PROMPT_COMPLETION_DEBOUNCE_MS,

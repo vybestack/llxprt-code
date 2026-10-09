@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { HistoryIndexedRows } from '@vybestack/llxprt-code-core/services/history/historyMutationSnapshot.js';
+
 import {
   publishProviderFallbackCandidate,
   ProviderFallbackInvariantError,
@@ -22,16 +22,13 @@ export interface PendingFallbackDeps {
 
 async function restoreRejectedState(
   deps: PendingFallbackDeps,
-  snapshot: HistoryIndexedRows,
+  restore: () => Promise<void>,
   anchor: number,
   baseline: number | null,
   failure: unknown,
 ): Promise<void> {
   try {
-    await deps.historyService.detachedValues.replace(
-      snapshot,
-      deps.getRuntimeModel(),
-    );
+    await restore();
     if (anchor === 0) deps.historyService.resetCacheAnchorSeq();
     else deps.historyService.setCacheAnchorSeq(anchor);
     deps.restoreLastPromptTokenCount(baseline);
@@ -51,7 +48,7 @@ export async function applyPendingWindowFallback(
   const history = deps.historyService;
   const anchor = history.getCacheAnchorSeq();
   const baseline = deps.getLastPromptTokenCount();
-  return history.detachedValues.withCheckpoint(async (snapshot) => {
+  return history.detachedValues.withRollbackCheckpoint(async (restore) => {
     const state = { installed: false, committed: false };
     try {
       const applied = await deps.performFallbackCompression(
@@ -84,7 +81,7 @@ export async function applyPendingWindowFallback(
       return applied;
     } catch (error) {
       if (state.installed)
-        await restoreRejectedState(deps, snapshot, anchor, baseline, error);
+        await restoreRejectedState(deps, restore, anchor, baseline, error);
       throw error;
     }
   });

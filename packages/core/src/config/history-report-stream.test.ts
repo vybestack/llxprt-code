@@ -2,14 +2,14 @@
 import { describe, expect, it } from 'bun:test';
 import { tmpdir } from 'node:os';
 import { Config } from './config.js';
-import { createTestAgentClient } from '../test-utils/config.js';
-import { withSuffixFixture } from '../services/history/history-suffix-test-helpers.js';
+import { createHistoryReportClient } from './history-report-client-test-helpers.js';
+import { withCoreSuffixFixture } from '../services/history/core-suffix-fixture-test-helpers.js';
 import { accountingRow } from '../services/history/token-accounting-stream-test-helpers.js';
 
 for (const size of [512, 8192]) {
   describe(`configuration history verification with ${size} rows`, () => {
     it('finishes auth-state publication while raw arrays are unavailable', async () => {
-      await withSuffixFixture(
+      await withCoreSuffixFixture(
         size,
         async (history, reader, counters) => {
           const config = new Config({
@@ -18,14 +18,7 @@ for (const size of [512, 8192]) {
             cwd: tmpdir(),
             debugMode: false,
             model: 'test-model',
-            agentClientFactory: () =>
-              createTestAgentClient({
-                getHistory: () => {
-                  throw new Error('history report must not materialize');
-                },
-                streamHistory: (signal) => history.streamRawHistory(signal),
-                getHistoryService: () => history,
-              }),
+            agentClientFactory: () => createHistoryReportClient(history),
           });
           config.setFallbackMode(true);
           await config.initializeContentGeneratorConfig();

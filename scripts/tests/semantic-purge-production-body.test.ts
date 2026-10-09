@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { writeBodyFile } from '../lib/body-evidence-writer.js';
 import { describe, expect, it } from 'bun:test';
-import { writeFileSync } from 'node:fs';
+
 import { join } from 'node:path';
 import { DebugLogger } from '../../packages/core/src/debug/index.js';
 import { buildCuratedHistory } from '../../packages/core/src/services/history/historyCuration.js';
@@ -11,8 +12,8 @@ import { captureCuratedBody } from './provider-curated-body-helpers.js';
 const logger = new DebugLogger('test:semantic-purge-body-oracle');
 import type { IContent } from '../../packages/core/src/services/history/IContent.js';
 import { HistoryService } from '../../packages/core/src/services/history/HistoryService.js';
-import { withSuffixFixture } from '../../packages/core/src/services/history/history-suffix-test-helpers.js';
-import { EagerSemanticPurgeOracle } from '../../packages/core/src/services/history/semantic-purge-eager-test-oracle.js';
+import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
+import { EagerSemanticPurgeOracle } from '../../packages/core/src/services/history/semantic-purge-eager-test-helpers.js';
 import { SemanticMediaPurgeSession } from '../../packages/agents/src/core/semanticMediaPurgeSession.js';
 
 function row(index: number, bytes: number): IContent {
@@ -55,20 +56,20 @@ function row(index: number, bytes: number): IContent {
     ],
   };
 }
-function saveBodies(
+async function saveBodies(
   provider: string,
   size: number,
   explicit: boolean,
   actual: string,
   expected: string,
-): void {
+): Promise<void> {
   const output = process.env.SEMANTIC_PURGE_BODY_OUTPUT;
   if (!output) return;
-  writeFileSync(
+  await writeBodyFile(
     join(output, `production-${provider}-${size}-${explicit}-actual.json`),
     actual,
   );
-  writeFileSync(
+  await writeBodyFile(
     join(output, `production-${provider}-${size}-${explicit}-expected.json`),
     expected,
   );
@@ -159,7 +160,13 @@ async function verify(
           await enforceTurnMediaRequestContents(options),
           caching,
         );
-        saveBodies(`${provider}-${caching}`, size, explicit, actual, expected);
+        await saveBodies(
+          `${provider}-${caching}`,
+          size,
+          explicit,
+          actual,
+          expected,
+        );
         return { actual, expected, retried };
       } finally {
         attempt.finalize();

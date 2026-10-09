@@ -1,14 +1,15 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { appendBodyEvidence } from '../../../../../scripts/lib/body-evidence-writer.js';
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { appendFileSync } from 'node:fs';
+
 import { captureCompressionBody } from './compression-value-openai-body.js';
 import { publishProviderFallbackCandidate } from '../providerFallbackCandidate.js';
 import { buildProviderContent } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { DetachedHistoryJournal } from '@vybestack/llxprt-code-core/services/history/detachedHistoryJournal.js';
 import { withValueTransformFixture } from '@vybestack/llxprt-code-core/services/history/transform-value-test-helpers.js';
-import { suffixRow } from '@vybestack/llxprt-code-core/services/history/history-suffix-test-helpers.js';
+import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
@@ -45,21 +46,24 @@ async function compareBodies(
         independent,
         caching,
       );
-      expect(actual).toBe(oracle);
-      expect(actual).toContain(`${size - 1}:${'x'.repeat(bytes)}`);
       const output = process.env.TRANSFORM_BODY_OUTPUT;
       if (output !== undefined)
-        appendFileSync(
+        await appendBodyEvidence(
           output,
-          JSON.stringify({
+          {
             size,
             bytes,
             provider,
             caching,
             bodyBytes: Buffer.byteLength(actual),
             sha256: createHash('sha256').update(actual).digest('hex'),
-          }) + '\n',
+          },
+          actual,
+          oracle,
         );
+      expect(actual).toBe(oracle);
+      expect(actual).toContain(`${size - 1}:${'x'.repeat(bytes)}`);
+
       compared++;
     }
   }

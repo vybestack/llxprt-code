@@ -20,7 +20,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { act } from 'react';
-import { renderHook, waitFor } from '../../../../test-utils/render.js';
+import { renderHook, waitFor } from '../../../../__tests__/render.js';
 import { useSubmitQuery, type UseSubmitQueryDeps } from '../useSubmitQuery.js';
 import { StreamingState, type HistoryItemWithoutId } from '../../../types.js';
 import { type RecordingIntegration } from '@vybestack/llxprt-code-core';

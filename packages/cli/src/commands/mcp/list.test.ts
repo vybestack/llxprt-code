@@ -8,6 +8,18 @@ import { automock } from '@vybestack/llxprt-code-test-utils';
 import type { Mock } from 'bun:test';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
+import type { MCPServerConfig } from '@vybestack/llxprt-code-core';
+import type { McpAuthProvider } from '@vybestack/llxprt-code-mcp';
+import type { OAuthClientMetadata } from '@modelcontextprotocol/sdk/shared/auth.js';
+import { resetRegisteredMcpAuthFactories } from '@vybestack/llxprt-code-mcp/auth/mcp-auth-factory.js';
+import {
+  buildProviderContributionRegistry,
+  loadInstalledRuntimePlugins,
+} from '@vybestack/llxprt-code-providers/composition.js';
+import type {
+  LoadedRuntimePlugin,
+  RuntimeMcpAuthFactoryContribution,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import { createTransport } from '@vybestack/llxprt-code-mcp';
 import { listMcpServers } from './list.js';
 import { loadSettings } from '../../config/settings.js';
@@ -49,6 +61,18 @@ void vi.mock('@vybestack/llxprt-code-mcp', () => ({
 void vi.mock('@modelcontextprotocol/sdk/client/index.js', () =>
   automock(realIndexModule),
 );
+const actualComposition = {
+  ...(await import('@vybestack/llxprt-code-providers/composition.js')),
+};
+void vi.mock('@vybestack/llxprt-code-providers/composition.js', () => ({
+  ...actualComposition,
+  loadInstalledRuntimePlugins: vi.fn(),
+}));
+
+const mockedLoadInstalledRuntimePlugins =
+  loadInstalledRuntimePlugins as unknown as Mock<
+    (...args: never[]) => Promise<unknown>
+  >;
 
 const mockedExtensionStorage = ExtensionStorage as unknown as {
   getUserExtensionsDir: ReturnType<typeof vi.fn>;
@@ -76,6 +100,57 @@ interface MockTransport {
   close: Mock<() => Promise<void>>;
 }
 
+const FAKE_CLIENT_METADATA: OAuthClientMetadata = {
+  client_name: 'test (fake)',
+  redirect_uris: [],
+  grant_types: [],
+  response_types: [],
+  token_endpoint_auth_method: 'none',
+};
+
+/** Records construction so tests can prove the plugin factory was invoked. */
+let fakeAuthProviderConstructions = 0;
+
+/** Auth provider double dispatched through the real factory registry seam. */
+class FakeAuthProvider implements McpAuthProvider {
+  readonly redirectUrl = '';
+  readonly clientMetadata = FAKE_CLIENT_METADATA;
+  constructor(_config?: MCPServerConfig) {
+    fakeAuthProviderConstructions++;
+  }
+  clientInformation() {
+    return undefined;
+  }
+  saveClientInformation() {}
+  async tokens() {
+    return undefined;
+  }
+  saveTokens() {}
+  redirectToAuthorization() {}
+  saveCodeVerifier() {}
+  codeVerifier() {
+    return '';
+  }
+  async getRequestHeaders() {
+    return { 'X-Fake-Project': 'provider-project' };
+  }
+}
+
+/** One installed plugin contributing a google_credentials auth factory. */
+function googleAuthPlugin(
+  ...mcpAuthFactories: RuntimeMcpAuthFactoryContribution[]
+): LoadedRuntimePlugin {
+  return {
+    specifier: '@vybestack/llxprt-plugin-google-mcp-auth',
+    manifest: {
+      apiVersion: 1,
+      id: '@vybestack/llxprt-plugin-google-mcp-auth',
+      providers: [],
+      mcpAuthFactories,
+    },
+  };
+}
+
 describe('mcp list command', () => {
   let consoleSpy: Mock<DebugLogger['log']>;
   let mockClient: MockClient;
@@ -83,6 +158,13 @@ describe('mcp list command', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    // Each listMcpServers run registers MCP auth factories (startup-only
+    // seam); reset between tests so every run starts unregistered.
+    resetRegisteredMcpAuthFactories();
+    fakeAuthProviderConstructions = 0;
+    mockedLoadInstalledRuntimePlugins.mockResolvedValue(
+      buildProviderContributionRegistry([]),
+    );
 
     consoleSpy = vi
       .spyOn(DebugLogger.prototype, 'log')
@@ -104,6 +186,7 @@ describe('mcp list command', () => {
   });
 
   afterEach(() => {
+    resetRegisteredMcpAuthFactories();
     consoleSpy.mockRestore();
   });
 
@@ -314,5 +397,138 @@ describe('mcp list command', () => {
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('deprecated'));
 
     warnSpy.mockRestore();
+  });
+
+  it('should test plugin-backed authProviderType servers through the registered plugin factories', async () => {
+    mockedLoadInstalledRuntimePlugins.mockResolvedValue(
+      buildProviderContributionRegistry([
+        googleAuthPlugin({
+          authProviderType: 'google_credentials',
+          createAuthProvider: (config: MCPServerConfig) =>
+            new FakeAuthProvider(config),
+        }),
+      ]),
+    );
+    // Real transport creation: it dispatches authProviderType through the
+    // registry the command wired from the loaded plugins.
+    mockedCreateTransport.mockImplementation(
+      actual.createTransport as unknown as (
+        ...args: never[]
+      ) => Promise<MockTransport>,
+    );
+    mockedLoadSettings.mockReturnValue({
+      merged: {
+        mcpServers: {
+          'google-server': {
+            url: 'https://example.com/mcp',
+            type: 'http',
+            authProviderType: 'google_credentials',
+          },
+        },
+      },
+    });
+
+    mockClient.connect.mockResolvedValue(undefined);
+    mockClient.ping.mockResolvedValue(undefined);
+
+    await listMcpServers();
+
+    expect(fakeAuthProviderConstructions).toBe(1);
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'google-server: https://example.com/mcp (http) - Connected',
+      ),
+    );
+  });
+
+  it('should show disconnected when the plugin for a Google authProviderType is not installed', async () => {
+    mockedCreateTransport.mockImplementation(
+      actual.createTransport as unknown as (
+        ...args: never[]
+      ) => Promise<MockTransport>,
+    );
+    mockedLoadSettings.mockReturnValue({
+      merged: {
+        mcpServers: {
+          'google-server': {
+            url: 'https://example.com/mcp',
+            type: 'http',
+            authProviderType: 'google_credentials',
+          },
+        },
+      },
+    });
+
+    await listMcpServers();
+
+    expect(fakeAuthProviderConstructions).toBe(0);
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'google-server: https://example.com/mcp (http) - Disconnected',
+      ),
+    );
+  });
+
+  it('should surface the plugin install hint when the Google auth plugin is not installed', async () => {
+    mockedCreateTransport.mockImplementation(
+      actual.createTransport as unknown as (
+        ...args: never[]
+      ) => Promise<MockTransport>,
+    );
+    mockedLoadSettings.mockReturnValue({
+      merged: {
+        mcpServers: {
+          'google-server': {
+            url: 'https://example.com/mcp',
+            type: 'http',
+            authProviderType: 'google_credentials',
+          },
+        },
+      },
+    });
+
+    await listMcpServers();
+
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining('@vybestack/llxprt-plugin-google-mcp-auth'),
+    );
+  });
+
+  it('should surface the factory failure reason when the plugin factory throws', async () => {
+    mockedLoadInstalledRuntimePlugins.mockResolvedValue(
+      buildProviderContributionRegistry([
+        googleAuthPlugin({
+          authProviderType: 'google_credentials',
+          createAuthProvider: () => {
+            throw new Error('factory exploded');
+          },
+        }),
+      ]),
+    );
+    mockedCreateTransport.mockImplementation(
+      actual.createTransport as unknown as (
+        ...args: never[]
+      ) => Promise<MockTransport>,
+    );
+    mockedLoadSettings.mockReturnValue({
+      merged: {
+        mcpServers: {
+          'google-server': {
+            url: 'https://example.com/mcp',
+            type: 'http',
+            authProviderType: 'google_credentials',
+          },
+        },
+      },
+    });
+
+    await listMcpServers();
+
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "MCP server 'google-server' failed to create its " +
+          "'google_credentials' auth provider: factory exploded",
+      ),
+    );
   });
 });

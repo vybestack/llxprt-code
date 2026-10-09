@@ -30,7 +30,7 @@ import { convertToAnthropicMessages } from './AnthropicMessageNormalizer.js';
 import { prepareAnthropicRequest } from './AnthropicRequestPreparation.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { streamCallOptions } from '../test-utils/streamCallOptions.js';
+import { streamCallOptions } from '../__tests__/streamCallOptions.js';
 import type { AnthropicMessage } from './AnthropicMessageNormalizer.js';
 
 // Light boundary mock: prepareAnthropicRequest builds the real system prompt

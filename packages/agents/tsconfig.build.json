@@ -26,7 +26,17 @@
     "dist",
     "src/test-utils/**",
     "src/**/__tests__/**",
+    "**/__tests__/**",
     "**/*.test.ts",
-    "**/*.spec.ts"
+    "**/*.test.tsx",
+    "**/*.spec.ts",
+    "**/*.spec.tsx",
+    "**/*test-helpers*",
+    "**/*.bun.ts",
+    "**/*.test-d.ts",
+    "**/__mocks__/**",
+    "**/*.testHelpers.ts",
+    "**/*.test-helper.ts",
+    "**/*.fixtures.ts"
   ]
 }

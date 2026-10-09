@@ -36,7 +36,7 @@ import {
 } from '../utils/collectContents.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 
 const TERMINAL_EVENT =
   'data: {"type":"response.completed","response":{"id":"resp_1","status":"completed"}}\n\n';
@@ -161,7 +161,7 @@ function buildDeps(
     } as unknown as ResponsesExecutorDeps['logger'],
     getProviderBaseURL: () => 'https://api.openai.com/v1',
     getCustomHeaders: () => undefined,
-    isCodexBaseURL: () => false,
+    isCodexMode: () => false,
     getCodexAccountId: async () => 'codex-account',
     resolveAuthTokenForPrompt: async () => '',
     shouldRetryOnError: () => true,

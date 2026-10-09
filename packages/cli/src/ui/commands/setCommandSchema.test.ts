@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'bun:test';
 import { buildSetSchema } from './setCommandSchema.js';
 import { createCompletionHandler } from './schema/index.js';
-import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 
 // Regression coverage for issue #1050: the four ephemeral timeout settings
 // (task-default-timeout-seconds, task-max-timeout-seconds,

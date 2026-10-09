@@ -7,6 +7,19 @@
     "**/*.test.*",
     "**/*.test-d.*",
     "**/*.spec.*",
+    "**/*test-helpers*",
+    "**/*TestSetup*",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.spec.ts",
+    "**/*.spec.tsx",
+    "**/*.bun.ts",
+    "**/*.test-d.ts",
+    "**/__mocks__/**",
+    "**/*.testHelpers.ts",
+    "**/*.test-helper.ts",
+    "**/*.fixtures.ts",
+    "**/src/test-utils/**",
     "../settings/src/**/__tests__/**",
     "../settings/src/**/*.test.*",
     "../settings/src/**/*.test-d.*",
@@ -14,6 +27,9 @@
     "../tools/src/**/__tests__/**",
     "../tools/src/**/*.test.*",
     "../tools/src/**/*.test-d.*",
-    "../tools/src/**/*.spec.*"
+    "../tools/src/**/*.spec.*",
+    "**/test-support/**",
+    "**/mcpClientTestHelpers.ts",
+    "**/*.bun.tsx"
   ]
 }

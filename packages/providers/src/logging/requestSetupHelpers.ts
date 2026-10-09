@@ -5,11 +5,14 @@
  */
 
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { MaterializedGenerateChatOptions } from '../IProvider.js';
+import type { GenerateChatOptions } from '../IProvider.js';
 import { ConfigBasedRedactor } from './ConfigBasedRedactor.js';
 import type { ConversationDataRedactor } from './ConfigBasedRedactor.js';
-import { logRequestEntry } from './conversationResponseLogger.js';
+import { logStreamingConversationRequestEntry } from './conversationLogger.js';
+import { getRequestSignal } from '../utils/abortSignal.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { RequestLoggingPolicy } from './requestLoggingPolicy.js';
+import type { RequestArtifactDescriptor } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
 
 export interface RequestSetupContext {
   readonly providerName: string;
@@ -25,7 +28,7 @@ export interface RequestSetupContext {
  * Set up per-call redactor based on injected redactor or invocation/config.
  */
 export function setupRedactor(
-  normalizedOptions: MaterializedGenerateChatOptions,
+  normalizedOptions: GenerateChatOptions,
   activeConfig: Config,
   ctx: RequestSetupContext,
 ): ConversationDataRedactor | null {
@@ -71,20 +74,20 @@ export function checkConversationLoggingEnabled(
  */
 export async function logRequestIfEnabled(
   activeConfig: Config,
-  normalizedOptions: MaterializedGenerateChatOptions,
+  normalizedOptions: GenerateChatOptions,
   promptId: string,
   redactor: ConversationDataRedactor | null,
   ctx: RequestSetupContext,
-): Promise<void> {
+  policy: RequestLoggingPolicy,
+): Promise<RequestArtifactDescriptor | undefined> {
   ctx.debug.log(
     () =>
-      `Before logRequest: contents length = ${normalizedOptions.contents.length}`,
+      `Before logRequest: contents length = ${normalizedOptions.contentCount ?? 'unknown'}`,
   );
-  // logRequestEntry is already fail-open (catches its own errors and warns).
-  // Any unexpected error here is also treated as non-fatal so request
-  // reliability is never compromised by conversation logging.
+  // Eager logging stays best-effort; branded source attempts require the append result.
+  let artifact: RequestArtifactDescriptor | undefined;
   try {
-    await logRequestEntry(
+    artifact = await logStreamingConversationRequestEntry(
       activeConfig,
       normalizedOptions.contents,
       normalizedOptions.tools,
@@ -93,20 +96,26 @@ export async function logRequestIfEnabled(
         providerName: ctx.providerName,
         conversationId: ctx.conversationId,
         turnNumber: ctx.turnNumber,
-        defaultModelName: ctx.defaultModelName,
         generatePromptId: ctx.generatePromptId,
         redactor,
-        debug: ctx.debug,
+        conversationLogEmptyTools:
+          normalizedOptions.metadata?.conversationLogEmptyTools === true,
+        sanitizeMedia: policy.strictPreSend,
       },
+      getRequestSignal(normalizedOptions),
+      policy.strictTelemetry,
     );
   } catch (error) {
+    getRequestSignal(normalizedOptions)?.throwIfAborted();
+    if (policy.strictPreSend) throw error;
     ctx.debug.warn(
       () =>
-        `logRequest failed (fail-open): ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to log conversation request (fail-open): ${error instanceof Error ? error.message : String(error)}`,
     );
   }
   ctx.debug.log(
     () =>
-      `After logRequest: contents length = ${normalizedOptions.contents.length}`,
+      `After logRequest: contents length = ${normalizedOptions.contentCount ?? 'unknown'}`,
   );
+  return artifact;
 }

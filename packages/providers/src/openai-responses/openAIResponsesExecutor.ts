@@ -29,28 +29,36 @@
  * custom headers, Codex account ID) as pure functions.
  */
 
+import {
+  resolveInvocationEphemerals,
+  normalizeBaseURL,
+  resolveApiKey,
+  buildInput,
+  createRequest,
+  applyInstructionsAndTools,
+  applyReasoningSettings,
+  applyTextVerbosity,
+  applyCodexRequestSettings,
+  applyPromptCaching,
+} from './responses-request-fields.js';
+import type { ToolOutputSettingsProvider } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
+import {
+  resolveRequestContents,
+  createRequestContentsFiller,
+} from './responses-content-filler.js';
 import { dumpFinalizedRequest } from './openAIResponsesRequestDump.js';
 import { SyntheticToolResponseHandler } from '../openai/syntheticToolResponses.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ToolOutputSettingsProvider } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
-import { convertToolsToOpenAIResponses } from './schemaConverter.js';
 import { requireAssembledSystemInstruction } from '../utils/systemPromptPlacement.js';
-import { resolveRuntimeAuthToken } from '../utils/authToken.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
-import { acquireRequestScopedBody } from '../utils/requestScopedBody.js';
+import {
+  acquireRequestScopedBody,
+  type RequestScopedContents,
+} from '../utils/requestScopedBody.js';
 import { isPreviousResponseNotFoundError } from './openAIResponsesStatefulRecovery.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import { buildOpenAIResponsesInput } from './OpenAIResponsesInputBuilder.js';
-import {
-  applyOpenAIResponsesReasoning,
-  type AppliedOpenAIResponsesReasoning,
-} from './openai-responses-reasoning.js';
-import { sanitizePromptCacheKey } from './sanitizePromptCacheKey.js';
-import type {
-  OpenAIResponsesRequest,
-  ResponsesInputItem,
-} from './OpenAIResponsesTypes.js';
+import type { OpenAIResponsesRequest } from './OpenAIResponsesTypes.js';
 import type { computeStatefulConversation } from './openAIResponsesStateful.js';
 import { applyStatefulConversation } from './openAIResponsesStateful.js';
 import {
@@ -68,7 +76,13 @@ import {
 } from '../utils/request-media-resolution.js';
 import type { StreamResponsesParams } from './openAIResponsesHttpStream.js';
 import { streamResponses } from './openAIResponsesStreaming.js';
+import {
+  progressiveResponsesInput,
+  responsesBodyBytes,
+} from './progressive-responses-body.js';
 import type { resolveMediaCapabilities } from './openAIResponsesRequestState.js';
+import type { ResponsesSourcePrompt } from '../runtime/responses-source-serializer.js';
+import { diskResponsesBodyBytes } from './responses-disk-body.js';
 
 /**
  * Provider-specific capabilities that the executor needs to do its work.
@@ -93,8 +107,8 @@ export interface ResponsesExecutorDeps {
   readonly getCustomHeaders: (
     options?: NormalizedGenerateChatOptions,
   ) => Record<string, string> | undefined;
-  /** True when the base URL points at the Codex (ChatGPT) backend. */
-  readonly isCodexBaseURL: (baseURL: string | undefined) => boolean;
+  /** Whether the selected provider uses the Codex protocol. */
+  readonly isCodexMode: () => boolean;
   /** Resolve the Codex account ID for OAuth headers (Codex mode only). */
   readonly getCodexAccountId: () => Promise<string>;
   /**
@@ -169,36 +183,12 @@ export interface PreparedResponsesRequestContext {
   readonly request: OpenAIResponsesRequest;
   readonly projectionContext: OpenAIResponsesProjectionContext;
   readonly mediaRequest: ResolvedMediaRequest;
+  readonly sourcePrompt?: ResponsesSourcePrompt;
 }
 
 export interface RequestContext extends PreparedResponsesRequestContext {
   readonly apiKey: string;
   readonly baseURL: string;
-}
-
-function resolveInvocationEphemerals(
-  options: NormalizedGenerateChatOptions,
-): Record<string, unknown> {
-  const invocation = options.invocation as {
-    ephemerals?: Record<string, unknown>;
-  };
-  return invocation.ephemerals ?? {};
-}
-
-/**
- * Resolves the history array a request build consumes. Lazily-wired requests
- * (issue #854 P05b4) drain the memoized request-scoped source — the first
- * caller materializes it and every later consumer (projection, recovery
- * rebuilds, stateless fallbacks) resolves the SAME array, so a one-shot
- * source is never drained twice.
- */
-async function resolveRequestContents(
-  options: NormalizedGenerateChatOptions,
-): Promise<IContent[]> {
-  const requestContents = options.requestContents;
-  return requestContents === undefined
-    ? options.contents
-    : requestContents.materialize();
 }
 
 /**
@@ -240,63 +230,104 @@ interface ResponsesExecutionSetup {
    * lease — the transport call is already initiated at that point.
    */
   readonly materializeRequestBody?: () => Promise<void>;
+  readonly streamRequestBody?: () => AsyncIterable<Uint8Array>;
 }
 
-/**
- * Creates the deferred content stage for a lazily-wired transport (issue
- * #854 P05b4). The request context was built against an empty shell so the
- * history source stays unpulled while the transport call initiates; this
- * stage drains the memoized source and applies every content-derived piece
- * (input, stateful chaining) onto the SAME request object the lease owns.
- */
-function createRequestContentsFiller(
+function createDeferredBodySetup(
   options: NormalizedGenerateChatOptions,
   deps: ResponsesExecutorDeps,
   invocationEphemerals: Record<string, unknown>,
-  context: RequestContext,
-): () => Promise<void> {
-  let fill: Promise<void> | undefined;
-  return () => {
-    fill ??= (async () => {
-      const patchedContent = SyntheticToolResponseHandler.patchMessageHistory(
-        await resolveRequestContents(options),
-      );
-      const shape = resolveResponsesRequestShape(
-        options,
-        patchedContent,
-        invocationEphemerals,
-        deps,
-        false,
-        false,
-      );
-      // The shell's media request was registered over an empty history, so
-      // resolve media over the drained shape content — the exact semantics
-      // buildRequestContext applies eagerly — and chain its release onto the
-      // shell's so the request-scoped lease still drops when the transport
-      // call settles.
-      const mediaRequest = await resolveRequestMedia(
-        options.runtime,
-        shape.stateful.content,
-        getRequestSignal(options),
-      );
-      context.mediaRequest.registerCleanup(() => mediaRequest.release());
-      context.request.input = buildInput(
-        options,
-        mediaRequest.withContents((contents) => contents),
-        invocationEphemerals,
-        deps,
-        shape.stateful.parentId !== undefined,
-      );
-      applyStatefulConversation(
-        context.request,
-        shape.stateful,
-        shape.explicitUserStore,
-        shape.isCodex,
-        deps.logger,
-      );
-    })();
-    return fill;
+  requestContext: RequestContext,
+  owner: RequestScopedContents,
+  abortSignal: AbortSignal | undefined,
+): Pick<
+  ResponsesExecutionSetup,
+  'materializeRequestBody' | 'streamRequestBody'
+> {
+  const materializeRequestBody = createRequestContentsFiller(
+    options,
+    deps,
+    invocationEphemerals,
+    requestContext,
+  );
+  const shape = resolveResponsesRequestShape(
+    options,
+    [],
+    invocationEphemerals,
+    deps,
+    false,
+    false,
+  );
+  return {
+    materializeRequestBody,
+    ...(!shape.stateful.enabled
+      ? {
+          streamRequestBody: () =>
+            responsesBodyBytes(
+              requestContext.request,
+              progressiveResponsesInput(
+                owner,
+                requestContext.request,
+                (rows) => buildInput(options, rows, invocationEphemerals, deps),
+                materializeRequestBody,
+                abortSignal,
+              ),
+              abortSignal,
+            ),
+        }
+      : {}),
   };
+}
+
+async function prepareDeferredResponsesExecution(
+  options: NormalizedGenerateChatOptions,
+  deps: ResponsesExecutorDeps,
+  invocationEphemerals: Record<string, unknown>,
+  owner: RequestScopedContents,
+  abortSignal: AbortSignal | undefined,
+): Promise<ResponsesExecutionSetup> {
+  // Issue #854 P05b4 lazily-wired transport: build a content-free shell so
+  // the history source stays unpulled while the transport initiates; the
+  // filler applies the content-derived pieces inside the request-scoped
+  // lease at the lazy body's first pull.
+  const shell = await buildRequestContext(
+    options,
+    [],
+    invocationEphemerals,
+    deps,
+  );
+  const requestContext = await resolveResponsesTransportContext(
+    options,
+    shell,
+    deps,
+  );
+  try {
+    const dumpResult = await dumpFinalizedRequest(
+      requestContext,
+      invocationEphemerals,
+      deps,
+      options,
+    );
+    return {
+      abortSignal,
+      invocationEphemerals,
+      requestContext,
+      dumpResult,
+      ...createDeferredBodySetup(
+        options,
+        deps,
+        invocationEphemerals,
+        requestContext,
+        owner,
+        abortSignal,
+      ),
+    };
+  } catch (error) {
+    return finishMediaRequest(requestContext.mediaRequest, {
+      status: 'failed',
+      error,
+    });
+  }
 }
 
 async function prepareResponsesExecution(
@@ -304,53 +335,21 @@ async function prepareResponsesExecution(
   deps: ResponsesExecutorDeps,
   preparedRequestContext: PreparedResponsesRequestContext | undefined,
 ): Promise<ResponsesExecutionSetup> {
-  requireAssembledSystemInstruction(options.systemInstruction);
+  if (preparedRequestContext?.sourcePrompt === undefined)
+    requireAssembledSystemInstruction(options.systemInstruction);
   const abortSignal = getRequestSignal(options);
   const invocationEphemerals = resolveInvocationEphemerals(options);
   if (
     preparedRequestContext === undefined &&
     options.requestContents !== undefined
   ) {
-    // Issue #854 P05b4 lazily-wired transport: build a content-free shell so
-    // the history source stays unpulled while the transport initiates; the
-    // filler applies the content-derived pieces inside the request-scoped
-    // lease at the lazy body's first pull.
-    const shell = await buildRequestContext(
+    return prepareDeferredResponsesExecution(
       options,
-      [],
+      deps,
       invocationEphemerals,
-      deps,
+      options.requestContents,
+      abortSignal,
     );
-    const requestContext = await resolveResponsesTransportContext(
-      options,
-      shell,
-      deps,
-    );
-    try {
-      const dumpResult = await dumpFinalizedRequest(
-        requestContext,
-        invocationEphemerals,
-        deps,
-        options,
-      );
-      return {
-        abortSignal,
-        invocationEphemerals,
-        requestContext,
-        dumpResult,
-        materializeRequestBody: createRequestContentsFiller(
-          options,
-          deps,
-          invocationEphemerals,
-          requestContext,
-        ),
-      };
-    } catch (error) {
-      return finishMediaRequest(requestContext.mediaRequest, {
-        status: 'failed',
-        error,
-      });
-    }
   }
   const prepared =
     preparedRequestContext ??
@@ -371,7 +370,23 @@ async function prepareResponsesExecution(
       deps,
       options,
     );
-    return { abortSignal, invocationEphemerals, requestContext, dumpResult };
+    const source = requestContext.sourcePrompt?.toEstimatorProjection();
+    return {
+      abortSignal,
+      invocationEphemerals,
+      requestContext,
+      dumpResult,
+      ...(source === undefined
+        ? {}
+        : {
+            streamRequestBody: () =>
+              diskResponsesBodyBytes(
+                requestContext.request,
+                source,
+                abortSignal,
+              ),
+          }),
+    };
   } catch (error) {
     return finishMediaRequest(requestContext.mediaRequest, {
       status: 'failed',
@@ -385,12 +400,25 @@ export async function* executeOpenAIResponsesRequest(
   deps: ResponsesExecutorDeps,
   preparedRequestContext?: PreparedResponsesRequestContext,
 ): AsyncIterableIterator<IContent> {
+  try {
+    yield* executeResponsesRequest(options, deps, preparedRequestContext);
+  } finally {
+    await options.requestContents?.dispose();
+  }
+}
+
+async function* executeResponsesRequest(
+  options: NormalizedGenerateChatOptions,
+  deps: ResponsesExecutorDeps,
+  preparedRequestContext?: PreparedResponsesRequestContext,
+): AsyncIterableIterator<IContent> {
   const {
     abortSignal,
     invocationEphemerals,
     requestContext,
     dumpResult,
     materializeRequestBody,
+    streamRequestBody,
   } = await prepareResponsesExecution(options, deps, preparedRequestContext);
   const streamParams: StreamResponsesParams = {
     ...buildStreamParams(
@@ -401,6 +429,7 @@ export async function* executeOpenAIResponsesRequest(
       dumpResult,
     ),
     ...(materializeRequestBody === undefined ? {} : { materializeRequestBody }),
+    ...(streamRequestBody === undefined ? {} : { streamRequestBody }),
     rebuildStateless: async () => {
       await requestContext.mediaRequest.release();
       return buildStatelessTurn(
@@ -768,7 +797,7 @@ async function resolveResponsesTransportContext(
     }
     return {
       ...prepared,
-      apiKey: await resolveApiKey(options, prepared.rawBaseURL, deps),
+      apiKey: await resolveApiKey(options, deps),
       baseURL: normalizeBaseURL(prepared.rawBaseURL),
     };
   } catch (error) {
@@ -779,259 +808,4 @@ async function resolveResponsesTransportContext(
   }
 }
 
-async function resolveApiKey(
-  options: NormalizedGenerateChatOptions,
-  effectiveBaseURL: string,
-  deps: ResponsesExecutorDeps,
-): Promise<string> {
-  const promptAuthToken = await deps.resolveAuthTokenForPrompt();
-  // Strict guard on the value that becomes the Authorization header:
-  // only forward a genuine non-empty string. Provider implementations
-  // can resolve to '' from deeper auth paths, and a defensive runtime
-  // typeof check ensures a non-string (undefined/null from a loosely
-  // typed implementation) is never injected into the header.
-  if (typeof promptAuthToken === 'string' && promptAuthToken !== '') {
-    return promptAuthToken;
-  }
-  const runtimeToken = await resolveRuntimeAuthToken(
-    options.resolved.authToken,
-  );
-  if (typeof runtimeToken === 'string' && runtimeToken !== '') {
-    return runtimeToken;
-  }
-
-  const isCodex = deps.isCodexBaseURL(effectiveBaseURL);
-  throw new Error(
-    isCodex
-      ? 'Codex authentication required. Run /auth codex enable to authenticate.'
-      : 'OpenAI API key is required',
-  );
-}
-
-export function isResponsesPdfEnabled(
-  options: NormalizedGenerateChatOptions,
-): boolean {
-  const invocationEphemerals = resolveInvocationEphemerals(options);
-  const setting =
-    (invocationEphemerals['media.pdf.enabled'] as boolean | undefined) ??
-    options.invocation.getModelBehavior<boolean>('media.pdf.enabled') ??
-    readOptionalSetting(options, 'media.pdf.enabled');
-  return setting !== false;
-}
-
-/**
- * Read a setting through the structurally optional `SettingsService.get`
- * seam. `get` is declared optional on the contract, so a settings object that
- * omits it must fall through to the caller's default rather than throwing.
- */
-function readOptionalSetting(
-  options: NormalizedGenerateChatOptions,
-  key: string,
-): unknown {
-  const get = (
-    options as { settings?: { get?: (settingKey: string) => unknown } }
-  ).settings?.get;
-  return typeof get === 'function'
-    ? get.call(options.settings, key)
-    : undefined;
-}
-
-function buildInput(
-  options: NormalizedGenerateChatOptions,
-  patchedContent: IContent[],
-  invocationEphemerals: Record<string, unknown>,
-  deps: ResponsesExecutorDeps,
-  serverSideParentActive: boolean = false,
-): ResponsesInputItem[] {
-  const includeReasoningInContextSetting =
-    (invocationEphemerals['reasoning.includeInContext'] as
-      | boolean
-      | undefined) ??
-    options.invocation.getModelBehavior<boolean>(
-      'reasoning.includeInContext',
-    ) ??
-    readOptionalSetting(options, 'reasoning.includeInContext');
-  const outputLimiterConfig =
-    options.config ??
-    options.runtime?.config ??
-    deps.getGlobalConfig() ??
-    ({
-      getEphemeralSettings: () => ({}),
-    } satisfies ToolOutputSettingsProvider);
-  return buildOpenAIResponsesInput(patchedContent, {
-    includeReasoningInContext: includeReasoningInContextSetting !== false,
-    outputLimiterConfig,
-    debug: (messageFactory) => deps.logger.debug(messageFactory),
-    serverSideParentActive,
-    mediaPdfEnabled: isResponsesPdfEnabled(options),
-  });
-}
-
-function normalizeBaseURL(baseURLCandidate: string): string {
-  let baseURL = baseURLCandidate;
-  while (baseURL.endsWith('/')) baseURL = baseURL.slice(0, -1);
-  return baseURL;
-}
-
-function createRequest(
-  options: NormalizedGenerateChatOptions,
-  input: ResponsesInputItem[],
-  requestOverrides: Record<string, unknown>,
-  deps: ResponsesExecutorDeps,
-): OpenAIResponsesRequest {
-  return {
-    model: options.resolved.model || deps.getDefaultModel(),
-    input,
-    stream: true,
-    ...requestOverrides,
-  };
-}
-
-function applyInstructionsAndTools(
-  request: OpenAIResponsesRequest,
-  systemPrompt: string,
-  options: NormalizedGenerateChatOptions,
-): void {
-  if (systemPrompt) request.instructions = systemPrompt;
-
-  const responsesTools = convertToolsToOpenAIResponses(options.tools);
-  if (responsesTools === undefined || responsesTools.length === 0) return;
-
-  request.tools = responsesTools;
-  if (
-    request.tool_choice === undefined ||
-    request.tool_choice === null ||
-    request.tool_choice === ''
-  ) {
-    request.tool_choice = 'auto';
-  }
-  request.parallel_tool_calls = true;
-}
-
-function applyReasoningSettings(
-  request: OpenAIResponsesRequest,
-  options: NormalizedGenerateChatOptions,
-  invocationEphemerals: Record<string, unknown>,
-  deps: ResponsesExecutorDeps,
-): AppliedOpenAIResponsesReasoning {
-  const reasoning = applyOpenAIResponsesReasoning({
-    request,
-    modelBehavior: options.invocation.modelBehavior,
-    fallbacks: {
-      enabled:
-        invocationEphemerals['reasoning.enabled'] ??
-        readOptionalSetting(options, 'reasoning.enabled'),
-      effort:
-        invocationEphemerals['reasoning.effort'] ??
-        readOptionalSetting(options, 'reasoning.effort'),
-      budgetTokens:
-        invocationEphemerals['reasoning.budgetTokens'] ??
-        readOptionalSetting(options, 'reasoning.budgetTokens'),
-      summary:
-        invocationEphemerals['reasoning.summary'] ??
-        readOptionalSetting(options, 'reasoning.summary'),
-      includeInResponse:
-        invocationEphemerals['reasoning.includeInResponse'] ??
-        readOptionalSetting(options, 'reasoning.includeInResponse'),
-    },
-    providerName: deps.providerName,
-    logger: deps.logger,
-  });
-  deps.logger.debug(
-    () =>
-      `Reasoning check: enabled=${String(reasoning.enabled)}, effort=${String(reasoning.effort)}, summary=${String(reasoning.summary)}, shouldRequest=${reasoning.selected}, includeInResponse=${reasoning.includeThinkingInResponse}`,
-  );
-  if (reasoning.selected) {
-    request.include = ['reasoning.encrypted_content'];
-    deps.logger.debug(
-      () => `Added include parameter: ${JSON.stringify(request.include)}`,
-    );
-  }
-  deps.logger.debug(
-    () => `Full request reasoning config: ${JSON.stringify(request.reasoning)}`,
-  );
-  return reasoning;
-}
-
-function applyTextVerbosity(
-  request: OpenAIResponsesRequest,
-  options: NormalizedGenerateChatOptions,
-  ephemerals: Record<string, unknown>,
-  deps: ResponsesExecutorDeps,
-): void {
-  const textVerbosity =
-    (ephemerals['text.verbosity'] as string | undefined) ??
-    (options as { settings?: { get: (key: string) => unknown } }).settings?.get(
-      'text.verbosity',
-    );
-  if (
-    typeof textVerbosity !== 'string' ||
-    textVerbosity === '' ||
-    !['low', 'medium', 'high'].includes(textVerbosity.toLowerCase())
-  ) {
-    return;
-  }
-  request.text = { verbosity: textVerbosity.toLowerCase() };
-  deps.logger.debug(() => `Added text.verbosity to request: ${textVerbosity}`);
-}
-
-function applyCodexRequestSettings(
-  request: OpenAIResponsesRequest,
-  isCodex: boolean,
-  deps: ResponsesExecutorDeps,
-): void {
-  if (!isCodex) return;
-
-  // store=false is only the Codex DEFAULT. applyStatefulConversation runs
-  // after this and raises it to store=true whenever statefulness is active.
-  // See the design rationale doc comment on applyStatefulConversation in
-  // openAIResponsesStateful.ts for the full trade-off discussion (#3134).
-  request.store = false;
-  for (const parameter of deps.getUnallowedModelParameters(request.model)) {
-    delete request[parameter];
-  }
-  if ('max_output_tokens' in request) {
-    delete request.max_output_tokens;
-    deps.logger.debug(
-      () => 'Codex mode: removed unsupported max_output_tokens from request',
-    );
-  }
-}
-
-function applyPromptCaching(
-  request: OpenAIResponsesRequest,
-  options: NormalizedGenerateChatOptions,
-  ephemerals: Record<string, unknown>,
-  isCodex: boolean,
-  deps: ResponsesExecutorDeps,
-): void {
-  const promptCachingSetting =
-    (ephemerals['prompt-caching'] as string | undefined) ??
-    ((
-      options as {
-        settings?: {
-          getProviderSettings: (name: string) => Record<string, unknown>;
-        };
-      }
-    ).settings?.getProviderSettings(deps.providerName)['prompt-caching'] as
-      | string
-      | undefined) ??
-    '1h';
-  if (promptCachingSetting === 'off') return;
-
-  if (
-    typeof request.prompt_cache_key === 'string' &&
-    request.prompt_cache_key.trim() !== ''
-  ) {
-    if (!isCodex) request.prompt_cache_retention = '24h';
-    return;
-  }
-
-  const cacheKey =
-    (options.invocation as { runtimeId?: string } | undefined)?.runtimeId ??
-    options.runtime?.runtimeId;
-  if (typeof cacheKey !== 'string' || cacheKey.trim() === '') return;
-
-  request.prompt_cache_key = sanitizePromptCacheKey(cacheKey);
-  if (!isCodex) request.prompt_cache_retention = '24h';
-}
+export { isResponsesPdfEnabled } from './responses-request-fields.js';

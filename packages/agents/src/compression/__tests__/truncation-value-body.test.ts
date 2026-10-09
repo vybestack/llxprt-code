@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { appendBodyEvidence } from '../../../../../scripts/lib/body-evidence-writer.js';
 import { describe, expect, it } from 'bun:test';
-import { appendFileSync } from 'node:fs';
+
 import { createHash } from 'node:crypto';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -51,6 +52,38 @@ async function compareBody(
     false,
     expectedResponse,
   );
+  const output = process.env.TRANSFORM_BODY_OUTPUT;
+  if (output !== undefined)
+    await appendBodyEvidence(
+      output,
+      {
+        size,
+        bytes,
+        provider,
+        caching,
+        expected,
+        tokens: size - start,
+        bodyBytes: Buffer.byteLength(actual),
+        sha256: createHash('sha256').update(actual).digest('hex'),
+      },
+      actual,
+      oracle,
+    );
+  const responseOutput = process.env.TRUNCATION_RESPONSE_OUTPUT;
+  if (responseOutput !== undefined)
+    await appendBodyEvidence(
+      responseOutput,
+      {
+        size,
+        bytes,
+        provider,
+        caching,
+        actual: JSON.stringify(response),
+        expected: JSON.stringify(expectedResponse),
+      },
+      JSON.stringify(response),
+      JSON.stringify(expectedResponse),
+    );
   expect(actual).toBe(oracle);
   expect(actual).toContain('x'.repeat(bytes));
   expect(Buffer.byteLength(actual)).toBeGreaterThan((size - start) * bytes);
@@ -60,34 +93,6 @@ async function compareBody(
       .flatMap((row) => row.blocks)
       .filter((block) => block.type === 'text').length,
   ).toBeGreaterThan(0);
-  const output = process.env.TRANSFORM_BODY_OUTPUT;
-  if (output !== undefined)
-    appendFileSync(
-      output,
-      JSON.stringify({
-        size,
-        bytes,
-        provider,
-        caching,
-        expected,
-        tokens: size - start,
-        bodyBytes: Buffer.byteLength(actual),
-        sha256: createHash('sha256').update(actual).digest('hex'),
-      }) + '\n',
-    );
-  const responseOutput = process.env.TRUNCATION_RESPONSE_OUTPUT;
-  if (responseOutput !== undefined)
-    appendFileSync(
-      responseOutput,
-      JSON.stringify({
-        size,
-        bytes,
-        provider,
-        caching,
-        actual: JSON.stringify(response),
-        expected: JSON.stringify(expectedResponse),
-      }) + '\n',
-    );
 }
 
 async function bodies(size: number, bytes: number): Promise<number> {

@@ -6,14 +6,9 @@ import type { NormalizedGenerateChatOptions } from '../../BaseProvider.js';
 import type { ResolvedAuthToken } from '../../types/providerRuntime.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import OpenAI from 'openai';
-import {
-  clearActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import type { ProviderCallOptionsInit } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
-import { streamCallOptions } from '../../test-utils/streamCallOptions.js';
-import { createOpenAIRawPostTestAdapter } from '../../test-utils/rawPostTestAdapters.js';
+import { type ProviderCallOptionsInit } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { streamCallOptions } from '../../__tests__/streamCallOptions.js';
+import { createOpenAIRawPostTestAdapter } from '../../__tests__/rawPostTestAdapters.js';
 import { CredentialResolutionError } from '@vybestack/llxprt-code-auth';
 
 void vi.mock('openai', () => {
@@ -156,119 +151,142 @@ function buildNormalizedOptions(
   };
 }
 
-describe('requires-auth setting', () => {
-  beforeEach(() => {
-    FakeOpenAIClass.reset();
-    setEnv('OPENAI_API_KEY', '');
-    setEnv('OPENAI_BASE_URL', '');
+registerRequiresAuthCase1();
+registerRequiresAuthCase2();
+registerRequiresAuthCase3();
+registerRequiresAuthCase4();
 
-    setActiveProviderRuntimeContext(
-      createProviderRuntimeContext({
-        settingsService: new SettingsService(),
-        runtimeId: 'requires-auth-test',
-      }),
-    );
-  });
+function beforeEachRequiresAuth1(): void {
+  FakeOpenAIClass.reset();
+  setEnv('OPENAI_API_KEY', '');
+  setEnv('OPENAI_BASE_URL', '');
+}
 
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-    restoreEnv();
-  });
+function afterEachRequiresAuth2(): void {
+  restoreEnv();
+}
 
-  it('allows connection to remote endpoint without auth when requires-auth is false', async () => {
-    const provider = new RequiresAuthTestProvider(
-      undefined,
-      'http://host.docker.internal:1234/v1/',
-    );
-    const settings = createSettingsWithRequiresAuth(
-      'http://host.docker.internal:1234/v1/',
-      false,
-    );
+function registerRequiresAuthCase1(): void {
+  describe('requires-auth setting [1]', () => {
+    beforeEach(beforeEachRequiresAuth1);
+    afterEach(afterEachRequiresAuth2);
 
-    const callOptions = buildCallOptions(provider, {
-      settings,
-      runtimeId: 'no-auth-required',
-    });
+    it('allows connection to remote endpoint without auth when requires-auth is false', async () => {
+      const provider = new RequiresAuthTestProvider(
+        undefined,
+        'http://host.docker.internal:1234/v1/',
+      );
+      const settings = createSettingsWithRequiresAuth(
+        'http://host.docker.internal:1234/v1/',
+        false,
+      );
 
-    const generator = provider.generateChatCompletion(callOptions);
-    await expect(generator.next()).resolves.toBeDefined();
-    expect(FakeOpenAIClass.created).toHaveLength(1);
-  });
+      const callOptions = buildCallOptions(provider, {
+        settings,
+        runtimeId: 'no-auth-required',
+      });
 
-  it('logs a safe diagnostic when auth resolution fails for an exempt endpoint', async () => {
-    const forbiddenDetail = 'issue3451-sensitive-failure-detail';
-    const provider = new RequiresAuthTestProvider(
-      undefined,
-      'http://host.docker.internal:1234/v1/',
-    );
-    const settings = createSettingsWithRequiresAuth(
-      'http://host.docker.internal:1234/v1/',
-      false,
-    );
-    const authToken: ResolvedAuthToken = {
-      provide: async () => {
-        throw new Error(forbiddenDetail);
-      },
-    };
-
-    await provider.createClientForTest(
-      buildNormalizedOptions(provider, settings, authToken),
-    );
-
-    const output = provider.recordingLogger.messages.join('\n');
-    expect(output).toContain('kind=credential-source-failed');
-    expect(output).toContain('auth-exempt endpoint');
-    expect(output).not.toContain(forbiddenDetail);
-  });
-
-  it('throws auth error for remote endpoint without auth when requires-auth is not set', async () => {
-    const provider = new RequiresAuthTestProvider(
-      undefined,
-      'http://host.docker.internal:1234/v1/',
-    );
-    const settings = createSettingsWithRequiresAuth(
-      'http://host.docker.internal:1234/v1/',
-    );
-
-    const callOptions = buildCallOptions(provider, {
-      settings,
-      runtimeId: 'auth-required-default',
-    });
-
-    const generator = provider.generateChatCompletion(callOptions);
-    const rejection = generator.next();
-    await expect(rejection).rejects.toBeInstanceOf(CredentialResolutionError);
-    await expect(rejection).rejects.toMatchObject({
-      kind: 'no-credential-configured',
-      message: expect.stringContaining(
-        'provider=openai; profile=no-profile; runtimeId=auth-required-default',
-      ),
+      const generator = provider.generateChatCompletion(callOptions);
+      await expect(generator.next()).resolves.toBeDefined();
+      expect(FakeOpenAIClass.created).toHaveLength(1);
     });
   });
+}
 
-  it('throws auth error for remote endpoint without auth when requires-auth is true', async () => {
-    const provider = new RequiresAuthTestProvider(
-      undefined,
-      'http://host.docker.internal:1234/v1/',
-    );
-    const settings = createSettingsWithRequiresAuth(
-      'http://host.docker.internal:1234/v1/',
-      true,
-    );
+function registerRequiresAuthCase2(): void {
+  describe('requires-auth setting [2]', () => {
+    beforeEach(beforeEachRequiresAuth1);
+    afterEach(afterEachRequiresAuth2);
 
-    const callOptions = buildCallOptions(provider, {
-      settings,
-      runtimeId: 'auth-required-explicit',
-    });
+    it('logs a safe diagnostic when auth resolution fails for an exempt endpoint', async () => {
+      const forbiddenDetail = 'issue3451-sensitive-failure-detail';
+      const provider = new RequiresAuthTestProvider(
+        undefined,
+        'http://host.docker.internal:1234/v1/',
+      );
+      const settings = createSettingsWithRequiresAuth(
+        'http://host.docker.internal:1234/v1/',
+        false,
+      );
+      const authToken: ResolvedAuthToken = {
+        provide: async () => {
+          throw new Error(forbiddenDetail);
+        },
+      };
 
-    const generator = provider.generateChatCompletion(callOptions);
-    const rejection = generator.next();
-    await expect(rejection).rejects.toBeInstanceOf(CredentialResolutionError);
-    await expect(rejection).rejects.toMatchObject({
-      kind: 'no-credential-configured',
-      message: expect.stringContaining(
-        'provider=openai; profile=no-profile; runtimeId=auth-required-explicit',
-      ),
+      await provider.createClientForTest(
+        buildNormalizedOptions(provider, settings, authToken),
+      );
+
+      const output = provider.recordingLogger.messages.join('\n');
+      expect(output).toContain('kind=credential-source-failed');
+      expect(output).toContain('auth-exempt endpoint');
+      expect(output).not.toContain(forbiddenDetail);
     });
   });
-});
+}
+
+function registerRequiresAuthCase3(): void {
+  describe('requires-auth setting [3]', () => {
+    beforeEach(beforeEachRequiresAuth1);
+    afterEach(afterEachRequiresAuth2);
+
+    it('throws auth error for remote endpoint without auth when requires-auth is not set', async () => {
+      const provider = new RequiresAuthTestProvider(
+        undefined,
+        'http://host.docker.internal:1234/v1/',
+      );
+      const settings = createSettingsWithRequiresAuth(
+        'http://host.docker.internal:1234/v1/',
+      );
+
+      const callOptions = buildCallOptions(provider, {
+        settings,
+        runtimeId: 'auth-required-default',
+      });
+
+      const generator = provider.generateChatCompletion(callOptions);
+      const rejection = generator.next();
+      await expect(rejection).rejects.toBeInstanceOf(CredentialResolutionError);
+      await expect(rejection).rejects.toMatchObject({
+        kind: 'no-credential-configured',
+        message: expect.stringContaining(
+          'provider=openai; profile=no-profile; runtimeId=auth-required-default',
+        ),
+      });
+    });
+  });
+}
+
+function registerRequiresAuthCase4(): void {
+  describe('requires-auth setting [4]', () => {
+    beforeEach(beforeEachRequiresAuth1);
+    afterEach(afterEachRequiresAuth2);
+
+    it('throws auth error for remote endpoint without auth when requires-auth is true', async () => {
+      const provider = new RequiresAuthTestProvider(
+        undefined,
+        'http://host.docker.internal:1234/v1/',
+      );
+      const settings = createSettingsWithRequiresAuth(
+        'http://host.docker.internal:1234/v1/',
+        true,
+      );
+
+      const callOptions = buildCallOptions(provider, {
+        settings,
+        runtimeId: 'auth-required-explicit',
+      });
+
+      const generator = provider.generateChatCompletion(callOptions);
+      const rejection = generator.next();
+      await expect(rejection).rejects.toBeInstanceOf(CredentialResolutionError);
+      await expect(rejection).rejects.toMatchObject({
+        kind: 'no-credential-configured',
+        message: expect.stringContaining(
+          'provider=openai; profile=no-profile; runtimeId=auth-required-explicit',
+        ),
+      });
+    });
+  });
+}

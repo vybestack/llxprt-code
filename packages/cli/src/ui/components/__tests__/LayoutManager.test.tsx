@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { render } from '../../../test-utils/render.js';
+import { render } from '../../../__tests__/render.js';
 import React, { act } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { Text } from 'ink';

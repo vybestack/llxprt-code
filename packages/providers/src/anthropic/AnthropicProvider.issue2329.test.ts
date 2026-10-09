@@ -11,15 +11,14 @@
  * AnthropicResponseParser.issue1844.test.ts.
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { vi, describe, it, expect, beforeEach } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   setupAnthropicProvider,
   type AnthropicTestSetup,
-} from './test-utils/anthropicProviderTestSetup.js';
+} from './__tests__/anthropicProviderTestSetup.js';
 
-import { createAnthropicRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
+import { createAnthropicRawPostTestAdapter } from '../__tests__/rawPostTestAdapters.js';
 
 const mockMessagesCreate = vi.fn();
 
@@ -50,10 +49,6 @@ describe('AnthropicProvider issue #2329 – streaming refusal propagation', () =
     const setup = setupAnthropicProvider();
     provider = setup.provider;
     buildCallOptions = setup.buildCallOptions;
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
   });
 
   it('should propagate stopReason "refusal" from message_delta @issue:2329', async () => {

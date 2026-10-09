@@ -26,16 +26,13 @@
 import {
   type Config,
   DebugLogger,
+  createProviderRuntimeContext,
   type RuntimeProviderManager,
   type RuntimeProvider,
-  peekActiveProviderRuntimeContext,
   type HydratedModel,
 } from '@vybestack/llxprt-code-core';
-import { createSettingsProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
-import type {
-  SettingsService,
-  ProfileManager,
-} from '@vybestack/llxprt-code-settings';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { ProfileManager } from '@vybestack/llxprt-code-settings';
 import { getProviderConfigKeys } from '@vybestack/llxprt-code-settings/settings/settingsRegistry.js';
 import { type OAuthManager } from '../auth/index.js';
 import type { OAuthUICallback } from '@vybestack/llxprt-code-auth';
@@ -98,10 +95,9 @@ export function getCliRuntimeContext() {
   if (!entry?.config) {
     const registeredIds = Array.from(runtimeRegistry.keys());
     const scope = getCurrentRuntimeScope();
-    const activeCtx = peekActiveProviderRuntimeContext();
     logger.debug(
       () =>
-        `[getCliRuntimeContext] MISS: runtimeId=${identity.runtimeId}, hasEntry=${!!entry}, hasConfig=${!!entry?.config}, registered=[${registeredIds.join(', ')}], scope=${JSON.stringify(scope)}, activeCtx.runtimeId=${activeCtx?.runtimeId}`,
+        `[getCliRuntimeContext] MISS: runtimeId=${identity.runtimeId}, hasEntry=${!!entry}, hasConfig=${!!entry?.config}, registered=[${registeredIds.join(', ')}], scope=${JSON.stringify(scope)}`,
     );
   }
 
@@ -122,10 +118,11 @@ export function getCliRuntimeContext() {
 
     // Single resolution path (#2534 C6): the runtime registry entry is the
     // only owner of the settings service. When stateless hardening is off
-    // and the entry predates registry settings registration, the context is
-    // built without one rather than probing config for a second owner.
-    return createSettingsProviderRuntimeContext({
-      settingsService,
+    // and the entry predates registry settings registration, this
+    // composition site constructs a fresh SettingsService explicitly
+    // (issue #2616) rather than probing config for a second owner.
+    return createProviderRuntimeContext({
+      settingsService: settingsService ?? new SettingsService(),
       config: entry.config,
       runtimeId: identity.runtimeId,
       metadata: identity.metadata,
@@ -275,18 +272,17 @@ export function ensureStatelessProviderReady(): void {
   const config = entry.config;
   const providerManager = entry.providerManager;
 
-  const missingFields: string[] = [];
-  if (!settingsService) {
-    missingFields.push('SettingsService');
-  }
-  if (!config) {
-    missingFields.push('Config');
-  }
-  if (!providerManager) {
-    missingFields.push('ProviderManager');
-  }
-
-  if (missingFields.length > 0) {
+  if (!settingsService || !config || !providerManager) {
+    const missingFields: string[] = [];
+    if (!settingsService) {
+      missingFields.push('SettingsService');
+    }
+    if (!config) {
+      missingFields.push('Config');
+    }
+    if (!providerManager) {
+      missingFields.push('ProviderManager');
+    }
     throw new Error(
       formatNormalizationFailureMessage({
         runtimeId,
@@ -296,17 +292,15 @@ export function ensureStatelessProviderReady(): void {
     );
   }
 
-  const runtimeContext = createSettingsProviderRuntimeContext({
-    settingsService: settingsService!,
-    config: config!,
+  const runtimeContext = createProviderRuntimeContext({
+    settingsService,
+    config,
     runtimeId,
     metadata,
   });
 
-  const runtimeProviderManager = providerManager!;
   if (
-    typeof runtimeProviderManager.prepareStatelessProviderInvocation !==
-    'function'
+    typeof providerManager.prepareStatelessProviderInvocation !== 'function'
   ) {
     throw new Error(
       formatNormalizationFailureMessage({
@@ -317,7 +311,7 @@ export function ensureStatelessProviderReady(): void {
     );
   }
 
-  runtimeProviderManager.prepareStatelessProviderInvocation(runtimeContext);
+  providerManager.prepareStatelessProviderInvocation(runtimeContext);
 }
 function validateOAuthRuntimeEntry(
   runtimeId: string,

@@ -33,7 +33,10 @@ export interface MCPServerConfig {
   readonly extensionName?: string;
   readonly extension?: McpExtensionConfig;
   readonly oauth?: MCPOAuthConfig;
-  readonly authProviderType?: AuthProviderType;
+  // Plugin-contributed factory types are accepted here and validated at
+  // runtime (unknown types fail terminally in the transport); the
+  // settings-file schema enum stays intentionally closed (#2764 / #2618).
+  readonly authProviderType?: AuthProviderType | (string & {});
   readonly targetAudience?: string;
   readonly targetServiceAccount?: string;
 }

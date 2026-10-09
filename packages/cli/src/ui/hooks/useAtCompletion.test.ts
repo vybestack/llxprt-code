@@ -5,14 +5,14 @@
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'bun:test';
-import { renderHook, waitFor } from '../../test-utils/render.js';
+import { renderHook, waitFor } from '../../__tests__/render.js';
 import { act } from 'react';
 import * as path from 'path';
 import type { Config, FileSearch } from '@vybestack/llxprt-code-core';
 import { FileSearchFactory } from '@vybestack/llxprt-code-core';
 import type { FileSystemStructure } from '@vybestack/llxprt-code-test-utils';
 import { createTmpDir, cleanupTmpDir } from '@vybestack/llxprt-code-test-utils';
-import { useTestHarnessForAtCompletion } from './useAtCompletion-test-helpers.js';
+import { useTestHarnessForAtCompletion } from './__tests__/useAtCompletion-test-helpers.js';
 
 describe('useAtCompletion', () => {
   let testRootDir: string;

@@ -21,8 +21,7 @@ import {
   advanceCompressionClock,
 } from './compression-regression-fixtures.js';
 
-import { createChatSessionRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import * as providerRuntime from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { makeHttpError, makeChatSession } from './compression-retry-helpers.js';
 
@@ -175,7 +174,6 @@ describe('ChatSession compression cooldown @plan PLAN-20260218-COMPRESSION-RETRY
       ...runtimeSetup.runtime,
       config: runtimeSetup.config,
     };
-    providerRuntime.setActiveProviderRuntimeContext(providerRuntimeSnapshot);
   });
   afterEach(() => {
     vi.useRealTimers();

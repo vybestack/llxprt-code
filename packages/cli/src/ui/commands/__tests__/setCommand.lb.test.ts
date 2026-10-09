@@ -8,7 +8,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
-import { createMockCommandContext } from '../../../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
 import type { CommandContext } from '../types.js';
 import { setCommand } from '../setCommand.js';
 

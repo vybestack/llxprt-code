@@ -10,7 +10,7 @@
  */
 import { describe, it, expect } from 'bun:test';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { mockChunk } from '../turn-test-helpers.js';
+import { mockChunk } from './turn-test-helpers.js';
 
 /**
  * Neutral block shape for thinking/text/tool_call test fixtures.

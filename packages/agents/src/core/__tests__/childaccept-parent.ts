@@ -7,7 +7,7 @@ import { HistoryService } from '@vybestack/llxprt-code-core/services/history/His
 export async function openParent(directory: string): Promise<{
   history: HistoryService;
   path: string;
-  before: Buffer;
+  before: Buffer<ArrayBuffer>;
   close(): Promise<void>;
 }> {
   const recording = await SessionRecordingService.createLocked({

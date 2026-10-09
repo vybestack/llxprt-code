@@ -29,16 +29,6 @@ import {
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-/**
- * Host packages every first-party runtime plugin peer-depends on. Each is
- * rewritten to `^<release version>` on every release; a plugin manifest that
- * drops one of them is a packaging mistake and fails the release.
- */
-const PLUGIN_PEER_HOST_PACKAGES = [
-  '@vybestack/llxprt-code-core',
-  '@vybestack/llxprt-code-providers',
-] as const;
-
 type DependencyMap = Record<string, unknown>;
 
 type PackageJson = {
@@ -96,8 +86,9 @@ function bindHostPeerRanges(
   peers: DependencyMap,
   pkgJsonPath: string,
   version: string,
+  hostPeers: readonly string[],
 ): boolean {
-  for (const hostPackage of PLUGIN_PEER_HOST_PACKAGES) {
+  for (const hostPackage of hostPeers) {
     if (typeof peers[hostPackage] !== 'string') {
       throw new Error(
         `${pkgJsonPath} does not peer-depend on ${hostPackage}; cannot bind its range.`,
@@ -106,7 +97,7 @@ function bindHostPeerRanges(
   }
 
   let changed = false;
-  for (const hostPackage of PLUGIN_PEER_HOST_PACKAGES) {
+  for (const hostPackage of hostPeers) {
     const targetRange = `^${version}`;
     if (peers[hostPackage] !== targetRange) {
       peers[hostPackage] = targetRange;
@@ -139,7 +130,7 @@ export function bindPluginPeerDeps({
       );
     }
 
-    if (!bindHostPeerRanges(peers, pkgJsonPath, version)) {
+    if (!bindHostPeerRanges(peers, pkgJsonPath, version, release.hostPeers)) {
       console.log(`  ${release.name} peers already bound to ^${version}`);
       continue;
     }

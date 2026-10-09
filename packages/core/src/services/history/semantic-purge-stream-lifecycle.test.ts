@@ -1,8 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { SemanticMediaPurgeStreamCoordinator } from './semantic-purge-stream.js';
-import { withSuffixFixture } from './history-suffix-test-helpers.js';
-import { ownerFixtureRow } from './chronology-rollback-owner-helpers.js';
+import { withCoreSuffixFixture } from './core-suffix-fixture-test-helpers.js';
+import { ownerFixtureRow } from './chronology-rollback-owner-test-helpers.js';
 import type { IContent } from './IContent.js';
 import { RowOwnership } from '../../recording/rowOwnership.js';
 
@@ -18,7 +18,7 @@ function imageRow(index: number, bytes: number): IContent {
 
 describe('stream purge transaction lifecycle', () => {
   it('exposes read-only frozen views without disk writer methods', async () => {
-    await withSuffixFixture(
+    await withCoreSuffixFixture(
       3,
       async (history) => {
         const coordinator = new SemanticMediaPurgeStreamCoordinator(history, {
@@ -42,7 +42,7 @@ describe('stream purge transaction lifecycle', () => {
 
   it('cancels one cursor and leaves an independent repeated traversal intact', async () => {
     const owners = new RowOwnership();
-    await withSuffixFixture(
+    await withCoreSuffixFixture(
       3,
       async (history) => {
         const coordinator = new SemanticMediaPurgeStreamCoordinator(history, {
@@ -99,7 +99,7 @@ async function verifyCacheRequest(
 
 describe('semantic purge request and abort lifecycle', () => {
   it('keeps the exact boundary identity on every cache request traversal without altering base rows', async () => {
-    await withSuffixFixture(
+    await withCoreSuffixFixture(
       3,
       async (history) => {
         const coordinator = new SemanticMediaPurgeStreamCoordinator(history, {
@@ -124,7 +124,7 @@ describe('semantic purge request and abort lifecycle', () => {
 
   it('rejects a pre-aborted begin without acquiring cursor owners', async () => {
     const owners = new RowOwnership();
-    await withSuffixFixture(
+    await withCoreSuffixFixture(
       3,
       async (history) => {
         const coordinator = new SemanticMediaPurgeStreamCoordinator(history, {

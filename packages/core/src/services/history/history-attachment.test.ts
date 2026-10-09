@@ -1,7 +1,7 @@
 import {
   collectRowsForAssertions,
   collectJournalRowsForAssertions,
-} from '../../test-utils/collect-rows-for-assertions.js';
+} from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { appendFile, access, mkdtemp, rm, stat } from 'node:fs/promises';

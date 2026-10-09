@@ -21,6 +21,7 @@
  * - CLI consumers (14+ files: sendMessageStream, setTools, updateSystemInstruction, etc.)
  */
 
+import type { ToolDeclaration } from '../llm-types/toolDeclaration.js';
 import type { ContentGeneratorConfig } from './contentGenerator.js';
 import type { HistoryService } from '../services/history/HistoryService.js';
 import type { IContent } from '../services/history/IContent.js';
@@ -33,8 +34,6 @@ import type { StreamEvent } from './chatSessionTypes.js';
 import type { Config } from '../config/config.js';
 import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import type { ContentGenerator } from './contentGenerator.js';
-import type { ToolSchedulerFactory } from './toolSchedulerContract.js';
-import type { TaskToolRegistration } from '../config/toolRegistryFactory.js';
 import type { ModelOutput } from '../llm-types/modelEnvelope.js';
 import type { AgentMessageInput } from '../llm-types/agentMessageInput.js';
 import type { JournalReadCounters } from '../recording/journalCounters.js';
@@ -80,7 +79,7 @@ export interface AgentClientGenerateConfig {
   topP?: number;
   topK?: number;
   abortSignal?: AbortSignal;
-  tools?: unknown;
+  tools?: ToolDeclaration[];
   toolConfig?: unknown;
   systemInstruction?: unknown;
 }
@@ -199,14 +198,3 @@ export type AgentClientFactory = (
   config: Config,
   runtimeState: AgentRuntimeState,
 ) => AgentClientContract;
-
-/**
- * Aggregation of the three agent-runtime factory primitives the composition
- * root wires into Config. Single source of truth — both agents and providers
- * import this from core (no duplicated structural re-declaration).
- */
-export interface AgentRuntimeFactoryBindings {
-  agentClientFactory: AgentClientFactory;
-  toolSchedulerFactory: ToolSchedulerFactory;
-  taskToolRegistration: () => TaskToolRegistration;
-}

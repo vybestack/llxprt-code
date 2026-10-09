@@ -13,7 +13,7 @@ import type { Config, IContent } from '@vybestack/llxprt-code-core';
 import type { Agent, AgentMessage } from '@vybestack/llxprt-code-agents';
 import type { ChatSessionFileLister } from './zed-session-loader.js';
 
-import { RecordingConnection } from './zed-test-helpers.js';
+import { RecordingConnection } from './__tests__/zed-test-helpers.js';
 
 const tmpRoots: string[] = [];
 
@@ -38,8 +38,6 @@ void vi.mock('@vybestack/llxprt-code-agents', () => ({
 }));
 
 void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
-  registerAgentRuntimeFactories: vi.fn(),
-  resetAgentRuntimeFactories: vi.fn(),
   clearActiveModelParam: vi.fn(),
   getActiveModelParams: vi.fn(),
   loadProfileByName: vi.fn(),

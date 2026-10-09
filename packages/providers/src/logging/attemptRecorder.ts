@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { acknowledgeTerminalTelemetry } from '@vybestack/llxprt-code-telemetry/telemetry/loggers.js';
 import type {
   AttemptEndInfo,
   AttemptLifecycleObserver,
@@ -25,6 +26,7 @@ import {
   extractTokenCountsFromTokenUsage,
 } from './tokenCounts.js';
 import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
+import type { RequestLoggingPolicy } from './requestLoggingPolicy.js';
 
 /**
  * Normalizes a numeric value to a non-negative finite number, or 0.
@@ -98,11 +100,12 @@ export interface AttemptRecorderOptions {
    * finalize it via finalizeAttempt. External lifecycle notifications
    * (onAttemptStart/onAttemptEnd) are accepted but typically not used.
    *
-   * When false, an external owner (RetryOrchestrator or a provider-owned
-   * transport) is the canonical lifecycle owner. ensureAttemptStarted and
-   * finalizeAttempt are no-ops.
+   * When false, an external owner starts and ends physical attempts.
+   * A strict durable response holds its successful end until the wrapper
+   * acknowledges the response; failed physical attempts remain immediate.
    */
   readonly wrapperOwned: boolean;
+  readonly loggingPolicy?: RequestLoggingPolicy;
 }
 
 /**
@@ -139,6 +142,9 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
   private readonly defaultModelName: string;
   private readonly config: Config | undefined;
   private readonly logicalRequestId: string;
+  private durableResponsePending: boolean;
+  private pendingSuccess: AttemptEndInfo | undefined;
+  private acceptedTelemetry: (() => void) | undefined;
 
   constructor(opts: AttemptRecorderOptions) {
     this.providerName = opts.providerName;
@@ -146,6 +152,8 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
     this.config = opts.config;
     this.logicalRequestId = opts.logicalRequestId;
     this.wrapperOwned = opts.wrapperOwned;
+    this.durableResponsePending =
+      opts.loggingPolicy?.strictDurableResponse === true;
   }
 
   /**
@@ -299,6 +307,10 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
     if (!attempt || attempt.hasEmittedTerminal) {
       return;
     }
+    if (this.durableResponsePending && info.status === 'success') {
+      this.pendingSuccess = Object.freeze({ ...info, attemptId });
+      return;
+    }
     attempt.hasEmittedTerminal = true;
 
     // Resolve token counts once with the emitAttemptRecord precedence
@@ -327,8 +339,11 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
       };
     }
 
+    const accepted = this.acceptedTelemetry;
+    this.acceptedTelemetry = undefined;
     try {
-      this.emitAttemptRecord(attempt, info, resolved);
+      if (info.status === 'success' && accepted !== undefined) accepted();
+      else this.emitAttemptRecord(attempt, info, resolved);
     } catch (err) {
       this.logger.error(
         () =>
@@ -667,6 +682,37 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
     };
   }
 
+  async acknowledgeSuccess(
+    modelName: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const id = this.getCurrentAttemptId();
+    const attempt = id === undefined ? undefined : this.attempts.get(id);
+    if (attempt === undefined || attempt.hasEmittedTerminal)
+      throw new Error('Source success has no active attempt');
+    const info: AttemptEndInfo = this.pendingSuccess ?? {
+      attemptId: attempt.attemptId,
+      attemptIndex: attempt.attemptIndex,
+      start: attempt.requestStartMs,
+      completionMs: performance.now(),
+      firstTokenMs: attempt.firstTokenMs,
+      lastTokenMs: attempt.lastTokenMs,
+      status: 'success',
+      providerName: this.providerName,
+      modelName,
+      inputTokens: 0,
+      outputTokens: 0,
+      cachedTokens: 0,
+      thoughtsTokens: 0,
+      toolTokens: 0,
+    };
+    const resolved = this.resolveAttemptTokens(attempt, info);
+    this.acceptedTelemetry = await acknowledgeTerminalTelemetry(
+      () => this.emitAttemptRecord(attempt, info, resolved),
+      signal,
+    );
+  }
+
   /**
    * Get the active attempt ID for the most recent attempt.
    */
@@ -695,8 +741,9 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
   /**
    * Finalize the current attempt with status and token data. This is the
    * sole terminal path for wrapper-owned lifecycle (direct/no-retry
-   * providers). When wrapperOwned is false, this is a no-op — the
-   * external lifecycle owner is responsible for calling onAttemptEnd.
+   * providers). For externally owned attempts it settles only a success
+   * held behind the strict durable response boundary, preserving that
+   * physical attempt's identity. Other external terminal ends are unchanged.
    * The status passed here is authoritative.
    */
   finalizeAttempt(
@@ -705,7 +752,19 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
     latestTokenUsage?: UsageStats,
     errorMessage?: string,
   ): void {
-    if (!this.wrapperOwned) return;
+    this.durableResponsePending = false;
+    if (!this.wrapperOwned) {
+      const pending = this.pendingSuccess;
+      this.pendingSuccess = undefined;
+      if (pending !== undefined)
+        this.onAttemptEnd({
+          ...pending,
+          status,
+          errorMessage,
+          completionMs: performance.now(),
+        });
+      return;
+    }
 
     const attemptId = this.getCurrentAttemptId();
     if (!attemptId) return;

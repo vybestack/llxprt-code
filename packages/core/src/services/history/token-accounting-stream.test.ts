@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { withSuffixFixture } from './history-suffix-test-helpers.js';
+import { withCoreSuffixFixture } from './core-suffix-fixture-test-helpers.js';
 import {
   accountingFactory,
   accountingRow,
@@ -28,7 +28,7 @@ for (const size of [512, 8192]) {
   >) {
     describe(`${method} token recalculation over ${size} mixed journal rows`, () => {
       it('counts all blocks in order without borrowing a full history', async () => {
-        await withSuffixFixture(
+        await withCoreSuffixFixture(
           size,
           async (service, ownership, counters) => {
             const actual = createHash('sha256');
@@ -62,7 +62,7 @@ for (const size of [512, 8192]) {
 for (const method of ['total', 'legacy'] satisfies Array<'total' | 'legacy'>) {
   describe(`${method} recalculation lifecycle`, () => {
     it('holds one row while the tokenizer is suspended and releases it after failure', async () => {
-      await withSuffixFixture(
+      await withCoreSuffixFixture(
         512,
         async (service, ownership, counters) => {
           const entered = deferred();
@@ -96,7 +96,7 @@ for (const method of ['total', 'legacy'] satisfies Array<'total' | 'legacy'>) {
     });
 
     it('does not publish a partial total when aborted inside tokenization', async () => {
-      await withSuffixFixture(
+      await withCoreSuffixFixture(
         512,
         async (service, ownership, counters) => {
           const controller = new AbortController();
@@ -123,7 +123,7 @@ for (const method of ['total', 'legacy'] satisfies Array<'total' | 'legacy'>) {
     });
 
     it('rejects a pre-aborted request without reading any journal row', async () => {
-      await withSuffixFixture(
+      await withCoreSuffixFixture(
         2,
         async (service, ownership, counters) => {
           const controller = new AbortController();
@@ -144,7 +144,7 @@ for (const method of ['total', 'legacy'] satisfies Array<'total' | 'legacy'>) {
 
 describe('streamed hypothetical token estimates', () => {
   it('uses historical model attribution when no override is supplied and closes on consumer failure', async () => {
-    await withSuffixFixture(
+    await withCoreSuffixFixture(
       512,
       async (service, ownership, counters) => {
         const seen = createHash('sha256');
@@ -177,7 +177,7 @@ describe('streamed hypothetical token estimates', () => {
 
 describe('streamed hypothetical token estimate membership', () => {
   it('preserves pinned membership when the live conversation is cleared during an estimate', async () => {
-    await withSuffixFixture(
+    await withCoreSuffixFixture(
       512,
       async (service, ownership, counters) => {
         const entered = deferred();
@@ -215,7 +215,7 @@ describe('streamed hypothetical token estimate membership', () => {
 
   it('accepts a single valid row larger than the controlled fixture payload allowance', async () => {
     const payloadBytes = 8 * 1024 * 1024 + 4096;
-    await withSuffixFixture(
+    await withCoreSuffixFixture(
       1,
       async (service, ownership) => {
         service.setTokenizerFactory(accountingFactory((text) => text.length));

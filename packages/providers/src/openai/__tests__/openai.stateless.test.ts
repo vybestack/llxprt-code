@@ -2,22 +2,18 @@
  * @plan PLAN-20251018-STATELESSPROVIDER2.P08
  * @requirement REQ-SP2-001
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { OpenAIProvider } from '../OpenAIProvider.js';
 import OpenAI from 'openai';
-import {
-  clearActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import {
   createProviderCallOptions,
   type ProviderCallOptionsInit,
-} from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
-import { createOpenAIRawPostTestAdapter } from '../../test-utils/rawPostTestAdapters.js';
+} from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { createOpenAIRawPostTestAdapter } from '../../__tests__/rawPostTestAdapters.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { GenerateChatOptions } from '../../IProvider.js';
 
@@ -125,22 +121,10 @@ function buildCallOptions(
 
 function resetRuntime(): void {
   FakeOpenAIClass.reset();
-  // Set up default runtime context for tests
-  setActiveProviderRuntimeContext(
-    createProviderRuntimeContext({
-      settingsService: new SettingsService(),
-      runtimeId: 'openai-stateless-test',
-    }),
-  );
-}
-
-function cleanupRuntime(): void {
-  clearActiveProviderRuntimeContext();
 }
 
 describe('OpenAI provider stateless contract tests', () => {
   beforeEach(resetRuntime);
-  afterEach(cleanupRuntime);
 
   it('creates client per runtime @plan:PLAN-20251018-STATELESSPROVIDER2.P08 @requirement:REQ-SP2-001 @pseudocode openai-responses-stateless.md lines 1-4', async () => {
     const provider = new TestOpenAIProvider(
@@ -199,7 +183,6 @@ describe('OpenAI provider stateless contract tests', () => {
 
 describe('OpenAI provider stateless contract: model parameters', () => {
   beforeEach(resetRuntime);
-  afterEach(cleanupRuntime);
 
   it('attaches per-call model parameters from runtime config @plan:PLAN-20251023-STATELESS-HARDENING.P07 @requirement:REQ-SP4-002 @requirement:REQ-SP4-003 @pseudocode provider-cache-elimination.md lines 10-12', async () => {
     const provider = new TestOpenAIProvider(
@@ -260,7 +243,6 @@ describe('OpenAI provider stateless contract: model parameters', () => {
 
 describe('OpenAI provider stateless contract: ephemeral overrides', () => {
   beforeEach(resetRuntime);
-  afterEach(cleanupRuntime);
 
   it('does not translate legacy max-tokens ephemerals into max_tokens on the wire', async () => {
     const provider = new TestOpenAIProvider('token-legacy');

@@ -60,7 +60,7 @@ import {
 } from '../provider-usage-info.js';
 import type { TokenStore, OAuthToken } from '@vybestack/llxprt-code-core';
 import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
-import { createFakeOAuthSettings } from '../test-oauth-settings.js';
+import { createFakeOAuthSettings } from './test-oauth-settings.js';
 
 // ---------------------------------------------------------------------------
 // Helpers

@@ -1,5 +1,5 @@
-import { observeHistorySynchronouslyForTest } from '../../test-utils/synchronous-history-test-observation.js';
-import { forbidHistoryMaterializationForTest } from '../../test-utils/history-materialization-test-guard.js';
+import { observeHistorySynchronouslyForTest } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
+import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
@@ -10,8 +10,8 @@ import type {
 } from './IContent.js';
 import { RowOwnership } from '../../recording/rowOwnership.js';
 import { createHistoryProviderFileBindingStore } from './provider-file-binding.js';
-import { withSuffixFixture } from './history-suffix-test-helpers.js';
-import { ownerFixtureRow } from './chronology-rollback-owner-helpers.js';
+import { withCoreSuffixFixture } from './core-suffix-fixture-test-helpers.js';
+import { ownerFixtureRow } from './chronology-rollback-owner-test-helpers.js';
 import {
   exactTokenizer,
   rejectedValue,
@@ -117,7 +117,7 @@ describe('provider file binding through a disk row transform', () => {
   for (const size of [512, 8192]) {
     it(`binds and unbinds ${size} media/tool journal rows without any whole-history accessor`, async () => {
       const owners = new RowOwnership();
-      await withSuffixFixture(
+      await withCoreSuffixFixture(
         size,
         async (history) => {
           history.setTokenizerFactory(exactTokenizer());
@@ -144,7 +144,7 @@ describe('provider file binding through a disk row transform', () => {
 
   it('rejects late publication and restores every original binding field and token count', async () => {
     const owners = new RowOwnership();
-    await withSuffixFixture(
+    await withCoreSuffixFixture(
       512,
       async (history) => {
         history.setTokenizerFactory(exactTokenizer());

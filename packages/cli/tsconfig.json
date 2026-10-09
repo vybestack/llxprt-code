@@ -26,6 +26,8 @@
       "@vybestack/llxprt-code-mcp": ["../mcp/index.ts"],
       "@vybestack/llxprt-code-mcp/*": ["../mcp/src/*"],
       "@vybestack/llxprt-code-providers": ["../providers/index.ts"],
+      "@vybestack/llxprt-code-test-utils": ["../test-utils/index.ts"],
+      "@vybestack/llxprt-code-test-utils/*": ["../test-utils/src/*"],
       "@vybestack/llxprt-code-providers/auth.js": [
         "../providers/src/auth/index.ts"
       ],
@@ -77,7 +79,6 @@
     "../auth/src/interfaces/__tests__/provider-key-storage.test.ts",
     "../auth/src/interfaces/__tests__/secure-store.test.ts",
     "../auth/src/proxy/__tests__/proxy-socket-client.test.ts",
-    "../mcp/src/auth/google-auth-provider.test.ts",
     "../mcp/src/auth/oauth-provider.authenticate.test.ts",
     "../mcp/src/auth/oauth-provider.token.test.ts",
     "../mcp/src/auth/token-storage/base-token-storage.test.ts",

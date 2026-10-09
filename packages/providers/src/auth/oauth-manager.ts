@@ -365,7 +365,11 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
    * @returns String describing higher priority auth method, null if none
    */
   async getHigherPriorityAuth(providerName: string): Promise<string | null> {
-    return getHigherPriorityAuth(providerName, this.settings);
+    return getHigherPriorityAuth(
+      providerName,
+      this.settings,
+      this.config?.getSettingsService(),
+    );
   }
 
   /**

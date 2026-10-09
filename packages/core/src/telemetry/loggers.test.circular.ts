@@ -17,7 +17,7 @@ import {
   type ToolCallRequestInfo,
   type ToolCallResponseInfo,
 } from '../core/turn.js';
-import { MockTool } from '../test-utils/tools.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/tools.js';
 
 function buildMockConfig(): Config {
   return {

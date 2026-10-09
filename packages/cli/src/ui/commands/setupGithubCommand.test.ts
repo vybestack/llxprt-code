@@ -4,6 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  withFetchPreconnect,
+  type FetchCall,
+} from '../../../../test-utils/src/fetch-test-helpers.js';
 import { automock, waitFor } from '@vybestack/llxprt-code-test-utils';
 import os from 'node:os';
 import path from 'node:path';
@@ -26,7 +30,7 @@ import {
 } from './setupGithubCommand.js';
 import type { CommandContext, ToolActionReturn } from './types.js';
 import * as commandUtils from '../utils/commandUtils.js';
-import { assertTruthy } from '../../test-utils/assertions.js';
+import { assertTruthy } from '../../__tests__/assertions.js';
 
 /**
  * Bun's vi.spyOn type signature omits the property-getter overload that
@@ -50,7 +54,8 @@ const realChildProcessModule = { ...(await import('child_process')) };
 void vi.mock('child_process', () => automock(realChildProcessModule));
 
 // Mock fetch globally
-global.fetch = vi.fn();
+const fetchMock = vi.fn<FetchCall>();
+global.fetch = withFetchPreconnect(fetchMock);
 
 void vi.mock('../../utils/gitUtils.js', () => ({
   isGitHubRepository: vi.fn(),
@@ -73,20 +78,22 @@ function makeContext(signal?: AbortSignal): CommandContext {
   } as CommandContext;
 }
 
-describe('setupGithubCommand', () => {
-  let scratchDir = '';
+let scratchDir = '';
+async function setupSetupGithubCommandBeforeEach(): Promise<void> {
+  vi.resetAllMocks();
+  scratchDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'setup-github-command-'),
+  );
+}
 
-  beforeEach(async () => {
-    vi.resetAllMocks();
-    scratchDir = await fs.mkdtemp(
-      path.join(os.tmpdir(), 'setup-github-command-'),
-    );
-  });
+async function setupSetupGithubCommandAfterEach(): Promise<void> {
+  vi.restoreAllMocks();
+  if (scratchDir) await fs.rm(scratchDir, { recursive: true });
+}
 
-  afterEach(async () => {
-    vi.restoreAllMocks();
-    if (scratchDir) await fs.rm(scratchDir, { recursive: true });
-  });
+describe('setupGithubCommand / non-Windows workflow installation', () => {
+  beforeEach(setupSetupGithubCommandBeforeEach);
+  afterEach(setupSetupGithubCommandAfterEach);
 
   it('downloads workflows, updates gitignore, and includes pipefail on non-windows', async () => {
     spyOnGetter(process, 'platform', 'get').mockReturnValue('linux');
@@ -97,16 +104,14 @@ describe('setupGithubCommand', () => {
 
     const workflows = GITHUB_WORKFLOW_PATHS.map((p) => path.basename(p));
 
-    (global.fetch as Mock<typeof global.fetch>).mockImplementation(
-      async (url) => {
-        const filename = path.basename(url.toString());
-        return new Response(filename, {
-          status: 200,
-          statusText: 'OK',
-          headers: { 'Content-Type': 'text/plain' },
-        });
-      },
-    );
+    fetchMock.mockImplementation(async (url) => {
+      const filename = path.basename(url.toString());
+      return new Response(filename, {
+        status: 200,
+        statusText: 'OK',
+        headers: { 'Content-Type': 'text/plain' },
+      });
+    });
 
     (
       gitUtils.isGitHubRepository as Mock<typeof gitUtils.isGitHubRepository>
@@ -169,6 +174,11 @@ describe('setupGithubCommand', () => {
     expect(gitignoreContent).toContain('.llxprt/');
     expect(gitignoreContent).toContain('gha-creds-*.json');
   });
+});
+
+describe('setupGithubCommand / Windows workflow installation', () => {
+  beforeEach(setupSetupGithubCommandBeforeEach);
+  afterEach(setupSetupGithubCommandAfterEach);
 
   it('downloads workflows, updates gitignore, and does not include pipefail on windows', async () => {
     spyOnGetter(process, 'platform', 'get').mockReturnValue('win32');
@@ -178,16 +188,14 @@ describe('setupGithubCommand', () => {
     const fakeReleaseVersion = 'v1.2.3';
 
     const workflows = GITHUB_WORKFLOW_PATHS.map((p) => path.basename(p));
-    (global.fetch as Mock<typeof global.fetch>).mockImplementation(
-      async (url) => {
-        const filename = path.basename(url.toString());
-        return new Response(filename, {
-          status: 200,
-          statusText: 'OK',
-          headers: { 'Content-Type': 'text/plain' },
-        });
-      },
-    );
+    fetchMock.mockImplementation(async (url) => {
+      const filename = path.basename(url.toString());
+      return new Response(filename, {
+        status: 200,
+        statusText: 'OK',
+        headers: { 'Content-Type': 'text/plain' },
+      });
+    });
 
     (
       gitUtils.isGitHubRepository as Mock<typeof gitUtils.isGitHubRepository>
@@ -250,12 +258,17 @@ describe('setupGithubCommand', () => {
     expect(gitignoreContent).toContain('.llxprt/');
     expect(gitignoreContent).toContain('gha-creds-*.json');
   });
+});
+
+describe('setupGithubCommand / download failure and cancellation', () => {
+  beforeEach(setupSetupGithubCommandBeforeEach);
+  afterEach(setupSetupGithubCommandAfterEach);
 
   it('throws an error when download fails', async () => {
     const fakeRepoRoot = scratchDir;
     const fakeReleaseVersion = 'v1.2.3';
 
-    (global.fetch as Mock<typeof global.fetch>).mockResolvedValue(
+    fetchMock.mockResolvedValue(
       new Response('Not Found', {
         status: 404,
         statusText: 'Not Found',
@@ -291,7 +304,7 @@ describe('setupGithubCommand', () => {
     let downloadSignal: AbortSignal | undefined;
 
     // Behave like a real fetch: stay pending until the caller's signal aborts.
-    (global.fetch as Mock<typeof global.fetch>).mockImplementation(
+    fetchMock.mockImplementation(
       (_url, init) =>
         new Promise<Response>((_resolve, reject) => {
           const signal = init?.signal;

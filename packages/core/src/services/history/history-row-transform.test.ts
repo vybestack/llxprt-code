@@ -11,8 +11,8 @@ import {
   rowsOf,
   withRollbackFixture,
 } from './chronology-rollback-test-helpers.js';
-import { ownerFixtureRow } from './chronology-rollback-owner-helpers.js';
-import { withSuffixFixture } from './history-suffix-test-helpers.js';
+import { ownerFixtureRow } from './chronology-rollback-owner-test-helpers.js';
+import { withCoreSuffixFixture } from './core-suffix-fixture-test-helpers.js';
 import { RowOwnership } from '../../recording/rowOwnership.js';
 import { createHistoryProviderFileBindingStore } from './provider-file-binding.js';
 import { changedTransformRow } from './row-transform-test-helpers.js';
@@ -30,7 +30,7 @@ describe('disk-backed row transform', () => {
   for (const size of sizes) {
     it(`copies ${size} media/tool rows without a context array and restores every row after GC`, async () => {
       const owners = new RowOwnership();
-      await withSuffixFixture(
+      await withCoreSuffixFixture(
         size,
         async (history) => {
           history.setTokenizerFactory(exactTokenizer());

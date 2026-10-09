@@ -1,4 +1,4 @@
-import { collectJournalRowsForAssertions } from '../../test-utils/collect-rows-for-assertions.js';
+import { collectJournalRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 /// <reference lib="esnext.array" />
 /**
  * @license

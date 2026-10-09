@@ -23,7 +23,7 @@
  * cache-prefix proxy because chronology is never serialized to a provider.
  */
 
-import { collectRawHistory } from '@vybestack/llxprt-code-core/test-utils/collect-raw-history.js';
+import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { describe, it, expect } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -38,7 +38,7 @@ import {
   aiTextMsg,
   aiToolCallMsg,
   toolResponseMsg,
-} from '../MiddleOutStrategy-test-helpers.js';
+} from './MiddleOutStrategy-test-helpers.js';
 import {
   getCompletionBudget,
   DEFAULT_COMPLETION_BUDGET,

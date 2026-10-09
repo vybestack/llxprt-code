@@ -294,15 +294,7 @@ class ChunkAccumulator {
     while (index < value.length) {
       const chunk = this.currentChunk();
       const available = this.maxChunkBytes - this.used;
-      let end = Math.min(value.length, index + available);
-      if (
-        end < value.length &&
-        end > index &&
-        isHighSurrogate(value.charCodeAt(end - 1)) &&
-        isLowSurrogate(value.charCodeAt(end))
-      ) {
-        end -= 1;
-      }
+      const end = fittingUtf8End(value, index, available);
       const source = value.slice(index, end);
       this.recordEncodingInput(source.length);
       const encoded = encoder.encodeInto(source, chunk.subarray(this.used));
@@ -365,6 +357,27 @@ class ChunkAccumulator {
     this.used = 0;
     return result;
   }
+}
+
+function fittingUtf8End(
+  value: string,
+  start: number,
+  capacity: number,
+): number {
+  let end = start;
+  let bytes = 0;
+  while (end < value.length) {
+    const next = nextScalarEnd(value, end);
+    const unit = value.charCodeAt(end);
+    let width = 3;
+    if (next - end === 2) width = 4;
+    else if (unit <= 0x7f) width = 1;
+    else if (unit <= 0x7ff) width = 2;
+    if (bytes + width > capacity) break;
+    bytes += width;
+    end = next;
+  }
+  return end;
 }
 
 function isHighSurrogate(codeUnit: number): boolean {

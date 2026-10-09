@@ -10,7 +10,7 @@ import {
   assertReplayOk,
   PROJECT_HASH,
   sessionStartLine,
-} from './replay-test-helpers.js';
+} from './__tests__/replay-test-helpers.js';
 import type { IContent } from '../services/history/IContent.js';
 
 let dir: string;

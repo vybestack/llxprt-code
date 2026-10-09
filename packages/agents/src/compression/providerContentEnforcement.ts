@@ -7,7 +7,6 @@
 import type { ModelGenerationSettings } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { ProviderContentEnvelope } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { HistoryIndexedRows } from '@vybestack/llxprt-code-core/services/history/historyMutationSnapshot.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   publishProviderFallbackCandidate,
@@ -90,13 +89,18 @@ interface OverflowReductionResult {
 }
 
 interface FallbackStateSnapshot {
-  readonly history: HistoryIndexedRows;
+  readonly restoreHistory: () => Promise<void>;
   readonly cacheAnchorSeq: number;
   readonly promptTokenBaseline: number | null;
 }
 
 export class ProviderContentEnforcer {
   constructor(private readonly deps: ProviderContentEnforcementDeps) {}
+
+  /** The disk route uses the same initial policy, without invented array contents. */
+  sourceContextLimits(provider: IProvider): ContextLimits {
+    return this.computeContextLimits(provider, this.resolveModel(provider));
+  }
 
   async enforce(
     envelope: ProviderContentEnvelope,
@@ -652,10 +656,7 @@ export class ProviderContentEnforcer {
   private async restoreFallbackState(
     snapshot: FallbackStateSnapshot,
   ): Promise<void> {
-    await this.deps.historyService.detachedValues.replace(
-      snapshot.history,
-      this.deps.runtimeContext.state.model,
-    );
+    await snapshot.restoreHistory();
     if (snapshot.cacheAnchorSeq === 0) {
       this.deps.historyService.resetCacheAnchorSeq();
     } else {
@@ -673,7 +674,7 @@ export class ProviderContentEnforcer {
       await this.restoreFallbackState(snapshot);
       return failure;
     } catch (rollbackError) {
-      return new AggregateError(
+      throw new AggregateError(
         [failure, this.normalizeError(rollbackError)],
         'Provider truncation fallback failed and its state rollback also failed',
       );
@@ -694,12 +695,13 @@ export class ProviderContentEnforcer {
   }> {
     const cacheAnchorSeq = this.deps.historyService.getCacheAnchorSeq();
     const promptTokenBaseline = this.deps.getPromptTokenBaseline();
-    return this.deps.historyService.detachedValues.withCheckpoint((history) =>
-      this.executeCapturedFallback(
-        { history, cacheAnchorSeq, promptTokenBaseline },
-        promptId,
-        targetTokenCount,
-      ),
+    return this.deps.historyService.detachedValues.withRollbackCheckpoint(
+      (restoreHistory) =>
+        this.executeCapturedFallback(
+          { restoreHistory, cacheAnchorSeq, promptTokenBaseline },
+          promptId,
+          targetTokenCount,
+        ),
     );
   }
 

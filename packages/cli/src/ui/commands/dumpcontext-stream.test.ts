@@ -1,4 +1,4 @@
-import { forbidHistoryMaterializationForTest } from '../../../../core/src/test-utils/history-materialization-test-guard.js';
+import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn, vi } from 'bun:test';
 import * as fs from 'node:fs/promises';
@@ -8,7 +8,7 @@ import { Storage, SettingsService } from '@vybestack/llxprt-code-settings';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { ProviderManager } from '@vybestack/llxprt-code-providers/ProviderManager.js';
 import { OpenAIProvider } from '@vybestack/llxprt-code-providers/openai/OpenAIProvider.js';
-import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { dumpcontextCommand } from './dumpcontextCommand.js';
 
 void vi.mock('../contexts/RuntimeContext.js', () => ({

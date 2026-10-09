@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { RowOwnership } from '../../recording/rowOwnership.js';
-import { withSuffixFixture } from './history-suffix-test-helpers.js';
+import { withCoreSuffixFixture } from './core-suffix-fixture-test-helpers.js';
 import { exactTokenizer } from './chronology-rollback-test-helpers.js';
 import {
   MergeRowHistory,
@@ -14,10 +14,10 @@ describe('transactional history merge rows', () => {
   for (const size of [512, 8192]) {
     it(`appends ${size} mixed rows without eager reads and preserves complete source values`, async () => {
       const owners = new RowOwnership();
-      await withSuffixFixture(
+      await withCoreSuffixFixture(
         size,
         async (source) => {
-          await withSuffixFixture(
+          await withCoreSuffixFixture(
             1,
             async (target) => {
               target.setTokenizerFactory(exactTokenizer());
@@ -53,7 +53,7 @@ describe('transactional history merge rows', () => {
 
 describe('history merge self append and large row', () => {
   it('pins self-merge once and preserves markers when the appended rows are duplicated', async () => {
-    await withSuffixFixture(
+    await withCoreSuffixFixture(
       3,
       async (history) => {
         history.setTokenizerFactory(exactTokenizer());
@@ -72,10 +72,10 @@ describe('history merge self append and large row', () => {
 
   it('accepts a valid nine MiB row without applying the controlled-fixture byte limit as an input cap', async () => {
     const bytes = 9 * 1024 * 1024;
-    await withSuffixFixture(
+    await withCoreSuffixFixture(
       1,
       async (source) => {
-        await withSuffixFixture(
+        await withCoreSuffixFixture(
           0,
           async (target) => {
             target.setTokenizerFactory(exactTokenizer());

@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'bun:test';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { withSuffixFixture } from '../../../../core/src/services/history/history-suffix-test-helpers.js';
+import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import {
   oneshotSetup,
   oneshotOracle,

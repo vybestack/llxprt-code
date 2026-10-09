@@ -19,7 +19,7 @@
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { ProviderManager } from '../ProviderManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   LoadBalancingProvider,
@@ -27,7 +27,7 @@ import {
 } from '../LoadBalancingProvider.js';
 import type { IProvider, GenerateChatOptions } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { streamCallOptions } from '../test-utils/streamCallOptions.js';
+import { streamCallOptions } from './streamCallOptions.js';
 import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
 import {
@@ -182,211 +182,278 @@ async function pullFirst(
 }
 
 describe('LoadBalancingProvider commit boundary (issue #2532)', () => {
-  let settingsService: SettingsService;
-  let config: Config;
-  let providerManager: ProviderManager;
-
   beforeEach(() => {
     settingsService = new SettingsService();
     config = createRuntimeConfigStub(settingsService);
     providerManager = new ProviderManager({ settingsService, config });
   });
+  registerBehavior1();
 
-  function registerAndCreate(
-    backendA: { provider: IProvider; calls: { value: number } },
-    backendB: { provider: IProvider; calls: { value: number } },
-    cfg: LoadBalancingProviderConfig,
-  ): LoadBalancingProvider {
-    providerManager.registerProvider(backendA.provider);
-    providerManager.registerProvider(backendB.provider);
-    return new LoadBalancingProvider(cfg, providerManager);
-  }
+  registerBehavior2();
 
-  it('does not retry the same backend or advance after partial text then network error', async () => {
-    const failure = networkError();
-    const backendA = makeScriptedProvider('provider-a', [
-      yieldThenThrow(textChunk, failure),
-    ]);
-    const backendB = makeScriptedProvider('provider-b', [successStream('ok')]);
-    const lb = registerAndCreate(backendA, backendB, makeConfig());
+  registerBehavior3();
 
-    const result = await pullUntilFailure(lb, makeOptions());
+  registerBehavior4();
 
-    expect(result.first).toStrictEqual(textChunk);
-    expect(result.failure).toBe(failure);
-    expect(backendA.calls.value).toBe(1);
-    expect(backendB.calls.value).toBe(0);
-  });
+  registerBehavior5();
 
-  it('does not retry the same backend or advance after partial text then 5xx', async () => {
-    const failure = statusError('internal error', 500);
-    const backendA = makeScriptedProvider('provider-a', [
-      yieldThenThrow(textChunk, failure),
-    ]);
-    const backendB = makeScriptedProvider('provider-b', [successStream('ok')]);
-    const lb = registerAndCreate(backendA, backendB, makeConfig());
+  registerBehavior6();
 
-    const result = await pullUntilFailure(lb, makeOptions());
+  registerBehavior7();
 
-    expect(result.failure).toBe(failure);
-    expect(backendA.calls.value).toBe(1);
-    expect(backendB.calls.value).toBe(0);
-  });
+  registerBehavior8();
 
-  it('surfaces the terminal error instead of a retryable aggregate after partial text on a failover backend', async () => {
-    const preOutputFailure = networkError();
-    const postOutputFailure = networkError();
-    const backendA = makeScriptedProvider('provider-a', [
-      alwaysThrow(preOutputFailure),
-    ]);
-    const backendB = makeScriptedProvider('provider-b', [
-      yieldThenThrow(textChunk, postOutputFailure),
-    ]);
-    const lb = registerAndCreate(backendA, backendB, makeConfig());
+  registerBehavior9();
+});
 
-    const result = await pullUntilFailure(lb, makeOptions());
+let settingsService: SettingsService;
+let config: Config;
+let providerManager: ProviderManager;
 
-    expect(result.first).toStrictEqual(textChunk);
-    expect(result.failure).toBe(postOutputFailure);
-    expect(result.failure).not.toBeInstanceOf(LoadBalancerFailoverError);
-    expect(isTerminalRetryError(result.failure)).toBe(true);
-    // Backend A may retry pre-output before the rotation reaches B, but B
-    // must never be retried after observable output escapes it.
-    expect(backendA.calls.value).toBeGreaterThanOrEqual(1);
-    expect(backendB.calls.value).toBe(1);
-  });
+function registerAndCreate(
+  backendA: { provider: IProvider; calls: { value: number } },
+  backendB: { provider: IProvider; calls: { value: number } },
+  cfg: LoadBalancingProviderConfig,
+): LoadBalancingProvider {
+  providerManager.registerProvider(backendA.provider);
+  providerManager.registerProvider(backendB.provider);
+  return new LoadBalancingProvider(cfg, providerManager);
+}
 
-  it('treats a metadata-only chunk as exposure: no retry, no advance', async () => {
-    const failure = networkError();
-    const backendA = makeScriptedProvider('provider-a', [
-      yieldThenThrow(metadataChunk, failure),
-    ]);
-    const backendB = makeScriptedProvider('provider-b', [successStream('ok')]);
-    const lb = registerAndCreate(backendA, backendB, makeConfig());
+function registerBehavior1(): void {
+  describe('LoadBalancingProvider commit boundary (issue #2532) [1]', () => {
+    it('does not retry the same backend or advance after partial text then network error', async () => {
+      const failure = networkError();
+      const backendA = makeScriptedProvider('provider-a', [
+        yieldThenThrow(textChunk, failure),
+      ]);
+      const backendB = makeScriptedProvider('provider-b', [
+        successStream('ok'),
+      ]);
+      const lb = registerAndCreate(backendA, backendB, makeConfig());
 
-    const result = await pullUntilFailure(lb, makeOptions());
+      const result = await pullUntilFailure(lb, makeOptions());
 
-    expect(result.first).toStrictEqual(metadataChunk);
-    expect(result.failure).toBe(failure);
-    expect(backendA.calls.value).toBe(1);
-    expect(backendB.calls.value).toBe(0);
-  });
-
-  it('marks the shared request commit state with a metadata floor through the guarded stream', async () => {
-    const backendA = makeScriptedProvider('provider-a', [
-      yieldThenThrow(metadataChunk, networkError()),
-    ]);
-    const backendB = makeScriptedProvider('provider-b', [successStream('ok')]);
-    const lb = registerAndCreate(backendA, backendB, makeConfig());
-
-    const request = resolveRetryRequestContext(makeOptions(), {
-      maxAttempts: 8,
-      initialDelayMs: 0,
-      authRetryTimeoutMs: 30_000,
-    });
-    try {
-      await pullUntilFailure(lb, request.options);
-    } catch {
-      request.releaseBudget();
-      throw new Error('expected the pull to surface the scripted failure');
-    }
-    try {
-      expect(getRequestCommitState(request).committed).toBe(true);
-      expect(getRequestCommitState(request).exposure).toBe('metadata');
+      expect(result.first).toStrictEqual(textChunk);
+      expect(result.failure).toBe(failure);
       expect(backendA.calls.value).toBe(1);
       expect(backendB.calls.value).toBe(0);
-    } finally {
-      request.releaseBudget();
-    }
-  });
-
-  it('marks post-yield failures terminal on standalone load-balanced streams', async () => {
-    const backendA = makeScriptedProvider('provider-a', [
-      yieldThenThrow(textChunk, networkError()),
-    ]);
-    const backendB = makeScriptedProvider('provider-b', [successStream('ok')]);
-    const lb = registerAndCreate(backendA, backendB, makeConfig());
-
-    const result = await pullUntilFailure(lb, makeOptions());
-
-    expect(isTerminalRetryError(result.failure)).toBe(true);
-    expect(backendA.calls.value).toBe(1);
-    expect(backendB.calls.value).toBe(0);
-  });
-
-  it('still retries the same backend and fails over before any output', async () => {
-    const backendA = makeScriptedProvider('provider-a', [
-      alwaysThrow(networkError()),
-    ]);
-    const backendB = makeScriptedProvider('provider-b', [successStream('ok')]);
-    const lb = registerAndCreate(
-      backendA,
-      backendB,
-      makeConfig({ failover_retry_count: 2 }),
-    );
-
-    const first = await pullFirst(lb, makeOptions());
-
-    expect(first).toMatchObject({
-      speaker: 'ai',
-      blocks: [{ type: 'text', text: 'ok' }],
     });
-    // failover_retry_count is 2: backend A exhausts its own retries before
-    // the rotation advances to backend B.
-    expect(backendA.calls.value).toBe(2);
-    expect(backendB.calls.value).toBe(1);
   });
+}
 
-  it('aggregates an all-429 rotation pre-exposure into a retryable failure', async () => {
-    const backendA = makeScriptedProvider('provider-a', [
-      alwaysThrow(statusError('rate limited', 429)),
-    ]);
-    const backendB = makeScriptedProvider('provider-b', [
-      alwaysThrow(statusError('rate limited', 429)),
-    ]);
-    const lb = registerAndCreate(
-      backendA,
-      backendB,
-      makeConfig({ failover_retry_count: 1 }),
-    );
+function registerBehavior2(): void {
+  describe('LoadBalancingProvider commit boundary (issue #2532) [2]', () => {
+    it('does not retry the same backend or advance after partial text then 5xx', async () => {
+      const failure = statusError('internal error', 500);
+      const backendA = makeScriptedProvider('provider-a', [
+        yieldThenThrow(textChunk, failure),
+      ]);
+      const backendB = makeScriptedProvider('provider-b', [
+        successStream('ok'),
+      ]);
+      const lb = registerAndCreate(backendA, backendB, makeConfig());
 
-    const failure = await expectFailure(lb, makeOptions());
+      const result = await pullUntilFailure(lb, makeOptions());
 
-    expect(failure).toBeInstanceOf(LoadBalancerFailoverError);
-    expect((failure as LoadBalancerFailoverError).isRetryable).toBe(true);
-    expect(backendA.calls.value).toBe(1);
-    expect(backendB.calls.value).toBe(1);
-  });
-
-  it('releases the losing stream and fails over on first-chunk timeout before output', async () => {
-    let losingReleased = false;
-    const hangScript: Script = (options) =>
-      (async function* hang() {
-        try {
-          await delay(10_000, getRequestSignal(options));
-          yield textChunk;
-        } finally {
-          losingReleased = true;
-        }
-      })();
-    const backendA = makeScriptedProvider('provider-a', [hangScript]);
-    const backendB = makeScriptedProvider('provider-b', [successStream('ok')]);
-    const lb = registerAndCreate(
-      backendA,
-      backendB,
-      makeConfig({ timeout_ms: 50, failover_retry_count: 1 }),
-    );
-
-    const first = await pullFirst(lb, makeOptions());
-
-    expect(first).toMatchObject({
-      speaker: 'ai',
-      blocks: [{ type: 'text', text: 'ok' }],
+      expect(result.failure).toBe(failure);
+      expect(backendA.calls.value).toBe(1);
+      expect(backendB.calls.value).toBe(0);
     });
-    expect(backendA.calls.value).toBe(1);
-    expect(backendB.calls.value).toBe(1);
-    // The losing stream must not linger for its full 10s pending delay: the
-    // timeout aborts the attempt signal, which settles the hung generator.
-    expect(losingReleased).toBe(true);
   });
-});
+}
+
+function registerBehavior3(): void {
+  describe('LoadBalancingProvider commit boundary (issue #2532) [3]', () => {
+    it('surfaces the terminal error instead of a retryable aggregate after partial text on a failover backend', async () => {
+      const preOutputFailure = networkError();
+      const postOutputFailure = networkError();
+      const backendA = makeScriptedProvider('provider-a', [
+        alwaysThrow(preOutputFailure),
+      ]);
+      const backendB = makeScriptedProvider('provider-b', [
+        yieldThenThrow(textChunk, postOutputFailure),
+      ]);
+      const lb = registerAndCreate(backendA, backendB, makeConfig());
+
+      const result = await pullUntilFailure(lb, makeOptions());
+
+      expect(result.first).toStrictEqual(textChunk);
+      expect(result.failure).toBe(postOutputFailure);
+      expect(result.failure).not.toBeInstanceOf(LoadBalancerFailoverError);
+      expect(isTerminalRetryError(result.failure)).toBe(true);
+      // Backend A may retry pre-output before the rotation reaches B, but B
+      // must never be retried after observable output escapes it.
+      expect(backendA.calls.value).toBeGreaterThanOrEqual(1);
+      expect(backendB.calls.value).toBe(1);
+    });
+  });
+}
+
+function registerBehavior4(): void {
+  describe('LoadBalancingProvider commit boundary (issue #2532) [4]', () => {
+    it('treats a metadata-only chunk as exposure: no retry, no advance', async () => {
+      const failure = networkError();
+      const backendA = makeScriptedProvider('provider-a', [
+        yieldThenThrow(metadataChunk, failure),
+      ]);
+      const backendB = makeScriptedProvider('provider-b', [
+        successStream('ok'),
+      ]);
+      const lb = registerAndCreate(backendA, backendB, makeConfig());
+
+      const result = await pullUntilFailure(lb, makeOptions());
+
+      expect(result.first).toStrictEqual(metadataChunk);
+      expect(result.failure).toBe(failure);
+      expect(backendA.calls.value).toBe(1);
+      expect(backendB.calls.value).toBe(0);
+    });
+  });
+}
+
+function registerBehavior5(): void {
+  describe('LoadBalancingProvider commit boundary (issue #2532) [5]', () => {
+    it('marks the shared request commit state with a metadata floor through the guarded stream', async () => {
+      const backendA = makeScriptedProvider('provider-a', [
+        yieldThenThrow(metadataChunk, networkError()),
+      ]);
+      const backendB = makeScriptedProvider('provider-b', [
+        successStream('ok'),
+      ]);
+      const lb = registerAndCreate(backendA, backendB, makeConfig());
+
+      const request = resolveRetryRequestContext(makeOptions(), {
+        maxAttempts: 8,
+        initialDelayMs: 0,
+        authRetryTimeoutMs: 30_000,
+      });
+      try {
+        await pullUntilFailure(lb, request.options);
+      } catch {
+        request.releaseBudget();
+        throw new Error('expected the pull to surface the scripted failure');
+      }
+      try {
+        expect(getRequestCommitState(request).committed).toBe(true);
+        expect(getRequestCommitState(request).exposure).toBe('metadata');
+        expect(backendA.calls.value).toBe(1);
+        expect(backendB.calls.value).toBe(0);
+      } finally {
+        request.releaseBudget();
+      }
+    });
+  });
+}
+
+function registerBehavior6(): void {
+  describe('LoadBalancingProvider commit boundary (issue #2532) [6]', () => {
+    it('marks post-yield failures terminal on standalone load-balanced streams', async () => {
+      const backendA = makeScriptedProvider('provider-a', [
+        yieldThenThrow(textChunk, networkError()),
+      ]);
+      const backendB = makeScriptedProvider('provider-b', [
+        successStream('ok'),
+      ]);
+      const lb = registerAndCreate(backendA, backendB, makeConfig());
+
+      const result = await pullUntilFailure(lb, makeOptions());
+
+      expect(isTerminalRetryError(result.failure)).toBe(true);
+      expect(backendA.calls.value).toBe(1);
+      expect(backendB.calls.value).toBe(0);
+    });
+  });
+}
+
+function registerBehavior7(): void {
+  describe('LoadBalancingProvider commit boundary (issue #2532) [7]', () => {
+    it('still retries the same backend and fails over before any output', async () => {
+      const backendA = makeScriptedProvider('provider-a', [
+        alwaysThrow(networkError()),
+      ]);
+      const backendB = makeScriptedProvider('provider-b', [
+        successStream('ok'),
+      ]);
+      const lb = registerAndCreate(
+        backendA,
+        backendB,
+        makeConfig({ failover_retry_count: 2 }),
+      );
+
+      const first = await pullFirst(lb, makeOptions());
+
+      expect(first).toMatchObject({
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'ok' }],
+      });
+      // failover_retry_count is 2: backend A exhausts its own retries before
+      // the rotation advances to backend B.
+      expect(backendA.calls.value).toBe(2);
+      expect(backendB.calls.value).toBe(1);
+    });
+  });
+}
+
+function registerBehavior8(): void {
+  describe('LoadBalancingProvider commit boundary (issue #2532) [8]', () => {
+    it('aggregates an all-429 rotation pre-exposure into a retryable failure', async () => {
+      const backendA = makeScriptedProvider('provider-a', [
+        alwaysThrow(statusError('rate limited', 429)),
+      ]);
+      const backendB = makeScriptedProvider('provider-b', [
+        alwaysThrow(statusError('rate limited', 429)),
+      ]);
+      const lb = registerAndCreate(
+        backendA,
+        backendB,
+        makeConfig({ failover_retry_count: 1 }),
+      );
+
+      const failure = await expectFailure(lb, makeOptions());
+
+      expect(failure).toBeInstanceOf(LoadBalancerFailoverError);
+      expect((failure as LoadBalancerFailoverError).isRetryable).toBe(true);
+      expect(backendA.calls.value).toBe(1);
+      expect(backendB.calls.value).toBe(1);
+    });
+  });
+}
+
+function registerBehavior9(): void {
+  describe('LoadBalancingProvider commit boundary (issue #2532) [9]', () => {
+    it('releases the losing stream and fails over on first-chunk timeout before output', async () => {
+      let losingReleased = false;
+      const hangScript: Script = (options) =>
+        (async function* hang() {
+          try {
+            await delay(10_000, getRequestSignal(options));
+            yield textChunk;
+          } finally {
+            losingReleased = true;
+          }
+        })();
+      const backendA = makeScriptedProvider('provider-a', [hangScript]);
+      const backendB = makeScriptedProvider('provider-b', [
+        successStream('ok'),
+      ]);
+      const lb = registerAndCreate(
+        backendA,
+        backendB,
+        makeConfig({ timeout_ms: 50, failover_retry_count: 1 }),
+      );
+
+      const first = await pullFirst(lb, makeOptions());
+
+      expect(first).toMatchObject({
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'ok' }],
+      });
+      expect(backendA.calls.value).toBe(1);
+      expect(backendB.calls.value).toBe(1);
+      // The losing stream must not linger for its full 10s pending delay: the
+      // timeout aborts the attempt signal, which settles the hung generator.
+      expect(losingReleased).toBe(true);
+    });
+  });
+}

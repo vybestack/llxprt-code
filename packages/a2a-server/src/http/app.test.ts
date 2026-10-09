@@ -43,7 +43,7 @@ import {
   createConfirmationMessageRequest,
   assertUniqueFinalEventIsLast,
   assertTaskCreation,
-} from '../utils/testing_utils.js';
+} from '../utils/__tests__/testing_utils.js';
 
 const AUTH_ENV_KEYS = [
   'USE_CCPA',

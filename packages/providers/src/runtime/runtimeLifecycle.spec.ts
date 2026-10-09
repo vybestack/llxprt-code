@@ -29,7 +29,6 @@ import type {
   MessageBus,
 } from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { OAuthManager } from '../auth/index.js';
 import { getCliProviderManager } from './runtimeAccessors.js';
 
@@ -49,7 +48,6 @@ describe('runtimeLifecycle', () => {
   beforeEach(() => {
     resetCliRuntimeRegistryForTesting();
     configureCliStatelessHardening(null);
-    clearActiveProviderRuntimeContext();
 
     // Create mock instances
     mockConfig = {
@@ -109,7 +107,6 @@ describe('runtimeLifecycle', () => {
   afterEach(() => {
     resetCliRuntimeRegistryForTesting();
     configureCliStatelessHardening(null);
-    clearActiveProviderRuntimeContext();
   });
 
   describe('setCliRuntimeContext', () => {

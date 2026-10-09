@@ -18,19 +18,15 @@
 
 import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  clearActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { GenerateChatOptions } from '../IProvider.js';
 import { activeRequestBodyCount } from '../utils/requestScopedBody.js';
 import { acquireRequestScopedBody } from '../utils/requestScopedBody.js';
-import { readRawPostTestBody } from '../test-utils/rawPostTestAdapters.js';
+import { readRawPostTestBody } from './rawPostTestAdapters.js';
 import { OpenAIProvider } from '../openai/OpenAIProvider.js';
 import { OpenAIVercelProvider } from '../openai-vercel/OpenAIVercelProvider.js';
 
@@ -58,7 +54,6 @@ function makeHarness(
     runtimeId,
     config: createRuntimeConfigStub(settings),
   });
-  setActiveProviderRuntimeContext(runtime);
   return { settings, runtime };
 }
 
@@ -218,11 +213,14 @@ async function captureVercelBodies(
     'prompt-caching': 'off',
   });
   const bodies: string[] = [];
-  globalThis.fetch = (input: RequestInfo | URL, init?: RequestInit) =>
-    fetchImpl(input, init).then(async (response) => {
-      bodies.push(await readInitBody(init));
-      return response;
-    });
+  globalThis.fetch = Object.assign(
+    (input: RequestInfo | URL, init?: RequestInit) =>
+      fetchImpl(input, init).then(async (response) => {
+        bodies.push(await readInitBody(init));
+        return response;
+      }),
+    { preconnect: originalFetch.preconnect },
+  );
   try {
     await drain(provider, options);
   } finally {
@@ -237,7 +235,6 @@ async function captureVercelBodies(
 
 describe('P05b4 transport body leases @plan:PLAN-20260917-ISSUE854.P05b4', () => {
   afterEach(() => {
-    clearActiveProviderRuntimeContext();
     globalThis.fetch = originalFetch;
   });
 

@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { writeBodyFile } from '../lib/body-evidence-writer.js';
 import { describe, expect, it } from 'bun:test';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { withBatchFixture } from '../../packages/core/src/services/history/addbatch-stream-test-helpers.js';
 import {
@@ -71,7 +72,7 @@ async function pair(
         ['after-actual', afterActual],
         ['after-expected', afterExpected],
       ])
-        writeFileSync(join(output, `${prefix}-${suffix}.json`), text);
+        await writeBodyFile(join(output, `${prefix}-${suffix}.json`), text);
     }
     return Buffer.byteLength(actual) + Buffer.byteLength(afterActual);
   });

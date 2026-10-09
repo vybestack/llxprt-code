@@ -107,7 +107,7 @@ import {
   defaultRunConfig,
   createStatelessRuntimeBundle,
   createRuntimeOverrides,
-} from './subagent-test-helpers.js';
+} from './__tests__/subagent-test-helpers.js';
 
 describe('subagent.ts', () => {
   let mockSendMessageStream: Mock;

@@ -14,7 +14,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
-import { collectRowsForAssertions } from '../../../../core/src/test-utils/collect-rows-for-assertions.js';
+import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { CompressionExecutionError } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { PerformCompressionResult } from '../../core/turn.js';
@@ -25,8 +25,7 @@ import {
 } from './compression-regression-fixtures.js';
 
 import { ChatSession } from '../../core/chatSession.js';
-import { createChatSessionRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import * as providerRuntime from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import {
   makeHttpError,
@@ -59,7 +58,6 @@ function setupCompressionRuntime(): void {
     ...runtimeSetup.runtime,
     config: runtimeSetup.config,
   };
-  providerRuntime.setActiveProviderRuntimeContext(providerRuntimeSnapshot);
 }
 
 interface EmptySummaryFallbackSetup {

@@ -18,7 +18,7 @@ import {
 } from './providerRequestConversion.js';
 import { dumpRequestContext, dumpRequestContextStream } from './dumpContext.js';
 import { streamPrettyJson } from './streamPrettyJson.js';
-import { collectJournalRowsForAssertions } from '../../../core/src/test-utils/collect-rows-for-assertions.js';
+import { collectJournalRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 
 const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dump-stream-contract-'));
 const row = (index: number): IContent => ({

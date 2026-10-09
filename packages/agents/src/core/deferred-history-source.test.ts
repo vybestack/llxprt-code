@@ -6,7 +6,7 @@ import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership
 import {
   withSuffixFixture,
   rowIndex,
-} from '@vybestack/llxprt-code-core/services/history/history-suffix-test-helpers.js';
+} from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   buildAgent,

@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { ProviderManager } from '../ProviderManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import {
   LoadBalancingProvider,
   type LoadBalancingProviderConfig,
@@ -15,8 +15,11 @@ import {
 import { LoadBalancerFailoverError } from '../errors.js';
 import type { IProvider } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { GenerateChatOptions } from '../GenerateChatOptions.js';
-import { replayableContents } from '../utils/collectContents.js';
+import type { GenerateChatOptions } from '../IProvider.js';
+import {
+  isAsyncIterableContents,
+  replayableContents,
+} from '../utils/collectContents.js';
 
 const requestContents = replayableContents([
   { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
@@ -31,7 +34,7 @@ async function* generateInitialStickyResponse(
   callLog.push(model);
   if (model === 'model-a') throw new Error('backend-a error');
   if (model === 'model-b') throw new Error('backend-b error');
-  yield { type: 'text' as const, content: 'success' };
+  yield { speaker: 'ai', blocks: [{ type: 'text', text: 'success' }] };
 }
 
 async function* generateWraparoundStickyResponse(
@@ -46,7 +49,7 @@ async function* generateWraparoundStickyResponse(
     throw error;
   }
   if (model === 'model-a') {
-    yield { type: 'text' as const, content: 'success from a' };
+    yield { speaker: 'ai', blocks: [{ type: 'text', text: 'success from a' }] };
   }
   if (model === 'model-b') throw new Error('backend-b error');
 }
@@ -61,7 +64,7 @@ async function* generatePhaseResetResponse(
   if (phase === 'first') {
     if (model === 'model-a') throw new Error('backend-a error');
     if (model === 'model-b') throw new Error('backend-b error');
-    yield { type: 'text' as const, content: 'success from c' };
+    yield { speaker: 'ai', blocks: [{ type: 'text', text: 'success from c' }] };
   } else {
     throw new Error('all backends failed');
   }
@@ -88,16 +91,19 @@ async function* generateMultiRequestStickyResponse(
   if (phase === 1) {
     if (model === 'zai-model') throw new Error('zai error');
     if (model === 'makora-model') throw new Error('makora error');
-    yield { type: 'text' as const, content: 'ollama success' };
+    yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ollama success' }] };
   } else if (phase === 2) {
     if (model === 'ollama-model') {
       const error = new Error('Rate limited') as Error & { status: number };
       error.status = 429;
       throw error;
     }
-    yield { type: 'text' as const, content: 'zai success' };
+    yield { speaker: 'ai', blocks: [{ type: 'text', text: 'zai success' }] };
   } else {
-    yield { type: 'text' as const, content: 'zai success again' };
+    yield {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'zai success again' }],
+    };
   }
 }
 function makeStickyConfig(profileName: string): LoadBalancingProviderConfig {
@@ -179,8 +185,9 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492) [part 1]',
 
     const mockProvider: IProvider = {
       name: 'test-provider',
-      generateChatCompletion: (options: GenerateChatOptions) =>
-        generateInitialStickyResponse(options, callLog),
+      generateChatCompletion: (
+        options: GenerateChatOptions | AsyncIterable<IContent>,
+      ) => generateInitialStickyResponse(requestOptions(options), callLog),
       getModels: async () => [],
       getDefaultModel: () => 'test-model',
     };
@@ -191,8 +198,6 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492) [part 1]',
 
     const provider = new LoadBalancingProvider(lbConfig, providerManager);
     const options: GenerateChatOptions = {
-      prompt: 'test prompt',
-      messages: [{ role: 'user' as const, content: 'test' }],
       contents: requestContents,
     };
 
@@ -204,8 +209,9 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492) [part 1]',
     expect(provider.getCurrentFailoverIndex()).toBe(2);
 
     callLog.length = 0;
-    mockProvider.generateChatCompletion = (options: GenerateChatOptions) =>
-      generateWraparoundStickyResponse(options, callLog);
+    mockProvider.generateChatCompletion = (
+      options: GenerateChatOptions | AsyncIterable<IContent>,
+    ) => generateWraparoundStickyResponse(requestOptions(options), callLog);
 
     const results: IContent[] = [];
     for await (const chunk of provider.generateChatCompletion(options)) {
@@ -213,8 +219,8 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492) [part 1]',
     }
 
     expect(results[0]).toStrictEqual({
-      type: 'text',
-      content: 'success from a',
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'success from a' }],
     });
     expect(provider.getCurrentFailoverIndex()).toBe(0);
     expect(callLog).toStrictEqual(['model-c', 'model-a']);
@@ -233,8 +239,9 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492) [part 2]',
 
     const mockProvider: IProvider = {
       name: 'test-provider',
-      generateChatCompletion: (options: GenerateChatOptions) =>
-        generatePhaseResetResponse(options, phase, callLog),
+      generateChatCompletion: (
+        options: GenerateChatOptions | AsyncIterable<IContent>,
+      ) => generatePhaseResetResponse(requestOptions(options), phase, callLog),
       getModels: async () => [],
       getDefaultModel: () => 'test-model',
     };
@@ -245,8 +252,6 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492) [part 2]',
 
     const provider = new LoadBalancingProvider(lbConfig, providerManager);
     const options: GenerateChatOptions = {
-      prompt: 'test prompt',
-      messages: [{ role: 'user' as const, content: 'test' }],
       contents: requestContents,
     };
 
@@ -284,8 +289,9 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492) [part 3]',
 
     const mockProvider: IProvider = {
       name: 'test-provider',
-      generateChatCompletion: (options: GenerateChatOptions) =>
-        generateFullRotationFailure(options, callLog),
+      generateChatCompletion: (
+        options: GenerateChatOptions | AsyncIterable<IContent>,
+      ) => generateFullRotationFailure(requestOptions(options), callLog),
       getModels: async () => [],
       getDefaultModel: () => 'test-model',
     };
@@ -296,8 +302,6 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492) [part 3]',
 
     const provider = new LoadBalancingProvider(lbConfig, providerManager);
     const options: GenerateChatOptions = {
-      prompt: 'test prompt',
-      messages: [{ role: 'user' as const, content: 'test' }],
       contents: requestContents,
     };
 
@@ -329,8 +333,14 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492) [part 4]',
 
     const mockProvider: IProvider = {
       name: 'test-provider',
-      generateChatCompletion: (options: GenerateChatOptions) =>
-        generateMultiRequestStickyResponse(options, phase, callLog),
+      generateChatCompletion: (
+        options: GenerateChatOptions | AsyncIterable<IContent>,
+      ) =>
+        generateMultiRequestStickyResponse(
+          requestOptions(options),
+          phase,
+          callLog,
+        ),
       getModels: async () => [],
       getDefaultModel: () => 'test-model',
     };
@@ -341,8 +351,6 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492) [part 4]',
 
     const provider = new LoadBalancingProvider(lbConfig, providerManager);
     const options: GenerateChatOptions = {
-      prompt: 'test prompt',
-      messages: [{ role: 'user' as const, content: 'test' }],
       contents: requestContents,
     };
 
@@ -380,3 +388,11 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492) [part 4]',
     expect(phase3Calls).toStrictEqual(['phase3:zai-model']);
   });
 });
+
+function requestOptions(
+  options: GenerateChatOptions | AsyncIterable<IContent>,
+): GenerateChatOptions {
+  if (isAsyncIterableContents(options))
+    throw new Error('Expected request options');
+  return options;
+}

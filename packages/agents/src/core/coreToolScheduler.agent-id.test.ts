@@ -10,12 +10,12 @@ import type { ToolCall, CompletedToolCall } from './coreToolScheduler.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
-import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 import {
   createMockMessageBus,
   createMockPolicyEngine,
-} from './coreToolScheduler-test-helpers.js';
+} from './__tests__/coreToolScheduler-test-helpers.js';
 
 describe('CoreToolScheduler agentId propagation', () => {
   it('propagates agentId from request to completed call payloads', async () => {

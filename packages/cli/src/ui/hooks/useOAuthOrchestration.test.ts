@@ -4,11 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { hasDialogRequest } from '../../test-utils/dialogStore.js';
+import { hasDialogRequest } from '../../__tests__/dialogStore.js';
 
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
-import { renderHook } from '../../test-utils/render.js';
+import { renderHook } from '../../__tests__/render.js';
 import { useOAuthOrchestration } from './useOAuthOrchestration.js';
 import { createDialogStore } from '../stores/dialog/dialogStore.js';
 import { createDialogOpeners } from '../stores/dialog/dialogOpeners.js';

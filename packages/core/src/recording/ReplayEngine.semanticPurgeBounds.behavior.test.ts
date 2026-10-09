@@ -21,7 +21,7 @@ import {
   assertReplayOk,
   PROJECT_HASH,
   writeJsonlFile,
-} from './replay-test-helpers.js';
+} from './__tests__/replay-test-helpers.js';
 import type { IContent } from '../services/history/IContent.js';
 
 function replayContent(): IContent {

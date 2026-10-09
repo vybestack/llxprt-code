@@ -1,11 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { writeBodyFile } from '../lib/body-evidence-writer.js';
 import { describe, it, expect } from 'bun:test';
-import { writeFileSync } from 'node:fs';
+
 import { join } from 'node:path';
 import { DebugLogger } from '../../packages/core/src/debug/index.js';
 import { HistoryService } from '../../packages/core/src/services/history/HistoryService.js';
 import type { IContent } from '../../packages/core/src/services/history/IContent.js';
-import { withSuffixFixture } from '../../packages/core/src/services/history/history-suffix-test-helpers.js';
+import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { exactTokenizer } from '../../packages/core/src/services/history/chronology-rollback-test-helpers.js';
 import { buildCuratedHistory } from '../../packages/core/src/services/history/historyCuration.js';
 import { buildProviderContent } from '../../packages/core/src/services/history/historyProviderPipeline.js';
@@ -97,8 +98,8 @@ async function hardlimitBodies(
       const output = process.env.TOOL_TRUNCATION_BODY_OUTPUT;
       if (output !== undefined) {
         const name = `tool-hardlimit-${provider}-${size}-${caching}`;
-        writeFileSync(join(output, name + '-actual.json'), actual);
-        writeFileSync(join(output, name + '-expected.json'), expected);
+        await writeBodyFile(join(output, name + '-actual.json'), actual);
+        await writeBodyFile(join(output, name + '-expected.json'), expected);
       }
       expect(actual).toBe(expected);
       expect(await finalizedCount(actualRows)).toBeLessThan(30000);

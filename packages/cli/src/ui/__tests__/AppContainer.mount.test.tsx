@@ -3,7 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { displayBoot } from '../../test-utils/resumeRows.js';
+import { displayBoot } from '../../__tests__/resumeRows.js';
 
 /**
  * @plan project-plans/issue1576/TEST_PLAN.md - Test 1
@@ -371,11 +371,11 @@ void vi.mock('node:process', () => ({
 import {
   renderWithProviders,
   createMockSettings,
-} from '../../test-utils/render.js';
+} from '../../__tests__/render.js';
 import { AppContainer } from '../AppContainer.js';
 import { initialAppState } from '../reducers/appReducer.js';
 import type { Config, IContent } from '@vybestack/llxprt-code-core';
-import { createMockAgent } from '../../test-utils/mockAgent.js';
+import { createMockAgent } from '../../__tests__/mockAgent.js';
 import {
   buildSlashCommandRuntime,
   buildUiRuntimeFromSource,

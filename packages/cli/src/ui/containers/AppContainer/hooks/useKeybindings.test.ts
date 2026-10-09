@@ -6,7 +6,7 @@
 
 import { act } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
-import { renderHook } from '../../../../test-utils/render.js';
+import { renderHook } from '../../../../__tests__/render.js';
 import type { Key } from '../../../hooks/useKeypress.js';
 import { useKeybindings } from './useKeybindings.js';
 

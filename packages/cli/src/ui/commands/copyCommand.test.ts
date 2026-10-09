@@ -5,13 +5,13 @@
  */
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core';
-import { withSuffixFixture } from '@vybestack/llxprt-code-core/services/history/history-suffix-test-helpers.js';
-import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import {
   publicChat,
   publicCommandContext,
   PublicCursorHistory,
-} from '../../test-utils/public-history-cursor.js';
+} from '../../__tests__/public-history-cursor.js';
 
 const writes: string[] = [];
 let clipboardError: unknown;

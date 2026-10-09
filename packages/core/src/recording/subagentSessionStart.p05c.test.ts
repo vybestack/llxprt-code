@@ -32,7 +32,7 @@ import {
 } from './SessionRecordingService.js';
 import { SessionLockManager } from './SessionLockManager.js';
 import { replaySession } from './ReplayEngine.js';
-import { sessionStartLine } from './replay-test-helpers.js';
+import { sessionStartLine } from './__tests__/replay-test-helpers.js';
 
 /**
  * Proposed P05c extension of the recording config (tmp/verify854/p05c/api_sketch.md).

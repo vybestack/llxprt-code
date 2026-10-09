@@ -19,15 +19,10 @@
  * @requirement:REQ-PE-001 (issue #2817 acceptance A4)
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { describe, expect, it, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { OpenAIProvider } from '../OpenAIProvider.js';
-import {
-  clearActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { streamCallOptions } from '../../test-utils/streamCallOptions.js';
+import { streamCallOptions } from '../../__tests__/streamCallOptions.js';
 import type OpenAI from 'openai';
 import type { IProviderConfig } from '../../types/IProviderConfig.js';
 import type { NormalizedGenerateChatOptions } from '../../BaseProvider.js';
@@ -113,19 +108,6 @@ function buildSendSeamShapedOptions(providerName: string) {
 }
 
 describe('OpenAI Chat projection credential parity (issue #2817)', () => {
-  beforeEach(() => {
-    setActiveProviderRuntimeContext(
-      createProviderRuntimeContext({
-        settingsService: new SettingsService(),
-        runtimeId: 'openai-chat-projection-auth-parity-test',
-      }),
-    );
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
-
   it('projects a media-capable endpoint using the ambient prompt credential', async () => {
     const provider = new AmbientCredentialProvider();
 

@@ -15,7 +15,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import {
   renderWithProviders,
   createMockSettings,
-} from '../../test-utils/render.js';
+} from '../../__tests__/render.js';
 import { AppContainer } from '../AppContainer.js';
 import { initialAppState } from '../reducers/appReducer.js';
 import type { Config } from '@vybestack/llxprt-code-core';
@@ -24,7 +24,7 @@ import {
   defaultKeyBindings,
   type KeyBinding,
 } from '../../config/keyBindings.js';
-import { createMockAgent } from '../../test-utils/mockAgent.js';
+import { createMockAgent } from '../../__tests__/mockAgent.js';
 import {
   buildSlashCommandRuntime,
   buildUiRuntimeFromSource,

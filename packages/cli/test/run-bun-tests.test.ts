@@ -24,6 +24,11 @@ import {
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { envPerFileTimeoutMs } from '../../../scripts/lib/bun-test-policy.js';
+import {
+  buildSessionEnv,
+  createTestSessionRoot,
+  removeSessionRoot,
+} from '../../../scripts/lib/test-session-isolation.js';
 
 const PER_FILE_TIMEOUT_ENV_VAR = 'LLXPRT_TEST_FILE_TIMEOUT_MS';
 import {
@@ -926,6 +931,50 @@ describe('envPerFileTimeoutMs', () => {
 });
 
 describe('real CLI test-file child retry', () => {
+  it('selects the runner budget at each call while passing the session env to children', async () => {
+    const session = createTestSessionRoot();
+    const saved = process.env[PER_FILE_TIMEOUT_ENV_VAR];
+    const runnerEnv = { ...process.env };
+    const file = join(session.root, 'budget.test.ts');
+    const marker = join(session.root, 'child-env.json');
+    const childEnv = buildSessionEnv(
+      { ...process.env, [PER_FILE_TIMEOUT_ENV_VAR]: '0' },
+      session,
+    );
+    try {
+      writeFileSync(
+        file,
+        `import { it } from 'bun:test';
+import { writeFileSync } from 'node:fs';
+writeFileSync(${JSON.stringify(marker)}, JSON.stringify({ home: process.env.HOME, tmp: process.env.TMPDIR }));
+it('finishes within the runner budget', async () => { await Bun.sleep(50); });`,
+      );
+      process.env[PER_FILE_TIMEOUT_ENV_VAR] = '4000';
+      const result = await runTestFile(file, childEnv);
+      expect(result.passed, result.output).toBe(true);
+      expect(result.timedOut).toBe(false);
+      expect(JSON.parse(readFileSync(marker, 'utf8'))).toEqual({
+        home: session.homeDir,
+        tmp: session.tmpDir,
+      });
+      expect(process.env).toEqual({
+        ...runnerEnv,
+        [PER_FILE_TIMEOUT_ENV_VAR]: '4000',
+      });
+      expect(process.env.HOME).not.toBe(session.homeDir);
+      rmSync(marker);
+      process.env[PER_FILE_TIMEOUT_ENV_VAR] = '0';
+      await expect(runTestFile(file, childEnv)).rejects.toThrow(
+        PER_FILE_TIMEOUT_ENV_VAR,
+      );
+      expect(existsSync(marker)).toBe(false);
+    } finally {
+      if (saved === undefined) delete process.env[PER_FILE_TIMEOUT_ENV_VAR];
+      else process.env[PER_FILE_TIMEOUT_ENV_VAR] = saved;
+      removeSessionRoot(session);
+    }
+  }, 15000);
+
   it('kills a timed-out child and returns the passing retry', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'cli-runner-retry-'));
     try {
@@ -1017,3 +1066,32 @@ it('reaps a timed-out child even when timeout notification throws', async () => 
     rmSync(dir, { recursive: true, force: true });
   }
 }, 15_000);
+
+describe('external signal classification', () => {
+  it.skipIf(process.platform === 'win32')(
+    'does not retry a real self-SIGTERM without a timer timeout',
+    async () => {
+      const root = mkdtempSync(join(tmpdir(), 'cli-signal-policy-'));
+      try {
+        const file = join(root, 'signal.test.ts');
+        const marker = join(root, 'attempts');
+        writeFileSync(
+          file,
+          `import { appendFileSync } from 'node:fs'; appendFileSync(${JSON.stringify(marker)}, 'attempt'); process.kill(process.pid, 'SIGTERM');`,
+        );
+        const logs: string[] = [];
+        const result = await runTestFileWithTimeoutRetry(
+          file,
+          () => runTestFile(file),
+          (line) => logs.push(line),
+        );
+        expect(result.passed).toBe(false);
+        expect(result.timedOut).toBe(false);
+        expect(readFileSync(marker, 'utf8')).toBe('attempt');
+        expect(logs).toEqual([]);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  );
+});

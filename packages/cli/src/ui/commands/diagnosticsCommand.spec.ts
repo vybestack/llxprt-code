@@ -15,7 +15,7 @@ import {
   setupDiagnosticsTest,
   teardownDiagnosticsTest,
   type DiagnosticsTestSetup,
-} from './diagnosticsCommand-test-helpers.js';
+} from './__tests__/diagnosticsCommand-test-helpers.js';
 
 // Hoisted mocks for RuntimeContext
 const runtimeMocks = {

@@ -1,4 +1,4 @@
-import { curatedHistoryForTest } from '../../../core/src/test-utils/curated-history-fixture.js';
+import { curatedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -15,10 +15,7 @@ import {
   type Mock,
 } from 'bun:test';
 import type { ChatSessionConfig } from './chatSession.js';
-import type {
-  ToolDeclaration,
-  LegacyToolsetLike,
-} from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { ChatSession } from './chatSession.js';
 import type {
   IContent,
@@ -77,7 +74,7 @@ const retryWithBackoff = (await import(
 
 async function assertProviderRows(
   contents: AsyncIterable<IContent>,
-  expected: ReadonlyArray<Pick<IContent, 'speaker' | 'blocks'>>,
+  expected: Array<Pick<IContent, 'speaker' | 'blocks'>>,
 ): Promise<IContent[]> {
   const iterator = contents[Symbol.asyncIterator]();
   const rows: IContent[] = [];
@@ -118,7 +115,6 @@ function registerStubProvider(
     getModels: vi.fn(async () => []),
     getDefaultModel: () => 'stub-model',
     generateChatCompletion,
-    getAuthToken: vi.fn(async () => 'stub-auth-token'),
   });
 }
 
@@ -173,8 +169,10 @@ async function verifyRuntime1(): Promise<GenerateChatOptions> {
   const calls: GenerateChatOptions[] = [];
 
   const generateChatCompletionMock = vi.fn(async function* (
-    options: GenerateChatOptions,
-  ) {
+    input: GenerateChatOptions | AsyncIterable<IContent>,
+  ): AsyncGenerator<IContent> {
+    if (!('contents' in input)) throw new Error('Expected chat options');
+    const options = input;
     calls.push(options);
     yield {
       speaker: 'ai',
@@ -184,15 +182,17 @@ async function verifyRuntime1(): Promise<GenerateChatOptions> {
 
   registerStubProvider(generateChatCompletionMock);
 
-  const tools = [
+  const tools: ToolDeclaration[] = [
     {
-      functionDeclarations: [{ name: 'doThing' } as Record<string, unknown>],
+      name: 'doThing',
+      description: 'Do a thing',
+      parametersJsonSchema: {
+        type: 'object',
+        properties: { value: { type: 'string' } },
+      },
     },
-  ] as unknown as LegacyToolsetLike;
-
-  const generationConfig: ChatSessionConfig = {
-    tools: tools as unknown as ToolDeclaration[],
-  };
+  ];
+  const generationConfig: ChatSessionConfig = { tools };
 
   const historyService = new HistoryService();
   historyService.add({
@@ -250,59 +250,57 @@ async function verifyRuntime1(): Promise<GenerateChatOptions> {
 async function verifyRuntime2(): Promise<
   Awaited<ReturnType<ChatSession['sendMessage']>>
 > {
-  const generateChatCompletionMock = vi.fn(async function* () {
-    yield {
-      speaker: 'ai',
-      blocks: [
-        {
-          type: 'tool_call',
-          id: 'allowed-call',
-          name: 'read_file',
-          parameters: { file_path: 'file.txt' },
+  const generateChatCompletionMock = vi.fn(
+    async function* (): AsyncGenerator<IContent> {
+      yield {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'tool_call',
+            id: 'allowed-call',
+            name: 'read_file',
+            parameters: { file_path: 'file.txt' },
+          },
+          {
+            type: 'tool_call',
+            id: 'blocked-call',
+            name: 'run_shell_command',
+            parameters: { command: 'echo blocked' },
+          },
+        ],
+        metadata: {
+          providerMetadata: {
+            automaticFunctionCallingHistory: [
+              {
+                speaker: 'ai',
+                blocks: [
+                  {
+                    type: 'tool_call',
+                    id: 'history-allowed-call',
+                    name: 'read_file',
+                    parameters: { file_path: 'file.txt' },
+                  },
+                  {
+                    type: 'tool_call',
+                    id: 'history-blocked-call',
+                    name: 'run_shell_command',
+                    parameters: { command: 'echo blocked-history' },
+                  },
+                ],
+              },
+            ],
+          },
         },
-        {
-          type: 'tool_call',
-          id: 'blocked-call',
-          name: 'run_shell_command',
-          parameters: { command: 'echo blocked' },
-        },
-      ],
-      metadata: {
-        providerMetadata: {
-          automaticFunctionCallingHistory: [
-            {
-              speaker: 'ai',
-              blocks: [
-                {
-                  type: 'tool_call',
-                  id: 'history-allowed-call',
-                  name: 'read_file',
-                  parameters: { file_path: 'file.txt' },
-                },
-                {
-                  type: 'tool_call',
-                  id: 'history-blocked-call',
-                  name: 'run_shell_command',
-                  parameters: { command: 'echo blocked-history' },
-                },
-              ],
-            },
-          ],
-        },
-      },
-    };
-  });
+      };
+    },
+  );
 
   registerStubProvider(generateChatCompletionMock);
 
   const tools = [
-    {
-      functionDeclarations: [
-        { name: 'read_file' } as Record<string, unknown>,
-        { name: 'run_shell_command' } as Record<string, unknown>,
-      ],
-    },
-  ] as unknown as LegacyToolsetLike;
+    { name: 'read_file', parametersJsonSchema: {} },
+    { name: 'run_shell_command', parametersJsonSchema: {} },
+  ];
   const historyService = new HistoryService();
   const hookConfig = createHookConfig(false);
   const view = buildView(historyService, hookConfig);
@@ -325,52 +323,50 @@ async function verifyRuntime2(): Promise<
 async function verifyRuntime3(): Promise<
   Awaited<ReturnType<ChatSession['generateDirectMessage']>>
 > {
-  const generateChatCompletionMock = vi.fn(async function* () {
-    yield {
-      speaker: 'ai',
-      blocks: [
-        { type: 'text', text: 'visible text' },
-        {
-          type: 'tool_call',
-          id: 'blocked-call',
-          name: 'run_shell_command',
-          parameters: { command: 'echo blocked' },
+  const generateChatCompletionMock = vi.fn(
+    async function* (): AsyncGenerator<IContent> {
+      yield {
+        speaker: 'ai',
+        blocks: [
+          { type: 'text', text: 'visible text' },
+          {
+            type: 'tool_call',
+            id: 'blocked-call',
+            name: 'run_shell_command',
+            parameters: { command: 'echo blocked' },
+          },
+        ],
+        metadata: {
+          providerMetadata: {
+            automaticFunctionCallingHistory: [
+              {
+                speaker: 'ai',
+                blocks: [
+                  {
+                    type: 'tool_call',
+                    id: 'metadata-blocked-call',
+                    name: 'run_shell_command',
+                    parameters: { command: 'echo metadata-blocked' },
+                  },
+                ],
+              },
+            ],
+          },
         },
-      ],
-      metadata: {
-        providerMetadata: {
-          automaticFunctionCallingHistory: [
-            {
-              speaker: 'ai',
-              blocks: [
-                {
-                  type: 'tool_call',
-                  id: 'metadata-blocked-call',
-                  name: 'run_shell_command',
-                  parameters: { command: 'echo metadata-blocked' },
-                },
-              ],
-            },
-          ],
-        },
-      },
-    };
-    yield {
-      speaker: 'ai',
-      blocks: [{ type: 'text', text: 'still visible' }],
-    };
-  });
+      };
+      yield {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'still visible' }],
+      };
+    },
+  );
 
   registerStubProvider(generateChatCompletionMock);
 
   const tools = [
-    {
-      functionDeclarations: [
-        { name: 'read_file' } as Record<string, unknown>,
-        { name: 'run_shell_command' } as Record<string, unknown>,
-      ],
-    },
-  ] as unknown as LegacyToolsetLike;
+    { name: 'read_file', parametersJsonSchema: {} },
+    { name: 'run_shell_command', parametersJsonSchema: {} },
+  ];
   const hookConfig = createHookConfig(true);
   const view = buildView(new HistoryService(), hookConfig);
 

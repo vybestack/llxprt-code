@@ -21,7 +21,7 @@ import {
   createMockSettings,
   render as actRender,
   renderWithProviders,
-} from '../../../test-utils/render.js';
+} from '../../../__tests__/render.js';
 import { Colors } from '../../colors.js';
 import { SHELL_COMMAND_NAME, TOOL_STATUS } from '../../constants.js';
 import type { AnsiOutput } from '@vybestack/llxprt-code-core';

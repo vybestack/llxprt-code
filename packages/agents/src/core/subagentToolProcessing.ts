@@ -798,11 +798,14 @@ async function executeNonInteractiveTool(
     ctx.config,
     { interactive: false },
   );
+  // The processing context object is the stable per-run scheduler registry
+  // owner; every non-interactive tool call of one subagent run shares it so
+  // the acquisition and release balance on one entry.
   const completed = await executeToolCall(
     schedulerConfig,
     requestInfo,
     abortController.signal,
-    { messageBus: ctx.messageBus },
+    { messageBus: ctx.messageBus, owner: ctx },
   );
   return { status: completed.status, response: completed.response };
 }

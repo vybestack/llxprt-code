@@ -25,6 +25,7 @@ import { AnthropicProvider } from '../anthropic/AnthropicProvider.js';
 import type { ProviderManager } from '../ProviderManager.js';
 import { type IProviderConfig } from '../types/IProviderConfig.js';
 import type { OAuthManager } from '../auth/index.js';
+import type { OAuthManager as OAuthManagerContract } from '@vybestack/llxprt-code-auth';
 import type { IModel } from '../IModel.js';
 import { type ProviderAliasEntry } from './providerAliases.js';
 import { createBuiltinProviderContributionRegistry } from './runtimePlugins/registry.js';
@@ -350,7 +351,7 @@ export function createOpenAIResponsesAliasProvider(
   openaiApiKey: string | undefined,
   openaiBaseUrl: string | undefined,
   openaiProviderConfig: IProviderConfig,
-  oauthManager: OAuthManager,
+  oauthManager: OAuthManagerContract,
   authOnlyEnabled: boolean,
 ): OpenAIResponsesProvider {
   const resolvedBaseUrl = entry.config['base-url'] ?? openaiBaseUrl;
@@ -384,17 +385,10 @@ export function createOpenAIResponsesAliasProvider(
     aliasProviderConfig,
     oauthManager,
     entry.config.modelDefaults ?? [],
+    entry.alias,
   );
 
   enforceAliasAuthOnly(provider, authOnlyEnabled);
-
-  // Override the provider name to match the alias
-  Object.defineProperty(provider, 'name', {
-    value: entry.alias,
-    writable: false,
-    enumerable: true,
-    configurable: true,
-  });
 
   overrideAliasDefaultModel(provider, entry);
   overrideStaticModels(provider, entry);

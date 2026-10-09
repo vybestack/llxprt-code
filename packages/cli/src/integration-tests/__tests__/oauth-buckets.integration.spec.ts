@@ -27,7 +27,7 @@ import {
 import type { StandardProfile } from '@vybestack/llxprt-code-settings';
 import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import type { OAuthProvider } from '@vybestack/llxprt-code-providers/auth.js';
-import { assertDefined } from '../../test-utils/assertions.js';
+import { assertDefined } from '../../__tests__/assertions.js';
 import {
   createTempDirectory,
   cleanupTempDirectory,

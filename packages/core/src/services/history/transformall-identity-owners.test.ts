@@ -3,8 +3,8 @@ import { describe, expect, it } from 'bun:test';
 import { gcAndSweep } from 'bun:jsc';
 import { appendFileSync } from 'node:fs';
 import { RowOwnership } from '../../recording/rowOwnership.js';
-import { withSuffixFixture } from './history-suffix-test-helpers.js';
-import { ownerFixtureRow } from './chronology-rollback-owner-helpers.js';
+import { withCoreSuffixFixture } from './core-suffix-fixture-test-helpers.js';
+import { ownerFixtureRow } from './chronology-rollback-owner-test-helpers.js';
 import {
   exactTokenizer,
   rejectedValue,
@@ -30,7 +30,7 @@ function retainingEvidence(
 
 async function identityControl(size: number, mode: string): Promise<number> {
   const owners = new RowOwnership();
-  await withSuffixFixture(
+  await withCoreSuffixFixture(
     size,
     async (history) => {
       history.setTokenizerFactory(exactTokenizer());
@@ -98,7 +98,7 @@ describe('public transform identity ownership', () => {
 describe('public transform large valid rows', () => {
   for (const mode of ['detached', 'borrowed']) {
     it(`preserves a valid nine-MiB ${mode} row without a size ban`, async () => {
-      await withSuffixFixture(
+      await withCoreSuffixFixture(
         1,
         async (history) => {
           history.setTokenizerFactory(exactTokenizer());

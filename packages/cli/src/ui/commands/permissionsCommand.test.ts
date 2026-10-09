@@ -19,7 +19,7 @@ import {
 import { permissionsCommand } from './permissionsCommand.js';
 import { CommandKind } from './types.js';
 import * as trustedFolders from '../../config/trustedFolders.js';
-import { createMockCommandContext as createBaseMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { createMockCommandContext as createBaseMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 
 const realTrustedFoldersModule = {

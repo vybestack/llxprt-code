@@ -3,7 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { collectResumeRows } from '../test-utils/resumeRows.js';
+import { collectResumeRows } from './resumeRows.js';
 
 /**
  * @plan PLAN-20260214-SESSIONBROWSER.P30
@@ -17,7 +17,7 @@ import { collectResumeRows } from '../test-utils/resumeRows.js';
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { assertTruthy } from '../test-utils/assertions.js';
+import { assertTruthy } from '../__tests__/assertions.js';
 import { performResume } from '../services/performResume.js';
 import {
   cleanupSessionBrowserTestState,

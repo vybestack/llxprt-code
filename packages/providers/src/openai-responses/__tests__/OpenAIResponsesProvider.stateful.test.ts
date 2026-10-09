@@ -24,15 +24,11 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  clearActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ResponsesInputItem } from '../OpenAIResponsesTypes.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-auth';
@@ -191,17 +187,9 @@ describe('OpenAIResponsesProvider stateful conversations @issue:207', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     global.fetch = mockFetch as unknown as typeof fetch;
-
-    setActiveProviderRuntimeContext(
-      createProviderRuntimeContext({
-        settingsService: new SettingsService(),
-        runtimeId: TEST_RUNTIME_ID,
-      }),
-    );
   });
 
   afterEach(() => {
-    clearActiveProviderRuntimeContext();
     global.fetch = originalFetch;
   });
 

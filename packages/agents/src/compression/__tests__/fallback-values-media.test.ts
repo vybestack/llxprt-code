@@ -6,7 +6,7 @@ import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media
 import { HistoryMediaOwnership } from '@vybestack/llxprt-code-core/storage/history-media-ownership.js';
 import { withValueTransformFixture } from '@vybestack/llxprt-code-core/services/history/transform-value-test-helpers.js';
 import { DetachedHistoryJournal } from '@vybestack/llxprt-code-core/services/history/detachedHistoryJournal.js';
-import { suffixRow } from '@vybestack/llxprt-code-core/services/history/history-suffix-test-helpers.js';
+import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { batchGate } from '@vybestack/llxprt-code-core/services/history/addbatch-stream-test-helpers.js';
 import {
   detachedDigest,

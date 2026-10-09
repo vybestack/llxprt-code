@@ -9,7 +9,7 @@ import {
   iContentToHistoryItems,
   resolveEmojiFilterMode,
 } from './iContentToHistoryItems.js';
-import { assertHasType } from '../../test-utils/assertions.js';
+import { assertHasType } from '../../__tests__/assertions.js';
 
 describe('iContentToHistoryItems', () => {
   it('maps human text to user history item', () => {

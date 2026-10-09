@@ -20,7 +20,7 @@
 
 import { describe, it, expect, vi } from 'bun:test';
 import React, { act, type Dispatch, type SetStateAction } from 'react';
-import { renderHook, waitFor } from '../../../../test-utils/render.js';
+import { renderHook, waitFor } from '../../../../__tests__/render.js';
 import { useSubmitQuery, type UseSubmitQueryDeps } from '../useSubmitQuery.js';
 import { StreamingState, type HistoryItemWithoutId } from '../../../types.js';
 import type {
@@ -33,7 +33,7 @@ import type { UseHistoryManagerReturn } from '../../useHistoryManager.js';
 import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
 import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
 import { createDeferred } from './createDeferred.js';
-import { createFakeAgentFromMockClient } from '../../useAgentStream-test-helpers.js';
+import { createFakeAgentFromMockClient } from '../../__tests__/useAgentStream-test-helpers.js';
 import type { StreamRuntime } from '../../../cliUiRuntime.js';
 import {
   createLoadedSettings,

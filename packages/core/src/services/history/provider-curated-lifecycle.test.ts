@@ -10,7 +10,7 @@ import { buildProviderContent } from './historyProviderPipeline.js';
 import { providerFixtureRow } from './provider-curated-test-helpers.js';
 import type { IContent } from './IContent.js';
 import { consumeCuratedExit } from './curated-stream-test-helpers.js';
-import { withSuffixFixture } from './history-suffix-test-helpers.js';
+import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 
 const logger = new DebugLogger('test:provider-lifecycle');
 async function* source(

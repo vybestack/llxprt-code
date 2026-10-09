@@ -22,7 +22,6 @@ import { LoggingProviderWrapper } from '../LoggingProviderWrapper.js';
 import type {
   IProvider,
   GenerateChatOptions,
-  MaterializedGenerateChatOptions,
   ProviderToolset,
 } from '../IProvider.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
@@ -219,7 +218,9 @@ describe('LoggingProviderWrapper projection normalization parity (issue #2817)',
       base.transportInput?.metadataSource,
     );
   });
+});
 
+describe('LoggingProviderWrapper projection validation and absent capability (issue #2817)', () => {
   it('fails fast when no runtime context can be resolved for a projection', async () => {
     // Transport rejects an unresolvable runtime; projection must not silently
     // prepare an envelope against provider-default state instead.
@@ -245,9 +246,7 @@ describe('LoggingProviderWrapper projection normalization parity (issue #2817)',
     };
     const settings = new SettingsService();
     const wrapper = new LoggingProviderWrapper(plain);
-    const normalize = vi.fn(
-      (options: MaterializedGenerateChatOptions) => options,
-    );
+    const normalize = vi.fn((options: GenerateChatOptions) => options);
     const options = { contents: replayableContents([makeContent('Hello')]) };
     // The stream is not structurally cloneable; side-effect detection keys off
     // the cloned remainder, which is where normalization would inject state.

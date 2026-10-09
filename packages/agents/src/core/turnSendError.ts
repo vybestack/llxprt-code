@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
+
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { enrichSchemaDepthError } from './schemaDepthErrorEnrichment.js';
@@ -14,7 +16,7 @@ export function throwTurnSendError(
   runtimeContext: AgentRuntimeContext,
   promptId: string,
   durationMs: number,
-  tools: Array<{ functionDeclarations: Array<{ name: string }> }> | undefined,
+  tools: ToolDeclaration[] | undefined,
   logger: DebugLogger,
 ): never {
   logApiError(

@@ -3,7 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { collectResumeRows } from '../../test-utils/resumeRows.js';
+import { collectResumeRows } from '../../__tests__/resumeRows.js';
 
 /**
  * @plan PLAN-20260214-SESSIONBROWSER.P10

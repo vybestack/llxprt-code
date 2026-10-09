@@ -7,7 +7,7 @@ import {
 } from '../pendingWindowFallback.js';
 import { runDiskProviderFallback } from '../diskProviderFallback.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import { collectRawHistory } from '../../../../core/src/test-utils/collect-raw-history.js';
+import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import {
   withPendingFixture,
   pendingCaller,

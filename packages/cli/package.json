@@ -14,7 +14,7 @@
     "llxprt": "bin/llxprt.mjs"
   },
   "scripts": {
-    "build": "bun ../../scripts/build_package.ts && bun ../../scripts/chmod_executable.ts dist/index.js",
+    "build": "bun ../../scripts/build_package.ts && bun ../../scripts/chmod_executable.ts dist/index.js && bun ./scripts/dist-test-artifact-guard.ts",
     "start": "bun index.ts",
     "debug": "bun --inspect-brk index.ts",
     "postinstall": "node scripts/install-native-launchers.cjs",
@@ -38,8 +38,19 @@
     "!**/*.test.tsx",
     "!**/*.spec.ts",
     "!**/*.spec.tsx",
+    "!**/*.bun.ts",
+    "!**/*.test-d.ts",
     "!**/__tests__/**",
-    "!**/__snapshots__/**"
+    "!**/__snapshots__/**",
+    "!**/__mocks__/**",
+    "!**/*test-helpers*",
+    "!**/*.testHelpers.ts",
+    "!**/*.test-helper.ts",
+    "!**/*.fixtures.ts",
+    "!**/src/test-utils/**",
+    "!**/*.bun.tsx",
+    "!**/integration-tests/**",
+    "!**/__testhelpers__/**"
   ],
   "config": {
     "sandboxImageUri": "ghcr.io/vybestack/llxprt-code/sandbox:0.12.0"

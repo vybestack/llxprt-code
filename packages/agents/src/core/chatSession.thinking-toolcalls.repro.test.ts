@@ -9,7 +9,7 @@
  * max-lines/no-console disable).
  */
 
-import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-core/test-utils/collect-rows-for-assertions.js';
+import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { afterAll, describe, it, expect, vi, beforeEach } from 'bun:test';
 import { ChatSession } from './chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';

@@ -11,6 +11,7 @@ import {
   type HistoryBatchRows,
 } from './history-batch-values.js';
 import { withDetachedHistoryCheckpoint } from './detachedHistoryCheckpoint.js';
+import { withDetachedRollbackCheckpoint } from './detachedRollbackCheckpoint.js';
 import type { HistoryIndexedRows } from './historyMutationSnapshot.js';
 import {
   detachedValueSubmission,
@@ -28,6 +29,9 @@ export type {
 } from './detachedHistoryMutation.js';
 
 export interface DetachedHistoryAPI {
+  withRollbackCheckpoint<T>(
+    execute: (restore: () => Promise<void>) => Promise<T>,
+  ): Promise<T>;
   withCheckpoint<T>(
     execute: (checkpoint: HistoryIndexedRows) => Promise<T>,
     signal?: AbortSignal,
@@ -117,6 +121,8 @@ export function createDetachedHistoryAPI(
   ): Promise<void> =>
     enqueue(() => withDetachedHistoryMutation(task, host(), model, options));
   return {
+    withRollbackCheckpoint: (execute) =>
+      withDetachedRollbackCheckpoint(host(), enqueue, execute),
     withCheckpoint: (execute, signal) =>
       withDetachedHistoryCheckpoint(
         journal,

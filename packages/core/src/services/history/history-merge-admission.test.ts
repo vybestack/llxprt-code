@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
-import { withSuffixFixture } from './history-suffix-test-helpers.js';
+import { withCoreSuffixFixture } from './core-suffix-fixture-test-helpers.js';
 import { exactTokenizer, rowsOf } from './chronology-rollback-test-helpers.js';
 import { mergeRow, MergeRowHistory } from './history-merge-test-helpers.js';
 
@@ -12,10 +12,10 @@ function admissionRow(index: number): IContent {
 
 describe('history merge accepted source rows', () => {
   it('matches independent array addAll admission, skipping zero-block source rows', async () => {
-    await withSuffixFixture(
+    await withCoreSuffixFixture(
       3,
       async (source) => {
-        await withSuffixFixture(
+        await withCoreSuffixFixture(
           0,
           async (target) => {
             const oracle = new HistoryService();
@@ -49,10 +49,10 @@ describe('history merge accepted source rows', () => {
   });
 
   it('does not publish or change tokens when no source row is accepted', async () => {
-    await withSuffixFixture(
+    await withCoreSuffixFixture(
       1,
       async (source) => {
-        await withSuffixFixture(
+        await withCoreSuffixFixture(
           1,
           async (target) => {
             let changes = 0;

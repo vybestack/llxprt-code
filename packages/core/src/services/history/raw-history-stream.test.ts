@@ -1,8 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { collectRawHistory } from '../../test-utils/collect-raw-history.js';
+import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { suffixRow, withSuffixFixture } from './history-suffix-test-helpers.js';
+import {
+  suffixRow,
+  withSuffixFixture,
+} from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import type { IContent } from './IContent.js';
 
 function mixedRow(index: number): IContent {

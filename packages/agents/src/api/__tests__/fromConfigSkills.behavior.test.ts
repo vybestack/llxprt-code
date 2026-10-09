@@ -42,7 +42,7 @@ interface ProviderToolDeclaration {
 function modelVisibleSkillNames(config: Config): string[] {
   const chat = config.getAgentClient().getChat() as unknown as {
     generationConfig?: {
-      tools?: Array<{ functionDeclarations?: ProviderToolDeclaration[] }>;
+      tools?: ProviderToolDeclaration[];
     };
   };
   const toolGroups = chat.generationConfig?.tools;
@@ -51,10 +51,10 @@ function modelVisibleSkillNames(config: Config): string[] {
       'ChatSession carries no tool groups; ChatSession.setTools may have changed shape',
     );
   }
-  const declarations = toolGroups[0]?.functionDeclarations;
+  const declarations = toolGroups;
   if (!Array.isArray(declarations)) {
     throw new Error(
-      'ChatSession tool group has no functionDeclarations; ChatSession.setTools may have changed shape',
+      'ChatSession has no declarations; ChatSession.setTools may have changed shape',
     );
   }
   const declaration = declarations.find(

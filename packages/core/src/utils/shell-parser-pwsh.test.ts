@@ -15,7 +15,7 @@ import {
   extractCommandNamesForLanguage,
   hasCommandSubstitutionForLanguage,
 } from './shell-parser.js';
-import { resolvePwshTestPolicyFromEnv } from '../test-utils/pwsh-test-policy.js';
+import { resolvePwshTestPolicyFromEnv } from '@vybestack/llxprt-code-test-utils/core/pwsh-test-policy.js';
 
 await initializeParser();
 const pwshPolicy = resolvePwshTestPolicyFromEnv(

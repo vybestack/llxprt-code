@@ -15,6 +15,11 @@ import {
   ProviderNormalizationDisk,
   type ProviderBlockPointer,
 } from './provider-normalization-disk.js';
+import {
+  NormalizedProviderRequestSnapshot,
+  streamProviderContentSnapshot,
+  type ProviderRequestSnapshot,
+} from './provider-request-snapshot.js';
 
 export interface ProviderCuratedStreamOptions {
   readonly signal?: AbortSignal;
@@ -65,11 +70,14 @@ function appendContinuity(
       recordBlocks(disk, reconstructed);
       const reconstructionIndex = disk.append('normalized', reconstructed);
       disk.setNumber(`warn:reconstructed:${reconstructionIndex}`, 1);
+      if (tailOrigin !== undefined)
+        disk.setNumber(`pending:normalized:${reconstructionIndex}`, 1);
     }
   }
   const index = disk.append('normalized', row);
   recordScores(disk, row, 'normalized', index);
   if (tailOrigin !== undefined) {
+    disk.setNumber(`pending:normalized:${index}`, 1);
     disk.setNumber(`tail:normalized:${index}`, tailOrigin.index);
     for (let block = 0; block < tailOrigin.split.blocks.length; block++) {
       disk.setPointer(`origin:normalized:${index}:${block}`, {
@@ -105,8 +113,15 @@ function appendCompleted(
   disk: ProviderNormalizationDisk,
   row: IContent,
   normalizedIndex?: number,
+  pending = false,
 ): void {
   const index = disk.append('completed', row);
+  if (
+    pending ||
+    (normalizedIndex !== undefined &&
+      disk.number(`pending:normalized:${normalizedIndex}`) === 1)
+  )
+    disk.setNumber(`pending:completed:${index}`, 1);
   recordScores(disk, row, 'completed', index, normalizedIndex);
   if (
     normalizedIndex !== undefined &&
@@ -141,13 +156,18 @@ async function completeResponses(
     signal?.throwIfAborted();
     const row = disk.row('normalized', index);
     appendCompleted(disk, row, index);
-    appendMissingResponses(disk, row);
+    appendMissingResponses(
+      disk,
+      row,
+      disk.number(`pending:normalized:${index}`) === 1,
+    );
   }
 }
 
 function appendMissingResponses(
   disk: ProviderNormalizationDisk,
   row: IContent,
+  pending: boolean,
 ): void {
   if (row.speaker !== 'ai' || !hasValidBlocks(row)) return;
   const missing = row.blocks.filter(
@@ -170,11 +190,16 @@ function appendMissingResponses(
       isComplete: true,
     });
   }
-  appendCompleted(disk, {
-    speaker: 'tool',
-    blocks,
-    metadata: { synthetic: true, reason: 'orphaned_tool_call' },
-  });
+  appendCompleted(
+    disk,
+    {
+      speaker: 'tool',
+      blocks,
+      metadata: { synthetic: true, reason: 'orphaned_tool_call' },
+    },
+    undefined,
+    pending,
+  );
 }
 
 function score(response: ToolResponseBlock): number {
@@ -358,16 +383,44 @@ async function stageOutput(
     signal?.throwIfAborted();
     const row = stripped(disk.row('completed', index));
     if (row !== undefined) {
-      disk.append('ordered', row);
+      appendOrdered(disk, row, disk.number(`pending:completed:${index}`) === 1);
       anchors.output(row.metadata?.cacheAnchor === true);
     }
     const response = adjacentResponse(disk, index, tail);
     if (response !== undefined) {
       const sanitized = sanitizeProviderContentForSerialization(response);
-      disk.append('ordered', sanitized);
+      appendOrdered(disk, sanitized, hasPendingResponse(disk, index));
       anchors.output(sanitized.metadata?.cacheAnchor === true);
     }
   }
+}
+
+function appendOrdered(
+  disk: ProviderNormalizationDisk,
+  row: IContent,
+  pending: boolean,
+): void {
+  const index = disk.append('ordered', row);
+  if (!pending) return;
+  disk.setNumber(`pending:ordered:${index}`, 1);
+  if (disk.number('pending:first-output') === undefined)
+    disk.setNumber('pending:first-output', index);
+}
+
+function hasPendingResponse(
+  disk: ProviderNormalizationDisk,
+  index: number,
+): boolean {
+  for (const prefix of ['response', 'media']) {
+    const length =
+      disk.number(`${prefix === 'response' ? 'responses' : prefix}:${index}`) ??
+      0;
+    for (let slot = 0; slot < length; slot++) {
+      const pointer = disk.pointer(`${prefix}:${index}:${slot}`);
+      if (disk.number(`pending:completed:${pointer.row}`) === 1) return true;
+    }
+  }
+  return false;
 }
 
 export async function* streamProviderContent(
@@ -376,6 +429,17 @@ export async function* streamProviderContent(
   logger: DebugLogger,
   options: ProviderCuratedStreamOptions = {},
 ): AsyncGenerator<IContent, void, unknown> {
+  yield* streamProviderContentSnapshot(
+    await prepareProviderContentSnapshot(curated, tail, logger, options),
+  );
+}
+
+export async function prepareProviderContentSnapshot(
+  curated: AsyncIterable<IContent>,
+  tail: readonly IContent[],
+  logger: DebugLogger,
+  options: ProviderCuratedStreamOptions = {},
+): Promise<ProviderRequestSnapshot> {
   options.signal?.throwIfAborted();
   const disk = new ProviderNormalizationDisk(options.root);
   const anchors = new ProviderAnchorDiagnostics();
@@ -400,13 +464,15 @@ export async function* streamProviderContent(
     await indexResponses(disk, logger, options.signal);
     await stageOutput(disk, tail, anchors, options.signal);
     anchors.log(logger);
-    const length = disk.number('length:ordered') ?? 0;
-    for (let index = 0; index < length; index++) {
-      options.signal?.throwIfAborted();
-      yield* ownedRow(disk.row('ordered', index), options.ownership);
-    }
-  } finally {
+    return new NormalizedProviderRequestSnapshot(
+      disk,
+      tail.length,
+      options.signal,
+      options.ownership,
+    );
+  } catch (error) {
     disk.close();
+    throw error;
   }
 }
 
@@ -421,16 +487,4 @@ async function* combinedRows(
   for await (const row of curated) yield { row };
   for (let tailIndex = 0; tailIndex < tail.length; tailIndex++)
     yield { row: tail[tailIndex], tailIndex };
-}
-
-function* ownedRow(
-  row: IContent,
-  ownership?: RowOwnership,
-): Generator<IContent, void, unknown> {
-  ownership?.retain(row);
-  try {
-    yield row;
-  } finally {
-    ownership?.release(row);
-  }
 }

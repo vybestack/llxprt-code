@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { writeBodyFile } from '../lib/body-evidence-writer.js';
 import { describe, expect, it } from 'bun:test';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { DebugLogger } from '../../packages/core/src/debug/index.js';
 import { buildCuratedHistory } from '../../packages/core/src/services/history/historyCuration.js';
@@ -66,8 +67,8 @@ async function compare(size: number): Promise<void> {
         if (output !== undefined) {
           mkdirSync(output, { recursive: true });
           const name = `${provider}-${size}-${caching}`;
-          writeFileSync(join(output, `${name}-actual.json`), actual);
-          writeFileSync(join(output, `${name}-expected.json`), expected);
+          await writeBodyFile(join(output, `${name}-actual.json`), actual);
+          await writeBodyFile(join(output, `${name}-expected.json`), expected);
         }
       }
     }

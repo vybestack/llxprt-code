@@ -23,7 +23,7 @@ import {
 
 import { ChatSession } from '../../core/chatSession.js';
 import { PerformCompressionResult } from '../../core/turn.js';
-import { createChatSessionRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
@@ -32,7 +32,6 @@ import {
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import * as providerRuntime from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
 void vi.mock('@vybestack/llxprt-code-core/utils/delay.js', () => ({
@@ -54,6 +53,8 @@ function makeChatSession(
   runtimeSetup: ReturnType<typeof createChatSessionRuntime>,
   providerRuntimeSnapshot: ProviderRuntimeContext,
 ): ChatSession {
+  if (runtimeSetup.runtime.runtimeId === undefined)
+    throw new Error('Missing fixture runtime id');
   const runtimeState = createAgentRuntimeState({
     runtimeId: runtimeSetup.runtime.runtimeId,
     provider: runtimeSetup.provider.name,
@@ -356,7 +357,6 @@ describe('CompressionHandler wasRecentlyCompressed (issue #1792)', () => {
       ...runtimeSetup.runtime,
       config: runtimeSetup.config,
     };
-    providerRuntime.setActiveProviderRuntimeContext(providerRuntimeSnapshot);
   });
   afterEach(() => {
     vi.restoreAllMocks();
@@ -376,7 +376,6 @@ describe('CompressionHandler performCompression result (issue #1792)', () => {
       ...runtimeSetup.runtime,
       config: runtimeSetup.config,
     };
-    providerRuntime.setActiveProviderRuntimeContext(providerRuntimeSnapshot);
   });
   afterEach(() => {
     vi.restoreAllMocks();

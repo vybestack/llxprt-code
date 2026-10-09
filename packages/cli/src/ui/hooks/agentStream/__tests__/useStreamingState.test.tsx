@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { renderHook } from '../../../../test-utils/render.js';
+import { renderHook } from '../../../../__tests__/render.js';
 import { StreamingState } from '../../../types.js';
 import { useStreamingState } from '../useAgentStreamLifecycle.js';
 import type { TrackedToolCall } from '../../useReactToolScheduler.js';

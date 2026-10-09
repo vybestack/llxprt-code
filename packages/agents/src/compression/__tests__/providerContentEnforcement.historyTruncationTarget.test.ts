@@ -1,4 +1,4 @@
-import { curatedHistoryForTest } from '../../../../core/src/test-utils/curated-history-fixture.js';
+import { curatedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC

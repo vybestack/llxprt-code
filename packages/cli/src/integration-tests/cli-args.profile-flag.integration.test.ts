@@ -13,8 +13,8 @@ import {
   cleanupTempDirectory,
   createTempKeyfile,
 } from './test-utils.js';
-import { runCli } from './cli-args-test-helpers.js';
-import { testRegex } from '../test-utils/regex.js';
+import { runCli } from './__tests__/cli-args-test-helpers.js';
+import { testRegex } from '../__tests__/regex.js';
 
 function expectGeminiProviderAttempt(output: string): void {
   expect(output).toContain('Error when talking to gemini API');

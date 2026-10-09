@@ -48,11 +48,9 @@ import {
   type ToolPairingStreamOptions,
 } from './historyToolPairing.js';
 export type { ToolPairingStreamOptions } from './historyToolPairing.js';
-import {
-  isCuratedContent,
-  streamCuratedProviderHistory,
-} from './historyCuration.js';
-import { streamProviderContent } from './provider-curated-stream.js';
+import { isCuratedContent } from './historyCuration.js';
+import { streamProviderContentSnapshot } from './provider-request-snapshot.js';
+export type { ProviderRequestSnapshot } from './provider-request-snapshot.js';
 
 import {
   withSummaryRows,
@@ -773,16 +771,12 @@ export class HistoryService extends HistoryServiceCore {
     signal?: AbortSignal,
     historyOverride?: Iterable<IContent> | AsyncIterable<IContent>,
   ): AsyncGenerator<IContent, void, unknown> {
-    yield* streamProviderContent(
-      streamCuratedProviderHistory(
-        this.logger,
-        historyOverride ?? this.journal.streamRows(undefined, signal),
-        this.isCompressing,
-        signal,
+    yield* streamProviderContentSnapshot(
+      await this.prepareCuratedForProviderSnapshot(
+        tailContents,
+        { signal },
+        historyOverride,
       ),
-      tailContents,
-      this.logger,
-      { signal },
     );
   }
 

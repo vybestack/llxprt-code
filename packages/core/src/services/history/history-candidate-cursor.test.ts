@@ -3,7 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import { appendFileSync } from 'node:fs';
 import { RowOwnership } from '../../recording/rowOwnership.js';
 import { HistoryDensityRows } from './historyDensityRows.js';
-import { ownerFixtureRow } from './chronology-rollback-owner-helpers.js';
+import { ownerFixtureRow } from './chronology-rollback-owner-test-helpers.js';
 import { restoreChronologyEntry } from './historyChronology.js';
 import type { IContent } from './IContent.js';
 

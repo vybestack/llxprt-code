@@ -41,9 +41,7 @@ expectTypeOf<FunctionDeclaration>().toMatchTypeOf<{
 }>();
 
 // ToolDeclarations wraps function declarations.
-expectTypeOf<ToolDeclarations>().toMatchTypeOf<{
-  functionDeclarations?: FunctionDeclaration[];
-}>();
+expectTypeOf<ToolDeclarations>().toMatchTypeOf<FunctionDeclaration[]>();
 
 // TodoRead.schema is assignable to FunctionDeclaration.
 expectTypeOf<

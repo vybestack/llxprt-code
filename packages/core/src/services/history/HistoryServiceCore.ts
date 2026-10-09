@@ -22,6 +22,12 @@ import { finalizeHistoryMutation } from './finalizeHistoryMutation.js';
 import { CompressionOperationQueue } from './historyCompressionQueue.js';
 import { HistoryTokenTickets } from './history-token-tickets.js';
 import { type IContent } from './IContent.js';
+import { streamCuratedProviderHistory } from './historyCuration.js';
+import {
+  prepareProviderContentSnapshot,
+  type ProviderCuratedStreamOptions,
+} from './provider-curated-stream.js';
+import type { ProviderRequestSnapshot } from './provider-request-snapshot.js';
 import { EventEmitter } from 'events';
 // @plan:PLAN-20260603-ISSUE1584.P05 RuntimeTokenizerFactory used for injection path
 import type { RuntimeTokenizerFactory } from '../../runtime/contracts/RuntimeTokenizerFactory.js';
@@ -267,6 +273,24 @@ export abstract class HistoryServiceCore
         this.invalidatePendingSyncs();
         this.totalTokens = tokens;
       },
+    );
+  }
+
+  prepareCuratedForProviderSnapshot(
+    tailContents: readonly IContent[] = [],
+    options: ProviderCuratedStreamOptions = {},
+    historyOverride?: Iterable<IContent> | AsyncIterable<IContent>,
+  ): Promise<ProviderRequestSnapshot> {
+    return prepareProviderContentSnapshot(
+      streamCuratedProviderHistory(
+        this.logger,
+        historyOverride ?? this.journal.streamRows(undefined, options.signal),
+        this.isCompressing,
+        options.signal,
+      ),
+      tailContents,
+      this.logger,
+      options,
     );
   }
 

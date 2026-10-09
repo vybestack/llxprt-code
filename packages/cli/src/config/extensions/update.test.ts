@@ -18,7 +18,7 @@ import {
 import { checkForAllExtensionUpdates, updateExtension } from './update.js';
 import { isWorkspaceTrusted } from '../trustedFolders.js';
 import { ExtensionUpdateState } from '../../ui/state/extensions.js';
-import { createExtension } from '../../test-utils/createExtension.js';
+import { createExtension } from '../../__tests__/createExtension.js';
 import { ExtensionEnablementManager } from './extensionEnablement.js';
 
 const mockGit = {

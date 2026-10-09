@@ -14,7 +14,7 @@ import { todoCommand } from './todoCommand.js';
 import type { CommandContext } from './types.js';
 import type { Todo } from '@vybestack/llxprt-code-core';
 import * as fc from 'fast-check';
-import { assertDefined } from '../../test-utils/assertions.js';
+import { assertDefined } from '../../__tests__/assertions.js';
 
 /**
  * Mock context factory

@@ -10,7 +10,7 @@ import {
   withRollbackFixture,
 } from './chronology-rollback-test-helpers.js';
 import { changedTransformRow } from './row-transform-test-helpers.js';
-import { ownerFixtureRow } from './chronology-rollback-owner-helpers.js';
+import { ownerFixtureRow } from './chronology-rollback-owner-test-helpers.js';
 
 describe('public transform full retry', () => {
   for (const size of [512, 8192]) {

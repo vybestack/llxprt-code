@@ -14,7 +14,7 @@ import {
   FatalError,
   type MessageBus,
   type ProviderRuntimeContext,
-  resolveRuntimeSettingsService,
+  createRuntimeSettingsService,
 } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -418,7 +418,9 @@ export async function prepareRuntimeForProfile(
 ): Promise<BootstrapRuntimeState> {
   const runtimeInit = parsed.runtimeMetadata;
   const providedService = runtimeInit.settingsService;
-  const settingsService = resolveRuntimeSettingsService(providedService);
+  // Explicit composition default (issue #2616): when the bootstrap caller did
+  // not hand us a service, construct one here — no ambient resolution.
+  const settingsService = providedService ?? createRuntimeSettingsService();
 
   const runtimeId = runtimeInit.runtimeId ?? DEFAULT_RUNTIME_ID;
   const metadata = {

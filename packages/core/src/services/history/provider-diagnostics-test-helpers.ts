@@ -1,4 +1,4 @@
-import { forbidHistoryMaterializationForTest } from '../../test-utils/history-materialization-test-guard.js';
+import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, vi } from 'bun:test';
 import { createHash } from 'node:crypto';
@@ -10,7 +10,7 @@ import { DebugLogger, type LogEntry } from '../../debug/index.js';
 import type { IContent } from './IContent.js';
 import { HistoryService } from './HistoryService.js';
 import { providerFixtureRow } from './provider-curated-test-helpers.js';
-import { withSuffixFixture } from './history-suffix-test-helpers.js';
+import { withCoreSuffixFixture } from './core-suffix-fixture-test-helpers.js';
 import { buildProviderContent } from './historyProviderPipeline.js';
 import { buildCuratedHistory } from './historyCuration.js';
 
@@ -137,7 +137,7 @@ export async function captureMixedDiagnostics(
     ),
   );
   const oldEvents = take();
-  return withSuffixFixture(
+  return withCoreSuffixFixture(
     size,
     async (history) => {
       const actual = await providerDigest(

@@ -46,6 +46,12 @@ import { logHookCall } from '../telemetry/loggers.js';
 import { HookCallEvent } from '../telemetry/types.js';
 import { MessageBusType } from '../confirmation-bus/types.js';
 import type { HookExecutionResponse } from './hookBusContracts.js';
+import type {
+  HookModelSnapshotRequest,
+  AggregatedHookSnapshotResult,
+} from './hookSnapshotAggregator.js';
+import type { HookModelRowsInput } from './hookModelInputStream.js';
+import { executeHookSnapshotPlan } from './hookSnapshotExecution.js';
 
 const moduleDebugLogger = DebugLogger.getLogger(
   'llxprt:core:hooks:eventHandler',
@@ -150,6 +156,7 @@ export class HookEventHandler {
    * @requirement DELTA-HEVT-004
    */
   private disposed = false;
+  private readonly snapshotDisposal = new AbortController();
 
   /**
    * @plan PLAN-20250218-HOOKSYSTEM.P03
@@ -246,6 +253,60 @@ export class HookEventHandler {
       tool_response: toolResponse,
       ...(mcpContext && { mcp_context: mcpContext }),
     });
+  }
+
+  fireBeforeModelSnapshotEvent(
+    request: HookModelSnapshotRequest,
+    signal?: AbortSignal,
+  ): Promise<AggregatedHookSnapshotResult> {
+    return this.executeModelSnapshotEvent(
+      {
+        ...this.buildBaseInput(HookEventName.BeforeModel),
+        hook_event_name: HookEventName.BeforeModel,
+        llm_request: { ...request, version: 2 },
+      },
+      signal,
+    );
+  }
+
+  fireAfterModelSnapshotEvent(
+    request: HookModelSnapshotRequest,
+    response: Omit<HookLLMResponse, 'version'>,
+    signal?: AbortSignal,
+  ): Promise<AggregatedHookSnapshotResult> {
+    return this.executeModelSnapshotEvent(
+      {
+        ...this.buildBaseInput(HookEventName.AfterModel),
+        hook_event_name: HookEventName.AfterModel,
+        llm_request: { ...request, version: 2 },
+        llm_response: { ...response, version: 2 },
+      },
+      signal,
+    );
+  }
+
+  private async executeModelSnapshotEvent(
+    input: HookModelRowsInput,
+    signal?: AbortSignal,
+  ): Promise<AggregatedHookSnapshotResult> {
+    const combined =
+      signal === undefined
+        ? this.snapshotDisposal.signal
+        : AbortSignal.any([signal, this.snapshotDisposal.signal]);
+    combined.throwIfAborted();
+    const plan = this.planner.createExecutionPlan(input.hook_event_name);
+    const results =
+      plan === null
+        ? []
+        : await executeHookSnapshotPlan(this.runner, plan, input, combined);
+    const aggregated = this.aggregator.aggregateSnapshotResults(
+      results,
+      combined,
+    );
+    this.debugLogger.debug(
+      `Hook snapshot event ${input.hook_event_name}: ${results.length} hook(s), success=${aggregated.success}`,
+    );
+    return aggregated;
   }
 
   /**
@@ -998,6 +1059,9 @@ export class HookEventHandler {
     // Line 131: SET this.isDisposed = true (idempotent)
     if (this.disposed) return;
     this.disposed = true;
+    this.snapshotDisposal.abort(
+      new Error('HookEventHandler has been disposed.'),
+    );
     // Lines 132-134: IF subscription exists → unsubscribe
     this.subscriptionHandle?.unsubscribe();
     this.subscriptionHandle = undefined;

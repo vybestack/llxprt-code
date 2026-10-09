@@ -9,7 +9,7 @@ import { BucketFailoverHandlerImpl } from './BucketFailoverHandlerImpl.js';
 import {
   createBucketFailoverFixture,
   makeToken,
-} from './BucketFailoverHandlerImpl.test-helpers.js';
+} from './__tests__/BucketFailoverHandlerImpl.test-helpers.js';
 
 describe('BucketFailoverHandlerImpl #11', () => {
   it('resetSession() clears tried set but keeps current bucket position', async () => {

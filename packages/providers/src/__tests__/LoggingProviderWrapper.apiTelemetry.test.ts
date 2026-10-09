@@ -12,7 +12,7 @@ import { describe, expect, it, vi, beforeEach, type Mock } from 'bun:test';
 import { LoggingProviderWrapper } from '../LoggingProviderWrapper.js';
 import type { GenerateChatOptions, IContent, IProvider } from '../IProvider.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import * as loggers from '@vybestack/llxprt-code-telemetry/telemetry/loggers.js';
 import {
   StubProvider,

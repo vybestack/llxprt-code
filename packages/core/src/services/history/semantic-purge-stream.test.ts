@@ -1,14 +1,14 @@
-import { observeHistorySynchronouslyForTest } from '../../test-utils/synchronous-history-test-observation.js';
-import { forbidHistoryMaterializationForTest } from '../../test-utils/history-materialization-test-guard.js';
+import { observeHistorySynchronouslyForTest } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
+import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { gcAndSweep } from 'bun:jsc';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 import { SemanticMediaPurgeStreamCoordinator } from './semantic-purge-stream.js';
-import { EagerSemanticPurgeOracle } from './semantic-purge-eager-test-oracle.js';
-import { withSuffixFixture } from './history-suffix-test-helpers.js';
-import { ownerFixtureRow } from './chronology-rollback-owner-helpers.js';
+import { EagerSemanticPurgeOracle } from './semantic-purge-eager-test-helpers.js';
+import { withCoreSuffixFixture } from './core-suffix-fixture-test-helpers.js';
+import { ownerFixtureRow } from './chronology-rollback-owner-test-helpers.js';
 import { RowOwnership } from '../../recording/rowOwnership.js';
 import {
   exactTokenizer,
@@ -83,11 +83,11 @@ async function verifyFullFixture(
   size: number,
 ): Promise<ReturnType<RowOwnership['snapshot']>> {
   const owners = new RowOwnership();
-  await withSuffixFixture(
+  await withCoreSuffixFixture(
     size,
     async (history) => {
       history.setTokenizerFactory(exactTokenizer());
-      await withSuffixFixture(
+      await withCoreSuffixFixture(
         size,
         async (eager) => {
           eager.setTokenizerFactory(exactTokenizer());
@@ -154,7 +154,7 @@ describe('complete disk semantic purge membership', () => {
 
 describe('detached semantic purge transactions', () => {
   it('returns frozen detached rows on independent cursors and fails fast after close', async () => {
-    await withSuffixFixture(
+    await withCoreSuffixFixture(
       3,
       async (history) => {
         const coordinator = new SemanticMediaPurgeStreamCoordinator(history, {
@@ -181,7 +181,7 @@ describe('detached semantic purge transactions', () => {
   });
 
   it('retains the same base and cache-boundary identity after a rejected commit', async () => {
-    await withSuffixFixture(
+    await withCoreSuffixFixture(
       3,
       async (history) => {
         const coordinator = new SemanticMediaPurgeStreamCoordinator(history, {
@@ -291,7 +291,7 @@ describe('stream purge rollback and concurrency', () => {
 
 describe('stream purge persistence and row admission', () => {
   it('preserves a persistence rejection object without rewriting or compensation', async () => {
-    await withSuffixFixture(
+    await withCoreSuffixFixture(
       3,
       async (history) => {
         const before = Array.from({ length: 3 }, (_, index) => purgeRow(index));
@@ -325,7 +325,7 @@ describe('stream purge persistence and row admission', () => {
   });
 
   it('compensates candidate persistence after tokenization rejects and preserves its error', async () => {
-    await withSuffixFixture(
+    await withCoreSuffixFixture(
       3,
       async (history) => {
         const failure = new Error('tokenization failed');
@@ -367,7 +367,7 @@ describe('stream purge persistence and row admission', () => {
 describe('semantic purge unrestricted row size', () => {
   it('accepts a valid row larger than the fixture budget without truncating it', async () => {
     const bytes = 8 * 1024 * 1024 + 1;
-    await withSuffixFixture(
+    await withCoreSuffixFixture(
       1,
       async (history) => {
         const coordinator = new SemanticMediaPurgeStreamCoordinator(history, {

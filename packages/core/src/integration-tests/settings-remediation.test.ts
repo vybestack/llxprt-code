@@ -6,15 +6,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { Config } from '../config/config.js';
-import {
-  resetSettingsService,
-  registerSettingsService,
-} from '@vybestack/llxprt-code-settings';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '../runtime/providerRuntimeContext.js';
 import process from 'process';
 import { performance } from 'node:perf_hooks';
 
@@ -33,18 +25,7 @@ describe('Settings Remediation Integration', () => {
   let mockEventListeners: Array<(...args: unknown[]) => void>;
 
   beforeEach(() => {
-    resetSettingsService();
-
     settingsService = new SettingsService();
-
-    const runtime = createProviderRuntimeContext({
-      settingsService,
-      runtimeId: 'test-settings-remediation',
-      metadata: { source: 'settings-remediation.test.ts' },
-    });
-    setActiveProviderRuntimeContext(runtime);
-
-    registerSettingsService(settingsService);
 
     mockEventListeners = [];
 
@@ -68,7 +49,6 @@ describe('Settings Remediation Integration', () => {
     });
     mockEventListeners = [];
 
-    resetSettingsService();
     vi.clearAllMocks();
   });
 
@@ -252,16 +232,7 @@ describe('Settings Remediation Integration', () => {
         'value',
       );
 
-      resetSettingsService();
-
       const newSettingsService = new SettingsService();
-      const newRuntime = createProviderRuntimeContext({
-        settingsService: newSettingsService,
-        runtimeId: 'test-new-instance',
-        metadata: { source: 'persistence-test' },
-      });
-      setActiveProviderRuntimeContext(newRuntime);
-      registerSettingsService(newSettingsService);
 
       const newConfig = new Config({
         sessionId: 'new-session',

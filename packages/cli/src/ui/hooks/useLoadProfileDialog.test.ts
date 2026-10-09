@@ -11,12 +11,12 @@
 
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { act } from 'react';
-import { renderHook, waitFor } from '../../test-utils/render.js';
-import { createDeferred } from '../../test-utils/async.js';
+import { renderHook, waitFor } from '../../__tests__/render.js';
+import { createDeferred } from '../../__tests__/async.js';
 import { MessageType } from '../types.js';
 import { createDialogStore } from '../stores/dialog/dialogStore.js';
 import { createDialogOpeners } from '../stores/dialog/dialogOpeners.js';
-import { hasDialogRequest } from '../../test-utils/dialogStore.js';
+import { hasDialogRequest } from '../../__tests__/dialogStore.js';
 
 const useRuntimeApiMock = vi.fn();
 

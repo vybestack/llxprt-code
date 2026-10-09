@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-core/test-utils/collect-rows-for-assertions.js';
+import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { assertDefined } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import * as fs from 'node:fs';

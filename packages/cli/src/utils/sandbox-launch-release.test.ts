@@ -27,7 +27,7 @@ import {
   type ReadinessGate,
   type SpawnMock,
   type TrackedChild,
-} from './sandbox-launch-release.test-helpers.js';
+} from './__tests__/sandbox-launch-release.test-helpers.js';
 
 function completedEngineProcess(stdout: string): ChildProcess {
   const proc = new EventEmitter() as unknown as ChildProcess;
@@ -297,6 +297,9 @@ describe('#3469 launch resource release', () => {
       args: string[],
       options: childProcess.SpawnOptions,
     ) => {
+      if (command.startsWith('podman machine ssh')) {
+        return completedEngineProcess('ok');
+      }
       if (command === 'ssh-add') {
         return completedEngineProcess('');
       }
@@ -378,9 +381,6 @@ describe('#3469 launch resource release', () => {
     execSyncMock.mockImplementation(((command: string) => {
       if (command.includes('system connection list')) {
         return Buffer.from(PODMAN_MACHINE_CONNECTION);
-      }
-      if (command.startsWith('podman machine ssh')) {
-        return Buffer.from('ok');
       }
       if (command.includes('ps -a --format')) {
         if (failure.nameLookup === true) {

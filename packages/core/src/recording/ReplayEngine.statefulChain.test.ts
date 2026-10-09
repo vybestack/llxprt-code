@@ -27,7 +27,7 @@ import {
   contentLine,
   compressedLine,
   writeJsonlFile,
-} from './replay-test-helpers.js';
+} from './__tests__/replay-test-helpers.js';
 import { type IContent } from '../services/history/IContent.js';
 
 const CODEX_PROVIDER_BASE_URL = 'https://chatgpt.com/backend-api/codex';

@@ -1,5 +1,5 @@
-import { observeHistorySynchronouslyForTest as testHistory } from '../test-utils/synchronous-history-test-observation.js';
-import { curatedHistoryForTest } from '../test-utils/curated-history-fixture.js';
+import { observeHistorySynchronouslyForTest as testHistory } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
+import { curatedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 /**
  * Test to reproduce duplicate tool call IDs during compression
  *

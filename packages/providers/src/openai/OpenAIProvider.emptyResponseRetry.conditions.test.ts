@@ -7,9 +7,8 @@
 import { describe, it, expect, beforeEach, vi, type Mock } from 'bun:test';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import type { ITool } from '../ITool.js';
-import { resetSettingsService } from '@vybestack/llxprt-code-settings';
-import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
@@ -22,7 +21,6 @@ describe('OpenAIProvider empty response retry conditions (issue #584)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    resetSettingsService();
     const runtime = initializeTestProviderRuntime({
       runtimeId: `openai-provider.emptyResponseRetry.${Math.random()
         .toString(36)
@@ -143,22 +141,18 @@ describe('OpenAIProvider empty response retry conditions (issue #584)', () => {
 
     const tools: ITool[] = [
       {
-        functionDeclarations: [
-          {
-            name: 'FindFiles',
-            description: 'Find files matching a pattern',
-            parametersJsonSchema: {
-              type: 'object',
-              properties: {
-                pattern: {
-                  type: 'string',
-                  description: 'The glob pattern to match',
-                },
-              },
-              required: ['pattern'],
+        name: 'FindFiles',
+        description: 'Find files matching a pattern',
+        parametersJsonSchema: {
+          type: 'object',
+          properties: {
+            pattern: {
+              type: 'string',
+              description: 'The glob pattern to match',
             },
           },
-        ],
+          required: ['pattern'],
+        },
       },
     ];
 
@@ -251,22 +245,18 @@ describe('OpenAIProvider empty response retry conditions (issue #584)', () => {
 
     const tools: ITool[] = [
       {
-        functionDeclarations: [
-          {
-            name: 'FindFiles',
-            description: 'Find files matching a pattern',
-            parametersJsonSchema: {
-              type: 'object',
-              properties: {
-                pattern: {
-                  type: 'string',
-                  description: 'The glob pattern to match',
-                },
-              },
-              required: ['pattern'],
+        name: 'FindFiles',
+        description: 'Find files matching a pattern',
+        parametersJsonSchema: {
+          type: 'object',
+          properties: {
+            pattern: {
+              type: 'string',
+              description: 'The glob pattern to match',
             },
           },
-        ],
+          required: ['pattern'],
+        },
       },
     ];
 

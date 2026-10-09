@@ -9,7 +9,7 @@ import type {
 } from '@vybestack/llxprt-code-core';
 import { foldDurableRows } from '@vybestack/llxprt-code-core/recording/durableRowFold.js';
 import { chatCommand } from './chatCommand.js';
-import { withChatMutationFixture } from './chat-mutation-test-fixture.js';
+import { withChatMutationFixture } from './chat-mutation-test-helpers.js';
 
 const image =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=';

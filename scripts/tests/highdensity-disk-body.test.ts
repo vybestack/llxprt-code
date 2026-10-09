@@ -1,11 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { PerformCompressionResult } from '../../packages/core/src/core/turn.js';
+import { writeBodyFile } from '../lib/body-evidence-writer.js';
 import { describe, expect, it } from 'bun:test';
-import { writeFileSync } from 'node:fs';
+
 import { join } from 'node:path';
 import type { IContent } from '../../packages/core/src/services/history/IContent.js';
 import { DebugLogger } from '../../packages/core/src/debug/index.js';
-import { withSuffixFixture } from '../../packages/core/src/services/history/history-suffix-test-helpers.js';
+import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { buildCuratedHistory } from '../../packages/core/src/services/history/historyCuration.js';
 import { buildProviderContent } from '../../packages/core/src/services/history/historyProviderPipeline.js';
 import { providerPendingFixture } from '../../packages/core/src/services/history/provider-curated-test-helpers.js';
@@ -38,8 +39,8 @@ async function compareBody(
   const output = process.env.HIGHDENSITY_BODY_OUTPUT;
   if (output !== undefined) {
     const name = `highdensity-${stage}-${provider}-${size}-${caching}`;
-    writeFileSync(join(output, name + '-actual.json'), actual);
-    writeFileSync(join(output, name + '-expected.json'), expected);
+    await writeBodyFile(join(output, name + '-actual.json'), actual);
+    await writeBodyFile(join(output, name + '-expected.json'), expected);
   }
   expect(actual).toBe(expected);
   return actual.length;

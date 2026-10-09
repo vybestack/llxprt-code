@@ -7,6 +7,5 @@
     "**/*.test.*",
     "**/*.test-d.*",
     "**/*.spec.*"
-  ],
-  "references": [{ "path": "../test-utils" }]
+  ]
 }

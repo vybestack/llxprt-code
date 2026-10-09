@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
-import { renderHook } from '../../../../test-utils/render.js';
+import { renderHook } from '../../../../__tests__/render.js';
 import { useShellFocusAutoReset } from './useShellFocusAutoReset.js';
 import { ToolCallStatus } from '../../../types.js';
 import { SHELL_COMMAND_NAME } from '../../../constants.js';

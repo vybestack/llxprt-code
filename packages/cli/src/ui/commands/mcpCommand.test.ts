@@ -6,7 +6,7 @@
 
 import { vi, describe, it, expect, beforeEach, type Mock } from 'bun:test';
 import { mcpCommand } from './mcpCommand.js';
-import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import {
   MCPServerStatus,
   getMCPServerStatus,

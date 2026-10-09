@@ -7,7 +7,7 @@
 import { vi, describe, it, expect, beforeEach, type Mock } from 'bun:test';
 import { quotaCommand } from './quotaCommand.js';
 import { type CommandContext, CommandKind } from './types.js';
-import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { MessageType } from '../types.js';
 
 const realLlxprtCodeProvidersModule = {

@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { act } from 'react';
-import { renderHook, waitFor } from '../../test-utils/render.js';
+import { renderHook, waitFor } from '../../__tests__/render.js';
 import { useShellPathCompletion } from './useShellPathCompletion.js';
 import { useTextBuffer } from '../components/shared/text-buffer.js';
 import type { FileSystemStructure } from '@vybestack/llxprt-code-test-utils';

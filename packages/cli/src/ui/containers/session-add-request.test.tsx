@@ -7,7 +7,7 @@
 import { describe, expect, it, vi } from 'bun:test';
 import { StrictMode } from 'react';
 import { Config } from '@vybestack/llxprt-code-core';
-import { render } from '../../test-utils/render.js';
+import { render } from '../../__tests__/render.js';
 import { createTurnStore } from '../stores/turn/turnStore.js';
 
 // Provider identity is unrelated to history delivery.

@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { writeBodyFile } from '../lib/body-evidence-writer.js';
 import { describe, expect, it } from 'bun:test';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { accountingRow } from '../../packages/core/src/services/history/token-accounting-stream-test-helpers.js';
 import { withAgentCarry } from '../../packages/agents/src/api/__tests__/helpers/agent-carry-fixture.js';
@@ -30,8 +31,11 @@ async function verifyBodies(size: number): Promise<void> {
         if (output !== undefined) {
           mkdirSync(output, { recursive: true });
           const prefix = `${size}-${provider}-${caching}`;
-          writeFileSync(join(output, `${prefix}-expected.json`), expected);
-          writeFileSync(join(output, `${prefix}-actual.json`), actual);
+          await writeBodyFile(
+            join(output, `${prefix}-expected.json`),
+            expected,
+          );
+          await writeBodyFile(join(output, `${prefix}-actual.json`), actual);
         }
         expect(actual).toBe(expected);
       }

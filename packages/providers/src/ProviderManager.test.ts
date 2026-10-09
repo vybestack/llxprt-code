@@ -4,21 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { ProviderManager } from './ProviderManager.js';
 import { LoggingProviderWrapper } from './LoggingProviderWrapper.js';
 import type { IProvider } from './IProvider.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 // import { ProviderPerformanceTracker } from './logging/ProviderPerformanceTracker.js'; // Not used in tests
-import {
-  registerSettingsService,
-  resetSettingsService,
-} from '@vybestack/llxprt-code-settings';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
-  clearActiveProviderRuntimeContext,
   createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
   type ProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
@@ -49,7 +43,6 @@ function setTestRuntimeContext(
     config: createRuntimeConfigStub(),
     metadata: { source: 'ProviderManager.test' },
   });
-  setActiveProviderRuntimeContext(runtime);
   return runtime;
 }
 
@@ -64,12 +57,7 @@ describe('ProviderManager provider ordering', () => {
 
   let runtime: ProviderRuntimeContext;
   beforeEach(() => {
-    resetSettingsService();
     runtime = setTestRuntimeContext();
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
   });
 
   it('prioritizes core providers and sorts remaining alphabetically', () => {
@@ -107,12 +95,6 @@ describe('ProviderManager provider ordering', () => {
     // An ambient context with a config is present, but the manager receives
     // only { settingsService } — it must NOT backfill config from ambient
     // state, so no LoggingProviderWrapper is applied.
-    setActiveProviderRuntimeContext({
-      settingsService,
-      config: runtimeConfig,
-      runtimeId: 'provider-manager.no-ambient-adoption-test',
-      metadata: { source: 'ProviderManager.test' },
-    });
 
     const withoutConfig = new ProviderManager({ settingsService });
     withoutConfig.registerProvider(createProvider('no-config-provider'));
@@ -142,9 +124,7 @@ describe('ProviderPerformanceTracker', () => {
     expect(manager.getProviderMetrics()).toBeNull();
   });
   beforeEach(() => {
-    resetSettingsService();
     runtime = setTestRuntimeContext();
-    registerSettingsService(new SettingsService());
     mockProvider = {
       name: 'test-provider',
       isDefault: false,
@@ -152,10 +132,6 @@ describe('ProviderPerformanceTracker', () => {
       getDefaultModel: vi.fn().mockReturnValue('default-model'),
       generateChatCompletion: vi.fn(),
     } as unknown as IProvider;
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
   });
 
   it('should accumulate session tokens correctly', () => {
@@ -214,7 +190,6 @@ describe('ProviderPerformanceTracker', () => {
 
   it('should reset session token usage', () => {
     const manager = new ProviderManager(runtime);
-    resetSettingsService();
 
     // Register a mock provider
     manager.registerProvider(mockProvider);

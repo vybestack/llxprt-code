@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
+
 /**
  * @fileoverview Pure request-preparation helpers extracted from StreamProcessor.
  *
@@ -14,7 +16,6 @@
 
 import type { BeforeModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 import {
-  toolDeclarationsFromLegacyToolset,
   type ToolChoice,
   type ModelStreamChunk,
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
@@ -26,7 +27,14 @@ import type { SendMessageParams } from './chatSession.js';
 import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
 import { sanitizeProviderContentForSerialization } from '@vybestack/llxprt-code-core/services/history/historyCloneUtils.js';
 import { logApiRequest } from './turnLogging.js';
+import { fireSourceToolSelectionHook } from './source-tool-selection-hook.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import {
+  providerRequestRows,
+  type ProviderRequestRows,
+  type ProviderRequestSnapshot,
+} from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import type { ProviderCuratedStreamOptions } from '@vybestack/llxprt-code-core/services/history/provider-curated-stream.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
@@ -37,22 +45,18 @@ import {
   SCOPE_LOCAL_EMIT_TOOL_NAME,
 } from './toolGovernance.js';
 
-export type ToolGroupArray = Array<{
-  functionDeclarations?: Array<{
-    name: string;
-    description?: string;
-    parametersJsonSchema?: unknown;
-  }>;
-}>;
-
 export interface ToolSelectionHookResult {
-  tools: unknown;
+  tools: ToolDeclaration[] | undefined;
   allowedFunctionNames: string[] | undefined;
+  conversationLogEmptyTools?: boolean;
 }
 
 /** Result of preparing a request payload with its runtime contexts. */
 export interface PreparedRequest {
-  requestPayload: { contents: IContent[]; tools: unknown };
+  requestPayload: {
+    contents: IContent[];
+    tools: ToolDeclaration[] | undefined;
+  };
   baseRuntimeContext: ProviderRuntimeContext;
 }
 
@@ -81,17 +85,64 @@ export function streamSemanticPurgeRequest(
   };
 }
 
-/** Collect normalized rows for the existing enforcement and hook request contracts. */
-export async function buildRequestContentsResult(
+export interface RequestContentsSnapshot {
+  readonly contents: ProviderRequestRows;
+  readonly pending: ProviderRequestSnapshot['pending'] & {
+    readonly isPending: (index: number) => boolean;
+  };
+}
+
+export async function withRequestContentsSnapshot<T>(
   userContents: IContent | IContent[],
   historyService: HistoryService,
+  consume: (request: RequestContentsSnapshot) => Promise<T>,
+  options: ProviderCuratedStreamOptions = {},
   historyOverride?: Iterable<IContent> | AsyncIterable<IContent>,
-  signal?: AbortSignal,
-): Promise<{ contents: IContent[]; pending: IContent[] }> {
+): Promise<T> {
+  const owner = await openRequestContentsSnapshot(
+    userContents,
+    historyService,
+    options,
+    historyOverride,
+  );
+  try {
+    return await consume(
+      Object.freeze({
+        contents: providerRequestRows(owner),
+        pending: Object.freeze({
+          ...owner.pending,
+          isPending: (index: number) => owner.isPending(index),
+        }),
+      }),
+    );
+  } finally {
+    owner.close();
+  }
+}
+
+/** The caller closes this disk selection after the final response or failed attempt. */
+export function openRequestContentsSnapshot(
+  userContents: IContent | IContent[],
+  historyService: HistoryService,
+  options: ProviderCuratedStreamOptions = {},
+  historyOverride?: Iterable<IContent> | AsyncIterable<IContent>,
+): Promise<ProviderRequestSnapshot> {
+  options.signal?.throwIfAborted();
+  return historyService.prepareCuratedForProviderSnapshot(
+    preparePendingContents(userContents, historyService),
+    options,
+    historyOverride,
+  );
+}
+
+function preparePendingContents(
+  userContents: IContent | IContent[],
+  historyService: HistoryService,
+): IContent[] {
   const inputArray = Array.isArray(userContents)
     ? userContents
     : [userContents];
-  const userIContents: IContent[] = inputArray.map((content) => {
+  return inputArray.map((content) => {
     const turnKey = historyService.generateTurnKey();
     const idGen = historyService.getIdGeneratorCallback(turnKey);
     return {
@@ -99,6 +150,16 @@ export async function buildRequestContentsResult(
       metadata: { ...(content.metadata ?? {}), id: idGen(), turnId: turnKey },
     };
   });
+}
+
+/** Collect normalized rows for the existing enforcement and hook request contracts. */
+export async function buildRequestContentsResult(
+  userContents: IContent | IContent[],
+  historyService: HistoryService,
+  historyOverride?: Iterable<IContent> | AsyncIterable<IContent>,
+  signal?: AbortSignal,
+): Promise<{ contents: IContent[]; pending: IContent[] }> {
+  const userIContents = preparePendingContents(userContents, historyService);
   const contents: IContent[] = [];
   for await (const row of historyService.getCuratedForProviderStream(
     userIContents,
@@ -115,8 +176,8 @@ export async function buildRequestContentsResult(
  */
 export function selectRequestTools(
   params: SendMessageParams,
-  fallbackTools: unknown,
-): unknown {
+  fallbackTools: ToolDeclaration[] | undefined,
+): ToolDeclaration[] | undefined {
   return params.config?.tools ?? fallbackTools;
 }
 
@@ -134,6 +195,7 @@ export async function applyToolSelectionHook(
   configForHooks: AgentRuntimeContext['providerRuntime']['config'],
   tools: AgentClientGenerateConfig['tools'],
   model: string,
+  preserveRuntimeRegistry = false,
 ): Promise<ToolSelectionHookResult> {
   if (configForHooks === undefined) {
     return { tools, allowedFunctionNames: undefined };
@@ -156,32 +218,41 @@ export async function applyToolSelectionHook(
     return { tools, allowedFunctionNames: undefined };
   }
 
-  await hookSystem.initialize();
-  const toolsFromConfig = Array.isArray(tools) ? (tools as ToolGroupArray) : [];
-  const toolSelectionResult = await hookSystem.fireBeforeToolSelectionEvent({
-    model,
-    contents: [],
-    tools: toolDeclarationsFromLegacyToolset(toolsFromConfig),
-  });
+  if (!preserveRuntimeRegistry || !hookSystem.isInitialized()) {
+    await hookSystem.initialize();
+  }
+  const toolsFromConfig = Array.isArray(tools) ? tools : [];
+  const toolSelectionResult = preserveRuntimeRegistry
+    ? await fireSourceToolSelectionHook(hookSystem, model, toolsFromConfig)
+    : await hookSystem.fireBeforeToolSelectionEvent({
+        model,
+        contents: [],
+        tools: toolsFromConfig,
+      });
   const modifiedConfig = toolSelectionResult?.applyToolChoiceModifications({
     tools: toolsFromConfig,
   });
 
   const toolChoice: ToolChoice | undefined = modifiedConfig?.toolChoice;
   if (toolChoice?.mode === 'none') {
-    return { tools: [], allowedFunctionNames: [] };
+    return {
+      tools: [],
+      allowedFunctionNames: [],
+      conversationLogEmptyTools: true,
+    };
   }
   const allowedFunctions = extractAllowedToolNames(toolChoice);
   if (allowedFunctions === undefined) {
-    return { tools: toolsFromConfig, allowedFunctionNames: undefined };
+    return {
+      tools,
+      allowedFunctionNames: undefined,
+      conversationLogEmptyTools: tools === undefined,
+    };
   }
 
   const emitterName = canonicalizeToolName(SCOPE_LOCAL_EMIT_TOOL_NAME);
   const hasScopeLocalEmitter = toolsFromConfig.some(
-    (toolGroup) =>
-      toolGroup.functionDeclarations?.some(
-        (declaration) => canonicalizeToolName(declaration.name) === emitterName,
-      ) === true,
+    (decl) => canonicalizeToolName(decl.name) === emitterName,
   );
   const effectiveAllowedFunctions = hasScopeLocalEmitter
     ? Array.from(new Set([...allowedFunctions, SCOPE_LOCAL_EMIT_TOOL_NAME]))
@@ -189,21 +260,13 @@ export async function applyToolSelectionHook(
   const allowedNames = new Set(
     effectiveAllowedFunctions.map(canonicalizeToolName),
   );
-  const filteredTools = toolsFromConfig
-    .map((toolGroup) => ({
-      ...toolGroup,
-      functionDeclarations: Array.isArray(toolGroup.functionDeclarations)
-        ? toolGroup.functionDeclarations.filter(
-            (fn) =>
-              typeof fn.name === 'string' &&
-              allowedNames.has(canonicalizeToolName(fn.name)),
-          )
-        : [],
-    }))
-    .filter((group) => group.functionDeclarations.length > 0) as ToolGroupArray;
+  const filteredTools = toolsFromConfig.filter((decl) =>
+    allowedNames.has(canonicalizeToolName(decl.name)),
+  );
   return {
     tools: filteredTools,
     allowedFunctionNames: effectiveAllowedFunctions,
+    conversationLogEmptyTools: filteredTools.length === 0,
   };
 }
 
@@ -228,7 +291,7 @@ export function buildRuntimeContext(
 
 interface PrepareRequestPayloadParams {
   requestContents: IContent[];
-  tools: unknown;
+  tools: ToolDeclaration[] | undefined;
   logger: DebugLogger;
   providerRuntimeBuilder: (
     source: string,

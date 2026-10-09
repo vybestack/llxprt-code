@@ -6,7 +6,7 @@ import type { CompressionHandler } from '../CompressionHandler.js';
 import * as compressionFactory from '../compressionStrategyFactory.js';
 import { OneShotStrategy } from '../OneShotStrategy.js';
 import { TopDownTruncationStrategy } from '../TopDownTruncationStrategy.js';
-import { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
+import { DetachedHistoryJournal } from '@vybestack/llxprt-code-core/services/history/detachedHistoryJournal.js';
 import {
   EmptySummaryError,
   type CompressionStrategy,
@@ -64,10 +64,16 @@ function installFallbackStrategies(
   ) {
     if (!control.active) return compressDisk.call(this, context);
     if (!fallbackFixtureOutcome(control, candidateHistory.length)) return noop;
-    if (!(context.history instanceof HistoryDensityRows))
+    if (!(context.history instanceof DetachedHistoryJournal))
       throw new Error('Expected disk fixture rows');
-    const start = context.history.length;
-    for (const row of candidateHistory) context.history.appendIdentity(row);
+    const rows = context.history;
+    const start = rows.length;
+    for (const row of candidateHistory) rows.append(row);
+    const readRow = rows.readRow.bind(rows);
+    vi.spyOn(rows, 'readRow').mockImplementation((index) => {
+      const value = readRow(index);
+      return index >= start ? candidateHistory[index - start] : value;
+    });
     return { kind: 'applied', start, metadata };
   });
 }
@@ -140,6 +146,7 @@ export function makeCompressionSnapshot(label: string): IContent {
       synthetic: true,
       isSummary: true,
       reason: 'compression-state-snapshot',
+      chronology: { seq: 3, userTurn: 2, step: 1, recordedAt: 0 },
     },
   };
 }

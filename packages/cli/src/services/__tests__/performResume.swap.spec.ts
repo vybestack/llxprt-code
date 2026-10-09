@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { HistoryJournalStore } from '../../../../core/src/services/history/historyJournalStore.js';
-import { collectResumeRows } from '../../test-utils/resumeRows.js';
-import { collectRowsForAssertions } from '../../../../core/src/test-utils/collect-rows-for-assertions.js';
+import { collectResumeRows } from '../../__tests__/resumeRows.js';
+import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 
 /**
  * @plan PLAN-20260214-SESSIONBROWSER.P10

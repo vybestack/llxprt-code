@@ -20,13 +20,9 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  clearActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { OpenAIProvider } from './OpenAIProvider.js';
-import { streamCallOptions } from '../test-utils/streamCallOptions.js';
+import { streamCallOptions } from '../__tests__/streamCallOptions.js';
 
 const originalFetch = global.fetch;
 const mockFetch = vi.fn();
@@ -118,16 +114,9 @@ describe('OpenAIProvider concurrent call-scoped routing isolation @issue:2483', 
     vi.clearAllMocks();
     mockFetch.mockClear();
     global.fetch = mockFetch as unknown as typeof fetch;
-    setActiveProviderRuntimeContext(
-      createProviderRuntimeContext({
-        settingsService: new SettingsService(),
-        runtimeId: 'openai-concurrent-routing-test',
-      }),
-    );
   });
 
   afterEach(() => {
-    clearActiveProviderRuntimeContext();
     global.fetch = originalFetch;
   });
 

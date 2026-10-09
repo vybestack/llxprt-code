@@ -18,7 +18,23 @@
     "src/**/__tests__/**",
     "../mcp/src/**/*.test.ts",
     "../mcp/src/**/*.spec.ts",
-    "../mcp/src/**/__tests__/**"
+    "../mcp/src/**/__tests__/**",
+    "**/__tests__/**",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.spec.ts",
+    "**/*.spec.tsx",
+    "**/*.bun.ts",
+    "**/*.test-d.ts",
+    "**/__mocks__/**",
+    "**/*test-helpers*",
+    "**/*.testHelpers.ts",
+    "**/*.test-helper.ts",
+    "**/*.fixtures.ts",
+    "**/src/test-utils/**",
+    "**/*.bun.tsx",
+    "../mcp/src/**/test-support/**",
+    "../mcp/src/**/mcpClientTestHelpers.ts"
   ],
   "references": [{ "path": "../core/tsconfig.build.json" }]
 }

@@ -28,8 +28,8 @@
  *     later content events reach the recording file.
  */
 
-import { forbidHistoryMaterializationForTest } from '../../../../core/src/test-utils/history-materialization-test-guard.js';
-import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-core/test-utils/collect-rows-for-assertions.js';
+import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
+import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { assertNotNull, errorMessage } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect } from 'bun:test';
 import {

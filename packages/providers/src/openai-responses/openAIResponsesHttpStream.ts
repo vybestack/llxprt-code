@@ -55,6 +55,7 @@ import {
   DEFAULT_STREAMING_JSON_CHUNK_BYTES,
   LazyBoundedJsonBody,
 } from '../utils/boundedJsonBody.js';
+import { ProgressiveJsonBody } from '../utils/progressive-json-body.js';
 
 export {
   DEFAULT_HTTP_JSON_ENVELOPE_BYTES,
@@ -88,18 +89,18 @@ export interface StreamResponsesParams {
   dumpBaseId?: string;
   dumpMode?: DumpMode;
   /**
-   * Lazily-wired transport (issue #854 P05b4): fills the request context from
-   * the memoized history source. When present the wire body is a
-   * {@link LazyBoundedJsonBody} — the fetch call initiates before the history
-   * source is drained, and the body materializes at its first byte pull.
+   * Finalizes content-dependent request fields from request-owned history.
+   * Stateful and WebSocket requests require this complete shape; stateless
+   * HTTP uploads can supply streamRequestBody for demand-driven input.
    */
   materializeRequestBody?: () => Promise<void>;
+  streamRequestBody?: () => AsyncIterable<Uint8Array>;
 }
 
 interface FetchStreamParams {
   responsesURL: string;
   headers: Record<string, string>;
-  body: BoundedJsonBody | LazyBoundedJsonBody;
+  body: BoundedJsonBody | LazyBoundedJsonBody | ProgressiveJsonBody;
   abortSignal?: AbortSignal;
   includeThinkingInResponse: boolean;
   responsesStored: boolean;
@@ -161,6 +162,16 @@ function transportCleanupError(
   );
 }
 
+function bodyTransportDescription(
+  body: BoundedJsonBody | LazyBoundedJsonBody | ProgressiveJsonBody,
+): string {
+  if (body instanceof BoundedJsonBody)
+    return `Request body transport: streaming-json, envelopeBytes=${body.byteLength}`;
+  if (body instanceof ProgressiveJsonBody)
+    return 'Request body transport: demand-driven streaming-json';
+  return 'Request body transport: lazy streaming-json (materializes at first byte pull)';
+}
+
 export async function* streamOverHttp(
   params: StreamResponsesParams,
   deps: ResponsesExecutorDeps,
@@ -181,7 +192,10 @@ export async function* streamOverHttp(
           await params.materializeRequestBody?.();
           return new BoundedJsonBody(params.request, bodyOptions);
         });
-  const body = lazyBody ?? new BoundedJsonBody(params.request, bodyOptions);
+  const body =
+    params.streamRequestBody === undefined
+      ? (lazyBody ?? new BoundedJsonBody(params.request, bodyOptions))
+      : new ProgressiveJsonBody(params.streamRequestBody);
   const headers = {
     ...(await buildResponsesHeaders(
       params.apiKey,
@@ -194,11 +208,7 @@ export async function* streamOverHttp(
       ? { 'Content-Length': String(body.byteLength) }
       : {}),
   };
-  deps.logger.debug(() =>
-    body instanceof BoundedJsonBody
-      ? `Request body transport: streaming-json, envelopeBytes=${body.byteLength}`
-      : 'Request body transport: lazy streaming-json (materializes at first byte pull)',
-  );
+  deps.logger.debug(() => bodyTransportDescription(body));
   deps.logger.debug(
     () => `Request body keys: ${JSON.stringify(Object.keys(params.request))}`,
   );
@@ -338,7 +348,7 @@ async function* fetchStreamWithRetries(
 async function fetchResponse(params: {
   responsesURL: string;
   headers: Record<string, string>;
-  body: BoundedJsonBody | LazyBoundedJsonBody;
+  body: BoundedJsonBody | LazyBoundedJsonBody | ProgressiveJsonBody;
   abortSignal?: AbortSignal;
 }): Promise<Response> {
   const requestBody = params.body.createStreamHandle();

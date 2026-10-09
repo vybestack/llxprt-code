@@ -5,8 +5,8 @@
  */
 
 import { ExitCodes } from '@vybestack/llxprt-code-core';
-import { renderWithProviders, waitFor } from '../../test-utils/render.js';
-import { createDeferred } from '../../test-utils/async.js';
+import { renderWithProviders, waitFor } from '../../__tests__/render.js';
+import { createDeferred } from '../../__tests__/async.js';
 import { act, StrictMode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { FolderTrustDialog } from './FolderTrustDialog.js';

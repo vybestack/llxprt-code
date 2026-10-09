@@ -1,9 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { writeBodyFile } from '../lib/body-evidence-writer.js';
 import { describe, expect, it } from 'bun:test';
-import { writeFileSync } from 'node:fs';
+
 import { join } from 'node:path';
 import { DebugLogger } from '../../packages/core/src/debug/index.js';
-import { withSuffixFixture } from '../../packages/core/src/services/history/history-suffix-test-helpers.js';
+import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { buildCuratedHistory } from '../../packages/core/src/services/history/historyCuration.js';
 import { buildProviderContent } from '../../packages/core/src/services/history/historyProviderPipeline.js';
 import { providerPendingFixture } from '../../packages/core/src/services/history/provider-curated-test-helpers.js';
@@ -45,17 +46,25 @@ async function compareSummaryBody(
     summaryRows(expectedContents),
     caching,
   );
-  savePair(`summary-body-${provider}-${size}-${caching}`, actual, expected);
+  await savePair(
+    `summary-body-${provider}-${size}-${caching}`,
+    actual,
+    expected,
+  );
   expect(actual).toBe(expected);
   return actual.length;
 }
 
 const logger = new DebugLogger('test:middleout-body');
-function savePair(name: string, actual: string, expected: string): void {
+async function savePair(
+  name: string,
+  actual: string,
+  expected: string,
+): Promise<void> {
   const output = process.env.MIDDLEOUT_DISK_BODY_OUTPUT;
   if (output === undefined) return;
-  writeFileSync(join(output, name + '-actual.json'), actual);
-  writeFileSync(join(output, name + '-expected.json'), expected);
+  await writeBodyFile(join(output, name + '-actual.json'), actual);
+  await writeBodyFile(join(output, name + '-expected.json'), expected);
 }
 
 async function bodyPair(
@@ -99,7 +108,7 @@ async function bodyPair(
           oracleRows,
           caching,
         );
-        savePair(
+        await savePair(
           `${stage}-${provider}-${size}-${caching}`,
           actual,
           expectedBody,
@@ -107,7 +116,7 @@ async function bodyPair(
         expect(actual).toBe(expectedBody);
       }
       expect(transport.requests).toStrictEqual(expected.requests);
-      savePair(
+      await savePair(
         `summary-contents-${provider}-${size}-${caching}`,
         transport.requests[0],
         expected.requests[0],

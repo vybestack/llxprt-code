@@ -27,7 +27,7 @@ import {
   loadProviderAliasEntries,
   type ModelDefaultRule,
 } from './providerAliases.js';
-import { loadWithTempConfig } from './providerAliases.test-helpers.js';
+import { loadWithTempConfig } from './__tests__/providerAliases.test-helpers.js';
 
 function expectNoImageResizeDefaults(
   defaults: Readonly<Record<string, unknown>>,

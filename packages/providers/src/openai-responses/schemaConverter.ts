@@ -18,12 +18,10 @@
  */
 
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 
 const logger = new DebugLogger('llxprt:provider:openai-responses:schema');
 
-/**
- * OpenAI Responses function parameter schema format
- */
 export interface OpenAIResponsesParameters {
   type: 'object';
   properties: Record<string, OpenAIResponsesPropertySchema>;
@@ -31,26 +29,13 @@ export interface OpenAIResponsesParameters {
   [key: string]: unknown;
 }
 
-/**
- * OpenAI Responses property schema (recursive for nested objects/arrays)
- */
 export interface OpenAIResponsesPropertySchema {
-  type: string;
-  description?: string;
-  enum?: string[];
-  items?: OpenAIResponsesPropertySchema;
+  type?: string | string[];
   properties?: Record<string, OpenAIResponsesPropertySchema>;
   required?: string[];
-  minimum?: number;
-  maximum?: number;
-  minLength?: number;
-  maxLength?: number;
-  default?: unknown;
+  [key: string]: unknown;
 }
 
-/**
- * OpenAI Responses tool format
- */
 export interface OpenAIResponsesTool {
   type: 'function';
   name: string;
@@ -59,145 +44,81 @@ export interface OpenAIResponsesTool {
   strict: null;
 }
 
-/**
- * Input format from Gemini-style tool declarations
- */
-interface ToolDeclaration {
-  name: string;
-  description?: string;
-  parametersJsonSchema?: unknown;
-}
-
-/**
- * Convert a Gemini-style schema to OpenAI Responses parameter format.
- * Handles:
- * - Uppercase type enums → lowercase strings
- * - Missing required fields → adds empty array
- * - String numeric values → proper numbers
- * - Recursive property/items conversion
- */
 export function convertSchemaToOpenAIResponses(
   schema: unknown,
 ): OpenAIResponsesParameters {
-  if (schema === null || schema === undefined || typeof schema !== 'object') {
-    return {
-      type: 'object',
-      properties: {},
-      required: [],
-    };
-  }
-
-  const input = schema as Record<string, unknown>;
-  const result: OpenAIResponsesParameters = {
+  const converted = isSchemaObject(schema) ? convertPropertySchema(schema) : {};
+  return {
+    ...converted,
     type: 'object',
-    properties: {},
-    required: [],
+    properties: converted.properties ?? {},
+    required: converted.required ?? [],
   };
-
-  // Convert properties recursively
-  if (
-    input.properties !== null &&
-    input.properties !== undefined &&
-    typeof input.properties === 'object'
-  ) {
-    result.properties = convertProperties(
-      input.properties as Record<string, unknown>,
-    );
-  }
-
-  // Ensure required is always an array - CRITICAL for K2 and other models
-  if (Array.isArray(input.required)) {
-    result.required = input.required.map((r) => String(r));
-  } else {
-    // OpenAI requires the 'required' field to be present, even if empty
-    result.required = [];
-  }
-
-  return result;
 }
 
-/**
- * Convert properties object recursively
- */
 function convertProperties(
   properties: Record<string, unknown>,
 ): Record<string, OpenAIResponsesPropertySchema> {
   const result: Record<string, OpenAIResponsesPropertySchema> = {};
-
   for (const [key, value] of Object.entries(properties)) {
-    if (typeof value === 'object' && value !== null) {
-      result[key] = convertPropertySchema(value as Record<string, unknown>);
-    }
+    if (isSchemaObject(value)) result[key] = convertPropertySchema(value);
   }
-
   return result;
 }
 
-/**
- * Convert a single property schema
- */
+/** Normalize only schema positions; const/default/enum remain literal data. */
+function convertSchemaValue(value: unknown): unknown {
+  return isSchemaObject(value) ? convertPropertySchema(value) : value;
+}
+
 function convertPropertySchema(
   prop: Record<string, unknown>,
 ): OpenAIResponsesPropertySchema {
-  const result: OpenAIResponsesPropertySchema = {
-    type: normalizeType(prop.type),
-  };
-
-  // Copy description
-  if (typeof prop.description === 'string') {
-    result.description = prop.description;
+  const result: OpenAIResponsesPropertySchema = { ...prop };
+  // A union or reference without a type must not acquire a string constraint.
+  if (prop.type !== undefined) {
+    result.type = Array.isArray(prop.type)
+      ? prop.type.map(normalizeType)
+      : normalizeType(prop.type);
   }
-
-  // Handle enum values
-  if (Array.isArray(prop.enum)) {
-    result.enum = prop.enum.map((v) => String(v));
+  if (isSchemaObject(prop.properties)) {
+    result.properties = convertProperties(prop.properties);
   }
-
-  // Handle array items
-  if (Array.isArray(prop.items)) {
-    if (prop.items.length > 0) {
-      // Tuple type - use first item as representative (skip empty tuples)
-      const firstItem = prop.items[0];
-      if (isSchemaObject(firstItem)) {
-        result.items = convertPropertySchema(firstItem);
-      }
-    }
-  } else if (isSchemaObject(prop.items)) {
-    result.items = convertPropertySchema(prop.items);
+  if (Array.isArray(prop.required)) {
+    result.required = prop.required.map(String);
+  } else if (result.type === 'object' && result.properties !== undefined) {
+    result.required = [];
   }
-
-  // Handle nested object properties
-  if (prop.properties != null && typeof prop.properties === 'object') {
-    result.properties = convertProperties(
-      prop.properties as Record<string, unknown>,
-    );
-    // Nested objects should also have required array
-    if (Array.isArray(prop.required)) {
-      result.required = prop.required.map((r) => String(r));
-    } else if (result.type === 'object') {
-      result.required = [];
+  for (const key of [
+    'items',
+    'additionalProperties',
+    'not',
+    'if',
+    'then',
+    'else',
+  ]) {
+    if (key in prop) {
+      const value = prop[key];
+      result[key] = Array.isArray(value)
+        ? value.map(convertSchemaValue)
+        : convertSchemaValue(value);
     }
   }
-
-  // Handle numeric constraints (convert strings to numbers if needed)
-  if (prop.minimum !== undefined) {
-    result.minimum = toNumber(prop.minimum);
+  for (const key of ['anyOf', 'oneOf', 'allOf', 'prefixItems']) {
+    if (Array.isArray(prop[key]))
+      result[key] = prop[key].map(convertSchemaValue);
   }
-  if (prop.maximum !== undefined) {
-    result.maximum = toNumber(prop.maximum);
+  for (const key of [
+    '$defs',
+    'definitions',
+    'patternProperties',
+    'dependentSchemas',
+  ]) {
+    if (isSchemaObject(prop[key])) result[key] = convertProperties(prop[key]);
   }
-  if (prop.minLength !== undefined) {
-    result.minLength = toNumber(prop.minLength);
+  for (const key of ['minimum', 'maximum', 'minLength', 'maxLength']) {
+    if (prop[key] !== undefined) result[key] = toNumber(prop[key]);
   }
-  if (prop.maxLength !== undefined) {
-    result.maxLength = toNumber(prop.maxLength);
-  }
-
-  // Handle default value
-  if (prop.default !== undefined) {
-    result.default = prop.default;
-  }
-
   return result;
 }
 
@@ -209,16 +130,10 @@ function isSchemaObject(value: unknown): value is Record<string, unknown> {
   return prototype === Object.prototype || prototype === null;
 }
 
-/**
- * Normalize type value to lowercase string.
- * Handles Gemini's uppercase Type enum (e.g., "OBJECT" → "object")
- */
+/** Normalize authored uppercase and numeric type enums at schema positions. */
 function normalizeType(type: unknown): string {
-  if (typeof type === 'string') {
-    return type.toLowerCase();
-  }
+  if (typeof type === 'string') return type.toLowerCase();
   if (typeof type === 'number') {
-    // Gemini Type enum values
     const typeMap: Record<number, string> = {
       1: 'string',
       2: 'number',
@@ -232,13 +147,8 @@ function normalizeType(type: unknown): string {
   return 'string';
 }
 
-/**
- * Convert value to number, handling strings
- */
 function toNumber(value: unknown): number | undefined {
-  if (typeof value === 'number') {
-    return value;
-  }
+  if (typeof value === 'number') return value;
   if (typeof value === 'string') {
     const num = parseFloat(value);
     return isNaN(num) ? undefined : num;
@@ -246,46 +156,26 @@ function toNumber(value: unknown): number | undefined {
   return undefined;
 }
 
-/**
- * Convert an array of Gemini-style tool declarations to OpenAI Responses format
- */
 export function convertToolsToOpenAIResponses(
-  toolDeclarations?: Array<{
-    functionDeclarations?: ToolDeclaration[];
-  }>,
+  toolDeclarations?: ToolDeclaration[],
 ): OpenAIResponsesTool[] | undefined {
-  if (!toolDeclarations || toolDeclarations.length === 0) {
-    return undefined;
-  }
-
+  if (!toolDeclarations || toolDeclarations.length === 0) return undefined;
   const responsesTools: OpenAIResponsesTool[] = [];
-
-  for (const toolGroup of toolDeclarations) {
-    if (!toolGroup.functionDeclarations) {
-      continue;
-    }
-
-    for (const decl of toolGroup.functionDeclarations) {
-      if (!isSchemaObject(decl.parametersJsonSchema)) {
-        throw new Error(
-          `Tool "${decl.name}" is missing parametersJsonSchema — legacy schema fallback has been removed. ` +
-            `Ensure all tool declarations provide parametersJsonSchema at construction time.`,
-        );
-      }
-      const parameters = convertSchemaToOpenAIResponses(
-        decl.parametersJsonSchema,
+  for (const decl of toolDeclarations) {
+    if (!isSchemaObject(decl.parametersJsonSchema)) {
+      throw new Error(
+        `Tool "${decl.name}" is missing parametersJsonSchema — legacy schema fallback has been removed. ` +
+          `Ensure all tool declarations provide parametersJsonSchema at construction time.`,
       );
-
-      responsesTools.push({
-        type: 'function',
-        name: decl.name,
-        description: decl.description ?? null,
-        parameters,
-        strict: null,
-      });
     }
+    responsesTools.push({
+      type: 'function',
+      name: decl.name,
+      description: decl.description ?? null,
+      parameters: convertSchemaToOpenAIResponses(decl.parametersJsonSchema),
+      strict: null,
+    });
   }
-
   if (logger.enabled && responsesTools.length > 0) {
     logger.debug(
       () =>
@@ -298,6 +188,5 @@ export function convertToolsToOpenAIResponses(
       },
     );
   }
-
   return responsesTools.length > 0 ? responsesTools : undefined;
 }

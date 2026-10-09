@@ -7,7 +7,7 @@
 import { describe, it, expect, vi } from 'bun:test';
 import * as fc from 'fast-check';
 import { createCompletionHandler, tokenize } from './index.js';
-import { createMockCommandContext } from '../../../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
 import type {
   CommandArgumentSchema,
   LiteralArgument,

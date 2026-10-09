@@ -23,7 +23,7 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import type { Mock } from 'bun:test';
 import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import {
   ProviderError,
   RateLimitError,
@@ -31,7 +31,7 @@ import {
   wrapError,
 } from './errors.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 
 interface MockStreamTextResult {
   textStream: AsyncIterable<string>;

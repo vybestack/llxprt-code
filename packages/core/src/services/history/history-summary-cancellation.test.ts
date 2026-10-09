@@ -3,7 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import { withBatchFixture } from './addbatch-stream-test-helpers.js';
 import { exportSummaryRow, summaryRow } from './export-summary-test-helpers.js';
 import { mediaParticipant } from './chronology-rollback-test-helpers.js';
-import { collectRawHistory } from '../../test-utils/collect-raw-history.js';
+import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 
 describe('summary cancellation before journal publication', () => {
   it('never opens callback rows when already aborted', async () => {

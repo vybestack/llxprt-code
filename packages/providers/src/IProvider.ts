@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 import { type IModel } from './IModel.js';
 import { type ITool } from './ITool.js';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -26,6 +27,7 @@ import type { RuntimeInvocationContext } from '@vybestack/llxprt-code-core/runti
 import type { StructuredError } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { StreamLivenessEvent } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import type { SystemPromptPlacement } from './utils/systemPromptPlacement.js';
+import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { RequestScopedContents } from './utils/requestScopedBody.js';
 import type {
   ProviderTelemetryContext,
@@ -36,14 +38,7 @@ import type {
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { ProviderMediaTransportCapabilities } from './providerMediaTransportCapabilities.js';
 
-export type ProviderToolset = Array<{
-  functionDeclarations: Array<{
-    name: string;
-    description?: string;
-    parametersJsonSchema?: unknown;
-    parameters?: unknown;
-  }>;
-}>;
+export type ProviderToolset = ToolDeclaration[];
 
 /**
  * @plan PLAN-20251018-STATELESSPROVIDER2.P06
@@ -60,6 +55,8 @@ export interface GenerateChatOptions {
    * providers collect it request-scoped at the entry point.
    */
   contents: AsyncIterable<IContent>;
+  requestRows?: ProviderRequestRows;
+  contentCount?: number;
   tools?: ProviderToolset;
   settings?: SettingsService;
   config?: Config;
@@ -128,6 +125,8 @@ export interface MaterializedGenerateChatOptions
  * (`GenerateChatOptions`) and the materialized internal shape satisfy it
  * (issue #854, PLAN-20260917-ISSUE854.P05b3).
  */
+export type ProviderRuntimeOptions = Omit<GenerateChatOptions, 'contents'>;
+
 export interface MetadataBearingOptions {
   metadata?: Record<string, unknown>;
 }

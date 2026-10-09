@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { render } from '../../test-utils/render.js';
+import { render } from '../../__tests__/render.js';
 import { AnsiOutputText } from './AnsiOutput.js';
 import type { AnsiOutput, AnsiToken } from '@vybestack/llxprt-code-core';
 

@@ -7,8 +7,8 @@ import {
   pairedEstimate,
   RETAINED_ALLOWANCE_BYTES,
   type PairedDelta,
-} from '../../test-utils/retained-growth.js';
-import { withSuffixFixture } from './history-suffix-test-helpers.js';
+} from '@vybestack/llxprt-code-test-utils/core/retained-growth.js';
+import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { accountingRow } from './token-accounting-stream-test-helpers.js';
 import type { IContent } from './IContent.js';
 

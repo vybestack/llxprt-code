@@ -23,8 +23,12 @@
     "node_modules",
     "dist",
     "src/**/__tests__/**",
+    "**/__tests__/**",
     "**/*.test.ts",
+    "**/*.test.tsx",
     "**/*.spec.ts",
-    "**/*.bun.ts"
+    "**/*.spec.tsx",
+    "**/*.bun.ts",
+    "**/*test-helpers*"
   ]
 }

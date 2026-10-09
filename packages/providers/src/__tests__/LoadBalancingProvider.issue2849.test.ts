@@ -26,14 +26,14 @@
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { ProviderManager } from '../ProviderManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import {
   LoadBalancingProvider,
   type LoadBalancingProviderConfig,
 } from '../LoadBalancingProvider.js';
 import type { IProvider } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { GenerateChatOptions } from '../GenerateChatOptions.js';
+import type { GenerateChatOptions } from '../IProvider.js';
 import { replayableContents } from '../utils/collectContents.js';
 
 /** Build a fake delegate whose per-invocation behavior is supplied inline. */
@@ -74,7 +74,10 @@ function throwStatus(
 
 /** A generator that yields a single success chunk. */
 async function* successChunk(): AsyncGenerator<IContent> {
-  yield { type: 'text' as const, content: 'ok' } as unknown as IContent;
+  yield {
+    speaker: 'ai',
+    blocks: [{ type: 'text', text: 'ok' }],
+  } as unknown as IContent;
 }
 
 function respondAfterTransientRateLimit(
@@ -86,8 +89,6 @@ function respondAfterTransientRateLimit(
 
 function makeOptions(): GenerateChatOptions {
   return {
-    prompt: 'test prompt',
-    messages: [{ role: 'user' as const, content: 'test' }],
     contents: replayableContents([
       { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
       { speaker: 'human', blocks: [{ type: 'text', text: 'test prompt' }] },
@@ -319,7 +320,10 @@ describe('LoadBalancingProvider issue #2849: LB reliability for transient 429 [p
     const chunks = await consumeStream(lb, makeOptions());
 
     expect(chunks).toHaveLength(1);
-    expect(chunks[0]).toStrictEqual({ type: 'text', content: 'ok' });
+    expect(chunks[0]).toStrictEqual({
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'ok' }],
+    });
     // zai: 429 then success on retry — never failed over.
     expect(zai.counter.value).toBe(2);
     // Exhausted backends never reached because zai succeeded on retry.
@@ -385,8 +389,8 @@ describe('LoadBalancingProvider issue #2849: LB reliability for transient 429 [p
       () =>
         (async function* (): AsyncGenerator<IContent> {
           yield {
-            type: 'text' as const,
-            content: 'partial',
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'partial' }],
           } as unknown as IContent;
           throw statusError('rate limited', 429);
         })(),
@@ -413,7 +417,10 @@ describe('LoadBalancingProvider issue #2849: LB reliability for transient 429 [p
 
     // The partial chunk WAS yielded before the error.
     expect(chunks).toHaveLength(1);
-    expect(chunks[0]).toStrictEqual({ type: 'text', content: 'partial' });
+    expect(chunks[0]).toStrictEqual({
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'partial' }],
+    });
     // Only zai was called — no failover to makora after mid-stream 429.
     expect(zai.counter.value).toBe(1);
     expect(makora.counter.value).toBe(0);

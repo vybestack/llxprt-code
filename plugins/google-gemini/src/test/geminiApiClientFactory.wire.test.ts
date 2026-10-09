@@ -21,7 +21,42 @@ import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { createGeminiApiClient } from '../gemini/geminiApiClientFactory.js';
-import { SchemaType } from '../gemini/geminiWireTypes.js';
+import {
+  SchemaType,
+  type GenerateContentParameters,
+} from '../gemini/geminiWireTypes.js';
+import { ApplyPatchTool } from '../../../../packages/tools/src/index.js';
+import { SchemaValidator } from '../../../../packages/tools/src/utils/schemaValidator.js';
+import { buildGeminiTools } from '../gemini/geminiRequestBuilding.js';
+import { GeminiProvider } from '../gemini/GeminiProvider.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createProviderCallOptions } from './testSupport.js';
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function record(value: unknown): Record<string, unknown> {
+  if (!isRecord(value)) {
+    throw new Error('Expected a schema record');
+  }
+  return value;
+}
+
+function assertUnionTypesAreSeparate(value: unknown): void {
+  if (Array.isArray(value)) {
+    value.forEach(assertUnionTypesAreSeparate);
+  } else if (typeof value === 'object' && value !== null) {
+    const node = record(value);
+    if (Array.isArray(node['anyOf'])) {
+      expect(node['type']).toBeUndefined();
+      expect(node['properties']).toBeUndefined();
+      expect(node['required']).toBeUndefined();
+    }
+    Object.values(node).forEach(assertUnionTypesAreSeparate);
+  }
+}
 
 interface CapturedRequest {
   readonly path: string;
@@ -60,8 +95,15 @@ describe('geminiApiClientFactory', () => {
           path: new URL(req.url ?? '/', 'http://127.0.0.1').pathname,
           body: raw === '' ? {} : (JSON.parse(raw) as Record<string, unknown>),
         });
-        res.writeHead(200, { 'content-type': 'application/json' });
-        res.end(JSON.stringify(nextResponse));
+        if (req.url?.includes(':streamGenerateContent')) {
+          res.writeHead(200, { 'content-type': 'text/event-stream' });
+          res.end(`data: ${JSON.stringify(nextResponse)}
+
+`);
+        } else {
+          res.writeHead(200, { 'content-type': 'application/json' });
+          res.end(JSON.stringify(nextResponse));
+        }
       });
     });
     await new Promise<void>((resolve) => {
@@ -84,7 +126,8 @@ describe('geminiApiClientFactory', () => {
 
   async function callWith(
     config: Record<string, unknown>,
-    contents?: unknown,
+    contents?: GenerateContentParameters['contents'],
+    streaming = false,
   ): Promise<CapturedRequest> {
     captured = [];
     nextResponse = textResponse('ok');
@@ -94,11 +137,21 @@ describe('geminiApiClientFactory', () => {
       // API version itself.
       httpOptions: { baseUrl: origin() },
     });
-    await client.models.generateContent({
+    const params = {
       model: 'gemini-3-flash-preview',
       contents: contents ?? [{ role: 'user', parts: [{ text: 'hi' }] }],
       config,
-    } as never);
+    };
+    if (streaming) {
+      const stream = await client.models.generateContentStream(params);
+      const responses = [];
+      for await (const response of stream) {
+        responses.push(response);
+      }
+      expect(responses.length).toBeGreaterThan(0);
+    } else {
+      await client.models.generateContent(params);
+    }
     const request = captured[0];
     expect(request).toBeDefined();
     return request;
@@ -113,6 +166,58 @@ describe('geminiApiClientFactory', () => {
     expect(declarations).toBeDefined();
     return (declarations as Array<Record<string, unknown>>)[0];
   }
+
+  it.each([true, false])(
+    'keeps empty-tools logging metadata out of actual provider HTTP requests (streaming=%s)',
+    async (streaming) => {
+      const settings = new SettingsService();
+      const config = new Config({
+        cwd: process.cwd(),
+        targetDir: process.cwd(),
+        debugMode: false,
+        sessionId: 'logging-wire',
+        model: 'gemini-3-flash-preview',
+        settingsService: settings,
+      });
+      config.setEphemeralSetting(
+        'streaming',
+        streaming ? 'enabled' : 'disabled',
+      );
+      const provider = new GeminiProvider('test-key', origin(), config);
+      provider.setConfig(config);
+      captured = [];
+      nextResponse = textResponse('ok');
+      for (const conversationLogEmptyTools of [undefined, true, false]) {
+        const options = createProviderCallOptions({
+          providerName: 'gemini',
+          settings,
+          config,
+          contents: [
+            { speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] },
+          ],
+          tools: [],
+          runtimeMetadata: { conversationLogEmptyTools },
+          metadata: { conversationLogEmptyTools },
+          systemInstruction: 'Answer briefly.',
+          resolved: { model: 'gemini-3-flash-preview', baseURL: origin() },
+        });
+        const chunks = [];
+        for await (const chunk of provider.generateChatCompletion(options)) {
+          chunks.push(chunk);
+        }
+        expect(chunks.length).toBeGreaterThan(0);
+      }
+      expect(captured).toHaveLength(3);
+      expect(captured[1]).toStrictEqual(captured[0]);
+      expect(captured[2]).toStrictEqual(captured[0]);
+      expect(captured[0].path).toBe(
+        `/v1beta/models/gemini-3-flash-preview:${streaming ? 'streamGenerateContent' : 'generateContent'}`,
+      );
+      expect(JSON.stringify(captured)).not.toContain(
+        'conversationLogEmptyTools',
+      );
+    },
+  );
 
   describe('Gemini client seam: request URL', () => {
     it('sends to the versioned Gemini path when given a bare origin', async () => {
@@ -288,69 +393,332 @@ describe('geminiApiClientFactory', () => {
     });
   });
 
-  describe('Gemini client seam: anyOf branches that only constrain requiredness', () => {
-    // apply_patch declares `anyOf: [{ required: ['absolute_path'] },
-    // { required: ['file_path'] }]`, meaning "at least one of these". Gemini
-    // rejects a branch that marks a property required without being an object
-    // schema that defines it:
-    //   any_of[0].required: only allowed for OBJECT type
-    //   any_of[0].required[0]: property is not defined
-    const applyPatchLike = {
-      maxOutputTokens: 16,
-      tools: [
-        {
-          functionDeclarations: [
-            {
-              name: 'apply_patch',
-              description: 'Apply a patch',
-              parametersJsonSchema: {
-                type: 'object',
-                properties: {
-                  absolute_path: { type: 'string' },
-                  file_path: { type: 'string' },
-                  patch_content: { type: 'string' },
-                },
-                required: ['patch_content'],
-                anyOf: [
-                  { required: ['absolute_path'] },
-                  { required: ['file_path'] },
-                ],
-              },
-            },
-          ],
-        },
-      ],
-    };
+  describe('Gemini client seam: required-only object unions', () => {
+    const declaration = new ApplyPatchTool().schema;
+    const name = declaration.name;
+    if (typeof name !== 'string') {
+      throw new Error('Expected the apply_patch declaration name');
+    }
+    const source = record(declaration.parametersJsonSchema);
+    const cases = [
+      { data: { absolute_path: '/a', patch_content: 'patch' }, valid: true },
+      { data: { file_path: '/a', patch_content: 'patch' }, valid: true },
+      {
+        data: { absolute_path: '/a', file_path: '/b', patch_content: 'patch' },
+        valid: true,
+      },
+      { data: { patch_content: 'patch' }, valid: false },
+      { data: { absolute_path: '/a' }, valid: false },
+      { data: { file_path: '/a' }, valid: false },
+      { data: { absolute_path: '/a', file_path: '/b' }, valid: false },
+      { data: { absolute_path: 42, patch_content: 'patch' }, valid: false },
+      { data: { file_path: 42, patch_content: 'patch' }, valid: false },
+      {
+        data: { absolute_path: '/a', file_path: 42, patch_content: 'patch' },
+        valid: false,
+      },
+      {
+        data: { absolute_path: 42, file_path: '/b', patch_content: 'patch' },
+        valid: false,
+      },
+      { data: { absolute_path: '/a', patch_content: 42 }, valid: false },
+      { data: { file_path: '/a', patch_content: 42 }, valid: false },
+      { data: [], valid: false },
+      ...['absolute_path', 'file_path', 'patch_content'].flatMap((field) =>
+        [null, false, [], {}].map((value) => ({
+          data: {
+            absolute_path: '/a',
+            file_path: '/b',
+            patch_content: 'patch',
+            [field]: value,
+          },
+          valid: false,
+        })),
+      ),
+    ];
 
-    it('gives each branch an object type and the property it requires', async () => {
-      const request = await callWith(applyPatchLike);
-      const parameters = firstTool(request.body)['parameters'] as Record<
-        string,
-        unknown
-      >;
-      const branches = parameters['anyOf'] as Array<Record<string, unknown>>;
-      expect(branches).toHaveLength(2);
-      for (const branch of branches) {
-        const required = branch['required'] as string[];
-        expect(branch['type']).toBe('object');
-        const properties = branch['properties'] as Record<string, unknown>;
-        for (const name of required) {
-          expect(properties[name]).toBeTruthy();
+    for (const streaming of [false, true]) {
+      describe(streaming ? 'streaming' : 'non-streaming', () => {
+        for (const casing of ['lowercase', 'uppercase']) {
+          const schema =
+            casing === 'lowercase'
+              ? source
+              : {
+                  ...source,
+                  type: SchemaType.OBJECT,
+                  properties: Object.fromEntries(
+                    Object.entries(record(source['properties'])).map(
+                      ([name, property]) => [
+                        name,
+                        { ...record(property), type: SchemaType.STRING },
+                      ],
+                    ),
+                  ),
+                };
+          for (const location of ['root', 'properties', 'items']) {
+            const parametersJsonSchema =
+              location === 'root'
+                ? schema
+                : {
+                    type: SchemaType.OBJECT,
+                    properties: {
+                      patch:
+                        location === 'properties'
+                          ? schema
+                          : { type: SchemaType.ARRAY, items: schema },
+                    },
+                    required: ['patch'],
+                  };
+            const toolDeclaration = {
+              ...declaration,
+              name,
+              parametersJsonSchema,
+            };
+
+            it(`preserves ${casing} ${location} patch constraints on the wire`, async () => {
+              const snapshot = structuredClone(toolDeclaration);
+              const { geminiTools } = buildGeminiTools([toolDeclaration]);
+              const request = await callWith(
+                { tools: geminiTools },
+                undefined,
+                streaming,
+              );
+              expect(request.path).toEndWith(
+                streaming ? ':streamGenerateContent' : ':generateContent',
+              );
+              expect(firstTool(request.body)['name']).toBe(declaration.name);
+              const parameters = record(firstTool(request.body)['parameters']);
+              assertUnionTypesAreSeparate(parameters);
+              const patchSchema =
+                location === 'root'
+                  ? parameters
+                  : location === 'properties'
+                    ? record(record(parameters['properties'])['patch'])
+                    : record(
+                        record(record(parameters['properties'])['patch'])[
+                          'items'
+                        ],
+                      );
+              const branches = patchSchema['anyOf'];
+              if (!Array.isArray(branches)) {
+                throw new Error('Expected patch alternatives');
+              }
+              expect(branches).toHaveLength(2);
+              for (const [index, branchValue] of branches.entries()) {
+                const branch = record(branchValue);
+                expect(branch['type']).toBe('object');
+                expect(branch['required']).toEqual(
+                  expect.arrayContaining([
+                    'patch_content',
+                    index === 0 ? 'absolute_path' : 'file_path',
+                  ]),
+                );
+                const properties = record(branch['properties']);
+                for (const name of [
+                  'absolute_path',
+                  'file_path',
+                  'patch_content',
+                ]) {
+                  expect(record(properties[name])['type']).toBe('string');
+                }
+              }
+              for (const { data, valid } of cases) {
+                expect(
+                  SchemaValidator.validate({ anyOf: branches }, data) === null,
+                ).toBe(valid);
+              }
+              expect(toolDeclaration).toStrictEqual(snapshot);
+            });
+
+            it(`validates the ${casing} ${location} emitted patch truth table`, async () => {
+              const { geminiTools } = buildGeminiTools([toolDeclaration]);
+              const request = await callWith(
+                { tools: geminiTools },
+                undefined,
+                streaming,
+              );
+              const parameters = record(firstTool(request.body)['parameters']);
+              for (const { data, valid } of cases) {
+                const input =
+                  location === 'root'
+                    ? data
+                    : { patch: location === 'properties' ? data : [data] };
+                expect(
+                  SchemaValidator.validate(parameters, input) === null,
+                ).toBe(valid);
+              }
+            });
+          }
         }
-      }
-    });
 
-    it('keeps the branches distinct so the either/or meaning survives', async () => {
-      const request = await callWith(applyPatchLike);
-      const parameters = firstTool(request.body)['parameters'] as Record<
-        string,
-        unknown
-      >;
-      const branches = parameters['anyOf'] as Array<Record<string, unknown>>;
-      expect(branches.map((b) => b['required'])).toStrictEqual([
-        ['absolute_path'],
-        ['file_path'],
-      ]);
-    });
+        it.each([
+          {
+            name: 'mixed typed and required-only alternatives',
+            anyOf: [
+              { required: ['a'] },
+              {
+                type: 'object',
+                properties: { b: { type: 'string' } },
+                required: ['b'],
+              },
+            ],
+          },
+          {
+            name: 'an empty alternative',
+            anyOf: [{ required: ['a'] }, {}],
+          },
+          {
+            name: 'an alternative with empty required names',
+            anyOf: [{ required: ['a'] }, { required: [] }],
+          },
+          {
+            name: 'an alternative with its own property constraints',
+            anyOf: [
+              { required: ['a'] },
+              {
+                properties: { b: { type: 'string', minLength: 3 } },
+                required: ['b'],
+              },
+            ],
+          },
+        ])(
+          'preserves common constraints outside normalization for $name',
+          async ({ anyOf }) => {
+            const parametersJsonSchema = {
+              type: 'object',
+              properties: {
+                a: { type: 'string' },
+                b: { type: 'string' },
+                common: { type: 'string' },
+              },
+              required: ['common'],
+              anyOf,
+            };
+            const snapshot = structuredClone(parametersJsonSchema);
+            const { geminiTools } = buildGeminiTools([
+              { name: 'mixed_boundary', parametersJsonSchema },
+            ]);
+            const request = await callWith(
+              { tools: geminiTools },
+              undefined,
+              streaming,
+            );
+            const parameters = record(firstTool(request.body)['parameters']);
+            for (const data of [
+              { b: 'ok' },
+              { b: 'ok', common: 42 },
+              { a: 'ok', common: 'yes' },
+              { b: 'long', common: 'yes' },
+              { a: 42, b: 'long', common: 'yes' },
+              { a: 'ok', b: 42, common: 'yes' },
+              { b: 'ok', common: 'yes' },
+              [],
+            ]) {
+              expect(SchemaValidator.validate(parameters, data) === null).toBe(
+                SchemaValidator.validate(parametersJsonSchema, data) === null,
+              );
+            }
+            expect(parameters['type']).toBe('object');
+            expect(parameters['properties']).toStrictEqual(
+              parametersJsonSchema.properties,
+            );
+            expect(parameters['required']).toStrictEqual(['common']);
+            expect(parameters['anyOf']).toStrictEqual(anyOf);
+            expect(parametersJsonSchema).toStrictEqual(snapshot);
+          },
+        );
+
+        it('retains common constraints when the alternatives are empty', async () => {
+          const parametersJsonSchema = {
+            type: 'object',
+            properties: { common: { type: 'string' } },
+            required: ['common'],
+            anyOf: [],
+          };
+          const { geminiTools } = buildGeminiTools([
+            { name: 'empty_boundary', parametersJsonSchema },
+          ]);
+          const request = await callWith(
+            { tools: geminiTools },
+            undefined,
+            streaming,
+          );
+          const parameters = record(firstTool(request.body)['parameters']);
+          expect(parameters['type']).toBe('object');
+          expect(parameters['properties']).toStrictEqual(
+            parametersJsonSchema.properties,
+          );
+          expect(parameters['required']).toStrictEqual(['common']);
+        });
+
+        it.each(['object', SchemaType.OBJECT, undefined])(
+          'preserves ordinary object constraints with root type %s and their source declaration',
+          async (type) => {
+            const parametersJsonSchema = {
+              ...(type === undefined ? {} : { type }),
+              properties: {
+                label: { type: 'string', minLength: 2 },
+                entries: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: { value: { type: 'string' } },
+                    required: ['value'],
+                  },
+                },
+              },
+              required: ['label'],
+            };
+            const snapshot = structuredClone(parametersJsonSchema);
+            const { geminiTools } = buildGeminiTools([
+              { name: 'ordinary', parametersJsonSchema },
+            ]);
+            const request = await callWith(
+              { tools: geminiTools },
+              undefined,
+              streaming,
+            );
+            const parameters = record(firstTool(request.body)['parameters']);
+            expect(parameters['type']).toBe('object');
+            expect(parameters['anyOf']).toBeUndefined();
+            for (const { data, valid } of [
+              { data: { label: 'ok', entries: [{ value: 'v' }] }, valid: true },
+              { data: {}, valid: false },
+              { data: { label: 'x' }, valid: false },
+              { data: { label: 42 }, valid: false },
+              { data: { label: 'ok', entries: [{}] }, valid: false },
+              { data: { label: 'ok', entries: [{ value: 42 }] }, valid: false },
+            ]) {
+              expect(SchemaValidator.validate(parameters, data) === null).toBe(
+                valid,
+              );
+            }
+            expect(parametersJsonSchema).toStrictEqual(snapshot);
+          },
+        );
+
+        it('does not insert an object type into an existing anyOf-only root union', async () => {
+          const parametersJsonSchema = {
+            anyOf: [{ type: 'string', enum: ['a', 'b'] }, { type: 'integer' }],
+          };
+          const snapshot = structuredClone(parametersJsonSchema);
+          const { geminiTools } = buildGeminiTools([
+            { name: 'existing_union', parametersJsonSchema },
+          ]);
+          expect(
+            geminiTools?.[0].functionDeclarations[0].parameters.type,
+          ).toBeUndefined();
+          const request = await callWith(
+            { tools: geminiTools },
+            undefined,
+            streaming,
+          );
+          const parameters = record(firstTool(request.body)['parameters']);
+          assertUnionTypesAreSeparate(parameters);
+          expect(parameters['anyOf']).toStrictEqual(parametersJsonSchema.anyOf);
+          expect(parametersJsonSchema).toStrictEqual(snapshot);
+        });
+      });
+    }
   });
 });

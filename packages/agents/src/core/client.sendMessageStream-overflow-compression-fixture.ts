@@ -15,7 +15,7 @@ import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 import {
   setupAgentClient,
   type MockResponseShape,
-} from './client-test-helpers.js';
+} from './__tests__/client-test-helpers.js';
 
 // Mock clientToolGovernance module so tests can control tool name/governance returns
 const realClientToolGovernance = {

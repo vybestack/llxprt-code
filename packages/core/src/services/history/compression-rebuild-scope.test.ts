@@ -6,7 +6,7 @@
 
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
-import { observeHistorySynchronouslyForTest as synchronousTestHistory } from '../../test-utils/synchronous-history-test-observation.js';
+import { observeHistorySynchronouslyForTest as synchronousTestHistory } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
 
 function compressSummary(text: string): {
   speaker: 'human';

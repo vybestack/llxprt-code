@@ -23,7 +23,7 @@
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { ProviderManager } from '../ProviderManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   LoadBalancingProvider,
@@ -158,7 +158,7 @@ async function serializedEnvelopeTokens(
     .map((content) => JSON.stringify(content.blocks))
     .join('\n');
   const toolText = (options.tools ?? [])
-    .map((toolset) => JSON.stringify(toolset.functionDeclarations))
+    .map((tool) => JSON.stringify(tool))
     .join('\n');
   return Math.ceil((contentText.length + toolText.length) / 4);
 }
@@ -574,13 +574,9 @@ function registerProjectionCase11(): void {
         ]),
         tools: [
           {
-            functionDeclarations: [
-              {
-                name: 'read_file',
-                description: 'Reads a file from the workspace',
-                parametersJsonSchema: { type: 'object', properties: {} },
-              },
-            ],
+            name: 'read_file',
+            description: 'Reads a file from the workspace',
+            parametersJsonSchema: { type: 'object', properties: {} },
           },
         ],
       });

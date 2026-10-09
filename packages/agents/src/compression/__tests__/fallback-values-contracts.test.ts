@@ -6,7 +6,7 @@ import {
   fallbackCandidate,
 } from './provider-fallback-disk-helpers.js';
 import { withValueTransformFixture } from '@vybestack/llxprt-code-core/services/history/transform-value-test-helpers.js';
-import { transformFixtureRows } from '@vybestack/llxprt-code-core/services/history/transform-value-fixtures.js';
+import { transformFixtureRows } from '@vybestack/llxprt-code-core/services/history/transform-value-test-helpers-fixtures.js';
 import { DetachedHistoryJournal } from '@vybestack/llxprt-code-core/services/history/detachedHistoryJournal.js';
 import {
   detachedDigest,
@@ -17,7 +17,7 @@ import {
   type PendingFallbackDeps,
 } from '../pendingWindowFallback.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { suffixRow } from '@vybestack/llxprt-code-core/services/history/history-suffix-test-helpers.js';
+import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { batchGate } from '@vybestack/llxprt-code-core/services/history/addbatch-stream-test-helpers.js';
 import { rejectedValue } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-test-helpers.js';
 import type { ProviderFallbackCandidate } from '../providerFallbackCandidate.js';

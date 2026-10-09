@@ -14,14 +14,14 @@
  */
 
 import { afterEach, describe, expect, it } from 'bun:test';
-import { renderHook } from '../../test-utils/render.js';
+import { renderHook } from '../../__tests__/render.js';
 import { act } from 'react';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { SessionRecordingService } from '@vybestack/llxprt-code-core';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { collectRowsForAssertions } from '../../../../core/src/test-utils/collect-rows-for-assertions.js';
+import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { useHistory } from './useHistoryManager.js';
 import { createTurnStore } from '../stores/turn/turnStore.js';
 

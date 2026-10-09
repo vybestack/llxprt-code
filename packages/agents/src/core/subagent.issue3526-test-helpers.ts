@@ -8,7 +8,7 @@ import type {
   ContentBlock,
   IContent,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { RuntimeToolDeclaration } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 
 export const OUTPUT_CONFIG = {
@@ -66,11 +66,11 @@ export function stopped(text = 'Done.'): IContent {
 
 export function declarationsFrom(
   options: GenerateChatOptions,
-): RuntimeToolDeclaration[] {
+): ToolDeclaration[] {
   if (options.tools === undefined) {
     throw new Error('Expected provider request tool declarations.');
   }
-  return options.tools.flatMap((group) => group.functionDeclarations);
+  return options.tools;
 }
 
 export async function requestText(

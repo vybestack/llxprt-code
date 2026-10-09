@@ -53,7 +53,7 @@ export interface DetachedHistoryTask {
   transform: DetachedHistoryTransform | undefined;
   dispose?(): void;
 }
-interface DetachedState {
+export interface DetachedState {
   readonly tokens: number;
   readonly spans: readonly RemovedInteriorSpan[];
   readonly chronology: ChronologyState;
@@ -253,6 +253,40 @@ export async function withDetachedHistoryMutation(
     throw new AggregateError(failures, 'Detached mutation cleanup failed');
 }
 
+export async function restoreDetachedHistory(
+  checkpoint: DetachedHistoryJournal,
+  state: DetachedState,
+  host: DetachedHistoryHost,
+): Promise<void> {
+  const previous = new DetachedHistoryJournal(host.ownership);
+  const spans = new DensitySpanRows();
+  try {
+    await captureDetachedHistory(
+      host.journal,
+      previous,
+      host.ownership,
+      undefined,
+      () => host.waitForTokenUpdates(),
+    );
+    await commitDetachedHistory(
+      host,
+      previous,
+      checkpoint,
+      spans,
+      undefined,
+      {},
+      false,
+      state,
+    );
+  } finally {
+    try {
+      spans.close();
+    } finally {
+      previous.close();
+    }
+  }
+}
+
 function rowsFrom(
   rows: DetachedHistoryJournal,
   start: number,
@@ -353,6 +387,7 @@ async function commitDetachedHistory(
   modelName: string | undefined,
   options: DetachedHistoryOptions,
   appendOnly: boolean,
+  restoredState?: DetachedState,
 ): Promise<void> {
   const state = host.snapshot();
   const effects: PreparedHistoryBatchEffect[] = [];
@@ -362,15 +397,18 @@ async function commitDetachedHistory(
   );
   try {
     options.signal?.throwIfAborted();
-    stampCandidate(host, next, options.signal);
+    if (restoredState === undefined) stampCandidate(host, next, options.signal);
     const published = appendOnly ? rowsFrom(next, previous.length) : next;
     const tokens =
+      restoredState?.tokens ??
       (appendOnly ? state.tokens : 0) +
-      (await host.estimate(published, modelName, options.signal));
-    const spans = densitySpans.project(
-      state.spans,
-      mergeCommitSpans([], undefined, previous, next),
-    );
+        (await host.estimate(published, modelName, options.signal));
+    const spans =
+      restoredState?.spans ??
+      densitySpans.project(
+        state.spans,
+        mergeCommitSpans([], undefined, previous, next),
+      );
     await publishDetachedEffects(host, previous, next, effects, options);
     await publication.publish(
       previous,
@@ -379,6 +417,8 @@ async function commitDetachedHistory(
       appendOnly,
       awaitFinalAcknowledgement(appendOnly, options),
     );
+    if (restoredState !== undefined)
+      host.chronology.restore(restoredState.chronology);
     host.apply(tokens, spans);
     await finishDetachedPublication(
       host,

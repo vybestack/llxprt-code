@@ -1,16 +1,17 @@
 # @vybestack/llxprt-plugin-google-gemini
 
-Optional LLxprt Code runtime plugin that will contribute the Google Gemini
-provider. This package is scaffolding (issue #2759): it reserves the package
-context, lockfile, build/test/pack flows, and manifest-v1 skeleton. The
-Gemini production code and its behavioral suites move in via #2762/#2763.
+Optional LLxprt Code runtime plugin supplying the Google Gemini provider.
+The provider implementation and its behavioral suites live in this package
+following the extraction in #2763.
 
 ## Status
 
-The manifest contributes a placeholder `google-gemini` provider whose factory
-fails with an actionable error. It does not contribute `gemini` yet because
-the built-in `gemini` provider still exists in the base CLI; the extraction
-issue (#2763) removes the built-in and retires this placeholder.
+The manifest contributes the `gemini` provider and its default alias. The base
+CLI does not include Gemini. In a source checkout, install this package's
+dependencies before selecting `gemini` or running CLI integration tests that
+use it. Root installs and builds do not install optional plugin dependencies.
+Checkout discovery loads this package from `src/index.ts` when its own
+`node_modules` exists; a plugin build is not required for source execution.
 
 ## Install
 

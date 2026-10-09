@@ -6,9 +6,9 @@ import { tmpdir } from 'node:os';
 import { SessionRecordingService } from '../../recording/SessionRecordingService.js';
 import { createRowCounters } from '../../recording/journalCounters.js';
 import { RowOwnership } from '../../recording/rowOwnership.js';
-import { observeHistorySynchronouslyForTest } from '../../test-utils/synchronous-history-test-observation.js';
+import { observeHistorySynchronouslyForTest } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
 import { HistoryService } from './HistoryService.js';
-import { suffixRow } from './history-suffix-test-helpers.js';
+import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 
 async function expectClosed(
   rows: ReturnType<HistoryService['streamRawHistory']>,

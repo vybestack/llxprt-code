@@ -88,11 +88,11 @@ void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('Core Prompt'),
 }));
 
-import { registerTerminationTests } from './subagent.runNonInteractive-term-cases.js';
+import { registerTerminationTests } from './__tests__/subagent.runNonInteractive-term-cases.js';
 import {
   registerInteractiveBestEffortTest,
   registerDisposeTests,
-} from './subagent.runNonInteractive-term-dispose-cases.js';
+} from './__tests__/subagent.runNonInteractive-term-dispose-cases.js';
 
 describe('subagent.ts', () => {
   afterAll(() => {

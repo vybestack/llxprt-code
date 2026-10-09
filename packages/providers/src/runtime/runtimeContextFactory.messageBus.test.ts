@@ -34,7 +34,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { MessageBus } from '@vybestack/llxprt-code-core';
+import { MessageBus, Config } from '@vybestack/llxprt-code-core';
 import type {
   IsolatedRuntimeContextHandle,
   IsolatedRuntimeContextOptions,
@@ -69,8 +69,13 @@ describe('runtime context messageBus seam (P12 RED) @plan:PLAN-20260617-COREAPI.
   it('DEFAULT — with no messageBus option the runtime builds a private bus and activates; handle matches runtimeId/config/settings/providerManager @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-001', async () => {
     const handle: IsolatedRuntimeContextHandle = createIsolatedRuntimeContext({
       runtimeId: 'p12-mb-default',
-      workspaceDir: process.cwd(),
-      model: 'p12-default-model',
+      config: new Config({
+        sessionId: 'p12-mb-default',
+        targetDir: process.cwd(),
+        cwd: process.cwd(),
+        model: 'p12-default-model',
+        debugMode: false,
+      }),
       metadata: { source: 'p12-messageBus-default' },
       prepare: async () => {},
     });
@@ -104,8 +109,13 @@ describe('runtime context messageBus seam (P12 RED) @plan:PLAN-20260617-COREAPI.
     // messageBus field does not trip TS excess-property checking (Trap A).
     const opts: OptionsWithBus = {
       runtimeId: 'p12-mb-provided',
-      workspaceDir: process.cwd(),
-      model: 'p12-provided-model',
+      config: new Config({
+        sessionId: 'p12-mb-provided',
+        targetDir: process.cwd(),
+        cwd: process.cwd(),
+        model: 'p12-provided-model',
+        debugMode: false,
+      }),
       metadata: { source: 'p12-messageBus-provided' },
       prepare: async () => {},
       messageBus: providedBus,

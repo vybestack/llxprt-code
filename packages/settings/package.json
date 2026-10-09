@@ -21,11 +21,6 @@
       "bun": "./src/settings/SettingsService.ts",
       "import": "./dist/src/settings/SettingsService.js"
     },
-    "./settings/settingsServiceInstance.js": {
-      "types": "./dist/src/settings/settingsServiceInstance.d.ts",
-      "bun": "./src/settings/settingsServiceInstance.ts",
-      "import": "./dist/src/settings/settingsServiceInstance.js"
-    },
     "./settings/settingsRegistry.js": {
       "types": "./dist/src/settings/settingsRegistry.d.ts",
       "bun": "./src/settings/settingsRegistry.ts",

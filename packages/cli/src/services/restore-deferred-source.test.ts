@@ -22,7 +22,7 @@ import {
 import { AgentClient } from '../../../agents/src/core/client.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { accountingFactory } from '@vybestack/llxprt-code-core/services/history/token-accounting-stream-test-helpers.js';
-import { suffixRow } from '@vybestack/llxprt-code-core/services/history/history-suffix-test-helpers.js';
+import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { createRowCounters } from '@vybestack/llxprt-code-core/recording/journalCounters.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 

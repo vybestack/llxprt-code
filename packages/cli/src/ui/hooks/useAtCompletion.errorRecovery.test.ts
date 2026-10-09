@@ -5,12 +5,12 @@
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'bun:test';
-import { renderHook, waitFor } from '../../test-utils/render.js';
+import { renderHook, waitFor } from '../../__tests__/render.js';
 import { act } from 'react';
 import type { Config, FileSearch } from '@vybestack/llxprt-code-core';
 import { FileSearchFactory } from '@vybestack/llxprt-code-core';
 import { createTmpDir, cleanupTmpDir } from '@vybestack/llxprt-code-test-utils';
-import { useTestHarnessForAtCompletion } from './useAtCompletion-test-helpers.js';
+import { useTestHarnessForAtCompletion } from './__tests__/useAtCompletion-test-helpers.js';
 
 /**
  * Error-recovery behaviour for the at-completion hook (issue #3373).

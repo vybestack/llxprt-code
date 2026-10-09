@@ -42,7 +42,7 @@ import {
   buildRegistry,
   buildScheduler,
   trackPublicationOrder,
-} from '../test-utils/coreToolScheduler-same-path-mutations-helpers.js';
+} from '../__tests__/coreToolScheduler-same-path-mutations-helpers.js';
 
 describe('CoreToolScheduler real file tools same-path ordering', () => {
   const workspaceFor = useTempWorkspace();

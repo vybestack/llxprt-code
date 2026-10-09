@@ -1,18 +1,9 @@
 /**
  * @plan PLAN-20260702-LLMTYPES.P04
  * @requirement REQ-003.4
- * @pseudocode llm-types-envelope.md "Integration Points"
- *
- * Compile-time assignability proof that existing legacy shapes convert to
- * neutral llm-types WITHOUT casts. Structural shapes are replicated LOCALLY
- * (NOT imported from @vybestack/llxprt-code-providers to avoid inverting
- * package dependency direction). Sources cited inline.
  */
 import { describe, expect, it } from 'bun:test';
-import {
-  toolDeclarationsFromLegacyToolset,
-  type ToolDeclaration,
-} from './toolDeclaration.js';
+import type { ToolDeclaration } from './toolDeclaration.js';
 import type { ModelGenerationRequest } from './modelRequest.js';
 import type { IContent } from '../services/history/IContent.js';
 import type {
@@ -20,142 +11,77 @@ import type {
   RuntimeGenerateChatOptions,
 } from '../runtime/contracts/RuntimeProviderChat.js';
 
-// ---------------------------------------------------------------------------
-// Local structural shapes mirroring the legacy runtime contracts.
-//
-// Source: packages/providers/src/IProvider.ts (ProviderToolset) — the
-// type used by every provider's GenerateChatOptions.tools today.
-// Source: packages/core/src/runtime/contracts/RuntimeProviderChat.ts
-// (RuntimeProviderToolset) — the core runtime toolset type.
-// ---------------------------------------------------------------------------
+async function* streamRows(
+  rows: readonly IContent[],
+): RuntimeGenerateChatOptions['contents'] {
+  yield* rows;
+}
 
-/** Mirrors packages/providers/src/IProvider.ts:ProviderToolset */
-type ProviderToolsetLocal = Array<{
-  functionDeclarations: Array<{
-    name: string;
-    description?: string;
-    parametersJsonSchema?: unknown;
-    parameters?: unknown;
-  }>;
-}>;
-
-/**
- * The runtime contracts live in THIS package, so the REAL types are used
- * directly — no mirror, no drift risk. Only the providers-package shape
- * above must be mirrored (importing it would invert package dependencies);
- * drift there is caught by the providers package itself, whose
- * ProviderToolset literally reuses this structural shape.
- */
-type RuntimeProviderToolsetLocal = RuntimeProviderToolset;
-
-type RuntimeContentsLocal = NonNullable<RuntimeGenerateChatOptions['contents']>;
-
-describe('REQ-003.4 compile-time assignability (no casts needed)', () => {
-  it('ProviderToolset-shaped literal converts via toolDeclarationsFromLegacyToolset', () => {
-    // This is a COMPILE-TIME proof: the literal matches LegacyToolsetLike
-    // because LegacyToolsetLike is structurally wider. No cast.
-    const legacy: ProviderToolsetLocal = [
-      {
-        functionDeclarations: [
-          {
-            name: 'getWeather',
-            description: 'Get weather',
-            parametersJsonSchema: { type: 'object', properties: {} },
-          },
-          {
-            name: 'legacyTool',
-            parameters: { type: 'object' },
-          },
-        ],
-      },
-    ];
-
-    const result: ToolDeclaration[] = toolDeclarationsFromLegacyToolset(legacy);
-    expect(result).toHaveLength(2);
-    expect(result[0].name).toBe('getWeather');
-    expect(result[0].description).toBe('Get weather');
-    expect(result[0].parametersJsonSchema).toStrictEqual({
-      type: 'object',
-      properties: {},
-    });
-    expect(result[1].name).toBe('legacyTool');
-    // Verify the `parameters` fallback was resolved as schema
-    expect(result[1].parametersJsonSchema).toStrictEqual({ type: 'object' });
-  });
-
-  it('RuntimeProviderToolset-shaped literal converts via toolDeclarationsFromLegacyToolset', () => {
-    const runtime: RuntimeProviderToolsetLocal = [
-      {
-        functionDeclarations: [
-          {
-            name: 'search',
-            description: 'Search the web',
-            parametersJsonSchema: { type: 'object' },
-          },
-        ],
-      },
-    ];
-
-    const result: ToolDeclaration[] =
-      toolDeclarationsFromLegacyToolset(runtime);
-    expect(result).toHaveLength(1);
-    expect(result[0].name).toBe('search');
-  });
-
-  it('falls back to empty schema when no valid schema is present', () => {
-    const legacy: ProviderToolsetLocal = [
-      {
-        functionDeclarations: [{ name: 'noSchema' }],
-      },
-    ];
-
-    const result: ToolDeclaration[] = toolDeclarationsFromLegacyToolset(legacy);
-    expect(result).toHaveLength(1);
-    expect(result[0].name).toBe('noSchema');
-    expect(result[0].parametersJsonSchema).toStrictEqual({});
-  });
-
+describe('neutral request assignability', () => {
   it('IContent[] assigns to ModelGenerationRequest.contents', async () => {
-    // COMPILE-TIME proof: IContent[] is assignable to the request's contents field.
     const contents: IContent[] = [
       { speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] },
       { speaker: 'ai', blocks: [{ type: 'text', text: 'hello' }] },
     ];
-    // COMPILE-TIME proof: the runtime contract carries the rows as a stream
-    // (issue #854) — an async generator over the rows satisfies it with no cast.
-    async function* toStream(rows: IContent[]): RuntimeContentsLocal {
-      for (const row of rows) {
-        yield row;
-      }
-    }
-    const streamed = toStream(contents);
-
     const req: ModelGenerationRequest = { contents };
     expect(req.contents).toBe(contents);
     expect(req.contents).toHaveLength(2);
 
+    const streamed = streamRows(contents);
     const drained: IContent[] = [];
-    for await (const row of streamed) {
-      drained.push(row);
-    }
+    for await (const row of streamed) drained.push(row);
     expect(drained).toStrictEqual(contents);
   });
 
-  it('a full GenerateChatOptions-shaped object is assignable to ModelGenerationRequest (contents subset)', () => {
-    // This proves the neutral request type accepts the shapes that flow through
-    // existing provider boundaries today — IContent[] plus legacy toolsets.
+  it('runtime request tools assign directly to the model request', () => {
     const contents: IContent[] = [
       { speaker: 'human', blocks: [{ type: 'text', text: 'run' }] },
     ];
-    const tools: ProviderToolsetLocal = [
-      { functionDeclarations: [{ name: 'exec', parameters: {} }] },
+    const tools: RuntimeProviderToolset = [
+      { name: 'exec', parametersJsonSchema: {} },
     ];
-
-    const req: ModelGenerationRequest = {
-      contents,
-      tools: toolDeclarationsFromLegacyToolset(tools),
+    const declarations: ToolDeclaration[] = tools;
+    const runtime: RuntimeGenerateChatOptions = {
+      contents: streamRows(contents),
+      tools: declarations,
     };
-    expect(req.tools).toHaveLength(1);
+    const req: ModelGenerationRequest = { contents, tools: runtime.tools };
+    expect(req.tools).toBe(tools);
     expect(req.tools?.[0].name).toBe('exec');
+  });
+
+  it('keeps runtime history lazy while sharing ordered flat tool schemas', async () => {
+    let reads = 0;
+    const schema = {
+      type: 'object',
+      properties: { path: { type: 'string' } },
+      required: ['path'],
+    };
+    const tools: ToolDeclaration[] = [
+      {
+        name: 'read_file',
+        description: 'Read a file',
+        parametersJsonSchema: schema,
+      },
+      { name: 'no_args', parametersJsonSchema: true },
+    ];
+    async function* contents(): RuntimeGenerateChatOptions['contents'] {
+      reads++;
+      yield { speaker: 'human', blocks: [{ type: 'text', text: 'first' }] };
+      reads++;
+      yield { speaker: 'ai', blocks: [{ type: 'text', text: 'second' }] };
+    }
+    const runtime: RuntimeGenerateChatOptions = { contents: contents(), tools };
+    expect(reads).toBe(0);
+    expect(runtime.tools?.map(({ name }) => name)).toStrictEqual([
+      'read_file',
+      'no_args',
+    ]);
+    expect(runtime.tools?.[0].parametersJsonSchema).toBe(schema);
+    expect(runtime.tools?.[1].parametersJsonSchema).toBe(true);
+    const speakers: string[] = [];
+    for await (const row of runtime.contents) speakers.push(row.speaker);
+    expect(speakers).toStrictEqual(['human', 'ai']);
+    expect(reads).toBe(2);
   });
 });

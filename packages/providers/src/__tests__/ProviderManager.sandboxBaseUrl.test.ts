@@ -1,16 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { ProviderManager } from '../ProviderManager.js';
 import type { IProvider } from '../IProvider.js';
-import {
-  registerSettingsService,
-  resetSettingsService,
-} from '@vybestack/llxprt-code-settings';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  clearActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
 function createMockProvider(name: string): IProvider {
   return {
@@ -51,17 +42,13 @@ describe('ProviderManager sandbox-base-url resolution', () => {
 
   beforeEach(() => {
     originalSandboxEnv = process.env.SANDBOX;
-    resetSettingsService();
-    setActiveProviderRuntimeContext(createProviderRuntimeContext());
     settingsService = new SettingsService();
-    registerSettingsService(settingsService);
     manager = new ProviderManager({ settingsService });
     manager.registerProvider(createMockProvider('test-provider'));
     manager.setActiveProvider('test-provider');
   });
 
   afterEach(() => {
-    clearActiveProviderRuntimeContext();
     if (originalSandboxEnv === undefined) {
       delete process.env.SANDBOX;
     } else {

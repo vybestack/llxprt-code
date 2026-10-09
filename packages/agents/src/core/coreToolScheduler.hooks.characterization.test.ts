@@ -13,10 +13,10 @@ import {
 import {
   expectErrored,
   expectSuccessful,
-} from './coreToolScheduler-test-helpers.js';
-import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
+} from './__tests__/coreToolScheduler-test-helpers.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
-import { getTestRuntimeMessageBus } from '@vybestack/llxprt-code-core/test-utils/config.js';
+import { getTestRuntimeMessageBus } from '@vybestack/llxprt-code-test-utils/core/config.js';
 
 function createMockPolicyEngine() {
   return {

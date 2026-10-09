@@ -5,18 +5,13 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import type { ToolChoice } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
+import type {
+  ToolChoice,
+  ToolDeclaration,
+} from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 import { DirectMessageProcessor } from './DirectMessageProcessor.js';
 import { StreamProcessor } from './StreamProcessor.js';
 import { TurnProcessor } from './TurnProcessor.js';
-
-type ToolGroupArray = Array<{
-  functionDeclarations: Array<{
-    name: string;
-    description?: string;
-    parametersJsonSchema?: unknown;
-  }>;
-}>;
 
 type V2ToolSelectionRequest = {
   model: string;
@@ -32,9 +27,9 @@ type ProcessorVariant = {
   name: string;
   applyToolSelectionHook: (
     toolChoice: ToolChoice | undefined,
-    toolsFromConfig: ToolGroupArray,
+    toolsFromConfig: ToolDeclaration[],
   ) => Promise<{
-    tools: ToolGroupArray;
+    tools: ToolDeclaration[];
     firedRequest?: V2ToolSelectionRequest;
   }>;
 };
@@ -65,17 +60,11 @@ function createHookConfig(
   };
 }
 
-function createTools(): ToolGroupArray {
+function createTools(): ToolDeclaration[] {
   return [
-    {
-      functionDeclarations: [
-        { name: 'alpha', description: 'alpha tool' },
-        { name: 'beta', description: 'beta tool' },
-      ],
-    },
-    {
-      functionDeclarations: [{ name: 'gamma', description: 'gamma tool' }],
-    },
+    { name: 'alpha', description: 'alpha tool', parametersJsonSchema: {} },
+    { name: 'beta', description: 'beta tool', parametersJsonSchema: {} },
+    { name: 'gamma', description: 'gamma tool', parametersJsonSchema: {} },
   ];
 }
 
@@ -94,8 +83,8 @@ function makeVariant(
         runtimeContext: { state: { model: string } };
         _applyToolSelectionHook: (
           configForHooks: unknown,
-          tools: ToolGroupArray,
-        ) => Promise<{ tools: ToolGroupArray }>;
+          tools: ToolDeclaration[],
+        ) => Promise<{ tools: ToolDeclaration[] }>;
       };
       processor.runtimeContext = { state: { model: STUB_MODEL } };
       const firedRequest: { request?: V2ToolSelectionRequest } = {};
@@ -212,12 +201,8 @@ describe.each(variants)(
       );
 
       expect(result.tools).toStrictEqual([
-        {
-          functionDeclarations: [{ name: 'beta', description: 'beta tool' }],
-        },
-        {
-          functionDeclarations: [{ name: 'gamma', description: 'gamma tool' }],
-        },
+        { name: 'beta', description: 'beta tool', parametersJsonSchema: {} },
+        { name: 'gamma', description: 'gamma tool', parametersJsonSchema: {} },
       ]);
     });
 
@@ -230,9 +215,7 @@ describe.each(variants)(
       );
 
       expect(result.tools).toStrictEqual([
-        {
-          functionDeclarations: [{ name: 'beta', description: 'beta tool' }],
-        },
+        { name: 'beta', description: 'beta tool', parametersJsonSchema: {} },
       ]);
     });
 
@@ -245,9 +228,7 @@ describe.each(variants)(
       );
 
       expect(result.tools).toStrictEqual([
-        {
-          functionDeclarations: [{ name: 'beta', description: 'beta tool' }],
-        },
+        { name: 'beta', description: 'beta tool', parametersJsonSchema: {} },
       ]);
     });
 
@@ -266,37 +247,3 @@ describe.each(variants)(
     });
   },
 );
-
-describe('DirectMessageProcessor BeforeToolSelection runtime-cast tool groups', () => {
-  it('treats absent or non-array functionDeclarations as empty when filtering', async () => {
-    const toolsFromConfig = [
-      { functionDeclarations: [{ name: 'alpha', description: 'alpha tool' }] },
-      {} as unknown as ToolGroupArray[number],
-      {
-        functionDeclarations: 'not-an-array',
-      } as unknown as ToolGroupArray[number],
-    ];
-
-    const result = await directVariant.applyToolSelectionHook(
-      { mode: 'auto', allowedToolNames: ['alpha'] },
-      toolsFromConfig,
-    );
-
-    expect(result.tools).toStrictEqual([
-      { functionDeclarations: [{ name: 'alpha', description: 'alpha tool' }] },
-    ]);
-  });
-});
-
-describe('TurnProcessor BeforeToolSelection runtime-cast tool groups', () => {
-  it('treats a tool group lacking functionDeclarations as empty when filtering', async () => {
-    const toolsFromConfig = [{} as unknown as ToolGroupArray[number]];
-
-    const result = await turnVariant.applyToolSelectionHook(
-      { mode: 'auto', allowedToolNames: ['alpha'] },
-      toolsFromConfig,
-    );
-
-    expect(result.tools).toStrictEqual([]);
-  });
-});

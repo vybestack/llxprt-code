@@ -1,4 +1,4 @@
-import { collectRowsForAssertions } from '../../test-utils/collect-rows-for-assertions.js';
+import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -15,7 +15,7 @@ import { collectRowsForAssertions } from '../../test-utils/collect-rows-for-asse
  * iterates a snapshot.
  */
 
-import { collectRawHistory } from '../../test-utils/collect-raw-history.js';
+import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { describe, it, expect } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';

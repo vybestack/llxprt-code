@@ -26,20 +26,19 @@ import type { SkillDefinition } from '../skills/skillLoader.js';
 import type { LlxprtExtension } from './configTypes.js';
 import { SimpleExtensionLoader } from '../utils/extensionLoader.js';
 import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
-import { initializeTestConfig } from '../test-utils/config.js';
+import { initializeTestConfig } from '../__tests__/config-test-helpers.js';
 import {
   buildFsMockBody,
   buildToolsMockBody,
   buildContentGeneratorMockBody,
   buildTelemetryMockBody,
   buildGitServiceMockBody,
-  buildSettingsMockBody,
   buildIdeIntegrationMockBody,
   buildMemoryDiscoveryMockBody,
   buildEventsMockBody,
   buildFetchMockBody,
   type HoistedConfigMocks,
-} from './configTestHarness.js';
+} from './__tests__/configTestHarness.js';
 
 // Hoisted mocks referenced by the mock factories below.
 const hoistedConfigMocks = {
@@ -93,8 +92,6 @@ void vi.mock('../core/contentGenerator.js', () =>
 void vi.mock('../telemetry/index.js', () => buildTelemetryMockBody());
 
 void vi.mock('../services/gitService.js', () => buildGitServiceMockBody());
-
-void vi.mock('@vybestack/llxprt-code-settings', () => buildSettingsMockBody());
 
 const __actual5 = {
   ...(await import('@vybestack/llxprt-code-ide-integration')),

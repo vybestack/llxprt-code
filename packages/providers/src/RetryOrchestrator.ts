@@ -38,11 +38,7 @@ import {
   delay,
 } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { guardStream } from './guardedStream.js';
-import {
-  collectContents,
-  isAsyncIterableContents,
-  replayableContents,
-} from './utils/collectContents.js';
+import { acquireRequestRows } from './utils/requestRowsLease.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import {
   claimProviderErrorObservation,
@@ -276,25 +272,22 @@ export class RetryOrchestrator implements IProvider {
     tools?: ProviderToolset,
     signal?: AbortSignal,
   ): AsyncIterableIterator<IContent> {
-    // Normalize arguments to GenerateChatOptions. The history is collected
-    // once at the retry boundary (issue #854) and re-opened per attempt, so
-    // every retry streams the same request-scoped contents.
-    const options: GenerateChatOptions | Promise<GenerateChatOptions> =
-      isAsyncIterableContents(optionsOrContents)
-        ? collectContents(optionsOrContents).then((contents) =>
-            this.toRetryOptions(
-              { contents: replayableContents(contents), tools },
-              signal,
-            ),
-          )
-        : collectContents(optionsOrContents.contents).then((contents) =>
-            this.toRetryOptions(
-              { ...optionsOrContents, contents: replayableContents(contents) },
-              signal,
-            ),
-          );
+    return this.generateScopedCompletion(optionsOrContents, tools, signal);
+  }
 
-    return this.generateChatCompletionWithRetry(options);
+  private async *generateScopedCompletion(
+    input: GenerateChatOptions | AsyncIterable<IContent>,
+    tools?: ProviderToolset,
+    signal?: AbortSignal,
+  ): AsyncIterableIterator<IContent> {
+    const request = acquireRequestRows(input, tools, signal);
+    try {
+      yield* this.generateChatCompletionWithRetry(
+        this.toRetryOptions(request.options, signal),
+      );
+    } finally {
+      await request.close();
+    }
   }
 
   /**

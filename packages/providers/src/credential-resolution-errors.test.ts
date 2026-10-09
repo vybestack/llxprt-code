@@ -6,21 +6,43 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { CredentialResolutionError } from '@vybestack/llxprt-code-auth';
-import {
-  clearActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { AnthropicProvider } from './anthropic/AnthropicProvider.js';
 import { resetFactorySingletons } from './auth/proxy/credential-store-factory.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { NormalizedGenerateChatOptions } from './BaseProvider.js';
-import { streamCallOptions } from './test-utils/streamCallOptions.js';
+import { streamCallOptions } from './__tests__/streamCallOptions.js';
 import type { IProvider } from './IProvider.js';
 import { OpenAIProvider } from './openai/OpenAIProvider.js';
 import { OpenAIVercelProvider } from './openai-vercel/OpenAIVercelProvider.js';
 import { createCredentialResolutionError } from './utils/credentialResolutionError.js';
+
+const originalSocket = process.env.LLXPRT_CREDENTIAL_SOCKET;
+
+const originalOpenAIKey = process.env.OPENAI_API_KEY;
+
+const originalAnthropicKey = process.env.ANTHROPIC_API_KEY;
+
+const providerCases: readonly ProviderCase[] = [
+  {
+    providerName: 'openai',
+    createProvider: () =>
+      new OpenAIProvider(undefined, 'https://api.openai.com/v1'),
+    baseURL: 'https://api.openai.com/v1',
+  },
+  {
+    providerName: 'anthropic',
+    createProvider: () => new AnthropicProvider(undefined),
+    baseURL: 'https://api.anthropic.com',
+  },
+  {
+    providerName: 'openaivercel',
+    createProvider: () =>
+      new OpenAIVercelProvider(undefined, 'https://api.openai.com/v1'),
+    baseURL: 'https://api.openai.com/v1',
+  },
+];
 
 const PROFILE = 'issue3451-provider-profile';
 const RUNTIME_ID = 'session#typescriptexpert#provider-surface';
@@ -47,7 +69,6 @@ function createOptions(providerName: string, settings: SettingsService) {
     runtimeId: RUNTIME_ID,
     metadata: { source: 'credential-resolution-errors.test.ts' },
   });
-  setActiveProviderRuntimeContext(runtime);
   return streamCallOptions({
     providerName,
     settings,
@@ -118,10 +139,6 @@ async function captureError(
 }
 
 describe('Provider credential-resolution error surface', () => {
-  const originalSocket = process.env.LLXPRT_CREDENTIAL_SOCKET;
-  const originalOpenAIKey = process.env.OPENAI_API_KEY;
-  const originalAnthropicKey = process.env.ANTHROPIC_API_KEY;
-
   beforeEach(() => {
     process.env.LLXPRT_CREDENTIAL_SOCKET = UNUSED_PROXY_SOCKET;
     delete process.env.OPENAI_API_KEY;
@@ -130,7 +147,6 @@ describe('Provider credential-resolution error surface', () => {
   });
 
   afterEach(() => {
-    clearActiveProviderRuntimeContext();
     resetFactorySingletons();
     if (originalSocket === undefined) {
       delete process.env.LLXPRT_CREDENTIAL_SOCKET;
@@ -149,27 +165,21 @@ describe('Provider credential-resolution error surface', () => {
     }
   });
 
-  const providerCases: readonly ProviderCase[] = [
-    {
-      providerName: 'openai',
-      createProvider: () =>
-        new OpenAIProvider(undefined, 'https://api.openai.com/v1'),
-      baseURL: 'https://api.openai.com/v1',
-    },
-    {
-      providerName: 'anthropic',
-      createProvider: () => new AnthropicProvider(undefined),
-      baseURL: 'https://api.anthropic.com',
-    },
-    {
-      providerName: 'openaivercel',
-      createProvider: () =>
-        new OpenAIVercelProvider(undefined, 'https://api.openai.com/v1'),
-      baseURL: 'https://api.openai.com/v1',
-    },
-  ];
-
   for (const providerCase of providerCases) {
+    registerProviderBehavior1(providerCase);
+  }
+
+  registerProviderBehavior2();
+
+  registerProviderBehavior3();
+
+  registerProviderBehavior4();
+
+  registerProviderBehavior5();
+});
+
+function registerProviderBehavior1(providerCase: ProviderCase): void {
+  describe('provider fixture 1', () => {
     it(`${providerCase.providerName} throws CredentialResolutionError with safe resolver diagnostics`, async () => {
       const settings = createSettings(providerCase.providerName);
       settings.setProviderSetting(
@@ -191,108 +201,126 @@ describe('Provider credential-resolution error surface', () => {
       expect(error.message).not.toContain(FORBIDDEN_SECRET);
       expect(JSON.stringify(error.diagnostics)).not.toContain(FORBIDDEN_SECRET);
     });
-  }
-
-  it('Anthropic third-party base URL preserves typed diagnostics and explicit API-key guidance', async () => {
-    const baseURL = 'https://api.z.ai/api/anthropic';
-    const settings = createSettings('anthropic');
-    settings.setProviderSetting('anthropic', 'base-url', baseURL);
-    const provider = new AnthropicProvider(undefined, baseURL);
-    const options = createOptions('anthropic', settings);
-
-    const error = await captureError(provider.generateChatCompletion(options));
-
-    expect(error).toBeInstanceOf(CredentialResolutionError);
-    if (!(error instanceof CredentialResolutionError)) {
-      throw new Error('Expected a typed credential-resolution failure');
-    }
-    expect(error.kind).toBe('no-credential-configured');
-    expect(error.diagnostics.profile).toBe(PROFILE);
-    expect(error.diagnostics.runtimeId).toBe(RUNTIME_ID);
-    expect(error.remediation).toContain(
-      `No API key resolved for Anthropic-compatible endpoint "${baseURL}"`,
-    );
-    expect(error.message).toContain(
-      `No API key resolved for Anthropic-compatible endpoint "${baseURL}"`,
-    );
   });
+}
 
-  it('prefers a live caller failure while retaining resolver diagnostics', () => {
-    const settings = createSettings('openai');
-    const staleCause = new Error('stale resolver failure');
-    const liveCause = new Error('live token refresh failure');
-    const resolverFailure = new CredentialResolutionError(
-      'proxy-unavailable',
-      {
-        provider: 'openai',
-        profile: PROFILE,
-        runtimeId: RUNTIME_ID,
-        attemptedMechanisms: ['oauth'],
-        proxyMode: true,
-        proxyContacted: true,
-      },
-      { cause: staleCause },
-    );
-    const options = createNormalizedOptions(
-      'openai',
-      settings,
-      resolverFailure,
-    );
+function registerProviderBehavior2(): void {
+  describe('provider fixture 2', () => {
+    it('Anthropic third-party base URL preserves typed diagnostics and explicit API-key guidance', async () => {
+      const baseURL = 'https://api.z.ai/api/anthropic';
+      const settings = createSettings('anthropic');
+      settings.setProviderSetting('anthropic', 'base-url', baseURL);
+      const provider = new AnthropicProvider(undefined, baseURL);
+      const options = createOptions('anthropic', settings);
 
-    const error = createCredentialResolutionError(options, 'openai', {
-      kind: 'credential-source-failed',
-      cause: liveCause,
+      const error = await captureError(
+        provider.generateChatCompletion(options),
+      );
+
+      expect(error).toBeInstanceOf(CredentialResolutionError);
+      if (!(error instanceof CredentialResolutionError)) {
+        throw new Error('Expected a typed credential-resolution failure');
+      }
+      expect(error.kind).toBe('no-credential-configured');
+      expect(error.diagnostics.profile).toBe(PROFILE);
+      expect(error.diagnostics.runtimeId).toBe(RUNTIME_ID);
+      expect(error.remediation).toContain(
+        `No API key resolved for Anthropic-compatible endpoint "${baseURL}"`,
+      );
+      expect(error.message).toContain(
+        `No API key resolved for Anthropic-compatible endpoint "${baseURL}"`,
+      );
     });
-
-    expect(error.kind).toBe('credential-source-failed');
-    expect(error.cause).toBe(liveCause);
-    expect(error.cause).not.toBe(staleCause);
-    expect(error.diagnostics).toStrictEqual(resolverFailure.diagnostics);
   });
+}
 
-  it('preserves the resolver failure when a caller explicitly provides an undefined cause', () => {
-    const settings = createSettings('openai');
-    const resolverCause = new Error('resolver transport failure');
-    const resolverFailure = new CredentialResolutionError(
-      'proxy-unavailable',
-      {
-        provider: 'openai',
-        profile: PROFILE,
-        runtimeId: RUNTIME_ID,
-        attemptedMechanisms: ['oauth'],
-        proxyMode: true,
-        proxyContacted: false,
-      },
-      { cause: resolverCause },
-    );
-    const options = createNormalizedOptions(
-      'openai',
-      settings,
-      resolverFailure,
-    );
+function registerProviderBehavior3(): void {
+  describe('provider fixture 3', () => {
+    it('prefers a live caller failure while retaining resolver diagnostics', () => {
+      const settings = createSettings('openai');
+      const staleCause = new Error('stale resolver failure');
+      const liveCause = new Error('live token refresh failure');
+      const resolverFailure = new CredentialResolutionError(
+        'proxy-unavailable',
+        {
+          provider: 'openai',
+          profile: PROFILE,
+          runtimeId: RUNTIME_ID,
+          attemptedMechanisms: ['oauth'],
+          proxyMode: true,
+          proxyContacted: true,
+        },
+        { cause: staleCause },
+      );
+      const options = createNormalizedOptions(
+        'openai',
+        settings,
+        resolverFailure,
+      );
 
-    const error = createCredentialResolutionError(options, 'openai', {
-      kind: 'credential-source-failed',
-      cause: undefined,
+      const error = createCredentialResolutionError(options, 'openai', {
+        kind: 'credential-source-failed',
+        cause: liveCause,
+      });
+
+      expect(error.kind).toBe('credential-source-failed');
+      expect(error.cause).toBe(liveCause);
+      expect(error.cause).not.toBe(staleCause);
+      expect(error.diagnostics).toStrictEqual(resolverFailure.diagnostics);
     });
-
-    expect(error).toBe(resolverFailure);
-    expect(error.kind).toBe('proxy-unavailable');
-    expect(error.cause).toBe(resolverCause);
   });
+}
 
-  it('marks fresh failure trace fields unknown instead of asserting no proxy attempt', () => {
-    const settings = createSettings('openai');
-    const options = createNormalizedOptions('openai', settings);
+function registerProviderBehavior4(): void {
+  describe('provider fixture 4', () => {
+    it('preserves the resolver failure when a caller explicitly provides an undefined cause', () => {
+      const settings = createSettings('openai');
+      const resolverCause = new Error('resolver transport failure');
+      const resolverFailure = new CredentialResolutionError(
+        'proxy-unavailable',
+        {
+          provider: 'openai',
+          profile: PROFILE,
+          runtimeId: RUNTIME_ID,
+          attemptedMechanisms: ['oauth'],
+          proxyMode: true,
+          proxyContacted: false,
+        },
+        { cause: resolverCause },
+      );
+      const options = createNormalizedOptions(
+        'openai',
+        settings,
+        resolverFailure,
+      );
 
-    const error = createCredentialResolutionError(options, 'openai', {
-      kind: 'credential-source-failed',
-      cause: new Error('live token refresh failure'),
+      const error = createCredentialResolutionError(options, 'openai', {
+        kind: 'credential-source-failed',
+        cause: undefined,
+      });
+
+      expect(error).toBe(resolverFailure);
+      expect(error.kind).toBe('proxy-unavailable');
+      expect(error.cause).toBe(resolverCause);
     });
-
-    expect(error.diagnostics.attemptedMechanisms).toBe('unknown');
-    expect(error.diagnostics.proxyContacted).toBe('unknown');
-    expect(error.message).toContain('attemptedMechanisms=unknown');
-    expect(error.message).toContain('proxyContacted=unknown');
   });
-});
+}
+
+function registerProviderBehavior5(): void {
+  describe('provider fixture 5', () => {
+    it('marks fresh failure trace fields unknown instead of asserting no proxy attempt', () => {
+      const settings = createSettings('openai');
+      const options = createNormalizedOptions('openai', settings);
+
+      const error = createCredentialResolutionError(options, 'openai', {
+        kind: 'credential-source-failed',
+        cause: new Error('live token refresh failure'),
+      });
+
+      expect(error.diagnostics.attemptedMechanisms).toBe('unknown');
+      expect(error.diagnostics.proxyContacted).toBe('unknown');
+      expect(error.message).toContain('attemptedMechanisms=unknown');
+      expect(error.message).toContain('proxyContacted=unknown');
+    });
+  });
+}

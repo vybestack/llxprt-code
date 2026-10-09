@@ -35,7 +35,7 @@ void vi.mock('@vybestack/llxprt-code-mcp', () => ({
 
 import type { ConfigParameters } from './config.js';
 import { Config } from './config.js';
-import { initializeTestConfig } from '../test-utils/config.js';
+import { initializeTestConfig } from '../__tests__/config-test-helpers.js';
 import { ideContext } from '@vybestack/llxprt-code-ide-integration';
 
 const baseParams: ConfigParameters = {

@@ -27,7 +27,10 @@ import { AgentEventType, PerformCompressionResult } from './turn.js';
 import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 import { uiTelemetryService } from '@vybestack/llxprt-code-core/telemetry/uiTelemetry.js';
 import { ChatSession } from './chatSession.js';
-import { fromAsync, setupAgentClient } from './client-test-helpers.js';
+import {
+  fromAsync,
+  setupAgentClient,
+} from './__tests__/client-test-helpers.js';
 import {
   client,
   initializeClient,

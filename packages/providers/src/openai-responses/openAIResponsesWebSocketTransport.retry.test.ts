@@ -17,7 +17,7 @@ import {
   options,
   request,
   textContent,
-} from './openAIResponsesWebSocketTransport.test-helpers.js';
+} from './__tests__/openAIResponsesWebSocketTransport.test-helpers.js';
 
 describe('Codex Responses WebSocket connection-lifecycle retry @issue:2771', () => {
   it('B1: reconnects and retries once on connection-limit, then completes', async () => {

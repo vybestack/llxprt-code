@@ -7,7 +7,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
-import { suffixRow, withSuffixFixture } from './history-suffix-test-helpers.js';
+import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
+import { withCoreSuffixFixture } from './core-suffix-fixture-test-helpers.js';
 
 export type Query = 'clone' | 'trace';
 export function journalShapeRow(index: number, payloadBytes: number): IContent {
@@ -106,7 +107,7 @@ export async function exitMeasurement(
   query: Query,
   exit: Exit,
 ): Promise<object> {
-  return withSuffixFixture(512, async (service, ownership) => {
+  return withCoreSuffixFixture(512, async (service, ownership) => {
     const before = scratchDirectories();
     const stream = queryStream(service, query);
     const first = await stream.next();
@@ -153,7 +154,7 @@ export async function traversalMeasurement(
   within: boolean;
   parity: boolean;
 }> {
-  return withSuffixFixture(
+  return withCoreSuffixFixture(
     size,
     async (service, ownership, counters) => {
       const retained: object[] = [];

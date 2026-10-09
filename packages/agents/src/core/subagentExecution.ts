@@ -18,10 +18,6 @@
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import {
-  type SchedulerCallbacks,
-  type SchedulerOptions,
-} from '@vybestack/llxprt-code-core/config/config.js';
 import type {
   IContent,
   ToolCallBlock,
@@ -671,6 +667,11 @@ export async function initInteractiveScheduler(
   // display-callback factory in interactiveToolScheduler.ts) is purely
   // for UI-side display callbacks — NOT for fixing scheduler.schedule
   // receiver binding. Both paths wrap schedule in a closure below.
+  //
+  // Registry owner: the per-run scheduler config facade. It is the same
+  // object at acquisition and release, and two subagents (or two runs) never
+  // share the facade, so their 'subagent' entries never collide.
+  const owner = ctx.schedulerConfig;
   const schedulerPromise = options?.schedulerFactory
     ? Promise.resolve(
         options.schedulerFactory({
@@ -680,30 +681,19 @@ export async function initInteractiveScheduler(
           onToolCallsUpdate: undefined,
         }),
       )
-    : (async () => {
-        const sessionId = ctx.schedulerConfig.getSessionId();
-        return (
-          ctx.schedulerConfig as Config & {
-            getOrCreateScheduler(
-              sessionId: string,
-              callbacks: SchedulerCallbacks,
-              options?: SchedulerOptions,
-              dependencies?: { messageBus?: MessageBus },
-            ): ReturnType<Config['getOrCreateScheduler']>;
-          }
-        ).getOrCreateScheduler(
-          sessionId,
-          {
-            outputUpdateHandler: channel.outputUpdateHandler,
-            onAllToolCallsComplete: channel.handleCompletion,
-            onToolCallsUpdate: undefined,
-            getPreferredEditor: () => undefined,
-            onEditorClose: () => {},
-          },
-          undefined,
-          { messageBus: ctx.messageBus },
-        );
-      })();
+    : ctx.schedulerConfig.getOrCreateScheduler(
+        owner,
+        'subagent',
+        {
+          outputUpdateHandler: channel.outputUpdateHandler,
+          onAllToolCallsComplete: channel.handleCompletion,
+          onToolCallsUpdate: undefined,
+          getPreferredEditor: () => undefined,
+          onEditorClose: () => {},
+        },
+        undefined,
+        { messageBus: ctx.messageBus },
+      );
 
   let scheduler: Awaited<typeof schedulerPromise>;
   try {
@@ -727,7 +717,9 @@ export async function initInteractiveScheduler(
     }
   } else {
     schedulerDispose = async () =>
-      ctx.schedulerConfig.disposeScheduler(ctx.schedulerConfig.getSessionId());
+      // Pass the acquired scheduler so a stale release after a disposeAll
+      // sweep cannot dispose a replacement entry under the same key.
+      ctx.schedulerConfig.disposeScheduler(owner, 'subagent', scheduler);
   }
 
   return {

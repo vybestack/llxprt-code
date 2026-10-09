@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import type * as acp from '@agentclientprotocol/sdk';
 import type { IContent } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import { RecordingConnection } from './zed-test-helpers.js';
+import { RecordingConnection } from './__tests__/zed-test-helpers.js';
 import {
   recordedFilesLister,
   mockFromConfig,

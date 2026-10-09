@@ -1,8 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { captureBodyAttempt } from '../lib/body-evidence-writer.js';
+import { randomUUID } from 'node:crypto';
 import { SettingsService } from '../../packages/settings/src/settings/SettingsService.js';
 import { createProviderRuntimeContext } from '../../packages/core/src/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '../../packages/core/src/runtime/RuntimeInvocationContext.js';
-import { createRuntimeConfigStub } from '../../packages/core/src/test-utils/runtime.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { OpenAIResponsesProvider } from '../../packages/providers/src/openai-responses/OpenAIResponsesProvider.js';
 import { AnthropicProvider } from '../../packages/providers/src/anthropic/AnthropicProvider.js';
 import { GeminiProvider } from '../../plugins/google-gemini/src/gemini/GeminiProvider.js';
@@ -24,7 +26,7 @@ import { buildProviderContent } from '../../packages/core/src/services/history/h
 import { providerPendingFixture } from '../../packages/core/src/services/history/provider-curated-test-helpers.js';
 import { recomposeFixture } from '../../packages/agents/src/compression/__tests__/provider-curated-recomposition-helpers.js';
 import { captureCuratedBody } from './provider-curated-body-helpers.js';
-import { createProviderCallOptions } from '../../packages/core/src/test-utils/providerCallOptions.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import type { CompressionProviderResult } from '../../packages/core/src/core/compression/types.js';
 import { PerformCompressionResult } from '../../packages/core/src/core/turn.js';
 
@@ -209,6 +211,7 @@ export async function invokedSummaryBodies(
   );
   const originalFetch = globalThis.fetch;
   const bodies: string[] = [];
+  const captureId = randomUUID();
   let actualLane = false;
   globalThis.fetch = async (
     _input: RequestInfo | URL,
@@ -216,7 +219,7 @@ export async function invokedSummaryBodies(
   ): Promise<Response> => {
     if (init?.body === undefined)
       throw new Error('Missing actual summary BODY');
-    bodies.push(await new Response(init.body).text());
+    await captureBodyAttempt(bodies, init.body, name, captureId);
     if (actualLane && bodies.length === 2) throw new TypeError('fetch failed');
     const url = _input instanceof Request ? _input.url : String(_input);
     return networkResponse(name, url.includes('streamGenerateContent'));

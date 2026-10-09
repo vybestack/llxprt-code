@@ -10,7 +10,7 @@ import { OAuthManager } from './oauth-manager.js';
 import {
   makeToken,
   MemoryTokenStore,
-} from './BucketFailoverHandlerImpl.test-helpers.js';
+} from './__tests__/BucketFailoverHandlerImpl.test-helpers.js';
 
 describe('BucketFailoverHandlerImpl #48', () => {
   it('times out hanging authenticate in Pass 3 with configurable timeout, records reauth-timeout reason, returns false', async () => {

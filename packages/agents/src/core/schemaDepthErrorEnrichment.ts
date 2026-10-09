@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
+
 import { isProviderApiError } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { isSchemaDepthError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
@@ -16,7 +18,7 @@ import { hasCycleInSchema } from '@vybestack/llxprt-code-tools/tools/tools.js';
  */
 export function enrichSchemaDepthError(
   error: unknown,
-  tools: unknown,
+  tools: ToolDeclaration[] | undefined,
   logger: DebugLogger,
 ): void {
   if (
@@ -34,8 +36,8 @@ export function enrichSchemaDepthError(
   const toolNames: string[] = [];
   const cyclicSchemaTools: string[] = [];
 
-  for (const toolGroup of tools) {
-    collectCyclicSchemaToolNames(toolGroup, toolNames, cyclicSchemaTools);
+  for (const declaration of tools) {
+    collectCyclicSchemaToolNames(declaration, toolNames, cyclicSchemaTools);
   }
 
   const metadata = {
@@ -58,36 +60,17 @@ export function enrichSchemaDepthError(
 }
 
 /**
- * Collects tool names and any with cyclic schemas from a single tool group.
- * Tool groups can be malformed at runtime, so the shape is validated before use.
+ * Collects a declaration's name and identifies cyclic parameter schemas.
  */
 function collectCyclicSchemaToolNames(
-  toolGroup: unknown,
+  funcDecl: ToolDeclaration,
   toolNames: string[],
   cyclicSchemaTools: string[],
 ): void {
-  if (
-    typeof toolGroup !== 'object' ||
-    toolGroup === null ||
-    !('functionDeclarations' in toolGroup) ||
-    !Array.isArray(toolGroup.functionDeclarations)
-  ) {
-    return;
-  }
-
-  for (const funcDecl of toolGroup.functionDeclarations) {
-    if (typeof funcDecl !== 'object' || funcDecl === null) {
-      continue;
-    }
-    const name = funcDecl.name ?? 'unknown';
-    toolNames.push(name);
-    const schema = funcDecl.parametersJsonSchema;
-    if (
-      schema != null &&
-      typeof schema === 'object' &&
-      hasCycleInSchema(schema as Record<string, unknown>)
-    ) {
-      cyclicSchemaTools.push(name);
-    }
+  const name = funcDecl.name;
+  toolNames.push(name);
+  const schema = funcDecl.parametersJsonSchema;
+  if (typeof schema === 'object' && hasCycleInSchema(schema)) {
+    cyclicSchemaTools.push(name);
   }
 }

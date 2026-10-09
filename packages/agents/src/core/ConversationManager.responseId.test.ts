@@ -12,7 +12,7 @@
  * This exercises ConversationManager.recordHistory → _addModelOutputToHistory.
  */
 
-import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-core/test-utils/collect-rows-for-assertions.js';
+import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { describe, it, expect, beforeEach } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';

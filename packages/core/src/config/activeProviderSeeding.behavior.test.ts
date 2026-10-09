@@ -13,12 +13,9 @@
  * proof of freshness for a service carrying other injected state.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import { describe, it, expect, afterEach, vi } from 'bun:test';
 import { Config } from './config.js';
-import {
-  SettingsService,
-  resetSettingsService,
-} from '@vybestack/llxprt-code-settings';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import process from 'process';
 
 const actual = { ...(await import('fs')) };
@@ -41,12 +38,7 @@ function baseParams(): ConstructorParameters<typeof Config>[0] {
 }
 
 describe('Config activeProvider seeding ownership (#2534 review Finding 6)', () => {
-  beforeEach(() => {
-    resetSettingsService();
-  });
-
   afterEach(() => {
-    resetSettingsService();
     vi.clearAllMocks();
   });
 

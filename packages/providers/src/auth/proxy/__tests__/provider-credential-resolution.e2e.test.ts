@@ -20,12 +20,8 @@ import type {
   OAuthToken,
   TokenStore,
 } from '@vybestack/llxprt-code-core';
-import {
-  clearActiveProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { streamCallOptions } from '../../../test-utils/streamCallOptions.js';
+import { streamCallOptions } from '../../../__tests__/streamCallOptions.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
 import {
@@ -40,6 +36,39 @@ import {
   createTokenStore,
   resetFactorySingletons,
 } from '../credential-store-factory.js';
+
+const proxies: RunningProxy[] = [];
+
+let temporaryDirectory: string | undefined;
+
+let originalSocket: string | undefined;
+
+async function startProxy(withCredential: boolean): Promise<RunningProxy> {
+  const token: OAuthToken | undefined = withCredential
+    ? {
+        access_token: CREDENTIAL_SECRET,
+        token_type: 'Bearer',
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+      }
+    : undefined;
+  if (temporaryDirectory === undefined) {
+    throw new Error('Temporary proxy directory is not initialized');
+  }
+  const server = new CredentialProxyServer({
+    tokenStore: new InMemoryTokenStore(token),
+    providerKeyStorage: new EmptyProviderKeyStorage(),
+    socketDir: temporaryDirectory,
+  });
+  const socketPath = await server.start();
+  const proxy = { server, socketPath };
+  proxies.push(proxy);
+  process.env.LLXPRT_CREDENTIAL_SOCKET = socketPath;
+  return proxy;
+}
+
+function createProvider(): CredentialProbeProvider {
+  return new CredentialProbeProvider(createProxyOAuthManager());
+}
 
 const PROFILE = 'issue3451-sandbox-profile';
 const PROVIDER = 'issue3451-proxy-provider';
@@ -210,7 +239,6 @@ function createCallOptions(settings: SettingsService, runtimeId: string) {
       },
     ],
   });
-  setActiveProviderRuntimeContext(options.runtime);
   return options;
 }
 
@@ -240,10 +268,6 @@ async function captureCredentialFailure(
 }
 
 describe('Provider credential resolution through a sandbox proxy', () => {
-  const proxies: RunningProxy[] = [];
-  let temporaryDirectory: string | undefined;
-  let originalSocket: string | undefined;
-
   beforeEach(async () => {
     temporaryDirectory = undefined;
     temporaryDirectory = await fs.mkdtemp(
@@ -258,7 +282,6 @@ describe('Provider credential resolution through a sandbox proxy', () => {
   afterEach(async () => {
     const cleanupErrors: unknown[] = [];
     try {
-      clearActiveProviderRuntimeContext();
       resetFactorySingletons();
       runtimeScopedStates.clear();
       for (const proxy of proxies.splice(0)) {
@@ -287,117 +310,110 @@ describe('Provider credential resolution through a sandbox proxy', () => {
     }
   });
 
-  async function startProxy(withCredential: boolean): Promise<RunningProxy> {
-    const token: OAuthToken | undefined = withCredential
-      ? {
-          access_token: CREDENTIAL_SECRET,
-          token_type: 'Bearer',
-          expiry: Math.floor(Date.now() / 1000) + 3600,
-        }
-      : undefined;
-    if (temporaryDirectory === undefined) {
-      throw new Error('Temporary proxy directory is not initialized');
-    }
-    const server = new CredentialProxyServer({
-      tokenStore: new InMemoryTokenStore(token),
-      providerKeyStorage: new EmptyProviderKeyStorage(),
-      socketDir: temporaryDirectory,
+  registerProviderBehavior1();
+
+  registerProviderBehavior2();
+
+  registerProviderBehavior3();
+});
+
+function registerProviderBehavior1(): void {
+  describe('provider fixture 1', () => {
+    it('resolves a credential for a fresh subagent-shaped runtime while the proxy is available', async () => {
+      await startProxy(true);
+      const settings = createSettings();
+      const provider = createProvider();
+
+      await expect(
+        callProvider(
+          provider,
+          settings,
+          'session#typescriptexpert#credential-present',
+        ),
+      ).resolves.toBeUndefined();
     });
-    const socketPath = await server.start();
-    const proxy = { server, socketPath };
-    proxies.push(proxy);
-    process.env.LLXPRT_CREDENTIAL_SOCKET = socketPath;
-    return proxy;
-  }
-
-  function createProvider(): CredentialProbeProvider {
-    return new CredentialProbeProvider(createProxyOAuthManager());
-  }
-
-  it('resolves a credential for a fresh subagent-shaped runtime while the proxy is available', async () => {
-    await startProxy(true);
-    const settings = createSettings();
-    const provider = createProvider();
-
-    await expect(
-      callProvider(
-        provider,
-        settings,
-        'session#typescriptexpert#credential-present',
-      ),
-    ).resolves.toBeUndefined();
   });
+}
 
-  it('classifies a closed proxy on a subagent first call while a parent runtime remains warm', async () => {
-    const proxy = await startProxy(true);
-    const settings = createSettings();
-    const provider = createProvider();
-    const parentRuntimeId = 'session-parent-runtime';
-    const parentRuntime = createCallOptions(settings, parentRuntimeId).runtime;
-    const getActiveRuntimeContext = (): IProviderRuntimeContext => ({
-      ...parentRuntime,
-      settingsService: settings,
-      runtimeId: parentRuntimeId,
-    });
-    const parentResolver = new AuthPrecedenceResolver(
-      {
-        isOAuthEnabled: true,
-        supportsOAuth: true,
-        oauthProvider: PROVIDER,
-        providerId: PROVIDER,
-      },
-      {
-        oauthManager: createProxyOAuthManager(),
+function registerProviderBehavior2(): void {
+  describe('provider fixture 2', () => {
+    it('classifies a closed proxy on a subagent first call while a parent runtime remains warm', async () => {
+      const proxy = await startProxy(true);
+      const settings = createSettings();
+      const provider = createProvider();
+      const parentRuntimeId = 'session-parent-runtime';
+      const parentRuntime = createCallOptions(
+        settings,
+        parentRuntimeId,
+      ).runtime;
+      const getActiveRuntimeContext = (): IProviderRuntimeContext => ({
+        ...parentRuntime,
         settingsService: settings,
-        getActiveRuntimeContext,
-      },
-    );
+        runtimeId: parentRuntimeId,
+      });
+      const parentResolver = new AuthPrecedenceResolver(
+        {
+          isOAuthEnabled: true,
+          supportsOAuth: true,
+          oauthProvider: PROVIDER,
+          providerId: PROVIDER,
+        },
+        {
+          oauthManager: createProxyOAuthManager(),
+          settingsService: settings,
+          getActiveRuntimeContext,
+        },
+      );
 
-    const parentInitial = await parentResolver.resolveAuthenticationResult({
-      settingsService: settings,
-      includeOAuth: true,
-    });
-    expect(parentInitial.token).toBe(CREDENTIAL_SECRET);
-    await proxy.server.stop();
-    proxies.splice(proxies.indexOf(proxy), 1);
-
-    const failure = await captureCredentialFailure(
-      provider,
-      settings,
-      'session#typescriptexpert#proxy-closed',
-    );
-
-    expect(failure.kind).toBe('proxy-unavailable');
-    expect(failure.diagnostics.provider).toBe(PROVIDER);
-    expect(failure.diagnostics.profile).toBe(PROFILE);
-    expect(failure.diagnostics.proxyContacted).toBe(false);
-    expect(failure.message).not.toContain(CREDENTIAL_SECRET);
-
-    const parentAfterFailure = await parentResolver.resolveAuthenticationResult(
-      {
+      const parentInitial = await parentResolver.resolveAuthenticationResult({
         settingsService: settings,
         includeOAuth: true,
-      },
-    );
-    expect(parentAfterFailure.token).toBe(CREDENTIAL_SECRET);
+      });
+      expect(parentInitial.token).toBe(CREDENTIAL_SECRET);
+      await proxy.server.stop();
+      proxies.splice(proxies.indexOf(proxy), 1);
+
+      const failure = await captureCredentialFailure(
+        provider,
+        settings,
+        'session#typescriptexpert#proxy-closed',
+      );
+
+      expect(failure.kind).toBe('proxy-unavailable');
+      expect(failure.diagnostics.provider).toBe(PROVIDER);
+      expect(failure.diagnostics.profile).toBe(PROFILE);
+      expect(failure.diagnostics.proxyContacted).toBe(false);
+      expect(failure.message).not.toContain(CREDENTIAL_SECRET);
+
+      const parentAfterFailure =
+        await parentResolver.resolveAuthenticationResult({
+          settingsService: settings,
+          includeOAuth: true,
+        });
+      expect(parentAfterFailure.token).toBe(CREDENTIAL_SECRET);
+    });
   });
+}
 
-  it('classifies an absent proxy credential distinctly from proxy transport failure', async () => {
-    await startProxy(false);
-    const settings = createSettings();
-    settings.set('auth-key-name', MISSING_KEY_NAME);
-    const provider = createProvider();
+function registerProviderBehavior3(): void {
+  describe('provider fixture 3', () => {
+    it('classifies an absent proxy credential distinctly from proxy transport failure', async () => {
+      await startProxy(false);
+      const settings = createSettings();
+      settings.set('auth-key-name', MISSING_KEY_NAME);
+      const provider = createProvider();
 
-    const failure = await captureCredentialFailure(
-      provider,
-      settings,
-      'session#typescriptexpert#credential-absent',
-    );
+      const failure = await captureCredentialFailure(
+        provider,
+        settings,
+        'session#typescriptexpert#credential-absent',
+      );
 
-    expect(failure.kind).toBe('credential-not-found');
-    expect(failure.kind).not.toBe('proxy-unavailable');
-    expect(failure.diagnostics.provider).toBe(PROVIDER);
-    expect(failure.diagnostics.profile).toBe(PROFILE);
-    expect(failure.diagnostics.proxyContacted).toBe(true);
+      expect(failure.kind).toBe('credential-not-found');
+      expect(failure.kind).not.toBe('proxy-unavailable');
+      expect(failure.diagnostics.provider).toBe(PROVIDER);
+      expect(failure.diagnostics.profile).toBe(PROFILE);
+      expect(failure.diagnostics.proxyContacted).toBe(true);
+    });
   });
-});
+}

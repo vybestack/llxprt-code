@@ -12,7 +12,7 @@
 
 import { describe, expect, it, vi } from 'bun:test';
 import { act } from 'react';
-import { renderWithProviders } from '../../test-utils/render.js';
+import { renderWithProviders } from '../../__tests__/render.js';
 import { LoadProfileDialog } from './LoadProfileDialog.js';
 
 // A lone ESC byte only decodes to an 'escape' keypress after the

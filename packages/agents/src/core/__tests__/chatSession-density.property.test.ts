@@ -15,7 +15,7 @@
  * Sibling to chatSession-density.test.ts.
  */
 
-import { collectRawHistory } from '@vybestack/llxprt-code-core/test-utils/collect-raw-history.js';
+import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { describe, it } from 'bun:test';
 import * as fc from 'fast-check';
 import { ChatSession } from '../chatSession.js';

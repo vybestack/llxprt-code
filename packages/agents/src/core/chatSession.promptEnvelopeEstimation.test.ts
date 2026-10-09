@@ -23,15 +23,7 @@
  */
 
 import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
-import {
-  describe,
-  it,
-  expect,
-  vi,
-  beforeEach,
-  afterEach,
-  onTestFinished,
-} from 'bun:test';
+import { describe, it, expect, vi, beforeEach, onTestFinished } from 'bun:test';
 import { ChatSession } from './chatSession.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
@@ -46,12 +38,9 @@ import {
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import * as providerRuntime from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { createChatSessionRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import type {
-  GenerateChatOptions,
-  IProvider,
-} from '@vybestack/llxprt-code-providers/IProvider.js';
+import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
+import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { waitForCondition } from '../test-utils/eventLoop.js';
@@ -83,8 +72,10 @@ function createEstimatingProvider(
     getCurrentModel: () => 'test-model',
     getModels: () => Promise.resolve([]),
     async *generateChatCompletion(
-      options: GenerateChatOptions,
+      input: GenerateChatOptions | AsyncIterable<IContent>,
     ): AsyncIterableIterator<IContent> {
+      if (!('contents' in input)) throw new Error('Expected chat options');
+      const options = input;
       const preparedPrompt =
         options.promptEnvelopeTransportToken === undefined
           ? undefined
@@ -130,6 +121,7 @@ function createEstimatingProvider(
         projectionRevision: 1,
         unsupportedMedia: [],
         transportToken,
+        finalizedProjection: Object.freeze({}),
         legacyEstimate: () => Promise.resolve(tokenCount),
       };
     },
@@ -175,7 +167,6 @@ function createTestFixture(provider: IProvider): TestFixture {
     ...runtimeSetup.runtime,
     config: mockConfig,
   };
-  providerRuntime.setActiveProviderRuntimeContext(providerRuntimeSnapshot);
 
   if (
     'projectPromptEnvelope' in provider &&
@@ -194,6 +185,8 @@ function createTestFixture(provider: IProvider): TestFixture {
     embedContent: vi.fn(),
   };
 
+  if (runtimeSetup.runtime.runtimeId === undefined)
+    throw new Error('Missing fixture runtime id');
   const runtimeState = createAgentRuntimeState({
     runtimeId: runtimeSetup.runtime.runtimeId,
     provider: 'test-estimating-provider',
@@ -234,7 +227,7 @@ function buildChatSession(fixture: TestFixture): ChatSession {
 }
 
 function registerRetryTimerCleanup(): void {
-  vi.useFakeTimers({ toFake: ['setTimeout', 'Date'] });
+  vi.useFakeTimers();
   // Restore real timers even if an assertion below throws, so fake timers
   // cannot leak into subsequent tests.
   onTestFinished(() => {
@@ -256,8 +249,10 @@ function createRetryingProvider(
     getCurrentModel: () => 'test-model',
     getModels: () => Promise.resolve([]),
     async *generateChatCompletion(
-      options: GenerateChatOptions,
+      input: GenerateChatOptions | AsyncIterable<IContent>,
     ): AsyncIterableIterator<IContent> {
+      if (!('contents' in input)) throw new Error('Expected chat options');
+      const options = input;
       const token = options.promptEnvelopeTransportToken;
       const body = token === undefined ? undefined : preparedBodies.get(token);
       if (body === undefined) {
@@ -289,7 +284,7 @@ function createRetryingProvider(
     ): Promise<PromptEnvelopeProjection> {
       preparationAttempt += 1;
       const preparedBody = JSON.stringify({
-        contents: options.contents,
+        contents: await Array.fromAsync(options.contents),
         retryMaterial: 'x'.repeat(preparationAttempt * 40),
       });
       const tokenCount = Math.max(Math.ceil(preparedBody.length / 4), 1);
@@ -303,6 +298,7 @@ function createRetryingProvider(
         projectionRevision: 1,
         unsupportedMedia: [],
         transportToken,
+        finalizedProjection: Object.freeze({}),
         legacyEstimate: () => Promise.resolve(tokenCount),
       };
     },
@@ -323,7 +319,7 @@ const prepareRetryEstimationScenario = () => {
   const chat = buildChatSession(fixture);
 
   const sendPromise = chat.sendMessage(
-    { message: [{ text: 'Retry me.' }] },
+    { message: [{ type: 'text', text: 'Retry me.' }] },
     'retry-1',
   );
 
@@ -346,8 +342,10 @@ const prepareFailedRequestEstimateScenario = () => {
     getCurrentModel: () => 'test-model',
     getModels: () => Promise.resolve([]),
     async *generateChatCompletion(
-      options: GenerateChatOptions,
+      input: GenerateChatOptions | AsyncIterable<IContent>,
     ): AsyncIterableIterator<IContent> {
+      if (!('contents' in input)) throw new Error('Expected chat options');
+      const options = input;
       const token = options.promptEnvelopeTransportToken;
       if (token === undefined) {
         throw new Error('transport did not receive the prepared envelope');
@@ -371,7 +369,9 @@ const prepareFailedRequestEstimateScenario = () => {
     async projectPromptEnvelope(
       options: GenerateChatOptions,
     ): Promise<PromptEnvelopeProjection> {
-      const serialized = JSON.stringify(options.contents);
+      const serialized = JSON.stringify(
+        await Array.fromAsync(options.contents),
+      );
       const tokenCount = Math.max(Math.ceil(serialized.length / 4), 1);
       const transportToken = Object.freeze({});
       return {
@@ -381,6 +381,7 @@ const prepareFailedRequestEstimateScenario = () => {
         projectionRevision: 1,
         unsupportedMedia: [],
         transportToken,
+        finalizedProjection: Object.freeze({}),
         legacyEstimate: () => Promise.resolve(tokenCount),
       };
     },
@@ -394,10 +395,6 @@ const prepareFailedRequestEstimateScenario = () => {
 describe('ChatSession prompt-envelope estimation (issue #2817)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-  });
-
-  afterEach(() => {
-    providerRuntime.setActiveProviderRuntimeContext(null);
   });
 
   it(
@@ -455,7 +452,7 @@ async function testSplitCase1(): Promise<void> {
   expect(chat.getPromptEnvelopeEstimate()).toBeNull();
 
   await chat.sendMessage(
-    { message: [{ text: 'Hello, tell me about AI.' }] },
+    { message: [{ type: 'text', text: 'Hello, tell me about AI.' }] },
     'test-prompt-1',
   );
 
@@ -473,7 +470,7 @@ async function testSplitCase2(): Promise<void> {
   const chat = buildChatSession(fixture);
 
   await chat.sendMessage(
-    { message: [{ text: 'Brief question.' }] },
+    { message: [{ type: 'text', text: 'Brief question.' }] },
     'prompt-small',
   );
 
@@ -509,7 +506,7 @@ async function testSplitCase2(): Promise<void> {
   }
 
   await chat.sendMessage(
-    { message: [{ text: 'Now answer another question.' }] },
+    { message: [{ type: 'text', text: 'Now answer another question.' }] },
     'prompt-large',
   );
 
@@ -529,13 +526,17 @@ async function testSplitCase3(): Promise<void> {
   const fixture = createTestFixture(provider);
   const chat = buildChatSession(fixture);
 
-  await chat.sendMessage({ message: [{ text: 'Short message.' }] }, 'prompt-1');
+  await chat.sendMessage(
+    { message: [{ type: 'text', text: 'Short message.' }] },
+    'prompt-1',
+  );
   const shortEstimate = chat.getPromptEnvelopeEstimate()!;
 
   await chat.sendMessage(
     {
       message: [
         {
+          type: 'text',
           text: 'This is a significantly longer pending message that contains much more textual content and therefore should produce a higher token estimate because the projection serializes the finalized contents.',
         },
       ],
@@ -560,7 +561,10 @@ async function testSplitCase4(): Promise<void> {
   const fixture = createTestFixture(provider);
   const chat = buildChatSession(fixture);
 
-  await chat.sendMessage({ message: [{ text: 'Hello' }] }, 'test-prompt');
+  await chat.sendMessage(
+    { message: [{ type: 'text', text: 'Hello' }] },
+    'test-prompt',
+  );
 
   await fixture.historyService.waitForTokenUpdates();
 
@@ -584,7 +588,7 @@ async function testSplitCase5(): Promise<void> {
   const baselineFixture = createTestFixture(baselineProvider.provider);
   const baselineChat = buildChatSession(baselineFixture);
   await baselineChat.sendMessage(
-    { message: [{ text: 'Hello' }] },
+    { message: [{ type: 'text', text: 'Hello' }] },
     'prompt-baseline',
   );
   const baselineEstimate = baselineChat.getPromptEnvelopeEstimate()!;
@@ -594,7 +598,10 @@ async function testSplitCase5(): Promise<void> {
   const chat = buildChatSession(fixture);
   chat.setSystemInstruction(longSystemPrompt);
 
-  await chat.sendMessage({ message: [{ text: 'Hello' }] }, 'prompt-1');
+  await chat.sendMessage(
+    { message: [{ type: 'text', text: 'Hello' }] },
+    'prompt-1',
+  );
 
   const estimate = chat.getPromptEnvelopeEstimate();
   expect(estimate).not.toBeNull();
@@ -609,26 +616,28 @@ async function testSplitCase6(): Promise<void> {
   const fixture = createTestFixture(provider);
   const chat = buildChatSession(fixture);
 
-  await chat.sendMessage({ message: [{ text: 'Hello' }] }, 'prompt-1');
+  await chat.sendMessage(
+    { message: [{ type: 'text', text: 'Hello' }] },
+    'prompt-1',
+  );
   const withoutToolsEstimate = chat.getPromptEnvelopeEstimate()!;
 
-  const largeToolSet = [
-    {
-      functionDeclarations: Array.from({ length: 8 }, (_, i) => ({
-        name: `tool_${i}`,
-        description: `Tool number ${i} with a lengthy description that adds prompt material so the projected envelope grows. This tool performs an action relevant to the conversation and its schema is non-trivial.`,
-        parametersJsonSchema: {
-          type: 'object',
-          properties: {
-            arg: { type: 'string', description: `argument for tool ${i}` },
-          },
-        },
-      })),
+  const largeToolSet = Array.from({ length: 8 }, (_, i) => ({
+    name: `tool_${i}`,
+    description: `Tool number ${i} with a lengthy description that adds prompt material so the projected envelope grows. This tool performs an action relevant to the conversation and its schema is non-trivial.`,
+    parametersJsonSchema: {
+      type: 'object',
+      properties: {
+        arg: { type: 'string', description: `argument for tool ${i}` },
+      },
     },
-  ];
+  }));
 
   await chat.sendMessage(
-    { message: [{ text: 'Hello' }], config: { tools: largeToolSet } },
+    {
+      message: [{ type: 'text', text: 'Hello' }],
+      config: { tools: largeToolSet },
+    },
     'prompt-with-tools',
   );
   const withToolsEstimate = chat.getPromptEnvelopeEstimate()!;
@@ -651,7 +660,7 @@ async function testSplitCase7(): Promise<void> {
   expect(chat.getPromptEnvelopeEstimate()).toBeNull();
 
   const stream = await chat.sendMessageStream(
-    { message: [{ text: 'Stream me a haiku.' }] },
+    { message: [{ type: 'text', text: 'Stream me a haiku.' }] },
     'stream-prompt-1',
   );
 
@@ -693,7 +702,7 @@ async function testSplitCase9(): Promise<void> {
     getCurrentModel: () => 'test-model',
     getModels: () => Promise.resolve([]),
     async *generateChatCompletion(
-      _options: GenerateChatOptions,
+      _options: GenerateChatOptions | AsyncIterable<IContent>,
     ): AsyncIterableIterator<IContent> {
       yield {
         speaker: 'ai',
@@ -709,7 +718,10 @@ async function testSplitCase9(): Promise<void> {
   const chat = buildChatSession(fixture);
 
   await expect(
-    chat.sendMessage({ message: [{ text: 'Hello' }] }, 'estimate-failure'),
+    chat.sendMessage(
+      { message: [{ type: 'text', text: 'Hello' }] },
+      'estimate-failure',
+    ),
   ).rejects.toThrow('projection blew up');
 }
 
@@ -721,7 +733,7 @@ async function testSplitCase10(): Promise<void> {
     getCurrentModel: () => 'test-model',
     getModels: () => Promise.resolve([]),
     async *generateChatCompletion(
-      _options: GenerateChatOptions,
+      _options: GenerateChatOptions | AsyncIterable<IContent>,
     ): AsyncIterableIterator<IContent> {
       yield {
         speaker: 'ai',
@@ -733,7 +745,10 @@ async function testSplitCase10(): Promise<void> {
   const fixture = createTestFixture(providerWithoutEstimation);
   const chat = buildChatSession(fixture);
 
-  await chat.sendMessage({ message: [{ text: 'Hello' }] }, 'test-prompt');
+  await chat.sendMessage(
+    { message: [{ type: 'text', text: 'Hello' }] },
+    'test-prompt',
+  );
 
   expect(chat.getPromptEnvelopeEstimate()).toBeNull();
 }
@@ -742,12 +757,15 @@ async function testSplitCase11(): Promise<void> {
   const { chat, fixture, reportedPromptTokens } =
     prepareFailedRequestEstimateScenario();
   await expect(
-    chat.sendMessage({ message: [{ text: 'Boom' }] }, 'prompt-fails'),
+    chat.sendMessage(
+      { message: [{ type: 'text', text: 'Boom' }] },
+      'prompt-fails',
+    ),
   ).rejects.toThrow('upstream provider exploded after estimation');
   expect(chat.getPromptEnvelopeEstimate()).toBeNull();
 
   await chat.sendMessage(
-    { message: [{ text: 'Now succeed' }] },
+    { message: [{ type: 'text', text: 'Now succeed' }] },
     'prompt-succeeds',
   );
 

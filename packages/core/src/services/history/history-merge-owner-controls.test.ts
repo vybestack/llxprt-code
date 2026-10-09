@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'bun:test';
 import { RowOwnership } from '../../recording/rowOwnership.js';
 import type { IContent } from './IContent.js';
-import { withSuffixFixture } from './history-suffix-test-helpers.js';
+import { withCoreSuffixFixture } from './core-suffix-fixture-test-helpers.js';
 import { exactTokenizer } from './chronology-rollback-test-helpers.js';
 import {
   MergeRowHistory,
@@ -30,10 +30,10 @@ async function retainingMerge(size: number, copy: boolean): Promise<number> {
   const retained: IContent[] = [];
   const owners = new RowOwnership();
   try {
-    await withSuffixFixture(
+    await withCoreSuffixFixture(
       size,
       async (source) => {
-        await withSuffixFixture(
+        await withCoreSuffixFixture(
           0,
           async (target) => {
             target.setTokenizerFactory(exactTokenizer());

@@ -15,7 +15,7 @@ import {
   renderWithProviders,
   createMockSettings,
   waitFor,
-} from '../../../test-utils/render.js';
+} from '../../../__tests__/render.js';
 import { act } from 'react';
 
 function maximumConsecutiveBlankLines(lines: readonly string[]): number {

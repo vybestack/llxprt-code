@@ -4,15 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createAgentRuntimeState } from './AgentRuntimeState.js';
 import {
   createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-  clearActiveProviderRuntimeContext,
+  type ProviderRuntimeContext,
 } from './providerRuntimeContext.js';
 import { loadAgentRuntime } from './AgentRuntimeLoader.js';
 import type {
@@ -21,14 +20,14 @@ import type {
   ToolRegistryView,
   ReadonlySettingsSnapshot,
 } from './AgentRuntimeContext.js';
-import { getTestRuntimeMessageBus } from '../test-utils/config.js';
+import { getTestRuntimeMessageBus } from '../__tests__/config-test-helpers.js';
 
 import type { AgentRuntimeState } from './AgentRuntimeState.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { Config } from '../config/config.js';
 import { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import { MockTool } from '../test-utils/tools.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/tools.js';
 import type {
   ContentGenerator,
   ContentGeneratorConfig,
@@ -41,8 +40,6 @@ import { MediaAdmissionService } from '../storage/media-admission-service.js';
 
 function createTestConfig(): Config {
   const settingsService = new SettingsService();
-  const runtime = createProviderRuntimeContext({ settingsService });
-  setActiveProviderRuntimeContext(runtime);
 
   return new Config({
     sessionId: 'test-session',
@@ -87,7 +84,9 @@ describe('AgentRuntimeLoader', () => {
   let config: Config;
   let runtimeState: AgentRuntimeState;
   let settingsSnapshot: ReadonlySettingsSnapshot;
-  let providerRuntime = createProviderRuntimeContext();
+  // Issue #2616: a runtime context requires explicit settings, so the
+  // declaration is unassigned until beforeEach constructs one.
+  let providerRuntime: ProviderRuntimeContext;
 
   const telemetryAdapter: AgentRuntimeTelemetryAdapter = {
     logApiRequest: vi.fn(),
@@ -124,10 +123,6 @@ describe('AgentRuntimeLoader', () => {
       settingsService: new SettingsService(),
       metadata: { source: 'AgentRuntimeLoader.test' },
     });
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
   });
 
   it('creates isolated runtime bundle per invocation', async () => {

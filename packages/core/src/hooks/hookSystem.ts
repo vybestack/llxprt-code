@@ -31,6 +31,12 @@ import {
   BeforeToolSelectionHookOutput,
 } from './types.js';
 import type { HookLLMRequest, HookLLMResponse } from './hookTranslator.js';
+import { MissingSnapshotHookCallbackError } from './hookSnapshotAggregator.js';
+import type {
+  HookModelSnapshotRequest,
+  AggregatedHookSnapshotResult,
+  HookModelSnapshotCallbacks,
+} from './hookSnapshotAggregator.js';
 
 const debugLogger = DebugLogger.getLogger('llxprt:core:hooks:system');
 
@@ -47,7 +53,7 @@ const debugLogger = DebugLogger.getLogger('llxprt:core:hooks:system');
  * @requirement:HOOK-008 - First hook event fires initialize() before delegating to event handler
  * @requirement:HOOK-142 - Importable from packages/core/src/hooks/hookSystem.ts
  */
-export class HookSystem {
+export class HookSystem implements HookModelSnapshotCallbacks {
   private readonly config: Config;
   private readonly registry: HookRegistry;
   private readonly planner: HookPlanner;
@@ -231,6 +237,31 @@ export class HookSystem {
    */
   getAllHooks(): HookRegistryEntry[] {
     return this.registry.getAllHooks();
+  }
+
+  async fireBeforeModelSnapshotEvent(
+    request: HookModelSnapshotRequest,
+    signal?: AbortSignal,
+  ): Promise<AggregatedHookSnapshotResult> {
+    if (this.fireBeforeModelEvent !== HookSystem.prototype.fireBeforeModelEvent)
+      throw new MissingSnapshotHookCallbackError(
+        'fireBeforeModelSnapshotEvent',
+      );
+    return this.getEventHandler().fireBeforeModelSnapshotEvent(request, signal);
+  }
+
+  async fireAfterModelSnapshotEvent(
+    request: HookModelSnapshotRequest,
+    response: Omit<HookLLMResponse, 'version'>,
+    signal?: AbortSignal,
+  ): Promise<AggregatedHookSnapshotResult> {
+    if (this.fireAfterModelEvent !== HookSystem.prototype.fireAfterModelEvent)
+      throw new MissingSnapshotHookCallbackError('fireAfterModelSnapshotEvent');
+    return this.getEventHandler().fireAfterModelSnapshotEvent(
+      request,
+      response,
+      signal,
+    );
   }
 
   // --- Convenience wrappers delegating to HookEventHandler ---

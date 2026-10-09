@@ -21,7 +21,7 @@
  *    (2 tests, AC1/AC2 and the throw-fallback AC3).
  */
 
-import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-core/test-utils/collect-rows-for-assertions.js';
+import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { describe, it, expect } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';

@@ -17,26 +17,20 @@
  * They will pass after Phase P10 ChatSession refactor.
  */
 
-import { collectRowsForAssertions } from '../test-utils/collect-rows-for-assertions.js';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { Config } from '../config/config.js';
 import { createAgentRuntimeContext } from '../runtime/createAgentRuntimeContext.js';
 import { createAgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import type {
   ReadonlySettingsSnapshot,
   ApiRequestEvent,
-  ApiResponseEvent,
-  ApiErrorEvent,
   AgentRuntimeProviderAdapter,
   AgentRuntimeTelemetryAdapter,
   ToolRegistryView,
 } from '../runtime/AgentRuntimeContext.js';
 import type { RuntimeProvider as IProvider } from '../runtime/contracts/RuntimeProvider.js';
-import {
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-  clearActiveProviderRuntimeContext,
-} from '../runtime/providerRuntimeContext.js';
+import { createProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 const noopProviderAdapter: AgentRuntimeProviderAdapter = {
@@ -113,20 +107,15 @@ void vi.mock('../core/contentGenerator.js', () => ({
 
 describe('ChatSession Isolation Integration Tests', () => {
   beforeEach(() => {
-    setActiveProviderRuntimeContext(
-      createProviderRuntimeStub('foreground-bootstrap'),
-    );
     // Create a mock foreground config with specific model
     new Config({
       provider: 'gemini',
       model: 'gemini-2.0-flash-exp',
       targetDir: process.cwd(),
-      sandbox: false,
+      cwd: process.cwd(),
+      sessionId: 'foreground-isolation',
+      debugMode: false,
     });
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
   });
 
   /**
@@ -333,15 +322,6 @@ async function verifyRuntimeIsolationCase2(): Promise<void> {
 
 async function verifyRuntimeIsolationCase3(): Promise<void> {
   // GIVEN: Mock telemetry targets
-  const _foregroundLogs: Array<{
-    type: string;
-    event: ApiRequestEvent | ApiResponseEvent | ApiErrorEvent;
-  }> = [];
-
-  const _subagentLogs: Array<{
-    type: string;
-    event: ApiRequestEvent | ApiResponseEvent | ApiErrorEvent;
-  }> = [];
 
   // GIVEN: Foreground context with telemetry
   const foregroundState = createAgentRuntimeState({
@@ -360,10 +340,7 @@ async function verifyRuntimeIsolationCase3(): Promise<void> {
     foregroundContext.telemetry,
     'logApiRequest',
   );
-  const _foregroundResponseSpy = vi.spyOn(
-    foregroundContext.telemetry,
-    'logApiResponse',
-  );
+  vi.spyOn(foregroundContext.telemetry, 'logApiResponse');
 
   // GIVEN: Subagent context with telemetry
   const subagentState = createAgentRuntimeState({
@@ -382,10 +359,7 @@ async function verifyRuntimeIsolationCase3(): Promise<void> {
     subagentContext.telemetry,
     'logApiRequest',
   );
-  const _subagentResponseSpy = vi.spyOn(
-    subagentContext.telemetry,
-    'logApiResponse',
-  );
+  vi.spyOn(subagentContext.telemetry, 'logApiResponse');
 
   // WHEN: API requests simulated for both contexts
   const foregroundRequest: ApiRequestEvent = {
@@ -394,7 +368,7 @@ async function verifyRuntimeIsolationCase3(): Promise<void> {
     provider: foregroundState.provider,
     model: foregroundState.model,
     timestamp: Date.now(),
-    payload: '{"prompt": "foreground query"}',
+    requestText: '{"prompt": "foreground query"}',
   };
 
   const subagentRequest: ApiRequestEvent = {
@@ -403,7 +377,7 @@ async function verifyRuntimeIsolationCase3(): Promise<void> {
     provider: subagentState.provider,
     model: subagentState.model,
     timestamp: Date.now(),
-    payload: '{"prompt": "subagent query"}',
+    requestText: '{"prompt": "subagent query"}',
   };
 
   foregroundContext.telemetry.logApiRequest(foregroundRequest);
@@ -529,7 +503,9 @@ async function verifyRuntimeIsolationCase6(): Promise<void> {
     provider: 'gemini',
     model: 'gemini-2.0-flash-exp',
     targetDir: process.cwd(),
-    sandbox: false,
+    cwd: process.cwd(),
+    sessionId: 'config-isolation',
+    debugMode: false,
   });
 
   const setModelSpy = vi.spyOn(mockConfig, 'setModel');

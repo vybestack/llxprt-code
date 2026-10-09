@@ -1,4 +1,4 @@
-import { forbidHistoryMaterializationForTest } from '../../test-utils/history-materialization-test-guard.js';
+import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createHash } from 'node:crypto';
 import { HistoryService } from './HistoryService.js';

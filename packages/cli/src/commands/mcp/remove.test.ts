@@ -20,7 +20,7 @@ import { removeCommand } from './remove.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { testRegex } from '../../test-utils/regex.js';
+import { testRegex } from '../../__tests__/regex.js';
 
 const realPromisesModule = { ...(await import('fs/promises')) };
 

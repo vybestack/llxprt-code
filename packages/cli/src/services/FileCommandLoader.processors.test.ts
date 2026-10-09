@@ -26,7 +26,7 @@ function assert(condition: unknown, message: string): asserts condition {
     throw new Error(message);
   }
 }
-import { createMockCommandContext } from '../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../__tests__/mockCommandContext.js';
 import {
   SHELL_INJECTION_TRIGGER,
   SHORTHAND_ARGS_PLACEHOLDER,

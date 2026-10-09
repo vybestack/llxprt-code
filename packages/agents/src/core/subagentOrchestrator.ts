@@ -52,10 +52,8 @@ import {
   teardownRuntimeArtifacts,
 } from './subagentChildJournal.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import {
-  createRuntimeSettingsService,
-  createSettingsProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { createRuntimeSettingsService } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
 import {
   loadAgentRuntime,
   type AgentRuntimeLoaderOptions,
@@ -69,13 +67,16 @@ import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/me
 import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 import {
-  createIsolatedRuntimeContext,
   runWithRuntimeScope,
   type IsolatedRuntimeContextHandle,
 } from '@vybestack/llxprt-code-providers/runtime.js';
 import { applyProfileWithGuards } from '@vybestack/llxprt-code-providers/runtime/profileApplication.js';
-import { registerProvidersOntoManager } from '../api/createAgent.js';
 import { executeProviderActivation } from '../api/providerActivationExecutor.js';
+import { cleanupFailedRuntimeBootstrap } from '../api/agentRuntimeAssembly.js';
+import {
+  buildIsolatedSubagentHandle,
+  ownIsolatedConfig,
+} from './isolatedConfigOwnership.js';
 
 const LOAD_BALANCER_PROVIDER_NAME = 'load-balancer';
 
@@ -802,7 +803,7 @@ export class SubagentOrchestrator {
     childJournal: ChildSessionJournal;
     signal?: AbortSignal;
   }): Promise<AgentRuntimeLoaderResult> {
-    const providerRuntime = createSettingsProviderRuntimeContext({
+    const providerRuntime = createProviderRuntimeContext({
       settingsService: params.isolatedHandle.settingsService,
       config: params.isolatedHandle.config,
       runtimeId: params.isolatedHandle.runtimeId,
@@ -893,27 +894,17 @@ export class SubagentOrchestrator {
     // parent's (Issue #2410). Load-balancer profiles intentionally activate via
     // the foreground profile-application path inside this isolated runtime so
     // the real load-balancer provider is registered and selected.
-    const handle = createIsolatedRuntimeContext({
+    // The Config is built through the AGENT-owned assembly (issue #3222):
+    // providers no longer constructs one or stamps CLI-registered agent
+    // factories onto it, so in a process with no CLI import the subagent
+    // still gets working agent factories and runtime managers.
+    const handle = buildIsolatedSubagentHandle({
       runtimeId: agentRuntimeId,
+      model: activationProfile.model,
+      subagentName,
       settingsService,
       profileManager: this.options.profileManager,
       messageBus: this.options.messageBus,
-      model: activationProfile.model,
-      metadata: {
-        source: 'SubagentOrchestrator',
-        subagent: subagentName,
-      },
-      prepare: (context) => {
-        registerProvidersOntoManager(
-          context.providerManager,
-          {
-            settingsService: context.settingsService,
-            runtimeId: context.runtimeId,
-            metadata: context.metadata,
-          },
-          context.config,
-        );
-      },
     });
 
     try {
@@ -965,10 +956,18 @@ export class SubagentOrchestrator {
         },
       );
     } catch (error) {
-      await handle.cleanup();
-      throw error;
+      // A cleanup failure must not replace the original bootstrap error. The
+      // isolated Config is agent-owned (built above) and the activation's
+      // refreshAuth may already have constructed an AgentClient on it —
+      // dispose it after the handle so a failed bootstrap leaks nothing.
+      return cleanupFailedRuntimeBootstrap(
+        handle,
+        error,
+        'SubagentOrchestrator.createIsolatedRuntime',
+        { ownedConfig: handle.config },
+      );
     }
 
-    return handle;
+    return ownIsolatedConfig(handle);
   }
 }

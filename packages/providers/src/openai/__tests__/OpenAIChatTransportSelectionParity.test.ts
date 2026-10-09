@@ -25,15 +25,10 @@
  * @requirement:REQ-PE-001 (issue #2817)
  */
 
-import { afterEach, describe, expect, it, vi } from 'bun:test';
+import { describe, expect, it, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { OpenAIProvider } from '../OpenAIProvider.js';
-import {
-  clearActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { streamCallOptions } from '../../test-utils/streamCallOptions.js';
+import { streamCallOptions } from '../../__tests__/streamCallOptions.js';
 
 void vi.mock('openai', () => ({
   default: class FakeOpenAI {
@@ -92,19 +87,7 @@ function streamingFetchStub(requestedUrls: string[]): typeof global.fetch {
 }
 
 describe('OpenAI transport selection parity (issue #2817)', () => {
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
-
   it('routes both projection and transport to Responses when only per-call settings request it', async () => {
-    // Ambient settings resolve no responses mode -> would select Chat.
-    setActiveProviderRuntimeContext(
-      createProviderRuntimeContext({
-        settingsService: new SettingsService(),
-        runtimeId: 'openai-transport-parity-test',
-      }),
-    );
-
     const provider = new TransportParityProvider();
 
     // Per-call settings explicitly request the Responses transport.

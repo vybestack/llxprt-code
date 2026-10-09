@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { writeBodyFile } from '../lib/body-evidence-writer.js';
 import { describe, expect, it } from 'bun:test';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { DebugLogger } from '../../packages/core/src/debug/index.js';
 import { buildCuratedHistory } from '../../packages/core/src/services/history/historyCuration.js';
@@ -54,8 +55,8 @@ async function compareBodies(
       if (output !== undefined) {
         mkdirSync(output, { recursive: true });
         const name = `${provider}-${size}-${phase}-${caching}`;
-        writeFileSync(join(output, `${name}-actual.json`), actual);
-        writeFileSync(join(output, `${name}-expected.json`), oracle);
+        await writeBodyFile(join(output, `${name}-actual.json`), actual);
+        await writeBodyFile(join(output, `${name}-expected.json`), oracle);
       }
     }
   }
@@ -96,7 +97,9 @@ describe('history removal provider BODY pairs', () => {
   it.each([512, 8192])(
     'preserves provider bytes after pop, matching removal and clear over %i rows',
     async (size) => {
-      await expect(compare(size)).resolves.toBeUndefined();
+      const comparing = compare(size);
+      await comparing;
+      await expect(comparing).resolves.toBeUndefined();
     },
     180000,
   );

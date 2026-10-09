@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from '../services/history/IContent.js';
-import { withSuffixFixture } from '../services/history/history-suffix-test-helpers.js';
+import { withCoreSuffixFixture } from '../services/history/core-suffix-fixture-test-helpers.js';
 import { MediaLifecycleMetrics } from './media-lifecycle-metrics.js';
 import {
   metricRow,
@@ -41,7 +41,7 @@ describe('media metric failure settlement', () => {
   it('closes the disk index and pinned raw reader on source failure', async () => {
     const before = metricScratch();
     await withMetricStore(async (store) =>
-      withSuffixFixture(
+      withCoreSuffixFixture(
         512,
         async (history, owners) => {
           await expect(
@@ -65,7 +65,7 @@ describe('media metric failure settlement', () => {
   it('closes a reader started before a synchronous owner sampler throws', async () => {
     const before = metricScratch();
     await withMetricStore(async (store) =>
-      withSuffixFixture(
+      withCoreSuffixFixture(
         512,
         async (history, owners) => {
           const sources = metricSources(store, history);
@@ -100,7 +100,7 @@ describe('media metric cancellation', () => {
     const before = metricScratch();
     let aborted: AbortedMetricHistory | undefined;
     await withMetricStore(async (store) =>
-      withSuffixFixture(
+      withCoreSuffixFixture(
         512,
         async (history, owners, counters) => {
           if (aborted === undefined) throw new Error('Missing abort fixture');

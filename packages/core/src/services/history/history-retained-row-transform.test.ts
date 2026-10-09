@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, it, expect } from 'bun:test';
-import { withSuffixFixture } from './history-suffix-test-helpers.js';
+import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { exactTokenizer } from './chronology-rollback-test-helpers.js';
 import type { IContent } from './IContent.js';
 

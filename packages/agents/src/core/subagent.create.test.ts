@@ -98,7 +98,7 @@ import {
   defaultRunConfig,
   createStatelessRuntimeBundle,
   createRuntimeOverrides,
-} from './subagent-test-helpers.js';
+} from './__tests__/subagent-test-helpers.js';
 
 describe('subagent.ts', () => {
   let mockSendMessageStream: Mock;
@@ -434,7 +434,7 @@ describe('subagent.ts', () => {
 
         const toolGroups = messageParams?.config?.tools ?? [];
 
-        const functionDeclarations = toolGroups[0]?.functionDeclarations ?? [];
+        const functionDeclarations = toolGroups;
 
         const descriptionObservation = functionDeclarations[0]?.description;
         return {

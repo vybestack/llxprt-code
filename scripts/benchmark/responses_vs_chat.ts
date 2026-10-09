@@ -15,11 +15,9 @@
 
 import { OpenAIProvider } from '../../packages/core/src/providers/openai/OpenAIProvider.js';
 import { IMessage } from '../../packages/cli/src/providers/IMessage.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-  clearActiveProviderRuntimeContext,
-  peekActiveProviderRuntimeContext,
   ProviderRuntimeContext,
 } from '../../packages/core/src/runtime/providerRuntimeContext.js';
 
@@ -69,21 +67,20 @@ async function benchmarkAPI(
   };
 }
 
+/**
+ * Builds an explicit runtime context for one benchmark scenario. Issue #2616:
+ * no ambient install — the caller owns the context and hands it to the
+ * provider invocation it measures.
+ */
 async function withRuntime<T>(
   metadata: ProviderRuntimeContext['metadata'],
   task: (runtime: ProviderRuntimeContext) => Promise<T>,
 ): Promise<T> {
-  const previous = peekActiveProviderRuntimeContext();
-  const runtime = createProviderRuntimeContext({ metadata });
-  setActiveProviderRuntimeContext(runtime);
-  try {
-    return await task(runtime);
-  } finally {
-    clearActiveProviderRuntimeContext();
-    if (previous) {
-      setActiveProviderRuntimeContext(previous);
-    }
-  }
+  const runtime = createProviderRuntimeContext({
+    settingsService: new SettingsService(),
+    metadata,
+  });
+  return task(runtime);
 }
 
 function formatImprovementLabel(

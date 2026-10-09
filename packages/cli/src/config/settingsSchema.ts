@@ -119,7 +119,7 @@ export const SETTINGS_SCHEMA_DEFINITIONS: Record<
       authProviderType: {
         type: 'string',
         description:
-          'Authentication provider used for acquiring credentials (for example `dynamic_discovery`).',
+          'Authentication provider used for acquiring credentials (for example `dynamic_discovery`). The Google modes `google_credentials` and `service_account_impersonation` require the optional `@vybestack/llxprt-plugin-google-mcp-auth` runtime plugin to be installed.',
         enum: [
           'dynamic_discovery',
           'google_credentials',
@@ -129,12 +129,12 @@ export const SETTINGS_SCHEMA_DEFINITIONS: Record<
       targetAudience: {
         type: 'string',
         description:
-          'OAuth target audience (CLIENT_ID.apps.googleusercontent.com).',
+          'OAuth target audience (CLIENT_ID.apps.googleusercontent.com). Only used with `google_credentials`/`service_account_impersonation`, which require the optional `@vybestack/llxprt-plugin-google-mcp-auth` runtime plugin.',
       },
       targetServiceAccount: {
         type: 'string',
         description:
-          'Service account email to impersonate (name@project.iam.gserviceaccount.com).',
+          'Service account email to impersonate (name@project.iam.gserviceaccount.com). Only used with `service_account_impersonation`, which requires the optional `@vybestack/llxprt-plugin-google-mcp-auth` runtime plugin.',
       },
     },
   },

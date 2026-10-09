@@ -27,3 +27,4 @@ export {
 } from './src/telemetry/types.js';
 export { getIdeTrust } from './src/utils/ide-trust.js';
 export * from './src/utils/pathReader.js';
+export { createSessionSchedulerRegistry } from './src/session/sessionSchedulerRegistryImpl.js';

@@ -15,7 +15,7 @@ import { appendFile, mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { continueCommand } from '../continueCommand.js';
-import { createMockCommandContext } from '../../../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
 import {
   exportSessionMediaPackage,
   LocalMediaStore,
@@ -35,7 +35,7 @@ import type {
   ValueArgument,
   LiteralArgument,
 } from '../schema/types.js';
-import { assertDefined, assertType } from '../../../test-utils/assertions.js';
+import { assertDefined, assertType } from '../../../__tests__/assertions.js';
 
 /**
  * Helper to narrow a command argument to the ValueArgument variant.

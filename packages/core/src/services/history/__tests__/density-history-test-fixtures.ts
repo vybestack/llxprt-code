@@ -1,13 +1,13 @@
-import { withCuratedHistoryForTest } from '../../../test-utils/curated-history-fixture.js';
+import { withCuratedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { collectRawHistory } from '../../../test-utils/collect-raw-history.js';
+import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { expect } from 'bun:test';
 import * as fc from 'fast-check';
 import { HistoryService } from '../HistoryService.js';
 import {
   withSuffixFixture,
   suffixRow,
-} from '../history-suffix-test-helpers.js';
+} from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import type { IContent } from '../IContent.js';
 import type {
   DensityResult,

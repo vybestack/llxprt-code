@@ -5,7 +5,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { annotateCompressionSpanStream } from './compression-span-stream.js';
 import { annotateCompressionSpan } from './historyChronology.js';
-import { withSuffixFixture, suffixRow } from './history-suffix-test-helpers.js';
+import {
+  withSuffixFixture,
+  suffixRow,
+} from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import {
   accountingRow,
   deferred,

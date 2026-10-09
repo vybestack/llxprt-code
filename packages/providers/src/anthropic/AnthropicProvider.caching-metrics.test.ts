@@ -7,16 +7,15 @@
  * Split from AnthropicProvider.test.ts for max-lines compliance.
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { vi, describe, it, expect, beforeEach } from 'bun:test';
 import { AnthropicProvider } from './AnthropicProvider.js';
-import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
-import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { TEST_PROVIDER_CONFIG } from '../__tests__/providerTestConfig.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   setupAnthropicProvider,
   type AnthropicTestSetup,
-} from './test-utils/anthropicProviderTestSetup.js';
-import { createAnthropicRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
+} from './__tests__/anthropicProviderTestSetup.js';
+import { createAnthropicRawPostTestAdapter } from '../__tests__/rawPostTestAdapters.js';
 
 function cacheMetrics(content: IContent): {
   readonly cacheRead: number;
@@ -161,9 +160,6 @@ describe('AnthropicProvider', () => {
     runtimeContext.config.streaming = 'disabled';
   });
 
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
   describe('Prompt Caching - Metrics', () => {
     describe('Cache Metrics Extraction', () => {
       it('should extract cache metrics from non-streaming response', async () => {

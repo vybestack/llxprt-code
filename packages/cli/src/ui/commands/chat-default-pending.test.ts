@@ -5,7 +5,7 @@ import {
   batchRow,
   withBatchFixture,
 } from '@vybestack/llxprt-code-core/services/history/addbatch-stream-test-helpers.js';
-import { publicChat } from '../../test-utils/public-history-cursor.js';
+import { publicChat } from '../../__tests__/public-history-cursor.js';
 
 const bounds = { rows: 440, serializedBytes: 8 * 1024 * 1024 };
 

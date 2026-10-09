@@ -1,4 +1,4 @@
-import { curatedHistoryForTest } from '../../../../core/src/test-utils/curated-history-fixture.js';
+import { curatedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -21,7 +21,7 @@ import { curatedHistoryForTest } from '../../../../core/src/test-utils/curated-h
  *   6. The metadata-only stub does not leak original payload content.
  */
 
-import { collectRawHistory } from '@vybestack/llxprt-code-core/test-utils/collect-raw-history.js';
+import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type {

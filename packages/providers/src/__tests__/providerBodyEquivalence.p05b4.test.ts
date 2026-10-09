@@ -27,13 +27,10 @@
 import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  clearActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type {
   MediaBlock,
@@ -47,10 +44,10 @@ import { getMaxTokensForModel } from '../anthropic/AnthropicModelData.js';
 import { normalizeMediaToDataUri } from '../utils/mediaUtils.js';
 import { buildToolResponsePayload } from '../utils/toolResponsePayload.js';
 import { AnthropicProvider } from '../anthropic/AnthropicProvider.js';
-import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
+import { TEST_PROVIDER_CONFIG } from './providerTestConfig.js';
 import { OpenAIResponsesProvider } from '../openai-responses/OpenAIResponsesProvider.js';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
-import { readRawPostTestBody } from '../test-utils/rawPostTestAdapters.js';
+import { readRawPostTestBody } from './rawPostTestAdapters.js';
 
 /* ------------------------------------------------------------------ *
  * Seeded deterministic PRNG + op-log generator
@@ -608,7 +605,10 @@ function makeResponsesSettings(): SettingsService {
 
 async function captureResponsesBodies(
   rows: readonly IContent[],
-  fetchImpl: typeof fetch,
+  fetchImpl: (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ) => Promise<Response>,
   ephemerals: Record<string, unknown> = { 'prompt-caching': 'off' },
 ): Promise<FetchCall[]> {
   const settings = makeResponsesSettings();
@@ -640,11 +640,14 @@ async function captureResponsesBodies(
     'https://api.openai.com/v1',
   );
   const calls: FetchCall[] = [];
-  globalThis.fetch = (input: RequestInfo | URL, init?: RequestInit) =>
-    fetchImpl(input, init).then(async (response) => {
-      calls.push({ bodyText: await readInitBody(init), init: init ?? {} });
-      return response;
-    });
+  globalThis.fetch = Object.assign(
+    (input: RequestInfo | URL, init?: RequestInit) =>
+      fetchImpl(input, init).then(async (response) => {
+        calls.push({ bodyText: await readInitBody(init), init: init ?? {} });
+        return response;
+      }),
+    { preconnect: originalFetch.preconnect },
+  );
   try {
     for await (const _chunk of provider.generateChatCompletion(options)) {
       // drain
@@ -660,7 +663,6 @@ async function captureResponsesBodies(
  * ------------------------------------------------------------------ */
 
 function cleanupProvider(): void {
-  clearActiveProviderRuntimeContext();
   globalThis.fetch = originalFetch;
 }
 
@@ -787,18 +789,10 @@ function expectStableRetryBodies(bodies: readonly string[]): void {
   }
 }
 
-describe('P05b4 openai-responses retry body stability @plan:PLAN-20260917-ISSUE854.P05b4', () => {
-  afterEach(cleanupProvider);
-
-  it('openai-responses: retry rebuilds are byte-stable across orchestrator attempts (target contract)', async () => {
-    // Reasoning rows WITHOUT stored 'openai.responses.reasoningId' metadata:
-    // each orchestrator attempt rebuilds the input from the replayed history
-    // and SYNTHESIZES rs_ ids for them, so any wall-clock component in the
-    // synthesized id shows up as a byte difference between attempts.
-    const rows = retryReasoningRows();
-    let fetchCount = 0;
-    const bodies: string[] = [];
-    const failingFetch: typeof fetch = async () => {
+function retryingFetch(): typeof fetch {
+  let fetchCount = 0;
+  return Object.assign(
+    async () => {
       const index = fetchCount;
       fetchCount += 1;
       // A real millisecond boundary between builds makes any wall-clock
@@ -814,13 +808,31 @@ describe('P05b4 openai-responses retry body stability @plan:PLAN-20260917-ISSUE8
       if (index < 2) {
         return new Response(
           JSON.stringify({
-            error: { message: 'forced auth refusal', type: 'invalid_api_key' },
+            error: {
+              message: 'forced auth refusal',
+              type: 'invalid_api_key',
+            },
           }),
           { status: 401, headers: { 'content-type': 'application/json' } },
         );
       }
       return streamingSseResponse();
-    };
+    },
+    { preconnect: originalFetch.preconnect },
+  );
+}
+
+describe('P05b4 openai-responses retry body stability @plan:PLAN-20260917-ISSUE854.P05b4', () => {
+  afterEach(cleanupProvider);
+
+  it('openai-responses: retry rebuilds are byte-stable across orchestrator attempts (target contract)', async () => {
+    // Reasoning rows WITHOUT stored 'openai.responses.reasoningId' metadata:
+    // each orchestrator attempt rebuilds the input from the replayed history
+    // and SYNTHESIZES rs_ ids for them, so any wall-clock component in the
+    // synthesized id shows up as a byte difference between attempts.
+    const rows = retryReasoningRows();
+    const bodies: string[] = [];
+    const failingFetch = retryingFetch();
     const settings = makeResponsesSettings();
     const runtime = createProviderRuntimeContext({
       settingsService: settings,
@@ -858,14 +870,17 @@ describe('P05b4 openai-responses retry body stability @plan:PLAN-20260917-ISSUE8
       initialDelayMs: 0,
       maxDelayMs: 0,
     });
-    globalThis.fetch = async (
-      input: RequestInfo | URL,
-      init?: RequestInit,
-    ): Promise<Response> => {
-      const response = await failingFetch(input, init);
-      bodies.push(await readInitBody(init));
-      return response;
-    };
+    globalThis.fetch = Object.assign(
+      async (
+        input: RequestInfo | URL,
+        init?: RequestInit,
+      ): Promise<Response> => {
+        const response = await failingFetch(input, init);
+        bodies.push(await readInitBody(init));
+        return response;
+      },
+      { preconnect: originalFetch.preconnect },
+    );
     let settled = false;
     try {
       for await (const _chunk of orchestrator.generateChatCompletion(options)) {

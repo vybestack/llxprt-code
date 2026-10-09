@@ -25,12 +25,12 @@ import { describe, it, expect, beforeEach } from 'bun:test';
 // process), so vi.unmock('ink') from the Vitest era is unnecessary and
 // unsupported by Bun's test runner.
 
-import { hasDialogRequest } from '../../test-utils/dialogStore.js';
+import { hasDialogRequest } from '../../__tests__/dialogStore.js';
 import { render } from 'ink-testing-library';
 import { Box, Text } from 'ink';
 
 import { continueCommand } from '../commands/continueCommand.js';
-import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import type {
   CommandContext,
   SlashCommandActionReturn,
@@ -44,8 +44,8 @@ import type {
 } from '../commands/schema/types.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { Colors } from '../colors.js';
-import { assertType } from '../../test-utils/assertions.js';
-import { expectFrameContains } from '../../test-utils/inkFrame.js';
+import { assertType } from '../../__tests__/assertions.js';
+import { expectFrameContains } from '../../__tests__/inkFrame.js';
 import {
   createDialogStore,
   selectActiveDialog,

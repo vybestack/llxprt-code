@@ -13,7 +13,6 @@ import type {
   AgentMessageInput,
   ToolDeclaration,
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import type { ToolGroupArray } from './streamRequestHelpers.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { StructuredError } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { StreamLivenessEvent } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
@@ -37,7 +36,9 @@ export interface ChatSessionConfig extends ModelGenerationSettings {
    */
   onStreamLiveness?: (event: StreamLivenessEvent) => void;
   providerRequestContext?: Record<string, unknown>;
-  tools?: ToolGroupArray;
+  /** Explicit stateless text-only disk selection; incompatible array contracts reject. */
+  requestHistorySource?: 'responses-disk-text';
+  tools?: ToolDeclaration[];
   toolConfig?: unknown;
   /**
    * Caller-supplied re-renderer carried onto provider options so a router
@@ -731,7 +732,7 @@ export class ChatSession {
   }
 
   setTools(tools: ToolDeclaration[]): void {
-    this.generationConfig.tools = [{ functionDeclarations: tools }];
+    this.generationConfig.tools = tools;
   }
 
   clearTools(): void {

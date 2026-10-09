@@ -21,7 +21,7 @@ import {
   shellTypeToParserLanguage,
 } from './shell-utils.js';
 import { initializeParser, isParserAvailable } from './shell-parser.js';
-import { resolvePwshTestPolicyFromEnv } from '../test-utils/pwsh-test-policy.js';
+import { resolvePwshTestPolicyFromEnv } from '@vybestack/llxprt-code-test-utils/core/pwsh-test-policy.js';
 import type { Config } from '../config/config.js';
 
 await initializeParser();

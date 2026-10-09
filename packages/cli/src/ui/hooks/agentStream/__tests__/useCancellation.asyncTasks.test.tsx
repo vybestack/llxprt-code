@@ -12,7 +12,7 @@
 
 import { describe, it, expect, vi } from 'bun:test';
 import React, { act } from 'react';
-import { renderHook } from '../../../../test-utils/render.js';
+import { renderHook } from '../../../../__tests__/render.js';
 import { useCancellation } from '../useAgentStreamLifecycle.js';
 import { StreamingState, MessageType } from '../../../types.js';
 import { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';

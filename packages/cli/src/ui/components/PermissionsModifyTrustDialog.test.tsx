@@ -15,8 +15,8 @@ import * as path from 'node:path';
  * identical.
  */
 const RESOLVED_TEST_DIR = path.resolve('/test/dir');
-import { renderWithProviders, waitFor } from '../../test-utils/render.js';
-import { createDeferred } from '../../test-utils/async.js';
+import { renderWithProviders, waitFor } from '../../__tests__/render.js';
+import { createDeferred } from '../../__tests__/async.js';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { PermissionsModifyTrustDialog } from './PermissionsModifyTrustDialog.js';
 import React, { act } from 'react';

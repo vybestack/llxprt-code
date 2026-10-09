@@ -7,7 +7,8 @@
 
 import {
   type IProvider,
-  type MaterializedGenerateChatOptions,
+  type GenerateChatOptions,
+  type ProviderRuntimeOptions,
 } from './IProvider.js';
 import { type IProviderManager } from './IProviderManager.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -270,9 +271,9 @@ export class ProviderManager implements IProviderManager {
       ) => void;
       setOptionsNormalizer?: (
         normalizer: (
-          options: MaterializedGenerateChatOptions,
+          options: GenerateChatOptions,
           providerName: string,
-        ) => MaterializedGenerateChatOptions,
+        ) => GenerateChatOptions,
       ) => void;
     };
     runtimeAware.setRuntimeSettingsService?.(this.settingsService);
@@ -376,10 +377,10 @@ export class ProviderManager implements IProviderManager {
    *
    * Normalize runtime inputs per call - no stored settings/config fallbacks.
    */
-  normalizeRuntimeInputs(
-    rawOptions: MaterializedGenerateChatOptions,
+  normalizeRuntimeInputs<Contents>(
+    rawOptions: ProviderRuntimeOptions & { contents: Contents },
     providerName?: string,
-  ): MaterializedGenerateChatOptions {
+  ): ProviderRuntimeOptions & { contents: Contents } {
     return normalizeRuntimeInputs(
       rawOptions,
       {

@@ -7,7 +7,7 @@ import {
   seedRows,
   assertOwnerBound,
 } from './export-summary-test-helpers.js';
-import { collectRawHistory } from '../../test-utils/collect-raw-history.js';
+import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { exactTokenizer } from './chronology-rollback-test-helpers.js';
 
 async function unchanged(

@@ -10,7 +10,7 @@ import {
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { IModel } from '../IModel.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { streamCallOptions } from '../test-utils/streamCallOptions.js';
+import { streamCallOptions } from './streamCallOptions.js';
 
 type Snapshot = {
   callId: string;
@@ -232,161 +232,191 @@ const createProvider = (): TestBaseProvider =>
   );
 
 describe('BaseProvider stateless contract', () => {
-  it('@plan:PLAN-20251018-STATELESSPROVIDER2.P05 @requirement:REQ-SP2-001 @pseudocode base-provider-call-contract.md lines 3-4 uses call-scoped settings for model/base-url resolution', async () => {
-    const provider = createProvider();
-    const call = createCallContext({
-      callId: 'call-override',
-      model: 'call-model',
-      baseUrl: 'https://call.example/v1',
-    });
+  registerBehavior1();
 
-    await collectChunks(
-      provider.generateChatCompletion(
-        streamCallOptions({
-          providerName: PROVIDER_NAME,
-          contents: [createContent('ping')],
-          settings: call.settings,
-          metadata: call.metadata,
-        }),
-      ),
-    );
+  registerBehavior2();
 
-    const snapshots = provider.snapshotsFor('call-override');
-    expect(snapshots).not.toHaveLength(0);
-    expect(
-      Array.from(new Set(snapshots.map((entry) => entry.model))).sort(),
-    ).toStrictEqual([call.model]);
-    expect(
-      Array.from(new Set(snapshots.map((entry) => entry.baseUrl))).sort(),
-    ).toStrictEqual([call.baseUrl]);
-  });
+  registerBehavior3();
 
-  it('@plan:PLAN-20251018-STATELESSPROVIDER2.P05 @requirement:REQ-SP2-001 @pseudocode base-provider-call-contract.md lines 3-5 isolates overlapping calls without leaking settings', async () => {
-    const provider = createProvider();
-    const callA = createCallContext({
-      callId: 'call-a',
-      model: 'model-a',
-      baseUrl: 'https://call-a.example/v1',
-    });
-    const callB = createCallContext({
-      callId: 'call-b',
-      model: 'model-b',
-      baseUrl: 'https://call-b.example/v1',
-    });
+  registerBehavior4();
 
-    await Promise.all([
-      collectChunks(
-        provider.generateChatCompletion(
-          streamCallOptions({
-            providerName: PROVIDER_NAME,
-            contents: [createContent('ping-a')],
-            settings: callA.settings,
-            metadata: callA.metadata,
-          }),
-        ),
-      ),
-      collectChunks(
-        provider.generateChatCompletion(
-          streamCallOptions({
-            providerName: PROVIDER_NAME,
-            contents: [createContent('ping-b')],
-            settings: callB.settings,
-            metadata: callB.metadata,
-          }),
-        ),
-      ),
-    ]);
-
-    const snapshotsA = provider.snapshotsFor('call-a');
-    const snapshotsB = provider.snapshotsFor('call-b');
-
-    expect(snapshotsA).not.toHaveLength(0);
-    expect(snapshotsB).not.toHaveLength(0);
-
-    expect(
-      Array.from(new Set(snapshotsA.map((entry) => entry.model))).sort(),
-    ).toStrictEqual([callA.model]);
-    expect(
-      Array.from(new Set(snapshotsA.map((entry) => entry.baseUrl))).sort(),
-    ).toStrictEqual([callA.baseUrl]);
-
-    expect(
-      Array.from(new Set(snapshotsB.map((entry) => entry.model))).sort(),
-    ).toStrictEqual([callB.model]);
-    expect(
-      Array.from(new Set(snapshotsB.map((entry) => entry.baseUrl))).sort(),
-    ).toStrictEqual([callB.baseUrl]);
-  });
-
-  it('@plan:PLAN-20251018-STATELESSPROVIDER2.P05 @requirement:REQ-SP2-001 @pseudocode base-provider-call-contract.md lines 3-7 resets overrides and auth resolver state after completion', async () => {
-    const provider = createProvider();
-    const authCall = createCallContext({
-      callId: 'call-auth',
-      model: 'model-auth',
-      baseUrl: 'https://auth.example/v1',
-      authKey: 'token-auth',
-      captureAuth: true,
-    });
-
-    await collectChunks(
-      provider.generateChatCompletion(
-        streamCallOptions({
-          providerName: PROVIDER_NAME,
-          contents: [createContent('auth-request')],
-          settings: authCall.settings,
-          metadata: authCall.metadata,
-        }),
-      ),
-    );
-
-    const authSnapshots = provider.snapshotsFor('call-auth');
-    expect(
-      authSnapshots.some((snapshot) => snapshot.authToken === 'token-auth'),
-    ).toBe(true);
-
-    await collectChunks(
-      provider.generateChatCompletion(
-        streamCallOptions({
-          providerName: PROVIDER_NAME,
-          contents: [createContent('baseline-request')],
-          metadata: {
-            marker: 'baseline',
-            captureAuth: true,
-            hook: { callId: 'baseline' },
-          },
-        }),
-      ),
-    );
-
-    const baselineSnapshots = provider.snapshotsFor('baseline');
-    expect(baselineSnapshots).not.toHaveLength(0);
-
-    const baselineTokens = Array.from(
-      new Set(baselineSnapshots.map(authTokenOrEmpty)),
-    ).sort();
-
-    expect(baselineTokens).toStrictEqual(['']);
-  });
-
-  it('does not leak global base-url from another active provider', () => {
-    const settings = createSettingsService({
-      model: 'baseline-model',
-    });
-    settings.set('base-url', 'https://api.openai.com/v1');
-    settings.set('activeProvider', 'openai');
-
-    const provider = new TestBaseProvider(settings);
-    expect(provider.getCurrentBaseURL()).toBeUndefined();
-  });
-
-  it('still respects global base-url when provider is active', () => {
-    const settings = createSettingsService({
-      model: 'baseline-model',
-    });
-    settings.set('base-url', 'https://api.openai.com/v1');
-    settings.set('activeProvider', PROVIDER_NAME);
-
-    const provider = new TestBaseProvider(settings);
-    expect(provider.getCurrentBaseURL()).toBe('https://api.openai.com/v1');
-  });
+  registerBehavior5();
 });
+
+function registerBehavior1(): void {
+  describe('BaseProvider stateless contract [1]', () => {
+    it('@plan:PLAN-20251018-STATELESSPROVIDER2.P05 @requirement:REQ-SP2-001 @pseudocode base-provider-call-contract.md lines 3-4 uses call-scoped settings for model/base-url resolution', async () => {
+      const provider = createProvider();
+      const call = createCallContext({
+        callId: 'call-override',
+        model: 'call-model',
+        baseUrl: 'https://call.example/v1',
+      });
+
+      await collectChunks(
+        provider.generateChatCompletion(
+          streamCallOptions({
+            providerName: PROVIDER_NAME,
+            contents: [createContent('ping')],
+            settings: call.settings,
+            metadata: call.metadata,
+          }),
+        ),
+      );
+
+      const snapshots = provider.snapshotsFor('call-override');
+      expect(snapshots).not.toHaveLength(0);
+      expect(
+        Array.from(new Set(snapshots.map((entry) => entry.model))).sort(),
+      ).toStrictEqual([call.model]);
+      expect(
+        Array.from(new Set(snapshots.map((entry) => entry.baseUrl))).sort(),
+      ).toStrictEqual([call.baseUrl]);
+    });
+  });
+}
+
+function registerBehavior2(): void {
+  describe('BaseProvider stateless contract [2]', () => {
+    it('@plan:PLAN-20251018-STATELESSPROVIDER2.P05 @requirement:REQ-SP2-001 @pseudocode base-provider-call-contract.md lines 3-5 isolates overlapping calls without leaking settings', async () => {
+      const provider = createProvider();
+      const callA = createCallContext({
+        callId: 'call-a',
+        model: 'model-a',
+        baseUrl: 'https://call-a.example/v1',
+      });
+      const callB = createCallContext({
+        callId: 'call-b',
+        model: 'model-b',
+        baseUrl: 'https://call-b.example/v1',
+      });
+
+      await Promise.all([
+        collectChunks(
+          provider.generateChatCompletion(
+            streamCallOptions({
+              providerName: PROVIDER_NAME,
+              contents: [createContent('ping-a')],
+              settings: callA.settings,
+              metadata: callA.metadata,
+            }),
+          ),
+        ),
+        collectChunks(
+          provider.generateChatCompletion(
+            streamCallOptions({
+              providerName: PROVIDER_NAME,
+              contents: [createContent('ping-b')],
+              settings: callB.settings,
+              metadata: callB.metadata,
+            }),
+          ),
+        ),
+      ]);
+
+      const snapshotsA = provider.snapshotsFor('call-a');
+      const snapshotsB = provider.snapshotsFor('call-b');
+
+      expect(snapshotsA).not.toHaveLength(0);
+      expect(snapshotsB).not.toHaveLength(0);
+
+      expect(
+        Array.from(new Set(snapshotsA.map((entry) => entry.model))).sort(),
+      ).toStrictEqual([callA.model]);
+      expect(
+        Array.from(new Set(snapshotsA.map((entry) => entry.baseUrl))).sort(),
+      ).toStrictEqual([callA.baseUrl]);
+
+      expect(
+        Array.from(new Set(snapshotsB.map((entry) => entry.model))).sort(),
+      ).toStrictEqual([callB.model]);
+      expect(
+        Array.from(new Set(snapshotsB.map((entry) => entry.baseUrl))).sort(),
+      ).toStrictEqual([callB.baseUrl]);
+    });
+  });
+}
+
+function registerBehavior3(): void {
+  describe('BaseProvider stateless contract [3]', () => {
+    it('@plan:PLAN-20251018-STATELESSPROVIDER2.P05 @requirement:REQ-SP2-001 @pseudocode base-provider-call-contract.md lines 3-7 resets overrides and auth resolver state after completion', async () => {
+      const provider = createProvider();
+      const authCall = createCallContext({
+        callId: 'call-auth',
+        model: 'model-auth',
+        baseUrl: 'https://auth.example/v1',
+        authKey: 'token-auth',
+        captureAuth: true,
+      });
+
+      await collectChunks(
+        provider.generateChatCompletion(
+          streamCallOptions({
+            providerName: PROVIDER_NAME,
+            contents: [createContent('auth-request')],
+            settings: authCall.settings,
+            metadata: authCall.metadata,
+          }),
+        ),
+      );
+
+      const authSnapshots = provider.snapshotsFor('call-auth');
+      expect(
+        authSnapshots.some((snapshot) => snapshot.authToken === 'token-auth'),
+      ).toBe(true);
+
+      await collectChunks(
+        provider.generateChatCompletion(
+          streamCallOptions({
+            providerName: PROVIDER_NAME,
+            contents: [createContent('baseline-request')],
+            metadata: {
+              marker: 'baseline',
+              captureAuth: true,
+              hook: { callId: 'baseline' },
+            },
+          }),
+        ),
+      );
+
+      const baselineSnapshots = provider.snapshotsFor('baseline');
+      expect(baselineSnapshots).not.toHaveLength(0);
+
+      const baselineTokens = Array.from(
+        new Set(baselineSnapshots.map(authTokenOrEmpty)),
+      ).sort();
+
+      expect(baselineTokens).toStrictEqual(['']);
+    });
+  });
+}
+
+function registerBehavior4(): void {
+  describe('BaseProvider stateless contract [4]', () => {
+    it('does not leak global base-url from another active provider', () => {
+      const settings = createSettingsService({
+        model: 'baseline-model',
+      });
+      settings.set('base-url', 'https://api.openai.com/v1');
+      settings.set('activeProvider', 'openai');
+
+      const provider = new TestBaseProvider(settings);
+      expect(provider.getCurrentBaseURL()).toBeUndefined();
+    });
+  });
+}
+
+function registerBehavior5(): void {
+  describe('BaseProvider stateless contract [5]', () => {
+    it('still respects global base-url when provider is active', () => {
+      const settings = createSettingsService({
+        model: 'baseline-model',
+      });
+      settings.set('base-url', 'https://api.openai.com/v1');
+      settings.set('activeProvider', PROVIDER_NAME);
+
+      const provider = new TestBaseProvider(settings);
+      expect(provider.getCurrentBaseURL()).toBe('https://api.openai.com/v1');
+    });
+  });
+}

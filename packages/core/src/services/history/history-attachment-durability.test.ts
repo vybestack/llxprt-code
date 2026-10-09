@@ -1,4 +1,4 @@
-import { collectRowsForAssertions } from '../../test-utils/collect-rows-for-assertions.js';
+import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, afterEach, beforeEach, expect, it } from 'bun:test';
 import { appendFile, mkdtemp, readFile, rm, stat } from 'node:fs/promises';

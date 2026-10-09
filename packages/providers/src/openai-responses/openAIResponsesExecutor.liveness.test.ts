@@ -32,7 +32,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { WebSocketTransport } from './openAIResponsesWebSocketTransport.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 
 const getCoreSystemPromptAsyncSpy = vi.fn().mockResolvedValue('system prompt');
 
@@ -92,7 +92,7 @@ function buildDeps(
     logger: { debug: vi.fn() } as unknown as ResponsesExecutorDeps['logger'],
     getProviderBaseURL: () => 'https://api.openai.com/v1',
     getCustomHeaders: () => undefined,
-    isCodexBaseURL: () => false,
+    isCodexMode: () => false,
     getCodexAccountId: async () => 'codex-account',
     resolveAuthTokenForPrompt: async () => '',
     shouldRetryOnError: () => false,
@@ -413,7 +413,7 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
     const iterator = executeOpenAIResponsesRequest(
       options,
       buildDeps({
-        isCodexBaseURL: () => true,
+        isCodexMode: () => true,
         getWebSocketTransport: () => wsTransport,
         isWebSocketTransportActive: () => true,
         getMediaTransportCapabilities: () =>
@@ -480,7 +480,7 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
     const iterator = executeOpenAIResponsesRequest(
       options,
       buildDeps({
-        isCodexBaseURL: () => true,
+        isCodexMode: () => true,
         getWebSocketTransport: () => wsTransport,
         isWebSocketTransportActive: () => true,
         getMediaTransportCapabilities: () =>
@@ -566,7 +566,7 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
     const iterator = executeOpenAIResponsesRequest(
       options,
       buildDeps({
-        isCodexBaseURL: () => true,
+        isCodexMode: () => true,
         getWebSocketTransport: () => wsTransport,
         isWebSocketTransportActive: () => true,
         getMediaTransportCapabilities: () =>
@@ -632,7 +632,7 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
       const iterator = executeOpenAIResponsesRequest(
         options,
         buildDeps({
-          isCodexBaseURL: () => true,
+          isCodexMode: () => true,
           getWebSocketTransport: () => wsTransport,
           isWebSocketTransportActive: () => true,
         }),
@@ -682,7 +682,7 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
     const iterator = executeOpenAIResponsesRequest(
       options,
       buildDeps({
-        isCodexBaseURL: () => true,
+        isCodexMode: () => true,
         getWebSocketTransport: () => wsTransport,
         isWebSocketTransportActive: () => true,
         getCodexAccountId: async () => {

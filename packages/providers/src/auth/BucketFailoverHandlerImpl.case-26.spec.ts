@@ -10,7 +10,7 @@ import type { OAuthToken } from '@vybestack/llxprt-code-core';
 import {
   createBucketFailoverFixture,
   makeToken,
-} from './BucketFailoverHandlerImpl.test-helpers.js';
+} from './__tests__/BucketFailoverHandlerImpl.test-helpers.js';
 
 describe('BucketFailoverHandlerImpl #26', () => {
   /**

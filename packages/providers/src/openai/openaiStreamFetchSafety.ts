@@ -4,18 +4,26 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type {} from 'bun';
+
 /** Avoid runtime-native stream iteration in the OpenAI SDK's SSE reader. */
 export function createReaderBasedStreamFetch(
   innerFetch?: typeof fetch,
 ): typeof fetch {
-  return async (input, init) => {
-    const response = await (innerFetch ?? globalThis.fetch)(input, init);
-    return response.ok &&
-      response.body &&
-      Boolean(Reflect.get(response.body, Symbol.asyncIterator))
-      ? wrapResponseWithReaderIteratedBody(response)
-      : response;
-  };
+  return Object.assign(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      const response = await (innerFetch ?? globalThis.fetch)(input, init);
+      return response.ok &&
+        response.body &&
+        Boolean(Reflect.get(response.body, Symbol.asyncIterator))
+        ? wrapResponseWithReaderIteratedBody(response)
+        : response;
+    },
+    {
+      preconnect: (...args: Parameters<typeof fetch.preconnect>) =>
+        (innerFetch ?? globalThis.fetch).preconnect(...args),
+    },
+  );
 }
 
 /** Delegate Response methods to their original internal slots. */

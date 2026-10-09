@@ -21,7 +21,7 @@ import OpenAI from 'openai';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { GemmaToolCallParser } from '@vybestack/llxprt-code-core/parsers/TextToolCallParser.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { ToolCallPipeline } from '../openai/ToolCallPipeline.js';

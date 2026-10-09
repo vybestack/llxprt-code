@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi } from 'bun:test';
 import React, { act, useState } from 'react';
-import { renderHook, waitFor } from '../../../../test-utils/render.js';
+import { renderHook, waitFor } from '../../../../__tests__/render.js';
 import {
   useSubmitQuery,
   type SubmissionExecutor,
@@ -31,7 +31,7 @@ import type { StructuredError } from '@vybestack/llxprt-code-core';
 import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
 import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
 import { createDeferred, type Deferred } from './createDeferred.js';
-import { createFakeAgentFromMockClient } from '../../useAgentStream-test-helpers.js';
+import { createFakeAgentFromMockClient } from '../../__tests__/useAgentStream-test-helpers.js';
 import type { StreamRuntime } from '../../../cliUiRuntime.js';
 import { useStreamingState } from '../useAgentStreamLifecycle.js';
 import {

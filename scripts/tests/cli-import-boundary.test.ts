@@ -820,14 +820,17 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
       expect(code).toBe(0);
     });
 
-    it('flags importing from the agents internals.js subpath (deep import)', () => {
-      // @vybestack/llxprt-code-agents/internals.js is a deep subpath NOT in
-      // PUBLIC_SUBPATHS_BY_PACKAGE (agents has no entry there), so it is a
-      // deep-import violation regardless of which named symbol is imported.
+    it('flags importing from an undeclared agents subpath (deep import)', () => {
+      // A subpath like @vybestack/llxprt-code-agents/dead-subpath.js is a deep
+      // subpath NOT in PUBLIC_SUBPATHS_BY_PACKAGE (agents has no entry there),
+      // so it is a deep-import violation regardless of which named symbol is
+      // imported. This is the coverage that historically caught the retired
+      // low-level barrel subpath; the fixture now uses a synthetic dead
+      // subpath because the real one no longer exists (issue #3222).
       const { code, stdout } = withCliFixture(({ root, write }) => {
         write(
           'packages/cli/src/rogue.ts',
-          "import { AgentClient } from '@vybestack/llxprt-code-agents/internals.js';\n",
+          "import { AgentClient } from '@vybestack/llxprt-code-agents/dead-subpath.js';\n",
         );
         write(...thinIndex());
         return runScript(root, 1);
@@ -835,27 +838,27 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
       expect(code).toBe(1);
       expect(stdout).toContain('rogue.ts');
       // Assert the exact offending specifier literal.
-      expect(stdout).toContain('@vybestack/llxprt-code-agents/internals.js');
+      expect(stdout).toContain('@vybestack/llxprt-code-agents/dead-subpath.js');
       // Static import syntax is reported as 'static-import'; the deep nature of
       // the violation is conveyed by the offending specifier literal above.
       expect(stdout).toContain('static-import');
     });
 
-    it('flags a namespace import from the agents internals.js subpath', () => {
+    it('flags a namespace import from an undeclared agents subpath', () => {
       // Specifier-level enforcement must catch all static import syntaxes,
       // including namespace imports, because the checker reads the
       // ImportDeclaration moduleSpecifier independently of the import clause form.
       const { code, stdout } = withCliFixture(({ root, write }) => {
         write(
           'packages/cli/src/namespace-deep.ts',
-          "import * as internals from '@vybestack/llxprt-code-agents/internals.js';\n",
+          "import * as deadbarrel from '@vybestack/llxprt-code-agents/dead-subpath.js';\n",
         );
         write(...thinIndex());
         return runScript(root, 1);
       });
       expect(code).toBe(1);
       expect(stdout).toContain('namespace-deep.ts');
-      expect(stdout).toContain('@vybestack/llxprt-code-agents/internals.js');
+      expect(stdout).toContain('@vybestack/llxprt-code-agents/dead-subpath.js');
       expect(stdout).toContain('static-import');
     });
 

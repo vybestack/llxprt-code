@@ -22,7 +22,7 @@ import {
   options,
   request,
   textContent,
-} from './openAIResponsesWebSocketTransport.test-helpers.js';
+} from './__tests__/openAIResponsesWebSocketTransport.test-helpers.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 describe('Codex Responses WebSocket stateful connection scope @issue:3446', () => {

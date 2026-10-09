@@ -4,15 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  afterAll,
-  afterEach,
-  beforeAll,
-  describe,
-  expect,
-  it,
-  vi,
-} from 'bun:test';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'bun:test';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -27,11 +19,6 @@ import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybesta
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import {
-  createSettingsProviderRuntimeContext,
-  deactivateSettingsRuntimeContext,
-  setSettingsProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
 import {
   createProviderAdapterFromManager,
   createTelemetryAdapterFromConfig,
@@ -86,10 +73,6 @@ describe('System prompt provider — non-foreground subagent (issue #3176, D5)',
     await initializePromptSystem();
   });
 
-  afterEach(() => {
-    deactivateSettingsRuntimeContext();
-  });
-
   afterAll(() => {
     fs.rmSync(tempDir, { recursive: true, force: true });
     if (originalPromptsDir === undefined) {
@@ -99,20 +82,28 @@ describe('System prompt provider — non-foreground subagent (issue #3176, D5)',
     }
   });
 
-  it('would resolve the ambient template without an explicit request provider', async () => {
+  it('resolves the template from request-scoped settings; no ambient fallback', async () => {
+    // Issue #2616: the ambient settings singleton is gone. Template
+    // resolution for a non-foreground subagent request is driven by the
+    // request-scoped settings passed to the prompt builder — and when the
+    // caller passes none, no ambient provider template may resolve.
     const settings = new SettingsService();
     settings.set('activeProvider', AMBIENT_PROVIDER);
-    setSettingsProviderRuntimeContext(
-      createSettingsProviderRuntimeContext({ settingsService: settings }),
-    );
 
-    const prompt = await getCoreSystemPromptAsync({
+    const withSettings = await getCoreSystemPromptAsync({
+      model: SUBAGENT_MODEL,
+      coreMemory: '',
+      settings,
+    });
+    expect(withSettings).toContain(AMBIENT_SENTINEL);
+    expect(withSettings).not.toContain(SUBAGENT_SENTINEL);
+
+    const withoutSettings = await getCoreSystemPromptAsync({
       model: SUBAGENT_MODEL,
       coreMemory: '',
     });
-
-    expect(prompt).toContain(AMBIENT_SENTINEL);
-    expect(prompt).not.toContain(SUBAGENT_SENTINEL);
+    expect(withoutSettings).not.toContain(AMBIENT_SENTINEL);
+    expect(withoutSettings).not.toContain(SUBAGENT_SENTINEL);
   });
 
   it('sends the real template for the provider executing the subagent request', async () => {

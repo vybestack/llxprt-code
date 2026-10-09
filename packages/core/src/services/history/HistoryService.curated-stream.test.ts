@@ -1,5 +1,5 @@
-import { forbidHistoryMaterializationForTest } from '../../test-utils/history-materialization-test-guard.js';
-import { withCuratedHistoryForTest } from '../../test-utils/curated-history-fixture.js';
+import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
+import { withCuratedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { readFileSync } from 'node:fs';

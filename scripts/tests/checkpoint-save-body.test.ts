@@ -1,8 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { writeBodyFile } from '../lib/body-evidence-writer.js';
 import { describe, expect, it, vi } from 'bun:test';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { join, basename } from 'node:path';
 import { withBatchFixture } from '../../packages/core/src/services/history/addbatch-stream-test-helpers.js';
+import { exactTokenizer } from '../../packages/core/src/services/history/chronology-rollback-test-helpers.js';
 import {
   exportSummaryRow,
   seedRows,
@@ -21,7 +23,7 @@ import {
   savedCheckpoint,
 } from '../../packages/cli/src/ui/hooks/agentStream/checkpoint-disk-test-helpers.js';
 import { restoreCommand } from '../../packages/cli/src/ui/commands/restoreCommand.js';
-import { createMockCommandContext } from '../../packages/cli/src/test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../packages/cli/src/__tests__/mockCommandContext.js';
 import { captureCuratedBody } from './provider-curated-body-helpers.js';
 
 async function bodyPairs(
@@ -33,6 +35,16 @@ async function bodyPairs(
   const expectedRows = Array.from({ length: size }, (_, index) =>
     exportSummaryRow(index),
   );
+  let index = 0;
+  for await (const row of source()) {
+    const expected = expectedRows[index++];
+    expect(row.speaker).toBe(expected.speaker);
+    expect(row.metadata).toStrictEqual(expected.metadata);
+    expect(row.blocks.filter((block) => block.type !== 'media')).toStrictEqual(
+      expected.blocks.filter((block) => block.type !== 'media'),
+    );
+  }
+  expect(index).toBe(size);
   for (const provider of ['anthropic', 'openai-responses', 'gemini']) {
     for (const caching of [false, true]) {
       const expected = await captureCuratedBody(
@@ -71,9 +83,9 @@ async function savePair(
   if (output === undefined) return;
   await mkdir(output, { recursive: true });
   const name = `${size}-${provider}-${caching}`;
-  await writeFile(join(output, `${name}-expected.json`), expected);
-  await writeFile(join(output, `${name}-actual.json`), actual);
-  await writeFile(join(output, `${size}-checkpoint.json`), checkpoint);
+  await writeBodyFile(join(output, `${name}-expected.json`), expected);
+  await writeBodyFile(join(output, `${name}-actual.json`), actual);
+  await writeBodyFile(join(output, `${size}-checkpoint.json`), checkpoint);
 }
 
 async function roundTrip(size: number): Promise<void> {
@@ -83,6 +95,7 @@ async function roundTrip(size: number): Promise<void> {
     const config = internalConfig(agent);
     const root = await mkdtemp(join(process.cwd(), 'tmp/checkpoint-body-'));
     try {
+      vi.spyOn(config, 'getTokenizerFactory').mockReturnValue(exactTokenizer());
       const client = config.getAgentClient();
       client.storeHistoryServiceForReuse(history);
       await history.recalculateTokens();
@@ -117,7 +130,9 @@ async function roundTrip(size: number): Promise<void> {
         toolArgs: checkpointTool.request.args,
       });
       expect(loadedUi).toBe(JSON.stringify(checkpointUiHistory));
-      expect([tokenCountBeforeSave, history.getTotalTokens()]).toStrictEqual([
+      const restored = client.getHistoryService();
+      if (restored === null) throw new Error('Missing restored history');
+      expect([tokenCountBeforeSave, restored.getTotalTokens()]).toStrictEqual([
         expectedTokens,
         expectedTokens,
       ]);

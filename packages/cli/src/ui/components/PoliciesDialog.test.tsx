@@ -5,7 +5,7 @@
  */
 
 import { act } from 'react';
-import { renderWithProviders, waitFor } from '../../test-utils/render.js';
+import { renderWithProviders, waitFor } from '../../__tests__/render.js';
 import { vi, describe, it, expect, beforeEach } from 'bun:test';
 
 const realRealInkModule = {

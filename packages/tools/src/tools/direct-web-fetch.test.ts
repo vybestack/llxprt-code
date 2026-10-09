@@ -19,7 +19,7 @@ import { describe, it, expect, beforeEach } from 'bun:test';
 import { DirectWebFetchTool } from './direct-web-fetch.js';
 import { ToolErrorType } from '../types/tool-error.js';
 import type { IToolHost } from '../index.js';
-import { createLoopbackHarness } from '../test-utils/loopback-test-helpers.js';
+import { createLoopbackHarness } from '../__tests__/loopback-test-helpers.js';
 
 const loopback = createLoopbackHarness();
 

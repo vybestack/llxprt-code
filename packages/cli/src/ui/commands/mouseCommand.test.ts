@@ -5,10 +5,10 @@
  */
 
 import { describe, expect, it, beforeEach, vi } from 'bun:test';
-import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { disableMouseEvents, isMouseEventsActive } from '../utils/mouse.js';
 import { mouseCommand } from './mouseCommand.js';
-import { assertDefined } from '../../test-utils/assertions.js';
+import { assertDefined } from '../../__tests__/assertions.js';
 
 describe('mouseCommand', () => {
   const runMouseCommand = async (args: string) => {

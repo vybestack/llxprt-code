@@ -2,7 +2,10 @@
 import { describe, expect, it } from 'bun:test';
 import { annotateCompressionSpan } from './historyChronology.js';
 import { annotateCompressionSpanStream } from './compression-span-stream.js';
-import { suffixRow, withSuffixFixture } from './history-suffix-test-helpers.js';
+import {
+  suffixRow,
+  withSuffixFixture,
+} from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { accountingRow } from './token-accounting-stream-test-helpers.js';
 import type { IContent } from './IContent.js';
 import { isSpeakerContent } from './historyJournalGuards.js';

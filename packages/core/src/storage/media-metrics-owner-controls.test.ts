@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from '../services/history/IContent.js';
 import { RowOwnership } from '../recording/rowOwnership.js';
-import { withSuffixFixture } from '../services/history/history-suffix-test-helpers.js';
+import { withCoreSuffixFixture } from '../services/history/core-suffix-fixture-test-helpers.js';
 import { MediaLifecycleMetrics } from './media-lifecycle-metrics.js';
 import {
   metricRow,
@@ -45,7 +45,7 @@ for (const size of [512, 8192])
       it('detects strong borrowed and copied retention beyond unchanged controlled bounds', async () => {
         let retaining: RetainingMetricHistory | undefined;
         await withMetricStore(async (store) =>
-          withSuffixFixture(
+          withCoreSuffixFixture(
             size,
             async (history, reader) => {
               if (retaining === undefined)

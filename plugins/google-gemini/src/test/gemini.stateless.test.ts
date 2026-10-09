@@ -2,22 +2,18 @@
  * @plan PLAN-20251018-STATELESSPROVIDER2.P11
  * @requirement REQ-SP2-001
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  clearActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createRuntimeConfigStub } from './testSupport.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { IProviderConfig } from '@vybestack/llxprt-code-providers/types/IProviderConfig.js';
 import { GeminiProvider } from '../gemini/GeminiProvider.js';
 import {
   createProviderCallOptions,
   type ProviderCallOptionsInit,
-} from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+} from './testSupport.js';
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(async () => 'core-prompt'),
@@ -166,17 +162,6 @@ describe('Gemini provider stateless contract tests', () => {
     googleGenAIState.streamCalls.length = 0;
     googleGenAIState.nonStreamCalls.length = 0;
     googleGenAIState.streamPlans.length = 0;
-    // Set up default runtime context for tests
-    setActiveProviderRuntimeContext(
-      createProviderRuntimeContext({
-        settingsService: new SettingsService(),
-        runtimeId: 'gemini-stateless-test',
-      }),
-    );
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
   });
 
   it('emits usage metadata chunks during streaming @plan:PLAN-20251018-STATELESSPROVIDER2.P11 @requirement:REQ-SP2-001 @pseudocode anthropic-gemini-stateless.md lines 5-7', async () => {
@@ -393,13 +378,9 @@ describe('Gemini provider stateless contract tests', () => {
           runtime,
           tools: [
             {
-              functionDeclarations: [
-                {
-                  name: 'fetchSomething',
-                  description: 'fetch data',
-                  parametersJsonSchema: {},
-                },
-              ],
+              name: 'fetchSomething',
+              description: 'fetch data',
+              parametersJsonSchema: {},
             },
           ],
         }),

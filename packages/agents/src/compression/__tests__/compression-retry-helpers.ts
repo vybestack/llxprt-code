@@ -25,7 +25,7 @@ import { EmptySummaryError } from '@vybestack/llxprt-code-core/core/compression/
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import * as compressionFactory from '../compressionStrategyFactory.js';
 import { ChatSession } from '../../core/chatSession.js';
-import type { createChatSessionRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import type { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {

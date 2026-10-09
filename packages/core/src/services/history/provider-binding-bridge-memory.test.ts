@@ -7,7 +7,7 @@ import {
   pairedEstimate,
   RETAINED_ALLOWANCE_BYTES,
   type PairedDelta,
-} from '../../test-utils/retained-growth.js';
+} from '@vybestack/llxprt-code-test-utils/core/retained-growth.js';
 const schema = z.object({
   size: z.number(),
   trap: z.boolean(),

@@ -6,7 +6,7 @@
 
 import { act } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
-import { renderHook } from '../../../../test-utils/render.js';
+import { renderHook } from '../../../../__tests__/render.js';
 import { appEvents, AppEvent } from '../../../../utils/events.js';
 import { useAppEventHandlers } from './useAppEventHandlers.js';
 

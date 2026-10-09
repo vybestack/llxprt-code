@@ -133,7 +133,7 @@ Each entry includes: source path, destination path, classification rule, and imp
 
 | # | Source Path | Destination Path | Rule | Import Rewrite Category |
 |---|------------|------------------|------|------------------------|
-| 54 | `packages/core/src/providers/test-utils/providerTestConfig.ts` | `packages/providers/src/test-utils/providerTestConfig.ts` | Rule 6 | L (test utilities) |
+| 54 | `packages/core/src/providers/test-utils/providerTestConfig.ts` | `packages/providers/src/__tests__/providerTestConfig.ts` | Rule 6 | L (test utilities) |
 
 ### anthropic/ (Rule 4)
 
@@ -168,7 +168,7 @@ Each entry includes: source path, destination path, classification rule, and imp
 | 81 | `packages/core/src/providers/anthropic/schemaConverter.ts` | `packages/providers/src/anthropic/schemaConverter.ts` | Rule 4 | B |
 | 82 | `packages/core/src/providers/anthropic/usageInfo.ts` | `packages/providers/src/anthropic/usageInfo.ts` | Rule 4 | B |
 | 83 | `packages/core/src/providers/anthropic/usageInfo.test.ts` | `packages/providers/src/anthropic/usageInfo.test.ts` | Rule 4 | B |
-| 84 | `packages/core/src/providers/anthropic/test-utils/anthropicTestUtils.ts` | `packages/providers/src/anthropic/test-utils/anthropicTestUtils.ts` | Rule 2 | B |
+| 84 | `packages/core/src/providers/anthropic/test-utils/anthropicTestUtils.ts` | `packages/providers/src/anthropic/__tests__/anthropicTestUtils.ts` | Rule 2 | B |
 
 ### chutes/ (Rule 4)
 

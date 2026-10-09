@@ -3,7 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { displayBoot } from '../../../test-utils/resumeRows.js';
+import { displayBoot } from '../../../__tests__/resumeRows.js';
 
 /**
  * @plan PLAN-20260214-SESSIONBROWSER.P13
@@ -41,7 +41,7 @@ import {
   type IContent,
 } from '@vybestack/llxprt-code-core';
 
-import { renderHook, waitFor } from '../../../test-utils/render.js';
+import { renderHook, waitFor } from '../../../__tests__/render.js';
 import {
   useSessionBrowser,
   type UseSessionBrowserProps,

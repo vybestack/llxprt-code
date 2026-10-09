@@ -1,12 +1,13 @@
-import { observeHistorySynchronouslyForTest } from '../../packages/core/src/test-utils/synchronous-history-test-observation.js';
-import { forbidHistoryMaterializationForTest } from '../../packages/core/src/test-utils/history-materialization-test-guard.js';
+import { observeHistorySynchronouslyForTest } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
+import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { writeBodyFile } from '../lib/body-evidence-writer.js';
 import { describe, expect, it } from 'bun:test';
-import { writeFileSync } from 'node:fs';
+
 import { join } from 'node:path';
 import { DebugLogger } from '../../packages/core/src/debug/index.js';
 import { HistoryService } from '../../packages/core/src/services/history/HistoryService.js';
-import { withSuffixFixture } from '../../packages/core/src/services/history/history-suffix-test-helpers.js';
+import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import {
   providerFarFixtureRow,
   providerPendingFixture,
@@ -68,8 +69,8 @@ async function verifyBody(
       const output = process.env.PROVIDER_CURATED_BODY_OUTPUT;
       if (output) {
         const name = `${provider}-${size}-${caching}`;
-        writeFileSync(join(output, `${name}-actual.json`), actual);
-        writeFileSync(join(output, `${name}-expected.json`), expected);
+        await writeBodyFile(join(output, `${name}-actual.json`), actual);
+        await writeBodyFile(join(output, `${name}-expected.json`), expected);
       }
       return { actual, expected };
     },

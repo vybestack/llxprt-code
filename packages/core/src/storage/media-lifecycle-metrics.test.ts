@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { collectRowsForAssertions } from '../test-utils/collect-rows-for-assertions.js';
-import { collectRawHistory } from '../test-utils/collect-raw-history.js';
+import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
+import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import {
   assertDefined,
   assertNotNull,

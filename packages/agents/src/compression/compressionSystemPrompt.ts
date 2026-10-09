@@ -24,6 +24,7 @@
  */
 
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
+import type { PromptSettingsReader } from '@vybestack/llxprt-code-core/core/prompts.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
@@ -130,10 +131,14 @@ function isCompressionLoadBalancerWrapper(
  * (issue #3176, D5 + D8). Ordinary compression derives them through
  * {@link buildCompressionChatOptions}; load-balanced compression supplies the
  * selected candidate provider and the compressed session's interaction mode.
+ * The `settings` reader is likewise request-scoped: callers pass the settings
+ * service carried by the request's runtime context (issue #2616).
  *
  * @param model  - The resolved model (same as `resolved.model` on the wire)
  * @param options - Request-scoped `provider` and `interactionMode`; both
  *                  required, derived by {@link buildCompressionChatOptions}
+ * @param settings - Request-scoped settings reader; when omitted the prompt
+ *                   builder uses its defaults
  * @returns The assembled system instruction
  */
 export async function buildCompressionSystemInstruction(
@@ -142,6 +147,7 @@ export async function buildCompressionSystemInstruction(
     provider: string;
     interactionMode: CompressionInteractionMode;
   },
+  settings?: PromptSettingsReader,
 ): Promise<string> {
   const interactionMode = options.interactionMode;
   const provider = requireCompressionProvider(options.provider);
@@ -150,6 +156,7 @@ export async function buildCompressionSystemInstruction(
     coreMemory: '',
     model,
     provider,
+    settings,
     tools: undefined,
     includeSubagentDelegation: false,
     interactionMode,

@@ -29,8 +29,6 @@ import { assembleCliProviderRuntime } from '@vybestack/llxprt-code-providers/run
 // is the external boundary: stub it so prepareRuntimeForProfile is exercised
 // as a thin client that supplies declarative context and adopts the result.
 void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
-  registerAgentRuntimeFactories: vi.fn(),
-  resetAgentRuntimeFactories: vi.fn(),
   ephemeralSettingHelp: {},
   parseEphemeralSettingValue: vi.fn((_key: string, rawValue: string) => ({
     success: true,

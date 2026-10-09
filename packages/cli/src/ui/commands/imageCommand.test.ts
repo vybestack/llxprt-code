@@ -7,7 +7,7 @@
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi } from 'bun:test';
 import { imageCommand } from './imageCommand.js';
-import { assertTruthy } from '../../test-utils/assertions.js';
+import { assertTruthy } from '../../__tests__/assertions.js';
 import { MessageType } from '../types.js';
 import type { CommandContext } from './types.js';
 

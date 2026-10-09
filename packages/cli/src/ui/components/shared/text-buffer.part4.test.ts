@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'bun:test';
 import stripAnsi from 'strip-ansi';
 import { act } from 'react';
-import { renderHook } from '../../../test-utils/render.js';
+import { renderHook } from '../../../__tests__/render.js';
 import type {
   TextBuffer,
   TextBufferAction,

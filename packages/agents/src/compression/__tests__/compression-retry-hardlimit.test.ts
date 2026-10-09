@@ -14,7 +14,7 @@ import { installPendingLegacyStrategyFixture } from './pending-legacy-strategy-f
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
-import { collectRowsForAssertions } from '../../../../core/src/test-utils/collect-rows-for-assertions.js';
+import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import * as compressionFactory from '../compressionStrategyFactory.js';
 const realCompressionStrategy = compressionFactory.getCompressionStrategy;
 import {
@@ -23,13 +23,13 @@ import {
   useCompressionClock,
 } from './compression-regression-fixtures.js';
 
-import { createChatSessionRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import * as providerRuntime from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import {
   makeHttpError,
   makeChatForEnforceContextWindow,
   mockHardLimitRewriteStrategy,
+  hardLimitReplacement,
 } from './compression-retry-helpers.js';
 
 const original = { ...(await import('@vybestack/llxprt-code-settings')) };
@@ -790,7 +790,6 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
       ...runtimeSetup.runtime,
       config: runtimeSetup.config,
     };
-    providerRuntime.setActiveProviderRuntimeContext(providerRuntimeSnapshot);
   });
   afterEach(() => {
     vi.restoreAllMocks();

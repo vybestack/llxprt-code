@@ -27,7 +27,7 @@ import {
   buildProviderDumpBodyStream,
 } from './providerRequestConversion.js';
 import { streamPrettyJson } from './streamPrettyJson.js';
-import { pairedEstimate } from '../../../core/src/test-utils/retained-growth.js';
+import { pairedEstimate } from '@vybestack/llxprt-code-test-utils/core/retained-growth.js';
 
 async function settle(): Promise<void> {
   for (let index = 0; index < 3; index++) {

@@ -16,7 +16,7 @@ import {
   createSession,
   runPrompt,
   editConfirmation,
-} from './zed-test-helpers.js';
+} from './__tests__/zed-test-helpers.js';
 
 type AgentToolStatus = Extract<
   AgentEvent,

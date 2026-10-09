@@ -15,10 +15,13 @@ import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
 import type { ChatSession, StreamEvent } from './chatSession.js';
 import { StreamEventType } from './chatSession.js';
 import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import { type MockedChatInstance, mockChunk } from './turn-test-helpers.js';
+import {
+  type MockedChatInstance,
+  mockChunk,
+} from './__tests__/turn-test-helpers.js';
 import { DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import type {
   GenerateChatOptions,
   IProvider,

@@ -3,7 +3,7 @@ import { describe, it, expect } from 'bun:test';
 import type { HistoryServiceJournalOptions } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
-import { withSuffixFixture } from '../../../../core/src/services/history/history-suffix-test-helpers.js';
+import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { truncateOversizedToolResponsesUnified } from '../toolResultTruncator.js';
 import {
   BoundedToolHistory,

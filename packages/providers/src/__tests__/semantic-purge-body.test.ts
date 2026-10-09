@@ -1,15 +1,19 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { captureBodyAttempt } from '../../../../scripts/lib/body-evidence-writer.js';
+import { randomUUID } from 'node:crypto';
+import { withFetchPreconnect } from '../../../test-utils/src/fetch-test-helpers.js';
+import { writeBodyFile } from '../../../../scripts/lib/body-evidence-writer.js';
 import { describe, expect, it } from 'bun:test';
-import { writeFileSync } from 'node:fs';
+
 import { join } from 'node:path';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { SemanticMediaPurgeStreamCoordinator } from '@vybestack/llxprt-code-core/services/history/semantic-purge-stream.js';
-import { withSuffixFixture } from '@vybestack/llxprt-code-core/services/history/history-suffix-test-helpers.js';
+import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
 import { OpenAIResponsesProvider } from '../openai-responses/OpenAIResponsesProvider.js';
 
@@ -138,15 +142,23 @@ async function captureBody(rows: AsyncIterable<IContent>): Promise<string> {
   );
   const original = globalThis.fetch;
   const bodies: string[] = [];
-  globalThis.fetch = async (
-    _input: RequestInfo | URL,
-    init?: RequestInit,
-  ): Promise<Response> => {
-    if (init?.body === undefined || init.body === null)
-      throw new Error('Missing body');
-    bodies.push(await new Response(init.body).text());
-    return response();
-  };
+  const captureId = randomUUID();
+  globalThis.fetch = withFetchPreconnect(
+    async (
+      _input: RequestInfo | URL,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      if (init?.body === undefined || init.body === null)
+        throw new Error('Missing body');
+      await captureBodyAttempt(
+        bodies,
+        init.body,
+        'openai-responses',
+        captureId,
+      );
+      return response();
+    },
+  );
   try {
     for await (const _chunk of provider.generateChatCompletion({
       ...options,
@@ -162,16 +174,19 @@ async function captureBody(rows: AsyncIterable<IContent>): Promise<string> {
   return bodies[0];
 }
 
-function saveBodies(
+async function saveBodies(
   size: number,
   explicit: boolean,
   actual: string,
   expected: string,
-): void {
+): Promise<void> {
   const output = process.env.SEMANTIC_PURGE_BODY_OUTPUT;
   if (output === undefined) return;
-  writeFileSync(join(output, `body-${size}-${explicit}-actual.json`), actual);
-  writeFileSync(
+  await writeBodyFile(
+    join(output, `body-${size}-${explicit}-actual.json`),
+    actual,
+  );
+  await writeBodyFile(
     join(output, `body-${size}-${explicit}-expected.json`),
     expected,
   );
@@ -201,7 +216,7 @@ describe('semantic purge exact provider BODY BYTES', () => {
                 stream: true,
                 instructions: 'test system prompt',
               });
-              saveBodies(size, explicit, actual, expected);
+              await saveBodies(size, explicit, actual, expected);
               expect(Buffer.from(actual).equals(Buffer.from(expected))).toBe(
                 true,
               );

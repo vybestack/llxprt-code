@@ -3,7 +3,7 @@ import { describe, expect, it, spyOn } from 'bun:test';
 import * as fs from 'node:fs';
 import { batchRow, withBatchFixture } from './addbatch-stream-test-helpers.js';
 import { expectTicketDiskContents } from './ticket-disk-contract-test-helpers.js';
-import { withCuratedHistoryForTest } from '../../test-utils/curated-history-fixture.js';
+import { withCuratedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 import type { IContent } from './IContent.js';
 
 function observeDiskOperations(): {

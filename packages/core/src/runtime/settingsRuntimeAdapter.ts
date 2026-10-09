@@ -1,147 +1,29 @@
 /**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * @plan PLAN-20260608-ISSUE1588.P06
  * @requirement REQ-SVC-001
  *
- * Core-owned adapter bridging settings-package lifecycle with core
- * provider-runtime context helpers. This is the sole production file that
- * imports/constructs settings-package SettingsService while mutating the
- * active provider runtime context.
+ * Issue #2616 PR A: this module is reduced to the pure single-owner
+ * construction seam used by composition sites (agents, CLI bootstrap, core
+ * config construction). Every ambient helper that read or mutated
+ * process-wide runtime state — resolve/get/maybeGet runtime settings
+ * service, settings runtime context creation, activation/deactivation —
+ * and the import-time factory registration are deleted. Consumers receive
+ * their SettingsService explicitly.
  */
 
 import {
   SettingsService,
   type SettingsServiceInit,
-  getSettingsService,
-  registerSettingsService,
-  resetSettingsService,
 } from '@vybestack/llxprt-code-settings';
-import type { Config } from '../config/config.js';
-import {
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-  clearActiveProviderRuntimeContext,
-  peekActiveProviderRuntimeContext,
-  setProviderRuntimeStateFactory,
-  type ProviderRuntimeContext,
-  type ProviderRuntimeContextInit,
-} from './providerRuntimeContext.js';
-
-setProviderRuntimeStateFactory(() => new SettingsService());
 
 export function createRuntimeSettingsService(
   options?: SettingsServiceInit,
 ): SettingsService {
   return new SettingsService(options);
-}
-
-export interface SettingsProviderRuntimeContextInit
-  extends Omit<ProviderRuntimeContextInit, 'settingsService' | 'config'> {
-  settingsService?: SettingsService | null;
-  config?: Config;
-}
-
-/**
- * Resolve a settings service for a caller that may have one supplied
- * explicitly. The active provider runtime context consulted here is the
- * CALL-SCOPED carrier established by BaseProvider around each provider
- * invocation (set/restore) — it is never an identity authority. Runtime
- * identity is resolved exclusively through the providers runtime registry
- * (resolveActiveRuntimeIdentity), and composition boundaries (Config
- * construction, ProviderManager construction) require explicit services
- * (issue #2300).
- */
-export function resolveRuntimeSettingsService(
-  settingsService?: SettingsService | null,
-): SettingsService {
-  if (settingsService) {
-    return settingsService;
-  }
-
-  const activeContext = peekActiveProviderRuntimeContext();
-  if (activeContext?.settingsService) {
-    return activeContext.settingsService as SettingsService;
-  }
-
-  try {
-    return getSettingsService();
-  } catch {
-    // No singleton has been registered yet; create an isolated runtime service.
-  }
-
-  return createRuntimeSettingsService();
-}
-
-/**
- * Read the settings service for the CURRENT INVOCATION. Inside a provider
- * call this returns the call-scoped service that BaseProvider swapped in;
- * outside one it returns the registered settings singleton. See
- * resolveRuntimeSettingsService for the carrier-vs-authority distinction
- * (issue #2300).
- */
-export function getRuntimeSettingsService(): SettingsService {
-  const activeContext = peekActiveProviderRuntimeContext();
-  if (activeContext?.settingsService) {
-    return activeContext.settingsService as SettingsService;
-  }
-
-  return getSettingsService();
-}
-
-export function maybeGetRuntimeSettingsService(): SettingsService | undefined {
-  try {
-    return getRuntimeSettingsService();
-  } catch {
-    return undefined;
-  }
-}
-
-export function createSettingsProviderRuntimeContext(
-  init: SettingsProviderRuntimeContextInit = {},
-): ProviderRuntimeContext {
-  return createProviderRuntimeContext({
-    ...init,
-    settingsService: resolveRuntimeSettingsService(init.settingsService),
-  });
-}
-
-export function setSettingsProviderRuntimeContext(
-  context: ProviderRuntimeContext | null,
-): void {
-  setActiveProviderRuntimeContext(context);
-  if (context?.settingsService) {
-    registerSettingsService(context.settingsService as SettingsService);
-  }
-}
-
-export function clearSettingsProviderRuntimeContext(): void {
-  clearActiveProviderRuntimeContext();
-}
-
-/**
- * Activate a runtime context with the given settings service.
- * Creates a ProviderRuntimeContext, sets it as the active context,
- * and registers the settings service with the settings-package singleton.
- */
-export function activateSettingsRuntimeContext(
-  settingsService: SettingsService,
-  runtimeId?: string,
-  options: { config?: Config; metadata?: Record<string, unknown> } = {},
-): void {
-  const context = createSettingsProviderRuntimeContext({
-    settingsService,
-    config: options.config,
-    runtimeId,
-    metadata: options.metadata,
-  });
-  setSettingsProviderRuntimeContext(context);
-}
-
-/**
- * Deactivate the current runtime context and reset settings state.
- * Clears the active provider runtime context and resets the
- * settings-package singleton.
- */
-export function deactivateSettingsRuntimeContext(): void {
-  clearSettingsProviderRuntimeContext();
-  resetSettingsService();
 }

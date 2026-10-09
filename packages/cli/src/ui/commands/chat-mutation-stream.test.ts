@@ -5,7 +5,7 @@ import { stat } from 'node:fs/promises';
 import { accountingRow } from '@vybestack/llxprt-code-core/services/history/token-accounting-stream-test-helpers.js';
 import { foldDurableRows } from '@vybestack/llxprt-code-core/recording/durableRowFold.js';
 import { chatCommand } from './chatCommand.js';
-import { withChatMutationFixture } from './chat-mutation-test-fixture.js';
+import { withChatMutationFixture } from './chat-mutation-test-helpers.js';
 
 for (const size of [512, 8192]) {
   for (const name of ['clear', 'restore']) {

@@ -3,11 +3,11 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { displayBoot } from '../../../../test-utils/resumeRows.js';
+import { displayBoot } from '../../../../__tests__/resumeRows.js';
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { act } from 'react';
-import { renderHook } from '../../../../test-utils/render.js';
+import { renderHook } from '../../../../__tests__/render.js';
 import { useSessionInitialization } from './useSessionInitialization.js';
 import {
   EMOJI_BLOCKED_ERROR_TEXT,

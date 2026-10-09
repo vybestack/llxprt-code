@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, mock } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { withSuffixFixture } from '@vybestack/llxprt-code-core/services/history/history-suffix-test-helpers.js';
+import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { deferred } from '@vybestack/llxprt-code-core/services/history/token-accounting-stream-test-helpers.js';
 import {
   clipboardOracle,
@@ -9,7 +9,7 @@ import {
   publicCommandContext,
   publicRow,
   PublicCursorHistory,
-} from '../../test-utils/public-history-cursor.js';
+} from '../../__tests__/public-history-cursor.js';
 
 let clipboard: (text: string) => Promise<void> = async () => {};
 void mock.module('../utils/commandUtils.js', () => ({

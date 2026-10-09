@@ -10,7 +10,6 @@ import * as fs from 'node:fs/promises';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { isGitRepository } from '../utils/gitUtils.js';
 import { PromptService } from '../prompt-config/prompt-service.js';
-import { getRuntimeSettingsService } from '../runtime/settingsRuntimeAdapter.js';
 import { DebugLogger } from '../debug/index.js';
 import {
   getGlobalCoreMemoryFilePath,
@@ -131,6 +130,17 @@ function getToolNameMapping(): Record<string, string> {
 }
 
 /**
+ * Narrow structural port of the settings surface the prompt builder reads.
+ * Callers that own a Config (or a runtime context) pass their settings
+ * service explicitly (issue #2616); when omitted, prompt settings fall
+ * back to the same defaults the former ambient try/catch produced.
+ */
+export interface PromptSettingsReader {
+  get(key: string): unknown;
+  getAllGlobalSettings(): Record<string, unknown>;
+}
+
+/**
  * Options for getCoreSystemPromptAsync
  */
 export interface CoreSystemPromptOptions {
@@ -145,10 +155,17 @@ export interface CoreSystemPromptOptions {
    * (issue #3176, finding D5). Request runtimes and routers pass the concrete
    * provider that will execute the request so `provider` and `model` remain
    * coherent. When omitted, `resolveProvider`
-   * falls back to the ambient runtime settings service — the legacy path
-   * that is request-scoped only by accident.
+   * falls back to the explicit `settings` reader — and to the neutral
+   * sentinel when neither is supplied.
    */
   provider?: string;
+  /**
+   * Explicit settings reader (structural port with `get` +
+   * `getAllGlobalSettings`). Callers that own a Config pass
+   * `config.getSettingsService()`. When absent, prompt settings resolution
+   * uses the same defaults the former ambient try/catch produced.
+   */
+  settings?: PromptSettingsReader;
   includeSubagentDelegation?: boolean;
   /**
    * Settings-resolved (NOT caller-supplied). When omitted,
@@ -209,17 +226,18 @@ export async function loadCoreMemoryContent(cwd: string): Promise<string> {
 
   return parts.join('\n\n');
 }
-function resolvePromptSettings(): {
+function resolvePromptSettings(settings?: PromptSettingsReader): {
   enableToolPrompts: boolean;
 } {
   let enableToolPrompts = false;
   try {
-    const settingsService = getRuntimeSettingsService();
-    const toolPromptsSetting = settingsService.get('enable-tool-prompts') as
-      | boolean
-      | undefined;
-    if (toolPromptsSetting !== undefined) {
-      enableToolPrompts = toolPromptsSetting;
+    if (settings) {
+      const toolPromptsSetting = settings.get('enable-tool-prompts') as
+        | boolean
+        | undefined;
+      if (toolPromptsSetting !== undefined) {
+        enableToolPrompts = toolPromptsSetting;
+      }
     }
   } catch {
     // Settings unavailable; use defaults.
@@ -290,41 +308,56 @@ function resolveEnabledTools(tools?: string[]): string[] {
   return Array.from(new Set(mappedTools));
 }
 
-function resolveProvider(provider?: string): string {
-  let resolvedProvider =
-    provider !== undefined && provider !== ''
-      ? provider
-      : UNCONFIGURED_PROVIDER;
-  if (!provider) {
-    try {
-      const settingsService = getRuntimeSettingsService();
-      const activeProvider = settingsService.get('activeProvider') as string;
-      if (activeProvider) resolvedProvider = activeProvider;
-    } catch {
-      // Settings unavailable (e.g., during tests); use neutral sentinel.
-    }
+/**
+ * Reads the active provider from an explicit settings reader. Returns
+ * undefined when the reader is unavailable, the key is absent, or reading
+ * throws — callers fall back to the neutral sentinel.
+ */
+function readActiveProviderFromSettings(
+  settings: PromptSettingsReader,
+): string | undefined {
+  try {
+    const activeProvider: unknown = settings.get('activeProvider');
+    return typeof activeProvider === 'string' && activeProvider !== ''
+      ? activeProvider
+      : undefined;
+  } catch {
+    // Settings unavailable (e.g., during tests); use neutral sentinel.
+    return undefined;
   }
-  return resolvedProvider;
+}
+
+function resolveProvider(
+  provider?: string,
+  settings?: PromptSettingsReader,
+): string {
+  if (provider) {
+    return provider;
+  }
+  const activeProvider = settings
+    ? readActiveProviderFromSettings(settings)
+    : undefined;
+  return activeProvider ?? UNCONFIGURED_PROVIDER;
 }
 
 function resolveAsyncSubagentSettings(
   asyncSubagentsEnabled?: boolean,
   profileAsyncEnabled?: boolean,
+  settings?: PromptSettingsReader,
 ): { asyncSubagentsEnabled: boolean; profileAsyncEnabled: boolean } {
   let a = asyncSubagentsEnabled;
   let p = profileAsyncEnabled;
-  if (a === undefined || p === undefined) {
+  if ((a === undefined || p === undefined) && settings) {
     try {
-      const settingsService = getRuntimeSettingsService();
       if (a === undefined) {
-        const globalSettings = settingsService.getAllGlobalSettings();
+        const globalSettings = settings.getAllGlobalSettings();
         const subagentsSettings = globalSettings['subagents'] as
           | { asyncEnabled?: boolean }
           | undefined;
         a = subagentsSettings?.asyncEnabled !== false;
       }
       if (p === undefined) {
-        const profileValue = settingsService.get('subagents.async.enabled');
+        const profileValue = settings.get('subagents.async.enabled');
         p = profileValue !== false;
       }
     } catch {
@@ -332,7 +365,7 @@ function resolveAsyncSubagentSettings(
       p = p ?? true;
     }
   }
-  return { asyncSubagentsEnabled: a, profileAsyncEnabled: p };
+  return { asyncSubagentsEnabled: a ?? true, profileAsyncEnabled: p ?? true };
 }
 
 /**
@@ -345,14 +378,15 @@ async function buildPromptContext(
     options;
   const cwd = process.cwd();
 
-  const { enableToolPrompts } = resolvePromptSettings();
+  const { enableToolPrompts } = resolvePromptSettings(options.settings);
   const environment = buildEnvironment(cwd, interactionMode);
   const enabledTools = resolveEnabledTools(tools);
-  const resolvedProvider = resolveProvider(provider);
+  const resolvedProvider = resolveProvider(provider, options.settings);
   const { asyncSubagentsEnabled, profileAsyncEnabled } =
     resolveAsyncSubagentSettings(
       options.asyncSubagentsEnabled,
       options.profileAsyncEnabled,
+      options.settings,
     );
 
   return {
@@ -382,6 +416,7 @@ function resolvePromptArgs(
   modelArg: string | undefined;
   toolsArg: string[] | undefined;
   providerArg: string | undefined;
+  settingsArg: PromptSettingsReader | undefined;
   includeSubagentDelegation: boolean | undefined;
   asyncSubagentsEnabledArg: boolean | undefined;
   profileAsyncEnabledArg: boolean | undefined;
@@ -398,6 +433,7 @@ function resolvePromptArgs(
     modelArg: undefined as string | undefined,
     toolsArg: undefined as string[] | undefined,
     providerArg: undefined as string | undefined,
+    settingsArg: undefined as PromptSettingsReader | undefined,
     includeSubagentDelegation: undefined as boolean | undefined,
     asyncSubagentsEnabledArg: undefined as boolean | undefined,
     profileAsyncEnabledArg: undefined as boolean | undefined,
@@ -418,6 +454,7 @@ function resolvePromptArgs(
       modelArg: opts.model,
       toolsArg: opts.tools,
       providerArg: opts.provider,
+      settingsArg: opts.settings,
       includeSubagentDelegation: opts.includeSubagentDelegation,
       asyncSubagentsEnabledArg: opts.asyncSubagentsEnabled,
       profileAsyncEnabledArg: opts.profileAsyncEnabled,
@@ -437,6 +474,7 @@ async function resolveEffectiveMemories(
   userMemory: string | undefined,
   coreMemory: string | undefined,
   mcpInstructions: string | undefined,
+  settings?: PromptSettingsReader,
 ): Promise<{
   effectiveUserMemory: string | undefined;
   effectiveCoreMemory: string | undefined;
@@ -454,19 +492,20 @@ async function resolveEffectiveMemories(
   let effectiveUserMemory = userMemory;
   let effectiveCoreMemory = loadedCoreMemory;
   try {
-    const settingsService = getRuntimeSettingsService();
-    const allMemoriesAreCore = settingsService.get(
-      'model.allMemoriesAreCore',
-    ) as boolean | undefined;
-    if (allMemoriesAreCore === true) {
-      const parts = [effectiveCoreMemory, effectiveUserMemory].filter((p) =>
-        p?.trim(),
-      );
-      effectiveCoreMemory = parts.join('\n\n') || undefined;
-      effectiveUserMemory = undefined;
+    if (settings) {
+      const allMemoriesAreCore = settings.get('model.allMemoriesAreCore') as
+        | boolean
+        | undefined;
+      if (allMemoriesAreCore === true) {
+        const parts = [effectiveCoreMemory, effectiveUserMemory].filter((p) =>
+          p?.trim(),
+        );
+        effectiveCoreMemory = parts.join('\n\n') || undefined;
+        effectiveUserMemory = undefined;
+      }
     }
   } catch {
-    // Settings service may not be available (e.g. during tests)
+    // Settings reader may fail (e.g. during tests)
   }
 
   if (mcpInstructions?.trim()) {
@@ -493,6 +532,7 @@ export async function getCoreSystemPromptAsync(
     modelArg,
     toolsArg,
     providerArg,
+    settingsArg,
     includeSubagentDelegation,
     asyncSubagentsEnabledArg,
     profileAsyncEnabledArg,
@@ -500,12 +540,18 @@ export async function getCoreSystemPromptAsync(
   } = resolvePromptArgs(userMemoryOrOptions, model, tools);
 
   const { effectiveUserMemory, effectiveCoreMemory } =
-    await resolveEffectiveMemories(userMemory, coreMemory, mcpInstructions);
+    await resolveEffectiveMemories(
+      userMemory,
+      coreMemory,
+      mcpInstructions,
+      settingsArg,
+    );
 
   const context = await buildPromptContext({
     model: modelArg,
     tools: toolsArg,
     provider: providerArg,
+    settings: settingsArg,
     includeSubagentDelegation,
     asyncSubagentsEnabled: asyncSubagentsEnabledArg,
     profileAsyncEnabled: profileAsyncEnabledArg,

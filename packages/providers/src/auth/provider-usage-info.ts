@@ -18,7 +18,6 @@
 
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { getRuntimeSettingsService } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
 import {
   CodexOAuthTokenSchema,
   type IOAuthSettingsProvider,
@@ -295,25 +294,33 @@ export async function getAllCodexRateLimitResetCredits(
  * Returns a string describing the higher-priority auth if one exists,
  * null if OAuth is the appropriate auth method to use.
  *
+ * The settings reader (typically the caller's SettingsService) is received
+ * explicitly (issue #2616): when it is supplied the `authOnly` global is
+ * consulted through it, and when it is absent the authOnly check is
+ * skipped — the same behavior today's catch branch produced.
+ *
  * @param providerName - Name of the provider to check
  * @param settings - Loaded settings to inspect for API keys / keyfiles / base URLs
+ * @param settingsReader - Explicit reader for the `authOnly` global; optional
  */
 export async function getHigherPriorityAuth(
   providerName: string,
   settings: IOAuthSettingsProvider | undefined,
+  settingsReader?: { get(key: string): unknown },
 ): Promise<string | null> {
   if (!settings) {
     return null;
   }
 
   try {
-    const settingsService = getRuntimeSettingsService();
-    const authOnly = isAuthOnlyEnabled(settingsService.get('authOnly'));
-    if (authOnly) {
-      return null;
+    if (settingsReader) {
+      const authOnly = isAuthOnlyEnabled(settingsReader.get('authOnly'));
+      if (authOnly) {
+        return null;
+      }
     }
   } catch {
-    // SettingsService not registered (subagent/test context) — skip authOnly check
+    // Settings reader failed (subagent/test context) — skip authOnly check
   }
 
   if (settings.getProviderApiKey(providerName)) {

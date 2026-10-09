@@ -4,10 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect } from 'bun:test';
 import { AgenticLoop } from '../AgenticLoop.js';
-import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
-import { clearAllSchedulers } from '@vybestack/llxprt-code-core/config/schedulerSingleton.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
@@ -27,13 +26,6 @@ import {
 } from './agenticLoop-test-helpers.js';
 
 describe('AgenticLoop integration - a2a-style with auto policy', () => {
-  beforeEach(() => {
-    clearAllSchedulers();
-  });
-  afterEach(() => {
-    clearAllSchedulers();
-  });
-
   it('auto policy executes tools WITHOUT invoking the approval handler; multi-tool batch feeds back', async () => {
     const toolA = new MockTool({ name: 'tool_a' });
     toolA.executeFn.mockResolvedValue({

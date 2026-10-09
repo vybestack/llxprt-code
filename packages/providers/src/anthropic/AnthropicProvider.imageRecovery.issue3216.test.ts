@@ -11,7 +11,7 @@
  * sanitizer/classifier under test are never mocked; only the SDK transport is.
  */
 
-import { vi, describe, it, expect, afterEach } from 'bun:test';
+import { vi, describe, it, expect } from 'bun:test';
 import { APIError } from '@anthropic-ai/sdk';
 import {
   attachTransportAttemptBudget,
@@ -21,20 +21,16 @@ import { AnthropicProvider } from './AnthropicProvider.js';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
 import type { GenerateChatOptions } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
+import { TEST_PROVIDER_CONFIG } from '../__tests__/providerTestConfig.js';
 import {
   createProviderWithRuntime,
   createRuntimeConfigStub,
-} from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import { streamCallOptions } from '../test-utils/streamCallOptions.js';
+} from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import { streamCallOptions } from '../__tests__/streamCallOptions.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  clearActiveProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import sharp from 'sharp';
-import { createAnthropicRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
+import { createAnthropicRawPostTestAdapter } from '../__tests__/rawPostTestAdapters.js';
 
 async function pngBase64(width: number, height: number): Promise<string> {
   const buffer = await sharp({
@@ -223,7 +219,6 @@ function setupProvider(
     return svc.get(key);
   };
 
-  setActiveProviderRuntimeContext(runtime);
   return { provider, runtimeContext: runtime, settingsService: svc };
 }
 
@@ -287,498 +282,550 @@ function appendTextChunk(chunks: string[], chunk: IContent): void {
 }
 
 describe('AnthropicProvider image recovery (@issue:3216)', () => {
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
+  registerAnthropicBehavior1();
 
-  it('proactively sanitizes oversized history images so no 400 is sent', async () => {
-    vi.clearAllMocks();
-    const big = await pngBase64(3000, 3000);
-    const { provider, runtimeContext, settingsService } = setupProvider({
-      withImageBudget: true,
-    });
-    mockMessagesCreate.mockResolvedValue(createMockStream('ok'));
+  registerAnthropicBehavior2();
 
-    const messages: IContent[] = [
-      {
-        speaker: 'human',
-        blocks: [
-          {
-            type: 'media',
-            mimeType: 'image/png',
-            data: big,
-            encoding: 'base64' as const,
-          },
-          { type: 'text', text: 'describe this' },
-        ],
-      },
-    ];
+  registerAnthropicBehavior3();
 
-    await consumeGenerator(
-      provider,
-      buildCallOptions(provider, runtimeContext, settingsService, messages),
-    );
+  registerAnthropicBehavior4();
 
-    expect(mockMessagesCreate).toHaveBeenCalledTimes(1);
-    const request = mockMessagesCreate.mock.calls[0][0];
-    const allContent = JSON.stringify(request.messages);
-    expect(allContent).toContain('dropped');
-    expect(allContent).not.toContain(big);
-  });
+  registerAnthropicBehavior5();
 
-  it('retries exactly once after a 400 image-dimension error and succeeds', async () => {
-    vi.clearAllMocks();
-    const big = await pngBase64(3000, 3000);
-    // NO image budget in config — the error's own limit is used for recovery.
-    const { provider, runtimeContext, settingsService } = setupProvider({
-      withImageBudget: false,
-    });
-    mockMessagesCreate
-      .mockRejectedValueOnce(make400ImageDimensionError())
-      .mockResolvedValueOnce(createMockStream('recovered'));
+  registerAnthropicBehavior6();
 
-    const messages: IContent[] = [
-      {
-        speaker: 'human',
-        blocks: [
-          {
-            type: 'media',
-            mimeType: 'image/png',
-            data: big,
-            encoding: 'base64' as const,
-          },
-        ],
-      },
-    ];
-
-    const result = await consumeGenerator(
-      provider,
-      buildCallOptions(provider, runtimeContext, settingsService, messages),
-    );
-
-    expect(mockMessagesCreate).toHaveBeenCalledTimes(2);
-    expect(result.threw).toBe(false);
-    expect(result.chunks.join('')).toContain('recovered');
-    // The retry request must not contain the oversized image.
-    const retryRequest = mockMessagesCreate.mock.calls[1][0];
-    expect(JSON.stringify(retryRequest.messages)).not.toContain(big);
-  });
-
-  it('intersects a configured budget with the provider-reported recovery limit', async () => {
-    vi.clearAllMocks();
-    const image = await pngBase64(2200, 1000);
-    const { provider, runtimeContext, settingsService } = setupProvider({
-      withImageBudget: true,
-      maxImageDimension: 2500,
-    });
-    mockMessagesCreate
-      .mockRejectedValueOnce(make400ImageDimensionError())
-      .mockResolvedValueOnce(createMockStream('recovered'));
-
-    const messages: IContent[] = [
-      {
-        speaker: 'human',
-        blocks: [
-          {
-            type: 'media',
-            mimeType: 'image/png',
-            data: image,
-            encoding: 'base64' as const,
-          },
-        ],
-      },
-    ];
-
-    const result = await consumeGenerator(
-      provider,
-      buildCallOptions(provider, runtimeContext, settingsService, messages),
-    );
-
-    expect(result.threw).toBe(false);
-    expect(mockMessagesCreate).toHaveBeenCalledTimes(2);
-    expect(
-      JSON.stringify(mockMessagesCreate.mock.calls[0][0].messages),
-    ).toContain(image);
-    const retryMessages = JSON.stringify(
-      mockMessagesCreate.mock.calls[1][0].messages,
-    );
-    expect(retryMessages).not.toContain(image);
-  });
-
-  it('does NOT retry for an unrelated 400 error', async () => {
-    vi.clearAllMocks();
-    const { provider, runtimeContext, settingsService } = setupProvider({
-      withImageBudget: false,
-    });
-    mockMessagesCreate.mockRejectedValueOnce(make400UnrelatedError());
-
-    const messages: IContent[] = [
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'hello' }],
-      },
-    ];
-
-    const result = await consumeGenerator(
-      provider,
-      buildCallOptions(provider, runtimeContext, settingsService, messages),
-    );
-
-    expect(result.threw).toBe(true);
-    expect(mockMessagesCreate).toHaveBeenCalledTimes(1);
-  });
-
-  it('does NOT retry a second time if the sanitized request also fails', async () => {
-    vi.clearAllMocks();
-    const big = await pngBase64(3000, 3000);
-    const { provider, runtimeContext, settingsService } = setupProvider({
-      withImageBudget: false,
-    });
-    mockMessagesCreate
-      .mockRejectedValueOnce(make400ImageDimensionError())
-      .mockRejectedValueOnce(make400ImageDimensionError());
-
-    const messages: IContent[] = [
-      {
-        speaker: 'human',
-        blocks: [
-          {
-            type: 'media',
-            mimeType: 'image/png',
-            data: big,
-            encoding: 'base64' as const,
-          },
-        ],
-      },
-    ];
-
-    const result = await consumeGenerator(
-      provider,
-      buildCallOptions(provider, runtimeContext, settingsService, messages),
-    );
-
-    expect(result.threw).toBe(true);
-    // First call (400) + one retry (also 400) = 2 total. No third attempt.
-    expect(mockMessagesCreate).toHaveBeenCalledTimes(2);
-  });
-
-  it('does NOT consume a transport slot for recovery when the signal is already aborted', async () => {
-    vi.clearAllMocks();
-    const big = await pngBase64(3000, 3000);
-    const { provider, runtimeContext, settingsService } = setupProvider({
-      withImageBudget: false,
-    });
-
-    const messages: IContent[] = [
-      {
-        speaker: 'human',
-        blocks: [
-          {
-            type: 'media',
-            mimeType: 'image/png',
-            data: big,
-            encoding: 'base64' as const,
-          },
-        ],
-      },
-    ];
-
-    // Direct call with an explicit transport budget so slot consumption is
-    // observable. The signal is aborted BEFORE recovery runs, so the
-    // known-aborted recovery must bail out BEFORE consuming a slot.
-    const baseOptions = buildCallOptions(
-      provider,
-      runtimeContext,
-      settingsService,
-      messages,
-    );
-    const attached = attachTransportAttemptBudget(baseOptions, 5);
-    const abortController = new AbortController();
-    mockMessagesCreate.mockImplementationOnce(() => {
-      abortController.abort();
-      return Promise.reject(make400ImageDimensionError());
-    });
-    // Preserve the narrowed options type while overriding the signal and
-    // carrying the budget-bearing metadata from the attached copy.
-    const parentInvocation = baseOptions.invocation;
-    const abortedOptions: GenerateChatOptions = {
-      ...baseOptions,
-      invocation: {
-        ...parentInvocation,
-        signal: abortController.signal,
-      },
-      metadata: attached.options.metadata,
-    };
-
-    const result = await consumeGenerator(provider, abortedOptions);
-
-    // Recovery was skipped: the ORIGINAL 400 propagates (nothing sanitized).
-    expect(result.threw).toBe(true);
-    expect(errorMessage(result.error)).toContain('image dimensions');
-    // The recovery retry never reached the transport.
-    expect(mockMessagesCreate).toHaveBeenCalledTimes(1);
-    // No transport slot was consumed by the known-aborted recovery.
-    const budget = getTransportAttemptBudget(abortedOptions);
-    expect(budget?.used).toBe(0);
-  });
-
-  it('retries once after a 400 when oversized image is nested in tool_result media', async () => {
-    vi.clearAllMocks();
-    const big = await pngBase64(3000, 3000);
-    const { provider, runtimeContext, settingsService } = setupProvider({
-      withImageBudget: false,
-    });
-    mockMessagesCreate
-      .mockRejectedValueOnce(make400ImageDimensionError())
-      .mockResolvedValueOnce(createMockStream('recovered-nested'));
-
-    // Real neutral AI history: a tool_call from the assistant followed by a
-    // tool_response carrying the oversized image — the actual read_file shape.
-    const messages: IContent[] = [
-      {
-        speaker: 'ai',
-        blocks: [
-          {
-            type: 'tool_call',
-            id: 'toolu_abc',
-            name: 'read_file',
-            parameters: { absolute_path: 'big.png' },
-          },
-        ],
-      },
-      {
-        speaker: 'tool',
-        blocks: [
-          {
-            type: 'tool_response',
-            callId: 'toolu_abc',
-            toolName: 'read_file',
-            result: 'Read big.png',
-          },
-          {
-            type: 'media',
-            mimeType: 'image/png',
-            data: big,
-            encoding: 'base64' as const,
-          },
-        ],
-      },
-    ];
-
-    const result = await consumeGenerator(
-      provider,
-      buildCallOptions(provider, runtimeContext, settingsService, messages),
-    );
-
-    expect(mockMessagesCreate).toHaveBeenCalledTimes(2);
-    expect(result.threw).toBe(false);
-    expect(result.chunks.join('')).toContain('recovered-nested');
-    // The retry request must not contain the oversized image bytes anywhere.
-    const retryRequest = mockMessagesCreate.mock.calls[1][0];
-    expect(JSON.stringify(retryRequest.messages)).not.toContain(big);
-    // The tool_result wrapper and pairing must survive in the retry body.
-    const retryMessages = retryRequest.messages as Array<{
-      content: unknown;
-    }>;
-    const allBlocks = retryMessages.flatMap(messageContentBlocks);
-    const toolResultBlock = allBlocks.find(isToolResultBlock);
-    expect(toolResultBlock).toBeDefined();
-    expect(toolResultBlock?.tool_use_id).toBe('toolu_abc');
-  });
+  registerAnthropicBehavior7();
 });
 
 describe('AnthropicProvider image recovery through RetryOrchestrator (@issue:3216 H2)', () => {
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
+  registerAnthropicBehavior8();
 
-  it('dimension-400 then sanitized retry 429 = exactly two physical calls (budget-exhausted)', async () => {
-    vi.clearAllMocks();
-    const big = await pngBase64(3000, 3000);
-    const { provider, runtimeContext, settingsService } = setupProvider({
-      withImageBudget: false,
-    });
-    mockMessagesCreate
-      .mockRejectedValueOnce(make400ImageDimensionError())
-      .mockRejectedValueOnce(make429RateLimitError());
+  registerAnthropicBehavior9();
 
-    const messages: IContent[] = [
-      {
-        speaker: 'human',
-        blocks: [
-          {
-            type: 'media',
-            mimeType: 'image/png',
-            data: big,
-            encoding: 'base64' as const,
-          },
-        ],
-      },
-    ];
-
-    // Wrap in RetryOrchestrator with retries=2 (budget limit = 2 physical
-    // calls). The recovery's sanitized retry must consume the 2nd slot so
-    // the orchestrator does NOT make a third outer attempt.
-    const orchestrator = new RetryOrchestrator(provider, {
-      maxAttempts: 2,
-      initialDelayMs: 0,
-    });
-
-    const callOptions = streamCallOptions({
-      providerName: provider.name,
-      contents: messages,
-      settings: settingsService,
-      runtime: runtimeContext,
-      config: runtimeContext.config,
-      ephemerals: { retries: 2, retrywait: 0 },
-    });
-
-    const chunks: string[] = [];
-    let threw = false;
-    try {
-      const gen = orchestrator.generateChatCompletion(callOptions);
-      for await (const chunk of gen) {
-        appendTextChunk(chunks, chunk);
-      }
-    } catch {
-      threw = true;
-    }
-
-    expect(threw).toBe(true); // The 429 exhausts the budget → throws
-    expect(mockMessagesCreate).toHaveBeenCalledTimes(2); // exactly two
-    // The second call must be the sanitized retry (image removed)
-    const retryReq = mockMessagesCreate.mock.calls[1][0];
-    expect(JSON.stringify(retryReq.messages)).not.toContain(big);
-  });
-
-  it('sanitized retry error propagates verbatim; no third physical call', async () => {
-    vi.clearAllMocks();
-    const big = await pngBase64(3000, 3000);
-    const { provider, runtimeContext, settingsService } = setupProvider({
-      withImageBudget: false,
-    });
-    // phys 1: poisoned original → 400 image-dimension error.
-    // phys 2: sanitized retry → distinct 500 marker error.
-    mockMessagesCreate
-      .mockRejectedValueOnce(make400ImageDimensionError())
-      .mockRejectedValueOnce(make500MarkerError());
-
-    const messages: IContent[] = [
-      {
-        speaker: 'human',
-        blocks: [
-          {
-            type: 'media',
-            mimeType: 'image/png',
-            data: big,
-            encoding: 'base64' as const,
-          },
-        ],
-      },
-    ];
-
-    // retries=2 → transport budget limit = 2 physical calls. The sanitized
-    // retry consumes the 2nd slot, so the orchestrator must stop there.
-    const orchestrator = new RetryOrchestrator(provider, {
-      maxAttempts: 2,
-      initialDelayMs: 0,
-    });
-
-    const callOptions = streamCallOptions({
-      providerName: provider.name,
-      contents: messages,
-      settings: settingsService,
-      runtime: runtimeContext,
-      config: runtimeContext.config,
-      ephemerals: { retries: 2, retrywait: 0 },
-    });
-
-    let caught: unknown;
-    try {
-      const gen = orchestrator.generateChatCompletion(callOptions);
-      for await (const _chunk of gen) {
-        // drain
-      }
-    } catch (e) {
-      caught = e;
-    }
-
-    // The sanitized retry's OWN error is the real outcome and must propagate
-    // so the outer retry classification sees it — NOT the original 400.
-    expect(caught).toBeDefined();
-    const caughtMessage = errorMessage(caught);
-    expect(caughtMessage).toContain(
-      'RETRY_MARKER_PROPAGATED_FROM_SANITIZED_RETRY',
-    );
-    expect(caughtMessage).not.toContain('many-image');
-    // Exactly two physical calls: poisoned original + sanitized retry.
-    expect(mockMessagesCreate).toHaveBeenCalledTimes(2);
-  });
-
-  it('does NOT resend the poisoned original on a subsequent outer attempt', async () => {
-    vi.clearAllMocks();
-    const big = await pngBase64(3000, 3000);
-    const { provider, runtimeContext, settingsService } = setupProvider({
-      withImageBudget: false,
-    });
-    mockMessagesCreate
-      .mockRejectedValueOnce(make400ImageDimensionError()) // phys 1: poisoned
-      .mockRejectedValueOnce(make429RateLimitError()) // phys 2: sanitized retry
-      .mockResolvedValueOnce(createMockStream('third-ok')); // phys 3: sanitized
-
-    const messages: IContent[] = [
-      {
-        speaker: 'human',
-        blocks: [
-          {
-            type: 'media',
-            mimeType: 'image/png',
-            data: big,
-            encoding: 'base64' as const,
-          },
-        ],
-      },
-    ];
-
-    const orchestrator = new RetryOrchestrator(provider, {
-      maxAttempts: 3,
-      initialDelayMs: 0,
-    });
-
-    const callOptions = streamCallOptions({
-      providerName: provider.name,
-      contents: messages,
-      settings: settingsService,
-      runtime: runtimeContext,
-      config: runtimeContext.config,
-      ephemerals: { retries: 3, retrywait: 0 },
-    });
-
-    const chunks: string[] = [];
-    let threw = false;
-    try {
-      const gen = orchestrator.generateChatCompletion(callOptions);
-      for await (const chunk of gen) {
-        appendTextChunk(chunks, chunk);
-      }
-    } catch {
-      threw = true;
-    }
-
-    expect(threw).toBe(false);
-    expect(chunks.join('')).toContain('third-ok');
-    expect(mockMessagesCreate).toHaveBeenCalledTimes(3);
-    // Call 1: the poisoned original (contains big)
-    expect(
-      JSON.stringify(mockMessagesCreate.mock.calls[0][0].messages),
-    ).toContain(big);
-    // Call 2: sanitized retry (no big)
-    expect(
-      JSON.stringify(mockMessagesCreate.mock.calls[1][0].messages),
-    ).not.toContain(big);
-    // Call 3: sanitized body reused (no big, no resend of poisoned original)
-    expect(
-      JSON.stringify(mockMessagesCreate.mock.calls[2][0].messages),
-    ).not.toContain(big);
-  });
+  registerAnthropicBehavior10();
 });
+
+function registerAnthropicBehavior1(): void {
+  describe('behavior 1', () => {
+    it('proactively sanitizes oversized history images so no 400 is sent', async () => {
+      vi.clearAllMocks();
+      const big = await pngBase64(3000, 3000);
+      const { provider, runtimeContext, settingsService } = setupProvider({
+        withImageBudget: true,
+      });
+      mockMessagesCreate.mockResolvedValue(createMockStream('ok'));
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [
+            {
+              type: 'media',
+              mimeType: 'image/png',
+              data: big,
+              encoding: 'base64' as const,
+            },
+            { type: 'text', text: 'describe this' },
+          ],
+        },
+      ];
+
+      await consumeGenerator(
+        provider,
+        buildCallOptions(provider, runtimeContext, settingsService, messages),
+      );
+
+      expect(mockMessagesCreate).toHaveBeenCalledTimes(1);
+      const request = mockMessagesCreate.mock.calls[0][0];
+      const allContent = JSON.stringify(request.messages);
+      expect(allContent).toContain('dropped');
+      expect(allContent).not.toContain(big);
+    });
+  });
+}
+
+function registerAnthropicBehavior2(): void {
+  describe('behavior 2', () => {
+    it('retries exactly once after a 400 image-dimension error and succeeds', async () => {
+      vi.clearAllMocks();
+      const big = await pngBase64(3000, 3000);
+      // NO image budget in config — the error's own limit is used for recovery.
+      const { provider, runtimeContext, settingsService } = setupProvider({
+        withImageBudget: false,
+      });
+      mockMessagesCreate
+        .mockRejectedValueOnce(make400ImageDimensionError())
+        .mockResolvedValueOnce(createMockStream('recovered'));
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [
+            {
+              type: 'media',
+              mimeType: 'image/png',
+              data: big,
+              encoding: 'base64' as const,
+            },
+          ],
+        },
+      ];
+
+      const result = await consumeGenerator(
+        provider,
+        buildCallOptions(provider, runtimeContext, settingsService, messages),
+      );
+
+      expect(mockMessagesCreate).toHaveBeenCalledTimes(2);
+      expect(result.threw).toBe(false);
+      expect(result.chunks.join('')).toContain('recovered');
+      // The retry request must not contain the oversized image.
+      const retryRequest = mockMessagesCreate.mock.calls[1][0];
+      expect(JSON.stringify(retryRequest.messages)).not.toContain(big);
+    });
+  });
+}
+
+function registerAnthropicBehavior3(): void {
+  describe('behavior 3', () => {
+    it('intersects a configured budget with the provider-reported recovery limit', async () => {
+      vi.clearAllMocks();
+      const image = await pngBase64(2200, 1000);
+      const { provider, runtimeContext, settingsService } = setupProvider({
+        withImageBudget: true,
+        maxImageDimension: 2500,
+      });
+      mockMessagesCreate
+        .mockRejectedValueOnce(make400ImageDimensionError())
+        .mockResolvedValueOnce(createMockStream('recovered'));
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [
+            {
+              type: 'media',
+              mimeType: 'image/png',
+              data: image,
+              encoding: 'base64' as const,
+            },
+          ],
+        },
+      ];
+
+      const result = await consumeGenerator(
+        provider,
+        buildCallOptions(provider, runtimeContext, settingsService, messages),
+      );
+
+      expect(result.threw).toBe(false);
+      expect(mockMessagesCreate).toHaveBeenCalledTimes(2);
+      expect(
+        JSON.stringify(mockMessagesCreate.mock.calls[0][0].messages),
+      ).toContain(image);
+      const retryMessages = JSON.stringify(
+        mockMessagesCreate.mock.calls[1][0].messages,
+      );
+      expect(retryMessages).not.toContain(image);
+    });
+  });
+}
+
+function registerAnthropicBehavior4(): void {
+  describe('behavior 4', () => {
+    it('does NOT retry for an unrelated 400 error', async () => {
+      vi.clearAllMocks();
+      const { provider, runtimeContext, settingsService } = setupProvider({
+        withImageBudget: false,
+      });
+      mockMessagesCreate.mockRejectedValueOnce(make400UnrelatedError());
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'hello' }],
+        },
+      ];
+
+      const result = await consumeGenerator(
+        provider,
+        buildCallOptions(provider, runtimeContext, settingsService, messages),
+      );
+
+      expect(result.threw).toBe(true);
+      expect(mockMessagesCreate).toHaveBeenCalledTimes(1);
+    });
+  });
+}
+
+function registerAnthropicBehavior5(): void {
+  describe('behavior 5', () => {
+    it('does NOT retry a second time if the sanitized request also fails', async () => {
+      vi.clearAllMocks();
+      const big = await pngBase64(3000, 3000);
+      const { provider, runtimeContext, settingsService } = setupProvider({
+        withImageBudget: false,
+      });
+      mockMessagesCreate
+        .mockRejectedValueOnce(make400ImageDimensionError())
+        .mockRejectedValueOnce(make400ImageDimensionError());
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [
+            {
+              type: 'media',
+              mimeType: 'image/png',
+              data: big,
+              encoding: 'base64' as const,
+            },
+          ],
+        },
+      ];
+
+      const result = await consumeGenerator(
+        provider,
+        buildCallOptions(provider, runtimeContext, settingsService, messages),
+      );
+
+      expect(result.threw).toBe(true);
+      // First call (400) + one retry (also 400) = 2 total. No third attempt.
+      expect(mockMessagesCreate).toHaveBeenCalledTimes(2);
+    });
+  });
+}
+
+function registerAnthropicBehavior6(): void {
+  describe('behavior 6', () => {
+    it('does NOT consume a transport slot for recovery when the signal is already aborted', async () => {
+      vi.clearAllMocks();
+      const big = await pngBase64(3000, 3000);
+      const { provider, runtimeContext, settingsService } = setupProvider({
+        withImageBudget: false,
+      });
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [
+            {
+              type: 'media',
+              mimeType: 'image/png',
+              data: big,
+              encoding: 'base64' as const,
+            },
+          ],
+        },
+      ];
+
+      // Direct call with an explicit transport budget so slot consumption is
+      // observable. The signal is aborted BEFORE recovery runs, so the
+      // known-aborted recovery must bail out BEFORE consuming a slot.
+      const baseOptions = buildCallOptions(
+        provider,
+        runtimeContext,
+        settingsService,
+        messages,
+      );
+      const attached = attachTransportAttemptBudget(baseOptions, 5);
+      const abortController = new AbortController();
+      mockMessagesCreate.mockImplementationOnce(() => {
+        abortController.abort();
+        return Promise.reject(make400ImageDimensionError());
+      });
+      // Preserve the narrowed options type while overriding the signal and
+      // carrying the budget-bearing metadata from the attached copy.
+      const parentInvocation = baseOptions.invocation;
+      const abortedOptions: GenerateChatOptions = {
+        ...baseOptions,
+        invocation: {
+          ...parentInvocation,
+          signal: abortController.signal,
+        },
+        metadata: attached.options.metadata,
+      };
+
+      const result = await consumeGenerator(provider, abortedOptions);
+
+      // Recovery was skipped: the ORIGINAL 400 propagates (nothing sanitized).
+      expect(result.threw).toBe(true);
+      expect(errorMessage(result.error)).toContain('image dimensions');
+      // The recovery retry never reached the transport.
+      expect(mockMessagesCreate).toHaveBeenCalledTimes(1);
+      // No transport slot was consumed by the known-aborted recovery.
+      const budget = getTransportAttemptBudget(abortedOptions);
+      expect(budget?.used).toBe(0);
+    });
+  });
+}
+
+function registerAnthropicBehavior7(): void {
+  describe('behavior 7', () => {
+    it('retries once after a 400 when oversized image is nested in tool_result media', async () => {
+      vi.clearAllMocks();
+      const big = await pngBase64(3000, 3000);
+      const { provider, runtimeContext, settingsService } = setupProvider({
+        withImageBudget: false,
+      });
+      mockMessagesCreate
+        .mockRejectedValueOnce(make400ImageDimensionError())
+        .mockResolvedValueOnce(createMockStream('recovered-nested'));
+
+      // Real neutral AI history: a tool_call from the assistant followed by a
+      // tool_response carrying the oversized image — the actual read_file shape.
+      const messages: IContent[] = [
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'toolu_abc',
+              name: 'read_file',
+              parameters: { absolute_path: 'big.png' },
+            },
+          ],
+        },
+        {
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: 'toolu_abc',
+              toolName: 'read_file',
+              result: 'Read big.png',
+            },
+            {
+              type: 'media',
+              mimeType: 'image/png',
+              data: big,
+              encoding: 'base64' as const,
+            },
+          ],
+        },
+      ];
+
+      const result = await consumeGenerator(
+        provider,
+        buildCallOptions(provider, runtimeContext, settingsService, messages),
+      );
+
+      expect(mockMessagesCreate).toHaveBeenCalledTimes(2);
+      expect(result.threw).toBe(false);
+      expect(result.chunks.join('')).toContain('recovered-nested');
+      // The retry request must not contain the oversized image bytes anywhere.
+      const retryRequest = mockMessagesCreate.mock.calls[1][0];
+      expect(JSON.stringify(retryRequest.messages)).not.toContain(big);
+      // The tool_result wrapper and pairing must survive in the retry body.
+      const retryMessages = retryRequest.messages as Array<{
+        content: unknown;
+      }>;
+      const allBlocks = retryMessages.flatMap(messageContentBlocks);
+      const toolResultBlock = allBlocks.find(isToolResultBlock);
+      expect(toolResultBlock).toBeDefined();
+      expect(toolResultBlock?.tool_use_id).toBe('toolu_abc');
+    });
+  });
+}
+
+function registerAnthropicBehavior8(): void {
+  describe('behavior 8', () => {
+    it('dimension-400 then sanitized retry 429 = exactly two physical calls (budget-exhausted)', async () => {
+      vi.clearAllMocks();
+      const big = await pngBase64(3000, 3000);
+      const { provider, runtimeContext, settingsService } = setupProvider({
+        withImageBudget: false,
+      });
+      mockMessagesCreate
+        .mockRejectedValueOnce(make400ImageDimensionError())
+        .mockRejectedValueOnce(make429RateLimitError());
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [
+            {
+              type: 'media',
+              mimeType: 'image/png',
+              data: big,
+              encoding: 'base64' as const,
+            },
+          ],
+        },
+      ];
+
+      // Wrap in RetryOrchestrator with retries=2 (budget limit = 2 physical
+      // calls). The recovery's sanitized retry must consume the 2nd slot so
+      // the orchestrator does NOT make a third outer attempt.
+      const orchestrator = new RetryOrchestrator(provider, {
+        maxAttempts: 2,
+        initialDelayMs: 0,
+      });
+
+      const callOptions = streamCallOptions({
+        providerName: provider.name,
+        contents: messages,
+        settings: settingsService,
+        runtime: runtimeContext,
+        config: runtimeContext.config,
+        ephemerals: { retries: 2, retrywait: 0 },
+      });
+
+      const chunks: string[] = [];
+      let threw = false;
+      try {
+        const gen = orchestrator.generateChatCompletion(callOptions);
+        for await (const chunk of gen) {
+          appendTextChunk(chunks, chunk);
+        }
+      } catch {
+        threw = true;
+      }
+
+      expect(threw).toBe(true); // The 429 exhausts the budget → throws
+      expect(mockMessagesCreate).toHaveBeenCalledTimes(2); // exactly two
+      // The second call must be the sanitized retry (image removed)
+      const retryReq = mockMessagesCreate.mock.calls[1][0];
+      expect(JSON.stringify(retryReq.messages)).not.toContain(big);
+    });
+  });
+}
+
+function registerAnthropicBehavior9(): void {
+  describe('behavior 9', () => {
+    it('sanitized retry error propagates verbatim; no third physical call', async () => {
+      vi.clearAllMocks();
+      const big = await pngBase64(3000, 3000);
+      const { provider, runtimeContext, settingsService } = setupProvider({
+        withImageBudget: false,
+      });
+      // phys 1: poisoned original → 400 image-dimension error.
+      // phys 2: sanitized retry → distinct 500 marker error.
+      mockMessagesCreate
+        .mockRejectedValueOnce(make400ImageDimensionError())
+        .mockRejectedValueOnce(make500MarkerError());
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [
+            {
+              type: 'media',
+              mimeType: 'image/png',
+              data: big,
+              encoding: 'base64' as const,
+            },
+          ],
+        },
+      ];
+
+      // retries=2 → transport budget limit = 2 physical calls. The sanitized
+      // retry consumes the 2nd slot, so the orchestrator must stop there.
+      const orchestrator = new RetryOrchestrator(provider, {
+        maxAttempts: 2,
+        initialDelayMs: 0,
+      });
+
+      const callOptions = streamCallOptions({
+        providerName: provider.name,
+        contents: messages,
+        settings: settingsService,
+        runtime: runtimeContext,
+        config: runtimeContext.config,
+        ephemerals: { retries: 2, retrywait: 0 },
+      });
+
+      let caught: unknown;
+      try {
+        const gen = orchestrator.generateChatCompletion(callOptions);
+        for await (const _chunk of gen) {
+          // drain
+        }
+      } catch (e) {
+        caught = e;
+      }
+
+      // The sanitized retry's OWN error is the real outcome and must propagate
+      // so the outer retry classification sees it — NOT the original 400.
+      expect(caught).toBeDefined();
+      const caughtMessage = errorMessage(caught);
+      expect(caughtMessage).toContain(
+        'RETRY_MARKER_PROPAGATED_FROM_SANITIZED_RETRY',
+      );
+      expect(caughtMessage).not.toContain('many-image');
+      // Exactly two physical calls: poisoned original + sanitized retry.
+      expect(mockMessagesCreate).toHaveBeenCalledTimes(2);
+    });
+  });
+}
+
+function registerAnthropicBehavior10(): void {
+  describe('behavior 10', () => {
+    it('does NOT resend the poisoned original on a subsequent outer attempt', async () => {
+      vi.clearAllMocks();
+      const big = await pngBase64(3000, 3000);
+      const { provider, runtimeContext, settingsService } = setupProvider({
+        withImageBudget: false,
+      });
+      mockMessagesCreate
+        .mockRejectedValueOnce(make400ImageDimensionError()) // phys 1: poisoned
+        .mockRejectedValueOnce(make429RateLimitError()) // phys 2: sanitized retry
+        .mockResolvedValueOnce(createMockStream('third-ok')); // phys 3: sanitized
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [
+            {
+              type: 'media',
+              mimeType: 'image/png',
+              data: big,
+              encoding: 'base64' as const,
+            },
+          ],
+        },
+      ];
+
+      const orchestrator = new RetryOrchestrator(provider, {
+        maxAttempts: 3,
+        initialDelayMs: 0,
+      });
+
+      const callOptions = streamCallOptions({
+        providerName: provider.name,
+        contents: messages,
+        settings: settingsService,
+        runtime: runtimeContext,
+        config: runtimeContext.config,
+        ephemerals: { retries: 3, retrywait: 0 },
+      });
+
+      const chunks: string[] = [];
+      let threw = false;
+      try {
+        const gen = orchestrator.generateChatCompletion(callOptions);
+        for await (const chunk of gen) {
+          appendTextChunk(chunks, chunk);
+        }
+      } catch {
+        threw = true;
+      }
+
+      expect(threw).toBe(false);
+      expect(chunks.join('')).toContain('third-ok');
+      expect(mockMessagesCreate).toHaveBeenCalledTimes(3);
+      // Call 1: the poisoned original (contains big)
+      expect(
+        JSON.stringify(mockMessagesCreate.mock.calls[0][0].messages),
+      ).toContain(big);
+      // Call 2: sanitized retry (no big)
+      expect(
+        JSON.stringify(mockMessagesCreate.mock.calls[1][0].messages),
+      ).not.toContain(big);
+      // Call 3: sanitized body reused (no big, no resend of poisoned original)
+      expect(
+        JSON.stringify(mockMessagesCreate.mock.calls[2][0].messages),
+      ).not.toContain(big);
+    });
+  });
+}

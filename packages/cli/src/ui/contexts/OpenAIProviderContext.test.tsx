@@ -5,7 +5,7 @@
  */
 
 import { type MutableRefObject, act } from 'react';
-import { render } from '../../test-utils/render.js';
+import { render } from '../../__tests__/render.js';
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import {
   OpenAIProviderContextProvider,

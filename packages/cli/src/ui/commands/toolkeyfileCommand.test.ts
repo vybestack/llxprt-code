@@ -14,13 +14,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { toolkeyfileCommand } from './toolkeyfileCommand.js';
 import { createCompletionHandler } from './schema/index.js';
-import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { CommandKind } from './types.js';
 import type { CommandContext, MessageActionReturn } from './types.js';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { assertDefined } from '../../test-utils/assertions.js';
+import { assertDefined } from '../../__tests__/assertions.js';
 
 // ─── In-memory store for mock ToolKeyStorage ─────────────────────────────────
 

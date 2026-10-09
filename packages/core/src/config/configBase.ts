@@ -11,6 +11,8 @@ import type { ShellJobManager } from '../services/shellJobManager.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { assertSessionScopedKey } from '@vybestack/llxprt-code-settings';
 import { createToolRegistry as _createToolRegistry } from './toolRegistryFactory.js';
+import { reconcileTaskToolRegistration as _reconcileTaskToolRegistration } from './toolRegistryFactory.js';
+import type { AgentClientContract } from '../core/clientContract.js';
 import { TELEMETRY_OUTFILE_BOUND_DEFAULTS } from './configConstructor.js';
 import { shutdownLsp } from './lspIntegration.js';
 import type { LspServiceClient } from '@vybestack/llxprt-code-ide-integration';
@@ -19,8 +21,9 @@ import {
   normalizeStreamingValue,
   normalizeContextLimit,
 } from './ephemeralSettingsHelpers.js';
-import { disposeScheduler as _disposeScheduler } from './schedulerSingleton.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
+import type { SchedulerPurpose } from '../session/sessionSchedulerRegistry.js';
+import type { SessionSchedulerRegistry } from '../session/sessionSchedulerRegistry.js';
 import {
   type ShellReplacementMode,
   normalizeShellReplacement,
@@ -162,9 +165,80 @@ export abstract class ConfigBase extends ConfigBaseCore {
     return result.registry;
   }
 
-  disposeScheduler(sessionId: string): void {
-    _disposeScheduler(sessionId);
+  /**
+   * Carries a task-tool registration installed after initialization into the
+   * already-built tool registry (issue #3222).
+   *
+   * The registration is consumed only at tool-registry construction, and
+   * ensureInitialized is a no-op for a Config the caller already initialized,
+   * so a registration installed on such a Config (for example the shipped
+   * default fromConfig installs during adoption) would otherwise never be
+   * consumed. This registers the missing task tool against the LIVE registry
+   * under the same coreTools/excludeTools governance as build time — never
+   * overriding an existing task tool or any other registry contents — and
+   * pushes the updated declarations to a ready agent client, mirroring
+   * Config.refreshSkills.
+   */
+  async reconcileTaskToolRegistration(): Promise<void> {
+    const messageBus = this.getRuntimeMessageBus();
+    if (messageBus === undefined) {
+      return;
+    }
+    const registered = _reconcileTaskToolRegistration(
+      this,
+      this,
+      this.getToolRegistry(),
+      this.allPotentialTools,
+      messageBus,
+    );
+    if (!registered) {
+      return;
+    }
+    // Registry changes do not reach the model on their own: the chat session
+    // caches the declarations it was last given.
+    const client = this.getAgentClientIfReady();
+    if (client) {
+      await client.setTools();
+    }
   }
+
+  /**
+   * The agent client when present and initialized, else undefined. The
+   * backing field is definite-assignment, so it is runtime-undefined before
+   * initialize() despite the non-optional declared type. Protected so
+   * subclasses (Config.refreshSkills et al.) share the one ready-check.
+   */
+  protected getAgentClientIfReady(): AgentClientContract | undefined {
+    const client = this.agentClient as AgentClientContract | undefined;
+    if (client === undefined) {
+      return undefined;
+    }
+    if (!client.isInitialized()) {
+      return undefined;
+    }
+    return client;
+  }
+
+  disposeScheduler(
+    owner: object,
+    purpose: SchedulerPurpose,
+    handle?: object,
+  ): void {
+    // No lazy creation here: disposing before any acquisition is a no-op,
+    // matching the unknown-key release semantics of the registry itself.
+    this.schedulerRegistry?.release(owner, purpose, handle);
+  }
+
+  /**
+   * TEMPORARY (#2615 slice E): per-Config scheduler registry backing the
+   * getOrCreateScheduler/disposeScheduler delegates. DELETION CRITERION: the
+   * E-wave PR that lands SessionRuntime ownership of the registry deletes
+   * this field and both Config delegate methods. Instance state, not a
+   * module global; the process-global scheduler maps died with the deleted
+   * scheduler singleton module. The lazy getter lives on Config next to
+   * getOrCreateScheduler.
+   */
+  protected schedulerRegistry: SessionSchedulerRegistry | undefined;
 
   setDisabledHooks(hooks: string[]): void {
     this.disabledHooks = hooks;

@@ -33,7 +33,9 @@ export type {
   ProviderContributionOrigin,
   ProviderContributionRegistry,
   ProviderFactoryContext,
+  RegisteredMcpAuthFactory,
   RuntimeContributedAlias,
+  RuntimeMcpAuthFactoryContribution,
   RuntimePluginManifest,
   RuntimeProviderContribution,
 } from './types.js';

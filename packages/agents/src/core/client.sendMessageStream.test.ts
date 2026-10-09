@@ -35,7 +35,7 @@ import {
   fromAsync,
   setupAgentClient,
   type MockResponseShape,
-} from './client-test-helpers.js';
+} from './__tests__/client-test-helpers.js';
 
 const realRetryModule = {
   ...(await import('@vybestack/llxprt-code-core/utils/retry.js')),

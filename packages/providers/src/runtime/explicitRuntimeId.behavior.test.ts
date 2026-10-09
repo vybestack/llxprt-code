@@ -21,7 +21,6 @@ import {
   resetRuntimeScopeForTesting,
   runWithRuntimeScope,
 } from './runtimeContextFactory.js';
-import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core';
 import type {
   Config,
   RuntimeProviderManager,
@@ -48,7 +47,6 @@ describe('explicit runtimeId at composition boundaries (issue #2300)', () => {
   beforeEach(() => {
     resetCliRuntimeRegistryForTesting();
     configureCliStatelessHardening(null);
-    clearActiveProviderRuntimeContext();
     resetRuntimeScopeForTesting();
 
     mockConfig = {
@@ -97,7 +95,6 @@ describe('explicit runtimeId at composition boundaries (issue #2300)', () => {
   afterEach(() => {
     resetCliRuntimeRegistryForTesting();
     configureCliStatelessHardening(null);
-    clearActiveProviderRuntimeContext();
     resetRuntimeScopeForTesting();
   });
 

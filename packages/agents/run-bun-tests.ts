@@ -29,10 +29,17 @@
  * Exit code is 0 when every file passes and 1 when any file fails.
  */
 
+import {
+  resolveRunnerTimeouts,
+  classifyAttempt,
+  runTimeoutRetry,
+  killTimedOutChild,
+  renderJUnitReport,
+  formatAgentsFailureReason,
+} from '../../scripts/lib/bun-test-retry.js';
 import { spawn } from 'node:child_process';
 import {
   mkdtempSync,
-  readFileSync,
   readdirSync,
   rmSync,
   statSync,
@@ -41,8 +48,6 @@ import {
 import { join, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
-  DEFAULT_PER_FILE_TIMEOUT_MS,
-  DEFAULT_PER_TEST_TIMEOUT_MS,
   acceptancePolicyForFile,
   envPerFileTimeoutMs,
   MAX_TEST_CONCURRENCY,
@@ -52,7 +57,6 @@ import {
 import {
   assertRunnerActive,
   createBespokeRunnerIsolation,
-  killRunnerChild,
   installRunnerSignalHandlers,
   trackRunnerChild,
 } from '../../scripts/lib/bespoke-runner-isolation.js';
@@ -111,19 +115,18 @@ const CONCURRENCY = resolveTestConcurrency({
 export function timeoutForFile(file: string): number {
   return (
     acceptancePolicyForFile(WORKSPACE_ROOT, file)?.perTestTimeoutMs ??
-    DEFAULT_PER_TEST_TIMEOUT_MS
+    resolveRunnerTimeouts({ runner: 'agents', env: {} }).perTestMs
   );
 }
 
 export function fileTimeoutForFile(file: string): number {
-  const override = envPerFileTimeoutMs(
-    process.env,
-    'LLXPRT_TEST_FILE_TIMEOUT_MS',
-  );
+  const ordinary = resolveRunnerTimeouts({
+    runner: 'agents',
+    env: process.env,
+  });
   return (
     acceptancePolicyForFile(WORKSPACE_ROOT, file)?.perFileTimeoutMs ??
-    override ??
-    DEFAULT_PER_FILE_TIMEOUT_MS
+    ordinary.perFileMs
   );
 }
 
@@ -218,13 +221,7 @@ export async function runTestFileWithTimeoutRetry<
   runAttempt: () => Promise<T>,
   logRetry: (message: string) => void = (message) => console.log(message),
 ): Promise<T> {
-  const firstAttempt = await runAttempt();
-  if (!firstAttempt.timedOut) {
-    return firstAttempt;
-  }
-
-  logRetry(`RETRY (2/2): ${file} after per-file timeout`);
-  return runAttempt();
+  return runTimeoutRetry(file, runAttempt, logRetry);
 }
 
 export function runTestFile(
@@ -274,7 +271,7 @@ export function runTestFile(
     const timer = setTimeout(() => {
       killedByTimeout = true;
       try {
-        killRunnerChild(child);
+        killTimedOutChild({ runner: 'agents', child });
       } catch (error) {
         console.error(
           `Failed to kill timed-out test child ${child.pid}: ${String(error)}`,
@@ -287,7 +284,11 @@ export function runTestFile(
     child.on('close', (code, signal) => {
       settleOnce({
         file,
-        passed: !killedByTimeout && code === 0,
+        passed: classifyAttempt({
+          runner: 'agents',
+          killedByTimer: killedByTimeout,
+          exitCode: code,
+        }).passed,
         exitCode: code,
         signal,
         timedOut: killedByTimeout,
@@ -309,37 +310,11 @@ export function runTestFile(
   });
 }
 
-function escapeXml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
 function describeFailure(result: TestResult): string {
-  if (result.timedOut) {
-    return `TIMEOUT after ${result.timeoutMs}ms`;
-  }
-  if (result.signal !== null) {
-    // Distinguishes an external kill (typically the OOM killer on a small CI
-    // runner) from a genuine test failure, which would report an exit code.
-    return `killed by signal ${result.signal}`;
-  }
-  return `exit code ${result.exitCode ?? -1}`;
+  return formatAgentsFailureReason(result);
 }
 
 /** Totals scraped from the root `<testsuites>` element of a Bun JUnit report. */
-interface ReportTotals {
-  readonly tests: number;
-  readonly failures: number;
-  readonly skipped: number;
-}
-
-function readIntAttribute(element: string, name: string): number {
-  const match = new RegExp(`\\b${name}="([0-9]+)"`).exec(element);
-  return match === null ? 0 : Number.parseInt(match[1], 10);
-}
 
 /**
  * Extracts the suite body and totals from one child's JUnit report.
@@ -353,83 +328,25 @@ function readIntAttribute(element: string, name: string): number {
  * Returns `undefined` when the child produced no usable report, i.e. it crashed
  * or was killed before writing one.
  */
-function extractReportBody(
-  xml: string,
-): { body: string; totals: ReportTotals } | undefined {
-  const openMatch = /<testsuites\b[^>]*>/.exec(xml);
-  const closeIndex = xml.lastIndexOf('</testsuites>');
-  if (openMatch === null || closeIndex < 0) {
-    return undefined;
-  }
-  const bodyStart = openMatch.index + openMatch[0].length;
-  if (closeIndex < bodyStart) {
-    return undefined;
-  }
-  return {
-    body: xml.slice(bodyStart, closeIndex).replace(/^\n+|\n+$/g, ''),
-    totals: {
-      tests: readIntAttribute(openMatch[0], 'tests'),
-      failures: readIntAttribute(openMatch[0], 'failures'),
-      skipped: readIntAttribute(openMatch[0], 'skipped'),
-    },
-  };
-}
 
 /**
  * Synthesised suite for a file whose process died without writing a report, so
  * that a crash or a wall-clock kill still shows up as a failure instead of
  * silently contributing zero tests to the report.
  */
-function unreportedSuite(result: TestResult): string {
-  const name = escapeXml(result.file);
-  const reason = escapeXml(describeFailure(result));
-  return [
-    `  <testsuite name="${name}" file="${name}" tests="1" failures="1" skipped="0" time="0">`,
-    `    <testcase name="${name} (no test report produced)" classname="${name}" time="0">`,
-    `      <failure message="${reason}">The bun test process produced no JUnit report.</failure>`,
-    '    </testcase>',
-    '  </testsuite>',
-  ].join('\n');
-}
 
 function generateJUnit(
   results: readonly TestResult[],
   reportPathFor: (file: string) => string,
 ): string {
-  const bodies: string[] = [];
-  let tests = 0;
-  let failures = 0;
-  let skipped = 0;
-
-  for (const result of results) {
-    let report: string | undefined;
-    try {
-      report = readFileSync(reportPathFor(result.file), 'utf-8');
-    } catch {
-      report = undefined;
-    }
-    const extracted =
-      report === undefined ? undefined : extractReportBody(report);
-    if (extracted === undefined) {
-      bodies.push(unreportedSuite(result));
-      tests += 1;
-      failures += 1;
-      continue;
-    }
-    bodies.push(extracted.body);
-    tests += extracted.totals.tests;
-    failures += extracted.totals.failures;
-    skipped += extracted.totals.skipped;
-  }
-
-  return (
-    [
-      '<?xml version="1.0" encoding="UTF-8"?>',
-      `<testsuites name="agents" tests="${tests}" failures="${failures}" skipped="${skipped}">`,
-      ...bodies,
-      '</testsuites>',
-    ].join('\n') + '\n'
-  );
+  return renderJUnitReport({
+    kind: 'agents-detail',
+    files: results.map((result) => ({
+      file: result.file,
+      failureReason: describeFailure(result),
+      reportPath: reportPathFor(result.file),
+    })),
+  });
 }
 
 async function main(): Promise<void> {

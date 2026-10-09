@@ -36,6 +36,10 @@ interface ScorePointer {
   readonly estimatedTokens: number;
 }
 
+function isEmptyAiRow(row: IContent): boolean {
+  return row.speaker === 'ai' && row.blocks.length === 0;
+}
+
 export class ToolResponseDiskRanking implements Iterable<DiskRankedCandidate> {
   private readonly directory = mkdtempSync(
     join(tmpdir(), 'tool-response-ranking-'),
@@ -68,6 +72,7 @@ export class ToolResponseDiskRanking implements Iterable<DiskRankedCandidate> {
   ): Promise<void> {
     this.assertOpen();
     for await (const row of history.streamRawHistory(this.signal)) {
+      if (isEmptyAiRow(row)) continue;
       const entryIndex = this.rows.length;
       this.rows.append(row);
       await this.scoreRow(row, entryIndex, estimate);
@@ -227,7 +232,7 @@ async function countRawRows(
 ): Promise<number> {
   let count = 0;
   for await (const row of history.streamRawHistory(signal)) {
-    void row;
+    if (isEmptyAiRow(row)) continue;
     count++;
   }
   return count;
@@ -259,28 +264,31 @@ export async function replaceRankedToolResponse(
   try {
     await history.detachedValues.transform(
       async (source, sink) => {
-        if (source.length !== candidate.historyLength) throw staleTarget;
         let invalidatesChain = false;
         let matchesTarget = false;
         let probeIndex = 0;
         for await (const row of source.streamRows(signal)) {
-          if (probeIndex === candidate.entryIndex) {
+          const empty = isEmptyAiRow(row);
+          if (!empty && probeIndex === candidate.entryIndex) {
             matchesTarget = matchesResponse(
               row,
               candidate.blockIndex,
               replacement,
             );
           }
+          if (!empty) probeIndex++;
           if (
-            probeIndex++ >= candidate.entryIndex &&
+            matchesTarget &&
             row.speaker === 'ai' &&
             row.metadata?.responsesStored === true
           )
             invalidatesChain = true;
         }
-        if (!matchesTarget) throw staleTarget;
+        if (probeIndex !== candidate.historyLength || !matchesTarget)
+          throw staleTarget;
         let entryIndex = 0;
         for await (let row of source.streamRows(signal)) {
+          if (isEmptyAiRow(row)) continue;
           if (entryIndex === candidate.entryIndex) {
             const blocks = [...row.blocks];
             blocks[candidate.blockIndex] = replacement;

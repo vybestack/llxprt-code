@@ -5,10 +5,9 @@
  */
 
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect } from 'bun:test';
 import { AgenticLoop } from '../AgenticLoop.js';
-import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
-import { clearAllSchedulers } from '@vybestack/llxprt-code-core/config/schedulerSingleton.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import type {
@@ -29,14 +28,7 @@ import {
 } from './agenticLoop-test-helpers.js';
 
 describe('AgenticLoop scheduler isolation', () => {
-  beforeEach(() => {
-    clearAllSchedulers();
-  });
-  afterEach(() => {
-    clearAllSchedulers();
-  });
-
-  it('runs its tool turn on an isolated scheduler key, leaving a pre-existing main scheduler (keyed by sessionId) and its callbacks intact', async () => {
+  it('runs its tool turn on an isolated scheduler entry, leaving a pre-existing main scheduler (different owner object) and its callbacks intact', async () => {
     const loopTool = new MockTool({ name: 'loop_tool' });
     loopTool.executeFn.mockResolvedValue({
       llmContent: 'loop-ok',
@@ -57,11 +49,16 @@ describe('AgenticLoop scheduler isolation', () => {
       interactive: false,
       approvalMode: ApprovalMode.YOLO,
     });
-    const sessionId = config.getSessionId();
+
+    // Distinct owner object for the main scheduler: the loop instance keys
+    // its own entry, so object identity (never a shared session-id string)
+    // is what keeps the two schedulers apart.
+    const mainOwner = { label: 'main-scheduler' };
 
     const mainCompletions: CompletedToolCall[][] = [];
     const mainScheduler = await config.getOrCreateScheduler(
-      sessionId,
+      mainOwner,
+      'session',
       {
         onAllToolCallsComplete: async (completed) => {
           mainCompletions.push(completed);
@@ -108,6 +105,6 @@ describe('AgenticLoop scheduler isolation', () => {
     expect(lastMainCompletion?.[0]?.request.callId).toBe('main-call');
     expect(lastMainCompletion?.[0]?.status).toBe('success');
 
-    config.disposeScheduler(sessionId);
+    config.disposeScheduler(mainOwner, 'session');
   });
 });

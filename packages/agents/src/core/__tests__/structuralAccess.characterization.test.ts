@@ -21,8 +21,8 @@
  * or Google-shaped internals. Asserts ONLY on observable outcomes.
  */
 
-import { observeHistorySynchronouslyForTest as testHistory } from '../../../../core/src/test-utils/synchronous-history-test-observation.js';
-import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-core/test-utils/collect-rows-for-assertions.js';
+import { observeHistorySynchronouslyForTest as testHistory } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
+import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import * as fc from 'fast-check';
 import { makeRuntimeContext } from './helpers/structural-access-test-fixtures.js';

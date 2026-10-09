@@ -7,23 +7,14 @@
  * Split from AnthropicProvider.test.ts for max-lines compliance.
  */
 
-import {
-  vi,
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-  type Mock,
-} from 'bun:test';
-import { clearActiveProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { vi, describe, it, expect, beforeEach, type Mock } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   setupAnthropicProvider,
   type AnthropicMessage,
   type AnthropicTestSetup,
-} from './test-utils/anthropicProviderTestSetup.js';
-import { createAnthropicRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
+} from './__tests__/anthropicProviderTestSetup.js';
+import { createAnthropicRawPostTestAdapter } from '../__tests__/rawPostTestAdapters.js';
 
 function isAnthropicMessageContent(value: unknown): boolean {
   return typeof value === 'string' || Array.isArray(value);
@@ -152,9 +143,6 @@ describe('AnthropicProvider', () => {
     buildCallOptions = setup.buildCallOptions;
   });
 
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
   describe('generateChatCompletion', () => {
     it('should not retry after stopReason-only message_delta if a transient stream error follows', async () => {
       settingsService.setProviderSetting('anthropic', 'streaming', 'enabled');
@@ -225,16 +213,12 @@ describe('AnthropicProvider', () => {
 
       const tools = [
         {
-          functionDeclarations: [
-            {
-              name: 'test_tool',
-              description: 'A test tool',
-              parametersJsonSchema: {
-                type: 'object',
-                properties: { foo: { type: 'string' } },
-              },
-            },
-          ],
+          name: 'test_tool',
+          description: 'A test tool',
+          parametersJsonSchema: {
+            type: 'object',
+            properties: { foo: { type: 'string' } },
+          },
         },
       ];
 

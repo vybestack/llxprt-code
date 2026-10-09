@@ -20,7 +20,7 @@ import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import type React from 'react';
 import type { Config } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import { renderHook } from '../../../../test-utils/render.js';
+import { renderHook } from '../../../../__tests__/render.js';
 import { useStreamEventHandlers } from '../useStreamEventHandlers.js';
 import type { LoadedSettings } from '../../../../config/settings.js';
 import type { HistoryItemWithoutId } from '../../../types.js';

@@ -7,7 +7,7 @@ import {
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import type { SubagentLaunchResult } from '../subagentOrchestrator.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 

@@ -23,7 +23,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { act } from 'react';
-import { renderHook, waitFor } from '../../../../test-utils/render.js';
+import { renderHook, waitFor } from '../../../../__tests__/render.js';
 import { useSubmitQuery } from '../useSubmitQuery.js';
 import { createDeferred } from './createDeferred.js';
 import {

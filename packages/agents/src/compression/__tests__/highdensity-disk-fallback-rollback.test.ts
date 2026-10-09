@@ -5,7 +5,7 @@ import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.
 import { CompressionExecutionError } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { expectedRange } from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
-import { withSuffixFixture } from '../../../../core/src/services/history/history-suffix-test-helpers.js';
+import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import {
   highdensitySetup,
   highdensityRow,

@@ -10,7 +10,7 @@ import { CoreToolScheduler } from './coreToolScheduler.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
@@ -23,7 +23,7 @@ import {
   createMockConfig,
   createMockMessageBus,
   createMockPolicyEngine,
-} from './coreToolScheduler-test-helpers.js';
+} from './__tests__/coreToolScheduler-test-helpers.js';
 
 function makeRegistry(
   tools: Array<DeclarativeTool<Record<string, unknown>, ToolResult>>,

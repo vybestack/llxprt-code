@@ -9,6 +9,7 @@
 // that implements this contract, including a third-party plugin. IProvider.ts
 // and BaseProvider.ts already import Config this way.
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { McpAuthProviderFactory } from '@vybestack/llxprt-code-mcp';
 import type { OAuthManager } from '../../auth/index.js';
 import type { IProvider } from '../../IProvider.js';
 import type { IProviderConfig } from '../../types/IProviderConfig.js';
@@ -75,12 +76,25 @@ export interface RuntimeProviderContribution {
 }
 
 /**
+ * An MCP auth provider factory contribution declared by a runtime plugin
+ * manifest (#2764). The shape mirrors the MCP-owned
+ * {@link McpAuthFactoryContribution}; the factory type is single-sourced from
+ * `@vybestack/llxprt-code-mcp` via a type-only import, so this package never
+ * value-imports `mcp` (it already reaches it transitively through `core`).
+ */
+export interface RuntimeMcpAuthFactoryContribution {
+  readonly authProviderType: string;
+  readonly createAuthProvider: McpAuthProviderFactory;
+}
+
+/**
  * A validated runtime plugin manifest (manifest v1).
  */
 export interface RuntimePluginManifest {
   readonly apiVersion: 1;
   readonly id: string;
   readonly providers: readonly RuntimeProviderContribution[];
+  readonly mcpAuthFactories?: readonly RuntimeMcpAuthFactoryContribution[];
 }
 
 /**
@@ -104,13 +118,25 @@ export interface LoadedRuntimePlugin {
 }
 
 /**
+ * An MCP auth factory contribution as the registry reports it: the
+ * manifest-declared contribution plus the origin of the plugin that
+ * contributed it.
+ */
+export interface RegisteredMcpAuthFactory {
+  readonly contribution: RuntimeMcpAuthFactoryContribution;
+  readonly origin: ProviderContributionOrigin;
+}
+
+/**
  * The local, immutable provider contribution registry handed down the composition chain.
  * It carries built-in provider factories followed by plugin-contributed factories,
- * keyed case-insensitively by provider id, plus the ordered contributed aliases.
+ * keyed case-insensitively by provider id, plus the ordered contributed aliases and
+ * the plugin-contributed MCP auth provider factories (#2764).
  */
 export interface ProviderContributionRegistry {
   getProviderFactory(providerId: string): ProviderAliasFactory | undefined;
   getProviderOrigin(providerId: string): ProviderContributionOrigin | undefined;
   listProviderIds(): readonly string[];
   getContributedAliases(): readonly ContributedAliasRegistration[];
+  getMcpAuthFactories(): readonly RegisteredMcpAuthFactory[];
 }

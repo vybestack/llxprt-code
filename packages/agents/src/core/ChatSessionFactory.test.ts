@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { observeStoredHistoryReuse } from './chat-session-factory-history-test-observation.js';
-import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-core/test-utils/collect-rows-for-assertions.js';
+import { observeStoredHistoryReuse } from './__tests__/chat-session-factory-history-test-observation.js';
+import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import {
   describe,
   it,
@@ -77,7 +77,6 @@ void vi.mock(
 void vi.mock(
   '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js',
   () => ({
-    setProviderRuntimeStateFactory: vi.fn(),
     createProviderRuntimeContext: vi.fn().mockReturnValue({}),
   }),
 );

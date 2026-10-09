@@ -11,7 +11,7 @@
  * closely on its structure: same vi.mock preamble, same setupAgentClient helper.
  */
 
-import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-core/test-utils/collect-rows-for-assertions.js';
+import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { automock } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
@@ -29,7 +29,7 @@ import {
   fromAsync,
   setupAgentClient,
   type MockResponseShape,
-} from './client-test-helpers.js';
+} from './__tests__/client-test-helpers.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 

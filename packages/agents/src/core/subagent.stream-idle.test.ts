@@ -24,7 +24,7 @@ import {
   type Mock,
 } from 'bun:test';
 import { ChatSession, StreamEventType } from './chatSession.js';
-import { mockChunk } from './turn-test-helpers.js';
+import { mockChunk } from './__tests__/turn-test-helpers.js';
 import {
   createContentGenerator,
   type ContentGenerator,
@@ -54,7 +54,7 @@ const { TodoStoreMock } = (() => {
   const TodoStoreMock = vi
     .fn()
     .mockImplementation(() => ({ readTodos: mockReadTodos }));
-  return { mockReadTodos, TodoStoreMock };
+  return { TodoStoreMock };
 })();
 
 const actual = { ...(await import('@vybestack/llxprt-code-tools')) };
@@ -131,10 +131,10 @@ function mockSession(
   );
   (
     createContentGenerator as Mock<typeof createContentGenerator>
-  ).mockReturnValue({} as ContentGenerator);
+  ).mockResolvedValue({} as ContentGenerator);
   (
     getEnvironmentContext as Mock<typeof getEnvironmentContext>
-  ).mockResolvedValue('');
+  ).mockResolvedValue([]);
 }
 
 function registerConfigTimeout(): void {
@@ -170,7 +170,7 @@ function registerConfigTimeout(): void {
       // Run to completion
       await runAllTimersAsync();
       // Scope should have timed out
-      const _result = await resultPromise;
+      await resultPromise;
       expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.TIMEOUT);
     });
   });
@@ -306,7 +306,7 @@ function registerEnvPrecedence(): void {
 
       // Release the stall so the generator can unwind, then let the run finish.
       releaseGap!();
-      const _result = await resultPromise;
+      await resultPromise;
       expect(resultSettled).toBe(true);
       expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.TIMEOUT);
     });

@@ -10,10 +10,10 @@ import { tmpdir } from 'node:os';
 import {
   withSuffixFixture,
   suffixRow,
-} from '@vybestack/llxprt-code-core/services/history/history-suffix-test-helpers.js';
+} from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
-import { createChatSessionRuntime } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import {
   createProviderAdapterFromManager,
   createTelemetryAdapterFromConfig,

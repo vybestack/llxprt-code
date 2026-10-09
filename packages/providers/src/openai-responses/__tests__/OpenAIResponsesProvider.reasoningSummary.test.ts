@@ -9,384 +9,411 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  clearActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
-import { streamCallOptions } from '../../test-utils/streamCallOptions.js';
+import { streamCallOptions } from '../../__tests__/streamCallOptions.js';
 
 const originalFetch = global.fetch;
 const mockFetch = vi.fn();
 
-describe('OpenAIResponsesProvider reasoning.summary @issue:922', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockFetch.mockClear();
-    global.fetch = mockFetch as unknown as typeof fetch;
+registerReasoningSummaryCase1();
+registerReasoningSummaryCase2();
+registerReasoningSummaryCase3();
+registerReasoningSummaryCase4();
+registerReasoningSummaryCase5();
 
-    setActiveProviderRuntimeContext(
-      createProviderRuntimeContext({
-        settingsService: new SettingsService(),
-        runtimeId: 'openai-responses-reasoning-summary-test',
-      }),
-    );
+function beforeEachReasoningSummary1(): void {
+  vi.clearAllMocks();
+  mockFetch.mockClear();
+  global.fetch = mockFetch as unknown as typeof fetch;
+}
+
+function afterEachReasoningSummary2(): void {
+  global.fetch = originalFetch;
+}
+
+function registerReasoningSummaryCase1(): void {
+  describe('OpenAIResponsesProvider reasoning.summary @issue:922 [1]', () => {
+    beforeEach(beforeEachReasoningSummary1);
+    afterEach(afterEachReasoningSummary2);
+
+    it('should include reasoning.summary=auto in request body when set', async () => {
+      const provider = new OpenAIResponsesProvider(
+        'test-api-key',
+        'https://api.openai.com/v1',
+      );
+
+      const settings = new SettingsService();
+      settings.setProviderSetting(provider.name, 'model', 'gpt-5.2');
+
+      settings.set('reasoning.effort', 'high');
+      settings.set('reasoning.summary', 'auto');
+
+      const runtime = createProviderRuntimeContext({
+        runtimeId: 'openai-responses-reasoning-summary-runtime',
+        settingsService: settings,
+      });
+
+      let capturedBody: string | undefined;
+
+      mockFetch.mockImplementation(
+        async (
+          _input: RequestInfo | URL,
+          init?: RequestInit,
+        ): Promise<Response> => {
+          if (init?.body !== undefined && init.body !== null) {
+            capturedBody = await new Response(init.body).text();
+          }
+
+          const encoder = new TextEncoder();
+          const stream = new ReadableStream({
+            start(controller) {
+              controller.enqueue(
+                encoder.encode(
+                  'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
+                ),
+              );
+              controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+              controller.close();
+            },
+          });
+
+          return new Response(stream, {
+            status: 200,
+            headers: { 'content-type': 'text/event-stream' },
+          });
+        },
+      );
+
+      const options = streamCallOptions({
+        providerName: provider.name,
+        settings,
+        runtime,
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+        ],
+      });
+
+      for await (const _content of provider.generateChatCompletion(options)) {
+        // Consume generator
+      }
+
+      expect(capturedBody).toBeDefined();
+      const parsedBody = JSON.parse(capturedBody!) as {
+        reasoning?: Record<string, unknown>;
+      };
+
+      expect(parsedBody.reasoning).toBeDefined();
+      expect(parsedBody.reasoning?.effort).toBe('high');
+      expect(parsedBody.reasoning?.summary).toBe('auto');
+    });
   });
+}
 
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-    global.fetch = originalFetch;
+function registerReasoningSummaryCase2(): void {
+  describe('OpenAIResponsesProvider reasoning.summary @issue:922 [2]', () => {
+    beforeEach(beforeEachReasoningSummary1);
+    afterEach(afterEachReasoningSummary2);
+
+    it('should include reasoning.summary=concise in request body', async () => {
+      const provider = new OpenAIResponsesProvider(
+        'test-api-key',
+        'https://api.openai.com/v1',
+      );
+
+      const settings = new SettingsService();
+      settings.setProviderSetting(provider.name, 'model', 'gpt-5.2');
+
+      settings.set('reasoning.effort', 'medium');
+      settings.set('reasoning.summary', 'concise');
+
+      const runtime = createProviderRuntimeContext({
+        runtimeId: 'openai-responses-reasoning-summary-runtime-2',
+        settingsService: settings,
+      });
+
+      let capturedBody: string | undefined;
+
+      mockFetch.mockImplementation(
+        async (
+          _input: RequestInfo | URL,
+          init?: RequestInit,
+        ): Promise<Response> => {
+          if (init?.body !== undefined && init.body !== null) {
+            capturedBody = await new Response(init.body).text();
+          }
+
+          const encoder = new TextEncoder();
+          const stream = new ReadableStream({
+            start(controller) {
+              controller.enqueue(
+                encoder.encode(
+                  'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
+                ),
+              );
+              controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+              controller.close();
+            },
+          });
+
+          return new Response(stream, {
+            status: 200,
+            headers: { 'content-type': 'text/event-stream' },
+          });
+        },
+      );
+
+      const options = streamCallOptions({
+        providerName: provider.name,
+        settings,
+        runtime,
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+        ],
+      });
+
+      for await (const _content of provider.generateChatCompletion(options)) {
+        // Consume generator
+      }
+
+      expect(capturedBody).toBeDefined();
+      const parsedBody = JSON.parse(capturedBody!) as {
+        reasoning?: Record<string, unknown>;
+      };
+
+      expect(parsedBody.reasoning?.summary).toBe('concise');
+    });
   });
+}
 
-  it('should include reasoning.summary=auto in request body when set', async () => {
-    const provider = new OpenAIResponsesProvider(
-      'test-api-key',
-      'https://api.openai.com/v1',
-    );
+function registerReasoningSummaryCase3(): void {
+  describe('OpenAIResponsesProvider reasoning.summary @issue:922 [3]', () => {
+    beforeEach(beforeEachReasoningSummary1);
+    afterEach(afterEachReasoningSummary2);
 
-    const settings = new SettingsService();
-    settings.setProviderSetting(provider.name, 'model', 'gpt-5.2');
+    it('should include reasoning.summary=detailed in request body', async () => {
+      const provider = new OpenAIResponsesProvider(
+        'test-api-key',
+        'https://api.openai.com/v1',
+      );
 
-    settings.set('reasoning.effort', 'high');
-    settings.set('reasoning.summary', 'auto');
+      const settings = new SettingsService();
+      settings.setProviderSetting(provider.name, 'model', 'gpt-5.2');
 
-    const runtime = createProviderRuntimeContext({
-      runtimeId: 'openai-responses-reasoning-summary-runtime',
-      settingsService: settings,
+      settings.set('reasoning.effort', 'high');
+      settings.set('reasoning.summary', 'detailed');
+
+      const runtime = createProviderRuntimeContext({
+        runtimeId: 'openai-responses-reasoning-summary-runtime-3',
+        settingsService: settings,
+      });
+
+      let capturedBody: string | undefined;
+
+      mockFetch.mockImplementation(
+        async (
+          _input: RequestInfo | URL,
+          init?: RequestInit,
+        ): Promise<Response> => {
+          if (init?.body !== undefined && init.body !== null) {
+            capturedBody = await new Response(init.body).text();
+          }
+
+          const encoder = new TextEncoder();
+          const stream = new ReadableStream({
+            start(controller) {
+              controller.enqueue(
+                encoder.encode(
+                  'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
+                ),
+              );
+              controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+              controller.close();
+            },
+          });
+
+          return new Response(stream, {
+            status: 200,
+            headers: { 'content-type': 'text/event-stream' },
+          });
+        },
+      );
+
+      const options = streamCallOptions({
+        providerName: provider.name,
+        settings,
+        runtime,
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+        ],
+      });
+
+      for await (const _content of provider.generateChatCompletion(options)) {
+        // Consume generator
+      }
+
+      expect(capturedBody).toBeDefined();
+      const parsedBody = JSON.parse(capturedBody!) as {
+        reasoning?: Record<string, unknown>;
+      };
+
+      expect(parsedBody.reasoning?.summary).toBe('detailed');
     });
-
-    let capturedBody: string | undefined;
-
-    mockFetch.mockImplementation(
-      async (
-        _input: RequestInfo | URL,
-        init?: RequestInit,
-      ): Promise<Response> => {
-        if (init?.body !== undefined && init.body !== null) {
-          capturedBody = await new Response(init.body).text();
-        }
-
-        const encoder = new TextEncoder();
-        const stream = new ReadableStream({
-          start(controller) {
-            controller.enqueue(
-              encoder.encode(
-                'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
-              ),
-            );
-            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-            controller.close();
-          },
-        });
-
-        return new Response(stream, {
-          status: 200,
-          headers: { 'content-type': 'text/event-stream' },
-        });
-      },
-    );
-
-    const options = streamCallOptions({
-      providerName: provider.name,
-      settings,
-      runtime,
-      contents: [
-        { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
-      ],
-    });
-
-    for await (const _content of provider.generateChatCompletion(options)) {
-      // Consume generator
-    }
-
-    expect(capturedBody).toBeDefined();
-    const parsedBody = JSON.parse(capturedBody!) as {
-      reasoning?: Record<string, unknown>;
-    };
-
-    expect(parsedBody.reasoning).toBeDefined();
-    expect(parsedBody.reasoning?.effort).toBe('high');
-    expect(parsedBody.reasoning?.summary).toBe('auto');
   });
+}
 
-  it('should include reasoning.summary=concise in request body', async () => {
-    const provider = new OpenAIResponsesProvider(
-      'test-api-key',
-      'https://api.openai.com/v1',
-    );
+function registerReasoningSummaryCase4(): void {
+  describe('OpenAIResponsesProvider reasoning.summary @issue:922 [4]', () => {
+    beforeEach(beforeEachReasoningSummary1);
+    afterEach(afterEachReasoningSummary2);
 
-    const settings = new SettingsService();
-    settings.setProviderSetting(provider.name, 'model', 'gpt-5.2');
+    it('should NOT include reasoning.summary when set to none', async () => {
+      const provider = new OpenAIResponsesProvider(
+        'test-api-key',
+        'https://api.openai.com/v1',
+      );
 
-    settings.set('reasoning.effort', 'medium');
-    settings.set('reasoning.summary', 'concise');
+      const settings = new SettingsService();
+      settings.setProviderSetting(provider.name, 'model', 'gpt-5.2');
 
-    const runtime = createProviderRuntimeContext({
-      runtimeId: 'openai-responses-reasoning-summary-runtime-2',
-      settingsService: settings,
+      settings.set('reasoning.effort', 'high');
+      settings.set('reasoning.summary', 'none');
+
+      const runtime = createProviderRuntimeContext({
+        runtimeId: 'openai-responses-reasoning-summary-runtime-4',
+        settingsService: settings,
+      });
+
+      let capturedBody: string | undefined;
+
+      mockFetch.mockImplementation(
+        async (
+          _input: RequestInfo | URL,
+          init?: RequestInit,
+        ): Promise<Response> => {
+          if (init?.body !== undefined && init.body !== null) {
+            capturedBody = await new Response(init.body).text();
+          }
+
+          const encoder = new TextEncoder();
+          const stream = new ReadableStream({
+            start(controller) {
+              controller.enqueue(
+                encoder.encode(
+                  'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
+                ),
+              );
+              controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+              controller.close();
+            },
+          });
+
+          return new Response(stream, {
+            status: 200,
+            headers: { 'content-type': 'text/event-stream' },
+          });
+        },
+      );
+
+      const options = streamCallOptions({
+        providerName: provider.name,
+        settings,
+        runtime,
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+        ],
+      });
+
+      for await (const _content of provider.generateChatCompletion(options)) {
+        // Consume generator
+      }
+
+      expect(capturedBody).toBeDefined();
+      const parsedBody = JSON.parse(capturedBody!) as {
+        reasoning?: Record<string, unknown>;
+      };
+
+      // When summary=none, it should not be included in the request
+      expect(parsedBody.reasoning?.effort).toBe('high');
+      expect(parsedBody.reasoning?.summary).toBeUndefined();
     });
-
-    let capturedBody: string | undefined;
-
-    mockFetch.mockImplementation(
-      async (
-        _input: RequestInfo | URL,
-        init?: RequestInit,
-      ): Promise<Response> => {
-        if (init?.body !== undefined && init.body !== null) {
-          capturedBody = await new Response(init.body).text();
-        }
-
-        const encoder = new TextEncoder();
-        const stream = new ReadableStream({
-          start(controller) {
-            controller.enqueue(
-              encoder.encode(
-                'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
-              ),
-            );
-            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-            controller.close();
-          },
-        });
-
-        return new Response(stream, {
-          status: 200,
-          headers: { 'content-type': 'text/event-stream' },
-        });
-      },
-    );
-
-    const options = streamCallOptions({
-      providerName: provider.name,
-      settings,
-      runtime,
-      contents: [
-        { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
-      ],
-    });
-
-    for await (const _content of provider.generateChatCompletion(options)) {
-      // Consume generator
-    }
-
-    expect(capturedBody).toBeDefined();
-    const parsedBody = JSON.parse(capturedBody!) as {
-      reasoning?: Record<string, unknown>;
-    };
-
-    expect(parsedBody.reasoning?.summary).toBe('concise');
   });
+}
 
-  it('should include reasoning.summary=detailed in request body', async () => {
-    const provider = new OpenAIResponsesProvider(
-      'test-api-key',
-      'https://api.openai.com/v1',
-    );
+function registerReasoningSummaryCase5(): void {
+  describe('OpenAIResponsesProvider reasoning.summary @issue:922 [5]', () => {
+    beforeEach(beforeEachReasoningSummary1);
+    afterEach(afterEachReasoningSummary2);
 
-    const settings = new SettingsService();
-    settings.setProviderSetting(provider.name, 'model', 'gpt-5.2');
+    it('should NOT include reasoning.summary when not set at all', async () => {
+      const provider = new OpenAIResponsesProvider(
+        'test-api-key',
+        'https://api.openai.com/v1',
+      );
 
-    settings.set('reasoning.effort', 'high');
-    settings.set('reasoning.summary', 'detailed');
+      const settings = new SettingsService();
+      settings.setProviderSetting(provider.name, 'model', 'gpt-5.2');
 
-    const runtime = createProviderRuntimeContext({
-      runtimeId: 'openai-responses-reasoning-summary-runtime-3',
-      settingsService: settings,
+      settings.set('reasoning.effort', 'high');
+      // Do NOT set reasoning.summary
+
+      const runtime = createProviderRuntimeContext({
+        runtimeId: 'openai-responses-reasoning-summary-runtime-5',
+        settingsService: settings,
+      });
+
+      let capturedBody: string | undefined;
+
+      mockFetch.mockImplementation(
+        async (
+          _input: RequestInfo | URL,
+          init?: RequestInit,
+        ): Promise<Response> => {
+          if (init?.body !== undefined && init.body !== null) {
+            capturedBody = await new Response(init.body).text();
+          }
+
+          const encoder = new TextEncoder();
+          const stream = new ReadableStream({
+            start(controller) {
+              controller.enqueue(
+                encoder.encode(
+                  'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
+                ),
+              );
+              controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+              controller.close();
+            },
+          });
+
+          return new Response(stream, {
+            status: 200,
+            headers: { 'content-type': 'text/event-stream' },
+          });
+        },
+      );
+
+      const options = streamCallOptions({
+        providerName: provider.name,
+        settings,
+        runtime,
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+        ],
+      });
+
+      for await (const _content of provider.generateChatCompletion(options)) {
+        // Consume generator
+      }
+
+      expect(capturedBody).toBeDefined();
+      const parsedBody = JSON.parse(capturedBody!) as {
+        reasoning?: Record<string, unknown>;
+      };
+
+      // When summary is not set, it should not be in the request
+      expect(parsedBody.reasoning?.effort).toBe('high');
+      expect(parsedBody.reasoning?.summary).toBeUndefined();
     });
-
-    let capturedBody: string | undefined;
-
-    mockFetch.mockImplementation(
-      async (
-        _input: RequestInfo | URL,
-        init?: RequestInit,
-      ): Promise<Response> => {
-        if (init?.body !== undefined && init.body !== null) {
-          capturedBody = await new Response(init.body).text();
-        }
-
-        const encoder = new TextEncoder();
-        const stream = new ReadableStream({
-          start(controller) {
-            controller.enqueue(
-              encoder.encode(
-                'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
-              ),
-            );
-            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-            controller.close();
-          },
-        });
-
-        return new Response(stream, {
-          status: 200,
-          headers: { 'content-type': 'text/event-stream' },
-        });
-      },
-    );
-
-    const options = streamCallOptions({
-      providerName: provider.name,
-      settings,
-      runtime,
-      contents: [
-        { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
-      ],
-    });
-
-    for await (const _content of provider.generateChatCompletion(options)) {
-      // Consume generator
-    }
-
-    expect(capturedBody).toBeDefined();
-    const parsedBody = JSON.parse(capturedBody!) as {
-      reasoning?: Record<string, unknown>;
-    };
-
-    expect(parsedBody.reasoning?.summary).toBe('detailed');
   });
-
-  it('should NOT include reasoning.summary when set to none', async () => {
-    const provider = new OpenAIResponsesProvider(
-      'test-api-key',
-      'https://api.openai.com/v1',
-    );
-
-    const settings = new SettingsService();
-    settings.setProviderSetting(provider.name, 'model', 'gpt-5.2');
-
-    settings.set('reasoning.effort', 'high');
-    settings.set('reasoning.summary', 'none');
-
-    const runtime = createProviderRuntimeContext({
-      runtimeId: 'openai-responses-reasoning-summary-runtime-4',
-      settingsService: settings,
-    });
-
-    let capturedBody: string | undefined;
-
-    mockFetch.mockImplementation(
-      async (
-        _input: RequestInfo | URL,
-        init?: RequestInit,
-      ): Promise<Response> => {
-        if (init?.body !== undefined && init.body !== null) {
-          capturedBody = await new Response(init.body).text();
-        }
-
-        const encoder = new TextEncoder();
-        const stream = new ReadableStream({
-          start(controller) {
-            controller.enqueue(
-              encoder.encode(
-                'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
-              ),
-            );
-            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-            controller.close();
-          },
-        });
-
-        return new Response(stream, {
-          status: 200,
-          headers: { 'content-type': 'text/event-stream' },
-        });
-      },
-    );
-
-    const options = streamCallOptions({
-      providerName: provider.name,
-      settings,
-      runtime,
-      contents: [
-        { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
-      ],
-    });
-
-    for await (const _content of provider.generateChatCompletion(options)) {
-      // Consume generator
-    }
-
-    expect(capturedBody).toBeDefined();
-    const parsedBody = JSON.parse(capturedBody!) as {
-      reasoning?: Record<string, unknown>;
-    };
-
-    // When summary=none, it should not be included in the request
-    expect(parsedBody.reasoning?.effort).toBe('high');
-    expect(parsedBody.reasoning?.summary).toBeUndefined();
-  });
-
-  it('should NOT include reasoning.summary when not set at all', async () => {
-    const provider = new OpenAIResponsesProvider(
-      'test-api-key',
-      'https://api.openai.com/v1',
-    );
-
-    const settings = new SettingsService();
-    settings.setProviderSetting(provider.name, 'model', 'gpt-5.2');
-
-    settings.set('reasoning.effort', 'high');
-    // Do NOT set reasoning.summary
-
-    const runtime = createProviderRuntimeContext({
-      runtimeId: 'openai-responses-reasoning-summary-runtime-5',
-      settingsService: settings,
-    });
-
-    let capturedBody: string | undefined;
-
-    mockFetch.mockImplementation(
-      async (
-        _input: RequestInfo | URL,
-        init?: RequestInit,
-      ): Promise<Response> => {
-        if (init?.body !== undefined && init.body !== null) {
-          capturedBody = await new Response(init.body).text();
-        }
-
-        const encoder = new TextEncoder();
-        const stream = new ReadableStream({
-          start(controller) {
-            controller.enqueue(
-              encoder.encode(
-                'data: {"type":"response.completed","response":{"id":"r1","status":"completed"}}\n\n',
-              ),
-            );
-            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-            controller.close();
-          },
-        });
-
-        return new Response(stream, {
-          status: 200,
-          headers: { 'content-type': 'text/event-stream' },
-        });
-      },
-    );
-
-    const options = streamCallOptions({
-      providerName: provider.name,
-      settings,
-      runtime,
-      contents: [
-        { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
-      ],
-    });
-
-    for await (const _content of provider.generateChatCompletion(options)) {
-      // Consume generator
-    }
-
-    expect(capturedBody).toBeDefined();
-    const parsedBody = JSON.parse(capturedBody!) as {
-      reasoning?: Record<string, unknown>;
-    };
-
-    // When summary is not set, it should not be in the request
-    expect(parsedBody.reasoning?.effort).toBe('high');
-    expect(parsedBody.reasoning?.summary).toBeUndefined();
-  });
-});
+}

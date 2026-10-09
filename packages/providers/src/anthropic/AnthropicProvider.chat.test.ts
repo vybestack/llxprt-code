@@ -7,22 +7,18 @@
  * Split from AnthropicProvider.test.ts for max-lines compliance.
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { vi, describe, it, expect, beforeEach } from 'bun:test';
 import { AnthropicProvider } from './AnthropicProvider.js';
-import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
-import {
-  clearActiveProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+import { TEST_PROVIDER_CONFIG } from '../__tests__/providerTestConfig.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   setupAnthropicProvider,
   type AnthropicContentBlock,
   type AnthropicMessage,
   type AnthropicTestSetup,
-} from './test-utils/anthropicProviderTestSetup.js';
-import { createAnthropicRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
+} from './__tests__/anthropicProviderTestSetup.js';
+import { createAnthropicRawPostTestAdapter } from '../__tests__/rawPostTestAdapters.js';
 
 // Shared mock instance for messages.create - using vi.hoisted so it's
 // available when vi.mock factories run.
@@ -147,9 +143,6 @@ describe('AnthropicProvider', () => {
     buildCallOptions = setup.buildCallOptions;
   });
 
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
   describe('generateChatCompletion', () => {
     it('should pass custom headers provided via configuration to the Anthropic client', async () => {
       const customHeaders = {
@@ -202,8 +195,6 @@ describe('AnthropicProvider', () => {
         runtimeMetadata: { testCase: 'custom-headers' },
         runtimeId: 'anthropic.customHeaders',
       });
-
-      setActiveProviderRuntimeContext(callOptions.runtime);
 
       const generator = providerWithHeaders.generateChatCompletion(callOptions);
 
@@ -514,13 +505,9 @@ describe('AnthropicProvider', () => {
       ];
       const tools = [
         {
-          functionDeclarations: [
-            {
-              name: 'get_weather',
-              description: 'Get the weather',
-              parametersJsonSchema: { type: 'object', properties: {} },
-            },
-          ],
+          name: 'get_weather',
+          description: 'Get the weather',
+          parametersJsonSchema: { type: 'object', properties: {} },
         },
       ];
 

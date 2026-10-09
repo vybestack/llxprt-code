@@ -12,6 +12,11 @@
 
 import { spawn } from 'node:child_process';
 import type { HookConfig } from './types.js';
+import {
+  HookOutputOwner,
+  type HookSnapshotResult,
+} from './hookOutputSnapshot.js';
+import { runHookSnapshot, snapshotFailure } from './hookSnapshotProcess.js';
 import { HookEventName } from './types.js';
 import type {
   HookInput,
@@ -23,6 +28,12 @@ import type {
   BeforeToolInput,
 } from './types.js';
 import { mergeHookLLMRequest } from './hookTranslator.js';
+import {
+  startHookInputStream,
+  stopHookInputProcess,
+  type HookModelRowsInput,
+  type HookInputStream,
+} from './hookModelInputStream.js';
 import { DebugLogger } from '../debug/index.js';
 import type { Config } from '../config/config.js';
 import { sanitizeEnvironment } from '../services/environmentSanitization.js';
@@ -31,6 +42,13 @@ import {
   getShellConfiguration,
   type ShellType,
 } from '../utils/shell-utils.js';
+
+interface HookProcessState {
+  stdout: string;
+  stderr: string;
+  timedOut: boolean;
+  inputStream?: HookInputStream;
+}
 
 const debugLogger = DebugLogger.getLogger('llxprt:core:hooks:runner');
 
@@ -122,6 +140,51 @@ export class HookRunner {
         duration,
       };
     }
+  }
+
+  /** Internal disk seam; production event handlers retain the legacy array API. */
+  async executeHookWithRequestRows(
+    hookConfig: HookConfig,
+    eventName: HookEventName.BeforeModel | HookEventName.AfterModel,
+    input: HookModelRowsInput,
+    signal?: AbortSignal,
+  ): Promise<HookSnapshotResult> {
+    const startTime = Date.now();
+    const owner = new HookOutputOwner(input.cwd);
+    const options = { hookConfig, eventName, startTime };
+    try {
+      signal?.throwIfAborted();
+      if (input.hook_event_name !== eventName)
+        throw new Error('Hook input event mismatch');
+      const { ConfigSource } = await import('./hookRegistry.js');
+      if (
+        hookConfig.source === ConfigSource.Project &&
+        !this.config.isTrustedFolder()
+      )
+        throw new Error('Project hook blocked - folder not trusted');
+      if (!hookConfig.command) throw new Error('Command hook missing command');
+    } catch (error) {
+      return snapshotFailure(
+        owner,
+        options,
+        error instanceof Error
+          ? error
+          : new Error('Hook input failed', { cause: error }),
+      );
+    }
+    const timeout = hookConfig.timeout ?? DEFAULT_HOOK_TIMEOUT;
+    return runHookSnapshot(
+      {
+        ...options,
+        input,
+        signal,
+        timeout,
+        spawn: () => this.spawnHookProcess(hookConfig, input, true),
+        killTimeout: (child, expired) =>
+          this.setupKillTimeout(child, timeout, expired, true),
+      },
+      owner,
+    );
   }
 
   /**
@@ -273,6 +336,7 @@ export class HookRunner {
     eventName: HookEventName,
     input: HookInput,
     startTime: number,
+    source?: { input: HookModelRowsInput; signal?: AbortSignal },
   ): Promise<HookExecutionResult> {
     // Secondary security check - block project hooks in untrusted folders
     const { ConfigSource } = await import('./hookRegistry.js');
@@ -299,6 +363,7 @@ export class HookRunner {
       input,
       startTime,
       timeout,
+      source,
     );
   }
 
@@ -308,6 +373,7 @@ export class HookRunner {
     input: HookInput,
     startTime: number,
     timeout: number,
+    source?: { input: HookModelRowsInput; signal?: AbortSignal },
   ): Promise<HookExecutionResult> {
     return new Promise((resolve) => {
       if (!hookConfig.command) {
@@ -315,68 +381,110 @@ export class HookRunner {
         return;
       }
 
-      let stdout = '';
-      let stderr = '';
-      let timedOut = false;
-
-      const child = this.spawnHookProcess(hookConfig, input);
-
-      const timeoutControl = this.setupKillTimeout(child, timeout, () => {
-        timedOut = true;
-      });
-
-      this.writeToStdin(child, input);
-
-      child.stdout?.on('data', (data: Buffer) => {
-        stdout += data.toString();
-      });
-
-      child.stderr?.on('data', (data: Buffer) => {
-        stderr += data.toString();
-      });
-
-      child.on('close', (exitCode) => {
-        timeoutControl.clear();
-        const duration = Date.now() - startTime;
-        if (timedOut) {
-          resolve(
-            this.timeoutResult(
-              hookConfig,
-              eventName,
-              timeout,
-              stdout,
-              stderr,
-              duration,
-            ),
+      const state: HookProcessState = {
+        stdout: '',
+        stderr: '',
+        timedOut: false,
+      };
+      const child = this.spawnHookProcess(
+        hookConfig,
+        input,
+        source !== undefined,
+      );
+      const timeoutControl = this.setupKillTimeout(
+        child,
+        timeout,
+        () => {
+          state.timedOut = true;
+          state.inputStream?.cancel(
+            new Error(`Hook timed out after ${timeout}ms`),
+            false,
           );
-          return;
-        }
-        resolve(
-          this.buildExitResult(
-            hookConfig,
-            eventName,
-            exitCode,
-            stdout,
-            stderr,
-            duration,
-          ),
-        );
+        },
+        source !== undefined,
+      );
+      if (source === undefined) this.writeToStdin(child, input);
+      child.stdout?.on('data', (data: Buffer) => {
+        state.stdout += data.toString();
       });
-
-      child.on('error', (error) => {
+      child.stderr?.on('data', (data: Buffer) => {
+        state.stderr += data.toString();
+      });
+      const complete = (exitCode: number | null, error?: Error): void => {
         timeoutControl.clear();
-        resolve(
-          this.errorResult(
-            hookConfig,
-            eventName,
-            error,
-            stdout,
-            stderr,
-            startTime,
-          ),
+        if (error !== undefined) state.inputStream?.cancel(error);
+        void this.completeHookProcess(
+          hookConfig,
+          eventName,
+          startTime,
+          timeout,
+          state,
+          exitCode,
+          error,
+        ).then(resolve);
+      };
+      child.on('close', (exitCode) => complete(exitCode));
+      child.on('error', (error) => complete(null, error));
+      if (source !== undefined)
+        state.inputStream = startHookInputStream(
+          child,
+          source.input,
+          source.signal,
         );
-      });
     });
+  }
+
+  private async completeHookProcess(
+    hookConfig: HookConfig,
+    eventName: HookEventName,
+    startTime: number,
+    timeout: number,
+    state: HookProcessState,
+    exitCode: number | null,
+    error?: Error,
+  ): Promise<HookExecutionResult> {
+    const inputError = await state.inputStream?.close();
+    const duration = Date.now() - startTime;
+    if (state.timedOut)
+      return this.timeoutResult(
+        hookConfig,
+        eventName,
+        timeout,
+        state.stdout,
+        state.stderr,
+        duration,
+      );
+    const failure = error ?? inputError;
+    if (failure !== undefined) {
+      const result = this.errorResult(
+        hookConfig,
+        eventName,
+        failure,
+        state.stdout,
+        state.stderr,
+        startTime,
+      );
+      if (exitCode !== null) {
+        const exited = this.buildExitResult(
+          hookConfig,
+          eventName,
+          exitCode,
+          state.stdout,
+          state.stderr,
+          duration,
+        );
+        return { ...result, exitCode: exited.exitCode, output: exited.output };
+      }
+      return result;
+    }
+    return this.buildExitResult(
+      hookConfig,
+      eventName,
+      exitCode,
+      state.stdout,
+      state.stderr,
+      duration,
+    );
   }
 
   private missingCommandResult(
@@ -405,16 +513,18 @@ export class HookRunner {
     child: ReturnType<typeof spawn>,
     timeout: number,
     onTimeout: () => void,
+    sourceInput = false,
   ): { clear: () => void } {
     let forceKillHandle: NodeJS.Timeout | undefined;
     const timeoutHandle = setTimeout(() => {
       onTimeout();
-      child.kill('SIGTERM');
+      if (sourceInput) stopHookInputProcess(child, 'SIGTERM');
+      else child.kill('SIGTERM');
       forceKillHandle = setTimeout(() => {
+        if (sourceInput) stopHookInputProcess(child, 'SIGKILL');
         // Still running only when both exit indicators remain null.
-        if (child.exitCode === null && child.signalCode === null) {
+        else if (child.exitCode === null && child.signalCode === null)
           child.kill('SIGKILL');
-        }
       }, 5000);
     }, timeout);
 
@@ -521,6 +631,7 @@ export class HookRunner {
   private spawnHookProcess(
     hookConfig: HookConfig,
     input: HookInput,
+    sourceInput = false,
   ): ReturnType<typeof spawn> {
     // SECURITY: Get platform-specific shell configuration
     const shellConfig = getShellConfiguration();
@@ -561,6 +672,8 @@ export class HookRunner {
         env,
         cwd: input.cwd,
         stdio: ['pipe', 'pipe', 'pipe'],
+        detached:
+          sourceInput && process.platform !== 'win32' ? true : undefined,
         shell: false, // CRITICAL: must be false to prevent injection
         // Prevents child from inheriting parent's console screen buffer on
         // Windows (sets CREATE_NO_WINDOW). PowerShell Console API writes

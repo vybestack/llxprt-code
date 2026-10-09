@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { heapAccepted } from '../test-utils/retained-growth.js';
+import { heapAccepted } from '@vybestack/llxprt-code-test-utils/core/retained-growth.js';
 import { z } from 'zod';
 
 interface Measurement {

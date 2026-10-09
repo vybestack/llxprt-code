@@ -6,7 +6,7 @@
 
 import { describe, it, expect } from 'bun:test';
 import { act } from 'react';
-import { renderHook } from '../../../../test-utils/render.js';
+import { renderHook } from '../../../../__tests__/render.js';
 import { useQueuedSubmissions } from '../useQueuedSubmissions.js';
 import type { QueuedSubmission } from '../types.js';
 

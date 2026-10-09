@@ -15,6 +15,8 @@ import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Agen
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
+import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import type { RequestShapeResult } from './tokenUsageRequestShape.js';
 import { extractSystemInstructionText } from './streamRequestHelpers.js';
 import type { AgentClientGenerateConfig } from '@vybestack/llxprt-code-core/core/clientContract.js';
 
@@ -176,7 +178,31 @@ export function recordRequestShapeContext(
     countTokens: estimateTokens,
   });
 
-  const context: TokenUsageTurnContext = {
+  usageLogger.attachTurnContext(promptId, shapeContext(result));
+}
+
+export async function recordSourceRequestShapeContext(
+  usageLogger: TokenUsageLogger | null | undefined,
+  promptId: string,
+  requestRows: ProviderRequestRows,
+  tools: unknown,
+  instructionsText: string | undefined,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (usageLogger === undefined || usageLogger === null) return;
+  if (!usageLogger.isEnabled()) return;
+  const result = await usageLogger.getShapeMemory().recordSourceRequestShape({
+    requestRows,
+    tools,
+    instructionsText,
+    countTokens: estimateTokens,
+    signal,
+  });
+  usageLogger.attachTurnContext(promptId, shapeContext(result));
+}
+
+function shapeContext(result: RequestShapeResult): TokenUsageTurnContext {
+  return {
     toolCalls: result.toolCalls,
     newToolResultTokens: result.newToolResultTokens,
     carriedToolResultTokens: result.carriedToolResultTokens,
@@ -188,8 +214,6 @@ export function recordRequestShapeContext(
     prefixFingerprint: result.prefixFingerprint,
     prefixFingerprintChanged: result.prefixFingerprintChanged,
   };
-
-  usageLogger.attachTurnContext(promptId, context);
 }
 
 /**

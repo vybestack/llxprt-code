@@ -26,10 +26,21 @@
  * SAME Config later adopted by `fromConfig`/`createAgent`, whose executor
  * fast-path (already-active + no overrides) adopts the preflight state WITHOUT
  * re-running a second activation sequence.
+ *
+ * Preflight is an agent-owned assembly entrypoint (#3222): it installs the
+ * agent-owned runtime factories (agentClientFactory / toolSchedulerFactory /
+ * taskToolRegistration) onto the passed Config, per field, when absent. The
+ * activation primitive it owns (notably `config.refreshAuth`) requires the
+ * agent client factory, and preflight runs BEFORE `fromConfig`/`createAgent`
+ * would install those factories themselves — so preflight makes pre-agent
+ * activation self-contained. Instance-owned only (installed on the passed
+ * Config, never globals); `fromConfig`'s later ensure is only-if-absent, so
+ * preflight-installed factories persist consistently.
  */
 
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ProviderActivationIntent } from './config-types.js';
+import { ensureAgentRuntimeFactories } from './agentRuntimeAssembly.js';
 import {
   executeProviderActivation,
   type ProviderActivationResult,
@@ -65,6 +76,13 @@ export async function preflightAgentActivation(
   config: Config,
   intent: ProviderActivationIntent,
 ): Promise<AgentActivationPreflightResult> {
+  // Agent-owned assembly entrypoint (#3222): the activation primitive below
+  // (config.refreshAuth) requires the agent client factory, and preflight runs
+  // before fromConfig/createAgent would install factories themselves. Install
+  // agent-owned defaults per field, only when absent (instance-owned, no
+  // globals; caller-supplied factories always win).
+  ensureAgentRuntimeFactories(config);
+
   // Invalidate the most-recent token for this Config so a new attempt does not
   // leave a stale "latest" pointer.
   clearCompletedActivationPreflight(config);

@@ -3,7 +3,8 @@ import { describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import { buildChronologyTrace } from './historyChronology.js';
 import { sanitizeProviderHistoryForSerialization } from './historyCloneUtils.js';
-import { suffixRow, withSuffixFixture } from './history-suffix-test-helpers.js';
+import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
+import { withCoreSuffixFixture } from './core-suffix-fixture-test-helpers.js';
 import {
   exitMeasurement,
   mixedRow,
@@ -84,7 +85,7 @@ describe('chronology projection parity', () => {
 
 describe('chronology marker filtering over a real journal', () => {
   it('skips unmarked rows and keeps the marked rows in journal order', async () => {
-    await withSuffixFixture(
+    await withCoreSuffixFixture(
       512,
       async (service, ownership) => {
         let count = 0;
@@ -107,7 +108,7 @@ describe('chronology marker filtering over a real journal', () => {
 for (const query of ['clone', 'trace'] as const) {
   describe(`${query} cold pinned membership`, () => {
     it('captures membership on first next and excludes later mutations', async () => {
-      await withSuffixFixture(0, async (service, ownership) => {
+      await withCoreSuffixFixture(0, async (service, ownership) => {
         for (let index = 0; index < 3; index++) service.add(suffixRow(index));
         const before = scratchDirectories();
         const unused = queryStream(service, query);

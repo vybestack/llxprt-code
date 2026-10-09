@@ -10,14 +10,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { ApprovalMode, Config } from '@vybestack/llxprt-code-core';
 import { render } from 'ink-testing-library';
 import { LoadedSettings } from '../../config/settings.js';
-import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
-import { renderWithProviders } from '../../test-utils/render.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
+import { renderWithProviders } from '../../__tests__/render.js';
 import { buildSlashCommandRuntime } from '../cliUiRuntime.js';
 import { StreamingState } from '../types.js';
 import { StreamingContext } from '../contexts/StreamingContext.js';
 import { AppCommandsProvider } from '../contexts/AppCommandsContext.js';
 import { useTextBuffer } from '../components/shared/text-buffer.js';
-import { createAppCommandBindings } from '../../test-utils/appCommandBindings.js';
+import { createAppCommandBindings } from '../../__tests__/appCommandBindings.js';
 import { useTerminalStore } from '../stores/terminal/TerminalContext.js';
 import { InlineContent, type InlineContentProps } from './InlineContent.js';
 

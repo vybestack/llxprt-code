@@ -1,6 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { HistoryJournalStore } from './historyJournalStore.js';
-import type { HistoryIndexedRows } from './historyMutationSnapshot.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 import { DetachedHistoryJournal } from './detachedHistoryJournal.js';
 import { captureDetachedHistory } from './detachedHistoryCapture.js';
@@ -11,7 +10,7 @@ export async function withDetachedHistoryCheckpoint<T>(
   ownership: RowOwnership | undefined,
   enqueue: (execute: () => Promise<void>) => Promise<void>,
   settleTokens: () => Promise<void>,
-  execute: (checkpoint: HistoryIndexedRows) => Promise<T>,
+  execute: (checkpoint: DetachedHistoryJournal) => Promise<T>,
   signal?: AbortSignal,
 ): Promise<T> {
   const checkpoint = new DetachedHistoryJournal(ownership);

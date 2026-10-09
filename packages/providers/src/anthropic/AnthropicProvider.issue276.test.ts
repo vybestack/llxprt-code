@@ -9,23 +9,19 @@
  * auth, no beta headers, and no tool prefixing.
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { vi, describe, it, expect, beforeEach } from 'bun:test';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
+import { TEST_PROVIDER_CONFIG } from '../__tests__/providerTestConfig.js';
 import {
   createProviderWithRuntime,
   createRuntimeConfigStub,
-} from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import { streamCallOptions } from '../test-utils/streamCallOptions.js';
-import type { ProviderCallOptionsInit } from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+} from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import { streamCallOptions } from '../__tests__/streamCallOptions.js';
+import type { ProviderCallOptionsInit } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  clearActiveProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { createAnthropicRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
+import { createAnthropicRawPostTestAdapter } from '../__tests__/rawPostTestAdapters.js';
 
 void vi.mock('@vybestack/llxprt-code-tools/ToolFormatter.js', () => ({
   ToolFormatter: vi.fn().mockImplementation(() => ({
@@ -122,9 +118,6 @@ function resetSdkTracking() {
 }
 
 describe('Issue #276: OAuth token behavior through public APIs', () => {
-  let runtimeContext: ProviderRuntimeContext;
-  let settingsService: SettingsService;
-
   beforeEach(() => {
     vi.clearAllMocks();
     resetSdkTracking();
@@ -161,28 +154,56 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
       ...settingsService.getAllGlobalSettings(),
       ...settingsService.getProviderSettings('anthropic'),
     });
-
-    setActiveProviderRuntimeContext(runtimeContext);
   });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
-
-  const buildCallOptions = (
-    contents: IContent[],
-    overrides: Omit<ProviderCallOptionsInit, 'providerName' | 'contents'> = {},
-  ) =>
-    streamCallOptions({
-      providerName: 'anthropic',
-      contents,
-      settings: settingsService,
-      runtime: runtimeContext,
-      config: runtimeContext.config,
-      ...overrides,
-    });
-
   describe('getModels: OAuth and API-key tokens both dynamically list models', () => {
+    registerAnthropicBehavior1();
+
+    registerAnthropicBehavior2();
+
+    registerAnthropicBehavior3();
+
+    registerAnthropicBehavior4();
+
+    registerAnthropicBehavior5();
+  });
+
+  describe('generateChatCompletion: SDK construction uses correct auth mode', () => {
+    registerAnthropicBehavior6();
+
+    registerAnthropicBehavior7();
+  });
+
+  describe('generateChatCompletion: OAuth token prefixes tool names', () => {
+    registerAnthropicBehavior8();
+
+    registerAnthropicBehavior9();
+  });
+
+  describe('generateChatCompletion: OAuth token sets beta header in API call', () => {
+    registerAnthropicBehavior10();
+
+    registerAnthropicBehavior11();
+  });
+});
+
+let runtimeContext: ProviderRuntimeContext;
+let settingsService: SettingsService;
+
+const buildCallOptions = (
+  contents: IContent[],
+  overrides: Omit<ProviderCallOptionsInit, 'providerName' | 'contents'> = {},
+) =>
+  streamCallOptions({
+    providerName: 'anthropic',
+    contents,
+    settings: settingsService,
+    runtime: runtimeContext,
+    config: runtimeContext.config,
+    ...overrides,
+  });
+
+function registerAnthropicBehavior1(): void {
+  describe('behavior 1', () => {
     it('lists the dynamic mock model ID when authenticated with an OAuth token', async () => {
       const oauthProvider = new AnthropicProvider(
         'sk-ant-oat-test-token',
@@ -200,7 +221,11 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
         expect(model.provider).toBe('anthropic');
       });
     });
+  });
+}
 
+function registerAnthropicBehavior2(): void {
+  describe('behavior 2', () => {
     it('calls client.beta.models.list when using an OAuth token (dynamic path, no static catalog)', async () => {
       const oauthProvider = new AnthropicProvider(
         'sk-ant-oat-test-token',
@@ -212,7 +237,11 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
 
       expect(mockBetaModelsList).toHaveBeenCalled();
     });
+  });
+}
 
+function registerAnthropicBehavior3(): void {
+  describe('behavior 3', () => {
     it('fetches models from the API when authenticated with a regular API key', async () => {
       const apiProvider = new AnthropicProvider(
         'test-api-key',
@@ -227,7 +256,11 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
         true,
       );
     });
+  });
+}
 
+function registerAnthropicBehavior4(): void {
+  describe('behavior 4', () => {
     it('calls client.beta.models.list when using a regular API key', async () => {
       const apiProvider = new AnthropicProvider(
         'test-api-key',
@@ -239,7 +272,11 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
 
       expect(mockBetaModelsList).toHaveBeenCalled();
     });
+  });
+}
 
+function registerAnthropicBehavior5(): void {
+  describe('behavior 5', () => {
     it('returns default models with empty-string auth token when no auth is available', async () => {
       const noAuthProvider = new AnthropicProvider(
         '',
@@ -254,8 +291,10 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
       });
     });
   });
+}
 
-  describe('generateChatCompletion: SDK construction uses correct auth mode', () => {
+function registerAnthropicBehavior6(): void {
+  describe('behavior 6', () => {
     it('constructs SDK with authToken and no apiKey for OAuth tokens, plus OAuth beta defaultHeaders', async () => {
       const oauthProvider = new AnthropicProvider(
         'sk-ant-oat-test-token',
@@ -297,7 +336,11 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
       expect(typeof betaHeader === 'string').toBe(true);
       expect(betaHeader).toContain('oauth-2025-04-20');
     });
+  });
+}
 
+function registerAnthropicBehavior7(): void {
+  describe('behavior 7', () => {
     it('constructs SDK with apiKey and no authToken for regular API keys, without OAuth beta headers', async () => {
       const apiProvider = new AnthropicProvider('test-api-key', undefined, {
         ...TEST_PROVIDER_CONFIG,
@@ -334,8 +377,10 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
       expect(headerIncludesOAuthBeta(betaHeader)).toBe(false);
     });
   });
+}
 
-  describe('generateChatCompletion: OAuth token prefixes tool names', () => {
+function registerAnthropicBehavior8(): void {
+  describe('behavior 8', () => {
     it('sends tool names prefixed with llxprt_ when using an OAuth token', async () => {
       const oauthProvider = new AnthropicProvider(
         'sk-ant-oat-test-token',
@@ -358,13 +403,9 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
         {
           tools: [
             {
-              functionDeclarations: [
-                {
-                  name: 'read_file',
-                  description: 'Read a file',
-                  parametersJsonSchema: { type: 'object', properties: {} },
-                },
-              ],
+              name: 'read_file',
+              description: 'Read a file',
+              parametersJsonSchema: { type: 'object', properties: {} },
             },
           ],
           resolved: {
@@ -385,7 +426,11 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
       expect(requestBody.tools).toBeDefined();
       expect(requestBody.tools[0].name).toBe('llxprt_read_file');
     });
+  });
+}
 
+function registerAnthropicBehavior9(): void {
+  describe('behavior 9', () => {
     it('sends tool names without prefix when using a regular API key', async () => {
       const apiProvider = new AnthropicProvider('test-api-key', undefined, {
         ...TEST_PROVIDER_CONFIG,
@@ -404,13 +449,9 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
         {
           tools: [
             {
-              functionDeclarations: [
-                {
-                  name: 'read_file',
-                  description: 'Read a file',
-                  parametersJsonSchema: { type: 'object', properties: {} },
-                },
-              ],
+              name: 'read_file',
+              description: 'Read a file',
+              parametersJsonSchema: { type: 'object', properties: {} },
             },
           ],
           resolved: {
@@ -433,8 +474,10 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
       expect(requestBody.tools[0].name).toBe('read_file');
     });
   });
+}
 
-  describe('generateChatCompletion: OAuth token sets beta header in API call', () => {
+function registerAnthropicBehavior10(): void {
+  describe('behavior 10', () => {
     it('includes oauth-2025-04-20 in anthropic-beta header for OAuth requests', async () => {
       const oauthProvider = new AnthropicProvider(
         'sk-ant-oat-test-token',
@@ -474,7 +517,11 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
       const betaHeader = headers['anthropic-beta'];
       expect(headerIncludesOAuthBeta(betaHeader)).toBe(true);
     });
+  });
+}
 
+function registerAnthropicBehavior11(): void {
+  describe('behavior 11', () => {
     it('does not include oauth-2025-04-20 in anthropic-beta header for API key requests', async () => {
       const apiProvider = new AnthropicProvider('test-api-key', undefined, {
         ...TEST_PROVIDER_CONFIG,
@@ -514,4 +561,4 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
       expect(betaIncludesOAuth).toBe(false);
     });
   });
-});
+}

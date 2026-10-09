@@ -2,7 +2,7 @@ import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, beforeEach, afterEach, expect, vi } from 'bun:test';
 import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { streamCallOptions } from '../test-utils/streamCallOptions.js';
+import { streamCallOptions } from '../__tests__/streamCallOptions.js';
 
 const realLlxprtCodeSettingsModule = {
   ...(await import('@vybestack/llxprt-code-settings')),

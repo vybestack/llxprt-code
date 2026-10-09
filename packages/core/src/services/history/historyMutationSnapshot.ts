@@ -19,7 +19,6 @@ import {
   type PendingRowFold,
 } from '../../recording/pendingRowFold.js';
 import type { JournalReadCounters } from '../../recording/journalCounters.js';
-import { trackMutationOwners } from './historyMutationOwnership.js';
 
 export interface HistoryIndexedRows extends Iterable<IContent> {
   readonly length: number;
@@ -324,27 +323,13 @@ function createMutationSnapshot(
   counters?: JournalReadCounters,
   transactionOwnership?: RowOwnership,
 ): HistoryMutationSnapshot {
-  const owners: Iterable<IContent> = {
-    [Symbol.iterator]: () => source.pendingOwners(),
-  };
-  const releasePrevious = trackMutationOwners(owners, counters?.ownership);
-  const releaseTransaction = trackMutationOwners(owners, transactionOwnership);
-  try {
-    return new HistoryMutationSnapshot(
-      source,
-      counters?.ownership,
-      () => {
-        releaseTransaction();
-        releasePrevious();
-      },
-      durableTail,
-      transactionOwnership,
-    );
-  } catch (error) {
-    releaseTransaction();
-    releasePrevious();
-    throw error;
-  }
+  return new HistoryMutationSnapshot(
+    source,
+    counters?.ownership,
+    undefined,
+    durableTail,
+    transactionOwnership,
+  );
 }
 
 export async function captureHistoryMutationSnapshot(

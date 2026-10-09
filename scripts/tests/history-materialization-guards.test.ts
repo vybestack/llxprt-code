@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { observeHistorySynchronouslyForTest } from '../../packages/core/src/test-utils/synchronous-history-test-observation.js';
+import { observeHistorySynchronouslyForTest } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
 import { DensityDiskHistory } from '../../packages/agents/src/compression/__tests__/density-disk-helpers.js';
 import { HighdensityPreparationHistory } from '../../packages/agents/src/compression/__tests__/highdensity-disk-helpers.js';
 import { BatchStreamHistory } from '../../packages/core/src/services/history/addbatch-stream-test-helpers.js';

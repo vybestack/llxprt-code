@@ -495,7 +495,6 @@ export function useReactToolScheduler(
   const [externalSchedulerRegistered, setExternalSchedulerRegistered] =
     useState(false);
   const mainSchedulerId = useState(() => Symbol('main-scheduler'))[0];
-  const sessionId = useMemo(() => runtime.session.getSessionId(), [runtime]);
   const pendingScheduleRequests = useRef<PendingScheduleRequests>([]);
 
   const syncedRefs = useRefState(
@@ -515,7 +514,6 @@ export function useReactToolScheduler(
 
   const scheduler = useScheduler(
     runtime,
-    sessionId,
     mainSchedulerId,
     refs,
     runtimeMessageBus,

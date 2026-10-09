@@ -4,11 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { Config } from './config.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
-import { clearAllSchedulers } from './schedulerSingleton.js';
+import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { ToolSchedulerFactoryOptions } from '../core/toolSchedulerContract.js';
 
 const AgentClient = vi.fn().mockImplementation(() => ({
@@ -23,7 +23,10 @@ const AgentClient = vi.fn().mockImplementation(() => ({
 }));
 
 class CoreToolScheduler {
-  constructor(_options: ToolSchedulerFactoryOptions) {}
+  creationOptions: ToolSchedulerFactoryOptions;
+  constructor(options: ToolSchedulerFactoryOptions) {
+    this.creationOptions = options;
+  }
   schedule = vi.fn().mockResolvedValue(undefined);
   cancelAll = vi.fn();
   dispose = vi.fn();
@@ -31,10 +34,10 @@ class CoreToolScheduler {
   handleConfirmationResponse = vi.fn().mockResolvedValue(undefined);
 }
 
-describe('Config - CoreToolScheduler Singleton', () => {
+describe('Config - CoreToolScheduler registry', () => {
   let config: Config;
   let sessionMessageBus: MessageBus;
-  const testSessionId = 'test-session-123';
+  const testOwner = { sessionId: 'test-session-123' };
 
   beforeEach(async () => {
     // Create a minimal Config instance for testing
@@ -70,7 +73,7 @@ describe('Config - CoreToolScheduler Singleton', () => {
     } as unknown as SettingsService;
 
     const configParams = {
-      sessionId: testSessionId,
+      sessionId: 'config-level-session',
       targetDir: process.cwd(),
       debugMode: false,
       cwd: process.cwd(),
@@ -91,41 +94,20 @@ describe('Config - CoreToolScheduler Singleton', () => {
       config.getPolicyEngine(),
       config.getDebugMode(),
     );
-    await (
-      config as Config & {
-        initialize(dependencies?: { messageBus?: MessageBus }): Promise<void>;
-      }
-    ).initialize({ messageBus: sessionMessageBus });
-
-    clearAllSchedulers();
-  });
-
-  afterEach(() => {
-    config.disposeScheduler(testSessionId);
-    clearAllSchedulers();
+    await config.initialize({ messageBus: sessionMessageBus });
   });
 
   const getScheduler = (
-    sessionId: string,
+    owner: object,
     callbacks: {
       outputUpdateHandler: ReturnType<typeof vi.fn>;
       onAllToolCallsComplete: ReturnType<typeof vi.fn>;
       getPreferredEditor: ReturnType<typeof vi.fn>;
       onEditorClose: ReturnType<typeof vi.fn>;
     },
+    options?: { interactiveMode?: boolean },
   ) =>
-    (
-      config as Config & {
-        getOrCreateScheduler(
-          sessionId: string,
-          callbacks: typeof callbacks,
-          options?: Record<string, unknown>,
-          dependencies?: {
-            messageBus?: MessageBus;
-          },
-        ): Promise<unknown>;
-      }
-    ).getOrCreateScheduler(sessionId, callbacks, undefined, {
+    config.getOrCreateScheduler(owner, 'session', callbacks, options, {
       messageBus: sessionMessageBus,
     });
 
@@ -140,13 +122,13 @@ describe('Config - CoreToolScheduler Singleton', () => {
       };
 
       await expect(
-        config.getOrCreateScheduler(testSessionId, callbacks),
+        config.getOrCreateScheduler(testOwner, 'session', callbacks),
       ).rejects.toThrow(
         'Config.getOrCreateScheduler requires an explicit session/runtime MessageBus dependency.',
       );
     });
 
-    it('should create a new scheduler instance for a given sessionId if none exists', async () => {
+    it('should create a new scheduler instance for an owner if none exists', async () => {
       const callbacks = {
         outputUpdateHandler: vi.fn(),
         onAllToolCallsComplete: vi.fn(),
@@ -155,13 +137,13 @@ describe('Config - CoreToolScheduler Singleton', () => {
         onEditorClose: vi.fn(),
       };
 
-      const scheduler1 = await getScheduler(testSessionId, callbacks);
+      const scheduler1 = await getScheduler(testOwner, callbacks);
 
       expect(scheduler1).toBeInstanceOf(CoreToolScheduler);
       expect(scheduler1).toBeDefined();
     });
 
-    it('should return the same scheduler instance for the same sessionId', async () => {
+    it('should return the same scheduler instance for the same owner and purpose', async () => {
       const callbacks1 = {
         outputUpdateHandler: vi.fn(),
         onAllToolCallsComplete: vi.fn(),
@@ -178,8 +160,8 @@ describe('Config - CoreToolScheduler Singleton', () => {
         onEditorClose: vi.fn(),
       };
 
-      const scheduler1 = await getScheduler(testSessionId, callbacks1);
-      const scheduler2 = await getScheduler(testSessionId, callbacks2);
+      const scheduler1 = await getScheduler(testOwner, callbacks1);
+      const scheduler2 = await getScheduler(testOwner, callbacks2);
 
       expect(scheduler1).toBe(scheduler2);
     });
@@ -194,15 +176,15 @@ describe('Config - CoreToolScheduler Singleton', () => {
       };
 
       const [scheduler1, scheduler2] = await Promise.all([
-        getScheduler(testSessionId, callbacks),
-        getScheduler(testSessionId, callbacks),
+        getScheduler(testOwner, callbacks),
+        getScheduler(testOwner, callbacks),
       ]);
 
       expect(scheduler1).toBe(scheduler2);
     });
 
-    it('should create different scheduler instances for different sessionIds', async () => {
-      const otherSessionId = 'other-session-456';
+    it('should create different scheduler instances for different owners with the same label', async () => {
+      const otherOwner = { sessionId: 'test-session-123' };
 
       const callbacks = {
         outputUpdateHandler: vi.fn(),
@@ -212,15 +194,128 @@ describe('Config - CoreToolScheduler Singleton', () => {
         onEditorClose: vi.fn(),
       };
 
-      const scheduler1 = await getScheduler(testSessionId, callbacks);
-      const scheduler2 = await getScheduler(otherSessionId, callbacks);
+      const scheduler1 = await getScheduler(testOwner, callbacks);
+      const scheduler2 = await getScheduler(otherOwner, callbacks);
 
       expect(scheduler1).not.toBe(scheduler2);
+    });
+
+    it('constructs each owner scheduler with that acquisition own messageBus and toolRegistry', async () => {
+      const ownerA = { sessionId: 'dep-owner-a' };
+      const ownerB = { sessionId: 'dep-owner-b' };
+      const messageBusA = new MessageBus(
+        config.getPolicyEngine(),
+        config.getDebugMode(),
+      );
+      const messageBusB = new MessageBus(
+        config.getPolicyEngine(),
+        config.getDebugMode(),
+      );
+      const toolRegistryA = {
+        label: 'registry-a',
+      } as unknown as ToolRegistry;
+      const toolRegistryB = {
+        label: 'registry-b',
+      } as unknown as ToolRegistry;
+      const callbacks = {
+        outputUpdateHandler: vi.fn(),
+        onAllToolCallsComplete: vi.fn(),
+        onToolCallsUpdate: vi.fn(),
+        getPreferredEditor: () => undefined,
+        onEditorClose: vi.fn(),
+      };
+
+      const schedulerA = await config.getOrCreateScheduler(
+        ownerA,
+        'session',
+        callbacks,
+        undefined,
+        { messageBus: messageBusA, toolRegistry: toolRegistryA },
+      );
+      const schedulerB = await config.getOrCreateScheduler(
+        ownerB,
+        'session',
+        callbacks,
+        undefined,
+        { messageBus: messageBusB, toolRegistry: toolRegistryB },
+      );
+
+      expect(schedulerA).not.toBe(schedulerB);
+      const creationA = (schedulerA as unknown as CoreToolScheduler)
+        .creationOptions;
+      const creationB = (schedulerB as unknown as CoreToolScheduler)
+        .creationOptions;
+      // Regression net for first-acquisition dep capture: each entry is
+      // constructed with the deps of the acquisition that started it, not
+      // with the deps of the first acquisition on the whole registry.
+      expect(creationA.messageBus).toBe(messageBusA);
+      expect(creationA.toolRegistry).toBe(toolRegistryA);
+      expect(creationB.messageBus).toBe(messageBusB);
+      expect(creationB.toolRegistry).toBe(toolRegistryB);
+
+      config.disposeScheduler(ownerA, 'session');
+      config.disposeScheduler(ownerB, 'session');
+    });
+
+    it('should apply the latest acquirer callbacks on reuse', async () => {
+      const callbacks1 = {
+        outputUpdateHandler: vi.fn(),
+        onAllToolCallsComplete: vi.fn(),
+        onToolCallsUpdate: vi.fn(),
+        getPreferredEditor: () => undefined,
+        onEditorClose: vi.fn(),
+      };
+      const callbacks2 = {
+        outputUpdateHandler: vi.fn(),
+        onAllToolCallsComplete: vi.fn(),
+        onToolCallsUpdate: vi.fn(),
+        getPreferredEditor: () => undefined,
+        onEditorClose: vi.fn(),
+      };
+
+      const scheduler = await getScheduler(testOwner, callbacks1);
+      await getScheduler(testOwner, callbacks2);
+
+      const calls = (
+        scheduler as unknown as {
+          setCallbacks: { mock: { calls: Array<[Record<string, unknown>]> } };
+        }
+      ).setCallbacks.mock.calls;
+      const latest = calls[calls.length - 1][0];
+
+      expect(calls.length).toBeGreaterThanOrEqual(2);
+      expect(latest.getPreferredEditor).toBe(callbacks2.getPreferredEditor);
+      expect(latest.onEditorClose).toBe(callbacks2.onEditorClose);
+      expect(latest.outputUpdateHandler).toBe(callbacks2.outputUpdateHandler);
+      expect(latest.config).toBe(config);
+      // messageBus and toolRegistry are construction deps, not setCallbacks
+      // fields: production CoreToolScheduler.setCallbacks ignores them.
+      expect(latest.messageBus).toBeUndefined();
+      expect(latest.toolRegistry).toBeUndefined();
+    });
+
+    it('should forward interactiveMode into scheduler creation options', async () => {
+      const callbacks = {
+        outputUpdateHandler: vi.fn(),
+        onAllToolCallsComplete: vi.fn(),
+        onToolCallsUpdate: vi.fn(),
+        getPreferredEditor: () => undefined,
+        onEditorClose: vi.fn(),
+      };
+
+      const scheduler = await getScheduler(testOwner, callbacks, {
+        interactiveMode: false,
+      });
+
+      expect(
+        (scheduler as unknown as CoreToolScheduler).creationOptions
+          .toolContextInteractiveMode,
+      ).toBe(false);
     });
   });
 
   describe('disposeScheduler', () => {
-    it('should dispose and remove the scheduler for a given sessionId', async () => {
+    it('should dispose and remove the scheduler for an owner and purpose', async () => {
       const callbacks = {
         outputUpdateHandler: vi.fn(),
         onAllToolCallsComplete: vi.fn(),
@@ -229,22 +324,22 @@ describe('Config - CoreToolScheduler Singleton', () => {
         onEditorClose: vi.fn(),
       };
 
-      const scheduler = await getScheduler(testSessionId, callbacks);
+      const scheduler = await getScheduler(testOwner, callbacks);
 
       // Dispose
-      config.disposeScheduler(testSessionId);
+      config.disposeScheduler(testOwner, 'session');
 
       // Try to get a new scheduler - it should be a new instance, not the same one
-      const newScheduler = await getScheduler(testSessionId, callbacks);
+      const newScheduler = await getScheduler(testOwner, callbacks);
       expect(newScheduler).toBeDefined();
       expect(newScheduler).not.toBe(scheduler);
     });
 
-    it('should not throw if disposing a non-existent scheduler', () => {
-      const nonExistentSessionId = 'non-existent-session';
+    it('should not throw if disposing a scheduler that was never acquired', () => {
+      const nonExistentOwner = { sessionId: 'non-existent-session' };
 
       expect(() => {
-        config.disposeScheduler(nonExistentSessionId);
+        config.disposeScheduler(nonExistentOwner, 'session');
       }).not.toThrow();
     });
 
@@ -257,19 +352,19 @@ describe('Config - CoreToolScheduler Singleton', () => {
         onEditorClose: vi.fn(),
       };
 
-      const scheduler = await getScheduler(testSessionId, callbacks);
+      const scheduler = await getScheduler(testOwner, callbacks);
 
       // Add a second reference
-      await getScheduler(testSessionId, callbacks);
+      await getScheduler(testOwner, callbacks);
 
       // Dispose once should keep scheduler alive due to refCount
-      config.disposeScheduler(testSessionId);
-      const stillExisting = await getScheduler(testSessionId, callbacks);
+      config.disposeScheduler(testOwner, 'session');
+      const stillExisting = await getScheduler(testOwner, callbacks);
       expect(stillExisting).toBe(scheduler);
 
       // Clean up remaining references
-      config.disposeScheduler(testSessionId);
-      config.disposeScheduler(testSessionId);
+      config.disposeScheduler(testOwner, 'session');
+      config.disposeScheduler(testOwner, 'session');
     });
 
     it('should properly dispose the scheduler instance', async () => {
@@ -281,7 +376,7 @@ describe('Config - CoreToolScheduler Singleton', () => {
         onEditorClose: vi.fn(),
       };
 
-      const scheduler = await getScheduler(testSessionId, callbacks);
+      const scheduler = await getScheduler(testOwner, callbacks);
 
       // Spy on the dispose method
       const disposeSpy = vi.spyOn(
@@ -289,7 +384,7 @@ describe('Config - CoreToolScheduler Singleton', () => {
         'dispose',
       );
 
-      config.disposeScheduler(testSessionId);
+      config.disposeScheduler(testOwner, 'session');
 
       expect(disposeSpy).toHaveBeenCalled();
     });
@@ -303,7 +398,7 @@ describe('Config - CoreToolScheduler Singleton', () => {
         onEditorClose: vi.fn(),
       };
 
-      const scheduler = await getScheduler(testSessionId, callbacks);
+      const scheduler = await getScheduler(testOwner, callbacks);
 
       vi.spyOn(
         scheduler as { dispose: () => void },
@@ -313,16 +408,16 @@ describe('Config - CoreToolScheduler Singleton', () => {
       });
 
       expect(() => {
-        config.disposeScheduler(testSessionId);
+        config.disposeScheduler(testOwner, 'session');
       }).not.toThrow();
 
-      const newScheduler = await getScheduler(testSessionId, callbacks);
+      const newScheduler = await getScheduler(testOwner, callbacks);
       expect(newScheduler).not.toBe(scheduler);
     });
   });
 
-  describe('Integration: Single scheduler per session', () => {
-    it('should ensure only one CoreToolScheduler instance exists per sessionId across multiple components', async () => {
+  describe('Integration: Single scheduler per owner', () => {
+    it('should ensure only one CoreToolScheduler instance exists per owner across multiple components', async () => {
       const component1Callbacks = {
         outputUpdateHandler: vi.fn(),
         onAllToolCallsComplete: vi.fn(),
@@ -340,11 +435,11 @@ describe('Config - CoreToolScheduler Singleton', () => {
       };
 
       const schedulerFromComponent1 = await getScheduler(
-        testSessionId,
+        testOwner,
         component1Callbacks,
       );
       const schedulerFromComponent2 = await getScheduler(
-        testSessionId,
+        testOwner,
         component2Callbacks,
       );
 
@@ -352,8 +447,12 @@ describe('Config - CoreToolScheduler Singleton', () => {
       expect(schedulerFromComponent1).toBe(schedulerFromComponent2);
     });
 
-    it('should handle multiple sessions with separate schedulers', async () => {
-      const sessions = ['session-1', 'session-2', 'session-3'];
+    it('should handle multiple owners with separate schedulers', async () => {
+      const owners = [
+        { sessionId: 'owner-1' },
+        { sessionId: 'owner-2' },
+        { sessionId: 'owner-3' },
+      ];
       const callbacks = {
         outputUpdateHandler: vi.fn(),
         onAllToolCallsComplete: vi.fn(),
@@ -363,7 +462,7 @@ describe('Config - CoreToolScheduler Singleton', () => {
       };
 
       const schedulers = await Promise.all(
-        sessions.map((sessionId) => getScheduler(sessionId, callbacks)),
+        owners.map((owner) => getScheduler(owner, callbacks)),
       );
 
       // All schedulers should be different

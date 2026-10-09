@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { writeBodyFile } from '../lib/body-evidence-writer.js';
 import { describe, expect, it } from 'bun:test';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { DebugLogger } from '../../packages/core/src/debug/index.js';
 import { buildCuratedHistory } from '../../packages/core/src/services/history/historyCuration.js';
@@ -178,7 +179,7 @@ async function compareBytes(
       ['response-actual', JSON.stringify(actualResponse)],
       ['response-expected', JSON.stringify(expectedResponse)],
     ])
-      writeFileSync(join(output, name + '-' + suffix + '.json'), value);
+      await writeBodyFile(join(output, name + '-' + suffix + '.json'), value);
   }
   return actual.length;
 }

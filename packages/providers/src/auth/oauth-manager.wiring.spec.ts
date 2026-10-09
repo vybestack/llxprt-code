@@ -5,6 +5,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type {
   BucketFailoverOAuthManagerLike,
   OAuthManagerRuntimeMessageBusDeps,
@@ -305,8 +306,12 @@ describe('OAuthManager wiring', () => {
 
   it('delegates coordinator, orchestrator, status service, and usage module methods', async () => {
     const tokenStore = createTokenStore();
+    // Issue #2616: the manager reads its settings reader via
+    // config.getSettingsService() — the stub models that surface.
+    const settingsService = new SettingsService();
     const config = {
       getEphemeralSetting: vi.fn().mockReturnValue('https://api.example.test'),
+      getSettingsService: () => settingsService,
     } as unknown as import('@vybestack/llxprt-code-core').Config;
     const settings = {
       merged: {},
@@ -455,6 +460,7 @@ describe('OAuthManager wiring', () => {
     expect(wiring.getHigherPriorityAuth).toHaveBeenCalledWith(
       'claudecode',
       settings,
+      settingsService,
     );
 
     await expect(manager.getAnthropicUsageInfo()).resolves.toStrictEqual({

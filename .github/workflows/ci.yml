@@ -14,7 +14,15 @@ on:
       - 'dev/**'
   merge_group:
   workflow_dispatch:
-    # Manual trigger - no inputs needed, uses repository variables
+    inputs:
+      prereview_pr:
+        description: 'Optional PR number for runner-local prereview validation'
+        type: string
+        default: ''
+      prereview_head:
+        description: 'Expected immutable head SHA for prereview validation'
+        type: string
+        default: ''
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -34,6 +42,17 @@ env:
   SHELLCHECK_VERSION: '0.11.0'
   YAMLLINT_VERSION: '1.35.1'
 jobs:
+  prereview_validation:
+    if: github.event_name == 'workflow_dispatch' && inputs.prereview_pr != ''
+    uses: './.github/workflows/pr-review.yml'
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+      actions: read
+    with:
+      pull_request_number: '${{ inputs.prereview_pr }}'
+      expected_head_sha: '${{ inputs.prereview_head }}'
   skip_check:
     name: 'Skip Duplicate Check'
     runs-on: 'ubuntu-latest'

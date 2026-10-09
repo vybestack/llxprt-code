@@ -15,7 +15,7 @@ import { CoreToolScheduler } from './coreToolScheduler.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import { MockTool } from '@vybestack/llxprt-code-core/test-utils/mock-tool.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 import { HookSystem } from '@vybestack/llxprt-code-core/hooks/hookSystem.js';
 import {
@@ -23,7 +23,7 @@ import {
   createMockPolicyEngine,
   createMockConfig,
   waitForStatus,
-} from './coreToolScheduler-test-helpers.js';
+} from './__tests__/coreToolScheduler-test-helpers.js';
 
 describe('CoreToolScheduler cancelled tool responseParts', () => {
   it('should populate responseParts for cancelled tools when cancelAll is called', async () => {

@@ -36,9 +36,14 @@ export interface HistoryEntry {
 export interface HistoryState {
   readonly entries: readonly HistoryEntry[];
   readonly totalBytes: number;
+  readonly truncatedItems: number;
 }
 
-export const EMPTY_HISTORY_STATE: HistoryState = { entries: [], totalBytes: 0 };
+export const EMPTY_HISTORY_STATE: HistoryState = {
+  entries: [],
+  totalBytes: 0,
+  truncatedItems: 0,
+};
 
 export type HistoryItemUpdater = (
   prevItem: HistoryItem,
@@ -89,6 +94,7 @@ function createHistoryState(
   items: readonly HistoryItem[],
   limits: HistoryLimits,
 ): HistoryState {
+  if (limits.maxItems === 0) return EMPTY_HISTORY_STATE;
   const entries = items.flatMap((item) => {
     const entry = createHistoryEntry(item, limits.maxBytes);
     return entry === undefined ? [] : [entry];
@@ -97,6 +103,7 @@ function createHistoryState(
     {
       entries,
       totalBytes: entries.reduce((total, entry) => total + entry.bytes, 0),
+      truncatedItems: 0,
     },
     limits,
   );
@@ -121,7 +128,11 @@ function trimHistoryState(
     totalBytes -= itemBounded[byteStart].bytes;
     byteStart += 1;
   }
-  return { entries: itemBounded.slice(byteStart), totalBytes };
+  return {
+    entries: itemBounded.slice(byteStart),
+    totalBytes,
+    truncatedItems: state.truncatedItems + itemStart + byteStart,
+  };
 }
 
 function appendHistoryItem(
@@ -129,6 +140,7 @@ function appendHistoryItem(
   newItem: HistoryItem,
   limits: HistoryLimits,
 ): HistoryState {
+  if (limits.maxItems === 0) return previous;
   const lastEntry =
     previous.entries.length > 0
       ? previous.entries[previous.entries.length - 1]
@@ -149,6 +161,7 @@ function appendHistoryItem(
     {
       entries: [...previous.entries, entry],
       totalBytes: previous.totalBytes + entry.bytes,
+      truncatedItems: previous.truncatedItems,
     },
     limits,
   );
@@ -178,7 +191,7 @@ function updateHistoryItem(
     entryIndex === index ? updatedEntry : entry,
   );
   const totalBytes = previous.totalBytes - oldEntry.bytes + updatedEntry.bytes;
-  return trimHistoryState({ entries, totalBytes }, limits);
+  return trimHistoryState({ ...previous, entries, totalBytes }, limits);
 }
 
 function removeHistoryItems(
@@ -197,7 +210,7 @@ function removeHistoryItems(
     return previous;
   }
   const totalBytes = entries.reduce((total, entry) => total + entry.bytes, 0);
-  return trimHistoryState({ entries, totalBytes }, limits);
+  return trimHistoryState({ ...previous, entries, totalBytes }, limits);
 }
 
 function boundHistoryItem(

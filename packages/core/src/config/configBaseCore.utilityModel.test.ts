@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { makeFakeConfig } from '../test-utils/config.js';
+import { makeFakeConfig } from '../__tests__/config-test-helpers.js';
 
 describe('Config.getUtilityModel (interim setting read, issue #2627)', () => {
   it('returns undefined when no utilityModel is configured', () => {

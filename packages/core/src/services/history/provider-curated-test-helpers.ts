@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { IContent } from './IContent.js';
-import { suffixRow } from './history-suffix-test-helpers.js';
+import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 export function providerFixtureRow(index: number, bytes = 2048): IContent {
   const base = suffixRow(index, bytes);
   const id = `tool-${Math.floor(index / 8)}`;

@@ -7,7 +7,7 @@
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import type React from 'react';
 import { act } from 'react';
-import { renderHook } from '../../test-utils/render.js';
+import { renderHook } from '../../__tests__/render.js';
 import type { Mock } from 'bun:test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import type { Key } from './KeypressContext.js';

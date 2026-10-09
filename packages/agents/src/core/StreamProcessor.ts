@@ -3,16 +3,12 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type { AgentClientGenerateConfig } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { ChatSessionConfig, SendMessageParams } from './chatSession.js';
 import type {
   ModelStreamChunk,
   ModelOutput,
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import {
-  toModelStreamChunk,
-  toolDeclarationsFromLegacyToolset,
-} from '@vybestack/llxprt-code-core/llm-types/index.js';
+import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { StreamOutputAccumulator } from './streamOutputAccumulator.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { MediaAdmissionRelease } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
@@ -26,16 +22,10 @@ import { flushRuntimeAuthScope } from '@vybestack/llxprt-code-auth';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import type {
-  RuntimeGenerateChatOptions as GenerateChatOptions,
-  RuntimeProviderToolset as ProviderToolset,
-} from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
+import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { recordSendSeamTelemetry } from './tokenUsageEstimateLogger.js';
-import {
-  prepareAtSendSeam,
-  preparePromptEnvelopeAfterEnforcement,
-} from './promptEnvelopeSendSeam.js';
+import { prepareAtSendSeam } from './promptEnvelopeSendSeam.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { ConversationManager } from './ConversationManager.js';
 import type { CompressionHandler } from '../compression/CompressionHandler.js';
@@ -59,19 +49,16 @@ import {
   RAW_TOKEN_DELTA_SINK_KEY,
 } from '@vybestack/llxprt-code-providers';
 import {
-  applyToolSelectionHook,
-  buildRequestContentsResult,
-  streamSemanticPurgeRequest,
   contentForTelemetryPreservingUsage,
-  selectRequestTools,
   prepareRequestPayload,
   buildRuntimeContext,
   resolveUserMemory,
   logOutgoingRequest,
   extractSystemInstructionText,
   type ToolSelectionHookResult,
+  type PreparedRequest,
 } from './streamRequestHelpers.js';
-import { fireBeforeModelHook } from './beforeModelHookFire.js';
+import { buildAndSendStreamRequest } from './streamprocessor-request.js';
 import { trackPromptTokens } from './streamResponseHelpers.js';
 import {
   afterModelModifiedToChunk,
@@ -80,7 +67,6 @@ import {
 import type { AfterModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.js';
 
-import { withCompressionCallbackCleanup } from './streamCleanup.js';
 import { stampTurnIdentityOnInput } from './turnIdentity.js';
 import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
 import {
@@ -89,6 +75,7 @@ import {
   type PreparedUserTurn,
 } from './mediaAdmissionSeam.js';
 import { finalizeStreamResponse } from './streamResponseFinalizer.js';
+import { assertNoSourceModelHooks } from './streamprocessor-disk-source.js';
 
 function isPreparedUserTurn(
   value: IContent | IContent[] | PreparedUserTurn,
@@ -322,102 +309,80 @@ export class StreamProcessor {
     });
   }
 
-  private async _buildAndSendStreamRequest(
+  private _buildAndSendStreamRequest(
     params: SendMessageParams,
     promptId: string,
     userContent: IContent | IContent[],
     provider: IProvider,
     semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
   ): Promise<AsyncGenerator<ModelStreamChunk>> {
-    const { contents: requestContents, pending: pendingUserIContents } =
-      await buildRequestContentsResult(
-        userContent,
-        this.historyService,
-        streamSemanticPurgeRequest(
-          semanticMediaPurge,
-          params.config?.abortSignal,
+    return buildAndSendStreamRequest({
+      runtime: this.runtimeContext,
+      compression: this.compressionHandler,
+      history: this.historyService,
+      params,
+      promptId,
+      userContent,
+      provider,
+      semanticMediaPurge,
+      fallbackTools: this.generationConfig.tools,
+      preparePayload: (contents, selection) =>
+        this._prepareRequestPayload(contents, selection, params),
+      buildRuntime: (extras) =>
+        this.providerRuntimeBuilder('StreamProcessor.generateRequest', extras),
+      buildOptions: (contents, tools, runtime, base) =>
+        this._buildStreamChatOptions(
+          promptId,
+          { contents, tools },
+          runtime,
+          base,
+          params,
         ),
-        params.config?.abortSignal,
-      );
-
-    const configForHooks = this.runtimeContext.providerRuntime.config;
-    const toolSelection = await this._applyToolSelectionHook(
-      configForHooks,
-      this._selectRequestTools(params),
-    );
-    const { requestPayload, baseRuntimeContext, runtimeContext } =
-      this._prepareRequestPayload(requestContents, toolSelection.tools, params);
-
-    try {
-      const originalContents = requestPayload.contents;
-      const { contents: finalContents, pendingContents } =
-        await fireBeforeModelHook({
-          configForHooks,
-          requestContents: originalContents,
-          pendingUserIContents,
-          tools: toolSelection.tools as ProviderToolset | undefined,
-          hookRestrictedAllowedTools: toolSelection.allowedFunctionNames,
-          model: this.runtimeContext.state.model,
-          log: (msg) => this.logger.debug(() => msg),
-        });
-
-      const streamPreparation = await preparePromptEnvelopeAfterEnforcement({
-        provider,
-        contents: finalContents,
-        buildOptions: (contents) =>
-          this._buildStreamChatOptions(
-            promptId,
-            { contents, tools: toolSelection.tools },
-            runtimeContext,
-            baseRuntimeContext,
-            params,
-          ),
-        enforce: (contents, estimate) =>
-          this.compressionHandler.enforceProviderContents(
-            { contents, pendingContents },
-            promptId,
-            provider,
-            estimate,
-          ),
-        fallbackEstimate: (contents) =>
-          this.compressionHandler.estimatePendingTokens(contents),
-      });
-      requestPayload.contents = streamPreparation.contents;
-      const stream = await this._sendProviderRequest(
-        provider,
-        requestPayload,
-        runtimeContext,
-        baseRuntimeContext,
-        params,
-        promptId,
-        toolSelection.allowedFunctionNames,
-        streamPreparation.prepared,
-      );
-      return withCompressionCallbackCleanup(
-        stream,
-        provider,
-        this.compressionHandler,
-        params.config?.abortSignal,
-      );
-    } catch (error) {
-      this.compressionHandler.clearProviderCompressionCallback(provider);
-      throw error;
-    }
+      sendArray: (payload, allowedTools, prepared) =>
+        this._sendProviderRequest(
+          provider,
+          payload.requestPayload,
+          payload.runtimeContext,
+          payload.baseRuntimeContext,
+          params,
+          promptId,
+          allowedTools,
+          prepared,
+        ),
+      consumeSource: (stream, startTime, allowedTools) =>
+        this._consumeFirstChunkAndReturn(
+          stream,
+          undefined,
+          promptId,
+          startTime,
+          allowedTools,
+          this.currentRawTokenDeltaBridge,
+        ),
+      setEstimate: (estimate) => {
+        this.currentPromptEnvelopeEstimate = estimate;
+      },
+      log: (message) => this.logger.debug(() => message),
+    });
   }
+
   private _prepareRequestPayload(
     requestContents: IContent[],
-    tools: AgentClientGenerateConfig['tools'],
+    toolSelection: ToolSelectionHookResult,
     params: SendMessageParams,
   ): {
-    requestPayload: { contents: IContent[]; tools: unknown };
+    requestPayload: PreparedRequest['requestPayload'];
     baseRuntimeContext: ProviderRuntimeContext;
     runtimeContext: ProviderRuntimeContext;
   } {
     const { requestPayload, baseRuntimeContext } = prepareRequestPayload({
       requestContents,
-      tools,
+      tools: toolSelection.tools,
       logger: this.logger,
-      providerRuntimeBuilder: this.providerRuntimeBuilder,
+      providerRuntimeBuilder: (source, extras) =>
+        this.providerRuntimeBuilder(source, {
+          ...extras,
+          conversationLogEmptyTools: toolSelection.conversationLogEmptyTools,
+        }),
       providerName: this.providerResolver('stream').name,
       modelName: this.runtimeContext.state.model,
       baseUrl: this.runtimeContext.state.baseUrl,
@@ -448,23 +413,25 @@ export class StreamProcessor {
 
   private _buildStreamChatOptions(
     promptId: string,
-    requestPayload: { contents: IContent[]; tools: unknown },
+    requestPayload: {
+      contents: Iterable<IContent> | AsyncIterable<IContent>;
+      tools: PreparedRequest['requestPayload']['tools'];
+    },
     runtimeContext: ProviderRuntimeContext,
     baseRuntimeContext: ProviderRuntimeContext,
     params: SendMessageParams,
   ): GenerateChatOptions {
     const userMemory = resolveUserMemory(baseRuntimeContext.config);
     return {
-      // The provider-facing history is a stream (issue #854); re-open the
-      // assembled rows so estimation and transport each get a fresh pass.
+      // Estimation and transport each receive a fresh history pass.
       contents: {
         async *[Symbol.asyncIterator]() {
-          for (const content of requestPayload.contents) {
+          for await (const content of requestPayload.contents) {
             yield content;
           }
         },
       },
-      tools: requestPayload.tools as ProviderToolset | undefined,
+      tools: requestPayload.tools,
       config: runtimeContext.config,
       runtime: runtimeContext,
       onProviderError: params.config?.onProviderError,
@@ -493,7 +460,7 @@ export class StreamProcessor {
 
   private async _sendProviderRequest(
     provider: IProvider,
-    requestPayload: { contents: IContent[]; tools: unknown },
+    requestPayload: PreparedRequest['requestPayload'],
     runtimeContext: ProviderRuntimeContext,
     baseRuntimeContext: ProviderRuntimeContext,
     params: SendMessageParams,
@@ -566,7 +533,7 @@ export class StreamProcessor {
    */
   private async _consumeFirstChunkAndReturn(
     streamResponse: AsyncIterable<IContent>,
-    requestPayload: { contents: IContent[]; tools: unknown },
+    requestPayload: PreparedRequest['requestPayload'] | undefined,
     promptId: string,
     startTime: number,
     hookRestrictedAllowedTools: string[] | undefined,
@@ -590,23 +557,6 @@ export class StreamProcessor {
 
     return prependAsyncGenerator(firstChunk.value, convertedStream);
   }
-  private _selectRequestTools(
-    params: SendMessageParams,
-  ): AgentClientGenerateConfig['tools'] {
-    return selectRequestTools(params, this.generationConfig.tools);
-  }
-
-  private async _applyToolSelectionHook(
-    configForHooks: AgentRuntimeContext['providerRuntime']['config'],
-    tools: AgentClientGenerateConfig['tools'],
-  ): Promise<ToolSelectionHookResult> {
-    return applyToolSelectionHook(
-      configForHooks,
-      tools,
-      this.runtimeContext.state.model,
-    );
-  }
-
   private async _handleBucketFailover(
     signal: AbortSignal | undefined,
   ): Promise<boolean | null> {
@@ -644,7 +594,7 @@ export class StreamProcessor {
    */
   private async *_convertIContentStream(
     streamResponse: AsyncIterable<IContent>,
-    requestPayload?: { contents: IContent[]; tools: unknown },
+    requestPayload?: PreparedRequest['requestPayload'],
     telemetryContext?: {
       promptId: string;
       startTime: number;
@@ -727,11 +677,15 @@ export class StreamProcessor {
    */
   private async _processAfterModelHook(
     iContent: IContent,
-    requestPayload: { contents: IContent[]; tools: unknown } | undefined,
+    requestPayload: PreparedRequest['requestPayload'] | undefined,
     chunk: ModelStreamChunk,
     hookRestrictedAllowedTools: string[] | undefined,
   ): Promise<ModelStreamChunk | undefined> {
     const hookConfig = this.runtimeContext.providerRuntime.config;
+    if (requestPayload === undefined) {
+      await assertNoSourceModelHooks(hookConfig);
+      return undefined;
+    }
     if (
       hookConfig === undefined ||
       typeof hookConfig.getEnableHooks !== 'function' ||
@@ -760,13 +714,12 @@ export class StreamProcessor {
     const afterModelResult = await hookSystem.fireAfterModelEvent(
       {
         model: this.runtimeContext.state.model,
-        contents: requestPayload?.contents ?? [],
-        ...(Array.isArray(requestPayload?.tools) &&
-        requestPayload.tools.length > 0
+        contents: requestPayload.contents,
+        ...(requestPayload.tools !== undefined &&
+        (requestPayload.tools.length > 0 ||
+          hookRestrictedAllowedTools === undefined)
           ? {
-              tools: toolDeclarationsFromLegacyToolset(
-                requestPayload.tools as ProviderToolset,
-              ),
+              tools: requestPayload.tools,
             }
           : {}),
       },

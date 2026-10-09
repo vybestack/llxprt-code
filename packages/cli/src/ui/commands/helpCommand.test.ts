@@ -8,7 +8,7 @@ import { vi, describe, it, expect, beforeEach } from 'bun:test';
 import { helpCommand } from './helpCommand';
 import { type CommandContext } from './types.js';
 import { MessageType } from '../types.js';
-import { assertDefined } from '../../test-utils/assertions.js';
+import { assertDefined } from '../../__tests__/assertions.js';
 
 describe('helpCommand', () => {
   let mockContext: CommandContext;

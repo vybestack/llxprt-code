@@ -1,20 +1,21 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { writeBodyFile } from '../lib/body-evidence-writer.js';
 import { describe, expect, it } from 'bun:test';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { accountingRow } from '../../packages/core/src/services/history/token-accounting-stream-test-helpers.js';
 import { withReinitializeHistory } from '../../packages/agents/src/core/reinitialize-history-test-helpers.js';
 import { captureCuratedBody } from './provider-curated-body-helpers.js';
 
-function recordBodies(
+async function recordBodies(
   output: string | undefined,
   name: string,
   expected: string,
   actual: string,
-): void {
+): Promise<void> {
   if (output === undefined) return;
-  writeFileSync(join(output, `${name}-expected.json`), expected);
-  writeFileSync(join(output, `${name}-actual.json`), actual);
+  await writeBodyFile(join(output, `${name}-expected.json`), expected);
+  await writeBodyFile(join(output, `${name}-actual.json`), actual);
 }
 
 const bodyCases = ['anthropic', 'openai-responses', 'gemini'].flatMap(
@@ -48,7 +49,7 @@ for (const size of [512, 8192]) {
               true,
               true,
             );
-            recordBodies(
+            await recordBodies(
               output,
               `${provider}-${size}-${caching}-${explicitFalse}`,
               expected,

@@ -5,7 +5,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { vi, describe, it, expect, beforeEach } from 'bun:test';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import type {
   IContent,
@@ -14,25 +14,19 @@ import type {
   ToolResponseBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
+import { TEST_PROVIDER_CONFIG } from '../__tests__/providerTestConfig.js';
 import {
   createProviderWithRuntime,
   createRuntimeConfigStub,
-} from '@vybestack/llxprt-code-core/test-utils/runtime.js';
-import {
-  createProviderCallOptions,
-  type ProviderCallOptionsInit,
-} from '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js';
+} from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import type { ProviderCallOptionsInit } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { streamCallOptions } from '../__tests__/streamCallOptions.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  clearActiveProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type {
   AnthropicContentBlock,
   AnthropicRequestBody,
-} from './test-utils/anthropicTestUtils.js';
+} from './__tests__/anthropicTestUtils.js';
 
 // Mock dependencies
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
@@ -47,7 +41,7 @@ void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   isNetworkTransientError: vi.fn(() => false),
 }));
 
-import { createAnthropicRawPostTestAdapter } from '../test-utils/rawPostTestAdapters.js';
+import { createAnthropicRawPostTestAdapter } from '../__tests__/rawPostTestAdapters.js';
 
 const mockMessagesCreate = vi.fn();
 
@@ -128,7 +122,7 @@ const buildCallOptions = (
   contents: IContent[],
   overrides: Omit<ProviderCallOptionsInit, 'providerName' | 'contents'> = {},
 ) =>
-  createProviderCallOptions({
+  streamCallOptions({
     providerName: provider.name,
     contents,
     settings: settingsService,
@@ -200,7 +194,6 @@ const firstToolUseMessageLocation = (
 describe('AnthropicProvider Issue #1150: tool_result Adjacency Validation', () => {
   beforeEach(facadeCallback0);
 
-  afterEach(facadeCallback1);
   describe('Critical: Every tool_use must have tool_result in next message', () => {
     /**
      * CRITICAL TEST: This is the exact error from the bug report:
@@ -301,27 +294,20 @@ function facadeCallback0(): void {
   });
 
   runtimeContext.config.getEphemeralSetting = (key: string) => {
-    const providerValue = settingsService.getProviderSetting(
-      provider.name,
-      key,
-    );
+    const providerValue = settingsService.getProviderSettings(provider.name)[
+      key
+    ];
     if (providerValue !== undefined) {
       return providerValue;
     }
     return settingsService.get(key);
   };
 
-  setActiveProviderRuntimeContext(runtimeContext);
-
   // Enable extended thinking
   settingsService.set('reasoning.enabled', true);
   settingsService.set('reasoning.budgetTokens', 10000);
   settingsService.set('reasoning.includeInContext', true);
   settingsService.set('reasoning.stripFromContext', 'none');
-}
-
-function facadeCallback1(): void {
-  clearActiveProviderRuntimeContext();
 }
 
 async function facadeCallback2(): Promise<void> {

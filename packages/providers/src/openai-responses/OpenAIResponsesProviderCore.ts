@@ -26,7 +26,7 @@ import {
   isResponsesPdfEnabled,
   type ResponsesExecutorDeps,
 } from './openAIResponsesExecutor.js';
-import type { GenerateChatOptions } from '../IProvider.js';
+import type { GenerateChatOptions, ProviderToolset } from '../IProvider.js';
 import { collectUnsupportedMedia } from '../utils/mediaUtils.js';
 import {
   createCodexResponsesWebSocketTransport,
@@ -35,6 +35,13 @@ import {
 import { declaredMediaTransportCapabilities } from '../providerMediaTransportCapabilities.js';
 import type { IProviderConfig } from '../types/IProviderConfig.js';
 import type { ModelDefaultRule } from '../composition/providerAliases.js';
+import { finishMediaRequest } from '../utils/request-media-resolution.js';
+import { ResponsesDiskTextRows } from './responses-disk-text-rows.js';
+import {
+  buildDiskTextResponsesContext,
+  diskTextProjection,
+  assertDiskTextShape,
+} from './responses-disk-text-projection.js';
 import {
   createUnallowedModelParametersResolver,
   type UnallowedModelParametersResolver,
@@ -72,8 +79,9 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
     config?: IProviderConfig,
     oauthManager?: OAuthManager,
     modelDefaultRules: readonly ModelDefaultRule[] = [],
+    providerName = 'openai-responses',
   ) {
-    super(apiKey, baseURL, config, oauthManager);
+    super(apiKey, baseURL, config, oauthManager, providerName);
 
     this.getUnallowedModelParameters =
       createUnallowedModelParametersResolver(modelDefaultRules);
@@ -85,7 +93,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       logger: this.logger,
       getProviderBaseURL: (options) => this.resolveEffectiveBaseURL(options),
       getCustomHeaders: (options) => this.getCustomHeaders(options),
-      isCodexBaseURL: (baseURL) => this.isCodexMode(baseURL),
+      isCodexMode: () => this.isCodexMode(),
       getCodexAccountId: () => this.getCodexAccountId(),
       resolveAuthTokenForPrompt: () => this.getAuthTokenForPrompt(),
       shouldRetryOnError: (error) => this.shouldRetryOnError(error),
@@ -102,7 +110,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       // to trim history. Mirrors resolveWebSocketTransport's predicate without
       // constructing a socket.
       isWebSocketTransportActive: () =>
-        this.isCodexMode(this.getBaseURL()) && !this.webSocketStickToHttp,
+        this.isCodexMode() && !this.webSocketStickToHttp,
       onWebSocketFallback: () => {
         // One pre-output failure still serves THIS request over HTTP (an
         // invisible in-turn recovery); only a sustained run of them sticks.
@@ -126,7 +134,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
   }
 
   private resolveWebSocketTransport(): WebSocketTransport | undefined {
-    if (!this.isCodexMode(this.getBaseURL())) {
+    if (!this.isCodexMode()) {
       this.webSocketTransport?.close();
       this.webSocketTransport = undefined;
       return undefined;
@@ -155,9 +163,69 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
     this.rejectedStatefulParents.clear();
   }
 
+  override generateChatCompletion(
+    options: GenerateChatOptions,
+  ): AsyncIterableIterator<IContent>;
+  override generateChatCompletion(
+    contents: AsyncIterable<IContent>,
+    tools?: ProviderToolset,
+  ): AsyncIterableIterator<IContent>;
+  override generateChatCompletion(
+    contentsOrOptions: AsyncIterable<IContent> | GenerateChatOptions,
+    tools?: ProviderToolset,
+  ): AsyncIterableIterator<IContent> {
+    if (!('contents' in contentsOrOptions))
+      return super.generateChatCompletion(contentsOrOptions, tools);
+    const token = contentsOrOptions.promptEnvelopeTransportToken;
+    const prepared =
+      token === undefined ? undefined : this.preparedPromptEnvelopes.get(token);
+    if (
+      prepared?.sourcePrompt !== undefined &&
+      !(contentsOrOptions.requestRows instanceof ResponsesDiskTextRows)
+    )
+      throw new Error('Source token requires its branded disk selection');
+    if (
+      contentsOrOptions.requestRows instanceof ResponsesDiskTextRows &&
+      prepared !== undefined &&
+      prepared.sourcePrompt === undefined
+    )
+      throw new Error(
+        'Disk text selection requires a source-backed prepared token',
+      );
+    return super.generateChatCompletion(contentsOrOptions);
+  }
+
+  protected override supportsDiskTextRows(): boolean {
+    return true;
+  }
+
+  protected override async releaseUnstartedOptions(
+    options: NormalizedGenerateChatOptions,
+  ): Promise<void> {
+    if (!(options.requestRows instanceof ResponsesDiskTextRows)) return;
+    const token = options.promptEnvelopeTransportToken;
+    if (token === undefined) return;
+    const prepared = this.preparedPromptEnvelopes.get(token);
+    this.preparedPromptEnvelopes.delete(token);
+    options.resolved.authToken = '';
+    try {
+      await prepared?.mediaRequest.release();
+    } finally {
+      delete options.requestRows;
+      delete options.promptEnvelopeTransportToken;
+    }
+  }
+
   protected override async *generateChatCompletionWithOptions(
     options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
+    if (options.requestRows instanceof ResponsesDiskTextRows) {
+      assertDiskTextShape(options, this.buildExecutorDeps());
+      if (options.promptEnvelopeTransportToken === undefined)
+        throw new Error(
+          'Explicit Responses disk text send requires a prepared projection token',
+        );
+    }
     const preparedRequestContext =
       options.promptEnvelopeTransportToken === undefined
         ? undefined
@@ -171,6 +239,9 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       throw new Error(
         'Unknown OpenAI Responses prompt-envelope transport token',
       );
+    }
+    if (options.promptEnvelopeTransportToken !== undefined) {
+      this.preparedPromptEnvelopes.delete(options.promptEnvelopeTransportToken);
     }
     yield* executeOpenAIResponsesRequest(
       options,
@@ -188,28 +259,72 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
     options: GenerateChatOptions,
   ): Promise<PromptEnvelopeProjection> {
     const normalized = await this.normalizeOptionsForProjection(options);
-    const requestContext = await buildResponsesRequestContextForProjection(
-      normalized,
-      this.buildExecutorDeps(),
-    );
-    const transportToken = Object.freeze({});
-    this.preparedPromptEnvelopes.set(transportToken, requestContext);
-    const pdfEnabled = isResponsesPdfEnabled(normalized);
-    const projection = projectOpenAIResponsesPromptEnvelope(
-      requestContext.request,
-      {
-        transportToken,
-        unsupportedMedia: collectUnsupportedMedia(
-          normalized.contents,
-          (_block, category) =>
-            category === 'image' || (category === 'pdf' && pdfEnabled),
-        ),
-      },
-      requestContext.projectionContext,
-    );
-    return {
-      ...projection,
-      releaseIfUnsent: requestContext.mediaRequest.release,
-    };
+    if (normalized.requestRows instanceof ResponsesDiskTextRows) {
+      const prepared = await buildDiskTextResponsesContext(
+        normalized,
+        this.buildExecutorDeps(),
+      );
+      const token = Object.freeze({});
+      this.preparedPromptEnvelopes.set(token, prepared);
+      return diskTextProjection(prepared, token, async () => {
+        if (!this.preparedPromptEnvelopes.delete(token)) return;
+        await prepared.mediaRequest.release();
+      });
+    }
+    const requestContents = normalized.requestContents;
+    let prepared:
+      | Awaited<ReturnType<typeof buildResponsesRequestContextForProjection>>
+      | undefined;
+    try {
+      const requestContext = await buildResponsesRequestContextForProjection(
+        normalized,
+        this.buildExecutorDeps(),
+      );
+      prepared = requestContext;
+      requestContext.mediaRequest.registerCleanup(() =>
+        requestContents?.dispose(),
+      );
+      const transportToken = Object.freeze({});
+      const pdfEnabled = isResponsesPdfEnabled(normalized);
+      const projection = projectOpenAIResponsesPromptEnvelope(
+        requestContext.request,
+        {
+          transportToken,
+          unsupportedMedia: requestContext.mediaRequest.withContents(
+            (contents) =>
+              collectUnsupportedMedia(
+                contents,
+                (_block, category) =>
+                  category === 'image' || (category === 'pdf' && pdfEnabled),
+              ),
+          ),
+        },
+        requestContext.projectionContext,
+      );
+      this.preparedPromptEnvelopes.set(transportToken, requestContext);
+      return {
+        ...projection,
+        releaseIfUnsent: async () => {
+          if (!this.preparedPromptEnvelopes.delete(transportToken)) return;
+          await requestContext.mediaRequest.release();
+        },
+      };
+    } catch (error) {
+      if (prepared !== undefined) {
+        return finishMediaRequest(prepared.mediaRequest, {
+          status: 'failed',
+          error,
+        });
+      }
+      try {
+        await requestContents?.dispose();
+      } catch (releaseError) {
+        throw new AggregateError(
+          [error, releaseError],
+          'Responses projection failed and request contents disposal also failed',
+        );
+      }
+      throw error;
+    }
   }
 }

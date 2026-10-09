@@ -6,7 +6,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import type * as acp from '@agentclientprotocol/sdk';
-import { RecordingConnection } from './zed-test-helpers.js';
+import { RecordingConnection } from './__tests__/zed-test-helpers.js';
 import {
   recordedFilesLister,
   mockFromConfig,

@@ -11,7 +11,7 @@
  * "options.invocation.getModelBehavior is not a function".
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { describe, expect, it, vi } from 'bun:test';
 import {
   BaseProvider,
   type NormalizedGenerateChatOptions,
@@ -23,11 +23,7 @@ import {
   type RuntimeInvocationContext,
 } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  clearActiveProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-core/test-utils/runtime.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 
 const PROVIDER_NAME = 'invocation-safety';
 
@@ -81,10 +77,6 @@ function createSettings(provider: InvocationSafetyProvider): SettingsService {
   settings.set('model', `${PROVIDER_NAME}-model`);
   settings.setProviderSetting(PROVIDER_NAME, 'model', `${PROVIDER_NAME}-model`);
   const config = createRuntimeConfigStub(settings);
-  setActiveProviderRuntimeContext({
-    settingsService: settings,
-    config,
-  });
   (provider as unknown as { defaultConfig?: unknown }).defaultConfig = config;
   return settings;
 }
@@ -94,14 +86,6 @@ describe('BaseProvider normalization invocation safety', () => {
     speaker: 'human',
     blocks: [{ type: 'text', text: 'hi' }],
   };
-
-  beforeEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
-  });
 
   it('replaces a malformed invocation stub carrying only signal with a real RuntimeInvocationContext', async () => {
     const provider = new InvocationSafetyProvider();
@@ -177,7 +161,7 @@ describe('BaseProvider normalization invocation safety', () => {
 
   it('uses a metadata signal when a valid invocation has no signal', async () => {
     const { createProviderCallOptions } = await import(
-      '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js'
+      '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js'
     );
     const provider = new InvocationSafetyProvider();
     wireProviderWithAuth(provider);
@@ -204,7 +188,7 @@ describe('BaseProvider normalization invocation safety', () => {
 
   it('uses an invocation signal ahead of a metadata signal', async () => {
     const { createProviderCallOptions } = await import(
-      '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js'
+      '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js'
     );
     const provider = new InvocationSafetyProvider();
     wireProviderWithAuth(provider);
@@ -241,7 +225,7 @@ describe('BaseProvider normalization invocation safety', () => {
 
   it('keeps a valid RuntimeInvocationContext coherent while refreshing current ephemerals', async () => {
     const { createProviderCallOptions } = await import(
-      '@vybestack/llxprt-code-core/test-utils/providerCallOptions.js'
+      '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js'
     );
 
     const provider = new InvocationSafetyProvider();

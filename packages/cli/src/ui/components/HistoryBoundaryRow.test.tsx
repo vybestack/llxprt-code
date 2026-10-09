@@ -22,9 +22,9 @@
 import type React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { HistoryBoundaryRow } from './HistoryBoundaryRow.js';
-import { renderWithProviders } from '../../test-utils/render.js';
+import { renderWithProviders } from '../../__tests__/render.js';
 
-const { waitFor } = await import('../../test-utils/render.js');
+const { waitFor } = await import('../../__tests__/render.js');
 
 function noopToggle(): void {
   /* the parent wires the actual keystroke; tests pass a no-op */
