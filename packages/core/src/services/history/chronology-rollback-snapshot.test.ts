@@ -15,13 +15,13 @@ import { createRowCounters } from '../../recording/journalCounters.js';
 import type { IContent } from './IContent.js';
 import {
   PhaseOwners,
-  expectPendingAdmission,
+  expectDetachedAdmission,
   expectPhaseEmpty,
   recordPhase,
 } from './snapshot-phase-test-helpers.js';
 
-describe('caller-owned pending row identity after compensation', () => {
-  it('restores the original pending row object while the caller still owns it', async () => {
+describe('row values after publication compensation', () => {
+  it('restores the original row value after a publication failure', async () => {
     await withRollbackFixture(async (history) => {
       const original = rollbackRow(0);
       await history.addBatch([original]);
@@ -36,9 +36,11 @@ describe('caller-owned pending row identity after compensation', () => {
         ),
       ).toBe(primary);
       await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
-        expect(rows[0]).toBe(original);
+        expect(rows[0].speaker).toBe(original.speaker);
+        expect(rows[0].blocks).toStrictEqual(original.blocks);
+        expect(rows[0]).not.toBe(original);
       });
-    }, true);
+    });
   });
 });
 
@@ -58,14 +60,14 @@ describe('rollback snapshot lifetime and pending membership', () => {
         await store.waitForDurable();
         store.dispose();
         expect(snapshot.length).toBe(before.length);
-        expect([...snapshot]).toStrictEqual(before);
+        expect([...snapshot].map((row) => row.blocks)).toStrictEqual(
+          before.map((row) => row.blocks),
+        );
         const iterator = snapshot[Symbol.iterator]();
-        expect(iterator.next().value).toBe(before[0]);
+        expect(iterator.next().value?.blocks).toStrictEqual(before[0].blocks);
         iterator.return();
-        expect(ownership.snapshot().liveRows).toBe(before.length);
       });
       expect(ownership.snapshot().liveRows).toBe(0);
-      expect(ownership.snapshot().peakRows).toBe(before.length);
     });
   });
 
@@ -90,22 +92,21 @@ describe('rollback snapshot lifetime and pending membership', () => {
         }),
       );
       expect(error).toBe(primary);
-      expectPendingAdmission(ownership, transaction, pending);
+      expectDetachedAdmission(ownership, transaction);
       recordPhase('original-callback-before-ack', ownership, transaction);
       releaseWriter();
       await store.waitForDurable();
       expect(ownership.snapshot().liveRows).toBe(0);
       expectPhaseEmpty(ownership);
       expectPhaseEmpty(transaction);
-      expect(ownership.lastEvent?.stack).toContain('absorbHistoryPending');
       recordPhase('original-callback-after-ack', ownership, transaction);
       store.dispose();
     }, true);
   });
 });
 
-describe('pending rollback pin serialization order', () => {
-  it('does not reserialize a pinned pending row before ownership preparation fails', async () => {
+describe('rollback serialization order', () => {
+  it('does not reserialize an admitted row before ownership preparation fails', async () => {
     await withRollbackFixture(async (history) => {
       let forbidden = false;
       const serializationFailure = new Error('previous pending serialization');
@@ -137,22 +138,24 @@ describe('pending rollback pin serialization order', () => {
         primary,
       );
       await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
-        expect(rows[0]).toBe(original);
+        expect(rows[0].blocks[0]).toStrictEqual({
+          type: 'tool_call',
+          id: 'pending',
+          name: 'inspect',
+          parameters: { index: 0 },
+        });
       });
-    }, true);
+    });
   });
 });
 
-describe('serialization failure after partial publication', () => {
-  it('compensates admitted rows from the captured snapshot and restores caller chronology before media rollback', async () => {
-    await withRollbackFixture(async (history, recorder, releaseWriter) => {
+describe('serialization failure during admission', () => {
+  it('compensates from the captured snapshot and leaves caller rows untouched', async () => {
+    await withRollbackFixture(async (history, recorder) => {
       const before = [rollbackRow(0), rollbackRow(1)];
       await history.addBatch(before);
       const fresh = rollbackRow(2);
-      let published = false;
-      const serializationFailure = new Error(
-        'serialization after media publication',
-      );
+      const serializationFailure = new Error('serialization during admission');
       const unserializable: IContent = {
         speaker: 'ai',
         blocks: [
@@ -161,39 +164,30 @@ describe('serialization failure after partial publication', () => {
             id: 'serialized',
             name: 'inspect',
             parameters: {
-              count: 1,
-              toJSON: (): { count: number } => {
-                if (published) throw serializationFailure;
-                return { count: 1 };
+              toJSON: (): never => {
+                throw serializationFailure;
               },
             },
           },
         ],
       };
-      let restoredDuringOwnershipRollback = false;
-      history.registerMediaOwner(
-        mediaParticipant(() => ({
-          publish: () => {
-            published = true;
-          },
-          rollback: () => {
-            restoredDuringOwnershipRollback = fresh.metadata === undefined;
-          },
-        })),
-      );
       const error = await rejectedValue(
         history.replaceBatch([fresh, unserializable]),
       );
       expect(error).toBe(serializationFailure);
-      expect(restoredDuringOwnershipRollback).toBe(true);
       expect(fresh.metadata).toBeUndefined();
-      expect(await rowsOf(history)).toStrictEqual(before);
-      releaseWriter();
+      const bodies = (rows: readonly IContent[]): unknown[] =>
+        rows.map((row) => [row.speaker, row.blocks]);
+      expect(bodies(await rowsOf(history))).toStrictEqual(bodies(before));
       await history.waitForCommit();
-      expect(await durableRowsOf(recorder)).toStrictEqual(before);
+      expect(bodies(await durableRowsOf(recorder))).toStrictEqual(
+        bodies(before),
+      );
       const following = rollbackRow(3);
       await history.addBatch([following]);
-      expect(following.metadata?.chronology?.seq).toBe(3);
-    }, true);
+      expect(following.metadata).toBeUndefined();
+      const stored = await rowsOf(history);
+      expect(stored[2].metadata?.chronology?.seq).toBe(3);
+    });
   });
 });

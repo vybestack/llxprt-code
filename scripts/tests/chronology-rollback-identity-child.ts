@@ -18,6 +18,7 @@ import type {
 import {
   rejectedValue,
   rollbackRow,
+  rowsOf,
   withRollbackFixture,
 } from '../../packages/core/src/services/history/chronology-rollback-test-helpers.js';
 
@@ -91,6 +92,8 @@ interface IdentityObservation {
   readonly aliveWhileDisplaced: number;
   readonly restoredIdentities: number;
   readonly restoredValues: number;
+  readonly historyRows?: number;
+  readonly nextSeq?: number;
 }
 
 async function actual(): Promise<IdentityObservation> {
@@ -114,10 +117,15 @@ async function actual(): Promise<IdentityObservation> {
     );
     if (error !== primary) throw new Error('Changed primary failure');
     await history.waitForCommit();
+    const historyRows = (await rowsOf(history)).length;
+    await history.addBatch([rollbackRow(count)]);
+    const probe = (await rowsOf(history)).at(-1);
     const observation = {
       aliveWhileDisplaced,
       restoredIdentities: recognized(rows),
       restoredValues: restoredValues(rows),
+      historyRows,
+      nextSeq: probe?.metadata?.chronology?.seq,
     };
     rows.length = 0;
     return observation;

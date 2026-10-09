@@ -167,6 +167,11 @@ export async function withRollbackFixture<T>(
   }
 }
 
+/** Journal rows carry stamped chronology; bodies compare speaker and blocks only. */
+export function rowBodies(rows: readonly IContent[]): unknown[] {
+  return rows.map((row) => [row.speaker, row.blocks]);
+}
+
 export async function rowsOf(history: HistoryService): Promise<IContent[]> {
   const rows: IContent[] = [];
   for await (const row of history.getRecent(0)) rows.push(row);

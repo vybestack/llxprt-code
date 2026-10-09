@@ -66,9 +66,8 @@ describe('disk validation repair atomicity', () => {
 });
 
 describe('disk tool replacement rollback', () => {
-  it('restores addressed rows and source markers while a writer and tokenizer are paused', async () => {
-    await withBatchFixture(async ({ history, pauseWriter, releaseWriter }) => {
-      pauseWriter();
+  it('restores addressed row values and chronology while a tokenizer is paused', async () => {
+    await withBatchFixture(async ({ history }) => {
       const original = [repairRow(0, 3), batchRow(1), repairRow(2, 3)];
       await history.addBatch(original);
       const entered = batchGate();
@@ -103,13 +102,13 @@ describe('disk tool replacement rollback', () => {
       const rows = await collectRawHistory(history);
       expect(rows).toHaveLength(4);
       for (let index = 0; index < original.length; index++) {
-        expect(rows[index]).toBe(original[index]);
-        expect(rows[index].metadata?.chronology).toBe(
-          original[index].metadata?.chronology,
-        );
+        expect(rows[index].speaker).toBe(original[index].speaker);
+        expect(rows[index].blocks).toStrictEqual(original[index].blocks);
       }
-      expect(rows[3]).toBe(queued);
-      releaseWriter();
+      expect(rows[3].blocks).toStrictEqual(queued.blocks);
+      expect(rows.map((row) => row.metadata?.chronology?.seq)).toStrictEqual([
+        1, 2, 3, 4,
+      ]);
     });
   });
 });

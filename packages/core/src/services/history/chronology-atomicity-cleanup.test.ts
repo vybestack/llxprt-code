@@ -4,6 +4,7 @@ import {
   mediaParticipant,
   rejectedValue,
   rollbackRow,
+  rowBodies,
   rowsOf,
   withRollbackFixture,
 } from './chronology-rollback-test-helpers.js';
@@ -49,15 +50,22 @@ describe('history mutation cleanup after compensation failure', () => {
         undefined,
       ]);
       expect(history.getTotalTokens()).toBe(4);
+      // The injected fault lets the compensation rewind reach the journal but
+      // not the restoring row, so durable history is exactly what the journal
+      // holds: empty. No in-memory ledger resurrects the original row.
+      expect(await rowsOf(history)).toStrictEqual([]);
       const following = rollbackRow(3);
       await history.addBatch([following]);
-      expect(following.metadata?.chronology?.seq).toBe(2);
+      expect(following.metadata).toBeUndefined();
+      const durable = await rowsOf(history);
+      expect(durable).toHaveLength(1);
+      expect(durable[0].metadata?.chronology?.seq).toBe(2);
     });
   });
 });
 
 describe('history mutation cleanup after marker restoration failure', () => {
-  it('continues row and ownership cleanup when a callback makes one marker unrestorable', async () => {
+  it('ignores a callback that poisons a caller marker and still cleans up rows and ownership', async () => {
     await withRollbackFixture(async (history) => {
       const before = [rollbackRow(0)];
       await history.addBatch(before);
@@ -76,34 +84,30 @@ describe('history mutation cleanup after marker restoration failure', () => {
           },
         })),
       );
-      const error = aggregate(
-        await rejectedValue(
-          history.replaceBatch([poisoned, fresh], undefined, {
-            afterPublication: () => {
-              poisoned.metadata.chronology = { ...marker, seq: 900 };
-              Object.freeze(poisoned.metadata);
-              throw primary;
-            },
-          }),
-        ),
+      const error = await rejectedValue(
+        history.replaceBatch([poisoned, fresh], undefined, {
+          afterPublication: () => {
+            poisoned.metadata.chronology = { ...marker, seq: 900 };
+            Object.freeze(poisoned.metadata);
+            throw primary;
+          },
+        }),
       );
-      expect(error.errors).toHaveLength(2);
-      expect(error.errors[0]).toBe(primary);
-      expect(error.errors[1]).toBeInstanceOf(TypeError);
+      expect(error).toBe(primary);
       expect(fresh.metadata).toBeUndefined();
       expect(ownership).toBe('baseline');
-      expect(await rowsOf(history)).toStrictEqual(before);
+      expect(rowBodies(await rowsOf(history))).toStrictEqual(rowBodies(before));
       expect(history.getTotalTokens()).toBe(4);
       const following = rollbackRow(3);
       await history.addBatch([following]);
-      expect(following.metadata?.chronology?.seq).toBe(2);
+      expect((await rowsOf(history))[1].metadata?.chronology?.seq).toBe(2);
     });
   });
 });
 
 describe('chronology identity with caller-owned strong marker references', () => {
   for (const count of [512, 8192]) {
-    it(`restores ${count} caller-owned identities after callback overwrite and GC`, async () => {
+    it(`does not retain or restore ${count} caller marker identities after callback overwrite and GC`, async () => {
       await withRollbackFixture(async (history) => {
         const markers = Array.from({ length: count }, (_unused, index) => ({
           seq: index + 10,
@@ -130,7 +134,8 @@ describe('chronology identity with caller-owned strong marker references', () =>
         );
         expect(error).toBe(primary);
         for (const [index, row] of rows.entries()) {
-          expect(row.metadata.chronology).toBe(markers[index]);
+          expect(row.metadata.chronology).toStrictEqual(markers[index]);
+          expect(row.metadata.chronology).not.toBe(markers[index]);
         }
         expect(await rowsOf(history)).toStrictEqual([]);
       });

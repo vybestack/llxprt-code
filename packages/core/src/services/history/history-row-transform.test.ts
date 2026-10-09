@@ -8,6 +8,7 @@ import {
   expectedRange,
   rejectedValue,
   rollbackRow,
+  rowBodies,
   rowsOf,
   withRollbackFixture,
 } from './chronology-rollback-test-helpers.js';
@@ -23,7 +24,7 @@ async function expectMembership(
   history: HistoryService,
   before: IContent[],
 ): Promise<void> {
-  expect(await rowsOf(history)).toStrictEqual(before);
+  expect(rowBodies(await rowsOf(history))).toStrictEqual(rowBodies(before));
 }
 
 describe('disk-backed row transform', () => {
@@ -78,7 +79,7 @@ describe('disk-backed row transform', () => {
 });
 
 describe('row transform marker identity and cancellation', () => {
-  it('restores a strongly pinned original marker after displacement and GC', async () => {
+  it('neither pins nor resurrects a caller marker that a callback displaced', async () => {
     await withRollbackFixture(async (history) => {
       const original = { seq: 300, userTurn: 200, step: 9, recordedAt: 0 };
       const row = { ...rollbackRow(0), metadata: { chronology: original } };
@@ -88,9 +89,9 @@ describe('row transform marker identity and cancellation', () => {
         await rejectedValue(
           history.transformAll(
             async (_source, sink) => {
-              sink.appendIdentity(row);
-              sink.appendBorrowed(fresh);
-              sink.appendBorrowed(fresh);
+              sink.appendDetached(row);
+              sink.appendDetached(fresh);
+              sink.appendDetached(fresh);
             },
             undefined,
             {
@@ -103,12 +104,13 @@ describe('row transform marker identity and cancellation', () => {
           ),
         ),
       ).toBe(primary);
-      expect(row.metadata.chronology).toBe(original);
+      expect(row.metadata.chronology).toStrictEqual({ ...original, seq: 900 });
       expect(fresh.metadata).toBeUndefined();
       expect(await rowsOf(history)).toStrictEqual([]);
       const following = rollbackRow(3);
       await history.addBatch([following]);
-      expect(following.metadata?.chronology?.seq).toBe(1);
+      expect(following.metadata).toBeUndefined();
+      expect((await rowsOf(history))[0].metadata?.chronology?.seq).toBe(1);
     });
   });
 

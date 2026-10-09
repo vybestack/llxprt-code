@@ -30,7 +30,7 @@ function freezeStampedRow(row: IContent): void {
 
 describe('frozen pending batch rollback', () => {
   for (const stage of ['prepare', 'contentBatchAdded', 'afterPublication']) {
-    it(`preserves frozen caller row and marker identity after ${stage} failure`, async () => {
+    it(`restores journal values and leaves the frozen caller row untouched after ${stage} failure`, async () => {
       await withRollbackFixture(async (history, recorder, releaseWriter) => {
         const { row: baseline, metadata, marker } = markedBaseline();
         await history.addBatch([baseline]);
@@ -62,10 +62,12 @@ describe('frozen pending batch rollback', () => {
         );
         expect(error).toBe(primary);
         await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
-          expect(rows[0]).toBe(baseline);
+          expect(rows).toStrictEqual([baseline]);
+          expect(rows[0]).not.toBe(baseline);
         });
         expect(baseline.metadata).toBe(metadata);
         expect(baseline.metadata?.chronology).toBe(marker);
+        expect(Object.isFrozen(baseline)).toBe(true);
         expect(fresh.metadata).toBeUndefined();
         expect(history.getTotalTokens()).toBe(4);
         expect(history.getContextRange()).toStrictEqual(expectedRange(1));
@@ -74,25 +76,25 @@ describe('frozen pending batch rollback', () => {
         expect(await durableRowsOf(recorder)).toStrictEqual([baseline]);
         const following = rollbackRow(2);
         await history.addBatch([following]);
-        expect(following.metadata?.chronology).toMatchObject({
+        expect(following.metadata).toBeUndefined();
+        const stored = await rowsOf(history);
+        expect(stored[1].metadata?.chronology).toMatchObject({
           seq: 2,
           userTurn: 1,
           step: 2,
         });
-      }, true);
+      });
     });
   }
 });
 
 describe('frozen pending serialization rollback', () => {
-  it('compensates partially serialized rows and restores chronology before ownership rollback', async () => {
+  it('compensates partially admitted rows and restores chronology after a serialization failure', async () => {
     await withRollbackFixture(async (history, recorder, releaseWriter) => {
       const { row: baseline, marker } = markedBaseline();
       await history.addBatch([baseline]);
       freezeStampedRow(baseline);
       const primary = new Error('frozen batch serialization failure');
-      let published = false;
-      let restored = false;
       const fresh = rollbackRow(1);
       const bad: IContent = {
         speaker: 'tool',
@@ -103,29 +105,17 @@ describe('frozen pending serialization rollback', () => {
             toolName: 'inspect',
             result: {
               toJSON: (): object => {
-                if (published) throw primary;
-                return { value: 1 };
+                throw primary;
               },
             },
           },
         ],
       };
-      history.registerMediaOwner(
-        mediaParticipant(() => ({
-          publish: () => {
-            published = true;
-          },
-          rollback: () => {
-            restored =
-              fresh.metadata === undefined && bad.metadata === undefined;
-            published = false;
-          },
-        })),
-      );
       expect(await rejectedValue(history.addBatch([fresh, bad]))).toBe(primary);
-      expect(restored).toBe(true);
+      expect(fresh.metadata).toBeUndefined();
+      expect(bad.metadata).toBeUndefined();
       await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
-        expect(rows[0]).toBe(baseline);
+        expect(rows).toStrictEqual([baseline]);
       });
       expect(baseline.metadata?.chronology).toBe(marker);
       expect(await rowsOf(history)).toStrictEqual([baseline]);
@@ -134,8 +124,9 @@ describe('frozen pending serialization rollback', () => {
       expect(await durableRowsOf(recorder)).toStrictEqual([baseline]);
       const following = rollbackRow(2);
       await history.addBatch([following]);
-      expect(following.metadata?.chronology?.seq).toBe(2);
-    }, true);
+      expect(following.metadata).toBeUndefined();
+      expect((await rowsOf(history))[1].metadata?.chronology?.seq).toBe(2);
+    });
   });
 });
 
@@ -159,36 +150,35 @@ describe('frozen pending rollback queue ordering', () => {
       await queued;
       await history.waitForTokenUpdates();
       await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
-        expect(rows).toStrictEqual([baseline, appended, last]);
+        expect(rows.map((row) => row.blocks)).toStrictEqual([
+          baseline.blocks,
+          appended.blocks,
+          last.blocks,
+        ]);
+        expect(rows.map((row) => row.metadata?.chronology)).toMatchObject([
+          { seq: 1, userTurn: 1, step: 1 },
+          { seq: 2, userTurn: 1, step: 2 },
+          { seq: 3, userTurn: 2, step: 1 },
+        ]);
       });
       expect(failed.metadata).toBeUndefined();
-      expect(appended.metadata?.chronology).toMatchObject({
-        seq: 2,
-        userTurn: 1,
-        step: 2,
-      });
-      expect(last.metadata?.chronology).toMatchObject({
-        seq: 3,
-        userTurn: 2,
-        step: 1,
-      });
+      // history.add stamps the live caller row in place; addBatch does not.
+      expect(appended.metadata?.chronology?.seq).toBe(2);
+      expect(last.metadata).toBeUndefined();
+      const stored = await rowsOf(history);
       expect(history.getTotalTokens()).toBe(
-        await history.estimateTokensForContents([baseline, appended, last]),
+        await history.estimateTokensForContents(stored),
       );
       releaseWriter();
       await history.waitForCommit();
-      expect(await durableRowsOf(recorder)).toStrictEqual([
-        baseline,
-        appended,
-        last,
-      ]);
-    }, true);
+      expect(await durableRowsOf(recorder)).toStrictEqual(stored);
+    });
   });
 });
 
 describe('displaced pending chronology rollback', () => {
   for (const displacement of ['equal-value-marker', 'missing-metadata']) {
-    it(`restores pending marker identity after ${displacement} observer mutation`, async () => {
+    it(`keeps the journal marker value after ${displacement} caller mutation in an observer`, async () => {
       await withRollbackFixture(async (history, recorder, releaseWriter) => {
         const { row: baseline, marker } = markedBaseline();
         await history.addBatch([baseline]);
@@ -201,14 +191,18 @@ describe('displaced pending chronology rollback', () => {
         const fresh = rollbackRow(1);
         expect(await rejectedValue(history.addBatch([fresh]))).toBe(primary);
         await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
-          expect(rows[0]).toBe(baseline);
+          expect(rows).toHaveLength(1);
+          expect(rows[0].blocks).toStrictEqual(baseline.blocks);
+          expect(rows[0].metadata?.chronology).toStrictEqual(marker);
+          expect(rows[0]).not.toBe(baseline);
         });
-        expect(baseline.metadata?.chronology).toBe(marker);
         expect(fresh.metadata).toBeUndefined();
         releaseWriter();
         await history.waitForCommit();
-        expect(await durableRowsOf(recorder)).toStrictEqual([baseline]);
-      }, true);
+        const durable = await durableRowsOf(recorder);
+        expect(durable).toHaveLength(1);
+        expect(durable[0].metadata?.chronology).toStrictEqual(marker);
+      });
     });
   }
 });

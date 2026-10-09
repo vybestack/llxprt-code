@@ -1,7 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
-import { readFile } from 'node:fs/promises';
 import { mergeRow } from './history-merge-test-helpers.js';
 import {
   withRollbackFixture,
@@ -27,7 +26,7 @@ async function withSource(
 
 describe('history merge compensation and publication', () => {
   for (const pending of [false, true]) {
-    it(`restores ${pending ? 'pending identities' : 'durable values'} after partial admission and allows a queued mutation`, async () => {
+    it(`restores ${pending ? 'pending' : 'durable'} values after partial admission and allows a queued mutation`, async () => {
       await withSource(async (source) =>
         withRollbackFixture(async (target, recorder, releaseWriter) => {
           const marker = {
@@ -50,7 +49,7 @@ describe('history merge compensation and publication', () => {
           );
           const rows = await rowsOf(target);
           expect(rows).toStrictEqual([baseline, following]);
-          expect(rows[0] === baseline).toBe(pending);
+          expect(rows[0]).not.toBe(baseline);
           expect(baseline.metadata?.chronology).toBe(marker);
           await target.waitForTokenUpdates();
           expect(target.getTotalTokens()).toBe(tokens * 2);
@@ -90,7 +89,7 @@ describe('history merge observer and serialization compensation', () => {
     );
   });
 
-  it('compensates serialization failure after an earlier row has been admitted', async () => {
+  it('merges the admitted source value when the caller mutates its row after admission', async () => {
     await withRollbackFixture(async (source, _recorder, releaseSource) => {
       const first = mergeRow(10);
       const later = mergeRow(11);
@@ -106,17 +105,18 @@ describe('history merge observer and serialization compensation', () => {
         const baseline = mergeRow(0);
         target.add(baseline);
         await target.waitForCommit();
-        await expect(
-          Promise.resolve().then(() => target.merge(source)),
-        ).rejects.toThrow('BigInt');
-        expect(await rowsOf(target)).toStrictEqual([baseline]);
+        await target.merge(source);
+        expect(await rowsOf(target)).toStrictEqual([
+          baseline,
+          mergeRow(10),
+          mergeRow(11),
+        ]);
         await target.waitForCommit();
-        expect(await durableRowsOf(recorder)).toStrictEqual([baseline]);
-        const path = recorder.getFilePath();
-        if (path === null) throw new Error('Missing compensation journal');
-        expect(await readFile(path, 'utf8')).toContain(
-          '"timestamp":1700000000010',
-        );
+        expect(await durableRowsOf(recorder)).toStrictEqual([
+          baseline,
+          mergeRow(10),
+          mergeRow(11),
+        ]);
       });
       later.blocks.pop();
       releaseSource();

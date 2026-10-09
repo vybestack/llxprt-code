@@ -9,7 +9,7 @@ import {
 import type { ChronologyMarker, IContent } from './IContent.js';
 
 describe('removal marker rollback', () => {
-  it('restores displaced pending chronology marker references after an observer rejects', async () => {
+  it('keeps journal marker values after an observer displaces caller markers and rejects', async () => {
     await withRemovalFixture(
       async (
         { history, pauseWriter, waitForPausedWrite, releaseWriter },
@@ -42,14 +42,16 @@ describe('removal marker rollback', () => {
         } finally {
           history.off('tokensUpdated', listener);
         }
-        for (let index = 0; index < input.length; index++)
-          expect(input[index].metadata?.chronology).toBe(markers[index]);
-        await assertRemovalRows(history.streamRawHistory(), input, true);
+        const expected = input.map((row, index) => ({
+          ...row,
+          metadata: { chronology: markers[index] },
+        }));
+        await assertRemovalRows(history.streamRawHistory(), expected);
         expect(history.getContextRange().lastSeq).toBe(2);
         expect(await store.hasReservations(reference.contentId)).toBe(true);
         releaseWriter();
         await history.waitForCommit();
-        await assertRemovalRows(history.streamRawHistory(), input);
+        await assertRemovalRows(history.streamRawHistory(), expected);
       },
     );
   });

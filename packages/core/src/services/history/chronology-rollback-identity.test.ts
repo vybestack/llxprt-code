@@ -10,6 +10,8 @@ const resultSchema = z.object({
   aliveWhileDisplaced: z.number(),
   restoredIdentities: z.number(),
   restoredValues: z.number(),
+  historyRows: z.number().optional(),
+  nextSeq: z.number().optional(),
   aliveAfterSettlement: z.number(),
 });
 type IdentityMode = z.infer<typeof resultSchema>['mode'];
@@ -43,15 +45,18 @@ function measure(
 
 describe('chronology rollback identity with no external strong marker owners', () => {
   for (const count of [512, 8192]) {
-    it(`restores all ${count} original marker identities after overwrite and GC, then releases them`, () => {
+    it(`rolls ${count} rows back from the journal without a strong marker ledger`, () => {
       const result = measure(count, 'actual');
-      expect(result.aliveWhileDisplaced).toBe(count);
-      expect(result.restoredIdentities).toBe(count);
-      expect(result.restoredValues).toBe(count);
+      // The failed batch leaves no rows and restores the chronology counter by
+      // value; history keeps no strong reference to the caller's displaced markers.
+      expect(result.historyRows).toBe(0);
+      expect(result.nextSeq).toBe(1);
+      expect(result.aliveWhileDisplaced).toBe(0);
+      expect(result.restoredIdentities).toBe(0);
       expect(result.aliveAfterSettlement).toBe(0);
     }, 120_000);
 
-    it(`exposes loss of all ${count} identities in a disk descriptor plus weak-handle negative control`, () => {
+    it(`shows a disk descriptor plus weak handle loses all ${count} identities and restores values (negative control)`, () => {
       const result = measure(count, 'disk-weak');
       expect(result.aliveWhileDisplaced).toBe(0);
       expect(result.restoredIdentities).toBe(0);
@@ -59,7 +64,7 @@ describe('chronology rollback identity with no external strong marker owners', (
       expect(result.aliveAfterSettlement).toBe(0);
     }, 120_000);
 
-    it(`preserves ${count} disk-backed descriptor identities only with the context-length strong control`, () => {
+    it(`keeps ${count} identities alive only with the deliberate context-length strong control (retention trap)`, () => {
       const result = measure(count, 'disk-strong');
       expect(result.aliveWhileDisplaced).toBe(count);
       expect(result.restoredIdentities).toBe(count);

@@ -10,7 +10,7 @@ import { mergeRow } from './history-merge-test-helpers.js';
 import { withCoreSuffixFixture } from './core-suffix-fixture-test-helpers.js';
 
 describe('history merge pending source identities', () => {
-  it('keeps the pending source caller identity and marker on append', async () => {
+  it('appends the pending source row value and leaves the caller marker untouched', async () => {
     await withRollbackFixture(
       async (source, _sourceRecorder, releaseSource) => {
         const marker = {
@@ -28,7 +28,7 @@ describe('history merge pending source identities', () => {
             await target.merge(source);
             const live = await rowsOf(target);
             expect(live).toStrictEqual([baseline, incoming]);
-            expect(live[1]).toBe(incoming);
+            expect(live[1]).not.toBe(incoming);
             expect(incoming.metadata?.chronology).toBe(marker);
             releaseTarget();
             await target.waitForCommit();
@@ -46,7 +46,7 @@ describe('history merge pending source identities', () => {
     );
   });
 
-  it('restores the original pending source marker after an observer mutates it and rejects publication', async () => {
+  it('leaves the pending source row and caller marker untouched after an observer mutates the appended row and rejects publication', async () => {
     await withRollbackFixture(
       async (source, _sourceRecorder, releaseSource) => {
         const marker = {
@@ -68,7 +68,7 @@ describe('history merge pending source identities', () => {
           });
           expect(await rejectedValue(target.merge(source))).toBe(primary);
           expect(await rowsOf(target)).toStrictEqual([]);
-          expect((await rowsOf(source))[0]).toBe(incoming);
+          expect((await rowsOf(source))[0]).toStrictEqual(incoming);
           expect(incoming.metadata?.chronology).toBe(marker);
         });
         releaseSource();

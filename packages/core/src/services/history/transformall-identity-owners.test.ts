@@ -126,7 +126,7 @@ describe('public transform large valid rows', () => {
 });
 
 describe('public transform strong marker rollback', () => {
-  it('restores exact caller markers displaced after stamping, including repeated identities', async () => {
+  it('neither pins nor resurrects caller markers displaced after stamping, including repeated rows', async () => {
     await withRollbackFixture(async (history) => {
       const marker = { seq: 300, userTurn: 200, step: 9, recordedAt: 0 };
       const caller = { ...rollbackRow(0), metadata: { chronology: marker } };
@@ -136,9 +136,9 @@ describe('public transform strong marker rollback', () => {
         await rejectedValue(
           history.transformAll(
             async (_source, sink) => {
-              sink.appendIdentity(caller);
-              sink.appendBorrowed(fresh);
-              sink.appendBorrowed(fresh);
+              sink.appendDetached(caller);
+              sink.appendDetached(fresh);
+              sink.appendDetached(fresh);
             },
             undefined,
             {
@@ -151,13 +151,14 @@ describe('public transform strong marker rollback', () => {
           ),
         ),
       ).toBe(failure);
-      expect(caller.metadata.chronology).toBe(marker);
+      expect(caller.metadata.chronology).toStrictEqual({ ...marker, seq: 900 });
       expect(fresh.metadata).toBeUndefined();
       expect(await rowsOf(history)).toStrictEqual([]);
       await history.transformAll(async (_source, sink) =>
-        sink.appendIdentity(fresh),
+        sink.appendDetached(fresh),
       );
-      expect(fresh.metadata?.chronology?.seq).toBe(1);
+      expect(fresh.metadata).toBeUndefined();
+      expect((await rowsOf(history))[0].metadata?.chronology?.seq).toBe(1);
     });
   });
 });

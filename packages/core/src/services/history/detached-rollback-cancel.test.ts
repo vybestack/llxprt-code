@@ -8,7 +8,7 @@ import {
 import { rejectedValue, rowsOf } from './chronology-rollback-test-helpers.js';
 
 describe('detached cancellation before mutation', () => {
-  it('releases its captured pending source on abort without waiting for an original writer ack', async () => {
+  it('aborts without waiting for an original writer ack and leaves the journaled row intact', async () => {
     await withDetachedFixture(async ({ history, owners, releaseWriter }) => {
       history.add(detachedRow(0));
       await history.waitForTokenUpdates();
@@ -24,7 +24,6 @@ describe('detached cancellation before mutation', () => {
         ),
       );
       try {
-        while (owners.snapshot().liveRows === 0) await setImmediate();
         await setImmediate();
         controller.abort(failure);
         const result = await Promise.race([
@@ -33,11 +32,11 @@ describe('detached cancellation before mutation', () => {
         ]);
         expect(result).toBe(failure);
         expect(owners.snapshot().liveRows).toBe(0);
-        expect((await rowsOf(history))[0]).toStrictEqual(detachedRow(0));
       } finally {
         releaseWriter();
         await operation;
       }
+      expect(await rowsOf(history)).toStrictEqual([detachedRow(0)]);
     }, true);
   });
 });
