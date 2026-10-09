@@ -33,7 +33,7 @@ import {
   setupAgentClient,
   type MockResponseShape,
 } from './__tests__/client-test-helpers.js';
-import { collectHistoryFixture } from './collect-history-test-fixture.js';
+import { collectHistoryFixture } from './__tests__/support/collect-history-test-fixture.js';
 
 // Mock prompts module before imports
 const realConfigModule = {

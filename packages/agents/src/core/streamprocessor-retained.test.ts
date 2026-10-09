@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { runRetainedCensus } from './streamprocessor-retained-run.js';
+import { runRetainedCensus } from './__tests__/support/streamprocessor-retained-run.js';
 
 describe('actual StreamProcessor source retained owner census', () => {
   it('releases derived rows, segments and request closures below the strict 1 MiB gate', async () => {

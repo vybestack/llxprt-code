@@ -7,8 +7,8 @@ import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { prepareProviderContentSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-curated-stream.js';
 import { SemanticMediaPurgeBoundaryIdentity } from '@vybestack/llxprt-code-core/services/history/semantic-media-purge.js';
-import { sourceRootSetup } from './prompt-envelope-source-test-helpers.js';
-import { sourceHeap } from './streamprocessor-source-measurements.js';
+import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
+import { sourceHeap } from './__tests__/support/streamprocessor-source-measurements.js';
 import { stageTurnRequestArtifact } from './turn-request-artifact.js';
 
 const root = sourceRootSetup();

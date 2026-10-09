@@ -2,13 +2,16 @@
 import { describe, expect, it } from 'bun:test';
 import { StreamProcessor } from './StreamProcessor.js';
 import { ConversationManager } from './ConversationManager.js';
-import { sourceRootSetup } from './prompt-envelope-source-test-helpers.js';
+import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import {
   processorFixture,
   sourcePending,
   sourceWireOracle,
-} from './streamprocessor-source-fixture.js';
-import { preflightEndpoint, barrier } from './source-preflight-fixture.js';
+} from './__tests__/support/streamprocessor-source-fixture.js';
+import {
+  preflightEndpoint,
+  barrier,
+} from './__tests__/support/source-preflight-fixture.js';
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
 
 const root = sourceRootSetup();

@@ -1,13 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
-import { projectionEndpoint } from '@vybestack/llxprt-code-providers/openai-responses/projection-ownership-fixture.js';
-import { observeDiskBody } from '@vybestack/llxprt-code-providers/openai-responses/disk-text-body-observer.js';
+import { projectionEndpoint } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/projection-ownership-fixture.js';
+import { observeDiskBody } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-body-observer.js';
 import {
   processorFixture,
   sourcePending,
-} from './streamprocessor-source-fixture.js';
-import { sourceRootSetup } from './prompt-envelope-source-test-helpers.js';
+} from './__tests__/support/streamprocessor-source-fixture.js';
+import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 
 const root = sourceRootSetup();
 describe('actual StreamProcessor abort during progressive BODY', () => {

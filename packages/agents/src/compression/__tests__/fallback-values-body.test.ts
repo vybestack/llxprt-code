@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { appendBodyEvidence } from '../../../../../scripts/lib/body-evidence-writer.js';
+import { appendBodyEvidence } from '../../../../test-utils/src/body-evidence-writer.js';
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
 

@@ -3,8 +3,8 @@ import { describe, expect, it } from 'bun:test';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { RowOwnership } from '../../../core/src/recording/rowOwnership.js';
-import { MemoryCommand } from './wholememory-command.js';
-import { writeMemoryFixture } from './wholememory-fixture.js';
+import { MemoryCommand } from './__tests__/support/wholememory-command.js';
+import { writeMemoryFixture } from './__tests__/support/wholememory-fixture.js';
 
 const sessionId = '85400000-0000-4000-8000-000000000001';
 const sessionName = 'acceptance-named-session';

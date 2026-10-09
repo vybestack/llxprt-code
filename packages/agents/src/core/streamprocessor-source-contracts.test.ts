@@ -11,17 +11,17 @@ import {
   getShellConfiguration,
 } from '@vybestack/llxprt-code-core/utils/shell-utils.js';
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
-import { projectionEndpoint } from '@vybestack/llxprt-code-providers/openai-responses/projection-ownership-fixture.js';
+import { projectionEndpoint } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/projection-ownership-fixture.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { sourceRootSetup } from './prompt-envelope-source-test-helpers.js';
+import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import {
   processorFixture,
   sourcePending,
   sourceWireOracle,
-} from './streamprocessor-source-fixture.js';
+} from './__tests__/support/streamprocessor-source-fixture.js';
 import { TokenUsageLogger } from './TokenUsageLogger.js';
-import { toolHookWorker } from './streamprocessor-tool-hook-fixture.js';
-import { modelHookWorker } from './streamprocessor-model-hook-fixture.js';
+import { toolHookWorker } from './__tests__/support/streamprocessor-tool-hook-fixture.js';
+import { modelHookWorker } from './__tests__/support/streamprocessor-model-hook-fixture.js';
 
 const root = sourceRootSetup();
 function hook(

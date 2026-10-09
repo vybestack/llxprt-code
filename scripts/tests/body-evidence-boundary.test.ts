@@ -3,7 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
-import { initializeEvidenceLane } from '../lib/body-evidence-writer.js';
+import { initializeEvidenceLane } from '../../packages/test-utils/src/body-evidence-writer.js';
 import { captureCuratedBody } from './provider-curated-body-helpers.js';
 
 function receiptBodies(root: string): Buffer[] {

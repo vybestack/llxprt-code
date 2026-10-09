@@ -4,14 +4,14 @@ import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { prepareProviderContentSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-curated-stream.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { RequestShapeSessionMemory } from './tokenUsageRequestShape.js';
-import { sourceRootSetup } from './prompt-envelope-source-test-helpers.js';
+import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import {
   fallbackCount,
   independentSeed,
   seedTool,
   shapeRow,
   shapeState,
-} from './token-usage-source-fixture.js';
+} from './__tests__/support/token-usage-source-fixture.js';
 
 function failureMessage(failure: string): string {
   if (failure === 'disk') return 'Provider request snapshot is closed';

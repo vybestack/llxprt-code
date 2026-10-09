@@ -4,7 +4,7 @@ import {
   settledHeapCensus,
   settleHeap,
   type HeapCensus,
-} from './wholememory-probe.js';
+} from './__tests__/support/wholememory-probe.js';
 
 declare const Bun: { gc(force: boolean): void };
 const payloadBytes = 16 * 1024 * 1024;

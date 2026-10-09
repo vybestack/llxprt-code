@@ -4,7 +4,7 @@ import { HistoryService } from '@vybestack/llxprt-code-core/services/history/His
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { sourceBeforeModelHook } from './source-before-model-hook.js';
-import { sourceRootSetup } from './prompt-envelope-source-test-helpers.js';
+import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 
 const root = sourceRootSetup();
 const pending: IContent = {

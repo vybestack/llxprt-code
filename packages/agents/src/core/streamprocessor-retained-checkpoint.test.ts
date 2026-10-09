@@ -3,7 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import {
   RetainedOwnerCensus,
   retainedCheckpoint,
-} from './streamprocessor-retained-census.js';
+} from './__tests__/support/streamprocessor-retained-census.js';
 
 function releasedTarget(census: RetainedOwnerCensus): void {
   census.observe('control', { text: 'unreachable' });

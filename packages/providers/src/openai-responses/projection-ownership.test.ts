@@ -24,7 +24,7 @@ import {
   projectionRuntime,
   projectionWireOracle,
   rowCount,
-} from './projection-ownership-fixture.js';
+} from './__tests__/support/projection-ownership-fixture.js';
 
 type Setup = Awaited<ReturnType<typeof projectionRuntime>>;
 type Disk = ReturnType<typeof projectionDiskRows>;

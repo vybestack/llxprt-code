@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { writeBodyFile } from '../lib/body-evidence-writer.js';
+import { writeBodyFile } from '../../packages/test-utils/src/body-evidence-writer.js';
 import { describe, expect, it, vi } from 'bun:test';
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { join, basename } from 'node:path';

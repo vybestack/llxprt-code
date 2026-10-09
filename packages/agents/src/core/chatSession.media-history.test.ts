@@ -40,7 +40,7 @@ import {
   upsertRuntimeEntry,
 } from '@vybestack/llxprt-code-providers/runtime/runtimeRegistry.js';
 import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
-import { collectHistoryFixture } from './collect-history-test-fixture.js';
+import { collectHistoryFixture } from './__tests__/support/collect-history-test-fixture.js';
 const priorTokenLimits = {
   ...(await import('@vybestack/llxprt-code-core/core/tokenLimits.js')),
 };

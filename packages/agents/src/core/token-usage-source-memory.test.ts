@@ -11,12 +11,12 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { prepareProviderContentSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-curated-stream.js';
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { RequestShapeSessionMemory } from './tokenUsageRequestShape.js';
-import { sourceRootSetup } from './prompt-envelope-source-test-helpers.js';
+import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import {
   fallbackCount,
   sourceTextUnit,
   shapePending,
-} from './token-usage-source-fixture.js';
+} from './__tests__/support/token-usage-source-fixture.js';
 
 const root = sourceRootSetup();
 async function settled(): Promise<number> {

@@ -4,7 +4,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { ResponsesDiskTextRows } from './responses-disk-text-rows.js';
 import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
-import { projectionRuntime } from './projection-ownership-fixture.js';
+import { projectionRuntime } from './__tests__/support/projection-ownership-fixture.js';
 
 function rows(row: IContent): ResponsesDiskTextRows {
   return new ResponsesDiskTextRows({

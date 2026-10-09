@@ -3,7 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { sourceRootSetup } from './prompt-envelope-source-test-helpers.js';
+import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 
 const root = sourceRootSetup();
 const resultSchema = z.object({
@@ -19,7 +19,10 @@ describe('source hook pending ownership', () => {
     const worker = Bun.spawn(
       [
         process.execPath,
-        new URL('./source-hook-pending-worker.ts', import.meta.url).pathname,
+        new URL(
+          './__tests__/support/source-hook-pending-worker.ts',
+          import.meta.url,
+        ).pathname,
         root(),
       ],
       { stdout: 'pipe', stderr: 'pipe' },

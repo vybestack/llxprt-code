@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { installFixtureCandidate } from '../../packages/agents/src/compression/__tests__/provider-fallback-candidate-fixture.js';
-import { writeBodyFile } from '../lib/body-evidence-writer.js';
+import { writeBodyFile } from '../../packages/test-utils/src/body-evidence-writer.js';
 import { describe, it, expect } from 'bun:test';
 
 import { join } from 'node:path';

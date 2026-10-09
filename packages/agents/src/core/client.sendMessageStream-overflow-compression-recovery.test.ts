@@ -36,8 +36,8 @@ import {
   restoreTokenLimit,
   mockTurnRunFn,
   PREFLIGHT_BASELINE,
-} from './client.sendMessageStream-overflow-compression-fixture.js';
-import { collectHistoryFixture } from './collect-history-test-fixture.js';
+} from './__tests__/support/client.sendMessageStream-overflow-compression-fixture.js';
+import { collectHistoryFixture } from './__tests__/support/collect-history-test-fixture.js';
 
 describe('AgentClient — finalized-envelope enforcement handoff (issues 2402, 2755)', () => {
   beforeEach(initializeClient);

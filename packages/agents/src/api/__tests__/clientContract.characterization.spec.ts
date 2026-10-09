@@ -31,7 +31,7 @@ import {
   runFullLoop,
 } from '../../core/__tests__/streamPipeline-characterization-helpers.js';
 import type { IContent } from '@vybestack/llxprt-code-core';
-import { collectHistoryFixture } from '../../core/collect-history-test-fixture.js';
+import { collectHistoryFixture } from '../../core/__tests__/support/collect-history-test-fixture.js';
 
 function makeUserContent(text: string): IContent {
   return { speaker: 'human', blocks: [{ type: 'text', text }] };

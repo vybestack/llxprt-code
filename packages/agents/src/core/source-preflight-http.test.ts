@@ -14,7 +14,7 @@ import {
   enforceAndStreamSourcePromptEnvelopeRetries,
   type PreparedSourcePromptEnvelopeSend,
 } from './prompt-envelope-source-send.js';
-import { sourceRootSetup } from './prompt-envelope-source-test-helpers.js';
+import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import { stageTurnRequestArtifact } from './turn-request-artifact.js';
 import {
   preflightRuntime,
@@ -24,7 +24,7 @@ import {
   preflightInstructions,
   PreflightExporter,
   barrier,
-} from './source-preflight-fixture.js';
+} from './__tests__/support/source-preflight-fixture.js';
 
 const root = sourceRootSetup();
 type Fault = 'hold' | 'reject' | 'abort' | 'no-ack';

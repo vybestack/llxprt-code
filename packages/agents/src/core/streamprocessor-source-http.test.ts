@@ -4,24 +4,24 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
-import { diskTextRow } from '@vybestack/llxprt-code-providers/openai-responses/disk-text-fixture.js';
+import { diskTextRow } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-fixture.js';
 import {
   projectionEndpoint,
   projectionInstructions,
-} from '@vybestack/llxprt-code-providers/openai-responses/projection-ownership-fixture.js';
-import { observeDiskBody } from '@vybestack/llxprt-code-providers/openai-responses/disk-text-body-observer.js';
-import { sourceRootSetup } from './prompt-envelope-source-test-helpers.js';
+} from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/projection-ownership-fixture.js';
+import { observeDiskBody } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-body-observer.js';
+import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import {
   processorFixture,
   sourcePending,
   sourceWireOracle,
   largestSourceRowBytes,
-} from './streamprocessor-source-fixture.js';
+} from './__tests__/support/streamprocessor-source-fixture.js';
 import {
   sourceHeap,
   warmSourceProcessor,
   measureSourceUpload,
-} from './streamprocessor-source-measurements.js';
+} from './__tests__/support/streamprocessor-source-measurements.js';
 
 const root = sourceRootSetup();
 async function nativeEstimate(

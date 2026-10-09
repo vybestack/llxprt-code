@@ -4,10 +4,10 @@ import { createHash } from 'node:crypto';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { sourceRootSetup } from './prompt-envelope-source-test-helpers.js';
+import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import { getRequestTextFromContents } from './turnLogging.js';
 import { stageTurnRequestArtifact } from './turn-request-artifact.js';
-import { sourceHeap } from './streamprocessor-source-measurements.js';
+import { sourceHeap } from './__tests__/support/streamprocessor-source-measurements.js';
 
 const root = sourceRootSetup();
 const failureMessage = {

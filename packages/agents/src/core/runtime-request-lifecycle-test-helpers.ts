@@ -11,9 +11,9 @@ import {
   shutdownTelemetry,
   type RuntimeRequestArtifact,
 } from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
-import { diskTextRow } from '@vybestack/llxprt-code-providers/openai-responses/disk-text-fixture.js';
+import { diskTextRow } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-fixture.js';
 import { stageTurnRequestArtifact } from './turn-request-artifact.js';
-import { sourceHeap } from './streamprocessor-source-measurements.js';
+import { sourceHeap } from './__tests__/support/streamprocessor-source-measurements.js';
 
 export function runtimeConfig(
   directory: string,

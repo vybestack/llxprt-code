@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { runRetainedCensus } from './streamprocessor-retained-run.js';
+import { runRetainedCensus } from './__tests__/support/streamprocessor-retained-run.js';
 
 describe('actual source BODY async-context owner discharge', () => {
   it('does not keep the disk selection reachable when an external consumer keeps the completed BODY shell', async () => {

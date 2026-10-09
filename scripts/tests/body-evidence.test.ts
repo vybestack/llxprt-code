@@ -9,8 +9,8 @@ import {
   writeCompactBody,
   writeBodyFile,
   appendBodyEvidence,
-} from '../lib/body-evidence-writer.js';
-import { laneFootprint } from '../lib/body-evidence-budget.js';
+} from '../../packages/test-utils/src/body-evidence-writer.js';
+import { laneFootprint } from '../../packages/test-utils/src/body-evidence-budget.js';
 
 function freshLane(cap = 100 * 1024 * 1024): string {
   const scratch = process.env.BODY_EVIDENCE_TEST_SCRATCH;

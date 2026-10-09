@@ -10,7 +10,7 @@ import {
   heapCensus,
   observeDecodedRows,
   settleHeap,
-} from '../../packages/cli/src/services/wholememory-probe.js';
+} from '../../packages/cli/src/services/__tests__/support/wholememory-probe.js';
 import { activeRequestBodyCount } from '../../packages/providers/src/utils/requestScopedBody.js';
 import type { IContent } from '../../packages/core/src/services/history/IContent.js';
 import type { HistoryService } from '../../packages/core/src/services/history/HistoryService.js';

@@ -6,7 +6,7 @@ import { batchRow } from '../../packages/core/src/services/history/addbatch-stre
 import {
   settledHeapCensus,
   heapCensus,
-} from '../../packages/cli/src/services/wholememory-probe.js';
+} from '../../packages/cli/src/services/__tests__/support/wholememory-probe.js';
 import type { IContent } from '../../packages/core/src/services/history/IContent.js';
 
 const [directory, sizeText, mode] = process.argv.slice(2);

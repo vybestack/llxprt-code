@@ -12,14 +12,14 @@ import {
   enforceAndStreamSourcePromptEnvelopeRetries,
   type PreparedSourcePromptEnvelopeSend,
 } from './prompt-envelope-source-send.js';
-import { sourceRootSetup } from './prompt-envelope-source-test-helpers.js';
+import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import {
   preflightDisk,
   preflightRuntime,
   preflightEndpoint,
   preflightInstructions,
   barrier,
-} from './source-preflight-fixture.js';
+} from './__tests__/support/source-preflight-fixture.js';
 import { stageTurnRequestArtifact } from './turn-request-artifact.js';
 
 const root = sourceRootSetup();

@@ -9,11 +9,11 @@ import { withGpt56DiskSources } from '@vybestack/llxprt-code-providers/tokenizer
 import {
   diskTextFixture,
   diskTextWireOracle,
-} from '@vybestack/llxprt-code-providers/openai-responses/disk-text-fixture.js';
+} from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-fixture.js';
 import {
   projectionEndpoint,
   projectionRuntime,
-} from '@vybestack/llxprt-code-providers/openai-responses/projection-ownership-fixture.js';
+} from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/projection-ownership-fixture.js';
 import {
   enforceAndStreamSourcePromptEnvelopeRetries,
   type PromptEnvelopeSource,

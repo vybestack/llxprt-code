@@ -6,13 +6,13 @@ import {
   buildSourceProviderChatOptions,
   enforceAndStreamSourcePromptEnvelopeRetries,
 } from './prompt-envelope-source-send.js';
-import { sourceRootSetup } from './prompt-envelope-source-test-helpers.js';
+import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import {
   preflightDisk,
   preflightRuntime,
   preflightEndpoint,
   preflightInstructions,
-} from './source-preflight-fixture.js';
+} from './__tests__/support/source-preflight-fixture.js';
 
 const root = sourceRootSetup();
 describe('source prepared transactional cleanup failure', () => {

@@ -1,10 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { sourceRootSetup } from './prompt-envelope-source-test-helpers.js';
+import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import {
   strictProbe,
   type StrictReceipt,
-} from './source-strict-logger-fixture.js';
+} from './__tests__/support/source-strict-logger-fixture.js';
 
 const root = sourceRootSetup();
 function terminals(

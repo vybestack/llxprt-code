@@ -6,17 +6,17 @@ import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.
 import {
   projectionEndpoint,
   projectionInstructions,
-} from '@vybestack/llxprt-code-providers/openai-responses/projection-ownership-fixture.js';
+} from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/projection-ownership-fixture.js';
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
 import { createSourcePromptEnvelopePreparer } from './prompt-envelope-source-send.js';
-import { sourceRootSetup } from './prompt-envelope-source-test-helpers.js';
+import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import { sourceBeforeModelHook } from './source-before-model-hook.js';
-import { processorFixture } from './streamprocessor-source-fixture.js';
+import { processorFixture } from './__tests__/support/streamprocessor-source-fixture.js';
 import { ProviderSourceEnforcer } from '../compression/provider-source-enforcement.js';
 import {
   ladderPending,
   ladderHistoryDigest,
-} from './source-compression-ladder-fixture.js';
+} from './__tests__/support/source-compression-ladder-fixture.js';
 
 const root = sourceRootSetup();
 

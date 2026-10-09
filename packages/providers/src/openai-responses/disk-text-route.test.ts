@@ -9,11 +9,11 @@ import { Gpt56SourceProjection } from '../tokenizers/gpt56-source-projection.js'
 import {
   projectionEndpoint,
   projectionRuntime,
-} from './projection-ownership-fixture.js';
+} from './__tests__/support/projection-ownership-fixture.js';
 import {
   diskTextFixture as projectionDiskRows,
   diskTextWireOracle as projectionWireOracle,
-} from './disk-text-fixture.js';
+} from './__tests__/support/disk-text-fixture.js';
 
 async function gcRows(): Promise<void> {
   for (let index = 0; index < 8; index++) {

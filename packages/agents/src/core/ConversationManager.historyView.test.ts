@@ -42,7 +42,7 @@ import { ConversationManager } from './ConversationManager.js';
 import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
-import { collectHistoryFixture } from './collect-history-test-fixture.js';
+import { collectHistoryFixture } from './__tests__/support/collect-history-test-fixture.js';
 
 const GENERATING_MODEL = 'claude-opus-4-8';
 

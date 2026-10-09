@@ -7,7 +7,7 @@ import {
 } from '../../packages/core/src/services/history/chronology-rollback-test-helpers.js';
 import { buildProviderContent } from '../../packages/core/src/services/history/historyProviderPipeline.js';
 import { buildCuratedHistory } from '../../packages/core/src/services/history/historyCuration.js';
-import { appendBodyEvidence } from '../lib/body-evidence-writer.js';
+import { appendBodyEvidence } from '../../packages/test-utils/src/body-evidence-writer.js';
 import {
   transactionFixture,
   rawState,

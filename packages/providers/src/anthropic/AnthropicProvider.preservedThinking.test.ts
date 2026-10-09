@@ -8,6 +8,7 @@ import { describe, expect, it } from 'bun:test';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { prepareAnthropicRequest } from './AnthropicRequestPreparation.js';
 import { buildAnthropicRequestHeaders } from './AnthropicApiExecution.js';
@@ -32,14 +33,20 @@ async function buildRequest(model: string, enabled: boolean) {
     baseURL: 'https://api.anthropic.com',
     authToken: 'test-token',
   };
+  const rows = [
+    { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
+  ] satisfies IContent[];
   const call = createProviderCallOptions({
     providerName: 'anthropic',
     settings,
     resolved,
-    contents: [{ speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] }],
+    contents: rows,
   });
   const options = {
     ...call,
+    // prepareAnthropicRequest consumes the request-scoped materialized
+    // history; this seam never faces the transport stream.
+    contents: rows,
     metadata: call.metadata ?? {},
     resolved,
     invocation: call.invocation,

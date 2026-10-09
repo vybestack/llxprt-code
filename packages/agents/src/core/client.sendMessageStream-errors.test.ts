@@ -23,7 +23,7 @@ import { AgentClient } from './client.js';
 import {
   testToolNameRetry,
   testContextCompressionRetry,
-} from './client.sendMessageStream-errors-cases.js';
+} from './__tests__/support/client.sendMessageStream-errors-cases.js';
 import type { ChatSession } from './chatSession.js';
 import {
   make413Chat,

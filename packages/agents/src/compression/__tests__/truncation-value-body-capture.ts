@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { captureBodyAttempt } from '../../../../../scripts/lib/body-evidence-writer.js';
+import { captureBodyAttempt } from '../../../../test-utils/src/body-evidence-writer.js';
 import { randomUUID } from 'node:crypto';
 import { withFetchPreconnect } from '../../../../test-utils/src/fetch-test-helpers.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';

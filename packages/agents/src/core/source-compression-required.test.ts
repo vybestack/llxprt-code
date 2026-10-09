@@ -8,10 +8,10 @@ import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/cont
 import {
   projectionEndpoint,
   projectionInstructions,
-} from '@vybestack/llxprt-code-providers/openai-responses/projection-ownership-fixture.js';
+} from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/projection-ownership-fixture.js';
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
-import { sourceRootSetup } from './prompt-envelope-source-test-helpers.js';
-import { processorFixture } from './streamprocessor-source-fixture.js';
+import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
+import { processorFixture } from './__tests__/support/streamprocessor-source-fixture.js';
 import { computeMarginAdjustedLimit } from '../compression/contextLimitPolicy.js';
 
 const root = sourceRootSetup();

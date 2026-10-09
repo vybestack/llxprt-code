@@ -17,7 +17,7 @@ import {
   diskSource,
   rowText,
   sourceRootSetup,
-} from './prompt-envelope-source-test-helpers.js';
+} from './__tests__/support/prompt-envelope-source-test-helpers.js';
 
 const root = sourceRootSetup();
 const responseExitModes: ReadonlyArray<'return' | 'abort'> = [

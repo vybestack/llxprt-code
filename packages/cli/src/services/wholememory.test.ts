@@ -21,7 +21,7 @@ import {
   writeMemoryFixture,
   MEMORY_PAGE,
   type MemoryWorkload,
-} from './wholememory-fixture.js';
+} from './__tests__/support/wholememory-fixture.js';
 
 interface Measurement {
   count: number;
@@ -96,7 +96,7 @@ async function measure(
   await writeMemoryFixture(join(directory, 'warmup'), 2048, workload);
   const command = [
     process.execPath,
-    join(import.meta.dir, 'wholememory-child.ts'),
+    join(import.meta.dir, '__tests__/support/wholememory-child.ts'),
     directory,
     String(count),
     workload,

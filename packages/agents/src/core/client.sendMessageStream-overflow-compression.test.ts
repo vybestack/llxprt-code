@@ -47,7 +47,7 @@ import {
   OVERFLOW_REQUEST_CHARS,
   THRESHOLD,
   setClient,
-} from './client.sendMessageStream-overflow-compression-fixture.js';
+} from './__tests__/support/client.sendMessageStream-overflow-compression-fixture.js';
 
 describe('AgentClient — finalized-envelope enforcement handoff (issues 2402, 2755) — deferred enforcement', () => {
   beforeEach(initializeClient);

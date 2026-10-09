@@ -4,8 +4,8 @@ import { existsSync, unlinkSync } from 'node:fs';
 import { ResponsesDiskTextRows } from './responses-disk-text-rows.js';
 import { Gpt56SourceProjection } from '../tokenizers/gpt56-source-projection.js';
 import { diskResponsesBodyBytes } from './responses-disk-body.js';
-import { diskTextFixture } from './disk-text-fixture.js';
-import { projectionRuntime } from './projection-ownership-fixture.js';
+import { diskTextFixture } from './__tests__/support/disk-text-fixture.js';
+import { projectionRuntime } from './__tests__/support/projection-ownership-fixture.js';
 
 async function failedBody(source: Gpt56SourceProjection): Promise<void> {
   for await (const bytes of diskResponsesBodyBytes(

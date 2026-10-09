@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { GenerateChatOptions } from '../IProvider.js';
-import type { ProjectionRuntime } from './projection-ownership-fixture.js';
+import type { ProjectionRuntime } from './__tests__/support/projection-ownership-fixture.js';
 import { activeRequestBodyCount } from '../utils/requestScopedBody.js';
 import { replayableContents } from '../utils/collectContents.js';
 import {
@@ -14,7 +14,7 @@ import {
   withWorkspaceRuntime,
   workspaceBody,
   workspaceRows,
-} from './projection-workspace-fixture.js';
+} from './__tests__/support/projection-workspace-fixture.js';
 
 async function drain(stream: AsyncIterableIterator<IContent>): Promise<void> {
   for await (const _row of stream) {

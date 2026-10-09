@@ -8,7 +8,7 @@ import {
   digest,
   rowText,
   sourceRootSetup,
-} from '../../core/prompt-envelope-source-test-helpers.js';
+} from '../../core/__tests__/support/prompt-envelope-source-test-helpers.js';
 
 const root = sourceRootSetup();
 const limits = {

@@ -16,12 +16,12 @@ import {
   diskTextFixture,
   diskTextRow,
   diskTextWireOracle,
-} from './disk-text-fixture.js';
+} from './__tests__/support/disk-text-fixture.js';
 import {
   projectionEndpoint,
   projectionRuntime,
-} from './projection-ownership-fixture.js';
-import { observeDiskBody } from './disk-text-body-observer.js';
+} from './__tests__/support/projection-ownership-fixture.js';
+import { observeDiskBody } from './__tests__/support/disk-text-body-observer.js';
 import { activeRequestBodyCount } from '../utils/requestScopedBody.js';
 
 type Setup = Awaited<ReturnType<typeof projectionRuntime>>;

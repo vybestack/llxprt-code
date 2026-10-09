@@ -1,12 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
-import { sourceRootSetup } from './prompt-envelope-source-test-helpers.js';
+import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import {
   toolHookWorker,
   type ToolHookMode,
   type ToolHookFacts,
-} from './streamprocessor-tool-hook-fixture.js';
+} from './__tests__/support/streamprocessor-tool-hook-fixture.js';
 
 function promptTokens(facts: ToolHookFacts): number {
   if (facts.estimate === null)

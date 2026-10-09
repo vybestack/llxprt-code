@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { sourceRootSetup } from './prompt-envelope-source-test-helpers.js';
-import { correlatedProbe } from './source-telemetry-correlated-fixture.js';
+import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
+import { correlatedProbe } from './__tests__/support/source-telemetry-correlated-fixture.js';
 
 const root = sourceRootSetup();
 function closed(receipt: Awaited<ReturnType<typeof correlatedProbe>>): void {

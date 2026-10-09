@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { captureBodyAttempt } from '../lib/body-evidence-writer.js';
+import { captureBodyAttempt } from '../../packages/test-utils/src/body-evidence-writer.js';
 import { randomUUID } from 'node:crypto';
 import { SettingsService } from '../../packages/settings/src/settings/SettingsService.js';
 import { createProviderRuntimeContext } from '../../packages/core/src/runtime/providerRuntimeContext.js';

@@ -10,7 +10,7 @@ import { buildCuratedHistory } from '../../packages/core/src/services/history/hi
 import { buildProviderContent } from '../../packages/core/src/services/history/historyProviderPipeline.js';
 import { recomposeFixture } from '../../packages/agents/src/compression/__tests__/provider-curated-recomposition-helpers.js';
 import { captureCuratedBody } from './provider-curated-body-helpers.js';
-import { writeBodyFile } from '../lib/body-evidence-writer.js';
+import { writeBodyFile } from '../../packages/test-utils/src/body-evidence-writer.js';
 
 export const logger = new DebugLogger('test:empty-publication');
 export function fixtureRow(index: number): IContent {

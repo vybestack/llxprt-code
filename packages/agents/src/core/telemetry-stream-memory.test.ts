@@ -4,9 +4,9 @@ import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { telemetryCapRow } from './telemetry-stream-fixture.js';
+import { telemetryCapRow } from './__tests__/support/telemetry-stream-fixture.js';
 import { getRequestTextFromContents } from './turnLogging.js';
-import { sourceRootSetup } from './prompt-envelope-source-test-helpers.js';
+import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 
 const root = sourceRootSetup();
 const resultSchema = z.object({
@@ -39,7 +39,10 @@ describe('full-cap telemetry process residency', () => {
     await mkdir(directory, { recursive: true });
     await writeFile(join(directory, 'oracle.json'), JSON.stringify(expected));
     const child = Bun.spawn(
-      ['bun', './packages/agents/src/core/telemetry-stream-memory-worker.ts'],
+      [
+        'bun',
+        './packages/agents/src/core/__tests__/support/telemetry-stream-memory-worker.ts',
+      ],
       {
         cwd: process.cwd(),
         env: { ...process.env, ISSUE854_CAP_MEMORY_ROOT: directory },

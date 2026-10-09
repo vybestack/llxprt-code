@@ -9,7 +9,7 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
-import { initializeEvidenceLane } from '../lib/body-evidence-writer.js';
+import { initializeEvidenceLane } from '../../packages/test-utils/src/body-evidence-writer.js';
 
 function rootForProcess(): string {
   const scratch = process.env.BODY_EVIDENCE_TEST_SCRATCH;

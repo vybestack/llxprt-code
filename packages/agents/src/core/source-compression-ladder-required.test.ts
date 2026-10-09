@@ -2,8 +2,8 @@
 import { describe, expect, it } from 'bun:test';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { sourceRootSetup } from './prompt-envelope-source-test-helpers.js';
-import { ladderAttempt } from './source-compression-ladder-fixture.js';
+import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
+import { ladderAttempt } from './__tests__/support/source-compression-ladder-fixture.js';
 
 const root = sourceRootSetup();
 function receipt(name: string, value: unknown): void {

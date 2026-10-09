@@ -4,11 +4,11 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { RowOwnership } from '../../../core/src/recording/rowOwnership.js';
 import { isMediaReferenceBlock } from '../../../core/src/services/history/IContent.js';
-import { MemoryCommand } from './wholememory-command.js';
+import { MemoryCommand } from './__tests__/support/wholememory-command.js';
 import {
   type MemoryWorkload,
   writeMemoryFixture,
-} from './wholememory-fixture.js';
+} from './__tests__/support/wholememory-fixture.js';
 
 class RetainingMediaConsumer extends RowOwnership {
   private readonly retained: object[] = [];

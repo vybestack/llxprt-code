@@ -9,15 +9,15 @@ import {
   enforceAndStreamSourcePromptEnvelopeRetries,
   type PreparedSourcePromptEnvelopeSend,
 } from './prompt-envelope-source-send.js';
-import { sourceRootSetup } from './prompt-envelope-source-test-helpers.js';
+import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import {
   preflightEndpoint,
   preflightDisk,
   preflightRuntime,
   preflightInstructions,
   barrier,
-} from './source-preflight-fixture.js';
-import { sourceHeap } from './streamprocessor-source-measurements.js';
+} from './__tests__/support/source-preflight-fixture.js';
+import { sourceHeap } from './__tests__/support/streamprocessor-source-measurements.js';
 
 const root = sourceRootSetup();
 const retained: Array<

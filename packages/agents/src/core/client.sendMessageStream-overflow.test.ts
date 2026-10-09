@@ -22,7 +22,7 @@ import {
 } from 'bun:test';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { AgentClient } from './client.js';
-import * as overflowCases from './client.sendMessageStream-overflow-fixture.js';
+import * as overflowCases from './__tests__/support/client.sendMessageStream-overflow-fixture.js';
 import {
   installOverflowMockChat,
   installZeroCountGenerator,

@@ -31,7 +31,7 @@ import type {
 } from '@vybestack/llxprt-code-providers/IProvider.js';
 import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
 import { resetCliRuntimeRegistryForTesting } from '@vybestack/llxprt-code-providers/runtime/runtimeRegistry.js';
-import { collectHistoryFixture } from './collect-history-test-fixture.js';
+import { collectHistoryFixture } from './__tests__/support/collect-history-test-fixture.js';
 
 const INPUT_PNG =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=';

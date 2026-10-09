@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { ObservedHistory } from './streamprocessor-source-fixture.js';
+import { ObservedHistory } from './__tests__/support/streamprocessor-source-fixture.js';
 import { openRequestContentsSnapshot } from './streamRequestHelpers.js';
 
 function text(speaker: IContent['speaker'], value: string): IContent {

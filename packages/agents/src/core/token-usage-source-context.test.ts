@@ -13,7 +13,7 @@ import {
   recordSourceRequestShapeContext,
   recordProviderOrModelSwitch,
 } from './tokenUsageEstimateLogger.js';
-import { sourceRootSetup } from './prompt-envelope-source-test-helpers.js';
+import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import {
   shapeRow,
   shapeHead,
@@ -21,7 +21,7 @@ import {
   seedTool,
   shapeState,
   type ShapeCase,
-} from './token-usage-source-fixture.js';
+} from './__tests__/support/token-usage-source-fixture.js';
 
 const root = sourceRootSetup();
 const oracle = z

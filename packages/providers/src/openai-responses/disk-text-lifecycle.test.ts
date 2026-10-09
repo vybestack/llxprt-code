@@ -7,8 +7,8 @@ import { activeRequestBodyCount } from '../utils/requestScopedBody.js';
 import {
   projectionEndpoint,
   projectionRuntime,
-} from './projection-ownership-fixture.js';
-import { diskTextFixture as projectionDiskRows } from './disk-text-fixture.js';
+} from './__tests__/support/projection-ownership-fixture.js';
+import { diskTextFixture as projectionDiskRows } from './__tests__/support/disk-text-fixture.js';
 
 async function lifecycle(
   returnBeforeNext: boolean | 'throw',

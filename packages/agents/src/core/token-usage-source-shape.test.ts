@@ -11,7 +11,7 @@ import type {
 import { prepareProviderContentSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-curated-stream.js';
 import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { RequestShapeSessionMemory } from './tokenUsageRequestShape.js';
-import { sourceRootSetup } from './prompt-envelope-source-test-helpers.js';
+import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import { BoundarySnapshotDisk } from './boundary-snapshot-disk.js';
 import {
   shapeCases,
@@ -24,7 +24,7 @@ import {
   fallbackCount,
   independentSeed,
   type ShapeCase,
-} from './token-usage-source-fixture.js';
+} from './__tests__/support/token-usage-source-fixture.js';
 
 const root = sourceRootSetup();
 const evidence = join(process.cwd(), 'tmp/source-shape-disk-20261009-sol');

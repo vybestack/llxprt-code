@@ -8,6 +8,7 @@ import { describe, expect, it } from 'bun:test';
 import type { RuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { prepareAnthropicRequest } from './AnthropicRequestPreparation.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
@@ -72,16 +73,20 @@ async function prepare(fixture: RequestFixture): Promise<PreparedFixture> {
     baseURL: fixture.baseURL ?? BASE_URL,
     authToken: 'test-token',
   };
+  const rows = [
+    { speaker: 'human', blocks: [{ type: 'text', text: 'test request' }] },
+  ] satisfies IContent[];
   const callOptions = createProviderCallOptions({
     providerName: PROVIDER_NAME,
     settings,
     resolved,
-    contents: [
-      { speaker: 'human', blocks: [{ type: 'text', text: 'test request' }] },
-    ],
+    contents: rows,
   });
   const options = {
     ...callOptions,
+    // prepareAnthropicRequest consumes the request-scoped materialized
+    // history; this seam never faces the transport stream.
+    contents: rows,
     metadata: callOptions.metadata ?? {},
     resolved,
     invocation: replaceInvocationInputs(callOptions.invocation, fixture),

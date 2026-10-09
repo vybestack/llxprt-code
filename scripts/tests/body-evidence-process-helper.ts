@@ -5,7 +5,7 @@ import { setTimeout } from 'node:timers/promises';
 import {
   appendBodyEvidence,
   writeCompactBody,
-} from '../lib/body-evidence-writer.js';
+} from '../../packages/test-utils/src/body-evidence-writer.js';
 
 const [mode, root, label] = process.argv.slice(2);
 if (!root || !label) throw new Error('Missing process evidence identity');

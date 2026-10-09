@@ -11,9 +11,9 @@ import {
   shutdownTelemetry,
   flushTelemetry,
 } from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
-import { sourceRootSetup } from './prompt-envelope-source-test-helpers.js';
+import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import { stageTurnRequestArtifact } from './turn-request-artifact.js';
-import { diskTextRow } from '@vybestack/llxprt-code-providers/openai-responses/disk-text-fixture.js';
+import { diskTextRow } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-fixture.js';
 
 const root = sourceRootSetup();
 class PausedExporter extends FileLogExporter {

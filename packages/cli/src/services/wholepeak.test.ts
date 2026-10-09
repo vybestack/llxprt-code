@@ -9,9 +9,9 @@ import { streamHistoryItems } from '../ui/utils/streamHistoryItems.js';
 import {
   writeMemoryFixture,
   type MemoryWorkload,
-} from './wholememory-fixture.js';
+} from './__tests__/support/wholememory-fixture.js';
 import type { IContent } from '../../../core/src/services/history/IContent.js';
-import { MemoryCommand } from './wholememory-command.js';
+import { MemoryCommand } from './__tests__/support/wholememory-command.js';
 
 describe('overlapping readers', () => {
   it('separates overlapping resolvers and releases cancelled consumers', async () => {

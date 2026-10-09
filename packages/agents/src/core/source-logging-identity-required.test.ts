@@ -7,7 +7,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { prepareProviderContentSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-curated-stream.js';
 import { BoundarySnapshotDisk } from './boundary-snapshot-disk.js';
-import { sourceRootSetup } from './prompt-envelope-source-test-helpers.js';
+import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import { createSafeJsonReplacer } from './turnJsonUtils.js';
 import { stageTurnRequestArtifact } from './turn-request-artifact.js';
 

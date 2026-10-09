@@ -5,8 +5,8 @@ import { tmpdir } from 'node:os';
 import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { ResponsesDiskTextRows } from './responses-disk-text-rows.js';
 import { withGpt56DiskSources } from '../tokenizers/gpt56-disk-tokenizer-factory.js';
-import { diskTextFixture } from './disk-text-fixture.js';
-import { projectionRuntime } from './projection-ownership-fixture.js';
+import { diskTextFixture } from './__tests__/support/disk-text-fixture.js';
+import { projectionRuntime } from './__tests__/support/projection-ownership-fixture.js';
 
 describe('actual request source estimation cancellation', () => {
   it('cancels source estimation through the actual request signal without a separately configured global factory signal', async () => {

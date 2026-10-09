@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, closeSync, openSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { diskTextRow } from '@vybestack/llxprt-code-providers/openai-responses/disk-text-fixture.js';
+import { diskTextRow } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-fixture.js';
 
 const factsSchema = z.object({
   mode: z.string(),
@@ -64,7 +64,7 @@ async function worker(
   const child = Bun.spawn(
     [
       'bun',
-      'packages/agents/src/core/streamprocessor-logging-worker.ts',
+      'packages/agents/src/core/__tests__/support/streamprocessor-logging-worker.ts',
       root,
       mode,
       source ? 'source' : 'eager',

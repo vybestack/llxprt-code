@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { sourceRootSetup } from './prompt-envelope-source-test-helpers.js';
-import { mixedPostSendProbe } from './source-post-send-durable-fixture.js';
+import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
+import { mixedPostSendProbe } from './__tests__/support/source-post-send-durable-fixture.js';
 
 const root = sourceRootSetup();
 type Receipt = Awaited<ReturnType<typeof mixedPostSendProbe>>;

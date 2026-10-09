@@ -1,7 +1,7 @@
 import { observeHistorySynchronouslyForTest } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { writeBodyFile } from '../lib/body-evidence-writer.js';
+import { writeBodyFile } from '../../packages/test-utils/src/body-evidence-writer.js';
 import { describe, expect, it } from 'bun:test';
 
 import { join } from 'node:path';

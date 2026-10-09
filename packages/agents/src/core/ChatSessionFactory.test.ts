@@ -126,14 +126,14 @@ import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/promp
 import { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
 import { ChatSession } from './chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { withChatSessionFactoryMediaFixture } from './chatSessionFactoryMediaTestHelper.js';
+import { withChatSessionFactoryMediaFixture } from './__tests__/support/chatSessionFactoryMediaTestHelper.js';
 import {
   makeConfig,
   makeRuntimeState,
   makeTodoContinuationService,
   makeContentGenerator,
   createTestChatSession,
-} from './chatSessionFactoryTestConfig.js';
+} from './__tests__/support/chatSessionFactoryTestConfig.js';
 
 describe('buildSettingsSnapshot', () => {
   const observeSettings = (settings: Readonly<Record<string, unknown>>) =>
