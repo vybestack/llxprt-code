@@ -24,51 +24,37 @@ describe('summary cancellation before journal publication', () => {
     });
   });
 
-  it.each([false, true])(
-    'restores media effects, tokens and pending identities if aborted after media publication pending=%s',
-    async (pending) => {
-      await withBatchFixture(
-        async ({ history, owners, pauseWriter, releaseWriter }) => {
-          if (pending) pauseWriter();
-          const input = Array.from({ length: 5 }, (_, i) =>
-            exportSummaryRow(i),
-          );
-          await history.addBatch(input);
-          if (!pending) await history.waitForCommit();
-          const controller = new AbortController();
-          let publishedMedia = false;
-          history.registerMediaOwner(
-            mediaParticipant(async () => ({
-              publish: async () => {
-                publishedMedia = true;
-                controller.abort(new Error('media cancelled summary'));
-              },
-              rollback: async () => {
-                publishedMedia = false;
-              },
-            })),
-          );
-          const before = await history.estimateTokensForContents(input);
-          const summary = summaryRow();
-          await expect(
-            history.summarizeOldHistory(
-              3,
-              async () => summary,
-              controller.signal,
-            ),
-          ).rejects.toThrow('media cancelled summary');
-          expect(publishedMedia).toBe(false);
-          expect(history.getTotalTokens()).toBe(before);
-          const restored = await collectRawHistory(history);
-          expect(restored).toStrictEqual(input);
-          const identities = input.map((row, index) => restored[index] === row);
-          expect(identities).toStrictEqual(input.map(() => pending));
-          expect(summary.metadata?.chronology).toBeUndefined();
-          releaseWriter();
-          await history.waitForCommit();
-          expect(owners.snapshot().liveRows).toBe(0);
-        },
+  it('restores media effects, tokens and row values if aborted after media publication', async () => {
+    await withBatchFixture(async ({ history, owners }) => {
+      const input = Array.from({ length: 5 }, (_, i) => exportSummaryRow(i));
+      await history.addBatch(input);
+      await history.waitForCommit();
+      const controller = new AbortController();
+      let publishedMedia = false;
+      history.registerMediaOwner(
+        mediaParticipant(async () => ({
+          publish: async () => {
+            publishedMedia = true;
+            controller.abort(new Error('media cancelled summary'));
+          },
+          rollback: async () => {
+            publishedMedia = false;
+          },
+        })),
       );
-    },
-  );
+      const before = await history.estimateTokensForContents(input);
+      const summary = summaryRow();
+      await expect(
+        history.summarizeOldHistory(3, async () => summary, controller.signal),
+      ).rejects.toThrow('media cancelled summary');
+      expect(publishedMedia).toBe(false);
+      expect(history.getTotalTokens()).toBe(before);
+      const restored = await collectRawHistory(history);
+      expect(restored).toStrictEqual(input);
+      restored.forEach((row, index) => expect(row).not.toBe(input[index]));
+      expect(summary.metadata?.chronology).toBeUndefined();
+      await history.waitForCommit();
+      expect(owners.snapshot().liveRows).toBe(0);
+    });
+  });
 });

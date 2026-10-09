@@ -8,7 +8,7 @@ import {
 } from './chronology-rollback-test-helpers.js';
 
 describe('fallback restore candidate storage', () => {
-  it.each(['index', 'chronology'])(
+  it.each(['rows', 'index'])(
     'closes partially opened candidate when %s cannot open',
     async (file) => {
       await withRollbackFixture(async (history, recorder) => {

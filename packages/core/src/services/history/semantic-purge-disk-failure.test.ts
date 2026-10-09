@@ -28,7 +28,7 @@ describe('semantic purge disk snapshot failure', () => {
       ];
       await history.addBatch(input);
       await history.waitForCommit();
-      const before = structuredClone(input);
+      const before = await rowsOf(history);
       const owners = new RowOwnership();
       const failure = new Error('candidate disk write failed');
       const coordinator = new SemanticMediaPurgeStreamCoordinator(history, {

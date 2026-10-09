@@ -39,7 +39,9 @@ describe('clone sanitization and independent objects', () => {
         second: { _circular: true },
       });
       expect(media.data).toBe('aGVsbG8=');
-      expect(media.providerMetadata?.['observedAt']).toBeInstanceOf(Date);
+      expect(media.providerMetadata?.['observedAt']).toBe(
+        '2026-09-29T00:00:00.000Z',
+      );
       const first = cloned[0].blocks[0];
       if (first.type !== 'text') throw new Error('Missing text');
       first.text = 'changed clone';
@@ -111,9 +113,10 @@ for (const query of ['clone', 'trace'] as const) {
       await withCoreSuffixFixture(0, async (service, ownership) => {
         for (let index = 0; index < 3; index++) service.add(suffixRow(index));
         const before = scratchDirectories();
+        const admitted = ownership.snapshot().acquisitions;
         const unused = queryStream(service, query);
         await unused.return();
-        expect(ownership.snapshot().acquisitions).toBe(0);
+        expect(ownership.snapshot().acquisitions).toBe(admitted);
         expect(
           scratchDirectories().filter(
             (directory) => !before.includes(directory),

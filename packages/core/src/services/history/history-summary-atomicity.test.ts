@@ -109,61 +109,55 @@ describe('summary publication rollback', () => {
   });
 });
 
-describe('pending summary identity rollback', () => {
-  it('restores pending row identities and markers before replaying a queued add on token failure', async () => {
-    await withBatchFixture(
-      async ({ history, pauseWriter, releaseWriter, owners }) => {
-        pauseWriter();
-        const originals = Array.from({ length: 5 }, (_, index) =>
-          exportSummaryRow(index),
-        );
-        await history.addBatch(originals);
-        const before = history.getTotalTokens();
-        const entered = batchGate();
-        const release = batchGate();
-        history.setTokenizerFactory({
-          ...exactTokenizer(),
-          getTokenizer: () => ({
-            fallbackPolicy: 'deny',
-            countTokens: async () => {
-              entered.resolve();
-              await release.promise;
-              throw new Error('summary tokenizer rejected');
-            },
-          }),
-        });
-        const operation = history.summarizeOldHistory(3, async (source) => {
-          let index = 0;
-          for (const row of source) {
-            expect(row).toBe(originals[index]);
-            index++;
-          }
-          return summaryRow();
-        });
-        await entered.promise;
-        const queued = exportSummaryRow(5);
-        history.add(queued);
-        history.setTokenizerFactory(exactTokenizer());
-        release.resolve();
-        await expect(operation).rejects.toThrow('summary tokenizer rejected');
-        const rows = await collectRawHistory(history);
-        expect(rows).toHaveLength(6);
-        originals.forEach((row, index) => {
-          expect(rows[index]).toBe(row);
-          expect(rows[index].metadata?.chronology).toBe(
-            row.metadata?.chronology,
-          );
-        });
-        expect(rows[5]).toBe(queued);
-        await history.waitForTokenUpdates();
-        expect(history.getTotalTokens()).toBe(
-          before + (await history.estimateTokensForContents([queued])),
-        );
-        releaseWriter();
-        await history.waitForCommit();
-        assertOwnerBound(owners);
-      },
-    );
+describe('summary rollback over detached values', () => {
+  it('restores row values and markers before replaying a queued add on token failure', async () => {
+    await withBatchFixture(async ({ history, owners }) => {
+      const originals = Array.from({ length: 5 }, (_, index) =>
+        exportSummaryRow(index),
+      );
+      await history.addBatch(originals);
+      const stored = await collectRawHistory(history);
+      const before = history.getTotalTokens();
+      const entered = batchGate();
+      const release = batchGate();
+      history.setTokenizerFactory({
+        ...exactTokenizer(),
+        getTokenizer: () => ({
+          fallbackPolicy: 'deny',
+          countTokens: async () => {
+            entered.resolve();
+            await release.promise;
+            throw new Error('summary tokenizer rejected');
+          },
+        }),
+      });
+      const operation = history.summarizeOldHistory(3, async (source) => {
+        let index = 0;
+        for (const row of source) {
+          expect(row).toStrictEqual(stored[index]);
+          index++;
+        }
+        return summaryRow();
+      });
+      await entered.promise;
+      const queued = exportSummaryRow(5);
+      history.add(queued);
+      history.setTokenizerFactory(exactTokenizer());
+      release.resolve();
+      await expect(operation).rejects.toThrow('summary tokenizer rejected');
+      const rows = await collectRawHistory(history);
+      expect(rows).toHaveLength(6);
+      stored.forEach((row, index) => {
+        expect(rows[index]).toStrictEqual(row);
+      });
+      expect(rows[5]).toStrictEqual(queued);
+      await history.waitForTokenUpdates();
+      expect(history.getTotalTokens()).toBe(
+        before + (await history.estimateTokensForContents([queued])),
+      );
+      await history.waitForCommit();
+      assertOwnerBound(owners);
+    });
   });
 
   it('rolls back observer failure and permits a subsequent successful summary', async () => {

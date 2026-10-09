@@ -37,16 +37,19 @@ describe('summary capture with a queued add', () => {
         await operation;
         await history.waitForTokenUpdates();
         await history.waitForCommit();
-        let index = 0;
-        for await (const row of history.streamRawHistory()) {
-          const tail = index === 4 ? queued : input[size - 4 + index];
-          const expected = index === 0 ? summary : tail;
-          expect(row).toStrictEqual(expected);
-          expect(row.metadata?.chronology).toStrictEqual(
-            expected.metadata?.chronology,
-          );
-          index++;
-        }
+        const rows = await Array.fromAsync(history.streamRawHistory());
+        const [storedSummary, ...tailRows] = rows;
+        expect(storedSummary.metadata?.chronology).toBeDefined();
+        expect({
+          ...storedSummary,
+          metadata: { ...storedSummary.metadata, chronology: undefined },
+        }).toStrictEqual({
+          ...summary,
+          metadata: { ...summary.metadata, chronology: undefined },
+        });
+        const expectedTail = [...input.slice(size - 3), queued];
+        expect(tailRows).toStrictEqual(expectedTail);
+        const index = rows.length;
         expect(index).toBe(5);
         recordExportSummaryOwners('summary-pending', size, owners);
       });

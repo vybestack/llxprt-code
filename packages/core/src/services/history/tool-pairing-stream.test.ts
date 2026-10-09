@@ -70,6 +70,7 @@ describe('unmatched tool call cursor ownership', () => {
             calls(call(String(index))),
           ),
         );
+        const admitted = ownership.snapshot().acquisitions;
         const cursor = service.findUnmatchedToolCalls({ root, ownership });
         expect(readdirSync(root)).toHaveLength(0);
         let index = 0;
@@ -78,7 +79,9 @@ describe('unmatched tool call cursor ownership', () => {
           expect(ownership.snapshot().liveRows).toBe(1);
           expect(ownership.snapshot().peakRows).toBe(1);
           await Promise.resolve();
-          expect(ownership.snapshot().acquisitions).toBe(size + index + 1);
+          expect(ownership.snapshot().acquisitions).toBe(
+            admitted + size + index + 1,
+          );
           index += 1;
         }
         expect(index).toBe(size);

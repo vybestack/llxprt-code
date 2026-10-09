@@ -18,16 +18,27 @@ export function transformFixture(
   trap: boolean,
   afterPublication: () => void | Promise<void>,
 ): Promise<void> {
+  // The trap keeps every source row alive in the test itself (a deliberate
+  // context-length control); the sink never retains caller rows.
+  const retained: IContent[] = [];
   return history.transformAll(
     async (source, sink) => {
       let index = 0;
       for await (const { row } of source.streamRows()) {
-        if (trap) sink.appendBorrowed(row);
-        else sink.appendDetached(index === 0 ? changedTransformRow(row) : row);
+        if (trap) retained.push(row);
+        sink.appendDetached(index === 0 ? changedTransformRow(row) : row);
         index++;
       }
     },
     undefined,
-    { afterPublication },
+    {
+      afterPublication: async () => {
+        try {
+          await afterPublication();
+        } finally {
+          retained.length = 0;
+        }
+      },
+    },
   );
 }

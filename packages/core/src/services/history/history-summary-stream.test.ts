@@ -31,15 +31,23 @@ describe('disk-row history summary', () => {
           expect(index).toBe(size - 3);
           return summary;
         });
-        let index = 0;
-        for await (const row of history.streamRawHistory()) {
-          expect(row).toStrictEqual(
-            index === 0 ? summary : exportSummaryRow(size - 4 + index),
-          );
-          index++;
-        }
+        const rows = await Array.fromAsync(history.streamRawHistory());
+        const [storedSummary, ...tailRows] = rows;
+        const summaryChronologySeq = storedSummary.metadata?.chronology?.seq;
+        expect({
+          ...storedSummary,
+          metadata: { ...storedSummary.metadata, chronology: undefined },
+        }).toStrictEqual({
+          ...summary,
+          metadata: { ...summary.metadata, chronology: undefined },
+        });
+        expect(tailRows).toStrictEqual(
+          [size - 3, size - 2, size - 1].map((i) => exportSummaryRow(i)),
+        );
+        const index = rows.length;
         expect(index).toBe(4);
-        expect(summary.metadata?.chronology?.seq).toBe(size + 1);
+        expect(summaryChronologySeq).toBe(size + 1);
+        expect(summary.metadata?.chronology).toBeUndefined();
         expect(history.getTotalTokens()).toBe(
           await history.estimateTokensForContents([
             summary,

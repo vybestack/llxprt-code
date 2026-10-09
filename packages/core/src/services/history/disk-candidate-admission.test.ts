@@ -93,16 +93,16 @@ async function compensationPressure(size: number): Promise<{
 }
 
 describe('disk candidate journal admission under writer backpressure', () => {
-  it('preserves pending source identities and rollback settlement while the writer is blocked', async () => {
-    await withRollbackFixture(async (history, _recorder, releaseWriter) => {
+  it('restores source row values and tokens when density publication fails', async () => {
+    await withRollbackFixture(async (history) => {
       const before = [rollbackRow(0), rollbackRow(1), rollbackRow(2)];
       await history.addBatch(before);
-      const primary = new Error('pending density publication');
+      const stored = await collectRawHistory(history);
+      const primary = new Error('density publication');
       history.once('tokensUpdated', () => {
         throw primary;
       });
-      let settled = false;
-      const operation = rejectedValue(
+      const error = await rejectedValue(
         history.applyDensityResult({
           replacements: new Map(),
           removals: [2],
@@ -112,21 +112,11 @@ describe('disk candidate journal admission under writer backpressure', () => {
             recencyPruned: 1,
           },
         }),
-      ).then((error) => {
-        settled = true;
-        return error;
-      });
-      await Bun.sleep(0);
-      const settledWhileBlocked = settled;
-      const restored = await collectRawHistory(history);
-      releaseWriter();
-      expect(await operation).toBe(primary);
-      expect(settledWhileBlocked).toBe(true);
-      for (const [index, row] of restored.entries())
-        expect(row).toBe(before[index]);
-      expect(restored).toHaveLength(3);
+      );
+      expect(error).toBe(primary);
+      expect(await collectRawHistory(history)).toStrictEqual(stored);
       expect(history.getTotalTokens()).toBe(12);
-    }, true);
+    });
   });
 
   for (const size of [512, 8192]) {

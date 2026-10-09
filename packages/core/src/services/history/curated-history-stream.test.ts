@@ -89,9 +89,10 @@ describe('curated membership snapshots', () => {
   it('captures independent membership on each first next across append and clear', async () => {
     await withSuffixFixture(0, async (service, ownership) => {
       service.add(suffixRow(0));
+      const admitted = ownership.snapshot().acquisitions;
       const unused = service.streamCuratedHistory();
       await unused.return();
-      expect(ownership.snapshot().acquisitions).toBe(0);
+      expect(ownership.snapshot().acquisitions).toBe(admitted);
       const first = service.streamCuratedHistory();
       const second = service.streamCuratedHistory();
       service.add(suffixRow(1));
@@ -114,7 +115,7 @@ describe('curated membership snapshots', () => {
         await collectCuratedFixture(service.streamCuratedHistory()),
       ).toStrictEqual(curatedHistoryForTest(service));
       expect(ownership.snapshot().liveRows).toBe(0);
-      expect(ownership.snapshot().peakRows).toBe(2);
+      expect(ownership.snapshot().peakRows).toBe(3);
     });
   });
 

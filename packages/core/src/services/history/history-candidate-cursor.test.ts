@@ -4,7 +4,6 @@ import { appendFileSync } from 'node:fs';
 import { RowOwnership } from '../../recording/rowOwnership.js';
 import { HistoryDensityRows } from './historyDensityRows.js';
 import { ownerFixtureRow } from './chronology-rollback-owner-test-helpers.js';
-import { restoreChronologyEntry } from './historyChronology.js';
 import type { IContent } from './IContent.js';
 
 function recordOwners(
@@ -159,25 +158,22 @@ describe('disk candidate cursor lifecycle', () => {
   });
 });
 
-describe('disk candidate explicit identity ownership', () => {
-  it('detaches value writes but preserves explicitly pinned row and original marker identities through rollback', async () => {
+describe('disk candidate detached value ownership', () => {
+  it('serializes a sanitized value and neither pins nor aliases the caller row', () => {
     const ownership = new RowOwnership();
     const candidate = new HistoryDensityRows(ownership);
     const original = ownerFixtureRow(0, 2048);
-    const marker = original.metadata?.chronology;
     try {
       candidate.append(original);
-      candidate.appendIdentity(original);
-      const ledger = candidate.prepareChronologyRollback();
+      candidate.appendSanitized(original);
       original.metadata = {
         chronology: { seq: 900, userTurn: 90, step: 2, recordedAt: 0 },
       };
-      for (const entry of ledger) restoreChronologyEntry(entry);
-      expect(original.metadata.chronology).toBe(marker);
-      expect(candidate.readRow(1)).toBe(original);
       expect(candidate.readRow(0)).not.toBe(original);
+      expect(candidate.readRow(1)).not.toBe(original);
       expect(candidate.readRow(0)).toStrictEqual(ownerFixtureRow(0, 2048));
-      expect(ownership.snapshot().liveRows).toBe(1);
+      expect(candidate.readRow(1)).toStrictEqual(ownerFixtureRow(0, 2048));
+      expect(ownership.snapshot().liveRows).toBe(0);
     } finally {
       candidate.close();
     }
@@ -189,7 +185,7 @@ describe('disk candidate explicit identity ownership', () => {
     const candidate = new HistoryDensityRows(ownership);
     candidate.append(ownerFixtureRow(0, 2048));
     candidate.close();
-    expect(() => candidate.appendIdentity(ownerFixtureRow(1, 2048))).toThrow(
+    expect(() => candidate.appendSanitized(ownerFixtureRow(1, 2048))).toThrow(
       'Candidate rows are closed',
     );
     expect(() => candidate.append(ownerFixtureRow(2, 2048))).toThrow(
@@ -201,13 +197,17 @@ describe('disk candidate explicit identity ownership', () => {
     expect(ownership.snapshot().liveRows).toBe(0);
   });
 
-  it('rejects a retained 8192-row identity trap rather than hiding pins as borrowed rows', () => {
+  it('rejects a deliberately retained 8192-row control rather than hiding pins as borrowed rows', () => {
     const ownership = new RowOwnership();
     const candidate = new HistoryDensityRows(ownership);
+    const retained: IContent[] = [];
     try {
       for (let index = 0; index < 8192; index++) {
-        candidate.appendIdentity(ownerFixtureRow(index, 2048));
+        const row = ownerFixtureRow(index, 2048);
+        ownership.retain(row);
+        retained.push(row);
       }
+      expect(retained).toHaveLength(8192);
       recordOwners(8192, true, ownership);
       expect(ownership.snapshot().liveRows).toBe(8192);
       expect(ownership.snapshot().peakRows).toBeGreaterThan(440);
@@ -217,6 +217,8 @@ describe('disk candidate explicit identity ownership', () => {
     } finally {
       candidate.close();
     }
+    expect(ownership.snapshot().liveRows).toBe(8192);
+    for (const row of retained) ownership.release(row);
     expect(ownership.snapshot().liveRows).toBe(0);
   });
 });

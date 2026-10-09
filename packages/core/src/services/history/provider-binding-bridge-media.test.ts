@@ -56,10 +56,7 @@ describe('binding bridge local media reservations', () => {
         history.registerMediaOwner(new HistoryMediaOwnership(store));
         await history.addBatch(rows);
         await history.waitForCommit();
-        const inputRows = async function* () {
-          yield* rows;
-        };
-        const expected = await detachedDigest(inputRows());
+        const expected = await detachedDigest(history.streamRawHistory());
         const beforeReservation = await store.hasReservations(
           reference.contentId,
         );

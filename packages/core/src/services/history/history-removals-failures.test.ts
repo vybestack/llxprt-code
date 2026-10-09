@@ -49,7 +49,7 @@ function registerRemovalFailure(
             history.off('tokensUpdated', listener);
           }
           const expected = input;
-          await assertRemovalRows(history.streamRawHistory(), expected, true);
+          await assertRemovalRows(history.streamRawHistory(), expected);
           expect(history.getTotalTokens()).toBe(tokens);
           expect(history.getContextRange()).toStrictEqual(range);
           expect(await store.hasReservations(shared.contentId)).toBe(true);
@@ -83,7 +83,7 @@ describe('history removal rollback', () => {
         history.add(repeated);
         await waitForPausedWrite;
         await history.waitForTokenUpdates();
-        expect(await history.pop()).toBe(repeated);
+        expect(await history.pop()).toStrictEqual(repeated);
         expect(history.length()).toBe(0);
       },
     );

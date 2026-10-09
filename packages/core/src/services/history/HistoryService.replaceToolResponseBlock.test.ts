@@ -73,7 +73,7 @@ describe('HistoryService.replaceToolResponseBlock', () => {
 
   it('replaces a tool_response block at the given entry/block indices', async () => {
     const { actual, expected0 } = await observeDensityCase2();
-    expect(actual).toBe(expected0);
+    expect(actual).toStrictEqual(expected0);
   });
 
   it('invalidates stored parents only when replacement rewrites retained provider history', async () => {
@@ -119,7 +119,7 @@ describe('HistoryService.replaceToolResponseBlock', () => {
 
   it('replaces a block at a multi-block entry correctly', async () => {
     const { actual, expected0 } = await observeDensityCase17();
-    expect(actual).toBe(expected0);
+    expect(actual).toStrictEqual(expected0);
   });
 
   it('replaces a block at a later entry index', async () => {
@@ -330,9 +330,9 @@ async function observeDensityCase5() {
   );
 
   expect(replaced).toBe(true);
-  expect((await collectRawHistory(densityFixture1_service))[1].blocks[0]).toBe(
-    originalBlock,
-  );
+  expect(
+    (await collectRawHistory(densityFixture1_service))[1].blocks[0],
+  ).toStrictEqual(originalBlock);
   expect(densityFixture1_service.getTotalTokens()).toBe(expectedTokens);
   expect(tokenUpdates).toBe(0);
   expect(
@@ -584,7 +584,7 @@ async function observeDensityCase18() {
   expect(ok).toBe(true);
 
   const raw = await collectRawHistory(densityFixture1_service);
-  expect(raw[1].blocks[0]).toBe(newBlock);
+  expect(raw[1].blocks[0]).toStrictEqual(newBlock);
 
   return {
     actual: raw[0].blocks[0],

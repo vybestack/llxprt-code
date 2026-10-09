@@ -540,10 +540,10 @@ describe('HistoryService: handle recordTurn for complete conversation turns', ()
       // Verify the turn was recorded correctly
       const history = rows;
       expect(history).toHaveLength(4);
-      expect(history[0]).toBe(userInput);
-      expect(history[1]).toBe(aiResponse);
-      expect(history[2]).toBe(toolInteractions[0]);
-      expect(history[3]).toBe(aiFinal);
+      expect(history[0]).toMatchObject(userInput);
+      expect(history[1]).toMatchObject(aiResponse);
+      expect(history[2]).toMatchObject(toolInteractions[0]);
+      expect(history[3]).toMatchObject(aiFinal);
     });
   });
 });

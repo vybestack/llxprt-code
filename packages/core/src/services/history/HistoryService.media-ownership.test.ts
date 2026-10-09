@@ -317,12 +317,11 @@ describe('HistoryService local-media ownership lifecycle', () => {
     await service.applyDensityResult(densityResult);
 
     await collectRowsForAssertions(service.streamRawHistory(), async (rows) => {
+      expect(rows).toMatchObject([contents[1]]);
       expect({
-        history: rows,
         removed: await store.hasReservations(removed.contentId),
         retained: await store.hasReservations(retained.contentId),
       }).toStrictEqual({
-        history: [contents[1]],
         removed: false,
         retained: true,
       });

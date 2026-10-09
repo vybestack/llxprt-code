@@ -9,7 +9,7 @@ import {
 } from './pending-caller-lifecycle-test-helpers.js';
 
 describe('pending caller admission lifecycle', () => {
-  it('retains original pending identity and admission until durable ack', async () => {
+  it('hands out a detached value and holds no admission owner across durable ack', async () => {
     await withCallerFixture(async (fixture) => {
       const marker = { seq: 1, userTurn: 1, step: 1, recordedAt: 42 };
       const row = { ...callerRow(), metadata: { chronology: marker } };
@@ -30,23 +30,18 @@ describe('pending caller admission lifecycle', () => {
       expect(fixture.owners.references).toBe(0);
       expect(fixture.transaction.references).toBe(0);
       expect(row.metadata.chronology).toBe(marker);
-      expect({
-        admission,
-        beforeAck,
-        rowIdentity: observation.borrowed === row,
-        markerIdentity: observation.borrowed.metadata?.chronology === marker,
-      }).toMatchObject({
-        admission: { liveRows: 1, references: 1 },
-        beforeAck: 1,
-        rowIdentity: true,
-        markerIdentity: true,
-      });
+      expect(admission).toMatchObject({ liveRows: 0, references: 0 });
+      expect(beforeAck).toBe(0);
+      expect(observation.borrowed).toStrictEqual(row);
+      expect(observation.borrowed).not.toBe(row);
+      expect(observation.borrowed.metadata?.chronology).toStrictEqual(marker);
+      expect(observation.borrowed.metadata?.chronology).not.toBe(marker);
     });
   });
 });
 
 describe('pending caller write failure lifecycle', () => {
-  it('preserves write failure while retaining admission until retirement', async () => {
+  it('preserves write failure with no admission owner held', async () => {
     await withCallerFixture(async (fixture) => {
       const row = callerRow();
       fixture.store.apply({ kind: 'content', content: row });
@@ -65,19 +60,15 @@ describe('pending caller write failure lifecycle', () => {
       expect(observation.readerClosed).toBe(true);
       expect(fixture.owners.references).toBe(0);
       expect(fixture.transaction.references).toBe(0);
-      expect({
-        beforeRetirement,
-        rowIdentity: observation.borrowed === row,
-      }).toStrictEqual({
-        beforeRetirement: 1,
-        rowIdentity: true,
-      });
+      expect(beforeRetirement).toBe(0);
+      expect(observation.borrowed).toStrictEqual(row);
+      expect(observation.borrowed).not.toBe(row);
     });
   });
 });
 
 describe('pending caller cancellation lifecycle', () => {
-  it('retires cancelled admission after closing the borrowed reader', async () => {
+  it('closes the borrowed reader on cancellation without holding an admission owner', async () => {
     await withCallerFixture(async (fixture) => {
       const row = callerRow();
       fixture.store.apply({ kind: 'content', content: row });
@@ -101,19 +92,15 @@ describe('pending caller cancellation lifecycle', () => {
       expect(observation.readerClosed).toBe(true);
       expect(fixture.owners.references).toBe(0);
       expect(fixture.transaction.references).toBe(0);
-      expect({
-        beforeRetirement,
-        rowIdentity: observation.borrowed === row,
-      }).toStrictEqual({
-        beforeRetirement: 1,
-        rowIdentity: true,
-      });
+      expect(beforeRetirement).toBe(0);
+      expect(observation.borrowed).toStrictEqual(row);
+      expect(observation.borrowed).not.toBe(row);
     });
   });
 });
 
 describe('pending caller retained consumer lifecycle', () => {
-  it('keeps a retained consumer distinct from the admission across ack', async () => {
+  it('charges a retained consumer separately from the journal across ack', async () => {
     await withCallerFixture(async (fixture) => {
       const row = callerRow();
       fixture.store.apply({ kind: 'content', content: row });
@@ -129,13 +116,9 @@ describe('pending caller retained consumer lifecycle', () => {
         expect(fixture.owners.references).toBe(1);
         expect(fixture.owners.snapshot().liveRows).toBe(1);
         expect(fixture.transaction.references).toBe(0);
-        expect({
-          beforeAck,
-          rowIdentity: observation.borrowed === row,
-        }).toStrictEqual({
-          beforeAck: 2,
-          rowIdentity: true,
-        });
+        expect(beforeAck).toBe(1);
+        expect(observation.borrowed).toStrictEqual(row);
+        expect(observation.borrowed).not.toBe(row);
       } finally {
         fixture.owners.release(observation.borrowed);
         witness('consumer-released', fixture, row);

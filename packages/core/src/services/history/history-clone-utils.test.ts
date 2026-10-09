@@ -323,6 +323,7 @@ async function testBody4(): Promise<void> {
   }
 
   expect(clonedBlock.data).toBe('aGVsbG8=');
-  expect(clonedBlock.providerMetadata?.['observedAt']).toBeInstanceOf(Date);
-  expect(clonedBlock.providerMetadata?.['observedAt']).not.toBe(observedAt);
+  expect(clonedBlock.providerMetadata?.['observedAt']).toBe(
+    observedAt.toISOString(),
+  );
 }

@@ -19,15 +19,15 @@ function scratch(): string[] {
 }
 
 describe('scoped raw fallback snapshot', () => {
-  it('restores the caller marker object after overwrite and forced GC', async () => {
-    await withRollbackFixture(async (history, _recorder, release) => {
+  it('restores the stored marker value even after the caller overwrites its row metadata', async () => {
+    await withRollbackFixture(async (history) => {
       const row = rollbackRow(0);
       history.add(row);
       await history.waitForTokenUpdates();
-      if (row.metadata?.chronology === undefined)
-        throw new Error('Missing fixture marker');
-      const weak = new WeakRef(row.metadata.chronology);
+      await history.waitForCommit();
       await history.withRawHistorySnapshot(async (snapshot) => {
+        const stored = snapshot.readRow(0);
+        expect(stored.metadata?.chronology?.seq).toBe(1);
         await history.replaceAll([rollbackRow(1)]);
         row.metadata = {
           chronology: { seq: 999, userTurn: 999, step: 999, recordedAt: 0 },
@@ -35,12 +35,11 @@ describe('scoped raw fallback snapshot', () => {
         Bun.gc(true);
         await history.restoreRawHistorySnapshot(snapshot);
         const restored = snapshot.readRow(0);
-        expect(restored).toBe(row);
-        expect(restored.metadata?.chronology).toBe(weak.deref());
+        expect(restored).toStrictEqual(stored);
+        expect(restored).not.toBe(row);
         expect(restored.metadata?.chronology?.seq).toBe(1);
       });
-      release();
-    }, true);
+    });
   });
 
   it('pins membership across live replacement and rejects a damaged snapshot before publication', async () => {

@@ -101,9 +101,10 @@ describe('raw stream snapshot lifetime', () => {
     await withSuffixFixture(0, async (service, ownership) => {
       service.add(suffixRow(0));
       service.add(suffixRow(1));
+      const admitted = ownership.snapshot().acquisitions;
       const unused = service.streamRawHistory();
       await unused.return();
-      expect(ownership.snapshot().acquisitions).toBe(0);
+      expect(ownership.snapshot().acquisitions).toBe(admitted);
       const stream = service.streamRawHistory();
       service.add(suffixRow(2));
       const first = await stream.next();

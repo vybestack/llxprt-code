@@ -1,5 +1,4 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { describe, expect, it } from 'bun:test';
 import type {
   HistoryTransformSink,
@@ -27,46 +26,37 @@ describe('scoped row transform lifecycle', () => {
       if (escapedSink === undefined || escapedSource === undefined)
         throw new Error('Missing scoped handles');
       const closedSink = escapedSink;
-      expect(() => closedSink.appendBorrowed(rollbackRow(1))).toThrow('closed');
+      expect(() => closedSink.appendDetached(rollbackRow(1))).toThrow('closed');
       const cursor = escapedSource.streamRows()[Symbol.asyncIterator]();
       await expect(cursor.next()).rejects.toThrow('closed');
       expect(await rowsOf(history)).toHaveLength(1);
     });
   });
 
-  it('distinguishes pending caller rows from detached source values', async () => {
+  it('waits for the paused writer before publishing, then transforms detached values', async () => {
     await withRollbackFixture(async (history, _recorder, releaseWriter) => {
       const original = rollbackRow(0);
-      await history.addBatch([original]);
-      const controller = new AbortController();
-      const primary = new Error('cancel before commit');
-      expect(
-        await rejectedValue(
-          history.transformAll(
-            async (source, sink) => {
-              for await (const entry of source.streamRows()) {
-                expect(entry.ownership).toBe('borrowed');
-                expect(entry.row).toBe(original);
-                sink.appendBorrowed(entry.row);
-              }
-              controller.abort(primary);
-            },
-            undefined,
-            { signal: controller.signal },
-          ),
-        ),
-      ).toBe(primary);
-      expect((await collectRawHistory(history))[0]).toBe(original);
+      let published = false;
+      const adding = history.addBatch([original]).then(() => {
+        published = true;
+      });
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(published).toBe(false);
       releaseWriter();
-      await history.waitForCommit();
+      await adding;
+      const [added] = await rowsOf(history);
+      expect(added).toMatchObject(original);
       await history.transformAll(async (source, sink) => {
         for await (const entry of source.streamRows()) {
           expect(entry.ownership).toBe('detached');
-          expect(entry.row).not.toBe(original);
+          expect(entry.row).toStrictEqual(added);
+          expect(entry.row).not.toBe(added);
           sink.appendDetached(entry.row);
         }
       });
-      expect(await rowsOf(history)).toStrictEqual([original]);
+      const [stored] = await rowsOf(history);
+      expect(stored).toStrictEqual(added);
+      expect(stored).not.toBe(added);
     }, true);
   });
 });
@@ -77,21 +67,22 @@ describe('row transform traversal', () => {
       const before = [rollbackRow(0), rollbackRow(1), rollbackRow(2)];
       await history.addBatch(before);
       await history.waitForCommit();
+      const stored = await rowsOf(history);
       await history.transformAll(async (source, sink) => {
         for await (const { row } of source.streamRows()) {
-          expect(row).toStrictEqual(before[0]);
+          expect(row).toStrictEqual(stored[0]);
           break;
         }
         let index = 0;
         for await (const { row } of source.streamRows()) {
-          expect(row).toStrictEqual(before[index++]);
+          expect(row).toStrictEqual(stored[index++]);
         }
         expect(index).toBe(3);
         for await (const { row } of source.streamRows())
           sink.appendDetached(changedTransformRow(row));
       });
       expect(await rowsOf(history)).toStrictEqual(
-        before.map(changedTransformRow),
+        stored.map(changedTransformRow),
       );
       expect(history.getTotalTokens()).toBe(12);
       expect(history.getContextRange()).toStrictEqual(expectedRange(3));
@@ -139,13 +130,14 @@ describe('row transform publication cancellation', () => {
       const before = [rollbackRow(0), rollbackRow(1), rollbackRow(2)];
       await history.addBatch(before);
       await history.waitForCommit();
+      const stored = await rowsOf(history);
       const controller = new AbortController();
       const cancellation = new Error('cancel after admissions');
       expect(
         await rejectedValue(
           history.transformAll(
             async (_source, sink) => {
-              sink.appendIdentity(rollbackRow(3));
+              sink.appendDetached(rollbackRow(3));
             },
             undefined,
             {
@@ -157,11 +149,11 @@ describe('row transform publication cancellation', () => {
           ),
         ),
       ).toBe(cancellation);
-      expect(await rowsOf(history)).toStrictEqual(before);
+      expect(await rowsOf(history)).toStrictEqual(stored);
       expect(history.getTotalTokens()).toBe(12);
-      const following = rollbackRow(4);
-      await history.addBatch([following]);
-      expect(following.metadata?.chronology?.seq).toBe(4);
+      await history.addBatch([rollbackRow(4)]);
+      const rows = await rowsOf(history);
+      expect(rows[rows.length - 1].metadata?.chronology?.seq).toBe(4);
     });
   });
 });

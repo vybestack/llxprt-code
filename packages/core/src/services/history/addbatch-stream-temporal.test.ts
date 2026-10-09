@@ -82,7 +82,7 @@ async function finalAdmission(): Promise<number> {
       expect(history.length()).toBe(1);
       expect(await collected(input.weak)).toBe(0);
       // Return is publication, not acknowledgement: pending values still own their charges.
-      expect(owners.snapshot().liveRows).toBe(2);
+      expect(owners.snapshot().liveRows).toBe(1);
       expect(owners.snapshot().liveRows).toBeLessThanOrEqual(440);
       expect(owners.snapshot().liveSerializedBytes).toBeLessThanOrEqual(
         8 * 1024 * 1024,
@@ -160,7 +160,7 @@ async function explicitDurability(): Promise<number> {
       await waitForPausedWrite;
       expect(await nextTurns(operation)).toBe(false);
       expect(published).toBe(false);
-      expect(owners.snapshot().liveRows).toBe(2);
+      expect(owners.snapshot().liveRows).toBe(1);
       releaseWriter();
       await operation;
       expect(published).toBe(true);
@@ -200,7 +200,7 @@ async function cancelledFinalAdmission(): Promise<number> {
       await waitForPausedWrite;
       await turns();
       expect(published).toBe(true);
-      expect(owners.snapshot().liveRows).toBe(2);
+      expect(owners.snapshot().liveRows).toBe(1);
       expect(await nextTurns(operation)).toBe(false);
       releaseWriter();
       await expect(operation).rejects.toBe(failure);
@@ -266,7 +266,7 @@ async function namedAcknowledgement(): Promise<number> {
       await waitForPausedWrite;
       await turns();
       expect(acknowledged).toBe(false);
-      expect(owners.snapshot().liveRows).toBe(2);
+      expect(owners.snapshot().liveRows).toBe(1);
       releaseWriter();
       await operation;
       expect(acknowledged).toBe(true);

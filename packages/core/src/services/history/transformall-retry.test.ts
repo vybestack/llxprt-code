@@ -1,6 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { gcAndSweep } from 'bun:jsc';
 import {
   durableRowsOf,
   expectedRange,
@@ -61,9 +60,9 @@ describe('public transform full retry', () => {
   }
 });
 
-describe('public transform pending writer', () => {
-  it('pins pending source identities while a writer and a later append are queued', async () => {
-    await withRollbackFixture(async (history, recorder, releaseWriter) => {
+describe('public transform durable writer', () => {
+  it('rolls back a failed transform over detached source values and keeps a later append ordered', async () => {
+    await withRollbackFixture(async (history, recorder) => {
       const marker = { seq: 1, userTurn: 1, step: 1, recordedAt: 0 };
       const original = { ...rollbackRow(0), metadata: { chronology: marker } };
       await history.addBatch([original]);
@@ -75,14 +74,15 @@ describe('public transform pending writer', () => {
       const gate = new Promise<void>((resolve) => {
         release = resolve;
       });
-      const failure = new Error('pending transform rollback');
+      const failure = new Error('transform rollback');
       const operation = rejectedValue(
         history.transformAll(
           async (source, sink) => {
             for await (const entry of source.streamRows()) {
-              expect(entry.ownership).toBe('borrowed');
-              expect(entry.row).toBe(original);
-              sink.appendBorrowed(entry.row);
+              expect(entry.ownership).toBe('detached');
+              expect(entry.row).toStrictEqual(original);
+              expect(entry.row).not.toBe(original);
+              sink.appendDetached(entry.row);
             }
             reached?.();
             await gate;
@@ -90,11 +90,6 @@ describe('public transform pending writer', () => {
           undefined,
           {
             afterPublication: () => {
-              original.metadata = {
-                ...original.metadata,
-                chronology: { seq: 900, userTurn: 1, step: 1, recordedAt: 0 },
-              };
-              gcAndSweep();
               throw failure;
             },
           },
@@ -103,16 +98,17 @@ describe('public transform pending writer', () => {
       await ready;
       const queued = rollbackRow(1);
       const append = history.addBatch([queued]);
-      releaseWriter();
       release?.();
       expect(await operation).toBe(failure);
       await append;
       expect(original.metadata.chronology).toBe(marker);
-      expect(queued.metadata?.chronology?.seq).toBe(2);
-      expect(await rowsOf(history)).toStrictEqual([original, queued]);
+      const [first, second] = await rowsOf(history);
+      expect(first).toStrictEqual(original);
+      expect(second).toMatchObject(queued);
+      expect(second.metadata?.chronology?.seq).toBe(2);
       expect(history.getContextRange()).toStrictEqual(expectedRange(2));
       await history.waitForCommit();
-      expect(await durableRowsOf(recorder)).toStrictEqual([original, queued]);
-    }, true);
+      expect(await durableRowsOf(recorder)).toStrictEqual([first, second]);
+    });
   });
 });

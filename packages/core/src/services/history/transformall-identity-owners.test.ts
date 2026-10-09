@@ -3,6 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import { gcAndSweep } from 'bun:jsc';
 import { appendFileSync } from 'node:fs';
 import { RowOwnership } from '../../recording/rowOwnership.js';
+import type { IContent } from './IContent.js';
 import { withCoreSuffixFixture } from './core-suffix-fixture-test-helpers.js';
 import { ownerFixtureRow } from './chronology-rollback-owner-test-helpers.js';
 import {
@@ -37,14 +38,21 @@ async function identityControl(size: number, mode: string): Promise<number> {
       let traversed = 0;
       let bytes = 0;
       const failure = new Error('identity control rollback');
+      // Deliberate retaining control: the test itself holds and charges every row
+      // and its marker, since the sink no longer keeps caller rows alive.
+      const held: IContent[] = [];
       const result = await rejectedValue(
         history.transformAll(
           async (source, sink) => {
             for await (const { row } of source.streamRows()) {
               expect(row).toStrictEqual(ownerFixtureRow(traversed++, 2048));
               bytes += Buffer.byteLength(JSON.stringify(row));
-              if (mode === 'borrowed') sink.appendBorrowed(row);
-              else sink.appendIdentity(structuredClone(row));
+              const kept = mode === 'borrowed' ? row : structuredClone(row);
+              owners.retain(kept);
+              if (kept.metadata?.chronology !== undefined)
+                owners.retain(kept.metadata.chronology);
+              held.push(kept);
+              sink.appendDetached(row);
             }
           },
           undefined,
@@ -69,6 +77,11 @@ async function identityControl(size: number, mode: string): Promise<number> {
           },
         ),
       );
+      for (const kept of held) {
+        owners.release(kept);
+        if (kept.metadata?.chronology !== undefined)
+          owners.release(kept.metadata.chronology);
+      }
       let restored = 0;
       for await (const row of history.streamRawHistory())
         expect(row).toStrictEqual(ownerFixtureRow(restored++, 2048));
@@ -96,33 +109,30 @@ describe('public transform identity ownership', () => {
 });
 
 describe('public transform large valid rows', () => {
-  for (const mode of ['detached', 'borrowed']) {
-    it(`preserves a valid nine-MiB ${mode} row without a size ban`, async () => {
-      await withCoreSuffixFixture(
-        1,
-        async (history) => {
-          history.setTokenizerFactory(exactTokenizer());
-          let bytes = 0;
-          await history.transformAll(async (source, sink) => {
-            for await (const { row } of source.streamRows()) {
-              bytes += Buffer.byteLength(JSON.stringify(row));
-              if (mode === 'borrowed') sink.appendBorrowed(row);
-              else sink.appendDetached(row);
-            }
-          });
-          expect(bytes).toBeGreaterThan(8 * 1024 * 1024);
-          let count = 0;
-          for await (const row of history.streamRawHistory()) {
-            expect(row).toStrictEqual(ownerFixtureRow(0, 9 * 1024 * 1024));
-            count++;
+  it('preserves a valid nine-MiB detached row without a size ban', async () => {
+    await withCoreSuffixFixture(
+      1,
+      async (history) => {
+        history.setTokenizerFactory(exactTokenizer());
+        let bytes = 0;
+        await history.transformAll(async (source, sink) => {
+          for await (const { row } of source.streamRows()) {
+            bytes += Buffer.byteLength(JSON.stringify(row));
+            sink.appendDetached(row);
           }
-          expect(count).toBe(1);
-        },
-        9 * 1024 * 1024,
-        ownerFixtureRow,
-      );
-    }, 120_000);
-  }
+        });
+        expect(bytes).toBeGreaterThan(8 * 1024 * 1024);
+        let count = 0;
+        for await (const row of history.streamRawHistory()) {
+          expect(row).toStrictEqual(ownerFixtureRow(0, 9 * 1024 * 1024));
+          count++;
+        }
+        expect(count).toBe(1);
+      },
+      9 * 1024 * 1024,
+      ownerFixtureRow,
+    );
+  }, 120_000);
 });
 
 describe('public transform strong marker rollback', () => {

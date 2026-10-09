@@ -51,7 +51,7 @@ function registerRemovalScale(size: number): void {
 describe('disk history removals and real media ownership', () => {
   for (const size of [512, 8192]) registerRemovalScale(size);
 
-  it('preserves strong pending caller and marker identities and queued append order', async () => {
+  it('returns detached values for pending caller rows, keeps caller markers and queued append order', async () => {
     await withRemovalFixture(
       async ({ history, pauseWriter, waitForPausedWrite }, store) => {
         const [reference] = await removalReferences(store);
@@ -74,13 +74,9 @@ describe('disk history removals and real media ownership', () => {
         const popping = history.pop();
         const queued = batchRow(2);
         history.add(queued);
-        expect(await popping).toBe(tail);
+        expect(await popping).toMatchObject(tail);
         expect(tail.metadata?.chronology).toBe(marker);
-        await assertRemovalRows(
-          history.streamRawHistory(),
-          [first, queued],
-          true,
-        );
+        await assertRemovalRows(history.streamRawHistory(), [first, queued]);
         expect(await store.hasReservations(reference.contentId)).toBe(true);
         expect(await history.removeLastIfMatches(batchRow(99))).toBe(false);
       },
@@ -117,7 +113,7 @@ describe('pending clear and large-row identity', () => {
           blocks: [{ type: 'text', text: 'next' }],
         };
         history.add(next);
-        expect(history.getLastUserContent()).toBe(next);
+        expect(history.getLastUserContent()).toStrictEqual(next);
         expect(next).toHaveProperty('metadata.chronology.seq', 3);
         releaseWriter();
         await history.waitForCommit();
@@ -126,7 +122,7 @@ describe('pending clear and large-row identity', () => {
     );
   });
 
-  it('returns a valid nine-MiB pending row by identity and a settled row by detached value', async () => {
+  it('returns a valid nine-MiB pending row and a settled row by detached value', async () => {
     await withRemovalFixture(
       async ({ history, pauseWriter, waitForPausedWrite, releaseWriter }) => {
         const large = batchRow(0, 9 * 1024 * 1024);
@@ -134,7 +130,7 @@ describe('pending clear and large-row identity', () => {
         history.add(large);
         await waitForPausedWrite;
         await history.waitForTokenUpdates();
-        expect(await history.pop()).toBe(large);
+        expect(await history.pop()).toMatchObject(large);
         releaseWriter();
         await history.waitForCommit();
         history.add(large);
@@ -142,7 +138,7 @@ describe('pending clear and large-row identity', () => {
         await history.waitForCommit();
         const removed = await history.pop();
         expect(removed).not.toBe(large);
-        expect(removed).toStrictEqual(large);
+        expect(removed).toMatchObject(large);
       },
     );
   }, 180000);

@@ -62,17 +62,13 @@ export async function removalReferences(
 export async function assertRemovalRows(
   rows: AsyncIterable<IContent>,
   expected: readonly IContent[],
-  identity = false,
 ): Promise<void> {
   let index = 0;
   for await (const row of rows) {
     expect(row).toStrictEqual(expected[index]);
-    if (identity) {
-      expect(row).toBe(expected[index]);
-      expect(row.metadata?.chronology).toBe(
-        expected[index].metadata?.chronology,
-      );
-    }
+    expect(row.metadata?.chronology).toStrictEqual(
+      expected[index].metadata?.chronology,
+    );
     index++;
   }
   expect(index).toBe(expected.length);

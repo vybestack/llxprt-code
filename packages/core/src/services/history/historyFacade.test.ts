@@ -471,7 +471,7 @@ describe('HistoryService facade mutation durability (P05b3)', () => {
         {
           speaker: 'ai',
           text: 'summary of two',
-          chron: summary.metadata?.chronology?.seq ?? null,
+          chron: 3,
         },
       ]);
     });
