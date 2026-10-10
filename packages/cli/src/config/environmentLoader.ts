@@ -14,10 +14,10 @@ import {
   loadServerHierarchicalMemory,
   type FileFilteringOptions,
   type LlxprtExtension,
+  type WorkspaceIgnoreOperations,
 } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { Storage } from '@vybestack/llxprt-code-settings';
-import type { WorkspaceIgnoreOperations } from '@vybestack/llxprt-code-core';
 import type { Settings } from './settings.js';
 import type { CliArgs } from './cliArgParser.js';
 import type { ContextResolutionResult } from './interactiveContext.js';

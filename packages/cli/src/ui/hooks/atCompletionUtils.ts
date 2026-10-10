@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { WorkspaceSearchOperations } from '@vybestack/llxprt-code-core';
 import * as fs from 'fs/promises';
 import type { Dirent } from 'fs';
 import * as path from 'path';
@@ -12,8 +11,9 @@ import {
   escapePath,
   unescapePath,
   SHELL_SPECIAL_CHARS,
+  type WorkspaceSearchOperations,
+  type WorkspaceIgnoreOperations,
 } from '@vybestack/llxprt-code-core';
-import type { WorkspaceIgnoreOperations } from '@vybestack/llxprt-code-core';
 import type { Suggestion } from '../components/SuggestionsDisplay.js';
 import type { ParsedAtPath } from './slashCompletionTypes.js';
 

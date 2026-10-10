@@ -46,10 +46,6 @@ const mockAddItem = vi.fn();
 
 const ownedPolicies: RuntimePolicyOwner[] = [];
 const ownedConfigs: Config[] = [];
-afterEach(async () => {
-  for (const owner of ownedPolicies.splice(0)) await owner.dispose();
-  for (const config of ownedConfigs.splice(0)) await config.dispose();
-});
 function createMockConfig(engineRules: PolicyRule[] = []): {
   config: PoliciesDialogRuntime;
   policy: PolicyControl;
@@ -73,6 +69,11 @@ function createMockConfig(engineRules: PolicyRule[] = []): {
 }
 
 describe('PoliciesDialog', () => {
+  afterEach(async () => {
+    for (const owner of ownedPolicies.splice(0)) await owner.dispose();
+    for (const config of ownedConfigs.splice(0)) await config.dispose();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockListEditableRules.mockResolvedValue([]);

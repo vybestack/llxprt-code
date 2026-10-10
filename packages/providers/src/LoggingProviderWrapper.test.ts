@@ -88,18 +88,18 @@ function buildConfigStub(tmpDir: string): Config {
 }
 
 const settingsRoots: SessionSettingsOwner[] = [];
-afterEach(async () => {
-  const results = await Promise.allSettled(
-    settingsRoots.splice(0).map((owner) => owner.dispose()),
-  );
-  const failures = results.flatMap((result) =>
-    result.status === 'rejected' ? [result.reason] : [],
-  );
-  if (failures.length > 0)
-    throw new AggregateError(failures, 'Wrapper test cleanup failed');
-});
-
 describe('LoggingProviderWrapper — behavioral JSONL output', () => {
+  afterEach(async () => {
+    const results = await Promise.allSettled(
+      settingsRoots.splice(0).map((owner) => owner.dispose()),
+    );
+    const failures = results.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
+    );
+    if (failures.length > 0)
+      throw new AggregateError(failures, 'Wrapper test cleanup failed');
+  });
+
   afterEach(() => {
     resetConversationFileWriterForTesting();
   });

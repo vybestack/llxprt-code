@@ -6,18 +6,7 @@
 
 import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
 
-import {
-  afterEach as afterFixtureTest,
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-  vi,
-} from 'bun:test';
-afterFixtureTest(() => {
-  fixtureFilesystem = undefined;
-});
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
 const makeFixtureFilesystem = installTestWorkspaceFilesystem();
 let fixtureFilesystem: ReturnType<typeof makeFixtureFilesystem> | undefined;
@@ -63,6 +52,10 @@ const TITLE_LIST_ITEM_LABEL = 'To' + 'do';
  * by testing the real components and their interactions without mocking core functionality.
  */
 describe('Task-list Continuation Integration Tests', () => {
+  afterEach(() => {
+    fixtureFilesystem = undefined;
+  });
+
   let tempDir: string;
   let config: Config;
   let sessionRoot: CliTestSessionRoot;

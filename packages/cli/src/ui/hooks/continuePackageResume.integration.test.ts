@@ -14,10 +14,7 @@ import {
   installTestWorkspaceFilesystem,
   testConfigInitialization,
 } from '@vybestack/llxprt-code-test-utils/core/config.js';
-import { afterEach as afterFixtureTest, describe, expect, it } from 'bun:test';
-afterFixtureTest(() => {
-  fixtureFilesystem = undefined;
-});
+import { afterEach, describe, expect, it } from 'bun:test';
 const makeFixtureFilesystem = installTestWorkspaceFilesystem();
 let fixtureFilesystem: ReturnType<typeof makeFixtureFilesystem> | undefined;
 function fixturePaths() {
@@ -398,6 +395,10 @@ function historyText(history: readonly IContent[]): string {
 }
 
 describe('continue package perform_resume integration', () => {
+  afterEach(() => {
+    fixtureFilesystem = undefined;
+  });
+
   it('publishes the validated package and assigns it only after real resume activation succeeds', async () => {
     const root = await mkdtemp(join(tmpdir(), 'continue-package-resume-'));
     const history = new HistoryService();

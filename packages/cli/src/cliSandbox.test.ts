@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Config } from '@vybestack/llxprt-code-core';
+import { Config, coreEvents, CoreEvent } from '@vybestack/llxprt-code-core';
 
 /**
  * Behavioral tests for the pure helper functions extracted into cliSandbox.ts
@@ -35,7 +35,6 @@ import {
   auditLog,
   resetAuditLogStateForTesting,
 } from '@vybestack/llxprt-code-providers/auth.js';
-import { coreEvents, CoreEvent } from '@vybestack/llxprt-code-core';
 import { initializeOutputListenersAndFlush } from './session/outputListeners.js';
 import {
   registerSyncCleanup,

@@ -9,8 +9,8 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import { Box, Text } from 'ink';
 import { DiffRenderer } from './DiffRenderer.js';
 import { RenderInline } from '../../utils/InlineMarkdownRenderer.js';
-import type { ToolCallConfirmationDetails } from '@vybestack/llxprt-code-core';
 import {
+  type ToolCallConfirmationDetails,
   type IdeClient,
   ToolConfirmationOutcome,
   hasRedirection,

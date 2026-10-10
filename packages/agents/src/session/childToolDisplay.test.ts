@@ -6,10 +6,9 @@ import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-s
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { afterEach as disposeOwnedPolicies } from 'bun:test';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 
-import { describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it } from 'bun:test';
 import { ChildToolDisplay } from './childToolDisplay.js';
 import { initInteractiveScheduler } from '../core/subagentExecution.js';
 import { bindSchedulerOwner } from './assembleSchedulerOwner.js';
@@ -20,6 +19,16 @@ import { PolicyDecision } from '@vybestack/llxprt-code-policy';
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 
 describe('Child execution display subscriptions', () => {
+  const ownedPolicies: Array<{ dispose(): void }> = [];
+  afterEach(() => {
+    for (const owner of ownedPolicies.splice(0)) owner.dispose();
+  });
+
+  const ownedMcp: Array<{ dispose(): Promise<void> }> = [];
+  afterEach(async () => {
+    for (const owner of ownedMcp.splice(0)) await owner.dispose();
+  });
+
   it('keeps engine completion and tool execution alive after its observer detaches', async () => {
     const config = new Config({
       sessionId: 'child-display',
@@ -138,14 +147,4 @@ describe('Child execution display subscriptions', () => {
       await config.dispose();
     }
   });
-});
-
-const ownedPolicies: Array<{ dispose(): void }> = [];
-disposeOwnedPolicies(() => {
-  for (const owner of ownedPolicies.splice(0)) owner.dispose();
-});
-
-const ownedMcp: Array<{ dispose(): Promise<void> }> = [];
-disposeOwnedPolicies(async () => {
-  for (const owner of ownedMcp.splice(0)) await owner.dispose();
 });
