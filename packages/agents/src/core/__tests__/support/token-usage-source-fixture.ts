@@ -1,25 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { z } from 'zod';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { TokenCountFn } from '../../tokenUsageRequestShape.js';
+import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
+import {
+  RequestShapeSessionMemory,
+  type TokenCountFn,
+} from '../../tokenUsageRequestShape.js';
 
-export function independentSeed() {
-  return z
-    .object({ shape: z.record(z.unknown()), state: z.unknown() })
-    .parse(
-      JSON.parse(
-        readFileSync(
-          join(
-            process.cwd(),
-            'tmp/source-shape-disk-20261009-sol/seed-oracle.json',
-          ),
-          'utf8',
-        ),
-      ),
-    );
-}
 export const shapeCases = [
   'stable',
   'changed',
@@ -119,4 +105,73 @@ export function shapeState(memory: {
     sentCallIdCount: memory.sentCallIdCount,
     entries: keys.map((key) => [key, memory.get(key) ?? null]),
   };
+}
+
+export interface ShapeObservation {
+  readonly tokenizer: string;
+  readonly mode: string;
+  readonly send: number;
+  readonly shape: unknown;
+  readonly state: unknown;
+  readonly calls: number;
+  readonly chars: number;
+}
+export function countingTokenizer(tokenizer: string) {
+  const counts = { calls: 0, chars: 0 };
+  const countTokens: TokenCountFn = (text) => {
+    counts.calls++;
+    counts.chars += text.length;
+    return tokenizer === 'fallback'
+      ? fallbackCount(text)
+      : estimateTokens(text);
+  };
+  return { counts, countTokens };
+}
+/**
+ * Independent oracle for the source-route shape: runs the materialized-array
+ * shape computation over the same rows and returns the observations the source
+ * route must reproduce field for field.
+ */
+export function arrayShapeOracle(
+  mode: ShapeCase,
+  tokenizer: string,
+): ShapeObservation[] {
+  const memory = new RequestShapeSessionMemory(shapeCapacity(mode));
+  const { counts, countTokens } = countingTokenizer(tokenizer);
+  const observe = (send: number, shape: unknown): ShapeObservation => ({
+    tokenizer,
+    mode,
+    send,
+    shape,
+    state: shapeState(memory),
+    calls: counts.calls,
+    chars: counts.chars,
+  });
+  memory.recordRequestShape({
+    requestContents: [seedTool()],
+    tools: [],
+    instructionsText: undefined,
+    countTokens,
+  });
+  const observations: ShapeObservation[] = [];
+  for (let send = 0; send < 2; send++) {
+    const requestContents = [
+      ...Array.from({ length: 64 }, (_, index) => shapeRow(mode, index, send)),
+      shapePending(send),
+    ];
+    const shape = memory.recordRequestShape({
+      requestContents,
+      ...shapeHead(mode, send),
+      countTokens,
+    });
+    observations.push(observe(send, shape));
+  }
+  const shape = memory.recordRequestShape({
+    requestContents: [seedTool()],
+    tools: [],
+    instructionsText: undefined,
+    countTokens,
+  });
+  observations.push(observe(2, shape));
+  return observations;
 }

@@ -1,12 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { z } from 'zod';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { prepareProviderContentSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-curated-stream.js';
-import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { RequestShapeSessionMemory } from './tokenUsageRequestShape.js';
 import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import {
@@ -17,25 +13,12 @@ import {
   shapeCapacity,
   shapeState,
   seedTool,
-  fallbackCount,
+  arrayShapeOracle,
+  countingTokenizer,
   type ShapeCase,
 } from './__tests__/support/token-usage-source-fixture.js';
 
 const root = sourceRootSetup();
-const evidence = join(process.cwd(), 'tmp/source-shape-disk-20261009-sol');
-const oracle = z
-  .array(
-    z.object({
-      tokenizer: z.string(),
-      mode: z.string(),
-      send: z.number(),
-      shape: z.unknown(),
-      state: z.unknown(),
-      calls: z.number(),
-      chars: z.number(),
-    }),
-  )
-  .parse(JSON.parse(readFileSync(join(evidence, 'oracle.json'), 'utf8')));
 
 async function snapshot(mode: ShapeCase, send: number) {
   return prepareProviderContentSnapshot(
@@ -53,15 +36,7 @@ async function snapshot(mode: ShapeCase, send: number) {
 async function parity(mode: ShapeCase, tokenizer: string) {
   const memory = new RequestShapeSessionMemory(shapeCapacity(mode));
   const observations: unknown[] = [];
-  let calls = 0;
-  let chars = 0;
-  const countTokens = (text: string): number => {
-    calls++;
-    chars += text.length;
-    return tokenizer === 'fallback'
-      ? fallbackCount(text)
-      : estimateTokens(text);
-  };
+  const { counts, countTokens } = countingTokenizer(tokenizer);
   memory.recordRequestShape({
     requestContents: [seedTool()],
     tools: [],
@@ -84,8 +59,8 @@ async function parity(mode: ShapeCase, tokenizer: string) {
         send,
         shape,
         state: shapeState(memory),
-        calls,
-        chars,
+        calls: counts.calls,
+        chars: counts.chars,
       });
     } finally {
       rows.close();
@@ -103,8 +78,8 @@ async function parity(mode: ShapeCase, tokenizer: string) {
     send: 2,
     shape,
     state: shapeState(memory),
-    calls,
-    chars,
+    calls: counts.calls,
+    chars: counts.chars,
   });
   return observations;
 }
@@ -116,21 +91,15 @@ describe('exact disk-backed normalized TEXT request shape', () => {
         tokenizer,
       async (mode) => {
         expect(await parity(mode, tokenizer)).toStrictEqual(
-          oracle.filter(
-            (entry) => entry.mode === mode && entry.tokenizer === tokenizer,
-          ),
+          arrayShapeOracle(mode, tokenizer),
         );
       },
       180000,
     );
   }
   it('uses different tiktoken and fallback measurements', () => {
-    const fallback = oracle.find(
-      (entry) => entry.mode === 'anonymous' && entry.tokenizer === 'fallback',
-    );
-    const native = oracle.find(
-      (entry) => entry.mode === 'anonymous' && entry.tokenizer === 'tiktoken',
-    );
-    expect(fallback?.shape).not.toStrictEqual(native?.shape);
+    const fallback = arrayShapeOracle('anonymous', 'fallback')[0];
+    const native = arrayShapeOracle('anonymous', 'tiktoken')[0];
+    expect(fallback.shape).not.toStrictEqual(native.shape);
   });
 });

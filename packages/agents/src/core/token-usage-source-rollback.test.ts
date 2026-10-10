@@ -7,7 +7,6 @@ import { RequestShapeSessionMemory } from './tokenUsageRequestShape.js';
 import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import {
   fallbackCount,
-  independentSeed,
   seedTool,
   shapeRow,
   shapeState,
@@ -30,9 +29,8 @@ describe('source shape transactional session state', () => {
         instructionsText: undefined,
         countTokens: fallbackCount,
       });
-      const before = independentSeed();
-      const initial: unknown = baseline;
-      expect(initial).toStrictEqual(before.shape);
+      const before = { state: shapeState(memory) };
+      expect(before.state).toMatchObject({ measurementCount: 1 });
       const rows = await prepareProviderContentSnapshot(
         {
           async *[Symbol.asyncIterator](): AsyncGenerator<

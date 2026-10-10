@@ -6,7 +6,8 @@
 
 import { describe, it, expect } from 'bun:test';
 import { promises as fs } from 'node:fs';
-import { resolve, join, basename } from 'node:path';
+import { tmpdir } from 'node:os';
+import { join, basename } from 'node:path';
 import { ConversationFileWriter } from './ConversationFileWriter.js';
 import type { StorageLogger } from '../types/logger.js';
 
@@ -21,12 +22,7 @@ async function withFixture(
   action: (fixture: Fixture) => Promise<void>,
   logger?: StorageLogger,
 ): Promise<void> {
-  const root = resolve(
-    import.meta.dirname,
-    '../../../../tmp/conversation-ack-final-20261009-sol/fixtures',
-  );
-  await fs.mkdir(root, { recursive: true });
-  const directory = await fs.mkdtemp(join(root, 'ack-'));
+  const directory = await fs.mkdtemp(join(tmpdir(), 'conversation-ack-'));
   const faultDirectory = join(directory, 'append-target-directory');
   await fs.mkdir(faultDirectory);
   const logFile = join(

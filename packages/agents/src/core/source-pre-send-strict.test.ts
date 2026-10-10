@@ -102,22 +102,20 @@ describe('source request artifact reuse', () => {
   }, 60000);
 });
 
-if (process.env.ISSUE854_PRE_SEND_TELEMETRY_REQUIRED === '1') {
-  describe('required request-correlated telemetry acknowledgement', () => {
-    it('rejects source telemetry EISDIR before HTTP while overlapping eager remains fail-open', async () => {
-      const receipt = await mixedPreSendProbe(root(), 'api-request', false);
-      expect(receipt.writeFault).toBe('EISDIR');
-      expect(
-        receipt.rejected.some((batch) => batch.error.includes('EISDIR')),
-      ).toBe(true);
-      expect(receipt.eager.error).toBeNull();
-      expect(receipt.eager.output).toBe('finished');
-      expect(receipt.source.error).not.toBeNull();
-      expect(receipt.source.output).toBe('');
-      expect(receipt.bodies).toHaveLength(1);
-      expect(receipt.sourceClosed).toBe(1);
-      expect(receipt.activeReaders).toBe(0);
-      expect(receipt.activeBodies).toBe(0);
-    }, 60000);
-  });
-}
+describe('required request-correlated telemetry acknowledgement', () => {
+  it('rejects source telemetry EISDIR before HTTP while overlapping eager remains fail-open', async () => {
+    const receipt = await mixedPreSendProbe(root(), 'api-request', false);
+    expect(receipt.writeFault).toBe('EISDIR');
+    expect(
+      receipt.rejected.some((batch) => batch.error.includes('EISDIR')),
+    ).toBe(true);
+    expect(receipt.eager.error).toBeNull();
+    expect(receipt.eager.output).toBe('finished');
+    expect(receipt.source.error).not.toBeNull();
+    expect(receipt.source.output).toBe('');
+    expect(receipt.bodies).toHaveLength(1);
+    expect(receipt.sourceClosed).toBe(1);
+    expect(receipt.activeReaders).toBe(0);
+    expect(receipt.activeBodies).toBe(0);
+  }, 60000);
+});

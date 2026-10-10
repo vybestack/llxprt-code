@@ -2,7 +2,6 @@
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { readFile, readdir, stat } from 'node:fs/promises';
-import { join } from 'node:path';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import { getRequestTextFromContents } from './turnLogging.js';
@@ -191,48 +190,49 @@ describe('turn artifact failure cleanup', () => {
   });
 });
 
+async function measureRowRelease(trap: boolean) {
+  const warm = await stageTurnRequestArtifact(
+    root(),
+    (async function* () {
+      yield row(0);
+    })(),
+  );
+  expect(warm.row_count).toBe(1);
+  const baseline = await sourceHeap();
+  const references: Array<WeakRef<IContent>> = [];
+  const retained: IContent[] = [];
+  const artifact = await stageTurnRequestArtifact(
+    root(),
+    (async function* () {
+      for (let index = 0; index < 64; index++) {
+        const content = row(index, index === 63);
+        references.push(new WeakRef(content));
+        if (trap) retained.push(content);
+        yield content;
+      }
+    })(),
+  );
+  const settled = await sourceHeap();
+  return {
+    baseline,
+    settled,
+    delta: settled - baseline,
+    liveRows: references.filter((ref) => ref.deref() !== undefined).length,
+    retainedRows: retained.length,
+    artifact,
+  };
+}
+
 describe('turn artifact row release with retaining-sink adverse control', () => {
   it('releases input rows and completed writer ownership below strict 1 MiB', async () => {
-    const warm = await stageTurnRequestArtifact(
-      root(),
-      (async function* () {
-        yield row(0);
-      })(),
-    );
-    expect(warm.row_count).toBe(1);
-    const baseline = await sourceHeap();
-    const references: Array<WeakRef<IContent>> = [];
-    const retained: IContent[] = [];
-    const artifact = await stageTurnRequestArtifact(
-      root(),
-      (async function* () {
-        for (let index = 0; index < 64; index++) {
-          const content = row(index, index === 63);
-          references.push(new WeakRef(content));
-          if (process.env.ISSUE854_RETAIN_TURN_LOG_ROWS === '1')
-            retained.push(content);
-          yield content;
-        }
-      })(),
-    );
-    const settled = await sourceHeap();
-    const facts = {
-      baseline,
-      settled,
-      delta: settled - baseline,
-      liveRows: references.filter((ref) => ref.deref() !== undefined).length,
-      retainedRows: retained.length,
-      activeRows: 0,
-      artifact,
-    };
-    const evidence = process.env.ISSUE854_LOGGING_EVIDENCE;
-    if (evidence !== undefined)
-      await Bun.write(
-        join(evidence, `writer-release-${process.pid}.json`),
-        JSON.stringify(facts, null, 2),
-      );
+    const facts = await measureRowRelease(false);
     expect(facts.liveRows).toBe(0);
     expect(facts.delta).toBeLessThan(1_048_576);
-    expect(artifact.row_count).toBe(64);
+    expect(facts.artifact.row_count).toBe(64);
+  }, 60000);
+  it('trap: deliberately retained input rows fail the release gate', async () => {
+    const facts = await measureRowRelease(true);
+    expect(facts.retainedRows).toBe(64);
+    expect(() => expect(facts.liveRows).toBe(0)).toThrow('Expected: 0');
   }, 60000);
 });

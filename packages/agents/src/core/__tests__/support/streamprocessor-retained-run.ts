@@ -1,24 +1,14 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { existsSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, rmSync } from 'node:fs';
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
 import { retainedCheckpoint } from './streamprocessor-retained-census.js';
 import { retainedSetup } from './streamprocessor-retained-setup.js';
 
 type RetainedSetup = Awaited<ReturnType<typeof retainedSetup>>;
 
-function snapshot(input: RetainedSetup, stage: string): void {
-  if (process.env.ISSUE854_HEAP_SNAPSHOT !== '1') return;
-  writeFileSync(
-    join(input.evidence, `heap-${input.mode}-${stage}-${process.pid}.json`),
-    JSON.stringify(Bun.generateHeapSnapshot()),
-  );
-}
-
 async function measure(input: RetainedSetup) {
   const { setup, http, observer, census } = input;
   const baseline = await retainedCheckpoint(census);
-  snapshot(input, 'baseline');
   const started = setup.processor.makeApiCallAndProcessStream(
     {
       message: 'Answer the history.',
@@ -43,7 +33,6 @@ async function measure(input: RetainedSetup) {
     await http.uploaded.wait;
     await observer.last.wait;
     const last = await retainedCheckpoint(census);
-    snapshot(input, 'last');
     http.respond.release();
     const stream = await started;
     const output: string[] = [];
@@ -67,10 +56,8 @@ async function measure(input: RetainedSetup) {
 function requestFacts(input: RetainedSetup) {
   const { setup, census } = input;
   return {
-    mode: input.mode,
     pid: process.pid,
     retaining: process.env.ISSUE854_RETAIN_DERIVED_ROWS === '1',
-    snapshots: process.env.ISSUE854_HEAP_SNAPSHOT === '1',
     bodyShells: census.bodyShells.length,
     supportsCompressionCallback:
       'setCompressionCallback' in setup.provider &&
@@ -122,14 +109,6 @@ export async function runRetainedCensus() {
       settledDelta: measured.final.heap - measured.baseline.heap,
       detachedDelta: detached.heap - measured.baseline.heap,
     };
-    writeFileSync(
-      join(
-        input.evidence,
-        `census-${input.mode}-${facts.retaining ? 'trap' : 'release'}-${process.pid}.json`,
-      ),
-      JSON.stringify(facts, null, 2),
-    );
-    snapshot(input, 'detached');
     return facts;
   } finally {
     input.observer.restore();

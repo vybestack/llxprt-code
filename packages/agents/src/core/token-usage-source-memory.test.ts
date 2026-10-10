@@ -1,10 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { heapSize } from 'bun:jsc';
-import { writeFileSync } from 'node:fs';
 import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type { TokenCountFn } from './tokenUsageRequestShape.js';
-import { join } from 'node:path';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -30,6 +28,9 @@ function live<T extends object>(references: Array<WeakRef<T>>): number {
   return references.filter((reference) => reference.deref() !== undefined)
     .length;
 }
+function blockText(block: IContent['blocks'][number]): string {
+  return block.type === 'text' ? block.text : '';
+}
 function memoryRow(index: number, large: boolean): IContent {
   const chars = large && index === 63 ? 10 * 1024 * 1024 + 17 : 160 * 1024;
   return {
@@ -45,7 +46,9 @@ function memoryRow(index: number, large: boolean): IContent {
     metadata: { id: `memory-${index}` },
   };
 }
+type ShapeTrap = 'none' | 'rows' | 'serialized' | 'reader';
 interface Census {
+  trap: ShapeTrap;
   originals: Array<WeakRef<IContent>>;
   rows: Array<WeakRef<IContent>>;
   readers: Array<WeakRef<object>>;
@@ -54,8 +57,9 @@ interface Census {
   retainedReaders: Array<AsyncGenerator<IContent, void, unknown>>;
   samples: Array<{ bytes: number; activeTextBytes: number; liveRows: number }>;
 }
-function census(): Census {
+function census(trap: ShapeTrap): Census {
   return {
+    trap,
     originals: [],
     rows: [],
     readers: [],
@@ -86,8 +90,7 @@ class ObservedReader implements AsyncGenerator<IContent, void, unknown> {
   ): IteratorResult<IContent, void> | Promise<IteratorResult<IContent, void>> {
     if (next.done === true) return next;
     this.facts.rows.push(new WeakRef(next.value));
-    if (process.env.ISSUE854_SHAPE_TRAP === 'rows')
-      this.facts.retainedRows.push(next.value);
+    if (this.facts.trap === 'rows') this.facts.retainedRows.push(next.value);
     this.pending = next;
     return this.samplePull(++this.index);
   }
@@ -167,7 +170,7 @@ async function trapReader(
   snapshot: ProviderRequestRows,
   facts: Census,
 ): Promise<void> {
-  if (process.env.ISSUE854_SHAPE_TRAP !== 'reader') return;
+  if (facts.trap !== 'reader') return;
   const reader = snapshot.openReader();
   facts.readers.push(new WeakRef(reader));
   facts.retainedReaders.push(reader);
@@ -208,8 +211,9 @@ async function measure(
   large: boolean,
   tokenizer: string,
   estimate: TokenCountFn,
+  trap: ShapeTrap = 'none',
 ) {
-  const facts = census();
+  const facts = census(trap);
   const control = new WeakRef(Object.freeze({ control: true }));
   const memory = new RequestShapeSessionMemory(128);
   const baseline = await settled();
@@ -217,8 +221,7 @@ async function measure(
   const snapshot = await makeSnapshot(large, facts, ownership);
   const source = observed(snapshot, facts);
   const countTokens = (text: string): number => {
-    if (process.env.ISSUE854_SHAPE_TRAP === 'serialized')
-      facts.retainedSerialized.push(text);
+    if (facts.trap === 'serialized') facts.retainedSerialized.push(text);
     return estimate(text);
   };
   try {
@@ -238,20 +241,13 @@ async function measure(
       ownership: ownership.snapshot(),
       tokenizer,
     };
-    writeFileSync(
-      join(
-        process.cwd(),
-        'tmp/source-shape-disk-20261009-sol',
-        `memory-${process.env.ISSUE854_SHAPE_TRAP ?? 'normal'}-${tokenizer}-${large}-${process.pid}.json`,
-      ),
-      JSON.stringify(result, null, 2),
-    );
     expect(result.controlLive).toBe(false);
     expect(result.liveOriginals).toBe(0);
     expect(result.liveReadRows).toBe(0);
     expect(result.measurementCount).toBe(65);
     expect(result.delta).toBeLessThan(1_048_576);
     expect(result.liveReaders).toBe(0);
+    expect(result.retainedSerialized).toBe(0);
     for (const sample of result.samples) {
       expect(sample.liveRows).toBeLessThanOrEqual(1);
       expect(sample.overhead).toBeLessThan(1_048_576);
@@ -278,8 +274,24 @@ describe('bounded disk shape release', () => {
         instructionsText: undefined,
         countTokens: estimate,
       });
+      // The tiktoken wasm heap grows once to its high-water mark for the first
+      // >10 MiB string and never shrinks; warm it so the gate measures
+      // retention rather than that one-time allocation.
+      if (large) estimate(memoryRow(63, true).blocks.map(blockText).join(''));
       expect((await measure(large, tokenizer, estimate)).measurementCount).toBe(
         65,
+      );
+    },
+    120000,
+  );
+});
+describe('bounded disk shape release traps', () => {
+  const estimate = fallbackCount;
+  it.each(['rows', 'serialized', 'reader'] as const)(
+    'trap: deliberately retained %s fail the release gates',
+    async (trap) => {
+      await expect(measure(false, 'fallback', estimate, trap)).rejects.toThrow(
+        'expect(received)',
       );
     },
     120000,

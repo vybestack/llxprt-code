@@ -280,109 +280,107 @@ describe('actual source token-usage contract', () => {
   }, 60000);
 });
 
-if (process.env.ISSUE854_STREAM_FULL_CONTRACTS === '1') {
-  describe('remaining full StreamProcessor source acceptance', () => {
-    it('executes BeforeModel replacement with full history visible through real HTTP', async () => {
-      const http = projectionEndpoint(false);
-      unblock(http);
-      const setup = await processorFixture(
-        root(),
-        `http://127.0.0.1:${http.server.port}/v1`,
+describe('remaining full StreamProcessor source acceptance', () => {
+  it('executes BeforeModel replacement with full history visible through real HTTP', async () => {
+    const http = projectionEndpoint(false);
+    unblock(http);
+    const setup = await processorFixture(
+      root(),
+      `http://127.0.0.1:${http.server.port}/v1`,
+    );
+    const observed = join(root(), 'required-before.json');
+    hook(
+      setup.config,
+      HookEventName.BeforeModel,
+      observed,
+      `input.llm_request.contents.at(-1).blocks[0].text=input.llm_request.contents.at(-1).blocks[0].text.toUpperCase();console.log(JSON.stringify({hookSpecificOutput:{llm_request:input.llm_request}}));`,
+    );
+    try {
+      const stream = await setup.processor.makeApiCallAndProcessStream(
+        {
+          message: 'Answer',
+          config: {},
+        },
+        'required-before',
+        sourcePending,
       );
-      const observed = join(root(), 'required-before.json');
-      hook(
-        setup.config,
-        HookEventName.BeforeModel,
-        observed,
-        `input.llm_request.contents.at(-1).blocks[0].text=input.llm_request.contents.at(-1).blocks[0].text.toUpperCase();console.log(JSON.stringify({hookSpecificOutput:{llm_request:input.llm_request}}));`,
-      );
-      try {
-        const stream = await setup.processor.makeApiCallAndProcessStream(
-          {
-            message: 'Answer',
-            config: {},
-          },
-          'required-before',
-          sourcePending,
-        );
-        for await (const _chunk of stream) {
-          /* Drain the provider. */
-        }
-        expect(JSON.parse(readFileSync(observed, 'utf8'))).toMatchObject({
-          llm_request: {
-            contents: expect.arrayContaining([
-              expect.objectContaining({ speaker: 'ai' }),
-            ]),
-          },
-        });
-        expect(http.bodies).toStrictEqual([
-          sourceWireOracle(false, {
-            speaker: 'human',
-            blocks: sourcePending.blocks.map((block) =>
-              block.type === 'text'
-                ? { ...block, text: block.text.toUpperCase() }
-                : block,
-            ),
-          }),
-        ]);
-      } finally {
-        await dispose(setup, http);
+      for await (const _chunk of stream) {
+        /* Drain the provider. */
       }
-    }, 60000);
-  });
-  describe('required disk source full-context logging', () => {
-    it('sends with full-context telemetry logging enabled and no retained history owners', async () => {
-      const http = projectionEndpoint(false);
-      unblock(http);
-      const setup = await processorFixture(
-        root(),
-        `http://127.0.0.1:${http.server.port}/v1`,
-      );
-      setup.config.updateTelemetrySettings({ enabled: true, logPrompts: true });
-      try {
-        const stream = await setup.processor.makeApiCallAndProcessStream(
-          {
-            message: 'Answer',
-            config: {},
-          },
-          'required-logs',
-          sourcePending,
-        );
-        for await (const _chunk of stream) {
-          /* Drain the provider. */
-        }
-        expect(http.bodies).toHaveLength(1);
-        expect(setup.requests.map((event) => event.promptId)).toStrictEqual([
-          'required-logs',
-        ]);
-      } finally {
-        await dispose(setup, http);
-      }
-    }, 60000);
-    it('performs the existing compression escalation and reports its overflow error', async () => {
-      const http = projectionEndpoint(false);
-      unblock(http);
-      const setup = await processorFixture(
-        root(),
-        `http://127.0.0.1:${http.server.port}/v1`,
-      );
-      setup.settings.set('context-limit', 4000);
-      try {
-        await expect(
-          setup.processor.makeApiCallAndProcessStream(
-            {
-              message: 'Answer',
-              config: {},
-            },
-            'required-compression',
-            sourcePending,
+      expect(JSON.parse(readFileSync(observed, 'utf8'))).toMatchObject({
+        llm_request: {
+          contents: expect.arrayContaining([
+            expect.objectContaining({ speaker: 'ai' }),
+          ]),
+        },
+      });
+      expect(http.bodies).toStrictEqual([
+        sourceWireOracle(false, {
+          speaker: 'human',
+          blocks: sourcePending.blocks.map((block) =>
+            block.type === 'text'
+              ? { ...block, text: block.text.toUpperCase() }
+              : block,
           ),
-        ).rejects.toThrow(
-          'Request still exceeds the safety-adjusted context limit',
-        );
-      } finally {
-        await dispose(setup, http);
+        }),
+      ]);
+    } finally {
+      await dispose(setup, http);
+    }
+  }, 60000);
+});
+describe('required disk source full-context logging', () => {
+  it('sends with full-context telemetry logging enabled and no retained history owners', async () => {
+    const http = projectionEndpoint(false);
+    unblock(http);
+    const setup = await processorFixture(
+      root(),
+      `http://127.0.0.1:${http.server.port}/v1`,
+    );
+    setup.config.updateTelemetrySettings({ enabled: true, logPrompts: true });
+    try {
+      const stream = await setup.processor.makeApiCallAndProcessStream(
+        {
+          message: 'Answer',
+          config: {},
+        },
+        'required-logs',
+        sourcePending,
+      );
+      for await (const _chunk of stream) {
+        /* Drain the provider. */
       }
-    }, 60000);
-  });
-}
+      expect(http.bodies).toHaveLength(1);
+      expect(setup.requests.map((event) => event.promptId)).toStrictEqual([
+        'required-logs',
+      ]);
+    } finally {
+      await dispose(setup, http);
+    }
+  }, 60000);
+  it('performs the existing compression escalation and reports its overflow error', async () => {
+    const http = projectionEndpoint(false);
+    unblock(http);
+    const setup = await processorFixture(
+      root(),
+      `http://127.0.0.1:${http.server.port}/v1`,
+    );
+    setup.settings.set('context-limit', 4000);
+    try {
+      await expect(
+        setup.processor.makeApiCallAndProcessStream(
+          {
+            message: 'Answer',
+            config: {},
+          },
+          'required-compression',
+          sourcePending,
+        ),
+      ).rejects.toThrow(
+        'Request still exceeds the safety-adjusted context limit',
+      );
+    } finally {
+      await dispose(setup, http);
+    }
+  }, 60000);
+});

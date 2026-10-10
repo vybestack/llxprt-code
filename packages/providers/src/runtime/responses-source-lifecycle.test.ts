@@ -98,43 +98,41 @@ describe('Responses source deterministic lifecycle', () => {
   });
 });
 
-if (process.env.ISSUE854_SERIALIZER_PENDING_ABORT === '1') {
-  describe('Responses source pending-next cancellation demand', () => {
-    it('settles abort before an uncooperative source next completes', async () => {
-      const started = gate();
-      const blocked = gate();
-      const controller = new AbortController();
-      const reason = new Error('pending abort');
-      async function* contents(): AsyncIterable<IContent> {
-        started.release();
-        await blocked.wait;
-        yield row;
-      }
-      const pending = serializeResponsesPromptEnvelope({
-        model: 'gpt-5.6',
-        contents: contents(),
-        context,
-        signal: controller.signal,
-      });
-      await started.wait;
-      controller.abort(reason);
-      const result = await Promise.race([
-        pending.then(
-          () => 'resolved',
-          (error) => (error === reason ? 'aborted' : 'wrong error'),
-        ),
-        new Promise<void>((resolve) => setImmediate(resolve)).then(
-          () => 'pending',
-        ),
-      ]);
-      blocked.release();
-      const settled = await pending.then(
-        () => 'resolved',
-        (error: unknown) => error,
-      );
-      expect(settled).toBe(reason);
-      expect(await pending.cleanup).toStrictEqual({ status: 'fulfilled' });
-      expect(result).toBe('aborted');
+describe('Responses source pending-next cancellation demand', () => {
+  it('settles abort before an uncooperative source next completes', async () => {
+    const started = gate();
+    const blocked = gate();
+    const controller = new AbortController();
+    const reason = new Error('pending abort');
+    async function* contents(): AsyncIterable<IContent> {
+      started.release();
+      await blocked.wait;
+      yield row;
+    }
+    const pending = serializeResponsesPromptEnvelope({
+      model: 'gpt-5.6',
+      contents: contents(),
+      context,
+      signal: controller.signal,
     });
+    await started.wait;
+    controller.abort(reason);
+    const result = await Promise.race([
+      pending.then(
+        () => 'resolved',
+        (error) => (error === reason ? 'aborted' : 'wrong error'),
+      ),
+      new Promise<void>((resolve) => setImmediate(resolve)).then(
+        () => 'pending',
+      ),
+    ]);
+    blocked.release();
+    const settled = await pending.then(
+      () => 'resolved',
+      (error: unknown) => error,
+    );
+    expect(settled).toBe(reason);
+    expect(await pending.cleanup).toStrictEqual({ status: 'fulfilled' });
+    expect(result).toBe('aborted');
   });
-}
+});

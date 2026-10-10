@@ -1,7 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import {
-  appendFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -10,7 +9,6 @@ import {
   rmSync,
   statSync,
 } from 'node:fs';
-import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type {
@@ -91,24 +89,6 @@ function strings(value: unknown): readonly string[] {
     throw new Error('Invalid independent segments');
   return value.promptSegments;
 }
-function recordEvidence(
-  result: unknown,
-  actual: readonly Buffer[],
-  expected: readonly Buffer[],
-): void {
-  const evidence = process.env.ISSUE854_SERIALIZER_EVIDENCE;
-  if (evidence === undefined) return;
-  const segments = actual.map((bytes, i) => ({
-    bytes: bytes.length,
-    actualSha256: createHash('sha256').update(bytes).digest('hex'),
-    expectedSha256: createHash('sha256').update(expected[i]).digest('hex'),
-  }));
-  appendFileSync(
-    join(evidence, 'image-oracle.jsonl'),
-    `${JSON.stringify({ result, segments })}\n`,
-  );
-}
-
 async function parity(
   rows: readonly IContent[],
   activeProvider = 'openai-responses',
@@ -154,18 +134,6 @@ async function parity(
     const actual = await pending;
     await closing;
     expect(actual).toStrictEqual(expected);
-    recordEvidence(
-      {
-        rows: rows.length,
-        activeProvider,
-        crossKeyMedia,
-        imageCount: prompt.imageCount,
-        actual,
-        expected,
-      },
-      actualBytes,
-      expectedBytes,
-    );
     expect(
       Object.getOwnPropertyDescriptor(owner, 'imageEntries'),
     ).toBeUndefined();

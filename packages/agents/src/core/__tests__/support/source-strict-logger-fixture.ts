@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createHash } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
-import { appendFile, writeFile } from 'node:fs/promises';
+import { appendFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type {
   ReadableLogRecord,
@@ -321,12 +321,6 @@ async function captureStrictReceipt(
     activeReaders: fixture.state.active,
     activeBodies: activeRequestBodyCount(),
   };
-  const evidence = process.env.ISSUE854_LOGGING_EVIDENCE;
-  if (evidence !== undefined)
-    await writeFile(
-      join(evidence, `strict-${fault}-${source}.json`),
-      JSON.stringify(receipt, null, 2),
-    );
   await shutdownTelemetry(setup.config);
   await setup.config.dispose();
   resetConversationFileWriterForTesting();

@@ -282,21 +282,19 @@ describe('successful mixed source and eager durable responses', () => {
   );
 });
 
-if (process.env.ISSUE854_POST_SEND_TELEMETRY_REQUIRED === '1') {
-  describe('separate required telemetry response acknowledgement', () => {
-    it('rejects source after post-upload exporter EISDIR before accepted terminals', async () => {
-      const receipt = await mixedPostSendProbe(root(), 'api-response', false);
-      expect(receipt.bodies).toHaveLength(2);
-      expect(receipt.writeFault).toBe('EISDIR');
-      expect(
-        receipt.rejected.some((batch) => batch.error.includes('EISDIR')),
-      ).toBe(true);
-      expect(receipt.eager.error).toBeNull();
-      expect(receipt.source.error).not.toBeNull();
-      expect(receipt.source.usage).toHaveLength(0);
-      expect(receipt.source.finishes).toHaveLength(0);
-      expect(receipt.performance.totalRequests).toBe(1);
-      expect(receipt.sessionTokens.total).toBe(124);
-    }, 60000);
-  });
-}
+describe('separate required telemetry response acknowledgement', () => {
+  it('rejects source after post-upload exporter EISDIR before accepted terminals', async () => {
+    const receipt = await mixedPostSendProbe(root(), 'api-response', false);
+    expect(receipt.bodies).toHaveLength(2);
+    expect(receipt.writeFault).toBe('EISDIR');
+    expect(
+      receipt.rejected.some((batch) => batch.error.includes('EISDIR')),
+    ).toBe(true);
+    expect(receipt.eager.error).toBeNull();
+    expect(receipt.source.error).not.toBeNull();
+    expect(receipt.source.usage).toHaveLength(0);
+    expect(receipt.source.finishes).toHaveLength(0);
+    expect(receipt.performance.totalRequests).toBe(1);
+    expect(receipt.sessionTokens.total).toBe(124);
+  }, 60000);
+});

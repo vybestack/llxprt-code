@@ -155,15 +155,13 @@ describe('BeforeModel source enforcement', () => {
 });
 
 describe('BeforeModel oversized row', () => {
-  if (process.env.ISSUE854_MODEL_LARGE === '1') {
-    it('accepts a valid row larger than 10 MiB with a genuine full-input model hook', async () => {
-      const facts = await modelHookWorker(root(), 'large');
-      expect(facts.error).toBeUndefined();
-      expect(facts.bodies[0].bytes).toBeGreaterThan(10 * 1024 * 1024);
-      expect(facts.estimate).toStrictEqual(facts.oracle);
-      expect(facts.firstLive).toBe(0);
-      expect(facts.lastLive).toBe(0);
-      expect(facts.activeBodies).toBe(0);
-    }, 600000);
-  }
+  it('accepts a valid row larger than 10 MiB with a genuine full-input model hook', async () => {
+    const facts = await modelHookWorker(root(), 'large');
+    expect(facts.error).toBeUndefined();
+    expect(facts.bodies[0].bytes).toBeGreaterThan(10 * 1024 * 1024);
+    expect(facts.estimate).toStrictEqual(facts.oracle);
+    expect(facts.firstLive).toBe(0);
+    expect(facts.lastLive).toBe(0);
+    expect(facts.activeBodies).toBe(0);
+  }, 600000);
 });

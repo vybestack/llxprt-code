@@ -34,6 +34,8 @@ export class ObservedHistory extends HistoryService {
   readonly references: Array<WeakRef<IContent>> = [];
   readonly inputReferences: Array<WeakRef<IContent>> = [];
   readonly retained: IContent[] = [];
+  /** Trap switch: when set, the observed reader keeps every row alive. */
+  retainRows = false;
   readonly owners: Array<{ closed: boolean; count: number }> = [];
   override async prepareCuratedForProviderSnapshot(
     pending: readonly IContent[] = [],
@@ -49,6 +51,7 @@ export class ObservedHistory extends HistoryService {
     this.owners.push(owner);
     const references = this.references;
     const retained = this.retained;
+    const retainsRows = (): boolean => this.retainRows;
     return {
       count: snapshot.count,
       pending: snapshot.pending,
@@ -56,8 +59,7 @@ export class ObservedHistory extends HistoryService {
       async *openReader(signal): AsyncGenerator<IContent, void, unknown> {
         for await (const row of snapshot.openReader(signal)) {
           references.push(new WeakRef(row));
-          if (process.env.ISSUE854_RETAIN_STREAM_ROWS === '1')
-            retained.push(row);
+          if (retainsRows()) retained.push(row);
           yield row;
         }
       },

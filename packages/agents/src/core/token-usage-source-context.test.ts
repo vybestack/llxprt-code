@@ -20,28 +20,11 @@ import {
   shapePending,
   seedTool,
   shapeState,
+  arrayShapeOracle,
   type ShapeCase,
 } from './__tests__/support/token-usage-source-fixture.js';
 
 const root = sourceRootSetup();
-const oracle = z
-  .array(
-    z.object({
-      tokenizer: z.string(),
-      mode: z.string(),
-      send: z.number(),
-      shape: z.record(z.unknown()),
-      state: z.unknown(),
-    }),
-  )
-  .parse(
-    JSON.parse(
-      readFileSync(
-        join(process.cwd(), 'tmp/source-shape-disk-20261009-sol/oracle.json'),
-        'utf8',
-      ),
-    ),
-  );
 async function rows(mode: ShapeCase, send: number) {
   return prepareProviderContentSnapshot(
     {
@@ -72,6 +55,7 @@ function serializedShape(
   );
 }
 async function contextualSends(providerChange: boolean) {
+  const oracle = arrayShapeOracle('changed', 'tiktoken');
   const file = join(root(), 'usage.jsonl');
   const logger = new TokenUsageLogger(true, file);
   logger.getShapeMemory().recordRequestShape({
@@ -112,18 +96,13 @@ async function contextualSends(providerChange: boolean) {
         actualPromptTokens: 123,
         cachedTokens: 4,
       });
-      const expected = oracle.find(
-        (entry) =>
-          entry.mode === 'changed' &&
-          entry.tokenizer === 'tiktoken' &&
-          entry.send === send,
-      );
-      if (expected === undefined)
-        throw new Error('Missing independent oracle observation');
+      const expected = oracle[send];
       const current = records(file).find(
         (record) => record.prompt_id === `prompt-${send}`,
       );
-      expect(current).toMatchObject(serializedShape(expected.shape));
+      expect(current).toMatchObject(
+        serializedShape(z.record(z.unknown()).parse(expected.shape)),
+      );
       expect(current).toMatchObject({
         provider,
         model: state.model,

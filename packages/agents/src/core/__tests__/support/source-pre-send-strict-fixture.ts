@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { mkdirSync } from 'node:fs';
-import { appendFile, readdir, writeFile } from 'node:fs/promises';
+import { appendFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
@@ -176,12 +176,6 @@ export async function mixedPreSendProbe(
       activeReaders: input.fixture.state.active + disk.state.active,
       activeBodies: activeRequestBodyCount(),
     };
-    const evidence = process.env.ISSUE854_LOGGING_EVIDENCE;
-    if (evidence !== undefined)
-      await writeFile(
-        join(evidence, `mixed-${fault}-${eagerFirst}.json`),
-        JSON.stringify(receipt, null, 2),
-      );
     return receipt;
   } finally {
     await input.http.server.stop(true);

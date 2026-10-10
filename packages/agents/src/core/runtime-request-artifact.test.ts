@@ -151,12 +151,6 @@ describe('awaited actual runtime request artifact exporter', () => {
         expect(staged.source.content_bytes).toBeGreaterThan(
           large ? 10 * 1024 * 1024 : 4000,
         );
-        const evidence = process.env.ISSUE854_LOGGING_EVIDENCE;
-        if (evidence !== undefined)
-          await writeFile(
-            join(evidence, `runtime-${large}-${process.pid}.jsonl`),
-            await readFile(join(root(), 'runtime.jsonl')),
-          );
       } finally {
         await shutdownTelemetry(active);
       }

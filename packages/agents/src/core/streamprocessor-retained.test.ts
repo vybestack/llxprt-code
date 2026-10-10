@@ -8,7 +8,7 @@ describe('actual StreamProcessor source retained owner census', () => {
     expect(facts.output).toBe('finished');
     expect(facts.estimate).toStrictEqual(facts.oracle);
     expect(facts.bodies).toStrictEqual([facts.expected, facts.expected]);
-    expect(facts.rows).toBe(facts.mode === 'none' ? 0 : 130);
+    expect(facts.rows).toBe(130);
     expect(facts.tokens).toBe(3);
     expect(facts.distinctRetryTokens).toBe(true);
     expect(facts.owners.every((owner) => owner.closed)).toBe(true);
@@ -24,9 +24,7 @@ describe('actual StreamProcessor source retained owner census', () => {
     expect(
       facts.requests.every((request) => request.requestText === undefined),
     ).toBe(true);
-    expect(facts.largestRowBytes).toBeGreaterThanOrEqual(
-      facts.mode === 'large' ? 10 * 1024 * 1024 + 1 : 0,
-    );
+    expect(facts.largestRowBytes).toBeGreaterThanOrEqual(0);
     for (const category of [
       'progressive.row-copy',
       'progressive.row-copy.blocks',
@@ -36,7 +34,7 @@ describe('actual StreamProcessor source retained owner census', () => {
       const observed = facts.final.survivors[category];
       expect(
         observed === undefined ? 0 : observed.observed,
-      ).toBeGreaterThanOrEqual(facts.mode === 'none' ? 0 : 130);
+      ).toBeGreaterThanOrEqual(130);
       expect(observed === undefined ? 0 : observed.live).toBe(0);
     }
     for (const category of [

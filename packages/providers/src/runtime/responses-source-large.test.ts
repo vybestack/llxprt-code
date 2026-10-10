@@ -106,12 +106,6 @@ async function run(root: string, retain: boolean): Promise<Probe> {
     readFileSync(join(root, 'measured.json'), 'utf8'),
   );
   if (!probe(result)) throw new Error('Invalid residency evidence');
-  const evidence = process.env.ISSUE854_SERIALIZER_EVIDENCE;
-  if (evidence !== undefined)
-    writeFileSync(
-      join(evidence, retain ? 'retaining-large.json' : 'large.json'),
-      JSON.stringify(result, null, 2),
-    );
   return result;
 }
 

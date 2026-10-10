@@ -1,7 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import {
   projectionEndpoint,
@@ -101,12 +99,6 @@ async function scalarDiskDiagnostic() {
       bodies: http.bodies,
       projections: setup.provider.tokens.length,
     };
-    const evidence = process.env.ISSUE854_COMPRESSION_EVIDENCE;
-    if (evidence !== undefined)
-      writeFileSync(
-        join(evidence, `scalar-disk-${process.pid}.json`),
-        JSON.stringify(facts, null, 2),
-      );
     return facts;
   } finally {
     await preparer.releaseUnused();

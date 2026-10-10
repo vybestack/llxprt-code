@@ -1,22 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import { computeMarginAdjustedLimit } from '../compression/contextLimitPolicy.js';
 import { largestSourceRowBytes } from './__tests__/support/streamprocessor-source-fixture.js';
 import { ladderAttempt } from './__tests__/support/source-compression-ladder-fixture.js';
 
 const root = sourceRootSetup();
-function receipt(name: string, value: unknown): void {
-  const evidence = process.env.ISSUE854_COMPRESSION_EVIDENCE;
-  if (evidence !== undefined)
-    writeFileSync(
-      join(evidence, `${name}-${process.pid}.json`),
-      JSON.stringify(value, null, 2),
-    );
-}
-
 /**
  * A context limit that holds the >10 MiB protected tail (about 1.3M tokens)
  * but not the earlier history, so history must go through the ladder.
@@ -58,7 +47,6 @@ describe('required real disk compression HTTP parity with the unchanged array ro
   it('compresses manageable configured over-limit history and matches complete array HTTP and response bytes', async () => {
     const array = await ladderAttempt(root(), false, false);
     const source = await ladderAttempt(root(), true, false);
-    receipt('ladder-parity-false', { array, source });
     expect(array.error).toBeUndefined();
     expect(array.bodies).toHaveLength(1);
     expect(array.estimate?.estimatedPromptTokens).toBeLessThanOrEqual(
@@ -72,7 +60,6 @@ describe('required real disk compression HTTP parity with the unchanged array ro
 
   it('sends a valid individual row above 10MiB when the limit holds it and only earlier history needs the ladder', async () => {
     const source = await ladderAttempt(root(), true, true, FITS_TAIL_LIMIT);
-    receipt('ladder-fits-tail', { source });
     assertSourceSuccess(source, FITS_TAIL_LIMIT);
     expect(source.bodies[0]?.bytes).toBeGreaterThan(
       largestSourceRowBytes(true),
@@ -93,7 +80,6 @@ describe('required real disk compression HTTP parity with the unchanged array ro
       OVER_LIMIT_SMALL_TAIL,
       SMALL_LIMIT,
     );
-    receipt('ladder-overflow-small-tail', { array, source });
     assertStructuredOverflow(array);
     assertStructuredOverflow(source);
     expect(source.error).toBe(array.error);
@@ -103,7 +89,6 @@ describe('required real disk compression HTTP parity with the unchanged array ro
 
   it('returns the structured overflow when a valid row above 10MiB is the protected tail and exceeds the limit', async () => {
     const source = await ladderAttempt(root(), true, true, SMALL_LIMIT);
-    receipt('ladder-overflow-10mib-tail', { source });
     expect(source.errorName).toBe('ContextOverflowError');
     assertStructuredOverflow(source);
   }, 600000);

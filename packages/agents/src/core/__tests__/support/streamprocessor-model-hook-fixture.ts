@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -242,11 +242,5 @@ export async function modelHookWorker(
   const facts = modelFactsSchema.parse(
     JSON.parse(readFileSync(result, 'utf8')),
   );
-  const evidence = process.env.ISSUE854_MODEL_HOOK_EVIDENCE;
-  if (evidence !== undefined)
-    writeFileSync(
-      join(evidence, `${mode}-${source}-${child.pid}.json`),
-      JSON.stringify(facts, null, 2),
-    );
   return facts;
 }

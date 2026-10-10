@@ -125,17 +125,6 @@ describe('actual file exporter accepts turn artifacts below legacy adapter', () 
           request_chars: staged.content_chars,
         });
         expect(events.every((event) => !('artifact_path' in event))).toBe(true);
-        const evidence = process.env.ISSUE854_LOGGING_EVIDENCE;
-        if (evidence !== undefined) {
-          await writeFile(
-            join(evidence, `direct-sink-${large}-${process.pid}.jsonl`),
-            await readFile(join(root(), 'telemetry.jsonl')),
-          );
-          await writeFile(
-            join(evidence, `direct-artifact-${large}-${process.pid}.json`),
-            await readFile(staged.artifact_path),
-          );
-        }
       } finally {
         await shutdownTelemetry(active);
       }
@@ -164,13 +153,6 @@ describe('actual agent artifact protocol', () => {
       await returned;
       await flushTelemetry();
       const events = await attributes(join(root(), 'telemetry.jsonl'));
-      const facts = { returned: typeof returned, staged, events };
-      const evidence = process.env.ISSUE854_LOGGING_EVIDENCE;
-      if (evidence !== undefined)
-        await Bun.write(
-          join(evidence, 'adapter-protocol.json'),
-          JSON.stringify(facts, null, 2),
-        );
       expect(
         events.filter(
           (event) => event['event.name'] === 'llxprt_code.api_request',
@@ -257,20 +239,6 @@ describe('legacy string and descriptor protocols differ', () => {
       expect(events.some((event) => event.content_complete === true)).toBe(
         false,
       );
-      const evidence = process.env.ISSUE854_LOGGING_EVIDENCE;
-      if (evidence !== undefined)
-        await Bun.write(
-          join(evidence, 'legacy-cap-protocol.json'),
-          JSON.stringify(
-            {
-              fullChars: text.length,
-              cap: active.getTelemetryLogApiBodyMaxChars(),
-              request,
-            },
-            null,
-            2,
-          ),
-        );
     } finally {
       await shutdownTelemetry(active);
     }
@@ -292,57 +260,49 @@ describe('request-wide identity protocol', () => {
     expect(text).not.toBe(legacy);
     expect(legacy).toContain('"[Circular]"');
     expect(JSON.parse(text)).toHaveLength(2);
-    const evidence = process.env.ISSUE854_LOGGING_EVIDENCE;
-    if (evidence !== undefined)
-      await Bun.write(
-        join(evidence, 'identity-protocol.json'),
-        JSON.stringify({ legacy, independentRows: text }, null, 2),
-      );
   });
 });
 
+async function measureChunkSinkRelease(trap: boolean) {
+  const active = config();
+  initializeTelemetry(active);
+  const retained: LogRecord[] = [];
+  try {
+    const staged = await artifact(true);
+    await flushTelemetry();
+    const baseline = await sourceHeap();
+    const logger = logs.getLogger('llxprt-code');
+    await emitRequestArtifact(
+      staged,
+      { 'event.name': 'llxprt_code.api_request', prompt_id: 'sink-release' },
+      (record) => {
+        if (trap) retained.push(record);
+        logger.emit(record);
+      },
+    );
+    const settled = await sourceHeap();
+    const delta = settled - baseline;
+    if (trap) return { delta, retained };
+    verifyChunks(
+      await attributes(join(root(), 'telemetry.jsonl')),
+      await readFile(staged.artifact_path),
+    );
+    return { delta, retained };
+  } finally {
+    await shutdownTelemetry(active);
+  }
+}
+
 describe('actual chunk sink release', () => {
   it('releases exported chunk strings below strict 1 MiB with the retaining-sink trap unchanged', async () => {
-    const active = config();
-    initializeTelemetry(active);
-    const retained: LogRecord[] = [];
-    try {
-      const staged = await artifact(true);
-      await flushTelemetry();
-      const baseline = await sourceHeap();
-      const logger = logs.getLogger('llxprt-code');
-      await emitRequestArtifact(
-        staged,
-        { 'event.name': 'llxprt_code.api_request', prompt_id: 'sink-release' },
-        (record) => {
-          if (process.env.ISSUE854_RETAIN_LOG_SINK === '1')
-            retained.push(record);
-          logger.emit(record);
-        },
-      );
-      const settled = await sourceHeap();
-      const facts = {
-        baseline,
-        settled,
-        delta: settled - baseline,
-        retainedRecords: retained.length,
-        activeRows: 0,
-        bytes: staged.content_bytes,
-      };
-      const evidence = process.env.ISSUE854_LOGGING_EVIDENCE;
-      if (evidence !== undefined)
-        await Bun.write(
-          join(evidence, `sink-release-${process.pid}.json`),
-          JSON.stringify(facts, null, 2),
-        );
-      expect(facts.delta).toBeLessThan(1_048_576);
-      expect(retained).toHaveLength(0);
-      verifyChunks(
-        await attributes(join(root(), 'telemetry.jsonl')),
-        await readFile(staged.artifact_path),
-      );
-    } finally {
-      await shutdownTelemetry(active);
-    }
+    const facts = await measureChunkSinkRelease(false);
+    expect(facts.delta).toBeLessThan(1_048_576);
+    expect(facts.retained).toHaveLength(0);
+  }, 60000);
+  it('trap: a sink that retains exported records fails the release gate', async () => {
+    const facts = await measureChunkSinkRelease(true);
+    expect(() => expect(facts.retained).toHaveLength(0)).toThrow(
+      'Expected length: 0',
+    );
   }, 60000);
 });

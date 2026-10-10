@@ -1,6 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { mkdirSync, rmSync } from 'node:fs';
-import { writeFile } from 'node:fs/promises';
 import {
   getPerfPhaseObserver,
   setPerfPhaseObserver,
@@ -324,15 +323,6 @@ export async function correlatedProbe(
       activeReaders: input.fixture.state.active + second.state.active,
       activeBodies: activeRequestBodyCount(),
     };
-    const evidence = process.env.ISSUE854_LOGGING_EVIDENCE;
-    if (evidence !== undefined)
-      await writeFile(
-        join(
-          evidence,
-          `correlated-${fault}-${firstSource}-${secondSource}-${external}.json`,
-        ),
-        JSON.stringify(receipt, null, 2),
-      );
     return receipt;
   } finally {
     setPerfPhaseObserver(previousObserver);

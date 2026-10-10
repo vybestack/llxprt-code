@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
 import {
@@ -146,11 +146,5 @@ export async function toolHookWorker(
   const result = resultSchema.parse(
     JSON.parse(readFileSync(resultPath, 'utf8')),
   );
-  const evidence = process.env.ISSUE854_TOOL_HOOK_EVIDENCE;
-  if (evidence !== undefined)
-    writeFileSync(
-      join(evidence, `hook-${mode}-${source}-${child.pid}.json`),
-      JSON.stringify(result, null, 2),
-    );
   return result;
 }

@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
@@ -27,17 +27,11 @@ describe('source hook pending ownership', () => {
       ],
       { stdout: 'pipe', stderr: 'pipe' },
     );
-    const [exit, stdout, stderr] = await Promise.all([
+    const [exit, , stderr] = await Promise.all([
       worker.exited,
       new Response(worker.stdout).text(),
       new Response(worker.stderr).text(),
     ]);
-    const evidence = process.env.ISSUE854_COMPRESSION_EVIDENCE;
-    if (evidence !== undefined)
-      writeFileSync(
-        join(evidence, `pending-hook-${process.pid}.log`),
-        `${stdout}\n${stderr}`,
-      );
     expect({ exit, stderr }).toStrictEqual({ exit: 0, stderr: '' });
     const result = resultSchema.parse(
       JSON.parse(readFileSync(join(root(), 'pending-result.json'), 'utf8')),

@@ -1,9 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { heapSize } from 'bun:jsc';
-import { writeFileSync, existsSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   estimatePromptEnvelope,
@@ -171,15 +170,6 @@ async function uploadMeasurements(
   };
 }
 
-function writeFacts(large: boolean, facts: unknown): void {
-  const root = process.env.ISSUE854_DISK_EVIDENCE;
-  if (root !== undefined)
-    writeFileSync(
-      join(root, `acceptance-${large}-${process.pid}.json`),
-      `${JSON.stringify(facts, null, 2)}
-`,
-    );
-}
 function largestRowSize(large: boolean): number {
   return diskTextRow(63, large).blocks.reduce(
     (sum, block) =>
@@ -257,7 +247,6 @@ async function acceptance(large: boolean) {
       bodies: http.bodies,
       activeBodies: activeRequestBodyCount(),
     };
-    writeFacts(large, facts);
     return facts;
   } finally {
     observer.resume.release();

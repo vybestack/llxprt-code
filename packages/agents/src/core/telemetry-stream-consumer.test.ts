@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ReadableLogRecord } from '@opentelemetry/sdk-logs';
 import { type ExportResult, ExportResultCode } from '@opentelemetry/core';
@@ -157,9 +157,6 @@ describe('actual FileLogExporter acknowledges only verified chunk protocol', () 
         );
         const text = await readFile(join(root(), 'fault.jsonl'), 'utf8');
         expect(text).not.toContain('api_request_complete');
-        const evidence = process.env.ISSUE854_LOGGING_EVIDENCE;
-        if (evidence !== undefined)
-          await writeFile(join(evidence, `${fault}.jsonl`), text);
       } finally {
         await shutdownTelemetry(config);
       }

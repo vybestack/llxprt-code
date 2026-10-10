@@ -1,8 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { heapSize } from 'bun:jsc';
-import { readdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { readdirSync } from 'node:fs';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   estimatePromptEnvelope,
@@ -229,7 +228,6 @@ async function runProjectionScenario(
         (reference) => reference.deref() !== undefined,
       ).length,
     };
-    writeProjectionEvidence(`scenario-${large}-${retain}`, facts);
     return facts;
   } finally {
     http.readBody.release();
@@ -258,15 +256,6 @@ async function drainProjectionResponse(
       .join('');
   }
   expect(text).toBe('finished');
-}
-
-function writeProjectionEvidence(name: string, facts: unknown): void {
-  const root = process.env.ISSUE854_PROJECTION_EVIDENCE;
-  if (root !== undefined)
-    writeFileSync(
-      join(root, `${name}.json`),
-      `${JSON.stringify(facts, null, 2)}\n`,
-    );
 }
 
 async function abortPausedProjection(): Promise<string> {
@@ -346,7 +335,6 @@ describe('actual Responses projection disk ownership', () => {
         (name) =>
           name.startsWith('responses-request-snapshot-') && !before.has(name),
       );
-      writeProjectionEvidence('unsent-workspace', { abandoned });
       expect(abandoned).toHaveLength(0);
     } finally {
       disk.close();

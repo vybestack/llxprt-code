@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { mkdirSync } from 'node:fs';
-import { appendFile, readFile, readdir, writeFile } from 'node:fs/promises';
+import { appendFile, readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type {
   IContent,
@@ -177,15 +177,6 @@ async function prepareMixed(
     observations.uploads++;
     if (observations.uploads === 2) {
       observations.priorRequestLog = await readFile(conversationPath, 'utf8');
-      const evidence = process.env.ISSUE854_LOGGING_EVIDENCE;
-      if (evidence !== undefined)
-        await writeFile(
-          join(
-            evidence,
-            `prior-${fault}-${eagerFirst}-${externalLifecycle}.jsonl`,
-          ),
-          observations.priorRequestLog,
-        );
       uploaded.release();
     }
     await uploaded.wait;
@@ -255,12 +246,6 @@ export async function mixedPostSendProbe(
       activeReaders: input.fixture.state.active + disk.state.active,
       activeBodies: activeRequestBodyCount(),
     };
-    const evidence = process.env.ISSUE854_LOGGING_EVIDENCE;
-    if (evidence !== undefined)
-      await writeFile(
-        join(evidence, `post-${fault}-${eagerFirst}-${externalLifecycle}.json`),
-        JSON.stringify(receipt, null, 2),
-      );
     return receipt;
   } finally {
     attempts.close();

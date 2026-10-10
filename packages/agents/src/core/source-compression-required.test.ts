@@ -1,8 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import {
@@ -84,7 +82,7 @@ async function requiredCompression(spec: RequiredCase): Promise<void> {
   setup.settings.set('context-limit', limit);
   setup.settings.set('maxOutputTokens', 128);
   const before = await historyDigest(setup);
-  const initialEstimate = large ? undefined : await legacyFinalized(setup);
+  if (!large) await legacyFinalized(setup);
   let failure: unknown;
   try {
     const stream = await setup.processor.makeApiCallAndProcessStream(
@@ -125,26 +123,6 @@ async function requiredCompression(spec: RequiredCase): Promise<void> {
     }
     expect(setup.history.owners.every((owner) => owner.closed)).toBe(true);
     expect(activeRequestBodyCount()).toBe(0);
-    const evidence = process.env.ISSUE854_COMPRESSION_EVIDENCE;
-    if (evidence !== undefined)
-      writeFileSync(
-        join(evidence, `required-${large}-${process.pid}.json`),
-        JSON.stringify(
-          {
-            large,
-            before,
-            after,
-            initialEstimate,
-            finalEstimate: setup.processor.getPromptEnvelopeEstimate(),
-            bodies: http.bodies,
-            owners: setup.history.owners,
-            activeBodies: activeRequestBodyCount(),
-            error: failure instanceof Error ? failure.message : String(failure),
-          },
-          null,
-          2,
-        ),
-      );
     setup.history.dispose();
     await http.server.stop(true);
     await setup.config.dispose();

@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { observeRetainedLogging } from './streamprocessor-retained-logging.js';
-import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -51,19 +51,6 @@ function observePreparation(
   };
 }
 
-function noPayloadOracle(): { bytes: number; sha256: string } {
-  const body = JSON.stringify({
-    model: 'gpt-5.6',
-    input: [],
-    stream: true,
-    instructions: projectionInstructions,
-  });
-  return {
-    bytes: Buffer.byteLength(body),
-    sha256: createHash('sha256').update(body).digest('hex'),
-  };
-}
-
 async function nativeOracle(
   setup: Awaited<ReturnType<typeof processorFixture>>,
   count: number,
@@ -94,9 +81,7 @@ async function nativeOracle(
 }
 
 export interface RetainedSetup {
-  readonly evidence: string;
   readonly root: string;
-  readonly mode: string;
   readonly count: number;
   readonly census: RetainedOwnerCensus;
   readonly restoreOwners: () => void;
@@ -111,14 +96,9 @@ export interface RetainedSetup {
 }
 
 export async function retainedSetup(): Promise<RetainedSetup> {
-  const evidence =
-    process.env.ISSUE854_RETAINED_EVIDENCE ??
-    join(process.cwd(), 'tmp/streamprocessor-retained-20261008-sol');
-  mkdirSync(join(evidence, 'fixtures'), { recursive: true });
-  const root = mkdtempSync(join(evidence, 'fixtures/run-'));
-  const mode = process.env.ISSUE854_RETAINED_MODE ?? 'small';
-  const large = mode === 'large';
-  const count = mode === 'none' ? 0 : 64;
+  const root = mkdtempSync(join(tmpdir(), 'streamprocessor-retained-'));
+  const large = false;
+  const count = 64;
   await warmSourceProcessor(root);
   const census = new RetainedOwnerCensus();
   const restoreOwners = observeSourceOwners(census);
@@ -132,14 +112,12 @@ export async function retainedSetup(): Promise<RetainedSetup> {
   observePreparation(setup, census);
   const restoreLogging = observeRetainedLogging(setup.runtime, census);
   const oracle = await nativeOracle(setup, count, large);
-  const expected = count === 0 ? noPayloadOracle() : sourceWireOracle(large);
-  const largestRowBytes = count === 0 ? 0 : largestSourceRowBytes(large);
+  const expected = sourceWireOracle(large);
+  const largestRowBytes = largestSourceRowBytes(large);
   const observer = observeRetainedBody(census);
-  const pending: IContent | IContent[] = count === 0 ? [] : sourcePending;
+  const pending: IContent | IContent[] = sourcePending;
   return {
-    evidence,
     root,
-    mode,
     count,
     census,
     restoreOwners,

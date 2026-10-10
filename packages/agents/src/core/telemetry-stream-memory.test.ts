@@ -28,44 +28,62 @@ function oracle(): { bytes: number; sha256: string } {
     sha256: createHash('sha256').update(bytes).digest('hex'),
   };
 }
-describe('full-cap telemetry process residency', () => {
-  it('keeps full-cap SDK exporter and reader residency below unchanged 1MiB with row/chunk traps', async () => {
-    const expected = oracle();
-    const evidence = process.env.ISSUE854_LOGGING_EVIDENCE ?? root();
-    const directory = join(
-      evidence,
-      `memory-${process.env.ISSUE854_CAP_TRAP ?? 'normal'}-${process.pid}`,
-    );
-    await mkdir(directory, { recursive: true });
-    await writeFile(join(directory, 'oracle.json'), JSON.stringify(expected));
-    const child = Bun.spawn(
-      [
-        'bun',
-        './packages/agents/src/core/__tests__/support/telemetry-stream-memory-worker.ts',
-      ],
-      {
-        cwd: process.cwd(),
-        env: { ...process.env, ISSUE854_CAP_MEMORY_ROOT: directory },
-        stdout: 'pipe',
-        stderr: 'pipe',
+async function runWorker(trap: string | undefined) {
+  const expected = oracle();
+  const directory = join(root(), `memory-${trap ?? 'normal'}`);
+  await mkdir(directory, { recursive: true });
+  await writeFile(join(directory, 'oracle.json'), JSON.stringify(expected));
+  const child = Bun.spawn(
+    [
+      'bun',
+      join(
+        import.meta.dirname,
+        '__tests__/support/telemetry-stream-memory-worker.ts',
+      ),
+    ],
+    {
+      cwd: import.meta.dirname,
+      env: {
+        ...process.env,
+        ISSUE854_CAP_MEMORY_ROOT: directory,
+        ...(trap === undefined ? {} : { ISSUE854_CAP_TRAP: trap }),
       },
-    );
-    const [exit, stdout, stderr] = await Promise.all([
-      child.exited,
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-    ]);
-    await writeFile(join(directory, 'worker.log'), stdout + stderr);
-    expect(exit).toBe(0);
-    const facts = resultSchema.parse(
-      JSON.parse(await readFile(join(directory, 'result.json'), 'utf8')),
-    );
+      stdout: 'pipe',
+      stderr: 'pipe',
+    },
+  );
+  const [exit, stdout, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+  await writeFile(join(directory, 'worker.log'), stdout + stderr);
+  expect(exit).toBe(0);
+  const facts = resultSchema.parse(
+    JSON.parse(await readFile(join(directory, 'result.json'), 'utf8')),
+  );
+  return { expected, facts };
+}
+function expectReleased(facts: z.infer<typeof resultSchema>): void {
+  expect(facts.sampledDelta).toBeLessThan(1_048_576);
+  expect(facts.settledDelta).toBeLessThan(1_048_576);
+  expect(facts.externalDelta).toBeLessThan(1_048_576);
+  expect(facts.liveRows).toBe(0);
+  expect(facts.retainedRows).toBe(0);
+  expect(facts.retainedChunks).toBe(0);
+}
+describe('full-cap telemetry process residency', () => {
+  it('keeps full-cap SDK exporter and reader residency below unchanged 1MiB', async () => {
+    const { expected, facts } = await runWorker(undefined);
     expect(facts.receipt).toStrictEqual(expected);
-    expect(facts.sampledDelta).toBeLessThan(1_048_576);
-    expect(facts.settledDelta).toBeLessThan(1_048_576);
-    expect(facts.externalDelta).toBeLessThan(1_048_576);
-    expect(facts.liveRows).toBe(0);
-    expect(facts.retainedRows).toBe(0);
-    expect(facts.retainedChunks).toBe(0);
+    expectReleased(facts);
   }, 180000);
+  it.each(['rows', 'chunks'])(
+    'trap: deliberately retained %s fail the residency gates',
+    async (trap) => {
+      const { facts } = await runWorker(trap);
+      expect(() => expectReleased(facts)).toThrow('expect(received)');
+    },
+    180000,
+  );
 });

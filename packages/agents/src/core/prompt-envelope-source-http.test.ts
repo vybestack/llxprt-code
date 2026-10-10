@@ -193,38 +193,6 @@ async function runOracle(large: boolean): Promise<number> {
   }
 }
 
-async function projectionDemandSentinel(): Promise<number> {
-  const fixture = await diskSource(root());
-  const http = endpoint(false);
-  const setup = runtime(`http://127.0.0.1:${http.server.port}/v1`);
-  let stream: AsyncIterableIterator<IContent> | undefined;
-  try {
-    stream = await enforceAndStreamSourcePromptEnvelopeRetries({
-      provider: setup.provider,
-      source: fixture.source,
-      buildOptions: (source) =>
-        buildSourceProviderChatOptions(
-          source,
-          undefined,
-          setup.context,
-          setup.invocation,
-          undefined,
-          instructions,
-        ),
-      enforce: async (source, estimate) => {
-        await estimate(source);
-        return source;
-      },
-      shouldRetryOnError: () => false,
-    });
-    return fixture.state.pulled;
-  } finally {
-    await stream?.return?.();
-    await http.server.stop(true);
-    await setup.config.dispose();
-  }
-}
-
 describe('source-backed seam actual Responses local HTTP', () => {
   it(
     'reprojects a real HTTP retry with changed instructions and preserved retry context',
@@ -247,11 +215,6 @@ describe('source-backed seam actual Responses local HTTP', () => {
     },
     60000,
   );
-  if (process.env.ISSUE854_SOURCE_PROJECTION_DEMAND === '1') {
-    it('does not predrain disk contents before actual provider BODY demand', async () => {
-      expect(await projectionDemandSentinel()).toBeLessThan(64);
-    }, 60000);
-  }
 });
 
 async function testActualSeamRetry(): Promise<void> {

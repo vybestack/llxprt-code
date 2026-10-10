@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { mkdir, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createTelemetryAdapterFromConfig } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import {
@@ -224,24 +224,6 @@ async function runPublication(large: boolean, fault: Fault): Promise<number> {
     expect(input.fixture.state.active).toBe(0);
     expect(input.fixture.state.closed).toBe(1);
     expect(activeRequestBodyCount()).toBe(0);
-    const evidence = process.env.ISSUE854_LOGGING_EVIDENCE;
-    if (evidence !== undefined)
-      await writeFile(
-        join(evidence, `${fault}-${large}.json`),
-        JSON.stringify(
-          {
-            ...input.state,
-            artifactIds: input.artifactIds,
-            estimates: input.estimates,
-            oracle: input.oracle,
-            bodies: input.http.bodies,
-            completions: input.exporter.completions,
-            fixture: input.fixture.state,
-          },
-          null,
-          2,
-        ),
-      );
     return input.http.bodies.length;
   } finally {
     input.controller.abort(new Error('test cleanup'));

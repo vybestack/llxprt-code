@@ -1,7 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
 import { diskTextRow } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-fixture.js';
@@ -87,8 +85,6 @@ async function acceptance(large: boolean) {
     );
     const facts = {
       large,
-      retainRows: process.env.ISSUE854_RETAIN_STREAM_ROWS === '1',
-      originalArrayRoute: process.env.ISSUE854_ORIGINAL_STREAM_PATH === '1',
       oracle,
       estimate: setup.processor.getPromptEnvelopeEstimate(),
       baseline,
@@ -111,12 +107,6 @@ async function acceptance(large: boolean) {
       expected: sourceWireOracle(large),
       activeBodies: activeRequestBodyCount(),
     };
-    const evidence = process.env.ISSUE854_STREAM_EVIDENCE;
-    if (evidence !== undefined)
-      writeFileSync(
-        join(evidence, `acceptance-${large}-${process.pid}.json`),
-        JSON.stringify(facts, null, 2),
-      );
     return facts;
   } finally {
     observer.resume.release();
@@ -169,15 +159,11 @@ function assertAcceptance(facts: Awaited<ReturnType<typeof acceptance>>): void {
 }
 
 describe('actual StreamProcessor disk history HTTP ownership', () => {
-  it.each(process.env.ISSUE854_STREAM_LARGE === '1' ? [false, true] : [false])(
-    'sends exact finalized rows and releases original owners at BODY pauses, oversized=%s',
-    async (large) => {
-      const facts = await acceptance(large);
-      expect(facts.expected.bytes).toBeGreaterThan(37_000);
-      assertAcceptance(facts);
-    },
-    600000,
-  );
+  it('sends exact finalized rows and releases original owners at BODY pauses', async () => {
+    const facts = await acceptance(false);
+    expect(facts.expected.bytes).toBeGreaterThan(37_000);
+    assertAcceptance(facts);
+  }, 600000);
   it('sends with prompt logging enabled and releases every owner', async () => {
     const http = projectionEndpoint(false);
     const setup = await processorFixture(

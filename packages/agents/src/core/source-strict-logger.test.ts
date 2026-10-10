@@ -131,37 +131,35 @@ describe('eager logger filesystem failure controls', () => {
   );
 });
 
-if (process.env.ISSUE854_STRICT_REQUIRED === '1') {
-  describe('required source failure propagation remains RED without a source terminal logging context', () => {
-    it.each(['api-request', 'conversation-request'] as const)(
-      'rejects source %s logging failure without upload, success or completion',
-      async (fault) => {
-        const receipt = await strictProbe(root(), fault, true);
-        expect(receipt.writeFault).toBe('EISDIR');
-        expect(receipt.error).not.toBeNull();
-        expect(receipt.bodies).toHaveLength(0);
-        expect(receipt.output).toBe('');
-        expect(terminals(receipt)).toHaveLength(0);
-        expect(
-          receipt.events.some((event) =>
-            String(event['event.name']).endsWith('_complete'),
-          ),
-        ).toBe(false);
-        assertClosed(receipt);
-      },
-      60000,
-    );
-    it.each(['api-response', 'conversation-response'] as const)(
-      'surfaces source post-attempt %s write failure before success or token commitment',
-      async (fault) => {
-        const receipt = await strictProbe(root(), fault, true);
-        expect(receipt.writeFault).toBe('EISDIR');
-        expect(receipt.bodies).toHaveLength(1);
-        expect(receipt.error).not.toBeNull();
-        expect(terminals(receipt)).toHaveLength(0);
-        assertClosed(receipt);
-      },
-      60000,
-    );
-  });
-}
+describe('required source failure propagation remains RED without a source terminal logging context', () => {
+  it.each(['api-request', 'conversation-request'] as const)(
+    'rejects source %s logging failure without upload, success or completion',
+    async (fault) => {
+      const receipt = await strictProbe(root(), fault, true);
+      expect(receipt.writeFault).toBe('EISDIR');
+      expect(receipt.error).not.toBeNull();
+      expect(receipt.bodies).toHaveLength(0);
+      expect(receipt.output).toBe('');
+      expect(terminals(receipt)).toHaveLength(0);
+      expect(
+        receipt.events.some((event) =>
+          String(event['event.name']).endsWith('_complete'),
+        ),
+      ).toBe(false);
+      assertClosed(receipt);
+    },
+    60000,
+  );
+  it.each(['api-response', 'conversation-response'] as const)(
+    'surfaces source post-attempt %s write failure before success or token commitment',
+    async (fault) => {
+      const receipt = await strictProbe(root(), fault, true);
+      expect(receipt.writeFault).toBe('EISDIR');
+      expect(receipt.bodies).toHaveLength(1);
+      expect(receipt.error).not.toBeNull();
+      expect(terminals(receipt)).toHaveLength(0);
+      assertClosed(receipt);
+    },
+    60000,
+  );
+});
