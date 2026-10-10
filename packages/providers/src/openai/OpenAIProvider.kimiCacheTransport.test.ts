@@ -686,9 +686,10 @@ function registerProviderBehavior8(): void {
       for await (const content of iterator) void content;
 
       expect(streamed).toBe(true);
-      expect(contentLength).toBe(
-        String(new TextEncoder().encode(wireBody).byteLength),
-      );
+      // The body is pulled on demand, so its length is unknown when headers
+      // are sent and the request goes out chunked instead of with a length.
+      expect(contentLength).toBeNull();
+      expect(new TextEncoder().encode(wireBody).byteLength).toBeGreaterThan(0);
       expect(wireBody).toBe(JSON.stringify(JSON.parse(wireBody)));
       expect(wireBody).toContain('data:image/png;base64,QUJD');
     });
