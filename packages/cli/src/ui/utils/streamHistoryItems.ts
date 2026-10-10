@@ -1,6 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { IContent, EmojiFilterMode } from '@vybestack/llxprt-code-core';
-import type { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
+import type {
+  IContent,
+  EmojiFilterMode,
+  RowOwnership,
+} from '@vybestack/llxprt-code-core';
 import type { HistoryItem } from '../types.js';
 import type { RowSource } from './rowIdentity.js';
 import { HistoryProjection } from './historyProjection.js';

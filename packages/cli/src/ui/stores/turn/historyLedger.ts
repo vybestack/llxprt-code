@@ -5,7 +5,7 @@
  */
 
 import { Buffer } from 'node:buffer';
-import type { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
+import type { RowOwnership } from '@vybestack/llxprt-code-core';
 import type { HistoryItem } from '../../types.js';
 import { sameRowIdentity, type RowIdentity } from '../../utils/rowIdentity.js';
 import {

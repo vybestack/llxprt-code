@@ -1,16 +1,16 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { randomUUID } from 'node:crypto';
-import type {
-  IContent,
-  SessionRecordingService,
-  AgentClientContract,
+import {
+  HistoryDensityRows,
+  validateHistoryEntry,
+  MediaAdmissionService,
+  HistoryMediaIndex,
+  collectMediaReferences,
+  type IContent,
+  type SessionRecordingService,
+  type AgentClientContract,
+  type LocalMediaStore,
 } from '@vybestack/llxprt-code-core';
-import { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
-import { validateHistoryEntry } from '@vybestack/llxprt-code-core/services/history/historyBatchContracts.js';
-import { MediaAdmissionService } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
-import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
-import { HistoryMediaIndex } from '@vybestack/llxprt-code-core/storage/history-media-index.js';
-import { collectMediaReferences } from '@vybestack/llxprt-code-core/storage/media-reference-lifecycle.js';
 import { MessageType, type HistoryItemWithoutId } from '../types.js';
 import {
   createEmojiFilter,

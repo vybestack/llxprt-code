@@ -1,7 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { open, type FileHandle } from 'node:fs/promises';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
+import type { IContent, RowOwnership } from '@vybestack/llxprt-code-core';
 import { CheckpointJsonReader } from './checkpoint-json-reader.js';
 import type { CommandContext } from './types.js';
 

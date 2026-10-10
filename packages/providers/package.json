@@ -217,11 +217,6 @@
       "bun": "./src/utils/abortSignal.ts",
       "import": "./dist/src/utils/abortSignal.js"
     },
-    "./openai-responses/responses-disk-text-rows.js": {
-      "types": "./dist/src/openai-responses/responses-disk-text-rows.d.ts",
-      "bun": "./src/openai-responses/responses-disk-text-rows.ts",
-      "import": "./dist/src/openai-responses/responses-disk-text-rows.js"
-    },
     "./providerMediaTransportCapabilities.js": {
       "types": "./dist/src/providerMediaTransportCapabilities.d.ts",
       "bun": "./src/providerMediaTransportCapabilities.ts",

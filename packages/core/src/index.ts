@@ -253,6 +253,8 @@ export * from './storage/scratch-root.js';
 export * from './storage/local-media-store.js';
 export * from './storage/SessionPersistenceService.js';
 export * from './storage/media-admission-service.js';
+export { HistoryMediaIndex } from './storage/history-media-index.js';
+export { collectMediaReferences } from './storage/media-reference-lifecycle.js';
 export * from './storage/request-media-resolver.js';
 export * from './storage/media-lifecycle-metrics.js';
 
@@ -536,6 +538,10 @@ export type {
   HistoryBatchCursor,
 } from './services/history/history-batch-values.js';
 export { ContentConverters } from './services/history/ContentConverters.js';
+export { HistoryDensityRows } from './services/history/historyDensityRows.js';
+export { validateHistoryEntry } from './services/history/historyBatchContracts.js';
+export type { HistoryDumpSnapshot } from './services/history/historyDumpSnapshot.js';
+export { RowOwnership } from './recording/rowOwnership.js';
 // Chronology trace shape (#1721) is part of the public surface so consumers
 // (e.g. the CLI /dumpcontext command) can type the trace without deep-importing.
 export type { ChronologyTraceEntry } from './services/history/historyChronology.js';

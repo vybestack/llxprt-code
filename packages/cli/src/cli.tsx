@@ -54,6 +54,7 @@ import {
   type Config,
   patchStdio,
   ExitCodes,
+  sweepDeadScratchRoots,
 } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { createTokenStore } from '@vybestack/llxprt-code-providers/auth.js';
@@ -70,7 +71,6 @@ import {
 } from './utils/cleanup.js';
 import { runZedIntegration } from '@vybestack/llxprt-code-zed-acp';
 import { cleanupExpiredSessions } from './utils/sessionCleanup.js';
-import { sweepDeadScratchRoots } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import { existsSync, mkdirSync } from 'fs';
 import { firstNonEmptyString } from './utils/coalesce.js';
 import {

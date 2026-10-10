@@ -1,12 +1,14 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { IContent } from '@vybestack/llxprt-code-core';
-import type { HistoryDumpSnapshot } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { ChronologyTraceEntry } from '@vybestack/llxprt-code-core/services/history/historyChronology.js';
+import type {
+  IContent,
+  HistoryDumpSnapshot,
+  ChronologyTraceEntry,
+} from '@vybestack/llxprt-code-core';
 import type {
   dumpRequestContext,
   dumpRequestContextStream,
 } from '@vybestack/llxprt-code-providers';
-import { streamPrettyJson } from '@vybestack/llxprt-code-providers/utils/streamPrettyJson.js';
+import { streamPrettyJson } from '@vybestack/llxprt-code-providers';
 
 interface FixtureHistory {
   streamRawHistory(): AsyncIterable<IContent>;

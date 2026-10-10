@@ -197,3 +197,4 @@ export {
   buildProviderDumpBodyStream,
 } from './utils/providerRequestConversion.js';
 export { wrapStreamWithDump } from './utils/dumpSDKContext.js';
+export { streamPrettyJson } from './utils/streamPrettyJson.js';

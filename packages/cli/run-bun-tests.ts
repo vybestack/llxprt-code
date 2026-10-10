@@ -115,10 +115,11 @@ export function runTestFiles<T>(
  * slow-but-progressing file rather than to bound total runtime.
  */
 export function fileTimeoutForFile(file: string): number {
+  const runnerEnv = process.env;
   const ordinary = resolveRunnerTimeouts({
     runner: 'cli',
     integration: INTEGRATION_FILE_PATTERN.test(file),
-    env: process.env,
+    env: runnerEnv,
   });
   return (
     acceptancePolicyForFile(import.meta.dir, file)?.perFileTimeoutMs ??

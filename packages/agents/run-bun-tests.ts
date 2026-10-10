@@ -120,9 +120,10 @@ export function timeoutForFile(file: string): number {
 }
 
 export function fileTimeoutForFile(file: string): number {
+  const runnerEnv = process.env;
   const ordinary = resolveRunnerTimeouts({
     runner: 'agents',
-    env: process.env,
+    env: runnerEnv,
   });
   return (
     acceptancePolicyForFile(WORKSPACE_ROOT, file)?.perFileTimeoutMs ??

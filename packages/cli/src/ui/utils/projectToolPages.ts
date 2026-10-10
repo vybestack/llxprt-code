@@ -3,8 +3,8 @@ import type {
   IContent,
   EmojiFilterMode,
   ToolCallBlock,
+  RowOwnership,
 } from '@vybestack/llxprt-code-core';
-import type { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import type { HistoryItem, IndividualToolCallDisplay } from '../types.js';
 import { iContentToHistoryItems } from './iContentToHistoryItems.js';
 import type { ToolResponseIndex } from './toolResponseIndex.js';

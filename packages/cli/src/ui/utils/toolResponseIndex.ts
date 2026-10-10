@@ -3,9 +3,11 @@ import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
-import type { IContent } from '@vybestack/llxprt-code-core';
-import type { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import {
+  getScratchRoot,
+  type IContent,
+  type RowOwnership,
+} from '@vybestack/llxprt-code-core';
 
 const responseSchema = z.object({
   callId: z.string(),

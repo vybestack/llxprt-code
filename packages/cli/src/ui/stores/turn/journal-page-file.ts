@@ -10,9 +10,8 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
-import type { JournalEntry } from '@vybestack/llxprt-code-core';
+import { getScratchRoot, type JournalEntry } from '@vybestack/llxprt-code-core';
 import type { HistoryItem } from '../../types.js';
-import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 export type DisplayJournalEntry =
   | Extract<JournalEntry, { kind: 'boundary' }>
