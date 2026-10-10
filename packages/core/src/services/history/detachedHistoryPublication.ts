@@ -46,6 +46,59 @@ function truncationCut(
   }
 }
 
+/** True when the replacement is value-identical to the journal, row for row. */
+function rowsUnchanged(
+  previous: DetachedHistoryJournal,
+  next: DetachedHistoryJournal,
+): boolean {
+  if (next.length !== previous.length) return false;
+  const old: Iterator<IContent> = previous[Symbol.iterator]();
+  try {
+    for (const row of next) {
+      const prior = old.next();
+      if (prior.done === true || !isDeepStrictEqual(prior.value, row))
+        return false;
+    }
+    return true;
+  } finally {
+    old.return?.();
+  }
+}
+
+/**
+ * Detects the compression shape: one summary row replacing a journal whose
+ * rows all carry chronology markers. It is recorded as a compression detail
+ * plus one `compressed` event, never as a rewind and a content row.
+ */
+function compressionOps(
+  previous: DetachedHistoryJournal,
+  next: DetachedHistoryJournal,
+): HistoryJournalOp[] | undefined {
+  if (next.length !== 1 || previous.length === 0) return undefined;
+  let fromSeq: number | undefined;
+  let toSeq = 0;
+  for (const row of previous) {
+    const seq = row.metadata?.chronology?.seq;
+    if (typeof seq !== 'number') return undefined;
+    fromSeq ??= seq;
+    toSeq = seq;
+  }
+  let summary: IContent | undefined;
+  for (const row of next) summary = row;
+  if (summary === undefined) return undefined;
+  return [
+    {
+      kind: 'compressionDetail',
+      payload: {
+        fromSeq: fromSeq ?? 0,
+        toSeq,
+        itemsCompressed: previous.length,
+      },
+    },
+    { kind: 'compressed', summary, itemsCompressed: previous.length },
+  ];
+}
+
 export class DetachedHistoryPublication {
   admittedCount = 0;
   private releaseEnvelope = (): void => {};
@@ -62,6 +115,12 @@ export class DetachedHistoryPublication {
     appendOnly = false,
     awaitFinalCommit = true,
   ): Promise<void> {
+    if (!appendOnly && rowsUnchanged(previous, next)) return;
+    const compression = appendOnly ? undefined : compressionOps(previous, next);
+    if (compression !== undefined) {
+      for (const op of compression) await this.admit(op, signal);
+      return;
+    }
     const truncation = appendOnly ? undefined : truncationCut(previous, next);
     if (truncation !== undefined) {
       await this.admit({ kind: 'rewind', ...truncation }, signal);
