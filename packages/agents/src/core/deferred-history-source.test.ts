@@ -283,22 +283,28 @@ describe('deferred disk commit acknowledgement', () => {
       reached = resolve;
     });
     let fail = false;
-    const wait = SessionRecordingService.prototype.waitForCommit;
+    let armed = false;
+    let paused = false;
+    // Mutations await durability through waitForCommitSequence. Pause only the
+    // first acknowledgement after arming so reads made while paused still pass.
+    const wait = SessionRecordingService.prototype.waitForCommitSequence;
     const acknowledgement = vi
-      .spyOn(SessionRecordingService.prototype, 'waitForCommit')
+      .spyOn(SessionRecordingService.prototype, 'waitForCommitSequence')
       .mockImplementation(async function (
         this: SessionRecordingService,
         ...args
       ) {
         const committed = await wait.call(this, ...args);
-        if (JSON.stringify(args[0].payload).includes('durable row')) {
+        if (armed && !paused) {
           if (fail) throw new Error('final write acknowledgement failed');
+          paused = true;
           reached();
           await gate;
         }
         return committed;
       });
     let completed = false;
+    armed = true;
     const admission = client
       .storeHistoryForLaterUse(source('durable row'))
       .then(() => {
@@ -316,6 +322,7 @@ describe('deferred disk commit acknowledgement', () => {
       const history = client.getHistoryService();
       if (history === null) throw new Error('Missing admitted journal');
       expect(history.getContextRange().totalEntries).toBe(1);
+      paused = false;
       fail = true;
       await expect(
         client.storeHistoryForLaterUse(source('durable row')),
