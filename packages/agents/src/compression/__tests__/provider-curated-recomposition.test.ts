@@ -32,9 +32,9 @@ describe('journal materialization guard', () => {
 });
 const logger = new DebugLogger('test:provider-curated-recomposition');
 
-describe('invoked provider-content recomposition', () => {
+describe('invoked provider-source reopening', () => {
   for (const size of [512, 8192]) {
-    it(`recomposes ${size} tool/media rows through the real enforcer with old-format byte parity`, async () => {
+    it(`recomposes ${size} tool/media rows through the real source ladder with old-format byte parity`, async () => {
       const pending: IContent[] = [
         { speaker: 'human', blocks: [{ type: 'text', text: 'pending' }] },
       ];
