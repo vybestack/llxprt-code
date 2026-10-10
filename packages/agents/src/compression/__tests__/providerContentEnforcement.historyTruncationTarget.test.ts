@@ -1,4 +1,3 @@
-import { curatedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -17,11 +16,10 @@ import { curatedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/cu
  * nothing. Every reduction stage then declined and the user got the overflow
  * guard with nothing compressed.
  *
- * These tests use the REAL ProviderContentEnforcer over a REAL HistoryService
- * with real token estimation, and drive the REAL TopDownTruncationStrategy
- * through the REAL compression-context builder behind the
- * performFallbackCompression dependency — the same wiring CompressionHandler
- * uses. Nothing asserts on a mock call; the assertions are about whether the
+ * These tests drive the REAL CompressionHandler source ladder over a REAL
+ * HistoryService with real token estimation, and the REAL
+ * TopDownTruncationStrategy runs through the handler's own disk fallback.
+ * Nothing asserts on a mock call; the assertions are about whether the
  * payload genuinely came back under budget.
  */
 
@@ -31,30 +29,15 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
-import type { ProviderContentEnvelope } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
-import {
-  ProviderContentEnforcer,
-  type ProviderContentEnforcementDeps,
-} from '../providerContentEnforcement.js';
-import { runDiskProviderFallback } from '../diskProviderFallback.js';
+import { CompressionHandler } from '../CompressionHandler.js';
+import { enforceProviderSourceForTest } from './support/enforce-provider-source.js';
 import { computeMarginAdjustedLimit } from '../contextLimitPolicy.js';
 
 const MODEL = 'test-model';
 const COMPRESSION_THRESHOLD = 0.8;
 const CONTEXT_LIMIT = 20_000;
 const COMPLETION_BUDGET = 10_000;
-
-function makeLogger(): DebugLogger {
-  return {
-    debug: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-    child: vi.fn().mockReturnThis(),
-  } as unknown as DebugLogger;
-}
 
 function buildRuntimeContext(
   historyService: HistoryService,
@@ -90,48 +73,10 @@ function textContent(speaker: IContent['speaker'], text: string): IContent {
   return { speaker, blocks: [{ type: 'text', text }] };
 }
 
-function buildEnvelope(
-  contents: IContent[],
-  pendingContents: IContent[],
-): ProviderContentEnvelope {
-  return { contents, pendingContents } as ProviderContentEnvelope;
-}
-
-/**
- * Wire performFallbackCompression exactly as CompressionHandler does: build a
- * real compression context carrying the caller-supplied target, run the real
- * TopDownTruncationStrategy, and commit its candidate history.
- */
-function buildFallbackCompression(
-  historyService: HistoryService,
-  runtimeContext: AgentRuntimeContext,
-  logger: DebugLogger,
-): ProviderContentEnforcementDeps['performFallbackCompression'] {
-  return async (promptId, applyResult, targetTokenCount) => {
-    const result = await runDiskProviderFallback(
-      applyResult,
-      promptId,
-      runtimeContext,
-      historyService,
-      () =>
-        Promise.resolve({
-          provider: {} as never,
-          runtime: {} as never,
-        }),
-      undefined,
-      undefined,
-      logger,
-      { targetTokenCount },
-    );
-    return result.outcome === 'applied';
-  };
-}
-
 interface Harness {
-  enforcer: ProviderContentEnforcer;
+  handler: CompressionHandler;
   historyService: HistoryService;
   pending: IContent[];
-  envelope: ProviderContentEnvelope;
 }
 
 /**
@@ -143,8 +88,6 @@ interface Harness {
 async function buildHarness(): Promise<Harness> {
   const historyService = new HistoryService();
   const runtimeContext = buildRuntimeContext(historyService);
-  const logger = makeLogger();
-
   for (let i = 0; i < 12; i++) {
     historyService.add(
       textContent(
@@ -157,49 +100,37 @@ async function buildHarness(): Promise<Harness> {
 
   const pending = [textContent('human', `pending ${'word '.repeat(500)}`)];
 
-  const deps: ProviderContentEnforcementDeps = {
-    historyService,
+  const handler = new CompressionHandler(
     runtimeContext,
-    generationConfig: { maxOutputTokens: COMPLETION_BUDGET },
-    providerRuntimeNullable: undefined,
-    logger,
-    ensureDensityOptimized: vi.fn().mockResolvedValue(undefined),
-    // Middle-out and one-shot both refuse on a small number of large
-    // messages, which is what the reported session hit.
-    performCompression: vi
-      .fn()
-      .mockResolvedValue(PerformCompressionResult.NOOP),
-    performFallbackCompression: buildFallbackCompression(
-      historyService,
-      runtimeContext,
-      logger,
-    ),
-    getPromptTokenBaseline: () => null,
-    resetPromptTokenBaseline: () => {},
-    restorePromptTokenBaseline: () => {},
-  };
-
-  return {
-    enforcer: new ProviderContentEnforcer(deps),
     historyService,
-    pending,
-    envelope: buildEnvelope(
-      [...curatedHistoryForTest(historyService), ...pending],
-      pending,
-    ),
-  };
+    { maxOutputTokens: COMPLETION_BUDGET },
+    () => ({ provider: {} as never, runtime: {} as never }),
+    async () => {},
+  );
+  // Middle-out and one-shot both refuse on a small number of large
+  // messages, which is what the reported session hit.
+  vi.spyOn(handler, 'performCompression').mockResolvedValue(
+    PerformCompressionResult.NOOP,
+  );
+
+  return { handler, historyService, pending };
 }
 
-describe('ProviderContentEnforcer history-truncation target (issue #3406)', () => {
+describe('CompressionHandler source ladder history-truncation target (issue #3406)', () => {
   it('truncates history to fit when the envelope overflows but committed history is under the strategy target', async () => {
-    const { enforcer, historyService, pending } = await buildHarness();
+    const { handler, historyService, pending } = await buildHarness();
 
     const marginAdjustedLimit = computeMarginAdjustedLimit(CONTEXT_LIMIT);
     const inputBudget = marginAdjustedLimit - COMPLETION_BUDGET;
     const ephemeralTarget = COMPRESSION_THRESHOLD * CONTEXT_LIMIT * 0.6;
     const historyTokens = historyService.getTotalTokens();
     const envelopeTokens = await historyService.estimateTokensForContents(
-      [...curatedHistoryForTest(historyService), ...pending],
+      [
+        ...(await Array.fromAsync(
+          historyService.getCuratedForProviderStream(),
+        )),
+        ...pending,
+      ],
       MODEL,
     );
 
@@ -208,11 +139,13 @@ describe('ProviderContentEnforcer history-truncation target (issue #3406)', () =
     expect(envelopeTokens).toBeGreaterThan(inputBudget);
     expect(historyTokens).toBeLessThanOrEqual(ephemeralTarget);
 
-    const envelope = buildEnvelope(
-      [...curatedHistoryForTest(historyService), ...pending],
+    const result = await enforceProviderSourceForTest(
+      handler,
+      historyService,
       pending,
+      'prompt-3406',
+      undefined,
     );
-    const result = await enforcer.enforce(envelope, 'prompt-3406', undefined);
 
     const finalTokens = await historyService.estimateTokensForContents(
       result,
@@ -225,19 +158,16 @@ describe('ProviderContentEnforcer history-truncation target (issue #3406)', () =
   });
 
   it('leaves history alone when the envelope already fits', async () => {
-    const { enforcer, historyService } = await buildHarness();
+    const { handler, historyService } = await buildHarness();
     const historyTokens = historyService.getTotalTokens();
 
     // A tiny pending message against the same history is comfortably inside
     // the budget once the completion reservation is small.
     const smallPending = [textContent('human', 'hi')];
-    const envelope = buildEnvelope(
-      [...curatedHistoryForTest(historyService), ...smallPending],
+    const result = await enforceProviderSourceForTest(
+      handler,
+      historyService,
       smallPending,
-    );
-
-    const result = await enforcer.enforce(
-      envelope,
       'prompt-3406-fits',
       undefined,
     );
