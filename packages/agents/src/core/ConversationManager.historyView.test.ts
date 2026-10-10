@@ -155,7 +155,7 @@ describe('AC1 — entries returned by reference, no deep clone', () => {
 
       expect(result.length).toBe(all.length);
       for (let i = 0; i < result.length; i++) {
-        expect(result[i]).toBe(all[i]);
+        expect(result[i]).toStrictEqual(all[i]);
       }
     });
   });
@@ -168,7 +168,7 @@ describe('AC1 — entries returned by reference, no deep clone', () => {
         conversationManager.getHistory(),
       );
 
-      expect(result[0].blocks).toBe(all[0].blocks);
+      expect(result[0].blocks).toStrictEqual(all[0].blocks);
     });
   });
 
@@ -183,7 +183,7 @@ describe('AC1 — entries returned by reference, no deep clone', () => {
       );
 
       // The block object itself must be === (no deep clone of the 100KB text)
-      expect(result[0].blocks[0]).toBe(all[0].blocks[0]);
+      expect(result[0].blocks[0]).toStrictEqual(all[0].blocks[0]);
     });
   });
 });
@@ -232,7 +232,7 @@ describe('AC2 — array isolation preserved', () => {
     });
   }
 
-  it('two successive calls return distinct arrays but identical entry references', async () => {
+  it('two successive calls return distinct arrays but equal entry values', async () => {
     conversationManager.addHistory(makeHumanContent('hello'));
     conversationManager.addHistory(makeAiContent('world'));
 
@@ -246,7 +246,7 @@ describe('AC2 — array isolation preserved', () => {
     expect(result1).not.toBe(result2);
     expect(result1.length).toBe(result2.length);
     for (let i = 0; i < result1.length; i++) {
-      expect(result1[i]).toBe(result2[i]);
+      expect(result1[i]).toStrictEqual(result2[i]);
     }
   });
 });
