@@ -7,6 +7,7 @@ import type {
 import type { ValueTicketReader } from './synchronous-value-spool.js';
 import type { ResumeProjection } from '../services/history/historyResumeProjection.js';
 import { pinReadableFile, type PinnedFile } from './durableRowFold.js';
+import type { DurableFoldCheckpoint } from './durableFoldCheckpoint.js';
 
 /** Private fold input with pinned disk tickets and scalar membership boundaries. */
 export interface PendingFoldSnapshot {
@@ -18,6 +19,8 @@ export interface PendingFoldSnapshot {
   readonly projectionPath?: string;
   readonly pinnedJournal: PinnedFile | null;
   readonly pinnedProjection: PinnedFile | null;
+  /** Standing durable-fold state shared by every snapshot of one history store. */
+  readonly foldCheckpoint?: DurableFoldCheckpoint;
   release(): void;
 }
 
@@ -48,7 +51,10 @@ function pinJournal(
  * synchronously, before any await. Retirement, adoption, commit, and unlink
  * therefore cannot invalidate a fold that reads through the pinned inodes.
  */
-export function capturePendingFold(binding: FoldBinding): PendingFoldSnapshot {
+export function capturePendingFold(
+  binding: FoldBinding,
+  foldCheckpoint?: DurableFoldCheckpoint,
+): PendingFoldSnapshot {
   const pending = binding.pending.capture();
   const filePath = binding.recorder?.getFilePath() ?? null;
   const resumeBoundary = binding.resumeBoundary ?? 0;
@@ -86,6 +92,7 @@ export function capturePendingFold(binding: FoldBinding): PendingFoldSnapshot {
       projectionPath,
       pinnedJournal,
       pinnedProjection,
+      foldCheckpoint,
       release,
     };
   } catch (error) {

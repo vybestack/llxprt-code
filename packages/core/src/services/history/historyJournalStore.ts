@@ -103,6 +103,7 @@ import type {
   DensityMutationPayload,
   SyntheticInsertPayload,
 } from '../../recording/types.js';
+import { DurableFoldCheckpoint } from '../../recording/durableFoldCheckpoint.js';
 import { HistoryPendingTickets } from './history-pending-tickets.js';
 import type { ResumeProjection } from './historyResumeProjection.js';
 import {
@@ -536,6 +537,7 @@ export class HistoryJournalStore {
   private attachmentPending = false;
   private disposed = false;
   private readonly publicationOrdinals = new HistoryPublicationOrdinals();
+  private readonly foldCheckpoint = new DurableFoldCheckpoint();
 
   constructor(
     recording?: SessionRecordingService,
@@ -668,7 +670,7 @@ export class HistoryJournalStore {
   /** Internal only. Capture binding, watermark, and pending membership in one turn. */
   capturePendingFold(): PendingFoldSnapshot {
     if (this.disposed) throw new Error('History journal store is disposed');
-    return capturePendingFold(this.binding);
+    return capturePendingFold(this.binding, this.foldCheckpoint);
   }
 
   withReadRows<T>(
@@ -908,6 +910,7 @@ export class HistoryJournalStore {
     this.assertNoAdoption();
     if (this.disposed) return;
     this.disposed = true;
+    this.foldCheckpoint.dispose();
     removeTempDir(this.binding.projection?.directory ?? null);
     retireHistoryPending(this.binding);
     const recorder = this.binding.recorder;

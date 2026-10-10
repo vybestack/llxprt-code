@@ -29,6 +29,10 @@ import {
   type ProjectedLine,
 } from './resolverScan.js';
 import type { ResolverFileHandle } from './journalResolver.js';
+import type {
+  CheckpointSource,
+  DurableFoldCheckpoint,
+} from './durableFoldCheckpoint.js';
 
 export class UnsupportedDurableFoldEvent extends Error {
   constructor(readonly eventType: string) {
@@ -45,6 +49,8 @@ export class UnsupportedDurableFoldEvent extends Error {
 export interface PinnedFile {
   readonly fd: number;
   readonly size: number;
+  /** Device and inode of the pinned file; stable across unlink and append. */
+  readonly identity: string;
   readonly handle: ResolverFileHandle;
   release(): void;
 }
@@ -53,8 +59,11 @@ export interface PinnedFile {
 export function pinReadableFile(path: string): PinnedFile {
   const fd = openSync(path, 'r');
   let size: number;
+  let identity: string;
   try {
-    size = fstatSync(fd).size;
+    const stat = fstatSync(fd);
+    size = stat.size;
+    identity = `${stat.dev}:${stat.ino}`;
   } catch (error) {
     closeSync(fd);
     throw error;
@@ -68,6 +77,7 @@ export function pinReadableFile(path: string): PinnedFile {
   return {
     fd,
     size,
+    identity,
     release,
     handle: {
       stat: async () => ({ size }),
@@ -91,6 +101,8 @@ export interface DurableRowFoldOptions {
   readonly projectionPath?: string;
   readonly pinnedJournal?: PinnedFile;
   readonly pinnedProjection?: PinnedFile;
+  /** Standing state that lets a pinned fold scan only the appended tail. */
+  readonly checkpoint?: DurableFoldCheckpoint;
   readonly signal?: AbortSignal;
 }
 
@@ -451,10 +463,41 @@ async function openProjection(
   return io(await fs.open(options.projectionPath, 'r'));
 }
 
-/** Scan a fixed durable byte prefix in <=64KiB reads without hydrating history rows. */
-export async function foldDurableRows(
+interface BoundCheckpoint {
+  readonly checkpoint: DurableFoldCheckpoint;
+  readonly source: CheckpointSource;
+}
+
+/** The checkpoint binding for a fold whose journal and prefix are pinned, if any. */
+function bindCheckpoint(
   options: DurableRowFoldOptions,
-): Promise<DurableRowFold> {
+  journal: ResolverFileHandle,
+  boundary: number,
+  projection: ResolverFileHandle | undefined,
+): BoundCheckpoint | null {
+  const { checkpoint, pinnedJournal } = options;
+  if (checkpoint === undefined || pinnedJournal === undefined) return null;
+  let projectionIdentity = 'none';
+  if (boundary > 0 && projection !== undefined) {
+    if (options.pinnedProjection === undefined) return null;
+    projectionIdentity = options.pinnedProjection.identity;
+  }
+  return {
+    checkpoint,
+    source: {
+      journal: pinnedJournal.identity,
+      projection: projectionIdentity,
+      boundary,
+      handle: journal,
+      scratchRoot: options.scratchRoot,
+    },
+  };
+}
+
+function foldParameters(options: DurableRowFoldOptions): {
+  readonly boundary: number;
+  readonly chunkBytes: number;
+} {
   if (!Number.isSafeInteger(options.maxBytes) || options.maxBytes < 0)
     throw new RangeError('Invalid durable fold watermark');
   const boundary = options.resumeBoundary ?? 0;
@@ -467,22 +510,40 @@ export async function foldDurableRows(
   const chunkBytes = options.chunkBytes ?? 64 * 1024;
   if (!Number.isSafeInteger(chunkBytes) || chunkBytes <= 0)
     throw new RangeError('Invalid durable fold chunk size');
-  const journal = options.pinnedJournal
-    ? options.pinnedJournal.handle
-    : io(await fs.open(requiredJournalPath(options.filePath), 'r'));
-  let projection: ResolverFileHandle | undefined;
-  let directory: MutableRowDirectory | undefined;
-  let staged: ResolverDiskIndex | undefined;
-  let density: DurableDensityIndex | undefined;
-  try {
-    options.signal?.throwIfAborted();
-    if ((await journal.stat()).size < options.maxBytes)
-      throw new Error('Durable journal truncated below pinned watermark');
-    projection = await openProjection(options, boundary);
-    directory = new MutableRowDirectory(options.scratchRoot);
-    staged = new ResolverDiskIndex(options.scratchRoot);
-    density = new DurableDensityIndex(options.scratchRoot);
-    const projectionBytes = projection ? (await projection.stat()).size : 0;
+  return { boundary, chunkBytes };
+}
+
+/** Resources acquired while folding; the caller releases them on failure. */
+interface FoldResources {
+  projection?: ResolverFileHandle;
+  directory?: MutableRowDirectory;
+  staged?: ResolverDiskIndex;
+  density?: DurableDensityIndex;
+}
+
+async function buildFold(
+  options: DurableRowFoldOptions,
+  journal: ResolverFileHandle,
+  resources: FoldResources,
+): Promise<DurableRowFold> {
+  const { boundary, chunkBytes } = foldParameters(options);
+  options.signal?.throwIfAborted();
+  if ((await journal.stat()).size < options.maxBytes)
+    throw new Error('Durable journal truncated below pinned watermark');
+  const projection = await openProjection(options, boundary);
+  resources.projection = projection;
+  const staged = new ResolverDiskIndex(options.scratchRoot);
+  resources.staged = staged;
+  const density = new DurableDensityIndex(options.scratchRoot);
+  resources.density = density;
+  const projectionBytes = projection ? (await projection.stat()).size : 0;
+  const bound = bindCheckpoint(options, journal, boundary, projection);
+  const resumed =
+    (await bound?.checkpoint.restore(bound.source, options.maxBytes)) ?? null;
+  const directory =
+    resumed?.directory ?? new MutableRowDirectory(options.scratchRoot);
+  resources.directory = directory;
+  if (resumed === null)
     await scanRestoredPrefix(
       directory,
       staged,
@@ -494,33 +555,55 @@ export async function foldDurableRows(
       chunkBytes,
       options.signal,
     );
-    for await (const line of scanResolverLines(
-      journal,
-      chunkBytes,
-      staged,
-      options.maxBytes,
-      false,
-      density,
-      boundary,
-      options.signal,
-    ))
-      foldLine(directory, line, staged, density);
-    const densityMetrics = density.metrics();
-    staged.close();
-    density.close();
-    return new DurableRowFold(
-      journal,
-      directory,
-      Math.min(chunkBytes, 64 * 1024),
-      options.maxBytes,
-      densityMetrics,
-      projection,
-      projectionBytes,
-    );
+  for await (const line of scanResolverLines(
+    journal,
+    chunkBytes,
+    staged,
+    options.maxBytes,
+    false,
+    density,
+    resumed?.watermark ?? boundary,
+    options.signal,
+  ))
+    foldLine(directory, line, staged, density);
+  if (resumed?.watermark !== options.maxBytes)
+    await bound?.checkpoint.save(bound.source, options.maxBytes, directory);
+  const densityMetrics = density.metrics();
+  staged.close();
+  density.close();
+  return new DurableRowFold(
+    journal,
+    directory,
+    Math.min(chunkBytes, 64 * 1024),
+    options.maxBytes,
+    densityMetrics,
+    projection,
+    projectionBytes,
+  );
+}
+
+/**
+ * Scan a durable byte prefix in <=64KiB reads without hydrating history rows.
+ * With a checkpoint, only the bytes appended since the last fold are scanned.
+ */
+export async function foldDurableRows(
+  options: DurableRowFoldOptions,
+): Promise<DurableRowFold> {
+  foldParameters(options);
+  const journal = options.pinnedJournal
+    ? options.pinnedJournal.handle
+    : io(await fs.open(requiredJournalPath(options.filePath), 'r'));
+  const resources: FoldResources = {};
+  try {
+    return await buildFold(options, journal, resources);
   } catch (error) {
     // The scan error takes precedence over secondary cleanup failures.
-    await Promise.allSettled([projection?.close(), journal.close()]);
-    for (const scratch of [directory, staged, density]) {
+    await Promise.allSettled([resources.projection?.close(), journal.close()]);
+    for (const scratch of [
+      resources.directory,
+      resources.staged,
+      resources.density,
+    ]) {
       try {
         scratch?.close();
       } catch {

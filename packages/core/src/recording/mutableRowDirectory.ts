@@ -19,6 +19,7 @@ export interface NumericRow {
 }
 
 const WIDTH = 64;
+const COPY_ROWS = 1024;
 const SOURCES: readonly RowSource[] = ['durable', 'projection', 'pending'];
 
 function validInteger(value: number): boolean {
@@ -112,8 +113,8 @@ export class MutableRowDirectory {
   private size = 0;
   private closed = false;
 
-  constructor(root = getScratchRoot()) {
-    this.directory = fs.mkdtempSync(path.join(root, 'llxprt-row-directory-'));
+  constructor(root = getScratchRoot(), prefix = 'llxprt-row-directory-') {
+    this.directory = fs.mkdtempSync(path.join(root, prefix));
     this.file = path.join(this.directory, 'rows');
     try {
       this.fd = fs.openSync(this.file, 'wx+', 0o600);
@@ -232,6 +233,27 @@ export class MutableRowDirectory {
       return next;
     });
     return this.size;
+  }
+
+  /** Independent copy of the current rows, copied in bounded chunks. */
+  clone(root?: string, prefix?: string): MutableRowDirectory {
+    this.assertOpen();
+    const copy = new MutableRowDirectory(root, prefix);
+    try {
+      const chunk = Buffer.alloc(COPY_ROWS * WIDTH);
+      for (let row = 0; row < this.size; row += COPY_ROWS) {
+        const bytes = Math.min(COPY_ROWS, this.size - row) * WIDTH;
+        if (fs.readSync(this.fd, chunk, 0, bytes, row * WIDTH) !== bytes)
+          throw new Error('Truncated numeric row directory');
+        if (fs.writeSync(copy.fd, chunk, 0, bytes, row * WIDTH) !== bytes)
+          throw new Error('Short numeric row write');
+      }
+      copy.size = this.size;
+      return copy;
+    } catch (error) {
+      copy.close();
+      throw error;
+    }
   }
 
   metrics(): {

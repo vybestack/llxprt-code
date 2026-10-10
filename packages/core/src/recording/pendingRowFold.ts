@@ -245,6 +245,7 @@ export async function foldPendingRows(
         projectionPath: snapshot.projectionPath,
         pinnedJournal: snapshot.pinnedJournal,
         pinnedProjection: snapshot.pinnedProjection ?? undefined,
+        checkpoint: snapshot.foldCheckpoint,
         ...options,
       });
     }
