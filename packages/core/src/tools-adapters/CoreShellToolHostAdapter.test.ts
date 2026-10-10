@@ -155,6 +155,8 @@ describe('inactivity termination passthrough @plan:issue3589', () => {
   });
 });
 
+const ownedPolicies: Array<{ dispose(): void }> = [];
+
 describe('CoreShellToolHostAdapter', () => {
   it('rejects background launches without an Agent owner', () => {
     const { adapter } = makeAdapter();
@@ -402,6 +404,9 @@ describe('CoreShellToolHostAdapter', () => {
    * itself (no network), which reports the prompt it received.
    */
   describe('CoreShellToolHostAdapter.trySummarizeOutput (issue #2626: uniform summarization)', () => {
+    disposeOwnedPolicies(() => {
+      for (const owner of ownedPolicies.splice(0)) owner.dispose();
+    });
     async function makeSummarizingAdapter(providerManager?: {
       getActiveProvider(): { name: string } | undefined;
     }): Promise<{
@@ -552,9 +557,4 @@ describe('CoreShellToolHostAdapter', () => {
       .map((block) => (block.type === 'text' ? block.text : ''))
       .join('');
   }
-});
-
-const ownedPolicies: Array<{ dispose(): void }> = [];
-disposeOwnedPolicies(() => {
-  for (const owner of ownedPolicies.splice(0)) owner.dispose();
 });

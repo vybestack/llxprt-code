@@ -5,7 +5,12 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { assertSupportedReplacementRoute } from './admittedRouteSecurity.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import {
+  assertAdmittedCredential,
+  assertSupportedReplacementRoute,
+  captureAdmittedCredential,
+} from './admittedRouteSecurity.js';
 
 describe('admitted route replacement eligibility', () => {
   it('rejects a direct continuation with no captured endpoint after replacement', () => {
@@ -96,5 +101,83 @@ describe('admitted route replacement eligibility', () => {
         true,
       ),
     ).not.toThrow();
+  });
+});
+
+describe('admitted credential comparison', () => {
+  function settingsWithKeys(
+    globalKey: string | undefined,
+    providerKey: string | undefined,
+  ): SettingsService {
+    const settings = new SettingsService();
+    if (globalKey !== undefined) settings.set('auth-key', globalKey);
+    if (providerKey !== undefined)
+      settings.setProviderSetting('openai', 'auth-key', providerKey);
+    return settings;
+  }
+
+  it('accepts the credentials that were admitted', () => {
+    const settings = settingsWithKeys('global-key', 'provider-key');
+    const admitted = captureAdmittedCredential(settings, 'openai');
+    expect(() => assertAdmittedCredential(admitted, settings)).not.toThrow();
+  });
+
+  it('accepts unchanged credentials read from an equivalent settings service', () => {
+    const admitted = captureAdmittedCredential(
+      settingsWithKeys('global-key', 'provider-key'),
+      'openai',
+    );
+    expect(() =>
+      assertAdmittedCredential(
+        admitted,
+        settingsWithKeys('global-key', 'provider-key'),
+      ),
+    ).not.toThrow();
+  });
+
+  it('rejects a changed provider credential of equal length', () => {
+    const admitted = captureAdmittedCredential(
+      settingsWithKeys(undefined, 'key-aaaa'),
+      'openai',
+    );
+    expect(() =>
+      assertAdmittedCredential(
+        admitted,
+        settingsWithKeys(undefined, 'key-bbbb'),
+      ),
+    ).toThrow('Admitted provider credentials changed before request dispatch');
+  });
+
+  it('rejects a changed credential of a different length', () => {
+    const admitted = captureAdmittedCredential(
+      settingsWithKeys('short', undefined),
+      'openai',
+    );
+    expect(() =>
+      assertAdmittedCredential(
+        admitted,
+        settingsWithKeys('much-longer-key', undefined),
+      ),
+    ).toThrow('Admitted provider credentials changed before request dispatch');
+  });
+
+  it('rejects a credential that appears or disappears after admission', () => {
+    const admitted = captureAdmittedCredential(
+      settingsWithKeys(undefined, undefined),
+      'openai',
+    );
+    expect(() =>
+      assertAdmittedCredential(admitted, settingsWithKeys('added', undefined)),
+    ).toThrow('Admitted provider credentials changed before request dispatch');
+  });
+
+  it('rejects dispatch when no settings service is available', () => {
+    const admitted = captureAdmittedCredential(
+      settingsWithKeys('global-key', undefined),
+      'openai',
+    );
+    expect(() => assertAdmittedCredential(admitted, undefined)).toThrow(
+      'Admitted provider credentials changed before request dispatch',
+    );
   });
 });

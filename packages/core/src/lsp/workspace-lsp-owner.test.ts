@@ -19,15 +19,6 @@ const fixture = fileURLToPath(
 );
 const roots: WorkspaceLspOwner[] = [];
 const directories: string[] = [];
-afterEach(async () => {
-  await Promise.all(roots.splice(0).map((root) => root.dispose()));
-  await Promise.all(
-    directories
-      .splice(0)
-      .map((directory) => rm(directory, { recursive: true, force: true })),
-  );
-});
-
 const { initializeTestConfig } = await import(
   '../__tests__/config-test-helpers.js'
 );
@@ -81,6 +72,14 @@ async function activate(
 }
 
 describe('WorkspaceLspOwner real process lifetime', () => {
+  afterEach(async () => {
+    await Promise.all(roots.splice(0).map((root) => root.dispose()));
+    await Promise.all(
+      directories
+        .splice(0)
+        .map((directory) => rm(directory, { recursive: true, force: true })),
+    );
+  });
   it('checks real changed files and isolates independent roots with identical labels', async () => {
     const { directory, file } = await workspace();
     const first = new WorkspaceLspOwner(settings(), directory, () => true);

@@ -51,7 +51,9 @@ function compile(
 }
 
 beforeAll(() => {
-  root = mkdtempSync(join(repoRoot, 'tmp', 'memory-bootstrap-'));
+  const scratchParent = join(repoRoot, 'tmp');
+  mkdirSync(scratchParent, { recursive: true });
+  root = mkdtempSync(join(scratchParent, 'memory-bootstrap-'));
   for (const [installed, source] of entries) {
     compile(
       `installed-${installed}-entry`,

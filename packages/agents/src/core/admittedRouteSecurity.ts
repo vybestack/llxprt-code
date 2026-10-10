@@ -4,14 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { createHmac, randomBytes } from 'node:crypto';
+import { timingSafeEqual } from 'node:crypto';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { AdmittedProviderRoute } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
-
-// Revisions are only compared within this process, so a per-process random key
-// keeps the digest of secret material from being usable as an offline
-// password-guessing oracle.
-const credentialRevisionKey = randomBytes(32);
 
 export function admittedEndpoint(
   settings: SettingsService,
@@ -28,30 +23,45 @@ export function admittedEndpoint(
     ?.trim();
 }
 
-export function admittedCredentialRevision(
+/**
+ * The credential values that were admitted for a route. The secret stays in
+ * this closure; it is never exposed as a property of the route object, so
+ * serializing or inspecting a route cannot leak it.
+ */
+export type AdmittedCredential = (settings: SettingsService) => boolean;
+
+function readCredentialMaterial(
   settings: SettingsService,
   providerName: string,
-): string {
-  return createHmac('sha256', credentialRevisionKey)
-    .update(
-      JSON.stringify([
-        settings.get('auth-key') ?? null,
-        settings.getProviderSettings(providerName)['auth-key'] ?? null,
-      ]),
-    )
-    .digest('hex');
+): Buffer {
+  return Buffer.from(
+    JSON.stringify([
+      settings.get('auth-key') ?? null,
+      settings.getProviderSettings(providerName)['auth-key'] ?? null,
+    ]),
+    'utf8',
+  );
+}
+
+export function captureAdmittedCredential(
+  settings: SettingsService,
+  providerName: string,
+): AdmittedCredential {
+  const admitted = readCredentialMaterial(settings, providerName);
+  return (current) => {
+    const candidate = readCredentialMaterial(current, providerName);
+    return (
+      candidate.length === admitted.length &&
+      timingSafeEqual(candidate, admitted)
+    );
+  };
 }
 
 export function assertAdmittedCredential(
-  route: AdmittedProviderRoute | undefined,
+  admitted: AdmittedCredential,
   settings: SettingsService | undefined,
 ): void {
-  if (!route) return;
-  if (
-    !settings ||
-    route.credentialRevision !==
-      admittedCredentialRevision(settings, route.provider.name)
-  ) {
+  if (!settings || !admitted(settings)) {
     throw new Error(
       'Admitted provider credentials changed before request dispatch',
     );

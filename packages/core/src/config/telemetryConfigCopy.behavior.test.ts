@@ -32,9 +32,6 @@ function makeConfig(telemetry?: ConfigParameters['telemetry']): Config {
 }
 
 const owners: SessionSettingsOwner[] = [];
-afterEach(async () => {
-  for (const owner of owners.splice(0)) await owner.dispose();
-});
 function settingsFor(config: Config): SessionSettingsOwner {
   const owner = new SessionSettingsOwner(new SettingsService());
   owner.bindTelemetry(config);
@@ -43,6 +40,9 @@ function settingsFor(config: Config): SessionSettingsOwner {
 }
 
 describe('Config telemetry perf copy isolation', () => {
+  afterEach(async () => {
+    for (const owner of owners.splice(0)) await owner.dispose();
+  });
   describe('constructor/get copy isolation', () => {
     it('getTelemetrySettings returns a perf object that is a copy of the internal reference', () => {
       const config = makeConfig({

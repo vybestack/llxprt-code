@@ -29,9 +29,6 @@ function makeConfig(telemetry?: ConfigParameters['telemetry']): Config {
 }
 
 const owners: SessionSettingsOwner[] = [];
-afterEach(async () => {
-  for (const owner of owners.splice(0)) await owner.dispose();
-});
 function settingsFor(config: Config): SessionSettingsOwner {
   const owner = new SessionSettingsOwner(new SettingsService());
   owner.bindTelemetry(config);
@@ -40,6 +37,9 @@ function settingsFor(config: Config): SessionSettingsOwner {
 }
 
 describe('Config.getTelemetryPerfEnabled / getTelemetryPerfMemory', () => {
+  afterEach(async () => {
+    for (const owner of owners.splice(0)) await owner.dispose();
+  });
   describe('defaults', () => {
     it('perf enabled defaults to false when perf is absent', () => {
       const config = makeConfig({ enabled: true });

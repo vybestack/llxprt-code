@@ -33,7 +33,7 @@ describe('package import boundaries', () => {
   it('retains existing cross-package checks in other packages', async () => {
     expect(
       await ruleIds(
-        "import '../../core/src/adapters/IStreamAdapter.js';",
+        "import '../../core/src/adapters/IStreamAdapter.ts';",
         providerFile,
       ),
     ).toContain('import/no-relative-packages');

@@ -12,7 +12,6 @@ export interface AdmittedProviderRoute {
   readonly profileName: string | null;
   readonly baseURL?: string;
   readonly hasInlineKey: boolean;
-  readonly credentialRevision: string;
   readonly assertCurrent?: () => void;
   readonly members?: ReadonlyArray<{
     readonly providerName: string;

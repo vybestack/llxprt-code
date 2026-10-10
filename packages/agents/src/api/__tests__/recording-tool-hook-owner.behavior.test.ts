@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { readFile, rm } from 'node:fs/promises';
+import { mkdir, readFile, rm } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import type { Agent, AgentEvent } from '@vybestack/llxprt-code-agents';
@@ -61,6 +61,10 @@ describe('borrowed facade tool hook owner routing', () => {
       'recording-tool-hook-owner',
       `${randomUUID()}.jsonl`,
     );
+    // The hook command appends to `output` before any tool has had a chance to
+    // create this directory, so it must exist up front (it is absent on a
+    // clean checkout, e.g. CI).
+    await mkdir(evidenceDir, { recursive: true });
     try {
       await withRecordingLifetimeFixture(
         async ({ agent: a, borrow }) => {
@@ -171,12 +175,7 @@ describe('borrowed facade tool hook owner routing', () => {
         'recording-tool-owner.jsonl',
       );
     } finally {
-      await rm(output, { force: true });
-      await Promise.all(
-        ['a.txt', 'b.txt', 'resumed.txt'].map((name) =>
-          rm(join(evidenceDir, name), { force: true }),
-        ),
-      );
+      await rm(evidenceDir, { recursive: true, force: true });
     }
   }, 30000);
 });

@@ -148,7 +148,12 @@ function buildTomlStylePolicyConfig(): PolicyEngineConfig {
   };
 }
 
+const ownedPolicies: Array<{ dispose(): void }> = [];
+
 describe('Config approval-mode policy synchronization (issue #2659)', () => {
+  disposeOwnedPolicies(() => {
+    for (const owner of ownedPolicies.splice(0)) owner.dispose();
+  });
   let settingsService: SettingsService;
   let baseParams: ConfigParameters;
 
@@ -460,9 +465,4 @@ describe('PolicyEngine dynamic mode evaluation (standalone)', () => {
     engine.setApprovalMode(ApprovalMode.DEFAULT);
     expect(engine.evaluate('custom_tool', {})).toBe(PolicyDecision.ASK_USER);
   });
-});
-
-const ownedPolicies: Array<{ dispose(): void }> = [];
-disposeOwnedPolicies(() => {
-  for (const owner of ownedPolicies.splice(0)) owner.dispose();
 });

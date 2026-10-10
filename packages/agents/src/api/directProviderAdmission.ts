@@ -12,7 +12,7 @@ import { admitLoadBalancerModelParameters } from '@vybestack/llxprt-code-provide
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { LoopHolder } from './loop/rebuildLoop.js';
 import {
-  admittedCredentialRevision,
+  captureAdmittedCredential,
   assertSupportedReplacementRoute,
   assertAdmittedCredential,
 } from '../core/admittedRouteSecurity.js';
@@ -85,15 +85,15 @@ function admitDirectProviderModelParameters(
       });
     },
   );
+  const admittedCredential = captureAdmittedCredential(
+    settingsService,
+    providerName,
+  );
   const route: AdmittedProviderRoute = Object.freeze({
     provider,
     model: readModel(),
     profileName: settingsService.getCurrentProfileName(),
     hasInlineKey,
-    credentialRevision: admittedCredentialRevision(
-      settingsService,
-      providerName,
-    ),
     ...(providerName !== 'load-balancer' && endpoint
       ? { baseURL: endpoint }
       : {}),
@@ -114,7 +114,7 @@ function admitDirectProviderModelParameters(
               readCurrentEndpoint() !== route.baseURL),
           route.hasInlineKey,
         );
-        assertAdmittedCredential(route, settingsService);
+        assertAdmittedCredential(admittedCredential, settingsService);
       },
     }),
   });

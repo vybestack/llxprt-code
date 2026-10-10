@@ -467,28 +467,13 @@ export default tseslint.config(
     },
   },
 
-  // Source-adjacent JS makes same-package core imports appear to be internals.
-  // Restrict this allowance to core files resolving inside core itself.
+  // Core must not reach into sibling workspace packages through relative paths.
+  // import/no-relative-packages only fires when the resolver can find the
+  // target, which is not the case for .js specifiers that map to .ts sources.
   {
     files: ['packages/core/src/**/*.{ts,tsx}'],
     rules: {
       'custom/package-import-boundary': 'error',
-      'import/no-internal-modules': [
-        'error',
-        {
-          allow: [
-            'react-dom/test-utils',
-            'memfs/lib/volume.js',
-            'vscode-jsonrpc/node.js',
-            'yargs/**',
-            '@anthropic-ai/sdk/**',
-            'ajv/dist/2020.js',
-            '**/generated/**',
-            '**/prompts/**',
-            '**/packages/core/src/**',
-          ],
-        },
-      ],
     },
   },
 
