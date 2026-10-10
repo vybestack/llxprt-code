@@ -126,6 +126,7 @@ void vi.mock('@vybestack/llxprt-code-mcp', () => ({
   McpClientManager: vi.fn().mockImplementation(() => ({
     startConfiguredMcpServers: vi.fn().mockResolvedValue(undefined),
     readInstructions: vi.fn().mockReturnValue(''),
+    stop: vi.fn().mockResolvedValue(undefined),
   })),
   DiscoveredMCPTool: class DiscoveredMCPToolMock {
     constructor(

@@ -8,9 +8,9 @@ import { resolveShellJobSettings } from '@vybestack/llxprt-code-core/config/asyn
 import { describe, expect, it } from 'bun:test';
 import { existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import {
   createAgenticLoop,
   TaskLaunchOwner,
@@ -19,6 +19,7 @@ import { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTask
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
 import { resolveRepositoryFixture } from './helpers/fixtureRoot.js';
+import { makeScratchDir } from './helpers/scratch-dir.js';
 import {
   awaitShellGroupAbsence,
   deadline,
@@ -30,9 +31,7 @@ describe('standalone createAgenticLoop shell ownership', () => {
   it.skipIf(process.platform === 'win32')(
     'joins a real model-generated background shell process and removes its log on explicit runner disposal',
     async () => {
-      const root = await mkdtemp(
-        join(resolve('tmp'), 'standalone-shell-owner-'),
-      );
+      const root = await makeScratchDir('standalone-shell-owner-');
       const gate = await shellOwnerGate();
       const marker = join(root, 'standalone.marker');
       const command = [

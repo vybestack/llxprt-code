@@ -106,16 +106,22 @@ describe('explicit provider switch ownership', () => {
       second.settingsOwner,
     );
     expect(completed.changed).toBe(true);
+    // The switch prefers the provider alias default over the provider's own
+    // default (which LLXPRT_DEFAULT_MODEL overrides), so compare against the
+    // model the switch itself reports for this owner.
+    expect(completed.defaultModel).toBeTruthy();
     expect(second.settingsOwner.readSelectedModel()).toBe(
-      second.manager.getActiveProvider()?.getDefaultModel() ?? '',
+      completed.defaultModel,
     );
     expect(second.settingsOwner.readNamedParameter('context-limit')).toBe(5678);
     expect(first.settings.get('currentProfile')).toBe('first-profile');
     release();
-    expect((await delayed).changed).toBe(true);
+    const delayedResult = await delayed;
+    expect(delayedResult.changed).toBe(true);
+    expect(delayedResult.defaultModel).toBe(completed.defaultModel);
     expect(first.settingsOwner.readNamedParameter('context-limit')).toBe(1234);
     expect(first.settingsOwner.readSelectedModel()).toBe(
-      first.manager.getActiveProvider()?.getDefaultModel() ?? '',
+      delayedResult.defaultModel,
     );
     expect(second.settings.get('currentProfile')).toBe('second-profile');
   });

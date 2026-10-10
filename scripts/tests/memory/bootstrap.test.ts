@@ -13,15 +13,14 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { runMemoryEntrypoint } from '../../memory/entrypoint.ts';
 
-const repoRoot = fileURLToPath(new URL('../../../', import.meta.url));
 let root = '';
 
 beforeEach(() => {
-  root = mkdtempSync(join(repoRoot, 'tmp', 'memory-bootstrap-effect-'));
+  root = mkdtempSync(join(tmpdir(), 'memory-bootstrap-effect-'));
 });
 
 afterEach(() => {

@@ -4,9 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { createHash } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { AdmittedProviderRoute } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
+
+// Revisions are only compared within this process, so a per-process random key
+// keeps the digest of secret material from being usable as an offline
+// password-guessing oracle.
+const credentialRevisionKey = randomBytes(32);
 
 export function admittedEndpoint(
   settings: SettingsService,
@@ -27,7 +32,7 @@ export function admittedCredentialRevision(
   settings: SettingsService,
   providerName: string,
 ): string {
-  return createHash('sha256')
+  return createHmac('sha256', credentialRevisionKey)
     .update(
       JSON.stringify([
         settings.get('auth-key') ?? null,

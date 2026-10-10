@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
@@ -245,7 +246,7 @@ ${existingInput}`
     process.exit(1);
   }
 
-  const prompt_id = Math.random().toString(16).slice(2);
+  const prompt_id = randomBytes(8).toString('hex');
 
   let nonInteractiveExitCode = 0;
   let cleanupFailures: unknown[] = [];

@@ -16,10 +16,6 @@ import type {
   WorkspaceSearchOperations,
 } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import type {
-  RuntimeProviderManager,
-  RuntimeModel,
-} from '@vybestack/llxprt-code-core';
 /**
  * @plan:PLAN-20260617-COREAPI.P05
  * @requirement:REQ-001, REQ-017
@@ -55,12 +51,15 @@ import type {
   ToolCallsUpdateHandler,
 } from '@vybestack/llxprt-code-core/scheduler/types.js';
 import type {
+  RuntimeProviderManager,
+  RuntimeModel,
   PolicyDecision,
   DiscoveredMCPResource,
   ContinueTarget,
+  HistoryClearOptions,
+  // @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-004 @pseudocode agents-projection.md line 95
+  McpOAuthStatus,
 } from '@vybestack/llxprt-code-core';
-// @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-004 @pseudocode agents-projection.md line 95
-import type { McpOAuthStatus } from '@vybestack/llxprt-code-core';
 import type { ToolCallRequestInfo } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { BrowserListing, EditorCallbacks } from './config-types.js';
 import type {
@@ -792,8 +791,12 @@ export interface AgentSessionControl {
   }>;
   /** Reads live conversation history through the session owner. */
   getHistory(): Promise<readonly AgentHistoryItem[]>;
-  /** Durably clears non-initial turns and updates the live history. */
-  clearHistory(): Promise<void>;
+  /**
+   * Durably clears turns and updates the live history. By default the initial
+   * human-led turn is retained; pass `retainInitialHistory: false` to remove
+   * everything.
+   */
+  clearHistory(options?: HistoryClearOptions): Promise<void>;
   /** Creates and activates a self-contained child session from a checkpoint. */
   forkFromCheckpoint(ref: string): Promise<SessionInfo>;
   /** Lists live recording-native checkpoints in the current project. */
@@ -1198,7 +1201,7 @@ export interface Agent {
   ): Promise<void>;
   addHistory(message: AgentMessage): Promise<void>;
   restoreHistory(items: readonly AgentHistoryItem[]): Promise<void>;
-  resetChat(): Promise<void>;
+  resetChat(options?: HistoryClearOptions): Promise<void>;
   updateSystemInstruction(): Promise<void>;
   addDirectoryContext(): Promise<void>;
   compress(opts?: { readonly promptId?: string }): Promise<CompressionResult>;

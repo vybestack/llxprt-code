@@ -1012,7 +1012,7 @@ export abstract class HistoryServiceCore
    */
   async estimateTokensForContents(
     contents: readonly IContent[],
-    modelName?: string,
+    modelName = this.activeTokenizationModel,
   ): Promise<number> {
     return estimateTokensForContentsImpl(
       [...contents],

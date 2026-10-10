@@ -6,13 +6,14 @@
 import { describe, expect, it } from 'bun:test';
 import { existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
+import { readdir, readFile, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createAgent } from '@vybestack/llxprt-code-agents';
 import { AgentImpl } from '../agentImpl.js';
 import { HookControl } from '../control/hooks.js';
 import { resolveRepositoryFixture } from './helpers/fixtureRoot.js';
+import { makeScratchDir } from './helpers/scratch-dir.js';
 import {
   awaitShellGroupAbsence,
   deadline,
@@ -21,7 +22,7 @@ import {
 } from './helpers/shell-owner-gate.js';
 
 async function bootstrapFailure(denyObservation: boolean): Promise<number> {
-  const root = await mkdtemp(join(resolve('tmp'), 'bootstrap-shell-owner-'));
+  const root = await makeScratchDir('bootstrap-shell-owner-');
   const gate = await shellOwnerGate();
   const marker = join(root, 'bootstrap.marker');
   const primary = new Error('injected SessionStart bootstrap failure');

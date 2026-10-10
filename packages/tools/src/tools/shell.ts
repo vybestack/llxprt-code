@@ -769,12 +769,17 @@ export class ShellTool extends BaseDeclarativeTool<
   ToolResult
 > {
   static readonly Name: string = 'run_shell_command';
-  private allowlist: Set<string> = new Set();
   private readonly host: IShellToolHost;
 
+  /**
+   * @param allowlist Root commands approved with "Allow for this session".
+   * Session-bound views of a tool share the owning tool's set so approvals
+   * survive the per-call views the scheduler resolves.
+   */
   constructor(
     host: IShellToolHost | IShellExecutionService,
     messageBus?: IToolMessageBus,
+    private readonly allowlist: Set<string> = new Set(),
   ) {
     super(
       ShellTool.Name,
@@ -797,6 +802,7 @@ export class ShellTool extends BaseDeclarativeTool<
     return new ShellTool(
       bindBackgroundShellHost(this.host, jobs),
       this.messageBus,
+      this.allowlist,
     );
   }
 

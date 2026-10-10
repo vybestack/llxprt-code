@@ -13,7 +13,7 @@ import {
   it,
   spyOn,
 } from 'bun:test';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { z } from 'zod';
 import { execFile } from 'node:child_process';
@@ -41,12 +41,14 @@ describe('CLI session client bootstrap ownership', () => {
   let suiteDirectory: string;
   let directory: string;
   beforeAll(async () => {
-    suiteDirectory = await mkdtemp(
-      resolve(
-        import.meta.dirname,
-        '../../../tmp/session-client-frontend-migration/cli-lifetime-',
-      ),
+    // The repository tmp/ tree is gitignored, so a fresh checkout (CI) has
+    // none of it; mkdtemp does not create missing parent directories.
+    const suiteRoot = resolve(
+      import.meta.dirname,
+      '../../../tmp/session-client-frontend-migration',
     );
+    await mkdir(suiteRoot, { recursive: true });
+    suiteDirectory = await mkdtemp(join(suiteRoot, 'cli-lifetime-'));
   });
   afterAll(async () => {
     await rm(suiteDirectory, { recursive: true, force: true });

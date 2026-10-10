@@ -30,7 +30,6 @@
 import { basename } from 'node:path';
 import {
   CheckpointService,
-  HistoryMutationService,
   RecordingIntegration,
   SessionDiscovery,
   SessionRecordingService,
@@ -45,6 +44,7 @@ import {
   type ResumeRequest,
   type SessionSummary,
   type LockHandle,
+  type HistoryClearOptions,
 } from '@vybestack/llxprt-code-core';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { SemanticMediaPurgeFrontier } from '@vybestack/llxprt-code-core/services/history/semantic-media-purge.js';
@@ -74,8 +74,7 @@ import {
   seedOwnerRecording,
 } from './recordedHistoryPersistence.js';
 import {
-  commitRecordedHistoryMutation,
-  preflightClearHistory,
+  clearOwnerHistory,
   restoreOwnerTurns,
 } from './sessionControlHistoryMutation.js';
 import { warnSkippedRecordings } from './skippedRecordings.js';
@@ -726,28 +725,18 @@ export class SessionControl implements AgentSessionControl {
   getHistory = (): Promise<readonly IContent[]> =>
     this.runExclusive(() => this.deps.resolveClient().getHistory());
 
-  async clearHistory(): Promise<void> {
-    await this.runExclusive(async () => {
-      const client = this.deps.resolveClient();
-      const history = await client.getHistory();
-      const recording = this.requireRecording();
-      const result = await new HistoryMutationService().clear(
-        history,
-        recording,
-        (remainingHistory) =>
-          preflightClearHistory(remainingHistory, this.deps.mediaStore),
-      );
-      if (!result.ok) throw new Error(result.error);
-      await commitRecordedHistoryMutation({
-        result,
-        history,
-        client,
-        recording,
-        integration: this.integration,
-        owner: this,
-        resubscribe: () => this.resubscribeIntegration(),
-      });
-    });
+  async clearHistory(options?: HistoryClearOptions): Promise<void> {
+    await this.runExclusive(() =>
+      clearOwnerHistory(
+        options,
+        this.deps.resolveClient(),
+        this.requireRecording(),
+        this.integration,
+        this,
+        this.deps.mediaStore,
+        () => this.resubscribeIntegration(),
+      ),
+    );
   }
 
   /**

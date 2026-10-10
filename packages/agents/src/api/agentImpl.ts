@@ -19,6 +19,7 @@ import { generateDetachedText } from './detached-generation.js';
 import { executeHookCompression } from './compression-execution.js';
 import {
   ApprovalMode,
+  type HistoryClearOptions,
   type RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
 // @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007
@@ -894,14 +895,15 @@ export class AgentImpl implements Agent {
 
   /**
    * Resets the chat through the durable history-clear path while recording is
-   * active, preserving its initial history prefix. Without recording, delegates
-   * to the client's full reset contract.
+   * active, preserving its initial history prefix unless
+   * `retainInitialHistory` is false. Without recording, delegates to the
+   * client's full reset contract.
    * @plan:PLAN-20260617-COREAPI.P20
    * @requirement:REQ-010
    */
-  async resetChat(): Promise<void> {
+  async resetChat(options?: HistoryClearOptions): Promise<void> {
     if (this.session.getRecording().enabled) {
-      await this.session.clearHistory();
+      await this.session.clearHistory(options);
       return;
     }
     const client = this.deps.resolveClient();

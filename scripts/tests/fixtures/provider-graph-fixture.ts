@@ -25,7 +25,9 @@ export function createProviderGraphFixture(repoRoot: string): {
   readonly injectProductionImport: () => void;
   readonly dispose: () => void;
 } {
-  const root = mkdtempSync(join(repoRoot, 'tmp/provider-graph-'));
+  const scratchParent = join(repoRoot, 'tmp');
+  mkdirSync(scratchParent, { recursive: true });
+  const root = mkdtempSync(join(scratchParent, 'provider-graph-'));
   const source = loadData(
     join(repoRoot, 'scripts/affected-test-shards.data.json'),
   );

@@ -15,6 +15,7 @@ import {
   HookType,
   escapeShellArg,
 } from '@vybestack/llxprt-code-core';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
 import { clearCommand } from './clearCommand.js';
 import type { HistoryItemWithoutId } from '../types.js';
@@ -38,7 +39,7 @@ describe('clearCommand', () => {
   let resetCount: number;
   let uiEvents: string[];
   let agent: ReturnType<typeof createUiSessionOwner> & {
-    resetChat(): Promise<void>;
+    resetChat: Agent['resetChat'];
   };
 
   beforeEach(async () => {
@@ -138,6 +139,15 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
       'SessionStart',
     ]);
     expect(uiTelemetryService.reset).toHaveBeenCalledTimes(1);
+  });
+  it('should ask the agent to drop the whole conversation, including the initial turn', async () => {
+    let history = ['first question', 'first answer', 'later question'];
+    agent.resetChat = async (options) => {
+      history =
+        options?.retainInitialHistory === false ? [] : history.slice(0, 2);
+    };
+    await clearAction(context, '');
+    expect(history).toStrictEqual([]);
   });
   it('should skip reset when no agent is available (terminal-only clear)', async () => {
     const terminal = createMockCommandContext({

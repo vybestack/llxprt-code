@@ -13,6 +13,9 @@ import {
   afterEach,
   type Mock,
 } from 'bun:test';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Config, coreEvents } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -57,14 +60,16 @@ describe('setupTerminalAndTheme', () => {
   let config: Config;
   let settingsService: SettingsService;
   let mockSettings: LoadedSettings;
+  let workspaceRoot: string;
 
   beforeEach(async () => {
     vi.clearAllMocks();
 
+    workspaceRoot = await mkdtemp(join(tmpdir(), 'terminal-theme-'));
     settingsService = new SettingsService();
     config = new Config({
-      cwd: '/tmp',
-      targetDir: '/tmp/test',
+      cwd: workspaceRoot,
+      targetDir: workspaceRoot,
       debugMode: false,
       question: undefined,
       userMemory: '',
@@ -81,8 +86,9 @@ describe('setupTerminalAndTheme', () => {
     } as LoadedSettings;
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.clearAllMocks();
+    await rm(workspaceRoot, { recursive: true, force: true });
   });
 
   describe('Interactive TTY', () => {

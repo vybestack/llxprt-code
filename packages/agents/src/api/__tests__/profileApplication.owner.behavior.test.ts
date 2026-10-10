@@ -16,6 +16,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fromConfig, type Agent } from '../index.js';
+import { makeScratchDir } from './helpers/scratch-dir.js';
 import {
   buildCliStyleConfig,
   type BuiltCliConfig,
@@ -112,7 +113,7 @@ describe('public profile application ownership outside ALS', () => {
       import.meta.dirname,
       '../../../../../tmp/session-client-owner-consolidation',
     );
-    promptRoot = await mkdtemp(join(evidence, 'profile-prompts-'));
+    promptRoot = await makeScratchDir('profile-prompts-', evidence);
     previousPromptRoot = process.env.LLXPRT_PROMPTS_DIR;
     process.env.LLXPRT_PROMPTS_DIR = promptRoot;
   });

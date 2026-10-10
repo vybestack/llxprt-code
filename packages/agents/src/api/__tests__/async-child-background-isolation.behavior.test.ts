@@ -11,9 +11,10 @@ import { describe, expect, it } from 'bun:test';
 import { createServer } from 'node:http';
 import { existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { readFile, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { resolveRepositoryFixture } from './helpers/fixtureRoot.js';
+import { makeScratchDir } from './helpers/scratch-dir.js';
 import {
   awaitShellGroupAbsence,
   deadline,
@@ -130,9 +131,7 @@ export async function withAsyncChildFixture(
   parentShellCommand?: string,
   exerciseTrust = false,
 ): Promise<void> {
-  const directory = await mkdtemp(
-    join(resolve('tmp'), 'async-child-background-'),
-  );
+  const directory = await makeScratchDir('async-child-background-');
   const http = createChildServer(
     childShellCommand,
     parentShellCommand,
@@ -332,7 +331,7 @@ describe('public Agent async child background isolation', () => {
   it.each([false, true])(
     'uses live parent trust for a child 503 retry and privileged write denial (abort=%s)',
     async (abortChild) => {
-      const root = await mkdtemp(join(resolve('tmp'), 'child-live-trust-'));
+      const root = await makeScratchDir('child-live-trust-');
       const marker = join(root, 'privileged.txt');
       try {
         await withAsyncChildFixture(
@@ -383,7 +382,7 @@ describe('public Agent async child background isolation', () => {
   it.skipIf(process.platform === 'win32')(
     'joins a model-stream generated parent shell job through the public Agent task owner',
     async () => {
-      const root = await mkdtemp(join(resolve('tmp'), 'parent-model-shell-'));
+      const root = await makeScratchDir('parent-model-shell-');
       const shellGate = await shellOwnerGate();
       const marker = join(root, 'parent.marker');
       const command = [
@@ -477,7 +476,7 @@ describe('public Agent async child background isolation', () => {
   it.skipIf(process.platform === 'win32')(
     'lets the actual child scheduler launch a parent-owned background process beyond child completion',
     async () => {
-      const root = await mkdtemp(join(resolve('tmp'), 'child-shell-owner-'));
+      const root = await makeScratchDir('child-shell-owner-');
       const shellGate = await shellOwnerGate();
       const marker = join(root, 'child.marker');
       const command = [

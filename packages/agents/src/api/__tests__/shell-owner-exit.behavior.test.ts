@@ -7,10 +7,11 @@
 import { describe, expect, it } from 'bun:test';
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { rm } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { awaitShellGroupAbsence } from './helpers/shell-owner-gate.js';
 import { resolveRepositoryFixture } from './helpers/fixtureRoot.js';
+import { makeScratchDir } from './helpers/scratch-dir.js';
 
 interface FixtureJob {
   id: string;
@@ -46,7 +47,7 @@ function groupAbsent(job: FixtureJob): boolean {
 async function runFixture(
   mode: 'natural-failure' | 'preset' | 'explicit-failure',
 ): Promise<number> {
-  const root = await mkdtemp(join(resolve('tmp'), 'shell-exit-owners-'));
+  const root = await makeScratchDir('shell-exit-owners-');
   const node = spawnSync('which', ['node'], { encoding: 'utf8' }).stdout.trim();
   if (!node) throw new Error('Node executable not available');
   const child = spawn(

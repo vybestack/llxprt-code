@@ -7,6 +7,7 @@
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type {
+  HistoryClearOptions,
   HistoryMutationResult,
   RecordingIntegration,
   SessionRecordingService,
@@ -60,7 +61,35 @@ export async function restoreOwnerTurns(
   return result;
 }
 
-export async function commitRecordedHistoryMutation(input: {
+export async function clearOwnerHistory(
+  options: HistoryClearOptions | undefined,
+  client: AgentClientContract,
+  recording: SessionRecordingService,
+  integration: RecordingIntegration | null,
+  owner: object,
+  mediaStore: ConstructorParameters<typeof MediaAdmissionService>[0],
+  resubscribe: () => Error | undefined,
+): Promise<void> {
+  const history = await client.getHistory();
+  const result = await new HistoryMutationService().clear(
+    history,
+    recording,
+    (remainingHistory) => preflightClearHistory(remainingHistory, mediaStore),
+    options,
+  );
+  if (!result.ok) throw new Error(result.error);
+  await commitRecordedHistoryMutation({
+    result,
+    history,
+    client,
+    recording,
+    integration,
+    owner,
+    resubscribe,
+  });
+}
+
+async function commitRecordedHistoryMutation(input: {
   readonly result: HistoryMutationResult;
   readonly history: readonly IContent[];
   readonly recording: SessionRecordingService;
@@ -81,7 +110,9 @@ export async function commitRecordedHistoryMutation(input: {
   integration?.unsubscribeFromHistory();
   try {
     await client.resetChat();
-    await client.restoreHistory(result.remainingHistory, owner);
+    if (result.remainingHistory.length > 0) {
+      await client.restoreHistory(result.remainingHistory, owner);
+    }
     const resubscribeError = resubscribe();
     if (resubscribeError !== undefined) throw resubscribeError;
   } catch (error: unknown) {

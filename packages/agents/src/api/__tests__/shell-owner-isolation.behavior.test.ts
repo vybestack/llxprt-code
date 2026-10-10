@@ -8,7 +8,7 @@ import { describe, expect, it } from 'bun:test';
 import { existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { setImmediate } from 'node:timers/promises';
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
@@ -20,6 +20,7 @@ import {
 } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
 import type { CompletedToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
 import { resolveRepositoryFixture } from './helpers/fixtureRoot.js';
+import { makeScratchDir } from './helpers/scratch-dir.js';
 import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
 import {
   deadline,
@@ -167,7 +168,7 @@ async function exercise(
   holdShellNotice = false,
   sameOwnerSafeJob = false,
 ): Promise<boolean> {
-  const root = await mkdtemp(join(resolve('tmp'), 'shell-agent-owner-'));
+  const root = await makeScratchDir('shell-agent-owner-');
   const environment = new Map(
     [
       'LLXPRT_CONFIG_HOME',
@@ -449,7 +450,7 @@ async function exercise(
 }
 
 async function terminalDescendantDrain(): Promise<void> {
-  const root = await mkdtemp(join(resolve('tmp'), 'shell-agent-descendant-'));
+  const root = await makeScratchDir('shell-agent-descendant-');
   const gate = await shellOwnerGate();
   const built = await buildCliStyleConfig('plain-text.jsonl', {
     workingDir: root,
