@@ -26,6 +26,8 @@ export interface ResponsesSourceOptions {
   readonly tools?: unknown;
   readonly contents: AsyncIterable<IContent>;
   readonly context: ResponsesInputBuildContext;
+  /** Request-override `input` replaces the rows entirely, as in the array route. */
+  readonly inputOverride?: { readonly value: unknown };
   readonly signal?: AbortSignal;
   readonly stateful?: {
     readonly statefulParentUsed: boolean;
@@ -94,7 +96,9 @@ async function segment(
   return withSerializationCleanup(
     async () => {
       const sink = new PromptKeyTeeWriter([writer, wire]);
-      if (key === 'input') {
+      if (key === 'input' && options.inputOverride !== undefined) {
+        sink.value(options.inputOverride.value);
+      } else if (key === 'input') {
         const owner = requestScopedContents(options.contents, options.signal);
         await withSerializationCleanup(
           () =>

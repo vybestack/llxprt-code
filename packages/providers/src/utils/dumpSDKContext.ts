@@ -13,6 +13,7 @@ import {
   type DumpRequestResult,
 } from './dumpContext.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { dumpRequestContextBodyBytes } from './dumpSourceRequestStream.js';
 
 const logger = new DebugLogger('llxprt:core:dumpSDKContext');
 
@@ -169,6 +170,24 @@ export async function dumpSDKRequestContext(
   );
 
   return dumpRequestContext(request, providerName);
+}
+
+/** Request dump whose body is streamed from encoded JSON bytes. */
+export async function dumpSDKRequestContextBodyBytes(
+  providerName: string,
+  endpoint: string,
+  body: AsyncIterable<Uint8Array>,
+  baseURL?: string,
+  metadata?: RequestDumpMetadata,
+  signal?: AbortSignal,
+): Promise<DumpRequestResult> {
+  const url = buildSDKDumpUrl(providerName, endpoint, baseURL);
+  const { body: _omitted, ...request } = buildSDKDumpRequest(
+    url,
+    undefined,
+    metadata,
+  );
+  return dumpRequestContextBodyBytes(request, providerName, body, signal);
 }
 
 /**

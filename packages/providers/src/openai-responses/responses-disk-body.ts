@@ -22,12 +22,16 @@ function utf16Chunk(
   };
 }
 
+/** `wire` carries media bytes for transport; `redacted` is the dump-safe form. */
+export type DiskBodyMedia = 'wire' | 'redacted';
+
 async function* segmentBytes(
   segment: Gpt56SourceSegment,
+  media: DiskBodyMedia,
   signal?: AbortSignal,
 ): AsyncGenerator<Uint8Array, void> {
   signal?.throwIfAborted();
-  const wire = segment.wireSource;
+  const wire = media === 'wire' ? segment.wireSource : segment.source;
   if (wire === undefined)
     throw new Error('Responses source segment has no wire bytes');
   const reader = await open(wire.path, 'r');
@@ -57,6 +61,7 @@ export async function* diskResponsesBodyBytes(
   request: OpenAIResponsesRequest,
   projection: Gpt56SourceProjection,
   signal?: AbortSignal,
+  media: DiskBodyMedia = 'wire',
 ): AsyncGenerator<Uint8Array, void> {
   const release = projection.acquire();
   try {
@@ -70,7 +75,7 @@ export async function* diskResponsesBodyBytes(
         (entry) => entry.promptKey === key,
       );
       if (segment === undefined) yield* jsonValueBytes(value);
-      else yield* segmentBytes(segment, signal);
+      else yield* segmentBytes(segment, media, signal);
       prefix = ',';
     }
     yield Buffer.from('}');

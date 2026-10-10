@@ -51,7 +51,6 @@ describe('disk text request option exclusion', () => {
 
   it.each([
     { 'responses-stateful': true },
-    { dumpcontext: 'api' },
     { store: true },
     { previous_response_id: 'resp_parent' },
   ])('rejects incompatible explicit options %j', async (ephemerals) => {

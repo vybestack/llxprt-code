@@ -13,9 +13,11 @@
  */
 
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
+import { getRequestSignal } from '../utils/abortSignal.js';
 import {
   shouldDumpSDKContext,
   dumpSDKRequestContext,
+  dumpSDKRequestContextBodyBytes,
   type RequestDumpMetadata,
   bestEffortDump,
 } from '../utils/dumpSDKContext.js';
@@ -27,6 +29,7 @@ import type {
   ResponsesExecutorDeps,
 } from './openAIResponsesExecutor.js';
 import type { StreamResponsesParams } from './openAIResponsesHttpStream.js';
+import { diskResponsesBodyBytes } from './responses-disk-body.js';
 import { CODEX_WEBSOCKET_BETA_HEADER } from './openAIResponsesWebSocketTransport.js';
 
 /**
@@ -117,16 +120,48 @@ export async function dumpFinalizedRequest(
     'request',
     deps.providerName,
     () =>
-      dumpSDKRequestContext(
-        deps.providerName,
-        '/responses',
-        requestContext.request,
+      dumpRequest(
+        requestContext,
+        deps,
         baseURLForDump,
         dumpMetadata,
+        getRequestSignal(options),
       ),
     deps.logger,
   );
   return { baseId: result?.baseId, dumpMode };
+}
+
+function dumpRequest(
+  requestContext: RequestContext,
+  deps: ResponsesExecutorDeps,
+  baseURL: string,
+  metadata: RequestDumpMetadata,
+  signal: AbortSignal | undefined,
+): ReturnType<typeof dumpSDKRequestContext> {
+  const source = requestContext.sourcePrompt;
+  if (source === undefined)
+    return dumpSDKRequestContext(
+      deps.providerName,
+      '/responses',
+      requestContext.request,
+      baseURL,
+      metadata,
+    );
+  // Stream the redacted disk body; the request object holds empty placeholders.
+  return dumpSDKRequestContextBodyBytes(
+    deps.providerName,
+    '/responses',
+    diskResponsesBodyBytes(
+      requestContext.request,
+      source.toEstimatorProjection(),
+      signal,
+      'redacted',
+    ),
+    baseURL,
+    metadata,
+    signal,
+  );
 }
 
 /**

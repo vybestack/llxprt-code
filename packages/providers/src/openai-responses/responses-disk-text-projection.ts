@@ -34,7 +34,7 @@ async function* countedRows(
 export function assertDiskTextShape(
   options: NormalizedGenerateChatOptions,
   deps: ResponsesExecutorDeps,
-): void {
+): Readonly<Record<string, unknown>> {
   const ephemerals = resolveInvocationEphemerals(options);
   const shape = resolveResponsesRequestShape(
     options,
@@ -58,15 +58,7 @@ export function assertDiskTextShape(
     throw new Error(
       'Explicit Responses disk text route does not support stateful options',
     );
-  if ('input' in shape.requestOverrides)
-    throw new Error('Explicit disk text route cannot override input');
-  if (
-    ephemerals['dumpcontext'] !== undefined &&
-    ephemerals['dumpcontext'] !== 'off'
-  )
-    throw new Error(
-      'Explicit Responses disk text route does not support request dumps',
-    );
+  return shape.requestOverrides;
 }
 
 export async function buildDiskTextResponsesContext(
@@ -74,7 +66,7 @@ export async function buildDiskTextResponsesContext(
   deps: ResponsesExecutorDeps,
 ): Promise<PreparedResponsesRequestContext> {
   requireAssembledSystemInstruction(options.systemInstruction);
-  assertDiskTextShape(options, deps);
+  const overrides = assertDiskTextShape(options, deps);
   const rows = options.requestRows;
   if (rows === undefined || options.contentCount !== rows.count)
     throw new Error(
@@ -88,6 +80,9 @@ export async function buildDiskTextResponsesContext(
       instructions: prepared.request.instructions,
       tools: prepared.request.tools,
       contents: countedRows(rows, getRequestSignal(options)),
+      ...('input' in overrides
+        ? { inputOverride: { value: overrides['input'] } }
+        : {}),
       context: responsesInputContext(options, ephemerals, deps),
       signal: getRequestSignal(options),
     });
