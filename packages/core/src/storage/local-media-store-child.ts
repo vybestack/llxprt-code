@@ -96,6 +96,11 @@ async function writeCrashedLock(rootDirectory: string): Promise<void> {
   );
 }
 
+// The locking test contender uses this same duration (300). The heartbeat runs
+// every third of it, so the margin before a live holder looks stale must
+// absorb scheduler stalls on loaded CI hosts.
+const HOLD_PUBLISH_STALE_LOCK_MS = 300;
+
 function createStore(
   mode: string,
   rootDirectory: string,
@@ -113,7 +118,7 @@ function createStore(
     ...(readyPath === undefined || releasePath === undefined
       ? {}
       : {
-          staleLockMs: 30,
+          staleLockMs: HOLD_PUBLISH_STALE_LOCK_MS,
           fileOperations: {
             link: async (sourcePath, destinationPath): Promise<void> => {
               const released = waitForPath(releasePath);

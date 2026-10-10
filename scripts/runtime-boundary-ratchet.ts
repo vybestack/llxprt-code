@@ -40,6 +40,35 @@ export interface RatchetVerdict {
   readonly compilerDiagnosticCount: number;
 }
 
+/**
+ * Human-readable list of every compiler diagnostic, grouped by the program
+ * (compiler config) that produced it, plus any scanner that did not complete.
+ * The ratchet verdict only carries a count, so without this a CI failure
+ * would not say which diagnostic blocked the audit. Empty when nothing blocks.
+ */
+export function formatBlockedAudit(
+  result: Pick<AuditResult, 'programs' | 'scanners'>,
+): string {
+  const lines: string[] = [];
+  for (const program of result.programs) {
+    for (const problem of program.compilerDiagnostics) {
+      const location = problem.file
+        ? `${problem.file}:${problem.line ?? 0}:${problem.column ?? 0}`
+        : '(no file)';
+      lines.push(
+        `[${program.compilerConfig}] ${location} ${problem.category} TS${problem.code}: ${problem.message}`,
+      );
+    }
+  }
+  if (lines.length === 0) return '';
+  const { serviceShape, ambientDelegation } = result.scanners;
+  if (serviceShape !== 'complete')
+    lines.push(`scanner serviceShape: ${serviceShape}`);
+  if (ambientDelegation !== 'complete')
+    lines.push(`scanner ambientDelegation: ${ambientDelegation}`);
+  return `runtime-boundary audit blocked by compiler diagnostics:\n${lines.join('\n')}\n`;
+}
+
 export function parseRatchetBaseline(text: string): RatchetBaseline {
   const parsed: unknown = JSON.parse(text);
   if (typeof parsed !== 'object' || parsed === null || !('counts' in parsed))

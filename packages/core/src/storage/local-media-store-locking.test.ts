@@ -511,7 +511,7 @@ describe('local-media-store-locking', () => {
             rootDirectory: tempDirectory(),
             quotaBytes: 3,
             lockTimeoutMs: 2_000,
-            staleLockMs: 30,
+            staleLockMs: 300,
           });
 
           const reclamation = contender.reclaimUnreferenced(

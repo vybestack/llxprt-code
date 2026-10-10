@@ -11,11 +11,15 @@ import {
 
 export class ToolDispatchAdmission {
   private readonly controller = new AbortController();
+  // The closed error is owned here because AbortSignal.reason was observed to
+  // read as undefined on an aborted signal under load (Bun 1.3), which made
+  // retained dispatch reject with `undefined` instead of the closed error.
+  private closedError: Error | undefined;
   private readonly accepted = new Set<Promise<unknown>>();
   private closing: Promise<void> | undefined;
 
   assertOpen(): void {
-    if (this.controller.signal.aborted) throw this.controller.signal.reason;
+    if (this.closedError !== undefined) throw this.closedError;
   }
 
   bind(
@@ -154,11 +158,12 @@ export class ToolDispatchAdmission {
   close(): Promise<void> {
     if (this.closing !== undefined) return this.closing;
     const accepted = [...this.accepted];
-    this.controller.abort(new Error('Tool dispatch admission is closed'));
+    const closedError = new Error('Tool dispatch admission is closed');
+    this.closedError = closedError;
+    this.controller.abort(closedError);
     this.closing = Promise.allSettled(accepted).then((results) => {
       const failures = results.flatMap((result) =>
-        result.status === 'rejected' &&
-        result.reason !== this.controller.signal.reason
+        result.status === 'rejected' && result.reason !== closedError
           ? [result.reason]
           : [],
       );

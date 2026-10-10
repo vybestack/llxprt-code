@@ -19,6 +19,7 @@ import {
 } from '../check-runtime-state-boundary.js';
 import {
   evaluateRatchet,
+  formatBlockedAudit,
   parseRatchetBaseline,
   ratchetCountsFromResult,
 } from '../runtime-boundary-ratchet.js';
@@ -195,6 +196,26 @@ describe('runtime boundary ratchet baseline', () => {
     const verdict = evaluateRatchet(audit(), baselineOf('{"counts":{}}'));
     expect(verdict.exitCode).toBe(1);
     expect(verdict.compilerDiagnosticCount).toBeGreaterThan(0);
+  });
+
+  it('names every compiler diagnostic and the blocked scanner', () => {
+    put('packages/demo/src/broken.ts', 'export const value: number = "bad";');
+    const report = formatBlockedAudit(audit());
+    expect(report).toContain('[tsconfig.json]');
+    expect(report).toContain('packages/demo/src/broken.ts:1:14');
+    expect(report).toContain('TS2322');
+    expect(report).toContain(
+      "Type 'string' is not assignable to type 'number'",
+    );
+    expect(report).toContain('scanner serviceShape: blocked-by-compiler');
+    expect(report).toContain(
+      'scanner ambientDelegation: provisional-compiler-errors',
+    );
+  });
+
+  it('prints nothing when the audit has no compiler diagnostics', () => {
+    put('packages/demo/src/bag.ts', bundleSource);
+    expect(formatBlockedAudit(audit())).toBe('');
   });
 
   it('rejects baselines that record a non-ratcheted rule or an invalid count', () => {

@@ -36,6 +36,7 @@ import {
 import { scanState, workspacePath } from './runtime-state-scan.js';
 import {
   evaluateRatchet,
+  formatBlockedAudit,
   parseRatchetBaseline,
 } from './runtime-boundary-ratchet.js';
 import {
@@ -784,6 +785,7 @@ if (import.meta.main) {
         ),
       );
       const verdict = evaluateRatchet(result, baseline);
+      process.stderr.write(formatBlockedAudit(result));
       process.stdout.write(
         `${JSON.stringify({ ...verdict, scanners: result.scanners }, null, 2)}\n`,
       );
