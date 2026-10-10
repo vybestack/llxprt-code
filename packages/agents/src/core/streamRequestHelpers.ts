@@ -135,7 +135,7 @@ export function openRequestContentsSnapshot(
   );
 }
 
-function preparePendingContents(
+export function preparePendingContents(
   userContents: IContent | IContent[],
   historyService: HistoryService,
 ): IContent[] {

@@ -61,21 +61,6 @@ describe('bounded source enforcement foundation', () => {
     }
   });
 
-  it('keeps the exact unsupported ladder rejection without closing or mutating the borrowed source', async () => {
-    const setup = await enforcerSetup();
-    try {
-      const initial = await setup.enforcer.assess('initial');
-      await expect(setup.enforcer.enforce()).rejects.toThrow(
-        `Disk source compression requires array replacement contracts; projected ${initial.projected} exceeds compression threshold ${limits.compressionThreshold} (safety-adjusted limit ${limits.marginAdjustedLimit}, completion budget ${limits.completionBudget}).`,
-      );
-      expect(await digest(setup.source)).toHaveLength(64);
-      expect(setup.state.closed).toBe(0);
-      expect(setup.state.active).toBe(0);
-    } finally {
-      await setup.source.close();
-    }
-  });
-
   it('rejects a closed borrowed owner with a stage-aware full projection failure', async () => {
     const setup = await enforcerSetup();
     await setup.source.close();
@@ -103,7 +88,6 @@ describe('source scalar escalation policy', () => {
     expect((await enforcer.assess('post-density-optimization')).next).toBe(
       'send',
     );
-    await expect(enforcer.enforce()).resolves.toBeUndefined();
     const above = scalarEnforcer(limits.compressionThreshold - 127);
     expect((await above.assess('initial')).next).toBe('density');
     expect((await above.assess('post-density-optimization')).next).toBe(

@@ -22,7 +22,10 @@ import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import { getCompletionBudget } from './compressionBudgeting.js';
 import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
-import { buildContextOverflowError } from './contextOverflowError.js';
+import {
+  buildContextOverflowError,
+  buildUnrecoverableBoundaryError,
+} from './contextOverflowError.js';
 import {
   INEFFECTIVE_COMPRESSION_REDUCTION_THRESHOLD,
   computeHistoryTruncationTarget,
@@ -126,7 +129,7 @@ export class ProviderContentEnforcer {
       return earlyReturn;
     }
     if (envelope.pendingContents === undefined) {
-      throw this.buildUnrecoverableBoundaryError(
+      throw buildUnrecoverableBoundaryError(
         initialProjected,
         limits.marginAdjustedLimit,
       );
@@ -474,19 +477,6 @@ export class ProviderContentEnforcer {
       }
     }
     return this.deps.runtimeContext.state.model;
-  }
-
-  private buildUnrecoverableBoundaryError(
-    projected: number,
-    marginAdjustedLimit: number,
-  ): Error {
-    return new Error(
-      'Context overflow requires compression, but the pending-content boundary is unrecoverable: ' +
-        'a BeforeModel hook replaced or restructured the conversation contents, and no usable ' +
-        'llm_request_boundary metadata was available, so compression cannot safely recompose the pending region. ' +
-        'Consider reducing the context size, or have the hook supply valid llm_request_boundary metadata. ' +
-        `Projected ${projected} exceeds safety-adjusted limit ${marginAdjustedLimit}.`,
-    );
   }
 
   private async optimizeAndProject(

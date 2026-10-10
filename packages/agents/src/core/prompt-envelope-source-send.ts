@@ -202,6 +202,8 @@ export async function prepareSourcePromptEnvelopeAfterEnforcement(
   try {
     input.signal?.throwIfAborted();
     const source = await input.enforce(input.source, async (candidate) => {
+      // A replacement is owned before cancellation can reject its estimate.
+      preparer.own(candidate);
       input.signal?.throwIfAborted();
       const prepared = await preparer.prepare(candidate);
       input.signal?.throwIfAborted();

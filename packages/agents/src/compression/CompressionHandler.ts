@@ -71,6 +71,7 @@ import {
   ProviderSourceEnforcer,
   type ProviderSourceLimits,
 } from './provider-source-enforcement.js';
+import { runSourceStages } from './source-stage-ladder.js';
 
 const diskRunners = {
   'middle-out': runDiskMiddleOut,
@@ -491,11 +492,19 @@ export class CompressionHandler {
     return this.createProviderContentEnforcer().sourceContextLimits(provider);
   }
 
-  /** The first disk route rejects escalation rather than returning an eager replacement. */
-  async enforceProviderSource(
+  /**
+   * Runs the density/compression stages over disk candidates. `estimate`
+   * measures one candidate, `reopen` rebuilds the pending-aware candidate from
+   * the durable journal. The provider callback stays unmigrated and rejects.
+   */
+  async enforceProviderSource<S>(
     provider: IProvider,
-    estimate: () => Promise<number>,
-  ): Promise<void> {
+    promptId: string,
+    source: S,
+    estimate: (candidate: S) => Promise<number>,
+    reopen: () => Promise<S>,
+    pendingRecoverable: boolean,
+  ): Promise<S> {
     try {
       provider.setCompressionCallback?.(async () => {
         throw new Error(
@@ -503,11 +512,34 @@ export class CompressionHandler {
         );
       });
       await this.historyService.waitForTokenUpdates();
-      await new ProviderSourceEnforcer({
-        limits: this.sourceContextLimits(provider),
-        estimate,
-        getHistoryTokens: () => this.historyService.getTotalTokens(),
-      }).enforce();
+      let current = source;
+      await runSourceStages(
+        new ProviderSourceEnforcer({
+          limits: this.sourceContextLimits(provider),
+          estimate: () => estimate(current),
+          getHistoryTokens: () => this.historyService.getTotalTokens(),
+        }),
+        {
+          optimizeDensity: async () => {
+            await this.ensureDensityOptimized();
+            await this.historyService.waitForTokenUpdates();
+          },
+          compress: async () => {
+            const result = await this.performCompression(promptId, {
+              bypassCooldown: true,
+              trigger: 'auto',
+            });
+            await this.historyService.waitForTokenUpdates();
+            return result;
+          },
+          replaceSource: async () => {
+            current = await reopen();
+          },
+          warn: (message, error) => this.logger.warn(() => message, error),
+        },
+        pendingRecoverable,
+      );
+      return current;
     } catch (error) {
       this.clearProviderCompressionCallback(provider);
       throw error;

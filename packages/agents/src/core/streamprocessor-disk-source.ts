@@ -12,7 +12,12 @@ import {
   enforceAndStreamSourcePromptEnvelopeRetries,
   type PreparedSourcePromptEnvelopeSend,
 } from './prompt-envelope-source-send.js';
-import { openRequestContentsSnapshot } from './streamRequestHelpers.js';
+import { preparePendingContents } from './streamRequestHelpers.js';
+import {
+  pendingAwareRequestSelection,
+  sourcePendingMembership,
+  type PendingAwareRequestSelection,
+} from './source-pending-selection.js';
 
 /** The registry is live; an enabled system with no model hooks needs no array input. */
 export async function assertNoSourceModelHooks(
@@ -58,6 +63,7 @@ interface StreamDiskSourceInput {
   readonly compression: CompressionHandler;
   readonly history: HistoryService;
   readonly userContent: IContent | IContent[];
+  readonly promptId: string;
   readonly historyOverride?: AsyncIterable<IContent>;
   readonly provider: RuntimeProvider;
   readonly tools?: RuntimeProviderToolset;
@@ -72,14 +78,31 @@ interface StreamDiskSourceInput {
   ) => void | Promise<void>;
 }
 
+/** Raw pending input for recomposition, which is not the normalized output membership. */
+async function rawPendingInput(
+  selection: PendingAwareRequestSelection,
+  prepared: IContent[],
+  signal?: AbortSignal,
+): Promise<IContent[]> {
+  const recovered = selection.pendingSelection;
+  if (recovered?.kind !== 'hook-recovered-input') return prepared;
+  const rows: IContent[] = [];
+  for await (const row of recovered.rows.openReader(signal)) rows.push(row);
+  return rows;
+}
+
 /** Separate opt-in send. No request-wide content graph is fabricated or retained. */
 export async function streamDiskSource(
   input: StreamDiskSourceInput,
 ): Promise<AsyncIterableIterator<IContent>> {
   await assertSourceContracts(input.runtime, input.compression, input.signal);
-  const snapshot = await openRequestContentsSnapshot(
+  input.signal?.throwIfAborted();
+  const preparedPending = preparePendingContents(
     input.userContent,
     input.history,
+  );
+  const snapshot = await input.history.prepareCuratedForProviderSnapshot(
+    preparedPending,
     { signal: input.signal },
     input.historyOverride,
   );
@@ -92,6 +115,22 @@ export async function streamDiskSource(
     log: input.log,
     signal: input.signal,
   });
+  let recomposedPending: IContent[] | undefined;
+  const reopen = async (): Promise<PendingAwareRequestSelection> => {
+    recomposedPending ??= await rawPendingInput(
+      source,
+      preparedPending,
+      input.signal,
+    );
+    const rebuilt = await input.history.prepareCuratedForProviderSnapshot(
+      recomposedPending,
+      { signal: input.signal },
+    );
+    return pendingAwareRequestSelection(
+      rebuilt,
+      sourcePendingMembership(rebuilt),
+    );
+  };
   return enforceAndStreamSourcePromptEnvelopeRetries({
     provider: input.provider,
     source,
@@ -105,12 +144,15 @@ export async function streamDiskSource(
       contentCount: rows.count,
       readRequestRowsAtTransport: true,
     }),
-    enforce: async (rows, estimate) => {
-      await input.compression.enforceProviderSource(input.provider, () =>
-        estimate(rows),
-      );
-      return rows;
-    },
+    enforce: (_rows, estimate) =>
+      input.compression.enforceProviderSource(
+        input.provider,
+        input.promptId,
+        source,
+        estimate,
+        reopen,
+        source.pendingSelection !== undefined,
+      ),
     onPrepared: input.onPrepared,
     shouldRetryOnError: () => false,
   });

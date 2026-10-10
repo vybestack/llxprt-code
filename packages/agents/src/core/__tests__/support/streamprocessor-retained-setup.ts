@@ -37,11 +37,13 @@ function observePreparation(
     return result;
   };
   const enforceSource = setup.compression.enforceProviderSource;
-  setup.compression.enforceProviderSource = (provider, estimate) => {
-    census.observe('compression.estimate-closure', estimate);
+  setup.compression.enforceProviderSource = ((
+    ...args: Parameters<typeof enforceSource>
+  ) => {
+    census.observe('compression.estimate-closure', args[3]);
     census.cleanup.enforcementAttempts++;
-    return enforceSource.call(setup.compression, provider, estimate);
-  };
+    return enforceSource.apply(setup.compression, args);
+  }) as typeof enforceSource;
   const clearCallback = setup.compression.clearProviderCompressionCallback;
   setup.compression.clearProviderCompressionCallback = (provider) => {
     census.cleanup.callbackClearAttempts++;

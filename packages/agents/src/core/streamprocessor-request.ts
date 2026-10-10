@@ -141,6 +141,7 @@ async function diskRequest(
       compression: input.compression,
       history: input.history,
       userContent: input.userContent,
+      promptId: input.promptId,
       provider: input.provider,
       tools: tools.tools,
       log: input.log,

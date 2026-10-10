@@ -4,7 +4,6 @@ import {
   INEFFECTIVE_COMPRESSION_REDUCTION_THRESHOLD,
   computeHistoryTruncationTarget,
 } from './contextLimitPolicy.js';
-import { enforceSourceInitialProjection } from './source-initial-enforcement.js';
 
 export interface ProviderSourceLimits {
   readonly completionBudget: number;
@@ -44,12 +43,12 @@ interface ProviderSourceEnforcementDeps {
   readonly getHistoryTokens: () => number;
 }
 
-/** Scalar policy only. Disk recomposition/publication and callback contracts remain missing. */
+/** Scalar stage policy over the complete current disk owner; stage effects live in source-stage-ladder. */
 export class ProviderSourceEnforcer {
   constructor(private readonly deps: ProviderSourceEnforcementDeps) {}
 
-  async enforce(): Promise<void> {
-    await enforceSourceInitialProjection(this.deps.estimate, this.deps.limits);
+  get limits(): ProviderSourceLimits {
+    return this.deps.limits;
   }
 
   async assess(
