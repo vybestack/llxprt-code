@@ -158,16 +158,17 @@ function transportCleanupError(
   transportError: unknown,
   disposalError: unknown,
   message: string,
-): AggregateError {
-  return new AggregateError(
-    [
-      ...new Set([
-        ...flattenTransportErrors(transportError),
-        ...flattenTransportErrors(disposalError),
-      ]),
-    ],
-    message,
-  );
+): unknown {
+  const distinct = [
+    ...new Set([
+      ...flattenTransportErrors(transportError),
+      ...flattenTransportErrors(disposalError),
+    ]),
+  ];
+  // A body that failed while materializing re-reports that same failure on
+  // disposal. That is the transport error itself, not a second cleanup failure.
+  if (distinct.length === 1) return distinct[0];
+  return new AggregateError(distinct, message);
 }
 
 function bodyTransportDescription(

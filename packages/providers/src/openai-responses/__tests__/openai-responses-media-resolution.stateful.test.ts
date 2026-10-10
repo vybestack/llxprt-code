@@ -567,7 +567,13 @@ function registerProviderBehavior8(tempDirectory: () => string): void {
         const resolver = new RequestMediaResolver(store);
         let networkSubmissionCount = 0;
         global.fetch = Object.assign(
-          async (): Promise<Response> => {
+          async (
+            _input: Parameters<typeof fetch>[0],
+            init: Parameters<typeof fetch>[1],
+          ): Promise<Response> => {
+            // A transport pulls the request body before it can submit; a body
+            // that fails while materializing rejects here, as a real fetch does.
+            await new Response(init?.body).text();
             networkSubmissionCount += 1;
             return completedResponse('unexpected');
           },
