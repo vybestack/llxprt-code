@@ -76,6 +76,8 @@ import {
   type SourceStageActions,
 } from './source-stage-ladder.js';
 import { SourceCandidate, type SourcePendingRows } from './source-candidate.js';
+import { createSourceCompressionCallback } from './source-compression-callback.js';
+import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { truncateSourceToolResponses } from './source-tool-truncation.js';
 import {
   executeFallbackTransaction,
@@ -561,10 +563,12 @@ export class CompressionHandler {
    * Runs the full reduction ladder over disk candidates: density, compression,
    * ineffective-compression retry, hard-limit fallback, tool-response
    * truncation. `estimate` measures one candidate, `reopen` rebuilds the
-   * pending-aware candidate from the durable journal and `pending`. The
-   * provider callback stays unmigrated and rejects.
+   * pending-aware candidate from the durable journal and `pending`. A
+   * provider-triggered compression callback runs the same ladder over the
+   * current candidate; it stays attached after success until the caller
+   * clears it once the provider call ends, and is cleared here on failure.
    */
-  async enforceProviderSource<S>(
+  async enforceProviderSource<S extends ProviderRequestRows>(
     provider: IProvider,
     promptId: string,
     source: S,
@@ -574,19 +578,26 @@ export class CompressionHandler {
     pending: SourcePendingRows,
   ): Promise<S> {
     try {
-      provider.setCompressionCallback?.(async () => {
-        throw new Error(
-          'Disk source compression callback requires array replacement contracts',
-        );
-      });
       await this.historyService.waitForTokenUpdates();
       const candidate = new SourceCandidate(source, estimate, reopen, pending);
       const limits = this.sourceContextLimits(provider);
+      const getHistoryTokens = () => this.historyService.getTotalTokens();
+      provider.setCompressionCallback?.(
+        createSourceCompressionCallback({
+          candidate,
+          defaultLimits: limits,
+          pendingRecoverable,
+          getHistoryTokens,
+          stageActions: (active) =>
+            this.sourceStageActions(promptId, candidate, active),
+          warn: (message, error) => this.logger.warn(() => message, error),
+        }),
+      );
       await runSourceStages(
         new ProviderSourceEnforcer({
           limits,
           estimate: () => candidate.estimate(),
-          getHistoryTokens: () => this.historyService.getTotalTokens(),
+          getHistoryTokens,
         }),
         this.sourceStageActions(promptId, candidate, limits),
         pendingRecoverable,
