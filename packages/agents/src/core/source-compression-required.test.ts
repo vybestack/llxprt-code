@@ -10,8 +10,12 @@ import {
   projectionInstructions,
 } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/projection-ownership-fixture.js';
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
+import { ContextOverflowError } from '../compression/contextOverflowError.js';
 import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
-import { processorFixture } from './__tests__/support/streamprocessor-source-fixture.js';
+import {
+  largestSourceRowBytes,
+  processorFixture,
+} from './__tests__/support/streamprocessor-source-fixture.js';
 import { computeMarginAdjustedLimit } from '../compression/contextLimitPolicy.js';
 
 const root = sourceRootSetup();
@@ -55,7 +59,19 @@ async function legacyFinalized(
   }
 }
 
-async function requiredCompression(large: boolean): Promise<void> {
+/** Holds the >10 MiB protected tail (about 1.3M tokens) but not the earlier history. */
+const FITS_TAIL_LIMIT = 1322500;
+const SMALL_LIMIT = 4000;
+
+interface RequiredCase {
+  readonly name: string;
+  readonly large: boolean;
+  readonly limit: number;
+  readonly outcome: 'sent' | 'overflow';
+}
+
+async function requiredCompression(spec: RequiredCase): Promise<void> {
+  const { large, limit, outcome } = spec;
   const http = projectionEndpoint(false);
   http.readBody.release();
   http.respond.release();
@@ -65,7 +81,7 @@ async function requiredCompression(large: boolean): Promise<void> {
     large,
   );
   setup.settings.set('compression.strategy', 'high-density');
-  setup.settings.set('context-limit', 4000);
+  setup.settings.set('context-limit', limit);
   setup.settings.set('maxOutputTokens', 128);
   const before = await historyDigest(setup);
   const initialEstimate = large ? undefined : await legacyFinalized(setup);
@@ -79,21 +95,34 @@ async function requiredCompression(large: boolean): Promise<void> {
       'source-pending-compression',
       pending,
     );
-    const oracle = await legacyFinalized(setup);
+    // The legacy collecting projection of a >10 MiB row does not finish in
+    // test time; it is an array-route cost that WP16 deletes, so the large
+    // rows are checked against the source estimate and the sent body instead.
+    const oracle = large ? undefined : await legacyFinalized(setup);
     for await (const _chunk of stream) {
       /* Drain real HTTP and commit its lifecycle. */
     }
     expect(http.bodies).toHaveLength(1);
-    expect(setup.processor.getPromptEnvelopeEstimate()).toStrictEqual(oracle);
-    expect(oracle.estimatedPromptTokens + 128).toBeLessThanOrEqual(
-      computeMarginAdjustedLimit(4000),
+    const estimate = setup.processor.getPromptEnvelopeEstimate();
+    if (oracle !== undefined) expect(estimate).toStrictEqual(oracle);
+    expect(estimate?.estimatedPromptTokens).toBeLessThanOrEqual(
+      computeMarginAdjustedLimit(limit) - 128,
     );
+    if (large)
+      expect(http.bodies[0]?.bytes).toBeGreaterThan(
+        largestSourceRowBytes(true),
+      );
   } catch (error) {
     failure = error;
-    throw error;
+    if (outcome === 'sent') throw error;
   } finally {
     const after = await historyDigest(setup);
-    expect(failure === undefined || after === before).toBe(true);
+    if (outcome === 'overflow') {
+      expect(failure).toBeInstanceOf(ContextOverflowError);
+      expect(http.bodies).toHaveLength(0);
+    } else {
+      expect(failure === undefined || after === before).toBe(true);
+    }
     expect(setup.history.owners.every((owner) => owner.closed)).toBe(true);
     expect(activeRequestBodyCount()).toBe(0);
     const evidence = process.env.ISSUE854_COMPRESSION_EVIDENCE;
@@ -122,11 +151,27 @@ async function requiredCompression(large: boolean): Promise<void> {
   }
 }
 
+const cases: RequiredCase[] = [
+  { name: 'ordinary rows', large: false, limit: SMALL_LIMIT, outcome: 'sent' },
+  {
+    name: 'a valid row above 10MiB that the limit holds',
+    large: true,
+    limit: FITS_TAIL_LIMIT,
+    outcome: 'sent',
+  },
+  {
+    name: 'a protected row above 10MiB that exceeds the limit',
+    large: true,
+    limit: SMALL_LIMIT,
+    outcome: 'overflow',
+  },
+];
+
 describe('required actual source pending-aware compression escalation', () => {
-  it.each([false, true])(
-    'compresses configured high-density disk history before HTTP, oversized=%s',
-    async (large) => {
-      await expect(requiredCompression(large)).resolves.toBeUndefined();
+  it.each(cases)(
+    'compresses configured high-density disk history before HTTP, $name',
+    async (spec) => {
+      await expect(requiredCompression(spec)).resolves.toBeUndefined();
     },
     600000,
   );

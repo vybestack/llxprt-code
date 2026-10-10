@@ -3,7 +3,12 @@ import { createHash } from 'node:crypto';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
 import { projectionEndpoint } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/projection-ownership-fixture.js';
+import type { DiskTextTail } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-fixture.js';
 import { processorFixture } from './streamprocessor-source-fixture.js';
+
+function failureName(error: unknown): string | undefined {
+  return error instanceof Error ? error.name : undefined;
+}
 
 function failureMessage(error: unknown): string | undefined {
   if (error === undefined) return undefined;
@@ -32,7 +37,8 @@ export async function ladderHistoryDigest(
 export async function ladderAttempt(
   root: string,
   disk: boolean,
-  large: boolean,
+  large: DiskTextTail,
+  contextLimit = 4000,
 ) {
   const http = projectionEndpoint(false);
   http.readBody.release();
@@ -43,7 +49,7 @@ export async function ladderAttempt(
     large,
   );
   setup.settings.set('compression.strategy', 'high-density');
-  setup.settings.set('context-limit', 4000);
+  setup.settings.set('context-limit', contextLimit);
   setup.settings.set('maxOutputTokens', 128);
   const before = await ladderHistoryDigest(setup);
   let error: unknown;
@@ -75,6 +81,7 @@ export async function ladderAttempt(
     activeBodies: activeRequestBodyCount(),
     cooldown: setup.compression.isCompressionInCooldown(),
     error: failureMessage(error),
+    errorName: failureName(error),
   };
   setup.history.dispose();
   await http.server.stop(true);

@@ -11,7 +11,16 @@ import {
   projectionModel,
 } from './projection-ownership-fixture.js';
 
-export function diskTextRow(index: number, large: boolean): IContent {
+/** `large` true is the >10 MiB row; a number is that many 64 KiB chunks. */
+export type DiskTextTail = boolean | number;
+
+function tailChunks(large: DiskTextTail): number {
+  if (typeof large === 'number') return large;
+  return large ? 161 : 0;
+}
+
+export function diskTextRow(index: number, large: DiskTextTail): IContent {
+  const chunks = tailChunks(large);
   return {
     speaker: index % 2 === 0 ? 'human' : 'ai',
     blocks: [
@@ -22,7 +31,9 @@ export function diskTextRow(index: number, large: boolean): IContent {
       {
         type: 'text',
         text:
-          large && index === 63 ? `${'a'.repeat(65536)} `.repeat(161) : 'tail',
+          chunks > 0 && index === 63
+            ? `${'a'.repeat(65536)} `.repeat(chunks)
+            : 'tail',
       },
     ],
   };

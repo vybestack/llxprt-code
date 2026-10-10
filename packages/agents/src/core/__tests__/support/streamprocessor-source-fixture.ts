@@ -13,7 +13,10 @@ import type { GenerateChatOptions } from '@vybestack/llxprt-code-providers/IProv
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { createRuntimeTokenizerFactory } from '@vybestack/llxprt-code-providers/composition/runtimeTokenizerFactory.js';
 import { withGpt56DiskSources } from '@vybestack/llxprt-code-providers/tokenizers/gpt56-disk-tokenizer-factory.js';
-import { diskTextRow } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-fixture.js';
+import {
+  diskTextRow,
+  type DiskTextTail,
+} from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-fixture.js';
 import { projectionInstructions } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/projection-ownership-fixture.js';
 import { StreamProcessor } from '../../StreamProcessor.js';
 import { ConversationManager } from '../../ConversationManager.js';
@@ -80,7 +83,7 @@ class ObservedResponsesProvider extends OpenAIResponsesProvider {
 export async function processorFixture(
   root: string,
   baseURL: string,
-  large = false,
+  large: DiskTextTail = false,
   count = 64,
 ) {
   const settings = new SettingsService();
