@@ -57,8 +57,11 @@ async function legacyFinalized(
   }
 }
 
-/** Holds the >10 MiB protected tail (about 1.3M tokens) but not the earlier history. */
-const FITS_TAIL_LIMIT = 1322500;
+/**
+ * Holds the >10 MiB protected tail (about 3.06M tokens of mixed prose and code
+ * since the fixture stopped using single-character runs) but not the earlier history.
+ */
+const FITS_TAIL_LIMIT = 3063000;
 const SMALL_LIMIT = 4000;
 
 interface RequiredCase {

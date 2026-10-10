@@ -7,10 +7,10 @@ import { ladderAttempt } from './__tests__/support/source-compression-ladder-fix
 
 const root = sourceRootSetup();
 /**
- * A context limit that holds the >10 MiB protected tail (about 1.3M tokens)
+ * A context limit that holds the >10 MiB protected tail (about 3.06M tokens)
  * but not the earlier history, so history must go through the ladder.
  */
-const FITS_TAIL_LIMIT = 1322500;
+const FITS_TAIL_LIMIT = 3063000;
 /** Two 64 KiB chunks: still over the 4000-token limit, small enough for the array route. */
 const OVER_LIMIT_SMALL_TAIL = 2;
 const SMALL_LIMIT = 4000;
