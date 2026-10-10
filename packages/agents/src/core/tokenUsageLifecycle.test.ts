@@ -7,13 +7,13 @@
 /**
  * Issue #3130 slice 5: lifecycle event emission from production code (AC-7).
  *
- * These tests drive a REAL compression through the real CompressionHandler and
- * assert that a typed `compression` lifecycle record lands in the same JSONL
- * file alongside turn records. The TokenUsageLogger is real — assertions are on
- * the written file, not on mock call shapes.
+ * These tests drive a REAL disk compression through the real CompressionHandler
+ * and assert that a typed `compression` lifecycle record lands in the same
+ * JSONL file alongside turn records. The TokenUsageLogger is real and only the
+ * summary provider transport is faked — assertions are on the written file.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -22,25 +22,14 @@ import {
   TOKEN_USAGE_SCHEMA_VERSION,
   parseTokenUsageLogRecord,
 } from './tokenUsageRecords.js';
-import { CompressionHandler } from '../compression/CompressionHandler.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
-import * as compressionFactory from '../compression/compressionStrategyFactory.js';
-import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
-import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
-import {
-  createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
-  createToolRegistryViewFromRegistry,
-} from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type {
-  CompressionContext,
-  StrategyCompressionResult,
-} from '@vybestack/llxprt-code-core/core/compression/types.js';
-import type { CompressionProviderResult } from '@vybestack/llxprt-code-core/core/compression/types.js';
+import {
+  middleoutSetup,
+  SummaryTransport,
+} from '../compression/__tests__/middleout-disk-helpers.js';
+import { collectRows } from '../compression/__tests__/truncation-stream-helpers.js';
 
 // ---------------------------------------------------------------------------
 // Temp file helpers
@@ -68,175 +57,84 @@ function cleanupDir(filePath: string): void {
 }
 
 // ---------------------------------------------------------------------------
-// Compression test fixture: builds a real CompressionHandler with a real
-// TokenUsageLogger. The strategy factory is the ONLY mocked boundary — it
-// produces a deterministic compression result. Everything else (the handler,
-// the logger, the JSONL file) is real.
+// Compression test fixture: a real HistoryService with a real conversation, a
+// real CompressionHandler running the real disk middle-out compression, and a
+// real TokenUsageLogger. The ONLY fake is the summary provider transport (the
+// provider boundary): it answers the summary request with a snapshot and
+// reports the usage of that call. Token counts, the compression record and the
+// JSONL file are all produced by production code.
 // ---------------------------------------------------------------------------
 
-const TOKENS_BEFORE = 100_000;
-const TOKENS_AFTER = 3_000;
-const COMPRESSION_MODEL = 'gpt-4o-mini';
-const COMPRESSION_PROVIDER = 'openai';
-const SESSION_ID = 'lifecycle-test-session';
+const COMPRESSION_MODEL = 'test-model';
+const COMPRESSION_PROVIDER = 'summary-transport';
+const SESSION_ID = 'test-session';
+const SUMMARY_PROMPT_TOKENS = 71;
+const SUMMARY_OUTPUT_TOKENS = 9;
+const CONVERSATION_TURNS = 40;
 
-function buildCompressionHandler(logFile: string): {
-  handler: CompressionHandler;
-  logger: TokenUsageLogger;
-  historyService: HistoryService;
-} {
-  const runtimeSetup = createChatSessionRuntime();
-  const providerRuntimeSnapshot: ProviderRuntimeContext = {
-    ...runtimeSetup.runtime,
-    config: runtimeSetup.config,
-  };
-
-  const runtimeState = createAgentRuntimeState({
-    runtimeId: 'test-lifecycle-runtime',
-    provider: COMPRESSION_PROVIDER,
-    model: COMPRESSION_MODEL,
-    sessionId: SESSION_ID,
-  });
-
-  const historyService = new HistoryService();
-
-  // Pre-compression: high token count; post-compression: low token count.
-  // The first call returns TOKENS_BEFORE (during buildCompressionContext /
-  // tokensBefore capture). After the strategy applies new history, subsequent
-  // calls return TOKENS_AFTER.
-  let compressed = false;
-  vi.spyOn(historyService, 'getTotalTokens').mockImplementation(() =>
-    compressed ? TOKENS_AFTER : TOKENS_BEFORE,
-  );
-  vi.spyOn(historyService, 'waitForTokenUpdates').mockResolvedValue(undefined);
-  vi.spyOn(historyService, 'startCompression').mockImplementation(() => {});
-  vi.spyOn(historyService, 'endCompression').mockImplementation(() => {});
-  const curatedHistory: IContent[] = [
-    { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
-    { speaker: 'ai', blocks: [{ type: 'text', text: 'hi' }] },
-  ];
-  historyService.addAll(curatedHistory);
-
-  vi.spyOn(historyService, 'estimateTokensForContents').mockImplementation(
-    async () => {
-      compressed = true;
-      return TOKENS_AFTER;
-    },
-  );
-  vi.spyOn(historyService, 'getCacheAnchorSeq').mockReturnValue(0);
-
-  const view = createAgentRuntimeContext({
-    state: runtimeState,
-    history: historyService,
-    settings: {
-      compressionThreshold: 0.5,
-      contextLimit: 200_000,
-      preserveThreshold: 0.2,
-      telemetry: { enabled: false, target: null },
-    },
-    provider: createProviderAdapterFromManager(
-      runtimeSetup.config.getProviderManager(),
-    ),
-    telemetry: createTelemetryAdapterFromConfig(runtimeSetup.config),
-    tools: createToolRegistryViewFromRegistry(),
-    providerRuntime: providerRuntimeSnapshot,
-  });
-
-  const providerResolver = vi
-    .fn<(name: string | undefined) => CompressionProviderResult>()
-    .mockReturnValue({
-      provider: {
-        name: COMPRESSION_PROVIDER,
-        getDefaultModel: () => COMPRESSION_MODEL,
-      },
-      runtime: providerRuntimeSnapshot,
-    } as unknown as CompressionProviderResult);
-
-  const hookTrigger =
-    vi.fn<ConstructorParameters<typeof CompressionHandler>[4]>();
-  hookTrigger.mockResolvedValue(undefined);
-
-  const handler = new CompressionHandler(
-    view,
-    historyService,
-    {},
-    providerResolver,
-    hookTrigger,
-  );
-
-  const logger = new TokenUsageLogger(true, logFile);
-  handler.tokenUsageLogger = logger;
-
-  return { handler, logger, historyService };
+function conversationRows(turns: number): IContent[] {
+  const rows: IContent[] = [];
+  for (let turn = 0; turn < turns; turn++) {
+    const filler = `detail-${turn} `.repeat(120);
+    rows.push(
+      { speaker: 'human', blocks: [{ type: 'text', text: `ask ${filler}` }] },
+      { speaker: 'ai', blocks: [{ type: 'text', text: `answer ${filler}` }] },
+    );
+  }
+  return rows;
 }
 
-/**
- * Install a strategy factory mock that produces a real 'applied' compression
- * result with usage metadata on the summary entry. This is the ONLY mocked
- * boundary — the compression result is a real StrategyCompressionResult.
- */
-function installCompressingStrategy(): void {
-  vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
-    (name: string) => ({
-      name: name as 'middle-out',
-      requiresLLM: true,
-      trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
-      compress: vi
-        .fn()
-        .mockImplementation(
-          async (
-            context: CompressionContext,
-          ): Promise<StrategyCompressionResult> => {
-            const summaryEntry: IContent = {
-              speaker: 'human',
-              blocks: [
-                {
-                  type: 'text',
-                  text: '<state_snapshot>compressed</state_snapshot>',
-                },
-              ],
-              metadata: {
-                isSummary: true,
-                synthetic: true,
-                reason: 'compression-state-snapshot',
-                model: COMPRESSION_MODEL,
-                usage: {
-                  promptTokens: 8000,
-                  completionTokens: 500,
-                  totalTokens: 8500,
-                },
-              },
-            };
-            return {
-              kind: 'applied',
-              newHistory: [summaryEntry, ...context.history.slice(-2)],
-              metadata: {
-                originalMessageCount: context.history.length,
-                compressedMessageCount: 3,
-                strategyUsed: 'middle-out',
-                llmCallMade: true,
-                topPreserved: 0,
-                bottomPreserved: 2,
-                middleCompressed: context.history.length - 2,
-                usage: {
-                  promptTokens: 8000,
-                  completionTokens: 500,
-                  totalTokens: 8500,
-                },
-              },
-            };
-          },
-        ),
-    }),
+async function buildCompressionHandler(
+  logFile: string,
+  rows: readonly IContent[] = conversationRows(CONVERSATION_TURNS),
+): Promise<{
+  handler: ReturnType<typeof middleoutSetup>['handler'];
+  transport: SummaryTransport;
+  logger: TokenUsageLogger;
+  historyService: HistoryService;
+}> {
+  const historyService = new HistoryService();
+  if (rows.length > 0) {
+    historyService.addAll(rows);
+    await historyService.waitForCommit();
+  }
+  const { handler, transport } = middleoutSetup(historyService);
+  const logger = new TokenUsageLogger(true, logFile);
+  handler.tokenUsageLogger = logger;
+  return { handler, transport, logger, historyService };
+}
+
+interface CompressionObservation {
+  readonly result: PerformCompressionResult;
+  readonly tokensBefore: number;
+  readonly historyService: HistoryService;
+  readonly logger: TokenUsageLogger;
+}
+
+async function compressConversation(
+  promptId: string,
+): Promise<CompressionObservation> {
+  const { handler, logger, historyService } =
+    await buildCompressionHandler(logFile);
+  const tokensBefore = historyService.getTotalTokens();
+  const result = await handler.performCompression(promptId);
+  return { result, tokensBefore, historyService, logger };
+}
+
+async function independentTokensAfter(
+  historyService: HistoryService,
+): Promise<number> {
+  return historyService.estimateTokensForContents(
+    await collectRows(historyService),
   );
 }
 
 const observeEmitsACompressionRecordWhenARealCompressionCompletes =
   async () => {
-    installCompressingStrategy();
-    const { handler } = buildCompressionHandler(logFile);
-
-    await handler.performCompression('test-prompt-lifecycle');
+    const { result, tokensBefore, historyService } = await compressConversation(
+      'test-prompt-lifecycle',
+    );
+    expect(result).toBe(PerformCompressionResult.COMPRESSED);
 
     const records = readJsonl(logFile) as Array<Record<string, unknown>>;
     const compressionRecords = records.filter(
@@ -247,27 +145,29 @@ const observeEmitsACompressionRecordWhenARealCompressionCompletes =
 
     // AC-12: tokens_after < tokens_before. The record is read back as plain
     // JSON, so narrow the unknown numeric fields before comparing them.
-    const tokensBefore = record.tokens_before;
     const tokensAfter = record.tokens_after;
-    if (typeof tokensBefore !== 'number' || typeof tokensAfter !== 'number') {
+    const recordedBefore = record.tokens_before;
+    if (typeof recordedBefore !== 'number' || typeof tokensAfter !== 'number') {
       throw new Error(
-        `tokens_before/tokens_after must be numbers (got ${typeof tokensBefore}, ${typeof tokensAfter})`,
+        `tokens_before/tokens_after must be numbers (got ${typeof recordedBefore}, ${typeof tokensAfter})`,
       );
     }
 
-    // The compression model is carried
-
-    // The compression call's own usage
-
-    return { compressionRecords, record, tokensAfter, tokensBefore };
+    return {
+      compressionRecords,
+      record,
+      tokensAfter,
+      tokensBefore: recordedBefore,
+      expectedBefore: tokensBefore,
+      expectedAfter: await independentTokensAfter(historyService),
+    };
   };
 
 const observeTheCompressionRecordRoundTripsThroughParseTokenUsageLogRecord =
   async () => {
-    installCompressingStrategy();
-    const { handler } = buildCompressionHandler(logFile);
-
-    await handler.performCompression('test-prompt-roundtrip');
+    const { tokensBefore, historyService } = await compressConversation(
+      'test-prompt-roundtrip',
+    );
 
     const raw = fs.readFileSync(logFile, 'utf-8').trim();
     const parsed = parseTokenUsageLogRecord(JSON.parse(raw));
@@ -277,43 +177,21 @@ const observeTheCompressionRecordRoundTripsThroughParseTokenUsageLogRecord =
     if (parsed.record_type !== 'compression')
       throw new Error('expected a compression record');
 
-    return { parsed };
+    return {
+      parsed,
+      expectedBefore: tokensBefore,
+      expectedAfter: await independentTokensAfter(historyService),
+    };
   };
-
-function installNoopStrategy(): void {
-  vi.spyOn(compressionFactory, 'getCompressionStrategy').mockImplementation(
-    (name: string) => ({
-      name: name as 'middle-out',
-      requiresLLM: true,
-      trigger: { mode: 'threshold' as const, defaultThreshold: 0.8 },
-      compress: vi.fn().mockImplementation(
-        async (): Promise<StrategyCompressionResult> => ({
-          kind: 'noop',
-          reason: 'too-few-compressible',
-          metadata: {
-            originalMessageCount: 2,
-            compressedMessageCount: 2,
-            strategyUsed: 'middle-out',
-            llmCallMade: false,
-          },
-        }),
-      ),
-    }),
-  );
-}
 
 async function observeCoexistingRecords(): Promise<{
   lines: string[];
   parsed0: ReturnType<typeof parseTokenUsageLogRecord>;
   parsed1: ReturnType<typeof parseTokenUsageLogRecord>;
 }> {
-  installCompressingStrategy();
-  const { handler, logger } = buildCompressionHandler(logFile);
+  const { logger } = await compressConversation('test-prompt-coexist');
 
-  // Emit a compression lifecycle record through the real handler
-  await handler.performCompression('test-prompt-coexist');
-
-  // Emit a turn record through the same logger
+  // Emit a turn record through the same logger the compression record used
   logger.recordEstimate('test-prompt-coexist', {
     provider: 'openai',
     model: 'gpt-4',
@@ -340,7 +218,6 @@ describe('TokenUsageLogger — lifecycle event emission (issue #3130 slice 5)', 
   });
   afterEach(() => {
     cleanupDir(logFile);
-    vi.restoreAllMocks();
   });
 
   // -------------------------------------------------------------------------
@@ -348,34 +225,44 @@ describe('TokenUsageLogger — lifecycle event emission (issue #3130 slice 5)', 
   // -------------------------------------------------------------------------
 
   it('emits a compression record when a real compression completes', async () => {
-    const { compressionRecords, record, tokensAfter, tokensBefore } =
-      await observeEmitsACompressionRecordWhenARealCompressionCompletes();
+    const {
+      compressionRecords,
+      record,
+      tokensAfter,
+      tokensBefore,
+      expectedBefore,
+      expectedAfter,
+    } = await observeEmitsACompressionRecordWhenARealCompressionCompletes();
     expect(compressionRecords).toHaveLength(1);
     expect(record.record_type).toBe('compression');
     expect(record.schema_version).toBe(TOKEN_USAGE_SCHEMA_VERSION);
     expect(record.session_id).toBe(SESSION_ID);
-    expect(record.tokens_before).toBe(TOKENS_BEFORE);
-    expect(record.tokens_after).toBe(TOKENS_AFTER);
+    expect(record.tokens_before).toBe(expectedBefore);
+    expect(record.tokens_after).toBe(expectedAfter);
     expect(tokensAfter).toBeLessThan(tokensBefore);
     expect(record.compression_model).toBe(COMPRESSION_MODEL);
     expect(record.compression_provider).toBe(COMPRESSION_PROVIDER);
-    expect(record.compression_prompt_tokens).toBe(8000);
-    expect(record.compression_output_tokens).toBe(500);
+    expect(record.compression_prompt_tokens).toBe(SUMMARY_PROMPT_TOKENS);
+    expect(record.compression_output_tokens).toBe(SUMMARY_OUTPUT_TOKENS);
   });
 
   it('does not emit a compression record when compression is a structural no-op', async () => {
-    installNoopStrategy();
-    const { handler } = buildCompressionHandler(logFile);
+    const { handler, transport } = await buildCompressionHandler(logFile, [
+      { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
+      { speaker: 'ai', blocks: [{ type: 'text', text: 'hi' }] },
+    ]);
 
-    await handler.performCompression('test-prompt-noop');
+    expect(await handler.performCompression('test-prompt-noop')).toBe(
+      PerformCompressionResult.NOOP,
+    );
 
-    // No file written at all
+    // The provider was never asked for a summary, and no file was written
+    expect(transport.requests).toHaveLength(0);
     expect(fs.existsSync(logFile)).toBe(false);
   });
 
   it('does not emit a compression record when compression is skipped (empty history)', async () => {
-    const { handler, historyService } = buildCompressionHandler(logFile);
-    historyService.clear();
+    const { handler } = await buildCompressionHandler(logFile, []);
 
     expect(await handler.performCompression('test-prompt-empty')).toBe(
       PerformCompressionResult.SKIPPED_EMPTY,
@@ -385,10 +272,7 @@ describe('TokenUsageLogger — lifecycle event emission (issue #3130 slice 5)', 
   });
 
   it('emits exactly one compression record per compression call (no duplicates)', async () => {
-    installCompressingStrategy();
-    const { handler } = buildCompressionHandler(logFile);
-
-    await handler.performCompression('test-prompt-once');
+    await compressConversation('test-prompt-once');
 
     const records = readJsonl(logFile) as Array<Record<string, unknown>>;
     const compressionRecords = records.filter(
@@ -398,13 +282,14 @@ describe('TokenUsageLogger — lifecycle event emission (issue #3130 slice 5)', 
   });
 
   it('emits a disabled-logger no-op (no file written)', async () => {
-    installCompressingStrategy();
-    const { handler } = buildCompressionHandler(logFile);
+    const { handler } = await buildCompressionHandler(logFile);
 
     // Replace logger with a disabled one
     handler.tokenUsageLogger = new TokenUsageLogger(false, logFile);
 
-    await handler.performCompression('test-prompt-disabled');
+    expect(await handler.performCompression('test-prompt-disabled')).toBe(
+      PerformCompressionResult.COMPRESSED,
+    );
 
     expect(fs.existsSync(logFile)).toBe(false);
   });
@@ -426,12 +311,12 @@ describe('TokenUsageLogger — lifecycle event emission (issue #3130 slice 5)', 
   });
 
   it('the compression record round-trips through parseTokenUsageLogRecord', async () => {
-    const { parsed } =
+    const { parsed, expectedBefore, expectedAfter } =
       await observeTheCompressionRecordRoundTripsThroughParseTokenUsageLogRecord();
     expect(parsed).not.toBeNull();
     expect(parsed.record_type).toBe('compression');
-    expect(parsed.tokens_before).toBe(TOKENS_BEFORE);
-    expect(parsed.tokens_after).toBe(TOKENS_AFTER);
+    expect(parsed.tokens_before).toBe(expectedBefore);
+    expect(parsed.tokens_after).toBe(expectedAfter);
     expect(parsed.compression_model).toBe(COMPRESSION_MODEL);
     expect(parsed.compression_provider).toBe(COMPRESSION_PROVIDER);
   });
