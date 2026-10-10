@@ -43,10 +43,19 @@ describe('OpenAIResponsesProvider custom headers', () => {
     vi.clearAllMocks();
     mockSettingsService.getSettings.mockResolvedValue({});
     setGlobal('fetch', fetchMock);
-    fetchMock.mockResolvedValue({
+    fetchMock.mockImplementation(async () => ({
       ok: true,
-      body: undefined,
-    });
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(
+            new TextEncoder().encode(
+              'data: {"type":"response.completed","response":{"id":"resp_headers","output":[]}}\n\n',
+            ),
+          );
+          controller.close();
+        },
+      }),
+    }));
   });
 
   afterEach(() => {
