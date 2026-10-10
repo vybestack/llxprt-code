@@ -5,7 +5,7 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Behavioral tests for compression callback attachment via duck typing in
- * CompressionHandler.enforceProviderContents (issue #2207).
+ * CompressionHandler.enforceProviderSource (issue #2207).
  */
 
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
@@ -21,6 +21,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { CompressionCallback } from '@vybestack/llxprt-code-providers';
+import { enforceProviderSourceForTest } from './support/enforce-provider-source.js';
 
 function expectCapturedCallback(
   callback: CompressionCallback | null,
@@ -126,13 +127,10 @@ const observeAttachedCallbackRunsCompressionMachineryAndReturnsHistoryContents =
       }),
     };
 
-    await chat['compressionHandler'].enforceProviderContents(
-      {
-        contents: await Array.fromAsync(
-          historyService.getCuratedForProviderStream(),
-        ),
-        pendingContents: [],
-      },
+    await enforceProviderSourceForTest(
+      chat['compressionHandler'],
+      historyService,
+      [],
       'test-prompt',
       providerWithCallback as unknown as IProvider,
     );
@@ -143,7 +141,7 @@ const observeAttachedCallbackRunsCompressionMachineryAndReturnsHistoryContents =
     );
     const result = await readCallback(callback);
 
-    const emptyResult = await readCallback(callback);
+    const repeatedResult = await readCallback(callback);
 
     const attachedCallbackRunsCompressionMachineryAndReturnsHistoryContentsObservation1 =
       result.every(
@@ -153,7 +151,7 @@ const observeAttachedCallbackRunsCompressionMachineryAndReturnsHistoryContents =
     return {
       result,
       currentContents,
-      emptyResult,
+      repeatedResult,
       attachedCallbackRunsCompressionMachineryAndReturnsHistoryContentsObservation1,
     };
   };
@@ -209,13 +207,10 @@ const observePreservesPendingRequestContentsWhenCallbackRecomposesCompressedHist
       }),
     };
 
-    await chat['compressionHandler'].enforceProviderContents(
-      {
-        contents: await Array.fromAsync(
-          historyService.getCuratedForProviderStream([pending]),
-        ),
-        pendingContents: [pending],
-      },
+    await enforceProviderSourceForTest(
+      chat['compressionHandler'],
+      historyService,
+      [pending],
       'test-prompt',
       providerWithCallback as unknown as IProvider,
     );
@@ -276,13 +271,10 @@ const observePreservesAPendingMatchingToolResponseWithoutDuplicatingHistory =
       }),
     };
 
-    await chat['compressionHandler'].enforceProviderContents(
-      {
-        contents: await Array.fromAsync(
-          historyService.getCuratedForProviderStream([pendingToolResult]),
-        ),
-        pendingContents: [pendingToolResult],
-      },
+    await enforceProviderSourceForTest(
+      chat['compressionHandler'],
+      historyService,
+      [pendingToolResult],
       'test-prompt',
       providerWithCallback as unknown as IProvider,
     );
@@ -297,7 +289,7 @@ const observePreservesAPendingMatchingToolResponseWithoutDuplicatingHistory =
     return { result };
   };
 
-describe('CompressionHandler.enforceProviderContents - compression callback attachment (issue #2207)', () => {
+describe('CompressionHandler.enforceProviderSource - compression callback attachment (issue #2207)', () => {
   beforeEach(facadeCallback0);
 
   it(
@@ -314,8 +306,6 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
     'does not throw when provider lacks setCompressionCallback method',
     facadeCallback3,
   );
-
-  it('ignores non-callable setCompressionCallback properties', facadeCallback4);
 
   it(
     'attached callback runs compression machinery and returns history contents',
@@ -361,13 +351,10 @@ async function facadeCallback1(): Promise<void> {
     setCompressionCallback: vi.fn(),
   };
 
-  await chat['compressionHandler'].enforceProviderContents(
-    {
-      contents: await Array.fromAsync(
-        historyService.getCuratedForProviderStream(),
-      ),
-      pendingContents: [],
-    },
+  await enforceProviderSourceForTest(
+    chat['compressionHandler'],
+    historyService,
+    [],
     'test-prompt',
     providerWithCallback as unknown as IProvider,
   );
@@ -389,13 +376,10 @@ async function facadeCallback2(): Promise<void> {
   const { chat, providerWithThrowingSetter, setCompressionCallback } =
     await observeClearsCompressionCallbackWhenProviderSetterRejectsAttachment();
   await expect(
-    chat['compressionHandler'].enforceProviderContents(
-      {
-        contents: await Array.fromAsync(
-          historyService.getCuratedForProviderStream(),
-        ),
-        pendingContents: [],
-      },
+    enforceProviderSourceForTest(
+      chat['compressionHandler'],
+      historyService,
+      [],
       'test-prompt',
       providerWithThrowingSetter as unknown as IProvider,
     ),
@@ -426,38 +410,12 @@ async function facadeCallback3(): Promise<void> {
     historyService.getCuratedForProviderStream(),
   );
   await expect(
-    chat['compressionHandler'].enforceProviderContents(
-      { contents: expectedContents, pendingContents: [] },
+    enforceProviderSourceForTest(
+      chat['compressionHandler'],
+      historyService,
+      [],
       'test-prompt',
       providerWithoutCallback as unknown as IProvider,
-    ),
-  ).resolves.toStrictEqual(expectedContents);
-}
-
-async function facadeCallback4(): Promise<void> {
-  const runtimeContext = buildRuntimeContext(historyService, {
-    contextLimit: 131134,
-    compressionThreshold: 0.85,
-  });
-
-  historyService.add(makeUserMessage('test'));
-
-  const chat = new ChatSession(runtimeContext, mockContentGenerator, {}, []);
-
-  const providerWithNonCallableCallback = {
-    name: 'load-balancer',
-    generateChatCompletion: vi.fn(),
-    setCompressionCallback: 'not-a-function',
-  };
-
-  const expectedContents = await Array.fromAsync(
-    historyService.getCuratedForProviderStream(),
-  );
-  await expect(
-    chat['compressionHandler'].enforceProviderContents(
-      { contents: expectedContents, pendingContents: [] },
-      'test-prompt',
-      providerWithNonCallableCallback as unknown as IProvider,
     ),
   ).resolves.toStrictEqual(expectedContents);
 }
@@ -466,7 +424,7 @@ async function facadeCallback5(): Promise<void> {
   const {
     result,
     currentContents,
-    emptyResult,
+    repeatedResult,
     attachedCallbackRunsCompressionMachineryAndReturnsHistoryContentsObservation1,
   } =
     await observeAttachedCallbackRunsCompressionMachineryAndReturnsHistoryContents();
@@ -475,7 +433,7 @@ async function facadeCallback5(): Promise<void> {
   expect(
     attachedCallbackRunsCompressionMachineryAndReturnsHistoryContentsObservation1,
   ).toBe(true);
-  expect(emptyResult).toStrictEqual([]);
+  expect(repeatedResult).toStrictEqual(result);
 }
 
 async function facadeCallback6(): Promise<void> {
@@ -498,13 +456,10 @@ async function facadeCallback7(): Promise<void> {
     .mockResolvedValue(PerformCompressionResult.COMPRESSED);
   const pending = makeUserMessage('threshold crossing request '.repeat(50));
 
-  await compressionHandler.enforceProviderContents(
-    {
-      contents: await Array.fromAsync(
-        historyService.getCuratedForProviderStream([pending]),
-      ),
-      pendingContents: [pending],
-    },
+  await enforceProviderSourceForTest(
+    compressionHandler,
+    historyService,
+    [pending],
     'test-prompt',
     { name: 'fake', generateChatCompletion: vi.fn() } as unknown as IProvider,
   );

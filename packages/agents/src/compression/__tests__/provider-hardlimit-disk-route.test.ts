@@ -13,16 +13,7 @@ import { buildCompressionMetadata } from '../compressionContextBuilder.js';
 import { TopDownTruncationStrategy } from '../TopDownTruncationStrategy.js';
 import { middleoutSetup, middleoutRow } from './middleout-disk-helpers.js';
 import { collectRows } from './truncation-stream-helpers.js';
-
-async function providerRows(
-  history: HistoryService,
-  pending: IContent,
-): Promise<IContent[]> {
-  const rows: IContent[] = [];
-  for await (const row of history.getCuratedForProviderStream([pending]))
-    rows.push(row);
-  return rows;
-}
+import { enforceProviderSourceForTest } from './support/enforce-provider-source.js';
 
 class HardlimitHistory extends HistoryService {
   eagerAccess = false;
@@ -97,11 +88,10 @@ async function compare(size: number): Promise<number> {
         speaker: 'human',
         blocks: [{ type: 'text', text: 'pending' }],
       };
-      const result = await fixture.handler.enforceProviderContents(
-        {
-          contents: await providerRows(history, pending),
-          pendingContents: [pending],
-        },
+      const result = await enforceProviderSourceForTest(
+        fixture.handler,
+        history,
+        [pending],
         'hardlimit',
         undefined,
         async (rows) => {
@@ -151,11 +141,10 @@ describe('actual provider hard-limit disk fallback', () => {
         speaker: 'human',
         blocks: [{ type: 'text', text: 'pending' }],
       };
-      const result = await handler.enforceProviderContents(
-        {
-          contents: await providerRows(history, pending),
-          pendingContents: [pending],
-        },
+      const result = await enforceProviderSourceForTest(
+        handler,
+        history,
+        [pending],
         'large-hardlimit',
         undefined,
         async (rows) => (rows.length === 3 ? 1 : 200000),
