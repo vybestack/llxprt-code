@@ -33,6 +33,7 @@ import type {
   RuntimeGenerateChatOptions as GenerateChatOptions,
   RuntimeProviderToolset as ProviderToolset,
 } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 
 export function assertInstanceOf<T>(
@@ -196,9 +197,22 @@ interface SettingsOverrides {
   provider?: Record<string, unknown>;
 }
 
+function toAsyncContents(
+  rows: readonly IContent[] | AsyncIterable<IContent>,
+): AsyncIterable<IContent> {
+  if (Symbol.asyncIterator in rows) {
+    return rows;
+  }
+  return {
+    async *[Symbol.asyncIterator](): AsyncGenerator<IContent> {
+      yield* rows;
+    },
+  };
+}
+
 export interface ProviderCallOptionsInit {
   providerName: string;
-  contents?: GenerateChatOptions['contents'];
+  contents?: readonly IContent[] | AsyncIterable<IContent>;
   tools?: ProviderToolset;
   metadata?: Record<string, unknown>;
   userMemory?: GenerateChatOptions['userMemory'];
@@ -416,7 +430,7 @@ export function createProviderCallOptions(
   );
 
   return {
-    contents: init.contents ?? [],
+    contents: toAsyncContents(init.contents ?? []),
     tools: init.tools,
     metadata: mergedMetadata,
     settings,

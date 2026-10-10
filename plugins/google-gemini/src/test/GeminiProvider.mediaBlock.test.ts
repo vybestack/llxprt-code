@@ -21,30 +21,7 @@ import type {
   IContent,
   MediaReferenceBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import {
-  createProviderCallOptions as createOptions,
-  type ProviderCallOptionsInit,
-} from './testSupport.js';
-function isStream(
-  value: readonly IContent[] | AsyncIterable<IContent>,
-): value is AsyncIterable<IContent> {
-  return Symbol.asyncIterator in value;
-}
-function createProviderCallOptions(
-  init: Omit<ProviderCallOptionsInit, 'contents'> & {
-    contents?: readonly IContent[] | AsyncIterable<IContent>;
-  },
-): ReturnType<typeof createOptions> {
-  const rows = init.contents ?? [];
-  const contents: AsyncIterable<IContent> = isStream(rows)
-    ? rows
-    : {
-        async *[Symbol.asyncIterator](): AsyncGenerator<IContent> {
-          yield* rows;
-        },
-      };
-  return createOptions({ ...init, contents });
-}
+import { createProviderCallOptions } from './testSupport.js';
 
 import type {
   RequestMediaResolutionService,
