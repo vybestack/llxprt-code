@@ -18,6 +18,7 @@ import { withRetainedClient } from './retained-array-test-helpers.js';
 import {
   clientRows,
   forbidClientArrayRollback,
+  waitForNextMillisecond,
 } from './client-array-test-helpers.js';
 const png =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=';
@@ -150,6 +151,7 @@ function registerCleanup(): void {
           );
           expect(before.objectsRemoved).toBe(0);
           await client.dispose();
+          await waitForNextMillisecond();
           const after = await store.reclaimUnreferenced(
             new Set<string>(),
             Date.now() + 1,

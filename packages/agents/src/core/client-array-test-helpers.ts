@@ -85,3 +85,12 @@ export function recordClientProof(value: object): void {
   if (output !== undefined)
     appendFileSync(output, JSON.stringify(value) + '\n');
 }
+
+/**
+ * Media reclamation skips objects created in the current millisecond, so a
+ * test that reclaims right after admission must let the clock move first.
+ */
+export async function waitForNextMillisecond(): Promise<void> {
+  const start = Date.now();
+  while (Date.now() <= start) await Bun.sleep(1);
+}

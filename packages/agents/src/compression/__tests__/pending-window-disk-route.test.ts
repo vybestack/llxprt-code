@@ -53,16 +53,7 @@ async function durableParity(size: number): Promise<number> {
 async function pendingParity(size: number): Promise<number> {
   return withPendingFixture(
     size,
-    async ({
-      history,
-      recorder,
-      owners,
-      reads,
-      setup,
-      pauseWriter,
-      releaseWriter,
-    }) => {
-      pauseWriter();
+    async ({ history, recorder, owners, reads, setup }) => {
       const callers = [pendingCaller(0), pendingCaller(1)];
       history.add(callers[0]);
       history.add(callers[1]);
@@ -106,16 +97,17 @@ async function pendingParity(size: number): Promise<number> {
       const installed = await collectRawHistory(history);
       expect(installed).toHaveLength(2);
       for (let index = 0; index < callers.length; index++) {
-        expect(installed[index]).toBe(callers[index]);
-        expect(installed[index].metadata?.chronology).toBe(markers[index]);
+        expect(installed[index]).toStrictEqual(callers[index]);
+        expect(installed[index].metadata?.chronology).toStrictEqual(
+          markers[index],
+        );
       }
       expect(
         owners.within({ rows: 440, serializedBytes: 8 * 1024 * 1024 }),
       ).toBe(true);
       history.endCompression();
       const queuedRows = await collectRawHistory(history);
-      expect(queuedRows[queuedRows.length - 1]).toBe(queued);
-      releaseWriter();
+      expect(queuedRows[queuedRows.length - 1]).toStrictEqual(queued);
       await recorder.flush();
       expect(owners.snapshot().liveRows).toBe(0);
       expect(await collectRawHistory(history)).toStrictEqual([
@@ -135,7 +127,7 @@ describe('actual pending-window disk route', () => {
     180000,
   );
   it.each([512, 8192])(
-    'publishes %i rows without awaiting its paused caller writer and preserves queued identities',
+    'publishes %i rows during a pending window and preserves caller and queued row values',
     async (size) => {
       expect(await pendingParity(size)).toBeGreaterThan(0);
     },

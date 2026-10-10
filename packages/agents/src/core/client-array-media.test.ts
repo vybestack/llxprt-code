@@ -15,6 +15,7 @@ import {
   withArrayClient,
   withClientOracle,
   clientRows,
+  waitForNextMillisecond,
 } from './client-array-test-helpers.js';
 const png =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=';
@@ -138,6 +139,7 @@ function registerCleanupFailure(): void {
             await detachedDigest(history.streamRawHistory()),
           ).toStrictEqual(expected);
           expect(await detachedDurableDigest(recorder)).toStrictEqual(expected);
+          await waitForNextMillisecond();
           const reclaimed = await store.reclaimUnreferenced(
             new Set<string>(),
             Date.now() + 1,
