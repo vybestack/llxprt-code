@@ -1,7 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import * as fs from 'node:fs';
-import { tmpdir } from 'node:os';
 import {
   withDetachedFixture,
   detachedRows,
@@ -9,6 +8,7 @@ import {
   detachedDurableDigest,
 } from './detached-rollback-test-helpers.js';
 import { rejectedValue } from './chronology-rollback-test-helpers.js';
+import { getScratchRoot } from '../../storage/scratch-root.js';
 
 describe('detached external scratch I/O', () => {
   it.each([
@@ -22,7 +22,7 @@ describe('detached external scratch I/O', () => {
       await withDetachedFixture(async ({ history, recorder, owners }) => {
         await history.detachedValues.replace(detachedRows(size));
         const expected = await detachedDigest(detachedRows(size));
-        const before = fs.readdirSync(tmpdir());
+        const before = fs.readdirSync(getScratchRoot());
         let restore = (): void => {};
         let result: unknown;
         try {
@@ -63,7 +63,7 @@ describe('detached external scratch I/O', () => {
         expect(owners.snapshot().liveRows).toBe(0);
         expect(
           fs
-            .readdirSync(tmpdir())
+            .readdirSync(getScratchRoot())
             .filter(
               (name) =>
                 name.startsWith('history-detached-') && !before.includes(name),

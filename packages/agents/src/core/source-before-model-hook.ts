@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { tmpdir } from 'node:os';
+
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
@@ -11,6 +11,7 @@ import {
   sourcePendingMembership,
 } from './source-pending-selection.js';
 import { fireBeforeModelSnapshotHook } from './beforeModelHookFire.js';
+import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 export interface SourceBeforeModelInput {
   readonly config: AgentRuntimeContext['providerRuntime']['config'];
@@ -57,7 +58,7 @@ export async function sourceBeforeModelHook(
       },
       model: input.model,
       tools: input.tools ?? [],
-      root: tmpdir(),
+      root: getScratchRoot(),
       signal: input.signal,
       log: input.log,
     });

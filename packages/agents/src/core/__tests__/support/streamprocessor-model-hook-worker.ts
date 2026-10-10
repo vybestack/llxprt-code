@@ -2,7 +2,6 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { z } from 'zod';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
@@ -26,6 +25,7 @@ import {
   observeModelBody,
   type ModelBodyObserver,
 } from './streamprocessor-model-body-observer.js';
+import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 function endpoint(mode: ModelHookMode): {
   server: Bun.Server<undefined>;
@@ -231,7 +231,10 @@ async function run(
       firstLive: observer?.firstLive() ?? -1,
       lastLive: observer?.lastLive() ?? -1,
       boundary: observer?.boundaryFacts(),
-      directories: [...readdirSync(root), ...readdirSync(tmpdir())].filter(
+      directories: [
+        ...readdirSync(root),
+        ...readdirSync(getScratchRoot()),
+      ].filter(
         (name) =>
           name.startsWith('boundary-snapshot-') ||
           name.startsWith('hook-output-'),

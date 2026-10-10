@@ -249,6 +249,7 @@ export {
   getProviderKeyStorage,
   resetProviderKeyStorage,
 } from './storage/provider-key-storage.js';
+export * from './storage/scratch-root.js';
 export * from './storage/local-media-store.js';
 export * from './storage/SessionPersistenceService.js';
 export * from './storage/media-admission-service.js';

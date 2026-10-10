@@ -1,7 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { readdirSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import type { OAuthManager } from '@vybestack/llxprt-code-auth';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
@@ -18,6 +17,7 @@ import {
   createCodexResponsesWebSocketTransport,
   type WebSocketTransport,
 } from './openAIResponsesWebSocketTransport.js';
+import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 const codexOAuthManager = {
   getOAuthToken: async () => ({
@@ -88,7 +88,7 @@ function rowsOf(list: readonly IContent[]): ProviderRequestRows {
 
 function tmpPromptDirs(): Set<string> {
   return new Set(
-    readdirSync(tmpdir()).filter((name) =>
+    readdirSync(getScratchRoot()).filter((name) =>
       name.startsWith('responses-prompt-keys-'),
     ),
   );

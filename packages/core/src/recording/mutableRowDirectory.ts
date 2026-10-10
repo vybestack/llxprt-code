@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
+import { getScratchRoot } from '../storage/scratch-root.js';
 
 export type RowSource = 'durable' | 'projection' | 'pending';
 
@@ -112,7 +112,7 @@ export class MutableRowDirectory {
   private size = 0;
   private closed = false;
 
-  constructor(root = os.tmpdir()) {
+  constructor(root = getScratchRoot()) {
     this.directory = fs.mkdtempSync(path.join(root, 'llxprt-row-directory-'));
     this.file = path.join(this.directory, 'rows');
     try {

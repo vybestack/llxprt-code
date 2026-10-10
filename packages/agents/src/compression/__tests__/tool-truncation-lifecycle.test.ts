@@ -1,7 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, it, expect } from 'bun:test';
 import { readdirSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { exactTokenizer } from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import {
@@ -16,9 +15,10 @@ import {
   digestRows,
   expectedToolDigest,
 } from './tool-truncation-stream-helpers.js';
+import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 function scratch(): string[] {
-  return readdirSync(tmpdir())
+  return readdirSync(getScratchRoot())
     .filter((name) => name.startsWith('tool-response-ranking-'))
     .sort();
 }

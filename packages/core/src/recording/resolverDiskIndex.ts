@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
+import { getScratchRoot } from '../storage/scratch-root.js';
 
 export interface IndexedRow {
   readonly seq: number;
@@ -26,7 +26,7 @@ export class ResolverDiskIndex {
   private closed = false;
   private readonly buffer = Buffer.alloc(WIDTH);
 
-  constructor(root = os.tmpdir()) {
+  constructor(root = getScratchRoot()) {
     this.directory = fs.mkdtempSync(path.join(root, 'llxprt-resolver-'));
     try {
       this.fd = fs.openSync(path.join(this.directory, 'rows'), 'wx+', 0o600);

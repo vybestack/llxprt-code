@@ -1,15 +1,15 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, vi } from 'bun:test';
 import * as fs from 'node:fs';
-import { tmpdir } from 'node:os';
 import {
   withRollbackFixture,
   rollbackRow,
 } from './chronology-rollback-test-helpers.js';
+import { getScratchRoot } from '../../storage/scratch-root.js';
 
 function scratch(): string[] {
   return fs
-    .readdirSync(tmpdir())
+    .readdirSync(getScratchRoot())
     .filter(
       (name) =>
         name.startsWith('history-mutation-') ||

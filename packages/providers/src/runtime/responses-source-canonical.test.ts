@@ -1,10 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { readFileSync, readdirSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { projectOpenAIResponsesPromptEnvelope } from './promptEnvelopeProjections.js';
 import { serializeResponsesPromptEnvelope } from './responses-source-serializer.js';
+import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 async function* empty(): AsyncIterable<IContent> {}
 const context = {
@@ -86,7 +86,7 @@ describe('Responses source recursive canonicalization', () => {
     ).toBe(3);
   });
   it('rejects unsupported bigint JSON without leaving an owner or partial segment', async () => {
-    const before = new Set(readdirSync(tmpdir()));
+    const before = new Set(readdirSync(getScratchRoot()));
     await expect(
       serializeResponsesPromptEnvelope({
         model: 'gpt-5.6',
@@ -95,7 +95,9 @@ describe('Responses source recursive canonicalization', () => {
         tools: [{ size: BigInt(1) }],
       }),
     ).rejects.toThrow('BigInt');
-    const leaked = readdirSync(tmpdir()).filter((name) => !before.has(name));
+    const leaked = readdirSync(getScratchRoot()).filter(
+      (name) => !before.has(name),
+    );
     expect(leaked).toStrictEqual([]);
   });
   it('transfers disk image costs without rebuilding an image list', async () => {

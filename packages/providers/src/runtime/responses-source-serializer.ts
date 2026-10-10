@@ -1,6 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ResponsesInputBuildContext } from '../openai-responses/OpenAIResponsesInputBuilder.js';
@@ -22,6 +21,7 @@ import {
   withSerializationCleanup,
   type ResponsesSerialization,
 } from './responses-serialization-lifecycle.js';
+import { createScratchDirSync } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 export interface ResponsesSourceOptions {
   readonly model: string;
@@ -170,7 +170,7 @@ async function prompt(
   inputOnly: boolean,
 ): Promise<ResponsesSourcePrompt> {
   options.signal?.throwIfAborted();
-  const root = mkdtempSync(join(tmpdir(), 'responses-prompt-keys-'));
+  const root = createScratchDirSync('responses-prompt-keys-');
   const costs = join(root, 'image-costs.jsonl');
   try {
     writeFileSync(costs, '', { mode: 0o600 });

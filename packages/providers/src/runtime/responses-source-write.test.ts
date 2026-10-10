@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { serializeResponsesPromptEnvelope } from './responses-source-serializer.js';
+import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 const context = {
   includeReasoningInContext: false,
@@ -16,7 +17,7 @@ const context = {
 
 describe('Responses serializer disk-write lifecycle', () => {
   it('retains both a disk-write failure and failed directory cleanup', async () => {
-    const before = new Set(fs.readdirSync(tmpdir()));
+    const before = new Set(fs.readdirSync(getScratchRoot()));
     const writeFailure = new Error('disk write failed');
     const cleanupFailure = new Error('directory removal failed');
     const write = spyOn(fs, 'writeSync').mockImplementation(() => {
@@ -51,9 +52,12 @@ describe('Responses serializer disk-write lifecycle', () => {
       write.mockRestore();
       remove.mockRestore();
       for (const name of fs
-        .readdirSync(tmpdir())
+        .readdirSync(getScratchRoot())
         .filter((name) => !before.has(name)))
-        fs.rmSync(join(tmpdir(), name), { recursive: true, force: true });
+        fs.rmSync(join(getScratchRoot(), name), {
+          recursive: true,
+          force: true,
+        });
     }
   });
 });
@@ -117,7 +121,7 @@ describe('Responses synchronous disk-write cancellation limit', () => {
 
 describe('Responses stateful source and cleanup errors', () => {
   it('retains an incremental source failure alongside sealed-base disposal failure', async () => {
-    const before = new Set(fs.readdirSync(tmpdir()));
+    const before = new Set(fs.readdirSync(getScratchRoot()));
     const sourceFailure = new Error('incremental source failed');
     const cleanupFailure = new Error('sealed projection removal failed');
     const remove = spyOn(fsPromises, 'rm').mockRejectedValue(cleanupFailure);
@@ -156,16 +160,19 @@ describe('Responses stateful source and cleanup errors', () => {
     } finally {
       remove.mockRestore();
       for (const name of fs
-        .readdirSync(tmpdir())
+        .readdirSync(getScratchRoot())
         .filter((name) => !before.has(name)))
-        fs.rmSync(join(tmpdir(), name), { recursive: true, force: true });
+        fs.rmSync(join(getScratchRoot(), name), {
+          recursive: true,
+          force: true,
+        });
     }
   });
 });
 
 describe('Responses stateful multi-owner disposal', () => {
   it('reports every failed projection cleanup instead of only the first failure', async () => {
-    const before = new Set(fs.readdirSync(tmpdir()));
+    const before = new Set(fs.readdirSync(getScratchRoot()));
     const baseFailure = new Error('base directory removal failed');
     const incrementalFailure = new Error(
       'incremental directory removal failed',
@@ -200,9 +207,12 @@ describe('Responses stateful multi-owner disposal', () => {
     } finally {
       remove.mockRestore();
       for (const name of fs
-        .readdirSync(tmpdir())
+        .readdirSync(getScratchRoot())
         .filter((name) => !before.has(name)))
-        fs.rmSync(join(tmpdir(), name), { recursive: true, force: true });
+        fs.rmSync(join(getScratchRoot(), name), {
+          recursive: true,
+          force: true,
+        });
     }
   });
 });

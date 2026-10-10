@@ -2,14 +2,14 @@
 import { describe, expect, it } from 'bun:test';
 import { readdirSync, truncateSync } from 'node:fs';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import {
   withRollbackFixture,
   rollbackRow,
 } from './chronology-rollback-test-helpers.js';
+import { getScratchRoot } from '../../storage/scratch-root.js';
 
 function scratch(): string[] {
-  return readdirSync(tmpdir())
+  return readdirSync(getScratchRoot())
     .filter(
       (name) =>
         name.startsWith('history-mutation-') ||
@@ -58,7 +58,7 @@ describe('scoped raw fallback snapshot', () => {
         expect(snapshot.readRow(0).blocks[0]).toStrictEqual(
           rollbackRow(0).blocks[0],
         );
-        truncateSync(join(tmpdir(), added[0], 'index'), 0);
+        truncateSync(join(getScratchRoot(), added[0], 'index'), 0);
         await expect(
           history.restoreRawHistorySnapshot(snapshot),
         ).rejects.toThrow(/boundary/);

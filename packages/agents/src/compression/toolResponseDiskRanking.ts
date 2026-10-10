@@ -1,13 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import {
-  closeSync,
-  mkdtempSync,
-  openSync,
-  readSync,
-  rmSync,
-  writeSync,
-} from 'node:fs';
-import { tmpdir } from 'node:os';
+import { closeSync, openSync, readSync, rmSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
@@ -19,6 +11,7 @@ import {
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { sanitizeProviderContentForSerialization } from '@vybestack/llxprt-code-core/services/history/historyCloneUtils.js';
 import { isAlreadyStubbed } from './toolResultTruncator.js';
+import { createScratchDirSync } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 export interface DiskRankedCandidate {
   readonly historyLength: number;
@@ -41,9 +34,7 @@ function isEmptyAiRow(row: IContent): boolean {
 }
 
 export class ToolResponseDiskRanking implements Iterable<DiskRankedCandidate> {
-  private readonly directory = mkdtempSync(
-    join(tmpdir(), 'tool-response-ranking-'),
-  );
+  private readonly directory = createScratchDirSync('tool-response-ranking-');
   private readonly scores = openSync(join(this.directory, 'scores'), 'w+');
   private readonly rows = new HistoryDensityRows();
   private count = 0;

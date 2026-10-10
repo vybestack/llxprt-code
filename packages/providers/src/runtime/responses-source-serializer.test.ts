@@ -1,7 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { projectOpenAIResponsesPromptEnvelope } from './promptEnvelopeProjections.js';
 import {
@@ -16,6 +15,7 @@ import { estimateImageTokens } from '@vybestack/llxprt-code-tools/utils/imageTok
 import { requestScopedContents } from '../utils/requestScopedBody.js';
 import { collectUnsupportedMedia } from '../utils/mediaUtils.js';
 import { SyntheticToolResponseHandler } from '../openai/syntheticToolResponses.js';
+import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 const context: ResponsesInputBuildContext = {
   includeReasoningInContext: true,
@@ -363,7 +363,7 @@ describe('Responses source ownership', () => {
     await prompt.dispose();
   });
   it('cleans disk and closes the source on abort and preserves source failure', async () => {
-    const before = new Set(readdirSync(tmpdir()));
+    const before = new Set(readdirSync(getScratchRoot()));
     const controller = new AbortController();
     const error = new Error('source failure');
     let closed = false;
@@ -388,7 +388,9 @@ describe('Responses source ownership', () => {
         signal: controller.signal,
       }),
     ).rejects.toBe(error);
-    const leaked = readdirSync(tmpdir()).filter((name) => !before.has(name));
+    const leaked = readdirSync(getScratchRoot()).filter(
+      (name) => !before.has(name),
+    );
     expect(leaked).toStrictEqual([]);
   });
 });

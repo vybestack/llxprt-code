@@ -71,13 +71,12 @@ import {
   parseChronologyBinding,
   type ChronologyBinding,
 } from '../../recording/chronologyBinding.js';
-import * as os from 'node:os';
-import * as path from 'node:path';
 import { randomUUID } from 'crypto';
 import {
   captureHistoryMutationSnapshot,
   type HistoryMutationSnapshot,
 } from './historyMutationSnapshot.js';
+import { createScratchDirSync } from '../../storage/scratch-root.js';
 export {
   planHistoryMutation,
   planDensityMutation,
@@ -927,7 +926,7 @@ export class HistoryJournalStore {
 
   private ensureRecorder(): SessionRecordingService {
     if (this.binding.recorder === undefined) {
-      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'llxprt-history-'));
+      const dir = createScratchDirSync('llxprt-history-');
       this.binding.tempDir = dir;
       this.binding.recorder = new SessionRecordingService({
         sessionId: `history-${randomUUID()}`,

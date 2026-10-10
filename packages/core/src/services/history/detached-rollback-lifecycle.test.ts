@@ -1,7 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import * as fs from 'node:fs';
-import { tmpdir } from 'node:os';
 import type { IContent } from './IContent.js';
 import { rejectedValue } from './chronology-rollback-test-helpers.js';
 import {
@@ -11,6 +10,7 @@ import {
   detachedRow,
   withDetachedFixture,
 } from './detached-rollback-test-helpers.js';
+import { getScratchRoot } from '../../storage/scratch-root.js';
 
 describe('detached cleanup error ordering', () => {
   it('reports primary failure before scratch close failure while releasing all owners', async () => {
@@ -51,7 +51,7 @@ describe('detached resource lifecycle', () => {
   for (const file of ['rows', 'index', 'markers']) {
     it(`cleans up failed ${file} acquisition and releases submitted array owners`, async () => {
       await withDetachedFixture(async ({ history, owners }) => {
-        const before = fs.readdirSync(tmpdir());
+        const before = fs.readdirSync(getScratchRoot());
         const failure = new Error('acquisition');
         const open = fs.openSync;
         const fault = spyOn(fs, 'openSync').mockImplementation(
@@ -76,7 +76,7 @@ describe('detached resource lifecycle', () => {
         expect(owners.snapshot().liveRows).toBe(0);
         expect(
           fs
-            .readdirSync(tmpdir())
+            .readdirSync(getScratchRoot())
             .filter(
               (name) =>
                 name.startsWith('history-detached-') && !before.includes(name),

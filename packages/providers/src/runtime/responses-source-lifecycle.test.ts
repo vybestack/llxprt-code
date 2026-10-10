@@ -1,10 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { serializeResponsesPromptEnvelope } from './responses-source-serializer.js';
 import { requestScopedContents } from '../utils/requestScopedBody.js';
+import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 const context = {
   includeReasoningInContext: false,
@@ -27,7 +27,7 @@ function gate(): { wait: Promise<void>; release(): void } {
 
 describe('Responses source deterministic lifecycle', () => {
   it('returns the exact abort reason and closes a partially consumed source', async () => {
-    const before = new Set(readdirSync(tmpdir()));
+    const before = new Set(readdirSync(getScratchRoot()));
     const controller = new AbortController();
     const reason = new Error('abort while serializing');
     let closed = false;
@@ -49,7 +49,9 @@ describe('Responses source deterministic lifecycle', () => {
       }),
     ).rejects.toBe(reason);
     expect(closed).toBe(true);
-    const leaked = readdirSync(tmpdir()).filter((name) => !before.has(name));
+    const leaked = readdirSync(getScratchRoot()).filter(
+      (name) => !before.has(name),
+    );
     expect(leaked).toStrictEqual([]);
   });
   it('keeps a second disk reader independent when the first reader throws', async () => {

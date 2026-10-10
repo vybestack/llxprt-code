@@ -1,7 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createReadStream } from 'node:fs';
-import { mkdtemp, open, rm, stat } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { open, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { JournalResolver } from '../../recording/journalResolver.js';
@@ -10,6 +9,7 @@ import type { SessionRecordingService } from '../../recording/SessionRecordingSe
 import type { CommitWatermark } from '../../recording/types.js';
 import { invalidateResponsesStatefulChain, type IContent } from './IContent.js';
 import type { ResumeProjection } from './historyResumeProjection.js';
+import { createScratchDir } from '../../storage/scratch-root.js';
 
 function requireLiveSource(isCancelled: () => boolean): void {
   if (isCancelled()) throw new Error('History journal store is disposed');
@@ -129,7 +129,7 @@ export async function appendHistoryJournal(
   isCancelled: () => boolean,
   counters?: JournalReadCounters,
 ): Promise<AttachmentCommit> {
-  const directory = await mkdtemp(join(tmpdir(), 'history-attachment-'));
+  const directory = await createScratchDir('history-attachment-');
   let committedRows = 0;
   let destinationRewound = false;
   try {

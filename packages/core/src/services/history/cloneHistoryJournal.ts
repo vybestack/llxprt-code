@@ -1,13 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createReadStream, createWriteStream, rmSync } from 'node:fs';
-import { mkdtemp, rm, stat } from 'node:fs/promises';
+import { rm, stat } from 'node:fs/promises';
 import { pipeline } from 'node:stream/promises';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { SessionRecordingService } from '../../recording/SessionRecordingService.js';
 import { readMetadataJsonLines } from '../../recording/metadataJsonLines.js';
 import { field } from '../../recording/resolverProjection.js';
+import { createScratchDir } from '../../storage/scratch-root.js';
 
 export async function cloneHistoryJournal(
   source: SessionRecordingService,
@@ -18,7 +18,7 @@ export async function cloneHistoryJournal(
   byteOffset: number;
 }> {
   await source.flush();
-  const directory = await mkdtemp(join(tmpdir(), 'llxprt-history-'));
+  const directory = await createScratchDir('llxprt-history-');
   const recorder = new SessionRecordingService({
     sessionId: `history-${randomUUID()}`,
     projectHash: source.getProjectHash(),

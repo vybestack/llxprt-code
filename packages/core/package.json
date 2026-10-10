@@ -278,6 +278,11 @@
       "bun": "./src/storage/request-media-resolver.ts",
       "import": "./dist/src/storage/request-media-resolver.js"
     },
+    "./storage/scratch-root.js": {
+      "types": "./dist/src/storage/scratch-root.d.ts",
+      "bun": "./src/storage/scratch-root.ts",
+      "import": "./dist/src/storage/scratch-root.js"
+    },
     "./storage/secure-store.js": {
       "types": "./dist/src/storage/secure-store.d.ts",
       "bun": "./src/storage/secure-store.ts",

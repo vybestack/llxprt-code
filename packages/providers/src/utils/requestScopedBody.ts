@@ -16,17 +16,10 @@
 
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { collectContents } from './collectContents.js';
-import {
-  closeSync,
-  mkdtempSync,
-  openSync,
-  readSync,
-  rmSync,
-  writeSync,
-} from 'node:fs';
-import { tmpdir } from 'node:os';
+import { closeSync, openSync, readSync, rmSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
 import { deserialize, serialize } from 'node:v8';
+import { createScratchDirSync } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 /** Any object graph handed to a provider SDK as a request body. */
 type BodyGraph = Record<string, unknown>;
@@ -192,7 +185,7 @@ class ProgressiveRequestContents implements RequestScopedContents {
 
   private ensureStorage(): { root: string; path: string; fd: number } {
     if (this.storage !== undefined) return this.storage;
-    const root = mkdtempSync(join(tmpdir(), 'responses-request-snapshot-'));
+    const root = createScratchDirSync('responses-request-snapshot-');
     const path = join(root, 'rows');
     try {
       this.storage = { root, path, fd: openSync(path, 'w+', 0o600) };

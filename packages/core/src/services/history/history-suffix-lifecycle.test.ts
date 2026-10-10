@@ -1,24 +1,24 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import * as fs from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 import { HistoryJournalStore } from './historyJournalStore.js';
 import { rowIndex } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { withCoreSuffixFixture } from './core-suffix-fixture-test-helpers.js';
+import { getScratchRoot } from '../../storage/scratch-root.js';
 
 type Query = 'recent' | 'tokens';
 type Exit = 'return' | 'break' | 'throw' | 'abort';
 
 function scratchDirectories(): string[] {
   return fs
-    .readdirSync(tmpdir())
+    .readdirSync(getScratchRoot())
     .filter((name) =>
       /llxprt-(row-directory|resolver|density-index)-/.test(name),
     )
-    .map((name) => join(tmpdir(), name));
+    .map((name) => join(getScratchRoot(), name));
 }
 
 function queryStream(

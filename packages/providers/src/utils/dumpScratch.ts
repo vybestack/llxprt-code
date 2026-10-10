@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
+import { createScratchDirSync } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 export class DumpScratch<T> {
   private readonly root: string;
@@ -9,7 +9,7 @@ export class DumpScratch<T> {
   private readonly index: number;
 
   constructor() {
-    this.root = fs.mkdtempSync(path.join(os.tmpdir(), 'llxprt-dump-scratch-'));
+    this.root = createScratchDirSync('llxprt-dump-scratch-');
     let data: number | undefined;
     try {
       data = fs.openSync(path.join(this.root, 'data'), 'wx+', 0o600);

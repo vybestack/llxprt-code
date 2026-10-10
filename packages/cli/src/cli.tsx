@@ -70,6 +70,7 @@ import {
 } from './utils/cleanup.js';
 import { runZedIntegration } from '@vybestack/llxprt-code-zed-acp';
 import { cleanupExpiredSessions } from './utils/sessionCleanup.js';
+import { sweepDeadScratchRoots } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import { existsSync, mkdirSync } from 'fs';
 import { firstNonEmptyString } from './utils/coalesce.js';
 import {
@@ -164,6 +165,9 @@ function setupProcessLifecycle(): () => void {
   if (!existsSync(llxprtDir)) {
     mkdirSync(llxprtDir, { recursive: true });
   }
+  // Reclaim disk scratch left by processes that were killed before their exit
+  // hook could remove it; this process's own root is removed on exit.
+  sweepDeadScratchRoots();
   return cleanupStdio;
 }
 

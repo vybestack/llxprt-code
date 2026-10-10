@@ -1,11 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, vi } from 'bun:test';
 import * as fs from 'node:fs';
-import { tmpdir } from 'node:os';
 import {
   withRollbackFixture,
   rollbackRow,
 } from './chronology-rollback-test-helpers.js';
+import { getScratchRoot } from '../../storage/scratch-root.js';
 
 describe('fallback restore candidate storage', () => {
   it.each(['rows', 'index'])(
@@ -18,7 +18,7 @@ describe('fallback restore candidate storage', () => {
         await recorder.flush();
         await history.withRawHistorySnapshot(async (snapshot) => {
           await history.replaceAll([rollbackRow(1)]);
-          const before = fs.readdirSync(tmpdir());
+          const before = fs.readdirSync(getScratchRoot());
           const original = fs.openSync;
           const open = vi
             .spyOn(fs, 'openSync')
@@ -43,7 +43,7 @@ describe('fallback restore candidate storage', () => {
           expect(blocks).toStrictEqual([rollbackRow(1).blocks]);
           expect(
             fs
-              .readdirSync(tmpdir())
+              .readdirSync(getScratchRoot())
               .filter(
                 (name) =>
                   name.startsWith('history-density-') && !before.includes(name),

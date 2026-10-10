@@ -1,12 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { spyOn } from 'bun:test';
 import * as fs from 'node:fs';
-import { tmpdir } from 'node:os';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { serializeResponsesPromptEnvelope } from './responses-source-serializer.js';
+import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 const fifo = process.argv[2];
-const before = new Set(fs.readdirSync(tmpdir()));
+const before = new Set(fs.readdirSync(getScratchRoot()));
 const controller = new AbortController();
 const reason = new Error('abort queued during a synchronous disk write');
 setImmediate(() => {
@@ -55,6 +55,8 @@ fs.writeFileSync(
   JSON.stringify({
     outcome,
     cleanup,
-    leaked: fs.readdirSync(tmpdir()).filter((name) => !before.has(name)),
+    leaked: fs
+      .readdirSync(getScratchRoot())
+      .filter((name) => !before.has(name)),
   }),
 );

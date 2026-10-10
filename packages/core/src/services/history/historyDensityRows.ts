@@ -1,18 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import {
-  closeSync,
-  mkdtempSync,
-  openSync,
-  readSync,
-  rmSync,
-  writeSync,
-} from 'node:fs';
-import { tmpdir } from 'node:os';
+import { closeSync, openSync, readSync, rmSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
 import type { IContent } from './IContent.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 import { isSpeakerContent } from './historyJournalGuards.js';
 import { sanitizeProviderContentForSerialization } from './historyCloneUtils.js';
+import { createScratchDirSync } from '../../storage/scratch-root.js';
 
 export class HistoryDensityRows implements Iterable<IContent> {
   private readonly root: string;
@@ -23,7 +16,7 @@ export class HistoryDensityRows implements Iterable<IContent> {
   private closed = false;
 
   constructor(private readonly ownership?: RowOwnership) {
-    this.root = mkdtempSync(join(tmpdir(), 'history-density-'));
+    this.root = createScratchDirSync('history-density-');
     let rows: number | undefined;
     let index: number | undefined;
     try {

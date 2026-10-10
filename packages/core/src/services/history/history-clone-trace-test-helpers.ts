@@ -3,12 +3,12 @@ import { existsSync, readdirSync } from 'node:fs';
 import { isDeepStrictEqual } from 'node:util';
 import { buildChronologyTrace } from './historyChronology.js';
 import { sanitizeProviderHistoryForSerialization } from './historyCloneUtils.js';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { withCoreSuffixFixture } from './core-suffix-fixture-test-helpers.js';
+import { getScratchRoot } from '../../storage/scratch-root.js';
 
 export type Query = 'clone' | 'trace';
 export function journalShapeRow(index: number, payloadBytes: number): IContent {
@@ -49,11 +49,11 @@ export function queryStream(
   return query === 'clone' ? service.clone() : service.getChronologyTrace();
 }
 export function scratchDirectories(): string[] {
-  return readdirSync(tmpdir())
+  return readdirSync(getScratchRoot())
     .filter((name) =>
       /llxprt-(row-directory|resolver|density-index)-/.test(name),
     )
-    .map((name) => join(tmpdir(), name));
+    .map((name) => join(getScratchRoot(), name));
 }
 export function mixedRow(): IContent {
   const shared = { nested: ['input'] };

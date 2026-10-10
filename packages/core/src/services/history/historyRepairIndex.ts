@@ -1,14 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createHash } from 'node:crypto';
-import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { createScratchDirSync } from '../../storage/scratch-root.js';
 
 /** Membership and insertion anchors stay on disk, including duplicate call IDs. */
 export class HistoryRepairIndex {
-  private readonly directory = mkdtempSync(
-    join(tmpdir(), 'history-repair-index-'),
-  );
+  private readonly directory = createScratchDirSync('history-repair-index-');
 
   private path(kind: string, id: string): string {
     return join(

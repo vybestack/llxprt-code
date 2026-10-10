@@ -1,11 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { existsSync, readdirSync, statSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { requestScopedContents } from '../utils/requestScopedBody.js';
 import { serializeResponsesPromptEnvelope } from './responses-source-serializer.js';
+import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 const context = {
   includeReasoningInContext: false,
@@ -35,13 +35,13 @@ async function checkpoint<T>(promise: Promise<T>): Promise<T | 'pending'> {
 }
 
 function workspace(before: ReadonlySet<string>): string[] {
-  return readdirSync(tmpdir())
+  return readdirSync(getScratchRoot())
     .filter((name) => !before.has(name))
-    .map((name) => join(tmpdir(), name));
+    .map((name) => join(getScratchRoot(), name));
 }
 
 async function blockedSerialization(failure?: Error): Promise<number> {
-  const before = new Set(readdirSync(tmpdir()));
+  const before = new Set(readdirSync(getScratchRoot()));
   const started = gate();
   const blocked = gate();
   const controller = new AbortController();
@@ -223,7 +223,7 @@ describe('Responses external source cleanup failure', () => {
 
 describe('Responses delayed iterator-return cleanup', () => {
   it('returns the source only after its pending pull settles and waits for return settlement', async () => {
-    const before = new Set(readdirSync(tmpdir()));
+    const before = new Set(readdirSync(getScratchRoot()));
     const nextStarted = gate();
     const unblockNext = gate();
     const returnStarted = gate();
@@ -283,7 +283,7 @@ describe('Responses delayed iterator-return cleanup', () => {
 
 describe('Responses stateful cancellation ownership', () => {
   it('cleans the sealed base and blocked incremental workspace after manual unblock', async () => {
-    const before = new Set(readdirSync(tmpdir()));
+    const before = new Set(readdirSync(getScratchRoot()));
     const started = gate();
     const blocked = gate();
     const controller = new AbortController();

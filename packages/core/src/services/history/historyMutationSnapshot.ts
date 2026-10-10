@@ -1,13 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import {
-  closeSync,
-  mkdtempSync,
-  openSync,
-  readSync,
-  rmSync,
-  writeSync,
-} from 'node:fs';
-import { tmpdir } from 'node:os';
+import { closeSync, openSync, readSync, rmSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
 import type { IContent, ChronologyMarker } from './IContent.js';
 import { setImmediate } from 'node:timers/promises';
@@ -19,6 +11,7 @@ import {
   type PendingRowFold,
 } from '../../recording/pendingRowFold.js';
 import type { JournalReadCounters } from '../../recording/journalCounters.js';
+import { createScratchDirSync } from '../../storage/scratch-root.js';
 
 export interface HistoryIndexedRows extends Iterable<IContent> {
   readonly length: number;
@@ -131,7 +124,7 @@ export class HistoryMutationSnapshot implements Iterable<IContent> {
     readonly durableTail: number,
     private readonly transactionOwnership?: RowOwnership,
   ) {
-    this.root = mkdtempSync(join(tmpdir(), 'history-mutation-'));
+    this.root = createScratchDirSync('history-mutation-');
     let rows: number | undefined;
     try {
       rows = openSync(join(this.root, 'rows'), 'w+');

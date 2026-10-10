@@ -3,20 +3,19 @@ import {
   closeSync,
   existsSync,
   mkdirSync,
-  mkdtempSync,
   openSync,
   renameSync,
   rmdirSync,
   unlinkSync,
   writeSync,
 } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readFailureDetails } from './recording-failure-reader.js';
 import {
   recordingFailureDetails,
   type RecordingFailureDetail,
 } from './recording-failure-descriptor.js';
+import { createScratchDirSync } from '../storage/scratch-root.js';
 export type { RecordingFailureDetail } from './recording-failure-descriptor.js';
 
 function weakCause(value: unknown): WeakRef<object> | undefined {
@@ -232,7 +231,7 @@ export class RecordingFailureStore {
     let temporary: string | undefined;
     try {
       this.directory ??=
-        this.root ?? mkdtempSync(join(tmpdir(), 'llxprt-recording-failures-'));
+        this.root ?? createScratchDirSync('llxprt-recording-failures-');
       mkdirSync(this.directory, { recursive: true, mode: 0o700 });
       const file = join(this.directory, `${generation}.jsonl`);
       temporary = `${file}.tmp`;

@@ -2,14 +2,13 @@
 import {
   closeSync,
   ftruncateSync,
-  mkdtempSync,
   openSync,
   readSync,
   rmSync,
   writeSync,
 } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createScratchDirSync } from '../storage/scratch-root.js';
 
 export interface ValueTicketReader<T> {
   readonly length: number;
@@ -126,7 +125,7 @@ export class SynchronousValueSpool<T> {
 
   private ensureStorage(): NonNullable<SynchronousValueSpool<T>['storage']> {
     if (this.storage !== undefined) return this.storage;
-    const root = mkdtempSync(join(tmpdir(), 'history-value-ticket-'));
+    const root = createScratchDirSync('history-value-ticket-');
     let values: number | undefined;
     try {
       values = openSync(join(root, 'values'), 'w+');

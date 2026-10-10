@@ -1,7 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import * as fs from 'node:fs';
-import { tmpdir } from 'node:os';
 import {
   withValueTransformFixture,
   transformProbes,
@@ -22,6 +21,7 @@ import {
   prepareValueRoute,
   type ValueRoute,
 } from './purge-ranking-value-helpers.js';
+import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 async function observeFailure(
   route: ValueRoute,
@@ -41,7 +41,7 @@ async function observeFailure(
     expect(history.getContextRange()).toStrictEqual(range);
     const prepared = await prepareValueRoute(history, route, size, owners);
     const failure = new Error(`external ${kind} failure`);
-    const scratch = fs.readdirSync(tmpdir());
+    const scratch = fs.readdirSync(getScratchRoot());
     let restore = (): void => {};
     let result: unknown;
     try {
@@ -75,7 +75,7 @@ async function observeFailure(
     );
     expect(
       fs
-        .readdirSync(tmpdir())
+        .readdirSync(getScratchRoot())
         .filter(
           (name) =>
             /^(history-detached-|history-density-|tool-response-ranking-)/.test(

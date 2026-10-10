@@ -2,7 +2,6 @@
 import { describe, expect, it } from 'bun:test';
 import { heapSize } from 'bun:jsc';
 import { readdirSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
@@ -25,6 +24,7 @@ import {
   projectionWireOracle,
   rowCount,
 } from './__tests__/support/projection-ownership-fixture.js';
+import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 type Setup = Awaited<ReturnType<typeof projectionRuntime>>;
 type Disk = ReturnType<typeof projectionDiskRows>;
@@ -337,12 +337,12 @@ describe('actual Responses projection disk ownership', () => {
   it('removes its request snapshot workspace when an unused actual projection is released', async () => {
     const disk = projectionDiskRows(false, false);
     const setup = await projectionRuntime('http://127.0.0.1:1/v1', disk.root);
-    const before = new Set(readdirSync(tmpdir()));
+    const before = new Set(readdirSync(getScratchRoot()));
     try {
       const prepared = await prepareMeasuredLease(setup, disk);
       await prepared.releaseIfUnsent?.();
       expect(activeRequestBodyCount()).toBe(0);
-      const abandoned = readdirSync(tmpdir()).filter(
+      const abandoned = readdirSync(getScratchRoot()).filter(
         (name) =>
           name.startsWith('responses-request-snapshot-') && !before.has(name),
       );

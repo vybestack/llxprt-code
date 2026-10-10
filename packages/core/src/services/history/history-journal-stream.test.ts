@@ -10,6 +10,7 @@ import { SessionRecordingService } from '../../recording/SessionRecordingService
 import type { RecordingWriterIo } from '../../recording/types.js';
 import type { IContent } from './IContent.js';
 import { HistoryJournalStore } from './historyJournalStore.js';
+import { getScratchRoot } from '../../storage/scratch-root.js';
 
 function row(id: number, text = `row-${id}`): IContent {
   return {
@@ -232,11 +233,11 @@ describe('HistoryJournalStore live row stream snapshot timing', () => {
       try {
         const before = store.streamRows()[Symbol.asyncIterator]();
         const scratchBefore = fs
-          .readdirSync(os.tmpdir())
+          .readdirSync(getScratchRoot())
           .filter((entry) => entry.startsWith('llxprt-row-directory-')).length;
         await before.return?.();
         const scratchAfter = fs
-          .readdirSync(os.tmpdir())
+          .readdirSync(getScratchRoot())
           .filter((entry) => entry.startsWith('llxprt-row-directory-')).length;
         expect(scratchAfter).toBe(scratchBefore);
 

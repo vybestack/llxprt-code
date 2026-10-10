@@ -1,11 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { mkdtempSync, rmSync } from 'node:fs';
 import { ProviderNormalizationStorage } from './provider-normalization-storage.js';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
 import type { IContent } from './IContent.js';
 import { isSpeakerContent } from './historyJournalGuards.js';
+import { getScratchRoot } from '../../storage/scratch-root.js';
 
 const pointerSchema = z.object({
   row: z.number().int().nonnegative(),
@@ -18,7 +18,7 @@ export class ProviderNormalizationDisk {
   private readonly storage: ProviderNormalizationStorage;
   private semanticBoundaryIdentity: object | undefined;
 
-  constructor(root = tmpdir()) {
+  constructor(root = getScratchRoot()) {
     this.directory = mkdtempSync(join(root, 'provider-normalization-'));
     try {
       this.storage = new ProviderNormalizationStorage(this.directory);

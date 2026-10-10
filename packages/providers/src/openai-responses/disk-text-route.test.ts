@@ -1,7 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { existsSync, readdirSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { requestSelection } from './__tests__/support/request-selection.js';
 import { withGpt56DiskSources } from '../tokenizers/gpt56-disk-tokenizer-factory.js';
@@ -14,6 +13,7 @@ import {
   diskTextFixture as projectionDiskRows,
   diskTextWireOracle as projectionWireOracle,
 } from './__tests__/support/disk-text-fixture.js';
+import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 async function gcRows(): Promise<void> {
   for (let index = 0; index < 8; index++) {
@@ -26,7 +26,7 @@ describe('explicit actual provider disk text route', () => {
   it('seals the actual finalized projection without retaining rows or strings and releases an unsent token', async () => {
     const disk = projectionDiskRows(false, false);
     const setup = await projectionRuntime('http://127.0.0.1:1/v1', disk.root);
-    const before = new Set(readdirSync(tmpdir()));
+    const before = new Set(readdirSync(getScratchRoot()));
     try {
       const rows = requestSelection(disk.rows);
       const projection = await setup.provider.projectPromptEnvelope({
@@ -43,7 +43,7 @@ describe('explicit actual provider disk text route', () => {
       ).toHaveLength(0);
       await projection.releaseIfUnsent?.();
       expect(
-        readdirSync(tmpdir()).filter(
+        readdirSync(getScratchRoot()).filter(
           (name) =>
             name.startsWith('responses-prompt-keys-') && !before.has(name),
         ),
@@ -137,7 +137,7 @@ describe('actual source pinned estimate', () => {
       const estimate = await estimatePromptEnvelope(
         setup.provider.name,
         projection,
-        withGpt56DiskSources(setup.factory, tmpdir()),
+        withGpt56DiskSources(setup.factory, getScratchRoot()),
       );
       expect(estimate).toStrictEqual(oracle);
     } finally {

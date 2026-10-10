@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { tmpdir } from 'node:os';
 import type {
   RuntimeTokenizer,
   RuntimeTokenizerFactory,
@@ -34,6 +33,7 @@ import {
   OFFICIAL_PROMPT_ESTIMATOR_REGISTRATIONS,
   createOfficialRuntimeTokenizer,
 } from '../tokenizers/official/index.js';
+import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 class RuntimeTokenizerAdapter implements RuntimeTokenizer {
   constructor(
@@ -176,5 +176,5 @@ export function createRuntimeTokenizerFactory(
   };
   // Sends project a sealed disk owner rather than a context-sized string, so
   // the production factory itself must estimate disk sources for every family.
-  return withGpt56DiskSources(registryFactory, tmpdir());
+  return withGpt56DiskSources(registryFactory, getScratchRoot());
 }

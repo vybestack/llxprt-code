@@ -1,7 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import * as fs from 'node:fs';
-import { tmpdir } from 'node:os';
 import {
   withValueTransformFixture,
   transformProbes,
@@ -20,6 +19,7 @@ import {
 } from './truncation-value-helpers.js';
 
 import { highdensitySetup } from './highdensity-disk-helpers.js';
+import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 async function fault(
   size: number,
@@ -32,7 +32,7 @@ async function fault(
       probedTransformInput(size, truncationValueRow, owners, probes),
     );
     const expected = await detachedDigest(truncationValues(size));
-    const scratch = fs.readdirSync(tmpdir());
+    const scratch = fs.readdirSync(getScratchRoot());
     const failure =
       kind === 'cancel'
         ? new DOMException('cancelled checkpoint source', 'AbortError')
@@ -72,7 +72,7 @@ async function fault(
     );
     expect(
       fs
-        .readdirSync(tmpdir())
+        .readdirSync(getScratchRoot())
         .filter(
           (name) =>
             /^(history-detached-|history-density-)/.test(name) &&

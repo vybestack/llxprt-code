@@ -1,11 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { createReadStream, mkdtempSync, rmSync } from 'node:fs';
+import { createReadStream, rmSync } from 'node:fs';
 import { open, type FileHandle } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { IContent } from '../services/history/IContent.js';
 import { foldDurableRows } from './durableRowFold.js';
 import type { SessionRecordLine } from './types.js';
+import { createScratchDirSync } from '../storage/scratch-root.js';
 async function* streamFile(
   file: string,
   isClosed: () => boolean,
@@ -83,7 +83,7 @@ export async function validatePurgeRecordingForLiveFold(
   signal?.throwIfAborted();
   if (options.requireLiveFold !== true) return;
   const { staged, json: prefix, suffix, bytes } = record;
-  const directory = mkdtempSync(join(tmpdir(), 'llxprt-purge-preflight-'));
+  const directory = createScratchDirSync('llxprt-purge-preflight-');
   const file = join(directory, 'event.jsonl');
   try {
     const writer = await open(file, 'wx');
@@ -152,7 +152,7 @@ export async function stagePurgeRecordingRows(
   signal?: AbortSignal,
 ): Promise<StagedPurgeRecording> {
   signal?.throwIfAborted();
-  const directory = mkdtempSync(join(tmpdir(), 'llxprt-purge-recording-'));
+  const directory = createScratchDirSync('llxprt-purge-recording-');
   const file = join(directory, 'rows.json');
   let closed = false;
   const close = (): void => {

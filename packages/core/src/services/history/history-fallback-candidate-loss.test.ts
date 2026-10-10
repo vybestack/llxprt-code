@@ -1,13 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { readdirSync, truncateSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   withRollbackFixture,
   rollbackRow,
   exactTokenizer,
 } from './chronology-rollback-test-helpers.js';
+import { getScratchRoot } from '../../storage/scratch-root.js';
 
 describe('fallback candidate loss', () => {
   it('rejects a lost restore candidate without publishing a partial history', async () => {
@@ -19,17 +19,17 @@ describe('fallback candidate loss', () => {
       await recorder.flush();
       await history.withRawHistorySnapshot(async (snapshot) => {
         await history.replaceAll([rollbackRow(2)]);
-        const before = readdirSync(tmpdir());
+        const before = readdirSync(getScratchRoot());
         let damaged = false;
         history.setTokenizerFactory(
           exactTokenizer(() => {
             if (damaged) return;
-            const root = readdirSync(tmpdir()).find(
+            const root = readdirSync(getScratchRoot()).find(
               (name) =>
                 name.startsWith('history-density-') && !before.includes(name),
             );
             if (root === undefined) throw new Error('Missing active candidate');
-            truncateSync(join(tmpdir(), root, 'index'), 0);
+            truncateSync(join(getScratchRoot(), root, 'index'), 0);
             damaged = true;
           }),
         );
@@ -41,7 +41,7 @@ describe('fallback candidate loss', () => {
           blocks.push(row.blocks);
         expect(blocks).toStrictEqual([rollbackRow(2).blocks]);
         expect(
-          readdirSync(tmpdir()).filter(
+          readdirSync(getScratchRoot()).filter(
             (name) =>
               name.startsWith('history-density-') && !before.includes(name),
           ),

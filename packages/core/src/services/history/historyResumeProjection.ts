@@ -1,12 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { mkdtemp, open, rm } from 'node:fs/promises';
+import { open, rm } from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { field } from '../../recording/resolverProjection.js';
 import { parseChronologyBinding } from '../../recording/chronologyBinding.js';
 import type { SessionRecordingService } from '../../recording/SessionRecordingService.js';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { IContent } from './IContent.js';
 import type { ResumeCursorBoot } from '../../recording/resumeCursorBoot.js';
@@ -15,6 +14,7 @@ import {
   type ResolvedEntry,
 } from '../../recording/journalResolver.js';
 import type { CommitWatermark } from '../../recording/types.js';
+import { createScratchDir } from '../../storage/scratch-root.js';
 
 export interface ResumeProjection {
   readonly directory: string;
@@ -35,7 +35,7 @@ export async function writeResumeProjection(
   visit: (row: IContent) => Promise<void>,
   observation?: ProjectionWriteObservation,
 ): Promise<ResumeProjection> {
-  const directory = await mkdtemp(join(tmpdir(), 'history-projection-'));
+  const directory = await createScratchDir('history-projection-');
   const filePath = join(directory, 'projection.jsonl');
   try {
     const file = await open(filePath, 'wx');

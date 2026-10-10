@@ -1,17 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import {
-  closeSync,
-  mkdtempSync,
-  openSync,
-  readSync,
-  rmSync,
-  writeSync,
-} from 'node:fs';
-import { tmpdir } from 'node:os';
+import { closeSync, openSync, readSync, rmSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
 import type { IContent, ChronologyMarker } from './IContent.js';
 import { isRecord, isSpeakerContent } from './historyJournalGuards.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
+import { createScratchDirSync } from '../../storage/scratch-root.js';
 
 function isMarker(value: unknown): value is ChronologyMarker {
   if (!isRecord(value)) return false;
@@ -39,7 +32,7 @@ export class DetachedHistoryJournal implements Iterable<IContent> {
   private closed = false;
 
   constructor(private readonly ownership?: RowOwnership) {
-    this.root = mkdtempSync(join(tmpdir(), 'history-detached-'));
+    this.root = createScratchDirSync('history-detached-');
     const opened: number[] = [];
     try {
       this.rows = openSync(join(this.root, 'rows'), 'w+');

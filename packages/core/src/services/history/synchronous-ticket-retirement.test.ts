@@ -1,12 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { readdirSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { withSynchronousFixture } from './synchronous-ticket-test-helpers.js';
 import { batchRow } from './addbatch-stream-test-helpers.js';
+import { getScratchRoot } from '../../storage/scratch-root.js';
 
 function ticketFiles(): string[] {
-  return readdirSync(tmpdir())
+  return readdirSync(getScratchRoot())
     .filter((name) => name.startsWith('history-value-ticket-'))
     .sort();
 }

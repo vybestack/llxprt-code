@@ -1,10 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
 import type { ToolCallBlock } from './IContent.js';
+import { getScratchRoot } from '../../storage/scratch-root.js';
 
 const callSchema = z
   .object({
@@ -32,7 +32,7 @@ export class ToolPairingIndex {
   private readonly directory: string;
   private count = 0;
 
-  constructor(root = tmpdir()) {
+  constructor(root = getScratchRoot()) {
     this.directory = mkdtempSync(join(root, 'llxprt-tool-pairing-'));
   }
 

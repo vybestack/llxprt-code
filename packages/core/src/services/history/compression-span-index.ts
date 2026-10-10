@@ -1,13 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getScratchRoot } from '../../storage/scratch-root.js';
 
 export class CompressionSpanIndex {
   private readonly directory: string;
 
-  constructor(root = tmpdir()) {
+  constructor(root = getScratchRoot()) {
     this.directory = mkdtempSync(join(root, 'compression-span-'));
   }
 

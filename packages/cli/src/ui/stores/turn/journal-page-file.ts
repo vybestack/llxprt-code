@@ -8,11 +8,11 @@ import {
   rmSync,
   writeSync,
 } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
 import type { JournalEntry } from '@vybestack/llxprt-code-core';
 import type { HistoryItem } from '../../types.js';
+import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 export type DisplayJournalEntry =
   | Extract<JournalEntry, { kind: 'boundary' }>
@@ -40,7 +40,7 @@ export class JournalPageFile {
   private closed = false;
   private readonly buffer = Buffer.alloc(WIDTH);
 
-  constructor(temporaryRoot = tmpdir()) {
+  constructor(temporaryRoot = getScratchRoot()) {
     this.directory = mkdtempSync(join(temporaryRoot, 'llxprt-display-pages-'));
     this.data = openSync(join(this.directory, 'data'), 'wx+', 0o600);
     try {

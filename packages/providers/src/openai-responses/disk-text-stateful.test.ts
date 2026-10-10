@@ -1,7 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { readdirSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import type {
   IContent,
   UsageStats,
@@ -11,6 +10,7 @@ import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runt
 import type { GenerateChatOptions } from '../IProvider.js';
 import { requestSelection } from './__tests__/support/request-selection.js';
 import { projectionRuntime } from './__tests__/support/projection-ownership-fixture.js';
+import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 const completed =
   'data: {"type":"response.output_text.delta","delta":"ok"}\n\n' +
@@ -164,7 +164,7 @@ async function send(
 
 function tmpPromptDirs(): Set<string> {
   return new Set(
-    readdirSync(tmpdir()).filter((name) =>
+    readdirSync(getScratchRoot()).filter((name) =>
       name.startsWith('responses-prompt-keys-'),
     ),
   );

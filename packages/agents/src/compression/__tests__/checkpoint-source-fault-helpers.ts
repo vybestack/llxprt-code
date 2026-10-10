@@ -1,7 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { spyOn } from 'bun:test';
 import { readdirSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { HistoryIndexedRows } from '@vybestack/llxprt-code-core/services/history/historyMutationSnapshot.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -10,6 +9,7 @@ import type { SessionRecordingService } from '@vybestack/llxprt-code-core/record
 import { JournalResolver } from '@vybestack/llxprt-code-core/recording/journalResolver.js';
 import { detachedDigest } from '@vybestack/llxprt-code-core/services/history/detached-rollback-test-helpers.js';
 import { expectedRange } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-test-helpers.js';
+import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 export function checkpointSourceFault(
   history: HistoryService,
@@ -63,7 +63,7 @@ export function checkpointSourceFault(
 }
 
 export function checkpointScratch(): string[] {
-  return readdirSync(tmpdir()).filter((name) =>
+  return readdirSync(getScratchRoot()).filter((name) =>
     /^(history-detached-|history-density-)/.test(name),
   );
 }

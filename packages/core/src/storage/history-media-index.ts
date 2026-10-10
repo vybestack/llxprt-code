@@ -7,7 +7,6 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import {
@@ -15,11 +14,12 @@ import {
   type MediaReferenceBlock,
 } from '../services/history/IContent.js';
 import type { RowOwnership } from '../recording/rowOwnership.js';
+import { getScratchRoot } from './scratch-root.js';
 
 export class HistoryMediaIndex {
   private directory: string | undefined;
 
-  constructor(private readonly rootDirectory = tmpdir()) {}
+  constructor(private readonly rootDirectory = getScratchRoot()) {}
 
   private path(contentId: string): string | undefined {
     return this.directory === undefined

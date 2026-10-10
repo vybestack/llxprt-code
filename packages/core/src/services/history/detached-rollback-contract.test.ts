@@ -1,7 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { readdirSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import {
   mediaParticipant,
   rejectedValue,
@@ -15,9 +14,10 @@ import {
   detachedRows,
   withDetachedFixture,
 } from './detached-rollback-test-helpers.js';
+import { getScratchRoot } from '../../storage/scratch-root.js';
 
 function scratch(): string[] {
-  return readdirSync(tmpdir()).filter((name) =>
+  return readdirSync(getScratchRoot()).filter((name) =>
     name.startsWith('history-detached-'),
   );
 }
