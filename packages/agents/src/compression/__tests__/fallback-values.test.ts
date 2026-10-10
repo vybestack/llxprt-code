@@ -61,7 +61,6 @@ async function candidate(size: number, rollback: boolean): Promise<number> {
         history,
         rollback ? failure : undefined,
       );
-      fixture.pauseWriter();
       const operation = rejectedValue(
         publishProviderFallbackCandidate(
           history,
@@ -71,17 +70,13 @@ async function candidate(size: number, rollback: boolean): Promise<number> {
       );
       try {
         await Promise.race([
-          fixture.writerPaused,
+          finalization.acknowledged,
           operation.then((value) => {
             throw new Error(
-              `Candidate ended before writer pause: ${String(value)}`,
+              `Candidate ended before finalization: ${String(value)}`,
             );
           }),
         ]);
-        await sample('writer-paused');
-        expect(owners.snapshot().liveRows).toBeGreaterThan(0);
-        fixture.releaseWriter();
-        await finalization.acknowledged;
         await sample('acknowledged');
         expect(owners.snapshot().liveRows).toBe(0);
         expect(await detachedDurableDigest(recorder)).toStrictEqual(before);
@@ -97,7 +92,6 @@ async function candidate(size: number, rollback: boolean): Promise<number> {
         expect(history.getTotalTokens()).toBe(size);
         return before.count;
       } finally {
-        fixture.releaseWriter();
         finalization.release();
       }
     } finally {

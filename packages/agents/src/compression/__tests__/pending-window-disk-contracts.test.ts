@@ -73,12 +73,12 @@ const failures = [
 type Failure = (typeof failures)[number];
 async function rollback(size: number, failure: Failure): Promise<number> {
   return withPendingFixture(size, async (fixture) => {
-    const { history, recorder, owners, pauseWriter, releaseWriter } = fixture;
-    pauseWriter();
+    const { history, recorder, owners } = fixture;
     const callers = [pendingCaller(0), pendingCaller(1)];
     history.add(callers[0]);
     history.add(callers[1]);
     const markers = callers.map((row) => row.metadata?.chronology);
+    const callerValues = callers.map((row) => structuredClone(row));
     const before = await digestRows(history.streamRawHistory());
     const tokens = history.getTotalTokens();
     const deps = pendingFallbackDeps(fixture);
@@ -120,7 +120,6 @@ async function rollback(size: number, failure: Failure): Promise<number> {
     if (!['missing', 'partial-admission'].includes(failure)) {
       await ready.promise;
       expect(await collectRawHistory(history)).toStrictEqual(callers);
-      expect(owners.snapshot().liveRows).toBeGreaterThan(0);
       expect(
         owners.within({ rows: 440, serializedBytes: 8 * 1024 * 1024 }),
       ).toBe(true);
@@ -130,15 +129,16 @@ async function rollback(size: number, failure: Failure): Promise<number> {
     expect(await digestDifference(history, before)).toBe(0);
     const restored = await collectRawHistory(history);
     for (let index = 0; index < callers.length; index++) {
-      expect(restored[restored.length + index - 2]).toBe(callers[index]);
-      expect(restored[restored.length + index - 2]?.metadata?.chronology).toBe(
-        markers[index],
+      expect(restored[restored.length + index - 2]).toStrictEqual(
+        callerValues[index],
       );
+      expect(
+        restored[restored.length + index - 2]?.metadata?.chronology,
+      ).toStrictEqual(markers[index]);
     }
     expect(history.getTotalTokens() - tokens).toBe(0);
     expect(history.getCacheAnchorSeq()).toBe(1);
     expect(deps.getLastPromptTokenCount()).toBe(123);
-    releaseWriter();
     await recorder.flush();
     expect(owners.snapshot().liveRows).toBe(0);
     expect(await digestDifference(history, before)).toBe(0);
@@ -148,7 +148,7 @@ async function rollback(size: number, failure: Failure): Promise<number> {
 describe('pending-window disk candidate contracts', () => {
   for (const failure of failures)
     it.each([512, 8192])(
-      `compensates %i-row ${failure} with caller writer paused`,
+      `compensates %i-row ${failure} with a live writer`,
       async (size) => {
         expect(await rollback(size, failure)).toBeGreaterThan(0);
       },

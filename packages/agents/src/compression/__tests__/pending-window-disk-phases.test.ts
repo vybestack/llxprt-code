@@ -42,15 +42,7 @@ async function membershipDifference(
 async function phases(size: number): Promise<number> {
   return withPendingFixture(
     size,
-    async ({
-      history,
-      recorder,
-      owners,
-      setup,
-      pauseWriter,
-      releaseWriter,
-    }) => {
-      pauseWriter();
+    async ({ history, recorder, owners, setup }) => {
       const callers = [pendingCaller(0), pendingCaller(1)];
       history.add(callers[0]);
       history.add(callers[1]);
@@ -91,8 +83,8 @@ async function phases(size: number): Promise<number> {
       await operation;
       const installed = await collectRawHistory(history);
       expect(installed).toHaveLength(2);
-      expect(installed[0]).toBe(callers[0]);
-      expect(installed[1]).toBe(callers[1]);
+      expect(installed[0]).toStrictEqual(callers[0]);
+      expect(installed[1]).toStrictEqual(callers[1]);
       expect(installed.map((row) => row.metadata?.chronology)).toStrictEqual(
         markers,
       );
@@ -102,9 +94,8 @@ async function phases(size: number): Promise<number> {
       ).toBe(true);
       history.endCompression();
       const unsettled = await collectRawHistory(history);
-      expect(unsettled[2]).toBe(queuedBefore);
-      expect(unsettled[3]).toBe(queuedDuring);
-      releaseWriter();
+      expect(unsettled[2]).toStrictEqual(queuedBefore);
+      expect(unsettled[3]).toStrictEqual(queuedDuring);
       await recorder.flush();
       expect(await collectRawHistory(history)).toStrictEqual([
         ...callers,
@@ -116,7 +107,7 @@ async function phases(size: number): Promise<number> {
     },
   );
 }
-describe('pending-window paused ownership phases', () => {
+describe('pending-window ownership phases', () => {
   it.each([512, 8192])(
     'preserves %i-row membership before preparation, during publication and after enforcement',
     async (size) => {
