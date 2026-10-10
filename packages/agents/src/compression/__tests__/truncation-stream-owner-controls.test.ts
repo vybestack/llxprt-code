@@ -2,7 +2,8 @@
 import { describe, expect, it } from 'bun:test';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { HistoryDumpSnapshot } from '@vybestack/llxprt-code-core/services/history/historyDumpSnapshot.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { HistoryIndexedRows } from '@vybestack/llxprt-code-core/services/history/historyMutationSnapshot.js';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import {
   TruncationStreamHistory,
@@ -16,19 +17,37 @@ class RetainingHistory extends TruncationStreamHistory {
   readonly originalOwners = new RowOwnership();
   readonly copyOwners = new RowOwnership();
 
-  override async openDumpSnapshot(): Promise<HistoryDumpSnapshot> {
-    const snapshot = await super.openDumpSnapshot();
-    const originalOwners = this.originalOwners;
-    const copyOwners = this.copyOwners;
-    const retained = this.retained;
-    const copied = this.copied;
+  constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {
+    super(options);
+    // Truncation reads its previous rows through the detached checkpoint, so the
+    // control wraps the checkpoint iterator and keeps every row of the first pass.
+    const detached = this.detachedValues;
+    const withCheckpoint = detached.withCheckpoint.bind(detached);
+    Object.defineProperty(this, 'detachedValues', {
+      value: {
+        ...detached,
+        withCheckpoint: <T>(
+          execute: (checkpoint: HistoryIndexedRows) => Promise<T>,
+          signal?: AbortSignal,
+        ) =>
+          withCheckpoint(
+            (checkpoint) => execute(this.retainingRows(checkpoint)),
+            signal,
+          ),
+      },
+    });
+  }
+
+  private retainingRows(checkpoint: HistoryIndexedRows): HistoryIndexedRows {
     let retainedOnce = false;
+    const { originalOwners, copyOwners, retained, copied } = this;
     return {
-      ...snapshot,
-      async *rows() {
+      length: checkpoint.length,
+      readRow: (index) => checkpoint.readRow(index),
+      *[Symbol.iterator]() {
         const retain = !retainedOnce;
         retainedOnce = true;
-        for await (const row of snapshot.rows()) {
+        for (const row of checkpoint) {
           if (retain) {
             const copy = { ...row, blocks: [...row.blocks] };
             originalOwners.retain(row);

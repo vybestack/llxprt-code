@@ -121,6 +121,13 @@ async function readReceipt(
 try {
   await send('warm-small', false);
   await readReceipt(false);
+  // The measured send runs the full-size path (source token estimation, lazy
+  // encoder and regex initialisation); warm that same path so the baseline is
+  // taken after one-time initialisation and only per-send growth is measured.
+  for (const warm of ['warm-large-1', 'warm-large-2']) {
+    await send(warm);
+    await readReceipt(false);
+  }
   const baseline = await sourceHeap();
   const baselineMemory = process.memoryUsage();
   peakHeap = -Infinity;
