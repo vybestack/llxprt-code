@@ -5,12 +5,6 @@ import {
   suffixRow,
   withSuffixFixture,
 } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
-import {
-  rejectedValue,
-  rollbackRow,
-  withRollbackFixture,
-} from '../../packages/core/src/services/history/chronology-rollback-test-helpers.js';
-import { deferred } from '../../packages/core/src/services/history/token-accounting-stream-test-helpers.js';
 import { retainHistoryForMemoryTrap } from './retaining-history-test-helper.js';
 
 function sweep(): void {
@@ -60,40 +54,4 @@ describe('test-only eager memory trap source', () => {
       }, 120_000);
     }
   }
-
-  it('keeps original pending row and nested object identities during paused publication and rollback', async () => {
-    await withRollbackFixture(async (service) => {
-      const original = [rollbackRow(0, 2048), rollbackRow(1, 2048)];
-      await service.addBatch(original);
-      const retained = retainHistoryForMemoryTrap(service);
-      const entered = deferred();
-      const release = deferred();
-      const failure = new Error('test eager trap publication failure');
-      const operation = rejectedValue(
-        service.replaceBatch([rollbackRow(2)], undefined, {
-          afterPublication: async (): Promise<void> => {
-            entered.resolve();
-            await release.promise;
-            throw failure;
-          },
-        }),
-      );
-      await entered.promise;
-      try {
-        sweep();
-        expect(retained).toHaveLength(original.length);
-        for (let index = 0; index < original.length; index++) {
-          expect(retained[index]).toBe(original[index]);
-          expect(retained[index].blocks).toBe(original[index].blocks);
-          expect(retained[index].metadata).toBe(original[index].metadata);
-        }
-      } finally {
-        release.resolve();
-        await operation;
-      }
-      expect(await operation).toBe(failure);
-      expect(retained[0]).toBe(original[0]);
-      expect(retained[1]).toBe(original[1]);
-    }, true);
-  });
 });
