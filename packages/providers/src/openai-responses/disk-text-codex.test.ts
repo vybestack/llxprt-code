@@ -6,6 +6,7 @@ import type { OAuthManager } from '@vybestack/llxprt-code-auth';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { GenerateChatOptions } from '../IProvider.js';
+import { activeRequestBodyCount } from '../utils/requestScopedBody.js';
 import { requestSelection } from './__tests__/support/request-selection.js';
 import { projectionRuntime } from './__tests__/support/projection-ownership-fixture.js';
 import {
@@ -146,4 +147,26 @@ describe('Responses source route with Codex over the WebSocket', () => {
       [...tmpPromptDirs()].filter((entry) => !before.has(entry)),
     ).toHaveLength(0);
   }, 60000);
+
+  for (const afterFirstChunk of [false, true]) {
+    it(`releases the frame source and segments when the consumer returns ${afterFirstChunk ? 'after the first chunk' : 'before the first next'}`, async () => {
+      const before = tmpPromptDirs();
+      const options = codexOptions(
+        requestSelection({ ...rowsOf(history), close: () => {} }),
+      );
+      const projection = await provider.projectPromptEnvelope(options);
+      const stream = provider.generateChatCompletion({
+        ...options,
+        promptEnvelopeTransportToken: projection.transportToken,
+      });
+      const first = afterFirstChunk ? await stream.next() : undefined;
+      expect(first?.done).toBe(afterFirstChunk ? false : undefined);
+      await stream.return?.();
+      await projection.releaseIfUnsent?.();
+      expect(activeRequestBodyCount()).toBe(0);
+      expect(
+        [...tmpPromptDirs()].filter((entry) => !before.has(entry)),
+      ).toHaveLength(0);
+    }, 60000);
+  }
 });
