@@ -235,11 +235,6 @@ function facadeCallback0(): void {
   const mockRuntimeContext = retryRuntimeContext();
 
   const mockCompressionHandler = {
-    enforceProviderContents: vi
-      .fn()
-      .mockImplementation((envelope: { contents: IContent[] }) =>
-        Promise.resolve(envelope.contents),
-      ),
     enforceProviderSource: vi
       .fn()
       .mockImplementation((_provider: unknown, _id: string, source: unknown) =>

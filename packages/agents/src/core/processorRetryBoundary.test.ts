@@ -51,8 +51,11 @@ async function facadeCallback0(): Promise<void> {
   const processor = Object.create(TurnProcessor.prototype) as TurnProcessor;
   Object.assign(processor, {
     compressionHandler: {
-      enforceProviderContents: async ({ contents }: { contents: unknown[] }) =>
-        contents,
+      enforceProviderSource: async (
+        _provider: unknown,
+        _promptId: string,
+        source: unknown,
+      ) => source,
       clearProviderCompressionCallback: () => undefined,
     },
     runtimeContext: {
