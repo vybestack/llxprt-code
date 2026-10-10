@@ -102,7 +102,7 @@ async function foldPinnedSnapshot(
     });
     try {
       await verifyRows(fold, expected);
-      expect(await fold.readRow(expected.length - 1)).toBe(
+      expect(await fold.readRow(expected.length - 1)).toStrictEqual(
         expected[expected.length - 1],
       );
       expect(fold.metrics().residentBufferBytes).toBeLessThanOrEqual(64 * 1024);
@@ -378,7 +378,7 @@ describe('private pending fold paused I/O cleanup', () => {
 });
 
 describe('private pending fold mutation after capture', () => {
-  it('retains the pending object and observes its new content like eager materialize', () =>
+  it('stores the pending row by value so a post-capture caller mutation is not observed, like eager materialize', () =>
     useFixture(async (root) => {
       const recorder = recording(root, 'race-mutation');
       const store = new HistoryJournalStore(recorder);
@@ -392,8 +392,10 @@ describe('private pending fold mutation after capture', () => {
         const fold = await foldPendingRows(snapshot, { scratchRoot: root });
         try {
           await verifyRows(fold, expected);
-          expect(await fold.readRow(fold.length - 1)).toBe(pending);
-          expect(expected[expected.length - 1]).toBe(pending);
+          const last = await fold.readRow(fold.length - 1);
+          expect(last).toStrictEqual(expected[expected.length - 1]);
+          expect(last).toStrictEqual(row(9));
+          expect(last).not.toStrictEqual(pending);
         } finally {
           await fold.close();
         }

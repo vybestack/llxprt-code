@@ -45,7 +45,7 @@ async function verifyRows(
     const actual = await fold.readRow(index);
     expect(actual).toStrictEqual(expected[index]);
   }
-  expect(await fold.readRow(expected.length - 1)).toBe(fresh);
+  expect(await fold.readRow(expected.length - 1)).toStrictEqual(fresh);
 }
 
 function applyDensity(store: HistoryJournalStore, expected: IContent[]): void {
@@ -66,7 +66,7 @@ function applyDensity(store: HistoryJournalStore, expected: IContent[]): void {
 
 for (const count of [512, 8192])
   describe(`${count} rows`, () => {
-    it('pins pending membership across acknowledgements, applies mutations, and retains original pending identities', async () => {
+    it('pins pending membership across acknowledgements, applies mutations, and reads equal pending row values', async () => {
       await fixture(async (root, recorder) => {
         const first = recorder.enqueue('content', { content: row(0) });
         if (first === null) throw new Error('No durable row');
@@ -147,7 +147,7 @@ describe('pending compression', () => {
       });
       try {
         expect(fold.length).toBe(1);
-        expect(await fold.readRow(0)).toBe(summary);
+        expect(await fold.readRow(0)).toStrictEqual(summary);
       } finally {
         await fold.close();
         store.dispose();
