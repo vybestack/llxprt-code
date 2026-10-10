@@ -212,6 +212,8 @@ let client: AgentClient;
 
 let getModelSpy: ReturnType<typeof vi.spyOn>;
 
+let mediaRoot: string;
+
 /**
  * Helper: collect only ModelInfo events from a stream.
  */
@@ -234,6 +236,7 @@ async function collectModelInfos(
 async function disposeClientFixture(): Promise<void> {
   await client.dispose();
   vi.restoreAllMocks();
+  rmSync(mediaRoot, { recursive: true, force: true });
 }
 
 async function setupClientFixture(): Promise<void> {
@@ -247,6 +250,12 @@ async function setupClientFixture(): Promise<void> {
     { useInjectedConfig: true },
   );
   client = ctx.client;
+  mediaRoot = mkdtempSync(join(tmpdir(), 'model-profile-media-'));
+  const mediaStore = new LocalMediaStore({
+    rootDirectory: mediaRoot,
+    quotaBytes: 1024 * 1024,
+  });
+  Object.assign(client['config'], { getLocalMediaStore: () => mediaStore });
 
   mockTodoStoreConstructor.mockImplementation(() => ({
     readTodos: todoStoreReadMock,
@@ -418,39 +427,42 @@ async function verifyStoredHistoryOnToolsRefresh(): Promise<{
 
   client['chat'] = undefined;
 
-  const startChatSpy = vi
-    .spyOn(client, 'startChat')
-    .mockImplementation(async (extraHistory?: IContent[]) => {
-      const restoredHistory = extraHistory ?? [];
-      return {
-        waitForIdle: async (): Promise<void> => {
-          await pendingSend.promise.catch(() => undefined);
-        },
-        getHistory: vi.fn().mockReturnValue(restoredHistory),
-        getHistoryService: vi.fn().mockReturnValue({
-          clear: vi.fn(),
-          findUnmatchedToolCalls: vi.fn().mockReturnValue([]),
-          getCurated: vi.fn().mockReturnValue([]),
-          getTotalTokens: vi.fn().mockReturnValue(0),
-        }),
-        getLastPromptTokenCount: vi.fn().mockReturnValue(0),
-        getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
-        setTools: vi.fn(),
-      } as unknown as ChatSession;
-    });
+  const startChatSpy = vi.spyOn(client, 'startChat').mockImplementation(() => {
+    const stored = client['_storedHistoryService'];
+    if (stored === undefined) throw new Error('Missing stored history');
+    const chat = {
+      waitForIdle: async (): Promise<void> => {
+        await pendingSend.promise.catch(() => undefined);
+      },
+      streamHistory: (signal?: AbortSignal) => stored.streamRawHistory(signal),
+      clearHistory: async (): Promise<void> => {
+        stored.clear();
+        await stored.waitForOwnershipSettlement();
+      },
+      getHistoryService: vi.fn().mockReturnValue(stored),
+      getLastPromptTokenCount: vi.fn().mockReturnValue(0),
+      getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
+      setTools: vi.fn(),
+    } as unknown as ChatSession;
+    client['chat'] = chat;
+    return Promise.resolve(chat);
+  });
 
   await client.setTools();
 
-  expect(startChatSpy).toHaveBeenCalledWith(committedHistory);
+  // History is carried by the stored journal, never as an array handoff.
+  expect(startChatSpy).toHaveBeenCalledWith([]);
 
+  // Exercise the real idle-gated reader rather than the helper's stub.
+  vi.spyOn(client, 'streamHistory').mockRestore();
   let historyState = 'pending';
 
-  const historyRequest = AgentClient.prototype.getHistory
-    .call(client)
-    .then((history) => {
-      historyState = 'settled';
-      return history;
-    });
+  const historyRequest = readConfigHistory(
+    AgentClient.prototype.getHistory.call(client),
+  ).then((history) => {
+    historyState = 'settled';
+    return history;
+  });
 
   await Bun.sleep(0);
 
@@ -686,7 +698,10 @@ describe('AgentClient (client.ts)', () => {
     it('preserves stored conversation history when refreshing tools before the next turn', async () => {
       const { restoredHistory, committedHistory } =
         await verifyStoredHistoryOnToolsRefresh();
-      expect(restoredHistory).toStrictEqual(committedHistory);
+      // The journal stamps chronology metadata onto stored rows.
+      expect(
+        restoredHistory.map(({ speaker, blocks }) => ({ speaker, blocks })),
+      ).toStrictEqual(committedHistory);
     });
     it('also resets currentSequenceModel on ModelChanged', () => {
       verifyModelChangedSequenceReset();

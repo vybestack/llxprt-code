@@ -19,6 +19,7 @@ import type { ContentGeneratorConfig } from '@vybestack/llxprt-code-core/core/co
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
 import { TestRuntimeProviderManager } from '../../test-utils/runtimeProviderManager.js';
 import { buildMockContentGenerator } from './chatSession-density-helpers.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ChatSession } from '../chatSession.js';
 import type { MessageStreamDeps } from '../MessageStreamOrchestrator.js';
 import { AgentClient } from '../client.js';
@@ -229,9 +230,13 @@ async function createAndInitClient(
   );
   await client.initialize(contentGeneratorConfig);
 
-  client.getHistory = vi.fn(async function* () {});
+  // Tests steer the history seen by the client by resolving this stub.
+  const stubbedHistory = vi
+    .fn<() => Promise<readonly IContent[]>>()
+    .mockResolvedValue([]);
+  client.getHistory = stubbedHistory as unknown as typeof client.getHistory;
   vi.spyOn(client, 'streamHistory').mockImplementation(async function* () {
-    yield* client.getHistory();
+    yield* await stubbedHistory();
   });
 
   const mockChat = {
