@@ -60,6 +60,21 @@ function createContents(): IContent[] {
   ];
 }
 
+/**
+ * The media pre-pass runs after request normalization, when `contents` is the
+ * materialized row array rather than the caller's cold stream.
+ */
+function createNormalizedOptions(
+  init: Parameters<typeof createProviderCallOptions>[0] & {
+    contents: IContent[];
+  },
+): NormalizedGenerateChatOptions {
+  return {
+    ...createProviderCallOptions(init),
+    contents: init.contents,
+  } as NormalizedGenerateChatOptions;
+}
+
 type KimiMediaProcessor = {
   maybeProcessKimiMedia(
     options: NormalizedGenerateChatOptions,
@@ -78,7 +93,7 @@ describe('OpenAIProvider Kimi media preprocessing', () => {
       files: { create: filesCreate },
     } as unknown as OpenAI;
     const provider = createProvider();
-    const options = createProviderCallOptions({
+    const options = createNormalizedOptions({
       providerName: provider.name,
       contents: createContents(),
       configOverrides: { getTargetDir: () => '/workspace/kimi-media' },
@@ -124,7 +139,7 @@ describe('OpenAIProvider Kimi media preprocessing', () => {
     const settings = new SettingsService();
     settings.set('kimi.experimental-video', true);
     settings.set('provider-files', 'workspace');
-    const options = createProviderCallOptions({
+    const options = createNormalizedOptions({
       providerName: provider.name,
       contents: createContents(),
       settings,
