@@ -54,6 +54,12 @@ import {
   type MediaRequestOutcome,
   resolveRequestMedia,
 } from '@vybestack/llxprt-code-providers/utils/request-media-resolution.js';
+import { readsRequestRowsAtTransport } from '@vybestack/llxprt-code-providers/BaseProviderNormalization.js';
+import { acquireRequestScopedBody } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
+import {
+  dropTransportRows,
+  openTransportRowsMedia,
+} from '@vybestack/llxprt-code-providers/utils/transportRows.js';
 
 /**
  * Represents the default Gemini provider.
@@ -136,6 +142,11 @@ export class GeminiProvider extends BaseProvider {
 
   protected override supportsOAuth(): boolean {
     return false;
+  }
+
+  /** The transport reads `requestRows` itself (issue #854 WP09). */
+  protected override ownsRequestRowsTransport(): boolean {
+    return true;
   }
 
   private async determineBestAuth(): Promise<{
@@ -365,11 +376,14 @@ export class GeminiProvider extends BaseProvider {
     // silently transported as an empty prompt.
     requireAssembledSystemInstruction(options.systemInstruction);
 
-    const mediaRequest = await resolveRequestMedia(
-      options.runtime,
-      options.contents,
-      options.invocation.signal,
-    );
+    const sourceRoute = readsRequestRowsAtTransport(options);
+    const mediaRequest = sourceRoute
+      ? await openTransportRowsMedia(options)
+      : await resolveRequestMedia(
+          options.runtime,
+          options.contents,
+          options.invocation.signal,
+        );
     const effectiveOptions = {
       ...options,
       contents: mediaRequest.withContents((contents) => contents),
@@ -385,6 +399,15 @@ export class GeminiProvider extends BaseProvider {
         () => this.getBaseURL(),
         this.getLogger(),
       );
+      if (sourceRoute) dropTransportRows(mediaRequest);
+      // The SDK `Content[]` is the one body this request needs; it is
+      // released once the call settles on any outcome (issue #854 WP09).
+      const sdkBody = acquireRequestScopedBody('gemini', {
+        contents: setup.contentsWithSignatures,
+      });
+      mediaRequest.registerCleanup(() => {
+        void sdkBody.release();
+      });
       const result = await this.executeGeneration(
         effectiveOptions,
         setup,

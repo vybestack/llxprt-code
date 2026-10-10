@@ -257,6 +257,21 @@
       "bun": "./src/utils/request-media-resolution.ts",
       "import": "./dist/src/utils/request-media-resolution.js"
     },
+    "./utils/transportRows.js": {
+      "types": "./dist/src/utils/transportRows.d.ts",
+      "bun": "./src/utils/transportRows.ts",
+      "import": "./dist/src/utils/transportRows.js"
+    },
+    "./utils/requestScopedBody.js": {
+      "types": "./dist/src/utils/requestScopedBody.d.ts",
+      "bun": "./src/utils/requestScopedBody.ts",
+      "import": "./dist/src/utils/requestScopedBody.js"
+    },
+    "./BaseProviderNormalization.js": {
+      "types": "./dist/src/BaseProviderNormalization.d.ts",
+      "bun": "./src/BaseProviderNormalization.ts",
+      "import": "./dist/src/BaseProviderNormalization.js"
+    },
     "./utils/systemPromptPlacement.js": {
       "types": "./dist/src/utils/systemPromptPlacement.d.ts",
       "bun": "./src/utils/systemPromptPlacement.ts",

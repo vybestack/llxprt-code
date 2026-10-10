@@ -57,9 +57,19 @@ const realLlxprtCodeSettingsModule = {
 
 const generateContentStreamMock = vi.fn();
 
+// The provider releases the SDK `Content[]` once the call settles (issue #854
+// WP09), so requests are snapshotted at call time for later assertions.
+interface SentRequest {
+  contents: Array<{ role: string; parts: Array<Record<string, unknown>> }>;
+}
+let sentRequests: SentRequest[] = [];
+
 const googleGenAIConstructor = vi.fn().mockImplementation(() => ({
   models: {
-    generateContentStream: generateContentStreamMock,
+    generateContentStream: (request: SentRequest) => {
+      sentRequests.push(structuredClone(request));
+      return generateContentStreamMock(request);
+    },
   },
 }));
 
@@ -93,6 +103,7 @@ describe('GeminiProvider - MediaBlock support', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     generateContentStreamMock.mockReset();
+    sentRequests = [];
     delete process.env.GEMINI_API_KEY;
   });
 
@@ -190,7 +201,7 @@ async function convertsUserMedia(): Promise<void> {
   }
 
   expect(generateContentStreamMock).toHaveBeenCalledTimes(1);
-  const callArgs = generateContentStreamMock.mock.calls[0][0];
+  const callArgs = sentRequests[0];
   expect(callArgs.contents).toBeDefined();
   expect(callArgs.contents).toHaveLength(1);
   expect(callArgs.contents[0].role).toBe('user');
@@ -263,7 +274,7 @@ async function convertsMultipleMedia(): Promise<void> {
   }
 
   expect(generateContentStreamMock).toHaveBeenCalledTimes(1);
-  const callArgs = generateContentStreamMock.mock.calls[0][0];
+  const callArgs = sentRequests[0];
   expect(callArgs.contents[0].parts).toHaveLength(3);
   expect(callArgs.contents[0].parts[0]).toStrictEqual({
     text: 'Compare these images:',
@@ -332,7 +343,7 @@ async function convertsMediaOnly(): Promise<void> {
   }
 
   expect(generateContentStreamMock).toHaveBeenCalledTimes(1);
-  const callArgs = generateContentStreamMock.mock.calls[0][0];
+  const callArgs = sentRequests[0];
   expect(callArgs.contents[0].parts).toHaveLength(1);
   expect(callArgs.contents[0].parts[0]).toStrictEqual({
     inlineData: {
@@ -392,7 +403,7 @@ async function convertsUrlMedia(): Promise<void> {
   }
 
   expect(generateContentStreamMock).toHaveBeenCalledTimes(1);
-  const callArgs = generateContentStreamMock.mock.calls[0][0];
+  const callArgs = sentRequests[0];
   expect(callArgs.contents[0].parts[0]).toStrictEqual({
     fileData: {
       mimeType: 'image/png',
@@ -451,7 +462,7 @@ async function stripsDataUriPrefix(): Promise<void> {
   }
 
   expect(generateContentStreamMock).toHaveBeenCalledTimes(1);
-  const callArgs = generateContentStreamMock.mock.calls[0][0];
+  const callArgs = sentRequests[0];
   // Gemini expects just the base64 data, not the data URI prefix
   expect(callArgs.contents[0].parts[0]).toStrictEqual({
     inlineData: {
@@ -511,7 +522,7 @@ async function convertsPdfMedia(): Promise<void> {
   }
 
   expect(generateContentStreamMock).toHaveBeenCalledTimes(1);
-  const callArgs = generateContentStreamMock.mock.calls[0][0];
+  const callArgs = sentRequests[0];
   expect(callArgs.contents[0].parts).toHaveLength(2);
   expect(callArgs.contents[0].parts[1]).toStrictEqual({
     inlineData: {
@@ -571,7 +582,7 @@ async function convertsAudioMedia(): Promise<void> {
   }
 
   expect(generateContentStreamMock).toHaveBeenCalledTimes(1);
-  const callArgs = generateContentStreamMock.mock.calls[0][0];
+  const callArgs = sentRequests[0];
   expect(callArgs.contents[0].parts).toHaveLength(2);
   expect(callArgs.contents[0].parts[1]).toStrictEqual({
     inlineData: {
