@@ -19,24 +19,9 @@ import {
   type PendingAwareRequestSelection,
 } from './source-pending-selection.js';
 
-export async function assertSourceContracts(
-  runtime: AgentRuntimeContext,
-  compression: CompressionHandler,
-): Promise<void> {
-  const config = runtime.providerRuntime.config;
-  if (config === undefined)
+export function assertSourceRuntimeConfig(runtime: AgentRuntimeContext): void {
+  if (runtime.providerRuntime.config === undefined)
     throw new Error('Disk source requires live runtime config');
-  if (
-    (config.getTelemetryEnabled() && config.getTelemetryLogPromptsEnabled()) ||
-    config.getConversationLoggingEnabled()
-  )
-    throw new Error(
-      'Disk source request logging requires a source-capable full-context logger',
-    );
-  if (compression.tokenUsageLogger?.isEnabled() === true)
-    throw new Error(
-      'Disk source token-usage shape logging requires a source-capable attribution contract',
-    );
 }
 
 interface StreamDiskSourceInput {
@@ -76,7 +61,7 @@ async function rawPendingInput(
 export async function streamDiskSource(
   input: StreamDiskSourceInput,
 ): Promise<AsyncIterableIterator<IContent>> {
-  await assertSourceContracts(input.runtime, input.compression);
+  assertSourceRuntimeConfig(input.runtime);
   input.signal?.throwIfAborted();
   const preparedPending = preparePendingContents(
     input.userContent,

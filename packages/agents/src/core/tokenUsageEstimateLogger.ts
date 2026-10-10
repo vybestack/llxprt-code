@@ -241,8 +241,45 @@ export interface SendSeamTelemetryInput {
   turnId: string | null;
 }
 
-export async function recordSendSeamTelemetry(
+/** Source-route seam input: request rows are read from disk, never an array. */
+export interface SourceSendSeamTelemetryInput
+  extends Omit<SendSeamTelemetryInput, 'requestContents'> {
+  readonly requestRows: ProviderRequestRows;
+  readonly signal?: AbortSignal;
+}
+
+export function recordSendSeamTelemetry(
   input: SendSeamTelemetryInput,
+): Promise<void> {
+  return observeSendSeam(input, () =>
+    recordRequestShapeContext(
+      input.usageLogger,
+      input.promptId,
+      input.requestContents,
+      input.tools,
+      extractSystemInstructionText(input.systemInstruction),
+    ),
+  );
+}
+
+export function recordSourceSendSeamTelemetry(
+  input: SourceSendSeamTelemetryInput,
+): Promise<void> {
+  return observeSendSeam(input, () =>
+    recordSourceRequestShapeContext(
+      input.usageLogger,
+      input.promptId,
+      input.requestRows,
+      input.tools,
+      extractSystemInstructionText(input.systemInstruction),
+      input.signal,
+    ),
+  );
+}
+
+async function observeSendSeam(
+  input: Omit<SendSeamTelemetryInput, 'requestContents'>,
+  recordShape: () => void | Promise<void>,
 ): Promise<void> {
   // Single fail-open boundary for the whole send-seam observation. This runs
   // on the request path, so a telemetry failure must never abort a real
@@ -261,13 +298,7 @@ export async function recordSendSeamTelemetry(
       input.historyService,
       input.turnId,
     );
-    recordRequestShapeContext(
-      input.usageLogger,
-      input.promptId,
-      input.requestContents,
-      input.tools,
-      extractSystemInstructionText(input.systemInstruction),
-    );
+    await recordShape();
     recordProviderOrModelSwitch(
       input.usageLogger,
       input.runtimeState,

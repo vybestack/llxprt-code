@@ -25,6 +25,7 @@ import {
   type prepareAtSendSeam,
 } from './promptEnvelopeSendSeam.js';
 import { streamDiskSource } from './streamprocessor-disk-source.js';
+import type { PreparedSourcePromptEnvelopeSend } from './prompt-envelope-source-send.js';
 import type { SourceAfterModelRequest } from './source-after-model-hook.js';
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { withCompressionCallbackCleanup } from './streamCleanup.js';
@@ -68,6 +69,11 @@ export interface StreamRequestInput {
     afterModel: SourceAfterModelRequest,
   ) => Promise<AsyncGenerator<ModelStreamChunk>>;
   readonly setEstimate: (estimate: PromptEnvelopeEstimate | null) => void;
+  readonly recordSourceSeam: (
+    prepared: PreparedSourcePromptEnvelopeSend,
+    tools: PreparedRequest['requestPayload']['tools'],
+    signal: AbortSignal | undefined,
+  ) => Promise<void>;
   readonly log: (message: string) => void;
 }
 
@@ -177,6 +183,11 @@ async function diskRequest(
           provider: input.runtime.state.provider,
           timestamp: Date.now(),
         });
+        await input.recordSourceSeam(
+          prepared,
+          tools.tools,
+          input.params.config?.abortSignal,
+        );
       },
     });
     return await input.consumeSource(

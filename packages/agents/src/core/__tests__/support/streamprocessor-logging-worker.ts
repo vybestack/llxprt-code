@@ -298,8 +298,9 @@ function collectFacts(
           .map((line) => JSON.parse(line))
       : [],
     directory: readdirSync(root),
-    shapeMeasurements:
-      setup.compression.tokenUsageLogger?.getShapeMemory().measurementCount,
+    shapeMeasurements: (
+      input.chat?.getTokenUsageLogger() ?? setup.compression.tokenUsageLogger
+    )?.getShapeMemory().measurementCount,
   };
 }
 async function run(

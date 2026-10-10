@@ -199,38 +199,41 @@ function assertReplacement(facts: Facts): void {
   ]);
 }
 
-describe('genuine StreamProcessor source fail-fast logging', () => {
-  it.each([
-    'enabled',
-    'conversation',
-    'shape',
-    'retry',
-    'hook',
-    'error',
-    'abort',
-  ])(
-    'fails fast for unsupported enabled source logging mode %s before reading history or HTTP',
+function assertSourceLogging(facts: Facts, mode: string): void {
+  expect(facts.error).toBeUndefined();
+  expect(facts.output).toBe('finished');
+  expect(facts.bodies).toStrictEqual([wireOracle(facts)]);
+  expect(facts.estimate).toStrictEqual(facts.oracle);
+  assertResponseTokens(facts);
+  const requests = apiRequests(facts);
+  expect(requests).toHaveLength(2);
+  // The agent never fabricates a full-context string on the source route.
+  expect(requests.every((event) => event.request_text === undefined)).toBe(
+    true,
+  );
+  const names = facts.events.map((event) => event['event.name']);
+  expect(names.includes('conversation_request')).toBe(mode !== 'shape');
+  expect(names.includes('conversation_response')).toBe(mode !== 'shape');
+  if (mode === 'enabled') {
+    expect(requests[1].row_count).toBe(65);
+    expect(requests[1].artifact_id).toBeDefined();
+    expect(facts.chunkRecords).toBeGreaterThan(0);
+  } else {
+    expect(facts.chunkRecords).toBe(mode === 'conversation' ? 3 : 0);
+  }
+  if (mode === 'shape') expect(facts.shapeMeasurements).toBe(1);
+  expect(facts.liveOriginalRows).toBe(0);
+  expect(facts.liveReadRows).toBe(0);
+  assertOwners(facts);
+}
+
+describe('genuine StreamProcessor source logging', () => {
+  it.each(['enabled', 'conversation', 'shape'])(
+    'streams the source request with logging mode %s and no agent full-context string',
     async (mode) => {
       const facts = await worker(mode);
-      expect(facts.error).toContain(
-        mode === 'shape'
-          ? 'source token-usage shape logging'
-          : 'source request logging',
-      );
-      expect(facts.bodies).toHaveLength(0);
-      expect(facts.owners).toHaveLength(0);
-      expect(facts.estimate).toBeNull();
-      expect(facts.trace.map((event) => event.category)).toStrictEqual([
-        'agent.api_error',
-      ]);
-      expect(apiRequests(facts)).toHaveLength(0);
-      expect(
-        facts.events.some(
-          (event) => event['event.name'] === 'llxprt_code.api_error',
-        ),
-      ).toBe(true);
-      expect(facts.hooks).toHaveLength(0);
-      assertOwners(facts);
+      expect(facts.error).toBeUndefined();
+      assertSourceLogging(facts, mode);
     },
     60000,
   );
@@ -290,30 +293,13 @@ describe('genuine eager paired logging counterparts', () => {
   );
 });
 
-describe('actual ChatSession enabled-source fallback', () => {
-  it.each([
-    'enabled',
-    'conversation',
-    'shape',
-    'retry',
-    'hook',
-    'error',
-    'abort',
-  ])(
-    'preserves fail-fast diagnostics before localhost HTTP for %s',
+describe('actual ChatSession enabled-source logging', () => {
+  it.each(['enabled', 'conversation', 'shape'])(
+    'streams the source request with logging mode %s through ChatSession',
     async (mode) => {
       const facts = await worker(mode, true, false, 'chat');
-      expect(facts.error).toContain(
-        mode === 'shape'
-          ? 'source token-usage shape logging'
-          : 'source request logging',
-      );
-      expect(facts.bodies).toHaveLength(0);
-      expect(apiRequests(facts)).toHaveLength(0);
-      expect(facts.owners).toHaveLength(0);
-      expect(facts.hooks).toHaveLength(0);
-      expect(facts.estimate).toBeNull();
-      assertOwners(facts);
+      expect(facts.error).toBeUndefined();
+      assertSourceLogging(facts, mode);
     },
     60000,
   );
@@ -364,30 +350,13 @@ describe('actual ChatSession legacy eager localhost controls', () => {
 });
 
 if (process.env.ISSUE854_LOGGING_FULL === '1') {
-  describe('required full-context source acceptance remains RED', () => {
-    it.each([false, true])(
-      'supports actual logging-on history without dropping legacy entries, oversized=%s',
-      async (large) => {
-        const facts = await worker('enabled', true, large);
+  describe('oversized source logging acceptance', () => {
+    it.each(['stream', 'chat'] as const)(
+      'logs an oversized source request through %s without an agent string',
+      async (entry) => {
+        const facts = await worker('enabled', true, true, entry);
         expect(facts.error).toBeUndefined();
-        expect(facts.bodies).toStrictEqual([wireOracle(facts)]);
-        expect(facts.estimate).toStrictEqual(facts.oracle);
-        assertPair(facts);
-        assertOwners(facts);
-      },
-      600000,
-    );
-  });
-  describe('required ChatSession full-context source acceptance', () => {
-    it.each([false, true])(
-      'supports actual ChatSession logging-on source without losing legacy entries, oversized=%s',
-      async (large) => {
-        const facts = await worker('enabled', true, large, 'chat');
-        expect(facts.error).toBeUndefined();
-        expect(facts.bodies).toStrictEqual([wireOracle(facts)]);
-        expect(facts.estimate).toStrictEqual(facts.oracle);
-        assertPair(facts);
-        assertOwners(facts);
+        assertSourceLogging(facts, 'enabled');
       },
       600000,
     );

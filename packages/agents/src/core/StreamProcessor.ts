@@ -24,7 +24,10 @@ import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import { recordSendSeamTelemetry } from './tokenUsageEstimateLogger.js';
+import {
+  recordSendSeamTelemetry,
+  recordSourceSendSeamTelemetry,
+} from './tokenUsageEstimateLogger.js';
 import { prepareAtSendSeam } from './promptEnvelopeSendSeam.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { ConversationManager } from './ConversationManager.js';
@@ -365,6 +368,19 @@ export class StreamProcessor {
       setEstimate: (estimate) => {
         this.currentPromptEnvelopeEstimate = estimate;
       },
+      recordSourceSeam: (prepared, tools, signal) =>
+        recordSourceSendSeamTelemetry({
+          usageLogger: this.compressionHandler.tokenUsageLogger,
+          promptId,
+          estimate: prepared.estimate,
+          runtimeState: this.runtimeContext.state,
+          historyService: this.historyService,
+          requestRows: prepared.source,
+          tools,
+          systemInstruction: this.generationConfig.systemInstruction,
+          turnId: this.turnIdByPromptId.get(promptId) ?? null,
+          signal,
+        }),
       log: (message) => this.logger.debug(() => message),
     });
   }
