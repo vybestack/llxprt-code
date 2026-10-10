@@ -12,12 +12,14 @@ import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-st
 import { LOGICAL_REQUEST_ID_KEY } from '@vybestack/llxprt-code-providers/logging/attemptLifecycle.js';
 import { assembleStrict } from './source-strict-logger-fixture.js';
 import {
-  buildTransportSourceOptions,
   preflightDisk,
   barrier,
   preflightInstructions,
 } from './source-preflight-fixture.js';
-import { enforceAndStreamSourcePromptEnvelopeRetries } from '../../prompt-envelope-source-send.js';
+import {
+  buildSourceProviderChatOptions,
+  enforceAndStreamSourcePromptEnvelopeRetries,
+} from '../../prompt-envelope-source-send.js';
 
 type Input = Awaited<ReturnType<typeof assembleStrict>>;
 type Disk = Awaited<ReturnType<typeof preflightDisk>>;
@@ -93,7 +95,7 @@ async function sourceStream(
       source: input.fixture.source,
       signal: input.controller.signal,
       buildOptions: (rows) => ({
-        ...buildTransportSourceOptions(
+        ...buildSourceProviderChatOptions(
           rows,
           undefined,
           input.setup.context,

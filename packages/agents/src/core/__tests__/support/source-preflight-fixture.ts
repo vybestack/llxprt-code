@@ -13,7 +13,6 @@ import { FileLogExporter } from '@vybestack/llxprt-code-telemetry/telemetry/file
 import type { ReadableLogRecord } from '@opentelemetry/sdk-logs';
 import { ExportResultCode, type ExportResult } from '@opentelemetry/core';
 import { prepareAtSendSeam } from '../../promptEnvelopeSendSeam.js';
-import { buildSourceProviderChatOptions } from '../../prompt-envelope-source-send.js';
 import { diskTextRow } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-fixture.js';
 import { requestSelection } from './request-selection.js';
 import { BoundarySnapshotDisk } from '../../boundary-snapshot-disk.js';
@@ -219,16 +218,4 @@ export class PreflightExporter extends FileLogExporter {
         void this.releases[index].wait.then(() => callback(result));
     });
   }
-}
-
-/** The restricted source route: the provider reads the selection at its transport. */
-export function buildTransportSourceOptions(
-  ...args: Parameters<typeof buildSourceProviderChatOptions>
-): ReturnType<typeof buildSourceProviderChatOptions> & {
-  readonly readRequestRowsAtTransport: true;
-} {
-  return {
-    ...buildSourceProviderChatOptions(...args),
-    readRequestRowsAtTransport: true,
-  };
 }

@@ -172,7 +172,6 @@ function rowsOptions(
     },
     requestRows: probe.selection,
     contentCount: scenario.rows.length,
-    readRequestRowsAtTransport: true,
   };
 }
 

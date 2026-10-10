@@ -116,6 +116,7 @@ export function createRuntimeConfigStub(
     getConversationLoggingEnabled: () => false,
     setConversationLoggingEnabled: noop,
     getTelemetryLogPromptsEnabled: () => false,
+    getTelemetryLogApiBodiesEnabled: () => false,
     setTelemetryLogPromptsEnabled: noop,
     getUsageStatisticsEnabled: () => false,
     setUsageStatisticsEnabled: noop,

@@ -10,13 +10,13 @@ import {
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
 import { getRequestSignal } from '@vybestack/llxprt-code-providers/utils/abortSignal.js';
 import {
+  buildSourceProviderChatOptions,
   enforceAndStreamSourcePromptEnvelopeRetries,
   type PreparedSourcePromptEnvelopeSend,
 } from './prompt-envelope-source-send.js';
 import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import { stageTurnRequestArtifact } from './turn-request-artifact.js';
 import {
-  buildTransportSourceOptions,
   preflightRuntime,
   preflightDisk,
   preflightEndpoint,
@@ -102,7 +102,7 @@ async function start(input: Publication, fault: Fault) {
     source: input.fixture.source,
     signal: input.controller.signal,
     buildOptions: (source) =>
-      buildTransportSourceOptions(
+      buildSourceProviderChatOptions(
         source,
         undefined,
         input.setup.context,
@@ -278,7 +278,7 @@ describe('awaited source prepared preflight with actual Responses and validated 
       source: input.fixture.source,
       signal: input.controller.signal,
       buildOptions: (source) =>
-        buildTransportSourceOptions(
+        buildSourceProviderChatOptions(
           source,
           undefined,
           input.setup.context,

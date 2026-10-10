@@ -13,8 +13,8 @@
  * - the REAL enforcement machinery (real ChatSession CompressionHandler →
  *   real ProviderContentEnforcer → real TopDownTruncationStrategy over a
  *   real HistoryService) attached as the LB compression callback;
- * - the projection-aware seam estimator from
- *   preparePromptEnvelopeAfterEnforcement (issue #3507 AC2).
+ * - the projection-aware seam estimator built on prepareAtSendSeam
+ *   (issue #3507 AC2).
  *
  * Covered outcomes (conformance evidence for #2643/#2644):
  * - constant tool-schema overhead: the guard trips on the envelope estimate,
@@ -57,7 +57,7 @@ import {
   buildRuntimeContext,
 } from '../../core/__tests__/chatSession-density-helpers.js';
 import { ChatSession } from '../../core/chatSession.js';
-import { preparePromptEnvelopeAfterEnforcement } from '../../core/promptEnvelopeSendSeam.js';
+import { prepareAtSendSeam } from '../../core/promptEnvelopeSendSeam.js';
 
 const MODEL = 'test-model';
 const HISTORY_MESSAGES = 14;
@@ -504,26 +504,28 @@ async function facadeCallback3(): Promise<void> {
     contextLimit,
   });
 
-  const { contents: reduced } = await preparePromptEnvelopeAfterEnforcement({
-    provider: lb as unknown as Parameters<
-      typeof preparePromptEnvelopeAfterEnforcement
-    >[0]['provider'],
-    contents,
-    buildOptions: (candidate) => ({
-      contents: toStream(candidate),
-      tools: TOOLSET,
-      config: seamConfig,
-    }),
-    enforce: (candidate, estimate) =>
-      handler.enforceProviderContents(
-        { contents: candidate, pendingContents: [pending] },
-        'prompt-3507-parity',
-        lb,
-        estimate,
-      ),
-    fallbackEstimate: (candidate) =>
-      historyService.estimateTokensForContents(candidate, MODEL),
-  });
+  // Projection-aware candidate estimator: the provider's finalized envelope
+  // (tool schemas included), falling back to the contents-only estimate.
+  const estimateCandidate = async (candidate: IContent[]): Promise<number> => {
+    const prepared = await prepareAtSendSeam(
+      lb as unknown as Parameters<typeof prepareAtSendSeam>[0],
+      { contents: toStream(candidate), tools: TOOLSET, config: seamConfig },
+    );
+    try {
+      return (
+        prepared.estimate?.estimatedPromptTokens ??
+        (await historyService.estimateTokensForContents(candidate, MODEL))
+      );
+    } finally {
+      await prepared.releaseIfUnsent?.();
+    }
+  };
+  const reduced = await handler.enforceProviderContents(
+    { contents, pendingContents: [pending] },
+    'prompt-3507-parity',
+    lb,
+    estimateCandidate,
+  );
 
   const reducedTokens = await historyService.estimateTokensForContents(
     reduced,

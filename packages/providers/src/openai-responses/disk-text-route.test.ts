@@ -32,7 +32,6 @@ describe('explicit actual provider disk text route', () => {
       const projection = await setup.provider.projectPromptEnvelope({
         ...setup.options(rows),
         requestRows: rows,
-        readRequestRowsAtTransport: true as const,
       });
       const finalized = projection.finalizedProjection;
       expect(finalized).toBeInstanceOf(Gpt56SourceProjection);

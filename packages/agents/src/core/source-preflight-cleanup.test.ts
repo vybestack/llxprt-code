@@ -2,10 +2,12 @@
 import { describe, expect, it } from 'bun:test';
 import { requestSelection } from './__tests__/support/request-selection.js';
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
-import { enforceAndStreamSourcePromptEnvelopeRetries } from './prompt-envelope-source-send.js';
+import {
+  buildSourceProviderChatOptions,
+  enforceAndStreamSourcePromptEnvelopeRetries,
+} from './prompt-envelope-source-send.js';
 import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import {
-  buildTransportSourceOptions,
   preflightDisk,
   preflightRuntime,
   preflightEndpoint,
@@ -37,7 +39,7 @@ describe('source prepared transactional cleanup failure', () => {
       provider: setup.provider,
       source,
       buildOptions: (rows) =>
-        buildTransportSourceOptions(
+        buildSourceProviderChatOptions(
           rows,
           undefined,
           setup.context,

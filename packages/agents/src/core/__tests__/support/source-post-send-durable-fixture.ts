@@ -26,12 +26,14 @@ import {
 import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-storage/testing';
 import { assembleStrict } from './source-strict-logger-fixture.js';
 import {
-  buildTransportSourceOptions,
   preflightDisk,
   preflightInstructions,
   barrier,
 } from './source-preflight-fixture.js';
-import { enforceAndStreamSourcePromptEnvelopeRetries } from '../../prompt-envelope-source-send.js';
+import {
+  buildSourceProviderChatOptions,
+  enforceAndStreamSourcePromptEnvelopeRetries,
+} from '../../prompt-envelope-source-send.js';
 
 function observeAttempts() {
   const previous = getPerfPhaseObserver();
@@ -108,7 +110,7 @@ async function sendSource(input: Input): Promise<Result> {
       source: input.fixture.source,
       signal: input.controller.signal,
       buildOptions: (rows) => ({
-        ...buildTransportSourceOptions(
+        ...buildSourceProviderChatOptions(
           rows,
           undefined,
           input.setup.context,

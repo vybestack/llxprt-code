@@ -6,21 +6,18 @@ import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test
  */
 
 import { describe, expect, it } from 'bun:test';
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdtempSync } from 'node:fs';
 import { join } from 'node:path';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { readdirSync, rmSync } from 'node:fs';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { buildProviderContent } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
 import { withCoreSuffixFixture } from '@vybestack/llxprt-code-core/services/history/core-suffix-fixture-test-helpers.js';
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
-import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
-  buildRequestContentsResult,
   withRequestContentsSnapshot,
   type RequestContentsSnapshot,
 } from './streamRequestHelpers.js';
@@ -216,6 +213,28 @@ describe('scoped repeatable request snapshot', () => {
     );
   });
 });
+/** Reads the request rows through the shipped scoped snapshot. */
+async function collectRequestRows(
+  pending: IContent | IContent[],
+  history: HistoryService,
+  override?: Iterable<IContent> | AsyncIterable<IContent>,
+  signal?: AbortSignal,
+): Promise<{ contents: IContent[]; pendingInputCount: number }> {
+  return withRequestContentsSnapshot(
+    pending,
+    history,
+    async (request) => {
+      const contents: IContent[] = [];
+      for await (const row of request.contents.openReader(signal)) {
+        contents.push(row);
+      }
+      return { contents, pendingInputCount: request.pending.inputCount };
+    },
+    { signal },
+    override,
+  );
+}
+
 describe('request cursor cancellation', () => {
   it('rejects a cancelled request before preparing any provider contents', async () => {
     const history = new HistoryService();
@@ -223,7 +242,7 @@ describe('request cursor cancellation', () => {
     controller.abort(new Error('request cancelled'));
     try {
       await expect(
-        buildRequestContentsResult(
+        collectRequestRows(
           { speaker: 'human', blocks: [{ type: 'text', text: 'pending' }] },
           history,
           undefined,
@@ -236,7 +255,7 @@ describe('request cursor cancellation', () => {
   });
 });
 
-describe('buildRequestContentsResult history override', () => {
+describe('request snapshot history override', () => {
   class CursorOnlyRequestHistory extends HistoryService {
     constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {
       super(options);
@@ -252,7 +271,7 @@ describe('buildRequestContentsResult history override', () => {
           speaker: 'human',
           blocks: [{ type: 'text', text: 'prior' }],
         });
-        const result = await buildRequestContentsResult(
+        const result = await collectRequestRows(
           { speaker: 'human', blocks: [{ type: 'text', text: 'pending' }] },
           history,
         );
@@ -260,10 +279,9 @@ describe('buildRequestContentsResult history override', () => {
           [{ type: 'text', text: 'prior' }],
           [{ type: 'text', text: 'pending' }],
         ]);
-        expect(result.pending).toHaveLength(1);
-        expect(result.contents[1].metadata).toStrictEqual(
-          result.pending[0].metadata,
-        );
+        expect(result.pendingInputCount).toBe(1);
+        expect(result.contents[1].metadata?.id).toBeString();
+        expect(result.contents[1].metadata?.turnId).toBeString();
       } finally {
         history.dispose();
       }
@@ -294,7 +312,7 @@ describe('buildRequestContentsResult history override', () => {
       blocks: [{ type: 'text', text: 'continue' }],
     };
 
-    const result = await buildRequestContentsResult(pending, history, override);
+    const result = await collectRequestRows(pending, history, override);
     const toolCallIndex = result.contents.findIndex((content) =>
       content.blocks.some(
         (block) =>
@@ -314,98 +332,5 @@ describe('buildRequestContentsResult history override', () => {
     expect(result.contents[result.contents.length - 1]?.speaker).toBe('human');
     expect(result.contents[0]).not.toBe(override[0]);
     expect(result.contents[0]?.blocks[0]).not.toBe(override[0]?.blocks[0]);
-  });
-});
-
-async function* observedHistoryRows(
-  history: HistoryService,
-  demand: { yielded: number; closed: boolean },
-): AsyncGenerator<IContent, void, unknown> {
-  try {
-    for await (const row of history.streamRawHistory()) {
-      demand.yielded += 1;
-      yield row;
-    }
-  } finally {
-    demand.closed = true;
-  }
-}
-
-describe('issue854 helper-level RED send-time history demand', () => {
-  it('does not exhaust disk history before the first gated request body pull', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'issue854-send-time-'));
-    const recording = new SessionRecordingService({
-      sessionId: randomUUID(),
-      projectHash: 'issue854-helper-red',
-      chatsDir: root,
-      workspaceDirs: [root],
-      provider: 'test',
-      model: 'test',
-    });
-    const history = new HistoryService({ recording });
-    const rowCount = 64;
-    try {
-      for (let index = 0; index < rowCount; index += 1) {
-        history.add({
-          speaker: 'human',
-          blocks: [{ type: 'text', text: `disk history row ${index}` }],
-        });
-      }
-      await history.waitForCommit();
-
-      const cancelledDemand = { yielded: 0, closed: false };
-      const cancelledSource = observedHistoryRows(history, cancelledDemand);
-      await cancelledSource.next();
-      await cancelledSource.return();
-      if (cancelledDemand.yielded !== 1 || !cancelledDemand.closed) {
-        throw new Error(
-          'Independent disk source return did not stop after one row',
-        );
-      }
-
-      const demand = { yielded: 0, closed: false };
-      const result = await buildRequestContentsResult(
-        { speaker: 'human', blocks: [{ type: 'text', text: 'pending' }] },
-        history,
-        observedHistoryRows(history, demand),
-      );
-      const rowsReadBeforeBodyPull = demand.yielded;
-      const bodyGate = new AbortController();
-      async function* requestBody(
-        contents: Iterable<IContent> | AsyncIterable<IContent>,
-      ): AsyncGenerator<string, void, unknown> {
-        await new Promise<void>((resolve) => {
-          bodyGate.signal.addEventListener('abort', () => resolve(), {
-            once: true,
-          });
-        });
-        for await (const row of contents) {
-          yield JSON.stringify(row);
-        }
-      }
-      const body = requestBody(result.contents);
-      try {
-        const firstBodyPull = body.next();
-        bodyGate.abort();
-        await firstBodyPull;
-        writeFileSync(
-          join(root, 'demand.json'),
-          JSON.stringify({
-            bodyPulls: 1,
-            expectedHistoryRowsLessThan: rowCount,
-            rowsReadBeforeBodyPull,
-            rowsReadAtFirstBodyPull: demand.yielded,
-            sourceClosed: demand.closed,
-            independentReturn: cancelledDemand,
-          }),
-        );
-        expect(demand.yielded).toBeLessThan(rowCount);
-      } finally {
-        await body.return();
-      }
-    } finally {
-      history.dispose();
-      await recording.dispose();
-    }
   });
 });

@@ -35,7 +35,6 @@ function buildRetryOptions(
       ephemeralsSnapshot: { retries: 1, retrywait: 0, 'prompt-caching': 'off' },
     }),
     requestRows: candidate,
-    readRequestRowsAtTransport: true as const,
     contentCount: candidate.count,
   };
 }

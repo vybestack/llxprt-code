@@ -135,7 +135,6 @@ export async function streamDiskSource(
       ),
       requestRows: rows,
       contentCount: rows.count,
-      readRequestRowsAtTransport: true,
     }),
     enforce: (_rows, estimate) =>
       input.compression.enforceProviderSource(

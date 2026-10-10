@@ -128,19 +128,13 @@ function resolveRuntimeId(
 }
 
 /**
- * True when the call asks the provider's concrete transport to read its
- * `requestRows` itself instead of receiving them through `contents`.
+ * True when the call carries `requestRows`, which the provider's concrete
+ * transport reads itself instead of receiving them through `contents`.
  */
 export function readsRequestRowsAtTransport(
-  options: Pick<
-    GenerateChatOptions,
-    'requestRows' | 'readRequestRowsAtTransport'
-  >,
+  options: Pick<GenerateChatOptions, 'requestRows'>,
 ): boolean {
-  return (
-    options.requestRows !== undefined &&
-    options.readRequestRowsAtTransport === true
-  );
+  return options.requestRows !== undefined;
 }
 
 /**

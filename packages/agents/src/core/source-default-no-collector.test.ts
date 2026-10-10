@@ -32,7 +32,6 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { IProvider } from '@vybestack/llxprt-code-providers/IProvider.js';
 import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { ChatSession } from './chatSession.js';
-import * as requestHelpers from './streamRequestHelpers.js';
 
 interface ReaderCensus {
   opened: number;
@@ -182,32 +181,22 @@ async function streamedText(
 }
 
 describe('default sends never collect history into an array', () => {
-  let buildContents: Mock<typeof requestHelpers.buildRequestContentsResult>;
   let collect: Mock<typeof providerCollect.collectContents>;
 
   beforeEach(() => {
-    buildContents = spyOn(requestHelpers, 'buildRequestContentsResult');
     collect = spyOn(providerCollect, 'collectContents');
   });
 
   afterEach(() => {
-    buildContents.mockRestore();
     collect.mockRestore();
   });
 
-  it('observes the collectors when they are called (trap control)', async () => {
-    const history = new HistoryService();
-    seedHistory(history);
-    await requestHelpers.buildRequestContentsResult(
-      { speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] },
-      history,
-    );
+  it('observes the collector when it is called (trap control)', async () => {
     await providerCollect.collectContents(
       (async function* (): AsyncGenerator<IContent> {
         yield { speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] };
       })(),
     );
-    expect(buildContents).toHaveBeenCalledTimes(1);
     expect(collect).toHaveBeenCalledTimes(1);
   });
 
@@ -220,7 +209,6 @@ describe('default sends never collect history into an array', () => {
     expect(await streamedText(stream)).toContain('completed');
     expect(providerRows).toHaveLength(1);
     expect(providerRows[0]).toBeGreaterThan(6);
-    expect(buildContents).not.toHaveBeenCalled();
     expect(collect).not.toHaveBeenCalled();
     expect(history.census.snapshots).toBeGreaterThan(0);
     expect(history.census.opened).toBeGreaterThan(0);
@@ -240,7 +228,6 @@ describe('default sends never collect history into an array', () => {
     });
     expect(providerRows).toHaveLength(1);
     expect(providerRows[0]).toBeGreaterThan(6);
-    expect(buildContents).not.toHaveBeenCalled();
     expect(collect).not.toHaveBeenCalled();
     expect(history.census.snapshots).toBeGreaterThan(0);
     expect(history.census.opened).toBeGreaterThan(0);

@@ -30,12 +30,14 @@ import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/r
 import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-storage/testing';
 import { assembleStrict } from './source-strict-logger-fixture.js';
 import {
-  buildTransportSourceOptions,
   barrier,
   preflightDisk,
   preflightInstructions,
 } from './source-preflight-fixture.js';
-import { enforceAndStreamSourcePromptEnvelopeRetries } from '../../prompt-envelope-source-send.js';
+import {
+  buildSourceProviderChatOptions,
+  enforceAndStreamSourcePromptEnvelopeRetries,
+} from '../../prompt-envelope-source-send.js';
 
 export type CorrelatedFault =
   | 'pre'
@@ -187,7 +189,7 @@ async function send(
       source: disk.source,
       signal: input.controller.signal,
       buildOptions: (rows) => ({
-        ...buildTransportSourceOptions(
+        ...buildSourceProviderChatOptions(
           rows,
           undefined,
           input.setup.context,

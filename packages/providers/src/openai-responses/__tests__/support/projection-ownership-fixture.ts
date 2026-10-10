@@ -231,9 +231,7 @@ export async function projectionRuntime(
     signal?: AbortSignal,
   ): GenerateChatOptions => ({
     contents: { [Symbol.asyncIterator]: () => rows.openReader(signal) },
-    ...('close' in rows
-      ? { requestRows: rows, readRequestRowsAtTransport: true as const }
-      : {}),
+    ...('close' in rows ? { requestRows: rows } : {}),
     contentCount: rows.count,
     config,
     runtime,

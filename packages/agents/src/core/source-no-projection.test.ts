@@ -17,7 +17,6 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import { OpenAIVercelProvider } from '@vybestack/llxprt-code-providers/openai-vercel/OpenAIVercelProvider.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
@@ -31,7 +30,6 @@ import {
 } from '../compression/compressionBudgeting.js';
 import {
   enforceAndStreamSourcePromptEnvelopeRetries,
-  preparePromptEnvelopeAfterEnforcement,
   type PromptEnvelopeSource,
   type SourceProviderChatOptions,
 } from './promptEnvelopeSendSeam.js';
@@ -76,52 +74,34 @@ const failingEstimator = {
 } as unknown as HistoryService;
 
 describe('providers without prompt-envelope projection on the source route', () => {
-  it.each(['gemini', 'openaivercel'])(
-    'estimates %s from the request rows exactly as the array fallback does',
-    async (name) => {
-      const fixture = await diskSource(root(), 12);
-      const rows = await readRows(fixture.source);
-      const provider = { name } as unknown as RuntimeProvider;
-      const history = new HistoryService();
-      const model = 'model-a';
-      const fallbackSources: Array<
-        [string, HistoryService, () => Promise<number>]
-      > = [
-        [
-          'tokenizer',
-          history,
-          () => estimateSourcePendingTokens(fixture.source, history, model),
-        ],
-        [
-          'text fallback',
-          failingEstimator,
-          () =>
-            estimateSourcePendingTokens(
-              fixture.source,
-              failingEstimator,
-              model,
-            ),
-        ],
-      ];
-      for (const [, service, sourceEstimate] of fallbackSources) {
-        const array = await preparePromptEnvelopeAfterEnforcement({
-          provider,
-          contents: rows,
-          buildOptions: (contents) =>
-            ({ contents }) as unknown as RuntimeGenerateChatOptions,
-          enforce: async (contents) => contents,
-          fallbackEstimate: (contents) =>
-            estimatePendingTokens(contents, service, model),
-        });
-        await array.preparer.releaseUnused();
-        const expected = await estimatePendingTokens(rows, service, model);
-        const actual = await sourceEstimate();
-        expect(actual).toBeGreaterThan(0);
-        expect(actual).toBe(expected);
-      }
-      await fixture.source.close();
-    },
-  );
+  it('estimates from the request rows exactly as the contents estimator does', async () => {
+    const fixture = await diskSource(root(), 12);
+    const rows = await readRows(fixture.source);
+    const history = new HistoryService();
+    const model = 'model-a';
+    const fallbackSources: Array<
+      [string, HistoryService, () => Promise<number>]
+    > = [
+      [
+        'tokenizer',
+        history,
+        () => estimateSourcePendingTokens(fixture.source, history, model),
+      ],
+      [
+        'text fallback',
+        failingEstimator,
+        () =>
+          estimateSourcePendingTokens(fixture.source, failingEstimator, model),
+      ],
+    ];
+    for (const [, service, sourceEstimate] of fallbackSources) {
+      const expected = await estimatePendingTokens(rows, service, model);
+      const actual = await sourceEstimate();
+      expect(actual).toBeGreaterThan(0);
+      expect(actual).toBe(expected);
+    }
+    await fixture.source.close();
+  });
 
   it('prepares a non-projecting provider with a null envelope estimate and the fallback count', async () => {
     const fixture = await diskSource(root(), 4);
@@ -224,7 +204,6 @@ describe('unflagged end-to-end send through real non-projecting providers', () =
           },
           requestRows: source,
           contentCount: source.count,
-          readRequestRowsAtTransport: true,
         }) as SourceProviderChatOptions,
       enforce: async (source) => source,
       fallbackEstimate: (source, signal) =>
@@ -283,7 +262,6 @@ describe('unflagged end-to-end send through real non-projecting providers', () =
           },
           requestRows: source,
           contentCount: source.count,
-          readRequestRowsAtTransport: true,
         }) as SourceProviderChatOptions,
       enforce: async (source) => source,
       fallbackEstimate: (source, signal) =>

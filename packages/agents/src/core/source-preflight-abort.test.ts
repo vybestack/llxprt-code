@@ -8,12 +8,12 @@ import {
   raceWithAbort,
 } from '@vybestack/llxprt-code-providers/utils/abortSignal.js';
 import {
+  buildSourceProviderChatOptions,
   enforceAndStreamSourcePromptEnvelopeRetries,
   type PreparedSourcePromptEnvelopeSend,
 } from './prompt-envelope-source-send.js';
 import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import {
-  buildTransportSourceOptions,
   preflightDisk,
   preflightRuntime,
   preflightEndpoint,
@@ -76,7 +76,7 @@ async function start(input: Awaited<ReturnType<typeof fixture>>) {
     source: input.disk.source,
     signal: input.controller.signal,
     buildOptions: (source) =>
-      buildTransportSourceOptions(
+      buildSourceProviderChatOptions(
         source,
         undefined,
         input.setup.context,

@@ -57,13 +57,6 @@ export interface GenerateChatOptions {
   contents: AsyncIterable<IContent>;
   requestRows?: ProviderRequestSelection;
   contentCount?: number;
-  /**
-   * Transitional (issue #854): ask a provider that owns its request-rows
-   * transport to read `requestRows` itself (restricted source route). Without
-   * it the selection is just the authoritative history source. WP06/WP16
-   * remove this option once the source route is the default.
-   */
-  readRequestRowsAtTransport?: true;
   tools?: ProviderToolset;
   settings?: SettingsService;
   config?: Config;

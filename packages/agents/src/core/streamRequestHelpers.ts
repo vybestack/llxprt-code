@@ -26,7 +26,6 @@ import type {
 import type { SendMessageParams } from './chatSession.js';
 import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
 import { sanitizeProviderContentForSerialization } from '@vybestack/llxprt-code-core/services/history/historyCloneUtils.js';
-import { logApiRequest } from './turnLogging.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import {
   providerRequestRows,
@@ -50,7 +49,7 @@ export interface ToolSelectionHookResult {
   conversationLogEmptyTools?: boolean;
 }
 
-/** Result of preparing a request payload with its runtime contexts. */
+/** Request payload shape shared by the stream send and its fallback logging. */
 export interface PreparedRequest {
   requestPayload: {
     contents: IContent[];
@@ -149,25 +148,6 @@ export function preparePendingContents(
       metadata: { ...(content.metadata ?? {}), id: idGen(), turnId: turnKey },
     };
   });
-}
-
-/** Collect normalized rows for the existing enforcement and hook request contracts. */
-export async function buildRequestContentsResult(
-  userContents: IContent | IContent[],
-  historyService: HistoryService,
-  historyOverride?: Iterable<IContent> | AsyncIterable<IContent>,
-  signal?: AbortSignal,
-): Promise<{ contents: IContent[]; pending: IContent[] }> {
-  const userIContents = preparePendingContents(userContents, historyService);
-  const contents: IContent[] = [];
-  for await (const row of historyService.getCuratedForProviderStream(
-    userIContents,
-    signal,
-    historyOverride,
-  )) {
-    contents.push(row);
-  }
-  return { contents, pending: userIContents };
 }
 
 /**
@@ -284,48 +264,6 @@ export function buildRuntimeContext(
   };
 }
 
-interface PrepareRequestPayloadParams {
-  requestContents: IContent[];
-  tools: ToolDeclaration[] | undefined;
-  logger: DebugLogger;
-  providerRuntimeBuilder: (
-    source: string,
-    extras?: Record<string, unknown>,
-  ) => ProviderRuntimeContext;
-  providerName: string;
-  modelName: string;
-  baseUrl: string | undefined;
-}
-
-/**
- * Prepare the request payload (contents + tools) and the base provider runtime
- * context. The request-specific runtime context (e.g. abort-signal metadata) is
- * layered on by the caller via buildRuntimeContext.
- */
-export function prepareRequestPayload(
-  args: PrepareRequestPayloadParams,
-): PreparedRequest {
-  args.logger.debug(
-    () => '[StreamProcessor] Calling provider.generateChatCompletion',
-    {
-      providerName: args.providerName,
-      model: args.modelName,
-      historyLength: args.requestContents.length,
-      toolCount: Array.isArray(args.tools) ? args.tools.length : 0,
-      baseUrl: args.baseUrl,
-    },
-  );
-
-  const baseRuntimeContext = args.providerRuntimeBuilder(
-    'StreamProcessor.generateRequest',
-    { historyLength: args.requestContents.length },
-  );
-
-  const requestPayload = { contents: args.requestContents, tools: args.tools };
-
-  return { requestPayload, baseRuntimeContext };
-}
-
 /**
  * Type guard: true when a value is a non-null object record.
  */
@@ -412,24 +350,6 @@ export function resolveUserMemory(
     return config.getUserMemory();
   }
   return undefined;
-}
-
-/**
- * Log the outgoing API request via the telemetry runtime context.
- */
-export function logOutgoingRequest(
-  runtimeContext: AgentRuntimeContext,
-  requestPayload: { contents: IContent[] },
-  modelName: string,
-  promptId: string,
-): void {
-  logApiRequest(
-    runtimeContext,
-    runtimeContext.state,
-    requestPayload.contents,
-    modelName,
-    promptId,
-  );
 }
 
 const systemInstructionLogger = new DebugLogger(

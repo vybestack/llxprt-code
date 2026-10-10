@@ -92,7 +92,6 @@ describe('source projection finalized options parity', () => {
         ...options,
         contents: { [Symbol.asyncIterator]: () => rows.openReader() },
         requestRows: rows,
-        readRequestRowsAtTransport: true as const,
       };
       const source = await setup.provider.projectPromptEnvelope(sourceOptions);
       const estimate = await estimatePromptEnvelope(

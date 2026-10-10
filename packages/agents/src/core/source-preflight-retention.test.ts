@@ -5,12 +5,12 @@ import { join } from 'node:path';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
 import {
+  buildSourceProviderChatOptions,
   enforceAndStreamSourcePromptEnvelopeRetries,
   type PreparedSourcePromptEnvelopeSend,
 } from './prompt-envelope-source-send.js';
 import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import {
-  buildTransportSourceOptions,
   preflightEndpoint,
   preflightDisk,
   preflightRuntime,
@@ -43,7 +43,7 @@ async function prepareCycle(large: boolean, trap: boolean): Promise<void> {
     source: fixture.source,
     signal: controller.signal,
     buildOptions: (source) =>
-      buildTransportSourceOptions(
+      buildSourceProviderChatOptions(
         source,
         undefined,
         setup.context,

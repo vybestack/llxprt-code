@@ -59,7 +59,6 @@ function requestOver(
     contents: poisonedContents,
     requestRows: rows,
     contentCount: rows.count,
-    readRequestRowsAtTransport: true,
     ...extra,
   };
 }

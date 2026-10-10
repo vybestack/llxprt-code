@@ -740,9 +740,8 @@ export abstract class BaseProvider implements IProvider {
   }
 
   /**
-   * Whether this provider's concrete transport can read `requestRows` itself
-   * when a call sets `readRequestRowsAtTransport`. Other providers always get
-   * the selection's rows through the normal `contents` history path.
+   * Whether this provider's concrete transport reads `requestRows` itself.
+   * Other providers receive the selection's rows through `contents`.
    */
   protected ownsRequestRowsTransport(): boolean {
     return false;
@@ -845,9 +844,8 @@ export abstract class BaseProvider implements IProvider {
       isOneShotContentsSource(contentsOrOptions);
     const readsRowsAtTransport =
       !isAsyncIterableContents(contentsOrOptions) &&
-      readsRequestRowsAtTransport(contentsOrOptions);
-    if (readsRowsAtTransport && !this.ownsRequestRowsTransport())
-      throw new Error('This provider does not read request rows at transport');
+      readsRequestRowsAtTransport(contentsOrOptions) &&
+      this.ownsRequestRowsTransport();
     const providedOptions = await materializeCallOptions(
       contentsOrOptions,
       maybeTools,
