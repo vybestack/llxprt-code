@@ -34,6 +34,7 @@ export function enforceProviderSourceForTest(
   provider: RuntimeProvider | undefined,
   estimateRows: (rows: IContent[]) => Promise<number> = (rows) =>
     history.estimateTokensForContents(rows),
+  pendingRecoverable = true,
 ): Promise<IContent[]> {
   return enforceProviderSourceSelectionForTest(
     handler,
@@ -42,6 +43,8 @@ export function enforceProviderSourceForTest(
     promptId,
     provider,
     async (candidate) => estimateRows(await collectSelection(candidate)),
+    undefined,
+    pendingRecoverable,
   );
 }
 
@@ -50,6 +53,8 @@ export function enforceProviderSourceForTest(
  * candidate selection itself so tests over large histories can stream it
  * instead of materialising every row. `openSelection` may substitute the
  * snapshot opened for a stage whose rows the test never inspects.
+ * `pendingRecoverable` false models a BeforeModel hook that discarded the
+ * pending boundary.
  */
 export async function enforceProviderSourceSelectionForTest(
   handler: CompressionHandler,
@@ -61,6 +66,7 @@ export async function enforceProviderSourceSelectionForTest(
   openSelection: (
     realOpen: () => Promise<PendingAwareRequestSelection>,
   ) => Promise<PendingAwareRequestSelection> = (realOpen) => realOpen(),
+  pendingRecoverable = true,
 ): Promise<IContent[]> {
   let pendingRows = pendingContents;
   const realOpen = async (): Promise<PendingAwareRequestSelection> => {
@@ -86,7 +92,7 @@ export async function enforceProviderSourceSelectionForTest(
     source,
     estimateSelection,
     open,
-    true,
+    pendingRecoverable,
     pending,
   );
   return collectSelection(enforced);
