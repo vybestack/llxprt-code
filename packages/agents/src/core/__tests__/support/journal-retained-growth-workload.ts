@@ -86,6 +86,7 @@ function startProviderServer(): {
 async function createConfig(
   root: string,
   baseURL: string,
+  contextLimit: number,
 ): Promise<{ config: Config; settings: SettingsService }> {
   const settings = new SettingsService();
   settings.setProviderSetting('openai-responses', 'model', MODEL);
@@ -94,7 +95,7 @@ async function createConfig(
   settings.set('prompt-caching', 'off');
   settings.set('retries', 1);
   settings.set('retrywait', 0);
-  settings.set('context-limit', CONTEXT_LIMIT);
+  settings.set('context-limit', contextLimit);
   settings.set('maxOutputTokens', 128);
   settings.set('compression.strategy', 'high-density');
   const config = new Config({
@@ -118,6 +119,7 @@ export interface Workload {
   readonly history: HistoryService;
   readonly retainedRows: () => number;
   readonly requestCount: () => number;
+  setContextLimit(limit: number): void;
   runTurn(turn: number): Promise<void>;
   dispose(): Promise<void>;
 }
@@ -164,10 +166,11 @@ function addToolExchange(history: HistoryService, turn: number): void {
 export async function createWorkload(
   root: string,
   mode: WorkloadMode,
+  contextLimit = CONTEXT_LIMIT,
 ): Promise<Workload> {
   const http = startProviderServer();
   const baseURL = `http://127.0.0.1:${http.server.port}/v1`;
-  const { config, settings } = await createConfig(root, baseURL);
+  const { config, settings } = await createConfig(root, baseURL, contextLimit);
   const recording = await SessionRecordingService.createLocked({
     sessionId: config.getSessionId(),
     projectHash: basename(root),
@@ -196,7 +199,7 @@ export async function createWorkload(
       baseUrl: baseURL,
     },
     history,
-    settings: { contextLimit: CONTEXT_LIMIT },
+    settings: { contextLimit },
     providerRuntime,
     provider: { getActiveProvider: () => provider, setActiveProvider() {} },
     tools: { listToolNames: () => [], getToolMetadata: () => undefined },
@@ -214,6 +217,9 @@ export async function createWorkload(
     retainedRows: () =>
       history instanceof RetainingHistory ? history.retained.length : 0,
     requestCount: http.requestCount,
+    setContextLimit(limit) {
+      settings.set('context-limit', limit);
+    },
     async runTurn(turn) {
       if (turn > 1) addToolExchange(history, turn);
       const output = await readLoggingChatStream(

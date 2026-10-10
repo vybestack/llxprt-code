@@ -28,33 +28,7 @@ import {
 import { SyntheticToolResponseHandler } from '../openai/syntheticToolResponses.js';
 import type { RequestScopedContents } from '../utils/requestScopedBody.js';
 import type { PromptKeySink } from './prompt-key-tee-writer.js';
-
-async function matching(
-  owner: RequestScopedContents,
-  id: string,
-  response: boolean,
-  signal?: AbortSignal,
-): Promise<boolean> {
-  for await (const row of owner.stream()) {
-    signal?.throwIfAborted();
-    if (row.speaker !== (response ? 'tool' : 'ai')) continue;
-    for (const block of row.blocks) {
-      if (
-        response &&
-        block.type === 'tool_response' &&
-        normalizeToOpenAIToolId(block.callId) === id
-      )
-        return true;
-      if (
-        !response &&
-        block.type === 'tool_call' &&
-        normalizeToOpenAIToolId(block.id) === id
-      )
-        return true;
-    }
-  }
-  return false;
-}
+import { ToolPairIndex } from './responses-tool-pair-index.js';
 
 export interface DanglingCalls {
   /** Index of the last assistant row carrying tool calls; -1 when none. */
@@ -149,6 +123,7 @@ export class ResponsesSourceInput {
   #reasoning = 0;
   #pdfBytes = 0;
   #dangling: DanglingCalls | undefined;
+  #pairs: ToolPairIndex | undefined;
   readonly #skipRows: number;
 
   constructor(
@@ -237,6 +212,12 @@ export class ResponsesSourceInput {
     }
   }
 
+  /** Built on first need so histories without tool calls never replay the source. */
+  private async pairs(owner: RequestScopedContents): Promise<ToolPairIndex> {
+    this.#pairs ??= await ToolPairIndex.build(owner.stream(), this.signal);
+    return this.#pairs;
+  }
+
   private async assistant(
     row: IContent,
     owner: RequestScopedContents,
@@ -255,7 +236,7 @@ export class ResponsesSourceInput {
       const dangling =
         block.id !== '' &&
         missing.missing.has(normalizeToHistoryToolId(block.id));
-      if (dangling || (await matching(owner, id, true, this.signal)))
+      if (dangling || (await this.pairs(owner)).hasResponse(id))
         this.item({
           type: 'function_call',
           call_id: id,
@@ -275,7 +256,7 @@ export class ResponsesSourceInput {
       const id = normalizeToOpenAIToolId(block.callId);
       const include =
         this.context.serverSideParentActive === true ||
-        (await matching(owner, id, false, this.signal));
+        (await this.pairs(owner)).hasCall(id);
       if (include) {
         const items = buildOpenAIResponsesInput(
           [{ speaker: 'tool', blocks: [block] }],
@@ -322,6 +303,16 @@ export class ResponsesSourceInput {
   }
 
   async write(owner: RequestScopedContents): Promise<void> {
+    try {
+      await this.writeRows(owner);
+    } finally {
+      const pairs = this.#pairs;
+      this.#pairs = undefined;
+      pairs?.close();
+    }
+  }
+
+  private async writeRows(owner: RequestScopedContents): Promise<void> {
     this.writer.append('[');
     // Synthetic outputs for the stateful parent row itself precede every
     // written row.
