@@ -14,16 +14,10 @@ import {
   applyToolSelectionHook,
   selectRequestTools,
   buildRuntimeContext,
-  buildRequestContentsResult,
   streamSemanticPurgeRequest,
   type ToolSelectionHookResult,
   type PreparedRequest,
 } from './streamRequestHelpers.js';
-import { fireBeforeModelHook } from './beforeModelHookFire.js';
-import {
-  preparePromptEnvelopeAfterEnforcement,
-  type prepareAtSendSeam,
-} from './promptEnvelopeSendSeam.js';
 import { streamDiskSource } from './streamprocessor-disk-source.js';
 import type { PreparedSourcePromptEnvelopeSend } from './prompt-envelope-source-send.js';
 import type { SourceAfterModelRequest } from './source-after-model-hook.js';
@@ -31,9 +25,6 @@ import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/h
 import { withCompressionCallbackCleanup } from './streamCleanup.js';
 import { logApiError } from './turnLogging.js';
 
-interface PreparedRuntimeRequest extends PreparedRequest {
-  runtimeContext: ProviderRuntimeContext;
-}
 export interface StreamRequestInput {
   readonly runtime: AgentRuntimeContext;
   readonly compression: CompressionHandler;
@@ -44,10 +35,6 @@ export interface StreamRequestInput {
   readonly userContent: IContent | IContent[];
   readonly semanticMediaPurge: SemanticMediaPurgeAttempt | undefined;
   readonly fallbackTools: PreparedRequest['requestPayload']['tools'];
-  readonly preparePayload: (
-    contents: IContent[],
-    selection: ToolSelectionHookResult,
-  ) => PreparedRuntimeRequest;
   readonly buildRuntime: (
     extras: Record<string, unknown>,
   ) => ProviderRuntimeContext;
@@ -57,11 +44,6 @@ export interface StreamRequestInput {
     runtime: ProviderRuntimeContext,
     base: ProviderRuntimeContext,
   ) => RuntimeGenerateChatOptions;
-  readonly sendArray: (
-    payload: PreparedRuntimeRequest,
-    allowedTools: string[] | undefined,
-    prepared: Awaited<ReturnType<typeof prepareAtSendSeam>>,
-  ) => Promise<AsyncGenerator<ModelStreamChunk>>;
   readonly consumeSource: (
     stream: AsyncIterable<IContent>,
     startTime: number,
@@ -87,55 +69,21 @@ async function selection(
   );
 }
 
-async function arrayRequest(
-  input: StreamRequestInput,
-): Promise<AsyncGenerator<ModelStreamChunk>> {
-  const request = await buildRequestContentsResult(
-    input.userContent,
-    input.history,
-    streamSemanticPurgeRequest(
-      input.semanticMediaPurge,
-      input.params.config?.abortSignal,
-    ),
-    input.params.config?.abortSignal,
-  );
-  const tools = await selection(input);
-  const payload = input.preparePayload(request.contents, tools);
-  const hooked = await fireBeforeModelHook({
-    configForHooks: input.runtime.providerRuntime.config,
-    requestContents: payload.requestPayload.contents,
-    pendingUserIContents: request.pending,
-    tools: tools.tools ?? [],
-    hookRestrictedAllowedTools: tools.allowedFunctionNames,
-    model: input.runtime.state.model,
-    log: input.log,
-  });
-  const preparation = await preparePromptEnvelopeAfterEnforcement({
-    provider: input.provider,
-    contents: hooked.contents,
-    buildOptions: (contents) =>
-      input.buildOptions(
-        contents,
-        tools.tools,
-        payload.runtimeContext,
-        payload.baseRuntimeContext,
-      ),
-    enforce: (contents, estimate) =>
-      input.compression.enforceProviderContents(
-        { contents, pendingContents: hooked.pendingContents },
-        input.promptId,
-        input.provider,
-        estimate,
-      ),
-    fallbackEstimate: (contents) =>
-      input.compression.estimatePendingTokens(contents),
-  });
-  payload.requestPayload.contents = preparation.contents;
-  return input.sendArray(
-    payload,
-    tools.allowedFunctionNames,
-    preparation.prepared,
-  );
+function pinnedAfterModel(
+  pinned: () => ProviderRequestRows | undefined,
+  tools: PreparedRequest['requestPayload']['tools'],
+  signal: AbortSignal | undefined,
+): SourceAfterModelRequest {
+  return {
+    rows: () => {
+      const rows = pinned();
+      if (rows === undefined)
+        throw new Error('Source AfterModel requires a prepared selection');
+      return rows;
+    },
+    tools,
+    signal,
+  };
 }
 
 async function diskRequest(
@@ -172,6 +120,9 @@ async function diskRequest(
           base,
         );
       },
+      onReleased: () => {
+        pinned = undefined;
+      },
       onPrepared: async (prepared) => {
         pinned = prepared.source;
         input.setEstimate(prepared.estimate);
@@ -194,15 +145,11 @@ async function diskRequest(
       stream,
       startTime,
       tools.allowedFunctionNames,
-      {
-        rows: () => {
-          if (pinned === undefined)
-            throw new Error('Source AfterModel requires a prepared selection');
-          return pinned;
-        },
-        tools: tools.tools,
-        signal: input.params.config?.abortSignal,
-      },
+      pinnedAfterModel(
+        () => pinned,
+        tools.tools,
+        input.params.config?.abortSignal,
+      ),
     );
   } catch (error) {
     input.setEstimate(null);
@@ -222,12 +169,8 @@ export async function buildAndSendStreamRequest(
   input: StreamRequestInput,
 ): Promise<AsyncGenerator<ModelStreamChunk>> {
   try {
-    const stream =
-      input.params.config?.requestHistorySource === 'responses-disk-text'
-        ? await diskRequest(input)
-        : await arrayRequest(input);
     return withCompressionCallbackCleanup(
-      stream,
+      await diskRequest(input),
       input.provider,
       input.compression,
       input.params.config?.abortSignal,

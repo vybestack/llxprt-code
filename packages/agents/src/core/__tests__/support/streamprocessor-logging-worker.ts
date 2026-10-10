@@ -319,7 +319,6 @@ async function run(
       const params: SendMessageParams = {
         message: sourcePending,
         config: {
-          ...(source ? { requestHistorySource: 'responses-disk-text' } : {}),
           abortSignal: controller.signal,
         },
       };

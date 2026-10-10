@@ -4,7 +4,11 @@ import { runRetainedCensus } from './__tests__/support/streamprocessor-retained-
 
 describe('actual source BODY async-context owner discharge', () => {
   it('does not keep the disk selection reachable when an external consumer keeps the completed BODY shell', async () => {
-    const facts = await runRetainedCensus();
+    // The census only keeps the completed BODY shells when asked to; this test is the one that asks.
+    process.env.ISSUE854_RETAIN_BODY_SHELLS = '1';
+    const facts = await runRetainedCensus().finally(() => {
+      delete process.env.ISSUE854_RETAIN_BODY_SHELLS;
+    });
     expect(facts.bodyShells).toBe(2);
     expect(facts.output).toBe('finished');
     expect(facts.bodies).toStrictEqual([facts.expected, facts.expected]);

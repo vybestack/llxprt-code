@@ -2,7 +2,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import type { ChatSessionConfig } from '../../chatSession.js';
 import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { diskTextRow } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-fixture.js';
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
@@ -70,7 +69,6 @@ async function oracle(
 async function run(
   root: string,
   mode: ToolHookMode,
-  source: boolean,
 ): Promise<Record<string, unknown>> {
   mkdirSync(root, { recursive: true });
   const http = endpoint();
@@ -80,9 +78,6 @@ async function run(
     false,
     1,
   );
-  const selection: Pick<ChatSessionConfig, 'requestHistorySource'> = source
-    ? { requestHistorySource: 'responses-disk-text' }
-    : {};
   try {
     registerToolHook(setup.config, root, mode);
     const system = setup.config.getHookSystem();
@@ -97,7 +92,6 @@ async function run(
         {
           message: 'Answer',
           config: {
-            ...selection,
             tools: toolHookTools,
           },
         },
@@ -136,14 +130,10 @@ async function run(
   }
 }
 
-const [root, mode, source, resultPath] = z
+const [root, mode, , resultPath] = z
   .tuple([z.string(), toolHookMode, z.enum(['true', 'false']), z.string()])
   .parse(process.argv.slice(2));
 writeFileSync(
   resultPath,
-  JSON.stringify(
-    await run(root, toolHookMode.parse(mode), source === 'true'),
-    null,
-    2,
-  ),
+  JSON.stringify(await run(root, toolHookMode.parse(mode)), null, 2),
 );

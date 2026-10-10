@@ -36,6 +36,7 @@ import {
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
+import { withSnapshotModelEvents } from './__tests__/support/snapshot-hook-system.js';
 
 type Origin = 'producer' | 'missing' | 'none' | 'unmatched';
 type Path = 'direct' | 'stream' | 'turn';
@@ -63,30 +64,32 @@ function observeHooks(
   Object.defineProperties(config, {
     getEnableHooks: { value: () => true },
     getHookSystem: {
-      value: () => ({
-        initialize: async (): Promise<void> => undefined,
-        isInitialized: (): boolean => true,
-        fireBeforeToolSelectionEvent: async (
-          request: Omit<HookLLMRequest, 'version'>,
-        ) => {
-          selection.push(request);
-          return new BeforeToolSelectionHookOutput({
-            hookSpecificOutput: { toolChoice: choice },
-          });
-        },
-        fireBeforeModelEvent: async (
-          request: Omit<HookLLMRequest, 'version'>,
-        ) => {
-          before.push(request);
-          return new BeforeModelHookOutput({});
-        },
-        fireAfterModelEvent: async (
-          request: Omit<HookLLMRequest, 'version'>,
-        ) => {
-          after.push(request);
-          return new AfterModelHookOutput({});
-        },
-      }),
+      value: () =>
+        withSnapshotModelEvents({
+          initialize: async (): Promise<void> => undefined,
+          getRegistry: () => ({ getHooksForEvent: () => [{}] }),
+          isInitialized: (): boolean => true,
+          fireBeforeToolSelectionEvent: async (
+            request: Omit<HookLLMRequest, 'version'>,
+          ) => {
+            selection.push(request);
+            return new BeforeToolSelectionHookOutput({
+              hookSpecificOutput: { toolChoice: choice },
+            });
+          },
+          fireBeforeModelEvent: async (
+            request: Omit<HookLLMRequest, 'version'>,
+          ) => {
+            before.push(request);
+            return new BeforeModelHookOutput({});
+          },
+          fireAfterModelEvent: async (
+            request: Omit<HookLLMRequest, 'version'>,
+          ) => {
+            after.push(request);
+            return new AfterModelHookOutput({});
+          },
+        }),
     },
   });
 }

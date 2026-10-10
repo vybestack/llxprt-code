@@ -518,8 +518,12 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
       'prompt-issue-2150-abort-signal',
     );
 
-    // The error propagates; the aborted signal must suppress the retry.
-    await expect(collectEvents(stream)).rejects.toThrow('terminated');
+    // The aborted signal must suppress the retry. The source route reports the
+    // user's cancellation itself (AbortError) instead of the provider's
+    // 'terminated' text; the retry suppression is what this test pins.
+    await expect(collectEvents(stream)).rejects.toMatchObject({
+      name: 'AbortError',
+    });
     expect(attempt).toBe(1);
     expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);
   });

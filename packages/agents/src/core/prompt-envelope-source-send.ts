@@ -29,7 +29,9 @@ export interface SourceProviderChatOptions extends RuntimeGenerateChatOptions {
 
 export interface PreparedSourcePromptEnvelopeSend {
   readonly source: PromptEnvelopeSource;
-  readonly estimate: PromptEnvelopeEstimate;
+  /** Null when the provider has no projection; the fallback count is used. */
+  readonly estimate: PromptEnvelopeEstimate | null;
+  readonly estimatedPromptTokens: number;
   readonly options: SourceProviderChatOptions;
   releaseIfUnsent(): Promise<void>;
 }
@@ -37,6 +39,12 @@ export interface PreparedSourcePromptEnvelopeSend {
 type SourceOptionsBuilder = (
   source: PromptEnvelopeSource,
 ) => SourceProviderChatOptions;
+
+/** Contents-only estimate for providers that cannot project an envelope. */
+type SourceFallbackEstimate = (
+  source: PromptEnvelopeSource,
+  signal?: AbortSignal,
+) => Promise<number>;
 
 function sourceContents(
   rows: ProviderRequestRows,
@@ -99,6 +107,7 @@ export class SourcePromptEnvelopePreparer {
     private readonly provider: RuntimeProvider,
     private readonly buildOptions: SourceOptionsBuilder,
     private readonly signal?: AbortSignal,
+    private readonly fallbackEstimate?: SourceFallbackEstimate,
   ) {}
 
   own(source: PromptEnvelopeSource): void {
@@ -128,7 +137,12 @@ export class SourcePromptEnvelopePreparer {
         ? options
         : bindSourceOptions(options, source, this.signal),
     );
-    if (prepared.estimate === null) {
+    let estimatedPromptTokens: number;
+    if (prepared.estimate !== null) {
+      estimatedPromptTokens = prepared.estimate.estimatedPromptTokens;
+    } else if (this.fallbackEstimate !== undefined) {
+      estimatedPromptTokens = await this.fallbackEstimate(source, this.signal);
+    } else {
       await prepared.releaseIfUnsent?.();
       throw new Error(
         'Source-backed prompt preparation requires provider projection',
@@ -138,6 +152,7 @@ export class SourcePromptEnvelopePreparer {
     this.current = {
       source,
       estimate: prepared.estimate,
+      estimatedPromptTokens,
       options: {
         ...prepared.options,
         requestRows: source,
@@ -171,8 +186,14 @@ export function createSourcePromptEnvelopePreparer(
   provider: RuntimeProvider,
   buildOptions: SourceOptionsBuilder,
   signal?: AbortSignal,
+  fallbackEstimate?: SourceFallbackEstimate,
 ): SourcePromptEnvelopePreparer {
-  return new SourcePromptEnvelopePreparer(provider, buildOptions, signal);
+  return new SourcePromptEnvelopePreparer(
+    provider,
+    buildOptions,
+    signal,
+    fallbackEstimate,
+  );
 }
 
 interface SourceEnforcementInput {
@@ -184,6 +205,7 @@ interface SourceEnforcementInput {
     estimate: (candidate: PromptEnvelopeSource) => Promise<number>,
   ) => Promise<PromptEnvelopeSource>;
   readonly signal?: AbortSignal;
+  readonly fallbackEstimate?: SourceFallbackEstimate;
 }
 
 export async function prepareSourcePromptEnvelopeAfterEnforcement(
@@ -197,6 +219,7 @@ export async function prepareSourcePromptEnvelopeAfterEnforcement(
     input.provider,
     input.buildOptions,
     input.signal,
+    input.fallbackEstimate,
   );
   preparer.own(input.source);
   try {
@@ -207,7 +230,7 @@ export async function prepareSourcePromptEnvelopeAfterEnforcement(
       input.signal?.throwIfAborted();
       const prepared = await preparer.prepare(candidate);
       input.signal?.throwIfAborted();
-      return prepared.estimate.estimatedPromptTokens;
+      return prepared.estimatedPromptTokens;
     });
     // Register an unestimated replacement before cancellation can reject it.
     preparer.own(source);
@@ -239,6 +262,8 @@ interface SourceStreamInput extends SourceEnforcementInput {
     attemptIndex: number,
   ) => AsyncIterableIterator<IContent>;
   readonly shouldRetryOnError: (error: unknown) => boolean;
+  /** Runs once after the send has released its source, so callers can drop their own pins. */
+  readonly onReleased?: () => void;
 }
 
 function bindSourceOptions(
@@ -256,7 +281,7 @@ function bindSourceOptions(
   };
 }
 
-function bindSourceSignal(
+export function bindSourceSignal(
   prepared: PreparedSourcePromptEnvelopeSend,
   signal: AbortSignal,
 ): PreparedSourcePromptEnvelopeSend {
@@ -370,9 +395,18 @@ async function* sourceResponses(
   }
 }
 
+interface OwnedSend {
+  readonly iterator: AsyncGenerator<IContent, void, unknown>;
+  readonly preparer: SourcePromptEnvelopePreparer;
+}
+
+/**
+ * A consumer may keep this shell after the response completes, so once cleanup
+ * has run it drops the generator, preparer and selection it owned.
+ */
 class OwnedSourceResponse implements AsyncIterableIterator<IContent> {
   private readonly controller = new AbortController();
-  private readonly iterator: AsyncGenerator<IContent, void, unknown>;
+  private owned: OwnedSend | undefined;
   private cleanup: Promise<void> | undefined;
   private readonly onAbort = (): void => {
     this.controller.abort(this.parent?.reason);
@@ -382,16 +416,20 @@ class OwnedSourceResponse implements AsyncIterableIterator<IContent> {
 
   constructor(
     input: SourceStreamInput,
-    private readonly preparer: SourcePromptEnvelopePreparer,
+    preparer: SourcePromptEnvelopePreparer,
     source: PromptEnvelopeSource,
     private readonly parent?: AbortSignal,
+    private readonly onReleased?: () => void,
   ) {
-    this.iterator = sourceResponses(
-      input,
+    this.owned = {
+      iterator: sourceResponses(
+        input,
+        preparer,
+        source,
+        this.controller.signal,
+      ),
       preparer,
-      source,
-      this.controller.signal,
-    );
+    };
     parent?.addEventListener('abort', this.onAbort, { once: true });
     if (parent?.aborted === true) this.onAbort();
   }
@@ -400,13 +438,26 @@ class OwnedSourceResponse implements AsyncIterableIterator<IContent> {
     return this;
   }
 
+  private requireOwned(): OwnedSend {
+    if (this.owned === undefined)
+      throw new Error('Source response used after its send was released');
+    return this.owned;
+  }
+
   private close(): Promise<void> {
-    this.cleanup ??= discharge([
-      () => this.preparer.releaseUnused(),
-      async () => {
-        await this.iterator.return();
-      },
-    ]).finally(() => this.parent?.removeEventListener('abort', this.onAbort));
+    if (this.cleanup === undefined) {
+      const { iterator, preparer } = this.requireOwned();
+      this.cleanup = discharge([
+        () => preparer.releaseUnused(),
+        async () => {
+          await iterator.return();
+        },
+      ]).finally(() => {
+        this.parent?.removeEventListener('abort', this.onAbort);
+        this.owned = undefined;
+        this.onReleased?.();
+      });
+    }
     return this.cleanup;
   }
 
@@ -420,7 +471,7 @@ class OwnedSourceResponse implements AsyncIterableIterator<IContent> {
       return { done: true, value: undefined };
     }
     try {
-      const next = await this.iterator.next();
+      const next = await this.requireOwned().iterator.next();
       if (this.parent?.aborted === true) {
         await this.close();
         this.parent.throwIfAborted();
@@ -458,5 +509,11 @@ export async function enforceAndStreamSourcePromptEnvelopeRetries(
 ): Promise<AsyncIterableIterator<IContent>> {
   const { source, preparer } =
     await prepareSourcePromptEnvelopeAfterEnforcement(input);
-  return new OwnedSourceResponse(input, preparer, source, input.signal);
+  return new OwnedSourceResponse(
+    input,
+    preparer,
+    source,
+    input.signal,
+    input.onReleased,
+  );
 }

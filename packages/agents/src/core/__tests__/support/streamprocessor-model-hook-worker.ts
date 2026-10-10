@@ -131,7 +131,6 @@ async function oracle(
 async function consume(
   setup: Awaited<ReturnType<typeof processorFixture>>,
   mode: ModelHookMode,
-  source: boolean,
 ): Promise<Record<string, unknown>> {
   const controller = new AbortController();
   const timer =
@@ -150,7 +149,6 @@ async function consume(
       {
         message: 'Answer',
         config: {
-          ...(source ? { requestHistorySource: 'responses-disk-text' } : {}),
           tools: toolHookTools,
           abortSignal: controller.signal,
         },
@@ -214,7 +212,7 @@ async function run(
     await system.initialize();
     const expected = await oracle(setup, mode);
     if (source) observer = observeModelBody(setup.history);
-    const facts = await consume(setup, mode, source);
+    const facts = await consume(setup, mode);
     const path = join(root, 'model-hooks.jsonl');
     return {
       ...facts,

@@ -36,8 +36,6 @@ export interface ChatSessionConfig extends ModelGenerationSettings {
    */
   onStreamLiveness?: (event: StreamLivenessEvent) => void;
   providerRequestContext?: Record<string, unknown>;
-  /** Explicit stateless text-only disk selection; incompatible array contracts reject. */
-  requestHistorySource?: 'responses-disk-text';
   tools?: ToolDeclaration[];
   toolConfig?: unknown;
   /**

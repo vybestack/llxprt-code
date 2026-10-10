@@ -48,6 +48,11 @@ function unblock(http: ReturnType<typeof projectionEndpoint>): void {
   http.readBody.release();
   http.respond.release();
 }
+async function drain(stream: AsyncIterable<unknown>): Promise<void> {
+  for await (const _chunk of stream) {
+    /* Complete the actual history lifecycle. */
+  }
+}
 async function dispose(
   setup: Awaited<ReturnType<typeof processorFixture>>,
   http: ReturnType<typeof projectionEndpoint>,
@@ -57,8 +62,8 @@ async function dispose(
   await setup.config.dispose();
 }
 
-describe('source required hook failures', () => {
-  it('fails before HTTP when a required tool hook cannot execute successfully', async () => {
+describe('source tool-selection hook failures', () => {
+  it('sends without restriction when the tool-selection hook command fails', async () => {
     const http = projectionEndpoint(false);
     unblock(http);
     const setup = await processorFixture(
@@ -73,18 +78,18 @@ describe('source required hook failures', () => {
       { hooks: [{ type: HookType.Command, command: 'exit 1' }] },
     ];
     try {
-      await expect(
-        setup.processor.makeApiCallAndProcessStream(
+      await drain(
+        await setup.processor.makeApiCallAndProcessStream(
           {
             message: 'Answer',
-            config: { requestHistorySource: 'responses-disk-text' },
+            config: {},
           },
-          'required-tool-failure',
+          'failing-tool-hook',
           sourcePending,
         ),
-      ).rejects.toThrow('source tool-selection hook execution failed');
-      expect(http.bodies).toHaveLength(0);
-      expect(setup.history.owners).toHaveLength(0);
+      );
+      expect(http.bodies).toHaveLength(1);
+      expect(setup.history.owners.every((owner) => owner.closed)).toBe(true);
     } finally {
       await dispose(setup, http);
     }
@@ -107,39 +112,38 @@ describe('actual StreamProcessor source contract safety', () => {
     expect(source.boundary).toMatchObject({ first: 0, last: 0, closed: 1 });
     expect(source.bodies).toHaveLength(1);
   }, 60000);
-  it.each([HookEventName.AfterModel])(
-    'rejects enabled %s without fake hook contents or HTTP',
-    async (event) => {
-      const http = projectionEndpoint(false);
-      unblock(http);
-      const setup = await processorFixture(
-        root(),
-        `http://127.0.0.1:${http.server.port}/v1`,
-        false,
-        1,
+  it('executes an enabled AfterModel against the pinned request rows', async () => {
+    const http = projectionEndpoint(false);
+    unblock(http);
+    const setup = await processorFixture(
+      root(),
+      `http://127.0.0.1:${http.server.port}/v1`,
+      false,
+      1,
+    );
+    const observed = join(root(), 'after-model-input.json');
+    hook(setup.config, HookEventName.AfterModel, observed);
+    try {
+      await drain(
+        await setup.processor.makeApiCallAndProcessStream(
+          {
+            message: 'Answer',
+            config: {},
+          },
+          'after-model',
+          sourcePending,
+        ),
       );
-      const observed = join(root(), 'model-hook-input.json');
-      hook(setup.config, event, observed);
-      try {
-        await expect(
-          setup.processor.makeApiCallAndProcessStream(
-            {
-              message: 'Answer',
-              config: { requestHistorySource: 'responses-disk-text' },
-            },
-            'model-hook',
-            sourcePending,
-          ),
-        ).rejects.toThrow('source model hooks');
-        expect(existsSync(observed)).toBe(false);
-        expect(http.bodies).toHaveLength(0);
-        expect(setup.history.owners).toHaveLength(0);
-      } finally {
-        await dispose(setup, http);
-      }
-    },
-    60000,
-  );
+      expect(JSON.parse(readFileSync(observed, 'utf8'))).toMatchObject({
+        hook_event_name: 'AfterModel',
+        llm_request: { contents: [{ speaker: 'human' }, { speaker: 'human' }] },
+      });
+      expect(http.bodies).toHaveLength(1);
+      expect(setup.history.owners.every((owner) => owner.closed)).toBe(true);
+    } finally {
+      await dispose(setup, http);
+    }
+  }, 60000);
 });
 
 describe('actual source tool-selection hook', () => {
@@ -190,7 +194,7 @@ describe('actual source runtime-disabled hook', () => {
       const stream = await setup.processor.makeApiCallAndProcessStream(
         {
           message: 'Answer',
-          config: { requestHistorySource: 'responses-disk-text' },
+          config: {},
         },
         'disabled-model-hook',
         sourcePending,
@@ -224,7 +228,6 @@ describe('actual source response ownership', () => {
           {
             message: 'Answer',
             config: {
-              requestHistorySource: 'responses-disk-text',
               abortSignal: controller.signal,
             },
           },
@@ -245,7 +248,7 @@ describe('actual source response ownership', () => {
 });
 
 describe('actual source token-usage contract', () => {
-  it('rejects enabled token-usage shape logging before HTTP', async () => {
+  it('sends with token-usage shape logging enabled', async () => {
     const http = projectionEndpoint(false);
     unblock(http);
     const setup = await processorFixture(
@@ -259,17 +262,18 @@ describe('actual source token-usage contract', () => {
       join(root(), 'token-usage.jsonl'),
     );
     try {
-      await expect(
-        setup.processor.makeApiCallAndProcessStream(
+      await drain(
+        await setup.processor.makeApiCallAndProcessStream(
           {
             message: 'Answer',
-            config: { requestHistorySource: 'responses-disk-text' },
+            config: {},
           },
           'usage-log',
           sourcePending,
         ),
-      ).rejects.toThrow('source token-usage shape logging');
-      expect(http.bodies).toHaveLength(0);
+      );
+      expect(http.bodies).toHaveLength(1);
+      expect(setup.history.owners.every((owner) => owner.closed)).toBe(true);
     } finally {
       await dispose(setup, http);
     }
@@ -296,7 +300,7 @@ if (process.env.ISSUE854_STREAM_FULL_CONTRACTS === '1') {
         const stream = await setup.processor.makeApiCallAndProcessStream(
           {
             message: 'Answer',
-            config: { requestHistorySource: 'responses-disk-text' },
+            config: {},
           },
           'required-before',
           sourcePending,
@@ -339,7 +343,7 @@ if (process.env.ISSUE854_STREAM_FULL_CONTRACTS === '1') {
         const stream = await setup.processor.makeApiCallAndProcessStream(
           {
             message: 'Answer',
-            config: { requestHistorySource: 'responses-disk-text' },
+            config: {},
           },
           'required-logs',
           sourcePending,
@@ -368,7 +372,7 @@ if (process.env.ISSUE854_STREAM_FULL_CONTRACTS === '1') {
           setup.processor.makeApiCallAndProcessStream(
             {
               message: 'Answer',
-              config: { requestHistorySource: 'responses-disk-text' },
+              config: {},
             },
             'required-compression',
             sourcePending,

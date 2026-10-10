@@ -75,6 +75,8 @@ async function publish(
       signal,
     );
     input.artifactIds.push(source.artifact_id);
+    if (prepared.estimate === null)
+      throw new Error('Missing projected estimate');
     input.estimates.push(prepared.estimate);
     try {
       await createTelemetryAdapterFromConfig(input.setup.config).logApiRequest({

@@ -91,7 +91,7 @@ export async function ladderAttempt(
     const stream = await setup.processor.makeApiCallAndProcessStream(
       {
         message: 'Compress before sending.',
-        config: disk ? { requestHistorySource: 'responses-disk-text' } : {},
+        config: {},
       },
       'source-compression-ladder',
       ladderPending,

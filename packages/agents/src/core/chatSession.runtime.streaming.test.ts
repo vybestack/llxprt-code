@@ -35,6 +35,7 @@ import {
   BeforeModelHookOutput,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
+import { withSnapshotModelEvents } from './__tests__/support/snapshot-hook-system.js';
 import { waitForCondition } from '../test-utils/eventLoop.js';
 
 describe('ChatSession runtime streaming and abort behavior', () => {
@@ -93,18 +94,20 @@ describe('ChatSession runtime streaming and abort behavior', () => {
       getConversationLoggingEnabled: { value: () => false },
       getEnableHooks: { value: () => true },
       getHookSystem: {
-        value: () => ({
-          initialize: async () => undefined,
-          isInitialized: () => true,
+        value: () =>
+          withSnapshotModelEvents({
+            initialize: async () => undefined,
+            getRegistry: () => ({ getHooksForEvent: () => [{}] }),
+            isInitialized: () => true,
 
-          fireBeforeToolSelectionEvent: async () => ({
-            applyToolChoiceModifications: () => ({
-              toolChoice: { mode: 'auto', allowedToolNames: ['read_file'] },
+            fireBeforeToolSelectionEvent: async () => ({
+              applyToolChoiceModifications: () => ({
+                toolChoice: { mode: 'auto', allowedToolNames: ['read_file'] },
+              }),
             }),
+            fireBeforeModelEvent: async () => new BeforeModelHookOutput({}),
+            fireAfterModelEvent: async () => new AfterModelHookOutput({}),
           }),
-          fireBeforeModelEvent: async () => new BeforeModelHookOutput({}),
-          fireAfterModelEvent: async () => new AfterModelHookOutput({}),
-        }),
       },
     });
     const hookProviderRuntime = createProviderRuntimeContext({

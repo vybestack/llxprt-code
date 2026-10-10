@@ -5,6 +5,7 @@
  */
 
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { ModelGenerationSettings } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
@@ -183,6 +184,42 @@ export async function estimatePendingTokens(
 
     let fallback = 0;
     for (const content of contents) {
+      fallback += estimateFallbackContentTokens(content, logger);
+    }
+    return fallback;
+  }
+}
+
+/**
+ * The same estimate as {@link estimatePendingTokens}, read row by row from a
+ * disk selection so providers without prompt-envelope projection need no
+ * request-wide array. Each content is summed independently in both routes, so
+ * the values are identical.
+ */
+export async function estimateSourcePendingTokens(
+  rows: ProviderRequestRows,
+  historyService: HistoryService,
+  model: string,
+  signal?: AbortSignal,
+): Promise<number> {
+  if (rows.count === 0) {
+    return 0;
+  }
+  const stream: AsyncIterable<IContent> = {
+    [Symbol.asyncIterator]: () => rows.openReader(signal),
+  };
+  try {
+    return await historyService.estimateTokensForContents(
+      stream,
+      model,
+      signal,
+    );
+  } catch (error) {
+    signal?.throwIfAborted();
+    logger.debug('Falling back to local token estimate', error);
+
+    let fallback = 0;
+    for await (const content of stream) {
       fallback += estimateFallbackContentTokens(content, logger);
     }
     return fallback;

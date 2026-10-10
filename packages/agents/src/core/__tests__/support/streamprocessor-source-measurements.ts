@@ -32,7 +32,7 @@ export async function warmSourceProcessor(root: string): Promise<void> {
     const stream = await setup.processor.makeApiCallAndProcessStream(
       {
         message: 'Warm',
-        config: { requestHistorySource: 'responses-disk-text' },
+        config: {},
       },
       'warm-source',
       sourcePending,

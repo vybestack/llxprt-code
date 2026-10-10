@@ -65,7 +65,6 @@ async function request(mode: Mode) {
       {
         message: 'Answer',
         config: {
-          requestHistorySource: 'responses-disk-text',
           abortSignal: controller.signal,
         },
       },

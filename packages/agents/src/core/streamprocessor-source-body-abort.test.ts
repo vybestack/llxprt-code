@@ -25,7 +25,6 @@ describe('actual StreamProcessor abort during progressive BODY', () => {
       {
         message: 'Answer',
         config: {
-          requestHistorySource: 'responses-disk-text',
           abortSignal: controller.signal,
         },
       },

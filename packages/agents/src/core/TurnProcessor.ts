@@ -20,13 +20,13 @@ import type {
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import { recordSendSeamTelemetry } from './tokenUsageEstimateLogger.js';
+import { recordSourceSendSeamTelemetry } from './tokenUsageEstimateLogger.js';
+import { buildProviderChatOptions } from './promptEnvelopeSendSeam.js';
 import {
-  bindPreparedTransportSignal,
-  buildProviderChatOptions,
-  enforceAndSendWithPromptEnvelopeRetries,
-  prepareAtSendSeam,
-} from './promptEnvelopeSendSeam.js';
+  bindSourceSignal,
+  type PreparedSourcePromptEnvelopeSend,
+} from './prompt-envelope-source-send.js';
+import { sendTurnSource } from './turnSourceRequest.js';
 import { resolveGeneratingModel } from './generatingModelResolver.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { CompressionHandler } from '../compression/CompressionHandler.js';
@@ -72,7 +72,6 @@ import {
   emptyModelOutput,
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { recordAbandonedStreamAttempt } from './tokenUsageActualLogger.js';
-import { shouldRetryDirectProviderError } from './turnRetryPolicy.js';
 import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
 
 type SemanticMediaPurgeFactory = () => Promise<
@@ -82,7 +81,6 @@ import {
   prepareAdmittedUserTurn,
   type PreparedUserTurn,
 } from './mediaAdmissionSeam.js';
-import { enforceTurnMediaRequestContents } from './turnMediaRequest.js';
 import { commitTurnHistory } from './turnHistoryCommit.js';
 import {
   failedTurnCleanup,
@@ -567,123 +565,107 @@ export class TurnProcessor {
             toolSelection.tools?.length === 0),
       },
     );
-    return enforceAndSendWithPromptEnvelopeRetries({
-      provider,
-      contents: userIContents,
-      buildOptions: (contents) =>
-        this._buildProviderChatOptions(
-          contents,
-          toolSelection.tools,
-          runtimeContext,
-          requestParams.config?.abortSignal ?? new AbortController().signal,
-          requestParams.config?.providerRequestContext,
-        ),
-      enforce: (contents, estimate) =>
-        enforceTurnMediaRequestContents({
-          runtimeContext: this.runtimeContext,
-          historyService: this.historyService,
-          compressionHandler: this.compressionHandler,
-          userContents: contents,
-          provider,
-          promptId: prompt_id,
-          semanticMediaPurge,
-          signal: requestParams.config?.abortSignal,
-          estimateFinalizedPromptTokens: estimate,
-        }),
-      fallbackEstimate: (contents) =>
-        this.compressionHandler.estimatePendingTokens(contents),
-      send: (contents, prepared, attemptIndex) => {
-        // Recorded on the instance rather than threaded as a tenth parameter;
-        // `_syncTokenCounts` reads it when the turn is recorded. Mirrors how
-        // `currentPromptEnvelopeEstimate` is carried across the same seam.
-        this.lastSendAttemptIndex = attemptIndex;
-        return timing.measure(() =>
-          this._executeProviderCall(
-            provider,
-            requestParams,
-            prompt_id,
-            contents,
-            providerBaseUrl,
-            toolSelection,
-            runtimeContext,
-            prepared,
-          ),
-        );
-      },
-      shouldRetryOnError: shouldRetryDirectProviderError,
-      signal: requestParams.config?.abortSignal,
-    });
-  }
-
-  /**
-   * Executes the actual provider.generateChatCompletion call.
-   */
-  private async _executeProviderCall(
-    provider: IProvider,
-    params: SendMessageParams,
-    promptId: string,
-    requestContents: IContent[],
-    providerBaseUrl: string | undefined,
-    toolSelection: ToolSelectionHookResult,
-    runtimeContext: ProviderRuntimeContext,
-    preparedAtEnforcement?: Awaited<ReturnType<typeof prepareAtSendSeam>>,
-  ): Promise<ModelOutput> {
-    const tools = toolSelection.tools;
-    const allowedFunctionNames = toolSelection.allowedFunctionNames;
-    this._logToolDiagnostics(provider, tools, providerBaseUrl);
-    const timeoutController = new AbortController();
-    const upstreamAbortSignal = params.config?.abortSignal;
-    const onAbort = () => timeoutController.abort();
-    upstreamAbortSignal?.addEventListener('abort', onAbort, { once: true });
-    if (upstreamAbortSignal?.aborted === true) {
-      onAbort();
-    }
-
+    this._logToolDiagnostics(provider, toolSelection.tools, providerBaseUrl);
+    const signal = requestParams.config?.abortSignal;
     try {
-      const prepared =
-        preparedAtEnforcement ??
-        (await prepareAtSendSeam(
-          provider,
+      const response = await sendTurnSource({
+        runtime: this.runtimeContext,
+        compression: this.compressionHandler,
+        history: this.historyService,
+        provider,
+        promptId: prompt_id,
+        userContents: userIContents,
+        semanticMediaPurge,
+        tools: toolSelection.tools,
+        signal,
+        log: (message) => this.logger.debug(() => message),
+        buildOptions: (contents) =>
           this._buildProviderChatOptions(
-            requestContents,
-            tools,
+            contents,
+            toolSelection.tools,
             runtimeContext,
-            timeoutController.signal,
-            params.config?.providerRequestContext,
+            signal ?? new AbortController().signal,
+            requestParams.config?.providerRequestContext,
           ),
-        ));
-      this.currentPromptEnvelopeEstimate = prepared.estimate;
-      await recordSendSeamTelemetry({
-        usageLogger: this.compressionHandler.tokenUsageLogger,
-        promptId,
-        estimate: prepared.estimate,
-        runtimeState: this.runtimeContext.state,
-        historyService: this.historyService,
-        requestContents,
-        tools,
-        systemInstruction: this.generationConfig.systemInstruction,
-        turnId: this.currentTurnId,
+        onPrepared: (prepared) =>
+          this._recordPreparedSend(prepared, prompt_id, toolSelection.tools),
+        attempt: (prepared, attemptIndex) => {
+          // Recorded on the instance rather than threaded as a tenth parameter;
+          // `_syncTokenCounts` reads it when the turn is recorded.
+          this.lastSendAttemptIndex = attemptIndex;
+          return timing.measure(() =>
+            this._consumeSourceAttempt(
+              provider,
+              prepared,
+              runtimeContext,
+              signal,
+            ),
+          );
+        },
       });
-      const transportPrepared = bindPreparedTransportSignal(
-        prepared,
-        timeoutController.signal,
+      const output = toModelStreamChunk(response);
+      this._applyHookToolFiltering(
+        output,
+        response,
+        toolSelection.allowedFunctionNames,
       );
-
-      const streamResponse = provider.generateChatCompletion(
-        transportPrepared.options,
-      );
-      const lastResponse = await this._consumeProviderStream(
-        streamResponse,
-        runtimeContext,
-        timeoutController,
-        upstreamAbortSignal,
-      );
-      const output = toModelStreamChunk(lastResponse);
-      this._applyHookToolFiltering(output, lastResponse, allowedFunctionNames);
       return output;
     } catch (error) {
       this.currentPromptEnvelopeEstimate = null;
       throw error;
+    }
+  }
+
+  private async _recordPreparedSend(
+    prepared: PreparedSourcePromptEnvelopeSend,
+    promptId: string,
+    tools: ToolDeclaration[] | undefined,
+  ): Promise<void> {
+    this.currentPromptEnvelopeEstimate = prepared.estimate;
+    await this.runtimeContext.telemetry.logApiRequest({
+      model: this.runtimeContext.state.model,
+      promptId,
+      sessionId: this.runtimeContext.state.sessionId,
+      runtimeId: this.runtimeContext.state.runtimeId,
+      provider: this.runtimeContext.state.provider,
+      timestamp: Date.now(),
+    });
+    await recordSourceSendSeamTelemetry({
+      usageLogger: this.compressionHandler.tokenUsageLogger,
+      promptId,
+      estimate: prepared.estimate,
+      runtimeState: this.runtimeContext.state,
+      historyService: this.historyService,
+      requestRows: prepared.source,
+      tools,
+      systemInstruction: this.generationConfig.systemInstruction,
+      turnId: this.currentTurnId,
+    });
+  }
+
+  /**
+   * One provider attempt over a prepared source: the idle-timeout controller is
+   * the transport signal, and the whole response is consumed before returning
+   * so the retry policy sees mid-response failures.
+   */
+  private async _consumeSourceAttempt(
+    provider: IProvider,
+    prepared: PreparedSourcePromptEnvelopeSend,
+    runtimeContext: ProviderRuntimeContext,
+    upstreamAbortSignal: AbortSignal | undefined,
+  ): Promise<IContent> {
+    const timeoutController = new AbortController();
+    const onAbort = () => timeoutController.abort();
+    upstreamAbortSignal?.addEventListener('abort', onAbort, { once: true });
+    if (upstreamAbortSignal?.aborted === true) onAbort();
+    try {
+      const transport = bindSourceSignal(prepared, timeoutController.signal);
+      return await this._consumeProviderStream(
+        provider.generateChatCompletion(transport.options),
+        runtimeContext,
+        timeoutController,
+        upstreamAbortSignal,
+      );
     } finally {
       timeoutController.abort();
       upstreamAbortSignal?.removeEventListener('abort', onAbort);
@@ -715,7 +697,7 @@ export class TurnProcessor {
   }
 
   private _buildProviderChatOptions(
-    requestContents: IContent[],
+    requestContents: Iterable<IContent> | AsyncIterable<IContent>,
     tools: ToolDeclaration[] | undefined,
     runtimeContext: ProviderRuntimeContext,
     timeoutSignal: AbortSignal,

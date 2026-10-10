@@ -641,7 +641,11 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
       'prompt-issue-3048-abort-signal',
     );
 
-    await expect(collectEvents(stream)).rejects.toThrow('terminated');
+    // The source route reports the user's cancellation itself (AbortError)
+    // instead of the provider's 'terminated' text; no restart is the contract.
+    await expect(collectEvents(stream)).rejects.toMatchObject({
+      name: 'AbortError',
+    });
     expect(attempt).toBe(1);
   });
 

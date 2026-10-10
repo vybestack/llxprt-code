@@ -11,7 +11,9 @@ import type { SourcePendingRows } from '../compression/source-candidate.js';
 import {
   enforceAndStreamSourcePromptEnvelopeRetries,
   type PreparedSourcePromptEnvelopeSend,
+  type PromptEnvelopeSource,
 } from './prompt-envelope-source-send.js';
+import { estimateSourcePendingTokens } from '../compression/compressionBudgeting.js';
 import { preparePendingContents } from './streamRequestHelpers.js';
 import {
   pendingAwareRequestSelection,
@@ -41,7 +43,15 @@ interface StreamDiskSourceInput {
   ) => RuntimeGenerateChatOptions;
   readonly onPrepared: (
     prepared: PreparedSourcePromptEnvelopeSend,
+    attemptIndex: number,
   ) => void | Promise<void>;
+  /** Streaming callers retry around the whole send; direct turns retry inside it. */
+  readonly shouldRetryOnError?: (error: unknown) => boolean;
+  readonly send?: (
+    prepared: PreparedSourcePromptEnvelopeSend,
+    attemptIndex: number,
+  ) => AsyncIterableIterator<IContent>;
+  readonly onReleased?: () => void;
 }
 
 /** Raw pending input for recomposition, which is not the normalized output membership. */
@@ -57,7 +67,17 @@ async function rawPendingInput(
   return rows;
 }
 
-/** Separate opt-in send. No request-wide content graph is fabricated or retained. */
+function sourceFallbackEstimate(input: StreamDiskSourceInput) {
+  return (rows: PromptEnvelopeSource, signal?: AbortSignal): Promise<number> =>
+    estimateSourcePendingTokens(
+      rows,
+      input.history,
+      input.runtime.state.model,
+      signal,
+    );
+}
+
+/** The product send. No request-wide content graph is fabricated or retained. */
 export async function streamDiskSource(
   input: StreamDiskSourceInput,
 ): Promise<AsyncIterableIterator<IContent>> {
@@ -107,6 +127,7 @@ export async function streamDiskSource(
     provider: input.provider,
     source,
     signal: input.signal,
+    fallbackEstimate: sourceFallbackEstimate(input),
     buildOptions: (rows) => ({
       ...input.buildOptions(
         { [Symbol.asyncIterator]: () => rows.openReader(input.signal) },
@@ -127,6 +148,8 @@ export async function streamDiskSource(
         pending,
       ),
     onPrepared: input.onPrepared,
-    shouldRetryOnError: () => false,
+    send: input.send,
+    onReleased: input.onReleased,
+    shouldRetryOnError: input.shouldRetryOnError ?? (() => false),
   });
 }

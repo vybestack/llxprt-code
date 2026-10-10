@@ -22,7 +22,7 @@ async function measure(input: RetainedSetup) {
   const started = setup.processor.makeApiCallAndProcessStream(
     {
       message: 'Answer the history.',
-      config: { requestHistorySource: 'responses-disk-text' },
+      config: {},
     },
     'retained-census',
     input.pending,

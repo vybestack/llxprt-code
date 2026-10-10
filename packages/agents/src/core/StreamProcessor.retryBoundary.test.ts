@@ -18,6 +18,9 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { SendMessageParams } from './chatSession.js';
+import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { buildRuntimeContext } from './streamRequestHelpers.js';
 
 // Import retry utility types
 
@@ -237,6 +240,11 @@ function facadeCallback0(): void {
       .mockImplementation((envelope: { contents: IContent[] }) =>
         Promise.resolve(envelope.contents),
       ),
+    enforceProviderSource: vi
+      .fn()
+      .mockImplementation((_provider: unknown, _id: string, source: unknown) =>
+        Promise.resolve(source),
+      ),
     clearProviderCompressionCallback: vi.fn(),
     lastPromptTokenCount: 0,
   };
@@ -246,15 +254,7 @@ function facadeCallback0(): void {
     recordHistory: vi.fn(),
   };
 
-  const mockHistoryService = {
-    generateTurnKey: () => 'test-turn',
-    getIdGeneratorCallback: () => () => 'test-id',
-    async *getCuratedForProviderStream(contents: IContent[]) {
-      yield* contents;
-    },
-    add: vi.fn(),
-    waitForTokenUpdates: vi.fn().mockResolvedValue(undefined),
-  };
+  const mockHistoryService = new HistoryService();
 
   const mockProviderRuntimeBuilder = () => ({
     config: {
@@ -300,21 +300,11 @@ function facadeCallback1(): void {
     metadata: { source: 'test' },
   };
 
-  const buildRuntimeContext = (
-    processor as unknown as {
-      _buildRuntimeContext: (
-        baseRuntimeContext: unknown,
-        params: { config?: { abortSignal?: AbortSignal; tools?: unknown } },
-      ) => { config?: unknown; metadata?: Record<string, unknown> };
-    }
-  )._buildRuntimeContext;
-
-  const runtimeContext = buildRuntimeContext.call(
-    processor,
-    baseRuntimeContext,
+  const runtimeContext = buildRuntimeContext(
+    baseRuntimeContext as unknown as ProviderRuntimeContext,
     {
       config: { abortSignal: abortController.signal, tools },
-    },
+    } as unknown as SendMessageParams,
   );
 
   expect(runtimeContext.config).toBe(configInstance);
@@ -462,7 +452,9 @@ async function facadeCallback5(): Promise<void> {
         shouldRetryOnError?: (error: unknown) => boolean;
       },
     ) => {
-      capturedShouldRetryOnError = options?.shouldRetryOnError;
+      // The outer stream retry is entered first; the source pipeline's own
+      // nested retry must not replace its classification.
+      capturedShouldRetryOnError ??= options?.shouldRetryOnError;
       return fn();
     },
   );
@@ -509,7 +501,9 @@ async function facadeCallback6(): Promise<void> {
         shouldRetryOnError?: (error: unknown) => boolean;
       },
     ) => {
-      capturedShouldRetryOnError = options?.shouldRetryOnError;
+      // The outer stream retry is entered first; the source pipeline's own
+      // nested retry must not replace its classification.
+      capturedShouldRetryOnError ??= options?.shouldRetryOnError;
       return fn();
     },
   );

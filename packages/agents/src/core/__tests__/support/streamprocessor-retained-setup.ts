@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { observeRetainedLogging } from './streamprocessor-retained-logging.js';
 import { createHash } from 'node:crypto';
-import { mkdtempSync } from 'node:fs';
+import { mkdirSync, mkdtempSync } from 'node:fs';
 import { join } from 'node:path';
 import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -114,6 +114,7 @@ export async function retainedSetup(): Promise<RetainedSetup> {
   const evidence =
     process.env.ISSUE854_RETAINED_EVIDENCE ??
     join(process.cwd(), 'tmp/streamprocessor-retained-20261008-sol');
+  mkdirSync(join(evidence, 'fixtures'), { recursive: true });
   const root = mkdtempSync(join(evidence, 'fixtures/run-'));
   const mode = process.env.ISSUE854_RETAINED_MODE ?? 'small';
   const large = mode === 'large';

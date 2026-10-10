@@ -10,6 +10,7 @@ import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { DirectMessageProcessor } from './DirectMessageProcessor.js';
 import { TurnProcessor } from './TurnProcessor.js';
 import { isTerminalRetryError } from './turnAbortHelpers.js';
+import { shouldRetryDirectProviderError } from './turnRetryPolicy.js';
 
 function terminalError(): Error & {
   readonly isRetryable: false;
@@ -74,12 +75,13 @@ async function facadeCallback0(): Promise<void> {
     }),
     resolveProviderBaseUrl: () => undefined,
     generationConfig: {},
-    _executeProviderCall: async () => {
+    // The source send owns the provider retry loop; a terminal aggregate it
+    // raises must leave the turn untouched and unretried.
+    _enforceAndSendProviderRequest: async () => {
       calls++;
       throw error;
     },
     _validateProvider: () => undefined,
-    _enforceAndLogProviderContents: async (contents: unknown[]) => contents,
   });
 
   await expect(
@@ -99,6 +101,7 @@ async function facadeCallback0(): Promise<void> {
     ),
   ).rejects.toBe(error);
   expect(calls).toBe(1);
+  expect(shouldRetryDirectProviderError(error)).toBe(false);
 }
 
 async function facadeCallback1(): Promise<void> {

@@ -293,7 +293,7 @@ async function testActualSeamRetry(): Promise<void> {
         expect(prepared.options.metadata?.['_retryRequestContext']).toBe(
           retryContext,
         );
-        expect(prepared.estimate.estimatedPromptTokens).toBe(
+        expect(prepared.estimatedPromptTokens).toBe(
           await independentEstimate(setup, 64, false, attemptText),
         );
         systemText = retryInstructions;

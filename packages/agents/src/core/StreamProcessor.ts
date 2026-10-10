@@ -24,16 +24,11 @@ import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import {
-  recordSendSeamTelemetry,
-  recordSourceSendSeamTelemetry,
-} from './tokenUsageEstimateLogger.js';
-import { prepareAtSendSeam } from './promptEnvelopeSendSeam.js';
+import { recordSourceSendSeamTelemetry } from './tokenUsageEstimateLogger.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { ConversationManager } from './ConversationManager.js';
 import type { CompressionHandler } from '../compression/CompressionHandler.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { logApiError } from './turnLogging.js';
 import { EmptyStreamError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import { isTerminalRetryError } from './turnAbortHelpers.js';
 import {
@@ -53,12 +48,8 @@ import {
 } from '@vybestack/llxprt-code-providers';
 import {
   contentForTelemetryPreservingUsage,
-  prepareRequestPayload,
-  buildRuntimeContext,
   resolveUserMemory,
-  logOutgoingRequest,
   extractSystemInstructionText,
-  type ToolSelectionHookResult,
   type PreparedRequest,
 } from './streamRequestHelpers.js';
 import { buildAndSendStreamRequest } from './streamprocessor-request.js';
@@ -332,8 +323,6 @@ export class StreamProcessor {
       provider,
       semanticMediaPurge,
       fallbackTools: this.generationConfig.tools,
-      preparePayload: (contents, selection) =>
-        this._prepareRequestPayload(contents, selection, params),
       buildRuntime: (extras) =>
         this.providerRuntimeBuilder('StreamProcessor.generateRequest', extras),
       buildOptions: (contents, tools, runtime, base) =>
@@ -343,17 +332,6 @@ export class StreamProcessor {
           runtime,
           base,
           params,
-        ),
-      sendArray: (payload, allowedTools, prepared) =>
-        this._sendProviderRequest(
-          provider,
-          payload.requestPayload,
-          payload.runtimeContext,
-          payload.baseRuntimeContext,
-          params,
-          promptId,
-          allowedTools,
-          prepared,
         ),
       consumeSource: (stream, startTime, allowedTools, afterModel) =>
         this._consumeFirstChunkAndReturn(
@@ -383,52 +361,6 @@ export class StreamProcessor {
         }),
       log: (message) => this.logger.debug(() => message),
     });
-  }
-
-  private _prepareRequestPayload(
-    requestContents: IContent[],
-    toolSelection: ToolSelectionHookResult,
-    params: SendMessageParams,
-  ): {
-    requestPayload: PreparedRequest['requestPayload'];
-    baseRuntimeContext: ProviderRuntimeContext;
-    runtimeContext: ProviderRuntimeContext;
-  } {
-    const { requestPayload, baseRuntimeContext } = prepareRequestPayload({
-      requestContents,
-      tools: toolSelection.tools,
-      logger: this.logger,
-      providerRuntimeBuilder: (source, extras) =>
-        this.providerRuntimeBuilder(source, {
-          ...extras,
-          conversationLogEmptyTools: toolSelection.conversationLogEmptyTools,
-        }),
-      providerName: this.providerResolver('stream').name,
-      modelName: this.runtimeContext.state.model,
-      baseUrl: this.runtimeContext.state.baseUrl,
-    });
-
-    const runtimeContext = this._buildRuntimeContext(
-      baseRuntimeContext,
-      params,
-    );
-
-    return { requestPayload, baseRuntimeContext, runtimeContext };
-  }
-
-  // @plan:PLAN-20260617-COREAPI.P15
-  // @requirement:REQ-001
-  private _buildRuntimeContext(
-    baseRuntimeContext: ProviderRuntimeContext,
-    params: SendMessageParams,
-  ): ProviderRuntimeContext {
-    // The runtime context's `config` MUST stay the live llxprt `Config`
-    // class instance so provider-side resolution (ProviderManager
-    // .resolveModelField -> config.getModel()) keeps working. buildRuntimeContext
-    // only layers the per-request abortSignal onto metadata, leaving the Config
-    // slot untouched (genai config and tools reach the provider via dedicated
-    // channels: requestPayload.tools, metadata.abortSignal, params.config reads).
-    return buildRuntimeContext(baseRuntimeContext, params);
   }
 
   private _buildStreamChatOptions(
@@ -476,76 +408,6 @@ export class StreamProcessor {
       ),
       systemPromptAssembler: this.generationConfig.systemPromptAssembler,
     };
-  }
-
-  private async _sendProviderRequest(
-    provider: IProvider,
-    requestPayload: PreparedRequest['requestPayload'],
-    runtimeContext: ProviderRuntimeContext,
-    baseRuntimeContext: ProviderRuntimeContext,
-    params: SendMessageParams,
-    promptId: string,
-    hookRestrictedAllowedTools: string[] | undefined,
-    preparedAtEnforcement?: Awaited<ReturnType<typeof prepareAtSendSeam>>,
-  ): Promise<AsyncGenerator<ModelStreamChunk>> {
-    logOutgoingRequest(
-      this.runtimeContext,
-      requestPayload,
-      this.runtimeContext.state.model,
-      promptId,
-    );
-    const startTime = Date.now();
-    try {
-      const chatOptions = this._buildStreamChatOptions(
-        promptId,
-        requestPayload,
-        runtimeContext,
-        baseRuntimeContext,
-        params,
-      );
-      const prepared =
-        preparedAtEnforcement ??
-        (await prepareAtSendSeam(provider, chatOptions));
-      this.currentPromptEnvelopeEstimate = prepared.estimate;
-      await recordSendSeamTelemetry({
-        usageLogger: this.compressionHandler.tokenUsageLogger,
-        promptId,
-        estimate: prepared.estimate,
-        runtimeState: this.runtimeContext.state,
-        historyService: this.historyService,
-        requestContents: requestPayload.contents,
-        tools: requestPayload.tools,
-        systemInstruction: this.generationConfig.systemInstruction,
-        turnId: this.turnIdByPromptId.get(promptId) ?? null,
-      });
-
-      const streamResponse = provider.generateChatCompletion(prepared.options);
-      // Captured explicitly (not read inside the generator below): a later
-      // attempt replaces the instance field, and the explicit parameter is
-      // what keeps this attempt's stream wired to this attempt's tracker.
-      const rawTokenDeltaBridge = this.currentRawTokenDeltaBridge;
-
-      return await this._consumeFirstChunkAndReturn(
-        streamResponse,
-        requestPayload,
-        promptId,
-        startTime,
-        hookRestrictedAllowedTools,
-        rawTokenDeltaBridge,
-      );
-    } catch (error) {
-      const durationMs = Date.now() - startTime;
-      logApiError(
-        this.runtimeContext,
-        this.runtimeContext.state,
-        this.runtimeContext.state.model,
-        promptId,
-        durationMs,
-        error,
-      );
-      this.currentPromptEnvelopeEstimate = null;
-      throw error;
-    }
   }
 
   /**

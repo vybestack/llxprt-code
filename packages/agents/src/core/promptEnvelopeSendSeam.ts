@@ -82,7 +82,7 @@ export interface PromptEnvelopePreparer {
  * separation). The signal is embedded so retry/abort propagation works.
  */
 export function buildProviderChatOptions(
-  requestContents: IContent[],
+  requestContents: Iterable<IContent> | AsyncIterable<IContent>,
   tools: ToolDeclaration[] | undefined,
   runtimeContext: ProviderRuntimeContext,
   invocation: RuntimeGenerateChatOptions['invocation'],
@@ -95,7 +95,7 @@ export function buildProviderChatOptions(
     // assembled rows so estimation and transport each get a fresh pass.
     contents: {
       async *[Symbol.asyncIterator]() {
-        for (const content of requestContents) {
+        for await (const content of requestContents) {
           yield content;
         }
       },

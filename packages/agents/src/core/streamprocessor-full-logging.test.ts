@@ -1,6 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { createHash } from 'node:crypto';
 import {
   mkdirSync,
   mkdtempSync,
@@ -12,7 +11,6 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { diskTextRow } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-fixture.js';
 
 const factsSchema = z.object({
   mode: z.string(),
@@ -115,60 +113,7 @@ function apiRequests(facts: Facts): Array<Record<string, unknown>> {
     (event) => event['event.name'] === 'llxprt_code.api_request',
   );
 }
-function assertPair(facts: Facts, attempts = 1): void {
-  const requests = apiRequests(facts);
-  expect(requests).toHaveLength(attempts * 2);
-  for (let index = 0; index < requests.length; index += 2) {
-    expect(typeof requests[index].request_text).toBe('string');
-    expect(requests[index + 1].schema_version).toBe(2);
-    expect(requests[index].prompt_id).toBe('real-logging');
-    expect(requests[index + 1].prompt_id).toBe('real-logging');
-    expect(requests[index + 1].row_count).toBe(facts.mode === 'hook' ? 1 : 65);
-  }
-  expect(facts.chunkRecords).toBeGreaterThan(0);
-  const exportedHashes = requests
-    .filter((_event, index) => index % 2 === 0)
-    .map((event) => {
-      if (typeof event.request_text !== 'string')
-        throw new Error('Missing legacy request text');
-      return createHash('sha256').update(event.request_text).digest('hex');
-    });
-  expect(
-    facts.trace
-      .filter((event) => event.category === 'agent.api_request')
-      .map((event) => event.sha256),
-  ).toStrictEqual(exportedHashes);
-}
 
-function assertEventOrder(facts: Facts): void {
-  const request = [
-    'llxprt_code.api_request',
-    'conversation_request',
-    'conversation_request_complete',
-    'llxprt_code.api_request',
-    'llxprt_code.api_request_complete',
-  ];
-  const failed = [
-    ...request,
-    'conversation_response',
-    'llxprt_code.api_error',
-    'llxprt_code.api_error',
-  ];
-  const success = [
-    ...request,
-    'token_usage',
-    'llxprt_code.api_response',
-    'conversation_response',
-    'llxprt_code.api_response',
-  ];
-  let expected = success;
-  if (['error', 'abort'].includes(facts.mode)) expected = failed;
-  if (facts.mode === 'retry') expected = [...failed, ...success];
-  if (facts.mode === 'hook') expected = ['llxprt_code.hook_call', ...success];
-  expect(facts.events.map((event) => event['event.name'])).toStrictEqual(
-    expected,
-  );
-}
 function assertEagerFailure(facts: Facts): void {
   expect(facts.error).toBeDefined();
   expect(facts.estimate).toBeNull();
@@ -191,19 +136,6 @@ function assertEagerSuccess(facts: Facts): void {
   expect(facts.estimate).toStrictEqual(facts.oracle);
   expect(facts.output).toBe('finished');
   assertResponseTokens(facts);
-}
-function assertOriginalRows(facts: Facts, attempts: number): void {
-  expect(facts.bodies).toStrictEqual(
-    Array.from({ length: attempts }, () => wireOracle(facts)),
-  );
-  expect(facts.requestRows).toHaveLength(65);
-  for (let index = 0; index < 64; index++)
-    expect(facts.requestRows?.[index]).toMatchObject(diskTextRow(index, false));
-}
-function assertReplacement(facts: Facts): void {
-  expect(facts.requestRows).toStrictEqual([
-    { blocks: [{ text: 'new context', type: 'text' }], speaker: 'human' },
-  ]);
 }
 
 function assertSourceLogging(facts: Facts, mode: string): void {
@@ -275,25 +207,6 @@ describe('genuine source disabled logging', () => {
   }, 600000);
 });
 
-describe('genuine eager paired logging counterparts', () => {
-  it.each(['enabled', 'retry', 'hook', 'error', 'abort'])(
-    'measures the genuine enabled eager counterpart %s with paired legacy order',
-    async (mode) => {
-      const facts = await worker(mode, false);
-      const attempts = mode === 'retry' ? 2 : 1;
-      assertPair(facts, attempts);
-      assertEventOrder(facts);
-      expect(facts.bodies).toHaveLength(attempts);
-      if (mode === 'hook') assertReplacement(facts);
-      else assertOriginalRows(facts, attempts);
-      if (['error', 'abort'].includes(mode)) assertEagerFailure(facts);
-      else assertEagerSuccess(facts);
-      assertOwners(facts);
-    },
-    60000,
-  );
-});
-
 describe('actual ChatSession enabled-source logging', () => {
   it.each(['enabled', 'conversation', 'shape'])(
     'streams the source request with logging mode %s through ChatSession',
@@ -325,25 +238,6 @@ describe('actual ChatSession disabled-source localhost', () => {
     assertResponseTokens(facts);
     assertOwners(facts);
   }, 600000);
-});
-
-describe('actual ChatSession legacy eager localhost controls', () => {
-  it.each(['enabled', 'retry', 'hook', 'error', 'abort'])(
-    'preserves paired scalar order, tokens and HTTP for %s',
-    async (mode) => {
-      const facts = await worker(mode, false, false, 'chat');
-      const attempts = mode === 'retry' ? 2 : 1;
-      expect(facts.bodies).toHaveLength(attempts);
-      assertPair(facts, attempts);
-      assertEventOrder(facts);
-      if (mode === 'hook') assertReplacement(facts);
-      else assertOriginalRows(facts, attempts);
-      if (['error', 'abort'].includes(mode)) assertEagerFailure(facts);
-      else assertEagerSuccess(facts);
-      assertOwners(facts);
-    },
-    60000,
-  );
 });
 
 describe('oversized source logging acceptance', () => {

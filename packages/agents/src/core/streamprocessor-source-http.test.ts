@@ -69,12 +69,10 @@ async function acceptance(large: boolean) {
   const idleInputLive = setup.history.inputReferences.filter(
     (row) => row.deref() !== undefined,
   ).length;
-  const selection = { requestHistorySource: 'responses-disk-text' as const };
   const started = setup.processor.makeApiCallAndProcessStream(
     {
       message: 'Answer the history.',
-      config:
-        process.env.ISSUE854_ORIGINAL_STREAM_PATH === '1' ? {} : selection,
+      config: {},
     },
     'stream-source-http',
     sourcePending,
@@ -180,7 +178,7 @@ describe('actual StreamProcessor disk history HTTP ownership', () => {
     },
     600000,
   );
-  it('rejects array-only logging before HTTP rather than omitting enabled logs', async () => {
+  it('sends with prompt logging enabled and releases every owner', async () => {
     const http = projectionEndpoint(false);
     const setup = await processorFixture(
       root(),
@@ -190,24 +188,26 @@ describe('actual StreamProcessor disk history HTTP ownership', () => {
     http.readBody.release();
     http.respond.release();
     try {
-      await expect(
-        setup.processor.makeApiCallAndProcessStream(
-          {
-            message: 'Answer',
-            config: { requestHistorySource: 'responses-disk-text' },
-          },
-          'logging',
-          sourcePending,
-        ),
-      ).rejects.toThrow('source request logging');
-      expect(http.bodies).toHaveLength(0);
+      const stream = await setup.processor.makeApiCallAndProcessStream(
+        {
+          message: 'Answer',
+          config: {},
+        },
+        'logging',
+        sourcePending,
+      );
+      for await (const _chunk of stream) {
+        /* Complete the actual history lifecycle. */
+      }
+      expect(http.bodies).toHaveLength(1);
+      expect(setup.history.owners.every((owner) => owner.closed)).toBe(true);
     } finally {
       setup.history.dispose();
       await http.server.stop(true);
       await setup.config.dispose();
     }
   }, 60000);
-  it('applies existing context policy and rejects required array compression before HTTP', async () => {
+  it('applies existing context policy and rejects an unrecoverable overflow before HTTP', async () => {
     const http = projectionEndpoint(false);
     const setup = await processorFixture(
       root(),
@@ -221,13 +221,13 @@ describe('actual StreamProcessor disk history HTTP ownership', () => {
         setup.processor.makeApiCallAndProcessStream(
           {
             message: 'Answer',
-            config: { requestHistorySource: 'responses-disk-text' },
+            config: {},
           },
           'overflow',
           sourcePending,
         ),
-      ).rejects.toThrow('source compression');
-      expect(http.bodies).toHaveLength(0);
+      ).rejects.toThrow('safety-adjusted context limit');
+      expect(activeRequestBodyCount()).toBe(0);
       expect(setup.history.owners.every((owner) => owner.closed)).toBe(true);
     } finally {
       setup.history.dispose();

@@ -90,7 +90,7 @@ async function requiredCompression(spec: RequiredCase): Promise<void> {
     const stream = await setup.processor.makeApiCallAndProcessStream(
       {
         message: 'Compress history without losing pending.',
-        config: { requestHistorySource: 'responses-disk-text' },
+        config: {},
       },
       'source-pending-compression',
       pending,

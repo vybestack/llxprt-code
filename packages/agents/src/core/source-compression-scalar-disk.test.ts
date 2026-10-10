@@ -58,7 +58,7 @@ async function scalarSetup() {
   const scalar = new ProviderSourceEnforcer({
     limits: setup.compression.sourceContextLimits(setup.provider),
     estimate: async () =>
-      (await preparer.prepare(source)).estimate.estimatedPromptTokens,
+      (await preparer.prepare(source)).estimatedPromptTokens,
     getHistoryTokens: () => setup.history.getTotalTokens(),
   });
   return {

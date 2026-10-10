@@ -45,6 +45,7 @@ import {
   BeforeModelHookOutput,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
+import { withSnapshotModelEvents } from './__tests__/support/snapshot-hook-system.js';
 
 /**
  * Extracts visible text from a neutral ModelOutput — the post-P13
@@ -146,20 +147,26 @@ function createHookConfig(withModelHooks: boolean): Config {
   Object.defineProperties(hookConfig, {
     getEnableHooks: { value: () => true },
     getHookSystem: {
-      value: () => ({
-        initialize: async () => undefined,
-        fireBeforeToolSelectionEvent: async () => ({
-          applyToolChoiceModifications: () => ({
-            toolChoice: { mode: 'auto', allowedToolNames: ['read_file'] },
+      value: () => {
+        const system = {
+          initialize: async () => undefined,
+          getRegistry: () => ({
+            getHooksForEvent: () => (withModelHooks ? [{}] : []),
           }),
-        }),
-        ...(withModelHooks
-          ? {
+          fireBeforeToolSelectionEvent: async () => ({
+            applyToolChoiceModifications: () => ({
+              toolChoice: { mode: 'auto', allowedToolNames: ['read_file'] },
+            }),
+          }),
+        };
+        return withModelHooks
+          ? withSnapshotModelEvents({
+              ...system,
               fireBeforeModelEvent: async () => new BeforeModelHookOutput({}),
               fireAfterModelEvent: async () => new AfterModelHookOutput({}),
-            }
-          : {}),
-      }),
+            })
+          : system;
+      },
     },
   });
   return hookConfig;
@@ -167,6 +174,9 @@ function createHookConfig(withModelHooks: boolean): Config {
 
 async function verifyRuntime1(): Promise<GenerateChatOptions> {
   const calls: GenerateChatOptions[] = [];
+  // The source route closes the pinned request rows once the send returns, so
+  // the rows are read while the provider holds them.
+  const receivedRows: IContent[] = [];
 
   const generateChatCompletionMock = vi.fn(async function* (
     input: GenerateChatOptions | AsyncIterable<IContent>,
@@ -174,6 +184,7 @@ async function verifyRuntime1(): Promise<GenerateChatOptions> {
     if (!('contents' in input)) throw new Error('Expected chat options');
     const options = input;
     calls.push(options);
+    for await (const row of options.contents) receivedRows.push(row);
     yield {
       speaker: 'ai',
       blocks: [{ type: 'text', text: 'hello world' }],
@@ -235,7 +246,7 @@ async function verifyRuntime1(): Promise<GenerateChatOptions> {
     { speaker: 'ai', blocks: [{ type: 'text', text: 'Previous answer' }] },
     { speaker: 'human', blocks: [{ type: 'text', text: 'Hello there!' }] },
   ];
-  const rows = await assertProviderRows(options.contents, expected);
+  const rows = await assertProviderRows(streamRows(receivedRows), expected);
   expect(rows.every((row) => row.metadata !== undefined)).toBe(true);
   await expect(
     assertProviderRows(streamRows(rows.slice(0, -1)), expected),

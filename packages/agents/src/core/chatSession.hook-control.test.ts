@@ -21,6 +21,7 @@ import {
   createTelemetryAdapterFromConfig,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
+import { withSnapshotModelEvents } from './__tests__/support/snapshot-hook-system.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 
 describe('ChatSession hook execution control', () => {
@@ -35,14 +36,15 @@ describe('ChatSession hook execution control', () => {
   };
 
   beforeEach(() => {
-    mockHookSystem = {
+    mockHookSystem = withSnapshotModelEvents({
       trigger: vi.fn(),
       initialize: vi.fn().mockResolvedValue(undefined),
+      getRegistry: () => ({ getHooksForEvent: () => [{}] }),
       isInitialized: vi.fn().mockReturnValue(true),
       fireBeforeModelEvent: vi.fn().mockResolvedValue(undefined),
       fireAfterModelEvent: vi.fn().mockResolvedValue(undefined),
       fireBeforeToolSelectionEvent: vi.fn().mockResolvedValue(undefined),
-    } as unknown as HookSystem;
+    } as never) as unknown as HookSystem;
 
     mockProvider = {
       name: 'test-provider',

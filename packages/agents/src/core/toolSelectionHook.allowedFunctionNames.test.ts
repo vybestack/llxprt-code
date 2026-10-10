@@ -10,7 +10,7 @@ import type {
   ToolDeclaration,
 } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 import { DirectMessageProcessor } from './DirectMessageProcessor.js';
-import { StreamProcessor } from './StreamProcessor.js';
+import { applyToolSelectionHook } from './streamRequestHelpers.js';
 import { TurnProcessor } from './TurnProcessor.js';
 
 type V2ToolSelectionRequest = {
@@ -47,6 +47,7 @@ function createHookConfig(
     getEnableHooks: () => true,
     getHookSystem: () => ({
       initialize: async () => undefined,
+      isInitialized: () => true,
       fireBeforeToolSelectionEvent: async (request: V2ToolSelectionRequest) => {
         firedRequest.request = request;
         return {
@@ -71,10 +72,7 @@ function createTools(): ToolDeclaration[] {
 /** Real `_applyToolSelectionHook` on a prototype-only processor stub. */
 function makeVariant(
   name: string,
-  ProcessorClass:
-    | typeof DirectMessageProcessor
-    | typeof StreamProcessor
-    | typeof TurnProcessor,
+  ProcessorClass: typeof DirectMessageProcessor | typeof TurnProcessor,
 ): ProcessorVariant {
   return {
     name,
@@ -104,9 +102,29 @@ const directVariant = makeVariant(
 
 const turnVariant = makeVariant('TurnProcessor', TurnProcessor);
 
+/**
+ * The streaming send selects tools through the shared helper that its source
+ * request calls directly; there is no processor method to stub.
+ */
+const streamVariant: ProcessorVariant = {
+  name: 'StreamProcessor',
+  applyToolSelectionHook: async (toolChoice, toolsFromConfig) => {
+    const firedRequest: { request?: V2ToolSelectionRequest } = {};
+    const result = await applyToolSelectionHook(
+      createHookConfig(toolChoice, firedRequest) as never,
+      toolsFromConfig,
+      STUB_MODEL,
+    );
+    return {
+      tools: result.tools ?? [],
+      firedRequest: firedRequest.request,
+    };
+  },
+};
+
 const variants: ProcessorVariant[] = [
   directVariant,
-  makeVariant('StreamProcessor', StreamProcessor),
+  streamVariant,
   turnVariant,
 ];
 
