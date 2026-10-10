@@ -189,6 +189,7 @@ function createHookConfig(config: Config, mode: HookMode): Config {
         return {
           initialize: async () => undefined,
           isInitialized: () => true,
+          getRegistry: () => ({ getHooksForEvent: () => [] }),
           fireBeforeToolSelectionEvent: async () => ({
             applyToolChoiceModifications: () =>
               mode.allowedFunctionNames === undefined
@@ -207,6 +208,22 @@ function createHookConfig(config: Config, mode: HookMode): Config {
     },
   });
   return hookConfig;
+}
+
+/** Providers consume the request snapshot during the call; later assertions replay the rows. */
+async function captureRequest(
+  input: GenerateChatOptions,
+): Promise<GenerateChatOptions> {
+  const rows: IContent[] = [];
+  for await (const row of input.contents) rows.push(row);
+  return {
+    ...input,
+    contents: {
+      async *[Symbol.asyncIterator]() {
+        yield* rows;
+      },
+    },
+  };
 }
 
 function createScriptedProvider(
@@ -229,7 +246,7 @@ function createScriptedProvider(
       if (Symbol.asyncIterator in input) {
         throw new Error('Expected request options from the runtime.');
       }
-      requests.push(input);
+      requests.push(await captureRequest(input));
       const response = responses[responseIndex] ?? stopped();
       responseIndex += 1;
       yield response;

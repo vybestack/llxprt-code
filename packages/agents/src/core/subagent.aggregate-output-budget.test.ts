@@ -118,10 +118,21 @@ async function createBudgetScope(
     getActiveProvider: () => provider,
     setActiveProvider: () => undefined,
   };
-  const runtimeBundle = createStatelessRuntimeBundle({
+  const baseBundle = createStatelessRuntimeBundle({
     providerAdapter,
     history: new HistoryService(),
   });
+  // The disk request path reads the live runtime config, as production runtimes provide.
+  const runtimeBundle = {
+    ...baseBundle,
+    runtimeContext: {
+      ...baseBundle.runtimeContext,
+      providerRuntime: {
+        ...baseBundle.runtimeContext.providerRuntime,
+        config,
+      },
+    },
+  };
   const { overrides } = createRuntimeOverrides({ runtimeBundle });
   const outputConfig: OutputConfig = { outputs: {} };
 
