@@ -171,6 +171,8 @@ export class AgentClient implements AgentClientContract {
       },
     );
 
+    void this._historyService;
+
     const proxyUrl = runtimeState.proxyUrl;
     if (proxyUrl) {
       setGlobalDispatcher(new ProxyAgent(proxyUrl));
