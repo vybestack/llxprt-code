@@ -38,6 +38,7 @@ import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
 import type { OpenAIResponsesRequest } from './OpenAIResponsesTypes.js';
 import { BoundedJsonBody } from '../utils/boundedJsonBody.js';
 import { isPreviousResponseNotFoundError } from './openAIResponsesStatefulRecovery.js';
+import { assembleFrame } from './responses-websocket-frame.js';
 
 export const DEFAULT_WEBSOCKET_JSON_ENVELOPE_BYTES = 32 * 1024 * 1024;
 export const CODEX_WEBSOCKET_BETA_HEADER = 'responses_websockets=2026-02-06';
@@ -165,6 +166,12 @@ export interface StreamResponseOptions {
   readonly responsesStored?: boolean;
   readonly onStreamLiveness?: ParseResponsesStreamOptions['onStreamLiveness'];
   readonly onResponseEvent?: () => void;
+  /**
+   * Request-scoped source of the complete `response.create` frame bytes (disk
+   * source route). Called once per send attempt; the assembled frame is
+   * released as soon as the socket has taken it.
+   */
+  readonly requestFrameBytes?: () => AsyncIterable<Uint8Array>;
 }
 
 export interface WebSocketTransport {
@@ -598,7 +605,17 @@ function createResponseByteStream(
 async function sendBoundedRequestEnvelope(
   socket: TransportSocket,
   request: OpenAIResponsesRequest,
+  requestFrameBytes?: () => AsyncIterable<Uint8Array>,
 ): Promise<void> {
+  if (requestFrameBytes !== undefined) {
+    socket.send(
+      await assembleFrame(
+        requestFrameBytes(),
+        DEFAULT_WEBSOCKET_JSON_ENVELOPE_BYTES,
+      ),
+    );
+    return;
+  }
   const boundedEnvelope = new BoundedJsonBody(
     { ...request, type: 'response.create' },
     {
@@ -715,7 +732,11 @@ class CodexResponsesWebSocketTransport implements WebSocketTransport {
       throwIfAborted(options.abortSignal);
       // #3199: the physical body goes out through the bounded envelope so a
       // large media payload cannot serialize an unbounded string here.
-      await sendBoundedRequestEnvelope(socket, request);
+      await sendBoundedRequestEnvelope(
+        socket,
+        request,
+        options.requestFrameBytes,
+      );
       for await (const message of parseResponsesStream(
         createResponseByteStream(source),
         {

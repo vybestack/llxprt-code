@@ -6,7 +6,7 @@ import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
 import { projectionRuntime } from './__tests__/support/projection-ownership-fixture.js';
 
 describe('disk text request option exclusion', () => {
-  it('rejects Codex WebSocket-capable transport without scanning disk rows', async () => {
+  it('projects Codex WebSocket-capable transport by scanning the disk rows once', async () => {
     const setup = await projectionRuntime(
       'http://127.0.0.1:1/v1',
       process.cwd(),
@@ -28,10 +28,12 @@ describe('disk text request option exclusion', () => {
       'codex',
     );
     try {
-      await expect(
-        provider.projectPromptEnvelope(setup.options(source)),
-      ).rejects.toThrow('does not support Codex or WebSocket');
-      expect(reads).toBe(0);
+      const projection = await provider.projectPromptEnvelope(
+        setup.options(source),
+      );
+      expect(projection.transportToken).toBeDefined();
+      expect(reads).toBeGreaterThan(0);
+      await projection.releaseIfUnsent?.();
     } finally {
       provider.clearState();
       await setup.config.dispose();

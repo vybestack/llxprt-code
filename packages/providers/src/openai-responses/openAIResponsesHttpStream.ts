@@ -95,6 +95,8 @@ export interface StreamResponsesParams {
    */
   materializeRequestBody?: () => Promise<void>;
   streamRequestBody?: () => AsyncIterable<Uint8Array>;
+  /** Disk source route: the complete WebSocket `response.create` frame bytes. */
+  streamWebSocketFrame?: () => AsyncIterable<Uint8Array>;
 }
 
 interface FetchStreamParams {

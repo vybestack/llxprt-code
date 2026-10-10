@@ -649,6 +649,16 @@ async function buildStatelessTurn(
   );
 }
 
+function createFrameRequest(
+  request: OpenAIResponsesRequest,
+): OpenAIResponsesRequest {
+  const frame: OpenAIResponsesRequest & { type: 'response.create' } = {
+    ...request,
+    type: 'response.create',
+  };
+  return frame;
+}
+
 function buildStreamParams(
   requestContext: RequestContext,
   abortSignal: AbortSignal | undefined,
@@ -664,6 +674,12 @@ function buildStreamParams(
       : {
           streamRequestBody: () =>
             diskResponsesBodyBytes(requestContext.request, source, abortSignal),
+          streamWebSocketFrame: () =>
+            diskResponsesBodyBytes(
+              createFrameRequest(requestContext.request),
+              source,
+              abortSignal,
+            ),
         }),
     abortSignal,
     maxStreamingAttempts:

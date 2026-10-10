@@ -96,10 +96,16 @@ async function* streamOverWebSocketWithRenewal(
     const rebuilt = await params.rebuildStateless();
     let outcome: MediaRequestOutcome = { status: 'succeeded' };
     try {
+      const { requestFrameBytes: _stale, ...baseOptions } = streamOptions;
       yield* streamOverWebSocketOrFallback(
         transport,
         rebuilt.request,
-        streamOptions,
+        {
+          ...baseOptions,
+          ...(rebuilt.streamWebSocketFrame === undefined
+            ? {}
+            : { requestFrameBytes: rebuilt.streamWebSocketFrame }),
+        },
         () => streamOverHttp(rebuilt, deps),
         deps.onWebSocketFallback,
         deps.logger,
@@ -126,6 +132,9 @@ async function buildWebSocketStreamOptions(
     includeThinkingInResponse: params.includeThinkingInResponse,
     responsesStored: params.responsesStored,
     onStreamLiveness: params.normalizedOptions.onStreamLiveness,
+    ...(params.streamWebSocketFrame === undefined
+      ? {}
+      : { requestFrameBytes: params.streamWebSocketFrame }),
   };
 }
 

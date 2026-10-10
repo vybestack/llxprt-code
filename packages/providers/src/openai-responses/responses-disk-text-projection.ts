@@ -123,19 +123,13 @@ export function assertDiskTextShape(
   options: NormalizedGenerateChatOptions,
   deps: ResponsesExecutorDeps,
 ): Readonly<Record<string, unknown>> {
-  const ephemerals = resolveInvocationEphemerals(options);
-  const shape = resolveResponsesRequestShape(
+  return resolveResponsesRequestShape(
     options,
     [],
-    ephemerals,
+    resolveInvocationEphemerals(options),
     deps,
     false,
-  );
-  if (shape.isCodex || deps.isWebSocketTransportActive?.() === true)
-    throw new Error(
-      'Explicit Responses disk text route does not support Codex or WebSocket',
-    );
-  return shape.requestOverrides;
+  ).requestOverrides;
 }
 
 /** A source token's stateful decision must still hold when it is sent. */
