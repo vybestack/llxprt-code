@@ -398,7 +398,7 @@ function dispatchAttemptBoundary(
   if (pending?.type !== 'gemini' && pending?.type !== 'gemini_content') {
     return { agentMessageBuffer };
   }
-  deps.flushPendingHistoryItem(userMessageTimestamp);
+  flushPendingAiContent(deps, userMessageTimestamp);
   return { agentMessageBuffer: '' };
 }
 

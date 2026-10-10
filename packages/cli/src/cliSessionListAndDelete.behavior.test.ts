@@ -60,7 +60,8 @@ describe('--list-sessions / --delete-session outside a TTY (issue #3839)', () =>
   const writeHealthySession = (
     sessionId: string,
     modified: string,
-  ): Promise<string> => writeHealthy(target(), sessionId, modified);
+    model?: string,
+  ): Promise<string> => writeHealthy(target(), sessionId, modified, model);
 
   const writeCorruptSession = (sessionId: string): Promise<string> =>
     writeCorrupt(target(), sessionId);
@@ -331,6 +332,45 @@ describe('--list-sessions / --delete-session outside a TTY (issue #3839)', () =>
         exitCode: run.exitCode,
         files: (await chatFiles()).join('|'),
       }).toStrictEqual({ exitCode: 0, files: filesBefore.join('|') });
+    },
+    SUBPROCESS_TIMEOUT_MS,
+  );
+
+  it(
+    'delivers a listing larger than a pipe buffer in full before exiting 0',
+    async () => {
+      // Each line carries a ~4 KB model name, so 40 sessions (~160 KB) exceed
+      // the 64 KB pipe buffer. Truncation at process.exit would drop lines.
+      const sessionCount = 40;
+      const prefixes: string[] = [];
+      for (let i = 0; i < sessionCount; i++) {
+        const prefix = i.toString(16).padStart(8, '0');
+        prefixes.push(prefix);
+        await writeHealthySession(
+          `${prefix}-0000-4000-8000-000000000000`,
+          '2026-10-01T00:00:00Z',
+          `model-${prefix}-${'x'.repeat(4000)}`,
+        );
+      }
+
+      const run = await runCli(['--list-sessions']);
+
+      expect({
+        exitCode: run.exitCode,
+        header: run.stdout.includes(
+          `Sessions for this project (${sessionCount}):`,
+        ),
+        missingSessions: prefixes.filter(
+          (prefix) =>
+            !run.stdout.includes(`model-${prefix}-${'x'.repeat(4000)}`),
+        ),
+        endsWithNewline: run.stdout.endsWith('\n'),
+      }).toStrictEqual({
+        exitCode: 0,
+        header: true,
+        missingSessions: [],
+        endsWithNewline: true,
+      });
     },
     SUBPROCESS_TIMEOUT_MS,
   );

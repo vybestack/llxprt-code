@@ -20,6 +20,7 @@ import {
   type SessionStorageLocation,
 } from './sessionStorageLocation.js';
 import { runExitCleanup } from './utils/cleanup.js';
+import { drainStdio } from './utils/drainStdio.js';
 
 /** Format a single recorded-session summary line for --list-sessions output. */
 export function formatSessionSummaryLine(
@@ -111,8 +112,8 @@ export async function runSessionListOrDelete(
 }
 
 /**
- * Startup handling of --list-sessions / --delete-session: prints the result
- * and exits the process. Returns only when neither flag was supplied.
+ * Startup handling of --list-sessions / --delete-session: prints the result,
+ * waits for the output to flush (it may be a pipe) and exits the process. Returns only when neither flag was supplied.
  *
  * Runs once the Config is built and before terminal setup, provider
  * configuration/activation, the sandbox hop, agent construction and recording.
@@ -129,5 +130,6 @@ export async function exitAfterSessionListOrDelete(
     return;
   }
   await runExitCleanup();
+  await drainStdio();
   process.exit(exitCode);
 }

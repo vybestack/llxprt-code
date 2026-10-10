@@ -58,6 +58,7 @@ export async function writeHealthySession(
   target: RecordingTarget,
   sessionId: string,
   modified: string,
+  model = 'test-model',
 ): Promise<string> {
   const recording = new SessionRecordingService({
     chatsDir: target.chatsDir,
@@ -65,7 +66,7 @@ export async function writeHealthySession(
     projectHash: target.projectHash,
     workspaceDirs: [target.projectDir],
     provider: 'test-provider',
-    model: 'test-model',
+    model,
   });
   try {
     recording.recordContent({

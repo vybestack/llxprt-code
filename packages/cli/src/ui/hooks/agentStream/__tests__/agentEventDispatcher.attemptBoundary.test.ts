@@ -33,6 +33,8 @@ import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
 
 interface Rendered {
   readonly deps: AgentEventDeps;
+  /** The in-progress assistant item, or null when nothing is pending. */
+  readonly pendingItem: () => HistoryItemWithoutId | null;
   /** What the user sees top to bottom: committed items, then the pending one. */
   readonly renderedOrder: () => string[];
 }
@@ -68,6 +70,7 @@ function drawItem(
 function createRendered(): Rendered {
   let pending: HistoryItemWithoutId | null = null;
   const committed: Array<{
+    id: number;
     text: string;
     thinkingBlocks?: readonly ThinkingBlock[];
   }> = [];
@@ -90,8 +93,17 @@ function createRendered(): Rendered {
     text: string,
     thinkingBlocks: readonly ThinkingBlock[],
   ): number => {
-    committed.push({ text, thinkingBlocks });
-    return nextItemId++;
+    const id = nextItemId++;
+    committed.push({ id, text, thinkingBlocks });
+    return id;
+  };
+  const retractCommitted = (ids: readonly number[]): void => {
+    for (const id of ids) {
+      const index = committed.findIndex((item) => item.id === id);
+      if (index !== -1) {
+        committed.splice(index, 1);
+      }
+    }
   };
   const addItem: UseHistoryManagerReturn['addItem'] = (item) => {
     // Omit<HistoryItem, 'id'> flattens the union, so narrow on the text itself.
@@ -124,6 +136,14 @@ function createRendered(): Rendered {
       pending = null;
     };
   const turnCancelledRef = { current: false };
+  // Same discard as production (useStreamAttemptDiscardedHandler): drop the
+  // uncommitted attempt and retract the ledger's committed prefixes.
+  const handleStreamAttemptDiscarded = (): void => {
+    pending = null;
+    pendingResponse.reset();
+    retractCommitted(pendingResponse.drainCommittedSegments());
+    thinkingBlocksRef.current = [];
+  };
   const sanitizeContent = (text: string) => ({ text, blocked: false });
 
   const deps: AgentEventDeps = {
@@ -160,11 +180,12 @@ function createRendered(): Rendered {
     handleMaxSessionTurnsEvent: vi.fn(),
     handleContextWindowWillOverflowEvent: vi.fn(),
     handleCitationEvent: vi.fn(),
-    handleStreamAttemptDiscarded: vi.fn(),
+    handleStreamAttemptDiscarded,
   };
 
   return {
     deps,
+    pendingItem: () => pending,
     renderedOrder: () => {
       const order: string[] = [];
       for (const item of committed) {
@@ -289,5 +310,42 @@ describe('dispatchAgentEvent attempt boundaries (issue #3840)', () => {
     );
 
     expect(rendered.renderedOrder()).toStrictEqual(['text:attempt2']);
+  });
+
+  // Review finding: the boundary must commit the message the way every other
+  // assistant-message completion does, including clearing the pending item.
+  it('leaves no pending item after a boundary', () => {
+    const rendered = createRendered();
+
+    dispatchAll(
+      [{ type: 'text', text: 'attempt1' }, { type: 'attempt-boundary' }],
+      rendered,
+    );
+
+    expect(rendered.pendingItem()).toBeNull();
+    expect(rendered.renderedOrder()).toStrictEqual(['text:attempt1']);
+  });
+
+  // Review finding (issue #3048): a transport retry in a later attempt that has
+  // produced only thinking so far (no new assistant message to restart the
+  // ledger) used to retract the earlier attempt's already-committed prefix,
+  // because the boundary did not end the committed-segment ledger.
+  it('does not retract the earlier attempt when a thinking-only later attempt is retried', () => {
+    const rendered = createRendered();
+
+    dispatchAll(
+      [
+        { type: 'text', text: 'first paragraph\n\nfirst tail' },
+        { type: 'attempt-boundary' },
+        think('second', 'attempt'),
+        { type: 'retry' },
+      ],
+      rendered,
+    );
+
+    expect(rendered.renderedOrder()).toStrictEqual([
+      'text:first paragraph\n\n',
+      'text:first tail',
+    ]);
   });
 });
