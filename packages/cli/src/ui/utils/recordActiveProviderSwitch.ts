@@ -9,25 +9,30 @@ import type { RuntimeApi } from '../contexts/RuntimeContext.js';
 
 type SwitchRecorder = Pick<RecordingIntegration, 'recordProviderSwitch'>;
 
+type ResolvedSwitch = { provider: string; model: string };
+
 /**
  * Record a provider/model switch that has already taken effect. This is the one
  * place a recording failure (for example the queue byte limit) is caught: the
  * switch itself succeeded, so the failure is handed to `reportFailure` for the
  * caller's own message channel instead of being thrown into the switch's error
- * handling or swallowed.
+ * handling or swallowed. Resolving the provider/model is part of recording, so
+ * a failure to read them is reported the same way and records nothing.
  */
 export function recordProviderSwitchReportingFailure(
   recorder: SwitchRecorder | null | undefined,
-  provider: string,
-  model: string,
+  resolveSwitch: () => ResolvedSwitch,
   reportFailure: (message: string) => void,
 ): void {
   if (recorder === null || recorder === undefined) return;
+  let target = 'provider/model';
   try {
+    const { provider, model } = resolveSwitch();
+    target = `${provider}/${model}`;
     recorder.recordProviderSwitch(provider, model);
   } catch (error) {
     reportFailure(
-      `Switched to ${provider}/${model}, but recording the switch in the session file failed: ${error instanceof Error ? error.message : String(error)}`,
+      `Switched to ${target}, but recording the switch in the session file failed: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 }
@@ -47,12 +52,15 @@ export function recordActiveProviderSwitch(
   reportFailure: (message: string) => void,
   fallback: { providerName?: string; modelName?: string } = {},
 ): void {
-  if (recorder === null || recorder === undefined) return;
-  const status = runtime.getActiveProviderStatus();
   recordProviderSwitchReportingFailure(
     recorder,
-    status.providerName ?? fallback.providerName ?? '',
-    status.modelName ?? fallback.modelName ?? 'unknown',
+    () => {
+      const status = runtime.getActiveProviderStatus();
+      return {
+        provider: status.providerName ?? fallback.providerName ?? '',
+        model: status.modelName ?? fallback.modelName ?? 'unknown',
+      };
+    },
     reportFailure,
   );
 }

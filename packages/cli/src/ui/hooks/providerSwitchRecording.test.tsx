@@ -453,6 +453,43 @@ describe('provider changes made in dialogs reach the session recording (issue #3
       expect(addedMessages.join('\n')).not.toContain('Failed to load profile');
     });
 
+    it('reports a provider status read failure as a recording failure, not a failed profile load', async () => {
+      const failingStatusRuntime: ConfigBackedRuntime = {
+        ...requireRuntime(),
+        getActiveProviderStatus: () => {
+          throw new Error('provider status unavailable');
+        },
+      };
+      runtimeHolder.current = failingStatusRuntime;
+      const store = createDialogStore();
+      const dialogs = createDialogOpeners(store);
+      dialogs.loadProfile.open({});
+      const { result } = renderHook(() =>
+        useLoadProfileDialog({
+          addMessage: (message) => {
+            addedMessages.push(`${message.type}:${message.content}`);
+          },
+          dialogs,
+          recordingIntegrationRef: { current: integration },
+        }),
+      );
+
+      await act(async () => {
+        await result.current.handleSelect('lunahigh');
+      });
+
+      expect(config.getProvider()).toBe('codex');
+      expect(hasDialogRequest(store, 'loadProfile')).toBe(false);
+      expect(addedMessages).toHaveLength(2);
+      expect(addedMessages[0]).toBe(
+        `${MessageType.INFO}:Profile 'lunahigh' loaded`,
+      );
+      expect(addedMessages[1]).toBe(
+        `${MessageType.ERROR}:Switched to provider/model, but ${FAILURE_TEXT}: provider status unavailable`,
+      );
+      expect(addedMessages.join('\n')).not.toContain('Failed to load profile');
+    });
+
     it('sets the active profile name and closes the profile dialogs when only the recording fails', async () => {
       const store = createDialogStore();
       const dialogs = createDialogOpeners(store);

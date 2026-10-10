@@ -113,8 +113,7 @@ export function useModelDialogHandler(
             }
             recordProviderSwitchReportingFailure(
               recordingIntegration,
-              selectedProvider,
-              model.id,
+              () => ({ provider: selectedProvider, model: model.id }),
               (text) => addErrorItem(addItem, text),
             );
           } else {
@@ -126,8 +125,10 @@ export function useModelDialogHandler(
             );
             recordProviderSwitchReportingFailure(
               recordingIntegration,
-              result.providerName,
-              result.nextModel,
+              () => ({
+                provider: result.providerName,
+                model: result.nextModel,
+              }),
               (text) => addErrorItem(addItem, text),
             );
           }
