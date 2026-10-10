@@ -5,6 +5,10 @@ import { mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { heapSize } from 'bun:jsc';
+import {
+  getScratchRoot,
+  removeScratchRoot,
+} from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { streamCallOptions } from '../__tests__/streamCallOptions.js';
 import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
@@ -167,9 +171,15 @@ function diskReplayHistory() {
   };
 }
 
+/** Request snapshot workspaces currently present in the process scratch root. */
+function requestSnapshots(): string[] {
+  return readdirSync(getScratchRoot()).filter((name) =>
+    name.startsWith('responses-request-snapshot-'),
+  );
+}
+
 function retryEndpoint(
   source: ReturnType<typeof diskReplayHistory>,
-  root: string,
   baselineHeap: number,
 ) {
   const digests: string[] = [];
@@ -199,9 +209,11 @@ function retryEndpoint(
       }
       reader.releaseLock();
       digests.push(hash.digest('hex'));
-      const snapshots = readdirSync(root);
+      const snapshots = requestSnapshots();
       expect(snapshots).toHaveLength(1);
-      snapshotSizes.push(statSync(join(root, snapshots[0], 'rows')).size);
+      snapshotSizes.push(
+        statSync(join(getScratchRoot(), snapshots[0], 'rows')).size,
+      );
       await Bun.sleep(0);
       Bun.gc(true);
       retainedBytes.push(heapSize() - baselineHeap);
@@ -244,9 +256,11 @@ describe('bounded Responses text HTTP replay', () => {
     const root = mkdtempSync(join(tmpdir(), 'responses-http-test-'));
     const previousTmpdir = process.env.TMPDIR;
     process.env.TMPDIR = root;
+    // Snapshots live in the process scratch root; use a fresh one under root.
+    removeScratchRoot();
     await Bun.sleep(0);
     Bun.gc(true);
-    const endpoint = retryEndpoint(source, root, heapSize());
+    const endpoint = retryEndpoint(source, heapSize());
     try {
       const options = streamCallOptions({
         providerName: 'openai-responses',
@@ -282,10 +296,11 @@ describe('bounded Responses text HTTP replay', () => {
         expect(bytes).toBeLessThan(1024 * 1024);
       expect(endpoint.snapshotSizes[0]).toBeGreaterThan(9 * 1024 * 1024);
       expect(endpoint.snapshotSizes[1]).toBe(endpoint.snapshotSizes[0]);
-      expect(readdirSync(root)).toHaveLength(0);
+      expect(requestSnapshots()).toStrictEqual([]);
     } finally {
       source.release();
       await endpoint.server.stop(true);
+      removeScratchRoot();
       if (previousTmpdir === undefined) delete process.env.TMPDIR;
       else process.env.TMPDIR = previousTmpdir;
       rmSync(root, { recursive: true, force: true });
