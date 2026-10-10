@@ -37,14 +37,13 @@ import { spawn } from 'node:child_process';
 import { readdirSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, relative, win32 } from 'node:path';
 import {
-  acceptancePolicyForFile,
   envPerFileTimeoutMs,
   resolveTestConcurrency,
-  scheduleTestFiles,
 } from '../../scripts/lib/bun-test-policy.js';
 import {
   assertRunnerActive,
   createBespokeRunnerIsolation,
+  throwWorkerFailures,
   installRunnerSignalHandlers,
   trackRunnerChild,
 } from '../../scripts/lib/bespoke-runner-isolation.js';
@@ -89,22 +88,11 @@ export function toPathArgument(file: string): string {
 }
 
 export function timeoutForFile(file: string): number {
-  return (
-    acceptancePolicyForFile(import.meta.dir, file)?.perTestTimeoutMs ??
-    resolveRunnerTimeouts({
-      runner: 'cli',
-      integration: INTEGRATION_FILE_PATTERN.test(file),
-      env: {},
-    }).perTestMs
-  );
-}
-
-export function runTestFiles<T>(
-  files: readonly string[],
-  concurrency: number,
-  runFile: (file: string) => Promise<T>,
-): Promise<T[]> {
-  return scheduleTestFiles(import.meta.dir, files, concurrency, runFile);
+  return resolveRunnerTimeouts({
+    runner: 'cli',
+    integration: INTEGRATION_FILE_PATTERN.test(file),
+    env: {},
+  }).perTestMs;
 }
 
 /**
@@ -116,15 +104,11 @@ export function runTestFiles<T>(
  */
 export function fileTimeoutForFile(file: string): number {
   const runnerEnv = process.env;
-  const ordinary = resolveRunnerTimeouts({
+  return resolveRunnerTimeouts({
     runner: 'cli',
     integration: INTEGRATION_FILE_PATTERN.test(file),
     env: runnerEnv,
-  });
-  return (
-    acceptancePolicyForFile(import.meta.dir, file)?.perFileTimeoutMs ??
-    ordinary.perFileMs
-  );
+  }).perFileMs;
 }
 
 function parseConcurrency(): number {
@@ -354,7 +338,7 @@ export async function runTestFile(
       }
     }, timeoutMs);
 
-    child.on('close', (code) => {
+    child.on('exit', (code) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
@@ -405,38 +389,6 @@ export function exitCodeForRun(
   return failedTestFileCount > 0 || junitWriteFailed ? 1 : 0;
 }
 
-function printRunSummary(
-  results: readonly TestResult[],
-  failed: readonly TestResult[],
-): void {
-  for (const result of failed) {
-    console.error(`
------ ${result.file} -----`);
-    console.error(failureExcerpt(stripAnsi(result.output), 6000));
-  }
-  const cases = results.reduce(
-    (total, result) => {
-      const counts = parseCaseCounts(result.output);
-      return {
-        pass: total.pass + counts.pass,
-        fail: total.fail + counts.fail,
-        skip: total.skip + counts.skip,
-        todo: total.todo + counts.todo,
-      };
-    },
-    { pass: 0, fail: 0, skip: 0, todo: 0 },
-  );
-  console.log(
-    `Passed ${results.length - failed.length}/${results.length} CLI test files` +
-      (failed.length > 0 ? ` (${failed.length} failed)` : ''),
-  );
-  console.log(
-    `Test cases: ${cases.pass} passed, ${cases.fail} failed, ` +
-      `${cases.skip} skipped, ${cases.todo} todo ` +
-      `(${cases.pass + cases.fail + cases.skip + cases.todo} total)`,
-  );
-}
-
 async function main(): Promise<void> {
   const root = import.meta.dir;
   // Fail fast on an invalid per-file budget before any worker spawns, so a
@@ -477,11 +429,15 @@ async function main(): Promise<void> {
   let exitCode = 1;
   let failFast = false;
   try {
+    const results: TestResult[] = [];
+    let nextIndex = 0;
     let completed = 0;
-    const results = await runTestFiles(
-      selectedFiles,
-      concurrency,
-      async (file) => {
+
+    async function worker(): Promise<void> {
+      for (;;) {
+        const index = nextIndex++;
+        if (index >= selectedFiles.length) return;
+        const file = selectedFiles[index];
         const result = await isolation.runFile(file, () =>
           runTestFileWithTimeoutRetry(file, () =>
             runTestFile(file, isolation.sessionEnv, () => {
@@ -489,6 +445,7 @@ async function main(): Promise<void> {
             }),
           ),
         );
+        results.push(result);
         completed++;
         if (!result.passed) {
           console.error(
@@ -497,14 +454,47 @@ async function main(): Promise<void> {
             }`,
           );
         }
-        return result;
-      },
+      }
+    }
+
+    const workers = await Promise.allSettled(
+      Array.from(
+        { length: Math.min(concurrency, selectedFiles.length) },
+        worker,
+      ),
     );
+    throwWorkerFailures(workers);
 
     results.sort((a, b) => a.file.localeCompare(b.file));
     const failed = results.filter((result) => !result.passed);
 
-    printRunSummary(results, failed);
+    for (const result of failed) {
+      console.error(`\n----- ${result.file} -----`);
+      console.error(failureExcerpt(stripAnsi(result.output), 6000));
+    }
+
+    const cases = results.reduce(
+      (total, result) => {
+        const counts = parseCaseCounts(result.output);
+        return {
+          pass: total.pass + counts.pass,
+          fail: total.fail + counts.fail,
+          skip: total.skip + counts.skip,
+          todo: total.todo + counts.todo,
+        };
+      },
+      { pass: 0, fail: 0, skip: 0, todo: 0 },
+    );
+
+    console.log(
+      `Passed ${results.length - failed.length}/${results.length} CLI test files` +
+        (failed.length > 0 ? ` (${failed.length} failed)` : ''),
+    );
+    console.log(
+      `Test cases: ${cases.pass} passed, ${cases.fail} failed, ` +
+        `${cases.skip} skipped, ${cases.todo} todo ` +
+        `(${cases.pass + cases.fail + cases.skip + cases.todo} total)`,
+    );
 
     // A write failure must not replace the run's verdict with an unhandled
     // exception, but losing the required CI artifact is still a failed run.

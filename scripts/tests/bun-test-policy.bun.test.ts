@@ -116,10 +116,6 @@ describe('resolveTestConcurrency (issue #3139)', () => {
       }),
     ).toBe(1);
   });
-});
-
-describe('resolveTestConcurrency override validation', () => {
-  const linux: NodeJS.Platform = 'linux';
 
   it('ignores an unset or blank override rather than treating it as zero', () => {
     expect(
@@ -225,56 +221,6 @@ describe('runner invariants (issue #3139)', () => {
       readRunner(runner).includes('availableParallelism()'),
     );
     expect(offenders).toStrictEqual([]);
-  });
-});
-
-describe('exact memory acceptance policy', () => {
-  it('matches only normalized absolute paths of the two accepted suites', async () => {
-    const { acceptancePolicyForFile } = await import(
-      '../lib/bun-test-policy.js'
-    );
-    const cases = [
-      [
-        'agents',
-        'src/core/__tests__/childaccept-memory.test.ts',
-        7_200_000,
-        7_260_000,
-      ],
-      ['cli', 'src/services/wholememory.test.ts', 14_400_000, 14_460_000],
-    ] as const;
-    for (const [workspace, file, perTestTimeoutMs, perFileTimeoutMs] of cases) {
-      const root = join(REPO_ROOT, 'packages', workspace);
-      for (const path of [
-        file,
-        `./${file}`,
-        file.replaceAll('/', '\\'),
-        join(root, file),
-        `src/../${file}`,
-      ]) {
-        expect(acceptancePolicyForFile(root, path)).toEqual({
-          perTestTimeoutMs,
-          perFileTimeoutMs,
-        });
-      }
-      for (const path of [
-        file.replace('.test.ts', '.spec.ts'),
-        `${file}x`,
-        file.replace('src/', 'test/'),
-        `nested/${file}`,
-        file.toUpperCase(),
-        `../other/${file}`,
-      ]) {
-        expect(acceptancePolicyForFile(root, path)).toBeUndefined();
-      }
-      expect(
-        acceptancePolicyForFile(join(REPO_ROOT, 'packages', 'other'), file),
-      ).toBeUndefined();
-      expect(
-        acceptancePolicyForFile(join(REPO_ROOT, 'tmp', workspace), file),
-      ).toBeUndefined();
-    }
-    expect(DEFAULT_PER_TEST_TIMEOUT_MS).toBe(180_000);
-    expect(DEFAULT_PER_FILE_TIMEOUT_MS).toBe(300_000);
   });
 });
 

@@ -27,8 +27,6 @@
  */
 
 import { availableParallelism } from 'node:os';
-import { resolve } from 'node:path';
-import { throwWorkerFailures } from './bespoke-runner-isolation.js';
 
 /**
  * Per-test budget.
@@ -55,71 +53,6 @@ export const DEFAULT_PER_TEST_TIMEOUT_MS = 180_000;
  * (see the core runner).
  */
 export const DEFAULT_PER_FILE_TIMEOUT_MS = 300_000;
-
-interface AcceptanceTestPolicy {
-  readonly perTestTimeoutMs: number;
-  readonly perFileTimeoutMs: number;
-}
-
-/** Only these measured suites need a budget beyond the ordinary hang guard. */
-export function acceptancePolicyForFile(
-  workspaceRoot: string,
-  file: string,
-): AcceptanceTestPolicy | undefined {
-  const root = resolve(workspaceRoot);
-  const absolute = resolve(root, file.replaceAll('\\', '/'));
-  const agentsRoot = resolve(import.meta.dir, '../../packages/agents');
-  const cliRoot = resolve(import.meta.dir, '../../packages/cli');
-  if (
-    root === agentsRoot &&
-    absolute ===
-      resolve(agentsRoot, 'src/core/__tests__/childaccept-memory.test.ts')
-  ) {
-    return { perTestTimeoutMs: 7_200_000, perFileTimeoutMs: 7_260_000 };
-  }
-  if (
-    root === cliRoot &&
-    absolute === resolve(cliRoot, 'src/services/wholememory.test.ts')
-  ) {
-    return { perTestTimeoutMs: 14_400_000, perFileTimeoutMs: 14_460_000 };
-  }
-  return undefined;
-}
-
-/** Drain ordinary workers before running memory measurements one at a time. */
-export async function scheduleTestFiles<T>(
-  workspaceRoot: string,
-  files: readonly string[],
-  concurrency: number,
-  runFile: (file: string) => Promise<T>,
-): Promise<T[]> {
-  if (!Number.isSafeInteger(concurrency) || concurrency < 1) {
-    throw new Error('Test concurrency must be a positive integer');
-  }
-  const ordinary: string[] = [];
-  const acceptance: string[] = [];
-  for (const file of files) {
-    (acceptancePolicyForFile(workspaceRoot, file) === undefined
-      ? ordinary
-      : acceptance
-    ).push(file);
-  }
-  const results: T[] = [];
-  let nextIndex = 0;
-  const worker = async (): Promise<void> => {
-    while (nextIndex < ordinary.length) {
-      results.push(await runFile(ordinary[nextIndex++]));
-    }
-  };
-  const workers = await Promise.allSettled(
-    Array.from({ length: Math.min(concurrency, ordinary.length) }, worker),
-  );
-  throwWorkerFailures(workers);
-  for (const file of acceptance) {
-    results.push(await runFile(file));
-  }
-  return results;
-}
 
 // This override gives behavioral runner tests a short budget; it is not a CI tuning knob.
 export function envPerFileTimeoutMs(
