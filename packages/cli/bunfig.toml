@@ -10,6 +10,7 @@ preload = [
   "./test-setup-storage-isolation.ts",
   "./bun-test-setup.ts",
   "../../scripts/tests/browser-launch-guard.ts",
+  "../../scripts/tests/scratch-root-cleanup.ts",
 ]
 # Matches the testTimeout/hookTimeout that the removed vitest.config.ts set.
 # Bun defaults to 5s, which is not enough for the tests that spawn the real CLI

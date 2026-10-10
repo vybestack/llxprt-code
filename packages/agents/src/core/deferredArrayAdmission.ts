@@ -59,14 +59,17 @@ function createDeferredArrayAdmission(
     ),
     discardInput,
     release: async (): Promise<void> => {
-      for (const reference of references.values(options.ownership)) {
-        await store.release(
-          reference.contentId,
-          historyOwnerIdFor(reference.contentId, scope),
-        );
-        references.delete(reference.contentId);
+      try {
+        for (const reference of references.values(options.ownership)) {
+          await store.release(
+            reference.contentId,
+            historyOwnerIdFor(reference.contentId, scope),
+          );
+          references.delete(reference.contentId);
+        }
+      } finally {
+        references.close();
       }
-      references.close();
     },
   };
 }

@@ -154,14 +154,17 @@ export class ResumeCursorBoot {
   }
 
   private async releaseReservations(): Promise<void> {
-    for (const reference of this.reservations.values(this.ownership)) {
-      await this.mediaStore?.release(
-        reference.contentId,
-        historyOwnerIdFor(reference.contentId, this.reservationOwnerScope),
-      );
-      this.reservations.delete(reference.contentId);
+    try {
+      for (const reference of this.reservations.values(this.ownership)) {
+        await this.mediaStore?.release(
+          reference.contentId,
+          historyOwnerIdFor(reference.contentId, this.reservationOwnerScope),
+        );
+        this.reservations.delete(reference.contentId);
+      }
+    } finally {
+      this.reservations.close();
     }
-    this.reservations.close();
   }
 
   async close(): Promise<void> {
