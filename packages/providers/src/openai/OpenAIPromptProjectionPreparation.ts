@@ -11,7 +11,17 @@ import type { GenerateChatOptions } from '../IProvider.js';
 import { prepareRequest } from './OpenAIRequestPreparation.js';
 import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import type { ProviderMediaTransportCapabilities } from '../providerMediaTransportCapabilities.js';
-import { acquireRequestScopedBody } from '../utils/requestScopedBody.js';
+import type { UnsupportedMediaEntry } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import {
+  acquireRequestScopedBody,
+  type RequestScopedBody,
+} from '../utils/requestScopedBody.js';
+import { readsRequestRowsAtTransport } from '../BaseProviderNormalization.js';
+import { collectUnsupportedMedia } from '../utils/mediaUtils.js';
+import {
+  dropTransportRows,
+  openTransportRowsMedia,
+} from '../utils/transportRows.js';
 import {
   finishMediaRequest,
   resolveRequestMedia,
@@ -95,7 +105,7 @@ interface ChatProjectionPreparationDeps {
 export function registerOpenAIChatRequestCleanup(
   mediaRequest: ResolvedMediaRequest,
   requestContext: Awaited<ReturnType<typeof prepareRequest>>,
-): void {
+): RequestScopedBody<OpenAI.Chat.ChatCompletionCreateParams> {
   // Issue #854 P05b4: the wire body is owned by a request-scoped lease and
   // the media request's finish releases it, so the body arrays are spliced
   // once the transport call settles (any outcome) instead of outliving it.
@@ -106,24 +116,73 @@ export function registerOpenAIChatRequestCleanup(
   mediaRequest.registerCleanup(() => {
     void requestBodyLease.release();
   });
+  return requestBodyLease;
+}
+
+export interface PreparedOpenAIChatProjection {
+  readonly options: NormalizedGenerateChatOptions;
+  readonly requestContext: Awaited<ReturnType<typeof prepareRequest>>;
+  readonly mediaRequest: ResolvedMediaRequest;
+  readonly bodyLease: RequestScopedBody<OpenAI.Chat.ChatCompletionCreateParams>;
+  readonly unsupportedMedia: readonly UnsupportedMediaEntry[];
+}
+
+/**
+ * Drops the transient neutral rows once the chat body exists, so only the one
+ * wire `messages` body stays alive (issue #854 WP08). The Kimi pre-pass may
+ * have swapped in its own row list.
+ */
+export function dropOpenAIChatSourceRows(
+  mediaRequest: ResolvedMediaRequest,
+  options: NormalizedGenerateChatOptions,
+): void {
+  dropTransportRows(mediaRequest);
+  options.contents.splice(0);
+}
+
+/**
+ * An unprojected send builds its one chat body inside the transport: it takes
+ * the body's request-scoped lease and, on the source route, drops the
+ * transient neutral rows.
+ */
+export async function prepareOwnedOpenAIChatRequest(
+  options: NormalizedGenerateChatOptions,
+  mediaRequest: ResolvedMediaRequest,
+  defaultModel: string,
+  logger: DebugLogger,
+  providerName: string,
+  mediaTransportCapabilities: ProviderMediaTransportCapabilities,
+): Promise<Awaited<ReturnType<typeof prepareRequest>>> {
+  const requestContext = await prepareRequest(
+    options,
+    defaultModel,
+    options.config,
+    logger,
+    providerName,
+    mediaTransportCapabilities,
+  );
+  registerOpenAIChatRequestCleanup(mediaRequest, requestContext);
+  if (readsRequestRowsAtTransport(options)) {
+    dropOpenAIChatSourceRows(mediaRequest, options);
+  }
+  return requestContext;
 }
 
 export async function prepareOpenAIChatProjection(
   options: NormalizedGenerateChatOptions,
   deps: ChatProjectionPreparationDeps,
-): Promise<{
-  options: NormalizedGenerateChatOptions;
-  requestContext: Awaited<ReturnType<typeof prepareRequest>>;
-  mediaRequest: ResolvedMediaRequest;
-}> {
+): Promise<PreparedOpenAIChatProjection> {
   const support = deps.readMediaSupport();
   const needsClient =
     support?.fileUpload === true || support?.videoSupport === true;
-  const mediaRequest = await resolveRequestMedia(
-    options.runtime,
-    options.contents,
-    options.invocation.signal,
-  );
+  const sourceRoute = readsRequestRowsAtTransport(options);
+  const mediaRequest = sourceRoute
+    ? await openTransportRowsMedia(options)
+    : await resolveRequestMedia(
+        options.runtime,
+        options.contents,
+        options.invocation.signal,
+      );
   try {
     let preparedOptions = {
       ...options,
@@ -152,8 +211,22 @@ export async function prepareOpenAIChatProjection(
       deps.providerName,
       deps.mediaTransportCapabilities,
     );
-    registerOpenAIChatRequestCleanup(mediaRequest, requestContext);
-    return { options: preparedOptions, mediaRequest, requestContext };
+    const bodyLease = registerOpenAIChatRequestCleanup(
+      mediaRequest,
+      requestContext,
+    );
+    const unsupportedMedia = collectUnsupportedMedia(
+      preparedOptions.contents,
+      (_block, category) => category === 'image',
+    );
+    if (sourceRoute) dropOpenAIChatSourceRows(mediaRequest, preparedOptions);
+    return {
+      options: preparedOptions,
+      mediaRequest,
+      requestContext,
+      bodyLease,
+      unsupportedMedia,
+    };
   } catch (error) {
     return finishMediaRequest(mediaRequest, { status: 'failed', error });
   }

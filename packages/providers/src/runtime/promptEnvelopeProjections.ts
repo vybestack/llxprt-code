@@ -322,29 +322,24 @@ export function projectAnthropicPromptEnvelope(
   );
 }
 
+type OnDemandProjectionOptions = ProjectionOptions & {
+  readonly releaseIfUnsent: () => Promise<void>;
+};
+
 /**
  * Projection over a body that stays owned by its transport. The prompt
  * graph is derived from `readBody()` on every estimate access and is not
  * kept, so only the transport's one request body is alive between estimates
  * (issue #854). `readBody` throws once the body's lease was released.
  */
-export function projectAnthropicPromptEnvelopeOnDemand(
+function projectOnDemand(
   readBody: () => unknown,
-  options: ProjectionOptions & {
-    readonly releaseIfUnsent: () => Promise<void>;
-  },
+  promptKeys: readonly string[],
+  identity: ProjectionIdentity,
+  options: OnDemandProjectionOptions,
 ): PromptEnvelopeProjection {
-  const identity: ProjectionIdentity = {
-    protocol: 'anthropic-messages',
-    method: 'messages/v1',
-    projectionRevision: PROJECTION_REVISION,
-  };
   const estimation = () =>
-    buildEstimationProjection(
-      readBody(),
-      PROMPT_KEYS['anthropic-messages'],
-      identity.protocol,
-    );
+    buildEstimationProjection(readBody(), promptKeys, identity.protocol);
   return Object.freeze({
     model: extractModelOrThrow(readBody(), identity),
     protocol: identity.protocol,
@@ -358,6 +353,38 @@ export function projectAnthropicPromptEnvelopeOnDemand(
     legacyEstimate: () => estimation().legacyEstimate(),
     releaseIfUnsent: options.releaseIfUnsent,
   });
+}
+
+export function projectAnthropicPromptEnvelopeOnDemand(
+  readBody: () => unknown,
+  options: OnDemandProjectionOptions,
+): PromptEnvelopeProjection {
+  return projectOnDemand(
+    readBody,
+    PROMPT_KEYS['anthropic-messages'],
+    {
+      protocol: 'anthropic-messages',
+      method: 'messages/v1',
+      projectionRevision: PROJECTION_REVISION,
+    },
+    options,
+  );
+}
+
+export function projectOpenAIChatPromptEnvelopeOnDemand(
+  readBody: () => unknown,
+  options: OnDemandProjectionOptions,
+): PromptEnvelopeProjection {
+  return projectOnDemand(
+    readBody,
+    PROMPT_KEYS['openai-chat'],
+    {
+      protocol: 'openai-chat',
+      method: 'chat/completions/v1',
+      projectionRevision: PROJECTION_REVISION,
+    },
+    options,
+  );
 }
 
 export function projectOpenAIChatPromptEnvelope(

@@ -69,7 +69,7 @@ import { readsRequestRowsAtTransport } from '../BaseProviderNormalization.js';
 import {
   dropTransportRows,
   openTransportRowsMedia,
-} from './AnthropicTransportRows.js';
+} from '../utils/transportRows.js';
 import {
   buildAnthropicRequestHeaders,
   createAnthropicApiCall,
