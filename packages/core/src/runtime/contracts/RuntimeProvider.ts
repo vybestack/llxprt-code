@@ -23,6 +23,16 @@ import type {
   RuntimeProviderToolset,
 } from './RuntimeProviderChat.js';
 import type { PromptEnvelopeProjection } from './PromptEstimation.js';
+import type { ProviderRequestSelection } from '../../services/history/provider-request-snapshot.js';
+
+/**
+ * Provider-triggered compression (issue #854): the guard facts go in and a
+ * replacement request selection comes out. The selection is owned by the send
+ * preparer that produced it; the provider only reads it.
+ */
+export type RuntimeCompressionCallback = (
+  guard?: RuntimeCompressionGuardInfo,
+) => Promise<ProviderRequestSelection>;
 
 /** Guard facts a provider supplies when its context guard invokes the compression callback (issue #3499). */
 export interface RuntimeCompressionGuardInfo {
@@ -59,14 +69,7 @@ export interface RuntimeProvider {
   clearAuthCache?(): void;
   clearAuth?(): void;
 
-  setCompressionCallback?(
-    callback:
-      | ((
-          contents: IContent[],
-          guard?: RuntimeCompressionGuardInfo,
-        ) => Promise<IContent[]>)
-      | null,
-  ): void;
+  setCompressionCallback?(callback: RuntimeCompressionCallback | null): void;
 
   generateChatCompletion(
     options: RuntimeGenerateChatOptions,

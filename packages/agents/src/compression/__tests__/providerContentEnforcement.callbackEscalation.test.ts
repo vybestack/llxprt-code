@@ -21,6 +21,7 @@ import { curatedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/cu
 
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
@@ -53,9 +54,16 @@ interface GuardInfo {
 }
 
 type GuardAwareCallback = (
-  contents: IContent[],
   guard?: GuardInfo,
-) => Promise<IContent[]>;
+) => Promise<ProviderRequestSelection>;
+
+async function readSelection(
+  rows: ProviderRequestSelection,
+): Promise<IContent[]> {
+  const out: IContent[] = [];
+  for await (const row of rows.openReader()) out.push(row);
+  return out;
+}
 
 function makeLogger(): DebugLogger {
   return {
@@ -320,7 +328,7 @@ async function facadeCallback1(): Promise<void> {
 
   const callback = expectCapturedCallback(capturedCallback);
   const guard = guardOverBy(initialEstimate, 900);
-  const result = await callback(contents, guard);
+  const result = await readSelection(await callback(guard));
 
   const finalEstimate = await historyService.estimateTokensForContents(
     result,

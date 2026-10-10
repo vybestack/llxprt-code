@@ -11,6 +11,7 @@ import type {
 } from './IProvider.js';
 import type { IModel } from './IModel.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { ProviderManager } from './ProviderManager.js';
 import { coreEvents } from '@vybestack/llxprt-code-core/utils/events.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
@@ -40,7 +41,6 @@ import { isTimeoutError } from './loadBalancing/streamTimeout.js';
 import { buildExtendedStats } from './loadBalancing/statsBuilder.js';
 import { buildRoundRobinResolvedOptions as buildRoundRobinResolvedOptionsExternal } from './loadBalancing/resolvedOptionsBuilder.js';
 import { resolveMemberAuthentication } from './loadBalancing/memberAuthentication.js';
-import { cloneContentsForCompression } from './loadBalancing/contentClone.js';
 import {
   getRequestSignal,
   rethrowIfAborted,
@@ -70,6 +70,7 @@ import type { EstimationResult } from './loadBalancing/loadBalancerTokenEstimato
 import {
   estimatePreparedPrompt,
   optionsWithPromptProjection,
+  optionsWithRequestRows,
 } from './loadBalancing/preparedPromptOptions.js';
 import { getTargetContextLimit } from './loadBalancing/targetContextLimit.js';
 import {
@@ -277,15 +278,9 @@ export class LoadBalancingProvider implements IProvider {
       () =>
         `[LB:token-guard] Estimate ${result.tokens} exceeds limit ${contextLimit} for ${subProfile.name}, attempting compression`,
     );
-    const clonedContents = this.cloneForCompression(
-      await collectContents(options.contents),
-      subProfile,
-      result,
-      contextLimit,
-    );
-    let compressed: IContent[];
+    let replacement: ProviderRequestSelection;
     try {
-      compressed = await this.compressionCallback(clonedContents, {
+      replacement = await this.compressionCallback({
         estimatedTokens: result.tokens,
         contextLimit,
       });
@@ -296,10 +291,7 @@ export class LoadBalancingProvider implements IProvider {
         cause: error instanceof Error ? error : new Error(String(error)),
       });
     }
-    const compressedOptions = {
-      ...options,
-      contents: replayableContents(compressed),
-    };
+    const compressedOptions = optionsWithRequestRows(options, replacement);
     const compressedResult = await this.estimateForSubProfile(
       subProfile,
       compressedOptions,
@@ -309,25 +301,6 @@ export class LoadBalancingProvider implements IProvider {
       return optionsWithPromptProjection(compressedOptions, compressedResult);
     }
     return undefined;
-  }
-
-  private cloneForCompression(
-    contents: IContent[],
-    subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
-    result: EstimationResult,
-    contextLimit: number,
-  ): IContent[] {
-    try {
-      return cloneContentsForCompression(contents);
-    } catch (error) {
-      throw new LoadBalancerContextLimitError({
-        profileName: this.config.profileName,
-        subProfileName: subProfile.name,
-        tokens: result.tokens,
-        contextLimit,
-        cause: error instanceof Error ? error : new Error(String(error)),
-      });
-    }
   }
 
   /**
@@ -393,6 +366,27 @@ export class LoadBalancingProvider implements IProvider {
     });
   }
 
+  private async replayableCallOptions(
+    optionsOrContent: GenerateChatOptions | AsyncIterable<IContent>,
+    tools: ProviderToolset | undefined,
+    signal: AbortSignal | undefined,
+  ): Promise<GenerateChatOptions> {
+    if (isAsyncIterableContents(optionsOrContent)) {
+      return {
+        contents: replayableContents(await collectContents(optionsOrContent)),
+        tools,
+        ...(signal && { metadata: { abortSignal: signal } }),
+      };
+    }
+    if (optionsOrContent.requestRows !== undefined) return optionsOrContent;
+    return {
+      ...optionsOrContent,
+      contents: replayableContents(
+        await collectContents(optionsOrContent.contents),
+      ),
+    };
+  }
+
   generateChatCompletion(
     options: GenerateChatOptions,
   ): AsyncIterableIterator<IContent>;
@@ -406,20 +400,14 @@ export class LoadBalancingProvider implements IProvider {
     tools?: ProviderToolset,
     signal?: AbortSignal,
   ): AsyncIterableIterator<IContent> {
-    // Collect history once; replay for each attempt (issue #854).
-    const positional = isAsyncIterableContents(optionsOrContent);
-    const options: GenerateChatOptions = positional
-      ? {
-          contents: replayableContents(await collectContents(optionsOrContent)),
-          tools,
-          ...(signal && { metadata: { abortSignal: signal } }),
-        }
-      : {
-          ...optionsOrContent,
-          contents: replayableContents(
-            await collectContents(optionsOrContent.contents),
-          ),
-        };
+    // A neutral requestRows selection is already repeatable and pinned: every
+    // attempt reopens it, so nothing is collected here. Only the legacy
+    // contents stream is collected once and replayed per attempt (issue #854).
+    const options = await this.replayableCallOptions(
+      optionsOrContent,
+      tools,
+      signal,
+    );
     this.resetTokenAccountingDiagnostics();
 
     // Branch on strategy

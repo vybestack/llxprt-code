@@ -101,6 +101,8 @@ function createProjectingDelegate(spec: {
       }
       const transportToken = Object.freeze({ seq: delegateTokens.length });
       delegateTokens.push(transportToken);
+      // The wrapper's request lease closes after projection, so measure now.
+      const estimate = await spec.estimateTokens(options);
       return {
         model: options.resolved?.model ?? spec.name,
         protocol: 'openai-chat',
@@ -109,7 +111,7 @@ function createProjectingDelegate(spec: {
         unsupportedMedia: [],
         transportToken,
         finalizedProjection: Object.freeze({ kind: 'test', promptText: 'x' }),
-        legacyEstimate: () => Promise.resolve(spec.estimateTokens(options)),
+        legacyEstimate: () => Promise.resolve(estimate),
         ...(spec.releaseIfUnsent === undefined
           ? {}
           : { releaseIfUnsent: spec.releaseIfUnsent }),
@@ -243,17 +245,22 @@ function unitResolvedOptions(
 function registerProjectionCase01(): void {
   describe('delegate envelope', () => {
     it('forwards the peeked sub-profile delegate projection as an estimate-only envelope', async () => {
-      const delegate = createProjectingDelegate({
-        name: 'openai',
-        estimateTokens: () => 1234,
-      });
-      providerManager.registerProvider(delegate.provider);
-
-      const lb = createLoadBalancer(providerManager);
       const originalRows = [
         createTextContent('hello envelope'),
         createTextContent('second row'),
       ];
+      const delegate = createProjectingDelegate({
+        name: 'openai',
+        estimateTokens: async (options) => {
+          expect(await collectContents(options.contents)).toStrictEqual(
+            originalRows,
+          );
+          return 1234;
+        },
+      });
+      providerManager.registerProvider(delegate.provider);
+
+      const lb = createLoadBalancer(providerManager);
       const contents = replayableContents(originalRows);
 
       const projection = await lb.projectPromptEnvelope({ contents });
@@ -268,13 +275,6 @@ function registerProjectionCase01(): void {
       expect(await projection?.legacyEstimate()).toBe(1234);
       // No delegate accounting to forward means no accounting field at all.
       expect('accounting' in (projection ?? {})).toBe(false);
-      // The delegate projected the caller's contents.
-      const projectedRows = await collectContents(
-        delegate.projectedOptions[0].contents,
-      );
-      expect(projectedRows).toStrictEqual(originalRows);
-      expect(projectedRows[0]).toBe(originalRows[0]);
-      expect(projectedRows[1]).toBe(originalRows[1]);
     });
   });
 }

@@ -265,11 +265,11 @@ function recordGuardCallback(lb: LoadBalancingProvider): GuardCallbackRecorder {
         return;
       }
       const inner = callback;
-      original(async (contents, guard) => {
+      original(async (guard) => {
         if (guard !== undefined) {
           recorder.guardCalls.push(guard);
         }
-        return inner(contents, guard);
+        return inner(guard);
       });
     },
   );

@@ -31,6 +31,8 @@ interface GuardInfo {
   contextLimit: number;
 }
 
+import { trackedRequestRows } from './requestRowsTestSupport.js';
+
 function createTextContent(text: string): IContent {
   return { speaker: 'human', blocks: [{ type: 'text', text }] };
 }
@@ -166,12 +168,10 @@ describe('LoadBalancingProvider - compression guard facts (issue #3499)', () => 
 
     const requestText = 'this is a very long message that exceeds the limit';
     let capturedGuard: GuardInfo | undefined;
-    const compressionCallback = vi.fn(
-      async (_contents: IContent[], guard?: GuardInfo): Promise<IContent[]> => {
-        capturedGuard = guard;
-        return [createTextContent('ok')];
-      },
-    );
+    const compressionCallback = vi.fn(async (guard?: GuardInfo) => {
+      capturedGuard = guard;
+      return trackedRequestRows([createTextContent('ok')]);
+    });
     provider.setCompressionCallback(compressionCallback);
 
     const result = await consumeIterator(provider, [
@@ -221,9 +221,9 @@ describe('LoadBalancingProvider - compression guard facts (issue #3499)', () => 
       providerManager,
     );
 
-    const compressionCallback = vi.fn(async (_contents: IContent[]) => [
-      createTextContent('ok'),
-    ]);
+    const compressionCallback = vi.fn(async () =>
+      trackedRequestRows([createTextContent('ok')]),
+    );
     provider.setCompressionCallback(compressionCallback);
 
     const result = await consumeIterator(provider, [

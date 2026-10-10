@@ -17,6 +17,7 @@ import type {
 } from './loadBalancerTypes.js';
 
 import { createProviderKeyStorage } from '../runtime/runtimeSettings.js';
+import { trackedRequestRows } from '../__tests__/requestRowsTestSupport.js';
 import {
   isAsyncIterableContents,
   replayableContents,
@@ -223,7 +224,7 @@ describe('load balancer projection credentials', () => {
       storedKeys.set('member-key', 'before-compression');
       lb.setCompressionCallback(async () => {
         storedKeys.set('member-key', 'after-compression');
-        return [];
+        return trackedRequestRows([]);
       });
       await consume(lb, {
         ...options,

@@ -24,6 +24,11 @@ import type { RuntimeTokenizer } from '@vybestack/llxprt-code-core/runtime/contr
 import { LoadBalancerAllContextLimitsExceededError } from '../loadBalancing/contextLimitError.js';
 import { collectContents } from '../utils/collectContents.js';
 
+import {
+  trackedRequestRows,
+  type TrackedRequestRows,
+} from './requestRowsTestSupport.js';
+
 function createTextContent(text: string): IContent {
   return { speaker: 'human', blocks: [{ type: 'text', text }] };
 }
@@ -112,19 +117,6 @@ async function consumeIterator(
 
 let providerManager: ProviderManager;
 
-function compressFromOriginal(
-  compressionInputs: IContent[][],
-): (contents: IContent[]) => Promise<IContent[]> {
-  return async (contents) => {
-    compressionInputs.push(structuredClone(contents));
-    contents[0].blocks[0] = {
-      type: 'text',
-      text: 'mutated during first compression attempt',
-    };
-    return [createTextContent('ok')];
-  };
-}
-
 function createFailoverCompressionConfig(): LoadBalancingProviderConfig {
   return {
     profileName: 'failover-compression',
@@ -150,8 +142,8 @@ function createFailoverCompressionConfig(): LoadBalancingProviderConfig {
 }
 
 function registerCompressionCase01(): void {
-  describe('original request isolation', () => {
-    it('compresses each failover target from the original request contents', async () => {
+  describe('replacement request selection', () => {
+    it('asks for a fresh replacement selection per failover target and sends it as the request', async () => {
       const factory = createTokenizerFactory({
         'gpt-4.1': createCountingTokenizer(() => {}),
         'claude-opus-4': createCountingTokenizer(() => {}),
@@ -175,12 +167,7 @@ function registerCompressionCase01(): void {
         async *generateChatCompletion(
           options: GenerateChatOptions,
         ): AsyncGenerator<IContent> {
-          const sent = await collectContents(options.contents);
-          sentToAnthropic.push(structuredClone(sent));
-          sent[0].blocks[0] = {
-            type: 'text',
-            text: 'mutated by delegate provider',
-          };
+          sentToAnthropic.push(await collectContents(options.contents));
           yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
         },
         getModels: async () => [],
@@ -191,28 +178,26 @@ function registerCompressionCase01(): void {
         createFailoverCompressionConfig(),
         providerManager,
       );
-      const compressionInputs: IContent[][] = [];
-      const compressionCallback = vi.fn(
-        compressFromOriginal(compressionInputs),
-      );
+      const replacements: TrackedRequestRows[] = [];
+      const compressionCallback = vi.fn(async () => {
+        const replacement = trackedRequestRows([createTextContent('ok')]);
+        replacements.push(replacement);
+        return replacement;
+      });
       provider.setCompressionCallback(compressionCallback);
 
-      const originalContents = [
+      await consumeIterator(provider, [
         createTextContent('this message needs compression'),
-      ];
-      await consumeIterator(provider, originalContents);
+      ]);
 
       expect(openAiAttempts).toBe(1);
       expect(compressionCallback).toHaveBeenCalledTimes(2);
-      expect(compressionInputs).toStrictEqual([
-        originalContents,
-        originalContents,
-      ]);
-      expect(sentToAnthropic).toHaveLength(1);
-      expect(sentToAnthropic[0][0].blocks[0]).toStrictEqual({
-        type: 'text',
-        text: 'ok',
-      });
+      expect(replacements).toHaveLength(2);
+      expect(sentToAnthropic).toStrictEqual([[createTextContent('ok')]]);
+      // The load balancer only reads replacement selections; the preparer
+      // that produced them owns closing them.
+      expect(replacements.map((r) => r.closeCount())).toStrictEqual([0, 0]);
+      expect(replacements.map((r) => r.openReaders())).toStrictEqual([0, 0]);
     });
   });
 }
@@ -255,9 +240,9 @@ function registerCompressionCase02(): void {
 
       const provider = new LoadBalancingProvider(lbConfig, providerManager);
 
-      const compressionCallback = vi.fn(async (_contents: IContent[]) => [
-        createTextContent('compressed'),
-      ]);
+      const compressionCallback = vi.fn(async () =>
+        trackedRequestRows([createTextContent('compressed')]),
+      );
       provider.setCompressionCallback(compressionCallback);
 
       const result = await consumeIterator(provider, [
@@ -308,8 +293,8 @@ function registerCompressionCase03(): void {
         },
         providerManager,
       );
-      const compressionCallback = vi.fn(
-        async (contents: IContent[]) => contents,
+      const compressionCallback = vi.fn(async () =>
+        trackedRequestRows([createTextContent('abcdefghij')]),
       );
       provider.setCompressionCallback(compressionCallback);
 

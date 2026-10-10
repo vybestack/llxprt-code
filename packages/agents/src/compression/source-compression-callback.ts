@@ -1,7 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { RuntimeCompressionGuardInfo } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import type {
+  RuntimeCompressionCallback,
+  RuntimeCompressionGuardInfo,
+} from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import {
   ProviderSourceEnforcer,
   type ProviderSourceLimits,
@@ -12,7 +14,9 @@ import {
   type SourceStageActions,
 } from './source-stage-ladder.js';
 
-export interface SourceCompressionCallbackDeps<S extends ProviderRequestRows> {
+export interface SourceCompressionCallbackDeps<
+  S extends ProviderRequestSelection,
+> {
   readonly candidate: SourceCandidate<S>;
   /** Limits used when the provider supplies no guard facts. */
   readonly defaultLimits: ProviderSourceLimits;
@@ -28,7 +32,7 @@ export interface SourceCompressionCallbackDeps<S extends ProviderRequestRows> {
  * predicate mirrors the guard's check with no completion budget re-reserved
  * (issue #3499).
  */
-async function guardLimits<S extends ProviderRequestRows>(
+async function guardLimits<S extends ProviderRequestSelection>(
   candidate: SourceCandidate<S>,
   guard: RuntimeCompressionGuardInfo,
 ): Promise<ProviderSourceLimits> {
@@ -45,26 +49,17 @@ async function guardLimits<S extends ProviderRequestRows>(
   };
 }
 
-async function readRows(rows: ProviderRequestRows): Promise<IContent[]> {
-  const out: IContent[] = [];
-  for await (const row of rows.openReader()) out.push(row);
-  return out;
-}
-
 /**
  * Provider-triggered compression over the disk candidate. It runs the same
  * ordered source stages as pre-send enforcement (so fallback keeps its shared
  * transaction compensation and anchor/baseline order) and hands the provider
- * the rows of the replacement candidate. Superseded and replacement candidates
+ * the replacement candidate selection itself. Superseded and replacement candidates
  * stay owned by the send preparer that estimated them.
  */
-export function createSourceCompressionCallback<S extends ProviderRequestRows>(
-  deps: SourceCompressionCallbackDeps<S>,
-): (
-  contents: IContent[],
-  guard?: RuntimeCompressionGuardInfo,
-) => Promise<IContent[]> {
-  return async (_contents, guard) => {
+export function createSourceCompressionCallback<
+  S extends ProviderRequestSelection,
+>(deps: SourceCompressionCallbackDeps<S>): RuntimeCompressionCallback {
+  return async (guard) => {
     try {
       const limits =
         guard === undefined
@@ -79,7 +74,7 @@ export function createSourceCompressionCallback<S extends ProviderRequestRows>(
         deps.stageActions(limits),
         deps.pendingRecoverable,
       );
-      return await readRows(deps.candidate.value);
+      return deps.candidate.value;
     } catch (error: unknown) {
       deps.warn('[CompressionHandler] Compression callback failed', error);
       throw error;

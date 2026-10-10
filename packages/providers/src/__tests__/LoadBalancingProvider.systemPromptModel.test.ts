@@ -39,6 +39,8 @@ import {
   replayableContents,
 } from '../utils/collectContents.js';
 
+import { trackedRequestRows } from './requestRowsTestSupport.js';
+
 function createTextContent(text: string): IContent {
   return { speaker: 'human', blocks: [{ type: 'text', text }] };
 }
@@ -666,6 +668,7 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
           });
           projectionTokens.push(transportToken);
           projectedSystemInstructions.push(systemInstructionOrNone(options));
+          const estimate = await estimateCompressedContents(options);
           return {
             model: resolvedModelOrDefault(options),
             protocol: 'openai-responses',
@@ -678,7 +681,7 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
               protocol: 'test',
               promptText: 'proj',
             }),
-            legacyEstimate: () => estimateCompressedContents(options),
+            legacyEstimate: () => Promise.resolve(estimate),
           };
         },
         async *generateChatCompletion(
@@ -711,7 +714,9 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
         },
         providerManager,
       );
-      lb.setCompressionCallback(async () => [createTextContent('compressed')]);
+      lb.setCompressionCallback(async () =>
+        trackedRequestRows([createTextContent('compressed')]),
+      );
 
       const { assembler } = trackingAssembler((_p, m) => `[model=${m}]`);
 

@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'bun:test';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { createSourceCompressionCallback } from '../source-compression-callback.js';
 import { SourceCandidate } from '../source-candidate.js';
 import { ContextOverflowError } from '../contextOverflowError.js';
@@ -17,7 +17,7 @@ const defaultLimits = {
   compressionThreshold: 2000,
 };
 
-function rowsOf(...texts: string[]): ProviderRequestRows {
+function rowsOf(...texts: string[]): ProviderRequestSelection {
   const rows: IContent[] = texts.map((text) => ({
     speaker: 'human',
     blocks: [{ type: 'text', text }],
@@ -27,6 +27,7 @@ function rowsOf(...texts: string[]): ProviderRequestRows {
     async *openReader() {
       for (const row of rows) yield row;
     },
+    close: () => undefined,
   };
 }
 
@@ -35,14 +36,14 @@ function callbackHarness(
   measurements: number[],
   options: {
     fallback?: FallbackTransactionOutcome;
-    replacement?: ProviderRequestRows;
+    replacement?: ProviderRequestSelection;
   } = {},
 ) {
   const stages: string[] = [];
   const warnings: unknown[] = [];
   const queue = [...measurements];
   const replacement = options.replacement ?? rowsOf('compressed');
-  const candidate = new SourceCandidate<ProviderRequestRows>(
+  const candidate = new SourceCandidate<ProviderRequestSelection>(
     rowsOf('old a', 'old b'),
     async () => {
       const next = queue.shift();
@@ -82,12 +83,16 @@ function callbackHarness(
   return { callback, candidate, stages, warnings };
 }
 
-async function textsOf(rows: IContent[]): Promise<string[]> {
-  return rows.map((row) =>
-    row.blocks
-      .map((block) => (block.type === 'text' ? block.text : ''))
-      .join(''),
-  );
+async function textsOf(rows: ProviderRequestSelection): Promise<string[]> {
+  const texts: string[] = [];
+  for await (const row of rows.openReader()) {
+    texts.push(
+      row.blocks
+        .map((block) => (block.type === 'text' ? block.text : ''))
+        .join(''),
+    );
+  }
+  return texts;
 }
 
 describe('provider-triggered compression over the source candidate', () => {
@@ -95,7 +100,7 @@ describe('provider-triggered compression over the source candidate', () => {
     // Guard estimate 5000 vs candidate estimate 4000 leaves 1000 of envelope
     // overhead, so the effective limit is 3000 - 1000 = 2000.
     const { callback, stages } = callbackHarness([4000, 4000, 1500]);
-    const rows = await callback([], {
+    const rows = await callback({
       estimatedTokens: 5000,
       contextLimit: 3000,
     });
@@ -105,7 +110,7 @@ describe('provider-triggered compression over the source candidate', () => {
 
   it('uses the enforcer limits when the provider supplies no guard facts', async () => {
     const { callback, stages } = callbackHarness([1900]);
-    const rows = await callback([]);
+    const rows = await callback();
     expect(stages).toStrictEqual([]);
     expect(await textsOf(rows)).toStrictEqual(['old a', 'old b']);
   });
@@ -114,7 +119,7 @@ describe('provider-triggered compression over the source candidate', () => {
     const { callback, stages, warnings } = callbackHarness([
       4000, 4000, 4000, 3900, 3900, 3900, 3900,
     ]);
-    const outcome = callback([], { estimatedTokens: 4000, contextLimit: 3000 });
+    const outcome = callback({ estimatedTokens: 4000, contextLimit: 3000 });
     await expect(outcome).rejects.toBeInstanceOf(ContextOverflowError);
     expect(
       stages.map((stage) => stage.replace(/^fallback:.*/, 'fallback')),
@@ -145,7 +150,7 @@ describe('provider-triggered compression over the source candidate', () => {
       },
     );
     await expect(
-      callback([], { estimatedTokens: 4000, contextLimit: 3000 }),
+      callback({ estimatedTokens: 4000, contextLimit: 3000 }),
     ).rejects.toThrow('candidate rejected and rolled back');
   });
 });

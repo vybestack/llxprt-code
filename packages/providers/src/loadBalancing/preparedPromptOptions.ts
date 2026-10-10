@@ -17,7 +17,9 @@ import {
   estimateRowSourceTokens,
   type EstimationResult,
 } from './loadBalancerTokenEstimator.js';
+import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { collectContents } from '../utils/collectContents.js';
+import { getRequestSignal } from '../utils/abortSignal.js';
 import { resolveSubProfileModel } from './subProfileHelpers.js';
 
 export async function estimatePreparedPrompt(
@@ -74,6 +76,24 @@ export async function estimatePreparedPrompt(
     model,
     { tokenizerFactory },
   );
+}
+
+/**
+ * Options whose history is the replacement selection. The selection stays
+ * owned by whoever produced it; `contents` is its repeatable reader view bound
+ * to the request signal.
+ */
+export function optionsWithRequestRows(
+  options: GenerateChatOptions,
+  rows: ProviderRequestSelection,
+): GenerateChatOptions {
+  const signal = getRequestSignal(options);
+  return {
+    ...options,
+    contents: { [Symbol.asyncIterator]: () => rows.openReader(signal) },
+    requestRows: rows,
+    contentCount: rows.count,
+  };
 }
 
 export function optionsWithPromptProjection(

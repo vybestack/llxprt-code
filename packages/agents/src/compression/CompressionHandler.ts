@@ -13,7 +13,10 @@ import type {
 import type { ProviderContentEnvelope } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import type {
+  RuntimeCompressionCallback,
+  RuntimeProvider as IProvider,
+} from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type {
   CompressionProviderResult,
   DensityConfig,
@@ -55,7 +58,6 @@ import {
 } from './compressionBudgeting.js';
 import {
   ProviderContentEnforcer,
-  type CompressionGuardInfo,
   type ProviderContentEnforcementDeps,
 } from './providerContentEnforcement.js';
 import {
@@ -76,8 +78,9 @@ import {
   type SourceStageActions,
 } from './source-stage-ladder.js';
 import { SourceCandidate, type SourcePendingRows } from './source-candidate.js';
+import { arrayRequestSelection } from './array-request-selection.js';
 import { createSourceCompressionCallback } from './source-compression-callback.js';
-import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { truncateSourceToolResponses } from './source-tool-truncation.js';
 import {
   executeFallbackTransaction,
@@ -383,10 +386,7 @@ export class CompressionHandler {
       return;
     }
 
-    const callback = async (
-      _contents: IContent[],
-      guard?: CompressionGuardInfo,
-    ): Promise<IContent[]> => {
+    const callback: RuntimeCompressionCallback = async (guard) => {
       if (pendingContents === undefined) {
         throw new Error(
           'Compression callback invoked but the pending-content boundary is ' +
@@ -397,11 +397,13 @@ export class CompressionHandler {
         );
       }
       try {
-        return await enforcer.compressAndRecompose(
-          pendingContents,
-          promptId,
-          guard,
-          provider,
+        return arrayRequestSelection(
+          await enforcer.compressAndRecompose(
+            pendingContents,
+            promptId,
+            guard,
+            provider,
+          ),
         );
       } catch (error) {
         this.logger.warn(
@@ -568,7 +570,7 @@ export class CompressionHandler {
    * current candidate; it stays attached after success until the caller
    * clears it once the provider call ends, and is cleared here on failure.
    */
-  async enforceProviderSource<S extends ProviderRequestRows>(
+  async enforceProviderSource<S extends ProviderRequestSelection>(
     provider: IProvider,
     promptId: string,
     source: S,

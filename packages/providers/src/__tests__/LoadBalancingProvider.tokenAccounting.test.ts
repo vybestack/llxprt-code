@@ -24,6 +24,8 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import type { RuntimeTokenizer } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizer.js';
 
+import { trackedRequestRows } from './requestRowsTestSupport.js';
+
 function createTextContent(text: string): IContent {
   return { speaker: 'human', blocks: [{ type: 'text', text }] };
 }
@@ -124,7 +126,7 @@ function createTokenizerFactory(
 
 function createProjectedProvider(
   name: string,
-  tokensForOptions: (options: GenerateChatOptions) => number,
+  tokensForOptions: (options: GenerateChatOptions) => number | Promise<number>,
   sentTokens: Array<object | undefined>,
   failFirstSend = false,
 ): IProvider & { readonly projectionTokens: object[] } {
@@ -139,6 +141,9 @@ function createProjectedProvider(
         sequence: projectionTokens.length,
       });
       projectionTokens.push(transportToken);
+      // The wrapper's request lease closes when projection returns, so a
+      // projection measures the request while it is open.
+      const estimate = await tokensForOptions(options);
       return {
         model: options.resolved?.model ?? 'gpt-5.6-sol',
         protocol: 'openai-responses',
@@ -151,7 +156,7 @@ function createProjectedProvider(
           protocol: 'openai-responses',
           promptText: 'projected prompt',
         }),
-        legacyEstimate: () => Promise.resolve(tokensForOptions(options)),
+        legacyEstimate: () => Promise.resolve(estimate),
       };
     },
     async *generateChatCompletion(options): AsyncGenerator<IContent> {
@@ -528,9 +533,9 @@ describe('LoadBalancingProvider - Token Accounting (issue #2207)', () => {
       },
       providerManager,
     );
-    provider.setCompressionCallback(async () => [
-      createTextContent('compressed'),
-    ]);
+    provider.setCompressionCallback(async () =>
+      trackedRequestRows([createTextContent('compressed')]),
+    );
 
     await consumeIterator(provider, [createTextContent('large request')]);
 

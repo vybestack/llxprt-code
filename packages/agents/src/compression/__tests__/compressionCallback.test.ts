@@ -32,6 +32,12 @@ function expectCapturedCallback(
   return callback;
 }
 
+async function readCallback(
+  callback: CompressionCallback,
+): Promise<IContent[]> {
+  return Array.fromAsync((await callback()).openReader());
+}
+
 function countToolCalls(contents: IContent[], id: string): number {
   let count = 0;
   for (const content of contents) {
@@ -135,9 +141,9 @@ const observeAttachedCallbackRunsCompressionMachineryAndReturnsHistoryContents =
     const currentContents = await Array.fromAsync(
       historyService.getCuratedForProviderStream(),
     );
-    const result = await callback(currentContents);
+    const result = await readCallback(callback);
 
-    const emptyResult = await callback([]);
+    const emptyResult = await readCallback(callback);
 
     const attachedCallbackRunsCompressionMachineryAndReturnsHistoryContentsObservation1 =
       result.every(
@@ -215,10 +221,7 @@ const observePreservesPendingRequestContentsWhenCallbackRecomposesCompressedHist
     );
 
     const callback = expectCapturedCallback(capturedCallback);
-    const providerReadyContents = await Array.fromAsync(
-      historyService.getCuratedForProviderStream([pending]),
-    );
-    const result = await callback(providerReadyContents);
+    const result = await readCallback(callback);
 
     return { result, pending };
   };
@@ -285,10 +288,7 @@ const observePreservesAPendingMatchingToolResponseWithoutDuplicatingHistory =
     );
 
     const callback = expectCapturedCallback(capturedCallback);
-    const providerReadyContents = await Array.fromAsync(
-      historyService.getCuratedForProviderStream([pendingToolResult]),
-    );
-    const result = await callback(providerReadyContents);
+    const result = await readCallback(callback);
 
     assertToolResponseResult(result, 'pending-call', {
       value: 'large tool response '.repeat(50),
