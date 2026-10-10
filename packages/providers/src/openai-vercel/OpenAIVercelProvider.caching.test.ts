@@ -60,9 +60,7 @@ describe('OpenAIVercelProvider - Cache Metrics', () => {
   }
 
   function createTestProvider(): OpenAIVercelProvider {
-    return new OpenAIVercelProvider('test-api-key', undefined, {
-      settingsService,
-    });
+    return new OpenAIVercelProvider('test-api-key', undefined);
   }
 
   function createTestMessages(): IContent[] {

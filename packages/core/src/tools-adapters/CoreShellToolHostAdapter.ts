@@ -1,3 +1,5 @@
+import { normalizeShellReplacement } from '../config/configTypes.js';
+import type { ToolExecutionPolicy } from '@vybestack/llxprt-code-tools';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -22,9 +24,9 @@ import { readConfiguredTimeoutSeconds } from '@vybestack/llxprt-code-tools/utils
 import type { Config } from '../config/config.js';
 import { ApprovalMode } from '../config/config.js';
 import { ShellExecutionService } from '../services/shellExecutionService.js';
+import type { ShellExecutionConfig } from '../services/shellExecutionService.js';
 import type { ShellOutputEvent } from '../services/shellExecutionService.js';
-import type { ShellJob } from '../services/shellJobManager.js';
-import { validatePathWithinWorkspace } from '../safety/index.js';
+import type { WorkspacePathOperations } from '../services/workspace-filesystem-owner.js';
 import {
   getCommandRoots,
   getShellConfiguration,
@@ -36,33 +38,49 @@ import { isShellInvocationAllowlisted } from '../utils/tool-utils.js';
 import type { AnyToolInvocation } from '../index.js';
 import { formatMemoryUsage } from '../utils/formatters.js';
 import { limitOutputTokens } from '../utils/toolOutputLimiter.js';
-import { summarizeToolOutput } from '../utils/summarizer.js';
 
 export class CoreShellToolHostAdapter implements IShellToolHost {
-  constructor(private readonly config: Config) {}
+  constructor(
+    private readonly config: Config,
+    private readonly paths: WorkspacePathOperations,
+    private readonly readExecution: () => ToolExecutionPolicy,
+    private readonly summarizeOutput?: (
+      content: string,
+      signal: AbortSignal,
+      tokenBudget?: number,
+    ) => Promise<string>,
+  ) {}
 
   getTargetDir(): string {
     return this.config.getTargetDir();
   }
 
-  getWorkspaceContext(): {
-    getDirectories(): string[];
-    isPathWithinWorkspace(resolvedPath: string): boolean;
-  } {
-    const workspaceContext = this.config.getWorkspaceContext();
-    return {
-      getDirectories: () => [...workspaceContext.getDirectories()],
-      isPathWithinWorkspace: (resolvedPath: string) =>
-        workspaceContext.isPathWithinWorkspace(resolvedPath),
-    };
+  workspaceDirectories(): readonly string[] {
+    return this.paths.directories();
+  }
+  containsWorkspacePath(filePath: string): boolean {
+    return this.paths.contains(filePath);
   }
 
   isCommandAllowed(command: string): { allowed: boolean; reason?: string } {
     return isCommandAllowed(
       command,
-      this.config,
+      {
+        getShellReplacement: () => this.resolveShellReplacement(),
+        getExcludeTools: () => this.config.getExcludeTools(),
+        getCoreTools: () => this.config.getCoreTools(),
+      },
       getShellConfiguration().shell,
     );
+  }
+
+  private resolveShellReplacement(): ReturnType<Config['getShellReplacement']> {
+    const value = this.readExecution()['shell-replacement'];
+    if (value === undefined) return this.config.getShellReplacement();
+    if (typeof value === 'boolean') return normalizeShellReplacement(value);
+    if (value === 'all' || value === 'none' || value === 'allowlist')
+      return normalizeShellReplacement(value);
+    return normalizeShellReplacement(undefined);
   }
 
   isShellInvocationAllowlisted(command: string): boolean {
@@ -85,6 +103,23 @@ export class CoreShellToolHostAdapter implements IShellToolHost {
     return this.config.getDebugMode();
   }
 
+  private readShellAcquisition(): ShellExecutionConfig {
+    const declared = this.config.getShellExecutionConfig();
+    const policy = this.readExecution();
+    const rawSeconds = policy['shell-inactivity-timeout-seconds'];
+    const seconds = rawSeconds === undefined ? undefined : Number(rawSeconds);
+    const limit = policy['shell-output-retention-max-bytes'];
+    let inactivityTimeoutMs = declared.inactivityTimeoutMs;
+    if (seconds !== undefined)
+      inactivityTimeoutMs = seconds === -1 ? undefined : seconds * 1000;
+    return {
+      ...declared,
+      inactivityTimeoutMs,
+      outputRetentionMaxBytes:
+        typeof limit === 'number' ? limit : declared.outputRetentionMaxBytes,
+    };
+  }
+
   getShellExecutionConfig(): {
     shouldUseNodePty: boolean;
     executionOptions: Record<string, unknown>;
@@ -92,31 +127,28 @@ export class CoreShellToolHostAdapter implements IShellToolHost {
     ptyTerminalWidth?: number;
     ptyTerminalHeight?: number;
   } {
+    const acquisition = this.readShellAcquisition();
     return {
       shouldUseNodePty: this.config.getShouldUseNodePtyShell(),
-      executionOptions: this.config.getShellExecutionConfig() as Record<
-        string,
-        unknown
-      >,
+      executionOptions: { ...acquisition },
       ptyTerminalWidth: this.config.getPtyTerminalWidth(),
-      inactivityTimeoutMs:
-        this.config.getShellExecutionConfig().inactivityTimeoutMs,
+      inactivityTimeoutMs: acquisition.inactivityTimeoutMs,
       ptyTerminalHeight: this.config.getPtyTerminalHeight(),
     };
   }
 
   getTimeoutConfig(): ShellTimeoutConfig {
-    const ephemeralSettings = this.config.getEphemeralSettings();
+    const ephemeralSettings = this.readExecution();
     // Configured default/maximum are validated at the resolution boundary so a
     // bad profile value (0, -2, Infinity, non-numeric) is rejected here rather
     // than flowing unchecked to setTimeout (Finding 2).
     const defaultTimeoutSeconds = readConfiguredTimeoutSeconds(
-      ephemeralSettings,
+      { ...ephemeralSettings },
       'shell-default-timeout-seconds',
       DEFAULT_SHELL_TIMEOUT_SECONDS,
     );
     const maxTimeoutSeconds = readConfiguredTimeoutSeconds(
-      ephemeralSettings,
+      { ...ephemeralSettings },
       'shell-max-timeout-seconds',
       MAX_SHELL_TIMEOUT_SECONDS,
     );
@@ -128,7 +160,7 @@ export class CoreShellToolHostAdapter implements IShellToolHost {
   }
 
   getOutputLimits(): { maxTokens?: number; truncateMode?: string } {
-    const ephemeralSettings = this.config.getEphemeralSettings();
+    const ephemeralSettings = this.readExecution();
     return {
       maxTokens: ephemeralSettings['tool-output-max-tokens'] as
         | number
@@ -154,7 +186,7 @@ export class CoreShellToolHostAdapter implements IShellToolHost {
       signal,
       this.config.getShouldUseNodePtyShell(),
       {
-        ...this.config.getShellExecutionConfig(),
+        ...this.readShellAcquisition(),
         terminalWidth: this.config.getPtyTerminalWidth(),
         terminalHeight: this.config.getPtyTerminalHeight(),
       },
@@ -182,19 +214,8 @@ export class CoreShellToolHostAdapter implements IShellToolHost {
     return stripShellWrapper(command);
   }
 
-  validatePathWithinWorkspace(
-    _workspaceContext: {
-      getDirectories(): string[];
-      isPathWithinWorkspace(resolvedPath: string): boolean;
-    },
-    dirPath: string,
-    label: string,
-  ): string | null {
-    return validatePathWithinWorkspace(
-      this.config.getWorkspaceContext(),
-      dirPath,
-      label,
-    );
+  validatePathWithinWorkspace(dirPath: string, label: string): string | null {
+    return this.paths.validate(dirPath, label);
   }
 
   isPtyActive(pid: number): boolean {
@@ -210,13 +231,11 @@ export class CoreShellToolHostAdapter implements IShellToolHost {
     signal: AbortSignal,
     tokenBudget?: number,
   ): Promise<string> {
-    return summarizeToolOutput(
-      content,
-      this.config.getAgentClient(),
-      signal,
-      tokenBudget,
-      this.config.getUtilityModel(),
-    );
+    if (this.summarizeOutput === undefined)
+      throw new Error(
+        'Shell output summarization requires an explicit session client capability',
+      );
+    return this.summarizeOutput(content, signal, tokenBudget);
   }
 
   getSummarizeConfig(): { tokenBudget?: number } | undefined {
@@ -227,7 +246,11 @@ export class CoreShellToolHostAdapter implements IShellToolHost {
     content: string;
     wasTruncated: boolean;
   } {
-    const result = limitOutputTokens(content, this.config, ShellTool.Name);
+    const result = limitOutputTokens(
+      content,
+      { readExecutionPolicy: this.readExecution },
+      ShellTool.Name,
+    );
     return {
       content: result.content,
       wasTruncated: result.wasTruncated,
@@ -238,24 +261,13 @@ export class CoreShellToolHostAdapter implements IShellToolHost {
     command: string;
     cwd: string;
   }): ToolsShellJobInfo {
-    const manager = this.config.getShellJobManager();
-    if (manager === undefined) {
-      throw new Error(
-        'Background jobs are not available (ShellJobManager is not configured).',
-      );
-    }
-    const job = manager.launch({ command: input.command, cwd: input.cwd });
-    return toToolsShellJobInfo(job);
+    void input;
+    throw new Error('Background jobs require an Agent owner');
   }
 
   tailBackgroundJob(id: string): ToolsShellJobTailResult {
-    const manager = this.config.getShellJobManager();
-    if (manager === undefined) {
-      throw new Error(
-        'Background jobs are not available (ShellJobManager is not configured).',
-      );
-    }
-    return manager.tailOutput(id);
+    void id;
+    throw new Error('Background jobs require an Agent owner');
   }
 
   detectTrailingBackground(command: string): BackgroundPromotionResult {
@@ -278,21 +290,6 @@ export class CoreShellToolHostAdapter implements IShellToolHost {
         return exhaustiveOutputEvent(event);
     }
   }
-}
-
-function toToolsShellJobInfo(job: ShellJob): ToolsShellJobInfo {
-  return {
-    id: job.id,
-    command: job.command,
-    cwd: job.cwd,
-    state: job.state,
-    startedAt: job.startedAt,
-    endedAt: job.endedAt,
-    pid: job.pid,
-    exitCode: job.exitCode,
-    signal: job.signal,
-    failureReason: job.failureReason,
-  };
 }
 
 function exhaustiveOutputEvent(event: never): ToolsShellOutputEvent {

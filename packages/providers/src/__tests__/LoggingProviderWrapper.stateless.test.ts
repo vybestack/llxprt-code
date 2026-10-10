@@ -1,3 +1,6 @@
+import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
+const fixtureOwners = installRuntimeTestOwners();
+import { captureProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
 /**
  * @plan PLAN-20251023-STATELESS-HARDENING.P07
  * @requirement REQ-SP4-004
@@ -5,7 +8,7 @@
 import { describe, expect, it } from 'bun:test';
 import { LoggingProviderWrapper } from '../LoggingProviderWrapper.js';
 import type { GenerateChatOptions, IContent, IProvider } from '../IProvider.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
@@ -49,18 +52,14 @@ class StubRedactor {
 }
 
 const createConfigStub = (label: string): Config =>
-  ({
-    getConversationLoggingEnabled: () => false,
-    getConversationLogPath: () => `/tmp/${label}`,
-    getRedactionConfig: () => ({
-      redactApiKeys: false,
-      redactCredentials: false,
-      redactFilePaths: false,
-      redactUrls: false,
-      redactEmails: false,
-      redactPersonalInfo: false,
-    }),
-  }) as unknown as Config;
+  new Config({
+    sessionId: label,
+    targetDir: process.cwd(),
+    cwd: process.cwd(),
+    model: 'stub-model',
+    debugMode: false,
+    telemetry: { enabled: false, logConversations: false },
+  });
 
 const createRuntimeWithoutConfig = (
   settings: SettingsService,
@@ -98,9 +97,18 @@ describe('LoggingProviderWrapper stateless hardening integration', () => {
 
   it('rejects generateChatCompletion when runtime settings is absent @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-004', async () => {
     const provider = new StubProvider();
-    const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+    const wrapper = new LoggingProviderWrapper(
+      provider,
+      new StubRedactor(),
+      undefined,
+      () => captureProviderRequestDiagnostics(config, selectedOwner),
+    );
 
     const config = createConfigStub('test');
+    const selectedOwner = fixtureOwners.adopt(
+      config,
+      new SettingsService(),
+    ).settingsOwner;
     const runtime: ProviderRuntimeContext = {
       runtimeId: 'missing-settings-runtime',
       settingsService: undefined as unknown as SettingsService,
@@ -122,10 +130,19 @@ describe('LoggingProviderWrapper stateless hardening integration', () => {
 
   it('accepts generateChatCompletion with complete runtime context @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-004', async () => {
     const provider = new StubProvider();
-    const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+    const wrapper = new LoggingProviderWrapper(
+      provider,
+      new StubRedactor(),
+      undefined,
+      () => captureProviderRequestDiagnostics(config, selectedOwner),
+    );
 
     const settings = new SettingsService();
     const config = createConfigStub('complete-runtime');
+    const selectedOwner = fixtureOwners.adopt(
+      config,
+      new SettingsService(),
+    ).settingsOwner;
     const runtime: ProviderRuntimeContext = {
       runtimeId: 'complete-runtime',
       settingsService: settings,
@@ -150,10 +167,19 @@ describe('LoggingProviderWrapper stateless hardening integration', () => {
 
   it('merges runtime metadata correctly @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-005', async () => {
     const provider = new StubProvider();
-    const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+    const wrapper = new LoggingProviderWrapper(
+      provider,
+      new StubRedactor(),
+      undefined,
+      () => captureProviderRequestDiagnostics(config, selectedOwner),
+    );
 
     const settings = new SettingsService();
     const config = createConfigStub('metadata-test');
+    const selectedOwner = fixtureOwners.adopt(
+      config,
+      new SettingsService(),
+    ).settingsOwner;
 
     // Set up runtime context resolver
     wrapper.setRuntimeContextResolver(() => ({
@@ -188,18 +214,13 @@ describe('LoggingProviderWrapper stateless hardening integration', () => {
 
   it('fails fast when config lost its prototype instead of repairing it @requirement:REQ-SP4-004', async () => {
     const provider = new StubProvider();
-    const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
     const settings = new SettingsService();
+    const selectedOwner = fixtureOwners.config(
+      'negative-diagnostics',
+      settings,
+    ).settingsOwner;
     const invalidConfig = Object.freeze({
       getConversationLogPath: () => '/tmp/prototype-lost',
-      getRedactionConfig: () => ({
-        redactApiKeys: false,
-        redactCredentials: false,
-        redactFilePaths: false,
-        redactUrls: false,
-        redactEmails: false,
-        redactPersonalInfo: false,
-      }),
     }) as unknown as Config;
     const runtime: ProviderRuntimeContext = {
       runtimeId: 'prototype-lost-runtime',
@@ -208,19 +229,25 @@ describe('LoggingProviderWrapper stateless hardening integration', () => {
       metadata: { source: 'prototype-lost-test' },
     };
 
-    const iterator = wrapper.generateChatCompletion(
-      createProviderCallOptions({
-        providerName: provider.name,
-        contents: [],
-        settings,
-        config: invalidConfig,
-        runtime,
-      }),
+    const wrapper = new LoggingProviderWrapper(
+      provider,
+      new StubRedactor(),
+      undefined,
+      () => captureProviderRequestDiagnostics(invalidConfig, selectedOwner),
     );
-
-    await expect(iterator.next()).rejects.toThrow(
-      'FAST FAIL: Invalid config instance - missing getConversationLoggingEnabled() method',
-    );
+    await expect(
+      wrapper
+        .generateChatCompletion(
+          createProviderCallOptions({
+            providerName: provider.name,
+            contents: [],
+            settings,
+            config: invalidConfig,
+            runtime,
+          }),
+        )
+        .next(),
+    ).rejects.toThrow('owner.getRedactionConfig is not a function');
   });
 
   describe('extractTokenCountsFromTokenUsage', () => {

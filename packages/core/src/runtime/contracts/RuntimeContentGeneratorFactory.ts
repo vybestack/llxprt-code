@@ -16,8 +16,6 @@
  * @pseudocode component-boundaries.md C-CB-03, lines 30-34
  */
 
-import type { RuntimeProviderManager } from './RuntimeProviderManager.js';
-
 /**
  * Factory contract for creating a content generator from a provider manager.
  *
@@ -29,5 +27,5 @@ import type { RuntimeProviderManager } from './RuntimeProviderManager.js';
  * @requirement:REQ-DEP-001
  */
 export interface RuntimeContentGeneratorFactory<TGenerator = unknown> {
-  createContentGenerator(manager: RuntimeProviderManager): TGenerator;
+  createContentGenerator(): TGenerator;
 }

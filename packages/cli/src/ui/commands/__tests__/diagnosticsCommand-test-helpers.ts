@@ -12,12 +12,52 @@ import { createMockCommandContext } from '../../../__tests__/mockCommandContext.
 // diagnosticsTokens.ts imports it from '@vybestack/llxprt-code-mcp', and under
 // Bun the two specifiers can resolve to different module instances, so the
 // injected token store would otherwise not be the one the command reads.
-import {
-  MCPOAuthTokenStorage,
-  type TokenStorage,
-} from '@vybestack/llxprt-code-mcp';
+import { KeychainTokenStorage } from '@vybestack/llxprt-code-mcp';
 import type { MCPOAuthCredentials } from '@vybestack/llxprt-code-core';
 import type { OAuthToken } from '@vybestack/llxprt-code-providers/auth.js';
+import type { BucketStats } from '@vybestack/llxprt-code-auth';
+
+import {
+  discoverProviderBuckets,
+  type OAuthBucketDiscoveryManager,
+} from '../oauthBucketDiscovery.js';
+import type { OAuthControl } from '../../contexts/OAuthControlContext.js';
+
+type DiagnosticsSource = Omit<OAuthBucketDiscoveryManager, 'getTokenStore'> & {
+  getSessionBucket(provider: string): string | undefined;
+  getTokenStore(): {
+    listBuckets(provider: string): Promise<string[]>;
+    getBucketStats(
+      provider: string,
+      bucket: string,
+    ): Promise<BucketStats | null>;
+    getToken(provider: string, bucket: string): Promise<OAuthToken | null>;
+  };
+};
+
+export function createDiagnosticsOAuthControl(
+  source: () => DiagnosticsSource | null,
+): OAuthControl {
+  const manager = (): DiagnosticsSource => {
+    const value = source();
+    if (!value) throw new Error('OAuth unavailable');
+    return value;
+  };
+  return {
+    isAvailable: () => source() !== null,
+    getSessionBucket: (provider) => manager().getSessionBucket(provider),
+    discoverBuckets: (logger) => discoverProviderBuckets(manager(), logger),
+    readStoredTokenSummary: async (provider, bucket) => {
+      const token = await manager().getTokenStore().getToken(provider, bucket);
+      return token === null
+        ? null
+        : {
+            expiry: token.expiry,
+            hasRefreshToken: Boolean(token.refresh_token),
+          };
+    },
+  } as OAuthControl;
+}
 
 export function createTestToken(expiryInSeconds: number): OAuthToken {
   return {
@@ -76,35 +116,15 @@ export function createMCPCredentials(
 export interface DiagnosticsTestSetup {
   mockContext: CommandContext;
   mockTokenStore: Map<string, MCPOAuthCredentials>;
-  originalTokenStore: TokenStorage;
 }
 
 export function setupDiagnosticsTest(): DiagnosticsTestSetup {
-  const originalTokenStore = MCPOAuthTokenStorage.getTokenStore();
   const mockTokenStore = new Map<string, MCPOAuthCredentials>();
 
-  const mockStorage = {
-    async getAllCredentials() {
-      return new Map(mockTokenStore);
-    },
-    async getCredentials(serverName: string) {
-      return mockTokenStore.get(serverName) ?? null;
-    },
-    async setCredentials(credentials: MCPOAuthCredentials) {
-      mockTokenStore.set(credentials.serverName, credentials);
-    },
-    async deleteCredentials(serverName: string) {
-      mockTokenStore.delete(serverName);
-    },
-    async listServers() {
-      return Array.from(mockTokenStore.keys());
-    },
-    async clearAll() {
-      mockTokenStore.clear();
-    },
-  };
-
-  MCPOAuthTokenStorage.setTokenStore(mockStorage);
+  vi.spyOn(
+    KeychainTokenStorage.prototype,
+    'getAllCredentials',
+  ).mockImplementation(async () => new Map(mockTokenStore));
 
   const mockContext = createMockCommandContext({
     services: {
@@ -140,11 +160,10 @@ export function setupDiagnosticsTest(): DiagnosticsTestSetup {
     },
   });
 
-  return { mockContext, mockTokenStore, originalTokenStore };
+  return { mockContext, mockTokenStore };
 }
 
 export function teardownDiagnosticsTest(setup: DiagnosticsTestSetup): void {
-  MCPOAuthTokenStorage.setTokenStore(setup.originalTokenStore);
   setup.mockTokenStore.clear();
   vi.restoreAllMocks();
 }

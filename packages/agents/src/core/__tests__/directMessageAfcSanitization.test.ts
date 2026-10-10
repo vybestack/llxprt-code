@@ -1,8 +1,14 @@
+import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
+import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
+import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { installModelToolFixture } from './model-tool-fixture.js';
+const modelTools = installModelToolFixture();
 
 /**
  * Behavioral tests for DirectMessageProcessor AFC sanitization.
@@ -21,7 +27,6 @@
  */
 
 import { describe, it, expect, vi, type Mock } from 'bun:test';
-import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/index.js';
 
 import { ChatSession } from '../chatSession.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -35,7 +40,7 @@ import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Age
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
+  createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -44,6 +49,7 @@ import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentG
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import {
   BeforeModelHookOutput,
+  BeforeToolSelectionHookOutput,
   AfterModelHookOutput,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { createConfigParams } from '../chatSession-runtime-helpers.js';
@@ -61,16 +67,18 @@ function makeProviderStream(chunks: IContent[]): AsyncGenerator<IContent> {
 }
 
 interface DirectHarness {
-  chat: ChatSession;
+  chat: Pick<ChatSession, 'generateDirectMessage'>;
   historyService: HistoryService;
-  generateChatCompletionMock: Mock;
+  generateChatCompletionMock: Mock<() => AsyncIterableIterator<IContent>>;
 }
 
 function createDirectHarness(
-  generateChatCompletionMock: Mock,
+  generateChatCompletionMock: Mock<() => AsyncIterableIterator<IContent>>,
   options?: {
-    tools?: ToolDeclaration[];
-    hookConfig?: Config;
+    tools?: NonNullable<
+      Parameters<ChatSession['generateDirectMessage']>[0]['config']
+    >['tools'];
+    hookOwner?: HookExecutionOwner;
     historyService?: HistoryService;
   },
 ): DirectHarness {
@@ -90,7 +98,7 @@ function createDirectHarness(
 
   const manager = new TestRuntimeProviderManager(providerRuntime);
   manager.setConfig(config);
-  config.setProviderManager(manager);
+  configureProviderRuntimeFactories(config, manager);
 
   const provider: IProvider = {
     name: 'stub',
@@ -108,7 +116,7 @@ function createDirectHarness(
     sessionId: config.getSessionId(),
   });
   const historyService = options?.historyService ?? new HistoryService();
-  const effectiveConfig = options?.hookConfig ?? config;
+  const requestRuntime = providerRuntime;
   const view = createAgentRuntimeContext({
     state: runtimeState,
     history: historyService,
@@ -119,10 +127,15 @@ function createDirectHarness(
       telemetry: { enabled: true, target: null },
       'reasoning.includeInContext': true,
     },
-    provider: createProviderAdapterFromManager(config.getProviderManager()),
-    telemetry: createTelemetryAdapterFromConfig(config),
-    tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
-    providerRuntime: { ...providerRuntime, config: effectiveConfig },
+    provider: createProviderAdapterFromManager(manager),
+    telemetry: createTelemetryAdapter(
+      config,
+      createSessionSettingsFixture(config).settingsOwner.telemetry,
+    ),
+    tools: createToolRegistryViewFromRegistry(modelTools()),
+    providerRuntime: requestRuntime,
+    prepareProviderInvocation: (name, parameters, signal) =>
+      captureProviderInvocation(requestRuntime, name, parameters, signal),
   });
 
   const generationConfig: Record<string, unknown> = {};
@@ -137,33 +150,35 @@ function createDirectHarness(
     [],
   );
 
-  return { chat, historyService, generateChatCompletionMock };
+  return {
+    chat: {
+      generateDirectMessage: (params, promptId) =>
+        chat.generateDirectMessage(
+          { ...params, hookOwner: options?.hookOwner },
+          promptId,
+        ),
+    },
+    historyService,
+    generateChatCompletionMock,
+  };
 }
 
 function configWithHooks(
   baseConfig: Config,
   allowedFunctionNames: string[],
-): Config {
-  const hookConfig = Object.create(baseConfig) as Config;
-  Object.defineProperties(hookConfig, {
-    getEnableHooks: { value: () => true },
-    getHookSystem: {
-      value: () => ({
-        initialize: async () => undefined,
-        fireBeforeToolSelectionEvent: async () => ({
-          applyToolChoiceModifications: () => ({
-            toolChoice: {
-              mode: 'auto',
-              allowedToolNames: allowedFunctionNames,
-            },
-          }),
-        }),
-        fireBeforeModelEvent: async () => new BeforeModelHookOutput({}),
-        fireAfterModelEvent: async () => new AfterModelHookOutput({}),
+): HookExecutionOwner {
+  return {
+    sessionId: () => baseConfig.getSessionId(),
+    transcriptPath: () => undefined,
+    beforeToolSelection: async () =>
+      new BeforeToolSelectionHookOutput({
+        hookSpecificOutput: {
+          toolChoice: { mode: 'auto', allowedToolNames: allowedFunctionNames },
+        },
       }),
-    },
-  });
-  return hookConfig;
+    beforeModel: async () => new BeforeModelHookOutput({}),
+    afterModel: async () => new AfterModelHookOutput({}),
+  };
 }
 
 function textIContent(text: string): IContent {
@@ -177,7 +192,7 @@ function textIContent(text: string): IContent {
 const tools = [
   { name: 'read_file', parametersJsonSchema: {} },
   { name: 'run_shell_command', parametersJsonSchema: {} },
-] as unknown as ToolDeclaration[];
+];
 
 describe('DirectMessageProcessor AFC sanitization — allowed/disallowed paired', () => {
   it('re-adds only allowed tool calls from well-formed AFC history', async () => {
@@ -240,17 +255,17 @@ describe('DirectMessageProcessor AFC sanitization — allowed/disallowed paired'
           },
         },
       ]),
-    ) as Mock;
+    ) as Mock<() => AsyncIterableIterator<IContent>>;
     const baseConfig = new Config(createConfigParams(new SettingsService()));
     const harness = createDirectHarness(mock, {
       tools,
-      hookConfig: configWithHooks(baseConfig, ['read_file']),
+      hookOwner: configWithHooks(baseConfig, ['read_file']),
     });
 
-    const result = (await harness.chat.generateDirectMessage(
+    const result = await harness.chat.generateDirectMessage(
       { message: 'use tools', config: { tools } },
       'prompt-afc-allowed',
-    )) as Record<string, unknown>;
+    );
 
     const json = JSON.stringify(result);
     // The blocked tool must not appear in the serialized response.
@@ -258,15 +273,10 @@ describe('DirectMessageProcessor AFC sanitization — allowed/disallowed paired'
     // The allowed tool must survive in the filtered AFC history.
     expect(json).toContain('read_file');
     // The top-level providerMetadata must NOT carry automaticFunctionCallingHistory.
-    const topMeta = (result as { providerMetadata?: Record<string, unknown> })
-      .providerMetadata;
+    const topMeta = result.providerMetadata;
     expect(topMeta?.automaticFunctionCallingHistory).toBeUndefined();
     // The content metadata must NOT carry automaticFunctionCallingHistory.
-    const contentMeta = (
-      result as {
-        content?: { metadata?: { providerMetadata?: Record<string, unknown> } };
-      }
-    ).content?.metadata?.providerMetadata;
+    const contentMeta = result.content.metadata?.providerMetadata;
     expect(contentMeta?.automaticFunctionCallingHistory).toBeUndefined();
   });
 
@@ -308,18 +318,18 @@ describe('DirectMessageProcessor AFC sanitization — allowed/disallowed paired'
           },
         },
       ]),
-    ) as Mock;
+    ) as Mock<() => AsyncIterableIterator<IContent>>;
     const baseConfig = new Config(createConfigParams(new SettingsService()));
     // Empty allowed list → all tools disallowed
     const harness = createDirectHarness(mock, {
       tools,
-      hookConfig: configWithHooks(baseConfig, []),
+      hookOwner: configWithHooks(baseConfig, []),
     });
 
-    const result = (await harness.chat.generateDirectMessage(
+    const result = await harness.chat.generateDirectMessage(
       { message: 'use tools', config: { tools } },
       'prompt-afc-none-allowed',
-    )) as Record<string, unknown>;
+    );
 
     const json = JSON.stringify(result);
     expect(json).not.toContain('automaticFunctionCallingHistory');
@@ -343,17 +353,17 @@ describe('DirectMessageProcessor AFC sanitization — malformed/orphan', () => {
           },
         },
       ]),
-    ) as Mock;
+    ) as Mock<() => AsyncIterableIterator<IContent>>;
     const baseConfig = new Config(createConfigParams(new SettingsService()));
     const harness = createDirectHarness(mock, {
       tools,
-      hookConfig: configWithHooks(baseConfig, ['read_file']),
+      hookOwner: configWithHooks(baseConfig, ['read_file']),
     });
 
-    const result = (await harness.chat.generateDirectMessage(
+    const result = await harness.chat.generateDirectMessage(
       { message: 'q', config: { tools } },
       'prompt-afc-malformed',
-    )) as Record<string, unknown>;
+    );
 
     const json = JSON.stringify(result);
     expect(json).not.toContain('automaticFunctionCallingHistory');
@@ -386,30 +396,25 @@ describe('DirectMessageProcessor AFC sanitization — malformed/orphan', () => {
           },
         },
       ]),
-    ) as Mock;
+    ) as Mock<() => AsyncIterableIterator<IContent>>;
     const baseConfig = new Config(createConfigParams(new SettingsService()));
     const harness = createDirectHarness(mock, {
       tools,
-      hookConfig: configWithHooks(baseConfig, ['read_file']),
+      hookOwner: configWithHooks(baseConfig, ['read_file']),
     });
 
-    const result = (await harness.chat.generateDirectMessage(
+    const result = await harness.chat.generateDirectMessage(
       { message: 'q', config: { tools } },
       'prompt-afc-orphan',
-    )) as Record<string, unknown>;
+    );
 
     const json = JSON.stringify(result);
     // Provider wire metadata is stripped from BOTH metadata locations —
     // agents never see the raw automaticFunctionCallingHistory key.
     expect(json).not.toContain('automaticFunctionCallingHistory');
-    const topMeta = (result as { providerMetadata?: Record<string, unknown> })
-      .providerMetadata;
+    const topMeta = result.providerMetadata;
     expect(topMeta?.automaticFunctionCallingHistory).toBeUndefined();
-    const contentMeta = (
-      result as {
-        content?: { metadata?: { providerMetadata?: Record<string, unknown> } };
-      }
-    ).content?.metadata?.providerMetadata;
+    const contentMeta = result.content.metadata?.providerMetadata;
     expect(contentMeta?.automaticFunctionCallingHistory).toBeUndefined();
 
     // Structural preservation (neutral contract): the structurally-valid
@@ -442,17 +447,17 @@ describe('DirectMessageProcessor AFC sanitization — malformed/orphan', () => {
           },
         },
       ]),
-    ) as Mock;
+    ) as Mock<() => AsyncIterableIterator<IContent>>;
     const baseConfig = new Config(createConfigParams(new SettingsService()));
     const harness = createDirectHarness(mock, {
       tools,
-      hookConfig: configWithHooks(baseConfig, ['read_file']),
+      hookOwner: configWithHooks(baseConfig, ['read_file']),
     });
 
-    const result = (await harness.chat.generateDirectMessage(
+    const result = await harness.chat.generateDirectMessage(
       { message: 'q', config: { tools } },
       'prompt-afc-garbage',
-    )) as Record<string, unknown>;
+    );
 
     const json = JSON.stringify(result);
     expect(json).not.toContain('automaticFunctionCallingHistory');
@@ -481,11 +486,11 @@ describe('DirectMessageProcessor AFC sanitization — malformed/orphan', () => {
           },
         },
       ]),
-    ) as Mock;
+    ) as Mock<() => AsyncIterableIterator<IContent>>;
     const baseConfig = new Config(createConfigParams(new SettingsService()));
     const harness = createDirectHarness(mock, {
       tools,
-      hookConfig: configWithHooks(baseConfig, ['read_file']),
+      hookOwner: configWithHooks(baseConfig, ['read_file']),
     });
 
     const result = (await harness.chat.generateDirectMessage(

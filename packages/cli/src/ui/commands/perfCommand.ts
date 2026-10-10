@@ -29,7 +29,7 @@ import type {
   CommandContext,
 } from './types.js';
 import { CommandKind } from './types.js';
-import { getHistoryServiceFromConfig } from './historyServiceAccess.js';
+import { getHistoryServiceFromAgent } from './historyServiceAccess.js';
 import { formatHistoryMemoryBreakdown } from './perfMemoryBreakdown.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import {
@@ -297,9 +297,7 @@ function createMemorySubCommand(): SlashCommand {
     description: 'Show retained conversation size by block type and tool',
     kind: CommandKind.BUILT_IN,
     action: (context: CommandContext): MessageActionReturn => {
-      const historyService = getHistoryServiceFromConfig(
-        context.services.config,
-      );
+      const historyService = getHistoryServiceFromAgent(context.services.agent);
       if (historyService === null) {
         return messageInfo(
           'History is not available. Start a conversation first.',

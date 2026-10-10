@@ -38,7 +38,7 @@ async function listAction(
     }
   }
 
-  const skillManager = context.services.config?.getSkillManager();
+  const skillManager = context.services.config?.skillOperations;
   if (!skillManager) {
     context.ui.addItem(
       {
@@ -50,7 +50,7 @@ async function listAction(
     return;
   }
 
-  let skills = skillManager.getAllSkills();
+  let skills = skillManager.list(true);
 
   // By default, filter out built-in skills unless 'all' is specified
   if (!showAll) {
@@ -88,7 +88,7 @@ async function disableAction(
     );
     return;
   }
-  const skillManager = context.services.config?.getSkillManager();
+  const skillManager = context.services.config?.skillOperations;
   if (skillManager?.isAdminEnabled() === false) {
     context.ui.addItem(
       {
@@ -100,7 +100,7 @@ async function disableAction(
     return;
   }
 
-  const skill = skillManager?.getSkill(skillName);
+  const skill = skillManager?.find(skillName);
   if (!skill) {
     context.ui.addItem(
       {
@@ -151,7 +151,7 @@ async function enableAction(
     return;
   }
 
-  const skillManager = context.services.config?.getSkillManager();
+  const skillManager = context.services.config?.skillOperations;
   if (skillManager?.isAdminEnabled() === false) {
     context.ui.addItem(
       {
@@ -227,8 +227,9 @@ async function reloadAction(
     return;
   }
 
-  const skillManager = config.getSkillManager();
-  const beforeNames = new Set(skillManager.getSkills().map((s) => s.name));
+  const skillManager = context.services.config?.skillOperations;
+  if (!skillManager) throw new Error('Skills reload requires a session owner');
+  const beforeNames = new Set(skillManager.list().map((s) => s.name));
 
   const startTime = Date.now();
   const pendingState = { itemSet: false };
@@ -241,7 +242,7 @@ async function reloadAction(
   }, 100);
 
   try {
-    await config.reloadSkills();
+    await skillManager.reload();
 
     clearTimeout(pendingTimeout);
     if (pendingState.itemSet) {
@@ -255,7 +256,7 @@ async function reloadAction(
       context.ui.setPendingItem(null);
     }
 
-    const afterSkills = skillManager.getSkills();
+    const afterSkills = skillManager.list();
     const successText = buildReloadSummary(beforeNames, afterSkills);
 
     context.ui.addItem(
@@ -286,12 +287,12 @@ async function disableCompletion(
   context: CommandContext,
   partialArg: string,
 ): Promise<string[]> {
-  const skillManager = context.services.config?.getSkillManager();
+  const skillManager = context.services.config?.skillOperations;
   if (!skillManager) {
     return [];
   }
   return skillManager
-    .getAllSkills()
+    .list(true)
     .filter((s) => s.disabled !== true && s.name.startsWith(partialArg))
     .map((s) => s.name);
 }
@@ -300,12 +301,12 @@ async function enableCompletion(
   context: CommandContext,
   partialArg: string,
 ): Promise<string[]> {
-  const skillManager = context.services.config?.getSkillManager();
+  const skillManager = context.services.config?.skillOperations;
   if (!skillManager) {
     return [];
   }
   return skillManager
-    .getAllSkills()
+    .list(true)
     .filter((s) => s.disabled === true && s.name.startsWith(partialArg))
     .map((s) => s.name);
 }

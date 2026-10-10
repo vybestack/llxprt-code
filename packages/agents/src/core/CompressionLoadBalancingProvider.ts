@@ -4,10 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { bindProviderMediaAndFiles } from '@vybestack/llxprt-code-core/runtime/bindProviderMediaAndFiles.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { ProviderRequestCollaborators } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import {
   buildCompressionSystemInstruction,
   COMPRESSION_LOAD_BALANCER_WRAPPER,
@@ -20,8 +21,8 @@ import {
 export interface CompressionLoadBalancerCandidate {
   profileName: string;
   provider: IProvider;
-  runtime: ProviderRuntimeContext;
-  config: NonNullable<ProviderRuntimeContext['config']> | undefined;
+  runtime: ProviderRequestCollaborators;
+  config: NonNullable<ProviderRequestCollaborators['config']> | undefined;
   resolved: RuntimeGenerateChatOptions['resolved'];
   invocation: NonNullable<RuntimeGenerateChatOptions['invocation']>;
 }
@@ -143,10 +144,6 @@ export class CompressionLoadBalancingProvider implements IProvider {
 
     const candidateOptions: RuntimeGenerateChatOptions = {
       ...options,
-      runtime: candidate.runtime,
-      settings: candidate.runtime
-        .settingsService as RuntimeGenerateChatOptions['settings'],
-      config: candidate.config,
       resolved: {
         ...options.resolved,
         ...candidate.resolved,
@@ -159,6 +156,13 @@ export class CompressionLoadBalancingProvider implements IProvider {
         selectedCompressionProfile: candidate.profileName,
       },
     };
-    yield* candidate.provider.generateChatCompletion(candidateOptions);
+    yield* bindProviderMediaAndFiles(
+      candidate.provider,
+      candidate.runtime.mediaResolver,
+      candidate.runtime.requestMediaBudgetBytes,
+      candidate.runtime.providerFileBindings,
+      candidate.runtime.providerFileLifecycle,
+      candidate.runtime.config?.getTargetDir(),
+    ).generateChatCompletion(candidateOptions);
   }
 }

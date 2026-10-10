@@ -1,3 +1,5 @@
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import { CoreToolScheduler } from '../../coreToolScheduler.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -5,6 +7,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
+import { bindSchedulerOwner } from '../../../session/assembleSchedulerOwner.js';
 import { AgenticLoop } from '../AgenticLoop.js';
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
@@ -30,20 +33,44 @@ describe('AgenticLoop promptId correlation', () => {
 
     const toolRegistry = createToolRegistryForTest([tool]);
     const messageBus = new MessageBus(createAllowPolicyEngine(), false);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine: createAllowPolicyEngine(),
-      interactive: false,
-      approvalMode: ApprovalMode.YOLO,
-    });
+    const { config: config, settingsOwner: configSettingsOwner } =
+      createTestConfig({
+        messageBus,
+        toolRegistry,
+        policyEngine: createAllowPolicyEngine(),
+        interactive: false,
+        approvalMode: ApprovalMode.YOLO,
+      });
 
     const { client, promptIds } = createScriptedAgentClient([
       [toolCallRequestEvent('corr_tool', 'call-corr'), finishedEvent()],
       [contentEvent('done'), finishedEvent()],
     ]);
 
-    const loop = new AgenticLoop({ agentClient: client, config, messageBus });
+    const loop = new AgenticLoop({
+      createSchedulerOwner: bindSchedulerOwner(
+        config,
+        messageBus,
+        config.isInteractive(),
+        toolRegistry,
+        (options) => new CoreToolScheduler(options),
+        () => configSettingsOwner.readToolExecutionPolicy(),
+        () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
+        undefined,
+        RootTelemetry.prepare({
+          enabled: false,
+          sessionId: 'isolated-caller-fixture',
+          maxBytes: 1024,
+          maxFiles: 1,
+        }),
+      ),
+      agentClient: client,
+      config,
+      messageBus,
+    });
 
     const callerPromptId = 'caller-supplied-prompt-id';
     await collectEvents(
@@ -61,19 +88,43 @@ describe('AgenticLoop promptId correlation', () => {
   it('generates a promptId for the first turn when the caller omits one', async () => {
     const toolRegistry = createToolRegistryForTest([]);
     const messageBus = new MessageBus(createAllowPolicyEngine(), false);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine: createAllowPolicyEngine(),
-      interactive: false,
-      approvalMode: ApprovalMode.YOLO,
-    });
+    const { config: config, settingsOwner: configSettingsOwner } =
+      createTestConfig({
+        messageBus,
+        toolRegistry,
+        policyEngine: createAllowPolicyEngine(),
+        interactive: false,
+        approvalMode: ApprovalMode.YOLO,
+      });
 
     const { client, promptIds } = createScriptedAgentClient([
       [contentEvent('done'), finishedEvent()],
     ]);
 
-    const loop = new AgenticLoop({ agentClient: client, config, messageBus });
+    const loop = new AgenticLoop({
+      createSchedulerOwner: bindSchedulerOwner(
+        config,
+        messageBus,
+        config.isInteractive(),
+        toolRegistry,
+        (options) => new CoreToolScheduler(options),
+        () => configSettingsOwner.readToolExecutionPolicy(),
+        () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
+        undefined,
+        RootTelemetry.prepare({
+          enabled: false,
+          sessionId: 'isolated-caller-fixture',
+          maxBytes: 1024,
+          maxFiles: 1,
+        }),
+      ),
+      agentClient: client,
+      config,
+      messageBus,
+    });
 
     for await (const _event of loop.run('go', new AbortController().signal)) {
       void _event;
@@ -89,13 +140,14 @@ describe('AgenticLoop promptId correlation', () => {
     const tool = new MockTool({ name: 'collision_tool' });
     const toolRegistry = createToolRegistryForTest([tool]);
     const messageBus = new MessageBus(createAllowPolicyEngine(), false);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine: createAllowPolicyEngine(),
-      interactive: false,
-      approvalMode: ApprovalMode.YOLO,
-    });
+    const { config: config, settingsOwner: configSettingsOwner } =
+      createTestConfig({
+        messageBus,
+        toolRegistry,
+        policyEngine: createAllowPolicyEngine(),
+        interactive: false,
+        approvalMode: ApprovalMode.YOLO,
+      });
     const { client, promptIds } = createScriptedAgentClient([
       [
         toolCallRequestEvent('collision_tool', 'collision-call'),
@@ -103,7 +155,30 @@ describe('AgenticLoop promptId correlation', () => {
       ],
       [contentEvent('done'), finishedEvent()],
     ]);
-    const loop = new AgenticLoop({ agentClient: client, config, messageBus });
+    const loop = new AgenticLoop({
+      createSchedulerOwner: bindSchedulerOwner(
+        config,
+        messageBus,
+        config.isInteractive(),
+        toolRegistry,
+        (options) => new CoreToolScheduler(options),
+        () => configSettingsOwner.readToolExecutionPolicy(),
+        () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
+        undefined,
+        RootTelemetry.prepare({
+          enabled: false,
+          sessionId: 'isolated-caller-fixture',
+          maxBytes: 1024,
+          maxFiles: 1,
+        }),
+      ),
+      agentClient: client,
+      config,
+      messageBus,
+    });
 
     await collectEvents(
       loop,
@@ -121,18 +196,42 @@ describe('AgenticLoop promptId correlation', () => {
   it('rejects concurrent run calls on the same loop instance', async () => {
     const toolRegistry = createToolRegistryForTest([]);
     const messageBus = new MessageBus(createAllowPolicyEngine(), false);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine: createAllowPolicyEngine(),
-      interactive: false,
-      approvalMode: ApprovalMode.YOLO,
-    });
+    const { config: config, settingsOwner: configSettingsOwner } =
+      createTestConfig({
+        messageBus,
+        toolRegistry,
+        policyEngine: createAllowPolicyEngine(),
+        interactive: false,
+        approvalMode: ApprovalMode.YOLO,
+      });
     const { client } = createScriptedAgentClient([
       [contentEvent('first chunk')],
       [contentEvent('second run'), finishedEvent()],
     ]);
-    const loop = new AgenticLoop({ agentClient: client, config, messageBus });
+    const loop = new AgenticLoop({
+      createSchedulerOwner: bindSchedulerOwner(
+        config,
+        messageBus,
+        config.isInteractive(),
+        toolRegistry,
+        (options) => new CoreToolScheduler(options),
+        () => configSettingsOwner.readToolExecutionPolicy(),
+        () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
+        undefined,
+        RootTelemetry.prepare({
+          enabled: false,
+          sessionId: 'isolated-caller-fixture',
+          maxBytes: 1024,
+          maxFiles: 1,
+        }),
+      ),
+      agentClient: client,
+      config,
+      messageBus,
+    });
     const firstRun = loop.run('first', new AbortController().signal);
 
     const firstEvent = await firstRun.next();

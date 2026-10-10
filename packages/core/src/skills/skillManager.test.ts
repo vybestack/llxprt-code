@@ -84,7 +84,6 @@ description: project-desc
       isActive: true,
       path: '/ext',
       contextFiles: [],
-      id: 'ext-id',
       skills: [
         {
           name: 'skill-extension',
@@ -101,7 +100,15 @@ description: project-desc
     mockGetBuiltinSkillsDir.mockReturnValue('/non-existent');
 
     const service = new SkillManager();
-    await service.discoverSkills(storage, [mockExtension]);
+    await service.discoverSkills(
+      {
+        userSkillsDir: Storage.getUserSkillsDir(),
+        userAgentSkillsDir: Storage.getUserAgentSkillsDir(),
+        projectSkillsDir: storage.getProjectSkillsDir(),
+        projectAgentSkillsDir: storage.getProjectAgentSkillsDir(),
+      },
+      [mockExtension],
+    );
 
     const skills = service.getSkills();
     // At least 3 skills (extension, user, project). Built-in may or may not exist.
@@ -141,7 +148,6 @@ description: project-desc
       isActive: true,
       path: '/ext',
       contextFiles: [],
-      id: 'ext-id',
       skills: [
         {
           name: 'same-name',
@@ -158,7 +164,15 @@ description: project-desc
     mockGetBuiltinSkillsDir.mockReturnValue('/non-existent');
 
     const service = new SkillManager();
-    await service.discoverSkills(storage, [mockExtension]);
+    await service.discoverSkills(
+      {
+        userSkillsDir: Storage.getUserSkillsDir(),
+        userAgentSkillsDir: Storage.getUserAgentSkillsDir(),
+        projectSkillsDir: storage.getProjectSkillsDir(),
+        projectAgentSkillsDir: storage.getProjectAgentSkillsDir(),
+      },
+      [mockExtension],
+    );
 
     const skills = service.getSkills();
     const sameNameSkill = skills.find((s) => s.name === 'same-name');
@@ -167,7 +181,15 @@ description: project-desc
 
     // Test User > Extension
     vi.spyOn(storage, 'getProjectSkillsDir').mockReturnValue('/non-existent');
-    await service.discoverSkills(storage, [mockExtension]);
+    await service.discoverSkills(
+      {
+        userSkillsDir: Storage.getUserSkillsDir(),
+        userAgentSkillsDir: Storage.getUserAgentSkillsDir(),
+        projectSkillsDir: storage.getProjectSkillsDir(),
+        projectAgentSkillsDir: storage.getProjectAgentSkillsDir(),
+      },
+      [mockExtension],
+    );
     const userSkill = service.getSkills().find((s) => s.name === 'same-name');
     expect(userSkill!.description).toBe('user-desc');
   });
@@ -190,7 +212,12 @@ description: project-desc
     vi.spyOn(storage, 'getProjectSkillsDir').mockReturnValue('/non-existent');
     vi.spyOn(Storage, 'getUserSkillsDir').mockReturnValue('/non-existent');
 
-    await service.discoverSkills(storage);
+    await service.discoverSkills({
+      userSkillsDir: Storage.getUserSkillsDir(),
+      userAgentSkillsDir: Storage.getUserAgentSkillsDir(),
+      projectSkillsDir: storage.getProjectSkillsDir(),
+      projectAgentSkillsDir: storage.getProjectAgentSkillsDir(),
+    });
 
     const skills = service.getSkills();
     expect(skills).toHaveLength(1);
@@ -217,7 +244,12 @@ description: desc1
     mockGetBuiltinSkillsDir.mockReturnValue('/non-existent');
 
     const service = new SkillManager();
-    await service.discoverSkills(storage);
+    await service.discoverSkills({
+      userSkillsDir: Storage.getUserSkillsDir(),
+      userAgentSkillsDir: Storage.getUserAgentSkillsDir(),
+      projectSkillsDir: storage.getProjectSkillsDir(),
+      projectAgentSkillsDir: storage.getProjectAgentSkillsDir(),
+    });
     service.setDisabledSkills(['skill1']);
 
     expect(service.getSkills()).toHaveLength(0);
@@ -399,7 +431,12 @@ description: User desc
       const storage = new Storage('/dummy');
       vi.spyOn(storage, 'getProjectSkillsDir').mockReturnValue('/non-existent');
 
-      await service.discoverSkills(storage);
+      await service.discoverSkills({
+        userSkillsDir: Storage.getUserSkillsDir(),
+        userAgentSkillsDir: Storage.getUserAgentSkillsDir(),
+        projectSkillsDir: storage.getProjectSkillsDir(),
+        projectAgentSkillsDir: storage.getProjectAgentSkillsDir(),
+      });
 
       const skills = service.getSkills();
       const testSkill = skills.find((s) => s.name === 'test-skill');
@@ -422,7 +459,6 @@ description: User desc
         isActive: true,
         path: '/ext',
         contextFiles: [],
-        id: 'ext-id',
         skills: [
           {
             name: 'conflicting-skill',
@@ -456,7 +492,15 @@ description: user-desc
         '/non-existent',
       );
 
-      await service.discoverSkills(storage, [mockExtension]);
+      await service.discoverSkills(
+        {
+          userSkillsDir: Storage.getUserSkillsDir(),
+          userAgentSkillsDir: Storage.getUserAgentSkillsDir(),
+          projectSkillsDir: storage.getProjectSkillsDir(),
+          projectAgentSkillsDir: storage.getProjectAgentSkillsDir(),
+        },
+        [mockExtension],
+      );
 
       expect(emitFeedbackSpy).toHaveBeenCalledWith(
         'warning',
@@ -500,7 +544,12 @@ description: user-desc
       const service = new SkillManager();
       vi.spyOn(service, 'resolveBuiltinSkillsDir').mockReturnValue(builtinDir);
 
-      await service.discoverSkills(storage);
+      await service.discoverSkills({
+        userSkillsDir: Storage.getUserSkillsDir(),
+        userAgentSkillsDir: Storage.getUserAgentSkillsDir(),
+        projectSkillsDir: storage.getProjectSkillsDir(),
+        projectAgentSkillsDir: storage.getProjectAgentSkillsDir(),
+      });
 
       expect(debugWarnSpy).toHaveBeenCalledWith(
         expect.stringContaining('builtin-skill'),
@@ -515,20 +564,8 @@ description: user-desc
 
 function builtinSkillsForSource(
   source: string,
-  mockBuiltinSkill: {
-    name: string;
-    description: string;
-    location: string;
-    body: string;
-    source: string;
-  },
-): Array<{
-  name: string;
-  description: string;
-  location: string;
-  body: string;
-  source: string;
-}> {
+  mockBuiltinSkill: SkillDefinition,
+): SkillDefinition[] {
   if (source === 'builtin') {
     return [{ ...mockBuiltinSkill }];
   }

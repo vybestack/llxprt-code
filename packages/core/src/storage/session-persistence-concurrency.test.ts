@@ -183,7 +183,10 @@ describe('SessionPersistenceService concurrent saves', () => {
 
   it('serializes generations without losing the final state or sharing temporary files', async () => {
     const service = new SessionPersistenceService(
-      storage,
+      {
+        projectRoot: storage.getProjectRoot(),
+        chatsDir: storage.getProjectChatsDir(),
+      },
       'concurrent-session',
       {
         maxQueueBytes: 1024 * 1024,
@@ -220,10 +223,17 @@ describe('SessionPersistenceService concurrent saves', () => {
       rootDirectory: join(projectRoot, 'media'),
       quotaBytes: 1024,
     });
-    const service = new SessionPersistenceService(storage, 'failure-session', {
-      mediaStore,
-      maxQueueBytes: 1024 * 1024,
-    });
+    const service = new SessionPersistenceService(
+      {
+        projectRoot: storage.getProjectRoot(),
+        chatsDir: storage.getProjectChatsDir(),
+      },
+      'failure-session',
+      {
+        mediaStore,
+        maxQueueBytes: 1024 * 1024,
+      },
+    );
     const invalidHistory: IContent[] = [
       {
         speaker: 'human',
@@ -395,7 +405,10 @@ describe('SessionPersistenceService concurrent saves', () => {
       quotaBytes: 1024,
     });
     const persistence = new SessionPersistenceService(
-      failedStorage,
+      {
+        projectRoot: failedStorage.getProjectRoot(),
+        chatsDir: failedStorage.getProjectChatsDir(),
+      },
       'save-failure',
       { mediaStore },
     );
@@ -420,7 +433,10 @@ describe('SessionPersistenceService concurrent saves', () => {
       quotaBytes: 1024,
     });
     const persistence = new SessionPersistenceService(
-      failedStorage,
+      {
+        projectRoot: failedStorage.getProjectRoot(),
+        chatsDir: failedStorage.getProjectChatsDir(),
+      },
       'cleanup-failure',
       { mediaStore },
     );
@@ -487,7 +503,10 @@ describe('SessionPersistenceService concurrent saves', () => {
       quotaBytes: 1024,
     });
     const persistence = new SessionPersistenceService(
-      loadStorage,
+      {
+        projectRoot: loadStorage.getProjectRoot(),
+        chatsDir: loadStorage.getProjectChatsDir(),
+      },
       'load-success',
       { mediaStore },
     );
@@ -509,7 +528,10 @@ describe('SessionPersistenceService concurrent saves', () => {
       quotaBytes: 1024,
     });
     const persistence = new SessionPersistenceService(
-      loadStorage,
+      {
+        projectRoot: loadStorage.getProjectRoot(),
+        chatsDir: loadStorage.getProjectChatsDir(),
+      },
       'load-release-retry',
       { mediaStore },
     );
@@ -536,7 +558,10 @@ describe('SessionPersistenceService concurrent saves', () => {
       quotaBytes: 1024,
     });
     const persistence = new SessionPersistenceService(
-      loadStorage,
+      {
+        projectRoot: loadStorage.getProjectRoot(),
+        chatsDir: loadStorage.getProjectChatsDir(),
+      },
       'load-failure',
       { mediaStore },
     );
@@ -613,7 +638,10 @@ describe('SessionPersistenceService concurrent saves', () => {
       quotaBytes: 1024,
     });
     const loadService = new SessionPersistenceService(
-      loadStorage,
+      {
+        projectRoot: loadStorage.getProjectRoot(),
+        chatsDir: loadStorage.getProjectChatsDir(),
+      },
       'aggregate-load-session',
       { mediaStore },
     );
@@ -669,7 +697,10 @@ describe('SessionPersistenceService concurrent saves', () => {
     options: SessionPersistenceServiceOptions = {},
   ): SessionPersistenceService {
     return new SessionPersistenceService(
-      new Storage(join(projectRoot, name)),
+      {
+        projectRoot: new Storage(join(projectRoot, name)).getProjectRoot(),
+        chatsDir: new Storage(join(projectRoot, name)).getProjectChatsDir(),
+      },
       name,
       options,
     );

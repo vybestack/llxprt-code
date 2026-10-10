@@ -4,15 +4,29 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, vi, beforeEach, afterEach } from 'bun:test';
-import { SimpleExtensionLoader } from './extensionLoader.js';
-import type { Config } from '../config/config.js';
-import { type McpClientManager } from '@vybestack/llxprt-code-mcp';
+import {
+  describe,
+  expect,
+  it,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
+import {
+  SimpleExtensionLoader,
+  type ExtensionRuntimeConfiguration,
+} from './extensionLoader.js';
+import type { LlxprtExtension } from '../config/config.js';
 
 describe('SimpleExtensionLoader', () => {
-  let mockConfig: Config;
+  let mockConfig: ExtensionRuntimeConfiguration;
+  let refreshMemory: Mock<() => Promise<void>>;
   let extensionReloadingEnabled: boolean;
-  let mockMcpClientManager: McpClientManager;
+  let mockMcpClientManager: {
+    startExtension: Mock<(extension: LlxprtExtension) => Promise<void>>;
+    stopExtension: Mock<(extension: LlxprtExtension) => Promise<void>>;
+  };
   const activeExtension = {
     name: 'test-extension',
     isActive: true,
@@ -30,7 +44,9 @@ describe('SimpleExtensionLoader', () => {
     return reloadingEnabled ? 1 : 0;
   }
 
-  function expectedCallArgumentsFor(reloadingEnabled: boolean): unknown[][] {
+  function expectedCallArgumentsFor(
+    reloadingEnabled: boolean,
+  ): Array<[LlxprtExtension]> {
     return reloadingEnabled ? [[activeExtension]] : [];
   }
 
@@ -45,22 +61,19 @@ describe('SimpleExtensionLoader', () => {
 
   beforeEach(() => {
     mockMcpClientManager = {
-      startExtension: vi.fn(),
-      stopExtension: vi.fn(),
-    } as unknown as McpClientManager;
+      startExtension: vi
+        .fn<(extension: LlxprtExtension) => Promise<void>>()
+        .mockResolvedValue(undefined),
+      stopExtension: vi
+        .fn<(extension: LlxprtExtension) => Promise<void>>()
+        .mockResolvedValue(undefined),
+    };
+    refreshMemory = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
     extensionReloadingEnabled = false;
     mockConfig = {
-      getMcpClientManager: () => mockMcpClientManager,
       getEnableExtensionReloading: () => extensionReloadingEnabled,
-      refreshMemory: vi.fn(),
-      getHookSystem: () => undefined,
-      getSubagentManager: vi.fn().mockReturnValue({
-        removeExtensionSubagents: vi.fn(),
-      }),
-      on: vi.fn(),
-      off: vi.fn(),
-      emit: vi.fn(),
-    } as unknown as Config;
+      setExtensions: () => {},
+    };
   });
 
   afterEach(() => {
@@ -69,7 +82,14 @@ describe('SimpleExtensionLoader', () => {
 
   it('should start active extensions', async () => {
     const loader = new SimpleExtensionLoader([activeExtension]);
-    await loader.start(mockConfig);
+    await loader.start(
+      mockConfig,
+      (extension) => mockMcpClientManager.startExtension(extension),
+      (extension) => mockMcpClientManager.stopExtension(extension),
+      undefined,
+      undefined,
+      refreshMemory,
+    );
     expect(mockMcpClientManager.startExtension).toHaveBeenCalledTimes(1);
     expect(mockMcpClientManager.startExtension).toHaveBeenCalledWith(
       activeExtension,
@@ -78,7 +98,14 @@ describe('SimpleExtensionLoader', () => {
 
   it('should not start inactive extensions', async () => {
     const loader = new SimpleExtensionLoader([inactiveExtension]);
-    await loader.start(mockConfig);
+    await loader.start(
+      mockConfig,
+      (extension) => mockMcpClientManager.startExtension(extension),
+      (extension) => mockMcpClientManager.stopExtension(extension),
+      undefined,
+      undefined,
+      refreshMemory,
+    );
     expect(mockMcpClientManager.startExtension).not.toHaveBeenCalled();
   });
 
@@ -95,7 +122,14 @@ describe('SimpleExtensionLoader', () => {
       const loader = new SimpleExtensionLoader([]);
       await loader.loadExtension(activeExtension);
       expect(mockMcpClientManager.startExtension).not.toHaveBeenCalled();
-      await loader.start(mockConfig);
+      await loader.start(
+        mockConfig,
+        (extension) => mockMcpClientManager.startExtension(extension),
+        (extension) => mockMcpClientManager.stopExtension(extension),
+        undefined,
+        undefined,
+        refreshMemory,
+      );
       expect(mockMcpClientManager.startExtension).toHaveBeenCalledTimes(1);
       expect(mockMcpClientManager.startExtension).toHaveBeenCalledWith(
         activeExtension,
@@ -107,7 +141,14 @@ describe('SimpleExtensionLoader', () => {
       async (reloadingEnabled) => {
         extensionReloadingEnabled = reloadingEnabled;
         const loader = new SimpleExtensionLoader([]);
-        await loader.start(mockConfig);
+        await loader.start(
+          mockConfig,
+          (extension) => mockMcpClientManager.startExtension(extension),
+          (extension) => mockMcpClientManager.stopExtension(extension),
+          undefined,
+          undefined,
+          refreshMemory,
+        );
         expect(mockMcpClientManager.startExtension).not.toHaveBeenCalled();
         await loader.loadExtension(activeExtension);
 
@@ -135,19 +176,17 @@ describe('SimpleExtensionLoader', () => {
 
   describe('Hook system integration (126c32ac)', () => {
     it('should call hookSystem.initialize() after extension changes', async () => {
-      const mockHookSystemInit = vi.fn();
-      const mockRefreshMemory = vi.fn();
+      const mockHookSystemInit = vi
+        .fn<() => Promise<void>>()
+        .mockResolvedValue(undefined);
+      const mockRefreshMemory = vi
+        .fn<() => Promise<void>>()
+        .mockResolvedValue(undefined);
 
-      const mockConfigWithHooks = {
-        getMcpClientManager: () => ({
-          startExtension: vi.fn(),
-        }),
+      const mockConfigWithHooks: ExtensionRuntimeConfiguration = {
         getEnableExtensionReloading: () => true,
-        refreshMemory: mockRefreshMemory,
-        getHookSystem: () => ({
-          initialize: mockHookSystemInit,
-        }),
-      } as unknown as Config;
+        setExtensions: () => {},
+      };
 
       const extensionWithHooks = {
         name: 'test-ext',
@@ -160,7 +199,15 @@ describe('SimpleExtensionLoader', () => {
 
       extensionReloadingEnabled = true;
       const loader = new SimpleExtensionLoader([]);
-      await loader.start(mockConfigWithHooks);
+      await loader.start(
+        mockConfigWithHooks,
+        (extension) => mockMcpClientManager.startExtension(extension),
+        (extension) => mockMcpClientManager.stopExtension(extension),
+        undefined,
+        undefined,
+        mockRefreshMemory,
+        mockHookSystemInit,
+      );
 
       mockRefreshMemory.mockClear();
       mockHookSystemInit.mockClear();
@@ -173,23 +220,17 @@ describe('SimpleExtensionLoader', () => {
     });
 
     it('should call hookSystem.initialize() after unload', async () => {
-      const mockHookSystemInit = vi.fn();
-      const mockRefreshMemory = vi.fn();
+      const mockHookSystemInit = vi
+        .fn<() => Promise<void>>()
+        .mockResolvedValue(undefined);
+      const mockRefreshMemory = vi
+        .fn<() => Promise<void>>()
+        .mockResolvedValue(undefined);
 
-      const mockConfigWithHooks = {
-        getMcpClientManager: () => ({
-          startExtension: vi.fn(),
-          stopExtension: vi.fn(),
-        }),
+      const mockConfigWithHooks: ExtensionRuntimeConfiguration = {
         getEnableExtensionReloading: () => true,
-        refreshMemory: mockRefreshMemory,
-        getHookSystem: () => ({
-          initialize: mockHookSystemInit,
-        }),
-        getSubagentManager: vi.fn(() => ({
-          removeExtensionSubagents: vi.fn(),
-        })),
-      } as unknown as Config;
+        setExtensions: () => {},
+      };
 
       const extensionWithHooks = {
         name: 'test-ext',
@@ -202,7 +243,15 @@ describe('SimpleExtensionLoader', () => {
 
       extensionReloadingEnabled = true;
       const loader = new SimpleExtensionLoader([extensionWithHooks]);
-      await loader.start(mockConfigWithHooks);
+      await loader.start(
+        mockConfigWithHooks,
+        (extension) => mockMcpClientManager.startExtension(extension),
+        (extension) => mockMcpClientManager.stopExtension(extension),
+        undefined,
+        undefined,
+        mockRefreshMemory,
+        mockHookSystemInit,
+      );
 
       mockRefreshMemory.mockClear();
       mockHookSystemInit.mockClear();

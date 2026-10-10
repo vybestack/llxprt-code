@@ -1,3 +1,7 @@
+import {
+  createLoopConfig,
+  type LoopConfigRoot,
+} from '../../../../__tests__/loop-config-fixture.js';
 /**
  * Test helpers extracted from useAgentEventStream.loopIntegration.test.tsx
  * to keep it under the max-lines lint limit.
@@ -84,3 +88,6 @@ export function agentRequestInputToIContent(req: AgentRequestInput): IContent {
   }
   return iContentFromBlocks(agentRequestInputToBlocks(req), 'human');
 }
+
+export { createLoopConfig };
+export type { LoopConfigRoot };

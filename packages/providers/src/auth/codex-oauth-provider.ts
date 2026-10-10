@@ -28,7 +28,7 @@ import type { OAuthProvider } from './types.js';
 import { startLocalOAuthCallback } from './local-oauth-callback.js';
 import { ClipboardService } from './ClipboardService.js';
 import { InitializationGuard } from './oauth-provider-base.js';
-import { oauthRuntimeBridge } from './runtime-accessor-bridge.js';
+import type { BrowserProfileAssociation } from './browser-profile-association-store.js';
 
 /**
  * Port configuration for Codex OAuth callback
@@ -99,7 +99,15 @@ export class CodexOAuthProvider implements OAuthProvider {
   private authInProgressByBucket: Map<string, AuthFlightState> = new Map();
   private currentAuthBucket?: string;
 
-  constructor(tokenStore: TokenStore, addItem?: OAuthUICallback) {
+  constructor(
+    tokenStore: TokenStore,
+    addItem?: OAuthUICallback,
+    private readonly isBrowserDisabled: () => boolean = () => false,
+    private readonly getBrowserProfileAssociation: (
+      provider: string,
+      bucket?: string,
+    ) => BrowserProfileAssociation | undefined = () => undefined,
+  ) {
     this.deviceFlow = new CodexDeviceFlow();
     this.logger = new DebugLogger('llxprt:auth:codex');
     this.tokenStore = tokenStore;
@@ -340,13 +348,7 @@ export class CodexOAuthProvider implements OAuthProvider {
   ): Promise<CodexOAuthToken> {
     this.logger.debug(() => '[FLOW] performAuth() starting');
 
-    let noBrowser = false;
-    try {
-      noBrowser =
-        oauthRuntimeBridge.getEphemeralSetting('auth.noBrowser') === true;
-    } catch {
-      // Runtime not initialized (e.g., tests) — use default
-    }
+    const noBrowser = this.isBrowserDisabled();
     const interactive = shouldLaunchBrowser({ forceManual: noBrowser });
     this.logger.debug(() => `[FLOW] Interactive mode: ${interactive}`);
 
@@ -457,10 +459,7 @@ export class CodexOAuthProvider implements OAuthProvider {
     // using the immutable request bucket captured at initiateAuth entry.
     let browserOpts: BrowserLaunchOptions | undefined;
     try {
-      const assoc = oauthRuntimeBridge.getBrowserProfileAssociation(
-        'codex',
-        requestBucket,
-      );
+      const assoc = this.getBrowserProfileAssociation('codex', requestBucket);
       if (assoc) {
         browserOpts = {
           browser: assoc.browser,
@@ -762,8 +761,12 @@ export class CodexOAuthProvider implements OAuthProvider {
     }
   }
 
-  async refreshToken(currentToken: OAuthToken): Promise<OAuthToken | null> {
+  async refreshToken(
+    currentToken: OAuthToken,
+    signal?: AbortSignal,
+  ): Promise<OAuthToken | null> {
     await this.ensureInitialized();
+    signal?.throwIfAborted();
 
     const refreshToken =
       typeof currentToken.refresh_token === 'string'
@@ -779,7 +782,10 @@ export class CodexOAuthProvider implements OAuthProvider {
 
     this.logger.debug(() => 'Refreshing token (bucket-aware)');
     try {
-      const refreshedToken = await this.deviceFlow.refreshToken(refreshToken);
+      const refreshedToken = await this.deviceFlow.refreshToken(
+        refreshToken,
+        signal,
+      );
       const merged: CodexOAuthToken & Record<string, unknown> = {
         ...(currentToken as CodexOAuthToken & Record<string, unknown>),
         ...refreshedToken,
@@ -802,6 +808,7 @@ export class CodexOAuthProvider implements OAuthProvider {
 
       return merged;
     } catch {
+      signal?.throwIfAborted();
       // Token refresh failed — caller will fall back to re-auth
       this.logger.debug(() => `Token refresh failed`);
       return null;

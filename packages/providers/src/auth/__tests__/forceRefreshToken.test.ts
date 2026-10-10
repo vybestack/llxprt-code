@@ -12,19 +12,10 @@
  * 3. Handles TOCTOU race conditions correctly
  */
 
-import {
-  describe,
-  it,
-  expect,
-  vi,
-  beforeEach,
-  afterEach,
-  type Mock,
-} from 'bun:test';
+import { describe, it, expect, vi, type Mock } from 'bun:test';
 import { TokenAccessCoordinator } from '../token-access-coordinator.js';
 import type { OAuthProvider, OAuthToken, TokenStore } from '../types.js';
 import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-core';
-import { oauthRuntimeBridge } from '../runtime-accessor-bridge.js';
 
 // --------------------------------------------------------------------------
 // Test helpers
@@ -191,8 +182,6 @@ function makeCoordinator(opts?: {
   };
 }
 
-// Register runtime accessors via the bridge
-
 // Mock @vybestack/llxprt-code-core ProfileManager
 void vi.mock('@vybestack/llxprt-code-core', () => {
   const actual = realLlxprtCodeCoreModule;
@@ -207,23 +196,6 @@ void vi.mock('@vybestack/llxprt-code-core', () => {
 });
 
 describe('TokenAccessCoordinator forceRefreshToken', () => {
-  beforeEach(() => {
-    oauthRuntimeBridge.setAccessors({
-      getEphemeralSetting: () => undefined,
-      getProviderManager: () => ({
-        getProviderByName: () => null,
-      }),
-      getRuntimeContext: () => ({
-        runtimeId: 'test-runtime',
-      }),
-      getCurrentProfileName: () => null,
-    });
-  });
-
-  afterEach(() => {
-    oauthRuntimeBridge.setAccessors(undefined);
-  });
-
   /**
    * @fix issue1861
    * Test that forceRefreshToken refreshes when stored token matches failed token

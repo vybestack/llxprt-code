@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
+const composeFixtureRuntime = installWorkspaceRuntimeFixture();
+
 /**
  * Behavioral tests for /key subcommands: save, load, show, list, delete.
  *
@@ -77,12 +80,8 @@ function createTestStorage(
 
 const mockRuntime = {
   updateActiveProviderApiKey: vi.fn(),
-  getActiveProviderStatus: vi.fn(),
+  providerStatus: vi.fn(),
 };
-
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  getRuntimeApi: () => mockRuntime,
-}));
 
 let mockStorage: ProviderKeyStorage;
 
@@ -120,9 +119,9 @@ describe('/key subcommands', () => {
     tempDir = await createTempFallbackDir();
     mockStorage = createTestStorage(mockKeyring, tempDir);
 
-    context = createMockCommandContext();
+    context = createMockCommandContext({ runtimeApi: mockRuntime });
 
-    mockRuntime.getActiveProviderStatus.mockReturnValue({
+    mockRuntime.providerStatus.mockReturnValue({
       providerName: 'test-provider',
       modelName: 'model-x',
       displayLabel: 'test-provider:model-x',
@@ -255,10 +254,10 @@ describe('/key subcommands', () => {
     it('fails when overwriting in non-interactive mode', async () => {
       await mockStorage.saveKey('existing', 'old-key-value');
       // Mock non-interactive: config.isInteractive returns false
-      context.services.config = {
+      context.services.config = composeFixtureRuntime({
         ...context.services.config,
         isInteractive: () => false,
-      } as unknown as Config;
+      } as unknown as Config);
 
       const result = await runKey('save existing new-key-value');
       expect(result.type).toBe('message');
@@ -463,10 +462,10 @@ describe('/key subcommands', () => {
      */
     it('fails in non-interactive mode', async () => {
       await mockStorage.saveKey('mykey', 'sk-value123');
-      context.services.config = {
+      context.services.config = composeFixtureRuntime({
         ...context.services.config,
         isInteractive: () => false,
-      } as unknown as Config;
+      } as unknown as Config);
 
       const result = await runKey('delete mykey');
       expect(result.type).toBe('message');

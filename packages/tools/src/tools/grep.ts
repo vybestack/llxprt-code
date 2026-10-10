@@ -682,7 +682,7 @@ File: ${resolved.basename}
   }
 
   async execute(signal: AbortSignal): Promise<ToolResult> {
-    const ephemeralSettings = this.host.getEphemeralSettings();
+    const ephemeralSettings = this.host.readExecutionPolicy();
     const { maxResults, maxFiles, maxPerFile, timeoutMs } = validateGrepLimits(
       this.params,
       ephemeralSettings['tool-output-max-items'],
@@ -717,14 +717,16 @@ File: ${resolved.basename}
       const resolved = this.resolveTarget(dirPath);
       const searchDirDisplay = stringOrDefault(dirPath, '.');
 
-      return await this.executeDirectorySearch(
-        resolved,
-        workspaceContext,
-        combinedSignal,
-        searchDirDisplay,
-        maxResults,
-        maxFiles,
-        maxPerFile,
+      return await this.host.runSearch(workspaceContext, () =>
+        this.executeDirectorySearch(
+          resolved,
+          workspaceContext,
+          combinedSignal,
+          searchDirDisplay,
+          maxResults,
+          maxFiles,
+          maxPerFile,
+        ),
       );
     } catch (error) {
       return this.handleExecuteError(

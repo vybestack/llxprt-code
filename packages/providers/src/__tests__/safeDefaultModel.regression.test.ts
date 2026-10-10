@@ -1,3 +1,5 @@
+import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
+const fixtureOwners = installRuntimeTestOwners();
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -12,6 +14,8 @@
  * safeGetDefaultModel utility instead of calling getDefaultModel directly.
  */
 
+import { captureProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import { describe, it, expect } from 'bun:test';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
 import { LoggingProviderWrapper } from '../LoggingProviderWrapper.js';
@@ -117,7 +121,13 @@ describe('safeGetDefaultModel regression', () => {
       const raw = createProviderWithoutDefaultModel('test-provider');
       const settingsService = new SettingsService();
       const config = createRuntimeConfigStub(settingsService);
-      const wrapper = new LoggingProviderWrapper(raw, config);
+      const wrapperSettings1 = fixtureOwners.adopt(
+        config,
+        new SettingsService(),
+      ).settingsOwner;
+      const wrapper = new LoggingProviderWrapper(raw, config, undefined, () =>
+        captureProviderRequestDiagnostics(config, wrapperSettings1),
+      );
       expect(wrapper.getDefaultModel()).toBe('');
     });
 
@@ -125,14 +135,22 @@ describe('safeGetDefaultModel regression', () => {
       const raw = createProviderWithoutDefaultModel('test-provider');
       const settingsService = new SettingsService();
       const config = createRuntimeConfigStub(settingsService);
-      const wrapper = new LoggingProviderWrapper(raw, config);
+      const wrapperSettings2 = fixtureOwners.adopt(
+        config,
+        new SettingsService(),
+      ).settingsOwner;
+      const wrapper = new LoggingProviderWrapper(raw, config, undefined, () =>
+        captureProviderRequestDiagnostics(config, wrapperSettings2),
+      );
       const options: GenerateChatOptions = {
         contents: [{ role: 'user', parts: [{ text: 'hi' }] }],
         config,
-        settings: settingsService,
+        invocation: captureProviderInvocation(
+          { settingsService, runtimeId: 'test-runtime' },
+          'test',
+        ),
         runtime: {
-          settingsService,
-          config,
+          diagnostics: captureProviderRequestDiagnostics(config),
           runtimeId: 'test-runtime',
           metadata: {},
         },
@@ -151,15 +169,26 @@ describe('safeGetDefaultModel regression', () => {
       const settingsService = new SettingsService();
       const config = createRuntimeConfigStub(settingsService);
       const orchestrator = new RetryOrchestrator(raw);
-      const wrapper = new LoggingProviderWrapper(orchestrator, config);
+      const wrapperSettings3 = fixtureOwners.adopt(
+        config,
+        new SettingsService(),
+      ).settingsOwner;
+      const wrapper = new LoggingProviderWrapper(
+        orchestrator,
+        config,
+        undefined,
+        () => captureProviderRequestDiagnostics(config, wrapperSettings3),
+      );
 
       const options: GenerateChatOptions = {
         contents: [{ role: 'user', parts: [{ text: 'hi' }] }],
         config,
-        settings: settingsService,
+        invocation: captureProviderInvocation(
+          { settingsService, runtimeId: 'test-runtime' },
+          'test',
+        ),
         runtime: {
-          settingsService,
-          config,
+          diagnostics: captureProviderRequestDiagnostics(config),
           runtimeId: 'test-runtime',
           metadata: {},
         },

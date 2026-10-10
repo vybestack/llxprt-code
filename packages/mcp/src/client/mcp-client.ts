@@ -5,39 +5,26 @@
  */
 
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import type {
-  Prompt,
-  ReadResourceResult,
-  Resource,
-} from '@modelcontextprotocol/sdk/types.js';
 import {
+  type Prompt,
+  type ReadResourceResult,
+  type Resource,
   ReadResourceResultSchema,
   ResourceListChangedNotificationSchema,
   ToolListChangedNotificationSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import type { MCPServerConfig } from '../config/mcpServerConfig.js';
-import type {
-  McpPromptRegistry,
-  McpResourceRegistry,
-  McpTrustConfig,
-  McpWorkspaceContext,
-} from '../host/hostInterfaces.js';
-import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import type { MCPServerConfig } from '../config/index.js';
+import type * as Host from '../host/hostInterfaces.js';
+import type { McpToolPublication } from '@vybestack/llxprt-code-tools';
 import { getErrorMessage } from '@vybestack/llxprt-code-tools/utils/errors.js';
-import { emitHostFeedback } from '../host/hostServices.js';
+import {
+  captureHostFeedback,
+  type HostFeedbackSink,
+} from '../host/hostServices.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import type { DiscoveredMCPTool } from './mcp-tool.js';
 
-import {
-  MCPServerStatus,
-  MCPDiscoveryState,
-  mcpServerRequiresOAuth,
-  addMCPStatusChangeListener,
-  removeMCPStatusChangeListener,
-  updateMCPServerStatus,
-  getMCPServerStatus,
-  getAllMCPServerStatuses,
-} from './mcp-status.js';
+import { MCPServerStatus, MCPDiscoveryState } from './mcp-status.js';
 import { MCP_DEFAULT_TIMEOUT_MSEC, createTransport } from './mcp-transport.js';
 import {
   discoverTools,
@@ -46,6 +33,11 @@ import {
   invokeMcpPrompt,
   registerMcpPrompts,
 } from './mcp-discovery.js';
+import {
+  McpOAuthOperations,
+  bindMcpOAuthCapabilities,
+} from './mcp-oauth-helpers.js';
+import type { McpOAuthBinding } from '../auth/index.js';
 import { connectToMcpServer } from './mcp-connection.js';
 import { MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE } from './mcp-errors.js';
 import {
@@ -53,18 +45,13 @@ import {
   isEnabled,
   populateMcpServerCommand,
 } from './mcp-discovery-helpers.js';
+import { attachMcpConnectionHandlers } from './mcp-client-events.js';
 import { closeClientWithTimeout } from './close-client-with-timeout.js';
 
 // Re-export public API symbols to preserve external import paths.
 export {
   MCPServerStatus,
   MCPDiscoveryState,
-  mcpServerRequiresOAuth,
-  addMCPStatusChangeListener,
-  removeMCPStatusChangeListener,
-  updateMCPServerStatus,
-  getMCPServerStatus,
-  getAllMCPServerStatuses,
   MCP_DEFAULT_TIMEOUT_MSEC,
   createTransport,
   discoverTools,
@@ -87,6 +74,9 @@ export type { DiscoveredMCPPrompt } from '../host/hostInterfaces.js';
  */
 export class McpClient {
   private client: Client | undefined;
+  private readonly oauthOperations: McpOAuthOperations;
+  private connectionWork: Promise<void> | undefined;
+  private requiresOAuth = false;
   private status: MCPServerStatus = MCPServerStatus.DISCONNECTED;
   private isRefreshingTools: boolean = false;
   private pendingToolRefresh: boolean = false;
@@ -99,25 +89,46 @@ export class McpClient {
   private capabilityGeneration = 0;
   private activeCapabilityGeneration: number | undefined;
 
+  private readonly emitFeedback: HostFeedbackSink;
   constructor(
+    oauth: McpOAuthBinding,
+    private readonly approvalPolicy: Host.McpApprovalPolicy,
     private readonly serverName: string,
     private readonly serverConfig: MCPServerConfig,
-    private readonly toolRegistry: ToolRegistry,
-    private readonly promptRegistry: McpPromptRegistry,
-    private readonly resourceRegistry: McpResourceRegistry,
-    private readonly workspaceContext: McpWorkspaceContext,
-    private readonly cliConfig: McpTrustConfig,
+    private readonly toolRegistry: McpToolPublication,
+    private readonly promptRegistry: Host.McpPromptRegistry,
+    private readonly resourceRegistry: Host.McpResourceRegistry,
+    private readonly workspaceContext: Host.McpWorkspaceContext,
+    private readonly cliConfig: Host.McpTrustConfig,
     private readonly debugMode: boolean,
     private readonly clientVersion: string,
     private readonly onToolsUpdated?: (signal?: AbortSignal) => Promise<void>,
-  ) {}
+    feedback?: HostFeedbackSink,
+    private readonly onStatus?: (
+      status: MCPServerStatus,
+      requiresOAuth: boolean,
+    ) => void,
+  ) {
+    this.emitFeedback = captureHostFeedback(feedback);
+    this.oauthOperations = new McpOAuthOperations(
+      bindMcpOAuthCapabilities(oauth),
+    );
+  }
 
   async connect(): Promise<void> {
-    if (this.status !== MCPServerStatus.DISCONNECTED) {
+    if (this.status !== MCPServerStatus.DISCONNECTED || this.connectionWork) {
       throw new Error(
         `Can only connect when the client is disconnected, current state is ${this.status}`,
       );
     }
+    this.connectionWork = this.connectOperation().finally(() => {
+      this.connectionWork = undefined;
+    });
+    return this.connectionWork;
+  }
+
+  private async connectOperation(): Promise<void> {
+    this.requiresOAuth = this.serverConfig.oauth?.enabled === true;
     this.updateStatus(MCPServerStatus.CONNECTING);
     const connectionGeneration = ++this.connectionGeneration;
     const abortController = new AbortController();
@@ -130,7 +141,18 @@ export class McpClient {
         this.serverConfig,
         this.debugMode,
         this.workspaceContext,
+        this.oauthOperations,
         abortController.signal,
+        this.emitFeedback,
+        () => {
+          if (
+            connectionGeneration !== this.connectionGeneration ||
+            abortController.signal.aborted
+          )
+            return;
+          this.requiresOAuth = true;
+          this.onStatus?.(this.status, true);
+        },
       );
       connectedClient = client;
 
@@ -141,37 +163,18 @@ export class McpClient {
 
       this.registerNotificationHandlers(client);
       this.client = client;
-      const originalOnError = this.client.onerror;
-      this.client.onerror = (error) => {
-        if (
-          this.status !== MCPServerStatus.CONNECTED ||
-          this.client !== client
-        ) {
-          return;
-        }
-        try {
-          originalOnError?.(error);
-        } catch (handlerError) {
-          debugLogger.warn(
-            `Original MCP error handler failed for ${this.serverName}:`,
-            handlerError,
-          );
-        }
-        debugLogger.error(`MCP ERROR (${this.serverName}):`, error.toString());
-        this.removeAllServerArtifacts();
-        const failedClient = this.client;
-        this.invalidateCapabilities();
-        this.client = undefined;
-        try {
+      attachMcpConnectionHandlers(
+        client,
+        this.serverName,
+        () =>
+          this.client === client && this.status === MCPServerStatus.CONNECTED,
+        () => {
+          this.removeAllServerArtifacts();
+          this.invalidateCapabilities();
+          this.client = undefined;
           this.updateStatus(MCPServerStatus.DISCONNECTED);
-        } catch (statusError) {
-          debugLogger.warn(
-            `MCP status listener failed for ${this.serverName}:`,
-            statusError,
-          );
-        }
-        failedClient.close().catch(() => {});
-      };
+        },
+      );
       this.activeCapabilityGeneration = ++this.capabilityGeneration;
       this.updateStatus(MCPServerStatus.CONNECTED);
     } catch (error) {
@@ -182,10 +185,7 @@ export class McpClient {
       if (connectedClient !== undefined) {
         await connectedClient.close().catch(() => {});
       }
-      if (abortController.signal.aborted) {
-        return;
-      }
-      throw error;
+      if (!abortController.signal.aborted) throw error;
     } finally {
       if (this.connectionAbortController === abortController) {
         this.connectionAbortController = undefined;
@@ -247,7 +247,7 @@ export class McpClient {
   }
 
   async discover(
-    cliConfig: McpTrustConfig,
+    cliConfig: Host.McpTrustConfig,
     mayPublish: () => boolean = () => true,
   ): Promise<void> {
     this.assertConnected();
@@ -399,6 +399,9 @@ export class McpClient {
   }
 
   async disconnect(): Promise<void> {
+    this.connectionAbortController?.abort();
+    const authJoined = this.oauthOperations.cancelAndJoin();
+    const connectionWork = this.connectionWork;
     this.invalidateCapabilities();
     const wasActive =
       this.status === MCPServerStatus.CONNECTED ||
@@ -419,7 +422,6 @@ export class McpClient {
     if (wasActive) {
       this.updateStatus(MCPServerStatus.DISCONNECTING, cleanupErrors);
     }
-    this.connectionAbortController?.abort();
     this.connectionAbortController = undefined;
     this.discoveryAbortController?.abort();
     this.discoveryAbortController = undefined;
@@ -438,6 +440,7 @@ export class McpClient {
     } catch (error) {
       cleanupErrors.push(error);
     } finally {
+      await Promise.allSettled([connectionWork, authJoined]);
       if (wasActive) {
         this.updateStatus(MCPServerStatus.DISCONNECTED, cleanupErrors);
       }
@@ -459,7 +462,12 @@ export class McpClient {
 
   private updateStatus(status: MCPServerStatus, failures?: unknown[]): void {
     this.status = status;
-    updateMCPServerStatus(this.serverName, status, failures);
+    try {
+      this.onStatus?.(status, this.requiresOAuth);
+    } catch (error) {
+      if (failures === undefined) throw error;
+      failures.push(error);
+    }
   }
 
   private assertConnected(): void {
@@ -481,12 +489,13 @@ export class McpClient {
   }
 
   private async discoverTools(
-    cliConfig: McpTrustConfig,
+    cliConfig: Host.McpTrustConfig,
     options?: { timeout?: number; signal?: AbortSignal },
   ): Promise<DiscoveredMCPTool[]> {
     const client = this.getConnectedClient();
     const isAuthorized = this.createCapabilityAuthorization(client);
     return discoverTools(
+      this.approvalPolicy,
       this.serverName,
       this.serverConfig,
       client,
@@ -527,7 +536,10 @@ export class McpClient {
     this.resourceRegistry.setResourcesForServer(this.serverName, resources);
   }
 
-  async readResource(uri: string): Promise<ReadResourceResult> {
+  async readResource(
+    uri: string,
+    signal?: AbortSignal,
+  ): Promise<ReadResourceResult> {
     const client = this.getConnectedClient();
     const isAuthorized = this.createCapabilityAuthorization(client);
     if (!isAuthorized()) {
@@ -539,6 +551,7 @@ export class McpClient {
         params: { uri },
       },
       ReadResourceResultSchema,
+      { signal },
     );
     if (!isAuthorized()) {
       throw new Error(MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE);
@@ -634,7 +647,7 @@ export class McpClient {
       while (keepLooping) {
         this.pendingToolRefresh = false;
         const ok = await this.refreshToolsOnce();
-        keepLooping = ok && this.consumePendingRefresh();
+        keepLooping = ok && this.pendingToolRefresh;
       }
     } catch (error) {
       debugLogger.error(
@@ -754,16 +767,12 @@ export class McpClient {
         }
       }
 
-      emitHostFeedback('info', `Tools updated for server: ${this.serverName}`);
+      this.emitFeedback('info', `Tools updated for server: ${this.serverName}`);
       return true;
     } finally {
       clearTimeout(timeoutId);
       this.refreshAbortControllers.delete(abortController);
     }
-  }
-
-  private consumePendingRefresh(): boolean {
-    return this.pendingToolRefresh;
   }
 
   private async refreshResources(): Promise<void> {
@@ -782,7 +791,7 @@ export class McpClient {
       while (keepLooping) {
         this.pendingResourceRefresh = false;
         const ok = await this.refreshResourcesOnce();
-        keepLooping = ok && this.consumePendingResourceRefresh();
+        keepLooping = ok && this.pendingResourceRefresh;
       }
     } catch (error) {
       debugLogger.error(
@@ -845,7 +854,7 @@ export class McpClient {
         return false;
       }
 
-      emitHostFeedback(
+      this.emitFeedback(
         'info',
         `Resources updated for server: ${this.serverName}`,
       );
@@ -854,9 +863,5 @@ export class McpClient {
       clearTimeout(timeoutId);
       this.refreshAbortControllers.delete(abortController);
     }
-  }
-
-  private consumePendingResourceRefresh(): boolean {
-    return this.pendingResourceRefresh;
   }
 }

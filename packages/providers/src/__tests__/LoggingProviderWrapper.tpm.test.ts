@@ -7,10 +7,10 @@
  * Split from LoggingProviderWrapper.apiTelemetry.test.ts for max-lines compliance.
  */
 
+import { captureProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
 import { describe, expect, it, vi, beforeEach } from 'bun:test';
 import { LoggingProviderWrapper } from '../LoggingProviderWrapper.js';
 import type { GenerateChatOptions, IContent, IProvider } from '../IProvider.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import {
@@ -54,7 +54,13 @@ describe('LoggingProviderWrapper Metrics', () => {
 
     it('should record performance metrics even when provider emits no token usage metadata', async () => {
       const provider = new NoUsageProvider();
-      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+      const wrapper = new LoggingProviderWrapper(
+        provider,
+        new StubRedactor(),
+        undefined,
+        () =>
+          captureProviderRequestDiagnostics(config, runtime.sessionSettings),
+      );
 
       const settings = new SettingsService();
       const config = createConfigStub(false); // Logging disabled → processStreamForMetrics path
@@ -88,7 +94,13 @@ describe('LoggingProviderWrapper Metrics', () => {
 
     it('should estimate output tokens from streamed text when provider emits no usage metadata', async () => {
       const provider = new NoUsageProvider(); // yields 'Hello from no-usage provider'
-      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+      const wrapper = new LoggingProviderWrapper(
+        provider,
+        new StubRedactor(),
+        undefined,
+        () =>
+          captureProviderRequestDiagnostics(config, runtime.sessionSettings),
+      );
 
       const settings = new SettingsService();
       const config = createConfigStub(false); // processStreamForMetrics path
@@ -121,7 +133,13 @@ describe('LoggingProviderWrapper Metrics', () => {
 
     it('should record performance metrics when provider emits token usage metadata', async () => {
       const provider = new StubProvider(); // StubProvider DOES emit metadata.usage
-      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+      const wrapper = new LoggingProviderWrapper(
+        provider,
+        new StubRedactor(),
+        undefined,
+        () =>
+          captureProviderRequestDiagnostics(config, runtime.sessionSettings),
+      );
 
       const settings = new SettingsService();
       const config = createConfigStub(false); // Logging disabled → processStreamForMetrics path
@@ -153,16 +171,21 @@ describe('LoggingProviderWrapper Metrics', () => {
 
     it('should still accumulate token usage when usage metadata is present', async () => {
       const provider = new StubProvider(); // StubProvider emits metadata.usage
-      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+      const wrapper = new LoggingProviderWrapper(
+        provider,
+        new StubRedactor(),
+        undefined,
+        () =>
+          captureProviderRequestDiagnostics(
+            config,
+            runtime.sessionSettings,
+            accumulateMock,
+          ),
+      );
 
       const settings = new SettingsService();
       const accumulateMock = vi.fn();
-      const config = {
-        ...createConfigStub(false),
-        getProviderManager: () => ({
-          accumulateSessionTokens: accumulateMock,
-        }),
-      } as unknown as Config;
+      const config = createConfigStub(false);
       const runtime = createRuntimeContext(settings, config);
 
       const iterator = wrapper.generateChatCompletion(
@@ -190,16 +213,21 @@ describe('LoggingProviderWrapper Metrics', () => {
 
     it('should NOT accumulate token usage when provider emits no usage metadata', async () => {
       const provider = new NoUsageProvider();
-      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+      const wrapper = new LoggingProviderWrapper(
+        provider,
+        new StubRedactor(),
+        undefined,
+        () =>
+          captureProviderRequestDiagnostics(
+            config,
+            runtime.sessionSettings,
+            accumulateMock,
+          ),
+      );
 
       const settings = new SettingsService();
       const accumulateMock = vi.fn();
-      const config = {
-        ...createConfigStub(false),
-        getProviderManager: () => ({
-          accumulateSessionTokens: accumulateMock,
-        }),
-      } as unknown as Config;
+      const config = createConfigStub(false);
       const runtime = createRuntimeContext(settings, config);
 
       const iterator = wrapper.generateChatCompletion(
@@ -254,7 +282,13 @@ describe('LoggingProviderWrapper Metrics', () => {
       }
 
       const provider = new MultiChunkNoUsageProvider();
-      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+      const wrapper = new LoggingProviderWrapper(
+        provider,
+        new StubRedactor(),
+        undefined,
+        () =>
+          captureProviderRequestDiagnostics(config, runtime.sessionSettings),
+      );
 
       const settings = new SettingsService();
       const config = createConfigStub(false);
@@ -312,7 +346,13 @@ describe('LoggingProviderWrapper Metrics', () => {
       }
 
       const provider = new ToolOnlyProvider();
-      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+      const wrapper = new LoggingProviderWrapper(
+        provider,
+        new StubRedactor(),
+        undefined,
+        () =>
+          captureProviderRequestDiagnostics(config, runtime.sessionSettings),
+      );
 
       const settings = new SettingsService();
       const config = createConfigStub(false);

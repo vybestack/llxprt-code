@@ -24,7 +24,7 @@ import { join } from 'node:path';
 import {
   createIsolatedRuntimeContext,
   type IsolatedRuntimeContextOptions,
-} from './runtimeSettings.js';
+} from './index.js';
 
 describe('createIsolatedRuntimeContext required config @plan:ISSUE-3222 @requirement:REQ-3222-AC3', () => {
   let previousConfigHome: string | undefined;
@@ -47,15 +47,9 @@ describe('createIsolatedRuntimeContext required config @plan:ISSUE-3222 @require
 
   it('throws a typed Error naming the missing config when called without one @requirement:REQ-3222-AC3 @scenario:missing-config @given:activation bindings registered (runtimeSettings import) and NO config option @when:createIsolatedRuntimeContext({ runtimeId }) @then:an Error is thrown whose message names the required config (no runtime is silently constructed)', () => {
     expect(() =>
-      createIsolatedRuntimeContext(
-        // Intentional type escape: `config` is required on
-        // IsolatedRuntimeContextOptions (issue #3222), but this test
-        // asserts the runtime guard for JS callers that omit it, so the
-        // options object deliberately crosses the typed API without one.
-        {
-          runtimeId: 'issue3222-required-config',
-        } as unknown as IsolatedRuntimeContextOptions,
-      ),
+      Reflect.apply(createIsolatedRuntimeContext, undefined, [
+        { runtimeId: 'issue3222-required-config' },
+      ]),
     ).toThrow(/config/i);
   });
 

@@ -21,13 +21,15 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import {
+  Config,
   MessageBus,
   PolicyDecision,
-  PolicyEngine,
 } from '@vybestack/llxprt-code-core';
-import type { Config } from '@vybestack/llxprt-code-core';
 import { MessageBusType } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
-import type { Agent } from '@vybestack/llxprt-code-agents';
+import { ProviderManager } from '@vybestack/llxprt-code-providers';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { Agent, FromConfigOptions } from '@vybestack/llxprt-code-agents';
 
 const { fromConfigMock } = {
   fromConfigMock: vi.fn(),
@@ -59,48 +61,70 @@ function makeConfig(
     ephemerals?: Record<string, unknown>;
   } = {},
 ): Fixture {
-  const ephemerals = { ...(overrides.ephemerals ?? {}) };
-  const engine = new PolicyEngine({});
-  const bus = new MessageBus(engine);
-  const config = {
-    getPolicyEngine: () => engine,
-    getDebugMode: () => false,
-    getProvider: () => overrides.provider,
-    getModel: () => overrides.model ?? 'gemini-2.5-pro',
-    getEphemeralSetting: (key: string) => ephemerals[key],
-    setEphemeralSetting: (key: string, value: unknown) => {
-      ephemerals[key] = value;
-    },
-  } as unknown as Config;
-  return { config, engine, bus };
+  const config = new Config({
+    cwd: process.cwd(),
+    targetDir: process.cwd(),
+    debugMode: false,
+    question: undefined,
+    userMemory: '',
+    sessionId: 'foreground-bootstrap-fixture',
+    model: overrides.model ?? 'gemini-2.5-pro',
+    provider: overrides.provider,
+    initialSettings: overrides.ephemerals,
+  });
+  const settingsService = new SettingsService();
+  for (const [key, value] of Object.entries(config.getInitialSettings()))
+    settingsService.set(key, value);
+  const settingsOwner = new SessionSettingsOwner(settingsService);
+  settingsOwner.initializeProviderSelection(
+    config.getProvider(),
+    config.getModel(),
+  );
+  return { config, settingsService, settingsOwner };
 }
 
 interface Fixture {
   config: Config;
-  engine: PolicyEngine;
-  bus: MessageBus;
+  settingsService: SettingsService;
+  settingsOwner: SessionSettingsOwner;
 }
 
-function makeFakeAgent(config: Config, bus: MessageBus): FakeAgent {
+function makeFakeAgent(config: Config, getBus: () => MessageBus): FakeAgent {
   return {
     dispose: vi.fn().mockResolvedValue(undefined),
     getConfig: () => config,
     getProvider: () => 'gemini',
     getModel: () => 'gemini-2.5-pro',
-    getMessageBus: () => bus,
+    getMessageBus: getBus,
   };
 }
 
 describe('createForegroundAgent @plan:PLAN-20270110-ISSUE2378.P01 @requirement:REQ-2378-001', () => {
   let config: Config;
-  let engine: PolicyEngine;
+  let settingsService: SettingsService;
+  let settingsOwner: SessionSettingsOwner;
+  let roots: readonly Fixture[] = [];
+  let providerManager: ProviderManager;
+  let owner: NonNullable<FromConfigOptions['mcpRuntime']>;
   let bus: MessageBus;
   let fakeAgent: FakeAgent;
 
   function useFixture(overrides: Parameters<typeof makeConfig>[0] = {}): void {
-    ({ config, engine, bus } = makeConfig(overrides));
-    fakeAgent = makeFakeAgent(config, bus);
-    fromConfigMock.mockResolvedValue(fakeAgent as unknown as Agent);
+    const root = makeConfig(overrides);
+    roots = [...roots, root];
+    ({ config, settingsService, settingsOwner } = root);
+    providerManager = new ProviderManager({
+      settingsService,
+    });
+    fakeAgent = makeFakeAgent(config, () => bus);
+    fromConfigMock.mockImplementation(async (options: FromConfigOptions) => {
+      if (!options.mcpRuntime) {
+        throw new Error('Foreground Agent must hand off its MCP runtime');
+      }
+      owner = options.mcpRuntime;
+      bus = owner.messageBus;
+      return fakeAgent as unknown as Agent;
+    });
   }
 
   beforeEach(() => {
@@ -109,21 +133,34 @@ describe('createForegroundAgent @plan:PLAN-20270110-ISSUE2378.P01 @requirement:R
     useFixture();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await owner.dispose();
+    providerManager.dispose();
+    for (const root of roots) {
+      await root.settingsOwner.dispose();
+      await root.config.dispose();
+    }
+    roots = [];
     __resetCleanupStateForTesting();
     vi.restoreAllMocks();
   });
 
   it('calls fromConfig exactly once with the existing config and an activation intent, and NO caller messageBus (the Agent owns its bus)', async () => {
-    await createForegroundAgent({ config });
+    await createForegroundAgent({
+      config,
+      providerManager,
+      settingsService,
+      settingsOwner,
+    });
 
     expect(fromConfigMock).toHaveBeenCalledTimes(1);
-    const options = fromConfigMock.mock.calls[0][0] as {
-      config: Config;
-      messageBus?: unknown;
-      activation: unknown;
-    };
+    const options = fromConfigMock.mock.calls[0][0] as FromConfigOptions;
     expect(options.config).toBe(config);
+    expect(options.sessionId).toBe(config.getSessionId());
+    expect(options.sessionIdentityOwnership).toBe('config');
+    expect(options.mcpOwnership).toBe('agent');
+    expect(options.mcpRuntime?.messageBus).toBe(bus);
+    options.mcpRuntime?.assertConfig(config, bus);
     // #2378: the foreground helper never threads a caller-constructed bus —
     // fromConfig builds the single session bus from the Config's policy engine.
     expect(options.messageBus).toBeUndefined();
@@ -135,7 +172,12 @@ describe('createForegroundAgent @plan:PLAN-20270110-ISSUE2378.P01 @requirement:R
   });
 
   it('returns the agent produced by fromConfig and it is disposed on cleanup', async () => {
-    const agent = await createForegroundAgent({ config });
+    const agent = await createForegroundAgent({
+      config,
+      providerManager,
+      settingsService,
+      settingsOwner,
+    });
 
     // Observable outcome: the exact fakeAgent instance is returned (not a
     // wrapper), and it is registered for cleanup so runExitCleanup disposes it.
@@ -146,7 +188,12 @@ describe('createForegroundAgent @plan:PLAN-20270110-ISSUE2378.P01 @requirement:R
   });
 
   it('disposes the agent on normal exit alongside the interactive UI cleanup', async () => {
-    await createForegroundAgent({ config });
+    await createForegroundAgent({
+      config,
+      providerManager,
+      settingsService,
+      settingsOwner,
+    });
 
     const uiCleanup = vi.fn();
     registerCleanup(uiCleanup);
@@ -160,7 +207,12 @@ describe('createForegroundAgent @plan:PLAN-20270110-ISSUE2378.P01 @requirement:R
   });
 
   it('disposes the agent when startup is interrupted before the UI registers cleanup', async () => {
-    await createForegroundAgent({ config });
+    await createForegroundAgent({
+      config,
+      providerManager,
+      settingsService,
+      settingsOwner,
+    });
 
     await runExitCleanup();
 
@@ -172,7 +224,14 @@ describe('createForegroundAgent @plan:PLAN-20270110-ISSUE2378.P01 @requirement:R
     fromConfigMock.mockReset();
     fromConfigMock.mockRejectedValue(failure);
 
-    await expect(createForegroundAgent({ config })).rejects.toThrow(failure);
+    await expect(
+      createForegroundAgent({
+        config,
+        providerManager,
+        settingsService,
+        settingsOwner,
+      }),
+    ).rejects.toThrow(failure);
 
     await runExitCleanup();
 
@@ -180,7 +239,12 @@ describe('createForegroundAgent @plan:PLAN-20270110-ISSUE2378.P01 @requirement:R
   });
 
   it('forwards the exact existing Config to fromConfig (no duplicate runtime construction)', async () => {
-    await createForegroundAgent({ config });
+    await createForegroundAgent({
+      config,
+      providerManager,
+      settingsService,
+      settingsOwner,
+    });
 
     const options = fromConfigMock.mock.calls[0][0] as {
       config: Config;
@@ -190,7 +254,12 @@ describe('createForegroundAgent @plan:PLAN-20270110-ISSUE2378.P01 @requirement:R
 
   it('declares the configured provider and model in the activation intent', async () => {
     useFixture({ provider: 'glm', model: 'glm-4' });
-    await createForegroundAgent({ config });
+    await createForegroundAgent({
+      config,
+      providerManager,
+      settingsService,
+      settingsOwner,
+    });
 
     const options = fromConfigMock.mock.calls[0][0] as {
       activation: { provider?: string; model?: string; authMode: string };
@@ -204,7 +273,12 @@ describe('createForegroundAgent @plan:PLAN-20270110-ISSUE2378.P01 @requirement:R
 
   it('omits the model from the intent when the config model is the placeholder', async () => {
     useFixture({ provider: 'glm', model: 'placeholder-model' });
-    await createForegroundAgent({ config });
+    await createForegroundAgent({
+      config,
+      providerManager,
+      settingsService,
+      settingsOwner,
+    });
 
     const options = fromConfigMock.mock.calls[0][0] as {
       activation: { provider?: string; model?: string; authMode: string };
@@ -216,27 +290,32 @@ describe('createForegroundAgent @plan:PLAN-20270110-ISSUE2378.P01 @requirement:R
     expect(options.activation).not.toHaveProperty('model');
   });
 
-  it('applies session policy updates from the Agent-owned bus to the Config policy engine', async () => {
+  it('applies session policy updates through the foreground session owner', async () => {
+    await createForegroundAgent({
+      config,
+      providerManager,
+      settingsService,
+      settingsOwner,
+    });
+    expect(
+      owner.policyOwner.session.decisions.evaluate('activate_skill', {
+        name: 'pr-creator',
+      }),
+    ).toBe(PolicyDecision.ASK_USER);
+
     bus.publish({
       type: MessageBusType.UPDATE_POLICY,
       toolName: 'activate_skill',
       persist: false,
     });
-    expect(engine.evaluate('activate_skill', { name: 'pr-creator' })).toBe(
+
+    expect(
+      owner.policyOwner.session.decisions.evaluate('activate_skill', {
+        name: 'pr-creator',
+      }),
+    ).toBe(PolicyDecision.ALLOW);
+    expect(owner.policyOwner.session.decisions.evaluate('ast_edit', {})).toBe(
       PolicyDecision.ASK_USER,
     );
-
-    await createForegroundAgent({ config });
-
-    bus.publish({
-      type: MessageBusType.UPDATE_POLICY,
-      toolName: 'activate_skill',
-      persist: false,
-    });
-
-    expect(engine.evaluate('activate_skill', { name: 'pr-creator' })).toBe(
-      PolicyDecision.ALLOW,
-    );
-    expect(engine.evaluate('ast_edit', {})).toBe(PolicyDecision.ASK_USER);
   });
 });

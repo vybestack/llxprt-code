@@ -1,3 +1,8 @@
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import { afterEach as closeInvocationRoots } from 'bun:test';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+const retainedInvocationOwners: SessionSettingsOwner[] = [];
+
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -30,7 +35,7 @@ import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Age
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
+  createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -130,7 +135,18 @@ function buildCompressionHandler(logFile: string): {
   );
   vi.spyOn(historyService, 'getCacheAnchorSeq').mockReturnValue(0);
 
+  const invocationOwner = new SessionSettingsOwner(
+    runtimeSetup.settingsService,
+  );
+  retainedInvocationOwners.push(invocationOwner);
   const view = createAgentRuntimeContext({
+    prepareProviderInvocation: (name, parameters, signal) =>
+      invocationOwner.prepareProviderInvocation(
+        runtimeState.runtimeId,
+        name,
+        parameters,
+        signal,
+      ),
     state: runtimeState,
     history: historyService,
     settings: {
@@ -139,10 +155,16 @@ function buildCompressionHandler(logFile: string): {
       preserveThreshold: 0.2,
       telemetry: { enabled: false, target: null },
     },
-    provider: createProviderAdapterFromManager(
-      runtimeSetup.config.getProviderManager(),
+    provider: createProviderAdapterFromManager(runtimeSetup.providerManager),
+    telemetry: createTelemetryAdapter(
+      runtimeSetup.config,
+      RootTelemetry.prepare({
+        enabled: false,
+        sessionId: 'isolated-adapter-fixture',
+        maxBytes: 1024,
+        maxFiles: 1,
+      }),
     ),
-    telemetry: createTelemetryAdapterFromConfig(runtimeSetup.config),
     tools: createToolRegistryViewFromRegistry(),
     providerRuntime: providerRuntimeSnapshot,
   });
@@ -236,6 +258,11 @@ function installCompressingStrategy(): void {
 }
 
 describe('TokenUsageLogger — lifecycle event emission (issue #3130 slice 5)', () => {
+  closeInvocationRoots(async () => {
+    for (const owner of retainedInvocationOwners.splice(0))
+      await owner.dispose();
+  });
+
   let logFile: string;
 
   beforeEach(() => {

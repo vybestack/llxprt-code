@@ -3,11 +3,13 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createTestOAuthBinding } from './test-support/index.js';
+import { McpOAuthOperations } from './mcp-oauth-helpers.js';
 
 import { waitFor } from '../../../test-utils/src/wait-for.js';
-import { afterEach, describe, it, expect, vi } from 'bun:test';
-import { MCPOAuthProvider } from '../auth/oauth-provider.js';
-import { OAuthUtils } from '../auth/oauth-utils.js';
+import { beforeEach, afterEach, describe, it, expect, vi } from 'bun:test';
+import { MCPOAuthProvider } from '../auth/index.js';
+import { OAuthUtils } from '../auth/index.js';
 import {
   detectDeprecatedSSEEndpoint,
   handleAutomaticOAuth,
@@ -145,6 +147,20 @@ describe('detectDeprecatedSSEEndpoint', () => {
 });
 
 describe('handleAutomaticOAuth', () => {
+  let oauthOwner: McpOAuthOperations;
+  beforeEach(() => {
+    oauthOwner = new McpOAuthOperations({
+      discover: (...args) => OAuthUtils.discoverOAuthConfig(...args),
+      authenticate: (...args) =>
+        MCPOAuthProvider.authenticate(
+          {
+            tokenStorage: createTestOAuthBinding().tokenStorage,
+            openBrowser: createTestOAuthBinding().openBrowser,
+          },
+          ...args,
+        ),
+    });
+  });
   const oauthConfig = {
     authorizationUrl: 'https://auth.example.com/authorize',
     tokenUrl: 'https://auth.example.com/token',
@@ -171,11 +187,13 @@ describe('handleAutomaticOAuth', () => {
       'webflow',
       { url: 'https://mcp.webflow.com/mcp', type: 'streamable-http' },
       '',
+      oauthOwner,
     );
     const second = handleAutomaticOAuth(
       'webflow',
       { url: 'https://mcp.webflow.com/mcp', type: 'streamable-http' },
       '',
+      oauthOwner,
     );
 
     await waitFor(() => expect(authenticate).toHaveBeenCalledTimes(1));
@@ -198,6 +216,7 @@ describe('handleAutomaticOAuth', () => {
         'webflow',
         { url: 'https://mcp.webflow.com/mcp' },
         '',
+        oauthOwner,
       ),
     ).resolves.toBe(false);
     await expect(
@@ -205,6 +224,7 @@ describe('handleAutomaticOAuth', () => {
         'webflow',
         { url: 'https://mcp.webflow.com/mcp' },
         '',
+        oauthOwner,
       ),
     ).resolves.toBe(true);
     expect(authenticate).toHaveBeenCalledTimes(2);
@@ -225,11 +245,13 @@ describe('handleAutomaticOAuth', () => {
       'a\0b',
       { url: 'https://c.example.com' },
       '',
+      oauthOwner,
     );
     const second = handleAutomaticOAuth(
       'a',
       { url: 'b\0https://c.example.com' },
       'resource_metadata="https://auth.example.com/resource"',
+      oauthOwner,
     );
 
     await waitFor(() => expect(authenticate).toHaveBeenCalledTimes(2));

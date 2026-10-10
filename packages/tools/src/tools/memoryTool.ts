@@ -19,11 +19,7 @@ import * as path from 'node:path';
 import process from 'node:process';
 import * as Diff from 'diff';
 import { DEFAULT_CREATE_PATCH_OPTIONS } from '../utils/diffOptions.js';
-import type {
-  IStorageService,
-  IToolMessageBus,
-  SettingsServiceBoundary,
-} from '../interfaces/index.js';
+import type { IStorageService, IToolMessageBus } from '../interfaces/index.js';
 import { shortenPath } from '../utils/paths.js';
 import {
   type ModifiableDeclarativeTool,
@@ -140,15 +136,18 @@ function isCoreScope(scope?: MemoryScope): boolean {
   return scope === 'core.global' || scope === 'core.project';
 }
 
-function getGlobalMemoryFilePath(storageService: IStorageService): string {
-  return path.join(
-    storageService.getGlobalMemoryDir(),
-    getCurrentLlxprtMdFilename(),
-  );
+function getGlobalMemoryFilePath(
+  storageService: IStorageService,
+  filename = getCurrentLlxprtMdFilename(),
+): string {
+  return path.join(storageService.getGlobalMemoryDir(), filename);
 }
 
-function getProjectMemoryFilePath(workingDir: string): string {
-  return path.join(workingDir, LLXPRT_CONFIG_DIR, getCurrentLlxprtMdFilename());
+function getProjectMemoryFilePath(
+  workingDir: string,
+  filename = getCurrentLlxprtMdFilename(),
+): string {
+  return path.join(workingDir, LLXPRT_CONFIG_DIR, filename);
 }
 
 export function getGlobalCoreMemoryFilePath(
@@ -163,8 +162,9 @@ export function getProjectCoreMemoryFilePath(workingDir: string): string {
 
 export interface MemoryToolDependencies {
   storageService: IStorageService;
-  settingsService?: Pick<SettingsServiceBoundary, 'get'>;
+  canSaveCore?: () => boolean;
   getWorkingDir?: () => string;
+  contextFilename?: string;
   messageBus?: IToolMessageBus;
 }
 
@@ -282,6 +282,7 @@ class MemoryToolInvocation extends BaseToolInvocation<
     messageBus: IToolMessageBus,
     private readonly storageService: IStorageService,
     private getWorkingDir?: () => string,
+    private readonly contextFilename?: string,
   ) {
     super(params, messageBus);
   }
@@ -317,12 +318,18 @@ class MemoryToolInvocation extends BaseToolInvocation<
         return getGlobalCoreMemoryFilePath(this.storageService);
       case 'project':
         if (workingDir) {
-          return getProjectMemoryFilePath(workingDir);
+          return getProjectMemoryFilePath(workingDir, this.contextFilename);
         }
-        return getGlobalMemoryFilePath(this.storageService);
+        return getGlobalMemoryFilePath(
+          this.storageService,
+          this.contextFilename,
+        );
       case 'global':
       default:
-        return getGlobalMemoryFilePath(this.storageService);
+        return getGlobalMemoryFilePath(
+          this.storageService,
+          this.contextFilename,
+        );
     }
   }
 
@@ -460,8 +467,9 @@ export class MemoryTool
   static readonly Name: string = memoryToolSchemaData.name!;
 
   private readonly storageService: IStorageService;
-  private readonly settingsService?: Pick<SettingsServiceBoundary, 'get'>;
+  private readonly canSaveCore?: () => boolean;
   private readonly getWorkingDir?: () => string;
+  private readonly contextFilename?: string;
 
   /**
    * @param dependencies - Explicit storage/service wiring. There is NO
@@ -484,8 +492,9 @@ export class MemoryTool
       resolvedDependencies.messageBus,
     );
     this.storageService = resolvedDependencies.storageService;
-    this.settingsService = resolvedDependencies.settingsService;
+    this.canSaveCore = resolvedDependencies.canSaveCore;
     this.getWorkingDir = resolvedDependencies.getWorkingDir;
+    this.contextFilename = resolvedDependencies.contextFilename;
   }
 
   protected override validateToolParamValues(
@@ -501,9 +510,7 @@ export class MemoryTool
     // Core scopes require model.canSaveCore to be enabled
     if (isCoreScope(params.scope)) {
       try {
-        const canSaveCore = this.settingsService?.get('model.canSaveCore') as
-          | boolean
-          | undefined;
+        const canSaveCore = this.canSaveCore?.();
         if (canSaveCore !== true) {
           return (
             'Core memory scopes (core.global, core.project) are disabled. ' +
@@ -528,6 +535,7 @@ export class MemoryTool
       messageBus,
       this.storageService,
       this.getWorkingDir,
+      this.contextFilename,
     );
   }
 
@@ -588,12 +596,18 @@ export class MemoryTool
           return getGlobalCoreMemoryFilePath(this.storageService);
         case 'project':
           if (workingDir) {
-            return getProjectMemoryFilePath(workingDir);
+            return getProjectMemoryFilePath(workingDir, this.contextFilename);
           }
-          return getGlobalMemoryFilePath(this.storageService);
+          return getGlobalMemoryFilePath(
+            this.storageService,
+            this.contextFilename,
+          );
         case 'global':
         default:
-          return getGlobalMemoryFilePath(this.storageService);
+          return getGlobalMemoryFilePath(
+            this.storageService,
+            this.contextFilename,
+          );
       }
     };
 

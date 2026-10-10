@@ -3,6 +3,7 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { unsupportedApprovalPolicy } from './test-support/approval-policy.js';
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { safeJsonStringify } from '@vybestack/llxprt-code-telemetry/utils/safeJsonStringify.js';
@@ -17,12 +18,6 @@ import {
   type ContentPart as Part,
   type ToolResult,
 } from '@vybestack/llxprt-code-tools';
-
-// DiscoveredMCPToolInvocation stores an allowlist on its constructor (static).
-// This type centralizes the one unavoidable internal-state access for tests.
-type InvocationWithAllowlist = {
-  constructor: { allowlist: Set<string> };
-};
 
 // We only need to mock the parts of CallableTool that DiscoveredMCPTool uses.
 const mockCallTool = vi.fn();
@@ -84,17 +79,13 @@ describe('DiscoveredMCPTool', () => {
     mockCallTool.mockClear();
     mockToolMethod.mockClear();
     tool = new DiscoveredMCPTool(
+      unsupportedApprovalPolicy(),
       mockCallableToolInstance,
       serverName,
       serverToolName,
       baseDescription,
       inputSchema,
     );
-    // Clear allowlist before each relevant test, especially for shouldConfirmExecute
-    const invocation = tool.build({
-      param: 'mock',
-    }) as unknown as InvocationWithAllowlist;
-    invocation.constructor.allowlist.clear();
   });
 
   afterEach(() => {
@@ -137,13 +128,15 @@ describe('DiscoveredMCPTool', () => {
       mockCallTool.mockResolvedValue(mockMcpToolResponseParts);
 
       const invocation = tool.build(params);
+      const controller = new AbortController();
       const toolResult: ToolResult = await invocation.execute(
-        new AbortController().signal,
+        controller.signal,
       );
 
-      expect(mockCallTool).toHaveBeenCalledWith([
-        { name: serverToolName, args: params },
-      ]);
+      expect(mockCallTool).toHaveBeenCalledWith(
+        [{ name: serverToolName, args: params }],
+        controller.signal,
+      );
 
       const stringifiedResponseContent = JSON.stringify(
         mockToolSuccessResultObject,
@@ -186,6 +179,7 @@ describe('DiscoveredMCPTool', () => {
       'should return a structured error if MCP tool reports an error',
       async ({ isErrorValue }) => {
         const tool = new DiscoveredMCPTool(
+          unsupportedApprovalPolicy(),
           mockCallableToolInstance,
           serverName,
           serverToolName,
@@ -226,6 +220,7 @@ describe('DiscoveredMCPTool', () => {
 
     it('should return a structured error if MCP tool reports a top-level isError (spec compliant)', async () => {
       const tool = new DiscoveredMCPTool(
+        unsupportedApprovalPolicy(),
         mockCallableToolInstance,
         serverName,
         serverToolName,
@@ -269,6 +264,7 @@ describe('DiscoveredMCPTool', () => {
       'should consider a ToolResult with isError ${description} to be a success',
       async ({ isErrorValue }) => {
         const tool = new DiscoveredMCPTool(
+          unsupportedApprovalPolicy(),
           mockCallableToolInstance,
           serverName,
           serverToolName,
@@ -345,9 +341,10 @@ describe('DiscoveredMCPTool', () => {
       expect(toolResult.returnDisplay).toBe(successMessage);
 
       // 3. Verify that the underlying callTool was made correctly.
-      expect(mockCallTool).toHaveBeenCalledWith([
-        { name: serverToolName, args: params },
-      ]);
+      expect(mockCallTool).toHaveBeenCalledWith(
+        [{ name: serverToolName, args: params }],
+        expect.any(AbortSignal),
+      );
     });
 
     it('should handle an AudioBlock response', async () => {
@@ -631,8 +628,8 @@ describe('DiscoveredMCPTool', () => {
 
         const invocation = tool.build(params);
 
-        await expect(invocation.execute(controller.signal)).rejects.toThrow(
-          'Tool call aborted',
+        await expect(invocation.execute(controller.signal)).rejects.toBe(
+          controller.signal.reason,
         );
 
         // Tool should not be called if signal is already aborted
@@ -666,9 +663,10 @@ describe('DiscoveredMCPTool', () => {
         const promise = invocation.execute(controller.signal);
 
         // Abort after a short delay to simulate cancellation during execution
-        setTimeout(() => controller.abort(), 50);
+        const reason = new Error('Caller stopped MCP work');
+        setTimeout(() => controller.abort(reason), 50);
 
-        await expect(promise).rejects.toThrow('Tool call aborted');
+        await expect(promise).rejects.toBe(reason);
       });
 
       it('should complete successfully if not aborted', async () => {
@@ -692,9 +690,10 @@ describe('DiscoveredMCPTool', () => {
 
         expect(result.llmContent).toStrictEqual([{ text: 'Success' }]);
         expect(result.returnDisplay).toBe('Success');
-        expect(mockCallTool).toHaveBeenCalledWith([
-          { name: serverToolName, args: params },
-        ]);
+        expect(mockCallTool).toHaveBeenCalledWith(
+          [{ name: serverToolName, args: params }],
+          controller.signal,
+        );
       });
 
       it('should handle tool error even when abort signal is provided', async () => {

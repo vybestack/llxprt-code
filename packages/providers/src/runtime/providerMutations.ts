@@ -3,6 +3,8 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 
 /**
  * @plan:PLAN-20260603-ISSUE1584.P12
@@ -14,20 +16,16 @@
  * @plan:PLAN-20260320-ISSUE1575.P03
  * @requirement:REQ-1575-003
  * Provider mutations: model, API key, base URL, and tool format changes.
- * Depends on runtimeAccessors.ts for runtime services access.
  */
 
-import type { Config } from '@vybestack/llxprt-code-core';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import type { ModelDefaultRule } from '../composition/index.js';
-import { getCliRuntimeServices, _internal } from './runtimeAccessors.js';
-import {
-  getModelDefaultOwnedKeys,
-  getProviderDefaultOwnedEntries,
-  recordModelDefaultOwnedKeys,
-} from './modelDefaultOwnership.js';
+import { getProviderSettingsSnapshot } from './providerModelParameters.js';
 
-const logger = new DebugLogger('llxprt:runtime:providerMutations');
+function logger(): DebugLogger {
+  return new DebugLogger('llxprt:runtime:providerMutations');
+}
 
 /**
  * Compute merged ephemeral settings from modelDefaults rules that match a model name.
@@ -36,7 +34,7 @@ const logger = new DebugLogger('llxprt:runtime:providerMutations');
  */
 export function computeModelDefaults(
   modelName: string,
-  modelDefaultRules: ModelDefaultRule[],
+  modelDefaultRules: readonly ModelDefaultRule[],
 ): Record<string, unknown> {
   const merged: Record<string, unknown> = {};
   for (const rule of modelDefaultRules) {
@@ -207,73 +205,43 @@ export interface ModelChangeResult {
   authRefreshed: boolean;
 }
 
-/**
- * Helper for setActiveModel: recomputes and applies model defaults diff.
- * Replaces departing model-owned keys with the provider alias default when
- * one exists (provider alias default > auto) and otherwise clears them.
- *
- * Ownership decides what default application may change (issue #3255): keys
- * recorded as model- or provider-default-owned are replaced or restored
- * wholesale, while keys set through the session/profile path survive
- * unchanged. Alias entries are reparsed into fresh objects on every load,
- * and an explicit value can equal a default, so value equality and object
- * identity are both unreliable classifiers here.
- */
-function recomputeAndApplyModelDefaultsDiff(
-  config: Config,
-  previousModel: string | undefined,
-  newModel: string,
-  modelDefaultRules: ModelDefaultRule[],
-): void {
-  const oldDefaults = previousModel
-    ? computeModelDefaults(previousModel, modelDefaultRules)
-    : {};
+export interface ModelSelectionOperations {
+  readModel(): string | undefined;
+  selectModel(model: string, rules: readonly ModelDefaultRule[]): void;
+}
 
-  const newDefaults = computeModelDefaults(newModel, modelDefaultRules);
-  const ownedKeys = getModelDefaultOwnedKeys(config);
-  const providerOwnedDefaults = getProviderDefaultOwnedEntries(config);
-
-  // Replace keys the departing model supplied and the new model does not,
-  // but only while default application still owns them: restore the
-  // provider alias default when one was recorded, otherwise clear.
-  for (const key of Object.keys(oldDefaults)) {
-    if (key in newDefaults || !ownedKeys.has(key)) {
-      continue;
-    }
-    config.setEphemeralSetting(
-      key,
-      providerOwnedDefaults.has(key)
-        ? providerOwnedDefaults.get(key)
-        : undefined,
-    );
-  }
-
-  // Apply new defaults where no explicit value exists, and replace values
-  // default application owns (model default > provider alias default).
-  const appliedKeys: string[] = [];
-  for (const [key, newValue] of Object.entries(newDefaults)) {
-    const currentValue = config.getEphemeralSetting(key);
-    if (
-      currentValue === undefined ||
-      ownedKeys.has(key) ||
-      providerOwnedDefaults.has(key)
-    ) {
-      config.setEphemeralSetting(key, newValue);
-      appliedKeys.push(key);
-    }
-  }
-  recordModelDefaultOwnedKeys(config, appliedKeys);
+export function assembleModelSelection(
+  owner: SessionSettingsOwner,
+): ModelSelectionOperations {
+  return {
+    readModel: () => owner.readSelectedModel(),
+    selectModel: (model, rules) => {
+      const previous = owner.readSelectedModel();
+      owner.selectModel(model, {
+        departing:
+          previous === undefined ? {} : computeModelDefaults(previous, rules),
+        arriving: computeModelDefaults(model, rules),
+      });
+    },
+  };
 }
 
 export async function updateActiveProviderApiKey(
   apiKey: string | null,
+  config: { setEphemeralSetting(key: string, value: unknown): void },
+  settingsService: Pick<SettingsService, 'setProviderSetting'>,
+  provider:
+    | Pick<
+        NonNullable<ReturnType<RuntimeProviderManager['getActiveProvider']>>,
+        'name' | 'isPaidMode'
+      >
+    | undefined,
 ): Promise<ApiKeyUpdateResult> {
-  const { config, settingsService } = getCliRuntimeServices();
-  const provider = _internal.getActiveProviderOrThrow();
+  if (!provider) throw new Error('No active provider is available.');
   const providerName = provider.name;
   const trimmed = apiKey?.trim();
 
-  logger.debug(() => {
+  logger().debug(() => {
     const masked = trimmed ? `***redacted*** (len=${trimmed.length})` : 'null';
     return `[runtime] updateActiveProviderApiKey provider='${providerName}' value=${masked} CALLED`;
   });
@@ -286,7 +254,7 @@ export async function updateActiveProviderApiKey(
     config.setEphemeralSetting('auth-key-name', undefined);
 
     const isPaidMode = provider.isPaidMode?.();
-    logger.debug(
+    logger().debug(
       () =>
         `[runtime] api key removed for '${providerName}', paidMode=${String(isPaidMode)}`,
     );
@@ -309,7 +277,7 @@ export async function updateActiveProviderApiKey(
   config.setEphemeralSetting('auth-key-name', undefined);
 
   const isPaidMode = provider.isPaidMode?.();
-  logger.debug(
+  logger().debug(
     () =>
       `[runtime] api key updated for '${providerName}', paidMode=${String(isPaidMode)}`,
   );
@@ -327,10 +295,11 @@ export async function updateActiveProviderApiKey(
 
 export async function updateActiveProviderBaseUrl(
   baseUrl: string | null,
+  config: { setEphemeralSetting(key: string, value: unknown): void },
+  settingsService: Pick<SettingsService, 'setProviderSetting'>,
+  providerName: string | undefined,
 ): Promise<BaseUrlUpdateResult> {
-  const { config, settingsService } = getCliRuntimeServices();
-  const provider = _internal.getActiveProviderOrThrow();
-  const providerName = provider.name;
+  if (!providerName) throw new Error('No active provider is available.');
   const trimmed = baseUrl?.trim();
 
   const normalizedBaseUrl =
@@ -360,16 +329,19 @@ export async function updateActiveProviderBaseUrl(
   };
 }
 
-export async function getActiveToolFormatState(): Promise<ToolFormatState> {
-  const { settingsService } = getCliRuntimeServices();
-  const provider = _internal.getActiveProviderOrThrow();
+export async function getActiveToolFormatState(
+  owner: Pick<SessionSettingsOwner, 'readToolFormat' | 'writeToolFormat'>,
+  provider:
+    | Pick<
+        NonNullable<ReturnType<RuntimeProviderManager['getActiveProvider']>>,
+        'name' | 'getToolFormat'
+      >
+    | undefined,
+): Promise<ToolFormatState> {
+  if (!provider) throw new Error('No active provider is configured.');
 
-  const providerSettings = _internal.getProviderSettingsSnapshot(
-    settingsService,
-    provider.name,
-  );
-  const override =
-    (providerSettings.toolFormat as string | undefined) ?? 'auto';
+  const rawOverride = owner.readToolFormat();
+  const override = typeof rawOverride === 'string' ? rawOverride : 'auto';
 
   const isAutoDetected = !override || override === 'auto';
 
@@ -389,21 +361,23 @@ export async function getActiveToolFormatState(): Promise<ToolFormatState> {
 
 export async function setActiveToolFormatOverride(
   formatName: ToolFormatOverrideLiteral | null,
+  owner: Pick<SessionSettingsOwner, 'readToolFormat' | 'writeToolFormat'>,
+  provider:
+    | Pick<
+        NonNullable<ReturnType<RuntimeProviderManager['getActiveProvider']>>,
+        'name' | 'getToolFormat'
+      >
+    | undefined,
 ): Promise<ToolFormatState> {
-  const { config, settingsService } = getCliRuntimeServices();
-  const provider = _internal.getActiveProviderOrThrow();
+  if (!provider) throw new Error('No active provider is configured.');
 
   if (!formatName || formatName === 'auto') {
-    await settingsService.updateSettings(provider.name, { toolFormat: 'auto' });
-    config.setEphemeralSetting('toolFormat', 'auto');
-    return getActiveToolFormatState();
+    await owner.writeToolFormat('auto');
+    return getActiveToolFormatState(owner, provider);
   }
 
-  await settingsService.updateSettings(provider.name, {
-    toolFormat: formatName,
-  });
-  config.setEphemeralSetting('toolFormat', formatName);
-  return getActiveToolFormatState();
+  await owner.writeToolFormat(formatName);
+  return getActiveToolFormatState(owner, provider);
 }
 
 /**
@@ -416,18 +390,20 @@ export async function setActiveToolFormatOverride(
  */
 export async function setActiveModel(
   modelName: string,
+  selection: ModelSelectionOperations,
+  settingsService: Pick<SettingsService, 'getProviderSettings'>,
+  activeProvider:
+    | Pick<
+        NonNullable<ReturnType<RuntimeProviderManager['getActiveProvider']>>,
+        'name' | 'getDefaultModel'
+      >
+    | undefined,
 ): Promise<ModelChangeResult> {
-  const { config, settingsService, providerManager } = getCliRuntimeServices();
-
-  const activeProvider = providerManager.getActiveProvider() as
-    | ReturnType<typeof providerManager.getActiveProvider>
-    | null
-    | undefined;
   if (!activeProvider) {
     throw new Error('No active provider is available.');
   }
 
-  const providerSettings = _internal.getProviderSettingsSnapshot(
+  const providerSettings = getProviderSettingsSnapshot(
     settingsService,
     activeProvider.name,
   );
@@ -439,7 +415,10 @@ export async function setActiveModel(
   // SettingsService.updateSettings; a stale previous model skips the
   // leaving-model default restoration in recomputeAndApplyModelDefaultsDiff.
   const previousModel =
-    config.getModel() || (providerSettings.model as string | undefined);
+    selection.readModel() ??
+    (typeof providerSettings.model === 'string'
+      ? providerSettings.model
+      : undefined);
 
   const authRefreshed = false;
   // #2534 Domain C2: one transition. Config.setModel performs the single
@@ -447,7 +426,6 @@ export async function setActiveModel(
   // contentGeneratorConfig.model projection. The removed duplicates
   // (settingsService.set('activeProvider') + updateSettings) wrote the same
   // store keys this transition owns.
-  config.setModel(modelName);
 
   // Load alias config for the current provider to apply model defaults
   const { loadProviderAliasEntries } = await import('../composition/index.js');
@@ -460,15 +438,7 @@ export async function setActiveModel(
     aliasConfig = undefined;
   }
 
-  // Stateless recomputation of model defaults.
-  if (aliasConfig?.modelDefaults) {
-    recomputeAndApplyModelDefaultsDiff(
-      config,
-      previousModel,
-      modelName,
-      aliasConfig.modelDefaults,
-    );
-  }
+  selection.selectModel(modelName, aliasConfig?.modelDefaults ?? []);
 
   return {
     providerName: activeProvider.name,

@@ -3,6 +3,8 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { RootTelemetry } from './root-telemetry.js';
+let selectedTelemetry: RootTelemetry;
 
 /**
  * Behavioral tests proving logToolCall invokes the PerfPhaseObserver at the
@@ -22,7 +24,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { logToolCall } from './loggers.js';
 import { ToolCallEvent } from './types.js';
 import type { CompletedToolCallShape } from '../internal/interfaces.js';
-import * as sdk from './sdk.js';
 import * as uiTelemetry from './uiTelemetry.js';
 import {
   setPerfPhaseObserver,
@@ -84,8 +85,16 @@ const mockConfig = {
 } as unknown as Parameters<typeof logToolCall>[0];
 
 describe('logToolCall perf phase observer (P07)', () => {
+  afterEach(async () => {
+    await selectedTelemetry.close();
+  });
   beforeEach(() => {
-    vi.spyOn(sdk, 'isTelemetrySdkInitialized').mockReturnValue(false);
+    selectedTelemetry = RootTelemetry.prepare({
+      enabled: false,
+      sessionId: 'local-observer-root',
+      maxBytes: 1048576,
+      maxFiles: 2,
+    });
     vi.spyOn(uiTelemetry.uiTelemetryService, 'addEvent').mockImplementation(
       () => undefined,
     );
@@ -108,7 +117,7 @@ describe('logToolCall perf phase observer (P07)', () => {
       endMs: 1050,
       durationMs: 50,
     });
-    logToolCall(mockConfig, new ToolCallEvent(call));
+    logToolCall(mockConfig, new ToolCallEvent(call), selectedTelemetry);
 
     expect(toolCalls).toHaveLength(1);
     expect(toolCalls[0].callId).toBe('call-abc');
@@ -127,7 +136,7 @@ describe('logToolCall perf phase observer (P07)', () => {
     const call = makeCompletedCall({
       promptId: 'sess-1#agentic-loop#uuid#continuation#2',
     });
-    logToolCall(mockConfig, new ToolCallEvent(call));
+    logToolCall(mockConfig, new ToolCallEvent(call), selectedTelemetry);
 
     expect(toolCalls[0].promptId).toBe(
       'sess-1#agentic-loop#uuid#continuation#2',
@@ -135,11 +144,14 @@ describe('logToolCall perf phase observer (P07)', () => {
   });
 
   it('SDK-disabled mode still notifies', () => {
-    vi.spyOn(sdk, 'isTelemetrySdkInitialized').mockReturnValue(false);
     const { observer, toolCalls } = capturingObserver();
     setPerfPhaseObserver(observer);
 
-    logToolCall(mockConfig, new ToolCallEvent(makeCompletedCall()));
+    logToolCall(
+      mockConfig,
+      new ToolCallEvent(makeCompletedCall()),
+      selectedTelemetry,
+    );
 
     expect(toolCalls).toHaveLength(1);
   });
@@ -147,7 +159,11 @@ describe('logToolCall perf phase observer (P07)', () => {
   it('default-off: null observer produces no notification and no crash', () => {
     setPerfPhaseObserver(null);
     expect(getPerfPhaseObserver()).toBeNull();
-    logToolCall(mockConfig, new ToolCallEvent(makeCompletedCall()));
+    logToolCall(
+      mockConfig,
+      new ToolCallEvent(makeCompletedCall()),
+      selectedTelemetry,
+    );
     // No crash.
   });
 
@@ -162,7 +178,11 @@ describe('logToolCall perf phase observer (P07)', () => {
     setPerfPhaseObserver(throwingObserver);
 
     expect(() =>
-      logToolCall(mockConfig, new ToolCallEvent(makeCompletedCall())),
+      logToolCall(
+        mockConfig,
+        new ToolCallEvent(makeCompletedCall()),
+        selectedTelemetry,
+      ),
     ).toThrow('observer internal error');
   });
 
@@ -175,7 +195,7 @@ describe('logToolCall perf phase observer (P07)', () => {
     // erasing the required type on ToolCallRequest.callId.
     const event = new ToolCallEvent(makeCompletedCall());
     (event as { call_id?: string }).call_id = undefined;
-    logToolCall(mockConfig, event);
+    logToolCall(mockConfig, event, selectedTelemetry);
 
     // call_id is undefined when the request has none — no invented ID.
     expect(toolCalls[0].callId).toBeUndefined();

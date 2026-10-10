@@ -27,7 +27,7 @@
       "import": "./dist/src/composition/index.js"
     },
     "./composition/providerManagerInstance.js": {
-      "types": "./dist/src/composition/providerManagerInstance.d.ts",
+      "types": "./types/providerManagerInstance.d.ts",
       "bun": "./src/composition/providerManagerInstance.ts",
       "import": "./dist/src/composition/providerManagerInstance.js"
     },
@@ -51,30 +51,65 @@
       "bun": "./src/runtime/index.ts",
       "import": "./dist/src/runtime/index.js"
     },
-    "./runtime/runtimeSettings.js": {
-      "types": "./dist/src/runtime/runtimeSettings.d.ts",
-      "bun": "./src/runtime/runtimeSettings.ts",
-      "import": "./dist/src/runtime/runtimeSettings.js"
+    "./runtime/admitModelParameters.js": {
+      "types": "./dist/src/runtime/admitModelParameters.d.ts",
+      "bun": "./src/runtime/admitModelParameters.ts",
+      "import": "./dist/src/runtime/admitModelParameters.js"
     },
-    "./runtime/runtimeAccessors.js": {
-      "types": "./dist/src/runtime/runtimeAccessors.d.ts",
-      "bun": "./src/runtime/runtimeAccessors.ts",
-      "import": "./dist/src/runtime/runtimeAccessors.js"
+    "./runtime/admitLoadBalancerModelParameters.js": {
+      "types": "./dist/src/runtime/admitLoadBalancerModelParameters.d.ts",
+      "bun": "./src/runtime/admitLoadBalancerModelParameters.ts",
+      "import": "./dist/src/runtime/admitLoadBalancerModelParameters.js"
     },
     "./runtime/runtimeLifecycle.js": {
       "types": "./dist/src/runtime/runtimeLifecycle.d.ts",
       "bun": "./src/runtime/runtimeLifecycle.ts",
       "import": "./dist/src/runtime/runtimeLifecycle.js"
     },
-    "./runtime/runtimeRegistry.js": {
-      "types": "./dist/src/runtime/runtimeRegistry.d.ts",
-      "bun": "./src/runtime/runtimeRegistry.ts",
-      "import": "./dist/src/runtime/runtimeRegistry.js"
-    },
     "./runtime/runtimeContextFactory.js": {
       "types": "./dist/src/runtime/runtimeContextFactory.d.ts",
       "bun": "./src/runtime/runtimeContextFactory.ts",
       "import": "./dist/src/runtime/runtimeContextFactory.js"
+    },
+    "./runtime/runtimeActivationBindings.js": {
+      "types": "./dist/src/runtime/runtimeActivationBindings.d.ts",
+      "bun": "./src/runtime/runtimeActivationBindings.ts",
+      "import": "./dist/src/runtime/runtimeActivationBindings.js"
+    },
+    "./runtime/providerReadOperations.js": {
+      "types": "./dist/src/runtime/providerReadOperations.d.ts",
+      "bun": "./src/runtime/providerReadOperations.ts",
+      "import": "./dist/src/runtime/providerReadOperations.js"
+    },
+    "./runtime/assembleCliProviderRuntime.js": {
+      "types": "./dist/src/runtime/assembleCliProviderRuntime.d.ts",
+      "bun": "./src/runtime/assembleCliProviderRuntime.ts",
+      "import": "./dist/src/runtime/assembleCliProviderRuntime.js"
+    },
+    "./runtime/cliForegroundRuntime.js": {
+      "types": "./dist/src/runtime/cliForegroundRuntime.d.ts",
+      "bun": "./src/runtime/cliForegroundRuntime.ts",
+      "import": "./dist/src/runtime/cliForegroundRuntime.js"
+    },
+    "./runtime/settingsResolver.js": {
+      "types": "./dist/src/runtime/settingsResolver.d.ts",
+      "bun": "./src/runtime/settingsResolver.ts",
+      "import": "./dist/src/runtime/settingsResolver.js"
+    },
+    "./runtime/ownerSettingsOperations.js": {
+      "types": "./dist/src/runtime/ownerSettingsOperations.d.ts",
+      "bun": "./src/runtime/ownerSettingsOperations.ts",
+      "import": "./dist/src/runtime/ownerSettingsOperations.js"
+    },
+    "./runtime/providerModelParameters.js": {
+      "types": "./dist/src/runtime/providerModelParameters.d.ts",
+      "bun": "./src/runtime/providerModelParameters.ts",
+      "import": "./dist/src/runtime/providerModelParameters.js"
+    },
+    "./runtime/providerStatus.js": {
+      "types": "./dist/src/runtime/providerStatus.d.ts",
+      "bun": "./src/runtime/providerStatus.ts",
+      "import": "./dist/src/runtime/providerStatus.js"
     },
     "./runtime/providerSwitch.js": {
       "types": "./dist/src/runtime/providerSwitch.d.ts",
@@ -100,11 +135,6 @@
       "types": "./dist/src/runtime/profileApplication.d.ts",
       "bun": "./src/runtime/profileApplication.ts",
       "import": "./dist/src/runtime/profileApplication.js"
-    },
-    "./runtime/settingsResolver.js": {
-      "types": "./dist/src/runtime/settingsResolver.d.ts",
-      "bun": "./src/runtime/settingsResolver.ts",
-      "import": "./dist/src/runtime/settingsResolver.js"
     },
     "./runtime/statelessHardening.js": {
       "types": "./dist/src/runtime/statelessHardening.d.ts",
@@ -261,6 +291,7 @@
   "files": [
     "index.ts",
     "src",
+    "types",
     "!**/*.test.ts",
     "!**/*.test.tsx",
     "!**/*.spec.ts",

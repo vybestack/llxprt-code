@@ -103,7 +103,7 @@ describe('issue #3386 tmux memory-retention workload', () => {
         ({ step }) =>
           step['type'] === 'line' &&
           typeof step['text'] === 'string' &&
-          step['text'].includes('request-cli.ts'),
+          step['text'].includes('request-cli-entry.ts'),
       );
     expect(requestIndexes).toHaveLength(3);
 
@@ -144,7 +144,7 @@ describe('issue #3386 tmux memory-retention workload', () => {
     expect(startCommand).toHaveLength(3);
     const shellCommand = startCommand[2] ?? '';
     expect(shellCommand).toContain(
-      '${bun} scripts/memory/launcher.ts --dir "$LLXPRT_TMUX_ARTIFACT_DIR/memprofile"',
+      '${bun} scripts/memory/launcher-entry.ts --dir "$LLXPRT_TMUX_ARTIFACT_DIR/memprofile"',
     );
     expect(shellCommand).toContain('--interval 86400000 --');
     expect(shellCommand).toContain('NO_COLOR=true FORCE_COLOR=0');
@@ -169,7 +169,7 @@ describe('issue #3386 tmux memory-retention workload', () => {
     // Each request now appends `&& echo <marker>` so the following wait can
     // observe that the probe finished; see the completion-proof test above.
     const requestCommand =
-      'bun scripts/memory/request-cli.ts --dir "$LLXPRT_TMUX_ARTIFACT_DIR/memprofile" --wait';
+      'bun scripts/memory/request-cli-entry.ts --dir "$LLXPRT_TMUX_ARTIFACT_DIR/memprofile" --wait';
     const requestStepIndexes = steps.flatMap((step, index) =>
       step['type'] === 'line' &&
       typeof step['text'] === 'string' &&
@@ -232,7 +232,7 @@ describe('issue #3386 tmux memory-retention workload', () => {
 
     expect(requestStepIndexes).toHaveLength(3);
     for (const line of lines.filter((candidate) =>
-      candidate.includes('scripts/memory/request-cli.ts'),
+      candidate.includes('scripts/memory/request-cli-entry.ts'),
     )) {
       expect(line.startsWith(requestCommand)).toBe(true);
     }

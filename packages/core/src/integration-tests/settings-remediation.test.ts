@@ -5,9 +5,8 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
-import { Config } from '../config/config.js';
+import { SessionSettingsOwner } from '../session/session-settings-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import process from 'process';
 import { performance } from 'node:perf_hooks';
 
 const actual = { ...(await import('fs')) };
@@ -20,7 +19,7 @@ void vi.mock('fs', () => ({
 }));
 
 describe('Settings Remediation Integration', () => {
-  let config: Config;
+  let config: SessionSettingsOwner;
   let settingsService: SettingsService;
   let mockEventListeners: Array<(...args: unknown[]) => void>;
 
@@ -31,17 +30,11 @@ describe('Settings Remediation Integration', () => {
 
     // Config never adopts ambient runtime state (issue #2300) — the settings
     // service is passed explicitly.
-    config = new Config({
-      sessionId: 'test-session',
-      targetDir: process.cwd(),
-      debugMode: false,
-      model: 'test-model',
-      cwd: process.cwd(),
-      settingsService,
-    });
+    config = new SessionSettingsOwner(settingsService);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await config.dispose();
     mockEventListeners.forEach((listener) => {
       settingsService.off('change', listener);
       settingsService.off('provider-change', listener);
@@ -63,7 +56,7 @@ describe('Settings Remediation Integration', () => {
      * @and Operation completes synchronously
      */
     it('should update settings through Config to SettingsService synchronously', () => {
-      config.setEphemeralSetting('model', 'gpt-4');
+      config.writeUserParameter('model', 'gpt-4');
 
       expect(settingsService.get('model')).toBe('gpt-4');
     });
@@ -93,13 +86,13 @@ describe('Settings Remediation Integration', () => {
      * @then Values are stored and retrieved correctly
      */
     it('should handle nested key settings correctly', () => {
-      config.setEphemeralSetting('ui.theme', 'dark');
-      config.setEphemeralSetting('advanced.debug', true);
-      config.setEphemeralSetting('telemetry.enabled', false);
+      config.writeUserParameter('ui.theme', 'dark');
+      config.writeUserParameter('advanced.debug', true);
+      config.writeUserParameter('telemetry.enabled', false);
 
-      expect(config.getEphemeralSetting('ui.theme')).toBe('dark');
-      expect(config.getEphemeralSetting('advanced.debug')).toBe(true);
-      expect(config.getEphemeralSetting('telemetry.enabled')).toBe(false);
+      expect(config.readNamedParameter('ui.theme')).toBe('dark');
+      expect(config.readNamedParameter('advanced.debug')).toBe(true);
+      expect(config.readNamedParameter('telemetry.enabled')).toBe(false);
     });
   });
 
@@ -129,8 +122,8 @@ describe('Settings Remediation Integration', () => {
       mockEventListeners.push(listener);
       settingsService.on('change', listener);
 
-      config.setEphemeralSetting('temperature', 0.7);
-      config.setEphemeralSetting('temperature', 0.8);
+      config.writeUserParameter('temperature', 0.7);
+      config.writeUserParameter('temperature', 0.8);
 
       expect(changeEvents).toHaveLength(2);
       expect(changeEvents[0]).toStrictEqual({
@@ -205,11 +198,11 @@ describe('Settings Remediation Integration', () => {
       mockEventListeners.push(listener);
       settingsService.on('cleared', listener);
 
-      config.setEphemeralSetting('test', 'value');
-      config.clearEphemeralSettings();
+      config.writeUserParameter('test', 'value');
+      settingsService.clear();
 
       expect(clearedEventFired).toBe(true);
-      expect(config.getEphemeralSetting('test')).toBeUndefined();
+      expect(config.readNamedParameter('test')).toBeUndefined();
     });
   });
 
@@ -221,11 +214,11 @@ describe('Settings Remediation Integration', () => {
      * @when New instance is created
      * @then Previous data is not accessible
      */
-    it('should NOT persist settings across service instances', () => {
-      config.setEphemeralSetting('persistTest', 'should-not-persist');
+    it('should NOT persist settings across service instances', async () => {
+      config.writeUserParameter('persistTest', 'should-not-persist');
       settingsService.setProviderSetting('test-provider', 'key', 'value');
 
-      expect(config.getEphemeralSetting('persistTest')).toBe(
+      expect(config.readNamedParameter('persistTest')).toBe(
         'should-not-persist',
       );
       expect(settingsService.getProviderSettings('test-provider').key).toBe(
@@ -234,16 +227,10 @@ describe('Settings Remediation Integration', () => {
 
       const newSettingsService = new SettingsService();
 
-      const newConfig = new Config({
-        sessionId: 'new-session',
-        targetDir: process.cwd(),
-        debugMode: false,
-        model: 'test-model',
-        cwd: process.cwd(),
-        settingsService: newSettingsService,
-      });
+      const newConfig = new SessionSettingsOwner(newSettingsService);
 
-      expect(newConfig.getEphemeralSetting('persistTest')).toBeUndefined();
+      expect(newConfig.readNamedParameter('persistTest')).toBeUndefined();
+      await newConfig.dispose();
       expect(
         newSettingsService.getProviderSettings('test-provider').key,
       ).toBeUndefined();
@@ -256,23 +243,17 @@ describe('Settings Remediation Integration', () => {
      * @when One updates settings
      * @then All instances see the change
      */
-    it('should share settings between multiple Config instances', () => {
-      const config2 = new Config({
-        sessionId: 'test-session-2',
-        targetDir: process.cwd(),
-        debugMode: false,
-        model: 'test-model-2',
-        cwd: process.cwd(),
-        settingsService,
-      });
+    it('should share settings between multiple Config instances', async () => {
+      const config2 = new SessionSettingsOwner(settingsService);
 
-      config.setEphemeralSetting('sharedValue', 'visible-to-all');
+      config.writeUserParameter('sharedValue', 'visible-to-all');
 
-      expect(config2.getEphemeralSetting('sharedValue')).toBe('visible-to-all');
+      expect(config2.readNamedParameter('sharedValue')).toBe('visible-to-all');
 
-      config2.setEphemeralSetting('anotherShared', 42);
+      config2.writeUserParameter('anotherShared', 42);
 
-      expect(config.getEphemeralSetting('anotherShared')).toBe(42);
+      expect(config.readNamedParameter('anotherShared')).toBe(42);
+      await config2.dispose();
     });
   });
 
@@ -288,8 +269,8 @@ describe('Settings Remediation Integration', () => {
     it('should complete 1000 operations synchronously under 35ms median', () => {
       // Warmup: stabilize JIT/engine before timing to reduce variance
       for (let i = 0; i < 100; i++) {
-        config.setEphemeralSetting(`warmup${i}`, i);
-        config.getEphemeralSetting(`warmup${i}`);
+        config.writeUserParameter(`warmup${i}`, i);
+        config.readNamedParameter(`warmup${i}`);
       }
 
       // Run timed portion multiple times to smooth out noise from GC pauses,
@@ -301,8 +282,8 @@ describe('Settings Remediation Integration', () => {
         const startTime = performance.now();
 
         for (let i = 0; i < 1000; i++) {
-          config.setEphemeralSetting(`key${i}`, i);
-          config.getEphemeralSetting(`key${i}`);
+          config.writeUserParameter(`key${i}`, i);
+          config.readNamedParameter(`key${i}`);
         }
 
         elapsedTimes.push(performance.now() - startTime);
@@ -325,9 +306,9 @@ describe('Settings Remediation Integration', () => {
       expect(medianElapsed).toBeLessThan(medianPerfBoundMs());
 
       // Verify functional correctness of final run
-      expect(config.getEphemeralSetting('key999')).toBe(999);
-      expect(config.getEphemeralSetting('key0')).toBe(0);
-      expect(config.getEphemeralSetting('key500')).toBe(500);
+      expect(config.readNamedParameter('key999')).toBe(999);
+      expect(config.readNamedParameter('key0')).toBe(0);
+      expect(config.readNamedParameter('key500')).toBe(500);
     });
 
     /**
@@ -390,20 +371,20 @@ describe('Settings Remediation Integration', () => {
       settingsService.on('provider-change', providerListener);
       settingsService.on('cleared', clearListener);
 
-      config.setEphemeralSetting('model', 'gpt-4');
-      config.setEphemeralSetting('temperature', 0.7);
+      config.writeUserParameter('model', 'gpt-4');
+      config.writeUserParameter('temperature', 0.7);
 
       settingsService.setProviderSetting('openai', 'auth-key', 'key-1');
       settingsService.setProviderSetting('anthropic', 'auth-key', 'key-2');
 
-      config.setEphemeralSetting('model', 'gpt-4-turbo');
+      config.writeUserParameter('model', 'gpt-4-turbo');
 
-      const allGlobalSettings = config.getEphemeralSettings();
+      const allGlobalSettings = config.captureNamedParameters();
       const openaiSettings = settingsService.getProviderSettings('openai');
       const anthropicSettings =
         settingsService.getProviderSettings('anthropic');
 
-      config.clearEphemeralSettings();
+      settingsService.clear();
 
       expect(allGlobalSettings.model).toBe('gpt-4-turbo');
       expect(allGlobalSettings.temperature).toBe(0.7);
@@ -418,8 +399,8 @@ describe('Settings Remediation Integration', () => {
       expect(events[4].type).toBe('global-change');
       expect(events[5].type).toBe('cleared');
 
-      expect(config.getEphemeralSetting('model')).toBeUndefined();
-      expect(config.getEphemeralSetting('temperature')).toBeUndefined();
+      expect(config.readNamedParameter('model')).toBeUndefined();
+      expect(config.readNamedParameter('temperature')).toBeUndefined();
     });
   });
 
@@ -433,7 +414,7 @@ describe('Settings Remediation Integration', () => {
      * @and Data is consistent with synchronous methods
      */
     it('should support legacy promise-based interface', async () => {
-      config.setEphemeralSetting('model', 'test-model');
+      config.writeUserParameter('model', 'test-model');
       settingsService.setProviderSetting('openai', 'auth-key', 'test-key');
 
       const globalSettings = await settingsService.getSettings();
@@ -445,7 +426,7 @@ describe('Settings Remediation Integration', () => {
       await settingsService.updateSettings({ model: 'updated-model' });
       await settingsService.updateSettings('openai', { model: 'gpt-4' });
 
-      expect(config.getEphemeralSetting('model')).toBe('updated-model');
+      expect(config.readNamedParameter('model')).toBe('updated-model');
       expect(settingsService.getProviderSettings('openai').model).toBe('gpt-4');
     });
 
@@ -457,8 +438,8 @@ describe('Settings Remediation Integration', () => {
      * @then Complete diagnostics are returned
      */
     it('should provide comprehensive diagnostics', async () => {
-      config.setEphemeralSetting('model', 'test-model');
-      config.setEphemeralSetting('temperature', 0.8);
+      config.writeUserParameter('model', 'test-model');
+      config.writeUserParameter('temperature', 0.8);
       settingsService.setProviderSetting('openai', 'auth-key', 'test-key');
       settingsService.setProviderSetting('openai', 'model', 'gpt-4');
       settingsService.set('activeProvider', 'openai');

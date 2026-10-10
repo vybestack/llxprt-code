@@ -1,3 +1,7 @@
+import {
+  captureResponsesTestRequest,
+  type ResponsesTestDeps,
+} from './responses-request.test-helpers.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -7,10 +11,7 @@
 import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  executeOpenAIResponsesRequest,
-  type ResponsesExecutorDeps,
-} from './openAIResponsesExecutor.js';
+import { executeOpenAIResponsesRequest } from './openAIResponsesExecutor.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
@@ -39,8 +40,9 @@ function buildNormalizedOptions(
   });
   const config = createRuntimeConfigStub(settings, {});
   const invocation = createRuntimeInvocationContext({
-    runtime,
-    settings,
+    runtimeId: runtime.runtimeId,
+    runtimeMetadata: runtime.metadata,
+
     providerName: 'openai-responses',
     ephemeralsSnapshot: {},
     fallbackRuntimeId: 'test-runtime',
@@ -72,19 +74,19 @@ function buildNormalizedOptions(
 }
 
 function buildDeps(
-  overrides: Partial<ResponsesExecutorDeps> = {},
-): ResponsesExecutorDeps {
+  overrides: Partial<ResponsesTestDeps> = {},
+): ResponsesTestDeps {
   return {
     providerName: 'openai-responses',
-    logger: { debug: vi.fn() } as unknown as ResponsesExecutorDeps['logger'],
-    getProviderBaseURL: () => CODEX_BASE_URL,
-    getCustomHeaders: () => ({ 'X-Provider': 'p' }),
+    logger: { debug: vi.fn() } as unknown as ResponsesTestDeps['logger'],
+    requestBaseURL: CODEX_BASE_URL,
+    requestHeaders: { 'X-Provider': 'p' },
     isCodexMode: () => true,
     getCodexAccountId: async () => 'codex-account',
     resolveAuthTokenForPrompt: async () => 'codex-token',
     shouldRetryOnError: () => false,
-    getDefaultModel: () => 'gpt-5.6-sol',
-    getGlobalConfig: () => undefined,
+    defaultModel: 'gpt-5.6-sol',
+
     getMediaTransportCapabilities: (isCodex) =>
       declaredMediaTransportCapabilities(
         isCodex ? 'codex' : 'openai-responses',
@@ -214,7 +216,10 @@ describe('executeOpenAIResponsesRequest multi-parent recovery @issue:3446', () =
 
     const first = await drainHarness(
       executeOpenAIResponsesRequest(
-        buildNormalizedOptions({ contents: multiParentHistory() }),
+        captureResponsesTestRequest(
+          buildNormalizedOptions({ contents: multiParentHistory() }),
+          deps,
+        ),
         deps,
       ),
     );
@@ -262,24 +267,27 @@ describe('executeOpenAIResponsesRequest multi-parent recovery @issue:3446', () =
 
     const next = await drainHarness(
       executeOpenAIResponsesRequest(
-        buildNormalizedOptions({
-          contents: [
-            ...multiParentHistory(),
-            {
-              speaker: 'ai',
-              blocks: [{ type: 'text', text: 'recovered' }],
-              metadata: {
-                id: 'resp_fresh1',
-                responsesStored: true,
-                providerBaseURL: CODEX_BASE_URL,
+        captureResponsesTestRequest(
+          buildNormalizedOptions({
+            contents: [
+              ...multiParentHistory(),
+              {
+                speaker: 'ai',
+                blocks: [{ type: 'text', text: 'recovered' }],
+                metadata: {
+                  id: 'resp_fresh1',
+                  responsesStored: true,
+                  providerBaseURL: CODEX_BASE_URL,
+                },
               },
-            },
-            {
-              speaker: 'human',
-              blocks: [{ type: 'text', text: 'next question' }],
-            },
-          ],
-        }),
+              {
+                speaker: 'human',
+                blocks: [{ type: 'text', text: 'next question' }],
+              },
+            ],
+          }),
+          deps,
+        ),
         deps,
       ),
     );

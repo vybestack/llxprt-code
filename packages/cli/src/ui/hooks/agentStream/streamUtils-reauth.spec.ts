@@ -31,6 +31,7 @@ describe('handleSubmissionError', () => {
       ['bucket-a'],
       new Error('Token revoked'),
       { 'bucket-a': 'reauth-failed' },
+      undefined,
     );
 
     const result = handleSubmissionError(
@@ -58,6 +59,7 @@ describe('handleSubmissionError', () => {
       ['bucket-a'],
       new Error('Auth timed out'),
       { 'bucket-a': 'reauth-timeout' },
+      undefined,
     );
 
     const result = handleSubmissionError(
@@ -78,6 +80,7 @@ describe('handleSubmissionError', () => {
       ['bucket-a'],
       new Error('Refresh failed'),
       { 'bucket-a': 'expired-refresh-failed' },
+      undefined,
     );
 
     const result = handleSubmissionError(
@@ -98,6 +101,7 @@ describe('handleSubmissionError', () => {
       ['bucket-a'],
       new Error('Rate limited'),
       { 'bucket-a': 'quota-exhausted' },
+      undefined,
     );
 
     const result = handleSubmissionError(
@@ -117,6 +121,8 @@ describe('handleSubmissionError', () => {
       'anthropic',
       ['bucket-a'],
       new Error('Unknown failure'),
+      undefined,
+      undefined,
     );
 
     const result = handleSubmissionError(

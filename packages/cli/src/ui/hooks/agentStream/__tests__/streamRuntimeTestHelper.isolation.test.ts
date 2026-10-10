@@ -12,9 +12,11 @@ describe('stream runtime test fixture isolation', () => {
     const first = createStreamRuntimeForTest();
     const second = createStreamRuntimeForTest();
 
-    const firstStore = first.session.getLocalMediaStore();
-    const secondStore = second.session.getLocalMediaStore();
+    const firstStore = first.agentClientSource.getAgentClient().mediaStore;
+    const secondStore = second.agentClientSource.getAgentClient().mediaStore;
 
+    if (firstStore === undefined || secondStore === undefined)
+      throw new Error('Missing explicit fixture stores');
     expect(firstStore).not.toBe(secondStore);
     expect(firstStore.rootDirectory).not.toBe(secondStore.rootDirectory);
   });

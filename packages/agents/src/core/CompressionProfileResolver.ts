@@ -1,3 +1,6 @@
+import type { ProfileDefinitionReads } from '@vybestack/llxprt-code-core';
+import { applyProfileSettings } from '@vybestack/llxprt-code-settings';
+import type { PrepareProviderInvocation } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -18,7 +21,7 @@ import { createProviderKeyStorage } from '@vybestack/llxprt-code-providers/auth.
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
-import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { ProviderRequestCollaborators } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { CompressionProviderResult } from '@vybestack/llxprt-code-core/core/compression/types.js';
@@ -33,8 +36,10 @@ import { deriveCompressionInteractionMode } from '../compression/compressionSyst
  * into a concrete provider + runtime context. ChatSession supplies these.
  */
 export interface CompressionProfileResolverContext {
+  readonly profileDefinitions?: Pick<ProfileDefinitionReads, 'loadProfile'>;
   /** The base provider-runtime snapshot (runtimeId, metadata, config). */
-  readonly providerRuntime: ProviderRuntimeContext;
+  readonly providerRuntime: ProviderRequestCollaborators;
+  readonly prepareProviderInvocation: PrepareProviderInvocation;
   /**
    * The runtime state of the session being compressed. Used to derive the
    * interaction mode for load-balanced compression (issue #3176, D8).
@@ -331,7 +336,7 @@ export async function resolveStandardCompressionProvider(
   ctx: CompressionProfileResolverContext,
   profileName: string,
   profile: StandardProfile,
-  profileManager: NonNullable<ReturnType<Config['getProfileManager']>>,
+  profileManager: Pick<ProfileDefinitionReads, 'loadProfile'>,
   config: Config | undefined,
   parentEphemerals: Record<string, unknown> = {},
 ): Promise<CompressionProviderResult> {
@@ -340,11 +345,7 @@ export async function resolveStandardCompressionProvider(
     profile.provider,
   );
   const profileSettings = new SettingsService();
-  await profileManager.applyLoadedProfile(
-    profileName,
-    profile,
-    profileSettings,
-  );
+  await applyProfileSettings(profileName, profile, profileSettings);
   applyCompressionProfileParentEphemerals(
     profileSettings,
     profile.provider,
@@ -363,8 +364,7 @@ export async function resolveStandardCompressionProvider(
     provider: profile.provider,
     model: profile.model,
   };
-  const runtime: ProviderRuntimeContext = {
-    settingsService: profileSettings,
+  const runtime: ProviderRequestCollaborators = {
     config,
     runtimeId,
     metadata,
@@ -374,8 +374,9 @@ export async function resolveStandardCompressionProvider(
     profile,
   );
   const invocation = createRuntimeInvocationContext({
-    runtime,
-    settings: profileSettings,
+    runtimeId: runtime.runtimeId,
+    runtimeMetadata: runtime.metadata,
+
     providerName: profile.provider,
     ephemeralsSnapshot: buildCompressionProfileEphemeralsSnapshot(
       profileSettings,
@@ -403,7 +404,7 @@ export async function buildCompressionLoadBalancerCandidates(
   profileName: string,
   profile: LoadBalancerProfile,
   config: Config | undefined,
-  profileManager: NonNullable<ReturnType<Config['getProfileManager']>>,
+  profileManager: Pick<ProfileDefinitionReads, 'loadProfile'>,
 ): Promise<CompressionLoadBalancerCandidate[]> {
   const candidates: CompressionLoadBalancerCandidate[] = [];
   for (const subProfileName of profile.profiles) {
@@ -449,7 +450,7 @@ export async function resolveLoadBalancedCompressionProvider(
   profileName: string,
   profile: LoadBalancerProfile,
   config: Config | undefined,
-  profileManager: NonNullable<ReturnType<Config['getProfileManager']>>,
+  profileManager: Pick<ProfileDefinitionReads, 'loadProfile'>,
 ): Promise<CompressionProviderResult> {
   const candidates = await buildCompressionLoadBalancerCandidates(
     ctx,
@@ -498,15 +499,15 @@ export async function resolveLoadBalancedCompressionProvider(
     provider: 'load-balancer',
     model: settings.get('model'),
   };
-  const runtime: ProviderRuntimeContext = {
-    settingsService: settings,
+  const runtime: ProviderRequestCollaborators = {
     config,
     runtimeId,
     metadata,
   };
   const invocation = createRuntimeInvocationContext({
-    runtime,
-    settings,
+    runtimeId: runtime.runtimeId,
+    runtimeMetadata: runtime.metadata,
+
     providerName: 'load-balancer',
     ephemeralsSnapshot: buildCompressionProfileEphemeralsSnapshot(
       settings,
@@ -536,15 +537,17 @@ export async function resolveCompressionProvider(
 ): Promise<CompressionProviderResult> {
   if (!profileName) {
     const runtime = ctx.providerRuntime;
+    const provider = resolveDefaultProvider();
     return {
-      provider: resolveDefaultProvider(),
+      provider,
       runtime,
       config: runtime.config,
+      invocation: ctx.prepareProviderInvocation(provider.name),
     };
   }
 
   const config = ctx.providerRuntime.config;
-  const profileManager = config?.getProfileManager();
+  const profileManager = ctx.profileDefinitions;
   if (!profileManager) {
     throw new CompressionProfileNotFoundError(
       profileName,

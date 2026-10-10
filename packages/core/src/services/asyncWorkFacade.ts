@@ -88,7 +88,12 @@ function jobToInfo(job: ShellJob): FacadeWorkInfo {
  */
 export class AsyncWorkFacade {
   constructor(
-    private readonly taskManagerProvider: () => AsyncTaskManager | undefined,
+    private readonly tasks:
+      | Pick<
+          AsyncTaskManager,
+          'getAllTasks' | 'getTask' | 'getTaskByPrefix' | 'cancelTask'
+        >
+      | undefined,
     private readonly jobManagerProvider: () => ShellJobManager | undefined,
   ) {}
 
@@ -97,7 +102,7 @@ export class AsyncWorkFacade {
    */
   list(): FacadeWorkInfo[] {
     const results: FacadeWorkInfo[] = [];
-    const taskMgr = this.taskManagerProvider();
+    const taskMgr = this.tasks;
     if (taskMgr) {
       for (const t of taskMgr.getAllTasks()) {
         results.push(taskToInfo(t));
@@ -117,7 +122,7 @@ export class AsyncWorkFacade {
    * shell jobs.
    */
   get(id: string): FacadeWorkInfo | undefined {
-    const taskMgr = this.taskManagerProvider();
+    const taskMgr = this.tasks;
     if (taskMgr) {
       const task = taskMgr.getTask(id);
       if (task) {
@@ -142,7 +147,7 @@ export class AsyncWorkFacade {
   getByPrefix(prefix: string): FacadeLookupResult {
     const candidates: FacadeWorkInfo[] = [];
 
-    const taskMgr = this.taskManagerProvider();
+    const taskMgr = this.tasks;
     if (taskMgr) {
       const taskResult = taskMgr.getTaskByPrefix(prefix);
       if (taskResult.task) {
@@ -205,7 +210,7 @@ export class AsyncWorkFacade {
         return jobMgr.cancel(id);
       }
     }
-    const taskMgr = this.taskManagerProvider();
+    const taskMgr = this.tasks;
     if (taskMgr) {
       const task = taskMgr.getTask(id);
       if (task) {

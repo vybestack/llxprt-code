@@ -8,13 +8,17 @@
  * path.relative again.
  */
 
+import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
+const createFilesystem = installTestWorkspaceFilesystem();
+
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'fs/promises';
+import * as fsSync from 'node:fs';
 import * as path from 'path';
 import * as os from 'os';
 
 import { ZedPathResolver } from './zed-path-resolver.js';
-import type { Config, ContentBlock } from '@vybestack/llxprt-code-core';
+import type { ContentBlock } from '@vybestack/llxprt-code-core';
 
 describe('ZedPathResolver - recursive glob search', () => {
   let tmpDir: string;
@@ -29,25 +33,24 @@ describe('ZedPathResolver - recursive glob search', () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
-  function buildConfig(targetDir: string): Config {
+  function buildConfig(
+    targetDir: string,
+  ): ConstructorParameters<typeof ZedPathResolver>[0] {
+    const root = createFilesystem({ targetDir, isTrusted: () => true });
+    fsSync.writeFileSync(
+      path.join(targetDir, '.llxprtignore'),
+      'ignored-target-file.ts\naaa/\n',
+    );
     return {
       getTargetDir: () => targetDir,
-      getFileService: () => ({
-        shouldIgnoreFile: (filePath: string) =>
-          filePath.includes('ignored-target-file.ts'),
-      }),
+      ignore: root.ignore,
       getFileFilteringOptions: () => ({
         respectGitIgnore: true,
         respectLlxprtIgnore: true,
       }),
       getEnableRecursiveFileSearch: () => true,
-      getFileExclusions: () => ({
-        getCoreIgnorePatterns: () => ['node_modules/**'],
-      }),
-      getFileSystemService: () => ({
-        readTextFile: async (filePath: string) => fs.readFile(filePath, 'utf8'),
-      }),
-    } as unknown as Config;
+      readTextFile: root.files.readTextFile,
+    };
   }
 
   it('returns a valid relative path for a deeply nested glob match', async () => {
@@ -123,11 +126,7 @@ describe('ZedPathResolver - recursive glob search', () => {
     await fs.writeFile(path.join(visibleDir, fileName), 'visible');
     const config = {
       ...buildConfig(tmpDir),
-      getFileService: () => ({
-        shouldIgnoreFile: (filePath: string) =>
-          filePath.replace(/\\/g, '/').startsWith('aaa/'),
-      }),
-    } as unknown as Config;
+    };
     const resolver = new ZedPathResolver(config, () => {});
 
     const parts = await resolver.resolvePrompt(

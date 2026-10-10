@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-
 /**
  * Resolves the active provider for legacy config-owned request paths such as
  * auxiliary calls and the retained executor. Request runtimes and routers must
@@ -17,9 +15,8 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
  * inventing an identity.
  */
 export function resolveProviderForSystemPrompt(
-  config: Config,
+  provider: string | undefined,
 ): string | undefined {
-  const provider = config.getSettingsService().get('activeProvider');
   if (typeof provider === 'string' && provider.trim() !== '') {
     return provider;
   }

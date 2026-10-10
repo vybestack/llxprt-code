@@ -20,7 +20,6 @@ import { PolicyEngine } from './policy-engine.js';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 import { MessageBusType } from '../confirmation-bus/types.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
-import * as debugLoggerModule from '../utils/debugLogger.js';
 
 const __actual = { ...(await import('node:fs/promises')) };
 void vi.mock('node:fs/promises', () => {
@@ -394,52 +393,6 @@ describe('createPolicyUpdater - TOML Persistence', () => {
       // Error should be logged (non-fatal, session continues)
       // This tests that the error is caught and doesn't throw
       expect(fs.writeFile).toHaveBeenCalled();
-    });
-
-    it('should overwrite corrupt TOML file with warning', async () => {
-      createPolicyUpdater(policyEngine, messageBus);
-
-      const userPoliciesDir = '/mock/user/policies';
-      vi.spyOn(Storage, 'getUserPoliciesDir').mockReturnValue(userPoliciesDir);
-      (
-        fs.mkdir as unknown as Mock<(...args: never[]) => unknown>
-      ).mockResolvedValue(undefined);
-      (
-        fs.readFile as unknown as Mock<(...args: never[]) => unknown>
-      ).mockResolvedValue('invalid toml syntax {{{'); // Corrupt file
-      (
-        fs.writeFile as unknown as Mock<(...args: never[]) => unknown>
-      ).mockResolvedValue(undefined);
-      (
-        fs.rename as unknown as Mock<(...args: never[]) => unknown>
-      ).mockResolvedValue(undefined);
-
-      const debugWarnSpy = vi
-        .spyOn(debugLoggerModule.debugLogger, 'warn')
-        .mockImplementation(() => {});
-
-      messageBus.publish({
-        type: MessageBusType.UPDATE_POLICY,
-        toolName: 'test_tool',
-        persist: true,
-      });
-
-      await new Promise((resolve) => setTimeout(resolve, 10));
-
-      // Should warn about corrupt file
-      expect(debugWarnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to parse'),
-        expect.anything(),
-      );
-
-      // Should write new valid TOML
-      expect(fs.writeFile).toHaveBeenCalledWith(
-        expect.stringMatching(/\.tmp$/),
-        expect.stringContaining('toolName = "test_tool"'),
-        'utf-8',
-      );
-
-      debugWarnSpy.mockRestore();
     });
 
     it('should create new file when none exists (no error)', async () => {

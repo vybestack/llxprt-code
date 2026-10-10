@@ -3,6 +3,21 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
+
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';
+import {
+  readHookDefinitions,
+  hookSessionRuntime,
+} from '@vybestack/llxprt-code-core/hooks/hook-configuration.js';
+import {
+  HookEventName,
+  HookType,
+} from '@vybestack/llxprt-code-core/hooks/types.js';
+import { escapeShellArg } from '@vybestack/llxprt-code-core/utils/shell-utils.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, describe, expect, it, vi } from 'bun:test';
@@ -16,14 +31,13 @@ import {
 } from './__tests__/coreToolScheduler-test-helpers.js';
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
-import { getTestRuntimeMessageBus } from '@vybestack/llxprt-code-test-utils/core/config.js';
 
-function createMockPolicyEngine() {
-  return {
-    evaluate: vi.fn().mockReturnValue(PolicyDecision.ALLOW),
-    checkDecision: vi.fn().mockReturnValue(PolicyDecision.ALLOW),
-  };
-}
+const ownedFixtures: Array<{
+  config: Config;
+  policyOwner: RuntimePolicyOwner;
+  settingsOwner: SessionSettingsOwner;
+  hooks: SessionHookOwner;
+}> = [];
 
 function createMockToolRegistry(tool: MockTool): ToolRegistry {
   return {
@@ -46,45 +60,97 @@ function createHookSystem(options?: {
   beforeToolResult?: Record<string, unknown> | undefined;
   afterToolResult?: Record<string, unknown> | undefined;
 }) {
-  const eventHandler = {
-    fireBeforeToolEvent: vi.fn().mockResolvedValue(options?.beforeToolResult),
-    fireAfterToolEvent: vi.fn().mockResolvedValue(options?.afterToolResult),
-  };
-
-  return {
-    initialize: vi.fn().mockResolvedValue(undefined),
-    getEventHandler: vi.fn().mockReturnValue(eventHandler),
-    fireBeforeToolEvent: vi.fn().mockResolvedValue(options?.beforeToolResult),
-    fireAfterToolEvent: vi.fn().mockResolvedValue(options?.afterToolResult),
-    eventHandler,
-  };
+  return options ?? {};
 }
 
 function createMockConfig(
   toolRegistry: ToolRegistry,
   hookSystem: ReturnType<typeof createHookSystem>,
-): Config {
-  const mockPolicyEngine = createMockPolicyEngine();
+): {
+  config: Config;
+  settingsOwner: SessionSettingsOwner;
+  policyOwner: RuntimePolicyOwner;
+} {
+  const config = Object.assign(
+    new Config({
+      sessionId: 'test-session-id',
+      cwd: process.cwd(),
+      targetDir: process.cwd(),
+      model: 'test-model',
+      debugMode: false,
+      trustedFolder: true,
+      enableHooks: true,
+      hooks: {
+        [HookEventName.BeforeTool]: [
+          {
+            hooks: [
+              {
+                type: HookType.Command,
+                command:
+                  'printf %s ' +
+                  escapeShellArg(
+                    JSON.stringify(hookSystem.beforeToolResult ?? {}),
+                    'bash',
+                  ),
+              },
+            ],
+          },
+        ],
+        [HookEventName.AfterTool]: [
+          {
+            hooks: [
+              {
+                type: HookType.Command,
+                command:
+                  'printf %s ' +
+                  escapeShellArg(
+                    JSON.stringify(hookSystem.afterToolResult ?? {}),
+                    'bash',
+                  ),
+              },
+            ],
+          },
+        ],
+      },
+      policyEngineConfig: { defaultDecision: PolicyDecision.ALLOW },
+    }),
+    {
+      getSessionId: () => 'test-session-id',
+      getUsageStatisticsEnabled: () => false,
+      getDebugMode: () => false,
+      isInteractive: () => true,
+      getApprovalMode: () => ApprovalMode.YOLO,
 
-  return {
-    getSessionId: () => 'test-session-id',
-    getUsageStatisticsEnabled: () => false,
-    getDebugMode: () => false,
-    isInteractive: () => true,
-    getApprovalMode: () => ApprovalMode.YOLO,
-    getEphemeralSettings: () => ({}),
-    getAllowedTools: () => [],
-    getExcludeTools: () => [],
-    getContentGeneratorConfig: () => ({ model: 'test-model' }),
-    getToolRegistry: () => toolRegistry,
-    getPolicyEngine: () => mockPolicyEngine,
-    getEnableHooks: () => true,
-    getHookSystem: () => hookSystem,
-  } as unknown as Config;
+      getAllowedTools: () => [],
+      getExcludeTools: () => [],
+      getContentGeneratorConfig: () => ({ model: 'test-model' }),
+      getEnableHooks: () => true,
+    },
+  );
+  const settings = new SettingsService();
+  for (const [key, value] of Object.entries(config.getInitialSettings()))
+    settings.set(key, value);
+  const settingsOwner = new SessionSettingsOwner(settings);
+  settingsOwner.bindTelemetry(config);
+  const policyOwner = new RuntimePolicyOwner(config);
+  const hooks = new SessionHookOwner(
+    readHookDefinitions(config),
+    hookSessionRuntime(
+      config,
+      new WorkspaceTrustLifecycle({ localTrust: config.initialWorkspaceTrust }),
+      settingsOwner.telemetry,
+    ),
+    true,
+    policyOwner.session.messageBus,
+  );
+  ownedFixtures.push({ config, settingsOwner, policyOwner, hooks });
+  return { config, settingsOwner, policyOwner };
 }
 
 async function scheduleAndWaitForCompletion(
   scheduler: CoreToolScheduler,
+  completionConfig: Config,
+  settingsOwner: SessionSettingsOwner,
   request:
     | {
         callId: string;
@@ -106,18 +172,44 @@ async function scheduleAndWaitForCompletion(
     completionResolver = resolve;
   });
 
-  scheduler.onAllToolCallsComplete = async (calls) => {
-    completionResolver?.(calls);
-  };
+  scheduler.setCallbacks({
+    telemetry: settingsOwner.telemetry,
+    readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+    getToolGovernance: () =>
+      settingsOwner.readToolGovernance(
+        completionConfig.getExcludeTools() ?? [],
+      ),
+    config: completionConfig,
+    onAllToolCallsComplete: async (calls) => {
+      completionResolver?.(calls);
+    },
+    getPreferredEditor: () => undefined,
+    onEditorClose: () => {},
+  });
 
   await scheduler.schedule(
     Array.isArray(request) ? request : [request],
     new AbortController().signal,
+    ownedFixtures
+      .find((fixture) => fixture.config === completionConfig)
+      ?.hooks.execution({
+        sessionId: () => completionConfig.getSessionId(),
+        transcriptPath: () => undefined,
+      }),
   );
   return completionPromise;
 }
 
 describe('CoreToolScheduler hook-enabled characterization', () => {
+  afterEach(async () => {
+    for (const fixture of ownedFixtures.splice(0)) {
+      await fixture.hooks.dispose();
+      await fixture.settingsOwner.dispose();
+      await fixture.policyOwner.dispose();
+      await fixture.config.dispose();
+    }
+  });
+
   let scheduler: CoreToolScheduler | undefined;
 
   afterEach(() => {
@@ -136,30 +228,43 @@ describe('CoreToolScheduler hook-enabled characterization', () => {
         reason: 'blocked by before hook',
       },
     });
-    const config = createMockConfig(toolRegistry, hookSystem);
+    const {
+      config: config,
+      settingsOwner,
+      policyOwner,
+    } = createMockConfig(toolRegistry, hookSystem);
 
     scheduler = new CoreToolScheduler({
+      telemetry: settingsOwner.telemetry,
+      readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
       config,
-      messageBus: getTestRuntimeMessageBus(config),
-      toolRegistry: config.getToolRegistry(),
+      messageBus: policyOwner.session.messageBus,
+      toolRegistry,
       onAllToolCallsComplete: async () => {},
       onToolCallsUpdate: vi.fn(),
       getPreferredEditor: () => undefined,
       onEditorClose: () => {},
     });
 
-    const completedCalls = await scheduleAndWaitForCompletion(scheduler, {
-      callId: 'blocked-call',
-      name: 'hooked-tool',
-      args: { original: true },
-      isClientInitiated: false,
-      prompt_id: 'prompt-1',
-    });
+    const completedCalls = await scheduleAndWaitForCompletion(
+      scheduler,
+      config,
+      settingsOwner,
+      {
+        callId: 'blocked-call',
+        name: 'hooked-tool',
+        args: { original: true },
+        isClientInitiated: false,
+        prompt_id: 'prompt-1',
+      },
+    );
 
     expect(mockTool.executeFn).not.toHaveBeenCalled();
     expect(completedCalls).toHaveLength(1);
     expect(completedCalls[0].status).toBe('error');
-    expect(expectErrored(completedCalls[0]).response.error.message).toBe(
+    expect(expectErrored(completedCalls[0]).response.error?.message).toBe(
       'blocked by before hook',
     );
   });
@@ -179,30 +284,43 @@ describe('CoreToolScheduler hook-enabled characterization', () => {
         stopReason: 'stop requested by before hook',
       },
     });
-    const config = createMockConfig(toolRegistry, hookSystem);
+    const {
+      config: config,
+      settingsOwner,
+      policyOwner,
+    } = createMockConfig(toolRegistry, hookSystem);
 
     scheduler = new CoreToolScheduler({
+      telemetry: settingsOwner.telemetry,
+      readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
       config,
-      messageBus: getTestRuntimeMessageBus(config),
-      toolRegistry: config.getToolRegistry(),
+      messageBus: policyOwner.session.messageBus,
+      toolRegistry,
       onAllToolCallsComplete: async () => {},
       onToolCallsUpdate: vi.fn(),
       getPreferredEditor: () => undefined,
       onEditorClose: () => {},
     });
 
-    const completedCalls = await scheduleAndWaitForCompletion(scheduler, {
-      callId: 'stop-before-call',
-      name: 'hooked-tool',
-      args: {},
-      isClientInitiated: false,
-      prompt_id: 'prompt-1',
-    });
+    const completedCalls = await scheduleAndWaitForCompletion(
+      scheduler,
+      config,
+      settingsOwner,
+      {
+        callId: 'stop-before-call',
+        name: 'hooked-tool',
+        args: {},
+        isClientInitiated: false,
+        prompt_id: 'prompt-1',
+      },
+    );
 
     expect(mockTool.executeFn).not.toHaveBeenCalled();
     expect(completedCalls).toHaveLength(1);
     expect(completedCalls[0].status).toBe('error');
-    expect(expectErrored(completedCalls[0]).response.error.message).toBe(
+    expect(expectErrored(completedCalls[0]).response.error?.message).toBe(
       'stop requested by before hook',
     );
   });
@@ -227,19 +345,27 @@ describe('CoreToolScheduler hook-enabled characterization', () => {
         },
       },
     });
-    const config = createMockConfig(toolRegistry, hookSystem);
+    const {
+      config: config,
+      settingsOwner,
+      policyOwner,
+    } = createMockConfig(toolRegistry, hookSystem);
 
     scheduler = new CoreToolScheduler({
+      telemetry: settingsOwner.telemetry,
+      readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
       config,
-      messageBus: getTestRuntimeMessageBus(config),
-      toolRegistry: config.getToolRegistry(),
+      messageBus: policyOwner.session.messageBus,
+      toolRegistry,
       onAllToolCallsComplete: async () => {},
       onToolCallsUpdate: vi.fn(),
       getPreferredEditor: () => undefined,
       onEditorClose: () => {},
     });
 
-    await scheduleAndWaitForCompletion(scheduler, {
+    await scheduleAndWaitForCompletion(scheduler, config, settingsOwner, {
       callId: 'modified-call',
       name: 'hooked-tool',
       args: { original: true },
@@ -264,25 +390,38 @@ describe('CoreToolScheduler hook-enabled characterization', () => {
         systemMessage: 'after hook note',
       },
     });
-    const config = createMockConfig(toolRegistry, hookSystem);
+    const {
+      config: config,
+      settingsOwner,
+      policyOwner,
+    } = createMockConfig(toolRegistry, hookSystem);
 
     scheduler = new CoreToolScheduler({
+      telemetry: settingsOwner.telemetry,
+      readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
       config,
-      messageBus: getTestRuntimeMessageBus(config),
-      toolRegistry: config.getToolRegistry(),
+      messageBus: policyOwner.session.messageBus,
+      toolRegistry,
       onAllToolCallsComplete: async () => {},
       onToolCallsUpdate: vi.fn(),
       getPreferredEditor: () => undefined,
       onEditorClose: () => {},
     });
 
-    const completedCalls = await scheduleAndWaitForCompletion(scheduler, {
-      callId: 'after-message-call',
-      name: 'hooked-tool',
-      args: {},
-      isClientInitiated: false,
-      prompt_id: 'prompt-1',
-    });
+    const completedCalls = await scheduleAndWaitForCompletion(
+      scheduler,
+      config,
+      settingsOwner,
+      {
+        callId: 'after-message-call',
+        name: 'hooked-tool',
+        args: {},
+        isClientInitiated: false,
+        prompt_id: 'prompt-1',
+      },
+    );
 
     expect(completedCalls[0].status).toBe('success');
     const responsePart = expectSuccessful(completedCalls[0]).response
@@ -308,25 +447,38 @@ describe('CoreToolScheduler hook-enabled characterization', () => {
         systemMessage: 'before hook note',
       },
     });
-    const config = createMockConfig(toolRegistry, hookSystem);
+    const {
+      config: config,
+      settingsOwner,
+      policyOwner,
+    } = createMockConfig(toolRegistry, hookSystem);
 
     scheduler = new CoreToolScheduler({
+      telemetry: settingsOwner.telemetry,
+      readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
       config,
-      messageBus: getTestRuntimeMessageBus(config),
-      toolRegistry: config.getToolRegistry(),
+      messageBus: policyOwner.session.messageBus,
+      toolRegistry,
       onAllToolCallsComplete: async () => {},
       onToolCallsUpdate: vi.fn(),
       getPreferredEditor: () => undefined,
       onEditorClose: () => {},
     });
 
-    const completedCalls = await scheduleAndWaitForCompletion(scheduler, {
-      callId: 'before-message-call',
-      name: 'hooked-tool',
-      args: {},
-      isClientInitiated: false,
-      prompt_id: 'prompt-1',
-    });
+    const completedCalls = await scheduleAndWaitForCompletion(
+      scheduler,
+      config,
+      settingsOwner,
+      {
+        callId: 'before-message-call',
+        name: 'hooked-tool',
+        args: {},
+        isClientInitiated: false,
+        prompt_id: 'prompt-1',
+      },
+    );
 
     expect(completedCalls[0].status).toBe('success');
     const responsePart = expectSuccessful(completedCalls[0]).response
@@ -353,30 +505,43 @@ describe('CoreToolScheduler hook-enabled characterization', () => {
         stopReason: 'stop requested by after hook',
       },
     });
-    const config = createMockConfig(toolRegistry, hookSystem);
+    const {
+      config: config,
+      settingsOwner,
+      policyOwner,
+    } = createMockConfig(toolRegistry, hookSystem);
 
     scheduler = new CoreToolScheduler({
+      telemetry: settingsOwner.telemetry,
+      readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
       config,
-      messageBus: getTestRuntimeMessageBus(config),
-      toolRegistry: config.getToolRegistry(),
+      messageBus: policyOwner.session.messageBus,
+      toolRegistry,
       onAllToolCallsComplete: async () => {},
       onToolCallsUpdate: vi.fn(),
       getPreferredEditor: () => undefined,
       onEditorClose: () => {},
     });
 
-    const completedCalls = await scheduleAndWaitForCompletion(scheduler, {
-      callId: 'stop-after-call',
-      name: 'hooked-tool',
-      args: {},
-      isClientInitiated: false,
-      prompt_id: 'prompt-1',
-    });
+    const completedCalls = await scheduleAndWaitForCompletion(
+      scheduler,
+      config,
+      settingsOwner,
+      {
+        callId: 'stop-after-call',
+        name: 'hooked-tool',
+        args: {},
+        isClientInitiated: false,
+        prompt_id: 'prompt-1',
+      },
+    );
 
     expect(mockTool.executeFn).toHaveBeenCalledTimes(1);
     expect(completedCalls).toHaveLength(1);
     expect(completedCalls[0].status).toBe('error');
-    expect(expectErrored(completedCalls[0]).response.error.message).toBe(
+    expect(expectErrored(completedCalls[0]).response.error?.message).toBe(
       'stop requested by after hook',
     );
   });
@@ -396,30 +561,43 @@ describe('CoreToolScheduler hook-enabled characterization', () => {
         reason: 'blocked by after hook',
       },
     });
-    const config = createMockConfig(toolRegistry, hookSystem);
+    const {
+      config: config,
+      settingsOwner,
+      policyOwner,
+    } = createMockConfig(toolRegistry, hookSystem);
 
     scheduler = new CoreToolScheduler({
+      telemetry: settingsOwner.telemetry,
+      readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
       config,
-      messageBus: getTestRuntimeMessageBus(config),
-      toolRegistry: config.getToolRegistry(),
+      messageBus: policyOwner.session.messageBus,
+      toolRegistry,
       onAllToolCallsComplete: async () => {},
       onToolCallsUpdate: vi.fn(),
       getPreferredEditor: () => undefined,
       onEditorClose: () => {},
     });
 
-    const completedCalls = await scheduleAndWaitForCompletion(scheduler, {
-      callId: 'block-after-call',
-      name: 'hooked-tool',
-      args: {},
-      isClientInitiated: false,
-      prompt_id: 'prompt-1',
-    });
+    const completedCalls = await scheduleAndWaitForCompletion(
+      scheduler,
+      config,
+      settingsOwner,
+      {
+        callId: 'block-after-call',
+        name: 'hooked-tool',
+        args: {},
+        isClientInitiated: false,
+        prompt_id: 'prompt-1',
+      },
+    );
 
     expect(mockTool.executeFn).toHaveBeenCalledTimes(1);
     expect(completedCalls).toHaveLength(1);
     expect(completedCalls[0].status).toBe('error');
-    expect(expectErrored(completedCalls[0]).response.error.message).toBe(
+    expect(expectErrored(completedCalls[0]).response.error?.message).toBe(
       'blocked by after hook',
     );
   });
@@ -438,25 +616,38 @@ describe('CoreToolScheduler hook-enabled characterization', () => {
         suppressOutput: true,
       },
     });
-    const config = createMockConfig(toolRegistry, hookSystem);
+    const {
+      config: config,
+      settingsOwner,
+      policyOwner,
+    } = createMockConfig(toolRegistry, hookSystem);
 
     scheduler = new CoreToolScheduler({
+      telemetry: settingsOwner.telemetry,
+      readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
       config,
-      messageBus: getTestRuntimeMessageBus(config),
-      toolRegistry: config.getToolRegistry(),
+      messageBus: policyOwner.session.messageBus,
+      toolRegistry,
       onAllToolCallsComplete: async () => {},
       onToolCallsUpdate: vi.fn(),
       getPreferredEditor: () => undefined,
       onEditorClose: () => {},
     });
 
-    const completedCalls = await scheduleAndWaitForCompletion(scheduler, {
-      callId: 'suppress-call',
-      name: 'hooked-tool',
-      args: {},
-      isClientInitiated: false,
-      prompt_id: 'prompt-1',
-    });
+    const completedCalls = await scheduleAndWaitForCompletion(
+      scheduler,
+      config,
+      settingsOwner,
+      {
+        callId: 'suppress-call',
+        name: 'hooked-tool',
+        args: {},
+        isClientInitiated: false,
+        prompt_id: 'prompt-1',
+      },
+    );
 
     expect(completedCalls[0].status).toBe('success');
     expect(expectSuccessful(completedCalls[0]).response.suppressDisplay).toBe(
@@ -494,41 +685,54 @@ describe('CoreToolScheduler hook-enabled characterization', () => {
     });
     const toolRegistry = createMockToolRegistry(mockTool);
     const hookSystem = createHookSystem();
-    const config = createMockConfig(toolRegistry, hookSystem);
+    const {
+      config: config,
+      settingsOwner,
+      policyOwner,
+    } = createMockConfig(toolRegistry, hookSystem);
 
     scheduler = new CoreToolScheduler({
+      telemetry: settingsOwner.telemetry,
+      readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
       config,
-      messageBus: getTestRuntimeMessageBus(config),
-      toolRegistry: config.getToolRegistry(),
+      messageBus: policyOwner.session.messageBus,
+      toolRegistry,
       onAllToolCallsComplete: async () => {},
       onToolCallsUpdate: vi.fn(),
       getPreferredEditor: () => undefined,
       onEditorClose: () => {},
     });
 
-    const completionPromise = scheduleAndWaitForCompletion(scheduler, [
-      {
-        callId: 'batch-1',
-        name: 'hooked-tool',
-        args: { id: '1' },
-        isClientInitiated: false,
-        prompt_id: 'prompt-1',
-      },
-      {
-        callId: 'batch-2',
-        name: 'hooked-tool',
-        args: { id: '2' },
-        isClientInitiated: false,
-        prompt_id: 'prompt-1',
-      },
-      {
-        callId: 'batch-3',
-        name: 'hooked-tool',
-        args: { id: '3' },
-        isClientInitiated: false,
-        prompt_id: 'prompt-1',
-      },
-    ]);
+    const completionPromise = scheduleAndWaitForCompletion(
+      scheduler,
+      config,
+      settingsOwner,
+      [
+        {
+          callId: 'batch-1',
+          name: 'hooked-tool',
+          args: { id: '1' },
+          isClientInitiated: false,
+          prompt_id: 'prompt-1',
+        },
+        {
+          callId: 'batch-2',
+          name: 'hooked-tool',
+          args: { id: '2' },
+          isClientInitiated: false,
+          prompt_id: 'prompt-1',
+        },
+        {
+          callId: 'batch-3',
+          name: 'hooked-tool',
+          args: { id: '3' },
+          isClientInitiated: false,
+          prompt_id: 'prompt-1',
+        },
+      ],
+    );
 
     await waitFor(() => {
       expect(resolvers.size).toBe(3);

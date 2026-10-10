@@ -29,23 +29,22 @@ import {
   mergeInvocationHeaders,
 } from './OpenAIClientFactory.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
+import type { GenerateChatOptions } from '../IProvider.js';
+import { OpenAIProvider } from './OpenAIProvider.js';
+import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
+
+class ClientScopeProvider extends OpenAIProvider {
+  admitForClientScope(
+    options: GenerateChatOptions,
+  ): Promise<NormalizedGenerateChatOptions> {
+    return this.normalizeOptionsForProjection(options);
+  }
+}
 
 const undiciRequire = createRequire(
   createRequire(import.meta.url).resolve('undici/package.json'),
 );
 const { Agent, fetch: undiciFetch } = undiciRequire('./') as typeof Undici;
-
-function getMaxOutputTokens(key: string): number | undefined {
-  return key === 'maxOutputTokens' ? 2000 : undefined;
-}
-
-function getInvalidMaxOutputTokens(key: string): number | undefined {
-  return key === 'maxOutputTokens' ? -1 : undefined;
-}
-
-function getCallId(key: string): string | undefined {
-  return key === 'call-id' ? 'call-789' : undefined;
-}
 
 function getCustomInvocationHeaders(
   key: string,
@@ -139,8 +138,11 @@ describe('OpenAIClientFactory', () => {
   describe('extractModelParamsFromOptions', () => {
     it('returns undefined for empty params', () => {
       const options = {
-        invocation: { modelParams: {} },
-        settings: { get: () => undefined },
+        invocation: createRuntimeInvocationContext({
+          runtimeId: 'params',
+          providerName: 'openai',
+          ephemeralsSnapshot: {},
+        }),
       } as unknown as NormalizedGenerateChatOptions;
 
       const result = extractModelParamsFromOptions(options);
@@ -149,8 +151,11 @@ describe('OpenAIClientFactory', () => {
 
     it('translates maxOutputTokens to max_tokens', () => {
       const options = {
-        invocation: { modelParams: {} },
-        settings: { get: getMaxOutputTokens },
+        invocation: createRuntimeInvocationContext({
+          runtimeId: 'params',
+          providerName: 'openai',
+          ephemeralsSnapshot: { maxOutputTokens: 2000 },
+        }),
       } as unknown as NormalizedGenerateChatOptions;
 
       const result = extractModelParamsFromOptions(options);
@@ -160,8 +165,14 @@ describe('OpenAIClientFactory', () => {
 
     it('does not override existing max_tokens', () => {
       const options = {
-        invocation: { modelParams: { max_tokens: 1000 } },
-        settings: { get: getMaxOutputTokens },
+        invocation: createRuntimeInvocationContext({
+          runtimeId: 'params',
+          providerName: 'openai',
+          ephemeralsSnapshot: {
+            maxOutputTokens: 2000,
+            openai: { max_tokens: 1000 },
+          },
+        }),
       } as unknown as NormalizedGenerateChatOptions;
 
       const result = extractModelParamsFromOptions(options);
@@ -171,8 +182,11 @@ describe('OpenAIClientFactory', () => {
 
     it('includes model params from invocation', () => {
       const options = {
-        invocation: { modelParams: { temperature: 0.7, top_p: 0.9 } },
-        settings: { get: () => undefined },
+        invocation: createRuntimeInvocationContext({
+          runtimeId: 'params',
+          providerName: 'openai',
+          ephemeralsSnapshot: { openai: { temperature: 0.7, top_p: 0.9 } },
+        }),
       } as unknown as NormalizedGenerateChatOptions;
 
       const result = extractModelParamsFromOptions(options);
@@ -183,8 +197,11 @@ describe('OpenAIClientFactory', () => {
 
     it('ignores invalid maxOutputTokens values', () => {
       const options = {
-        invocation: { modelParams: {} },
-        settings: { get: getInvalidMaxOutputTokens },
+        invocation: createRuntimeInvocationContext({
+          runtimeId: 'params',
+          providerName: 'openai',
+          ephemeralsSnapshot: { maxOutputTokens: -1 },
+        }),
       } as unknown as NormalizedGenerateChatOptions;
 
       const result = extractModelParamsFromOptions(options);
@@ -193,59 +210,57 @@ describe('OpenAIClientFactory', () => {
   });
 
   describe('resolveRuntimeKey', () => {
-    it('returns runtimeId from runtime context', () => {
-      const options = {
-        runtime: { runtimeId: 'runtime-123' },
-        metadata: {},
-        settings: { get: () => undefined },
-      } as unknown as NormalizedGenerateChatOptions;
+    const admit = (
+      options: GenerateChatOptions,
+    ): Promise<NormalizedGenerateChatOptions> =>
+      new ClientScopeProvider('test-key').admitForClientScope(options);
 
-      const result = resolveRuntimeKey(options);
-      expect(result).toBe('runtime-123');
+    it('returns the admitted invocation runtimeId rather than conflicting metadata', async () => {
+      const options = await admit({
+        contents: [],
+        metadata: { runtimeId: 'conflicting-owner' },
+        invocation: createRuntimeInvocationContext({
+          runtimeId: 'runtime-123',
+          providerName: 'openai',
+          ephemeralsSnapshot: {},
+        }),
+      });
+      expect(resolveRuntimeKey(options)).toBe('runtime-123');
     });
 
-    it('falls back to metadata runtimeId', () => {
-      const options = {
-        runtime: {},
+    it('admits metadata runtimeId when no invocation is supplied', async () => {
+      const options = await admit({
+        contents: [],
         metadata: { runtimeId: 'metadata-456' },
-        settings: { get: () => undefined },
-      } as unknown as NormalizedGenerateChatOptions;
-
-      const result = resolveRuntimeKey(options);
-      expect(result).toBe('metadata-456');
+      });
+      expect(resolveRuntimeKey(options)).toBe('metadata-456');
     });
 
-    it('falls back to call-id with prefix', () => {
-      const options = {
-        runtime: {},
-        metadata: {},
-        settings: { get: getCallId },
-      } as unknown as NormalizedGenerateChatOptions;
-
-      const result = resolveRuntimeKey(options);
-      expect(result).toBe('call:call-789');
+    it('keeps admitted call identity rather than changing it from a call-id setting', async () => {
+      const options = await admit({
+        contents: [],
+        invocation: createRuntimeInvocationContext({
+          runtimeId: 'call-test',
+          providerName: 'openai',
+          ephemeralsSnapshot: { 'call-id': 'call-789' },
+        }),
+      });
+      expect(resolveRuntimeKey(options)).toBe('call-test');
     });
 
-    it('returns unscoped default when nothing set', () => {
-      const options = {
-        runtime: {},
-        metadata: {},
-        settings: { get: () => undefined },
-      } as unknown as NormalizedGenerateChatOptions;
-
-      const result = resolveRuntimeKey(options);
-      expect(result).toBe('openai.runtime.unscoped');
+    it('uses the provider admission identity when no owner identity is supplied', async () => {
+      const options = await admit({ contents: [] });
+      expect(resolveRuntimeKey(options)).toBe(
+        'openai:normalizeGenerateChatOptions',
+      );
     });
 
-    it('trims whitespace from metadata runtimeId', () => {
-      const options = {
-        runtime: {},
+    it('trims whitespace from metadata runtimeId during admission', async () => {
+      const options = await admit({
+        contents: [],
         metadata: { runtimeId: '  trimmed-id  ' },
-        settings: { get: () => undefined },
-      } as unknown as NormalizedGenerateChatOptions;
-
-      const result = resolveRuntimeKey(options);
-      expect(result).toBe('trimmed-id');
+      });
+      expect(resolveRuntimeKey(options)).toBe('trimmed-id');
     });
   });
 

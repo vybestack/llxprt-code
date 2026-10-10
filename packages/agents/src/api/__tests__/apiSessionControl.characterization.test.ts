@@ -4,7 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
+const fixturePaths = installTestWorkspacePaths({
+  targetDir: process.cwd(),
+  isTrusted: () => true,
+});
+
 import { describe, it, expect, vi } from 'bun:test';
+import { AgentSessionPersistence } from '../control/recordedHistoryPersistence.js';
+import { Storage } from '@vybestack/llxprt-code-settings';
+import { LocalMediaStore } from '@vybestack/llxprt-code-core';
 import * as fc from 'fast-check';
 import {
   SessionControl,
@@ -87,7 +96,21 @@ function textContent(
 
 function makeDeps(client: AgentClientContract): SessionControlDeps {
   return {
+    readRecordingQueueLimit: () => 1024 * 1024,
+    directories: () => fixturePaths().directories(),
     config: makeConfig(),
+    mediaStore: new LocalMediaStore({
+      rootDirectory: '/tmp/test-session-control/media',
+      quotaBytes: 1024 * 1024,
+    }),
+    persistence: new AgentSessionPersistence(
+      {
+        projectRoot: new Storage('/tmp/test-session-control').getProjectRoot(),
+        chatsDir: new Storage('/tmp/test-session-control').getProjectChatsDir(),
+      },
+      {},
+    ),
+    sessionIdentityOwnership: 'config',
     sessionId: () => 'test-session',
     resolveClient: () => client,
     getProvider: () => 'test-provider',

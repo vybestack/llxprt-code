@@ -5,11 +5,9 @@
  */
 
 export interface ApiErrorRuntimeInfo {
-  getProviderManager?():
-    | { getActiveProviderName?(): string | undefined }
-    | undefined;
+  getActiveProviderName?(): string | undefined;
   getProvider?(): string | undefined;
-  getSettingsService?(): { get(key: string): unknown };
+  readSelectedProvider?(): unknown;
   getModel?(): string;
 }
 
@@ -54,8 +52,7 @@ function getActiveProviderNameFromProviderManager(
   config: ApiErrorRuntimeInfo,
 ): string | undefined {
   try {
-    const providerManager = config.getProviderManager?.();
-    const activeProvider = providerManager?.getActiveProviderName?.();
+    const activeProvider = config.getActiveProviderName?.();
     return normalizeProviderName(activeProvider);
   } catch {
     return undefined;
@@ -76,8 +73,7 @@ function getActiveProviderNameFromSettings(
   config: ApiErrorRuntimeInfo,
 ): string | undefined {
   try {
-    const settingsService = config.getSettingsService?.();
-    const configuredProvider = settingsService?.get('activeProvider');
+    const configuredProvider = config.readSelectedProvider?.();
     return normalizeProviderName(configuredProvider);
   } catch {
     return undefined;

@@ -6,7 +6,6 @@
 
 import { describe, expect, it } from 'bun:test';
 import {
-  mockGetCurrentProfileName,
   createIssue1468Fixture,
   mockLoadProfile,
 } from './__tests__/oauth-manager.issue1468.test-helpers.js';
@@ -20,10 +19,10 @@ describe('Issue #1468 getProfileBuckets case 14', () => {
    * @then The buckets ['gmail','work'] should be used
    */
   it('should use profile buckets when provider matches', async () => {
-    const { manager } = createIssue1468Fixture();
+    const { manager, settingsService } = createIssue1468Fixture();
 
     // Setup: Anthropic profile loaded
-    mockGetCurrentProfileName.mockReturnValue('my-anthropic-profile');
+    settingsService.setCurrentProfileName('my-anthropic-profile');
     mockLoadProfile.mockResolvedValue({
       provider: 'anthropic',
       auth: {

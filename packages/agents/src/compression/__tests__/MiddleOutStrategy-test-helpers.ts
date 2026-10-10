@@ -1,3 +1,4 @@
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -12,6 +13,7 @@
  * disable is needed.
  */
 
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type {
   IContent,
   MediaBlock,
@@ -160,11 +162,7 @@ export const noopLogger = {
 } as unknown as DebugLogger;
 
 export const testProviderRuntime = {
-  settingsService: {
-    get: () => undefined,
-    set: () => {},
-    getProviderSettings: () => ({}),
-  },
+  settingsService: new SettingsService(),
   config: undefined,
   runtimeId: 'test-provider-runtime',
   metadata: { source: 'test' },
@@ -176,11 +174,7 @@ export const testProviderRuntime = {
 
 function createStubProviderRuntime(): ProviderRuntimeContext {
   return {
-    settingsService: {
-      get: () => undefined,
-      set: () => {},
-      getProviderSettings: () => ({}),
-    },
+    settingsService: new SettingsService(),
     config: undefined,
     runtimeId: 'test-provider-runtime',
     metadata: { source: 'test' },
@@ -239,12 +233,17 @@ export function buildContext(
     currentTokenCount: number;
   }> = {},
 ): CompressionContext {
-  const resolveProvider =
+  const resolveProvider: (profileName?: string) => CompressionProviderResult =
     overrides.resolveProvider ??
-    (() => ({
-      provider: createFakeProvider('default-provider'),
-      runtime: createStubProviderRuntime(),
-    }));
+    (() => {
+      const provider = createFakeProvider('default-provider');
+      const runtime = createStubProviderRuntime();
+      return {
+        provider,
+        runtime,
+        invocation: captureProviderInvocation(runtime, provider.name),
+      };
+    });
 
   const runtimeState: AgentRuntimeState = {
     runtimeId: 'test-runtime',
@@ -264,7 +263,10 @@ export function buildContext(
       contents.length * 100,
     currentTokenCount: overrides.currentTokenCount ?? 5000,
     logger: noopLogger,
-    resolveProvider,
+    resolveProvider: (profileName) => {
+      const resolved = resolveProvider(profileName);
+      return resolved;
+    },
     promptResolver: createStubPromptResolver(),
     promptBaseDir: '/tmp/test-prompts',
     promptContext: {

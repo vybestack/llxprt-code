@@ -242,18 +242,16 @@ async function prepareContainerEntrypoint({
 async function planWorkspacesAndDependencies(
   config: SandboxConfig,
   cliConfig: Config | undefined,
+  directories: (() => readonly string[]) | undefined,
 ): Promise<{
   readonly workspacePlan: ContainerWorkspacePlan;
   readonly dependencyMountPlan: DependencyMountPlan;
 }> {
   const workdir = path.resolve(process.cwd());
+  if (cliConfig !== undefined && directories === undefined)
+    throw new Error('Sandbox requires explicit workspace directory operations');
   const acceptedWorkspaceRoots =
-    cliConfig === undefined
-      ? [workdir]
-      : [
-          ...cliConfig.getWorkspaceContext().getDirectories(),
-          ...cliConfig.getConfiguredIncludeDirectories(),
-        ];
+    directories === undefined ? [workdir] : [...directories()];
   const workspacePlan = planContainerWorkspaces(
     workdir,
     acceptedWorkspaceRoots,
@@ -293,10 +291,11 @@ async function prepareContainerSandbox(
   cliConfig: Config | undefined,
   cliArgs: string[],
   lifecycle: SandboxLaunchLifecycle,
+  directories: (() => readonly string[]) | undefined,
 ): Promise<ContainerSandboxPrepared> {
   validateContainerSandboxEnv();
   const { workspacePlan, dependencyMountPlan } =
-    await planWorkspacesAndDependencies(config, cliConfig);
+    await planWorkspacesAndDependencies(config, cliConfig, directories);
   const checkpoint = planCheckpointPersistence(
     config,
     workspacePlan.primaryRoot,
@@ -520,6 +519,7 @@ export async function runContainerSandbox(
   nodeArgs: string[],
   cliConfig?: Config,
   cliArgs: string[] = [],
+  directories?: () => readonly string[],
 ): Promise<{
   exitCode: number;
   portForwardingResult: PortForwardingResult | undefined;
@@ -537,6 +537,7 @@ export async function runContainerSandbox(
       cliConfig,
       cliArgs,
       lifecycle,
+      directories,
     );
     return await executeContainerSandbox(
       config,

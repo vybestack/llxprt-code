@@ -4,10 +4,75 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { RecordingIntegration } from '@vybestack/llxprt-code-core';
-import type { RuntimeApi } from '../contexts/RuntimeContext.js';
+/** Where a provider switch is recorded: the Agent session owner, or a test double. */
+export interface ProviderSwitchRecorder {
+  recordProviderSwitch(provider: string, model: string): void | Promise<void>;
+}
 
-type SwitchRecorder = Pick<RecordingIntegration, 'recordProviderSwitch'>;
+/** The part of the runtime a switch recording reads the active provider from. */
+export interface ActiveProviderStatusSource {
+  providerStatus(): {
+    providerName?: string | null;
+    modelName?: string | null;
+  };
+}
+
+/** The session owner's recording entry point; the only capability a recorder needs. */
+type RecordSessionEvent = (event: {
+  type: 'provider_switch';
+  provider: string;
+  model: string;
+}) => void | Promise<void>;
+
+/** Records through the Agent session owner, the single recording writer. */
+export function agentProviderSwitchRecorder(
+  recordEvent: RecordSessionEvent,
+): ProviderSwitchRecorder {
+  return {
+    recordProviderSwitch: (provider, model) =>
+      recordEvent({ type: 'provider_switch', provider, model }),
+  };
+}
+
+/**
+ * The recorder the profile dialogs use. In owner mode the Agent session owner
+ * records; otherwise the raw integration does. The raw integration is swapped
+ * when a session is resumed, so it is read from `integrationRef` at record
+ * time, not when the recorder is built.
+ */
+export function dialogProviderSwitchRecorder(
+  recordingOwner: 'agent' | 'raw' | undefined,
+  recordEvent: RecordSessionEvent,
+  integrationRef:
+    | {
+        readonly current: {
+          recordProviderSwitch(provider: string, model: string): void;
+        } | null;
+      }
+    | undefined,
+): ProviderSwitchRecorder {
+  if (recordingOwner === 'agent')
+    return agentProviderSwitchRecorder(recordEvent);
+  return {
+    recordProviderSwitch: (provider, model) =>
+      integrationRef?.current?.recordProviderSwitch(provider, model),
+  };
+}
+
+/** The active provider/model as the Agent reports them. */
+export function agentActiveProviderStatus(
+  getProvider: () => string,
+  getModel: () => string,
+): ActiveProviderStatusSource {
+  return {
+    providerStatus: () => ({
+      providerName: getProvider(),
+      modelName: getModel(),
+    }),
+  };
+}
+
+type SwitchRecorder = ProviderSwitchRecorder;
 
 type ResolvedSwitch = { provider: string; model: string };
 
@@ -19,17 +84,17 @@ type ResolvedSwitch = { provider: string; model: string };
  * handling or swallowed. Resolving the provider/model is part of recording, so
  * a failure to read them is reported the same way and records nothing.
  */
-export function recordProviderSwitchReportingFailure(
+export async function recordProviderSwitchReportingFailure(
   recorder: SwitchRecorder | null | undefined,
   resolveSwitch: () => ResolvedSwitch,
   reportFailure: (message: string) => void,
-): void {
+): Promise<void> {
   if (recorder === null || recorder === undefined) return;
   let target = 'provider/model';
   try {
     const { provider, model } = resolveSwitch();
     target = `${provider}/${model}`;
-    recorder.recordProviderSwitch(provider, model);
+    await recorder.recordProviderSwitch(provider, model);
   } catch (error) {
     reportFailure(
       `Switched to ${target}, but recording the switch in the session file failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -46,16 +111,16 @@ export function recordProviderSwitchReportingFailure(
  *
  * `fallback` only fills fields the runtime status leaves empty.
  */
-export function recordActiveProviderSwitch(
+export async function recordActiveProviderSwitch(
   recorder: SwitchRecorder | null | undefined,
-  runtime: Pick<RuntimeApi, 'getActiveProviderStatus'>,
+  runtime: ActiveProviderStatusSource,
   reportFailure: (message: string) => void,
   fallback: { providerName?: string; modelName?: string } = {},
-): void {
-  recordProviderSwitchReportingFailure(
+): Promise<void> {
+  return recordProviderSwitchReportingFailure(
     recorder,
     () => {
-      const status = runtime.getActiveProviderStatus();
+      const status = runtime.providerStatus();
       return {
         provider: status.providerName ?? fallback.providerName ?? '',
         model: status.modelName ?? fallback.modelName ?? 'unknown',

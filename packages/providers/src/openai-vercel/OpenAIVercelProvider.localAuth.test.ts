@@ -86,7 +86,7 @@ describe('OpenAIVercelProvider local-endpoint keyless auth (issue #2506)', () =>
     const provider = new OpenAIVercelProvider(
       undefined,
       'http://127.0.0.1:11434/v1/',
-      { settingsService },
+      undefined,
     );
 
     const options = createProviderCallOptions({
@@ -119,9 +119,7 @@ describe('OpenAIVercelProvider local-endpoint keyless auth (issue #2506)', () =>
   });
 
   it('throws CredentialResolutionError for a remote endpoint with no key', async () => {
-    const provider = new OpenAIVercelProvider(undefined, undefined, {
-      settingsService,
-    });
+    const provider = new OpenAIVercelProvider(undefined, undefined, {});
 
     const options = createProviderCallOptions({
       config,
@@ -160,9 +158,7 @@ describe('OpenAIVercelProvider local-endpoint keyless auth (issue #2506)', () =>
       usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
     });
 
-    const provider = new OpenAIVercelProvider(undefined, undefined, {
-      settingsService,
-    });
+    const provider = new OpenAIVercelProvider(undefined, undefined, {});
 
     const options = createProviderCallOptions({
       config,

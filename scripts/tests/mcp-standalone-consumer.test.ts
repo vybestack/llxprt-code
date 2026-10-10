@@ -23,12 +23,14 @@
  * Declared dependencies are symlinked from the repository. Once execution
  * enters one of them, that package can resolve its own imports from the
  * repository. This suite therefore checks MCP's direct imports and package
- * exports. `scripts/check-runtime-dependency-declarations.ts` checks runtime
- * declarations for the complete set of published workspaces.
+ * exports and their behavior, not a fully isolated distribution install. The
+ * closure checks follow local/workspace source imports and workspace runtime
+ * manifests, but do not audit third-party package internals.
  */
 
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { spawnSync } from 'node:child_process';
+import ts from 'typescript';
 import {
   cpSync,
   existsSync,
@@ -190,8 +192,10 @@ function importEntrypoint(consumerRoot: string): ImportOutcome {
         )});` +
         'if ("registerMcpHostServices" in root) ' +
         'throw new Error("Host registration leaked through the root barrel");' +
-        'if (typeof host.registerMcpHostServices !== "function") ' +
-        'throw new Error("Host registration subpath is unavailable");' +
+        'if ("registerMcpHostServices" in host || "resetMcpHostServices" in host) ' +
+        'throw new Error("Dead host registry is still exported");' +
+        'if (typeof host.captureHostFeedback !== "function") ' +
+        'throw new Error("Explicit host feedback subpath is unavailable");' +
         'console.log("EXPORT_COUNT:" + Object.keys(root).length);',
     ],
     {
@@ -211,12 +215,110 @@ function importEntrypoint(consumerRoot: string): ImportOutcome {
   };
 }
 
+function runBehavior(consumerRoot: string, mode: string): ImportOutcome {
+  for (const [source, target] of [
+    ['mcp-standalone-behavior-fixture.ts', 'consumer.ts'],
+    ['mcp-standalone-stdio-fixture.ts', 'server.ts'],
+  ]) {
+    cpSync(join(repoRoot, 'scripts/tests', source), join(consumerRoot, target));
+  }
+  try {
+    const result = spawnSync(process.execPath, ['consumer.ts', mode], {
+      cwd: consumerRoot,
+      encoding: 'utf8',
+      timeout: 20000,
+    });
+    if (result.error) throw result.error;
+    return {
+      status: result.status,
+      stdout: result.stdout,
+      stderr: result.stderr,
+    };
+  } finally {
+    terminateSurvivingServer(consumerRoot);
+  }
+}
+
+function terminateSurvivingServer(consumerRoot: string): void {
+  const pidFile = join(consumerRoot, 'server.pid');
+  if (!existsSync(pidFile)) return;
+  const pid = Number(readFileSync(pidFile, 'utf8'));
+  if (!Number.isSafeInteger(pid) || pid <= 0)
+    throw new Error('Invalid fixture server PID');
+  try {
+    process.kill(pid, 'SIGKILL');
+  } catch (error) {
+    if (
+      !(error instanceof Error) ||
+      !('code' in error) ||
+      error.code !== 'ESRCH'
+    )
+      throw error;
+  }
+}
+
+function checkWorkspaceDependencyClosure(manifest: PackedManifest): void {
+  const visited = new Set<string>();
+  const pending = [manifest];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!current) continue;
+    for (const name of Object.keys({
+      ...current.dependencies,
+      ...current.peerDependencies,
+      ...current.optionalDependencies,
+    })) {
+      expect(name).not.toBe(CORE_PACKAGE_NAME);
+      expect(name).not.toBe('@vybestack/llxprt-code-agents');
+      if (!name.startsWith('@vybestack/') || visited.has(name)) continue;
+      visited.add(name);
+      pending.push(readPackedManifest(join(repoRoot, 'node_modules', name)));
+    }
+  }
+}
+
+function checkSourceImportClosure(entrypoint: string): number {
+  const visited = new Set<string>();
+  const pending = [entrypoint];
+  while (pending.length > 0) {
+    const file = pending.pop();
+    if (!file || visited.has(file)) continue;
+    visited.add(file);
+    const imports = ts.preProcessFile(
+      readFileSync(file, 'utf8'),
+      true,
+      true,
+    ).importedFiles;
+    for (const imported of imports) {
+      for (const forbidden of [
+        CORE_PACKAGE_NAME,
+        '@vybestack/llxprt-code-agents',
+      ]) {
+        expect(
+          imported.fileName === forbidden ||
+            imported.fileName.startsWith(`${forbidden}/`),
+          `${file}: ${imported.fileName}`,
+        ).toBe(false);
+      }
+      if (
+        !imported.fileName.startsWith('.') &&
+        !imported.fileName.startsWith('@vybestack/')
+      )
+        continue;
+      const resolved = Bun.resolveSync(imported.fileName, dirname(file));
+      expect(resolved).not.toMatch(/\/packages\/(core|agents)\//);
+      if (/\.[cm]?[jt]sx?$/.test(resolved)) pending.push(resolved);
+    }
+  }
+  return visited.size;
+}
+
 // Symlink creation and `tar` availability are unreliable on Windows runners;
 // the packaging contract this suite pins is platform independent.
 const describeStandalone =
   process.platform === 'win32' ? describe.skip : describe;
 
-describeStandalone('published mcp package installs standalone (#3305)', () => {
+describeStandalone('packed MCP source consumer (#3305, #2616, #2615)', () => {
   let packageDir: string;
   let manifest: PackedManifest;
 
@@ -244,7 +346,8 @@ describeStandalone('published mcp package installs standalone (#3305)', () => {
     }
   });
 
-  it('does not declare core in any dependency section', () => {
+  it('does not declare core or agents, including the workspace runtime dependency closure', () => {
+    checkWorkspaceDependencyClosure(manifest);
     expect(manifest.name).toBe(MCP_PACKAGE_NAME);
     const dependencySections = [
       manifest.dependencies,
@@ -254,8 +357,43 @@ describeStandalone('published mcp package installs standalone (#3305)', () => {
     ];
     for (const section of dependencySections) {
       expect(Object.keys(section ?? {})).not.toContain(CORE_PACKAGE_NAME);
+      expect(Object.keys(section ?? {})).not.toContain(
+        '@vybestack/llxprt-code-agents',
+      );
     }
   });
+
+  it('keeps the reachable workspace source import closure below core and agents', () => {
+    const consumerRoot = materializeConsumer(packageDir, manifest);
+    expect(
+      checkSourceImportClosure(
+        join(consumerRoot, 'node_modules', MCP_PACKAGE_NAME, 'index.ts'),
+      ),
+    ).toBeGreaterThan(1);
+  });
+
+  for (const [mode, marker] of [
+    ['stdio', 'STDIO_OK'],
+    [
+      'standalone-default',
+      'AUTH_OK browser=standalone-default callbackClosed=true',
+    ],
+    [
+      'unavailable-host',
+      'AUTH_OK browser=unavailable-host callbackClosed=true',
+    ],
+  ]) {
+    it(`exercises packed source public API: ${mode}`, () => {
+      const consumerRoot = materializeConsumer(packageDir, manifest);
+      const outcome = runBehavior(consumerRoot, mode);
+      expect(
+        outcome.status,
+        `${outcome.stderr}
+${outcome.stdout}`,
+      ).toBe(0);
+      expect(outcome.stdout).toContain(marker);
+    }, 30000);
+  }
 
   it(
     'imports its entrypoint with only its declared dependencies present',

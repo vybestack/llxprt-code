@@ -1,8 +1,11 @@
+import { buildToolGovernance } from '@vybestack/llxprt-code-tools';
 /**
  * @license
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+
+import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
 
 /**
  * @fileoverview Execution environment preparation for subagents.
@@ -12,17 +15,15 @@
  * Extracted from subagent.ts as part of Issue #1581 (Phase 2).
  */
 
+import {
+  createProviderRuntimeContext,
+  type ProviderRuntimeContext,
+} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { IsolatedRuntimeContextHandle } from '@vybestack/llxprt-code-providers/runtime/runtimeActivationBindings.js';
 import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { ToolSchedulerContract } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
 import { triggerPreCompressHook } from '@vybestack/llxprt-code-core/core/lifecycleHookTriggers.js';
-import {
-  ApprovalMode,
-  type SchedulerCallbacks,
-  type SchedulerOptions,
-} from '@vybestack/llxprt-code-core/config/config.js';
-import type { SchedulerPurpose } from '@vybestack/llxprt-code-core/session/sessionSchedulerRegistry.js';
 import { type ToolExecutionConfig } from './nonInteractiveToolExecutor.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/index.js';
@@ -38,7 +39,7 @@ import type {
   ToolMetadata,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { AgentRuntimeLoaderResult } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
-import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import type { ToolSelection } from '@vybestack/llxprt-code-tools';
 import {
   canonicalizeToolName,
   INVALID_TOOL_NAME,
@@ -49,7 +50,6 @@ import {
   isSubagentExcludedToolName,
   SUBAGENT_EXCLUDED_TOOL_NAMES,
 } from './toolGovernance.js';
-import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { resolvePromptMemory } from './promptMemoryPolicy.js';
 import {
@@ -243,19 +243,15 @@ export function buildEphemeralSettings(
  * Creates the bottom-layer tool execution configuration for subagents.
  *
  * This is the single source of truth for tool-related configuration in the
- * subagent, including scheduler creation. It interfaces directly with
- * `foregroundConfig` and is responsible for injecting default dependencies
- * (`messageBus` and `toolRegistry`) that callers may not provide.
+ * subagent. The child registry and settings determine its tool governance.
  *
- * Delegation chain: createSchedulerConfig → toolExecutorContext → foregroundConfig
  */
 export function createToolExecutionConfig(
   runtimeBundle: AgentRuntimeLoaderResult,
-  toolRegistry: ToolRegistry,
-  foregroundConfig: Config,
-  messageBus?: MessageBus,
+  toolRegistry: ToolSelection,
   settingsSnapshot?: ReadonlySettingsSnapshot,
   toolConfig?: ToolConfig,
+  readApprovalMode?: ToolExecutionConfig['readApprovalMode'],
 ): ToolExecutionConfig {
   const ephemerals = buildEphemeralSettings(settingsSnapshot);
 
@@ -264,9 +260,19 @@ export function createToolExecutionConfig(
   }
 
   return {
+    telemetry: runtimeBundle.telemetryRoot,
+    readApprovalMode,
     getToolRegistry: () => toolRegistry,
-    getEphemeralSettings: () => ({ ...ephemerals }),
-    getEphemeralSetting: (key: string) => ephemerals[key],
+    readExecutionPolicy: () =>
+      runtimeBundle.runtimeContext.readToolExecutionPolicy(),
+    readGovernance: () =>
+      buildToolGovernance({
+        getEphemeralSettings: () => ({
+          'tools.allowed': ephemerals['tools.allowed'],
+          'tools.disabled': ephemerals['tools.disabled'],
+        }),
+        getExcludeTools: () => Array.from(SUBAGENT_EXCLUDED_TOOL_NAMES),
+      }),
     // Issue #2069: scheduler governance must fail-closed for subagent-excluded
     // tools (task/list_subagents) so they can never be executed by a subagent
     // runtime, regardless of registry resolution or ephemeral whitelist state.
@@ -274,24 +280,11 @@ export function createToolExecutionConfig(
     getSessionId: () => runtimeBundle.runtimeContext.state.sessionId,
     getTelemetryLogPromptsEnabled: () =>
       Boolean(settingsSnapshot?.telemetry?.enabled),
-    getOrCreateScheduler: (owner, purpose, callbacks, options, dependencies) =>
-      foregroundConfig.getOrCreateScheduler(
-        owner,
-        purpose,
-        callbacks,
-        options,
-        {
-          messageBus: dependencies?.messageBus ?? messageBus,
-          toolRegistry: dependencies?.toolRegistry ?? toolRegistry,
-        },
-      ),
-    disposeScheduler: (owner, purpose, handle) =>
-      foregroundConfig.disposeScheduler(owner, purpose, handle),
   };
 }
 
 interface ToolRegistryWhitelistView {
-  getEnabledTools?: ToolRegistry['getEnabledTools'];
+  getEnabledTools?: ToolSelection['getEnabledTools'];
 }
 
 /** @internal — applies tool whitelist from toolConfig onto ephemeral settings */
@@ -589,161 +582,13 @@ Important Rules:
 }
 
 // ---------------------------------------------------------------------------
-// Scheduler config
-// ---------------------------------------------------------------------------
-
-type DefensiveConfig = {
-  getExcludeTools?: () => string[];
-  getEphemeralSettings?: () => Record<string, unknown>;
-};
-
-function resolveConfigAccessors(
-  toolExecutorContext: ToolExecutionConfig,
-  foregroundConfig: Config,
-  defensiveConfig: DefensiveConfig,
-): Pick<
-  Config,
-  | 'getEphemeralSettings'
-  | 'getEphemeralSetting'
-  | 'getExcludeTools'
-  | 'getTelemetryLogPromptsEnabled'
-  | 'getAllowedTools'
-> {
-  const getEphemeralSettings =
-    typeof toolExecutorContext.getEphemeralSettings === 'function'
-      ? () => ({ ...toolExecutorContext.getEphemeralSettings() })
-      : () => ({ ...(defensiveConfig.getEphemeralSettings?.() ?? {}) });
-
-  const getEphemeralSetting = (key: string): unknown =>
-    getEphemeralSettings()[key];
-
-  const getExcludeTools =
-    typeof toolExecutorContext.getExcludeTools === 'function'
-      ? () => toolExecutorContext.getExcludeTools()
-      : () => defensiveConfig.getExcludeTools?.() ?? [];
-
-  const getTelemetryLogPromptsEnabled =
-    typeof toolExecutorContext.getTelemetryLogPromptsEnabled === 'function'
-      ? () => toolExecutorContext.getTelemetryLogPromptsEnabled()
-      : () => foregroundConfig.getTelemetryLogPromptsEnabled();
-
-  const getAllowedTools = (): string[] | undefined => {
-    const ephemerals = getEphemeralSettings();
-    const allowed = ephemerals['tools.allowed'];
-    if (Array.isArray(allowed)) {
-      return allowed.filter(
-        (entry): entry is string => typeof entry === 'string',
-      );
-    }
-    return typeof foregroundConfig.getAllowedTools === 'function'
-      ? foregroundConfig.getAllowedTools()
-      : undefined;
-  };
-
-  return {
-    getEphemeralSettings,
-    getEphemeralSetting,
-    getExcludeTools,
-    getTelemetryLogPromptsEnabled,
-    getAllowedTools,
-  };
-}
-
-/**
- * Creates a higher-level Config facade for the CoreToolScheduler.
- *
- * This facade delegates scheduler operations (`getOrCreateScheduler`,
- * `disposeScheduler`) through `toolExecutorContext` rather than bypassing
- * it. The only policy this layer adds is the `interactiveMode` flag.
- *
- * Delegation chain: createSchedulerConfig → toolExecutorContext → foregroundConfig
- */
-export function createSchedulerConfig(
-  toolExecutorContext: ToolExecutionConfig,
-  foregroundConfig: Config,
-  options?: { interactive?: boolean },
-): Config {
-  const isInteractive = options?.interactive ?? false;
-
-  // Defensive runtime guard: test doubles and bootstrap configs may not
-  // implement every Config method despite the declared types.
-  const defensiveConfig = foregroundConfig as unknown as {
-    getEphemeralSettings?: () => Record<string, unknown>;
-    getExcludeTools?: () => string[];
-    getTelemetryLogPromptsEnabled?: () => boolean;
-    getAllowedTools?: () => string[] | undefined;
-    getToolRegistry?: () => unknown;
-    getOrCreateScheduler?: (
-      owner: object,
-      purpose: SchedulerPurpose,
-      callbacks: unknown,
-      options: unknown,
-      deps: unknown,
-    ) => Promise<ToolSchedulerContract>;
-    disposeScheduler?: (
-      owner: object,
-      purpose: SchedulerPurpose,
-      handle?: object,
-    ) => void;
-    getEnableHooks?: () => boolean;
-    getHooks?: () => unknown;
-    getHookSystem?: () => unknown;
-    getWorkingDir?: () => string;
-    getTargetDir?: () => string;
-  };
-
-  const accessors = resolveConfigAccessors(
-    toolExecutorContext,
-    foregroundConfig,
-    defensiveConfig,
-  );
-
-  return {
-    getToolRegistry: () => toolExecutorContext.getToolRegistry(),
-    getSessionId: () => toolExecutorContext.getSessionId(),
-    ...accessors,
-    getApprovalMode: () =>
-      typeof foregroundConfig.getApprovalMode === 'function'
-        ? foregroundConfig.getApprovalMode()
-        : ApprovalMode.DEFAULT,
-    getPolicyEngine: () => foregroundConfig.getPolicyEngine(),
-    getOrCreateScheduler: (
-      owner: object,
-      purpose: SchedulerPurpose,
-      callbacks: SchedulerCallbacks,
-      schedulerOptions?: SchedulerOptions,
-      dependencies?: {
-        messageBus?: MessageBus;
-        toolRegistry?: ToolRegistry;
-      },
-    ) =>
-      toolExecutorContext.getOrCreateScheduler(
-        owner,
-        purpose,
-        callbacks,
-        { ...schedulerOptions, interactiveMode: isInteractive },
-        dependencies,
-      ),
-    disposeScheduler: (
-      owner: object,
-      purpose: SchedulerPurpose,
-      handle?: object,
-    ) => {
-      toolExecutorContext.disposeScheduler(owner, purpose, handle);
-    },
-    getEnableHooks: () => defensiveConfig.getEnableHooks?.() ?? false,
-    getHooks: () => defensiveConfig.getHooks?.(),
-    getHookSystem: () => defensiveConfig.getHookSystem?.(),
-    getWorkingDir: () => defensiveConfig.getWorkingDir?.() ?? process.cwd(),
-    getTargetDir: () => defensiveConfig.getTargetDir?.() ?? process.cwd(),
-  } as unknown as Config;
-}
-
-// ---------------------------------------------------------------------------
 // Chat object creation
 // ---------------------------------------------------------------------------
 
 export interface CreateChatObjectParams {
+  instructions: InstructionReadOperations;
+  workspaceDirectories: () => readonly string[];
+  readMcpInstructions: () => string | undefined;
   promptConfig: PromptConfig;
   modelConfig: ModelConfig;
   outputConfig?: OutputConfig;
@@ -790,6 +635,9 @@ export async function createChatObject(
     modelConfig,
     combinedDeclarations,
     config,
+    params.readMcpInstructions,
+    params.workspaceDirectories,
+    params.instructions,
     personaPrompt,
     runtimeContext.state.provider,
     logger,
@@ -806,6 +654,9 @@ export async function createChatObject(
         { ...modelConfig, model: request.model },
         combinedDeclarations,
         config,
+        params.readMcpInstructions,
+        params.workspaceDirectories,
+        params.instructions,
         personaPrompt,
         request.provider,
         logger,
@@ -830,6 +681,9 @@ async function buildSystemInstruction(
   modelConfig: ModelConfig,
   combinedDeclarations: ToolDeclaration[],
   config: Config,
+  readMcpInstructions: () => string | undefined,
+  workspaceDirectories: () => readonly string[],
+  instructions: InstructionReadOperations,
   personaPrompt: string,
   provider: string | undefined,
   logger: { debug: (fn: () => string) => void },
@@ -852,15 +706,19 @@ async function buildSystemInstruction(
   // via resolvePromptMemory so subagents get the same JIT policy: under JIT,
   // global memory plus the working directory's JIT subdirectory memory, with
   // MCP instructions carried only through their dedicated option (issue #3173).
-  const { userMemory, coreMemory, mcpInstructions } =
-    await resolvePromptMemory(config);
+  const { userMemory, coreMemory, mcpInstructions } = await resolvePromptMemory(
+    config,
+    readMcpInstructions,
+    workspaceDirectories(),
+    instructions,
+  );
   const coreSystemPrompt: unknown = await getCoreSystemPromptAsync({
     userMemory,
     coreMemory,
     mcpInstructions,
     model: modelConfig.model,
     provider,
-    settings: config.getSettingsService(),
+    policy: runtimeContext.readPromptPolicy(),
     tools: toolNames,
     includeSubagentDelegation: false,
     interactionMode: 'subagent',
@@ -924,4 +782,20 @@ function instantiateChat(
     const missingChatObject: ChatSession | null = null;
     return missingChatObject;
   }
+}
+
+export function createSubagentProviderRuntime(
+  handle: IsolatedRuntimeContextHandle,
+  provider: string,
+  subagent: string,
+): ProviderRuntimeContext {
+  const profileId = handle.settingsService.getCurrentProfileName() ?? undefined;
+  return createProviderRuntimeContext({
+    ...handle.oauthManager.composeRetryOperations(provider, { profileId }),
+    settingsService: handle.settingsService,
+    config: handle.config,
+    providerFileLifecycle: handle.providerFileLifecycle,
+    runtimeId: handle.runtimeId,
+    metadata: { source: 'SubagentOrchestrator', subagent },
+  });
 }

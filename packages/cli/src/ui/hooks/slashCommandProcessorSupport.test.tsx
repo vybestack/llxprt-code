@@ -51,20 +51,6 @@ void vi.mock('../../services/McpPromptLoader.js', () => ({
 const actual = { ...(await import('@vybestack/llxprt-code-mcp')) };
 void vi.mock('@vybestack/llxprt-code-mcp', () => ({
   ...actual,
-  addMCPStatusChangeListener: vi.fn(),
-  removeMCPStatusChangeListener: vi.fn(),
-}));
-
-const actualActual = { ...(await import('@vybestack/llxprt-code-core')) };
-void vi.mock('@vybestack/llxprt-code-core', () => ({
-  ...actualActual,
-  IdeClient: {
-    getInstance: () =>
-      Promise.resolve({
-        addStatusChangeListener: vi.fn(),
-        removeStatusChangeListener: vi.fn(),
-      }),
-  },
 }));
 
 function useCommandRegistry(config: CliUiRuntime): readonly SlashCommand[] {
@@ -73,7 +59,14 @@ function useCommandRegistry(config: CliUiRuntime): readonly SlashCommand[] {
   const reloadCommands = useCallback(() => {
     setReloadTrigger((value) => value + 1);
   }, []);
-  useCommandReload(config, reloadTrigger, true, reloadCommands, setCommands);
+  useCommandReload(
+    config,
+    reloadTrigger,
+    true,
+    reloadCommands,
+    setCommands,
+    null,
+  );
   return commands;
 }
 
@@ -88,6 +81,7 @@ describe('useCommandReload', () => {
     let trusted = false;
     const config = {
       getFolderTrust: () => true,
+      getIdeClient: () => undefined,
       isTrustedFolder: () => trusted,
     } as CliUiRuntime;
     loaderState.fileCommands = [
@@ -123,6 +117,7 @@ describe('useCommandReload', () => {
     let trusted = true;
     const config = {
       getFolderTrust: () => true,
+      getIdeClient: () => undefined,
       isTrustedFolder: () => trusted,
     } as CliUiRuntime;
     const { result } = renderHook(() => useCommandRegistry(config));
@@ -140,6 +135,7 @@ describe('useCommandReload', () => {
   it('stops listening for folder trust changes after unmount', async () => {
     const config = {
       getFolderTrust: () => false,
+      getIdeClient: () => undefined,
       isTrustedFolder: () => true,
     } as CliUiRuntime;
     const listenersBeforeMount = coreEvents.listenerCount(

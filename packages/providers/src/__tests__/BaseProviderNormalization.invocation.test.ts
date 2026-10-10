@@ -76,6 +76,7 @@ function createSettings(provider: InvocationSafetyProvider): SettingsService {
   const settings = new SettingsService();
   settings.set('model', `${PROVIDER_NAME}-model`);
   settings.setProviderSetting(PROVIDER_NAME, 'model', `${PROVIDER_NAME}-model`);
+  provider.setRuntimeSettingsService(settings);
   const config = createRuntimeConfigStub(settings);
   (provider as unknown as { defaultConfig?: unknown }).defaultConfig = config;
   return settings;
@@ -90,7 +91,7 @@ describe('BaseProvider normalization invocation safety', () => {
   it('replaces a malformed invocation stub carrying only signal with a real RuntimeInvocationContext', async () => {
     const provider = new InvocationSafetyProvider();
     wireProviderWithAuth(provider);
-    const settings = createSettings(provider);
+    createSettings(provider);
 
     const abortController = new AbortController();
     const malformedInvocation = {
@@ -99,7 +100,6 @@ describe('BaseProvider normalization invocation safety', () => {
 
     const options = {
       contents: [prompt],
-      settings,
       invocation: malformedInvocation,
     } as GenerateChatOptions;
 
@@ -114,7 +114,7 @@ describe('BaseProvider normalization invocation safety', () => {
   it('preserves AbortSignal from a malformed stub on the normalized invocation', async () => {
     const provider = new InvocationSafetyProvider();
     wireProviderWithAuth(provider);
-    const settings = createSettings(provider);
+    createSettings(provider);
 
     const abortController = new AbortController();
     const malformedInvocation = {
@@ -123,7 +123,6 @@ describe('BaseProvider normalization invocation safety', () => {
 
     const options = {
       contents: [prompt],
-      settings,
       invocation: malformedInvocation,
     } as GenerateChatOptions;
 
@@ -146,7 +145,6 @@ describe('BaseProvider normalization invocation safety', () => {
 
     const options = {
       contents: [prompt],
-      settings,
       invocation: malformedInvocation,
     } as GenerateChatOptions;
 
@@ -201,12 +199,13 @@ describe('BaseProvider normalization invocation safety', () => {
       ephemerals: {},
     });
     const invocation = createRuntimeInvocationContext({
-      runtime: validOptions.runtime,
-      settings,
+      runtimeId: validOptions.invocation.runtimeId,
+      runtimeMetadata: validOptions.invocation.metadata,
+
       providerName: PROVIDER_NAME,
       ephemeralsSnapshot: {},
       signal: invocationController.signal,
-      fallbackRuntimeId: validOptions.runtime.runtimeId,
+      fallbackRuntimeId: validOptions.invocation.runtimeId,
     });
 
     await provider
@@ -223,7 +222,7 @@ describe('BaseProvider normalization invocation safety', () => {
     );
   });
 
-  it('keeps a valid RuntimeInvocationContext coherent while refreshing current ephemerals', async () => {
+  it('keeps a valid RuntimeInvocationContext coherent without importing later owner ephemerals', async () => {
     const { createProviderCallOptions } = await import(
       '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js'
     );
@@ -231,13 +230,14 @@ describe('BaseProvider normalization invocation safety', () => {
     const provider = new InvocationSafetyProvider();
     wireProviderWithAuth(provider);
     const settings = createSettings(provider);
-    settings.set('dumpcontext', 'on');
 
     const validOptions = createProviderCallOptions({
       providerName: PROVIDER_NAME,
       settings,
       ephemerals: {},
     });
+
+    settings.set('dumpcontext', 'on');
 
     const options = {
       ...validOptions,
@@ -252,6 +252,16 @@ describe('BaseProvider normalization invocation safety', () => {
     expect(normalized!.invocation.runtimeId).toBe(
       validOptions.invocation.runtimeId,
     );
-    expect(normalized!.invocation.getEphemeral('dumpcontext')).toBe('on');
+    expect(normalized!.invocation.getEphemeral('dumpcontext')).toBeUndefined();
+
+    await provider
+      .generateChatCompletion({
+        ...options,
+        invocation: undefined,
+      })
+      .next();
+    expect(
+      provider.lastNormalizedOptions?.invocation.getEphemeral('dumpcontext'),
+    ).toBe('on');
   });
 });

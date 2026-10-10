@@ -5,10 +5,7 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import {
-  createIssue1468Fixture,
-  mockGetCurrentProfileName,
-} from './__tests__/oauth-manager.issue1468.test-helpers.js';
+import { createIssue1468Fixture } from './__tests__/oauth-manager.issue1468.test-helpers.js';
 
 describe('Issue #1468 getProfileBuckets case 17', () => {
   /**
@@ -19,9 +16,9 @@ describe('Issue #1468 getProfileBuckets case 17', () => {
    * @then Empty array should be returned
    */
   it('should return empty array when no profile is loaded', async () => {
-    const { manager } = createIssue1468Fixture();
+    const { manager, settingsService } = createIssue1468Fixture();
 
-    mockGetCurrentProfileName.mockReturnValue(null);
+    settingsService.setCurrentProfileName(null);
 
     const managerInternal = manager as unknown as {
       getProfileBuckets: (provider: string) => Promise<string[]>;

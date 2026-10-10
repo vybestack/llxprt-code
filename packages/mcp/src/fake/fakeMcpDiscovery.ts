@@ -19,11 +19,11 @@
  *
  * This is a legitimate, shipped test double (like FakeProvider in the
  * providers package): production code never imports from any `__tests__`
- * directory. The fake replays into the REAL {@link ToolRegistry} and the REAL
+ * directory. The fake replays into the REAL {@link McpToolPublication} and the REAL
  * discovery state machine — discovered tools become real registry entries
  * carrying a `serverName`, and server status flows through the real
- * `updateMCPServerStatus` channel. Callers therefore exercise genuine
- * discovery-gate, ToolRegistry, and status-mapping logic; nothing is hardcoded
+ * explicit owner status callback. Callers therefore exercise genuine
+ * discovery-gate, McpToolPublication, and status-mapping logic; nothing is hardcoded
  * in the Agent's public surface.
  */
 
@@ -36,11 +36,8 @@ import {
   type ToolInvocation,
   type ToolResult,
 } from '@vybestack/llxprt-code-tools';
-import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import {
-  MCPServerStatus,
-  updateMCPServerStatus,
-} from '../client/mcp-client.js';
+import type { McpToolPublication } from '@vybestack/llxprt-code-tools';
+import { MCPServerStatus } from '../client/mcp-client.js';
 import { MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE } from '../client/mcp-errors.js';
 import { generateMcpToolName } from '../client/mcp-tool.js';
 
@@ -111,7 +108,7 @@ export function loadFakeMcpFixture(): FakeMcpFixture | undefined {
 /**
  * A minimal, real {@link BaseDeclarativeTool} representing a tool discovered
  * from a fake MCP server. It carries a non-empty `serverName`, which is the
- * marker {@link ToolRegistry.isDiscoveredMcpTool} uses to classify a tool as
+ * marker {@link McpToolPublication.isDiscoveredMcpTool} uses to classify a tool as
  * MCP-originated. Execution is intentionally inert (the fake provider never
  * issues tool calls during these scenarios), but the tool is a genuine
  * registry entry so listing/grouping logic runs for real.
@@ -217,13 +214,14 @@ async function waitForLatency(
 
 function disconnectFakeServer(
   name: string,
-  toolRegistry: ToolRegistry,
+  toolRegistry: McpToolPublication,
+  updateStatus: (status: MCPServerStatus) => void,
   failure?: string,
 ): FakeMcpDiscoveryOutcome {
   try {
     toolRegistry.removeMcpToolsByServer(name);
   } finally {
-    updateMCPServerStatus(name, MCPServerStatus.DISCONNECTED);
+    updateStatus(MCPServerStatus.DISCONNECTED);
   }
   return {
     status: MCPServerStatus.DISCONNECTED,
@@ -234,44 +232,50 @@ function disconnectFakeServer(
 
 export async function applyFakeServerDiscovery(
   name: string,
-  toolRegistry: ToolRegistry,
+  toolRegistry: McpToolPublication,
   fixture: FakeMcpFixture,
   isAuthorized: () => boolean,
-  signal?: AbortSignal,
+  signal: AbortSignal | undefined,
+  updateStatus: (status: MCPServerStatus) => void,
 ): Promise<FakeMcpDiscoveryOutcome> {
   const hasAuthorization = (): boolean =>
     signal?.aborted !== true && isAuthorizedSafely(isAuthorized);
   if (!hasAuthorization()) {
-    return disconnectFakeServer(name, toolRegistry);
+    return disconnectFakeServer(name, toolRegistry, updateStatus);
   }
   if (!Object.prototype.hasOwnProperty.call(fixture.servers, name)) {
-    return disconnectFakeServer(name, toolRegistry);
+    return disconnectFakeServer(name, toolRegistry, updateStatus);
   }
   const server = fixture.servers[name];
 
-  updateMCPServerStatus(name, MCPServerStatus.CONNECTING);
+  updateStatus(MCPServerStatus.CONNECTING);
   if (!hasAuthorization()) {
-    return disconnectFakeServer(name, toolRegistry);
+    return disconnectFakeServer(name, toolRegistry, updateStatus);
   }
 
   await waitForLatency(server.latencyMs ?? 0, signal);
   if (!hasAuthorization()) {
-    return disconnectFakeServer(name, toolRegistry);
+    return disconnectFakeServer(name, toolRegistry, updateStatus);
   }
 
   if (typeof server.failure === 'string') {
-    return disconnectFakeServer(name, toolRegistry, server.failure);
+    return disconnectFakeServer(
+      name,
+      toolRegistry,
+      updateStatus,
+      server.failure,
+    );
   }
 
   toolRegistry.removeMcpToolsByServer(name);
   if (!hasAuthorization()) {
-    return disconnectFakeServer(name, toolRegistry);
+    return disconnectFakeServer(name, toolRegistry, updateStatus);
   }
   const registeredToolNames: string[] = [];
   for (const tool of server.tools ?? []) {
     if (tool.enabled === false) continue;
     if (!hasAuthorization()) {
-      return disconnectFakeServer(name, toolRegistry);
+      return disconnectFakeServer(name, toolRegistry, updateStatus);
     }
     toolRegistry.registerTool(
       new FakeMcpTool(
@@ -282,15 +286,15 @@ export async function applyFakeServerDiscovery(
       ),
     );
     if (!hasAuthorization()) {
-      return disconnectFakeServer(name, toolRegistry);
+      return disconnectFakeServer(name, toolRegistry, updateStatus);
     }
     registeredToolNames.push(generateMcpToolName(name, tool.name));
   }
 
   if (!hasAuthorization()) {
-    return disconnectFakeServer(name, toolRegistry);
+    return disconnectFakeServer(name, toolRegistry, updateStatus);
   }
-  updateMCPServerStatus(name, MCPServerStatus.CONNECTED);
+  updateStatus(MCPServerStatus.CONNECTED);
   return {
     status: MCPServerStatus.CONNECTED,
     registeredToolNames,

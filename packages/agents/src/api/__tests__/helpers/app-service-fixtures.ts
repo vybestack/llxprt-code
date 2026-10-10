@@ -92,6 +92,11 @@ export async function createSkillManagerWithSeededSkill(
 
   const storage = new Storage(projectRoot);
   const manager = new SkillManager();
-  await manager.discoverSkills(storage);
+  await manager.discoverSkills({
+    userSkillsDir: Storage.getUserSkillsDir(),
+    userAgentSkillsDir: Storage.getUserAgentSkillsDir(),
+    projectSkillsDir: storage.getProjectSkillsDir(),
+    projectAgentSkillsDir: storage.getProjectAgentSkillsDir(),
+  });
   return manager;
 }

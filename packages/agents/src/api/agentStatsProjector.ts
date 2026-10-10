@@ -16,8 +16,26 @@
  */
 
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import { uiTelemetryService } from '@vybestack/llxprt-code-core/telemetry/uiTelemetry.js';
+import type { CompressionResult } from './agent.js';
 import type { SessionStats } from './agent.js';
+
+export function projectCurrentSequenceModel(
+  client: { getCurrentSequenceModel(): string | null } | undefined,
+): string | null {
+  return client?.getCurrentSequenceModel() ?? null;
+}
+
+export function subscribeSessionStats(
+  readHistoryService: () => HistoryService | null,
+  cb: (stats: SessionStats) => void,
+): () => void {
+  const handler = (): void => cb(projectSessionStats(readHistoryService()));
+  handler();
+  uiTelemetryService.on('update', handler);
+  return () => uiTelemetryService.off('update', handler);
+}
 
 /**
  * Projects the in-process uiTelemetryService singleton canonical snapshot +
@@ -72,13 +90,32 @@ export function readCompressionTokenCount(
   if (historyService === null) {
     return 0;
   }
-  try {
-    return historyService.getTotalTokens();
-  } catch {
-    return 0;
-  }
+  return historyService.getTotalTokens();
 }
 
+export function projectCompressionResult(
+  raw: PerformCompressionResult,
+  promptId: string,
+  originalTokenCount: number,
+  newTokenCount: number,
+): CompressionResult {
+  if (raw === PerformCompressionResult.COMPRESSED) {
+    return {
+      status: 'compressed',
+      originalTokenCount: Math.max(originalTokenCount, newTokenCount),
+      newTokenCount,
+      promptId,
+    };
+  }
+  if (raw === PerformCompressionResult.NOOP) {
+    // Structural no-op: history unchanged by a deterministic strategy guard.
+    // Distinct from 'skipped' (cooldown/empty) per issue #2602.
+    return { status: 'noop', promptId };
+  }
+  const status: 'skipped' | 'failed' =
+    raw === PerformCompressionResult.FAILED ? 'failed' : 'skipped';
+  return { status, promptId };
+}
 /**
  * Reads the conversation turn/message count from the HistoryService. Returns 0
  * when the HistoryService is unavailable.

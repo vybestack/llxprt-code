@@ -9,7 +9,7 @@
   "startCommand": [
     "/bin/sh",
     "-c",
-    "exec env CI=0 CONTINUOUS_INTEGRATION=0 NO_COLOR=true FORCE_COLOR=0 NODE_OPTIONS= LLXPRT_CODE_NO_RELAUNCH=true LLXPRT_CODE_SKIP_TERMINAL_CAPABILITY_DETECTION=true LLXPRT_CODE_BUILTIN_COMMANDS_ONLY=true LLXPRT_CODE_SUPPRESS_STATIC_HEADER=true LLXPRT_CODE_WELCOME_CONFIG_PATH=scripts/fixtures/welcome-completed.json LLXPRT_SYSTEM_SETTINGS_PATH=scripts/system-settings.interactive-ui.json LLXPRT_FAKE_RESPONSES=scripts/fixtures/issue3428-tool-result-retention-snapshot.responses.jsonl ${bun} scripts/memory/launcher.ts --dir \"$LLXPRT_TMUX_ARTIFACT_DIR/memprofile\" --interval 86400000 --snapshots --max-heap-mb 1024 -- --provider fake --model fake-model --yolo"
+    "exec env CI=0 CONTINUOUS_INTEGRATION=0 NO_COLOR=true FORCE_COLOR=0 NODE_OPTIONS= LLXPRT_CODE_NO_RELAUNCH=true LLXPRT_CODE_SKIP_TERMINAL_CAPABILITY_DETECTION=true LLXPRT_CODE_BUILTIN_COMMANDS_ONLY=true LLXPRT_CODE_SUPPRESS_STATIC_HEADER=true LLXPRT_CODE_WELCOME_CONFIG_PATH=scripts/fixtures/welcome-completed.json LLXPRT_SYSTEM_SETTINGS_PATH=scripts/system-settings.interactive-ui.json LLXPRT_FAKE_RESPONSES=scripts/fixtures/issue3428-tool-result-retention-snapshot.responses.jsonl ${bun} scripts/memory/launcher-entry.ts --dir \"$LLXPRT_TMUX_ARTIFACT_DIR/memprofile\" --interval 86400000 --snapshots --max-heap-mb 1024 -- --provider fake --model fake-model --yolo"
   ],
   "yolo": false,
   "steps": [

@@ -121,7 +121,7 @@ ${TEST_USER_MEMORY}`;
     const provider = new GeminiProvider(
       process.env.GEMINI_API_KEY,
       undefined,
-      config,
+      { defaultModel: config.getModel() },
       injectedClientFactory,
     );
 
@@ -133,8 +133,9 @@ ${TEST_USER_MEMORY}`;
     });
 
     const invocation = createRuntimeInvocationContext({
-      runtime,
-      settings: settingsService,
+      runtimeId: runtime.runtimeId,
+      runtimeMetadata: runtime.metadata,
+
       providerName: 'gemini',
       userMemory: TEST_USER_MEMORY,
       ephemeralsSnapshot: {},
@@ -190,7 +191,7 @@ ${TEST_USER_MEMORY}`;
     const provider1 = new GeminiProvider(
       process.env.GEMINI_API_KEY,
       undefined,
-      config,
+      { defaultModel: config.getModel() },
       injectedClientFactory,
     );
 
@@ -201,8 +202,9 @@ ${TEST_USER_MEMORY}`;
     });
 
     const invocation1 = createRuntimeInvocationContext({
-      runtime: runtime1,
-      settings: settingsService,
+      runtimeId: runtime1.runtimeId,
+      runtimeMetadata: runtime1.metadata,
+
       providerName: 'gemini',
       userMemory: TEST_USER_MEMORY,
       ephemeralsSnapshot: {},
@@ -254,7 +256,7 @@ ${TEST_USER_MEMORY}`;
     const provider2 = new GeminiProvider(
       'different-api-key',
       undefined,
-      config, // Same config instance with userMemory
+      { defaultModel: config.getModel() }, // Same config instance with userMemory
       injectedClientFactory,
     );
 
@@ -265,8 +267,9 @@ ${TEST_USER_MEMORY}`;
     });
 
     const invocation2 = createRuntimeInvocationContext({
-      runtime: runtime2,
-      settings: settingsService,
+      runtimeId: runtime2.runtimeId,
+      runtimeMetadata: runtime2.metadata,
+
       providerName: 'gemini',
       userMemory: TEST_USER_MEMORY, // Should come from config
       ephemeralsSnapshot: {},

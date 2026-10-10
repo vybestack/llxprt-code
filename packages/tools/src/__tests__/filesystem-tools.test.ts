@@ -1,3 +1,5 @@
+import type { ToolExecutionPolicy } from '../interfaces/tool-execution-policy.js';
+import { promises as fixtureFs } from 'node:fs';
 /**
  * @plan:PLAN-20260608-ISSUE1585.P10
  * @requirement:REQ-BEHAVIORAL-TDD, REQ-TEST-FIXTURE-COUPLING
@@ -85,7 +87,7 @@ function createTempDir(prefix = 'llxprt-fs-test-'): {
  */
 function _createFakeFileHost(
   targetDir: string,
-  ephemeralSettings: Record<string, unknown> = {},
+  ephemeralSettings: ToolExecutionPolicy = {},
 ): IToolHost {
   return {
     getTargetDir: () => targetDir,
@@ -93,7 +95,11 @@ function _createFakeFileHost(
     getApprovalMode: () => 'auto',
     setApprovalMode: () => {},
     isInteractive: () => false,
-    hasFeatureFlag: () => false,
+
+    runSearch: <T>(
+      _directories: readonly string[],
+      operation: () => Promise<T>,
+    ): Promise<T> => operation(),
     getFileService: () => ({
       shouldGitIgnoreFile: () => false,
       shouldLlxprtIgnoreFile: () => false,
@@ -109,9 +115,11 @@ function _createFakeFileHost(
     getFileFilteringRespectLlxprtIgnore: () => true,
     getLlxprtIgnoreFilePath: () => null,
     recordFileRead: () => {},
-    getFileSystemService: () => undefined,
+    readTextFile: (filePath) => fixtureFs.readFile(filePath, 'utf8'),
+    writeTextFile: (filePath, content) =>
+      fixtureFs.writeFile(filePath, content),
     getLlxprtIgnorePatterns: () => [],
-    getEphemeralSettings: () => ({ ...ephemeralSettings }),
+    readExecutionPolicy: () => ({ ...ephemeralSettings }),
     getDebugMode: () => false,
   };
 }

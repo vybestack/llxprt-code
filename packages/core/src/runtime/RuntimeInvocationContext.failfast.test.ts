@@ -18,8 +18,9 @@ describe('RuntimeInvocationContext fail-fast requirements', () => {
 
     expect(() =>
       createRuntimeInvocationContext({
-        runtime,
-        settings,
+        runtimeId: runtime.runtimeId,
+        runtimeMetadata: runtime.metadata,
+
         providerName: 'openai',
       }),
     ).toThrowError('RuntimeInvocationContext requires a non-empty runtimeId.');
@@ -34,8 +35,9 @@ describe('RuntimeInvocationContext fail-fast requirements', () => {
 
     expect(() =>
       createRuntimeInvocationContext({
-        runtime,
-        settings,
+        runtimeId: runtime.runtimeId,
+        runtimeMetadata: runtime.metadata,
+
         providerName: 'openai',
       }),
     ).toThrowError(

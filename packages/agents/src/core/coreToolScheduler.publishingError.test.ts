@@ -3,30 +3,13 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createSchedulerPolicyFixture } from './__tests__/scheduler-policy-fixture.js';
 
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi } from 'bun:test';
 import { CoreToolScheduler, type ToolCall } from './coreToolScheduler.js';
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
-
-function createMockMessageBus() {
-  return {
-    subscribe: vi.fn().mockReturnValue(() => {}),
-    publish: vi.fn(),
-    respondToConfirmation: vi.fn(),
-    requestConfirmation: vi.fn().mockResolvedValue(true),
-    removeAllListeners: vi.fn(),
-    listenerCount: vi.fn().mockReturnValue(0),
-  };
-}
-
-function createMockPolicyEngine() {
-  return {
-    evaluate: vi.fn().mockReturnValue(PolicyDecision.ALLOW),
-    checkDecision: vi.fn().mockReturnValue(PolicyDecision.ALLOW),
-  };
-}
 
 describe('CoreToolScheduler publishing error handling', () => {
   it('should transition tool to success state after successful execution', async () => {
@@ -70,27 +53,35 @@ describe('CoreToolScheduler publishing error handling', () => {
 
       const onAllToolCallsComplete = vi.fn();
       const onToolCallsUpdate = vi.fn();
-      const mockPolicyEngine = createMockPolicyEngine();
+      const policyDecision = PolicyDecision.ALLOW;
 
-      const mockConfig = {
-        getSessionId: () => 'test-session-id',
-        getUsageStatisticsEnabled: () => true,
-        getDebugMode: () => false,
-        getApprovalMode: () => ApprovalMode.YOLO,
-        getEphemeralSettings: () => ({}),
-        getAllowedTools: () => [],
-        getContentGeneratorConfig: () => ({
-          model: 'test-model',
-        }),
-        getToolRegistry: () => mockToolRegistry,
-        getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
-        getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
-      } as unknown as Config;
+      const {
+        config: mockConfig,
+        settingsOwner,
+        messageBus: runtimeMessageBus,
+      } = createSchedulerPolicyFixture(
+        {
+          getSessionId: () => 'test-session-id',
+          getUsageStatisticsEnabled: () => true,
+          getDebugMode: () => false,
+          getApprovalMode: () => ApprovalMode.YOLO,
+
+          getAllowedTools: () => [],
+          getContentGeneratorConfig: () => ({
+            model: 'test-model',
+          }),
+        },
+        policyDecision,
+      );
 
       const scheduler = new CoreToolScheduler({
+        telemetry: settingsOwner.telemetry,
+        readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+        getToolGovernance: () =>
+          settingsOwner.readToolGovernance(mockConfig.getExcludeTools() ?? []),
         config: mockConfig,
-        messageBus: mockConfig.getMessageBus(),
-        toolRegistry: mockConfig.getToolRegistry(),
+        messageBus: runtimeMessageBus,
+        toolRegistry: mockToolRegistry,
         onAllToolCallsComplete,
         onToolCallsUpdate: (calls) => {
           onToolCallsUpdate(calls);
@@ -170,27 +161,35 @@ describe('CoreToolScheduler publishing error handling', () => {
 
     const onAllToolCallsComplete = vi.fn();
     const onToolCallsUpdate = vi.fn();
-    const mockPolicyEngine = createMockPolicyEngine();
+    const policyDecision = PolicyDecision.ALLOW;
 
-    const mockConfig = {
-      getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
-      getDebugMode: () => false,
-      getApprovalMode: () => ApprovalMode.YOLO,
-      getEphemeralSettings: () => ({}),
-      getAllowedTools: () => [],
-      getContentGeneratorConfig: () => ({
-        model: 'test-model',
-      }),
-      getToolRegistry: () => mockToolRegistry,
-      getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
-      getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
-    } as unknown as Config;
+    const {
+      config: mockConfig,
+      settingsOwner,
+      messageBus: runtimeMessageBus,
+    } = createSchedulerPolicyFixture(
+      {
+        getSessionId: () => 'test-session-id',
+        getUsageStatisticsEnabled: () => true,
+        getDebugMode: () => false,
+        getApprovalMode: () => ApprovalMode.YOLO,
+
+        getAllowedTools: () => [],
+        getContentGeneratorConfig: () => ({
+          model: 'test-model',
+        }),
+      },
+      policyDecision,
+    );
 
     const scheduler = new CoreToolScheduler({
+      telemetry: settingsOwner.telemetry,
+      readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        settingsOwner.readToolGovernance(mockConfig.getExcludeTools() ?? []),
       config: mockConfig,
-      messageBus: mockConfig.getMessageBus(),
-      toolRegistry: mockConfig.getToolRegistry(),
+      messageBus: runtimeMessageBus,
+      toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -243,6 +242,5 @@ describe('CoreToolScheduler publishing error handling', () => {
   });
 });
 
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ToolRegistry } from '@vybestack/llxprt-code-tools/tools/tool-registry.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';

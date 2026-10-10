@@ -97,7 +97,9 @@ const runtimeSettingsState = {
     runtimeId: string;
     metadata?: Record<string, unknown>;
   } | null,
-  providerManager: null as ServerConfig.ProviderManager | null,
+  providerManager: null as
+    | import('@vybestack/llxprt-code-providers').ProviderManager
+    | null,
   oauthManager: null as unknown,
 };
 
@@ -111,7 +113,7 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
       getActiveProvider: vi.fn(() => undefined),
       getAvailableModels: vi.fn(async () => []),
       getProviderByName: vi.fn(() => undefined),
-    } as unknown as ServerConfig.ProviderManager);
+    } as unknown as import('@vybestack/llxprt-code-providers').ProviderManager);
 
   return {
     ephemeralSettingHelp: {},
@@ -132,54 +134,21 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
         warnings: [],
       }),
     ),
-    getCliRuntimeContext: vi.fn(() => runtimeSettingsState.context),
-    setCliRuntimeContext: vi.fn(
-      (
-        settingsService: SettingsService,
-        config?: ServerConfig.Config,
-        options: {
-          metadata?: Record<string, unknown>;
-          runtimeId?: string;
-        } = {},
-      ) => {
-        runtimeSettingsState.context = {
-          settingsService,
-          config: config ?? null,
-          runtimeId: options.runtimeId ?? 'mock-runtime',
-          metadata: options.metadata ?? {},
-        };
-      },
-    ),
     switchActiveProvider: vi.fn(async () => ({
       changed: true,
       previousProvider: null,
       nextProvider: 'mock-provider',
       infoMessages: [],
     })),
-    registerCliProviderInfrastructure: vi.fn(
-      (manager: ServerConfig.ProviderManager, oauthManager: unknown) => {
-        runtimeSettingsState.providerManager = manager;
-        runtimeSettingsState.oauthManager = oauthManager ?? null;
-      },
-    ),
     applyCliArgumentOverrides: vi.fn(async () => {}),
-    getCliRuntimeConfig: vi.fn(
-      () => runtimeSettingsState.context?.config ?? null,
-    ),
-    getCliRuntimeServices: vi.fn(() => ({
-      config: runtimeSettingsState.context?.config ?? null,
-      settingsService:
-        runtimeSettingsState.context?.settingsService ?? new SettingsService(),
-      providerManager: getProviderManager(),
-    })),
-    getCliProviderManager: vi.fn(() => runtimeSettingsState.providerManager),
-    getCliOAuthManager: vi.fn(() => {
+    providerManager: vi.fn(() => runtimeSettingsState.providerManager),
+    oauthManager: vi.fn(() => {
       if (runtimeSettingsState.oauthManager == null) {
         throw new Error('OAuthManager missing from runtime registration');
       }
       return runtimeSettingsState.oauthManager;
     }),
-    getActiveProviderStatus: vi.fn(() => ({
+    providerStatus: vi.fn(() => ({
       name:
         runtimeSettingsState.providerManager?.getActiveProviderName() ??
         runtimeSettingsState.context?.config?.getProvider() ??
@@ -857,12 +826,8 @@ describe('loadCliConfig', () => {
       path.resolve(path.sep, 'cli', 'path1'),
       path.join(mockCwd, 'cli', 'path2'),
     ];
-    const loadMemoryMock = ServerConfig.loadServerHierarchicalMemory as Mock<
-      typeof ServerConfig.loadServerHierarchicalMemory
-    >;
-    expect(loadMemoryMock).toHaveBeenCalled();
-    expect(loadMemoryMock.mock.calls.at(-1)?.[0]).toBe(process.cwd());
-    expect(loadMemoryMock.mock.calls.at(-1)?.[1]).toStrictEqual(
+    expect(config.getWorkingDir()).toBe(process.cwd());
+    expect(config.getConfiguredIncludeDirectories()).toStrictEqual(
       expectedIncludeDirectories,
     );
     expect(config.shouldLoadMemoryFromIncludeDirectories()).toBe(true);

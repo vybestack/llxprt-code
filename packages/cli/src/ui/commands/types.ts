@@ -11,10 +11,12 @@ import type {
   ConfirmationRequest,
 } from '../types.js';
 import type {
-  GitService,
+  WorkspaceCheckpointOperations,
   Logger,
   RecordingIntegration,
-  SubagentManager,
+  SubagentDefinitionReads,
+  SubagentDefinitionWrites,
+  ProfileDefinitionReads,
   ValidatedSessionMediaPackage,
   Todo, // Import shared command action return types from core
   ToolActionReturn,
@@ -24,10 +26,8 @@ import type {
   CommandActionReturn,
 } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import type { ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { RecordingSwapCallbacks } from '../../services/performResume.js';
 import type { LoadedSettings } from '../../config/settings.js';
-import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
 import type { SessionStatsState } from '../contexts/SessionContext.js';
@@ -37,9 +37,15 @@ import type {
 } from '../state/extensions.js';
 import type { CommandArgumentSchema } from './schema/types.js';
 import type { SubagentView } from '../components/SubagentManagement/types.js';
+import type { RuntimeApi } from '../contexts/RuntimeContext.js';
+import type { ProviderAliasRefresh } from '../contexts/ProviderAliasRefreshContext.js';
+import type { OAuthControl } from '../contexts/OAuthControlContext.js';
 
 // Grouped dependencies for clarity and easier mocking
 export interface CommandContext {
+  runtimeApi: RuntimeApi;
+  refreshProviderAliases: ProviderAliasRefresh;
+  oauthControl: OAuthControl;
   /**
    * Aborted when the user cancels this slash-command invocation with Esc in
    * the interactive UI. In non-interactive mode this is the run-level abort
@@ -70,11 +76,12 @@ export interface CommandContext {
      */
     agent: Agent | null;
     settings: LoadedSettings;
-    git: GitService | undefined;
+    git:
+      | Pick<WorkspaceCheckpointOperations, 'restoreProjectFromSnapshot'>
+      | undefined;
     logger: Logger;
-    subagentManager?: SubagentManager;
-    profileManager?: ProfileManager;
-    oauthManager?: OAuthManager;
+    subagentManager?: SubagentDefinitionReads & SubagentDefinitionWrites;
+    profileManager?: Pick<ProfileDefinitionReads, 'listProfiles'>;
   };
   // UI state and history management
   ui: {
@@ -132,6 +139,8 @@ export interface CommandContext {
   };
   // Flag to indicate if an overwrite has been confirmed
   overwriteConfirmed?: boolean;
+  /** Explicitly selects Agent-owned recording; absent retains raw interactive wiring. */
+  recordingOwner?: 'agent';
   // Recording integration for session recording
   recordingIntegration?: RecordingIntegration;
   /**

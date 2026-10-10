@@ -1,3 +1,7 @@
+import {
+  fixtureHookDefinitions,
+  fixtureHookRuntime,
+} from './hook-runtime-fixture.js';
 /**
  * @fileoverview Semantic tests for processCommonHookOutputFields, emitPerHookLogs, emitBatchSummary
  *
@@ -13,8 +17,8 @@
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import * as fc from 'fast-check';
 import type { AggregatedHookResult } from '../hookAggregator.js';
-import type { HookOutput, HookExecutionResult, HookConfig } from '../types.js';
-import { HookEventName, DefaultHookOutput } from '../types.js';
+import type { HookOutput, HookExecutionResult } from '../types.js';
+import { HookEventName, HookType, DefaultHookOutput } from '../types.js';
 import type { ProcessedHookResult } from '../hookEventHandler.js';
 import { HookEventHandler } from '../hookEventHandler.js';
 import { HookPlanner } from '../hookPlanner.js';
@@ -22,7 +26,7 @@ import { HookRunner } from '../hookRunner.js';
 import { HookAggregator } from '../hookAggregator.js';
 import { HookRegistry } from '../hookRegistry.js';
 import type { Config } from '../../config/config.js';
-import type { DebugLogger } from '../../logging/debug-logger.js';
+import type { DebugLogger } from '../../debug/DebugLogger.js';
 
 // -----------------------------------------------------------------------------
 // Test Helpers
@@ -54,7 +58,7 @@ function buildAggregated(
   outputs: Array<Partial<HookOutput>>,
   options: { success?: boolean; totalDuration?: number } = {},
 ): AggregatedHookResult {
-  const allOutputs: HookOutput[] = outputs.map(
+  const allOutputs: DefaultHookOutput[] = outputs.map(
     (o) =>
       new DefaultHookOutput({
         continue: o.continue,
@@ -82,10 +86,10 @@ function buildAggregated(
 function buildHookResults(shapes: HookResultShape[]): HookExecutionResult[] {
   return shapes.map((s, i) => ({
     hookConfig: {
-      id: `hook-${i}`,
+      type: HookType.Command,
+      command: `echo hook-${i}`,
       name: `test-hook-${i}`,
-      events: [HookEventName.BeforeTool],
-    } as HookConfig,
+    },
     eventName: HookEventName.BeforeTool,
     success: s.success,
     output: s.output
@@ -181,13 +185,17 @@ describe('processCommonHookOutputFields @plan:PLAN-20250218-HOOKSYSTEM.P13', () 
 
   beforeEach(() => {
     mockConfig = createMockConfig();
-    mockRegistry = new HookRegistry();
+    mockRegistry = new HookRegistry(fixtureHookDefinitions({}), () => true);
     mockPlanner = new HookPlanner(mockRegistry);
-    mockRunner = new HookRunner(mockConfig as Config);
+    mockRunner = new HookRunner(
+      fixtureHookRuntime(mockConfig as Config).process,
+      fixtureHookRuntime(mockConfig as Config).isTrustedFolder,
+      () => new AbortController().signal,
+    );
     mockAggregator = new HookAggregator();
 
     eventHandler = new HookEventHandler(
-      mockConfig as Config,
+      fixtureHookRuntime(mockConfig as Config),
       mockRegistry,
       mockPlanner,
       mockRunner,
@@ -419,13 +427,17 @@ describe('emitPerHookLogs and emitBatchSummary @plan:PLAN-20250218-HOOKSYSTEM.P1
   beforeEach(() => {
     mockConfig = createMockConfig();
     mockDebugLogger = createMockDebugLogger();
-    mockRegistry = new HookRegistry();
+    mockRegistry = new HookRegistry(fixtureHookDefinitions({}), () => true);
     mockPlanner = new HookPlanner(mockRegistry);
-    mockRunner = new HookRunner(mockConfig as Config);
+    mockRunner = new HookRunner(
+      fixtureHookRuntime(mockConfig as Config).process,
+      fixtureHookRuntime(mockConfig as Config).isTrustedFolder,
+      () => new AbortController().signal,
+    );
     mockAggregator = new HookAggregator();
 
     eventHandler = new HookEventHandler(
-      mockConfig as Config,
+      fixtureHookRuntime(mockConfig as Config),
       mockRegistry,
       mockPlanner,
       mockRunner,
@@ -573,7 +585,7 @@ describe('emitPerHookLogs and emitBatchSummary @plan:PLAN-20250218-HOOKSYSTEM.P1
     it('no log records when debugLogger absent @plan:PLAN-20250218-HOOKSYSTEM.P13', () => {
       // Create handler without debugLogger
       const handlerNoLogger = new HookEventHandler(
-        mockConfig as Config,
+        fixtureHookRuntime(mockConfig as Config),
         mockRegistry,
         mockPlanner,
         mockRunner,
@@ -622,13 +634,20 @@ describe('Property-based tests @plan:PLAN-20250218-HOOKSYSTEM.P13', () => {
 
   beforeEach(() => {
     const mockConfig = createMockConfig();
-    const mockRegistry = new HookRegistry();
+    const mockRegistry = new HookRegistry(
+      fixtureHookDefinitions({}),
+      () => true,
+    );
     const mockPlanner = new HookPlanner(mockRegistry);
-    const mockRunner = new HookRunner(mockConfig as Config);
+    const mockRunner = new HookRunner(
+      fixtureHookRuntime(mockConfig as Config).process,
+      fixtureHookRuntime(mockConfig as Config).isTrustedFolder,
+      () => new AbortController().signal,
+    );
     const mockAggregator = new HookAggregator();
 
     eventHandler = new HookEventHandler(
-      mockConfig as Config,
+      fixtureHookRuntime(mockConfig as Config),
       mockRegistry,
       mockPlanner,
       mockRunner,
@@ -735,13 +754,20 @@ describe('Property-based tests @plan:PLAN-20250218-HOOKSYSTEM.P13', () => {
         (hookResultShapes) => {
           const mockDebugLogger = createMockDebugLogger();
           const mockConfig = createMockConfig();
-          const mockRegistry = new HookRegistry();
+          const mockRegistry = new HookRegistry(
+            fixtureHookDefinitions({}),
+            () => true,
+          );
           const mockPlanner = new HookPlanner(mockRegistry);
-          const mockRunner = new HookRunner(mockConfig as Config);
+          const mockRunner = new HookRunner(
+            fixtureHookRuntime(mockConfig as Config).process,
+            fixtureHookRuntime(mockConfig as Config).isTrustedFolder,
+            () => new AbortController().signal,
+          );
           const mockAggregator = new HookAggregator();
 
           const handler = new HookEventHandler(
-            mockConfig as Config,
+            fixtureHookRuntime(mockConfig as Config),
             mockRegistry,
             mockPlanner,
             mockRunner,
@@ -789,13 +815,20 @@ describe('Property-based tests @plan:PLAN-20250218-HOOKSYSTEM.P13', () => {
         (hookResultShapes) => {
           const mockDebugLogger = createMockDebugLogger();
           const mockConfig = createMockConfig();
-          const mockRegistry = new HookRegistry();
+          const mockRegistry = new HookRegistry(
+            fixtureHookDefinitions({}),
+            () => true,
+          );
           const mockPlanner = new HookPlanner(mockRegistry);
-          const mockRunner = new HookRunner(mockConfig as Config);
+          const mockRunner = new HookRunner(
+            fixtureHookRuntime(mockConfig as Config).process,
+            fixtureHookRuntime(mockConfig as Config).isTrustedFolder,
+            () => new AbortController().signal,
+          );
           const mockAggregator = new HookAggregator();
 
           const handler = new HookEventHandler(
-            mockConfig as Config,
+            fixtureHookRuntime(mockConfig as Config),
             mockRegistry,
             mockPlanner,
             mockRunner,

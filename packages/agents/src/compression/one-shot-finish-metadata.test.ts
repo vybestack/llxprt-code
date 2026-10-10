@@ -1,3 +1,4 @@
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -34,6 +35,12 @@ describe('One-shot finish diagnostics', () => {
     const context = buildContext({
       history: generateHistory(20),
       resolveProvider: () => ({
+        invocation: captureProviderInvocation(
+          createProviderRuntimeContext({
+            settingsService: new SettingsService(),
+          }),
+          provider.name,
+        ),
         provider,
         runtime: createProviderRuntimeContext({
           settingsService: new SettingsService(),

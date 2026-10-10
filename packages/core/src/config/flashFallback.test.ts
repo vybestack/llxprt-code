@@ -4,7 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, vi, type Mock } from 'bun:test';
+import { SessionSettingsOwner } from '../session/session-settings-owner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+  type Mock,
+} from 'bun:test';
 import { Config } from './config.js';
 import { IdeClient } from '@vybestack/llxprt-code-ide-integration';
 import fs from 'node:fs';
@@ -25,6 +35,8 @@ void vi.mock('node:fs', () => {
 
 describe('Flash Model Fallback Configuration', () => {
   let config: Config;
+  let owner: SessionSettingsOwner;
+  afterEach(() => owner.dispose());
 
   beforeEach(() => {
     (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(true);
@@ -40,12 +52,8 @@ describe('Flash Model Fallback Configuration', () => {
       ideClient: IdeClient.getInstance(false),
     });
 
-    // Initialize contentGeneratorConfig for testing
-    (
-      config as unknown as { contentGeneratorConfig: unknown }
-    ).contentGeneratorConfig = {
-      model: 'gemini-2.5-pro',
-    };
+    owner = new SessionSettingsOwner(new SettingsService());
+    owner.initializeProviderSelection('gemini', config.getModel());
   });
 
   // These tests do not actually test fallback. isInFallbackMode() only returns true,
@@ -65,16 +73,17 @@ describe('Flash Model Fallback Configuration', () => {
       });
 
       // Should not crash when contentGeneratorConfig is undefined
-      newConfig.setModel('gemini-2.5-flash');
+      owner.chooseModel('gemini-2.5-flash');
       expect(newConfig.isInFallbackMode()).toBe(false);
     });
   });
 
   describe('getModel', () => {
-    it('should return contentGeneratorConfig model if available', () => {
+    it('reads current selection without changing the construction model', () => {
       // Simulate initialized content generator config
-      config.setModel('gemini-2.5-flash');
-      expect(config.getModel()).toBe('gemini-2.5-flash');
+      owner.chooseModel('gemini-2.5-flash');
+      expect(owner.readSelectedModel()).toBe('gemini-2.5-flash');
+      expect(config.getModel()).toBe('gemini-2.5-pro');
     });
 
     it('should fall back to initial model if contentGeneratorConfig is not available', () => {
@@ -103,7 +112,7 @@ describe('Flash Model Fallback Configuration', () => {
     });
 
     it('should persist switched state throughout session', () => {
-      config.setModel('gemini-2.5-flash');
+      owner.chooseModel('gemini-2.5-flash');
       // Setting state for fallback mode as is expected of clients
       config.setFallbackMode(true);
       expect(config.isInFallbackMode()).toBe(true);

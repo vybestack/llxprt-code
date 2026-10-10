@@ -32,6 +32,7 @@ import {
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as ServerConfig from '@vybestack/llxprt-code-core';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { loadCliConfig } from '../config.js';
@@ -167,51 +168,21 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
       modelName: '',
       warnings: [],
     })),
-    getCliRuntimeContext: vi.fn(() => runtimeSettingsState.context),
-    setCliRuntimeContext: vi.fn(
-      (
-        svc: SettingsService,
-        cfg?: ServerConfig.Config,
-        opts: { metadata?: Record<string, unknown>; runtimeId?: string } = {},
-      ) => {
-        runtimeSettingsState.context = {
-          settingsService: svc,
-          config: cfg ?? null,
-          runtimeId: opts.runtimeId ?? 'mock-runtime',
-          metadata: opts.metadata ?? {},
-        };
-      },
-    ),
     switchActiveProvider: vi.fn(async () => ({
       changed: true,
       previousProvider: null,
       nextProvider: 'gemini',
       infoMessages: [],
     })),
-    registerCliProviderInfrastructure: vi.fn(
-      (mgr: ProviderManager, oauth: unknown) => {
-        runtimeSettingsState.providerManager = mgr;
-        runtimeSettingsState.oauthManager = oauth ?? null;
-      },
-    ),
     applyCliArgumentOverrides: vi.fn(async () => {}),
-    getCliRuntimeConfig: vi.fn(
-      () => runtimeSettingsState.context?.config ?? null,
-    ),
-    getCliRuntimeServices: vi.fn(() => ({
-      config: runtimeSettingsState.context?.config ?? null,
-      settingsService:
-        runtimeSettingsState.context?.settingsService ?? new SettingsService(),
-      providerManager: getProviderManager(),
-    })),
-    getCliProviderManager: vi.fn(() => runtimeSettingsState.providerManager),
-    getCliOAuthManager: vi.fn(() => {
+    providerManager: vi.fn(() => runtimeSettingsState.providerManager),
+    oauthManager: vi.fn(() => {
       if (runtimeSettingsState.oauthManager === null) {
         throw new Error('OAuthManager missing from runtime registration');
       }
       return runtimeSettingsState.oauthManager;
     }),
-    getActiveProviderStatus: vi.fn(() => ({ name: null })),
+    providerStatus: vi.fn(() => ({ name: null })),
     listProviders: vi.fn(() => []),
     getActiveProviderName: vi.fn(() => null),
     setActiveModel: vi.fn(async () => ({
@@ -313,10 +284,11 @@ function settingsWithMcpServers(servers: McpServerMap): Settings {
 async function loadMcpConfig(
   settings: Settings,
   cliArgs: string[] = [],
+  sessionSettingsOwner?: SessionSettingsOwner,
+  runtimeSettingsService = new SettingsService(),
 ): Promise<ServerConfig.Config> {
   process.argv = ['node', 'script.js', ...cliArgs];
   const argv = await parseArguments(settings);
-  const runtimeSettingsService = new SettingsService();
   return loadCliConfig(
     settings,
     [],
@@ -324,7 +296,7 @@ async function loadMcpConfig(
     'test-session',
     argv,
     undefined,
-    { settingsService: runtimeSettingsService },
+    { settingsService: runtimeSettingsService, sessionSettingsOwner },
   );
 }
 
@@ -549,8 +521,13 @@ describe('mcpFilteringParity: MCP server filtering', () => {
   });
 
   it('reloads persisted MCP servers and reapplies settings filtering', async () => {
+    const settingsService = new SettingsService();
+    const settingsOwner = new SessionSettingsOwner(settingsService);
     const config = await loadMcpConfig(
       settingsWithMcpServers({ stale: { command: 'stale' } }),
+      [],
+      settingsOwner,
+      settingsService,
     );
     reloadSettingsState.current = {
       ...settingsWithMcpServers({
@@ -560,44 +537,70 @@ describe('mcpFilteringParity: MCP server filtering', () => {
       allowMCPServers: ['allowed'],
     };
 
-    await config.reloadMcpServers();
+    const binding = settingsOwner.readMcpSettingsBinding();
+    if (binding === undefined)
+      throw new Error('Missing settings selection binding');
+    const reloaded = await binding.reload();
 
-    expect(Object.keys(config.getMcpServers()!)).toStrictEqual(['allowed']);
-    expect(config.getBlockedMcpServers()).toStrictEqual([
+    expect(Object.keys(reloaded.mcpServers)).toStrictEqual(['allowed']);
+    expect(reloaded.blockedMcpServers).toStrictEqual([
       { name: 'blocked', extensionName: '' },
     ]);
+    expect(config.getMcpServers()).not.toBe(reloaded.mcpServers);
+    await settingsOwner.dispose();
   });
 
   it('retains the startup CLI allow-list when persisted settings reload', async () => {
+    const settingsService = new SettingsService();
+    const settingsOwner = new SessionSettingsOwner(settingsService);
     const config = await loadMcpConfig(
       settingsWithMcpServers({ allowed: { command: 'initial' } }),
       ['--allowed-mcp-server-names', 'allowed'],
+      settingsOwner,
+      settingsService,
     );
     reloadSettingsState.current = settingsWithMcpServers({
       allowed: { command: 'updated' },
       rejected: { command: 'rejected' },
     });
 
-    await config.reloadMcpServers();
+    const binding = settingsOwner.readMcpSettingsBinding();
+    if (binding === undefined)
+      throw new Error('Missing settings selection binding');
+    const reloaded = await binding.reload();
 
-    expect(config.getMcpServers()).toStrictEqual({
+    expect(reloaded.mcpServers).toStrictEqual({
       allowed: { command: 'updated' },
     });
+    expect(config.getMcpServers()).not.toStrictEqual(reloaded.mcpServers);
+    await settingsOwner.dispose();
   });
 
   it('keeps MCP reload disabled when administrative policy disabled it at startup', async () => {
-    const config = await loadMcpConfig({
-      ...settingsWithMcpServers({ initial: { command: 'initial' } }),
-      admin: { mcp: { enabled: false } },
-    });
+    const settingsService = new SettingsService();
+    const settingsOwner = new SessionSettingsOwner(settingsService);
+    const config = await loadMcpConfig(
+      {
+        ...settingsWithMcpServers({ initial: { command: 'initial' } }),
+        admin: { mcp: { enabled: false } },
+      },
+      [],
+      settingsOwner,
+      settingsService,
+    );
     reloadSettingsState.current = settingsWithMcpServers({
       added: { command: 'added' },
     });
 
-    await config.reloadMcpServers();
+    const binding = settingsOwner.readMcpSettingsBinding();
+    if (binding === undefined)
+      throw new Error('Missing settings selection binding');
+    const reloaded = await binding.reload();
 
-    expect(config.getMcpServers()).toStrictEqual({});
-    expect(config.getBlockedMcpServers()).toStrictEqual([]);
+    expect(reloaded.mcpServers).toStrictEqual({});
+    expect(reloaded.blockedMcpServers).toStrictEqual([]);
+    expect(config.getMcpServers()).not.toBe(reloaded.mcpServers);
+    await settingsOwner.dispose();
   });
 
   it('blockedMcpServers includes servers filtered by settings.excludeMCPServers', async () => {

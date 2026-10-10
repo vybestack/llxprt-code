@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { installWorkspaceRuntimeFixture } from '../../../__tests__/workspace-runtime-fixture.js';
+const composeFixtureRuntime = installWorkspaceRuntimeFixture();
+
 import { describe, it, expect, vi } from 'bun:test';
 
 const { schemaHandlerSpy, createHandlerMock } = (() => {
@@ -29,22 +32,19 @@ import { useTextBuffer } from '../../components/shared/text-buffer.js';
 import type { CommandContext, SlashCommand } from '../types.js';
 import { CommandKind } from '../types.js';
 import type { Config } from '@vybestack/llxprt-code-core';
-import { FileDiscoveryService } from '@vybestack/llxprt-code-storage';
 
 const mockCommandContext = {} as CommandContext;
 
 const mockConfig = {
+  getMcpServers: () => undefined,
   getTargetDir: () => '/',
-  getWorkspaceContext: () => ({
-    getDirectories: () => [],
-  }),
+
   getProjectRoot: () => '/',
   getFileFilteringOptions: () => ({
     respectGitIgnore: true,
     respectLlxprtIgnore: true,
   }),
   getEnableRecursiveFileSearch: () => false,
-  getFileService: () => new FileDiscoveryService('/'),
 } as unknown as Config;
 
 function useTextBufferForTest(text: string, cursorOffset?: number) {
@@ -102,7 +102,7 @@ describe('useSlashCompletion schema gating', () => {
           slashCommands,
           mockCommandContext,
           false,
-          mockConfig,
+          composeFixtureRuntime(mockConfig),
         );
       },
       { initialProps: { text: '/set' } },

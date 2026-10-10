@@ -22,9 +22,10 @@ export function isAbortSignal(value: unknown): value is AbortSignal {
   );
 }
 
-export function getRequestSignal(
-  options: Pick<GenerateChatOptions, 'invocation' | 'metadata'>,
-): AbortSignal | undefined {
+export function getRequestSignal(options: {
+  readonly invocation?: { readonly signal?: AbortSignal };
+  readonly metadata?: Readonly<Record<string, unknown>>;
+}): AbortSignal | undefined {
   const invocationSignal = options.invocation?.signal;
   if (isAbortSignal(invocationSignal)) return invocationSignal;
   const metadataSignal = options.metadata?.abortSignal;

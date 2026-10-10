@@ -1,3 +1,4 @@
+import { getOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -34,11 +35,11 @@ function buildContext(
   overrides: Partial<ResponsesInputBuildContext> = {},
 ): ResponsesInputBuildContext {
   const stubConfig: ToolOutputSettingsProvider = {
-    getEphemeralSettings: () => ({}),
+    readExecutionPolicy: () => ({}),
   };
   return {
     includeReasoningInContext: true,
-    outputLimiterConfig: stubConfig,
+    outputLimits: getOutputLimits(stubConfig),
     debug: () => {},
     mediaPdfEnabled: true,
     ...overrides,

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import type { OAuthControl } from '../contexts/OAuthControlContext.js';
 import {
   discoverBrowserProfiles,
   validateProfileDirectory,
@@ -96,7 +96,10 @@ export function handleDiscoverBrowserProfiles(
 }
 
 export function handleManageBrowserProfile(
-  oauthManager: OAuthManager,
+  oauthManager: Pick<
+    OAuthControl,
+    'clearBrowserProfileAssociation' | 'setBrowserProfileAssociation'
+  >,
   provider: string,
   bucket: string | undefined,
   selector: string | undefined,

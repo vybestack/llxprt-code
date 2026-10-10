@@ -11,14 +11,14 @@ import type {
   IIdeService,
   OpenDiffParams,
 } from '@vybestack/llxprt-code-tools';
-import type { Config } from '../config/config.js';
+import type { WorkspaceIdePort } from '../services/workspace-ide-owner.js';
 import { IDEConnectionStatus as CoreIDEConnectionStatus } from '@vybestack/llxprt-code-ide-integration';
 
 export class CoreIdeServiceAdapter implements IIdeService {
-  constructor(private readonly config: Config) {}
+  constructor(private readonly ide: Pick<WorkspaceIdePort, 'getClient'>) {}
 
   async applyDiff(params: DiffParams): Promise<DiffUpdateResult> {
-    const ideClient = this.config.getIdeClient();
+    const ideClient = this.ide.getClient();
     if (ideClient === undefined) {
       return { status: 'rejected', content: undefined };
     }
@@ -26,7 +26,7 @@ export class CoreIdeServiceAdapter implements IIdeService {
   }
 
   getConnectionStatus(): IDEConnectionStatus {
-    const status = this.config.getIdeClient()?.getConnectionStatus().status;
+    const status = this.ide.getClient()?.getConnectionStatus().status;
     if (status === CoreIDEConnectionStatus.Connected) {
       return 'connected';
     }
@@ -37,7 +37,7 @@ export class CoreIdeServiceAdapter implements IIdeService {
   }
 
   async openDiff(params: OpenDiffParams): Promise<void> {
-    const ideClient = this.config.getIdeClient();
+    const ideClient = this.ide.getClient();
     if (ideClient === undefined) {
       throw new Error('IDE client is not available');
     }

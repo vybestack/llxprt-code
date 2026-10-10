@@ -1,3 +1,4 @@
+import { createHistoryRuntimeFixture } from '../../core/__tests__/history-runtime-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -27,7 +28,7 @@ import type {
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
+
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
@@ -87,24 +88,16 @@ function buildRuntimeContext(
     model: 'test-model',
     sessionId: 'test-session',
   });
-  return createAgentRuntimeContext({
+  return createHistoryRuntimeFixture({
     state,
     history: historyService,
-    settings: {
+    policy: {
       compressionThreshold: overrides.compressionThreshold ?? 0.8,
       contextLimit: overrides.contextLimit ?? 131072,
       preserveThreshold: 0.2,
       telemetry: { enabled: false, target: null },
       'reasoning.includeInContext': true,
     },
-    provider: {} as never,
-    telemetry: {} as never,
-    tools: {} as never,
-    providerRuntime: {
-      runtimeId: 'test-runtime',
-      settingsService: { get: vi.fn(() => undefined) } as never,
-      config: {} as never,
-    } as never,
   });
 }
 
@@ -154,7 +147,8 @@ function buildEnforcerHarness(
     historyService,
     runtimeContext,
     generationConfig: overrides.generationConfig ?? {},
-    providerRuntimeNullable: undefined,
+    readCompletionBudgetSetting: () =>
+      runtimeContext.readCompletionBudgetSetting(),
     logger: makeLogger(),
     ensureDensityOptimized,
     performCompression,
@@ -346,9 +340,7 @@ describe('P26: providerContentEnforcement characterization', () => {
   it('uses the stateful Responses effective estimate and reprojects recomposed history before send', async () => {
     const settings = new SettingsService();
     const tokenizerFactory = createPromptTokenizerFactory();
-    const config = createRuntimeConfigStub(settings, {
-      getTokenizerFactory: () => tokenizerFactory,
-    });
+    const config = createRuntimeConfigStub(settings);
     const providerRuntime = createProviderRuntimeContext({
       settingsService: settings,
       config,
@@ -402,6 +394,7 @@ describe('P26: providerContentEnforcement characterization', () => {
           contents: candidate,
           ephemerals: { 'responses-stateful': true },
         }),
+        tokenizerFactory,
       );
       return recordPreparedEstimate(prepared, effectiveEstimates);
     };
@@ -464,9 +457,7 @@ describe('P26: providerContentEnforcement characterization', () => {
   it('preserves structured overflow metadata when real stateful reprojection remains over limit', async () => {
     const settings = new SettingsService();
     const tokenizerFactory = createAmplifyingPromptTokenizerFactory();
-    const config = createRuntimeConfigStub(settings, {
-      getTokenizerFactory: () => tokenizerFactory,
-    });
+    const config = createRuntimeConfigStub(settings);
     const providerRuntime = createProviderRuntimeContext({
       settingsService: settings,
       config,
@@ -518,6 +509,7 @@ describe('P26: providerContentEnforcement characterization', () => {
           contents: candidate,
           ephemerals: { 'responses-stateful': true },
         }),
+        tokenizerFactory,
       );
       return recordPreparedEstimate(prepared, estimates);
     };
@@ -804,7 +796,7 @@ describe('P26: compressionBudgeting characterization', () => {
         cfg as never,
         'm',
         undefined,
-        settingsService,
+        settingsService.get('maxOutputTokens'),
         131_072,
       ),
     ).toBe(32768);
@@ -830,7 +822,13 @@ describe('P26: compressionBudgeting characterization', () => {
     const { settingsService } =
       observeGetCompletionBudgetRejectsALiveBudgetThatConsumesTheContext();
     expect(() =>
-      getCompletionBudget({}, 'm', undefined, settingsService, 131_072),
+      getCompletionBudget(
+        {},
+        'm',
+        undefined,
+        settingsService.get('maxOutputTokens'),
+        131_072,
+      ),
     ).toThrow(InvalidContextBudgetError);
   });
 

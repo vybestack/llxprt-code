@@ -16,7 +16,7 @@
  * Per C-CB-09:
  * - createKeyringTokenStore: injects core SecureStore + DebugLogger
  * - createAuthPrecedenceResolver: injects core ProviderKeyStorage + DebugLogger;
- *   forwards caller-supplied oauthManager and getActiveRuntimeContext
+ *   forwards the caller-supplied oauthManager
  * - SecureStore/getSecureStore is NOT used in AuthPrecedenceResolver —
  *   it belongs exclusively to the KeyringTokenStore path
  */
@@ -29,7 +29,6 @@ import type {
   AuthPrecedenceConfig,
   OAuthManager,
   ISettingsService as AuthISettingsService,
-  IProviderRuntimeContext,
 } from '@vybestack/llxprt-code-auth';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { SecureStore, type KeyringAdapter } from './storage/secure-store.js';
@@ -79,13 +78,11 @@ export function createKeyringTokenStore(
  * @param config - Auth precedence configuration (API key, env vars, OAuth flags)
  * @param settingsService - Core SettingsService satisfying ISettingsService
  * @param oauthManager - Optional OAuthManager instance (caller-supplied, forwarded)
- * @param getActiveRuntimeContext - Optional runtime context getter (caller-supplied, forwarded)
  */
 export function createAuthPrecedenceResolver(
   config: AuthPrecedenceConfig,
   settingsService: AuthISettingsService,
   oauthManager?: OAuthManager,
-  getActiveRuntimeContext?: () => IProviderRuntimeContext | null,
 ): AuthPrecedenceResolver {
   const providerKeyStorage = getProviderKeyStorage();
   const logger = new DebugLogger('llxprt:auth:precedence');
@@ -94,6 +91,5 @@ export function createAuthPrecedenceResolver(
     settingsService,
     providerKeyStorage,
     logger,
-    getActiveRuntimeContext,
   });
 }

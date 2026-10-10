@@ -292,6 +292,10 @@ export class CheckAsyncTasksTool extends BaseDeclarativeTool<
 > {
   static readonly Name = 'check_async_tasks';
 
+  withAsyncTaskService(service: IAsyncTaskService): CheckAsyncTasksTool {
+    return new CheckAsyncTasksTool(service);
+  }
+
   constructor(
     private readonly dependencies:
       | CheckAsyncTasksToolDependencies

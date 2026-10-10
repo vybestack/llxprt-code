@@ -5,6 +5,7 @@
  */
 
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -23,6 +24,8 @@ interface TurnMediaRequestOptions {
   readonly estimateFinalizedPromptTokens:
     | ((contents: IContent[]) => Promise<number>)
     | undefined;
+  readonly hookOwner?: AgentChatRecordingExecution['hookOwner'];
+  readonly recordingExecution?: AgentChatRecordingExecution;
 }
 
 export async function enforceTurnMediaRequestContents(
@@ -40,6 +43,9 @@ export async function enforceTurnMediaRequestContents(
     options.promptId,
     options.provider,
     options.estimateFinalizedPromptTokens,
+    options.recordingExecution?.transcriptPath,
+    options.recordingExecution?.historyOrigin,
+    options.hookOwner ?? options.recordingExecution?.hookOwner,
   );
   logApiRequest(
     options.runtimeContext,

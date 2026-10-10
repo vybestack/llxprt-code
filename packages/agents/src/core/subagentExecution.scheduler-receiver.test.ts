@@ -18,6 +18,7 @@
  * correct `this`.
  */
 
+import { SessionSchedulerOwner } from '../session/sessionSchedulerOwner.js';
 import { describe, it, expect, vi } from 'bun:test';
 // vi is used for mocking ctx components below
 import {
@@ -53,6 +54,8 @@ class ReceiverSensitiveScheduler {
     }
   }
 
+  cancelAll(): void {}
+
   async dispose(): Promise<void> {}
 }
 
@@ -60,10 +63,12 @@ function makeCtx(
   overrides?: Partial<InitSchedulerContext>,
 ): InitSchedulerContext {
   return {
-    schedulerConfig: {
-      getSessionId: () => 'test-session',
-      disposeScheduler: vi.fn(),
-    } as unknown as InitSchedulerContext['schedulerConfig'],
+    createSchedulerOwner: () =>
+      new SessionSchedulerOwner(
+        'receiver',
+        () => new ReceiverSensitiveScheduler(),
+        async () => {},
+      ),
     messageBus: {
       subscribe: vi.fn(() => () => {}),
       respondToConfirmation: vi.fn(),
@@ -78,13 +83,13 @@ describe('initInteractiveScheduler — scheduler receiver preservation (issue #2
   it('preserves the scheduler receiver when no schedulerFactory is provided (ACP fallback)', async () => {
     const realScheduler = new ReceiverSensitiveScheduler();
 
-    // Override getOrCreateScheduler to return our receiver-sensitive scheduler.
     const ctx = makeCtx({
-      schedulerConfig: {
-        getSessionId: () => 'test-session',
-        disposeScheduler: vi.fn(),
-        getOrCreateScheduler: vi.fn(async () => realScheduler),
-      } as unknown as InitSchedulerContext['schedulerConfig'],
+      createSchedulerOwner: () =>
+        new SessionSchedulerOwner(
+          'receiver',
+          () => realScheduler,
+          async () => {},
+        ),
     });
 
     // No schedulerFactory → exercises the fallback path.
@@ -101,6 +106,7 @@ describe('initInteractiveScheduler — scheduler receiver preservation (issue #2
 
     // Verify the original scheduler's schedule was actually called.
     expect(realScheduler.scheduleCallCount).toBe(1);
+    await result.schedulerDispose();
   });
 
   it('preserves the scheduler receiver when schedulerFactory IS provided', async () => {
@@ -127,5 +133,6 @@ describe('initInteractiveScheduler — scheduler receiver preservation (issue #2
     ).resolves.toBeUndefined();
 
     expect(realScheduler.scheduleCallCount).toBe(1);
+    await result.schedulerDispose();
   });
 });

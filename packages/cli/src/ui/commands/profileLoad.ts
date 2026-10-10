@@ -5,24 +5,14 @@
  */
 
 import type { CommandContext, MessageActionReturn } from './types.js';
-import { getRuntimeApi } from '../contexts/RuntimeContext.js';
-import { recordActiveProviderSwitch } from '../utils/recordActiveProviderSwitch.js';
+import {
+  agentActiveProviderStatus,
+  agentProviderSwitchRecorder,
+  recordActiveProviderSwitch,
+} from '../utils/recordActiveProviderSwitch.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 
 const logger = new DebugLogger('llxprt:ui:profile-command');
-
-type ProfileConfigService = Partial<
-  Pick<
-    NonNullable<CommandContext['services']['config']>,
-    'getProviderManager' | 'setProvider'
-  >
-> & {
-  getAgentClient?: () =>
-    | (ReturnType<
-        NonNullable<CommandContext['services']['config']>['getAgentClient']
-      > & { setTools?: () => void | Promise<void> })
-    | undefined;
-};
 
 export type ProfileLoadResultView = {
   infoMessages?: string[];
@@ -79,92 +69,30 @@ export function classifyLoadError(
   };
 }
 
-async function switchProviderManager(
-  providerManager: {
-    setActiveProvider(name: string): void | Promise<void>;
-    getActiveProvider(): { name: string } | undefined;
-  },
-  providerName: string,
-): Promise<void> {
-  logger.debug(
-    () =>
-      `[profile] forcing config provider manager switch to '${providerName}'`,
-  );
-  try {
-    await providerManager.setActiveProvider(providerName);
-    logActiveProviderName(providerManager);
-  } catch (error) {
-    logger.error(
-      () =>
-        `[profile] failed to set provider on config manager: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-}
-
-function logActiveProviderName(providerManager: {
-  setActiveProvider(name: string): void | Promise<void>;
-  getActiveProvider(): { name: string } | undefined;
-}): void {
-  logger.debug(() => {
-    let activeName = 'unknown';
-    try {
-      activeName = providerManager.getActiveProvider()?.name ?? 'unknown';
-    } catch (readError) {
-      logger.debug(
-        () =>
-          `[profile] unable to read active provider: ${readError instanceof Error ? readError.message : String(readError)}`,
-      );
-    }
-    return `[profile] config manager active provider after switch: ${activeName}`;
-  });
-}
-
-async function refreshAgentTools(
-  configService: ProfileConfigService,
-): Promise<void> {
-  const agentClient = configService.getAgentClient?.();
-  if (agentClient !== undefined && typeof agentClient.setTools === 'function') {
-    try {
-      await agentClient.setTools();
-    } catch (error) {
-      logger.warn(
-        () =>
-          `[profile] failed to refresh agent tool schema after load: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  }
-}
-
 export async function applyLoadedProfileConfig(
   context: CommandContext,
-  result: { providerName?: string },
 ): Promise<void> {
-  const configService: ProfileConfigService | null | undefined =
-    context.services.config;
-  if (configService == null) {
-    return;
-  }
-
-  const providerManager = configService.getProviderManager?.();
-  if (result.providerName) {
-    if (providerManager !== undefined) {
-      await switchProviderManager(providerManager, result.providerName);
-    }
-    configService.setProvider?.(result.providerName);
-  }
-
-  await refreshAgentTools(configService);
+  await context.services.agent?.sessionClient.publishTools();
 }
 
-export function recordProviderSwitch(
+export async function recordProviderSwitch(
   context: CommandContext,
   result: { providerName?: string },
   profileLoadResult: ProfileLoadResultView,
   reportFailure: (message: string) => void,
-): void {
-  recordActiveProviderSwitch(
-    context.recordingIntegration,
-    getRuntimeApi(),
+): Promise<void> {
+  const agent = context.services.agent;
+  if (!agent) throw new Error('Session agent is unavailable');
+  return recordActiveProviderSwitch(
+    context.recordingOwner === 'agent'
+      ? agentProviderSwitchRecorder((event) =>
+          agent.session.recordRecordingEvent(event),
+        )
+      : context.recordingIntegration,
+    agentActiveProviderStatus(
+      () => agent.getProvider(),
+      () => agent.getModel(),
+    ),
     reportFailure,
     {
       providerName: result.providerName,

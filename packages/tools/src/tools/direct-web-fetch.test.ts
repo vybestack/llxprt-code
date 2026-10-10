@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { physicalFiles } from '../__tests__/helpers/physical-files.js';
+
 /**
  * Real-loopback behavioral tests for DirectWebFetchTool.
  *
@@ -29,12 +31,17 @@ function delay(ms: number): Promise<void> {
 
 function createToolHost(): IToolHost {
   return {
+    ...physicalFiles,
     getTargetDir: () => '/tmp',
     getWorkspaceRoots: () => ['/tmp'],
     getApprovalMode: () => 'auto',
     setApprovalMode: () => {},
     isInteractive: () => false,
-    hasFeatureFlag: () => false,
+
+    runSearch: <T>(
+      _directories: readonly string[],
+      operation: () => Promise<T>,
+    ): Promise<T> => operation(),
     getFileService: () => ({
       shouldGitIgnoreFile: () => false,
       shouldLlxprtIgnoreFile: () => false,
@@ -52,7 +59,7 @@ function createToolHost(): IToolHost {
     getLlxprtIgnoreFilePath: () => null,
     recordFileRead: () => {},
     getLlxprtIgnorePatterns: () => [],
-    getEphemeralSettings: () => ({}),
+    readExecutionPolicy: () => ({}),
     getDebugMode: () => false,
   };
 }

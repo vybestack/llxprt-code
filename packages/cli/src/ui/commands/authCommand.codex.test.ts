@@ -10,6 +10,7 @@
  * Verifies that Codex appears in supported providers and can be managed via /auth
  */
 
+import { createMockRuntimeApi } from '../components/__tests__/StatsDisplay.testHelpers.js';
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { AuthCommandExecutor } from './authCommand.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
@@ -42,9 +43,13 @@ describe('AuthCommand Codex OAuth Integration', () => {
       listBuckets: vi.fn().mockResolvedValue([]),
     } as unknown as OAuthManager;
 
-    executor = new AuthCommandExecutor(mockOAuthManager);
+    executor = new AuthCommandExecutor(mockOAuthManager, () => {});
 
     mockContext = {
+      runtimeApi: createMockRuntimeApi(),
+      oauthControl:
+        mockOAuthManager as unknown as CommandContext['oauthControl'],
+      refreshProviderAliases: vi.fn(async () => {}),
       signal: new AbortController().signal,
       services: {
         config: null,

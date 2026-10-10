@@ -1,3 +1,9 @@
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
+import { afterEach as closeInvocationRoots } from 'bun:test';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+const retainedInvocationOwners: SessionSettingsOwner[] = [];
+
+import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -36,7 +42,7 @@ import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Age
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
+  createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
@@ -69,6 +75,11 @@ function createConnectionError(): Error {
 }
 
 describe('Issue #3130 slice 3b — attempt-level token-usage records', () => {
+  closeInvocationRoots(async () => {
+    for (const owner of retainedInvocationOwners.splice(0))
+      await owner.dispose();
+  });
+
   let settingsService: SettingsService;
   let config: Config;
   let manager: TestRuntimeProviderManager;
@@ -91,7 +102,7 @@ describe('Issue #3130 slice 3b — attempt-level token-usage records', () => {
 
     manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
-    config.setProviderManager(manager);
+    configureProviderRuntimeFactories(config, manager);
   });
 
   function buildChatSession(
@@ -104,7 +115,16 @@ describe('Issue #3130 slice 3b — attempt-level token-usage records', () => {
       model: config.getModel(),
       sessionId: config.getSessionId(),
     });
+    const invocationOwner = new SessionSettingsOwner(settingsService);
+    retainedInvocationOwners.push(invocationOwner);
     const view = createAgentRuntimeContext({
+      prepareProviderInvocation: (name, parameters, signal) =>
+        invocationOwner.prepareProviderInvocation(
+          runtimeState.runtimeId,
+          name,
+          parameters,
+          signal,
+        ),
       state: runtimeState,
       history: history ?? new HistoryService(),
       settings: {
@@ -117,9 +137,12 @@ describe('Issue #3130 slice 3b — attempt-level token-usage records', () => {
         },
         'reasoning.includeInContext': true,
       },
-      provider: createProviderAdapterFromManager(config.getProviderManager()),
-      telemetry: createTelemetryAdapterFromConfig(config),
-      tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
+      provider: createProviderAdapterFromManager(manager),
+      telemetry: createTelemetryAdapter(
+        config,
+        createSessionSettingsFixture(config).settingsOwner.telemetry,
+      ),
+      tools: createToolRegistryViewFromRegistry(undefined),
       providerRuntime: { ...providerRuntime },
     });
 

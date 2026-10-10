@@ -18,12 +18,15 @@ import type {
 import { useTextBuffer, textBufferReducer } from './text-buffer.js';
 
 const defaultVisualLayout: VisualLayout = {
+  transformedToLogicalMaps: [[0]],
+  visualToTransformedMap: [0],
   visualLines: [''],
   logicalToVisualMap: [[[0, 0]]],
   visualToLogicalMap: [[0, 0]],
 };
 
 const initialState: TextBufferState = {
+  transformationsByLine: [[]],
   lines: [''],
   cursorRow: 0,
   cursorCol: 0,
@@ -259,7 +262,7 @@ describe('delete_word_left action', () => {
       const state = textBufferReducer(createSingleLineState(input, cursorCol), {
         type: 'delete_word_left',
       });
-      expect(state.lines).toStrictEqual(expectedLines);
+      expect(state.lines).toStrictEqual([...expectedLines]);
       expect(state.cursorCol).toBe(expectedCol);
     },
   );
@@ -302,7 +305,7 @@ describe('delete_word_right action', () => {
       const state = textBufferReducer(createSingleLineState(input, cursorCol), {
         type: 'delete_word_right',
       });
-      expect(state.lines).toStrictEqual(expectedLines);
+      expect(state.lines).toStrictEqual([...expectedLines]);
       expect(state.cursorCol).toBe(expectedCol);
     },
   );

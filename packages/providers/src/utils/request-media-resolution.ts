@@ -5,7 +5,7 @@
  */
 
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import {
   assertRequestMediaBudget,
   DEFAULT_REQUEST_MEDIA_BUDGET_BYTES,
@@ -30,14 +30,6 @@ function containsReference(contents: readonly IContent[]): boolean {
 function throwIfAborted(signal: AbortSignal | undefined): void {
   if (signal?.aborted !== true) return;
   throw signal.reason;
-}
-
-function requestIdentity(runtime: ProviderRuntimeContext): string {
-  const logicalRequestId = runtime.metadata?.['logicalRequestId'];
-  if (typeof logicalRequestId === 'string' && logicalRequestId.length > 0) {
-    return logicalRequestId;
-  }
-  return runtime.runtimeId ?? 'provider-request';
 }
 
 function turnIdentity(contents: readonly IContent[]): string {
@@ -122,14 +114,38 @@ export async function finishMediaRequest(
   if (outcome.status === 'failed') throw outcome.error;
 }
 
+export function captureRequestMediaInput(
+  logicalRequestId: unknown,
+  runtimeId: string | undefined,
+  aggregateBudgetBytes: number | undefined,
+  resolver: RequestMediaResolutionService | undefined,
+): {
+  readonly requestId: string;
+  readonly aggregateBudgetBytes?: number;
+  readonly resolver?: RequestMediaResolutionService;
+} {
+  return {
+    requestId:
+      typeof logicalRequestId === 'string' && logicalRequestId.length > 0
+        ? logicalRequestId
+        : (runtimeId ?? 'provider-request'),
+    aggregateBudgetBytes,
+    resolver,
+  };
+}
+
 export async function resolveRequestMedia(
-  runtime: ProviderRuntimeContext | undefined,
+  media: {
+    readonly requestId: string;
+    readonly aggregateBudgetBytes?: number;
+    readonly resolver?: RequestMediaResolutionService;
+  },
   contents: IContent[],
   signal: AbortSignal | undefined,
 ): Promise<ResolvedMediaRequest> {
   throwIfAborted(signal);
   const aggregateBudgetBytes =
-    runtime?.requestMediaBudgetBytes ?? DEFAULT_REQUEST_MEDIA_BUDGET_BYTES;
+    media.aggregateBudgetBytes ?? DEFAULT_REQUEST_MEDIA_BUDGET_BYTES;
   if (!containsReference(contents)) {
     assertRequestMediaBudget(
       contents,
@@ -138,15 +154,15 @@ export async function resolveRequestMedia(
     );
     return Promise.resolve(unchangedRequest(contents));
   }
-  if (runtime?.mediaResolver === undefined) {
+  if (media.resolver === undefined) {
     const turnId = turnIdentity(contents);
     throw new Error(
       `Provider request contains unresolved media references in turn ${turnId}, but its explicit runtime context has no media resolver`,
     );
   }
-  return runtime.mediaResolver.resolve({
+  return media.resolver.resolve({
     contents,
-    requestId: requestIdentity(runtime),
+    requestId: media.requestId,
     turnId: turnIdentity(contents),
     aggregateBudgetBytes,
     ...(signal === undefined ? {} : { signal }),

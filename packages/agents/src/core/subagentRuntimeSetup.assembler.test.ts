@@ -1,3 +1,6 @@
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
+import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -7,6 +10,17 @@
  * createChatObject) preserves `interactionMode: 'subagent'` and the persona
  * across turns (issue #3136, Step 1).
  */
+import { instructionFixture } from './__tests__/instruction-fixture.js';
+
+import { installModelToolFixture } from './__tests__/model-tool-fixture.js';
+const modelTools = installModelToolFixture();
+
+import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
+const fixturePaths = installTestWorkspacePaths({
+  targetDir: process.cwd(),
+  isTrusted: () => true,
+});
+import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { createChatObject } from './subagentRuntimeSetup.js';
@@ -22,7 +36,7 @@ import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Age
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
+  createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import {
@@ -62,6 +76,7 @@ void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
 
 describe('Subagent per-turn assembler (issue #3136)', () => {
   let settingsService: SettingsService;
+  let settingsOwner: SessionSettingsOwner;
   let config: Config;
   let capturedCalls: GenerateChatOptions[];
 
@@ -69,12 +84,6 @@ describe('Subagent per-turn assembler (issue #3136)', () => {
     vi.clearAllMocks();
     settingsService = new SettingsService();
     config = new Config(createConfigParams(settingsService));
-    // Per-turn assembly resolves the model via config.getModel() (issue
-    // #3138); drive it so a settings change simulates a real `/model`.
-    Object.defineProperty(config, 'getModel', {
-      value: () => settingsService.get('model') as string,
-      configurable: true,
-    });
     settingsService.set('providers.stub.base-url', 'https://stub.example.com');
     settingsService.set('providers.stub.auth-key', 'stub-api-key');
     settingsService.set('model', 'sub-model-v1');
@@ -109,6 +118,9 @@ describe('Subagent per-turn assembler (issue #3136)', () => {
     });
 
     const providerName = opts.provider ?? 'stub';
+    ({ settingsOwner } = createSessionSettingsFixture(config, settingsService));
+    settingsService.set('activeProvider', providerName);
+    settingsOwner.chooseModel('sub-model-v1');
     const provider: IProvider = {
       name: providerName,
       isDefault: true,
@@ -127,32 +139,13 @@ describe('Subagent per-turn assembler (issue #3136)', () => {
 
     const manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
-    config.setProviderManager(manager);
+    configureProviderRuntimeFactories(config, manager);
     manager.registerProvider(provider);
 
     const memoryOverrides: PropertyDescriptorMap = {};
-    if (opts.userMemory !== undefined) {
-      memoryOverrides['getUserMemory'] = { value: () => opts.userMemory };
-    }
-    if (opts.coreMemory !== undefined) {
-      memoryOverrides['getCoreMemory'] = { value: () => opts.coreMemory };
-    }
     if (opts.jitContextEnabled !== undefined) {
       memoryOverrides['isJitContextEnabled'] = {
         value: () => opts.jitContextEnabled,
-      };
-    }
-    if (opts.globalMemory !== undefined) {
-      memoryOverrides['getGlobalMemory'] = { value: () => opts.globalMemory };
-    }
-    if (opts.jitMemory !== undefined) {
-      memoryOverrides['getJitMemoryForPath'] = {
-        value: async () => opts.jitMemory,
-      };
-    }
-    if (opts.mcpInstructions !== undefined) {
-      memoryOverrides['getMcpInstructions'] = {
-        value: () => opts.mcpInstructions,
       };
     }
     if (opts.workingDir !== undefined) {
@@ -180,7 +173,15 @@ describe('Subagent per-turn assembler (issue #3136)', () => {
       sessionId: config.getSessionId(),
     });
     const view = createAgentRuntimeContext({
-      state: runtimeState,
+      state: {
+        ...runtimeState,
+        get model() {
+          const model = settingsOwner.readSelectedModel();
+          if (model === undefined)
+            throw new Error('Fixture requires selected model');
+          return model;
+        },
+      },
       history: new (
         await import(
           '@vybestack/llxprt-code-core/services/history/HistoryService.js'
@@ -193,13 +194,26 @@ describe('Subagent per-turn assembler (issue #3136)', () => {
         telemetry: { enabled: false, target: null },
         'reasoning.includeInContext': true,
       },
-      provider: createProviderAdapterFromManager(config.getProviderManager()),
-      telemetry: createTelemetryAdapterFromConfig(config),
-      tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
+      provider: createProviderAdapterFromManager(manager),
+      telemetry: createTelemetryAdapter(
+        config,
+        createSessionSettingsFixture(config).settingsOwner.telemetry,
+      ),
+      tools: createToolRegistryViewFromRegistry(modelTools()),
       providerRuntime,
+      prepareProviderInvocation: (name, parameters, signal) =>
+        captureProviderInvocation(providerRuntime, name, parameters, signal),
     });
 
     const chat = await createChatObject({
+      instructions: instructionFixture(
+        opts.userMemory ?? '',
+        opts.coreMemory ?? '',
+        opts.globalMemory ?? '',
+        opts.jitMemory ?? '',
+      ),
+      workspaceDirectories: () => fixturePaths().directories(),
+      readMcpInstructions: () => opts.mcpInstructions,
       promptConfig: { systemPrompt: opts.persona },
       modelConfig: { model: 'sub-model-v1', temp: 0, top_p: 1 },
       outputConfig: undefined,
@@ -230,7 +244,7 @@ describe('Subagent per-turn assembler (issue #3136)', () => {
     });
 
     // --- Simulate /model change ---
-    settingsService.set('model', 'sub-model-v2');
+    settingsOwner.chooseModel('sub-model-v2');
 
     await chat.sendMessage({ message: 'do the task' }, 'p1');
 
@@ -426,7 +440,7 @@ ${JIT}`);
       });
 
       settingsService.set('activeProvider', 'unrelated-provider-switch');
-      settingsService.set('model', 'sub-model-v2');
+      settingsOwner.chooseModel('sub-model-v2');
       await chat.sendMessage({ message: 'go' }, 'p1');
 
       const sentPrompt = capturedCalls[0].systemInstruction as string;

@@ -7,7 +7,6 @@
 import { describe, expect, it, vi } from 'bun:test';
 import type { OAuthProvider } from './types.js';
 import {
-  mockGetCurrentProfileName,
   createIssue1468Fixture,
   mockLoadProfile,
   mockFetchAnthropicUsage,
@@ -15,9 +14,9 @@ import {
 
 describe('Issue #1468 getProfileBuckets case 13', () => {
   it('prefers the current profile only bucket over a stale unscoped session bucket', async () => {
-    const { tokenStore, manager } = createIssue1468Fixture();
+    const { tokenStore, manager, settingsService } = createIssue1468Fixture();
 
-    mockGetCurrentProfileName.mockReturnValue('single-bucket-profile');
+    settingsService.setCurrentProfileName('single-bucket-profile');
     mockLoadProfile.mockResolvedValue({
       provider: 'claudecode',
       auth: {

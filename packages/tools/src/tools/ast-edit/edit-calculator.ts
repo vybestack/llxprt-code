@@ -192,12 +192,7 @@ async function readFileState(
   let fileExists = false;
 
   try {
-    const fileSystemService = host.getFileSystemService?.() as
-      | { readTextFile?: (filePath: string) => Promise<string> }
-      | undefined;
-    currentContent = fileSystemService?.readTextFile
-      ? await fileSystemService.readTextFile(params.file_path)
-      : await fsPromises.readFile(params.file_path, 'utf-8');
+    currentContent = await host.readTextFile(params.file_path);
     currentContent = currentContent.replace(/\r\n/g, '\n');
     fileExists = true;
   } catch (err: unknown) {

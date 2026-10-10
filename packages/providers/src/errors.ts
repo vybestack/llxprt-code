@@ -22,7 +22,7 @@ import {
   getSafeProviderMessage,
   summarizeProviderLabels,
 } from './providerErrorObservation.js';
-import { getActiveRuntimeKind } from './runtime/active-runtime-identity.js';
+import type { RuntimeKind } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
 /**
  * Error thrown when authentication is required but not available
@@ -475,12 +475,12 @@ const AUTH_BUCKET_FAILURE_REASONS: ReadonlySet<BucketFailureReason> = new Set([
 function buildReauthenticateSuffix(
   providerName: string,
   hasAuthReason: boolean,
+  runtimeKind: RuntimeKind | undefined,
 ): string {
   if (!hasAuthReason) {
     return '';
   }
 
-  const runtimeKind = getActiveRuntimeKind();
   if (
     runtimeKind === 'agent' ||
     runtimeKind === 'subagent' ||
@@ -523,7 +523,8 @@ export class AllBucketsExhaustedError extends Error {
     providerName: string,
     attemptedBuckets: string[],
     lastError: Error,
-    bucketFailureReasons?: Record<string, BucketFailureReason>,
+    bucketFailureReasons: Record<string, BucketFailureReason> | undefined,
+    runtimeKind: RuntimeKind | undefined,
   ) {
     const storedReasons: Record<string, BucketFailureReason> =
       bucketFailureReasons ? { ...bucketFailureReasons } : {};
@@ -549,6 +550,7 @@ export class AllBucketsExhaustedError extends Error {
     const reauthenticateSuffix = buildReauthenticateSuffix(
       providerName,
       hasAuthReason,
+      runtimeKind,
     );
 
     super(

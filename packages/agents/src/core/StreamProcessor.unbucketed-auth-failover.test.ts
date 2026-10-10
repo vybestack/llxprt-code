@@ -6,22 +6,14 @@
 
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 
-// @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
-const actual = { ...(await import('@vybestack/llxprt-code-auth')) };
-void vi.mock('@vybestack/llxprt-code-auth', () => ({
-  ...actual,
-  flushRuntimeAuthScope: vi.fn(),
-}));
-
 import { StreamProcessor } from './StreamProcessor.js';
-import { flushRuntimeAuthScope } from '@vybestack/llxprt-code-auth';
 
 describe('StreamProcessor._handleBucketFailover', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('allows single-bucket handlers to run tryFailover and flush auth scope', async () => {
+  it('allows single-bucket handlers to run tryFailover', async () => {
     const tryFailover = vi.fn().mockResolvedValue(true);
     const controller = new AbortController();
 
@@ -35,19 +27,13 @@ describe('StreamProcessor._handleBucketFailover', () => {
         },
         providerRuntime: {
           runtimeId: 'provider-runtime-1739',
-          config: {
-            getBucketFailoverHandler: () => ({
-              tryFailover,
-              getCurrentBucket: () => 'default',
-              isEnabled: () => false,
-            }),
-          },
+          tryBucketFailover: tryFailover,
+          readCurrentBucket: () => 'default',
         },
       },
       logger: {
         debug: vi.fn(),
       },
-      flushAuthScope: flushRuntimeAuthScope,
     });
 
     const result = await (
@@ -58,6 +44,5 @@ describe('StreamProcessor._handleBucketFailover', () => {
 
     expect(result).toBe(true);
     expect(tryFailover).toHaveBeenCalledWith({ signal: controller.signal });
-    expect(flushRuntimeAuthScope).toHaveBeenCalledWith('provider-runtime-1739');
   });
 });

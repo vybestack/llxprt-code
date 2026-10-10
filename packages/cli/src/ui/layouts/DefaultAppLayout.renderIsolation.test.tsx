@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
 
 import { act, cloneElement, useState } from 'react';
 import { describe, expect, it, vi } from 'bun:test';
@@ -49,11 +50,6 @@ void vi.mock('../components/AppHeader.js', () => ({ AppHeader: () => null }));
 void vi.mock('../components/LoadingIndicator.js', () => ({
   LoadingIndicator: () => null,
 }));
-const runtime = await import('@vybestack/llxprt-code-providers/runtime.js');
-void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
-  ...runtime,
-  getCliRuntimeContext: () => ({ messageBus: undefined }),
-}));
 const { renderWithProviders, createMockSettings } = await import(
   '../../__tests__/render.js'
 );
@@ -98,8 +94,11 @@ function mountLayout(runtimeMessageBus?: InstanceType<typeof MessageBus>) {
   const layout = (
     <DefaultAppLayout
       runtimeMessageBus={runtimeMessageBus}
-      uiRuntime={buildUiRuntimeFromSource(config)}
-      slashCommandRuntime={buildSlashCommandRuntime(config)}
+      uiRuntime={buildUiRuntimeFromSource(config, createUiSessionOwner())}
+      slashCommandRuntime={buildSlashCommandRuntime(
+        config,
+        createUiSessionOwner(),
+      )}
       settings={settings}
       startupWarnings={[]}
       version="test"

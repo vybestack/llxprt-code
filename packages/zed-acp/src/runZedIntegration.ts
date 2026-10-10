@@ -3,21 +3,24 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { WorkspaceTrustControlPort } from '@vybestack/llxprt-code-core';
 
-import { type Config, createInkStdio } from '@vybestack/llxprt-code-core';
+import type { ProfileDefinitionReads } from '@vybestack/llxprt-code-core';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
+
+import type { AgentProfileApplication } from '@vybestack/llxprt-code-agents';
+
+import {
+  type Config,
+  type RuntimeProviderManager,
+  createInkStdio,
+} from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import * as acp from '@agentclientprotocol/sdk';
 import { Readable, Writable } from 'node:stream';
 import * as process from 'node:process';
-import { setCliRuntimeContext } from '@vybestack/llxprt-code-providers/runtime.js';
 import { ZedAgent } from './zedIntegration.js';
-
-/**
- * The package-owned runtime id registered by the ACP client when it claims the
- * foreground runtime slot. Replaces the historical CLI-scoped
- * `'cli.runtime.zed'`.
- */
-export const ZED_ACP_RUNTIME_ID = 'zed-acp.runtime';
+import type { ZedSessionProviderInputs } from './zed-session-agent.js';
 
 const DISPOSAL_SIGNALS: readonly NodeJS.Signals[] = ['SIGINT', 'SIGTERM'];
 
@@ -110,22 +113,73 @@ export async function cleanupAgents(
   }
 }
 
-/**
- * Registers the ACP client as a foreground runtime in the providers runtime
- * registry, handing off the default CLI runtime pointer. Extracted and exported
- * so tests can assert the registration against the real registry.
- */
-export function registerZedAcpRuntime(config: Config): void {
-  setCliRuntimeContext(config.getSettingsService(), config, {
-    runtimeId: ZED_ACP_RUNTIME_ID,
-    metadata: { source: 'zed-integration', stage: 'bootstrap' },
-    allowDefaultHandoff: true,
-  });
+export interface ZedConnectionOwner {
+  readonly trustPort: WorkspaceTrustControlPort;
+  readonly profileDefinitions: Pick<ProfileDefinitionReads, 'listProfiles'>;
+  readonly createSessionSettings: () => SettingsService;
+  readonly config: Config;
+  readonly providerManager: RuntimeProviderManager;
+  readonly profileApplication: AgentProfileApplication;
+  readonly providerInputs?: ZedSessionProviderInputs;
+}
+
+export async function serveZedConnection(
+  owner: ZedConnectionOwner,
+  stream: acp.Stream,
+  onExitCleanup?: ExitCleanupCallback,
+): Promise<void> {
+  const logger = new DebugLogger('llxprt:zed-integration');
+  const agents: ZedAgent[] = [];
+  try {
+    const connection = new acp.AgentSideConnection((conn) => {
+      const agent = new ZedAgent(
+        owner.config,
+        conn,
+        owner.profileApplication,
+        owner.providerManager,
+        owner.createSessionSettings,
+        undefined,
+        owner.profileDefinitions,
+        owner.trustPort,
+        owner.providerInputs,
+      );
+      agents.push(agent);
+      return agent;
+    }, stream);
+    await connection.closed;
+  } finally {
+    await cleanupAgents(agents, logger, onExitCleanup);
+  }
+}
+
+async function discoverZedSessionProviderInputs(): Promise<ZedSessionProviderInputs> {
+  const [{ loadInstalledRuntimePlugins }, { createFileOAuthSettingsProvider }] =
+    await Promise.all([
+      import('@vybestack/llxprt-code-providers/composition.js'),
+      import('@vybestack/llxprt-code-providers/auth.js'),
+    ]);
+  return {
+    providerContributions: await loadInstalledRuntimePlugins(),
+    oauthSettings: createFileOAuthSettingsProvider(),
+  };
 }
 
 export async function runZedIntegration(
   config: Config,
-  options: { onExitCleanup?: ExitCleanupCallback } = {},
+  profileApplication: AgentProfileApplication,
+  options: {
+    profileDefinitions: ZedConnectionOwner['profileDefinitions'];
+    trustPort: ZedConnectionOwner['trustPort'];
+    providerManager: RuntimeProviderManager;
+    createSessionSettings: () => SettingsService;
+    onExitCleanup?: ExitCleanupCallback;
+    /**
+     * Installed provider contributions and OAuth settings for session provider
+     * assembly. Omitted: contributions are discovered from the installed
+     * runtime plugins and OAuth enablement is read from the user settings file.
+     */
+    providerInputs?: ZedSessionProviderInputs;
+  },
 ): Promise<void> {
   const logger = new DebugLogger('llxprt:zed-integration');
   logger.debug(() => 'Starting Zed integration');
@@ -136,24 +190,29 @@ export async function runZedIntegration(
   // observe EOF/abort so connection.closed settles.
   const stdinSource = process.stdin;
   const stdin = Readable.toWeb(stdinSource) as ReadableStream<Uint8Array>;
-  registerZedAcpRuntime(config);
-  const agents: ZedAgent[] = [];
+  const owner: ZedConnectionOwner = {
+    config,
+    profileApplication,
+    profileDefinitions: options.profileDefinitions,
+    trustPort: options.trustPort,
+    providerManager: options.providerManager,
+    createSessionSettings: options.createSessionSettings,
+    providerInputs:
+      options.providerInputs ?? (await discoverZedSessionProviderInputs()),
+  };
   const removeSignalHandlers = installDisposalSignalHandlers(
     buildSignalDisposalHandler(stdinSource, logger),
   );
   try {
-    const stream = acp.ndJsonStream(stdout, stdin);
-    const connection = new acp.AgentSideConnection((conn) => {
-      const agent = new ZedAgent(config, conn);
-      agents.push(agent);
-      return agent;
-    }, stream);
-    await connection.closed;
+    await serveZedConnection(
+      owner,
+      acp.ndJsonStream(stdout, stdin),
+      options.onExitCleanup,
+    );
   } catch (error) {
     logger.warn(() => `Zed agent connection error: ${error}`);
     throw error;
   } finally {
     removeSignalHandlers();
-    await cleanupAgents(agents, logger, options.onExitCleanup);
   }
 }

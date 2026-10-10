@@ -176,7 +176,7 @@ export const compressCommand: SlashCommand = {
         }
       }
       // Fallback: command-context service path (tracked migration debt for null agent).
-      const agentClient = context.services.config?.getAgentClient();
+      const agentClient = context.services.agent?.agentClient;
       if (agentClient == null || agentClient.hasChatInitialized() !== true) {
         ui.addItem(
           {

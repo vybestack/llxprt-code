@@ -16,7 +16,10 @@
   "extends": "./tsconfig.json",
   // Set here as well as on the command line so a direct
   // `tsc -p tsconfig.noemit.json` cannot emit build output into the sources.
-  "compilerOptions": { "noEmit": true },
+  "compilerOptions": {
+    "rootDir": "../..",
+    "noEmit": true
+  },
   "exclude": [
     "node_modules",
     "dist",

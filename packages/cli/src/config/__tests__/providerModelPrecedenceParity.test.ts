@@ -40,6 +40,7 @@ import { parseArguments } from '../cliArgParser.js';
 import type { Settings } from '../settings.js';
 import { ExtensionStorage } from '../extension.js';
 import { ExtensionEnablementManager } from '../extensions/extensionEnablement.js';
+import { loadPrecedenceProviderContributions } from './precedenceProviderContributions.js';
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -166,54 +167,21 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
         warnings: [],
       }),
     ),
-    getCliRuntimeContext: vi.fn(() => runtimeSettingsState.context),
-    setCliRuntimeContext: vi.fn(
-      (
-        settingsService: SettingsService,
-        config?: ServerConfig.Config,
-        options: {
-          metadata?: Record<string, unknown>;
-          runtimeId?: string;
-        } = {},
-      ) => {
-        runtimeSettingsState.context = {
-          settingsService,
-          config: config ?? null,
-          runtimeId: options.runtimeId ?? 'mock-runtime',
-          metadata: options.metadata ?? {},
-        };
-      },
-    ),
     switchActiveProvider: vi.fn(async () => ({
       changed: true,
       previousProvider: null,
       nextProvider: 'gemini',
       infoMessages: [],
     })),
-    registerCliProviderInfrastructure: vi.fn(
-      (manager: ProviderManager, oauthManager: unknown) => {
-        runtimeSettingsState.providerManager = manager;
-        runtimeSettingsState.oauthManager = oauthManager ?? null;
-      },
-    ),
     applyCliArgumentOverrides: vi.fn(async () => {}),
-    getCliRuntimeConfig: vi.fn(
-      () => runtimeSettingsState.context?.config ?? null,
-    ),
-    getCliRuntimeServices: vi.fn(() => ({
-      config: runtimeSettingsState.context?.config ?? null,
-      settingsService:
-        runtimeSettingsState.context?.settingsService ?? new SettingsService(),
-      providerManager: getProviderManager(),
-    })),
-    getCliProviderManager: vi.fn(() => runtimeSettingsState.providerManager),
-    getCliOAuthManager: vi.fn(() => {
+    providerManager: vi.fn(() => runtimeSettingsState.providerManager),
+    oauthManager: vi.fn(() => {
       if (runtimeSettingsState.oauthManager === null) {
         throw new Error('OAuthManager missing from runtime registration');
       }
       return runtimeSettingsState.oauthManager;
     }),
-    getActiveProviderStatus: vi.fn(() => ({ name: null })),
+    providerStatus: vi.fn(() => ({ name: null })),
     listProviders: vi.fn(() => []),
     getActiveProviderName: vi.fn(() => null),
     setActiveModel: vi.fn(async () => ({
@@ -316,7 +284,10 @@ async function runConfig(settings: Settings, argv?: string[]) {
     'test-session',
     parsedArgv,
     undefined,
-    { settingsService: runtimeSettingsService },
+    {
+      settingsService: runtimeSettingsService,
+      providerContributions: await loadPrecedenceProviderContributions(),
+    },
   );
 }
 
@@ -371,6 +342,14 @@ describe('providerModelPrecedenceParity: 4-level provider chain', () => {
   it('level 1: CLI --provider beats env', async () => {
     const config = await runConfig({}, ['--provider', 'openai']);
     expect(config.getProvider()).toBe('openai');
+  });
+
+  it('rejects an explicitly configured provider that was not registered', async () => {
+    await expect(
+      runConfig({}, ['--provider', 'not-a-provider']),
+    ).rejects.toThrow(
+      "Could not activate explicitly-configured provider 'not-a-provider': Provider 'not-a-provider' not found",
+    );
   });
 });
 

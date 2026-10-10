@@ -3,13 +3,18 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { describe, expect, it, vi } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { LoggingProviderWrapper } from '../../../providers/src/LoggingProviderWrapper.js';
 import type { IProvider } from '../../../providers/src/IProvider.js';
-import * as telemetryLoggers from '@vybestack/llxprt-code-core/telemetry/loggers.js';
+import type { ProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
+import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
+import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
+import { installModelToolFixture } from './__tests__/model-tool-fixture.js';
 import type { ConversationRequestEvent } from '@vybestack/llxprt-code-core/telemetry/types.js';
 import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
 import { ChatSession } from './chatSession.js';
@@ -31,11 +36,13 @@ import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Age
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
+  createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
+
+const modelTools = installModelToolFixture();
 
 type Origin = 'producer' | 'missing' | 'none' | 'unmatched';
 type Path = 'direct' | 'stream' | 'turn';
@@ -53,10 +60,36 @@ const unusedGenerator: ContentGenerator = {
   },
 };
 
+function conversationDiagnostics(
+  conversationLogPath: string,
+  events: ConversationRequestEvent[],
+): ProviderRequestDiagnostics {
+  return {
+    conversationLoggingEnabled: true,
+    conversationLogPath,
+    redaction: {
+      redactApiKeys: false,
+      redactCredentials: false,
+      redactFilePaths: false,
+      redactUrls: false,
+      redactEmails: false,
+      redactPersonalInfo: false,
+    },
+    recordApiError: () => undefined,
+    recordApiRequest: () => undefined,
+    recordApiResponse: () => undefined,
+    recordTokenUsage: () => undefined,
+    recordConversationRequest: (event) => {
+      events.push(event);
+    },
+    recordConversationResponse: () => undefined,
+  };
+}
+
 async function send(
   path: Path,
   origin: Origin,
-  conversationLogPath?: string,
+  diagnostics?: ProviderRequestDiagnostics,
 ): Promise<{
   before: Array<Omit<HookLLMRequest, 'version'>>;
   after: Array<Omit<HookLLMRequest, 'version'>>;
@@ -64,14 +97,7 @@ async function send(
   requests: RuntimeGenerateChatOptions[];
 }> {
   const settingsService = new SettingsService();
-  const config = new Config({
-    ...createConfigParams(settingsService),
-    telemetry: {
-      enabled: false,
-      logConversations: conversationLogPath !== undefined,
-      conversationLogPath,
-    },
-  });
+  const config = new Config(createConfigParams(settingsService));
   const before: Array<Omit<HookLLMRequest, 'version'>> = [];
   const after: Array<Omit<HookLLMRequest, 'version'>> = [];
   const selection: Array<Omit<HookLLMRequest, 'version'>> = [];
@@ -83,35 +109,24 @@ async function send(
     unmatched: { mode: 'auto', allowedToolNames: ['absent'] },
   };
   const choice = choices[origin];
-  Object.defineProperties(config, {
-    getEnableHooks: { value: () => true },
-    getHookSystem: {
-      value: () => ({
-        initialize: async (): Promise<void> => undefined,
-        isInitialized: (): boolean => true,
-        fireBeforeToolSelectionEvent: async (
-          request: Omit<HookLLMRequest, 'version'>,
-        ) => {
-          selection.push(request);
-          return new BeforeToolSelectionHookOutput({
-            hookSpecificOutput: { toolChoice: choice },
-          });
-        },
-        fireBeforeModelEvent: async (
-          request: Omit<HookLLMRequest, 'version'>,
-        ) => {
-          before.push(request);
-          return new BeforeModelHookOutput({});
-        },
-        fireAfterModelEvent: async (
-          request: Omit<HookLLMRequest, 'version'>,
-        ) => {
-          after.push(request);
-          return new AfterModelHookOutput({});
-        },
-      }),
+  const hookOwner: HookExecutionOwner = {
+    sessionId: () => config.getSessionId(),
+    transcriptPath: () => undefined,
+    beforeToolSelection: async (request) => {
+      selection.push(request);
+      return new BeforeToolSelectionHookOutput({
+        hookSpecificOutput: { toolChoice: choice },
+      });
     },
-  });
+    beforeModel: async (request) => {
+      before.push(request);
+      return new BeforeModelHookOutput({});
+    },
+    afterModel: async (request) => {
+      after.push(request);
+      return new AfterModelHookOutput({});
+    },
+  };
   const runtime = createProviderRuntimeContext({
     settingsService,
     config,
@@ -119,7 +134,7 @@ async function send(
   });
   const manager = new TestRuntimeProviderManager(runtime);
   manager.setConfig(config);
-  config.setProviderManager(manager);
+  configureProviderRuntimeFactories(config, manager);
   const provider: IProvider = {
     name: 'stub',
     getModels: async () => [],
@@ -136,11 +151,23 @@ async function send(
     },
   };
   manager.registerProvider(
-    conversationLogPath === undefined
+    diagnostics === undefined
       ? provider
-      : new LoggingProviderWrapper(provider),
+      : new LoggingProviderWrapper(
+          provider,
+          null,
+          undefined,
+          () => diagnostics,
+        ),
+  );
+  const { settingsOwner } = createSessionSettingsFixture(
+    config,
+    settingsService,
   );
   const view = createAgentRuntimeContext({
+    readRuntimeSettings: () => settingsOwner.readRuntimePolicy(),
+    prepareProviderInvocation: (name, parameters, signal) =>
+      captureProviderInvocation(runtime, name, parameters, signal),
     state: createAgentRuntimeState({
       runtimeId: 'empty-tools',
       provider: 'stub',
@@ -156,8 +183,8 @@ async function send(
       'reasoning.includeInContext': true,
     },
     provider: createProviderAdapterFromManager(manager),
-    telemetry: createTelemetryAdapterFromConfig(config),
-    tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
+    telemetry: createTelemetryAdapter(config, settingsOwner.telemetry),
+    tools: createToolRegistryViewFromRegistry(modelTools()),
     providerRuntime: runtime,
   });
   const chat = new ChatSession(view, unusedGenerator, {}, []);
@@ -165,12 +192,15 @@ async function send(
   if (origin === 'none' || origin === 'unmatched')
     chat.setTools([{ name: 'search', parametersJsonSchema: {} }]);
   if (path === 'direct')
-    await chat.generateDirectMessage({ message: 'hello' }, 'empty-tools');
+    await chat.generateDirectMessage(
+      { message: 'hello', hookOwner },
+      'empty-tools',
+    );
   else if (path === 'turn')
-    await chat.sendMessage({ message: 'hello' }, 'empty-tools');
+    await chat.sendMessage({ message: 'hello', hookOwner }, 'empty-tools');
   else {
     const stream = await chat.sendMessageStream(
-      { message: 'hello' },
+      { message: 'hello', hookOwner },
       'empty-tools',
     );
     const chunks = [];
@@ -221,13 +251,12 @@ describe.each<Path>(['direct', 'stream', 'turn'])(
         const dir = await mkdtemp(join(tmpdir(), 'issue3694-empty-origin-'));
         const events: ConversationRequestEvent[] = [];
         resetConversationFileWriterForTesting();
-        const sink = vi
-          .spyOn(telemetryLoggers, 'logConversationRequest')
-          .mockImplementation((_config, event) => {
-            events.push(event);
-          });
         try {
-          const { before, after, selection } = await send(path, origin, dir);
+          const { before, after, selection } = await send(
+            path,
+            origin,
+            conversationDiagnostics(dir, events),
+          );
           expect(selection).toHaveLength(1);
           for (const request of [...before, ...after, ...selection]) {
             expect(request).not.toHaveProperty('metadata');
@@ -269,7 +298,6 @@ describe.each<Path>(['direct', 'stream', 'turn'])(
             expectedTools !== undefined,
           );
         } finally {
-          sink.mockRestore();
           resetConversationFileWriterForTesting();
           await rm(dir, { recursive: true, force: true });
         }

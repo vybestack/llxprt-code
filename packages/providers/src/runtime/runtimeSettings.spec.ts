@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { PROFILE_EPHEMERAL_KEYS } from './runtimeSettings.js';
+import { PROFILE_EPHEMERAL_KEYS } from './index.js';
 
 /**
  * Test suite for Issue #1049: Fix timeout settings for autocomplete, profiles, and defaults

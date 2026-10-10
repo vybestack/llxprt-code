@@ -14,12 +14,13 @@
  * limitations under the License.
  */
 
+import { readInvocationPolicyValue } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import type OpenAI from 'openai';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import type { ToolOutputSettingsProvider } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
+import type { OutputLimitConfig } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import {
   requireInlineMediaBlock,
   type ToolCallBlock,
@@ -100,7 +101,7 @@ export function normalizeToolCallArguments(parameters: unknown): string {
  */
 export function buildToolResponseContent(
   block: ToolResponseBlock,
-  config?: ToolOutputSettingsProvider,
+  config?: OutputLimitConfig,
 ): string {
   const payload = buildToolResponsePayload(block, config, true);
   return ensureJsonSafe(
@@ -292,9 +293,9 @@ function processToolResponses(
   resolveToolResponseId: (tr: ToolResponseBlock) => string,
   buildResponseContent: (
     block: ToolResponseBlock,
-    config?: ToolOutputSettingsProvider,
+    config?: OutputLimitConfig,
   ) => string,
-  config: ToolOutputSettingsProvider | undefined,
+  config: OutputLimitConfig | undefined,
   pendingToolImages: MediaBlock[],
 ): OpenAI.Chat.ChatCompletionMessageParam[] {
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
@@ -382,7 +383,7 @@ function processContentMessages(
   toolFormat: ToolFormat | undefined,
   resolveToolCallId: (tc: ToolCallBlock) => string,
   resolveToolResponseId: (tr: ToolResponseBlock) => string,
-  config: ToolOutputSettingsProvider | undefined,
+  config: OutputLimitConfig | undefined,
   messages: OpenAI.Chat.ChatCompletionMessageParam[],
   pendingToolImages: MediaBlock[],
 ): void {
@@ -424,7 +425,7 @@ function processContentMessages(
 }
 
 export interface ReasoningMessageOptions {
-  settings: { get(key: string): unknown };
+  invocation: { readonly ephemerals: Readonly<Record<string, unknown>> };
 }
 
 /**
@@ -437,16 +438,18 @@ export function buildMessagesWithReasoning(
   contents: IContent[],
   options: ReasoningMessageOptions,
   toolFormat: ToolFormat | undefined,
-  config: ToolOutputSettingsProvider | undefined,
+  config: OutputLimitConfig | undefined,
 ): OpenAI.Chat.ChatCompletionMessageParam[] {
   const stripPolicy =
-    (options.settings.get('reasoning.stripFromContext') as
-      | StripPolicy
-      | undefined) ?? 'none';
+    (readInvocationPolicyValue(
+      options.invocation.ephemerals,
+      'reasoning.stripFromContext',
+    ) as StripPolicy | undefined) ?? 'none';
   const includeInContext =
-    (options.settings.get('reasoning.includeInContext') as
-      | boolean
-      | undefined) ?? false;
+    (readInvocationPolicyValue(
+      options.invocation.ephemerals,
+      'reasoning.includeInContext',
+    ) as boolean | undefined) ?? false;
 
   const contentsWithBlocks = contents.filter((content): content is IContent =>
     Array.isArray(content.blocks),

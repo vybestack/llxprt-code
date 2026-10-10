@@ -10,12 +10,11 @@ import type {
   MessageActionReturn,
 } from './types.js';
 import { CommandKind } from './types.js';
-import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import { coreEvents } from '@vybestack/llxprt-code-core';
 import {
   ephemeralSettingHelp,
   parseEphemeralSettingValue,
-} from '@vybestack/llxprt-code-providers/runtime.js';
+} from '@vybestack/llxprt-code-providers/runtime/ephemeralSettings.js';
 import {
   isStrictNumericString,
   LEGACY_SETTING_KEY_MIGRATIONS,
@@ -63,7 +62,10 @@ function formatParsedValue(value: unknown): string {
   return JSON.stringify(value);
 }
 
-function handleSetModelParam(parts: string[]): MessageActionReturn {
+function handleSetModelParam(
+  context: CommandContext,
+  parts: string[],
+): MessageActionReturn {
   if (parts.length < 3) {
     return {
       type: 'message',
@@ -73,7 +75,7 @@ function handleSetModelParam(parts: string[]): MessageActionReturn {
     };
   }
 
-  const runtime = getRuntimeApi();
+  const runtime = context.runtimeApi;
   const paramName = parts[1];
   const legacyParamRejection = rejectLegacySettingKey(paramName);
   if (legacyParamRejection) {
@@ -118,7 +120,10 @@ function handleSetModelParam(parts: string[]): MessageActionReturn {
   };
 }
 
-function handleUnsetModelParam(subKey: string): MessageActionReturn {
+function handleUnsetModelParam(
+  context: CommandContext,
+  subKey: string,
+): MessageActionReturn {
   if (!subKey) {
     return {
       type: 'message',
@@ -128,7 +133,7 @@ function handleUnsetModelParam(subKey: string): MessageActionReturn {
     };
   }
 
-  const runtime = getRuntimeApi();
+  const runtime = context.runtimeApi;
   try {
     runtime.clearActiveModelParam(subKey);
   } catch (error) {
@@ -157,10 +162,11 @@ function handleUnsetModelParam(subKey: string): MessageActionReturn {
 }
 
 function handleUnsetCustomHeader(
+  context: CommandContext,
   targetKey: string,
   subKey: string,
 ): MessageActionReturn {
-  const runtime = getRuntimeApi();
+  const runtime = context.runtimeApi;
   const currentHeaders = runtime.getEphemeralSettings()['custom-headers'] as
     | Record<string, unknown>
     | undefined;
@@ -184,7 +190,10 @@ function handleUnsetCustomHeader(
   };
 }
 
-function handleSetUnset(parts: string[]): MessageActionReturn {
+function handleSetUnset(
+  context: CommandContext,
+  parts: string[],
+): MessageActionReturn {
   if (parts.length < 2) {
     return {
       type: 'message',
@@ -194,7 +203,7 @@ function handleSetUnset(parts: string[]): MessageActionReturn {
     };
   }
 
-  const runtime = getRuntimeApi();
+  const runtime = context.runtimeApi;
   const targetKey = parts[1];
   const subKey = parts[2];
 
@@ -203,7 +212,7 @@ function handleSetUnset(parts: string[]): MessageActionReturn {
     if (legacyParamRejection) {
       return legacyParamRejection;
     }
-    return handleUnsetModelParam(subKey);
+    return handleUnsetModelParam(context, subKey);
   }
 
   const legacyUnsetRejection = rejectLegacySettingKey(targetKey);
@@ -221,7 +230,7 @@ function handleSetUnset(parts: string[]): MessageActionReturn {
   }
 
   if (targetKey === 'custom-headers' && subKey) {
-    return handleUnsetCustomHeader(targetKey, subKey);
+    return handleUnsetCustomHeader(context, targetKey, subKey);
   }
 
   runtime.setEphemeralSetting(targetKey, undefined);
@@ -262,7 +271,7 @@ function handleSetEphemeral(
     };
   }
 
-  const runtime = getRuntimeApi();
+  const runtime = context.runtimeApi;
   const value = parts.slice(1).join(' ');
 
   const parseResult = parseEphemeralSettingValue(key, value);
@@ -331,11 +340,11 @@ export const setCommand: SlashCommand = {
     const key = parts[0];
 
     if (key === 'modelparam') {
-      return handleSetModelParam(parts);
+      return handleSetModelParam(context, parts);
     }
 
     if (key === 'unset') {
-      return handleSetUnset(parts);
+      return handleSetUnset(context, parts);
     }
 
     return handleSetEphemeral(context, key, parts);

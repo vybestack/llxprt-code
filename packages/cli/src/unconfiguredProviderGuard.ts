@@ -1,10 +1,5 @@
-/**
- * @license
- * Copyright 2025 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import {
+  type RuntimeProviderManager,
   type Config,
   ExitCodes,
   OutputFormat,
@@ -12,6 +7,12 @@ import {
   StreamJsonFormatter,
   JsonStreamEventType,
 } from '@vybestack/llxprt-code-core';
+/**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 
 export const UNCONFIGURED_PROVIDER_MESSAGE =
@@ -26,8 +27,9 @@ export const UNCONFIGURED_PROVIDER_MESSAGE =
  * provider manager (the single source of truth for active-provider state).
  * Does NOT call process.exit, mutate state, or consult bare API-key env vars.
  */
-export function isProviderConfigured(config: Config): boolean {
-  const manager = config.getProviderManager();
+export function isProviderConfigured(
+  manager: Pick<RuntimeProviderManager, 'hasActiveProvider'> | undefined,
+): boolean {
   return manager?.hasActiveProvider() ?? false;
 }
 
@@ -86,10 +88,11 @@ export function reportUnconfiguredProviderError(
  *   does not resolve — it exits the process.
  */
 export async function guardUnconfiguredProvider(
-  config: Config,
+  config: Pick<Config, 'getOutputFormat' | 'isInteractive'>,
   runCleanup: () => Promise<void>,
+  manager: Pick<RuntimeProviderManager, 'hasActiveProvider'> | undefined,
 ): Promise<void> {
-  if (isProviderConfigured(config)) {
+  if (isProviderConfigured(manager)) {
     return;
   }
   if (typeof config.isInteractive === 'function' && config.isInteractive()) {

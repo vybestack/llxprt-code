@@ -17,7 +17,7 @@
 
 import type { ScheduledToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
 import type { ToolResult } from '@vybestack/llxprt-code-tools';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import {
   triggerBeforeToolHook,
   triggerAfterToolHook,
@@ -31,6 +31,7 @@ import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 export interface ToolExecutionContext {
   call: ScheduledToolCall;
   signal: AbortSignal;
+  hookOwner?: HookExecutionOwner;
   onLiveOutput?: (callId: string, update: LiveOutputUpdate) => void;
   onPid?: (callId: string, pid: number) => void;
 }
@@ -126,14 +127,33 @@ function applyHookOutputModifications(
   return finalResult;
 }
 
-export class ToolExecutor {
-  constructor(private readonly config: Config) {}
+function bindHookCancellation(
+  owner: HookExecutionOwner | undefined,
+  signal: AbortSignal,
+): HookExecutionOwner | undefined {
+  return owner === undefined
+    ? undefined
+    : {
+        ...owner,
+        signal:
+          owner.signal === undefined
+            ? signal
+            : AbortSignal.any([owner.signal, signal]),
+      };
+}
 
+export class ToolExecutor {
   /**
    * Execute a single tool call from scheduled to completed state.
    */
   async execute(context: ToolExecutionContext): Promise<ToolExecutionResult> {
-    const { call: scheduledCall, signal, onLiveOutput, onPid } = context;
+    const {
+      call: scheduledCall,
+      signal,
+      hookOwner,
+      onLiveOutput,
+      onPid,
+    } = context;
     const { callId, name: toolName, args } = scheduledCall.request;
     let invocation = scheduledCall.invocation;
     let effectiveArgs = args;
@@ -141,11 +161,12 @@ export class ToolExecutor {
     const serverName = (invocation as { _serverName?: string })._serverName;
     const mcpContext = serverName ? { server_name: serverName } : undefined;
 
+    const executionOwner = bindHookCancellation(hookOwner, signal);
     const beforeResult = await triggerBeforeToolHook(
-      this.config,
       toolName,
       args,
       mcpContext,
+      executionOwner,
     );
     checkHookDecision(beforeResult, 'BeforeTool');
 
@@ -183,11 +204,11 @@ export class ToolExecutor {
         );
 
         const afterResult = await triggerAfterToolHook(
-          this.config,
           toolName,
           effectiveArgs,
           beforeDecoratedResult,
           mcpContext,
+          executionOwner,
         );
         checkHookDecision(afterResult, 'AfterTool');
 

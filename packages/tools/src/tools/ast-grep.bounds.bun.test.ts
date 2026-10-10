@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { physicalFiles } from '../__tests__/helpers/physical-files.js';
+
 /**
  * Behavioral tests for ast_grep bounded acquisition (issue #3202):
  * - maxResults hard validation and cap
@@ -24,12 +26,17 @@ import type { ToolResult } from './tools.js';
 
 function createToolHost(targetDir: string): IToolHost {
   return {
+    ...physicalFiles,
     getTargetDir: () => targetDir,
     getWorkspaceRoots: () => [targetDir],
     getApprovalMode: () => 'auto',
     setApprovalMode: () => {},
     isInteractive: () => false,
-    hasFeatureFlag: () => false,
+
+    runSearch: <T>(
+      _directories: readonly string[],
+      operation: () => Promise<T>,
+    ): Promise<T> => operation(),
     getFileService: () => ({
       shouldGitIgnoreFile: () => false,
       shouldLlxprtIgnoreFile: () => false,
@@ -46,7 +53,7 @@ function createToolHost(targetDir: string): IToolHost {
     getLlxprtIgnoreFilePath: () => null,
     recordFileRead: () => {},
     getLlxprtIgnorePatterns: () => [],
-    getEphemeralSettings: () => ({}),
+    readExecutionPolicy: () => ({}),
     getDebugMode: () => false,
   };
 }
@@ -252,7 +259,7 @@ describe('ast_grep observed-file budget (issue #3202)', () => {
     const base = createToolHost(tempDir);
     return {
       ...base,
-      getEphemeralSettings: () => ({ 'tool-output-max-items': maxItems }),
+      readExecutionPolicy: () => ({ 'tool-output-max-items': maxItems }),
     };
   }
 
@@ -281,7 +288,7 @@ describe('ast_grep observed-file budget (issue #3202)', () => {
       const base = createToolHost(hardCapDir);
       const host: IToolHost = {
         ...base,
-        getEphemeralSettings: () => ({
+        readExecutionPolicy: () => ({
           'tool-output-max-items': 999_999_999,
         }),
       };
@@ -310,7 +317,7 @@ describe('ast_grep observed-file budget (issue #3202)', () => {
       const base = createToolHost(exactDir);
       const host: IToolHost = {
         ...base,
-        getEphemeralSettings: () => ({ 'tool-output-max-items': 5 }), // budget = 20
+        readExecutionPolicy: () => ({ 'tool-output-max-items': 5 }), // budget = 20
       };
       const result = await runAstGrep(host, {
         pattern: 'function $NAME() {}',
@@ -334,7 +341,7 @@ describe('ast_grep observed-file budget (issue #3202)', () => {
       const base = createToolHost(defaultDir);
       const host: IToolHost = {
         ...base,
-        getEphemeralSettings: () => ({}),
+        readExecutionPolicy: () => ({}),
       };
       const result = await runAstGrep(host, {
         pattern: 'function $NAME() {}',

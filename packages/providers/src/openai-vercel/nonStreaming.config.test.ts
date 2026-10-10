@@ -109,9 +109,7 @@ describe('OpenAIVercelProvider - Non-Streaming Configuration (P09)', () => {
         });
       });
 
-      provider = new OpenAIVercelProvider('test-api-key', undefined, {
-        settingsService,
-      });
+      provider = new OpenAIVercelProvider('test-api-key', undefined, {});
 
       const messages: IContent[] = [
         {
@@ -151,9 +149,7 @@ describe('OpenAIVercelProvider - Non-Streaming Configuration (P09)', () => {
         });
       });
 
-      provider = new OpenAIVercelProvider('test-api-key', undefined, {
-        settingsService,
-      });
+      provider = new OpenAIVercelProvider('test-api-key', undefined, {});
 
       const messages: IContent[] = [
         {
@@ -201,9 +197,7 @@ describe('OpenAIVercelProvider - Non-Streaming Configuration (P09)', () => {
         });
       });
 
-      provider = new OpenAIVercelProvider('test-api-key', undefined, {
-        settingsService,
-      });
+      provider = new OpenAIVercelProvider('test-api-key', undefined, {});
 
       const messages: IContent[] = [
         {
@@ -263,9 +257,7 @@ describe('OpenAIVercelProvider - Non-Streaming Configuration (P09)', () => {
         usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
       });
 
-      provider = new OpenAIVercelProvider('test-api-key', undefined, {
-        settingsService,
-      });
+      provider = new OpenAIVercelProvider('test-api-key', undefined, {});
 
       const messages: IContent[] = [
         {
@@ -307,9 +299,7 @@ describe('OpenAIVercelProvider - Non-Streaming Configuration (P09)', () => {
         usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
       });
 
-      provider = new OpenAIVercelProvider('test-api-key', undefined, {
-        settingsService,
-      });
+      provider = new OpenAIVercelProvider('test-api-key', undefined, {});
 
       const messages: IContent[] = [
         {
@@ -348,9 +338,7 @@ describe('OpenAIVercelProvider - Non-Streaming Configuration (P09)', () => {
         usage: { promptTokens: 10, completionTokens: 100, totalTokens: 110 },
       });
 
-      provider = new OpenAIVercelProvider('test-api-key', undefined, {
-        settingsService,
-      });
+      provider = new OpenAIVercelProvider('test-api-key', undefined, {});
 
       const messages: IContent[] = [
         {

@@ -1,3 +1,4 @@
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -147,6 +148,10 @@ describe('MiddleOutStrategy edge cases', () => {
       const ctx = buildContext({
         history,
         resolveProvider: () => ({
+          invocation: captureProviderInvocation(
+            testProviderRuntime,
+            multiChunkProvider.name,
+          ),
           provider: multiChunkProvider,
           runtime: testProviderRuntime,
         }),

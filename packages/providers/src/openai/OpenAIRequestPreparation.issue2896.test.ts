@@ -19,7 +19,7 @@ import { prepareRequest } from './OpenAIRequestPreparation.js';
 import { REASONING_WIRE_KEYS } from './openaiReasoningDialect.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('test system prompt'),
@@ -40,33 +40,26 @@ function createMockOptions(
     ephemerals?: Record<string, unknown>;
   } = {},
 ): NormalizedGenerateChatOptions {
-  const settings = new SettingsService();
-  const invocation: Record<string, unknown> = {
-    requestId: 'test-request',
-    timestamp: Date.now(),
-    modelBehavior: overrides.modelBehavior ?? {},
-    ephemerals: overrides.ephemerals ?? {},
-    modelParams: overrides.modelParams ?? {},
-  };
+  const invocation = createRuntimeInvocationContext({
+    runtimeId: 'test-request',
+    providerName: 'openai',
+    ephemeralsSnapshot: {
+      ...overrides.ephemerals,
+      ...overrides.modelBehavior,
+      openai: overrides.modelParams ?? {},
+    },
+  });
   return {
     contents: [],
     tools: undefined,
     metadata: {},
-    settings,
-    config: undefined,
     invocation,
     resolved: {
       model: 'gpt-4o',
       baseURL: overrides.baseURL,
-      authToken: { token: 'test-token', type: 'api-key' },
+      authToken: 'test-token',
     },
-    // The double assertion is load-bearing: `invocation` here is a minimal
-    // stand-in, not a real RuntimeInvocationContext (which carries runtimeId,
-    // settings, and nine more members plus its accessor methods). Narrowing it
-    // would mean constructing a full context per case and burying the
-    // assertions. openaiReasoningPipeline.test.ts covers the real, uncast
-    // object graph end to end.
-  } as unknown as NormalizedGenerateChatOptions;
+  };
 }
 
 function countReasoningKeys(body: Record<string, unknown>): number {

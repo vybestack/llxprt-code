@@ -1,3 +1,4 @@
+import { configureCommandOptions } from '../command-configuration.js';
 import { loadSettings } from '../../config/settings.js';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { CommandModule } from 'yargs';
@@ -30,11 +31,13 @@ export const enableCommand: CommandModule = {
   command: 'enable <name>',
   describe: 'Enables a skill.',
   builder: (yargs) =>
-    yargs.positional('name', {
-      describe: 'The name of the skill to enable.',
-      type: 'string',
-      demandOption: true,
-    }),
+    configureCommandOptions(yargs, (configuration) =>
+      configuration.positional('name', {
+        describe: 'The name of the skill to enable.',
+        type: 'string',
+        demandOption: true,
+      }),
+    ),
   handler: async (argv) => {
     await handleEnable({
       name: argv['name'] as string,

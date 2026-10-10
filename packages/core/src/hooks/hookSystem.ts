@@ -4,18 +4,25 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { initializeHookDefinitions } from './hook-initialization.js';
 /**
  * @plan:PLAN-20260216-HOOKSYSTEMREWRITE.P03
  * @requirement:HOOK-001,HOOK-003,HOOK-004,HOOK-005,HOOK-006,HOOK-007,HOOK-008,HOOK-142
  * @pseudocode:analysis/pseudocode/01-hook-system-lifecycle.md
  */
 
-import type { Config } from '../config/config.js';
+import type {
+  HookDefinitionConfiguration,
+  HookSessionRuntime,
+} from './hook-configuration.js';
 import { HookRegistry, type HookRegistryEntry } from './hookRegistry.js';
 import { HookPlanner } from './hookPlanner.js';
 import { HookRunner } from './hookRunner.js';
 import { HookAggregator, type AggregatedHookResult } from './hookAggregator.js';
-import { HookEventHandler } from './hookEventHandler.js';
+import {
+  HookEventHandler,
+  type HookExecutionOwner,
+} from './hookEventHandler.js';
 import { HookSystemNotInitializedError } from './errors.js';
 import { DebugLogger } from '../debug/index.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
@@ -48,7 +55,7 @@ const debugLogger = DebugLogger.getLogger('llxprt:core:hooks:system');
  * @requirement:HOOK-142 - Importable from packages/core/src/hooks/hookSystem.ts
  */
 export class HookSystem {
-  private readonly config: Config;
+  private readonly session: HookSessionRuntime;
   private readonly registry: HookRegistry;
   private readonly planner: HookPlanner;
   private readonly runner: HookRunner;
@@ -62,12 +69,19 @@ export class HookSystem {
   >();
   private lifecycleGeneration = 0;
   private readonly disposalController = new AbortController();
+  private projectController = new AbortController();
+  private readonly accepted = new Set<Promise<unknown>>();
+  private closing: Promise<void> | undefined;
+  private readonly unsubscribeTrustPolicy: () => void;
+  private readonly unsubscribeTrustTransition: () => void;
 
   /**
    * @plan PLAN-20250218-HOOKSYSTEM.P03
    * @requirement DELTA-HSYS-001
    */
-  private readonly messageBus: MessageBus | undefined;
+  private readonly messageBus:
+    | Pick<MessageBus, 'subscribe' | 'publish'>
+    | undefined;
 
   /**
    * @plan PLAN-20250218-HOOKSYSTEM.P03
@@ -80,19 +94,47 @@ export class HookSystem {
    * @requirement DELTA-HSYS-001
    */
   constructor(
-    config: Config,
-    messageBus?: MessageBus,
+    readConfiguration: () => HookDefinitionConfiguration,
+    session: HookSessionRuntime,
+    messageBus?: Pick<MessageBus, 'subscribe' | 'publish'>,
     injectedDebugLogger?: DebugLogger,
   ) {
-    this.config = config;
+    this.session = session;
     this.messageBus = messageBus;
     this.injectedDebugLogger = injectedDebugLogger;
     // Create infrastructure components but don't initialize yet
     // @requirement:HOOK-006 - Own single shared instances
-    this.registry = new HookRegistry(config);
+    this.registry = new HookRegistry(
+      readConfiguration,
+      session.isTrustedFolder,
+    );
     this.planner = new HookPlanner(this.registry);
-    this.runner = new HookRunner(config);
+    this.runner = new HookRunner(
+      session.process,
+      session.isTrustedFolder,
+      () => this.projectController.signal,
+    );
     this.aggregator = new HookAggregator();
+    this.unsubscribeTrustPolicy = session.onTrustPolicyChanged((trusted) => {
+      if (!trusted)
+        this.projectController.abort(
+          new Error('Workspace hook trust withdrawn'),
+        );
+      else this.projectController = new AbortController();
+    });
+    this.unsubscribeTrustTransition = session.onTrustTransition(async () => {
+      await Promise.allSettled([...this.accepted]);
+      if (this.lifecycleGeneration > 0) return;
+      try {
+        await this.initialize();
+      } catch (error) {
+        if (
+          !this.disposalController.signal.aborted ||
+          error !== this.disposalController.signal.reason
+        )
+          throw error;
+      }
+    });
   }
 
   /**
@@ -159,14 +201,16 @@ export class HookSystem {
     }
     signal?.throwIfAborted();
     debugLogger.debug('Initializing HookSystem');
-    this.disposeEventHandler();
-    await this.registry.initialize(signal);
+    await initializeHookDefinitions(
+      (initializationSignal) => this.registry.initialize(initializationSignal),
+      signal ?? this.disposalController.signal,
+    );
     if (lifecycleGeneration !== this.lifecycleGeneration) {
       throw new Error('HookSystem has been disposed.');
     }
     signal?.throwIfAborted();
-    this.eventHandler = new HookEventHandler(
-      this.config,
+    this.eventHandler ??= new HookEventHandler(
+      this.session,
       this.registry,
       this.planner,
       this.runner,
@@ -246,11 +290,10 @@ export class HookSystem {
     toolName: string,
     toolInput: Record<string, unknown>,
     mcpContext?: McpContext,
+    owner?: HookExecutionOwner,
   ): Promise<DefaultHookOutput | undefined> {
-    return this.getEventHandler().fireBeforeToolEvent(
-      toolName,
-      toolInput,
-      mcpContext,
+    return this.admit(owner, async (handler, owner) =>
+      handler.fireBeforeToolEvent(toolName, toolInput, mcpContext, owner),
     );
   }
 
@@ -266,12 +309,16 @@ export class HookSystem {
     toolInput: Record<string, unknown>,
     toolResponse: Record<string, unknown>,
     mcpContext?: McpContext,
+    owner?: HookExecutionOwner,
   ): Promise<DefaultHookOutput | undefined> {
-    return this.getEventHandler().fireAfterToolEvent(
-      toolName,
-      toolInput,
-      toolResponse,
-      mcpContext,
+    return this.admit(owner, async (handler, owner) =>
+      handler.fireAfterToolEvent(
+        toolName,
+        toolInput,
+        toolResponse,
+        mcpContext,
+        owner,
+      ),
     );
   }
 
@@ -284,17 +331,20 @@ export class HookSystem {
    */
   async fireBeforeModelEvent(
     request: Omit<HookLLMRequest, 'version'>,
+    owner?: HookExecutionOwner,
   ): Promise<BeforeModelHookOutput | undefined> {
-    try {
-      const result = await this.getEventHandler().fireBeforeModelEvent(request);
-      if (result.finalOutput) {
-        return new BeforeModelHookOutput(result.finalOutput);
+    return this.admit(owner, async (handler, owner) => {
+      try {
+        const result = await handler.fireBeforeModelEvent(request, owner);
+        if (result.finalOutput) {
+          return new BeforeModelHookOutput(result.finalOutput);
+        }
+        return undefined;
+      } catch (error) {
+        debugLogger.debug('BeforeModel hook failed (non-blocking):', error);
+        return undefined;
       }
-      return undefined;
-    } catch (error) {
-      debugLogger.debug('BeforeModel hook failed (non-blocking):', error);
-      return undefined;
-    }
+    });
   }
 
   /**
@@ -307,20 +357,24 @@ export class HookSystem {
   async fireAfterModelEvent(
     request: Omit<HookLLMRequest, 'version'>,
     response: Omit<HookLLMResponse, 'version'>,
+    owner?: HookExecutionOwner,
   ): Promise<AfterModelHookOutput | undefined> {
-    try {
-      const result = await this.getEventHandler().fireAfterModelEvent(
-        request,
-        response,
-      );
-      if (result.finalOutput) {
-        return new AfterModelHookOutput(result.finalOutput);
+    return this.admit(owner, async (handler, owner) => {
+      try {
+        const result = await handler.fireAfterModelEvent(
+          request,
+          response,
+          owner,
+        );
+        if (result.finalOutput) {
+          return new AfterModelHookOutput(result.finalOutput);
+        }
+        return undefined;
+      } catch (error) {
+        debugLogger.debug('AfterModel hook failed (non-blocking):', error);
+        return undefined;
       }
-      return undefined;
-    } catch (error) {
-      debugLogger.debug('AfterModel hook failed (non-blocking):', error);
-      return undefined;
-    }
+    });
   }
 
   /**
@@ -332,21 +386,26 @@ export class HookSystem {
    */
   async fireBeforeToolSelectionEvent(
     request: Omit<HookLLMRequest, 'version'>,
+    owner?: HookExecutionOwner,
   ): Promise<BeforeToolSelectionHookOutput | undefined> {
-    try {
-      const result =
-        await this.getEventHandler().fireBeforeToolSelectionEvent(request);
-      if (result.finalOutput) {
-        return new BeforeToolSelectionHookOutput(result.finalOutput);
+    return this.admit(owner, async (handler, owner) => {
+      try {
+        const result = await handler.fireBeforeToolSelectionEvent(
+          request,
+          owner,
+        );
+        if (result.finalOutput) {
+          return new BeforeToolSelectionHookOutput(result.finalOutput);
+        }
+        return undefined;
+      } catch (error) {
+        debugLogger.debug(
+          'BeforeToolSelection hook failed (non-blocking):',
+          error,
+        );
+        return undefined;
       }
-      return undefined;
-    } catch (error) {
-      debugLogger.debug(
-        'BeforeToolSelection hook failed (non-blocking):',
-        error,
-      );
-      return undefined;
-    }
+    });
   }
 
   /**
@@ -356,10 +415,13 @@ export class HookSystem {
    * @requirement:HOOK-006 - Simplifies caller code by removing getEventHandler() boilerplate
    * @throws {HookSystemNotInitializedError} if called before initialize()
    */
-  async fireSessionStartEvent(context: {
-    source: SessionStartSource;
-  }): Promise<AggregatedHookResult> {
-    return this.getEventHandler().fireSessionStartEvent(context);
+  async fireSessionStartEvent(
+    context: { source: SessionStartSource },
+    owner?: HookExecutionOwner,
+  ): Promise<AggregatedHookResult> {
+    return this.admit(owner, async (handler, owner) =>
+      handler.fireSessionStartEvent(context, owner),
+    );
   }
 
   /**
@@ -369,10 +431,13 @@ export class HookSystem {
    * @requirement:HOOK-006 - Simplifies caller code by removing getEventHandler() boilerplate
    * @throws {HookSystemNotInitializedError} if called before initialize()
    */
-  async fireSessionEndEvent(context: {
-    reason: SessionEndReason;
-  }): Promise<AggregatedHookResult> {
-    return this.getEventHandler().fireSessionEndEvent(context);
+  async fireSessionEndEvent(
+    context: { reason: SessionEndReason },
+    owner?: HookExecutionOwner,
+  ): Promise<AggregatedHookResult> {
+    return this.admit(owner, async (handler, owner) =>
+      handler.fireSessionEndEvent(context, owner),
+    );
   }
 
   /**
@@ -382,10 +447,15 @@ export class HookSystem {
    * @requirement:HOOK-006 - Simplifies caller code by removing getEventHandler() boilerplate
    * @throws {HookSystemNotInitializedError} if called before initialize()
    */
-  async firePreCompressEvent(context: {
-    trigger: PreCompressTrigger;
-  }): Promise<AggregatedHookResult> {
-    return this.getEventHandler().firePreCompressEvent(context);
+  async firePreCompressEvent(
+    context: {
+      trigger: PreCompressTrigger;
+    },
+    owner?: HookExecutionOwner,
+  ): Promise<AggregatedHookResult> {
+    return this.admit(owner, (handler, execution) =>
+      handler.firePreCompressEvent(context, execution),
+    );
   }
 
   /**
@@ -395,10 +465,15 @@ export class HookSystem {
    * @requirement:HOOK-006 - Simplifies caller code by removing getEventHandler() boilerplate
    * @throws {HookSystemNotInitializedError} if called before initialize()
    */
-  async fireBeforeAgentEvent(context: {
-    prompt: string;
-  }): Promise<AggregatedHookResult> {
-    return this.getEventHandler().fireBeforeAgentEvent(context);
+  async fireBeforeAgentEvent(
+    context: {
+      prompt: string;
+    },
+    owner?: HookExecutionOwner,
+  ): Promise<AggregatedHookResult> {
+    return this.admit(owner, (handler, execution) =>
+      handler.fireBeforeAgentEvent(context, execution),
+    );
   }
 
   /**
@@ -408,12 +483,17 @@ export class HookSystem {
    * @requirement:HOOK-006 - Simplifies caller code by removing getEventHandler() boilerplate
    * @throws {HookSystemNotInitializedError} if called before initialize()
    */
-  async fireAfterAgentEvent(context: {
-    prompt: string;
-    prompt_response: string;
-    stop_hook_active: boolean;
-  }): Promise<AggregatedHookResult> {
-    return this.getEventHandler().fireAfterAgentEvent(context);
+  async fireAfterAgentEvent(
+    context: {
+      prompt: string;
+      prompt_response: string;
+      stop_hook_active: boolean;
+    },
+    owner?: HookExecutionOwner,
+  ): Promise<AggregatedHookResult> {
+    return this.admit(owner, (handler, execution) =>
+      handler.fireAfterAgentEvent(context, execution),
+    );
   }
 
   /**
@@ -427,8 +507,11 @@ export class HookSystem {
     type: NotificationType,
     message: string,
     details: Record<string, unknown>,
+    owner?: HookExecutionOwner,
   ): Promise<AggregatedHookResult> {
-    return this.getEventHandler().fireNotificationEvent(type, message, details);
+    return this.admit(owner, async (handler, owner) =>
+      handler.fireNotificationEvent(type, message, details, owner),
+    );
   }
 
   /**
@@ -437,16 +520,65 @@ export class HookSystem {
    * @plan PLAN-20250218-HOOKSYSTEM.P03
    * @requirement DELTA-HEVT-004
    */
-  dispose(): void {
+  dispose(): Promise<void> {
+    if (this.closing !== undefined) return this.closing;
     this.lifecycleGeneration++;
     this.initializationGeneration++;
     this.disposalController.abort(new Error('HookSystem has been disposed.'));
     this.initializationSignals.clear();
-    this.disposeEventHandler();
+    this.unsubscribeTrustPolicy();
+    this.unsubscribeTrustTransition();
+    const accepted = [...this.accepted];
+    this.closing = this.joinDisposal(accepted);
+    return this.closing;
   }
 
-  private disposeEventHandler(): void {
-    this.eventHandler?.dispose();
+  private async joinDisposal(
+    accepted: ReadonlyArray<Promise<unknown>>,
+  ): Promise<void> {
+    const results = await Promise.allSettled([
+      ...accepted,
+      ...(this.initializationPromise === undefined
+        ? []
+        : [this.initializationPromise]),
+    ]);
+    const handler = await Promise.allSettled([this.eventHandler?.dispose()]);
     this.eventHandler = null;
+    const failures = [...results, ...handler].flatMap((result) =>
+      result.status === 'rejected' &&
+      result.reason !== this.disposalController.signal.reason
+        ? [result.reason]
+        : [],
+    );
+    if (failures.length === 1) throw failures[0];
+    if (failures.length > 1)
+      throw new AggregateError(failures, 'Hook shutdown failed');
+  }
+
+  private admit<T>(
+    owner: HookExecutionOwner | undefined,
+    operation: (
+      handler: HookEventHandler,
+      owner: HookExecutionOwner,
+    ) => Promise<T>,
+  ): Promise<T> {
+    if (this.lifecycleGeneration > 0)
+      return Promise.reject(new Error('HookSystem has been disposed.'));
+    const signal =
+      owner?.signal === undefined
+        ? this.disposalController.signal
+        : AbortSignal.any([owner.signal, this.disposalController.signal]);
+    const execution: HookExecutionOwner = {
+      sessionId: owner?.sessionId ?? this.session.sessionId,
+      transcriptPath: owner?.transcriptPath ?? this.session.transcriptPath,
+      signal,
+    };
+    const pending = operation(this.getEventHandler(), execution);
+    this.accepted.add(pending);
+    void pending.then(
+      () => this.accepted.delete(pending),
+      () => this.accepted.delete(pending),
+    );
+    return pending;
   }
 }

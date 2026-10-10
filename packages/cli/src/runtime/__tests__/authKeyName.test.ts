@@ -1,8 +1,10 @@
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { overrideInputs } from '../../../../providers/src/runtime/__tests__/provider-switch-inputs.js';
 
 /**
  * @plan:PLAN-20260603-ISSUE1584.P12
@@ -22,10 +24,10 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { Config } from '@vybestack/llxprt-code-core';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { Config } from '@vybestack/llxprt-code-core';
 import {
   ProviderKeyStorage,
   SecureStore,
@@ -189,13 +191,16 @@ describe('--key-name bootstrap parsing @plan:PLAN-20260211-SECURESTORE.P17', () 
   });
 });
 
+let runtimeRoot: import('@vybestack/llxprt-code-providers/runtime/runtimeActivationBindings.js').IsolatedRuntimeContextHandle;
+let runtimeManager: import('@vybestack/llxprt-code-core').RuntimeProviderManager;
+
 // ─── Precedence & Resolution Tests (R21-R27) ────────────────────────────────
 
 describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURESTORE.P17', () => {
   let mockKeyring: KeyringAdapter & { store: Map<string, string> };
   let tempDir: string;
   let runtimeMod: typeof import('@vybestack/llxprt-code-providers/runtime.js');
-  let contextFactoryMod: typeof import('@vybestack/llxprt-code-providers/runtime/runtimeContextFactory.js');
+  let contextFactoryMod: typeof import('@vybestack/llxprt-code-providers/runtime.js');
   let cleanupHandle: (() => Promise<void> | void) | null = null;
 
   beforeEach(async () => {
@@ -205,7 +210,7 @@ describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURE
 
     runtimeMod = await import('@vybestack/llxprt-code-providers/runtime.js');
     contextFactoryMod = await import(
-      '@vybestack/llxprt-code-providers/runtime/runtimeContextFactory.js'
+      '@vybestack/llxprt-code-providers/runtime.js'
     );
   });
 
@@ -217,36 +222,36 @@ describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURE
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
   });
 
-  async function setupRuntime(): Promise<{
-    config: {
-      getEphemeralSetting: (key: string) => unknown;
-      setEphemeralSetting: (key: string, value: unknown) => void;
-    };
-  }> {
-    const handle = contextFactoryMod.createIsolatedRuntimeContext({
-      runtimeId: 'auth-key-test',
-      config: new Config({
-        sessionId: 'auth-key-test',
+  async function setupRuntime(): Promise<
+    Awaited<ReturnType<typeof contextFactoryMod.createIsolatedRuntimeContext>>
+  > {
+    const handle = (() => {
+      const capturedConfig1 = new Config({
+        sessionId: 'auth-key-owner',
         targetDir: tempDir,
         cwd: tempDir,
         model: 'test-model',
         debugMode: false,
-      }),
-      prepare: async ({ providerManager }) => {
-        const stub = createStubProvider();
-        providerManager.registerProvider(stub);
-        await providerManager.setActiveProvider('test-provider');
-      },
-    });
+      });
+      return contextFactoryMod.createIsolatedRuntimeContext(
+        {
+          runtimeId: 'auth-key-test',
+          config: capturedConfig1,
+          prepare: async ({ providerManager }) => {
+            const stub = createStubProvider();
+            providerManager.registerProvider(stub);
+            await providerManager.setActiveProvider('test-provider');
+          },
+        },
+        new SettingsService(),
+      );
+    })();
     await handle.activate();
+    runtimeRoot = handle;
+    runtimeManager = handle.providerManager;
     cleanupHandle = handle.cleanup;
 
-    return {
-      config: handle.config as {
-        getEphemeralSetting: (key: string) => unknown;
-        setEphemeralSetting: (key: string, value: unknown) => void;
-      },
-    };
+    return handle;
   }
 
   // ─── Precedence Tests (R23.1, R23.2, R27.3) ────────────────────────────
@@ -259,58 +264,69 @@ describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURE
     await runtimeMod.applyCliArgumentOverrides(
       {},
       { keyOverride: 'raw-cli-key', keyNameOverride: 'mykey' },
+      ...(await overrideInputs(runtimeRoot)),
+      runtimeManager.getActiveProvider(),
     );
 
-    const { config: cfg } = runtimeMod.getCliRuntimeServices();
-    expect(cfg.getEphemeralSetting('auth-key')).toBe('raw-cli-key');
+    const cfg = runtimeRoot.settingsOwner;
+    expect(cfg.readNamedParameter('auth-key')).toBe('raw-cli-key');
   });
 
   /** @requirement R23.1 */
   it('--key-name beats auth-key-name: CLI flag beats profile field', async () => {
     await mockStorageRef!.saveKey('cli-named', 'cli-named-value');
     await mockStorageRef!.saveKey('profile-named', 'profile-named-value');
-    const { config } = await setupRuntime();
-    config.setEphemeralSetting('auth-key-name', 'profile-named');
+    const { settingsOwner: config } = await setupRuntime();
+    config.writeUserParameter('auth-key-name', 'profile-named');
 
     await runtimeMod.applyCliArgumentOverrides(
       {},
       { keyNameOverride: 'cli-named' },
+      ...(await overrideInputs(runtimeRoot)),
+      runtimeManager.getActiveProvider(),
     );
 
-    const { config: cfg } = runtimeMod.getCliRuntimeServices();
+    const cfg = runtimeRoot.settingsOwner;
     // auth-key-name stores the name reference; auth-key is cleared
-    expect(cfg.getEphemeralSetting('auth-key-name')).toBe('cli-named');
-    expect(cfg.getEphemeralSetting('auth-key')).toBeUndefined();
+    expect(cfg.readNamedParameter('auth-key-name')).toBe('cli-named');
+    expect(cfg.readNamedParameter('auth-key')).toBeUndefined();
   });
 
   /** @requirement R23.1 */
   it('auth-key-name beats auth-key: named key beats inline profile key', async () => {
     await mockStorageRef!.saveKey('my-named', 'named-key-value');
-    const { config } = await setupRuntime();
-    config.setEphemeralSetting('auth-key-name', 'my-named');
-    config.setEphemeralSetting('auth-key', 'inline-key-value');
+    const { settingsOwner: config } = await setupRuntime();
+    config.writeUserParameter('auth-key-name', 'my-named');
+    config.writeUserParameter('auth-key', 'inline-key-value');
 
-    await runtimeMod.applyCliArgumentOverrides({}, {});
+    await runtimeMod.applyCliArgumentOverrides(
+      {},
+      {},
+      ...(await overrideInputs(runtimeRoot)),
+      runtimeManager.getActiveProvider(),
+    );
 
-    const { config: cfg } = runtimeMod.getCliRuntimeServices();
+    const cfg = runtimeRoot.settingsOwner;
     // auth-key-name kept; auth-key cleared to prevent raw key in snapshots
-    expect(cfg.getEphemeralSetting('auth-key-name')).toBe('my-named');
-    expect(cfg.getEphemeralSetting('auth-key')).toBeUndefined();
+    expect(cfg.readNamedParameter('auth-key-name')).toBe('my-named');
+    expect(cfg.readNamedParameter('auth-key')).toBeUndefined();
   });
 
   /** @requirement R23.1, R27.3 */
   it('--key beats all: raw key overrides key-name + auth-key-name', async () => {
     await mockStorageRef!.saveKey('named', 'named-value');
-    const { config } = await setupRuntime();
-    config.setEphemeralSetting('auth-key-name', 'named');
+    const { settingsOwner: config } = await setupRuntime();
+    config.writeUserParameter('auth-key-name', 'named');
 
     await runtimeMod.applyCliArgumentOverrides(
       {},
       { keyOverride: 'raw-wins', keyNameOverride: 'named' },
+      ...(await overrideInputs(runtimeRoot)),
+      runtimeManager.getActiveProvider(),
     );
 
-    const { config: cfg } = runtimeMod.getCliRuntimeServices();
-    expect(cfg.getEphemeralSetting('auth-key')).toBe('raw-wins');
+    const cfg = runtimeRoot.settingsOwner;
+    expect(cfg.readNamedParameter('auth-key')).toBe('raw-wins');
   });
 
   /** @requirement R23.1, R27.3 */
@@ -323,12 +339,14 @@ describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURE
     await runtimeMod.applyCliArgumentOverrides(
       {},
       { keyNameOverride: 'cli-key', keyfileOverride: keyfilePath },
+      ...(await overrideInputs(runtimeRoot)),
+      runtimeManager.getActiveProvider(),
     );
 
-    const { config: cfg } = runtimeMod.getCliRuntimeServices();
+    const cfg = runtimeRoot.settingsOwner;
     // auth-key-name stores the name reference; auth-key is cleared
-    expect(cfg.getEphemeralSetting('auth-key-name')).toBe('cli-key');
-    expect(cfg.getEphemeralSetting('auth-key')).toBeUndefined();
+    expect(cfg.readNamedParameter('auth-key-name')).toBe('cli-key');
+    expect(cfg.readNamedParameter('auth-key')).toBeUndefined();
   });
 
   // ─── Named Key Resolution (R21.1, R22.1) ──────────────────────────────
@@ -341,26 +359,33 @@ describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURE
     await runtimeMod.applyCliArgumentOverrides(
       {},
       { keyNameOverride: 'myanthropic' },
+      ...(await overrideInputs(runtimeRoot)),
+      runtimeManager.getActiveProvider(),
     );
 
-    const { config: cfg } = runtimeMod.getCliRuntimeServices();
+    const cfg = runtimeRoot.settingsOwner;
     // auth-key-name stores the name reference; auth-key is cleared
-    expect(cfg.getEphemeralSetting('auth-key-name')).toBe('myanthropic');
-    expect(cfg.getEphemeralSetting('auth-key')).toBeUndefined();
+    expect(cfg.readNamedParameter('auth-key-name')).toBe('myanthropic');
+    expect(cfg.readNamedParameter('auth-key')).toBeUndefined();
   });
 
   /** @requirement R21.1 */
   it('auth-key-name profile field resolves stored key', async () => {
     await mockStorageRef!.saveKey('work-gemini', 'AIzaSy-work-key');
-    const { config } = await setupRuntime();
-    config.setEphemeralSetting('auth-key-name', 'work-gemini');
+    const { settingsOwner: config } = await setupRuntime();
+    config.writeUserParameter('auth-key-name', 'work-gemini');
 
-    await runtimeMod.applyCliArgumentOverrides({}, {});
+    await runtimeMod.applyCliArgumentOverrides(
+      {},
+      {},
+      ...(await overrideInputs(runtimeRoot)),
+      runtimeManager.getActiveProvider(),
+    );
 
-    const { config: cfg } = runtimeMod.getCliRuntimeServices();
+    const cfg = runtimeRoot.settingsOwner;
     // auth-key-name preserved; auth-key cleared to prevent raw key in snapshots
-    expect(cfg.getEphemeralSetting('auth-key-name')).toBe('work-gemini');
-    expect(cfg.getEphemeralSetting('auth-key')).toBeUndefined();
+    expect(cfg.readNamedParameter('auth-key-name')).toBe('work-gemini');
+    expect(cfg.readNamedParameter('auth-key')).toBeUndefined();
   });
 
   // ─── Error Handling (R24.1, R24.2) ─────────────────────────────────────
@@ -370,7 +395,12 @@ describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURE
     await setupRuntime();
 
     await expect(
-      runtimeMod.applyCliArgumentOverrides({}, { keyNameOverride: 'notexist' }),
+      runtimeMod.applyCliArgumentOverrides(
+        {},
+        { keyNameOverride: 'notexist' },
+        ...(await overrideInputs(runtimeRoot)),
+        runtimeManager.getActiveProvider(),
+      ),
     ).rejects.toThrow("Named key 'notexist' not found");
   });
 
@@ -379,7 +409,12 @@ describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURE
     await setupRuntime();
 
     await expect(
-      runtimeMod.applyCliArgumentOverrides({}, { keyNameOverride: 'missing' }),
+      runtimeMod.applyCliArgumentOverrides(
+        {},
+        { keyNameOverride: 'missing' },
+        ...(await overrideInputs(runtimeRoot)),
+        runtimeManager.getActiveProvider(),
+      ),
     ).rejects.toThrow('/key save missing');
   });
 
@@ -391,29 +426,41 @@ describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURE
       runtimeMod.applyCliArgumentOverrides(
         {},
         { keyNameOverride: 'missing', keyfileOverride: '/tmp/fallback.key' },
+        ...(await overrideInputs(runtimeRoot)),
+        runtimeManager.getActiveProvider(),
       ),
     ).rejects.toThrow("Named key 'missing' not found");
   });
 
   /** @requirement R24.1 */
   it('throws when auth-key-name references non-existent key', async () => {
-    const { config } = await setupRuntime();
-    config.setEphemeralSetting('auth-key-name', 'ghost');
+    const { settingsOwner: config } = await setupRuntime();
+    config.writeUserParameter('auth-key-name', 'ghost');
 
-    await expect(runtimeMod.applyCliArgumentOverrides({}, {})).rejects.toThrow(
-      "Named key 'ghost' not found",
-    );
+    await expect(
+      runtimeMod.applyCliArgumentOverrides(
+        {},
+        {},
+        ...(await overrideInputs(runtimeRoot)),
+        runtimeManager.getActiveProvider(),
+      ),
+    ).rejects.toThrow("Named key 'ghost' not found");
   });
 
   /** @requirement R24.1 */
   it('auth-key-name error does NOT fall through to lower-precedence sources', async () => {
-    const { config } = await setupRuntime();
-    config.setEphemeralSetting('auth-key-name', 'ghost');
-    config.setEphemeralSetting('auth-key', 'inline-fallback');
+    const { settingsOwner: config } = await setupRuntime();
+    config.writeUserParameter('auth-key-name', 'ghost');
+    config.writeUserParameter('auth-key', 'inline-fallback');
 
-    await expect(runtimeMod.applyCliArgumentOverrides({}, {})).rejects.toThrow(
-      "Named key 'ghost' not found",
-    );
+    await expect(
+      runtimeMod.applyCliArgumentOverrides(
+        {},
+        {},
+        ...(await overrideInputs(runtimeRoot)),
+        runtimeManager.getActiveProvider(),
+      ),
+    ).rejects.toThrow("Named key 'ghost' not found");
   });
 
   // ─── No Deprecation (R26.1) ───────────────────────────────────────────
@@ -422,10 +469,15 @@ describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURE
   it('--key raw value still works', async () => {
     await setupRuntime();
 
-    await runtimeMod.applyCliArgumentOverrides({ key: 'direct-raw-key' }, {});
+    await runtimeMod.applyCliArgumentOverrides(
+      { key: 'direct-raw-key' },
+      {},
+      ...(await overrideInputs(runtimeRoot)),
+      runtimeManager.getActiveProvider(),
+    );
 
-    const { config: cfg } = runtimeMod.getCliRuntimeServices();
-    expect(cfg.getEphemeralSetting('auth-key')).toBe('direct-raw-key');
+    const cfg = runtimeRoot.settingsOwner;
+    expect(cfg.readNamedParameter('auth-key')).toBe('direct-raw-key');
   });
 
   /** @requirement R26.1 */
@@ -435,10 +487,12 @@ describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURE
     await runtimeMod.applyCliArgumentOverrides(
       {},
       { keyOverride: 'bootstrap-key' },
+      ...(await overrideInputs(runtimeRoot)),
+      runtimeManager.getActiveProvider(),
     );
 
-    const { config: cfg } = runtimeMod.getCliRuntimeServices();
-    expect(cfg.getEphemeralSetting('auth-key')).toBe('bootstrap-key');
+    const cfg = runtimeRoot.settingsOwner;
+    expect(cfg.readNamedParameter('auth-key')).toBe('bootstrap-key');
   });
 
   /** @requirement R26.1 */
@@ -450,26 +504,28 @@ describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURE
     await runtimeMod.applyCliArgumentOverrides(
       {},
       { keyfileOverride: keyfilePath },
+      ...(await overrideInputs(runtimeRoot)),
+      runtimeManager.getActiveProvider(),
     );
 
-    const { config: cfg } = runtimeMod.getCliRuntimeServices();
-    expect(cfg.getEphemeralSetting('auth-keyfile')).toBe(keyfilePath);
+    const cfg = runtimeRoot.settingsOwner;
+    expect(cfg.readNamedParameter('auth-keyfile')).toBe(keyfilePath);
   });
 
   // ─── Ephemeral Setting (R21.2) ────────────────────────────────────────
 
   /** @requirement R21.2 */
   it('auth-key-name is stored and retrieved as ephemeral setting', async () => {
-    const { config } = await setupRuntime();
-    config.setEphemeralSetting('auth-key-name', 'mykey');
-    expect(config.getEphemeralSetting('auth-key-name')).toBe('mykey');
+    const { settingsOwner: config } = await setupRuntime();
+    config.writeUserParameter('auth-key-name', 'mykey');
+    expect(config.readNamedParameter('auth-key-name')).toBe('mykey');
   });
 
   describe('Issue #208 auth-key-name clear behavior', () => {
     let mockKeyring: KeyringAdapter & { store: Map<string, string> };
     let tempDir: string;
     let runtimeMod: typeof import('@vybestack/llxprt-code-providers/runtime.js');
-    let contextFactoryMod: typeof import('@vybestack/llxprt-code-providers/runtime/runtimeContextFactory.js');
+    let contextFactoryMod: typeof import('@vybestack/llxprt-code-providers/runtime.js');
     let cleanupHandle: (() => Promise<void> | void) | null = null;
 
     beforeEach(async () => {
@@ -481,7 +537,7 @@ describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURE
 
       runtimeMod = await import('@vybestack/llxprt-code-providers/runtime.js');
       contextFactoryMod = await import(
-        '@vybestack/llxprt-code-providers/runtime/runtimeContextFactory.js'
+        '@vybestack/llxprt-code-providers/runtime.js'
       );
     });
 
@@ -493,59 +549,55 @@ describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURE
       await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
     });
 
-    async function setupRuntime(): Promise<{
-      config: {
-        getEphemeralSetting: (key: string) => unknown;
-        setEphemeralSetting: (key: string, value: unknown) => void;
-      };
-      settingsService: {
-        getProviderSettings: (providerName: string) => Record<string, unknown>;
-      };
-    }> {
-      const handle = contextFactoryMod.createIsolatedRuntimeContext({
-        runtimeId: 'auth-key-clear-test',
-        config: new Config({
-          sessionId: 'auth-key-clear-test',
+    async function setupRuntime(): Promise<
+      Awaited<ReturnType<typeof contextFactoryMod.createIsolatedRuntimeContext>>
+    > {
+      const handle = (() => {
+        const capturedConfig2 = new Config({
+          sessionId: 'auth-key-owner',
           targetDir: tempDir,
           cwd: tempDir,
           model: 'test-model',
           debugMode: false,
-        }),
-        prepare: async ({ providerManager }) => {
-          providerManager.registerProvider(createStubProvider());
-          await providerManager.setActiveProvider('test-provider');
-        },
-      });
+        });
+        return contextFactoryMod.createIsolatedRuntimeContext(
+          {
+            runtimeId: 'auth-key-clear-test',
+            config: capturedConfig2,
+            prepare: async ({ providerManager }) => {
+              providerManager.registerProvider(createStubProvider());
+              await providerManager.setActiveProvider('test-provider');
+            },
+          },
+          new SettingsService(),
+        );
+      })();
       await handle.activate();
+      runtimeRoot = handle;
+      runtimeManager = handle.providerManager;
       cleanupHandle = handle.cleanup;
 
-      return {
-        config: handle.config as {
-          getEphemeralSetting: (key: string) => unknown;
-          setEphemeralSetting: (key: string, value: unknown) => void;
-        },
-        settingsService: handle.settingsService as {
-          getProviderSettings: (
-            providerName: string,
-          ) => Record<string, unknown>;
-        },
-      };
+      return handle;
     }
 
     it('clears auth-key-name and keyfile state when API key is cleared', async () => {
-      const { config, settingsService } = await setupRuntime();
+      const { settingsOwner: config, settingsService } = await setupRuntime();
 
-      config.setEphemeralSetting('auth-key-name', 'saved-name');
-      config.setEphemeralSetting('auth-keyfile', '/tmp/test-provider.key');
+      config.writeUserParameter('auth-key-name', 'saved-name');
+      config.writeUserParameter('auth-keyfile', '/tmp/test-provider.key');
 
       const providerSettings =
         settingsService.getProviderSettings('test-provider');
       providerSettings['auth-keyfile'] = '/tmp/test-provider.key';
 
-      await runtimeMod.updateActiveProviderApiKey(null);
+      await runtimeMod.updateActiveProviderApiKey(
+        null,
+        ...(await overrideInputs(runtimeRoot)),
+        runtimeManager.getActiveProvider(),
+      );
 
-      expect(config.getEphemeralSetting('auth-key-name')).toBeUndefined();
-      expect(config.getEphemeralSetting('auth-keyfile')).toBeUndefined();
+      expect(config.readNamedParameter('auth-key-name')).toBeUndefined();
+      expect(config.readNamedParameter('auth-keyfile')).toBeUndefined();
       expect(
         settingsService.getProviderSettings('test-provider')['auth-keyfile'],
       ).toBeUndefined();

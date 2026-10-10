@@ -4,60 +4,26 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-  afterAll,
-  vi,
-} from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import {
   ProfileManager,
+  SettingsService,
   type AuthConfig,
 } from '@vybestack/llxprt-code-settings';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { LoadBalancingProvider } from '../../LoadBalancingProvider.js';
+import { ProviderManager } from '../../ProviderManager.js';
 import type { GenerateChatOptions, IProvider } from '../../IProvider.js';
 import { createProviderKeyStorage } from '../../auth/proxy/credential-store-factory.js';
 import { resolveLoadBalancerSubProfile } from './loadBalancerProfile.js';
 import { resolveMemberAuthentication } from '../../loadBalancing/memberAuthentication.js';
 
-const realProviderManagerModule = {
-  ...(await import('../../ProviderManager.js')),
-};
-void vi.mock('../../ProviderManager.js', () => ({
-  ProviderManager: class {
-    private readonly providers = new Map<string, IProvider>();
-
-    registerProvider(provider: IProvider): void {
-      this.providers.set(provider.name, provider);
-    }
-
-    getProviderByName(name: string): IProvider | undefined {
-      return this.providers.get(name);
-    }
-
-    getTokenizerFactory(): undefined {
-      return undefined;
-    }
-  },
-}));
-const { ProviderManager: StubProviderManager } = await import(
-  '../../ProviderManager.js'
-);
-
 describe('resolveLoadBalancerSubProfile — member auth handling', () => {
   const tempDirs: string[] = [];
   let restoreStorage: (() => void) | undefined;
-
-  afterAll(() => {
-    void vi.mock('../../ProviderManager.js', () => realProviderManagerModule);
-  });
 
   async function makeTempDir(): Promise<string> {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'llxprt-lb-auth-'));
@@ -234,7 +200,9 @@ describe('resolveLoadBalancerSubProfile — member auth handling', () => {
           'member-keyname',
           deps(pm),
         );
-        const providerManager = new StubProviderManager();
+        const providerManager = new ProviderManager({
+          settingsService: new SettingsService(),
+        });
         const delegate: IProvider = {
           name: 'key-probe',
           getModels: async () => [],
@@ -259,20 +227,89 @@ describe('resolveLoadBalancerSubProfile — member auth handling', () => {
           },
           providerManager,
         );
+        providerManager.registerProvider(lb);
+        providerManager.setActiveProvider(lb.name);
+
+        const siblingManager = new ProviderManager({
+          settingsService: new SettingsService(),
+        });
+        const siblingDelegate: IProvider = {
+          name: delegate.name,
+          getModels: async () => [],
+          getDefaultModel: () => 'test-model',
+          async *generateChatCompletion(
+            options: GenerateChatOptions | IContent[],
+          ): AsyncGenerator<IContent> {
+            if (Array.isArray(options))
+              throw new Error('Expected delegate options');
+            yield {
+              speaker: 'ai',
+              blocks: [
+                {
+                  type: 'text',
+                  text: `sibling:${options.resolved?.authToken}`,
+                },
+              ],
+            };
+          },
+        };
+        siblingManager.registerProvider(siblingDelegate);
+        const siblingMember = {
+          ...resolved,
+          authToken: 'sibling-key',
+          authKeyName: undefined,
+          authKeyfile: undefined,
+        };
+        const siblingLb = new LoadBalancingProvider(
+          {
+            profileName: 'lb-main',
+            strategy,
+            subProfiles: [
+              siblingMember,
+              { ...siblingMember, name: 'second-member' },
+            ],
+          },
+          siblingManager,
+        );
+        siblingManager.registerProvider(siblingLb);
+        siblingManager.setActiveProvider(siblingLb.name);
+
+        const selected = providerManager.getActiveProvider();
+        const siblingSelected = siblingManager.getActiveProvider();
+        if (!selected || !siblingSelected)
+          throw new Error('Expected both owners to select a load balancer');
         const observed: IContent[] = [];
+        const siblingObserved: IContent[] = [];
         for (const value of ['  first-key  ', '  rotated-key  ']) {
           await storage.saveKey(keyName, value);
           await fs.writeFile(keyfile, value);
-          for await (const chunk of lb.generateChatCompletion({
+          for await (const chunk of selected.generateChatCompletion({
             contents: [],
           })) {
             observed.push(chunk);
+          }
+          for await (const chunk of siblingSelected.generateChatCompletion({
+            contents: [],
+          })) {
+            siblingObserved.push(chunk);
           }
         }
         expect(observed).toStrictEqual([
           { speaker: 'ai', blocks: [{ type: 'text', text: 'first-key' }] },
           { speaker: 'ai', blocks: [{ type: 'text', text: 'rotated-key' }] },
         ]);
+        expect(siblingObserved).toStrictEqual([
+          {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'sibling:sibling-key' }],
+          },
+          {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'sibling:sibling-key' }],
+          },
+        ]);
+        expect(providerManager.getActiveProvider()?.name).toBe(lb.name);
+        expect(siblingManager.getActiveProvider()?.name).toBe(siblingLb.name);
         expect(resolved.authToken).toStrictEqual(undefined);
       } finally {
         await storage.deleteKey(keyName);

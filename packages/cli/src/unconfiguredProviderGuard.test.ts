@@ -22,61 +22,50 @@ import {
   UNCONFIGURED_PROVIDER_MESSAGE,
 } from './unconfiguredProviderGuard.js';
 
-function makeConfig(provider: string | undefined, hasActive: boolean): Config {
-  return {
-    getProvider: () => provider,
-    getProviderManager: () => ({
-      hasActiveProvider: () => hasActive,
-    }),
-  } as unknown as Config;
-}
-
 describe('isProviderConfigured (pure guard)', () => {
   it('returns true when manager has an active provider', () => {
-    expect(isProviderConfigured(makeConfig(undefined, true))).toBe(true);
+    expect(isProviderConfigured({ hasActiveProvider: () => true })).toBe(true);
   });
 
   it('returns false when manager has no active provider (regardless of config string)', () => {
-    expect(isProviderConfigured(makeConfig(undefined, false))).toBe(false);
+    expect(isProviderConfigured({ hasActiveProvider: () => false })).toBe(
+      false,
+    );
   });
 
   it('returns false when provider is empty string and no active provider', () => {
-    expect(isProviderConfigured(makeConfig('', false))).toBe(false);
+    expect(isProviderConfigured({ hasActiveProvider: () => false })).toBe(
+      false,
+    );
   });
 
   it('returns true when manager has active provider even if config string is empty', () => {
-    expect(isProviderConfigured(makeConfig('', true))).toBe(true);
+    expect(isProviderConfigured({ hasActiveProvider: () => true })).toBe(true);
   });
 
   it('returns true when manager has active provider even if config string differs', () => {
-    expect(isProviderConfigured(makeConfig('openai', true))).toBe(true);
+    expect(isProviderConfigured({ hasActiveProvider: () => true })).toBe(true);
   });
 
   it('returns false when manager is undefined', () => {
-    const config = {
-      getProvider: () => 'openai',
-      getProviderManager: () => undefined,
-    } as unknown as Config;
-    expect(isProviderConfigured(config)).toBe(false);
+    expect(isProviderConfigured(undefined)).toBe(false);
   });
 
   it('ignores config.getProvider string entirely — manager is the single source of truth', () => {
     // A non-empty config provider string with no active manager is NOT configured.
-    const configNoManager = {
-      getProvider: () => 'gemini',
-      getProviderManager: () => undefined,
-    } as unknown as Config;
-    expect(isProviderConfigured(configNoManager)).toBe(false);
+    expect(isProviderConfigured(undefined)).toBe(false);
 
     // A non-empty config provider string with an inactive manager is NOT configured.
-    expect(isProviderConfigured(makeConfig('gemini', false))).toBe(false);
+    expect(isProviderConfigured({ hasActiveProvider: () => false })).toBe(
+      false,
+    );
   });
 
   it('has no side effects — does not call process.exit or throw', () => {
     const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
       throw new Error('should not be called');
     });
-    const result = isProviderConfigured(makeConfig(undefined, false));
+    const result = isProviderConfigured({ hasActiveProvider: () => false });
     expect(result).toBe(false);
     expect(exitSpy).not.toHaveBeenCalled();
     exitSpy.mockRestore();
@@ -237,9 +226,6 @@ describe('guardUnconfiguredProvider: void return and exit behavior', () => {
 
   it('returns a Promise<void> and settles before mocks restore', async () => {
     const config = {
-      getProviderManager: () => ({
-        hasActiveProvider: () => false,
-      }),
       isInteractive: () => false,
       getOutputFormat: () => 'text' as Config['outputFormat'],
     } as unknown as Config;
@@ -251,7 +237,9 @@ describe('guardUnconfiguredProvider: void return and exit behavior', () => {
       throw new Error(`process.exit(${code}) called`);
     });
 
-    const result = guardUnconfiguredProvider(config, () => Promise.resolve());
+    const result = guardUnconfiguredProvider(config, () => Promise.resolve(), {
+      hasActiveProvider: () => false,
+    });
     expect(result).toBeInstanceOf(Promise);
     // Await settlement so the real guard's runCleanup + finally complete
     // before the afterEach restores the real process.exit.
@@ -260,38 +248,29 @@ describe('guardUnconfiguredProvider: void return and exit behavior', () => {
   });
 
   it('resolves void when provider IS configured', async () => {
-    const config = {
-      getProviderManager: () => ({
-        hasActiveProvider: () => true,
-      }),
-      isInteractive: () => false,
-    } as unknown as Config;
+    const config = { isInteractive: () => false } as unknown as Config;
 
-    const result = await guardUnconfiguredProvider(config, () =>
-      Promise.resolve(),
+    const result = await guardUnconfiguredProvider(
+      config,
+      () => Promise.resolve(),
+      { hasActiveProvider: () => true },
     );
     expect(result).toBeUndefined();
   });
 
   it('resolves void in interactive mode even when unconfigured', async () => {
-    const config = {
-      getProviderManager: () => ({
-        hasActiveProvider: () => false,
-      }),
-      isInteractive: () => true,
-    } as unknown as Config;
+    const config = { isInteractive: () => true } as unknown as Config;
 
-    const result = await guardUnconfiguredProvider(config, () =>
-      Promise.resolve(),
+    const result = await guardUnconfiguredProvider(
+      config,
+      () => Promise.resolve(),
+      { hasActiveProvider: () => true },
     );
     expect(result).toBeUndefined();
   });
 
   it('exits with code 52 when unconfigured and non-interactive', async () => {
     const config = {
-      getProviderManager: () => ({
-        hasActiveProvider: () => false,
-      }),
       isInteractive: () => false,
       getOutputFormat: () => 'text' as Config['outputFormat'],
     } as unknown as Config;
@@ -301,16 +280,15 @@ describe('guardUnconfiguredProvider: void return and exit behavior', () => {
     });
 
     await expect(
-      guardUnconfiguredProvider(config, () => Promise.resolve()),
+      guardUnconfiguredProvider(config, () => Promise.resolve(), {
+        hasActiveProvider: () => false,
+      }),
     ).rejects.toThrow('process.exit(52) called');
     expect(exitSpy).toHaveBeenCalledWith(52);
   });
 
   it('still exits 52 even when cleanup throws', async () => {
     const config = {
-      getProviderManager: () => ({
-        hasActiveProvider: () => false,
-      }),
       isInteractive: () => false,
       getOutputFormat: () => 'text' as Config['outputFormat'],
     } as unknown as Config;
@@ -320,8 +298,10 @@ describe('guardUnconfiguredProvider: void return and exit behavior', () => {
     });
 
     await expect(
-      guardUnconfiguredProvider(config, () =>
-        Promise.reject(new Error('cleanup failed')),
+      guardUnconfiguredProvider(
+        config,
+        () => Promise.reject(new Error('cleanup failed')),
+        { hasActiveProvider: () => false },
       ),
     ).rejects.toThrow('process.exit(52) called');
     expect(exitSpy).toHaveBeenCalledWith(52);
@@ -329,9 +309,6 @@ describe('guardUnconfiguredProvider: void return and exit behavior', () => {
 
   it('runs cleanup before exiting', async () => {
     const config = {
-      getProviderManager: () => ({
-        hasActiveProvider: () => false,
-      }),
       isInteractive: () => false,
       getOutputFormat: () => 'text' as Config['outputFormat'],
     } as unknown as Config;
@@ -341,17 +318,16 @@ describe('guardUnconfiguredProvider: void return and exit behavior', () => {
       throw new Error(`process.exit(${code}) called`);
     });
 
-    await expect(guardUnconfiguredProvider(config, cleanupFn)).rejects.toThrow(
-      'process.exit(52) called',
-    );
+    await expect(
+      guardUnconfiguredProvider(config, cleanupFn, {
+        hasActiveProvider: () => false,
+      }),
+    ).rejects.toThrow('process.exit(52) called');
     expect(cleanupFn).toHaveBeenCalledTimes(1);
   });
 
   async function verifyLogsCleanupFailureViaDebugLoggerNotStderrAndStillExits52() {
     const config = {
-      getProviderManager: () => ({
-        hasActiveProvider: () => false,
-      }),
       isInteractive: () => false,
       getOutputFormat: () => 'text' as Config['outputFormat'],
     } as unknown as Config;
@@ -370,8 +346,10 @@ describe('guardUnconfiguredProvider: void return and exit behavior', () => {
 
     return {
       runGuardWithFailingCleanup: () =>
-        guardUnconfiguredProvider(config, () =>
-          Promise.reject(new Error('cleanup failed')),
+        guardUnconfiguredProvider(
+          config,
+          () => Promise.reject(new Error('cleanup failed')),
+          { hasActiveProvider: () => false },
         ),
       exitSpy,
       debugErrorSpy,

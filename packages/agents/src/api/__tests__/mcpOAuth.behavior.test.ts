@@ -144,6 +144,7 @@ function buildOrderingDeps(
     getMcpRuntimeStatus: () => ({
       servers: opts.servers ?? {},
       discoveryFailures: new Map<string, string>(),
+      serverStates: new Map(),
       discoveryState: MCPDiscoveryState.COMPLETED,
     }),
     ...(fakeManager !== undefined
@@ -160,8 +161,26 @@ function buildOrderingDeps(
     getToolRegistry: () => toolRegistry,
     getServerConfigs: () => opts.servers,
     getBlockedServers: () => opts.blocked ?? [],
-    getPromptRegistry: () => promptRegistry,
-    getResourceRegistry: () => resourceRegistry,
+    ...(promptRegistry === undefined
+      ? {}
+      : {
+          listPrompts: (server: string) =>
+            promptRegistry.getPromptsByServer(server).map((prompt) => ({
+              ...prompt,
+              serverName: server,
+              invoke: async () => ({ messages: [] }),
+            })),
+        }),
+    ...(resourceRegistry === undefined
+      ? {}
+      : {
+          listResources: () =>
+            resourceRegistry.getAllResources().map((resource) => ({
+              ...resource,
+              name: resource.name ?? resource.uri,
+              discoveredAt: 1,
+            })),
+        }),
     refreshClientTools: async () => {
       callLog.push('setTools');
     },

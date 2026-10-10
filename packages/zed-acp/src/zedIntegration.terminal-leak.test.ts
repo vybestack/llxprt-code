@@ -3,6 +3,11 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { installZedDefinitionFixture } from './__tests__/definition-fixture.js';
+const definitionFixture = installZedDefinitionFixture();
+import { createConnectionProviderManager } from './__tests__/connection-provider-fixture.js';
+import { unusedProfileApplication } from './test-profile-application.js';
 
 /**
  * Behavioral tests for ZedAgent agent-disposal when terminal setup fails after
@@ -14,10 +19,9 @@
  * and a mocked buildZedTerminalSetup that throws — no result-shaped mocks.
  */
 
-import { beforeEach, describe, expect, it, vi } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import type * as acp from '@agentclientprotocol/sdk';
-import type { Agent } from '@vybestack/llxprt-code-agents';
-import type { Config } from '@vybestack/llxprt-code-core';
+import { Config } from '@vybestack/llxprt-code-core';
 
 import { RecordingConnection } from './__tests__/zed-test-helpers.js';
 
@@ -37,38 +41,14 @@ void vi.mock('./zed-terminal-setup.js', () => ({
     mockBuildZedTerminalSetup(...args),
 }));
 
-void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
-  clearActiveModelParam: vi.fn(),
-  getActiveModelParams: vi.fn(),
-  loadProfileByName: vi.fn(),
-  setCliRuntimeContext: vi.fn(),
-}));
-
 function buildBaseConfig(): Config {
-  return {
-    getFileSystemService: () => ({
-      readTextFile: vi.fn(async () => 'base'),
-      writeTextFile: vi.fn(async () => undefined),
-    }),
-    getProviderManager: () => ({ id: 'base' }),
-    getProfileManager: () => undefined,
-    getEphemeralSetting: () => undefined,
-    getDebugMode: () => false,
-    getTargetDir: () => '/project',
-    getProjectRoot: () => '/project',
-    getMaxSessionTurns: () => 50,
-    getModel: () => 'test-model',
-    getSessionRecordingService: () => ({
-      isActive: () => false,
-      recordSessionMetadata: () => undefined,
-      getSessionMetadataTitle: () => undefined,
-    }),
-    getToolRegistry: () => ({ getAllTools: () => [] }),
-    storage: {
-      getProjectTempDir: () => '/tmp',
-      getProjectChatsDir: () => '/tmp/chats',
-    },
-  } as unknown as Config;
+  return new Config({
+    sessionId: 'base',
+    targetDir: process.cwd(),
+    cwd: process.cwd(),
+    model: 'test-model',
+    debugMode: false,
+  });
 }
 
 function buildTerminalCapableInit(): acp.InitializeRequest {
@@ -81,37 +61,47 @@ describe('ZedAgent.buildSessionAgent disposal on terminal-setup failure', () => 
     mockBuildZedTerminalSetup.mockReset();
   });
 
-  it('disposes the already-built agent when buildZedTerminalSetup throws', async () => {
-    const dispose = vi.fn(async () => undefined);
-    const agent = {
-      getApprovalMode: () => 'default',
-      setApprovalMode: vi.fn(),
-      dispose,
-      getHistory: vi.fn(async () => []),
-      async *stream() {
-        yield { type: 'done', reason: 'stop' };
+  afterEach(() => {
+    mockFromConfig.mockImplementation(actual.fromConfig);
+    mockBuildZedTerminalSetup.mockImplementation(
+      actualActual.buildZedTerminalSetup,
+    );
+  });
+
+  it('disposes the owned session Config when terminal setup fails during adoption', async () => {
+    let dispose: ReturnType<typeof vi.spyOn> | undefined;
+    mockFromConfig.mockImplementation(
+      async (options: Parameters<typeof actual.fromConfig>[0]) => {
+        dispose = vi.spyOn(options.config, 'dispose');
+        options.prepareSessionTools?.(options.config, {} as never, {
+          getAllTools: () => [],
+          registerTool: () => {},
+          unregisterTool: () => {},
+        });
       },
-      getMessageBus: () => ({}),
-      tools: { respondToConfirmation: vi.fn() },
-    } as unknown as Agent;
-    mockFromConfig.mockResolvedValue(agent);
+    );
     mockBuildZedTerminalSetup.mockImplementation(() => {
       throw new Error('terminal registry construction failed');
     });
 
     const mod = await import('./zedIntegration.js');
+    const config = buildBaseConfig();
+    const settingsService = new SettingsService();
     const zedAgent = new mod.ZedAgent(
-      buildBaseConfig(),
+      config,
       new RecordingConnection() as unknown as acp.AgentSideConnection,
+      unusedProfileApplication,
+      createConnectionProviderManager(config, settingsService),
+      () => new SettingsService({ sessionSource: settingsService }),
+      undefined,
+      definitionFixture(),
     );
     await zedAgent.initialize(buildTerminalCapableInit());
 
     await expect(
-      zedAgent.newSession({ cwd: '/project', mcpServers: [] }),
+      zedAgent.newSession({ cwd: process.cwd(), mcpServers: [] }),
     ).rejects.toThrow('terminal registry construction failed');
 
-    // The agent built by fromConfig MUST be disposed — not leaked — because
-    // buildSessionAgent aborted before handing ownership to the caller.
     expect(dispose).toHaveBeenCalledTimes(1);
   });
 });

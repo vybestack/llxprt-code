@@ -17,7 +17,6 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
     value: rawValue,
   })),
   applyCliSetArguments: vi.fn(() => ({ modelParams: {} })),
-  registerCliProviderInfrastructure: vi.fn(),
 }));
 
 type BootstrapProfileArgs = {

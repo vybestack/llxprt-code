@@ -16,7 +16,38 @@
  * @requirement REQ-014
  */
 
-import type { GitHubBrokerClient } from '@vybestack/llxprt-code-tools';
+import type { AgentToolHandle } from '@vybestack/llxprt-code-agents';
+import { z } from 'zod';
+
+export async function readGitHubCompletionReport(
+  tool: AgentToolHandle | undefined,
+  op: 'issue.list' | 'pr.list',
+  params: Record<string, unknown>,
+  signal: AbortSignal,
+): Promise<Record<string, unknown>> {
+  const operation = z.enum(['issue.list', 'pr.list']).parse(op);
+  if (tool === undefined) throw new Error('GitHub completion is unavailable');
+  const result = await tool.buildAndExecute(
+    { ...params, op: operation },
+    signal,
+  );
+  if (result.error !== undefined)
+    throw new Error(
+      z.object({ message: z.string() }).parse(result.error).message,
+    );
+  if (typeof result.llmContent !== 'string')
+    throw new Error('GitHub completion returned a non-JSON report');
+  const data: unknown = JSON.parse(result.llmContent);
+  return z.record(z.unknown()).parse(data);
+}
+
+export interface GitHubCompletionReads {
+  readonly readReport: (
+    op: 'issue.list' | 'pr.list',
+    params: Record<string, unknown>,
+    signal: AbortSignal,
+  ) => Promise<Record<string, unknown>>;
+}
 import type { Suggestion } from '../components/SuggestionsDisplay.js';
 
 /** Prefixes that trigger a GitHub lookup. */
@@ -96,11 +127,11 @@ function toSuggestion(kind: 'issue' | 'pr', item: ListedItem): Suggestion {
  * @requirement REQ-014
  */
 export async function fetchGitHubSuggestions(
-  client: GitHubBrokerClient | undefined,
+  reports: GitHubCompletionReads | undefined,
   parsed: GitHubAtPattern,
   signal: AbortSignal,
 ): Promise<Suggestion[]> {
-  if (client === undefined) return [];
+  if (reports === undefined) return [];
 
   const op = parsed.kind === 'issue' ? 'issue.list' : 'pr.list';
   const params: Record<string, unknown> = {
@@ -110,7 +141,7 @@ export async function fetchGitHubSuggestions(
   if (parsed.query.length > 0) params.search = parsed.query;
 
   try {
-    const data = await client.runOperation(op, params, signal);
+    const data = await reports.readReport(op, params, signal);
     const items = (parsed.kind === 'issue' ? data.issues : data.prs) as
       | ListedItem[]
       | undefined;

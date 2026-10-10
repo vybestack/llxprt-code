@@ -6,6 +6,12 @@
  * @plan PLAN-20260214-SESSIONBROWSER.P29
  */
 
+import {
+  WorkspaceTrustLifecycle,
+  assembleWorkspaceMemory,
+  WorkspaceFilesystemOwner,
+} from '@vybestack/llxprt-code-core';
+
 import process from 'node:process';
 import type {
   ApprovalMode,
@@ -41,7 +47,7 @@ import {
   type ProfileLoadResult,
 } from './profileResolution.js';
 import { resolveContextAndEnvironment } from './interactiveContext.js';
-import { loadEnvironment, resolveMemoryContent } from './environmentLoader.js';
+import { loadEnvironment } from './environmentLoader.js';
 import { resolveApprovalMode } from './approvalModeResolver.js';
 import { resolveProviderAndModel } from './providerModelResolver.js';
 import { buildConfig } from './configBuilder.js';
@@ -102,6 +108,9 @@ async function bootstrapAndLoadProfile(
   };
   const bootstrapArgs = parsedWithOverrides.bootstrapArgs;
   const runtimeState = await prepareRuntimeForProfile(parsedWithOverrides);
+  if (runtimeState.registration) {
+    runtimeOverrides.onRuntimeRegistrationReady?.(runtimeState.registration);
+  }
   // The registry may come from either source. Post-config re-assembly must see
   // the SAME one, or it rebuilds the provider manager without the plugins.
   const effectiveOverrides: CliRuntimeOverrides = {
@@ -214,11 +223,9 @@ async function resolveConfigBuildPieces(
     extensions,
     extensionEnablementManager,
   });
-  const { memoryContent, fileCount, filePaths } = await resolveMemoryContent(
-    cwd,
-    context,
-    profileMergedSettings,
-  );
+  const memoryContent = '';
+  const fileCount = 0;
+  const filePaths: string[] = [];
   const { mcpServers, blockedMcpServers } = resolveMcpServers(
     profileMergedSettings,
     context,
@@ -330,7 +337,6 @@ function buildLoadedConfig(
     sandboxConfig: pieces.sandboxConfig,
     mcpServers: pieces.mcpServers,
     blockedMcpServers: pieces.blockedMcpServers,
-    reloadMcpServers: pieces.reloadMcpServers,
     excludeTools: pieces.excludeTools,
     memoryContent: pieces.memoryContent,
     fileCount: pieces.fileCount,
@@ -381,6 +387,7 @@ export async function loadCliConfig(
   );
   // The Config must bind to the SAME SettingsService the bootstrap runtime
   // registered — Config construction never adopts ambient state (issue #2300).
+  bindSelectedMcpSettings(effectiveOverrides, pieces);
   const config = buildLoadedConfig(
     sessionId,
     cwd,
@@ -389,18 +396,61 @@ export async function loadCliConfig(
     requireBootstrapSettingsService(runtimeState),
   );
 
-  return finalizeConfig({
-    config,
-    runtimeState,
-    bootstrapArgs,
-    argv,
-    settings,
-    profileSettingsWithTools: pieces.profileSettingsWithTools,
-    profileLoadResult: profileResult,
-    providerModelResult: pieces.providerModel,
-    defaultDisabledTools: profileMergedSettings.defaultDisabledTools ?? [],
-    runtimeOverrides: effectiveOverrides,
-    approvalMode: pieces.approvalMode,
-    interactive: pieces.context.interactive,
+  const trust = new WorkspaceTrustLifecycle({
+    localTrust: config.initialWorkspaceTrust,
   });
+  const filesystem = new WorkspaceFilesystemOwner({
+    targetDir: config.getTargetDir(),
+    includeDirectories: config.getConfiguredIncludeDirectories(),
+    isTrusted: () => trust.isTrustedFolder(),
+  });
+  const memory = assembleWorkspaceMemory(config, filesystem, trust);
+  try {
+    await memory.operations.refresh();
+    return await finalizeConfig({
+      filesystem,
+      memory,
+      workspaceTrust: trust,
+      trustCleanup: () => trust.dispose(),
+      config,
+      runtimeState,
+      bootstrapArgs,
+      argv,
+      settings,
+      profileSettingsWithTools: pieces.profileSettingsWithTools,
+      profileLoadResult: profileResult,
+      providerModelResult: pieces.providerModel,
+      defaultDisabledTools: profileMergedSettings.defaultDisabledTools ?? [],
+      runtimeOverrides: effectiveOverrides,
+      approvalMode: pieces.approvalMode,
+      interactive: pieces.context.interactive,
+    });
+  } catch (error) {
+    const results = [];
+    for (const resource of [memory, filesystem, trust])
+      results.push(...(await Promise.allSettled([resource.dispose()])));
+    const failures = results.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
+    );
+    if (failures.length > 0)
+      throw new AggregateError(
+        [error, ...failures],
+        'Memory bootstrap cleanup failed',
+      );
+    throw error;
+  }
+}
+
+function bindSelectedMcpSettings(
+  overrides: CliRuntimeOverrides,
+  pieces: ConfigBuildPieces,
+): void {
+  overrides.sessionSettingsOwner?.bindMcpSettings(
+    {
+      mcpServers: pieces.mcpServers,
+      blockedMcpServers: [...pieces.blockedMcpServers],
+      settingsMcpServers: pieces.profileSettingsWithTools.mcpServers ?? {},
+    },
+    pieces.reloadMcpServers,
+  );
 }

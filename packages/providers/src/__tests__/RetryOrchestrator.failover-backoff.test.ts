@@ -8,6 +8,7 @@
  * must be applied before the first attempt on the new bucket (issue #1564).
  */
 
+import { retryOperationFixture } from './retry-operation-fixture.js';
 import { describe, it, expect } from 'bun:test';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
 import type { IProvider, GenerateChatOptions } from '../IProvider.js';
@@ -80,14 +81,13 @@ function createFailoverHandler(buckets: string[]) {
 }
 
 function makeOptions(failoverHandler: unknown): GenerateChatOptions {
-  return {
-    contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
-    runtime: {
-      config: {
-        getBucketFailoverHandler: () => failoverHandler,
-      } as unknown as GenerateChatOptions['runtime'],
-    } as unknown as GenerateChatOptions['runtime'],
-  };
+  return retryOperationFixture(
+    {
+      contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
+    },
+    undefined,
+    failoverHandler,
+  );
 }
 
 describe('RetryOrchestrator - bucket failover backoff delay (issue #1564)', () => {

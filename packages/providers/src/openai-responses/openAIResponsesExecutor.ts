@@ -23,7 +23,7 @@
  * Responses) call this function so neither duplicates the other's logic
  * (issue #2483).
  *
- * The executor consumes the already-normalized `NormalizedGenerateChatOptions`
+ * The executor consumes the already-normalized `ResponsesRequest`
  * — it does NOT re-normalize — and an explicit `ResponsesExecutorDeps`
  * interface that carries provider-specific capabilities (auth resolution,
  * custom headers, Codex account ID) as pure functions.
@@ -32,8 +32,7 @@
 import { dumpFinalizedRequest } from './openAIResponsesRequestDump.js';
 import { SyntheticToolResponseHandler } from '../openai/syntheticToolResponses.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ToolOutputSettingsProvider } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
-import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
+import type { ResponsesRequest } from './responses-request.js';
 import { convertToolsToOpenAIResponses } from './schemaConverter.js';
 import { requireAssembledSystemInstruction } from '../utils/systemPromptPlacement.js';
 import { resolveRuntimeAuthToken } from '../utils/authToken.js';
@@ -77,21 +76,6 @@ import type { resolveMediaCapabilities } from './openAIResponsesRequestState.js'
 export interface ResponsesExecutorDeps {
   readonly providerName: string;
   readonly logger: DebugLogger;
-  /**
-   * Return the effective base URL for THIS call.
-   *
-   * The per-call options are passed explicitly because projection runs outside
-   * the provider's active-call context; resolving from ambient state there
-   * would prepare an envelope for a different endpoint than transport uses
-   * (issue #2817).
-   */
-  readonly getProviderBaseURL: (
-    options?: NormalizedGenerateChatOptions,
-  ) => string | undefined;
-  /** Return provider-config custom headers. */
-  readonly getCustomHeaders: (
-    options?: NormalizedGenerateChatOptions,
-  ) => Record<string, string> | undefined;
   /** Whether the selected provider uses the Codex protocol. */
   readonly isCodexMode: () => boolean;
   /** Resolve the Codex account ID for OAuth headers (Codex mode only). */
@@ -103,13 +87,9 @@ export interface ResponsesExecutorDeps {
   readonly resolveAuthTokenForPrompt: () => Promise<string>;
   /** Determine whether a streaming error is retryable (status-based). */
   readonly shouldRetryOnError: (error: Error | unknown) => boolean;
-  /** Return the provider's default model ID for fallback when resolved model is empty. */
-  readonly getDefaultModel: () => string;
   readonly getMediaTransportCapabilities?: (
     isCodex: boolean,
   ) => ReturnType<typeof resolveMediaCapabilities>;
-  /** Return the provider instance's global config for tool-output-limiter fallback. */
-  readonly getGlobalConfig: () => ToolOutputSettingsProvider | undefined;
   /** Return model parameters disallowed by the provider's captured alias rules. */
   readonly getUnallowedModelParameters: (model: string) => Set<string>;
   /**
@@ -176,12 +156,9 @@ export interface RequestContext extends PreparedResponsesRequestContext {
 }
 
 function resolveInvocationEphemerals(
-  options: NormalizedGenerateChatOptions,
+  options: ResponsesRequest,
 ): Record<string, unknown> {
-  const invocation = options.invocation as {
-    ephemerals?: Record<string, unknown>;
-  };
-  return invocation.ephemerals ?? {};
+  return options.invocation.ephemerals;
 }
 
 /**
@@ -192,7 +169,7 @@ function resolveInvocationEphemerals(
  * estimate can never drift from what is actually sent.
  */
 export async function buildResponsesRequestContextForProjection(
-  options: NormalizedGenerateChatOptions,
+  options: ResponsesRequest,
   deps: ResponsesExecutorDeps,
   invocationEphemerals = resolveInvocationEphemerals(options),
   forceStateless = false,
@@ -219,7 +196,7 @@ interface ResponsesExecutionSetup {
 }
 
 async function prepareResponsesExecution(
-  options: NormalizedGenerateChatOptions,
+  options: ResponsesRequest,
   deps: ResponsesExecutorDeps,
   preparedRequestContext: PreparedResponsesRequestContext | undefined,
 ): Promise<ResponsesExecutionSetup> {
@@ -255,7 +232,7 @@ async function prepareResponsesExecution(
 }
 
 export async function* executeOpenAIResponsesRequest(
-  options: NormalizedGenerateChatOptions,
+  options: ResponsesRequest,
   deps: ResponsesExecutorDeps,
   preparedRequestContext?: PreparedResponsesRequestContext,
 ): AsyncIterableIterator<IContent> {
@@ -355,7 +332,7 @@ export async function* executeOpenAIResponsesRequest(
  * false).
  */
 async function* retryWithoutStatefulness(
-  options: NormalizedGenerateChatOptions,
+  options: ResponsesRequest,
   deps: ResponsesExecutorDeps,
   invocationEphemerals: Record<string, unknown>,
   abortSignal: AbortSignal | undefined,
@@ -438,7 +415,7 @@ async function* retryWithoutStatefulness(
  * is not evidence that the parent itself was bad (#3134).
  */
 async function buildStatelessTurn(
-  options: NormalizedGenerateChatOptions,
+  options: ResponsesRequest,
   deps: ResponsesExecutorDeps,
   invocationEphemerals: Record<string, unknown>,
   abortSignal: AbortSignal | undefined,
@@ -483,7 +460,7 @@ function buildStreamParams(
   requestContext: RequestContext,
   abortSignal: AbortSignal | undefined,
   invocationEphemerals: Record<string, unknown>,
-  options: NormalizedGenerateChatOptions,
+  options: ResponsesRequest,
   dumpResult: Awaited<ReturnType<typeof dumpFinalizedRequest>>,
 ): StreamResponsesParams {
   return {
@@ -501,7 +478,7 @@ function buildStreamParams(
 
 function buildResponsesProjectionContext(
   request: OpenAIResponsesRequest,
-  options: NormalizedGenerateChatOptions,
+  options: ResponsesRequest,
   patchedContent: IContent[],
   invocationEphemerals: Record<string, unknown>,
   deps: ResponsesExecutorDeps,
@@ -529,7 +506,6 @@ function buildResponsesProjectionContext(
       input: buildInput(
         options,
         toEstimationContents(patchedContent),
-        invocationEphemerals,
         deps,
         false,
       ),
@@ -538,7 +514,7 @@ function buildResponsesProjectionContext(
 }
 
 export async function buildRequestContext(
-  options: NormalizedGenerateChatOptions,
+  options: ResponsesRequest,
   patchedContent: IContent[],
   invocationEphemerals: Record<string, unknown>,
   deps: ResponsesExecutorDeps,
@@ -561,7 +537,11 @@ export async function buildRequestContext(
     forceParentless,
   );
   const mediaRequest = await resolveRequestMedia(
-    options.runtime,
+    {
+      requestId: options.mediaRequestId,
+      aggregateBudgetBytes: options.mediaBudgetBytes,
+      resolver: options.mediaResolver,
+    },
     stateful.content,
     getRequestSignal(options),
   );
@@ -569,21 +549,15 @@ export async function buildRequestContext(
     const input = buildInput(
       options,
       mediaRequest.withContents((contents) => contents),
-      invocationEphemerals,
       deps,
       stateful.parentId !== undefined,
     );
-    const request = createRequest(options, input, requestOverrides, deps);
+    const request = createRequest(options, input, requestOverrides);
     applyInstructionsAndTools(request, systemPrompt, options);
-    const reasoning = applyReasoningSettings(
-      request,
-      options,
-      invocationEphemerals,
-      deps,
-    );
-    applyTextVerbosity(request, options, invocationEphemerals, deps);
+    const reasoning = applyReasoningSettings(request, options, deps);
+    applyTextVerbosity(request, options, deps);
     applyCodexRequestSettings(request, isCodex, deps);
-    applyPromptCaching(request, options, invocationEphemerals, isCodex, deps);
+    applyPromptCaching(request, options, isCodex);
     applyStatefulConversation(
       request,
       stateful,
@@ -621,12 +595,12 @@ export async function buildRequestContext(
 }
 
 async function resolveResponsesTransportContext(
-  options: NormalizedGenerateChatOptions,
+  options: ResponsesRequest,
   prepared: PreparedResponsesRequestContext,
   deps: ResponsesExecutorDeps,
 ): Promise<RequestContext> {
   try {
-    const rawBaseURL = resolveResponsesBaseURL(options, deps);
+    const rawBaseURL = resolveResponsesBaseURL(options);
     if (rawBaseURL !== prepared.rawBaseURL) {
       throw new Error(
         `Projection/transport endpoint mismatch: the OpenAI Responses prompt envelope was prepared for "${prepared.rawBaseURL}" but transport resolved "${rawBaseURL}". A prepared envelope must be sent to the same endpoint it was estimated for (issue #2817 invariant: projection == transport).`,
@@ -646,7 +620,7 @@ async function resolveResponsesTransportContext(
 }
 
 async function resolveApiKey(
-  options: NormalizedGenerateChatOptions,
+  options: ResponsesRequest,
   deps: ResponsesExecutorDeps,
 ): Promise<string> {
   const promptAuthToken = await deps.resolveAuthTokenForPrompt();
@@ -673,59 +647,19 @@ async function resolveApiKey(
   );
 }
 
-export function isResponsesPdfEnabled(
-  options: NormalizedGenerateChatOptions,
-): boolean {
-  const invocationEphemerals = resolveInvocationEphemerals(options);
-  const setting =
-    (invocationEphemerals['media.pdf.enabled'] as boolean | undefined) ??
-    options.invocation.getModelBehavior<boolean>('media.pdf.enabled') ??
-    readOptionalSetting(options, 'media.pdf.enabled');
-  return setting !== false;
-}
-
-/**
- * Read a setting through the structurally optional `SettingsService.get`
- * seam. `get` is declared optional on the contract, so a settings object that
- * omits it must fall through to the caller's default rather than throwing.
- */
-function readOptionalSetting(
-  options: NormalizedGenerateChatOptions,
-  key: string,
-): unknown {
-  const get = (
-    options as { settings?: { get?: (settingKey: string) => unknown } }
-  ).settings?.get;
-  return typeof get === 'function'
-    ? get.call(options.settings, key)
-    : undefined;
+export function isResponsesPdfEnabled(options: ResponsesRequest): boolean {
+  return options.pdfEnabled;
 }
 
 function buildInput(
-  options: NormalizedGenerateChatOptions,
+  options: ResponsesRequest,
   patchedContent: IContent[],
-  invocationEphemerals: Record<string, unknown>,
   deps: ResponsesExecutorDeps,
   serverSideParentActive: boolean = false,
 ): ResponsesInputItem[] {
-  const includeReasoningInContextSetting =
-    (invocationEphemerals['reasoning.includeInContext'] as
-      | boolean
-      | undefined) ??
-    options.invocation.getModelBehavior<boolean>(
-      'reasoning.includeInContext',
-    ) ??
-    readOptionalSetting(options, 'reasoning.includeInContext');
-  const outputLimiterConfig =
-    options.config ??
-    options.runtime?.config ??
-    deps.getGlobalConfig() ??
-    ({
-      getEphemeralSettings: () => ({}),
-    } satisfies ToolOutputSettingsProvider);
   return buildOpenAIResponsesInput(patchedContent, {
-    includeReasoningInContext: includeReasoningInContextSetting !== false,
-    outputLimiterConfig,
+    includeReasoningInContext: options.includeReasoningInContext,
+    outputLimits: options.outputLimits,
     debug: (messageFactory) => deps.logger.debug(messageFactory),
     serverSideParentActive,
     mediaPdfEnabled: isResponsesPdfEnabled(options),
@@ -739,13 +673,12 @@ function normalizeBaseURL(baseURLCandidate: string): string {
 }
 
 function createRequest(
-  options: NormalizedGenerateChatOptions,
+  options: ResponsesRequest,
   input: ResponsesInputItem[],
   requestOverrides: Record<string, unknown>,
-  deps: ResponsesExecutorDeps,
 ): OpenAIResponsesRequest {
   return {
-    model: options.resolved.model || deps.getDefaultModel(),
+    model: options.resolved.model,
     input,
     stream: true,
     ...requestOverrides,
@@ -755,7 +688,7 @@ function createRequest(
 function applyInstructionsAndTools(
   request: OpenAIResponsesRequest,
   systemPrompt: string,
-  options: NormalizedGenerateChatOptions,
+  options: ResponsesRequest,
 ): void {
   if (systemPrompt) request.instructions = systemPrompt;
 
@@ -775,30 +708,13 @@ function applyInstructionsAndTools(
 
 function applyReasoningSettings(
   request: OpenAIResponsesRequest,
-  options: NormalizedGenerateChatOptions,
-  invocationEphemerals: Record<string, unknown>,
+  options: ResponsesRequest,
   deps: ResponsesExecutorDeps,
 ): AppliedOpenAIResponsesReasoning {
   const reasoning = applyOpenAIResponsesReasoning({
     request,
     modelBehavior: options.invocation.modelBehavior,
-    fallbacks: {
-      enabled:
-        invocationEphemerals['reasoning.enabled'] ??
-        readOptionalSetting(options, 'reasoning.enabled'),
-      effort:
-        invocationEphemerals['reasoning.effort'] ??
-        readOptionalSetting(options, 'reasoning.effort'),
-      budgetTokens:
-        invocationEphemerals['reasoning.budgetTokens'] ??
-        readOptionalSetting(options, 'reasoning.budgetTokens'),
-      summary:
-        invocationEphemerals['reasoning.summary'] ??
-        readOptionalSetting(options, 'reasoning.summary'),
-      includeInResponse:
-        invocationEphemerals['reasoning.includeInResponse'] ??
-        readOptionalSetting(options, 'reasoning.includeInResponse'),
-    },
+    fallbacks: options.reasoningFallbacks,
     providerName: deps.providerName,
     logger: deps.logger,
   });
@@ -820,15 +736,10 @@ function applyReasoningSettings(
 
 function applyTextVerbosity(
   request: OpenAIResponsesRequest,
-  options: NormalizedGenerateChatOptions,
-  ephemerals: Record<string, unknown>,
+  options: ResponsesRequest,
   deps: ResponsesExecutorDeps,
 ): void {
-  const textVerbosity =
-    (ephemerals['text.verbosity'] as string | undefined) ??
-    (options as { settings?: { get: (key: string) => unknown } }).settings?.get(
-      'text.verbosity',
-    );
+  const textVerbosity = options.textVerbosity;
   if (
     typeof textVerbosity !== 'string' ||
     textVerbosity === '' ||
@@ -865,23 +776,10 @@ function applyCodexRequestSettings(
 
 function applyPromptCaching(
   request: OpenAIResponsesRequest,
-  options: NormalizedGenerateChatOptions,
-  ephemerals: Record<string, unknown>,
+  options: ResponsesRequest,
   isCodex: boolean,
-  deps: ResponsesExecutorDeps,
 ): void {
-  const promptCachingSetting =
-    (ephemerals['prompt-caching'] as string | undefined) ??
-    ((
-      options as {
-        settings?: {
-          getProviderSettings: (name: string) => Record<string, unknown>;
-        };
-      }
-    ).settings?.getProviderSettings(deps.providerName)['prompt-caching'] as
-      | string
-      | undefined) ??
-    '1h';
+  const promptCachingSetting = options.promptCaching;
   if (promptCachingSetting === 'off') return;
 
   if (
@@ -892,9 +790,7 @@ function applyPromptCaching(
     return;
   }
 
-  const cacheKey =
-    (options.invocation as { runtimeId?: string } | undefined)?.runtimeId ??
-    options.runtime?.runtimeId;
+  const cacheKey = options.invocation.runtimeId;
   if (typeof cacheKey !== 'string' || cacheKey.trim() === '') return;
 
   request.prompt_cache_key = sanitizePromptCacheKey(cacheKey);

@@ -8,10 +8,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Storage } from '@vybestack/llxprt-code-settings';
-import { sessionMediaServices } from './session-media-service-factories.js';
+import { SessionMediaOwner } from './session-media-owner.js';
 
-describe('sessionMediaServices', () => {
+describe('SessionMediaOwner', () => {
   let projectRoot = '';
 
   beforeEach(async () => {
@@ -22,19 +21,13 @@ describe('sessionMediaServices', () => {
     await rm(projectRoot, { recursive: true, force: true });
   });
 
-  it('shares one persistence queue, generation stream, and path per session ID', () => {
-    const services = sessionMediaServices({
-      storage: new Storage(projectRoot),
-      getMediaStoreQuotaByteLimit: () => 1024,
-      getSessionPersistenceQueueByteLimit: () => 2048,
-    });
-
-    const first = services.persistence('shared-session');
-    const second = services.persistence('shared-session');
-    const other = services.persistence('other-session');
-
-    expect(second).toBe(first);
-    expect(second.getSessionFilePath()).toBe(first.getSessionFilePath());
-    expect(other).not.toBe(first);
+  it('provides a media store without retaining persistence journals in Config', async () => {
+    const owner = new SessionMediaOwner(projectRoot, 1024);
+    try {
+      expect(await owner.store.getStoredByteLength()).toBe(0);
+      expect('persistence' in owner).toBe(false);
+    } finally {
+      await owner.dispose();
+    }
   });
 });

@@ -15,7 +15,6 @@ import { mergeRefreshedToken } from '@vybestack/llxprt-code-auth/token-merge.js'
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { OAuthToken, TokenStore, OAuthProvider } from './types.js';
 import {
-  createProfileManager,
   isLoadBalancerProfileLike,
   getOAuthBucketsFromProfile,
 } from './profile-utils.js';
@@ -31,7 +30,15 @@ export class ProactiveRenewalManager {
     { timer: ReturnType<typeof setTimeout>; expiry: number }
   > = new Map();
   private proactiveRenewalFailures: Map<string, number> = new Map();
-  private proactiveRenewalInFlight: Set<string> = new Set();
+  private readonly controller = new AbortController();
+  private readonly signal: AbortSignal;
+  private proactiveRenewalInFlight = new Map<
+    string,
+    {
+      controller: AbortController;
+      promise: Promise<void>;
+    }
+  >();
   private proactiveRenewalTokens: Map<
     string,
     { accessToken: string; refreshToken: string }
@@ -41,7 +48,27 @@ export class ProactiveRenewalManager {
     private tokenStore: TokenStore,
     private getProvider: (name: string) => OAuthProvider | undefined,
     private isOAuthEnabled: (name: string) => boolean,
-  ) {}
+    signal?: AbortSignal,
+  ) {
+    this.signal = signal
+      ? AbortSignal.any([signal, this.controller.signal])
+      : this.controller.signal;
+    this.signal.addEventListener('abort', () => this.clearAllTimers(), {
+      once: true,
+    });
+  }
+
+  async cancelAndJoin(): Promise<void> {
+    this.controller.abort(new Error('Profile renewal lifetime retired'));
+    const results = await Promise.allSettled(
+      [...this.proactiveRenewalInFlight.values()].map((entry) => entry.promise),
+    );
+    const failures = results.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
+    );
+    if (failures.length > 0)
+      throw new AggregateError(failures, 'Profile renewal retirement failed');
+  }
 
   normalizeBucket(bucket?: string): string {
     if (typeof bucket === 'string' && bucket.trim() !== '') {
@@ -61,7 +88,9 @@ export class ProactiveRenewalManager {
       this.proactiveRenewals.delete(key);
     }
     this.proactiveRenewalFailures.delete(key);
-    this.proactiveRenewalInFlight.delete(key);
+    this.proactiveRenewalInFlight
+      .get(key)
+      ?.controller.abort(new Error('OAuth renewal superseded'));
     this.proactiveRenewalTokens.delete(key);
   }
 
@@ -145,6 +174,7 @@ export class ProactiveRenewalManager {
     bucket: string | undefined,
     token: OAuthToken,
   ): void {
+    if (this.signal.aborted) return;
     // R16.8: Skip proactive renewal scheduling in proxy mode
     // The host process handles token refresh, not the sandbox
     if (process.env.LLXPRT_CREDENTIAL_SOCKET) {
@@ -202,40 +232,53 @@ export class ProactiveRenewalManager {
    * @requirement REQ-1598-PR02, REQ-1598-PR03, REQ-1598-PR04
    * @pseudocode proactive-renewal.md lines 51-91
    */
-  async runProactiveRenewal(
-    providerName: string,
-    bucket: string,
-  ): Promise<void> {
+  runProactiveRenewal(providerName: string, bucket: string): Promise<void> {
     const normalizedBucket = this.normalizeBucket(bucket);
     const key = this.getProactiveRenewalKey(providerName, normalizedBucket);
+    const existing = this.proactiveRenewalInFlight.get(key);
+    if (existing) return existing.promise;
+    const controller = new AbortController();
+    const signal = AbortSignal.any([this.signal, controller.signal]);
+    const promise = this.executeProactiveRenewal(
+      providerName,
+      normalizedBucket,
+      key,
+      signal,
+    )
+      .catch((error: unknown) => {
+        if (!signal.aborted || error !== signal.reason) throw error;
+      })
+      .finally(() => {
+        if (this.proactiveRenewalInFlight.get(key)?.promise === promise)
+          this.proactiveRenewalInFlight.delete(key);
+      });
+    this.proactiveRenewalInFlight.set(key, { controller, promise });
+    return promise;
+  }
 
-    if (this.proactiveRenewalInFlight.has(key)) {
+  private async executeProactiveRenewal(
+    providerName: string,
+    normalizedBucket: string,
+    key: string,
+    signal: AbortSignal,
+  ): Promise<void> {
+    signal.throwIfAborted();
+    if (!this.isOAuthEnabled(providerName)) {
+      this.clearProactiveRenewal(key);
       return;
     }
-    this.proactiveRenewalInFlight.add(key);
-
-    try {
-      if (!this.isOAuthEnabled(providerName)) {
-        this.clearProactiveRenewal(key);
-        return;
-      }
-
-      const provider = this.getProvider(providerName);
-      if (!provider) {
-        // Provider might not be registered in this runtime; keep the timer but back off.
-        this.scheduleProactiveRetry(providerName, normalizedBucket);
-        return;
-      }
-
-      await this.acquireAndRefresh(
-        providerName,
-        normalizedBucket,
-        key,
-        provider,
-      );
-    } finally {
-      this.proactiveRenewalInFlight.delete(key);
+    const provider = this.getProvider(providerName);
+    if (!provider) {
+      this.scheduleProactiveRetry(providerName, normalizedBucket);
+      return;
     }
+    await this.acquireAndRefresh(
+      providerName,
+      normalizedBucket,
+      key,
+      provider,
+      signal,
+    );
   }
 
   /**
@@ -246,6 +289,7 @@ export class ProactiveRenewalManager {
     normalizedBucket: string,
     key: string,
     provider: OAuthProvider,
+    signal: AbortSignal,
   ): Promise<void> {
     // Issue #1159: Acquire lock before refreshing
     const lockAcquired = await this.tokenStore.acquireRefreshLock(
@@ -263,6 +307,7 @@ export class ProactiveRenewalManager {
         providerName,
         normalizedBucket,
       );
+      signal.throwIfAborted();
       if (diskToken && this.isTokenRefreshed(key, diskToken)) {
         this.proactiveRenewals.delete(key);
         this.scheduleProactiveRenewal(
@@ -277,11 +322,13 @@ export class ProactiveRenewalManager {
     }
 
     try {
+      signal.throwIfAborted();
       await this.performTokenRefresh(
         providerName,
         normalizedBucket,
         key,
         provider,
+        signal,
       );
     } finally {
       // Always release lock
@@ -297,6 +344,7 @@ export class ProactiveRenewalManager {
     normalizedBucket: string,
     key: string,
     provider: OAuthProvider,
+    signal: AbortSignal,
   ): Promise<void> {
     // Issue #1159: Double-check pattern - re-read token after acquiring lock
     const currentToken = await this.tokenStore.getToken(
@@ -304,6 +352,7 @@ export class ProactiveRenewalManager {
       normalizedBucket,
     );
 
+    signal.throwIfAborted();
     if (!currentToken?.refresh_token) {
       this.clearProactiveRenewal(key);
       return;
@@ -325,8 +374,9 @@ export class ProactiveRenewalManager {
       return;
     }
 
-    const refreshedToken = await provider.refreshToken(currentToken);
+    const refreshedToken = await provider.refreshToken(currentToken, signal);
     if (!refreshedToken) {
+      signal.throwIfAborted();
       // @plan PLAN-20260223-ISSUE1598.P14
       // @requirement REQ-1598-PR04, REQ-1598-PR05
       this.scheduleProactiveRetry(providerName, normalizedBucket);
@@ -343,6 +393,7 @@ export class ProactiveRenewalManager {
       mergedToken,
       normalizedBucket,
     );
+    if (signal.aborted) return;
     // @plan PLAN-20260223-ISSUE1598.P14
     // @requirement REQ-1598-PR03
     this.proactiveRenewalFailures.delete(key);
@@ -377,7 +428,21 @@ export class ProactiveRenewalManager {
     return this.hasTokenBeenRefreshedExternally(key, diskToken);
   }
 
-  async configureProactiveRenewalsForProfile(profile: unknown): Promise<void> {
+  async configureProactiveRenewalsForProfile(
+    profile: unknown,
+    loadProfile?: (name: string) => Promise<unknown>,
+  ): Promise<void> {
+    const commit = await this.prepareProactiveRenewalsForProfile(
+      profile,
+      loadProfile,
+    );
+    commit();
+  }
+
+  async prepareProactiveRenewalsForProfile(
+    profile: unknown,
+    loadProfile?: (name: string) => Promise<unknown>,
+  ): Promise<() => void> {
     const desiredKeys = new Set<string>();
     const targets: Array<{ providerName: string; bucket: string }> = [];
 
@@ -389,7 +454,12 @@ export class ProactiveRenewalManager {
     }
 
     if (isLoadBalancerProfileLike(profile)) {
-      await this.collectLoadBalancerTargets(profile, targets);
+      if (!loadProfile) {
+        throw new Error(
+          'Load-balancer renewals require the owner profile loader',
+        );
+      }
+      await this.collectLoadBalancerTargets(profile, targets, loadProfile);
     }
 
     for (const target of targets) {
@@ -397,22 +467,37 @@ export class ProactiveRenewalManager {
       desiredKeys.add(this.getProactiveRenewalKey(target.providerName, bucket));
     }
 
-    for (const existingKey of Array.from(this.proactiveRenewals.keys())) {
-      if (!desiredKeys.has(existingKey)) {
-        this.clearProactiveRenewal(existingKey);
+    const results = await Promise.allSettled(
+      targets.map(async (target) => {
+        const bucket = this.normalizeBucket(target.bucket);
+        const token = await this.maybeGetTokenForRenewal(
+          target.providerName,
+          bucket,
+        );
+        return { providerName: target.providerName, bucket, token };
+      }),
+    );
+    const failures = results.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
+    );
+    if (failures.length === 1) throw failures[0];
+    if (failures.length > 1)
+      throw new AggregateError(failures, 'Profile renewal preparation failed');
+    const renewals = results.flatMap((result) =>
+      result.status === 'fulfilled' ? [result.value] : [],
+    );
+    return () => {
+      for (const existingKey of Array.from(this.proactiveRenewals.keys())) {
+        if (!desiredKeys.has(existingKey)) {
+          this.clearProactiveRenewal(existingKey);
+        }
       }
-    }
-
-    for (const target of targets) {
-      const bucket = this.normalizeBucket(target.bucket);
-      const token = await this.maybeGetTokenForRenewal(
-        target.providerName,
-        bucket,
-      );
-      if (token) {
-        this.scheduleProactiveRenewal(target.providerName, bucket, token);
+      for (const { providerName, bucket, token } of renewals) {
+        if (token) {
+          this.scheduleProactiveRenewal(providerName, bucket, token);
+        }
       }
-    }
+    };
   }
 
   /**
@@ -435,8 +520,8 @@ export class ProactiveRenewalManager {
   private async collectLoadBalancerTargets(
     profile: { type: 'loadbalancer'; profiles: string[] },
     targets: Array<{ providerName: string; bucket: string }>,
+    loadProfile: (name: string) => Promise<unknown>,
   ): Promise<void> {
-    const profileManager = await createProfileManager();
     const visited = new Set<string>();
 
     const visit = async (profileName: string): Promise<void> => {
@@ -447,7 +532,7 @@ export class ProactiveRenewalManager {
 
       let loaded: unknown;
       try {
-        loaded = await profileManager.loadProfile(profileName);
+        loaded = await loadProfile(profileName);
       } catch (error) {
         logger.debug(
           () =>
@@ -486,7 +571,8 @@ export class ProactiveRenewalManager {
     }
     this.proactiveRenewals.clear();
     this.proactiveRenewalFailures.clear();
-    this.proactiveRenewalInFlight.clear();
+    for (const entry of this.proactiveRenewalInFlight.values())
+      entry.controller.abort(new Error('OAuth renewals cleared'));
     this.proactiveRenewalTokens.clear();
   }
 

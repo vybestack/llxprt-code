@@ -7,11 +7,11 @@
  * @requirement REQ-001,REQ-INT-001
  */
 
-import { mcpServerRequiresOAuth } from '../client/mcp-status.js';
 import { MCPOAuthTokenStorage } from './oauth-token-storage.js';
+import type { TokenStorage } from './token-storage/index.js';
 
 /**
- * Canonical OAuth status for a single MCP server.
+ * OAuth status for a single MCP server.
  * - 'not-required'  : the server does not require OAuth (no read performed)
  * - 'none'          : OAuth required but no usable persisted credential
  * - 'expired'       : a persisted credential exists but is expired
@@ -26,26 +26,24 @@ export type McpOAuthStatus =
 /**
  * Single source of truth for an MCP server's persisted OAuth status.
  *
- * Composes the runtime "requires OAuth" map, the persisted-credential read, and the expiry math.
+ * Combines explicit owner requiredness with the persisted credential read and expiry calculation.
  * Total (never throws): every storage absence/fault maps to 'none'. Masked: returns the enum only.
  *
  * @pseudocode oauth-status-helper.md:01-28
  */
 export async function getMcpServerOAuthStatus(
   serverName: string,
-  opts?: { requiresOAuth?: boolean },
+  opts: { requiresOAuth?: boolean } | undefined,
+  readCredentials: TokenStorage['getCredentials'],
 ): Promise<McpOAuthStatus> {
-  // @pseudocode 02-08 — required? (OR-combine; R-REQUIRED-OR). Do NOT read storage if not required.
-  const hintRequires = opts?.requiresOAuth === true;
-  const runtimeRequires = mcpServerRequiresOAuth.get(serverName) === true;
-  if (!hintRequires && !runtimeRequires) {
+  if (opts?.requiresOAuth !== true) {
     return 'not-required';
   }
 
   // @pseudocode 10-19 — persisted credential read (fault-tolerant; R-FAULT-TOLERANT / R-INNER-TOKEN).
-  let credentials: Awaited<ReturnType<typeof MCPOAuthTokenStorage.getToken>>;
+  let credentials: Awaited<ReturnType<TokenStorage['getCredentials']>>;
   try {
-    credentials = await MCPOAuthTokenStorage.getToken(serverName);
+    credentials = await readCredentials(serverName);
   } catch {
     return 'none';
   }

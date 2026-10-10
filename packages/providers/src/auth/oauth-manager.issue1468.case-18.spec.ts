@@ -6,7 +6,6 @@
 
 import { describe, expect, it } from 'bun:test';
 import {
-  mockGetCurrentProfileName,
   createIssue1468Fixture,
   mockLoadProfile,
 } from './__tests__/oauth-manager.issue1468.test-helpers.js';
@@ -20,9 +19,9 @@ describe('Issue #1468 getProfileBuckets case 18', () => {
    * @then Empty array should be returned
    */
   it('should return empty array when profile has no buckets', async () => {
-    const { manager } = createIssue1468Fixture();
+    const { manager, settingsService } = createIssue1468Fixture();
 
-    mockGetCurrentProfileName.mockReturnValue('my-anthropic-profile');
+    settingsService.setCurrentProfileName('my-anthropic-profile');
     mockLoadProfile.mockResolvedValue({
       provider: 'anthropic',
       // No auth section

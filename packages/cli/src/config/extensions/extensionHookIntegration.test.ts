@@ -4,6 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  fixtureHookDefinitions,
+  fixtureHookRuntime,
+} from '../../../../core/src/hooks/__tests__/hook-runtime-fixture.js';
 /**
  * Integration test proving that a gemini-extension.json manifest with valid
  * hooks is loaded by the extension loader and correctly registered by the
@@ -115,7 +119,10 @@ describe('extension hook integration: gemini-extension.json -> HookRegistry', ()
     } as unknown as Config;
 
     // Create and initialize the real HookRegistry
-    const registry = new HookRegistry(config);
+    const registry = new HookRegistry(
+      fixtureHookDefinitions(config),
+      fixtureHookRuntime(config).isTrustedFolder,
+    );
     await registry.initialize();
 
     // The hook should be registered for the BeforeTool event
@@ -180,7 +187,10 @@ describe('extension hook integration: gemini-extension.json -> HookRegistry', ()
       getHookSystem: () => undefined,
     } as unknown as Config;
 
-    const registry = new HookRegistry(config);
+    const registry = new HookRegistry(
+      fixtureHookDefinitions(config),
+      fixtureHookRuntime(config).isTrustedFolder,
+    );
     await registry.initialize();
 
     const hooks = registry.getHooksForEvent(HookEventName.AfterModel);

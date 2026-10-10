@@ -4,40 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeEach, afterEach, describe, expect, it, vi } from 'bun:test';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 
-const realLlxprtCodeAuthModule = {
-  ...(await import('@vybestack/llxprt-code-auth')),
+const providerRef = {
+  current: undefined as { name: string } | undefined,
 };
 
-const { flushMockRef, providerManagerRef, providerRef } = {
-  flushMockRef: {
-    current: undefined as ReturnType<typeof vi.fn> | undefined,
-  },
-  providerManagerRef: {
-    current: undefined as
-      | { getProviderByName: ReturnType<typeof vi.fn> }
-      | undefined,
-  },
-  providerRef: {
-    current: undefined as unknown,
-  },
-};
-
-void vi.mock('@vybestack/llxprt-code-auth', () => {
-  const actual = realLlxprtCodeAuthModule;
-  const flushMock = vi.fn(() => ({
-    runtimeId: 'test-runtime',
-    revokedTokens: [],
-  }));
-  flushMockRef.current = flushMock;
-  return {
-    ...actual,
-    flushRuntimeAuthScope: flushMock,
-  };
-});
-
-import { oauthRuntimeBridge } from './runtime-accessor-bridge.js';
+import { invalidateOwnerAuthCaches } from './owner-cache-invalidation.js';
 
 import { OAuthManager } from './oauth-manager.js';
 import type { OAuthProvider } from './types.js';
@@ -55,26 +28,7 @@ async function listProviderBuckets(provider: string): Promise<string[]> {
 
 describe('OAuthManager.logout runtime cache handling', () => {
   beforeEach(() => {
-    flushMockRef.current?.mockClear();
-
-    // Register runtime accessors via the bridge
-    const managerMock = {
-      getProviderByName: vi.fn(() => providerRef.current),
-    };
-    providerManagerRef.current = managerMock;
-    oauthRuntimeBridge.setAccessors({
-      getEphemeralSetting: () => undefined,
-      getProviderManager: () => managerMock,
-      getRuntimeContext: () => ({
-        runtimeId: 'test-runtime',
-        metadata: {},
-      }),
-      getCurrentProfileName: () => null,
-    });
-  });
-
-  afterEach(() => {
-    oauthRuntimeBridge.setAccessors(undefined);
+    providerRef.current = undefined;
   });
 
   it('flushes runtime auth scope when logging out a provider', async () => {
@@ -91,7 +45,10 @@ describe('OAuthManager.logout runtime cache handling', () => {
       releaseAuthLock: vi.fn().mockResolvedValue(undefined),
     };
 
-    const manager = new OAuthManager(tokenStore);
+    const manager = new OAuthManager(tokenStore, undefined, {
+      invalidateAuthCaches: () =>
+        invalidateOwnerAuthCaches(providerRef.current),
+    });
 
     const provider: OAuthProvider & {
       logout?: () => Promise<void>;
@@ -117,11 +74,8 @@ describe('OAuthManager.logout runtime cache handling', () => {
 
     await manager.logout('device-code-test');
 
-    expect(providerManagerRef.current).toBeDefined();
-    providerManagerRef.current?.getProviderByName.mockReturnValue(provider);
-
-    expect(flushMockRef.current).toBeDefined();
-    expect(flushMockRef.current).toHaveBeenCalledWith('test-runtime');
+    expect(provider.clearAuthCache).toHaveBeenCalled();
+    expect(provider.clearState).toHaveBeenCalled();
   });
 
   it('removes the session bucket token even when provider.logout exists', async () => {
@@ -138,7 +92,10 @@ describe('OAuthManager.logout runtime cache handling', () => {
       releaseAuthLock: vi.fn().mockResolvedValue(undefined),
     };
 
-    const manager = new OAuthManager(tokenStore);
+    const manager = new OAuthManager(tokenStore, undefined, {
+      invalidateAuthCaches: () =>
+        invalidateOwnerAuthCaches(providerRef.current),
+    });
 
     const provider: OAuthProvider & { logout?: () => Promise<void> } = {
       name: 'device-code-test',
@@ -182,7 +139,10 @@ describe('OAuthManager.logout runtime cache handling', () => {
       releaseAuthLock: vi.fn().mockResolvedValue(undefined),
     };
 
-    const manager = new OAuthManager(tokenStore);
+    const manager = new OAuthManager(tokenStore, undefined, {
+      invalidateAuthCaches: () =>
+        invalidateOwnerAuthCaches(providerRef.current),
+    });
 
     const provider: OAuthProvider & { logout?: () => Promise<void> } = {
       name: 'device-code-test',
@@ -232,7 +192,10 @@ describe('OAuthManager.logout runtime cache handling', () => {
       releaseAuthLock: vi.fn().mockResolvedValue(undefined),
     };
 
-    const manager = new OAuthManager(tokenStore);
+    const manager = new OAuthManager(tokenStore, undefined, {
+      invalidateAuthCaches: () =>
+        invalidateOwnerAuthCaches(providerRef.current),
+    });
 
     const deviceCodeProvider: OAuthProvider & { logout?: () => Promise<void> } =
       {
@@ -297,7 +260,10 @@ describe('OAuthManager.logout runtime cache handling', () => {
       releaseAuthLock: vi.fn().mockResolvedValue(undefined),
     };
 
-    const manager = new OAuthManager(tokenStore);
+    const manager = new OAuthManager(tokenStore, undefined, {
+      invalidateAuthCaches: () =>
+        invalidateOwnerAuthCaches(providerRef.current),
+    });
 
     const provider: OAuthProvider & { logout?: () => Promise<void> } = {
       name: 'device-code-test',
@@ -356,7 +322,10 @@ describe('OAuthManager.logout runtime cache handling', () => {
       releaseAuthLock: vi.fn().mockResolvedValue(undefined),
     };
 
-    const manager = new OAuthManager(tokenStore);
+    const manager = new OAuthManager(tokenStore, undefined, {
+      invalidateAuthCaches: () =>
+        invalidateOwnerAuthCaches(providerRef.current),
+    });
 
     manager.setSessionBucket('device-code-test', 'default');
     manager.setSessionBucket('device-code-test', 'bucket-a', {

@@ -3,6 +3,7 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createSchedulerPolicyFixture } from './__tests__/scheduler-policy-fixture.js';
 
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi } from 'bun:test';
@@ -12,18 +13,12 @@ import type {
   CompletedToolCall,
 } from './coreToolScheduler.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
-import { HookSystem } from '@vybestack/llxprt-code-core/hooks/hookSystem.js';
-import {
-  createMockMessageBus,
-  createMockPolicyEngine,
-  createMockConfig,
-  waitForStatus,
-} from './__tests__/coreToolScheduler-test-helpers.js';
+import { waitForStatus } from './__tests__/coreToolScheduler-test-helpers.js';
 
 describe('CoreToolScheduler cancelled tool responseParts', () => {
   it('should populate responseParts for cancelled tools when cancelAll is called', async () => {
@@ -48,33 +43,39 @@ describe('CoreToolScheduler cancelled tool responseParts', () => {
     const onAllToolCallsComplete = vi.fn();
     const onToolCallsUpdate = vi.fn();
 
-    const mockPolicyEngine = createMockPolicyEngine();
-    mockPolicyEngine.evaluate = vi
-      .fn()
-      .mockReturnValue(PolicyDecision.ASK_USER);
+    let policyDecision = PolicyDecision.ALLOW;
+    policyDecision = PolicyDecision.ASK_USER;
 
-    const mockConfig = {
-      getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
-      getDebugMode: () => false,
-      isInteractive: () => true,
-      getApprovalMode: () => ApprovalMode.DEFAULT,
-      getEphemeralSettings: () => ({}),
-      getAllowedTools: () => [],
-      getContentGeneratorConfig: () => ({
-        model: 'test-model',
-      }),
-      getToolRegistry: () => mockToolRegistry,
-      getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
-      getEnableHooks: () => false,
-      getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
-      getModel: () => 'gemini-2.5-pro',
-    } as unknown as Config;
+    const {
+      config: mockConfig,
+      settingsOwner,
+      messageBus: runtimeMessageBus,
+    } = createSchedulerPolicyFixture(
+      {
+        getSessionId: () => 'test-session-id',
+        getUsageStatisticsEnabled: () => true,
+        getDebugMode: () => false,
+        isInteractive: () => true,
+        getApprovalMode: () => ApprovalMode.DEFAULT,
+
+        getAllowedTools: () => [],
+        getContentGeneratorConfig: () => ({
+          model: 'test-model',
+        }),
+        getEnableHooks: () => false,
+        getModel: () => 'gemini-2.5-pro',
+      },
+      policyDecision,
+    );
 
     const scheduler = new CoreToolScheduler({
+      telemetry: settingsOwner.telemetry,
+      readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        settingsOwner.readToolGovernance(mockConfig.getExcludeTools() ?? []),
       config: mockConfig,
-      messageBus: mockConfig.getMessageBus(),
-      toolRegistry: mockConfig.getToolRegistry(),
+      messageBus: runtimeMessageBus,
+      toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -125,6 +126,8 @@ describe('CoreToolScheduler cancelled tool responseParts', () => {
     const toolResponsePart = completedCalls[0].response.responseParts[0];
     expect(toolResponsePart).not.toHaveProperty('type', 'tool_call');
     expect(toolResponsePart).toHaveProperty('type', 'tool_response');
+    if (toolResponsePart.type !== 'tool_response')
+      throw new Error('Expected tool response');
     expect(toolResponsePart.callId).toBe('cancel-response-parts-test');
     expect(toolResponsePart.toolName).toBe('mockTool');
     expect(toolResponsePart.result).toHaveProperty('error');
@@ -160,24 +163,28 @@ describe('CoreToolScheduler cancelled tool responseParts', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
     });
 
-    const mockConfig = createMockConfig({
-      getToolRegistry: () => mockToolRegistry,
+    const {
+      config: mockConfig,
+      settingsOwner,
+      messageBus: runtimeMessageBus,
+    } = createSchedulerPolicyFixture({
       getApprovalMode: () => ApprovalMode.YOLO,
       isInteractive: () => false,
     });
-    const mockMessageBus = createMockMessageBus();
-    mockConfig.getMessageBus = vi.fn().mockReturnValue(mockMessageBus);
+
     mockConfig.getEnableHooks = vi.fn().mockReturnValue(false);
-    mockConfig.getHookSystem = vi
-      .fn()
-      .mockReturnValue(new HookSystem(mockConfig));
 
     const scheduler = new CoreToolScheduler({
+      telemetry: settingsOwner.telemetry,
+      readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        settingsOwner.readToolGovernance(mockConfig.getExcludeTools() ?? []),
       config: mockConfig,
-      messageBus: mockMessageBus,
+      messageBus: runtimeMessageBus,
       toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       getPreferredEditor: () => 'vscode',
+      onEditorClose: () => {},
     });
 
     const abortController = new AbortController();
@@ -203,7 +210,7 @@ describe('CoreToolScheduler cancelled tool responseParts', () => {
     });
 
     // 3. Trigger a concurrent completion event (e.g. via cancelAll)
-    scheduler.cancelAll(abortController.signal);
+    scheduler.cancelAll();
 
     await schedulePromise;
 
@@ -236,19 +243,26 @@ describe('CoreToolScheduler cancelled tool responseParts', () => {
       getToolsByServer: () => [],
     } as unknown as ToolRegistry;
 
-    const mockConfig = createMockConfig({
-      getToolRegistry: () => mockToolRegistry,
+    const {
+      config: mockConfig,
+      settingsOwner,
+      messageBus: runtimeMessageBus,
+    } = createSchedulerPolicyFixture({
       getApprovalMode: () => ApprovalMode.YOLO,
       isInteractive: () => false,
     });
-    const mockMessageBus = createMockMessageBus();
 
     const scheduler = new CoreToolScheduler({
+      telemetry: settingsOwner.telemetry,
+      readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        settingsOwner.readToolGovernance(mockConfig.getExcludeTools() ?? []),
       config: mockConfig,
-      messageBus: mockMessageBus,
+      messageBus: runtimeMessageBus,
       toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       getPreferredEditor: () => 'vscode',
+      onEditorClose: () => {},
     });
 
     const abortController = new AbortController();

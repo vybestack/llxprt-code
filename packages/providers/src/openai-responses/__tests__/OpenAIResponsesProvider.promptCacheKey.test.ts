@@ -148,8 +148,9 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
     });
 
     const invocation = createRuntimeInvocationContext({
-      runtime,
-      settings,
+      runtimeId: runtime.runtimeId,
+      runtimeMetadata: runtime.metadata,
+
       providerName: provider.name,
       ephemeralsSnapshot: {
         'prompt-caching': '1h',
@@ -210,8 +211,9 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
     });
 
     const invocation = createRuntimeInvocationContext({
-      runtime,
-      settings,
+      runtimeId: runtime.runtimeId,
+      runtimeMetadata: runtime.metadata,
+
       providerName: provider.name,
       ephemeralsSnapshot: {
         'prompt-caching': '1h',
@@ -287,8 +289,9 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
     });
 
     const invocation = createRuntimeInvocationContext({
-      runtime,
-      settings,
+      runtimeId: runtime.runtimeId,
+      runtimeMetadata: runtime.metadata,
+
       providerName: provider.name,
       ephemeralsSnapshot: {
         'prompt-caching': 'off',
@@ -364,8 +367,9 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
     });
 
     const invocation = createRuntimeInvocationContext({
-      runtime,
-      settings,
+      runtimeId: runtime.runtimeId,
+      runtimeMetadata: runtime.metadata,
+
       providerName: provider.name,
       ephemeralsSnapshot: {},
     });
@@ -421,8 +425,9 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
     });
 
     const invocation = createRuntimeInvocationContext({
-      runtime,
-      settings,
+      runtimeId: runtime.runtimeId,
+      runtimeMetadata: runtime.metadata,
+
       providerName: provider.name,
       ephemeralsSnapshot: {
         'prompt-caching': '24h',
@@ -487,8 +492,9 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
     });
 
     const invocation = createRuntimeInvocationContext({
-      runtime,
-      settings,
+      runtimeId: runtime.runtimeId,
+      runtimeMetadata: runtime.metadata,
+
       providerName: provider.name,
       ephemeralsSnapshot: { 'prompt-caching': '1h' },
     });
@@ -555,8 +561,9 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
     // Unknown ephemeral settings pass through separateSettings() as
     // modelParams, which translateRequestOverrides() copies onto the request.
     const invocation = createRuntimeInvocationContext({
-      runtime,
-      settings,
+      runtimeId: runtime.runtimeId,
+      runtimeMetadata: runtime.metadata,
+
       providerName: provider.name,
       ephemeralsSnapshot: {
         'prompt-caching': '1h',
@@ -621,8 +628,9 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
     });
 
     const invocation = createRuntimeInvocationContext({
-      runtime,
-      settings,
+      runtimeId: runtime.runtimeId,
+      runtimeMetadata: runtime.metadata,
+
       providerName: provider.name,
       ephemeralsSnapshot: {
         'prompt-caching': '1h',

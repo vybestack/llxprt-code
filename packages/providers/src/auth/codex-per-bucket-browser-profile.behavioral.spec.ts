@@ -41,7 +41,6 @@ void vi.mock('./local-oauth-callback.js', () => ({
 }));
 
 import { CodexOAuthProvider } from './codex-oauth-provider.js';
-import { oauthRuntimeBridge } from './runtime-accessor-bridge.js';
 import {
   openBrowserSecurely,
   shouldLaunchBrowser,
@@ -93,12 +92,30 @@ describe('Codex per-bucket browser profile selection', () => {
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       );
     });
-    oauthRuntimeBridge.setAccessors({
-      getEphemeralSetting: () => undefined,
-      getProviderManager: () => undefined,
-      getRuntimeContext: () => undefined,
-      getCurrentProfileName: () => null,
-      getBrowserProfileAssociation: (_provider, bucket) => {
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it('completes concurrent public flows with each immutable bucket profile', async () => {
+    const provider = new CodexOAuthProvider(
+      {
+        ...createInMemorySecureStore(),
+        saveToken: async () => {},
+        getToken: async () => null,
+        removeToken: async () => {},
+        listProviders: async () => [],
+        listBuckets: async () => [],
+        getBucketStats: async () => null,
+        acquireRefreshLock: async () => true,
+        releaseRefreshLock: async () => {},
+        acquireAuthLock: async () => true,
+        releaseAuthLock: async () => {},
+      },
+      undefined,
+      undefined,
+      (_provider, bucket) => {
         if (bucket === 'work') {
           return { browser: 'chrome', profileDirectory: '/tmp/work-profile' };
         }
@@ -110,34 +127,7 @@ describe('Codex per-bucket browser profile selection', () => {
         }
         return undefined;
       },
-    });
-  });
-
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
-    oauthRuntimeBridge.setAccessors({
-      getEphemeralSetting: () => undefined,
-      getProviderManager: () => undefined,
-      getRuntimeContext: () => undefined,
-      getCurrentProfileName: () => null,
-      getBrowserProfileAssociation: () => undefined,
-    });
-  });
-
-  it('completes concurrent public flows with each immutable bucket profile', async () => {
-    const provider = new CodexOAuthProvider({
-      ...createInMemorySecureStore(),
-      saveToken: async () => {},
-      getToken: async () => null,
-      removeToken: async () => {},
-      listProviders: async () => [],
-      listBuckets: async () => [],
-      getBucketStats: async () => null,
-      acquireRefreshLock: async () => true,
-      releaseRefreshLock: async () => {},
-      acquireAuthLock: async () => true,
-      releaseAuthLock: async () => {},
-    });
+    );
 
     provider.setAuthContext({ bucket: 'work' });
     const workAuth = provider.initiateAuth();

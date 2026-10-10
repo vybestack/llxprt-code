@@ -4,6 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { HookType } from '../types.js';
+import {
+  fixtureHookDefinitions,
+  fixtureHookRuntime,
+} from './hook-runtime-fixture.js';
 /**
  * @fileoverview TDD tests for hook re-initialization on extension change
  * @requirement R2 R4
@@ -47,7 +52,10 @@ describe('Hook Re-Initialization (126c32ac)', () => {
   });
 
   it('should reload hooks when extension with hooks is added', async () => {
-    const hookSystem = new HookSystem(mockConfig);
+    const hookSystem = new HookSystem(
+      fixtureHookDefinitions(mockConfig),
+      fixtureHookRuntime(mockConfig),
+    );
 
     // First init — no extensions
     await hookSystem.initialize();
@@ -61,12 +69,11 @@ describe('Hook Re-Initialization (126c32ac)', () => {
       version: '1.0.0',
       path: '/ext',
       contextFiles: [],
-      id: 'ext-123',
       hooks: {
         [HookEventName.BeforeTool]: [
           {
             matcher: 'read_file',
-            hooks: [{ type: 'command', command: './check.sh' }],
+            hooks: [{ type: HookType.Command, command: './check.sh' }],
           },
         ],
       },
@@ -87,17 +94,19 @@ describe('Hook Re-Initialization (126c32ac)', () => {
       version: '1.0.0',
       path: '/ext',
       contextFiles: [],
-      id: 'ext-123',
       hooks: {
         [HookEventName.BeforeTool]: [
           {
-            hooks: [{ type: 'command', command: './check.sh' }],
+            hooks: [{ type: HookType.Command, command: './check.sh' }],
           },
         ],
       },
     });
 
-    const hookSystem = new HookSystem(mockConfig);
+    const hookSystem = new HookSystem(
+      fixtureHookDefinitions(mockConfig),
+      fixtureHookRuntime(mockConfig),
+    );
     await hookSystem.initialize();
     const beforeCount = hookSystem.getAllHooks().length;
     expect(beforeCount).toBe(1);
@@ -117,7 +126,10 @@ describe('Hook Re-Initialization (126c32ac)', () => {
 describe('Hook Re-Initialization Disposal (126c32ac)', () => {
   it('deduplicates concurrent initialization and supersedes it with one later generation', async () => {
     const mockConfig = createHookConfig();
-    const hookSystem = new HookSystem(mockConfig);
+    const hookSystem = new HookSystem(
+      fixtureHookDefinitions(mockConfig),
+      fixtureHookRuntime(mockConfig),
+    );
     const registry = hookSystem.getRegistry();
     const originalInitialize = registry.initialize.bind(registry);
     let release: (() => void) | undefined;
@@ -153,7 +165,11 @@ describe('Hook Re-Initialization Disposal (126c32ac)', () => {
       publish: vi.fn(),
     };
     const mockConfig = createHookConfig();
-    const hookSystem = new HookSystem(mockConfig, mockMessageBus);
+    const hookSystem = new HookSystem(
+      fixtureHookDefinitions(mockConfig),
+      fixtureHookRuntime(mockConfig),
+      mockMessageBus,
+    );
     const registry = hookSystem.getRegistry();
     const originalInitialize = registry.initialize.bind(registry);
     let release: (() => void) | undefined;
@@ -172,16 +188,21 @@ describe('Hook Re-Initialization Disposal (126c32ac)', () => {
     release?.();
     await Promise.all([first, superseding]);
 
-    expect(mockMessageBus.subscribe).toHaveBeenCalledTimes(2);
+    expect(mockMessageBus.subscribe).toHaveBeenCalledTimes(1);
+    expect(unsubscribes[0]).not.toHaveBeenCalled();
+    await hookSystem.dispose();
     expect(unsubscribes[0]).toHaveBeenCalledOnce();
-    expect(unsubscribes[1]).not.toHaveBeenCalled();
   });
 
   it('invalidates in-flight initialization and remains terminal after disposal', async () => {
     const subscribe = vi.fn(() => vi.fn());
     const mockMessageBus = { subscribe, publish: vi.fn() };
     const mockConfig = createHookConfig();
-    const hookSystem = new HookSystem(mockConfig, mockMessageBus);
+    const hookSystem = new HookSystem(
+      fixtureHookDefinitions(mockConfig),
+      fixtureHookRuntime(mockConfig),
+      mockMessageBus,
+    );
     const registry = hookSystem.getRegistry();
     const originalInitialize = registry.initialize.bind(registry);
     let release: (() => void) | undefined;
@@ -195,7 +216,7 @@ describe('Hook Re-Initialization Disposal (126c32ac)', () => {
 
     const initialization = hookSystem.initialize();
     await waitFor(() => expect(registry.initialize).toHaveBeenCalledOnce());
-    hookSystem.dispose();
+    await hookSystem.dispose();
     release?.();
 
     await expect(initialization).rejects.toThrow(/disposed/i);
@@ -215,7 +236,11 @@ describe('Hook Re-Initialization Disposal (126c32ac)', () => {
 
     const mockConfig = createHookConfig();
 
-    const hookSystem = new HookSystem(mockConfig, mockMessageBus);
+    const hookSystem = new HookSystem(
+      fixtureHookDefinitions(mockConfig),
+      fixtureHookRuntime(mockConfig),
+      mockMessageBus,
+    );
 
     // First init — subscribes to MessageBus
     await hookSystem.initialize();
@@ -225,8 +250,10 @@ describe('Hook Re-Initialization Disposal (126c32ac)', () => {
     // Re-init — should dispose old handler first
     await hookSystem.initialize();
 
-    expect(unsubscribeMock).toHaveBeenCalledTimes(1); // Old handler disposed
-    expect(subscribeMock).toHaveBeenCalledTimes(2); // New handler subscribed
+    expect(unsubscribeMock).not.toHaveBeenCalled();
+    expect(subscribeMock).toHaveBeenCalledTimes(1);
+    await hookSystem.dispose();
+    expect(unsubscribeMock).toHaveBeenCalledTimes(1);
   });
 
   it('should not leak subscriptions after multiple re-inits', async () => {
@@ -243,7 +270,11 @@ describe('Hook Re-Initialization Disposal (126c32ac)', () => {
 
     const mockConfig = createHookConfig();
 
-    const hookSystem = new HookSystem(mockConfig, mockMessageBus);
+    const hookSystem = new HookSystem(
+      fixtureHookDefinitions(mockConfig),
+      fixtureHookRuntime(mockConfig),
+      mockMessageBus,
+    );
 
     // Initialize 3 times
     await hookSystem.initialize();
@@ -251,16 +282,18 @@ describe('Hook Re-Initialization Disposal (126c32ac)', () => {
     await hookSystem.initialize();
 
     // Should have 3 subscriptions, 2 should be unsubscribed
-    expect(subscribeMock).toHaveBeenCalledTimes(3);
-
-    expect(unsubscribes[0]).toHaveBeenCalledTimes(1); // First disposed before second init
-    expect(unsubscribes[1]).toHaveBeenCalledTimes(1); // Second disposed before third init
-    expect(unsubscribes[2]).not.toHaveBeenCalled(); // Third still active
+    expect(subscribeMock).toHaveBeenCalledTimes(1);
+    expect(unsubscribes[0]).not.toHaveBeenCalled();
+    await hookSystem.dispose();
+    expect(unsubscribes[0]).toHaveBeenCalledTimes(1);
   });
 
   it('returns an already-aborted initialization as a rejected promise', async () => {
     const mockConfig = createHookConfig();
-    const hookSystem = new HookSystem(mockConfig);
+    const hookSystem = new HookSystem(
+      fixtureHookDefinitions(mockConfig),
+      fixtureHookRuntime(mockConfig),
+    );
     const controller = new AbortController();
     controller.abort();
 
@@ -273,7 +306,10 @@ describe('Hook Re-Initialization Disposal (126c32ac)', () => {
 
   it('aborts registry initialization when disposed', async () => {
     const mockConfig = createHookConfig();
-    const hookSystem = new HookSystem(mockConfig);
+    const hookSystem = new HookSystem(
+      fixtureHookDefinitions(mockConfig),
+      fixtureHookRuntime(mockConfig),
+    );
     const registry = hookSystem.getRegistry();
     let observedSignal: AbortSignal | undefined;
     vi.spyOn(registry, 'initialize').mockImplementation(async (signal) => {
@@ -286,7 +322,7 @@ describe('Hook Re-Initialization Disposal (126c32ac)', () => {
 
     const initialization = hookSystem.initialize();
     await waitFor(() => expect(observedSignal).toBeDefined());
-    hookSystem.dispose();
+    await hookSystem.dispose();
 
     expect(observedSignal?.aborted).toBe(true);
     await expect(initialization).rejects.toThrow(/disposed/i);
@@ -294,7 +330,10 @@ describe('Hook Re-Initialization Disposal (126c32ac)', () => {
 
   it('allows initialization to recover after registry initialization fails', async () => {
     const mockConfig = createHookConfig();
-    const hookSystem = new HookSystem(mockConfig);
+    const hookSystem = new HookSystem(
+      fixtureHookDefinitions(mockConfig),
+      fixtureHookRuntime(mockConfig),
+    );
     const failure = new Error('registry initialization failed');
     const initialize = vi
       .spyOn(hookSystem.getRegistry(), 'initialize')

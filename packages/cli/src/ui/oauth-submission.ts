@@ -4,30 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-interface OAuthProviderLike {
-  name: string;
-}
-
-interface OAuthProviderWithSubmit extends OAuthProviderLike {
-  submitAuthCode: (code: string) => void;
-}
-
-interface OAuthManagerLike {
-  getProvider: (name: string) => OAuthProviderLike | undefined;
-}
-
-function hasSubmitAuthCode(
-  provider: OAuthProviderLike | undefined,
-): provider is OAuthProviderWithSubmit {
-  return (
-    !!provider &&
-    'submitAuthCode' in provider &&
-    typeof (provider as OAuthProviderWithSubmit).submitAuthCode === 'function'
-  );
-}
-
 export interface OAuthSubmissionDependencies {
-  getOAuthManager: () => OAuthManagerLike | null;
+  submitCode: (provider: string, code: string) => boolean;
   getActiveProvider: () => string | undefined;
 }
 
@@ -40,16 +18,5 @@ export function submitOAuthCode(
     return false;
   }
 
-  const oauthManager = deps.getOAuthManager();
-  if (!oauthManager) {
-    return false;
-  }
-
-  const oauthProvider = oauthManager.getProvider(provider);
-  if (hasSubmitAuthCode(oauthProvider)) {
-    oauthProvider.submitAuthCode(code);
-    return true;
-  }
-
-  return false;
+  return deps.submitCode(provider, code);
 }

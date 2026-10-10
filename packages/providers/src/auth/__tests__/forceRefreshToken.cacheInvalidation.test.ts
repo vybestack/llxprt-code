@@ -4,34 +4,23 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * @fix issue2035
- * TokenAccessCoordinator forceRefreshToken runtime-cache invalidation tests.
+ * TokenAccessCoordinator forceRefreshToken behavior tests.
  *
  * Issue #2035: anthropic token still occasionally invalidated during long
- * generations across multiple agents. Root cause: forceRefreshToken updates the
- * disk token store but leaves the in-memory runtimeScopedStates cache holding
- * the revoked token, so retries (and other agents) keep resolving the stale
- * token and get another 401.
- *
- * These behavioral tests use the REAL runtimeScopedStates singleton (no mock
- * theater): we seed a stale cache entry, run forceRefreshToken, and assert the
- * entry is actually cleared so the next resolution falls through to the freshly
- * refreshed disk token.
+ * generations across multiple agents. forceRefreshToken must refresh from the
+ * current disk baseline, and the next auth resolution must return the freshly
+ * refreshed token rather than the revoked one.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { TokenAccessCoordinator } from '../token-access-coordinator.js';
 import type { OAuthProvider, OAuthToken, TokenStore } from '../types.js';
 import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-core';
 import {
-  runtimeScopedStates,
-  storeRuntimeScopedToken,
-  type RuntimeScopedState,
   AuthPrecedenceResolver,
-  ensureRuntimeState,
   type AuthPrecedenceConfig,
   type OAuthManager,
   type ISettingsService,
-  type IProviderRuntimeContext,
 } from '@vybestack/llxprt-code-auth';
 
 function makeToken(
@@ -182,62 +171,18 @@ async function peekStoredAccessToken(
   return stored?.access_token ?? null;
 }
 
-function seedRuntimeCacheEntry(
-  runtimeId: string,
-  providerId: string,
-  profileId: string,
-  token: string,
-): RuntimeScopedState {
-  const state: RuntimeScopedState = {
-    runtimeAuthScopeId: runtimeId,
-    entries: new Map(),
-    metadata: {
-      runtimeAuthScopeId: runtimeId,
-      cacheEntries: [],
-      cancellationHooks: [],
-      revokedTokens: [],
-      metrics: { hits: 0, misses: 0, lastUpdated: Date.now() },
-    },
-    settingsSubscriptions: [],
-  };
-  runtimeScopedStates.set(runtimeId, state);
-  storeRuntimeScopedToken(state, providerId, profileId, token);
-  return state;
-}
-
-describe('TokenAccessCoordinator forceRefreshToken runtime cache invalidation', () => {
-  beforeEach(() => {
-    for (const key of [...runtimeScopedStates.keys()]) {
-      runtimeScopedStates.delete(key);
-    }
-  });
-
-  afterEach(() => {
-    for (const key of [...runtimeScopedStates.keys()]) {
-      runtimeScopedStates.delete(key);
-    }
-  });
-
+describe('TokenAccessCoordinator forceRefreshToken refresh and baseline handling', () => {
   /**
    * @fix issue2035
-   * After a successful force refresh, the stale runtime-scoped cache entry must
-   * be removed so the retry resolves the fresh token instead of the revoked one.
+   * A successful force refresh returns the refreshed token.
    */
-  it('clears the runtime-scoped cache after a successful refresh', async () => {
+  it('returns the refreshed token after a successful refresh', async () => {
     const failedToken = 'failed-access-token';
     const initialTokens = new Map([
       ['anthropic', makeToken(failedToken, 3600, 'refresh-token-123')],
     ]);
     const provider = createMockProvider('anthropic');
     const { coordinator } = makeCoordinator({ provider, initialTokens });
-
-    const state = seedRuntimeCacheEntry(
-      'agent-1',
-      'anthropic',
-      'no-profile',
-      failedToken,
-    );
-    expect(state.entries.size).toBe(1);
 
     const result = await coordinator.forceRefreshToken(
       'anthropic',
@@ -245,47 +190,14 @@ describe('TokenAccessCoordinator forceRefreshToken runtime cache invalidation', 
     );
 
     expect(result?.access_token).toBe('refreshed-failed-access-token');
-    expect(state.entries.size).toBe(0);
   });
 
   /**
    * @fix issue2035
-   * Multi-agent scenario: invalidation must propagate to every runtime so other
-   * agents stop using the revoked token.
+   * TOCTOU: when another process already refreshed the disk token, the stored
+   * token is returned without a second refresh.
    */
-  it('clears stale cache entries across all runtimes after refresh', async () => {
-    const failedToken = 'failed-access-token';
-    const initialTokens = new Map([
-      ['anthropic', makeToken(failedToken, 3600, 'refresh-token-123')],
-    ]);
-    const provider = createMockProvider('anthropic');
-    const { coordinator } = makeCoordinator({ provider, initialTokens });
-
-    const agent1 = seedRuntimeCacheEntry(
-      'agent-1',
-      'anthropic',
-      'no-profile',
-      failedToken,
-    );
-    const agent2 = seedRuntimeCacheEntry(
-      'agent-2',
-      'anthropic',
-      'no-profile',
-      failedToken,
-    );
-
-    await coordinator.forceRefreshToken('anthropic', failedToken);
-
-    expect(agent1.entries.size).toBe(0);
-    expect(agent2.entries.size).toBe(0);
-  });
-
-  /**
-   * @fix issue2035
-   * TOCTOU: when another process already refreshed the disk token, the local
-   * runtime cache is still stale and must be invalidated too.
-   */
-  it('clears the runtime cache when another process already refreshed the token', async () => {
+  it('returns the stored token when another process already refreshed it', async () => {
     const failedToken = 'failed-access-token';
     const initialTokens = new Map([
       [
@@ -296,46 +208,13 @@ describe('TokenAccessCoordinator forceRefreshToken runtime cache invalidation', 
     const provider = createMockProvider('anthropic');
     const { coordinator } = makeCoordinator({ provider, initialTokens });
 
-    const state = seedRuntimeCacheEntry(
-      'agent-1',
-      'anthropic',
-      'no-profile',
-      failedToken,
-    );
-
     const result = await coordinator.forceRefreshToken(
       'anthropic',
       failedToken,
     );
 
     expect(result?.access_token).toBe('already-refreshed-by-other');
-    expect(state.entries.size).toBe(0);
-  });
-
-  /**
-   * @fix issue2035
-   * Must not invalidate unrelated providers cached in the same runtime.
-   */
-  it('does not invalidate cache entries for other providers', async () => {
-    const failedToken = 'failed-access-token';
-    const initialTokens = new Map([
-      ['anthropic', makeToken(failedToken, 3600, 'refresh-token-123')],
-    ]);
-    const provider = createMockProvider('anthropic');
-    const { coordinator } = makeCoordinator({ provider, initialTokens });
-
-    const state = seedRuntimeCacheEntry(
-      'agent-1',
-      'anthropic',
-      'no-profile',
-      failedToken,
-    );
-    storeRuntimeScopedToken(state, 'gemini', 'no-profile', 'gemini-token');
-
-    await coordinator.forceRefreshToken('anthropic', failedToken);
-
-    expect(state.entries.has('agent-1::gemini::no-profile')).toBe(true);
-    expect(state.entries.has('agent-1::anthropic::no-profile')).toBe(false);
+    expect(provider.refreshToken).not.toHaveBeenCalled();
   });
 });
 
@@ -351,18 +230,6 @@ describe('TokenAccessCoordinator forceRefreshToken runtime cache invalidation', 
  * the current stored token as the refresh baseline and perform a real refresh.
  */
 describe('TokenAccessCoordinator forceRefreshToken with empty failed token (issue #2035 OAuth path)', () => {
-  beforeEach(() => {
-    for (const key of [...runtimeScopedStates.keys()]) {
-      runtimeScopedStates.delete(key);
-    }
-  });
-
-  afterEach(() => {
-    for (const key of [...runtimeScopedStates.keys()]) {
-      runtimeScopedStates.delete(key);
-    }
-  });
-
   it('performs a real refresh when called with an empty failed token', async () => {
     const storedAccess = 'revoked-oauth-token';
     const initialTokens = new Map([
@@ -383,27 +250,6 @@ describe('TokenAccessCoordinator forceRefreshToken with empty failed token (issu
     expect(tokenStore.saveToken).toHaveBeenCalled();
     const persisted = await coordinator.peekStoredToken('anthropic');
     expect(persisted?.access_token).toBe(`refreshed-${storedAccess}`);
-  });
-
-  it('invalidates the runtime cache after refreshing with an empty failed token', async () => {
-    const storedAccess = 'revoked-oauth-token';
-    const initialTokens = new Map([
-      ['anthropic', makeToken(storedAccess, 3600, 'refresh-token-123')],
-    ]);
-    const provider = createMockProvider('anthropic');
-    const { coordinator } = makeCoordinator({ provider, initialTokens });
-
-    const state = seedRuntimeCacheEntry(
-      'agent-1',
-      'anthropic',
-      'no-profile',
-      storedAccess,
-    );
-    expect(state.entries.size).toBe(1);
-
-    await coordinator.forceRefreshToken('anthropic', '');
-
-    expect(state.entries.size).toBe(0);
   });
 
   it('returns null without refreshing when no token is stored', async () => {
@@ -481,46 +327,33 @@ describe('TokenAccessCoordinator forceRefreshToken with empty failed token (issu
 
   /**
    * @fix issue2035
-   * Empty failed token where the disk token already differs from the seeded
-   * in-memory cache (another agent/process refreshed first). The baseline is the
-   * current disk token, so loadTokenForForceRefresh sees a match and refreshes;
-   * critically, the stale in-memory cache entry is invalidated so the retry
-   * resolves the fresh token. This documents the chosen behavior (refresh over
-   * a cooldown-skip) which guarantees no 401 loop even if the disk token was
+   * Empty failed token where the disk token was written by another agent or
+   * process. The baseline is the current disk token, so the coordinator
+   * refreshes it. This documents the chosen behavior (refresh over a
+   * cooldown-skip) which guarantees no 401 loop even if the disk token was
    * itself just revoked.
    */
-  it('refreshes from the current disk baseline and clears the stale cache', async () => {
+  it('refreshes from the current disk baseline', async () => {
     const diskAccess = 'disk-token-from-other-agent';
-    const staleCachedAccess = 'older-cached-token';
     const initialTokens = new Map([
       ['anthropic', makeToken(diskAccess, 3600, 'refresh-token-123')],
     ]);
     const provider = createMockProvider('anthropic');
     const { coordinator } = makeCoordinator({ provider, initialTokens });
 
-    const state = seedRuntimeCacheEntry(
-      'agent-1',
-      'anthropic',
-      'no-profile',
-      staleCachedAccess,
-    );
-    expect(state.entries.size).toBe(1);
-
     const result = await coordinator.forceRefreshToken('anthropic', '');
 
     expect(result?.access_token).toBe(`refreshed-${diskAccess}`);
-    expect(state.entries.size).toBe(0);
   });
 });
 
 /**
  * End-to-end behavioral test that exercises the FULL issue #2035 cycle through
- * the real collaborators (TokenAccessCoordinator + AuthPrecedenceResolver) that
- * share the real runtimeScopedStates singleton — no mock theater on the cache.
+ * the real collaborators (TokenAccessCoordinator + AuthPrecedenceResolver).
  *
  * This proves the actual user-facing fix: after a 401 triggers forceRefreshToken,
  * the NEXT auth resolution (what the retry attempt performs) returns the FRESH
- * token rather than the revoked one that was previously cached.
+ * token rather than the revoked one.
  */
 
 function createStubSettingsService(
@@ -541,47 +374,22 @@ function createStubSettingsService(
   } as unknown as ISettingsService;
 }
 
-function createTestRuntimeContext(
-  runtimeId: string,
-  settingsService: ISettingsService,
-): IProviderRuntimeContext {
-  const context: IProviderRuntimeContext = {
-    settingsService,
-    runtimeId,
-    metadata: {},
-  } as IProviderRuntimeContext;
-  ensureRuntimeState(context);
-  return context;
-}
-
 describe('issue #2035 end-to-end: retry resolves fresh token after 401 refresh', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    for (const key of [...runtimeScopedStates.keys()]) {
-      runtimeScopedStates.delete(key);
-    }
-  });
-
-  afterEach(() => {
-    for (const key of [...runtimeScopedStates.keys()]) {
-      runtimeScopedStates.delete(key);
-    }
   });
 
   /**
    * @fix issue2035
    * Full cycle:
-   *  1. resolveAuthentication() caches the (soon-to-be-revoked) token.
-   *  2. A 401 occurs -> forceRefreshToken() refreshes disk + invalidates cache.
+   *  1. resolveAuthentication() returns the (soon-to-be-revoked) token.
+   *  2. A 401 occurs -> forceRefreshToken() refreshes the disk token.
    *  3. The retry's resolveAuthentication() must now return the FRESH token.
    */
   it('returns the refreshed token on the resolution following a forced refresh', async () => {
     const failedToken = 'failed-access-token';
     const refreshedAccessToken = 'refreshed-failed-access-token';
-    const runtimeId = 'agent-e2e';
-
     const settingsService = createStubSettingsService();
-    const runtimeContext = createTestRuntimeContext(runtimeId, settingsService);
 
     // Disk token store seeded with the soon-to-fail token (has a refresh token).
     const initialTokens = new Map<string, OAuthToken>([
@@ -611,32 +419,22 @@ describe('issue #2035 end-to-end: retry resolves fresh token after 401 refresh',
     const resolver = new AuthPrecedenceResolver(config, {
       oauthManager,
       settingsService,
-      getActiveRuntimeContext: () => runtimeContext,
     });
 
-    // Step 1: first resolution caches the failing token.
+    // Step 1: first resolution returns the failing token.
     const firstResolved = await resolver.resolveAuthentication({
       includeOAuth: true,
     });
     expect(firstResolved).toBe(failedToken);
 
-    // A second resolution WITHOUT a refresh would serve the cached (stale) token.
-    const cachedResolved = await resolver.resolveAuthentication({
-      includeOAuth: true,
-    });
-    expect(cachedResolved).toBe(failedToken);
-    // Only one underlying fetch so far -> proves the cache is in play.
-    expect(oauthManager.getToken).toHaveBeenCalledTimes(1);
-
-    // Step 2: the 401 handler forces a refresh (updates disk + invalidates cache).
+    // Step 2: the 401 handler forces a refresh (updates the disk token).
     const refreshed = await coordinator.forceRefreshToken(
       'anthropic',
       failedToken,
     );
     expect(refreshed?.access_token).toBe(refreshedAccessToken);
 
-    // Step 3: the retry's resolution must now return the FRESH token, proving
-    // the in-memory cache no longer shadows the refreshed disk token.
+    // Step 3: the retry's resolution must now return the FRESH token.
     const afterRefresh = await resolver.resolveAuthentication({
       includeOAuth: true,
     });
@@ -659,12 +457,8 @@ describe('issue #2035 end-to-end: retry resolves fresh token after 401 refresh',
     const provider = createMockProvider('anthropic');
     const { coordinator } = makeCoordinator({ provider, initialTokens });
 
-    const makeResolver = (runtimeId: string) => {
+    const makeResolver = () => {
       const settingsService = createStubSettingsService();
-      const runtimeContext = createTestRuntimeContext(
-        runtimeId,
-        settingsService,
-      );
       const oauthManager: OAuthManager = {
         getToken: vi.fn(() => peekStoredAccessToken(coordinator)),
         isAuthenticated: vi.fn().mockResolvedValue(true),
@@ -682,14 +476,13 @@ describe('issue #2035 end-to-end: retry resolves fresh token after 401 refresh',
       return new AuthPrecedenceResolver(config, {
         oauthManager,
         settingsService,
-        getActiveRuntimeContext: () => runtimeContext,
       });
     };
 
-    const agent1 = makeResolver('agent-1');
-    const agent2 = makeResolver('agent-2');
+    const agent1 = makeResolver();
+    const agent2 = makeResolver();
 
-    // Both agents cache the failing token.
+    // Both agents resolve the failing token.
     expect(await agent1.resolveAuthentication({ includeOAuth: true })).toBe(
       failedToken,
     );

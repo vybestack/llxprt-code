@@ -57,5 +57,5 @@ export async function resolveAuthTokenFromOptions(
       return '';
     }
   }
-  return '';
+  return options.readRetryAuthToken ? options.readRetryAuthToken() : '';
 }

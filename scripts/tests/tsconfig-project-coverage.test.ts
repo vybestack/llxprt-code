@@ -109,6 +109,13 @@ function typeAwareSources(pkg: string): string[] {
           walk(path);
         }
       } else if (/\.tsx?$/.test(entry.name)) {
+        if (
+          entry.name.endsWith('.d.ts') &&
+          (existsSync(path.slice(0, -5) + '.ts') ||
+            existsSync(path.slice(0, -5) + '.tsx'))
+        ) {
+          continue;
+        }
         found.push(path);
       }
     }

@@ -131,7 +131,10 @@ describe('GitService checkpoint semantics (#3464)', () => {
   });
 
   it('snapshots honor root and nested .gitignore files', async () => {
-    const service = new GitService(fixture.projectRoot, fixture.storage);
+    const service = new GitService(
+      fixture.projectRoot,
+      fixture.storage.getHistoryDir(),
+    );
     await service.initialize();
     const hash = await service.createFileSnapshot('ignored rules snapshot');
 
@@ -143,7 +146,10 @@ describe('GitService checkpoint semantics (#3464)', () => {
   });
 
   it('snapshots honor repository exclude rules', async () => {
-    const service = new GitService(fixture.projectRoot, fixture.storage);
+    const service = new GitService(
+      fixture.projectRoot,
+      fixture.storage.getHistoryDir(),
+    );
     await service.initialize();
     const hash = await service.createFileSnapshot('exclude rules snapshot');
 
@@ -152,7 +158,10 @@ describe('GitService checkpoint semantics (#3464)', () => {
   });
 
   it('exclude edits between snapshots are honored without re-initializing', async () => {
-    const service = new GitService(fixture.projectRoot, fixture.storage);
+    const service = new GitService(
+      fixture.projectRoot,
+      fixture.storage.getHistoryDir(),
+    );
     await service.initialize();
 
     await writeFixtureFile(
@@ -173,7 +182,10 @@ describe('GitService checkpoint semantics (#3464)', () => {
   });
 
   it('restore reverts tracked content and removes files added after the snapshot', async () => {
-    const service = new GitService(fixture.projectRoot, fixture.storage);
+    const service = new GitService(
+      fixture.projectRoot,
+      fixture.storage.getHistoryDir(),
+    );
     await service.initialize();
     const beforeHash = await service.createFileSnapshot('before edits');
 
@@ -220,7 +232,10 @@ describe('GitService checkpoint semantics (#3464)', () => {
     process.env.GIT_CONFIG_KEY_0 = 'user.useConfigOnly';
     process.env.GIT_CONFIG_VALUE_0 = 'true';
     try {
-      const service = new GitService(fixture.projectRoot, fixture.storage);
+      const service = new GitService(
+        fixture.projectRoot,
+        fixture.storage.getHistoryDir(),
+      );
       await expect(service.initialize()).resolves.toBeUndefined();
       const hash = await service.createFileSnapshot('identity snapshot');
       const tree = snapshotTree(fixture.historyDir(), hash);
@@ -263,7 +278,10 @@ describe('GitService checkpoint semantics (#3464)', () => {
   describe('inside a container sandbox', () => {
     it('initialize fails fast when the history dir has no persistent checkpoint store marker', async () => {
       process.env.SANDBOX = 'issue3464-sandbox-container';
-      const service = new GitService(fixture.projectRoot, fixture.storage);
+      const service = new GitService(
+        fixture.projectRoot,
+        fixture.storage.getHistoryDir(),
+      );
       await expect(service.initialize()).rejects.toThrow(
         /persistent checkpoint store/i,
       );
@@ -277,13 +295,19 @@ describe('GitService checkpoint semantics (#3464)', () => {
         path.join(historyDir, '.llxprt-checkpoint-store'),
         'llxprt-checkpoint-store v1\n',
       );
-      const service = new GitService(fixture.projectRoot, fixture.storage);
+      const service = new GitService(
+        fixture.projectRoot,
+        fixture.storage.getHistoryDir(),
+      );
       await expect(service.initialize()).resolves.toBeUndefined();
     });
 
     it('a seatbelt sandbox value does not require the marker', async () => {
       process.env.SANDBOX = 'sandbox-exec';
-      const service = new GitService(fixture.projectRoot, fixture.storage);
+      const service = new GitService(
+        fixture.projectRoot,
+        fixture.storage.getHistoryDir(),
+      );
       await expect(service.initialize()).resolves.toBeUndefined();
     });
   });

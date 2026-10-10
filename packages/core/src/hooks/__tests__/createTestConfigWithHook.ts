@@ -4,6 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  fixtureHookDefinitions,
+  fixtureHookRuntime,
+} from './hook-runtime-fixture.js';
 /**
  * @plan:PLAN-20260216-HOOKSYSTEMREWRITE.P19,P20
  * @requirement:HOOK-134
@@ -92,7 +96,6 @@ export function createTestConfigWithHook(options: TestHookOptions): Config {
     getExtensions: () => [],
     getDisabledHooks: () => [],
     getModel: () => 'test-model',
-    getSessionRecordingService: () => undefined,
     isTrustedFolder: () => true,
     getSanitizationConfig: () => ({
       enableEnvironmentVariableRedaction: false,
@@ -101,7 +104,10 @@ export function createTestConfigWithHook(options: TestHookOptions): Config {
     }),
     getHookSystem: () => {
       // Lazy initialization of HookSystem singleton
-      hookSystem ??= new HookSystem(config);
+      hookSystem ??= new HookSystem(
+        fixtureHookDefinitions(config),
+        fixtureHookRuntime(config),
+      );
       return hookSystem;
     },
   } as unknown as Config;
@@ -125,7 +131,6 @@ export function createTestConfigWithHooksDisabled(): Config {
     getExtensions: () => [],
     getDisabledHooks: () => [],
     getModel: () => 'test-model',
-    getSessionRecordingService: () => undefined,
     isTrustedFolder: () => false,
     getSanitizationConfig: () => ({
       enableEnvironmentVariableRedaction: false,

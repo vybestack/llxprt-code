@@ -9,12 +9,17 @@ import type { IStorageService } from '@vybestack/llxprt-code-tools';
 import { Storage } from '@vybestack/llxprt-code-settings';
 
 export class CoreStorageServiceAdapter implements IStorageService {
+  constructor(
+    private readonly configRoot?: string,
+    private readonly dataRoot?: string,
+  ) {}
+
   getGlobalMemoryDir(): string {
-    return Storage.getGlobalMemoryDir();
+    return this.configRoot ?? Storage.getGlobalMemoryDir();
   }
 
   getGlobalDataDir(): string {
-    return Storage.getGlobalDataDir();
+    return this.dataRoot ?? Storage.getGlobalDataDir();
   }
 
   async readFile(filePath: string): Promise<string> {

@@ -4,17 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  clearInstalledEntryLoading,
-  markInstalledEntryLoading,
-} from './entrypoint.ts';
+export async function main(): Promise<void> {
+  const { createInstalledLauncherRuntime, runLauncher } = await import(
+    './launcher.ts'
+  );
 
-markInstalledEntryLoading();
-const { createInstalledLauncherRuntime, runLauncher } = await import(
-  './launcher.ts'
-);
-clearInstalledEntryLoading();
-
-runLauncher(
-  createInstalledLauncherRuntime(import.meta.url, process.env.CLI_VERSION),
-);
+  runLauncher(
+    createInstalledLauncherRuntime(import.meta.url, process.env.CLI_VERSION),
+  );
+}

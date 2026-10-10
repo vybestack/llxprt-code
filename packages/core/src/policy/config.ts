@@ -36,7 +36,6 @@ import {
   type UpdatePolicy,
 } from '@vybestack/llxprt-code-policy';
 import { coreEvents } from '../utils/events.js';
-import { debugLogger } from '../utils/debugLogger.js';
 
 export {
   ADMIN_POLICY_TIER,
@@ -342,26 +341,38 @@ interface TomlRule {
   [key: string]: unknown;
 }
 
+export interface PolicyUpdaterPersistence {
+  readonly persist: (message: UpdatePolicy) => Promise<void>;
+  /** Receives each persistence write so its owner can join and report it. */
+  readonly track: (write: Promise<void>) => void;
+}
+
 export function createPolicyUpdater(
-  policyEngine: PolicyEngine,
+  policyEngine: Pick<PolicyEngine, 'addRule'>,
   messageBus: MessageBus,
+  persistence?: PolicyUpdaterPersistence,
 ) {
-  messageBus.subscribe(
+  const persist = persistence?.persist ?? persistPolicyToToml;
+  return messageBus.subscribe(
     MessageBusType.UPDATE_POLICY,
     (message: UpdatePolicy) => {
-      void (async () => {
-        applyDynamicPolicyRule(policyEngine, message);
-
-        if (message.persist === true) {
-          await persistPolicyToToml(message);
-        }
-      })();
+      applyDynamicPolicyRule(policyEngine, message);
+      if (message.persist !== true) return;
+      const write = persist(message).catch((error: unknown) => {
+        coreEvents.emitFeedback(
+          'error',
+          `Failed to persist policy for ${message.toolName}`,
+          error,
+        );
+        if (persistence !== undefined) throw error;
+      });
+      persistence?.track(write);
     },
   );
 }
 
 function applyDynamicPolicyRule(
-  policyEngine: PolicyEngine,
+  policyEngine: Pick<PolicyEngine, 'addRule'>,
   message: UpdatePolicy,
 ): void {
   const toolName = message.toolName;
@@ -398,30 +409,24 @@ function applyDynamicPolicyRule(
   }
 }
 
-async function persistPolicyToToml(message: UpdatePolicy): Promise<void> {
-  try {
-    const userPoliciesDir = Storage.getUserPoliciesDir();
-    await fs.mkdir(userPoliciesDir, { recursive: true });
-    const policyFile = path.join(userPoliciesDir, 'auto-saved.toml');
+export async function persistPolicyToToml(
+  message: UpdatePolicy,
+  userPoliciesDir = Storage.getUserPoliciesDir(),
+): Promise<void> {
+  await fs.mkdir(userPoliciesDir, { recursive: true });
+  const policyFile = path.join(userPoliciesDir, 'auto-saved.toml');
 
-    const existingData = await readExistingTomlPolicy(policyFile);
-    existingData.rule ??= [];
+  const existingData = await readExistingTomlPolicy(policyFile);
+  existingData.rule ??= [];
 
-    const newRule = buildTomlRule(message, message.toolName);
-    existingData.rule.push(newRule);
+  const newRule = buildTomlRule(message, message.toolName);
+  existingData.rule.push(newRule);
 
-    const newContent = toml.stringify(existingData as toml.JsonMap);
+  const newContent = toml.stringify(existingData as toml.JsonMap);
 
-    const tmpFile = `${policyFile}.tmp`;
-    await fs.writeFile(tmpFile, newContent, 'utf-8');
-    await fs.rename(tmpFile, policyFile);
-  } catch (error) {
-    coreEvents.emitFeedback(
-      'error',
-      `Failed to persist policy for ${message.toolName}`,
-      error,
-    );
-  }
+  const tmpFile = `${policyFile}.tmp`;
+  await fs.writeFile(tmpFile, newContent, 'utf-8');
+  await fs.rename(tmpFile, policyFile);
 }
 
 async function readExistingTomlPolicy(
@@ -433,10 +438,7 @@ async function readExistingTomlPolicy(
     existingData = toml.parse(fileContent) as { rule?: TomlRule[] };
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-      debugLogger.warn(
-        `Failed to parse ${policyFile}, overwriting with new policy.`,
-        error,
-      );
+      throw error;
     }
   }
   return existingData;

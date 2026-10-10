@@ -406,6 +406,35 @@ describe('writeImageAtomically', () => {
     const entries = await fs.promises.readdir(workspaceRoot);
     expect(entries).toHaveLength(0);
   });
+  it('does not publish a target when cancelled during a physical temporary write', async () => {
+    const target = path.join(workspaceRoot, 'during-write.png');
+    const controller = new AbortController();
+    const watcher = setInterval(() => {
+      if (
+        fs
+          .readdirSync(workspaceRoot)
+          .some((filename) => filename.endsWith('.tmp'))
+      )
+        controller.abort();
+    }, 1);
+    try {
+      const bytes = Buffer.alloc(32 * 1024 * 1024);
+      makeRealMinimalPng().copy(bytes);
+      const outcome = await writeImageAtomically(
+        bytes,
+        target,
+        controller.signal,
+      ).then(
+        () => 'published',
+        () => 'cancelled',
+      );
+      expect(outcome).toBe('cancelled');
+      expect(fs.existsSync(target)).toBe(false);
+      expect(await fs.promises.readdir(workspaceRoot)).toHaveLength(0);
+    } finally {
+      clearInterval(watcher);
+    }
+  });
 
   it('publishes via a no-clobber hard-link (link fails on existing target)', async () => {
     // The atomic publication primitive must be link(temp, target) which fails

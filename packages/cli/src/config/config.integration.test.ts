@@ -28,7 +28,6 @@ const realLlxprtCodeCoreModule = {
 const TEST_CONTENT_GENERATOR_CONFIG: ContentGeneratorConfig = {
   apiKey: 'test-key',
   model: 'test-model',
-  userAgent: 'test-agent',
 };
 
 // Mock file discovery service and tool registry
@@ -70,13 +69,13 @@ describe('Configuration Integration Tests', () => {
   describe('File Filtering Configuration', () => {
     it('should load default file filtering settings', async () => {
       const configParams: ConfigParameters = {
+        sessionId: crypto.randomUUID(),
         cwd: '/tmp',
-        contentGeneratorConfig: TEST_CONTENT_GENERATOR_CONFIG,
+        model: TEST_CONTENT_GENERATOR_CONFIG.model,
         embeddingModel: 'test-embedding-model',
-        sandbox: false,
         targetDir: tempDir,
         debugMode: false,
-        fileFilteringRespectGitIgnore: undefined, // Should default to  DEFAULT_FILE_FILTERING_OPTIONS
+        fileFiltering: {}, // Should default to  DEFAULT_FILE_FILTERING_OPTIONS
       };
 
       const config = new Config(configParams);
@@ -88,10 +87,10 @@ describe('Configuration Integration Tests', () => {
 
     it('should load custom file filtering settings from configuration', async () => {
       const configParams: ConfigParameters = {
+        sessionId: crypto.randomUUID(),
         cwd: '/tmp',
-        contentGeneratorConfig: TEST_CONTENT_GENERATOR_CONFIG,
+        model: TEST_CONTENT_GENERATOR_CONFIG.model,
         embeddingModel: 'test-embedding-model',
-        sandbox: false,
         targetDir: tempDir,
         debugMode: false,
         fileFiltering: {
@@ -106,10 +105,10 @@ describe('Configuration Integration Tests', () => {
 
     it('should merge user and workspace file filtering settings', async () => {
       const configParams: ConfigParameters = {
+        sessionId: crypto.randomUUID(),
         cwd: '/tmp',
-        contentGeneratorConfig: TEST_CONTENT_GENERATOR_CONFIG,
+        model: TEST_CONTENT_GENERATOR_CONFIG.model,
         embeddingModel: 'test-embedding-model',
-        sandbox: false,
         targetDir: tempDir,
         debugMode: false,
         fileFiltering: {
@@ -126,10 +125,10 @@ describe('Configuration Integration Tests', () => {
   describe('Configuration Integration', () => {
     it('should handle partial configuration objects gracefully', async () => {
       const configParams: ConfigParameters = {
+        sessionId: crypto.randomUUID(),
         cwd: '/tmp',
-        contentGeneratorConfig: TEST_CONTENT_GENERATOR_CONFIG,
+        model: TEST_CONTENT_GENERATOR_CONFIG.model,
         embeddingModel: 'test-embedding-model',
-        sandbox: false,
         targetDir: tempDir,
         debugMode: false,
         fileFiltering: {
@@ -145,10 +144,10 @@ describe('Configuration Integration Tests', () => {
 
     it('should handle empty configuration objects gracefully', async () => {
       const configParams: ConfigParameters = {
+        sessionId: crypto.randomUUID(),
         cwd: '/tmp',
-        contentGeneratorConfig: TEST_CONTENT_GENERATOR_CONFIG,
+        model: TEST_CONTENT_GENERATOR_CONFIG.model,
         embeddingModel: 'test-embedding-model',
-        sandbox: false,
         targetDir: tempDir,
         debugMode: false,
         fileFiltering: {},
@@ -164,10 +163,10 @@ describe('Configuration Integration Tests', () => {
 
     it('should handle missing configuration sections gracefully', async () => {
       const configParams: ConfigParameters = {
+        sessionId: crypto.randomUUID(),
         cwd: '/tmp',
-        contentGeneratorConfig: TEST_CONTENT_GENERATOR_CONFIG,
+        model: TEST_CONTENT_GENERATOR_CONFIG.model,
         embeddingModel: 'test-embedding-model',
-        sandbox: false,
         targetDir: tempDir,
         debugMode: false,
         // Missing fileFiltering configuration
@@ -185,10 +184,10 @@ describe('Configuration Integration Tests', () => {
   describe('Real-world Configuration Scenarios', () => {
     it('should handle a security-focused configuration', async () => {
       const configParams: ConfigParameters = {
+        sessionId: crypto.randomUUID(),
         cwd: '/tmp',
-        contentGeneratorConfig: TEST_CONTENT_GENERATOR_CONFIG,
+        model: TEST_CONTENT_GENERATOR_CONFIG.model,
         embeddingModel: 'test-embedding-model',
-        sandbox: false,
         targetDir: tempDir,
         debugMode: false,
         fileFiltering: {
@@ -203,10 +202,10 @@ describe('Configuration Integration Tests', () => {
 
     it('should handle a CI/CD environment configuration', async () => {
       const configParams: ConfigParameters = {
+        sessionId: crypto.randomUUID(),
         cwd: '/tmp',
-        contentGeneratorConfig: TEST_CONTENT_GENERATOR_CONFIG,
+        model: TEST_CONTENT_GENERATOR_CONFIG.model,
         embeddingModel: 'test-embedding-model',
-        sandbox: false,
         targetDir: tempDir,
         debugMode: false,
         fileFiltering: {
@@ -223,10 +222,10 @@ describe('Configuration Integration Tests', () => {
   describe('Checkpointing Configuration', () => {
     it('should enable checkpointing when the setting is true', async () => {
       const configParams: ConfigParameters = {
+        sessionId: crypto.randomUUID(),
         cwd: '/tmp',
-        contentGeneratorConfig: TEST_CONTENT_GENERATOR_CONFIG,
+        model: TEST_CONTENT_GENERATOR_CONFIG.model,
         embeddingModel: 'test-embedding-model',
-        sandbox: false,
         targetDir: tempDir,
         debugMode: false,
         checkpointing: true,
@@ -241,10 +240,10 @@ describe('Configuration Integration Tests', () => {
   describe('Extension Context Files', () => {
     it('should have an empty array for extension context files by default', () => {
       const configParams: ConfigParameters = {
+        sessionId: crypto.randomUUID(),
         cwd: '/tmp',
-        contentGeneratorConfig: TEST_CONTENT_GENERATOR_CONFIG,
+        model: TEST_CONTENT_GENERATOR_CONFIG.model,
         embeddingModel: 'test-embedding-model',
-        sandbox: false,
         targetDir: tempDir,
         debugMode: false,
       };
@@ -255,10 +254,10 @@ describe('Configuration Integration Tests', () => {
     it('should correctly store and return extension context file paths', () => {
       const contextFiles = ['/path/to/file1.txt', '/path/to/file2.js'];
       const configParams: ConfigParameters = {
+        sessionId: crypto.randomUUID(),
         cwd: '/tmp',
-        contentGeneratorConfig: TEST_CONTENT_GENERATOR_CONFIG,
+        model: TEST_CONTENT_GENERATOR_CONFIG.model,
         embeddingModel: 'test-embedding-model',
-        sandbox: false,
         targetDir: tempDir,
         debugMode: false,
         extensionContextFilePaths: contextFiles,
@@ -269,11 +268,11 @@ describe('Configuration Integration Tests', () => {
   });
 
   describe('Approval Mode Integration Tests', () => {
-    let parseArguments: typeof import('./cliArgParser').parseArguments;
+    let parseArguments: typeof import('./cliArgParser.js').parseArguments;
 
     beforeEach(async () => {
       // Import the argument parsing function for integration testing
-      const { parseArguments: parseArgs } = await import('./cliArgParser');
+      const { parseArguments: parseArgs } = await import('./cliArgParser.js');
       parseArguments = parseArgs;
     });
 
@@ -436,10 +435,10 @@ describe('Configuration Integration Tests', () => {
   });
 
   describe('CLI --set argument parsing', () => {
-    let parseArguments: typeof import('./cliArgParser').parseArguments;
+    let parseArguments: typeof import('./cliArgParser.js').parseArguments;
 
     beforeEach(async () => {
-      const { parseArguments: parseArgs } = await import('./cliArgParser');
+      const { parseArguments: parseArgs } = await import('./cliArgParser.js');
       parseArguments = parseArgs;
     });
 

@@ -104,7 +104,7 @@ describe('MemoryTool', () => {
   const createMemoryTool = (getWorkingDir?: () => string): MemoryTool =>
     new MemoryTool({
       storageService: mockStorageService,
-      settingsService: mockSettingsService,
+      canSaveCore: () => mockSettingsService.get() === true,
       getWorkingDir,
     });
 

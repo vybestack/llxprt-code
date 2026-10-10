@@ -39,8 +39,7 @@ const restoreSchema: CommandArgumentSchema = [
      * Deprecation: Legacy completion removed in favour of schema completer.
      */
     completer: withFuzzyFilter(async (ctx) => {
-      const checkpointDir =
-        ctx.services.config?.storage.getProjectTempCheckpointsDir();
+      const checkpointDir = ctx.services.config?.projectCheckpointsDir;
       if (!checkpointDir) {
         return [];
       }
@@ -89,7 +88,9 @@ function listCheckpoints(jsonFiles: string[]): SlashCommandActionReturn {
 interface ToolCallCheckpoint {
   history?: Parameters<NonNullable<LoadHistory>>[0];
   clientHistory?: Parameters<
-    ReturnType<CliUiRuntime['getAgentClient']>['setHistory']
+    NonNullable<
+      CommandContext['services']['agent']
+    >['agentClient']['setHistory']
   >[0];
   commitHash?: string;
   toolCall: { name: string; args: Record<string, unknown> };
@@ -112,7 +113,9 @@ async function applyCheckpointRestoration(
   }
 
   if (Array.isArray(toolCallData.clientHistory)) {
-    await config.getAgentClient().setHistory(toolCallData.clientHistory);
+    const agent = services.agent;
+    if (!agent) throw new Error('Session agent is unavailable');
+    await agent.setHistory(toolCallData.clientHistory);
   }
 
   if (
@@ -175,7 +178,7 @@ async function restoreAction(
     };
   }
 
-  const checkpointDir = config.storage.getProjectTempCheckpointsDir();
+  const checkpointDir = config.projectCheckpointsDir;
 
   if (!checkpointDir) {
     return {

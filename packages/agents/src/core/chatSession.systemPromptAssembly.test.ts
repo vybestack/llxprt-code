@@ -1,3 +1,7 @@
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
+import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
+import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -16,6 +20,8 @@
  * Subagent persona and interactionMode are covered in
  * subagentRuntimeSetup.assembler.test.ts.
  */
+import { installModelToolFixture } from './__tests__/model-tool-fixture.js';
+const modelTools = installModelToolFixture();
 
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import type {
@@ -38,7 +44,7 @@ import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Age
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
+  createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import {
@@ -57,6 +63,7 @@ interface AssemblyFixture {
   chat: ChatSession;
   historyService: HistoryService;
   settingsService: SettingsService;
+  settingsOwner: SessionSettingsOwner;
   capturedCalls: GenerateChatOptions[];
 }
 
@@ -65,14 +72,15 @@ function buildFixture(
   initialModel: string,
 ): AssemblyFixture {
   const settingsService = new SettingsService();
-  const config = new Config(createConfigParams(settingsService));
-  // The system prompt resolves its model through config.getModel()
-  // (issue #3138), so drive that -- it is what a real `/model` change moves.
-  Object.defineProperty(config, 'getModel', {
-    value: () => settingsService.get('model') as string,
-    configurable: true,
+  const config = new Config({
+    ...createConfigParams(settingsService),
+    provider: 'stub',
+    model: initialModel,
   });
-
+  const { settingsOwner } = createSessionSettingsFixture(
+    config,
+    settingsService,
+  );
   settingsService.set('providers.stub.base-url', 'https://stub.example.com');
   settingsService.set('providers.stub.auth-key', 'stub-api-key');
   settingsService.set('model', initialModel);
@@ -107,7 +115,7 @@ function buildFixture(
 
   const manager = new TestRuntimeProviderManager(providerRuntime);
   manager.setConfig(config);
-  config.setProviderManager(manager);
+  configureProviderRuntimeFactories(config, manager);
   manager.registerProvider(provider);
 
   // Minimal hook stubs so sendMessage does not crash on hook lookups.
@@ -133,7 +141,15 @@ function buildFixture(
   const historyService = new HistoryService();
 
   const view = createAgentRuntimeContext({
-    state: runtimeState,
+    state: {
+      ...runtimeState,
+      get model() {
+        const model = settingsOwner.readSelectedModel();
+        if (model === undefined)
+          throw new Error('Fixture requires a selected model');
+        return model;
+      },
+    },
     history: historyService,
     settings: {
       compressionThreshold: 0.8,
@@ -142,10 +158,15 @@ function buildFixture(
       telemetry: { enabled: false, target: null },
       'reasoning.includeInContext': true,
     },
-    provider: createProviderAdapterFromManager(config.getProviderManager()),
-    telemetry: createTelemetryAdapterFromConfig(config),
-    tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
+    provider: createProviderAdapterFromManager(manager),
+    telemetry: createTelemetryAdapter(
+      config,
+      createSessionSettingsFixture(config).settingsOwner.telemetry,
+    ),
+    tools: createToolRegistryViewFromRegistry(modelTools()),
     providerRuntime,
+    prepareProviderInvocation: (name, parameters, signal) =>
+      captureProviderInvocation(providerRuntime, name, parameters, signal),
   });
 
   const generationConfig: ChatSessionConfig = {
@@ -161,7 +182,13 @@ function buildFixture(
     assembler,
   );
 
-  return { chat, historyService, settingsService, capturedCalls };
+  return {
+    chat,
+    historyService,
+    settingsService,
+    settingsOwner,
+    capturedCalls,
+  };
 }
 
 // -------------------------------------------------------------------------
@@ -186,7 +213,7 @@ describe('ChatSession per-turn system prompt assembly (issue #3136)', () => {
     expect(fx.capturedCalls[0].systemInstruction).toBe('[model=old-model]');
 
     // Simulate /model change
-    fx.settingsService.set('model', 'brand-new-model');
+    fx.settingsOwner.chooseModel('brand-new-model');
 
     // Second turn — must name the NEW model
     await fx.chat.sendMessage({ message: 'second' }, 'p2');
@@ -195,7 +222,7 @@ describe('ChatSession per-turn system prompt assembly (issue #3136)', () => {
     );
 
     // The rendered model must equal what the provider resolves as body.model
-    const providerModel = fx.settingsService.get('model');
+    const providerModel = fx.settingsOwner.readSelectedModel();
     expect(fx.capturedCalls[1].systemInstruction).toContain(
       `[model=${providerModel}]`,
     );
@@ -212,8 +239,7 @@ describe('ChatSession per-turn system prompt assembly (issue #3136)', () => {
     expect(offsetAfterFirst).toBeGreaterThan(0);
 
     // Change to a model name with a very different length
-    fx.settingsService.set(
-      'model',
+    fx.settingsOwner.chooseModel(
       'a-much-longer-model-name-that-changes-token-count-significantly',
     );
 
@@ -242,7 +268,7 @@ describe('ChatSession per-turn system prompt assembly (issue #3136)', () => {
       '[stream model=old-stream-model]',
     );
 
-    fx.settingsService.set('model', 'new-stream-model');
+    fx.settingsOwner.chooseModel('new-stream-model');
 
     const stream2 = await fx.chat.sendMessageStream(
       { message: 'second-stream' },
@@ -269,7 +295,7 @@ describe('ChatSession per-turn system prompt assembly (issue #3136)', () => {
       '[direct model=old-direct-model]',
     );
 
-    fx.settingsService.set('model', 'new-direct-model');
+    fx.settingsOwner.chooseModel('new-direct-model');
 
     await fx.chat.generateDirectMessage({ message: 'second-direct' }, 'pd2');
     expect(fx.capturedCalls[1].systemInstruction).toBe(
@@ -358,7 +384,7 @@ describe('ChatSession per-turn system prompt assembly (issue #3136)', () => {
     };
     const manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
-    config.setProviderManager(manager);
+    configureProviderRuntimeFactories(config, manager);
     manager.registerProvider(provider);
     Object.defineProperties(config, {
       getConversationLoggingEnabled: { value: () => false },
@@ -389,10 +415,15 @@ describe('ChatSession per-turn system prompt assembly (issue #3136)', () => {
         telemetry: { enabled: false, target: null },
         'reasoning.includeInContext': true,
       },
-      provider: createProviderAdapterFromManager(config.getProviderManager()),
-      telemetry: createTelemetryAdapterFromConfig(config),
-      tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
+      provider: createProviderAdapterFromManager(manager),
+      telemetry: createTelemetryAdapter(
+        config,
+        createSessionSettingsFixture(config).settingsOwner.telemetry,
+      ),
+      tools: createToolRegistryViewFromRegistry(modelTools()),
       providerRuntime,
+      prepareProviderInvocation: (name, parameters, signal) =>
+        captureProviderInvocation(providerRuntime, name, parameters, signal),
     });
 
     const chat = new ChatSession(

@@ -4,55 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  describe,
-  it,
-  expect,
-  vi,
-  beforeEach,
-  afterEach,
-  type Mock,
-} from 'bun:test';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { coreEvents, CoreEvent } from '@vybestack/llxprt-code-core';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 
-// Mock external dependencies of applyProfileSnapshot so we can verify
+// Mock external dependencies of profile snapshots so we can verify
 // emission without bootstrapping the entire CLI runtime.
 const realLlxprtCodeSettingsModule = {
   ...(await import('@vybestack/llxprt-code-settings')),
 };
-
-void vi.mock('./runtimeAccessors.js', () => ({
-  getCliRuntimeServices: vi.fn(() => ({
-    config: {},
-    settingsService: { setCurrentProfileName: vi.fn() },
-    providerManager: {},
-  })),
-  maybeGetCliOAuthManager: vi.fn(() => null),
-  getActiveModelName: vi.fn(() => 'test-model'),
-  getActiveModelParams: vi.fn(() => ({})),
-  _internal: {
-    resolveActiveProviderName: vi.fn(() => 'test-provider'),
-    getProviderSettingsSnapshot: vi.fn(() => ({})),
-    getActiveProviderOrThrow: vi.fn(),
-    extractModelParams: vi.fn(() => ({})),
-  },
-}));
-
-void vi.mock('./profileApplication.js', () => ({
-  applyProfileWithGuards: vi.fn(
-    async (profile: { provider: string; model: string }) => ({
-      providerName: profile.provider,
-      modelName: profile.model,
-      infoMessages: [],
-      warnings: [],
-      providerChanged: true,
-      baseUrl: undefined,
-      didFallback: false,
-      requestedProvider: profile.provider,
-    }),
-  ),
-}));
 
 const profileManagerLoadProfileMock = vi.fn();
 
@@ -67,17 +27,35 @@ void vi.mock('@vybestack/llxprt-code-settings', () => {
   };
 });
 
-import {
-  _internal as runtimeAccessorsInternal,
-  getCliRuntimeServices,
-} from './runtimeAccessors.js';
-
 const {
   buildModelProfileInfoPayload,
-  applyProfileSnapshot,
+  finishProfileApplication,
   buildRuntimeProfileSnapshot,
   getProfileByName,
 } = await import('./profileSnapshot.js');
+
+async function publishAppliedProfile(
+  profile: Profile,
+  profileName?: string,
+): Promise<void> {
+  const applied = await finishProfileApplication(
+    profile,
+    { profileName },
+    {
+      providerName: profile.provider,
+      modelName: profile.model,
+      infoMessages: [],
+      warnings: [],
+      providerChanged: true,
+      didFallback: false,
+      requestedProvider: profile.provider,
+    },
+    { setCurrentProfileName: () => {} } as never,
+    null,
+    {} as never,
+  );
+  applied.publish();
+}
 
 describe('buildModelProfileInfoPayload', () => {
   it('builds payload with profile name as displayLabel when profile is active', () => {
@@ -222,7 +200,7 @@ describe('buildModelProfileInfoPayload', () => {
   });
 });
 
-describe('ModelProfileChanged emission from applyProfileSnapshot', () => {
+describe('ModelProfileChanged emission from finished profile application', () => {
   beforeEach(() => {
     coreEvents.removeAllListeners();
     vi.clearAllMocks();
@@ -245,7 +223,7 @@ describe('ModelProfileChanged emission from applyProfileSnapshot', () => {
       ephemeralSettings: {},
     };
 
-    await applyProfileSnapshot(profile, { profileName: 'work' });
+    await publishAppliedProfile(profile, 'work');
 
     expect(listener).toHaveBeenCalledTimes(1);
     expect(listener).toHaveBeenCalledWith(
@@ -270,7 +248,7 @@ describe('ModelProfileChanged emission from applyProfileSnapshot', () => {
       ephemeralSettings: {},
     };
 
-    await applyProfileSnapshot(profile, { profileName: undefined });
+    await publishAppliedProfile(profile);
 
     expect(listener).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -281,7 +259,7 @@ describe('ModelProfileChanged emission from applyProfileSnapshot', () => {
     );
   });
 
-  it('does not emit before applyProfileSnapshot is called', async () => {
+  it('does not emit before the finished profile is published', async () => {
     const listener = vi.fn();
     coreEvents.on(CoreEvent.ModelProfileChanged, listener);
 
@@ -296,7 +274,7 @@ describe('ModelProfileChanged emission from applyProfileSnapshot', () => {
       ephemeralSettings: {},
     };
 
-    await applyProfileSnapshot(profile, { profileName: 'prod' });
+    await publishAppliedProfile(profile, 'prod');
 
     expect(listener).toHaveBeenCalledTimes(1);
   });
@@ -308,38 +286,21 @@ describe('buildRuntimeProfileSnapshot', () => {
   });
 
   it('includes registered reasoning wire settings while excluding internal settings', () => {
-    (
-      getCliRuntimeServices as Mock<typeof getCliRuntimeServices>
-    ).mockReturnValue({
-      config: {
-        getEphemeralSettings: () => ({
-          activeProvider: 'gemini',
-          currentProfile: 'glm',
-          tools: { disabled: ['read_file'] },
-          'context-limit': 190000,
-          'reasoning.effortWireFormat': 'openai-responses',
-          'reasoning.enabledWireFormat': 'openrouter',
-          'reasoning.effortMap': { minimal: 'none', high: 'high' },
-          'reasoning.enabledMap': { false: null },
-        }),
+    const snapshot = buildRuntimeProfileSnapshot({
+      providerName: 'openai',
+      modelName: 'gpt-4o',
+      providerSettings: {},
+      ephemeralSettings: {
+        activeProvider: 'gemini',
+        currentProfile: 'glm',
+        tools: { disabled: ['read_file'] },
+        'context-limit': 190000,
+        'reasoning.effortWireFormat': 'openai-responses',
+        'reasoning.enabledWireFormat': 'openrouter',
+        'reasoning.effortMap': { minimal: 'none', high: 'high' },
+        'reasoning.enabledMap': { false: null },
       },
-      settingsService: { setCurrentProfileName: vi.fn() },
-      providerManager: {},
-    } as ReturnType<typeof getCliRuntimeServices>);
-    (
-      runtimeAccessorsInternal.resolveActiveProviderName as Mock<
-        typeof runtimeAccessorsInternal.resolveActiveProviderName
-      >
-    ).mockReturnValue('openai');
-    (
-      runtimeAccessorsInternal.getProviderSettingsSnapshot as Mock<
-        typeof runtimeAccessorsInternal.getProviderSettingsSnapshot
-      >
-    ).mockReturnValue({
-      model: 'gpt-4o',
     });
-
-    const snapshot = buildRuntimeProfileSnapshot();
 
     expect(snapshot.ephemeralSettings).toMatchObject({
       'context-limit': 190000,
@@ -406,7 +367,9 @@ describe('getProfileByName', () => {
       loadProfileWithBalancerMembers,
     );
 
-    const profile = await getProfileByName('glm');
+    const profile = await getProfileByName('glm', {
+      loadProfile: profileManagerLoadProfileMock,
+    });
 
     expect(profile).toMatchObject({
       type: 'loadbalancer',

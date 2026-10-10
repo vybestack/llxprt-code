@@ -4,10 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { OutputLimitConfig } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 export interface AnthropicMessageConversionOptions {
   isOAuth: boolean;
   reasoningEnabled: boolean;
-  config?: unknown;
+  config?: OutputLimitConfig;
   unprefixToolName: (name: string, isOAuth: boolean) => string;
   logger: { debug: (fn: () => string) => void };
   /**

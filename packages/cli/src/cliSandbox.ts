@@ -4,7 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type Config, ExitCodes } from '@vybestack/llxprt-code-core';
+import {
+  type Config,
+  ExitCodes,
+  WorkspaceFilesystemOwner,
+} from '@vybestack/llxprt-code-core';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { setTuiOwnsTerminal } from '@vybestack/llxprt-code-providers/auth.js';
 import { loadCliConfig } from './config/config.js';
@@ -214,12 +218,22 @@ export async function maybeHopIntoSandbox(
   );
   let exitCode: number;
   try {
-    exitCode = await start_sandbox(
-      sandboxConfig,
-      sandboxMemoryArgs,
-      partialConfig,
-      finalSandboxArgs,
-    );
+    const filesystem = new WorkspaceFilesystemOwner({
+      targetDir: partialConfig.getTargetDir(),
+      includeDirectories: partialConfig.getConfiguredIncludeDirectories(),
+      isTrusted: () => partialConfig.initialWorkspaceTrust ?? true,
+    });
+    try {
+      exitCode = await start_sandbox(
+        sandboxConfig,
+        sandboxMemoryArgs,
+        partialConfig,
+        finalSandboxArgs,
+        () => filesystem.paths.directories(),
+      );
+    } finally {
+      await filesystem.dispose();
+    }
   } finally {
     setTuiOwnsTerminal(false);
   }

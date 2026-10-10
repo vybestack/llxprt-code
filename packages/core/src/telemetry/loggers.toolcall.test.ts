@@ -1,8 +1,15 @@
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import { mkdtempSync, readFileSync, existsSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, dirname } from 'node:path';
+import { z } from 'zod';
+import { afterEach } from 'bun:test';
 /**
  * @license
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { unsupportedApprovalPolicy } from '@vybestack/llxprt-code-mcp/test-support/approval-policy.js';
 
 import type {
   AnyToolInvocation,
@@ -10,50 +17,133 @@ import type {
   ErroredToolCall,
 } from '../index.js';
 import { EditTool, ToolConfirmationOutcome, ToolErrorType } from '../index.js';
-import { logs } from '@opentelemetry/api-logs';
-import type { Config } from '../config/config.js';
+import { Config } from '../config/config.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { SessionSettingsOwner } from '../session/session-settings-owner.js';
+import { WorkspaceFilesystemOwner } from '../services/workspace-filesystem-owner.js';
+import { CoreToolHostAdapter } from '../tools-adapters/CoreToolHostAdapter.js';
 import { EVENT_TOOL_CALL } from '@vybestack/llxprt-code-telemetry/telemetry/constants.js';
 import { logToolCall } from '@vybestack/llxprt-code-telemetry/telemetry/loggers.js';
 import { ToolCallDecision } from '@vybestack/llxprt-code-telemetry/telemetry/tool-call-decision.js';
 import { ToolCallEvent } from '@vybestack/llxprt-code-telemetry/telemetry/types.js';
-import * as metrics from '@vybestack/llxprt-code-telemetry/telemetry/metrics.js';
-import * as sdk from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
 import { vi, describe, beforeEach, it, expect, setSystemTime } from 'bun:test';
-import * as uiTelemetry from './uiTelemetry.js';
+import * as uiTelemetry from '@vybestack/llxprt-code-telemetry/telemetry/uiTelemetry.js';
 import { DiscoveredMCPTool } from '@vybestack/llxprt-code-mcp';
 
-// Mock ClearcutLogger to avoid import errors
-const mockClearcutLogger = {
-  prototype: {
-    logMalformedJsonResponseEvent: vi.fn(),
-    logModelRoutingEvent: vi.fn(),
-    logExtensionInstallEvent: vi.fn(),
-    logExtensionUninstallEvent: vi.fn(),
-    logExtensionEnableEvent: vi.fn(),
-    logExtensionDisableEvent: vi.fn(),
-  },
-};
-
-(globalThis as { ClearcutLogger?: typeof mockClearcutLogger }).ClearcutLogger =
-  mockClearcutLogger;
-
 describe('loggers', () => {
-  const mockLogger = {
-    emit: vi.fn(),
-  };
-  const mockUiEvent = {
-    addEvent: vi.fn(),
-  };
-
-  beforeEach(() => {
-    vi.spyOn(sdk, 'isTelemetrySdkInitialized').mockReturnValue(true);
-    vi.spyOn(logs, 'getLogger').mockReturnValue(mockLogger);
-    vi.spyOn(uiTelemetry.uiTelemetryService, 'addEvent').mockImplementation(
-      mockUiEvent.addEvent,
+  let telemetry: RootTelemetry;
+  let outfile: string;
+  let host: CoreToolHostAdapter;
+  let settings: SessionSettingsOwner;
+  let files: WorkspaceFilesystemOwner;
+  let config: Config;
+  beforeEach(async () => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+    outfile = join(
+      mkdtempSync(join(tmpdir(), 'selected-logger-')),
+      'events.jsonl',
     );
-    vi.useFakeTimers();
+    telemetry = await RootTelemetry.create({
+      sessionId: 'test-session-id',
+      enabled: true,
+      outfile,
+      maxBytes: 1048576,
+      maxFiles: 2,
+      readPrivacySettings: () => ({
+        logPrompts: true,
+        logConversations: false,
+        logApiBodies: false,
+        maxChars: 4000,
+      }),
+    });
+    config = new Config({
+      sessionId: 'test-session-id',
+      cwd: process.cwd(),
+      targetDir: process.cwd(),
+      model: 'test',
+      debugMode: false,
+      telemetry: { enabled: false },
+    });
+    settings = new SessionSettingsOwner(new SettingsService());
+    settings.bindTelemetry(config, telemetry);
+    files = new WorkspaceFilesystemOwner({
+      targetDir: process.cwd(),
+      includeDirectories: [],
+      isTrusted: () => true,
+    });
+    host = new CoreToolHostAdapter(
+      config,
+      files.paths,
+      files.files,
+      files.ignore,
+      files.scans,
+      () => settings.readToolExecutionPolicy(),
+      { isTrustedFolder: () => true, getIdeTrust: () => undefined },
+      telemetry,
+    );
+    uiTelemetry.uiTelemetryService.reset();
     setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
   });
+  afterEach(async () => {
+    await settings.dispose();
+    await files.dispose();
+    await config.dispose();
+    await telemetry.close();
+    rmSync(dirname(outfile), { recursive: true, force: true });
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+  function exportedRecords(): Array<{
+    body?: unknown;
+    attributes: Record<string, unknown>;
+  }> {
+    if (!existsSync(outfile)) return [];
+    return readFileSync(outfile, 'utf8')
+      .split('\n')
+      .filter(Boolean)
+      .flatMap((line) => {
+        const parsed = z
+          .object({
+            body: z.unknown().optional(),
+            attributes: z.record(z.unknown()),
+          })
+          .safeParse(JSON.parse(line));
+        return parsed.success ? [parsed.data] : [];
+      });
+  }
+  async function exportedMetrics(): Promise<
+    Array<{ name: string; points: unknown[] }>
+  > {
+    await telemetry.flush();
+    if (!existsSync(outfile)) return [];
+    const schema = z.object({
+      scopeMetrics: z.array(
+        z.object({
+          metrics: z.array(
+            z.object({
+              descriptor: z.object({ name: z.string() }),
+              dataPoints: z.array(z.unknown()),
+            }),
+          ),
+        }),
+      ),
+    });
+    return readFileSync(outfile, 'utf8')
+      .split('\n')
+      .filter(Boolean)
+      .flatMap((line) => {
+        const parsed = schema.safeParse(JSON.parse(line));
+        return parsed.success
+          ? parsed.data.scopeMetrics.flatMap((scope) =>
+              scope.metrics.map((metric) => ({
+                name: metric.descriptor.name,
+                points: metric.dataPoints,
+              })),
+            )
+          : [];
+      });
+  }
 
   describe('logToolCall', () => {
     const mockConfig = {
@@ -64,20 +154,9 @@ describe('loggers', () => {
       getTelemetryLogPromptsEnabled: () => true,
     } as Config;
 
-    const mockMetrics = {
-      recordToolCallMetrics: vi.fn(),
-    };
-
-    beforeEach(() => {
-      vi.spyOn(metrics, 'recordToolCallMetrics').mockImplementation(
-        mockMetrics.recordToolCallMetrics,
-      );
-      mockLogger.emit.mockReset();
-    });
-
-    it('should log a tool call with all fields', () => {
-      const tool = new EditTool(mockConfig);
-      const call: CompletedToolCall = {
+    it('should log a tool call with all fields', async () => {
+      const tool = new EditTool(host);
+      const call: CompletedToolCall & { startMs?: number; endMs?: number } = {
         status: 'success',
         request: {
           name: 'test-function',
@@ -92,7 +171,7 @@ describe('loggers', () => {
         },
         response: {
           callId: 'test-call-id',
-          responseParts: [{ text: 'test-response' }],
+          responseParts: [{ type: 'text', text: 'test-response' }],
           resultDisplay: {
             fileDiff: 'diff',
             fileName: 'file.txt',
@@ -106,6 +185,7 @@ describe('loggers', () => {
               user_removed_lines: 6,
             },
           },
+
           error: undefined,
           errorType: undefined,
           agentId: 'agent-42',
@@ -113,13 +193,15 @@ describe('loggers', () => {
         tool,
         invocation: {} as AnyToolInvocation,
         durationMs: 100,
+        startMs: 0,
+        endMs: 100,
         outcome: ToolConfirmationOutcome.ProceedOnce,
       };
       const event = new ToolCallEvent(call);
 
-      logToolCall(mockConfig, event);
+      logToolCall(mockConfig, event, telemetry);
 
-      expect(mockLogger.emit).toHaveBeenCalledWith({
+      expect(exportedRecords()).toContainEqual({
         body: 'Tool call: test-function. Decision: accept. Success: true. Duration: 100ms.',
         attributes: {
           'session.id': 'test-session-id',
@@ -138,14 +220,13 @@ describe('loggers', () => {
           success: true,
           status: 'success',
           call_id: 'test-call-id',
-          start_ms: -100,
-          end_ms: 0,
+          start_ms: 0,
+          end_ms: 100,
           decision: ToolCallDecision.ACCEPT,
           prompt_id: 'prompt-id-1',
           tool_type: 'native',
           agent_id: 'agent-42',
-          error: undefined,
-          error_type: undefined,
+
           'metadata.ai_added_lines': '1',
           'metadata.ai_removed_lines': '2',
           'metadata.user_added_lines': '5',
@@ -153,24 +234,54 @@ describe('loggers', () => {
         },
       });
 
-      expect(mockMetrics.recordToolCallMetrics).toHaveBeenCalledWith(
-        mockConfig,
-        'test-function',
-        100,
-        true,
-        ToolCallDecision.ACCEPT,
-        'native',
+      expect(await exportedMetrics()).toContainEqual(
+        expect.objectContaining({
+          name: 'llxprt_code.tool.call.count',
+          points: expect.arrayContaining([
+            expect.objectContaining({
+              value: 1,
+              attributes: {
+                'session.id': 'test-session-id',
+                function_name: 'test-function',
+                decision: ToolCallDecision.ACCEPT,
+                tool_type: 'native',
+                success: true,
+              },
+            }),
+          ]),
+        }),
       );
 
-      expect(mockUiEvent.addEvent).toHaveBeenCalledWith({
-        ...event,
-        'event.name': EVENT_TOOL_CALL,
-        'event.timestamp': '2025-01-01T00:00:00.000Z',
-        agent_id: 'agent-42',
+      expect(await exportedMetrics()).toContainEqual(
+        expect.objectContaining({
+          name: 'llxprt_code.tool.call.latency',
+          points: expect.arrayContaining([
+            expect.objectContaining({
+              value: expect.objectContaining({ sum: 100, count: 1 }),
+              attributes: {
+                'session.id': 'test-session-id',
+                function_name: 'test-function',
+                decision: ToolCallDecision.ACCEPT,
+                tool_type: 'native',
+              },
+            }),
+          ]),
+        }),
+      );
+      expect(
+        uiTelemetry.uiTelemetryService.getMetrics().tools.byName[
+          'test-function'
+        ],
+      ).toMatchObject({
+        count: 1,
+        success: 1,
+        fail: 0,
+        cancelled: 0,
+        durationMs: 100,
       });
     });
-    it('should log a tool call with a reject decision', () => {
-      const call: ErroredToolCall = {
+    it('should log a tool call with a reject decision', async () => {
+      const call: ErroredToolCall & { startMs?: number; endMs?: number } = {
         status: 'error',
         request: {
           name: 'test-function',
@@ -185,20 +296,23 @@ describe('loggers', () => {
         },
         response: {
           callId: 'test-call-id',
-          responseParts: [{ text: 'test-response' }],
+          responseParts: [{ type: 'text', text: 'test-response' }],
           resultDisplay: undefined,
+
           error: undefined,
           errorType: undefined,
           agentId: 'agent-99',
         },
         durationMs: 100,
+        startMs: 0,
+        endMs: 100,
         outcome: ToolConfirmationOutcome.Cancel,
       };
       const event = new ToolCallEvent(call);
 
-      logToolCall(mockConfig, event);
+      logToolCall(mockConfig, event, telemetry);
 
-      expect(mockLogger.emit).toHaveBeenCalledWith({
+      expect(exportedRecords()).toContainEqual({
         body: 'Tool call: test-function. Decision: reject. Success: false. Duration: 100ms.',
         attributes: {
           'session.id': 'test-session-id',
@@ -217,36 +331,64 @@ describe('loggers', () => {
           success: false,
           status: 'error',
           call_id: 'test-call-id',
-          start_ms: -100,
-          end_ms: 0,
+          start_ms: 0,
+          end_ms: 100,
           decision: ToolCallDecision.REJECT,
           prompt_id: 'prompt-id-2',
           tool_type: 'native',
           agent_id: 'agent-99',
-          error: undefined,
-          error_type: undefined,
         },
       });
 
-      expect(mockMetrics.recordToolCallMetrics).toHaveBeenCalledWith(
-        mockConfig,
-        'test-function',
-        100,
-        false,
-        ToolCallDecision.REJECT,
-        'native',
+      expect(await exportedMetrics()).toContainEqual(
+        expect.objectContaining({
+          name: 'llxprt_code.tool.call.count',
+          points: expect.arrayContaining([
+            expect.objectContaining({
+              value: 1,
+              attributes: {
+                'session.id': 'test-session-id',
+                function_name: 'test-function',
+                decision: ToolCallDecision.REJECT,
+                tool_type: 'native',
+                success: false,
+              },
+            }),
+          ]),
+        }),
       );
 
-      expect(mockUiEvent.addEvent).toHaveBeenCalledWith({
-        ...event,
-        'event.name': EVENT_TOOL_CALL,
-        'event.timestamp': '2025-01-01T00:00:00.000Z',
-        agent_id: 'agent-99',
+      expect(await exportedMetrics()).toContainEqual(
+        expect.objectContaining({
+          name: 'llxprt_code.tool.call.latency',
+          points: expect.arrayContaining([
+            expect.objectContaining({
+              value: expect.objectContaining({ sum: 100, count: 1 }),
+              attributes: {
+                'session.id': 'test-session-id',
+                function_name: 'test-function',
+                decision: ToolCallDecision.REJECT,
+                tool_type: 'native',
+              },
+            }),
+          ]),
+        }),
+      );
+      expect(
+        uiTelemetry.uiTelemetryService.getMetrics().tools.byName[
+          'test-function'
+        ],
+      ).toMatchObject({
+        count: 1,
+        success: 0,
+        fail: 1,
+        cancelled: 0,
+        durationMs: 100,
       });
     });
 
-    it('should log a tool call with a modify decision', () => {
-      const call: CompletedToolCall = {
+    it('should log a tool call with a modify decision', async () => {
+      const call: CompletedToolCall & { startMs?: number; endMs?: number } = {
         status: 'success',
         request: {
           name: 'test-function',
@@ -261,22 +403,25 @@ describe('loggers', () => {
         },
         response: {
           callId: 'test-call-id',
-          responseParts: [{ text: 'test-response' }],
+          responseParts: [{ type: 'text', text: 'test-response' }],
           resultDisplay: undefined,
+
           error: undefined,
           errorType: undefined,
           agentId: 'agent-modify',
         },
         outcome: ToolConfirmationOutcome.ModifyWithEditor,
-        tool: new EditTool(mockConfig),
+        tool: new EditTool(host),
         invocation: {} as AnyToolInvocation,
         durationMs: 100,
+        startMs: 0,
+        endMs: 100,
       };
       const event = new ToolCallEvent(call);
 
-      logToolCall(mockConfig, event);
+      logToolCall(mockConfig, event, telemetry);
 
-      expect(mockLogger.emit).toHaveBeenCalledWith({
+      expect(exportedRecords()).toContainEqual({
         body: 'Tool call: test-function. Decision: modify. Success: true. Duration: 100ms.',
         attributes: {
           'session.id': 'test-session-id',
@@ -295,36 +440,64 @@ describe('loggers', () => {
           success: true,
           status: 'success',
           call_id: 'test-call-id',
-          start_ms: -100,
-          end_ms: 0,
+          start_ms: 0,
+          end_ms: 100,
           decision: ToolCallDecision.MODIFY,
           prompt_id: 'prompt-id-3',
           tool_type: 'native',
           agent_id: 'agent-modify',
-          error: undefined,
-          error_type: undefined,
         },
       });
 
-      expect(mockMetrics.recordToolCallMetrics).toHaveBeenCalledWith(
-        mockConfig,
-        'test-function',
-        100,
-        true,
-        ToolCallDecision.MODIFY,
-        'native',
+      expect(await exportedMetrics()).toContainEqual(
+        expect.objectContaining({
+          name: 'llxprt_code.tool.call.count',
+          points: expect.arrayContaining([
+            expect.objectContaining({
+              value: 1,
+              attributes: {
+                'session.id': 'test-session-id',
+                function_name: 'test-function',
+                decision: ToolCallDecision.MODIFY,
+                tool_type: 'native',
+                success: true,
+              },
+            }),
+          ]),
+        }),
       );
 
-      expect(mockUiEvent.addEvent).toHaveBeenCalledWith({
-        ...event,
-        'event.name': EVENT_TOOL_CALL,
-        'event.timestamp': '2025-01-01T00:00:00.000Z',
-        agent_id: 'agent-modify',
+      expect(await exportedMetrics()).toContainEqual(
+        expect.objectContaining({
+          name: 'llxprt_code.tool.call.latency',
+          points: expect.arrayContaining([
+            expect.objectContaining({
+              value: expect.objectContaining({ sum: 100, count: 1 }),
+              attributes: {
+                'session.id': 'test-session-id',
+                function_name: 'test-function',
+                decision: ToolCallDecision.MODIFY,
+                tool_type: 'native',
+              },
+            }),
+          ]),
+        }),
+      );
+      expect(
+        uiTelemetry.uiTelemetryService.getMetrics().tools.byName[
+          'test-function'
+        ],
+      ).toMatchObject({
+        count: 1,
+        success: 1,
+        fail: 0,
+        cancelled: 0,
+        durationMs: 100,
       });
     });
 
-    it('should log a tool call without a decision', () => {
-      const call: CompletedToolCall = {
+    it('should log a tool call without a decision', async () => {
+      const call: CompletedToolCall & { startMs?: number; endMs?: number } = {
         status: 'success',
         request: {
           name: 'test-function',
@@ -339,21 +512,24 @@ describe('loggers', () => {
         },
         response: {
           callId: 'test-call-id',
-          responseParts: [{ text: 'test-response' }],
+          responseParts: [{ type: 'text', text: 'test-response' }],
           resultDisplay: undefined,
+
           error: undefined,
           errorType: undefined,
           agentId: 'agent-nodecision',
         },
-        tool: new EditTool(mockConfig),
+        tool: new EditTool(host),
         invocation: {} as AnyToolInvocation,
         durationMs: 100,
+        startMs: 0,
+        endMs: 100,
       };
       const event = new ToolCallEvent(call);
 
-      logToolCall(mockConfig, event);
+      logToolCall(mockConfig, event, telemetry);
 
-      expect(mockLogger.emit).toHaveBeenCalledWith({
+      expect(exportedRecords()).toContainEqual({
         body: 'Tool call: test-function. Success: true. Duration: 100ms.',
         attributes: {
           'session.id': 'test-session-id',
@@ -372,36 +548,63 @@ describe('loggers', () => {
           success: true,
           status: 'success',
           call_id: 'test-call-id',
-          start_ms: -100,
-          end_ms: 0,
+          start_ms: 0,
+          end_ms: 100,
           decision: undefined,
-          error: undefined,
-          error_type: undefined,
+
           prompt_id: 'prompt-id-4',
           tool_type: 'native',
           agent_id: 'agent-nodecision',
         },
       });
 
-      expect(mockMetrics.recordToolCallMetrics).toHaveBeenCalledWith(
-        mockConfig,
-        'test-function',
-        100,
-        true,
-        undefined,
-        'native',
+      expect(await exportedMetrics()).toContainEqual(
+        expect.objectContaining({
+          name: 'llxprt_code.tool.call.count',
+          points: expect.arrayContaining([
+            expect.objectContaining({
+              value: 1,
+              attributes: {
+                'session.id': 'test-session-id',
+                function_name: 'test-function',
+                tool_type: 'native',
+                success: true,
+              },
+            }),
+          ]),
+        }),
       );
 
-      expect(mockUiEvent.addEvent).toHaveBeenCalledWith({
-        ...event,
-        'event.name': EVENT_TOOL_CALL,
-        'event.timestamp': '2025-01-01T00:00:00.000Z',
-        agent_id: 'agent-nodecision',
+      expect(await exportedMetrics()).toContainEqual(
+        expect.objectContaining({
+          name: 'llxprt_code.tool.call.latency',
+          points: expect.arrayContaining([
+            expect.objectContaining({
+              value: expect.objectContaining({ sum: 100, count: 1 }),
+              attributes: {
+                'session.id': 'test-session-id',
+                function_name: 'test-function',
+                tool_type: 'native',
+              },
+            }),
+          ]),
+        }),
+      );
+      expect(
+        uiTelemetry.uiTelemetryService.getMetrics().tools.byName[
+          'test-function'
+        ],
+      ).toMatchObject({
+        count: 1,
+        success: 1,
+        fail: 0,
+        cancelled: 0,
+        durationMs: 100,
       });
     });
 
-    it('should log a failed tool call with an error', () => {
-      const call: ErroredToolCall = {
+    it('should log a failed tool call with an error', async () => {
+      const call: ErroredToolCall & { startMs?: number; endMs?: number } = {
         status: 'error',
         request: {
           name: 'test-function',
@@ -416,7 +619,7 @@ describe('loggers', () => {
         },
         response: {
           callId: 'test-call-id',
-          responseParts: [{ text: 'test-response' }],
+          responseParts: [{ type: 'text', text: 'test-response' }],
           resultDisplay: undefined,
           error: {
             name: 'test-error-type',
@@ -426,12 +629,14 @@ describe('loggers', () => {
           agentId: 'agent-failure',
         },
         durationMs: 100,
+        startMs: 0,
+        endMs: 100,
       };
       const event = new ToolCallEvent(call);
 
-      logToolCall(mockConfig, event);
+      logToolCall(mockConfig, event, telemetry);
 
-      expect(mockLogger.emit).toHaveBeenCalledWith({
+      expect(exportedRecords()).toContainEqual({
         body: 'Tool call: test-function. Success: false. Duration: 100ms.',
         attributes: {
           'session.id': 'test-session-id',
@@ -450,8 +655,8 @@ describe('loggers', () => {
           success: false,
           status: 'error',
           call_id: 'test-call-id',
-          start_ms: -100,
-          end_ms: 0,
+          start_ms: 0,
+          end_ms: 100,
           decision: undefined,
           error: 'test-error',
           'error.message': 'test-error',
@@ -463,25 +668,54 @@ describe('loggers', () => {
         },
       });
 
-      expect(mockMetrics.recordToolCallMetrics).toHaveBeenCalledWith(
-        mockConfig,
-        'test-function',
-        100,
-        false,
-        undefined,
-        'native',
+      expect(await exportedMetrics()).toContainEqual(
+        expect.objectContaining({
+          name: 'llxprt_code.tool.call.count',
+          points: expect.arrayContaining([
+            expect.objectContaining({
+              value: 1,
+              attributes: {
+                'session.id': 'test-session-id',
+                function_name: 'test-function',
+                tool_type: 'native',
+                success: false,
+              },
+            }),
+          ]),
+        }),
       );
 
-      expect(mockUiEvent.addEvent).toHaveBeenCalledWith({
-        ...event,
-        'event.name': EVENT_TOOL_CALL,
-        'event.timestamp': '2025-01-01T00:00:00.000Z',
-        agent_id: 'agent-failure',
+      expect(await exportedMetrics()).toContainEqual(
+        expect.objectContaining({
+          name: 'llxprt_code.tool.call.latency',
+          points: expect.arrayContaining([
+            expect.objectContaining({
+              value: expect.objectContaining({ sum: 100, count: 1 }),
+              attributes: {
+                'session.id': 'test-session-id',
+                function_name: 'test-function',
+                tool_type: 'native',
+              },
+            }),
+          ]),
+        }),
+      );
+      expect(
+        uiTelemetry.uiTelemetryService.getMetrics().tools.byName[
+          'test-function'
+        ],
+      ).toMatchObject({
+        count: 1,
+        success: 0,
+        fail: 1,
+        cancelled: 0,
+        durationMs: 100,
       });
     });
 
-    it('should log a tool call with mcp_server_name for MCP tools', () => {
+    it('should log a tool call with mcp_server_name for MCP tools', async () => {
       const mockMcpTool = new DiscoveredMCPTool(
+        unsupportedApprovalPolicy(),
         {} as never,
         'mock_mcp_server',
         'mock_mcp_tool',
@@ -496,7 +730,7 @@ describe('loggers', () => {
         },
       );
 
-      const call: CompletedToolCall = {
+      const call: CompletedToolCall & { startMs?: number; endMs?: number } = {
         status: 'success',
         request: {
           name: 'mock_mcp_tool',
@@ -507,20 +741,23 @@ describe('loggers', () => {
         },
         response: {
           callId: 'test-call-id',
-          responseParts: [{ text: 'test-response' }],
+          responseParts: [{ type: 'text', text: 'test-response' }],
           resultDisplay: undefined,
+
           error: undefined,
           errorType: undefined,
         },
         tool: mockMcpTool,
         invocation: {} as AnyToolInvocation,
         durationMs: 100,
+        startMs: 0,
+        endMs: 100,
       };
       const event = new ToolCallEvent(call);
 
-      logToolCall(mockConfig, event);
+      logToolCall(mockConfig, event, telemetry);
 
-      expect(mockLogger.emit).toHaveBeenCalledWith({
+      expect(exportedRecords()).toContainEqual({
         body: 'Tool call: mock_mcp_tool. Success: true. Duration: 100ms.',
         attributes: {
           'session.id': 'test-session-id',
@@ -539,14 +776,12 @@ describe('loggers', () => {
           success: true,
           status: 'success',
           call_id: 'test-call-id',
-          start_ms: -100,
-          end_ms: 0,
+          start_ms: 0,
+          end_ms: 100,
           prompt_id: 'prompt-id',
           tool_type: 'mcp',
           agent_id: 'primary',
           decision: undefined,
-          error: undefined,
-          error_type: undefined,
         },
       });
     });

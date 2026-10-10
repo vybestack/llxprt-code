@@ -63,7 +63,7 @@ void vi.mock('node:v8', () => ({
 
 void vi.mock('../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: () => ({
-    getActiveProviderStatus: () => ({ providerName: 'gemini' }),
+    providerStatus: () => ({ providerName: 'gemini' }),
   }),
 }));
 

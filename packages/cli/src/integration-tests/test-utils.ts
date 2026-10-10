@@ -3,19 +3,63 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import {
+  MCPOAuthTokenStorage,
+  type McpOAuthBinding,
+  type OAuthCredentials,
+} from '@vybestack/llxprt-code-mcp';
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import * as http from 'http';
-import type { Config } from '@vybestack/llxprt-code-core';
+import type {
+  Config,
+  RuntimeProviderManager,
+} from '@vybestack/llxprt-code-core';
 import type { Profile } from '@vybestack/llxprt-code-settings';
-import { MessageBus } from '@vybestack/llxprt-code-core';
 import {
-  createAgentClient,
-  createToolScheduler,
-  createTaskRegistration,
+  fromConfig,
+  type Agent,
+  McpRuntimeOwner,
 } from '@vybestack/llxprt-code-agents';
+import { afterEach } from 'bun:test';
+
+function createTestOAuthBinding(): McpOAuthBinding {
+  let credentials = new Map<string, OAuthCredentials>();
+  return {
+    openBrowser: async () => {
+      throw new Error('Browser was not configured for this test');
+    },
+    tokenStorage: new MCPOAuthTokenStorage({
+      getCredentials: async (name) => credentials.get(name) ?? null,
+      setCredentials: async (value) => {
+        credentials = new Map(credentials).set(value.serverName, value);
+      },
+      deleteCredentials: async (name) => {
+        credentials = new Map(
+          [...credentials].filter(([serverName]) => serverName !== name),
+        );
+      },
+      listServers: async () => [...credentials.keys()],
+      getAllCredentials: async () => new Map(credentials),
+      clearAll: async () => {
+        credentials = new Map();
+      },
+    }),
+  };
+}
+
+const roots = new Set<CliTestSessionRoot>();
+afterEach(async () => {
+  const retiring = [...roots];
+  roots.clear();
+  await Promise.all(retiring.map((root) => root.dispose()));
+});
 
 /**
  * Creates a temporary directory for tests
@@ -47,37 +91,72 @@ export async function cleanupTempDirectory(dir: string): Promise<void> {
     }
   }
 }
-function attachTestAgentFactories(config: Config): void {
-  Object.defineProperties(config, {
-    agentClientFactory: {
-      value: createAgentClient,
-      configurable: true,
-    },
-    toolSchedulerFactory: {
-      value: createToolScheduler,
-      configurable: true,
-    },
-    taskToolRegistration: {
-      value: createTaskRegistration(),
-      configurable: true,
-    },
-  });
+export interface CliTestSessionRoot {
+  readonly config: Config;
+  readonly settingsService: SettingsService;
+  readonly settingsOwner: SessionSettingsOwner;
+  readonly agent: Agent;
+  dispose(): Promise<void>;
 }
 
 export async function initializeTestConfig(
   config: Config,
-): Promise<MessageBus> {
-  attachTestAgentFactories(config);
-  const sessionMessageBus = new MessageBus(
-    config.getPolicyEngine(),
-    config.getDebugMode(),
+  providerManager?: RuntimeProviderManager,
+): Promise<Agent> {
+  return (await initializeTestSessionRoot(config, providerManager)).agent;
+}
+
+export async function initializeTestSessionRoot(
+  config: Config,
+  providerManager?: RuntimeProviderManager,
+  suppliedSettings?: SettingsService,
+): Promise<CliTestSessionRoot> {
+  const settingsService = suppliedSettings ?? new SettingsService();
+  if (suppliedSettings === undefined) {
+    for (const [key, value] of Object.entries(config.getInitialSettings()))
+      settingsService.set(key, value);
+  }
+  const settingsOwner = new SessionSettingsOwner(settingsService);
+  settingsOwner.initializeProviderSelection(
+    config.getProvider(),
+    config.getModel(),
   );
-  await (
-    config as Config & {
-      initialize(dependencies?: { messageBus?: MessageBus }): Promise<void>;
-    }
-  ).initialize({ messageBus: sessionMessageBus });
-  return sessionMessageBus;
+  const policyOwner = new RuntimePolicyOwner(config);
+  const sessionMessageBus = policyOwner.session.messageBus;
+  const mcpOwner = await McpRuntimeOwner.create(
+    createTestOAuthBinding(),
+    config,
+    sessionMessageBus,
+    undefined,
+    undefined,
+    undefined,
+    policyOwner,
+    'runtime',
+  );
+  const agent = await fromConfig({
+    settingsService,
+    settingsOwner,
+    config,
+    providerManager,
+    messageBus: sessionMessageBus,
+    mcpRuntime: mcpOwner,
+    mcpOwnership: 'caller',
+  });
+  const root: CliTestSessionRoot = {
+    config,
+    settingsService,
+    settingsOwner,
+    agent,
+    dispose: async () => {
+      await agent.dispose();
+      await mcpOwner.dispose();
+      await settingsOwner.dispose();
+      await policyOwner.dispose();
+      await config.dispose();
+    },
+  };
+  roots.add(root);
+  return root;
 }
 
 /**

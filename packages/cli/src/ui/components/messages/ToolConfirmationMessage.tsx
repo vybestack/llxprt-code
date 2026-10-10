@@ -9,9 +9,9 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import { Box, Text } from 'ink';
 import { DiffRenderer } from './DiffRenderer.js';
 import { RenderInline } from '../../utils/InlineMarkdownRenderer.js';
-import type { ToolCallConfirmationDetails } from '@vybestack/llxprt-code-core';
 import {
-  IdeClient,
+  type ToolCallConfirmationDetails,
+  type IdeClient,
   ToolConfirmationOutcome,
   hasRedirection,
 } from '@vybestack/llxprt-code-core';
@@ -491,20 +491,11 @@ function useIdeClientState(config: CliUiRuntime): {
   );
 
   useEffect(() => {
-    let isMounted = true;
-    if (config.getIdeMode()) {
-      const getIdeClient = async () => {
-        const client = await IdeClient.getInstance();
-        if (isMounted) {
-          setIdeClient(client);
-          setIsDiffingEnabled(client.isDiffingEnabled());
-        }
-      };
-      void getIdeClient();
-    }
-    return () => {
-      isMounted = false;
-    };
+    if (!config.getIdeMode()) return;
+    const client = config.getIdeClient();
+    if (client === undefined) return;
+    setIdeClient(client);
+    setIsDiffingEnabled(client.isDiffingEnabled());
   }, [config]);
 
   return { ideClient, isDiffingEnabled };

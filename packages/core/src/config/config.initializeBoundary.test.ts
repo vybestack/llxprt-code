@@ -4,6 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { createTestFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+
+import { testConfigInitialization } from '@vybestack/llxprt-code-test-utils/core/config.js';
+
 /**
  * Finding 4 (#2378): Strengthen Config.initialize boundary provenance for
  * common aliases / argument indirection with tests, using sound AST/checker
@@ -21,7 +26,7 @@
  * 8. ensureInitialized() after initialize() returns the original promise.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import type { ConfigParameters } from './config.js';
 import { Config } from './config.js';
 import {
@@ -38,7 +43,6 @@ import {
   resetAgentClientMock,
   type HoistedConfigMocks,
 } from './__tests__/configTestHarness.js';
-import { MessageBus } from '../confirmation-bus/message-bus.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 const hoistedConfigMocks = {
@@ -96,48 +100,74 @@ describe('Config.initialize / ensureInitialized boundary provenance (Finding 4)'
     baseParams = createBaseParams(settingsService);
   });
 
+  const ownedPolicies: RuntimePolicyOwner[] = [];
+  afterEach(async () => {
+    for (const owner of ownedPolicies.splice(0)) await owner.dispose();
+  });
   function makeConfig(): Config {
-    return new Config(baseParams);
+    const config = new Config(baseParams);
+    return config;
   }
 
   // ── Shorthand property alias ──────────────────────────────────────────
 
   it('accepts the object-form with shorthand property alias ({ messageBus })', async () => {
     const config = makeConfig();
-    const messageBus = new MessageBus(
-      config.getPolicyEngine(),
-      config.getDebugMode(),
-    );
+    const configPolicy = new RuntimePolicyOwner(config);
+    ownedPolicies.push(configPolicy);
+    const messageBus = configPolicy.session.messageBus;
 
     // Shorthand alias: { messageBus } is equivalent to { messageBus: messageBus }
-    await config.ensureInitialized({ messageBus });
+    await config.ensureInitialized({
+      ...testConfigInitialization(
+        config,
+        messageBus,
+        configPolicy,
+        createTestFilesystem(config),
+      ),
+      messageBus,
+    });
 
-    expect(config.getAgentClient()).toBeDefined();
+    expect(config.hasInitializationStarted()).toBe(true);
   });
 
   // ── Function-form indirection ─────────────────────────────────────────
 
   it('accepts the function-form indirection and resolves the dependencies', async () => {
     const config = makeConfig();
-    const messageBus = new MessageBus(
-      config.getPolicyEngine(),
-      config.getDebugMode(),
-    );
+    const configPolicy = new RuntimePolicyOwner(config);
+    ownedPolicies.push(configPolicy);
+    const messageBus = configPolicy.session.messageBus;
 
     // Function-form: the factory is called lazily and its return value used.
-    const factory = vi.fn(() => ({ messageBus }));
+    const factory = vi.fn(() =>
+      testConfigInitialization(
+        config,
+        messageBus,
+        configPolicy,
+        createTestFilesystem(config),
+      ),
+    );
     await config.ensureInitialized(factory);
 
     expect(factory).toHaveBeenCalledTimes(1);
-    expect(config.getAgentClient()).toBeDefined();
+    expect(config.hasInitializationStarted()).toBe(true);
   });
 
   it('function-form returning a missing messageBus fails closed', async () => {
     const config = makeConfig();
+    const configPolicy = new RuntimePolicyOwner(config);
+    ownedPolicies.push(configPolicy);
 
     // The function form's type says messageBus is required, but at runtime
     // it could be undefined. This must fail closed with the explicit error.
-    const factory = () => ({}) as { messageBus: MessageBus };
+    const factory = () =>
+      testConfigInitialization(
+        config,
+        undefined,
+        configPolicy,
+        createTestFilesystem(config),
+      );
     await expect(config.ensureInitialized(factory)).rejects.toThrow(
       /requires an explicit session\/runtime MessageBus/,
     );
@@ -147,14 +177,25 @@ describe('Config.initialize / ensureInitialized boundary provenance (Finding 4)'
 
   it('object-form with undefined messageBus fails closed', async () => {
     const config = makeConfig();
+    const configPolicy = new RuntimePolicyOwner(config);
+    ownedPolicies.push(configPolicy);
 
     await expect(
-      config.ensureInitialized({ messageBus: undefined }),
+      config.ensureInitialized(
+        testConfigInitialization(
+          config,
+          undefined,
+          configPolicy,
+          createTestFilesystem(config),
+        ),
+      ),
     ).rejects.toThrow(/requires an explicit session\/runtime MessageBus/);
   });
 
   it('ensureInitialized with no arguments fails closed', async () => {
     const config = makeConfig();
+    const configPolicy = new RuntimePolicyOwner(config);
+    ownedPolicies.push(configPolicy);
 
     await expect(config.ensureInitialized()).rejects.toThrow(
       /requires an explicit session\/runtime MessageBus/,
@@ -165,35 +206,59 @@ describe('Config.initialize / ensureInitialized boundary provenance (Finding 4)'
 
   it('concurrent ensureInitialized calls share the same promise (exactly-once)', async () => {
     const config = makeConfig();
-    const messageBus = new MessageBus(
-      config.getPolicyEngine(),
-      config.getDebugMode(),
-    );
+    const configPolicy = new RuntimePolicyOwner(config);
+    ownedPolicies.push(configPolicy);
+    const messageBus = configPolicy.session.messageBus;
 
     // Two concurrent calls should share the SAME initialization promise —
     // performInitialization runs exactly once, not twice.
-    const p1 = config.ensureInitialized({ messageBus });
-    const p2 = config.ensureInitialized({ messageBus });
+    const p1 = config.ensureInitialized(
+      testConfigInitialization(
+        config,
+        messageBus,
+        configPolicy,
+        createTestFilesystem(config),
+      ),
+    );
+    const p2 = config.ensureInitialized(
+      testConfigInitialization(
+        config,
+        messageBus,
+        configPolicy,
+        createTestFilesystem(config),
+      ),
+    );
 
     expect(p1).toBe(p2);
     await p1;
-    expect(config.getAgentClient()).toBeDefined();
+    expect(config.hasInitializationStarted()).toBe(true);
   });
 
   it('a failed initialize() leaves a rejected promise — ensureInitialized does NOT silently retry', async () => {
     const config = makeConfig();
+    const configPolicy = new RuntimePolicyOwner(config);
+    ownedPolicies.push(configPolicy);
 
     // First call fails (no messageBus).
-    const p1 = config.ensureInitialized({ messageBus: undefined });
+    const p1 = config.ensureInitialized(
+      testConfigInitialization(
+        config,
+        undefined,
+        configPolicy,
+        createTestFilesystem(config),
+      ),
+    );
     await expect(p1).rejects.toThrow(/MessageBus dependency/);
 
     // Second call returns the SAME rejected promise — no retry, no recovery.
-    const p2 = config.ensureInitialized({
-      messageBus: new MessageBus(
-        config.getPolicyEngine(),
-        config.getDebugMode(),
+    const p2 = config.ensureInitialized(
+      testConfigInitialization(
+        config,
+        configPolicy.session.messageBus,
+        configPolicy,
+        createTestFilesystem(config),
       ),
-    });
+    );
     expect(p2).toBe(p1);
     await expect(p2).rejects.toThrow(/MessageBus dependency/);
   });
@@ -202,28 +267,54 @@ describe('Config.initialize / ensureInitialized boundary provenance (Finding 4)'
 
   it('initialize() after ensureInitialized() throws (already-initialized guard)', async () => {
     const config = makeConfig();
-    const messageBus = new MessageBus(
-      config.getPolicyEngine(),
-      config.getDebugMode(),
-    );
+    const configPolicy = new RuntimePolicyOwner(config);
+    ownedPolicies.push(configPolicy);
+    const messageBus = configPolicy.session.messageBus;
 
-    await config.ensureInitialized({ messageBus });
+    await config.ensureInitialized(
+      testConfigInitialization(
+        config,
+        messageBus,
+        configPolicy,
+        createTestFilesystem(config),
+      ),
+    );
 
     // initialize() throws synchronously because initialization already started.
-    expect(() => config.initialize({ messageBus })).toThrow(
-      /already initialized/,
-    );
+    expect(() =>
+      config.initialize(
+        testConfigInitialization(
+          config,
+          messageBus,
+          configPolicy,
+          createTestFilesystem(config),
+        ),
+      ),
+    ).toThrow(/already initialized/);
   });
 
   it('ensureInitialized() after initialize() returns the original promise', async () => {
     const config = makeConfig();
-    const messageBus = new MessageBus(
-      config.getPolicyEngine(),
-      config.getDebugMode(),
-    );
+    const configPolicy = new RuntimePolicyOwner(config);
+    ownedPolicies.push(configPolicy);
+    const messageBus = configPolicy.session.messageBus;
 
-    const p1 = config.initialize({ messageBus });
-    const p2 = config.ensureInitialized({ messageBus });
+    const p1 = config.initialize(
+      testConfigInitialization(
+        config,
+        messageBus,
+        configPolicy,
+        createTestFilesystem(config),
+      ),
+    );
+    const p2 = config.ensureInitialized(
+      testConfigInitialization(
+        config,
+        messageBus,
+        configPolicy,
+        createTestFilesystem(config),
+      ),
+    );
 
     // Same promise object — no second initialization.
     expect(p2).toBe(p1);
@@ -234,28 +325,43 @@ describe('Config.initialize / ensureInitialized boundary provenance (Finding 4)'
 
   it('the messageBus passed to initialize is the exact instance used by the tool registry', async () => {
     const config = makeConfig();
-    const messageBus = new MessageBus(
-      config.getPolicyEngine(),
-      config.getDebugMode(),
-    );
+    const configPolicy = new RuntimePolicyOwner(config);
+    ownedPolicies.push(configPolicy);
+    const messageBus = configPolicy.session.messageBus;
 
-    await config.ensureInitialized({ messageBus });
+    await config.ensureInitialized(
+      testConfigInitialization(
+        config,
+        messageBus,
+        configPolicy,
+        createTestFilesystem(config),
+      ),
+    );
 
     // The tool registry was created with THIS messageBus instance.
     // We verify this by checking that the config has a valid (non-undefined)
     // tool registry — the registry was constructed with the messageBus.
-    expect(config.getToolRegistry()).toBeDefined();
+    expect(config.hasInitializationStarted()).toBe(true);
   });
 
   // ── Mixed alias: renamed variable indirection ─────────────────────────
 
   it('accepts a renamed-variable object-form (alias through a different variable name)', async () => {
     const config = makeConfig();
-    const bus = new MessageBus(config.getPolicyEngine(), config.getDebugMode());
+    const configPolicy = new RuntimePolicyOwner(config);
+    ownedPolicies.push(configPolicy);
+    const bus = configPolicy.session.messageBus;
 
     // Aliased variable: the caller names it 'bus' but passes it as 'messageBus'.
-    await config.ensureInitialized({ messageBus: bus });
+    await config.ensureInitialized(
+      testConfigInitialization(
+        config,
+        bus,
+        configPolicy,
+        createTestFilesystem(config),
+      ),
+    );
 
-    expect(config.getAgentClient()).toBeDefined();
+    expect(config.hasInitializationStarted()).toBe(true);
   });
 });

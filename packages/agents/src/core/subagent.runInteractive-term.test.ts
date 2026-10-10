@@ -1,3 +1,4 @@
+import { createChatPolicyFixture } from './__tests__/session-policy-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -148,6 +149,7 @@ describe('subagent.ts', () => {
     ).mockImplementation(
       () =>
         ({
+          ...createChatPolicyFixture(),
           sendMessageStream: mockSendMessageStream,
           recordCompletedToolCalls: vi.fn(),
           getHistory: vi.fn().mockReturnValue([]),
@@ -171,7 +173,7 @@ describe('subagent.ts', () => {
     const promptConfig: PromptConfig = { systemPrompt: 'Execute task.' };
 
     it('should time out while waiting for interactive tool completion', async () => {
-      const { config } = await createMockConfig();
+      const { config, mcpRuntime } = await createMockConfig();
       // Install fake timers after config creation so config/auth setup runs on
       // real timers; fake timers freeze Date.now/performance.now/hrtime and
       // stop Bun's per-test timeout from firing.
@@ -193,7 +195,10 @@ describe('subagent.ts', () => {
           }),
         },
       });
-      const { overrides } = createRuntimeOverrides({ runtimeBundle });
+      const { overrides } = createRuntimeOverrides(
+        mcpRuntime.workspaceFilesystem.paths,
+        { runtimeBundle },
+      );
 
       const scope = await SubAgentScope.create(
         'interactive-timeout-agent',
@@ -269,7 +274,7 @@ describe('subagent.ts', () => {
 
     const observeTimeOutWhenSchedulerScheduleNeverResolvesAfterEmittingAToolCall =
       async () => {
-        const { config } = await createMockConfig();
+        const { config, mcpRuntime } = await createMockConfig();
         const runConfig: RunConfig = {
           max_time_minutes: 0.001, // 0.06 seconds
           max_turns: 100,
@@ -330,7 +335,10 @@ describe('subagent.ts', () => {
             }),
           },
         });
-        const { overrides } = createRuntimeOverrides({ runtimeBundle });
+        const { overrides } = createRuntimeOverrides(
+          mcpRuntime.workspaceFilesystem.paths,
+          { runtimeBundle },
+        );
 
         const scope = await SubAgentScope.create(
           'hanging-scheduler-agent',

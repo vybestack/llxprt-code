@@ -33,7 +33,10 @@ describe('installNonInteractiveSigintHandler', () => {
       .spyOn(process.stderr, 'write')
       .mockImplementation(() => true);
     vi.spyOn(process, 'on').mockImplementation(
-      (event: string | symbol, listener: (...args: unknown[]) => void) => {
+      (
+        event: string | symbol,
+        listener: Parameters<import('node:events').EventEmitter['on']>[1],
+      ) => {
         if (event === 'SIGINT') {
           capturedSigintListeners.push(listener as () => void);
         }
@@ -41,7 +44,10 @@ describe('installNonInteractiveSigintHandler', () => {
       },
     );
     vi.spyOn(process, 'off').mockImplementation(
-      (event: string | symbol, listener: (...args: unknown[]) => void) => {
+      (
+        event: string | symbol,
+        listener: Parameters<import('node:events').EventEmitter['on']>[1],
+      ) => {
         if (event === 'SIGINT') {
           capturedSigintListeners = capturedSigintListeners.filter(
             (l) => l !== (listener as () => void),

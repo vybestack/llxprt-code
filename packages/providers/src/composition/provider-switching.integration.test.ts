@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { NodeFileSystem } from './IFileSystem.js';
 
 import { describe, it, expect } from 'bun:test';
 import { createProviderManager } from './providerManagerInstance.js';
@@ -14,6 +15,7 @@ function createManager() {
   const settingsService = new SettingsService();
   const runtime = createProviderRuntimeContext({ settingsService });
   const { manager } = createProviderManager(runtime, {
+    fileSystem: new NodeFileSystem(),
     allowBrowserEnvironment: true,
   });
   return manager;

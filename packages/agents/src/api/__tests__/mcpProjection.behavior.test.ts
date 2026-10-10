@@ -24,15 +24,17 @@
  * so the control is constructed plainly with no type-defeating cast.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect } from 'bun:test';
+import type {
+  OAuthCredentials,
+  TokenStorage,
+} from '@vybestack/llxprt-code-mcp';
 import fc from 'fast-check';
 import { McpControl } from '../control/mcpControl.js';
 import type { McpControlDeps } from '../control/mcpControl.js';
 import { getMcpServerOAuthStatus } from '@vybestack/llxprt-code-core';
 import type { McpOAuthStatus } from '@vybestack/llxprt-code-core';
 import { MCPDiscoveryState } from '@vybestack/llxprt-code-core';
-import { mcpServerRequiresOAuth } from '@vybestack/llxprt-code-core';
-import { MCPOAuthTokenStorage } from '@vybestack/llxprt-code-core';
 import { fakeServerConfig } from './helpers/fakeMcpManager.js';
 
 // ─── ProjectionDeps: superset of McpControlDeps + the two P06 closures ─────
@@ -106,6 +108,7 @@ function buildProjectionDeps(
     getMcpRuntimeStatus: () => ({
       servers: opts.servers ?? {},
       discoveryFailures: new Map<string, string>(),
+      serverStates: new Map(),
       discoveryState: MCPDiscoveryState.COMPLETED,
     }),
     ...(fakeManager !== undefined
@@ -140,29 +143,14 @@ function buildProjectionDeps(
   return deps;
 }
 
-// ─── MockTokenStorage (parity block only) ──────────────────────────────────
-//
-// `TokenStorage` and `OAuthCredentials` are NOT on the core barrel, so we define
-// a minimal structural mock implementing exactly what MCPOAuthTokenStorage
-// .setTokenStore requires: the 6 async methods. The credential shape mirrors the
-// real engine (`{ serverName, token: { accessToken, tokenType?, expiresAt? },
-// updatedAt }`). Used ONLY by the PROP-C parity block; the deterministic
-// T20–T27 / PROP-A / PROP-B / PROP-D tests never touch the real store.
+class MockTokenStorage implements TokenStorage {
+  private readonly tokens = new Map<string, OAuthCredentials>();
 
-interface MockCredential {
-  serverName: string;
-  token: { accessToken: string; tokenType?: string; expiresAt?: number };
-  updatedAt: number;
-}
-
-class MockTokenStorage {
-  private readonly tokens = new Map<string, MockCredential>();
-
-  async getCredentials(serverName: string): Promise<MockCredential | null> {
+  async getCredentials(serverName: string): Promise<OAuthCredentials | null> {
     return this.tokens.get(serverName) ?? null;
   }
 
-  async setCredentials(credentials: MockCredential): Promise<void> {
+  async setCredentials(credentials: OAuthCredentials): Promise<void> {
     this.tokens.set(credentials.serverName, {
       ...credentials,
       updatedAt: credentials.updatedAt,
@@ -177,7 +165,7 @@ class MockTokenStorage {
     return Array.from(this.tokens.keys());
   }
 
-  async getAllCredentials(): Promise<Map<string, MockCredential>> {
+  async getAllCredentials(): Promise<Map<string, OAuthCredentials>> {
     return new Map(this.tokens);
   }
 
@@ -203,17 +191,6 @@ async function seedToken(
 }
 
 describe('agent.mcp projection of real persisted OAuth status @plan:PLAN-20260622-MCPOAUTHTRUTH.P05 @requirement:REQ-002,REQ-003,REQ-004,REQ-INT-001,REQ-INT-002', () => {
-  let priorStore: ReturnType<typeof MCPOAuthTokenStorage.getTokenStore>;
-
-  beforeEach(() => {
-    priorStore = MCPOAuthTokenStorage.getTokenStore();
-  });
-
-  afterEach(() => {
-    MCPOAuthTokenStorage.setTokenStore(priorStore);
-    mcpServerRequiresOAuth.clear();
-  });
-
   it('T20 auth("s") with oauthStatus=authenticated, requiresAuth=true, session=false projects the corrected quad @requirement:REQ-002 @scenario:auth-authenticated', async () => {
     const callLog: string[] = [];
     const deps = buildProjectionDeps(callLog, {
@@ -542,11 +519,6 @@ describe('agent.mcp projection of real persisted OAuth status @plan:PLAN-2026062
         authenticated: boolean;
       }> = [];
       const store = new MockTokenStorage();
-      MCPOAuthTokenStorage.setTokenStore(
-        store as unknown as Parameters<
-          typeof MCPOAuthTokenStorage.setTokenStore
-        >[0],
-      );
 
       const now = Date.now();
       // authenticated: non-expired token (well beyond the 5min buffer).
@@ -586,7 +558,11 @@ describe('agent.mcp projection of real persisted OAuth status @plan:PLAN-2026062
             const callLog: string[] = [];
             const deps = buildProjectionDeps(callLog, {
               getOAuthStatusReal: (s: string) =>
-                getMcpServerOAuthStatus(s, spec.opts),
+                getMcpServerOAuthStatus(
+                  s,
+                  spec.opts,
+                  store.getCredentials.bind(store),
+                ),
               requiresAuthByServer: { [spec.server]: spec.opts.requiresOAuth },
               authenticated: session ? [spec.server] : [],
             });
@@ -595,6 +571,7 @@ describe('agent.mcp projection of real persisted OAuth status @plan:PLAN-2026062
             const expected = await getMcpServerOAuthStatus(
               spec.server,
               spec.opts,
+              store.getCredentials.bind(store),
             );
             observations.push({
               actualStatus: result.oauthStatus,

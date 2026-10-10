@@ -29,7 +29,7 @@ import {
   parseErrorResponse,
   type ParseResponsesStreamOptions,
 } from '../openai/parseResponsesStream.js';
-import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
+import type { ResponsesRequest } from './responses-request.js';
 import {
   getErrorStatus,
   isNetworkTransientError,
@@ -83,7 +83,7 @@ export interface StreamResponsesParams {
   abortSignal?: AbortSignal;
   maxStreamingAttempts: number;
   streamRetryInitialDelayMs: number;
-  normalizedOptions: NormalizedGenerateChatOptions;
+  normalizedOptions: ResponsesRequest;
   dumpBaseId?: string;
   dumpMode?: DumpMode;
 }
@@ -97,8 +97,8 @@ interface FetchStreamParams {
   responsesStored: boolean;
   maxStreamingAttempts: number;
   streamRetryInitialDelayMs: number;
-  normalizedOptions: NormalizedGenerateChatOptions;
-  onStreamLiveness?: NormalizedGenerateChatOptions['onStreamLiveness'];
+  normalizedOptions: ResponsesRequest;
+  onStreamLiveness?: ResponsesRequest['onStreamLiveness'];
 }
 
 function resolveResponsesContentType(params: { isCodex: boolean }): string {
@@ -224,13 +224,13 @@ export async function buildResponsesHeaders(
   apiKey: string,
   contentType: string,
   isCodex: boolean,
-  options: NormalizedGenerateChatOptions,
+  options: ResponsesRequest,
   deps: ResponsesExecutorDeps,
 ): Promise<Record<string, string>> {
   const headers: Record<string, string> = {
     Authorization: `Bearer ${apiKey}`,
     'Content-Type': contentType,
-    ...(deps.getCustomHeaders(options) ?? {}),
+    ...options.headers,
   };
   if (isCodex) await addCodexHeaders(headers, options, deps);
   return headers;
@@ -238,7 +238,7 @@ export async function buildResponsesHeaders(
 
 async function addCodexHeaders(
   headers: Record<string, string>,
-  options: NormalizedGenerateChatOptions,
+  options: ResponsesRequest,
   deps: ResponsesExecutorDeps,
 ): Promise<void> {
   const accountId = await deps.getCodexAccountId();
@@ -249,7 +249,7 @@ async function addCodexHeaders(
   const sessionId =
     typeof invocationSessionId === 'string' && invocationSessionId.trim() !== ''
       ? invocationSessionId
-      : options.runtime?.runtimeId;
+      : undefined;
   const validSessionId =
     typeof sessionId === 'string' && sessionId.trim() !== ''
       ? sessionId

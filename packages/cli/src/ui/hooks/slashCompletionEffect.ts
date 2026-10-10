@@ -358,24 +358,20 @@ async function fetchForDir(
   at: ReturnType<typeof parseAtPath>,
   cfg: CliUiRuntime | undefined,
 ): Promise<Suggestion[]> {
-  const fds = cfg ? cfg.getFileService() : null;
+  const fds = cfg ? cfg.ignore : null;
   const rec = cfg?.getEnableRecursiveFileSearch() ?? true;
   const fOpts =
     cfg?.getFileFilteringOptions() ?? DEFAULT_FILE_FILTERING_OPTIONS;
   if (at.partialPath.indexOf('/') === -1 && at.prefix && rec) {
-    if (fds) {
-      return findFilesWithGlob(at.prefix, fds, fOpts, dir, cwd);
+    if (cfg) {
+      return findFilesWithGlob(at.prefix, cfg.search, fOpts, dir, cwd);
     }
     return findFilesRecursively(dir, at.prefix, null, fOpts);
   }
   const base = path.resolve(dir, at.baseDirRelative);
   const entries = await fs.readdir(base, { withFileTypes: true });
   const filtered = filterEntriesByPrefix(entries, at.prefix).filter(
-    (e) =>
-      fds?.shouldIgnoreFile(
-        path.relative(dir, path.join(base, e.name)),
-        fOpts,
-      ) !== true,
+    (e) => fds?.shouldIgnoreFile(path.join(base, e.name), fOpts) !== true,
   );
   return mapEntriesToSuggestions(filtered, base, dir, cwd);
 }

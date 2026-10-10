@@ -34,7 +34,7 @@ export function extractModelParamsFromOptions(
 ): Record<string, unknown> | undefined {
   const modelParams = { ...options.invocation.modelParams };
 
-  const rawMaxOutput = options.settings.get('maxOutputTokens');
+  const rawMaxOutput = options.invocation.getEphemeral('maxOutputTokens');
   const genericMaxOutput =
     typeof rawMaxOutput === 'number' &&
     Number.isFinite(rawMaxOutput) &&
@@ -58,28 +58,18 @@ export function resolveReasoningSettings(
   options: NormalizedGenerateChatOptions,
 ): ReasoningSettings {
   return {
-    enabled:
-      (options.settings.get('reasoning.enabled') as boolean | undefined) ??
-      true,
+    enabled: options.invocation.getEphemeral('reasoning.enabled') ?? true,
     includeInResponse:
-      (options.settings.get('reasoning.includeInResponse') as
-        | boolean
-        | undefined) ?? true,
+      options.invocation.getEphemeral('reasoning.includeInResponse') ?? true,
     includeInContext:
-      (options.settings.get('reasoning.includeInContext') as
-        | boolean
-        | undefined) ?? false,
+      options.invocation.getEphemeral('reasoning.includeInContext') ?? false,
     stripFromContext:
-      (options.settings.get('reasoning.stripFromContext') as
+      (options.invocation.getEphemeral('reasoning.stripFromContext') as
         | StripPolicy
         | undefined) ?? 'all',
-    format:
-      (options.settings.get('reasoning.format') as
-        | 'native'
-        | 'field'
-        | undefined) ?? 'field',
+    format: options.invocation.getEphemeral('reasoning.format') ?? 'field',
     fieldName:
-      (options.settings.get('reasoning.fieldName') as string | undefined) ??
+      options.invocation.getEphemeral('reasoning.fieldName') ??
       'reasoning_content',
   };
 }
@@ -90,8 +80,9 @@ export function resolveReasoningSettings(
 export function resolveStreamingEnabled(
   options: NormalizedGenerateChatOptions,
 ): boolean {
-  const ephemerals = options.invocation.ephemerals;
-  const streamingSetting = ephemerals['streaming'];
+  const streamingSetting =
+    options.invocation.getCliSetting('streaming') ??
+    options.invocation.getEphemeral('streaming');
   const streamingResolved = options.resolved.streaming;
   if (streamingResolved === false) return false;
   if (streamingResolved === true) return true;

@@ -18,27 +18,16 @@ export async function prepareTurnForQuery(
   setThought: (t: null) => void,
   thinkingBlocksRef: React.MutableRefObject<ThinkingBlock[]>,
 ): Promise<void> {
-  const getBucketFailoverHandler = () =>
-    runtime.bucketFailover.getBucketFailoverHandler();
-
   if (!isContinuation) {
     startNewPrompt();
     setThought(null);
     thinkingBlocksRef.current = [];
-    const handler = getBucketFailoverHandler();
-    handler?.reset?.();
-
-    // Invalidate auth cache at turn boundaries for new turns
-    // This ensures tokens updated by other processes are picked up
-    if (handler?.invalidateAuthCache) {
-      const runtimeId = runtime.session.getSessionId();
-      handler.invalidateAuthCache(runtimeId);
-    }
+    runtime.bucketFailover.resetBuckets?.();
   } else {
-    getBucketFailoverHandler()?.resetSession?.();
+    runtime.bucketFailover.resetBucketSession?.();
   }
   try {
-    await getBucketFailoverHandler()?.ensureBucketsAuthenticated?.();
+    await runtime.bucketFailover.ensureBucketsAuthenticated?.();
   } catch {
     // Swallow — partial auth is acceptable.
   }

@@ -36,6 +36,7 @@ import {
   summarizeOldHistory as summarizeOldHistoryHelper,
 } from './historyContextWindow.js';
 import {
+  ChronologyStamper,
   buildChronologyTrace,
   type ChronologyTraceEntry,
 } from './historyChronology.js';
@@ -60,6 +61,48 @@ export type {
  * compression coordination, and serialization.
  */
 export class HistoryService extends HistoryServiceCore {
+  getContentOrigin(content: IContent): object | undefined {
+    return this.contentOrigins.get(content);
+  }
+
+  async prepareProfileAdoption(candidate: HistoryService): Promise<() => void> {
+    await Promise.all([
+      this.waitForTokenUpdates(),
+      candidate.waitForTokenUpdates(),
+      this.waitForOwnershipSettlement(),
+      candidate.waitForOwnershipSettlement(),
+    ]);
+    if (
+      this.historyMutationInProgress ||
+      candidate.historyMutationInProgress ||
+      this.isCompressing ||
+      candidate.isCompressing
+    ) {
+      throw new Error('Profile history adoption requires idle histories');
+    }
+    return () => {
+      this.invalidatePendingSyncs();
+      candidate.invalidatePendingSyncs();
+      this.history = candidate.history;
+      this.totalTokens = candidate.totalTokens;
+      this.baseTokenOffset = candidate.baseTokenOffset;
+      this.tokenizerFactory = candidate.tokenizerFactory;
+      this.tokenizerCache = candidate.tokenizerCache;
+      this.activeTokenizationModel = candidate.activeTokenizationModel;
+      this.activeTokenizationProvider = candidate.activeTokenizationProvider;
+      this.chronology = candidate.chronology;
+      this.cacheAnchorSeq = candidate.cacheAnchorSeq;
+      this.mediaOwner = candidate.mediaOwner;
+      candidate.mediaOwner = undefined;
+      candidate.history = [];
+      candidate.totalTokens = 0;
+      candidate.baseTokenOffset = 0;
+      candidate.tokenizerCache = new Map();
+      candidate.chronology = new ChronologyStamper();
+      candidate.cacheAnchorSeq = 0;
+    };
+  }
+
   /**
    * Immutably replace a single tool_response block with a replacement
    * tool_response block, preserving callId/toolName invariants.
@@ -224,6 +267,7 @@ export class HistoryService extends HistoryServiceCore {
     }
 
     this.history = [];
+    this.contentOrigins.clear();
     this.totalTokens = 0;
     this.baseTokenOffset = 0;
     this.isCompressing = false;
@@ -266,6 +310,7 @@ export class HistoryService extends HistoryServiceCore {
 
     const previousTokens = this.totalTokens;
     this.history = [];
+    this.contentOrigins.clear();
     this.totalTokens = 0;
     // Chronology counters are intentionally NOT reset on clear (NG8): seq must
     // never be reused so items added after a clear never collide with earlier ones.
@@ -305,6 +350,7 @@ export class HistoryService extends HistoryServiceCore {
     if (last === content) {
       const previous = [...this.history];
       this.history.pop();
+      this.contentOrigins.delete(content);
       this.enqueueSynchronousOwnershipReconcile(previous, () => this.history);
       return true;
     }
@@ -316,6 +362,7 @@ export class HistoryService extends HistoryServiceCore {
     const previous = [...this.history];
     const removed = this.history.pop();
     if (removed) {
+      this.contentOrigins.delete(removed);
       this.enqueueSynchronousOwnershipReconcile(previous, () => this.history);
       // Recalculate tokens since we removed content
       // This is less efficient but ensures accuracy
@@ -511,10 +558,10 @@ export class HistoryService extends HistoryServiceCore {
    * Mark compression as starting
    * This will cause add() operations to queue until compression completes
    */
-  startCompression(): void {
+  startCompression(origin?: object): void {
     this.logger.debug('Starting compression - locking history');
     this.isCompressing = true;
-    this.emit('compressionStarted');
+    this.emit('compressionStarted', origin);
   }
 
   /**
@@ -523,7 +570,11 @@ export class HistoryService extends HistoryServiceCore {
    * When summary and itemsCompressed are provided, emits a compressionEnded
    * event so the recording service can log the compression.
    */
-  endCompression(summary?: IContent, itemsCompressed?: number): void {
+  endCompression(
+    summary?: IContent,
+    itemsCompressed?: number,
+    origin?: object,
+  ): void {
     this.logger.debug('Compression complete - unlocking history', {
       pendingCount: this.pendingOperations.length,
     });
@@ -537,10 +588,10 @@ export class HistoryService extends HistoryServiceCore {
       // suppression window), then the streaming content after them (#3264). When
       // nothing is in flight this executes inline, behavior unchanged.
       this.runSynchronousHistoryMutation(() => {
-        this.emit('compressionLockReleased');
+        this.emit('compressionLockReleased', origin);
 
         if (summary && itemsCompressed !== undefined) {
-          this.emit('compressionEnded', summary, itemsCompressed);
+          this.emit('compressionEnded', summary, itemsCompressed, origin);
         }
       });
     });

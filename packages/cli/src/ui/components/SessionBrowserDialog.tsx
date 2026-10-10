@@ -18,7 +18,7 @@ import type {
 } from '@vybestack/llxprt-code-core';
 
 import { SemanticColors } from '../colors.js';
-import type { PerformResumeResult } from '../../services/performResume.js';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import { useResponsive } from '../hooks/useResponsive.js';
 import { useKeypress } from '../hooks/useKeypress.js';
 import { useSessionBrowser } from '../hooks/useSessionBrowser.js';
@@ -38,8 +38,14 @@ export interface SessionBrowserDialogProps {
   currentSessionId: string;
   hasActiveConversation: boolean;
   activeRecording?: SessionRecordingService | null;
+  ownerAgent?: Agent;
   mediaStore?: LocalMediaStore;
-  onSelect: (target: ContinueTarget) => Promise<PerformResumeResult>;
+  onSelect: (
+    target: ContinueTarget,
+  ) => Promise<
+    | { ok: true; history?: unknown; metadata?: unknown; warnings?: unknown }
+    | { ok: false; error: string }
+  >;
   onClose: () => void;
 }
 
@@ -655,6 +661,7 @@ export function SessionBrowserDialog(
     currentSessionId,
     hasActiveConversation,
     activeRecording,
+    ownerAgent,
     mediaStore,
     onSelect,
     onClose,
@@ -667,6 +674,7 @@ export function SessionBrowserDialog(
     currentSessionId,
     onSelect,
     activeRecording,
+    ownerAgent,
     mediaStore,
     onClose,
     hasActiveConversation,

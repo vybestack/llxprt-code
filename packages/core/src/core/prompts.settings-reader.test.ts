@@ -29,32 +29,14 @@ import {
   initializePromptSystem,
   type CoreSystemPromptOptions,
 } from './prompts.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { SessionSettingsOwner } from '../session/session-settings-owner.js';
 import { UNCONFIGURED_PROVIDER } from '../config/models.js';
 import { __resetManifestCacheForTests } from '../prompt-config/defaults/manifest-loader.js';
 import process from 'node:process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-
-interface PromptSettingsReader {
-  get(key: string): unknown;
-  getAllGlobalSettings(): Record<string, unknown>;
-}
-
-function readerFrom(overrides: {
-  values?: Record<string, unknown>;
-  onGet?: (key: string) => unknown;
-}): PromptSettingsReader {
-  return {
-    get: (key: string) => {
-      if (overrides.onGet) {
-        return overrides.onGet(key);
-      }
-      return overrides.values?.[key];
-    },
-    getAllGlobalSettings: () => ({ ...(overrides.values ?? {}) }),
-  };
-}
 
 describe('getCoreSystemPromptAsync with explicit settings reader', () => {
   let tempDir: string;
@@ -78,47 +60,43 @@ describe('getCoreSystemPromptAsync with explicit settings reader', () => {
     __resetManifestCacheForTests();
   });
 
-  it('resolves the active provider from the explicit reader when no provider option is passed', async () => {
-    const settings = readerFrom({
-      values: { activeProvider: 'reader-provider' },
+  it('uses the selected session provider rather than another store during prompt assembly', async () => {
+    const selected = new SessionSettingsOwner(new SettingsService());
+    const peer = new SessionSettingsOwner(new SettingsService());
+    selected.initializeProviderSelection('reader-provider', 'prompt-model');
+    peer.initializeProviderSelection('peer-provider', 'prompt-model');
+    const prompt = await getCoreSystemPromptAsync({
+      provider: selected.readSelectedProvider(),
+      policy: selected.readRuntimePolicy().promptPolicy,
     });
-
-    const prompt = await getCoreSystemPromptAsync({ settings });
-
     expect(prompt).toContain('via reader-provider.');
+    expect(prompt).not.toContain('via peer-provider.');
     expect(prompt).not.toContain(UNCONFIGURED_PROVIDER);
   });
 
-  it('falls back to the unconfigured sentinel when the reader is absent', async () => {
+  it('falls back to the unconfigured sentinel when no selected provider is supplied', async () => {
     const options: CoreSystemPromptOptions = {};
-
     const prompt = await getCoreSystemPromptAsync(options);
-
     expect(prompt).toContain(UNCONFIGURED_PROVIDER);
   });
 
-  it('uses the catch-branch defaults when the explicit reader throws', async () => {
-    const settings = readerFrom({
-      onGet: () => {
-        throw new Error('reader unavailable');
-      },
-    });
-
-    const prompt = await getCoreSystemPromptAsync({ settings });
-
-    expect(prompt).toContain(UNCONFIGURED_PROVIDER);
+  it('rejects assembly from a closed session instead of silently changing provider identity', () => {
+    const owner = new SessionSettingsOwner(new SettingsService());
+    owner.initializeProviderSelection('reader-provider', 'prompt-model');
+    owner.closeAdmission();
+    expect(() => owner.readSelectedProvider()).toThrow(
+      'Session settings owner is closed',
+    );
   });
 
-  it('an explicit provider option still wins over the reader value', async () => {
-    const settings = readerFrom({
-      values: { activeProvider: 'reader-provider' },
-    });
-
+  it('uses the explicit request route for prompt assembly while preserving session selection', async () => {
+    const owner = new SessionSettingsOwner(new SettingsService());
+    owner.initializeProviderSelection('reader-provider', 'prompt-model');
     const prompt = await getCoreSystemPromptAsync({
       provider: 'explicit-option',
-      settings,
+      policy: owner.readRuntimePolicy().promptPolicy,
     });
-
     expect(prompt).toContain('via explicit-option.');
+    expect(owner.readSelectedProvider()).toBe('reader-provider');
   });
 });

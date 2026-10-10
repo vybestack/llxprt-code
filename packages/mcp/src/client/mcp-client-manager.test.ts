@@ -3,6 +3,15 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { installTestCatalogOwners } from '@vybestack/llxprt-code-test-utils/core/config.js';
+const createTestCatalogOwner = installTestCatalogOwners();
+import {
+  createExtensionManager,
+  createManagerWithContext,
+} from './__tests__/manager-fixtures.js';
+import { createTestOAuthBinding } from './test-support/index.js';
+
+import { unsupportedApprovalPolicy } from './test-support/approval-policy.js';
 
 import {
   advanceTimersByTimeAsync,
@@ -15,11 +24,9 @@ import {
 } from './mcp-client-manager.js';
 import { McpClient } from './mcp-client.js';
 import { MCPDiscoveryState } from './mcp-client.js';
-import type { Config } from './test-support/mcpClientTestSupport.js';
+import type { Config as BaseConfig } from './test-support/mcpClientTestSupport.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import type { PromptRegistry } from './test-support/mcpClientTestSupport.js';
-import type { ResourceRegistry } from './test-support/mcpClientTestSupport.js';
-import type { WorkspaceContext } from './test-support/mcpClientTestSupport.js';
+
 import type { LlxprtExtension } from './test-support/mcpClientTestSupport.js';
 import { EventEmitter } from 'node:events';
 import { MCP_CLIENT_UPDATE_EVENT } from '../host/hostServices.js';
@@ -49,29 +56,29 @@ describe('McpClientManager', () => {
     (
       McpClient as unknown as Mock<(...args: never[]) => unknown>
     ).mockReturnValue(mockedMcpClient as unknown as McpClient);
+    const mockConfigCatalog = createTestCatalogOwner();
+    const mockConfigPrompts = mockConfigCatalog.promptPublication;
+    const mockConfigResources = mockConfigCatalog.resourcePublication;
     const mockConfig = {
       isTrustedFolder: () => true,
       getMcpServers: () => ({
         'test-server': {},
       }),
       getMcpServerCommand: () => '',
-      getPromptRegistry: () => ({}) as PromptRegistry,
-      getResourceRegistry: () => ({}) as ResourceRegistry,
+
       getDebugMode: () => false,
-      getWorkspaceContext: () => ({}) as WorkspaceContext,
+
       getEnableExtensionReloading: () => false,
-      getExtensionEvents: () => undefined,
       getAllowedMcpServers: () => undefined,
       getBlockedMcpServers: () => undefined,
-      getAgentClient: () => ({
-        isInitialized: () => false,
-      }),
+
       refreshMcpContext: vi.fn(),
     } as unknown as Config;
-    const manager = new McpClientManager(
-      '0.0.1',
+    const manager = createManagerWithContext(
       {} as ToolRegistry,
       mockConfig,
+      mockConfigPrompts,
+      mockConfigResources,
     );
     await manager.startConfiguredMcpServers();
     expect(mockedMcpClient.connect).toHaveBeenCalledOnce();
@@ -91,6 +98,9 @@ describe('McpClientManager', () => {
       McpClient as unknown as Mock<(...args: never[]) => unknown>
     ).mockReturnValue(mockedMcpClient as unknown as McpClient);
     const refreshMcpContext = vi.fn();
+    const mockConfigCatalog = createTestCatalogOwner();
+    const mockConfigPrompts = mockConfigCatalog.promptPublication;
+    const mockConfigResources = mockConfigCatalog.resourcePublication;
     const mockConfig = {
       isTrustedFolder: () => true,
       getMcpServers: () => ({
@@ -99,23 +109,20 @@ describe('McpClientManager', () => {
         'server-3': {},
       }),
       getMcpServerCommand: () => '',
-      getPromptRegistry: () => ({}) as PromptRegistry,
-      getResourceRegistry: () => ({}) as ResourceRegistry,
+
       getDebugMode: () => false,
-      getWorkspaceContext: () => ({}) as WorkspaceContext,
+
       getEnableExtensionReloading: () => false,
-      getExtensionEvents: () => undefined,
       getAllowedMcpServers: () => undefined,
       getBlockedMcpServers: () => undefined,
-      getAgentClient: () => ({
-        isInitialized: () => false,
-      }),
+
       refreshMcpContext,
     } as unknown as Config;
-    const manager = new McpClientManager(
-      '0.0.1',
+    const manager = createManagerWithContext(
       {} as ToolRegistry,
       mockConfig,
+      mockConfigPrompts,
+      mockConfigResources,
     );
     await manager.startConfiguredMcpServers();
 
@@ -139,11 +146,13 @@ describe('McpClientManager', () => {
         getStatus: vi.fn(),
         getServerConfig: vi.fn().mockReturnValue({}),
       };
-      let onToolsUpdated: ConstructorParameters<typeof McpClient>[9];
+      let onToolsUpdated: ConstructorParameters<typeof McpClient>[11];
       (
         McpClient as unknown as Mock<(...args: never[]) => unknown>
       ).mockImplementation(
         (
+          _oauth,
+          _approvalPolicy,
           _serverName,
           _serverConfig,
           _toolRegistry,
@@ -160,14 +169,22 @@ describe('McpClientManager', () => {
         },
       );
       const refreshMcpContext = vi.fn();
+      const mockConfigCatalog = createTestCatalogOwner();
+      const mockConfigPrompts = {
+        ...mockConfigCatalog.promptPublication,
+        ...{ registerPrompt: vi.fn(), removePromptsByServer: vi.fn() },
+      };
+      const mockConfigResources = {
+        ...mockConfigCatalog.resourcePublication,
+        ...{ setResourcesForServer: vi.fn(), removeResourcesByServer: vi.fn() },
+      };
       const mockConfig = {
         isTrustedFolder: () => true,
         getMcpServers: () => ({ 'test-server': {} }),
         getMcpServerCommand: () => '',
-        getPromptRegistry: () => ({ removePromptsByServer: vi.fn() }),
-        getResourceRegistry: () => ({ removeResourcesByServer: vi.fn() }),
+
         getDebugMode: () => false,
-        getWorkspaceContext: () => ({}) as WorkspaceContext,
+
         getAllowedMcpServers: () => undefined,
         getBlockedMcpServers: () => undefined,
         refreshMcpContext,
@@ -175,7 +192,12 @@ describe('McpClientManager', () => {
       const toolRegistry = {
         removeMcpToolsByServer: vi.fn(),
       } as unknown as ToolRegistry;
-      const manager = new McpClientManager('0.0.1', toolRegistry, mockConfig);
+      const manager = createManagerWithContext(
+        toolRegistry,
+        mockConfig,
+        mockConfigPrompts,
+        mockConfigResources,
+      );
       await manager.startConfiguredMcpServers();
       refreshMcpContext.mockClear();
 
@@ -196,7 +218,7 @@ describe('McpClientManager', () => {
   it('retries a context refresh requested while a failed refresh is pending', async () => {
     vi.useFakeTimers();
     try {
-      let onToolsUpdated: ConstructorParameters<typeof McpClient>[9];
+      let onToolsUpdated: ConstructorParameters<typeof McpClient>[11];
       const mockedMcpClient = {
         connect: vi.fn(),
         discover: vi.fn(),
@@ -210,6 +232,8 @@ describe('McpClientManager', () => {
         McpClient as unknown as Mock<(...args: never[]) => unknown>
       ).mockImplementation(
         (
+          _oauth,
+          _approvalPolicy,
           _serverName,
           _serverConfig,
           _toolRegistry,
@@ -226,22 +250,31 @@ describe('McpClientManager', () => {
         },
       );
       const refreshMcpContext = vi.fn().mockResolvedValue(undefined);
+      const mockConfigCatalog = createTestCatalogOwner();
+      const mockConfigPrompts = {
+        ...mockConfigCatalog.promptPublication,
+        ...{ registerPrompt: vi.fn(), removePromptsByServer: vi.fn() },
+      };
+      const mockConfigResources = {
+        ...mockConfigCatalog.resourcePublication,
+        ...{ setResourcesForServer: vi.fn(), removeResourcesByServer: vi.fn() },
+      };
       const mockConfig = {
         isTrustedFolder: () => true,
         getMcpServers: () => ({ 'test-server': {} }),
         getMcpServerCommand: () => '',
-        getPromptRegistry: () => ({ removePromptsByServer: vi.fn() }),
-        getResourceRegistry: () => ({ removeResourcesByServer: vi.fn() }),
+
         getDebugMode: () => false,
-        getWorkspaceContext: () => ({}) as WorkspaceContext,
+
         getAllowedMcpServers: () => undefined,
         getBlockedMcpServers: () => undefined,
         refreshMcpContext,
       } as unknown as Config;
-      const manager = new McpClientManager(
-        '0.0.1',
+      const manager = createManagerWithContext(
         { removeMcpToolsByServer: vi.fn() } as unknown as ToolRegistry,
         mockConfig,
+        mockConfigPrompts,
+        mockConfigResources,
       );
       await manager.startConfiguredMcpServers();
       refreshMcpContext.mockClear();
@@ -285,28 +318,27 @@ describe('McpClientManager', () => {
     (
       McpClient as unknown as Mock<(...args: never[]) => unknown>
     ).mockReturnValue(mockedMcpClient as unknown as McpClient);
+    const mockConfigCatalog = createTestCatalogOwner();
+    const mockConfigPrompts = mockConfigCatalog.promptPublication;
+    const mockConfigResources = mockConfigCatalog.resourcePublication;
     const mockConfig = {
       isTrustedFolder: () => false,
       getMcpServers: () => ({
         'test-server': {},
       }),
       getMcpServerCommand: () => '',
-      getPromptRegistry: () => ({}) as PromptRegistry,
-      getResourceRegistry: () => ({}) as ResourceRegistry,
+
       getDebugMode: () => false,
-      getWorkspaceContext: () => ({}) as WorkspaceContext,
+
       getEnableExtensionReloading: () => false,
-      getExtensionEvents: () => undefined,
       getAllowedMcpServers: () => undefined,
       getBlockedMcpServers: () => undefined,
-      getAgentClient: () => ({
-        isInitialized: () => false,
-      }),
     } as unknown as Config;
-    const manager = new McpClientManager(
-      '0.0.1',
+    const manager = createManagerWithContext(
       {} as ToolRegistry,
       mockConfig,
+      mockConfigPrompts,
+      mockConfigResources,
     );
     await manager.startConfiguredMcpServers();
     expect(mockedMcpClient.connect).not.toHaveBeenCalled();
@@ -327,27 +359,29 @@ describe('McpClientManager', () => {
     // Simulate the real initialization order: agentClient is created AFTER
     // Promise.all([startConfiguredMcpServers(), extensionLoader.start()]),
     // so getAgentClient() returns undefined during MCP discovery.
+    const mockConfigCatalog = createTestCatalogOwner();
+    const mockConfigPrompts = mockConfigCatalog.promptPublication;
+    const mockConfigResources = mockConfigCatalog.resourcePublication;
     const mockConfig = {
       isTrustedFolder: () => true,
       getMcpServers: () => ({
         'test-server': {},
       }),
       getMcpServerCommand: () => '',
-      getPromptRegistry: () => ({}) as PromptRegistry,
-      getResourceRegistry: () => ({}) as ResourceRegistry,
+
       getDebugMode: () => false,
-      getWorkspaceContext: () => ({}) as WorkspaceContext,
+
       getEnableExtensionReloading: () => false,
-      getExtensionEvents: () => undefined,
       getAllowedMcpServers: () => undefined,
       getBlockedMcpServers: () => undefined,
-      getAgentClient: () => undefined,
+
       refreshMcpContext: vi.fn(),
     } as unknown as Config;
-    const manager = new McpClientManager(
-      '0.0.1',
+    const manager = createManagerWithContext(
       {} as ToolRegistry,
       mockConfig,
+      mockConfigPrompts,
+      mockConfigResources,
     );
 
     // This must resolve, not hang forever
@@ -357,7 +391,7 @@ describe('McpClientManager', () => {
     expect(mockedMcpClient.discover).toHaveBeenCalledOnce();
   });
 
-  describe('getMcpInstructions', () => {
+  describe('readInstructions', () => {
     it('should aggregate instructions from all connected servers', async () => {
       const mockedMcpClient1 = {
         connect: vi.fn(),
@@ -385,6 +419,9 @@ describe('McpClientManager', () => {
         return client as unknown as McpClient;
       });
 
+      const mockConfigCatalog = createTestCatalogOwner();
+      const mockConfigPrompts = mockConfigCatalog.promptPublication;
+      const mockConfigResources = mockConfigCatalog.resourcePublication;
       const mockConfig = {
         isTrustedFolder: () => true,
         getMcpServers: () => ({
@@ -392,28 +429,25 @@ describe('McpClientManager', () => {
           'server-2': {},
         }),
         getMcpServerCommand: () => '',
-        getPromptRegistry: () => ({}) as PromptRegistry,
-        getResourceRegistry: () => ({}) as ResourceRegistry,
+
         getDebugMode: () => false,
-        getWorkspaceContext: () => ({}) as WorkspaceContext,
+
         getEnableExtensionReloading: () => false,
-        getExtensionEvents: () => undefined,
         getAllowedMcpServers: () => undefined,
         getBlockedMcpServers: () => undefined,
-        getAgentClient: () => ({
-          isInitialized: () => false,
-        }),
+
         refreshMcpContext: vi.fn(),
       } as unknown as Config;
 
-      const manager = new McpClientManager(
-        '0.0.1',
+      const manager = createManagerWithContext(
         {} as ToolRegistry,
         mockConfig,
+        mockConfigPrompts,
+        mockConfigResources,
       );
       await manager.startConfiguredMcpServers();
 
-      const instructions = manager.getMcpInstructions();
+      const instructions = manager.readInstructions();
       expect(instructions).toContain(
         "The following are instructions provided by the tool server 'server-1':",
       );
@@ -440,34 +474,34 @@ describe('McpClientManager', () => {
         McpClient as unknown as Mock<(...args: never[]) => unknown>
       ).mockReturnValue(mockedMcpClient as unknown as McpClient);
 
+      const mockConfigCatalog = createTestCatalogOwner();
+      const mockConfigPrompts = mockConfigCatalog.promptPublication;
+      const mockConfigResources = mockConfigCatalog.resourcePublication;
       const mockConfig = {
         isTrustedFolder: () => true,
         getMcpServers: () => ({
           'test-server': {},
         }),
         getMcpServerCommand: () => '',
-        getPromptRegistry: () => ({}) as PromptRegistry,
-        getResourceRegistry: () => ({}) as ResourceRegistry,
+
         getDebugMode: () => false,
-        getWorkspaceContext: () => ({}) as WorkspaceContext,
+
         getEnableExtensionReloading: () => false,
-        getExtensionEvents: () => undefined,
         getAllowedMcpServers: () => undefined,
         getBlockedMcpServers: () => undefined,
-        getAgentClient: () => ({
-          isInitialized: () => false,
-        }),
+
         refreshMcpContext: vi.fn(),
       } as unknown as Config;
 
-      const manager = new McpClientManager(
-        '0.0.1',
+      const manager = createManagerWithContext(
         {} as ToolRegistry,
         mockConfig,
+        mockConfigPrompts,
+        mockConfigResources,
       );
       await manager.startConfiguredMcpServers();
 
-      const instructions = manager.getMcpInstructions();
+      const instructions = manager.readInstructions();
       expect(instructions).toBe('');
     });
 
@@ -500,6 +534,9 @@ describe('McpClientManager', () => {
         return client as unknown as McpClient;
       });
 
+      const mockConfigCatalog = createTestCatalogOwner();
+      const mockConfigPrompts = mockConfigCatalog.promptPublication;
+      const mockConfigResources = mockConfigCatalog.resourcePublication;
       const mockConfig = {
         isTrustedFolder: () => true,
         getMcpServers: () => ({
@@ -507,28 +544,25 @@ describe('McpClientManager', () => {
           'server-without-instructions': {},
         }),
         getMcpServerCommand: () => '',
-        getPromptRegistry: () => ({}) as PromptRegistry,
-        getResourceRegistry: () => ({}) as ResourceRegistry,
+
         getDebugMode: () => false,
-        getWorkspaceContext: () => ({}) as WorkspaceContext,
+
         getEnableExtensionReloading: () => false,
-        getExtensionEvents: () => undefined,
         getAllowedMcpServers: () => undefined,
         getBlockedMcpServers: () => undefined,
-        getAgentClient: () => ({
-          isInitialized: () => false,
-        }),
+
         refreshMcpContext: vi.fn(),
       } as unknown as Config;
 
-      const manager = new McpClientManager(
-        '0.0.1',
+      const manager = createManagerWithContext(
         {} as ToolRegistry,
         mockConfig,
+        mockConfigPrompts,
+        mockConfigResources,
       );
       await manager.startConfiguredMcpServers();
 
-      const instructions = manager.getMcpInstructions();
+      const instructions = manager.readInstructions();
       expect(instructions).toContain(
         "The following are instructions provided by the tool server 'server-with-instructions':",
       );
@@ -555,27 +589,31 @@ describe('McpClientManager', () => {
       (
         McpClient as unknown as Mock<(...args: never[]) => unknown>
       ).mockReturnValue(mockedMcpClient as unknown as McpClient);
+      const mockConfigCatalog = createTestCatalogOwner();
+      const mockConfigPrompts = mockConfigCatalog.promptPublication;
+      const mockConfigResources = mockConfigCatalog.resourcePublication;
       const mockConfig = {
         isTrustedFolder: () => true,
         getMcpServers: () => servers,
         getMcpServerCommand: () => '',
-        getPromptRegistry: () => ({}) as PromptRegistry,
-        getResourceRegistry: () => ({}) as ResourceRegistry,
+
         getDebugMode: () => false,
-        getWorkspaceContext: () => ({}) as WorkspaceContext,
+
         getEnableExtensionReloading: () => false,
-        getExtensionEvents: () => undefined,
         getAllowedMcpServers: () => undefined,
         getBlockedMcpServers: () => undefined,
-        getAgentClient: () => ({
-          isInitialized: () => false,
-        }),
+
         refreshMcpContext: vi.fn(),
       } as unknown as Config;
       const manager = new McpClientManager(
+        createTestOAuthBinding(),
+        unsupportedApprovalPolicy(),
         '0.0.1',
         {} as ToolRegistry,
+        mockConfigPrompts,
+        mockConfigResources,
         mockConfig,
+        mockConfig.refreshMcpContext,
         eventEmitter,
       );
       return { manager, eventEmitter, mockedMcpClient, mockConfig };
@@ -646,27 +684,27 @@ describe('McpClientManager', () => {
       (
         McpClient as unknown as Mock<(...args: never[]) => unknown>
       ).mockReturnValue(mockedMcpClient as unknown as McpClient);
+      const mockConfigCatalog = createTestCatalogOwner();
+      const mockConfigPrompts = mockConfigCatalog.promptPublication;
+      const mockConfigResources = mockConfigCatalog.resourcePublication;
       const mockConfig = {
         isTrustedFolder: () => false,
         getMcpServers: () => ({ 'test-server': {} }),
         getMcpServerCommand: () => '',
-        getPromptRegistry: () => ({}) as PromptRegistry,
-        getResourceRegistry: () => ({}) as ResourceRegistry,
+
         getDebugMode: () => false,
-        getWorkspaceContext: () => ({}) as WorkspaceContext,
+
         getEnableExtensionReloading: () => false,
-        getExtensionEvents: () => undefined,
         getAllowedMcpServers: () => undefined,
         getBlockedMcpServers: () => undefined,
-        getAgentClient: () => ({
-          isInitialized: () => false,
-        }),
+
         refreshMcpContext: vi.fn(),
       } as unknown as Config;
-      const manager = new McpClientManager(
-        '0.0.1',
+      const manager = createManagerWithContext(
         {} as ToolRegistry,
         mockConfig,
+        mockConfigPrompts,
+        mockConfigResources,
       );
 
       await manager.startConfiguredMcpServers();
@@ -678,50 +716,6 @@ describe('McpClientManager', () => {
   });
 
   // Shared helpers for extension-based discovery tests (issue #2325 + #2516).
-  const createExtensionManager = (
-    mockedMcpClient?: Record<string, ReturnType<typeof vi.fn>>,
-    servers: Record<string, unknown> = {},
-  ) => {
-    if (mockedMcpClient !== undefined) {
-      (
-        McpClient as unknown as Mock<(...args: never[]) => unknown>
-      ).mockReturnValue(mockedMcpClient as unknown as McpClient);
-    }
-    const promptRegistry = {
-      removePromptsByServer: vi.fn(),
-    } as unknown as PromptRegistry;
-    const resourceRegistry = {
-      removeResourcesByServer: vi.fn(),
-    } as unknown as ResourceRegistry;
-    const toolRegistry = {
-      removeMcpToolsByServer: vi.fn(),
-    } as unknown as ToolRegistry;
-    const mockConfig = {
-      isTrustedFolder: () => true,
-      getMcpServers: () => servers,
-      getMcpServerCommand: () => '',
-      getPromptRegistry: () => promptRegistry,
-      getResourceRegistry: () => resourceRegistry,
-      getDebugMode: () => false,
-      getWorkspaceContext: () => ({}) as WorkspaceContext,
-      getEnableExtensionReloading: () => false,
-      getExtensionEvents: () => undefined,
-      getAllowedMcpServers: () => undefined,
-      getBlockedMcpServers: () => undefined,
-      getAgentClient: () => ({
-        isInitialized: () => false,
-      }),
-      refreshMcpContext: vi.fn(),
-    } as unknown as Config;
-    const manager = new McpClientManager('0.0.1', toolRegistry, mockConfig);
-    return {
-      manager,
-      mockConfig,
-      promptRegistry,
-      resourceRegistry,
-      toolRegistry,
-    };
-  };
 
   const makeTestExtension = (): LlxprtExtension =>
     ({
@@ -735,7 +729,9 @@ describe('McpClientManager', () => {
 
   describe('startExtension background discovery (issue #2325)', () => {
     it('should not block startExtension on MCP server discovery (issue #2325)', async () => {
-      let resolveConnect: () => void;
+      let resolveConnect: () => void = () => {
+        throw new Error('Deferred connect not constructed');
+      };
       const connectPromise = new Promise<void>((resolve) => {
         resolveConnect = resolve;
       });
@@ -903,3 +899,5 @@ describe('McpClientManager', () => {
     });
   });
 });
+
+type Config = BaseConfig & { refreshMcpContext(): Promise<void> };

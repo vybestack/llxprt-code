@@ -7,7 +7,6 @@
 import { describe, expect, it, vi } from 'bun:test';
 import type { OAuthProvider } from './types.js';
 import {
-  mockGetCurrentProfileName,
   createIssue1468Fixture,
   mockLoadProfile,
   mockFetchAnthropicUsage,
@@ -15,9 +14,9 @@ import {
 
 describe('Issue #1468 getProfileBuckets case 11', () => {
   it('falls back to the unscoped foreground session bucket for anthropic usage lookups when no scoped bucket exists', async () => {
-    const { tokenStore, manager } = createIssue1468Fixture();
+    const { tokenStore, manager, settingsService } = createIssue1468Fixture();
 
-    mockGetCurrentProfileName.mockReturnValue('opusthinkingbucketed');
+    settingsService.setCurrentProfileName('opusthinkingbucketed');
     mockLoadProfile.mockResolvedValue({
       provider: 'claudecode',
       auth: {

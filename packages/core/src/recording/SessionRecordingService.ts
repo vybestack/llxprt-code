@@ -24,11 +24,17 @@
  * file materialization, and graceful ENOSPC handling.
  */
 
+import {
+  publishRecordedMedia,
+  containsRecordedMedia,
+} from '../storage/recorded-media-transfer.js';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import {
   mkdirSync,
   existsSync,
+  writeFileSync,
+  unlinkSync,
   watch,
   watchFile,
   unwatchFile,
@@ -429,9 +435,12 @@ export class SessionRecordingService {
     const now = new Date();
     const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-');
     const prefix = this.sessionId.substring(0, SESSION_FILE_ID_PREFIX_LENGTH);
-    const fileName = `session-${timestamp}-${prefix}.jsonl`;
-    this.filePath = path.join(this.chatsDir, fileName);
+    const instanceId = crypto.randomUUID();
+    const fileName = `session-${timestamp}-${instanceId}-${prefix}.jsonl`;
+    const filePath = path.join(this.chatsDir, fileName);
     mkdirSync(this.chatsDir, { recursive: true });
+    writeFileSync(filePath, '', { flag: 'wx' });
+    this.filePath = filePath;
     this.startChatsDirWatcher();
   }
 
@@ -508,7 +517,31 @@ export class SessionRecordingService {
    */
   private async writeBatchToFile(lines: string): Promise<boolean> {
     try {
-      await fs.appendFile(this.filePath!, lines, 'utf-8');
+      const filePath = this.filePath!;
+      const records = lines
+        .trimEnd()
+        .split('\n')
+        .map((line): unknown => JSON.parse(line));
+      if (!containsRecordedMedia(records)) {
+        await fs.appendFile(filePath, lines, 'utf-8');
+        return true;
+      }
+      const before = await fs.stat(filePath);
+      await publishRecordedMedia(this.mediaStore, records, async () => {
+        try {
+          await fs.appendFile(filePath, lines, 'utf-8');
+        } catch (error) {
+          try {
+            await fs.truncate(filePath, before.size);
+          } catch (rollbackError) {
+            throw new AggregateError(
+              [error, rollbackError],
+              'Journal rollback failed',
+            );
+          }
+          throw error;
+        }
+      });
       return true;
     } catch (error: unknown) {
       if (this.isDiskSpaceError(error)) {
@@ -707,7 +740,7 @@ export class SessionRecordingService {
   private startChatsDirWatcher(): void {
     if (this.chatsDirWatcher) return;
     try {
-      if (process.platform === 'win32') {
+      if (process.platform === 'win32' || process.platform === 'darwin') {
         const listener = (currentStats: Stats): void => {
           if (currentStats.nlink === 0) {
             this.handleChatsDirChange(this.chatsDir);
@@ -831,9 +864,7 @@ export class SessionRecordingService {
       },
       rollback: () => {
         if (!published || finalized) return;
-        if (this.chatsDirWatcher !== watcherBefore) {
-          this.chatsDirWatcher?.close();
-        }
+        this.rollbackMaterialization(materializedBefore, watcherBefore);
         this.queue = queueBefore;
         this.queueBytes = queueBytesBefore;
         this.preContentBuffer = preContentBefore;
@@ -852,6 +883,18 @@ export class SessionRecordingService {
         this.scheduleDrain();
       },
     };
+  }
+
+  private rollbackMaterialization(
+    wasMaterialized: boolean,
+    watcherBefore: { close(): void } | null,
+  ): void {
+    if (!wasMaterialized && this.filePath !== null) {
+      unlinkSync(this.filePath);
+    }
+    if (this.chatsDirWatcher !== watcherBefore) {
+      this.chatsDirWatcher?.close();
+    }
   }
 
   recordSemanticMediaPurge(

@@ -23,7 +23,6 @@ import { AgentClient } from './client.js';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import { MediaAdmissionService } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
@@ -450,11 +449,7 @@ describe('AgentClient (client.ts)', () => {
         join(tmpdir(), 'client-restore-history-'),
       );
       try {
-        const store = new LocalMediaStore({
-          rootDirectory: join(directory, 'media'),
-          quotaBytes: 1024 * 1024,
-        });
-        client['config'].getLocalMediaStore = () => store;
+        const store = client.mediaStore;
         const initializedChat = client['chat'];
         assertDefined(initializedChat, 'Expected chat');
         const historyService = new HistoryService();
@@ -522,12 +517,10 @@ describe('AgentClient (client.ts)', () => {
       const config = client['config'] as unknown as {
         getUserMemory: () => string;
         getCoreMemory: () => string;
-        getMcpInstructions: () => unknown;
         isInteractive: () => boolean;
       };
       vi.spyOn(config, 'getUserMemory').mockReturnValue('');
       vi.spyOn(config, 'getCoreMemory').mockReturnValue('');
-      vi.spyOn(config, 'getMcpInstructions').mockReturnValue(undefined);
       vi.spyOn(config, 'isInteractive').mockReturnValue(true);
 
       (
@@ -576,12 +569,10 @@ describe('AgentClient (client.ts)', () => {
       const config = client['config'] as unknown as {
         getUserMemory: () => string;
         getCoreMemory: () => string;
-        getMcpInstructions: () => unknown;
         isInteractive: () => boolean;
       };
       vi.spyOn(config, 'getUserMemory').mockReturnValue('');
       vi.spyOn(config, 'getCoreMemory').mockReturnValue('');
-      vi.spyOn(config, 'getMcpInstructions').mockReturnValue(undefined);
       vi.spyOn(config, 'isInteractive').mockReturnValue(false);
 
       (

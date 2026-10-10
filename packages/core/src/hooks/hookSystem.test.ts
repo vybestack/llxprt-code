@@ -4,6 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { SessionStartSource } from './types.js';
+import type { HookSystem as HookSystemType } from './hookSystem.js';
+import {
+  fixtureHookDefinitions,
+  fixtureHookRuntime,
+} from './__tests__/hook-runtime-fixture.js';
 /**
  * @plan:PLAN-20260216-HOOKSYSTEMREWRITE.P03
  * @requirement:HOOK-001,HOOK-002,HOOK-003,HOOK-004,HOOK-005,HOOK-006,HOOK-007,HOOK-008,HOOK-009,HOOK-148
@@ -16,25 +22,10 @@ import type { Storage } from '@vybestack/llxprt-code-settings';
 
 // Mock DebugLogger
 
-const realDebugModule = { ...(await import('../debug/index.js')) };
-const mockDebugLogger = {
-  log: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-  debug: vi.fn(),
-};
-
-void vi.mock('../debug/index.js', () => {
-  // Create a constructor function that returns the mock
-  const DebugLogger = vi.fn().mockImplementation(() => mockDebugLogger);
-  // Add getLogger as a static method
-  DebugLogger.getLogger = vi.fn().mockReturnValue(mockDebugLogger);
-
-  return {
-    ...realDebugModule,
-    DebugLogger,
-  };
-});
+const { DebugLogger: ActualDebugLogger } = await import(
+  '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js'
+);
+const mockDebugLogger = ActualDebugLogger.getLogger('llxprt:core:hooks:system');
 
 // Mock fs for HookRegistry
 void vi.mock('fs', () => ({
@@ -51,12 +42,15 @@ const HookSystemNotInitializedError =
   errorsModule.HookSystemNotInitializedError;
 
 describe('HookSystem', () => {
-  let hookSystem: HookSystem;
+  let hookSystem: HookSystemType;
   let mockConfig: Config;
   let mockStorage: Storage;
 
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.spyOn(mockDebugLogger, 'log');
+    vi.spyOn(mockDebugLogger, 'warn');
+    vi.spyOn(mockDebugLogger, 'debug');
 
     mockStorage = {
       getLlxprtDir: vi.fn().mockReturnValue('/project/.llxprt'),
@@ -80,7 +74,10 @@ describe('HookSystem', () => {
       getSessionRecordingService: vi.fn().mockReturnValue(null),
     } as unknown as Config;
 
-    hookSystem = new HookSystem(mockConfig);
+    hookSystem = new HookSystem(
+      fixtureHookDefinitions(mockConfig),
+      fixtureHookRuntime(mockConfig),
+    );
   });
 
   afterEach(() => {
@@ -194,7 +191,16 @@ describe('HookSystem', () => {
       const toolInput = { param: 'value' };
       await hookSystem.fireBeforeToolEvent('TestTool', toolInput);
 
-      expect(spy).toHaveBeenCalledWith('TestTool', toolInput, undefined);
+      expect(spy).toHaveBeenCalledWith(
+        'TestTool',
+        toolInput,
+        undefined,
+        expect.objectContaining({
+          signal: expect.any(AbortSignal),
+          sessionId: expect.any(Function),
+          transcriptPath: expect.any(Function),
+        }),
+      );
       expect(spy).toHaveBeenCalledTimes(1);
     });
 
@@ -205,10 +211,17 @@ describe('HookSystem', () => {
       const eventHandler = hookSystem.getEventHandler();
       const spy = vi.spyOn(eventHandler, 'fireBeforeModelEvent');
 
-      const llmRequest = { model: 'test-model' };
+      const llmRequest = { model: 'test-model', contents: [] };
       await hookSystem.fireBeforeModelEvent(llmRequest);
 
-      expect(spy).toHaveBeenCalledWith(llmRequest);
+      expect(spy).toHaveBeenCalledWith(
+        llmRequest,
+        expect.objectContaining({
+          signal: expect.any(AbortSignal),
+          sessionId: expect.any(Function),
+          transcriptPath: expect.any(Function),
+        }),
+      );
       expect(spy).toHaveBeenCalledTimes(1);
     });
 
@@ -219,10 +232,17 @@ describe('HookSystem', () => {
       const eventHandler = hookSystem.getEventHandler();
       const spy = vi.spyOn(eventHandler, 'fireSessionStartEvent');
 
-      const context = { source: 'startup' as const };
+      const context = { source: SessionStartSource.Startup };
       await hookSystem.fireSessionStartEvent(context);
 
-      expect(spy).toHaveBeenCalledWith(context);
+      expect(spy).toHaveBeenCalledWith(
+        context,
+        expect.objectContaining({
+          signal: expect.any(AbortSignal),
+          sessionId: expect.any(Function),
+          transcriptPath: expect.any(Function),
+        }),
+      );
       expect(spy).toHaveBeenCalledTimes(1);
     });
 
@@ -246,6 +266,11 @@ describe('HookSystem', () => {
         NotificationType.ToolPermission,
         'Test message',
         details,
+        expect.objectContaining({
+          signal: expect.any(AbortSignal),
+          sessionId: expect.any(Function),
+          transcriptPath: expect.any(Function),
+        }),
       );
       expect(spy).toHaveBeenCalledTimes(1);
     });
@@ -257,14 +282,19 @@ describe('HookSystem', () => {
       const eventHandler = hookSystem.getEventHandler();
       const mockResult = {
         success: true,
-        hookResults: [],
+        allOutputs: [],
+        errors: [],
+        totalDuration: 0,
         finalOutput: undefined,
       };
       vi.spyOn(eventHandler, 'fireBeforeModelEvent').mockResolvedValue(
         mockResult,
       );
 
-      const result = await hookSystem.fireBeforeModelEvent({ model: 'test' });
+      const result = await hookSystem.fireBeforeModelEvent({
+        model: 'test',
+        contents: [],
+      });
 
       expect(result).toBeUndefined();
     });
@@ -294,7 +324,10 @@ describe('HookSystem', () => {
       } as unknown as Config;
 
       // Create new HookSystem with properly mocked config
-      const configuredHookSystem = new HookSystem(configuredMockConfig);
+      const configuredHookSystem = new HookSystem(
+        fixtureHookDefinitions(configuredMockConfig),
+        fixtureHookRuntime(configuredMockConfig),
+      );
       await configuredHookSystem.initialize();
 
       const hooks = configuredHookSystem.getAllHooks();

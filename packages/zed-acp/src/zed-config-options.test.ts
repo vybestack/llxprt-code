@@ -3,16 +3,11 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { Agent } from '@vybestack/llxprt-code-agents';
 
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, expect, it, vi } from 'bun:test';
-import type { Agent } from '@vybestack/llxprt-code-agents';
-import {
-  CoreEvent,
-  coreEvents,
-  type Config,
-  type RuntimeModel,
-} from '@vybestack/llxprt-code-core';
+import { CoreEvent, coreEvents } from '@vybestack/llxprt-code-core';
 import {
   applyZedConfigOption,
   buildZedConfigOptions,
@@ -23,31 +18,30 @@ import {
   zedSessionConfigOptions,
 } from './zed-config-options.js';
 
-function configFixture(values: Record<string, unknown> = {}): Config {
-  const models: RuntimeModel[] = [
-    { id: 'alpha', name: 'Alpha', provider: 'test' },
-    { id: 'beta', name: 'Beta', provider: 'test' },
-  ];
+function configFixture(
+  values: Record<string, unknown> = {},
+): Pick<Agent, 'getEphemeralSetting' | 'setEphemeralSetting'> {
   return {
-    getModel: () => 'alpha',
     getEphemeralSetting: (key: string) => values[key],
     setEphemeralSetting: (key: string, value: unknown) => {
       values[key] = value;
     },
-    getProviderManager: () => ({ getAvailableModels: async () => models }),
-  } as Config;
+  };
 }
+
+const modelCatalogue = {
+  listAvailableModels: async () => [
+    { id: 'alpha', name: 'Alpha', provider: 'test' },
+    { id: 'beta', name: 'Beta', provider: 'test' },
+  ],
+};
 
 describe('Zed config options', () => {
   it('maps active-provider models and current settings to strict ACP selects', async () => {
     const options = await buildZedConfigOptions(
       {
+        listAvailableModels: modelCatalogue.listAvailableModels,
         getModel: () => 'alpha',
-        getProviderStatus: () => ({
-          provider: 'test',
-          model: 'alpha',
-          authStatus: 'authenticated' as const,
-        }),
       },
       configFixture({ 'reasoning.effort': 'high', emojifilter: 'warn' }),
     );
@@ -71,12 +65,8 @@ describe('Zed config options', () => {
   it('omits the model selector when the agent has no current model', async () => {
     const options = await buildZedConfigOptions(
       {
+        listAvailableModels: modelCatalogue.listAvailableModels,
         getModel: () => '',
-        getProviderStatus: () => ({
-          provider: 'test',
-          model: '',
-          authStatus: 'authenticated' as const,
-        }),
       },
       configFixture(),
     );
@@ -91,13 +81,10 @@ describe('Zed config options', () => {
     const values: Record<string, unknown> = {};
     const options = await applyZedConfigOption(
       {
+        listAvailableModels: modelCatalogue.listAvailableModels,
         getModel: () => 'alpha',
-        getProviderStatus: () => ({
-          provider: 'test',
-          model: 'alpha',
-          authStatus: 'authenticated' as const,
-        }),
-      } as unknown as Agent,
+        setModel: async () => undefined,
+      },
       configFixture(values),
       'emojifilter',
       'error',
@@ -115,12 +102,8 @@ describe('Zed config options', () => {
       zedConfigOptionsForClient(
         undefined,
         {
+          listAvailableModels: modelCatalogue.listAvailableModels,
           getModel: () => 'alpha',
-          getProviderStatus: () => ({
-            provider: 'test',
-            model: 'alpha',
-            authStatus: 'authenticated' as const,
-          }),
         },
         config,
       ),
@@ -128,12 +111,8 @@ describe('Zed config options', () => {
     const supported = await zedConfigOptionsForClient(
       { session: { configOptions: true } },
       {
+        listAvailableModels: modelCatalogue.listAvailableModels,
         getModel: () => 'alpha',
-        getProviderStatus: () => ({
-          provider: 'test',
-          model: 'alpha',
-          authStatus: 'authenticated' as const,
-        }),
       },
       config,
     );
@@ -146,12 +125,8 @@ describe('Zed config options', () => {
       zedConfigOptionsForClient(
         { session: { configOptions: false } },
         {
+          listAvailableModels: modelCatalogue.listAvailableModels,
           getModel: () => 'alpha',
-          getProviderStatus: () => ({
-            provider: 'test',
-            model: 'alpha',
-            authStatus: 'authenticated' as const,
-          }),
         },
         config,
       ),
@@ -191,13 +166,9 @@ describe('Zed config options', () => {
         setModel: async (model: string) => {
           currentModel = model;
         },
+        listAvailableModels: modelCatalogue.listAvailableModels,
         getModel: () => currentModel,
-        getProviderStatus: () => ({
-          provider: 'test',
-          model: 'alpha',
-          authStatus: 'authenticated' as const,
-        }),
-      } as unknown as Agent,
+      },
       config,
       'model',
       'beta',
@@ -215,13 +186,9 @@ describe('Zed config options', () => {
         setModel: async () => {
           throw new Error('secret provider diagnostic');
         },
+        listAvailableModels: modelCatalogue.listAvailableModels,
         getModel: () => 'alpha',
-        getProviderStatus: () => ({
-          provider: 'test',
-          model: 'alpha',
-          authStatus: 'authenticated' as const,
-        }),
-      } as unknown as Agent,
+      },
       configFixture(),
       'model',
       'beta',
@@ -239,12 +206,8 @@ describe('Zed config options', () => {
     const sendUpdate = vi.fn(async () => undefined);
     const stop = observeZedConfigOptions(
       {
+        listAvailableModels: modelCatalogue.listAvailableModels,
         getModel: () => 'alpha',
-        getProviderStatus: () => ({
-          provider: 'test',
-          model: 'alpha',
-          authStatus: 'authenticated' as const,
-        }),
       },
       configFixture(),
       sendUpdate,

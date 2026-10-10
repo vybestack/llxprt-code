@@ -290,8 +290,8 @@ describe('ConfirmationCoordinator', () => {
   describe('evaluateAndRoute', () => {
     it('policy ALLOW → approves directly without confirmation prompt', async () => {
       const config = makeMockConfig({
-        getPolicyEngine: vi.fn().mockReturnValue({
-          evaluate: vi.fn().mockReturnValue(PolicyDecision.ALLOW),
+        getPolicyEngineConfig: () => ({
+          defaultDecision: PolicyDecision.ALLOW,
         }),
         getApprovalMode: vi.fn().mockReturnValue(ApprovalMode.DEFAULT),
       });
@@ -311,9 +311,7 @@ describe('ConfirmationCoordinator', () => {
 
     it('policy DENY → sets error status', async () => {
       const config = makeMockConfig({
-        getPolicyEngine: vi.fn().mockReturnValue({
-          evaluate: vi.fn().mockReturnValue(PolicyDecision.DENY),
-        }),
+        getPolicyEngineConfig: () => ({ defaultDecision: PolicyDecision.DENY }),
       });
       const validatingCall = makeValidatingToolCall('call-1');
       const statusMutator = makeStatusMutator();
@@ -330,9 +328,7 @@ describe('ConfirmationCoordinator', () => {
 
     it('YOLO mode → approves directly without confirmation', async () => {
       const config = makeMockConfig({
-        getPolicyEngine: vi.fn().mockReturnValue({
-          evaluate: vi.fn().mockReturnValue(PolicyDecision.ASK),
-        }),
+        getPolicyEngineConfig: () => ({ defaultDecision: PolicyDecision.ASK }),
         getApprovalMode: vi.fn().mockReturnValue(ApprovalMode.YOLO),
         getAllowedTools: vi.fn().mockReturnValue([]),
       });
@@ -357,9 +353,7 @@ describe('ConfirmationCoordinator', () => {
 
     it('non-interactive mode throws when confirmation required', async () => {
       const config = makeMockConfig({
-        getPolicyEngine: vi.fn().mockReturnValue({
-          evaluate: vi.fn().mockReturnValue(PolicyDecision.ASK),
-        }),
+        getPolicyEngineConfig: () => ({ defaultDecision: PolicyDecision.ASK }),
         getApprovalMode: vi.fn().mockReturnValue(ApprovalMode.DEFAULT),
         getAllowedTools: vi.fn().mockReturnValue([]),
         isInteractive: vi.fn().mockReturnValue(false),
@@ -384,9 +378,7 @@ describe('ConfirmationCoordinator', () => {
 
     it('policy ASK + interactive → sets awaiting_approval', async () => {
       const config = makeMockConfig({
-        getPolicyEngine: vi.fn().mockReturnValue({
-          evaluate: vi.fn().mockReturnValue(PolicyDecision.ASK),
-        }),
+        getPolicyEngineConfig: () => ({ defaultDecision: PolicyDecision.ASK }),
         getApprovalMode: vi.fn().mockReturnValue(ApprovalMode.DEFAULT),
         getAllowedTools: vi.fn().mockReturnValue([]),
         isInteractive: vi.fn().mockReturnValue(true),
@@ -426,9 +418,7 @@ describe('ConfirmationCoordinator', () => {
 
     it('UI ProceedOnce publishes one bus response and invokes original onConfirm once', async () => {
       const config = makeMockConfig({
-        getPolicyEngine: vi.fn().mockReturnValue({
-          evaluate: vi.fn().mockReturnValue(PolicyDecision.ASK),
-        }),
+        getPolicyEngineConfig: () => ({ defaultDecision: PolicyDecision.ASK }),
         getApprovalMode: vi.fn().mockReturnValue(ApprovalMode.DEFAULT),
         getAllowedTools: vi.fn().mockReturnValue([]),
         isInteractive: vi.fn().mockReturnValue(true),
@@ -478,9 +468,7 @@ describe('ConfirmationCoordinator', () => {
 
     it('ModifyWithEditor re-confirmation invokes original onConfirm once', async () => {
       const config = makeMockConfig({
-        getPolicyEngine: vi.fn().mockReturnValue({
-          evaluate: vi.fn().mockReturnValue(PolicyDecision.ASK),
-        }),
+        getPolicyEngineConfig: () => ({ defaultDecision: PolicyDecision.ASK }),
         getApprovalMode: vi.fn().mockReturnValue(ApprovalMode.DEFAULT),
         getAllowedTools: vi.fn().mockReturnValue([]),
         isInteractive: vi.fn().mockReturnValue(true),
@@ -551,9 +539,7 @@ describe('ConfirmationCoordinator', () => {
 
     it('shouldConfirmExecute returns false → approves directly', async () => {
       const config = makeMockConfig({
-        getPolicyEngine: vi.fn().mockReturnValue({
-          evaluate: vi.fn().mockReturnValue(PolicyDecision.ASK),
-        }),
+        getPolicyEngineConfig: () => ({ defaultDecision: PolicyDecision.ASK }),
         getApprovalMode: vi.fn().mockReturnValue(ApprovalMode.DEFAULT),
         getAllowedTools: vi.fn().mockReturnValue([]),
         isInteractive: vi.fn().mockReturnValue(true),
@@ -652,7 +638,7 @@ describe('ConfirmationCoordinator', () => {
       ).statusMutator;
       const approveBefore = statusMutator.approve.mock.calls.length;
 
-      messageBus.emit(MessageBusType.TOOL_CONFIRMATION_RESPONSE, {
+      messageBus.publish({
         type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
         correlationId: 'old-corr',
         outcome: ToolConfirmationOutcome.ProceedOnce,

@@ -31,6 +31,8 @@ describe('AllBucketsExhaustedError @plan:PLAN-20260223-ISSUE1598.P07', () => {
       providerName,
       attemptedBuckets,
       lastError,
+      undefined,
+      undefined,
     );
 
     // Assert
@@ -62,6 +64,7 @@ describe('AllBucketsExhaustedError @plan:PLAN-20260223-ISSUE1598.P07', () => {
       attemptedBuckets,
       lastError,
       bucketFailureReasons,
+      undefined,
     );
 
     // Assert
@@ -88,6 +91,8 @@ describe('AllBucketsExhaustedError @plan:PLAN-20260223-ISSUE1598.P07', () => {
       providerName,
       attemptedBuckets,
       lastError,
+      undefined,
+      undefined,
     );
 
     // Assert
@@ -121,6 +126,7 @@ describe('AllBucketsExhaustedError @plan:PLAN-20260223-ISSUE1598.P07', () => {
       attemptedBuckets,
       lastError,
       bucketFailureReasons,
+      undefined,
     );
 
     // Assert - Enhanced message format
@@ -146,6 +152,7 @@ describe('AllBucketsExhaustedError @plan:PLAN-20260223-ISSUE1598.P07', () => {
       attemptedBuckets,
       lastError,
       emptyReasons,
+      undefined,
     );
 
     // Assert - Should be base format without detail section
@@ -171,6 +178,8 @@ describe('AllBucketsExhaustedError @plan:PLAN-20260223-ISSUE1598.P07', () => {
       providerName,
       attemptedBuckets,
       lastError,
+      undefined,
+      undefined,
     );
 
     // Assert
@@ -209,6 +218,7 @@ describe('AllBucketsExhaustedError @plan:PLAN-20260223-ISSUE1598.P07', () => {
       attemptedBuckets,
       lastError,
       bucketFailureReasons,
+      undefined,
     );
 
     // Assert
@@ -240,6 +250,7 @@ describe('AllBucketsExhaustedError @plan:PLAN-20260223-ISSUE1598.P07', () => {
       attemptedBuckets,
       lastError,
       partialReasons,
+      undefined,
     );
 
     // Assert
@@ -263,6 +274,8 @@ describe('AllBucketsExhaustedError @plan:PLAN-20260223-ISSUE1598.P07', () => {
       providerName,
       attemptedBuckets,
       lastError,
+      undefined,
+      undefined,
     );
     const originalMessage = error.message;
 
@@ -293,6 +306,7 @@ describe('AllBucketsExhaustedError @plan:PLAN-20260223-ISSUE1598.P07', () => {
       attemptedBuckets,
       lastError,
       bucketFailureReasons,
+      undefined,
     );
 
     // Assert - All properties should be readable

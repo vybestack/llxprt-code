@@ -14,10 +14,6 @@ const mockRuntime = {
   setActiveToolFormatOverride: vi.fn(),
 };
 
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  getRuntimeApi: () => mockRuntime,
-}));
-
 describe('toolformatCommand', () => {
   let mockContext: CommandContext;
   beforeEach(() => {
@@ -37,7 +33,7 @@ describe('toolformatCommand', () => {
       isAutoDetected: true,
     });
 
-    mockContext = createMockCommandContext();
+    mockContext = createMockCommandContext({ runtimeApi: mockRuntime });
     mockContext.services.settings.merged.providerToolFormatOverrides = {
       openai: 'xml',
     };

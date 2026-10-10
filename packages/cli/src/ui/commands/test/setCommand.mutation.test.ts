@@ -17,16 +17,12 @@ const mockRuntime = {
   clearActiveModelParam: vi.fn(),
 };
 
-void vi.mock('../../contexts/RuntimeContext.js', () => ({
-  getRuntimeApi: () => mockRuntime,
-}));
-
 describe('setCommand action mutation coverage', () => {
   let context: CommandContext;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    context = createMockCommandContext();
+    context = createMockCommandContext({ runtimeApi: mockRuntime });
   });
 
   it('stores numeric context-limit values', async () => {

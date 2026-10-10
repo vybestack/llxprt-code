@@ -1,3 +1,5 @@
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import { CoreToolScheduler } from '../../coreToolScheduler.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -10,6 +12,7 @@ import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import type { LiveOutputUpdate } from '@vybestack/llxprt-code-core';
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
+import { bindSchedulerOwner } from '../../../session/assembleSchedulerOwner.js';
 import { AgenticLoop } from '../AgenticLoop.js';
 import {
   collectEvents,
@@ -68,13 +71,15 @@ describe('AgenticLoop live-output acquisition bound', () => {
       );
 
       const messageBus = new MessageBus(createAllowPolicyEngine(), false);
-      const config = createTestConfig({
-        messageBus,
-        toolRegistry: createToolRegistryForTest([tool]),
-        policyEngine: createAllowPolicyEngine(),
-        interactive: false,
-        approvalMode: ApprovalMode.YOLO,
-      });
+      const toolRegistry = createToolRegistryForTest([tool]);
+      const { config: config, settingsOwner: configSettingsOwner } =
+        createTestConfig({
+          messageBus,
+          toolRegistry,
+          policyEngine: createAllowPolicyEngine(),
+          interactive: false,
+          approvalMode: ApprovalMode.YOLO,
+        });
       const { client } = createScriptedAgentClient([
         [
           toolCallRequestEvent('verbose_tool', 'call-verbose', {}),
@@ -84,7 +89,30 @@ describe('AgenticLoop live-output acquisition bound', () => {
       ]);
 
       const events = await collectEvents(
-        new AgenticLoop({ agentClient: client, config, messageBus }),
+        new AgenticLoop({
+          createSchedulerOwner: bindSchedulerOwner(
+            config,
+            messageBus,
+            config.isInteractive(),
+            toolRegistry,
+            (options) => new CoreToolScheduler(options),
+            () => configSettingsOwner.readToolExecutionPolicy(),
+            () =>
+              configSettingsOwner.readToolGovernance(
+                config.getExcludeTools() ?? [],
+              ),
+            undefined,
+            RootTelemetry.prepare({
+              enabled: false,
+              sessionId: 'isolated-caller-fixture',
+              maxBytes: 1024,
+              maxFiles: 1,
+            }),
+          ),
+          agentClient: client,
+          config,
+          messageBus,
+        }),
         'go',
         new AbortController().signal,
       );

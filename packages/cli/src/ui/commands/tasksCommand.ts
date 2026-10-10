@@ -94,14 +94,8 @@ function getRunningTaskIds(context: CommandContext): string[] {
   if (agent) {
     return agent.tasks.listRunning().map((t) => t.id);
   }
-  const asyncTaskManager = context.services.config?.getAsyncTaskManager();
-  if (!asyncTaskManager) {
-    return [];
-  }
-  return asyncTaskManager
-    .getAllTasks()
-    .filter((t) => t.status === 'running')
-    .map((t) => t.id);
+
+  return [];
 }
 
 function reportTaskNotFound(context: CommandContext, taskId: string): void {
@@ -175,47 +169,6 @@ async function endTaskViaAgent(
   reportCancelResult(context, task.id, await agent.tasks.cancel(task.id));
 }
 
-function endTaskViaAsyncTaskManager(
-  context: CommandContext,
-  taskId: string,
-): void {
-  const asyncTaskManager = context.services.config?.getAsyncTaskManager();
-  if (!asyncTaskManager) {
-    context.ui.addItem(
-      { type: MessageType.ERROR, text: 'AsyncTaskManager not available' },
-      Date.now(),
-    );
-    return;
-  }
-  let task = asyncTaskManager.getTask(taskId);
-  if (!task) {
-    const result = asyncTaskManager.getTaskByPrefix(taskId);
-    if (result.task) {
-      task = result.task;
-    } else if (result.candidates && result.candidates.length > 0) {
-      reportAmbiguous(
-        context,
-        result.candidates.map((c) => c.id),
-      );
-      return;
-    } else {
-      reportTaskNotFound(context, taskId);
-      return;
-    }
-  }
-  if (task.status !== 'running') {
-    context.ui.addItem(
-      {
-        type: MessageType.ERROR,
-        text: `Task ${task.id} is already ${task.status}.`,
-      },
-      Date.now(),
-    );
-    return;
-  }
-  reportCancelResult(context, task.id, asyncTaskManager.cancelTask(task.id));
-}
-
 export const taskCommand: SlashCommand = {
   name: 'task',
   description: 'Manage async background tasks',
@@ -231,52 +184,13 @@ export const taskCommand: SlashCommand = {
           ? agent.tasks.list()
           : undefined;
 
-        // When no agent, fall back to config-level AsyncTaskManager and
-        // project subagent-only tasks into the same display path.
         if (!tasks) {
-          const mgr = context.services.config?.getAsyncTaskManager();
-          if (!mgr) {
-            context.ui.addItem(
-              {
-                type: MessageType.ERROR,
-                text: 'AsyncTaskManager not available',
-              },
-              Date.now(),
-            );
-            return;
-          }
-          const rawTasks = mgr.getAllTasks();
-          if (rawTasks.length === 0) {
-            context.ui.addItem(
-              { type: MessageType.INFO, text: 'No async tasks.' },
-              Date.now(),
-            );
-            return;
-          }
-          const lines: string[] = ['Async Tasks:', ''];
-          for (const raw of rawTasks) {
-            const projected: AgentSubagentTaskInfo = {
-              kind: 'subagent',
-              id: raw.id,
-              subagentName: raw.subagentName,
-              goalPrompt: raw.goalPrompt,
-              status: raw.status,
-              launchedAt: raw.launchedAt,
-              ...(raw.completedAt !== undefined
-                ? { completedAt: raw.completedAt }
-                : {}),
-              ...(raw.error !== undefined ? { error: raw.error } : {}),
-            };
-            lines.push(formatSubagentTask(projected));
-            lines.push('');
-          }
           context.ui.addItem(
-            { type: MessageType.INFO, text: lines.join('\n') },
+            { type: MessageType.ERROR, text: 'Agent tasks not available' },
             Date.now(),
           );
           return;
         }
-
         if (tasks.length === 0) {
           context.ui.addItem(
             { type: MessageType.INFO, text: 'No async tasks.' },
@@ -326,7 +240,10 @@ export const taskCommand: SlashCommand = {
           await endTaskViaAgent(context, agent, taskId);
           return;
         }
-        endTaskViaAsyncTaskManager(context, taskId);
+        context.ui.addItem(
+          { type: MessageType.ERROR, text: 'Agent tasks not available' },
+          Date.now(),
+        );
       },
     },
   ],

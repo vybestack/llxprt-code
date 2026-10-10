@@ -65,22 +65,14 @@ export interface ThinkingTestSetup {
  * buildCallOptions; no ambient install or teardown is needed.
  */
 export function setupThinkingProvider(): ThinkingTestSetup {
-  let ephemeralSettingsGetter: () => Record<string, unknown> = () => ({});
-
   const result = createProviderWithRuntime<AnthropicProvider>(
     ({ settingsService: svc }) => {
       svc.set('auth-key', 'test-api-key');
       svc.set('activeProvider', 'anthropic');
       svc.setProviderSetting('anthropic', 'streaming', 'disabled');
 
-      ephemeralSettingsGetter = () => ({
-        ...svc.getAllGlobalSettings(),
-        ...svc.getProviderSettings('anthropic'),
-      });
-
       return new AnthropicProvider('test-api-key', undefined, {
         ...TEST_PROVIDER_CONFIG,
-        getEphemeralSettings: ephemeralSettingsGetter,
       });
     },
     {
@@ -92,21 +84,6 @@ export function setupThinkingProvider(): ThinkingTestSetup {
   const { provider, runtime: runtimeContext, settingsService } = result;
 
   runtimeContext.config ??= createRuntimeConfigStub(settingsService);
-
-  runtimeContext.config.getEphemeralSettings = () => ({
-    ...settingsService.getAllGlobalSettings(),
-    ...settingsService.getProviderSettings(provider.name),
-  });
-
-  runtimeContext.config.getEphemeralSetting = (key: string) => {
-    const providerValue = settingsService.getProviderSettings(provider.name)[
-      key
-    ];
-    if (providerValue !== undefined) {
-      return providerValue;
-    }
-    return settingsService.get(key);
-  };
 
   // Issue #2616: the runtime context is handed to the provider explicitly via
   // buildCallOptions; no ambient context is installed.

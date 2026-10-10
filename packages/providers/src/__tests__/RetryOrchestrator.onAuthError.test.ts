@@ -12,6 +12,7 @@
  * 3. Uses the handler from config (both runtime.config and options.config)
  */
 
+import { retryOperationFixture } from './retry-operation-fixture.js';
 import { describe, it, expect, vi } from 'bun:test';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
 import type { IProvider, GenerateChatOptions } from '../IProvider.js';
@@ -120,17 +121,16 @@ describe('RetryOrchestrator onAuthError handler', () => {
       initialDelayMs: 10,
     });
 
-    const options: GenerateChatOptions = {
-      contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
-      resolved: {
-        authToken: 'failed-oauth-token-abc123',
+    const options: GenerateChatOptions = retryOperationFixture(
+      {
+        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
+        resolved: {
+          authToken: 'failed-oauth-token-abc123',
+        },
       },
-      runtime: {
-        config: {
-          getOnAuthErrorHandler: () => onAuthErrorHandler,
-        } as unknown as GenerateChatOptions['runtime'],
-      } as unknown as GenerateChatOptions['runtime'],
-    };
+      onAuthErrorHandler,
+      undefined,
+    );
 
     const result = await consumeStream(
       orchestrator.generateChatCompletion(options),
@@ -159,16 +159,17 @@ describe('RetryOrchestrator onAuthError handler', () => {
 
     await expect(
       consumeStream(
-        orchestrator.generateChatCompletion({
-          contents: [
-            { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
-          ],
-          runtime: {
-            config: {
-              getOnAuthErrorHandler: () => ({ handleAuthError }),
+        orchestrator.generateChatCompletion(
+          retryOperationFixture(
+            {
+              contents: [
+                { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+              ],
             },
-          } as GenerateChatOptions['runtime'],
-        }),
+            { handleAuthError },
+            undefined,
+          ),
+        ),
       ),
     ).rejects.toMatchObject({ isRetryable: false });
     expect(handleAuthError).not.toHaveBeenCalled();
@@ -198,17 +199,16 @@ describe('RetryOrchestrator onAuthError handler', () => {
       initialDelayMs: 10,
     });
 
-    const options: GenerateChatOptions = {
-      contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
-      resolved: {
-        authToken: 'revoked-token-xyz789',
+    const options: GenerateChatOptions = retryOperationFixture(
+      {
+        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
+        resolved: {
+          authToken: 'revoked-token-xyz789',
+        },
       },
-      runtime: {
-        config: {
-          getOnAuthErrorHandler: () => onAuthErrorHandler,
-        } as unknown as GenerateChatOptions['runtime'],
-      } as unknown as GenerateChatOptions['runtime'],
-    };
+      onAuthErrorHandler,
+      undefined,
+    );
 
     const result = await consumeStream(
       orchestrator.generateChatCompletion(options),
@@ -229,7 +229,7 @@ describe('RetryOrchestrator onAuthError handler', () => {
    * @fix issue1861
    * Test that onAuthError handler is called from options.config when runtime.config is missing
    */
-  it('should find onAuthError handler from options.config when runtime.config is missing', async () => {
+  it('recovers with an explicit operation without runtime or Config services', async () => {
     const authError = createAuthError(401, 'Unauthorized');
 
     const mockOnAuthError = vi.fn().mockResolvedValue(undefined);
@@ -246,16 +246,18 @@ describe('RetryOrchestrator onAuthError handler', () => {
       initialDelayMs: 10,
     });
 
-    const options: GenerateChatOptions = {
-      contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
-      resolved: {
-        authToken: 'failed-token-123',
+    const options: GenerateChatOptions = retryOperationFixture(
+      {
+        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
+        resolved: {
+          authToken: 'failed-token-123',
+        },
+
+        // No runtime.config set
       },
-      config: {
-        getOnAuthErrorHandler: () => onAuthErrorHandler,
-      } as unknown as GenerateChatOptions['config'],
-      // No runtime.config set
-    };
+      onAuthErrorHandler,
+      undefined,
+    );
 
     const result = await consumeStream(
       orchestrator.generateChatCompletion(options),
@@ -289,14 +291,13 @@ describe('RetryOrchestrator onAuthError handler', () => {
       initialDelayMs: 10,
     });
 
-    const options: GenerateChatOptions = {
-      contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
-      runtime: {
-        config: {
-          getOnAuthErrorHandler: () => onAuthErrorHandler,
-        } as unknown as GenerateChatOptions['runtime'],
-      } as unknown as GenerateChatOptions['runtime'],
-    };
+    const options: GenerateChatOptions = retryOperationFixture(
+      {
+        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
+      },
+      onAuthErrorHandler,
+      undefined,
+    );
 
     const result = await consumeStream(
       orchestrator.generateChatCompletion(options),
@@ -311,7 +312,7 @@ describe('RetryOrchestrator onAuthError handler', () => {
    * @fix issue1861
    * Test that onAuthError handler is NOT called when no handler is configured
    */
-  it('should NOT fail when no onAuthError handler is configured', async () => {
+  it('does not replay an unauthorized request when no recovery operation is configured', async () => {
     const authError = createAuthError(401, 'Unauthorized');
 
     const provider = createTestProvider({
@@ -328,12 +329,9 @@ describe('RetryOrchestrator onAuthError handler', () => {
       // No handler configured
     };
 
-    // Should succeed without throwing
-    const result = await consumeStream(
-      orchestrator.generateChatCompletion(options),
-    );
-
-    expect(result).toHaveLength(1);
+    await expect(
+      consumeStream(orchestrator.generateChatCompletion(options)),
+    ).rejects.toBe(authError);
   });
 
   it('aborts a never-resolving auth refresh without another transport', async () => {
@@ -359,18 +357,16 @@ describe('RetryOrchestrator onAuthError handler', () => {
       maxAttempts: 2,
       initialDelayMs: 0,
     });
-    const config = {
-      getOnAuthErrorHandler: () => ({
-        handleAuthError: async ({ signal }) => {
-          refreshStarted();
-          await waitForRefreshAbort(signal, refreshSettled);
-        },
-      }),
-    } as GenerateChatOptions['config'];
+    const handleAuthError: OnAuthErrorHandler['handleAuthError'] = async ({
+      signal,
+    }) => {
+      refreshStarted();
+      await waitForRefreshAbort(signal, refreshSettled);
+    };
     const consumption = consumeStream(
       orchestrator.generateChatCompletion({
         contents: [],
-        config,
+        handleAuthError,
         invocation: {
           signal: controller.signal,
         } as GenerateChatOptions['invocation'],
@@ -424,18 +420,16 @@ describe('RetryOrchestrator onAuthError handler', () => {
       initialDelayMs: 10,
     });
 
-    const options: GenerateChatOptions = {
-      contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
-      resolved: {
-        authToken: 'revoked-token',
+    const options: GenerateChatOptions = retryOperationFixture(
+      {
+        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
+        resolved: {
+          authToken: 'revoked-token',
+        },
       },
-      runtime: {
-        config: {
-          getOnAuthErrorHandler: () => onAuthErrorHandler,
-          getBucketFailoverHandler: () => failoverHandler,
-        } as unknown as GenerateChatOptions['runtime'],
-      } as unknown as GenerateChatOptions['runtime'],
-    };
+      onAuthErrorHandler,
+      failoverHandler,
+    );
 
     const result = await consumeStream(
       orchestrator.generateChatCompletion(options),
@@ -467,18 +461,17 @@ describe('RetryOrchestrator onAuthError handler', () => {
       initialDelayMs: 10,
     });
 
-    const options: GenerateChatOptions = {
-      contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
-      resolved: {
-        // authToken as a function returning Promise
-        authToken: () => Promise.resolve('async-token-xyz'),
+    const options: GenerateChatOptions = retryOperationFixture(
+      {
+        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
+        resolved: {
+          // authToken as a function returning Promise
+          authToken: () => Promise.resolve('async-token-xyz'),
+        },
       },
-      runtime: {
-        config: {
-          getOnAuthErrorHandler: () => onAuthErrorHandler,
-        } as unknown as GenerateChatOptions['runtime'],
-      } as unknown as GenerateChatOptions['runtime'],
-    };
+      onAuthErrorHandler,
+      undefined,
+    );
 
     const result = await consumeStream(
       orchestrator.generateChatCompletion(options),
@@ -527,15 +520,14 @@ describe('RetryOrchestrator onAuthError handler (OAuth resolved below retry laye
 
     // No `resolved.authToken` — mirrors the production OAuth path where the
     // token is resolved inside BaseProvider, beneath the retry orchestrator.
-    const options: GenerateChatOptions = {
-      contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
-      resolved: {},
-      runtime: {
-        config: {
-          getOnAuthErrorHandler: () => onAuthErrorHandler,
-        } as unknown as GenerateChatOptions['runtime'],
-      } as unknown as GenerateChatOptions['runtime'],
-    };
+    const options: GenerateChatOptions = retryOperationFixture(
+      {
+        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
+        resolved: {},
+      },
+      onAuthErrorHandler,
+      undefined,
+    );
 
     const result = await consumeStream(
       orchestrator.generateChatCompletion(options),

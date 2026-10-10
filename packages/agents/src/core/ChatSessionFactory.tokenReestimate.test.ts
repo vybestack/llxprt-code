@@ -1,3 +1,5 @@
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
+import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -8,8 +10,28 @@
  * across a provider switch, it resets stale token accounting and
  * re-estimates all history tokens with the new provider's tokenizer.
  */
+import { instructionFixture } from './__tests__/instruction-fixture.js';
+
+import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
+const fixturePaths = installTestWorkspacePaths({
+  targetDir: process.cwd(),
+  isTrusted: () => true,
+});
 
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
+import { MediaAdmissionService } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { withChatSessionFactoryMediaFixture } from './chatSessionFactoryMediaTestHelper.js';
+
+const realHistoryServiceModule = {
+  ...(await import(
+    '@vybestack/llxprt-code-core/services/history/HistoryService.js'
+  )),
+};
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('core system prompt'),
@@ -97,27 +119,16 @@ import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Agen
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { TodoContinuationService } from './TodoContinuationService.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { installChatSessionFactoryConfigFixture } from './chatSessionFactoryConfigFixture.js';
+
+const createFixtureConfig = installChatSessionFactoryConfigFixture();
 
 function makeConfig(overrides: Partial<Config> = {}): Config {
-  return {
-    getEphemeralSetting: vi.fn().mockReturnValue(undefined),
-    isJitContextEnabled: vi.fn().mockReturnValue(false),
-    getGlobalMemory: vi.fn().mockReturnValue(undefined),
-    getUserMemory: vi.fn().mockReturnValue('user memory text'),
-    getCoreMemory: vi.fn().mockReturnValue('core memory text'),
-    getJitMemoryForPath: vi.fn().mockResolvedValue(null),
-    getMcpInstructions: vi.fn().mockReturnValue(undefined),
-    isInteractive: vi.fn().mockReturnValue(true),
-    getWorkingDir: vi.fn().mockReturnValue('/workspace'),
-    getSettingsService: vi.fn().mockReturnValue({
-      get: vi.fn().mockReturnValue(undefined),
-    }),
-    getContentGeneratorConfig: vi.fn().mockReturnValue({}),
-    getModel: vi.fn().mockReturnValue('gemini-2.5-flash'),
-    getToolRegistry: vi.fn().mockReturnValue(undefined),
-    getProviderManager: vi.fn().mockReturnValue(undefined),
+  const config = createFixtureConfig();
+  Object.assign(config, {
     ...overrides,
-  } as unknown as Config;
+  });
+  return config;
 }
 
 function makeRuntimeState(
@@ -182,14 +193,26 @@ describe('createChatSession - token re-estimation on HistoryService reuse', () =
       getModel: vi.fn().mockReturnValue('claude-3-5-sonnet-20241022'),
     });
     const runtimeState = makeRuntimeState({
-      model: 'stale-model-snapshot',
+      model: 'claude-3-5-sonnet-20241022',
       provider: 'anthropic',
     });
     const todoContinuationService = makeTodoContinuationService();
     const reusedHistory = makeReusedHistoryService();
 
     await createChatSession({
+      ...createSessionPolicyFixture(),
+      instructions: instructionFixture(
+        config.getProvidedInstructions(),
+        'core memory text',
+      ),
+      workspaceDirectories: () => fixturePaths().directories(),
+      readMcpInstructions: () => undefined,
       config,
+      telemetry: createSessionSettingsFixture(config).settingsOwner.telemetry,
+      mediaStore: new LocalMediaStore({
+        rootDirectory: config.projectTempDir + '/media',
+        quotaBytes: config.getMediaStoreQuotaByteLimit(),
+      }),
       runtimeState,
       contentGenerator: makeContentGenerator(),
       storedHistoryService: reusedHistory,
@@ -235,7 +258,19 @@ describe('createChatSession - token re-estimation on HistoryService reuse', () =
     const todoContinuationService = makeTodoContinuationService();
 
     await createChatSession({
+      ...createSessionPolicyFixture(),
+      instructions: instructionFixture(
+        config.getProvidedInstructions(),
+        'core memory text',
+      ),
+      workspaceDirectories: () => fixturePaths().directories(),
+      readMcpInstructions: () => undefined,
       config,
+      telemetry: createSessionSettingsFixture(config).settingsOwner.telemetry,
+      mediaStore: new LocalMediaStore({
+        rootDirectory: config.projectTempDir + '/media',
+        quotaBytes: config.getMediaStoreQuotaByteLimit(),
+      }),
       runtimeState,
       contentGenerator: makeContentGenerator(),
       storedHistoryService: undefined,
@@ -247,5 +282,151 @@ describe('createChatSession - token re-estimation on HistoryService reuse', () =
 
     expect(newHistoryInstance.resetTokenAccounting).not.toHaveBeenCalled();
     expect(newHistoryInstance.recalculateTotalTokens).not.toHaveBeenCalled();
+  });
+});
+
+describe('createChatSession explicit media input', () => {
+  it('uses the supplied store for retained base64 and reference history and the runtime loader', async () => {
+    await withChatSessionFactoryMediaFixture(async (fixture) => {
+      const configDirectory = await mkdtemp(join(tmpdir(), 'factory-config-'));
+      const configStore = new LocalMediaStore({
+        rootDirectory: join(configDirectory, 'media'),
+        quotaBytes: 1024 * 1024,
+      });
+      try {
+        const config = makeConfig();
+        const admission = new MediaAdmissionService(fixture.store);
+        const sourceContext = { turnId: 'source', source: 'test' };
+        const references = await admission.admitContents(
+          fixture.history,
+          sourceContext,
+        );
+        await admission.releaseContents(references, sourceContext);
+        const reference = references[0].blocks[0];
+        const base64 = fixture.history[0].blocks[0];
+        if (
+          reference.type !== 'media' ||
+          reference.encoding !== 'reference' ||
+          base64.type !== 'media' ||
+          base64.encoding !== 'base64'
+        ) {
+          throw new Error('Expected base64 and reference media');
+        }
+
+        const { HistoryService: RealHistoryService } = realHistoryServiceModule;
+        const historyService = new RealHistoryService();
+        await createChatSession({
+          ...createSessionPolicyFixture(),
+          instructions: instructionFixture(
+            config.getProvidedInstructions(),
+            'core memory text',
+          ),
+          workspaceDirectories: () => fixturePaths().directories(),
+          readMcpInstructions: () => undefined,
+          config,
+          telemetry:
+            createSessionSettingsFixture(config).settingsOwner.telemetry,
+          mediaStore: fixture.store,
+          runtimeState: makeRuntimeState(),
+          contentGenerator: makeContentGenerator(),
+          storedHistoryService: historyService,
+          clearStoredHistoryService: vi.fn(),
+          extraHistory: [...fixture.history, references[0]],
+          generateContentConfig: {},
+          todoContinuationService: makeTodoContinuationService(),
+          toolRegistry: undefined,
+        });
+
+        const retained = historyService.getAll();
+        expect(retained).toHaveLength(2);
+        for (const entry of retained) {
+          const block = entry.blocks[0];
+          if (block.type !== 'media' || block.encoding !== 'reference') {
+            throw new Error('Expected retained media reference');
+          }
+          expect(block.contentId).toBe(reference.contentId);
+          expect(await fixture.store.readVerified(block)).toStrictEqual(
+            Buffer.from(base64.data, 'base64'),
+          );
+          expect(await fixture.store.hasReservations(block.contentId)).toBe(
+            false,
+          );
+        }
+        const objectName = reference.contentId.slice('sha256:'.length);
+        expect(
+          await readFile(
+            join(fixture.store.rootDirectory, 'objects', 'sha256', objectName),
+          ),
+        ).toStrictEqual(Buffer.from(base64.data, 'base64'));
+        await expect(
+          readFile(
+            join(configStore.rootDirectory, 'objects', 'sha256', objectName),
+          ),
+        ).rejects.toThrow('ENOENT');
+        expect(await configStore.getStoredByteLength()).toBe(0);
+        const { loadAgentRuntime } = await import(
+          '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js'
+        );
+        expect(loadAgentRuntime).toHaveBeenCalledWith(
+          expect.objectContaining({ mediaStore: fixture.store }),
+        );
+      } finally {
+        await configStore.close();
+        await rm(configDirectory, { recursive: true, force: true });
+      }
+    });
+  });
+
+  async function startMediaChat(
+    config: Config,
+    store: LocalMediaStore,
+    history: readonly IContent[],
+  ): Promise<void> {
+    const { HistoryService: RealHistoryService } = realHistoryServiceModule;
+    await createChatSession({
+      ...createSessionPolicyFixture(),
+      instructions: instructionFixture(
+        config.getProvidedInstructions(),
+        'core memory text',
+      ),
+      workspaceDirectories: () => fixturePaths().directories(),
+      readMcpInstructions: () => undefined,
+      config,
+      telemetry: createSessionSettingsFixture(config).settingsOwner.telemetry,
+      mediaStore: store,
+      runtimeState: makeRuntimeState(),
+      contentGenerator: makeContentGenerator(),
+      storedHistoryService: new RealHistoryService(),
+      clearStoredHistoryService: vi.fn(),
+      extraHistory: history,
+      generateContentConfig: {},
+      todoContinuationService: makeTodoContinuationService(),
+      toolRegistry: undefined,
+    });
+  }
+
+  it('releases admitted history after a post-admission setup error without reading Config media', async () => {
+    await withChatSessionFactoryMediaFixture(async (fixture) => {
+      const config = makeConfig();
+      const { loadAgentRuntime } = await import(
+        '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js'
+      );
+      (loadAgentRuntime as Mock<typeof loadAgentRuntime>).mockRejectedValueOnce(
+        new Error('runtime setup failed'),
+      );
+
+      await expect(
+        startMediaChat(config, fixture.store, fixture.history),
+      ).rejects.toThrow('runtime setup failed');
+      expect(await fixture.hasReservationsAfterProbe()).toBe(false);
+    });
+  });
+
+  it('releases temporary initial media admission after successful setup', async () => {
+    await withChatSessionFactoryMediaFixture(async (fixture) => {
+      const config = makeConfig();
+      await startMediaChat(config, fixture.store, fixture.history);
+      expect(await fixture.hasReservationsAfterProbe()).toBe(false);
+    });
   });
 });

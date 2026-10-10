@@ -4,69 +4,46 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { installSchedulerToolFixture } from './__tests__/scheduler-tool-owner-fixture.js';
+
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi } from 'bun:test';
-import type { ToolCall, CompletedToolCall } from './coreToolScheduler.js';
+import type { CompletedToolCall } from './coreToolScheduler.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
-import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
-import {
-  createMockMessageBus,
-  createMockPolicyEngine,
-} from './__tests__/coreToolScheduler-test-helpers.js';
 
 describe('CoreToolScheduler agentId propagation', () => {
+  const fixtureRoot = installSchedulerToolFixture();
   it('propagates agentId from request to completed call payloads', async () => {
     const mockTool = new MockTool('mockTool');
     mockTool.executeFn.mockResolvedValue({
       llmContent: 'Tool executed',
       returnDisplay: 'Tool executed',
     });
-    const toolRegistry = {
-      getTool: () => mockTool,
-      getToolByName: () => mockTool,
-      getFunctionDeclarations: () => [],
-      tools: new Map(),
-      discovery: {},
-      registerTool: () => {},
-      getToolByDisplayName: () => mockTool,
-      getTools: () => [],
-      discoverTools: async () => {},
-      getAllTools: () => [],
-      getToolsByServer: () => [],
-    };
 
-    const onAllToolCallsComplete = vi.fn();
+    const onAllToolCallsComplete = vi
+      .fn<(calls: CompletedToolCall[]) => Promise<void>>()
+      .mockResolvedValue(undefined);
     const onToolCallsUpdate = vi.fn();
 
-    const mockPolicyEngine = createMockPolicyEngine();
-    mockPolicyEngine.evaluate = vi
-      .fn()
-      .mockReturnValue(PolicyDecision.ASK_USER);
-
-    const mockConfig = {
-      getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
-      getDebugMode: () => false,
-      isInteractive: () => true,
-      getApprovalMode: () => ApprovalMode.DEFAULT,
-      getAllowedTools: () => [],
-      getToolRegistry: () => toolRegistry,
-      getContentGeneratorConfig: () => ({
-        model: 'test-model',
-      }),
-      getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
-      getEnableHooks: () => false,
-      getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
-      getModel: () => 'gemini-2.5-pro',
-    } as unknown as Config;
+    const fixture = fixtureRoot([mockTool], {
+      sessionId: 'test-session-id',
+      approvalMode: ApprovalMode.DEFAULT,
+      interactive: true,
+    });
 
     const scheduler = new CoreToolScheduler({
-      config: mockConfig,
-      messageBus: mockConfig.getMessageBus(),
-      toolRegistry: mockConfig.getToolRegistry(),
+      config: fixture.config,
+      telemetry: fixture.settingsOwner.telemetry,
+      readExecutionPolicy: () =>
+        fixture.settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        fixture.settingsOwner.readToolGovernance(
+          fixture.config.getExcludeTools() ?? [],
+        ),
+      messageBus: fixture.messageBus,
+      toolRegistry: fixture.selection,
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -89,8 +66,7 @@ describe('CoreToolScheduler agentId propagation', () => {
       expect(onAllToolCallsComplete).toHaveBeenCalled();
     });
 
-    const completedCalls = onAllToolCallsComplete.mock
-      .calls[0][0] as CompletedToolCall[];
+    const completedCalls = onAllToolCallsComplete.mock.calls[0][0];
 
     expect(completedCalls[0].request.agentId).toBe('agent-sub-123');
     expect(completedCalls[0].response.agentId).toBe('agent-sub-123');
@@ -104,42 +80,26 @@ describe('CoreToolScheduler agentId propagation', () => {
       metadata: { agentId: 'agent-meta-456' },
     });
 
-    const toolRegistry = {
-      getTool: () => mockTool,
-      getToolByName: () => mockTool,
-      getFunctionDeclarations: () => [],
-      tools: new Map(),
-      discovery: {},
-      registerTool: () => {},
-      getToolByDisplayName: () => mockTool,
-      getTools: () => [],
-      discoverTools: async () => {},
-      getAllTools: () => [],
-      getToolsByServer: () => [],
-    };
-
-    const onAllToolCallsComplete = vi.fn();
-    const mockConfig = {
-      getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
-      getDebugMode: () => false,
-      isInteractive: () => true,
-      getApprovalMode: () => ApprovalMode.DEFAULT,
-      getAllowedTools: () => [],
-      getToolRegistry: () => toolRegistry,
-      getContentGeneratorConfig: () => ({
-        model: 'test-model',
-      }),
-      getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
-      getEnableHooks: () => false,
-      getPolicyEngine: vi.fn().mockReturnValue(createMockPolicyEngine()),
-      getModel: () => 'gemini-2.5-pro',
-    } as unknown as Config;
+    const onAllToolCallsComplete = vi
+      .fn<(calls: CompletedToolCall[]) => Promise<void>>()
+      .mockResolvedValue(undefined);
+    const fixture = fixtureRoot([mockTool], {
+      sessionId: 'test-session-id',
+      approvalMode: ApprovalMode.DEFAULT,
+      interactive: true,
+    });
 
     const scheduler = new CoreToolScheduler({
-      config: mockConfig,
-      messageBus: mockConfig.getMessageBus(),
-      toolRegistry: mockConfig.getToolRegistry(),
+      config: fixture.config,
+      telemetry: fixture.settingsOwner.telemetry,
+      readExecutionPolicy: () =>
+        fixture.settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        fixture.settingsOwner.readToolGovernance(
+          fixture.config.getExcludeTools() ?? [],
+        ),
+      messageBus: fixture.messageBus,
+      toolRegistry: fixture.selection,
       onAllToolCallsComplete,
       getPreferredEditor: () => 'vscode',
       onEditorClose: vi.fn(),
@@ -161,9 +121,9 @@ describe('CoreToolScheduler agentId propagation', () => {
       expect(onAllToolCallsComplete).toHaveBeenCalled();
     });
 
-    const [completedCalls] = onAllToolCallsComplete.mock.lastCall as [
-      ToolCall[],
-    ];
+    const lastCall = onAllToolCallsComplete.mock.lastCall;
+    if (!lastCall) throw new Error('Missing completed tool calls');
+    const [completedCalls] = lastCall;
     expect(completedCalls[0].status).toBe('success');
     expect(completedCalls[0].request.agentId).toBe('agent-request-123');
     expect(completedCalls[0].response.agentId).toBe('agent-meta-456');
@@ -175,49 +135,29 @@ describe('CoreToolScheduler agentId propagation', () => {
       llmContent: 'Tool executed',
       returnDisplay: 'Tool executed',
     });
-    const toolRegistry = {
-      getTool: () => mockTool,
-      getToolByName: () => mockTool,
-      getFunctionDeclarations: () => [],
-      tools: new Map(),
-      discovery: {},
-      registerTool: () => {},
-      getToolByDisplayName: () => mockTool,
-      getTools: () => [],
-      discoverTools: async () => {},
-      getAllTools: () => [],
-      getToolsByServer: () => [],
-    };
 
-    const onAllToolCallsComplete = vi.fn();
+    const onAllToolCallsComplete = vi
+      .fn<(calls: CompletedToolCall[]) => Promise<void>>()
+      .mockResolvedValue(undefined);
     const onToolCallsUpdate = vi.fn();
 
-    const mockPolicyEngine = createMockPolicyEngine();
-    mockPolicyEngine.evaluate = vi
-      .fn()
-      .mockReturnValue(PolicyDecision.ASK_USER);
-
-    const mockConfig = {
-      getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
-      getDebugMode: () => false,
-      isInteractive: () => true,
-      getApprovalMode: () => ApprovalMode.DEFAULT,
-      getAllowedTools: () => [],
-      getToolRegistry: () => toolRegistry,
-      getContentGeneratorConfig: () => ({
-        model: 'test-model',
-      }),
-      getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
-      getEnableHooks: () => false,
-      getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
-      getModel: () => 'gemini-2.5-pro',
-    } as unknown as Config;
+    const fixture = fixtureRoot([mockTool], {
+      sessionId: 'test-session-id',
+      approvalMode: ApprovalMode.DEFAULT,
+      interactive: true,
+    });
 
     const scheduler = new CoreToolScheduler({
-      config: mockConfig,
-      messageBus: mockConfig.getMessageBus(),
-      toolRegistry: mockConfig.getToolRegistry(),
+      config: fixture.config,
+      telemetry: fixture.settingsOwner.telemetry,
+      readExecutionPolicy: () =>
+        fixture.settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        fixture.settingsOwner.readToolGovernance(
+          fixture.config.getExcludeTools() ?? [],
+        ),
+      messageBus: fixture.messageBus,
+      toolRegistry: fixture.selection,
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -239,8 +179,7 @@ describe('CoreToolScheduler agentId propagation', () => {
       expect(onAllToolCallsComplete).toHaveBeenCalled();
     });
 
-    const completedCalls = onAllToolCallsComplete.mock
-      .calls[0][0] as CompletedToolCall[];
+    const completedCalls = onAllToolCallsComplete.mock.calls[0][0];
 
     expect(completedCalls[0].request.agentId).toBe('primary');
     expect(completedCalls[0].response.agentId).toBe('primary');

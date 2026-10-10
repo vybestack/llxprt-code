@@ -16,6 +16,9 @@ import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import type { RecordingSwapCallbacks } from '../../services/performResume.js';
 import { useSessionStats } from '../contexts/SessionContext.js';
+import { useRuntimeApi } from '../contexts/RuntimeContext.js';
+import { useProviderAliasRefresh } from '../contexts/ProviderAliasRefreshContext.js';
+import { useOAuthControl } from '../contexts/OAuthControlContext.js';
 import type {
   HistoryItemWithoutId,
   SlashCommandProcessorResult,
@@ -81,6 +84,7 @@ export interface UseSlashCommandProcessorCoreArgs {
   isConfigInitialized: boolean;
   todoContext?: TodoContextValue;
   recordingIntegration?: RecordingIntegration;
+  recordingOwner?: 'agent' | 'raw';
   recordingSwapCallbacks?: RecordingSwapCallbacks;
 }
 
@@ -97,11 +101,12 @@ interface SlashCommandProcessorState {
 
 function useSlashCommandProcessorState(
   config: CliUiRuntime | null,
+  recordingOwner?: 'agent' | 'raw',
 ): SlashCommandProcessorState {
   const [commands, setCommands] = useState<readonly SlashCommand[] | undefined>(
     () =>
       process.env.LLXPRT_CODE_BUILTIN_COMMANDS_ONLY === 'true'
-        ? loadBuiltinSlashCommandsForTesting(config)
+        ? loadBuiltinSlashCommandsForTesting(config, recordingOwner)
         : undefined,
   );
   const [reloadTrigger, setReloadTrigger] = useState(0);
@@ -147,6 +152,7 @@ function buildHandlerDeps(
     },
     recordingIntegration: args.recordingIntegration,
     recordingSwapCallbacks: args.recordingSwapCallbacks,
+    sessionPersistence: args.config?.sessionPersistence,
     confirmationLogger,
     slashCommandLogger,
     beginSlashCommandAction: cancellation.beginSlashCommandAction,
@@ -157,12 +163,18 @@ function buildHandlerDeps(
 export function useSlashCommandProcessorCore(
   args: UseSlashCommandProcessorCoreArgs,
 ): SlashCommandProcessorCoreResult {
+  const runtimeApi = useRuntimeApi();
+  const refreshProviderAliases = useProviderAliasRefresh();
+  const oauthControl = useOAuthControl();
   const session = useSessionStats();
-  const state = useSlashCommandProcessorState(args.config);
+  const state = useSlashCommandProcessorState(args.config, args.recordingOwner);
   const cancellation = useSlashCommandCancellation();
-  const managers = useManagers(args.config);
+  const managers = useManagers(args.config, args.agent ?? undefined);
   const pending = usePendingHistory(args.addItem);
   const commandContext = useCommandContext({
+    runtimeApi,
+    refreshProviderAliases,
+    oauthControl,
     config: args.config,
     agent: args.agent,
     settings: args.settings,
@@ -184,6 +196,7 @@ export function useSlashCommandProcessorCore(
     extensionsUpdateState: args.extensionsUpdateState,
     todoContext: args.todoContext,
     recordingIntegration: args.recordingIntegration,
+    recordingOwner: args.recordingOwner,
     recordingSwapCallbacks: args.recordingSwapCallbacks,
     stats: session,
   });
@@ -193,6 +206,8 @@ export function useSlashCommandProcessorCore(
     args.isConfigInitialized,
     state.reloadCommands,
     state.setCommands,
+    args.agent,
+    args.recordingOwner,
   );
   const handleSlashCommand = useCallback(
     (

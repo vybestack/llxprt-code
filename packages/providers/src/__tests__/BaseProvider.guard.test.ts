@@ -1,11 +1,9 @@
-import { describe, expect, it, vi } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import {
   BaseProvider,
   type NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
-import type { GenerateChatOptions } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 class HarnessProvider extends BaseProvider {
   lastNormalizedOptions: NormalizedGenerateChatOptions | undefined;
@@ -34,90 +32,27 @@ class HarnessProvider extends BaseProvider {
   }
 }
 
-describe('BaseProvider runtime guard', () => {
-  const prompt: IContent = {
-    speaker: 'human',
-    blocks: [],
-  };
-
-  it('raises MissingProviderRuntimeError when settings are not supplied', async () => {
-    // @plan:PLAN-20251023-STATELESS-HARDENING.P04 @requirement:REQ-SP4-001
-    // Red state: `pnpm test --filter "runtime guard" --runInBand` aborts with CACError `Unknown option --filter`,
-    // leaving BaseProvider guard pseudocode lines 10-14 unmet until runtime context wiring is implemented.
+describe('BaseProvider admission guard', () => {
+  const prompt: IContent = { speaker: 'human', blocks: [] };
+  it('admits standalone calls with owner defaults without forwarding settings', async () => {
     const provider = new HarnessProvider();
-    (
-      provider as unknown as {
-        authResolver: {
-          resolveAuthentication: (input: unknown) => Promise<string>;
-          resolveAuthenticationResult: (
-            input: unknown,
-          ) => Promise<{ token: string }>;
-          setSettingsService: (settings: SettingsService | undefined) => void;
-        };
-      }
-    ).authResolver = {
-      resolveAuthentication: vi.fn().mockResolvedValue(''),
-      resolveAuthenticationResult: vi.fn().mockResolvedValue({ token: '' }),
-      setSettingsService: vi.fn(),
-    };
-
-    (
-      provider as unknown as {
-        defaultSettingsService?: SettingsService;
-      }
-    ).defaultSettingsService = undefined;
-
-    const iterator = provider.generateChatCompletion({
-      contents: [prompt],
-      metadata: { test: true },
-    } as GenerateChatOptions);
-
-    await expect(iterator.next()).rejects.toMatchObject({
-      name: 'MissingProviderRuntimeError',
-      providerKey: 'BaseProvider.harness',
-      missingFields: expect.arrayContaining(['settings']),
-      context: {
-        stage: 'normalizeGenerateChatOptions',
-        metadata: expect.objectContaining({
-          requirement: 'REQ-SP4-001',
-        }),
-      },
-    });
+    await provider.generateChatCompletion({ contents: [prompt] }).next();
+    expect(provider.lastNormalizedOptions?.resolved.model).toBe(
+      'harness-model',
+    );
+    expect(provider.lastNormalizedOptions).not.toHaveProperty('settings');
+    expect(provider.lastNormalizedOptions).not.toHaveProperty('runtime');
   });
-
-  it('fails when config is not supplied', async () => {
+  it('rejects an empty admitted model before the provider starts', async () => {
     const provider = new HarnessProvider();
-
-    (
-      provider as unknown as {
-        authResolver: {
-          resolveAuthentication: (input: unknown) => Promise<string>;
-          resolveAuthenticationResult: (
-            input: unknown,
-          ) => Promise<{ token: string }>;
-          setSettingsService: (settings: SettingsService | undefined) => void;
-        };
-      }
-    ).authResolver = {
-      resolveAuthentication: vi.fn().mockResolvedValue('token'),
-      resolveAuthenticationResult: vi
-        .fn()
-        .mockResolvedValue({ token: 'token' }),
-      setSettingsService: vi.fn(),
-    };
-
-    const settings = new SettingsService();
-
-    const iterator = provider.generateChatCompletion({
-      contents: [prompt],
-      settings,
-      metadata: { scenario: 'missing-config' },
-    } as GenerateChatOptions);
-
-    await expect(iterator.next()).rejects.toMatchObject({
+    await expect(
+      provider
+        .generateChatCompletion({ contents: [prompt], resolved: { model: '' } })
+        .next(),
+    ).rejects.toMatchObject({
       name: 'MissingProviderRuntimeError',
-      providerKey: 'BaseProvider.harness',
-      missingFields: expect.arrayContaining(['config']),
+      missingFields: expect.arrayContaining(['resolved.model']),
     });
+    expect(provider.lastNormalizedOptions).toBeUndefined();
   });
 });

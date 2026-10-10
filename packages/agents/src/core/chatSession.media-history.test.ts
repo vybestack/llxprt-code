@@ -1,9 +1,15 @@
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import { afterEach as closeInvocationRoots } from 'bun:test';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+const retainedInvocationOwners: SessionSettingsOwner[] = [];
+
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { ProviderFileBindingStore } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { assertDefined } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -14,7 +20,7 @@ import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Age
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
+  createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
@@ -26,45 +32,14 @@ import type {
   GenerateChatOptions,
   IProvider,
 } from '@vybestack/llxprt-code-providers/IProvider.js';
-import {
-  requireRuntimeEntry,
-  resetCliRuntimeRegistryForTesting,
-  upsertRuntimeEntry,
-} from '@vybestack/llxprt-code-providers/runtime/runtimeRegistry.js';
+import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
-
-const PNG_BASE64 =
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=';
-
-function mediaHistory(data = PNG_BASE64): IContent[] {
-  return [
-    {
-      speaker: 'human',
-      blocks: [
-        {
-          type: 'media',
-          mimeType: 'image/png',
-          encoding: 'base64',
-          data,
-        },
-        {
-          type: 'media',
-          mimeType: 'image/png',
-          encoding: 'url',
-          data: 'https://example.test/image.png',
-        },
-      ],
-    },
-  ];
-}
-
-function mediaHistoryShape(history: readonly IContent[]): readonly string[] {
-  return history.flatMap((content) =>
-    content.blocks.map((block) =>
-      block.type === 'media' ? block.encoding : block.type,
-    ),
-  );
-}
+import type { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import {
+  mediaHistory,
+  mediaHistoryShape,
+  prefixedMediaHistory,
+} from './chatSession.media-history-fixtures.js';
 
 function mediaEncodings(history: readonly IContent[]): readonly string[] {
   return history.flatMap((content) =>
@@ -74,47 +49,45 @@ function mediaEncodings(history: readonly IContent[]): readonly string[] {
   );
 }
 
-function prefixedMediaHistory(): IContent[] {
-  return [
-    {
-      speaker: 'human',
-      blocks: [
-        { type: 'text', text: 'stable prefix' },
-        {
-          type: 'media',
-          mimeType: 'image/png',
-          encoding: 'base64',
-          data: PNG_BASE64,
-        },
-        {
-          type: 'media',
-          mimeType: 'image/png',
-          encoding: 'url',
-          data: 'https://example.test/image.png',
-        },
-      ],
-    },
-  ];
-}
-
 describe('ChatSession media history boundaries', () => {
+  closeInvocationRoots(async () => {
+    for (const owner of retainedInvocationOwners.splice(0))
+      await owner.dispose();
+  });
+
   let directory = '';
+  let lifecycle: ProviderFileLifecycle;
 
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'llxprt-chat-media-history-'));
+    lifecycle = new ProviderFileLifecycle({
+      maxFiles: 100,
+      maxBytes: 512 * 1024 * 1024,
+    });
   });
 
   afterEach(async () => {
-    resetCliRuntimeRegistryForTesting();
     await rm(directory, { recursive: true, force: true });
   });
 
-  function createChat(): ChatSession {
-    const provider: IProvider = {
+  function createChat(
+    onRequest?: (
+      request: GenerateChatOptions,
+      bindings: ProviderFileBindingStore | undefined,
+    ) => Promise<void>,
+  ): ChatSession {
+    const provider: IProvider & {
+      requestProviderFileBindings?: ProviderFileBindingStore;
+    } = {
+      requestProviderFileBindings: undefined,
       name: 'media-history-provider',
       getDefaultModel: () => 'media-history-model',
       getModels: () => Promise.resolve([]),
-      async *generateChatCompletion(): AsyncIterableIterator<IContent> {
+      async *generateChatCompletion(
+        request: GenerateChatOptions | IContent[],
+      ): AsyncIterableIterator<IContent> {
+        if (!Array.isArray(request))
+          await onRequest?.(request, this.requestProviderFileBindings);
         yield { speaker: 'ai', blocks: [{ type: 'text', text: 'unused' }] };
       },
     };
@@ -130,7 +103,16 @@ describe('ChatSession media history boundaries', () => {
       model: 'test-model',
       sessionId: 'media-history-session',
     });
+    const invocationOwner = new SessionSettingsOwner(setup.settingsService);
+    retainedInvocationOwners.push(invocationOwner);
     const runtime = createAgentRuntimeContext({
+      prepareProviderInvocation: (name, parameters, signal) =>
+        invocationOwner.prepareProviderInvocation(
+          state.runtimeId,
+          name,
+          parameters,
+          signal,
+        ),
       state,
       history,
       settings: {
@@ -139,12 +121,22 @@ describe('ChatSession media history boundaries', () => {
         preserveThreshold: 0.2,
         telemetry: { enabled: false, target: null },
       },
-      provider: createProviderAdapterFromManager(
-        setup.config.getProviderManager(),
+      provider: createProviderAdapterFromManager(setup.providerManager),
+      telemetry: createTelemetryAdapter(
+        setup.config,
+        RootTelemetry.prepare({
+          enabled: false,
+          sessionId: 'isolated-adapter-fixture',
+          maxBytes: 1024,
+          maxFiles: 1,
+        }),
       ),
-      telemetry: createTelemetryAdapterFromConfig(setup.config),
       tools: createToolRegistryViewFromRegistry(),
-      providerRuntime: { ...setup.runtime, config: setup.config },
+      providerRuntime: {
+        ...setup.runtime,
+        config: setup.config,
+        providerFileLifecycle: lifecycle,
+      },
       mediaStore: store,
       mediaAdmission: new MediaAdmissionService(store),
     });
@@ -157,10 +149,88 @@ describe('ChatSession media history boundaries', () => {
     return new ChatSession(runtime, contentGenerator, {}, []);
   }
 
+  it('rebinds prepared chat history without recreating media admission and retires the old graph separately', async () => {
+    const oldChat = createChat();
+    await oldChat.setHistory(mediaHistory());
+    const live = oldChat.getHistoryService();
+    const candidate = createChat(async (request, bindings) => {
+      const media = request.contents
+        .flatMap((content) => content.blocks)
+        .find(
+          (block) => block.type === 'media' && block.encoding === 'reference',
+        );
+      if (media !== undefined) {
+        if (!bindings) throw new Error('Missing history binding');
+        await bindings.bind(media.contentId, {
+          provider: 'media-history-provider',
+          baseURL: 'https://media.test',
+          credentialHash: 'test',
+          fileId: 'adopted-file',
+          byteLength: media.byteLength,
+          scope: 'session',
+          scopeId: 'media-history-runtime',
+          createdAt: 1,
+          expiresAt: 1000,
+          deletion: 'delete',
+          zeroDataRetention: 'incompatible-while-retained',
+          deletionState: 'active',
+        });
+      }
+    });
+    await candidate.setHistory(structuredClone(oldChat.getHistory()));
+    const detached = candidate.getHistoryService();
+    const oldBinding = oldChat.prepareHistoryRebind(detached);
+    const newBinding = candidate.prepareHistoryRebind(live, oldChat);
+    const adopt = await live.prepareProfileAdoption(detached);
+    const before = live.getAll();
+    const staged = detached.getAll();
+    expect(oldChat.getHistory()).toStrictEqual(before);
+    oldBinding();
+    adopt();
+    newBinding();
+    await oldChat.clearHistory();
+    expect(candidate.getHistory()).toStrictEqual(staged);
+    await candidate.verifyHistoryMedia(candidate.getHistory());
+    await candidate.sendMessage(
+      { message: 'continued after adoption' },
+      'adopted-send',
+    );
+    expect(JSON.stringify(live.getAll())).toContain('continued after adoption');
+    expect(JSON.stringify(live.getAll())).toContain('adopted-file');
+    for await (const _event of await candidate.sendMessageStream(
+      { message: 'stream after adoption' },
+      'adopted-stream',
+    )) {
+      expect(_event).toBeDefined();
+    }
+    expect(JSON.stringify(live.getAll())).toContain('stream after adoption');
+    const beforeDirect = live.getAll();
+    const direct = await candidate.generateDirectMessage(
+      { message: 'direct after adoption' },
+      'adopted-direct',
+    );
+    expect(direct.content.blocks.length).toBeGreaterThan(0);
+    expect(live.getAll()).toStrictEqual(beforeDirect);
+    expect(detached.getAll()).toStrictEqual([]);
+    await live.waitForTokenUpdates();
+    expect(live.getTotalTokens()).toBeGreaterThan(0);
+    const store = new LocalMediaStore({
+      rootDirectory: join(directory, 'media'),
+      quotaBytes: 1024 * 1024,
+    });
+    const retained = live.getAll()[0].blocks[0];
+    if (retained.type !== 'media' || retained.encoding !== 'reference')
+      throw new Error('Expected retained reference');
+    expect(await store.hasReservations(retained.contentId)).toBe(true);
+    await candidate.clearHistory();
+    await live.waitForOwnershipSettlement();
+    expect(live.getAll()).toStrictEqual([]);
+    expect(await store.hasReservations(retained.contentId)).toBe(false);
+  });
+
   it('migrates inline local media before setHistory retains it and leaves URLs unchanged', async () => {
     const chat = createChat();
     const input = mediaHistory();
-
     await chat.setHistory(input);
 
     const stored = chat.getHistory();
@@ -178,10 +248,7 @@ describe('ChatSession media history boundaries', () => {
     const deletionBlocked = new Promise<void>((resolve) => {
       finishDeletion = resolve;
     });
-    const lifecycle = upsertRuntimeEntry(
-      'media-history-runtime',
-      {},
-    ).providerFileLifecycle;
+
     const retained = await lifecycle.retain({
       cacheKey: 'chat-clear-provider-file',
       fileId: 'provider-file-for-chat-clear',
@@ -217,9 +284,7 @@ describe('ChatSession media history boundaries', () => {
     finishDeletion();
     await clearing;
     expect(
-      requireRuntimeEntry(
-        'media-history-runtime',
-      ).providerFileLifecycle.acquire({
+      lifecycle.acquire({
         cacheKey: 'chat-clear-provider-file',
         identity: {
           provider: 'test-provider',
@@ -237,10 +302,7 @@ describe('ChatSession media history boundaries', () => {
     await chat.setHistory([
       { speaker: 'human', blocks: [{ type: 'text', text: 'retained' }] },
     ]);
-    const lifecycle = upsertRuntimeEntry(
-      'media-history-runtime',
-      {},
-    ).providerFileLifecycle;
+
     const retained = await lifecycle.retain({
       cacheKey: 'chat-clear-provider-file-failure',
       fileId: 'provider-file-for-chat-clear-failure',
@@ -296,10 +358,13 @@ describe('ChatSession media history boundaries', () => {
   }): Promise<{
     readonly chat: ChatSession;
     readonly recording: SessionRecordingService;
+    readonly execution: AgentChatRecordingExecution;
     readonly requests: readonly IContent[][];
   }> {
     const requests: IContent[][] = [];
-    const provider: IProvider = {
+    const provider: IProvider & {
+      requestProviderFileBindings?: ProviderFileBindingStore;
+    } = {
       name: options.providerName,
       getDefaultModel: () => 'media-history-model',
       getMediaTransportCapabilities: () => ({
@@ -360,12 +425,7 @@ describe('ChatSession media history boundaries', () => {
       provider: options.providerName,
       model: 'media-history-model',
     });
-    const setup = createChatSessionRuntime({
-      provider,
-      configOverrides: {
-        getSessionRecordingService: () => recording,
-      },
-    });
+    const setup = createChatSessionRuntime({ provider });
     setup.settingsService.set('media.semantic-purge', options.mode);
     setup.settingsService.set('prompt-caching', '5m');
     const history = new HistoryService();
@@ -373,13 +433,23 @@ describe('ChatSession media history boundaries', () => {
       rootDirectory: join(directory, `media-${options.providerName}`),
       quotaBytes: 1024 * 1024,
     });
+    const state = createAgentRuntimeState({
+      runtimeId: `purge-${options.providerName}`,
+      provider: options.providerName,
+      model: 'media-history-model',
+      sessionId: `purge-${options.providerName}`,
+    });
+    const invocationOwner = new SessionSettingsOwner(setup.settingsService);
+    retainedInvocationOwners.push(invocationOwner);
     const runtime = createAgentRuntimeContext({
-      state: createAgentRuntimeState({
-        runtimeId: `purge-${options.providerName}`,
-        provider: options.providerName,
-        model: 'media-history-model',
-        sessionId: `purge-${options.providerName}`,
-      }),
+      prepareProviderInvocation: (name, parameters, signal) =>
+        invocationOwner.prepareProviderInvocation(
+          state.runtimeId,
+          name,
+          parameters,
+          signal,
+        ),
+      state,
       history,
       settings: {
         compressionThreshold: 0.8,
@@ -387,11 +457,18 @@ describe('ChatSession media history boundaries', () => {
         preserveThreshold: 0.2,
         telemetry: { enabled: false, target: null },
         'media.semantic-purge': options.mode,
+        promptCaching: invocationOwner.readRuntimePolicy().promptCaching,
       },
-      provider: createProviderAdapterFromManager(
-        setup.config.getProviderManager(),
+      provider: createProviderAdapterFromManager(setup.providerManager),
+      telemetry: createTelemetryAdapter(
+        setup.config,
+        RootTelemetry.prepare({
+          enabled: false,
+          sessionId: 'isolated-adapter-fixture',
+          maxBytes: 1024,
+          maxFiles: 1,
+        }),
       ),
-      telemetry: createTelemetryAdapterFromConfig(setup.config),
       tools: createToolRegistryViewFromRegistry(),
       providerRuntime: { ...setup.runtime, config: setup.config },
       mediaStore: store,
@@ -406,9 +483,88 @@ describe('ChatSession media history boundaries', () => {
     return {
       chat: new ChatSession(runtime, contentGenerator, {}, []),
       recording,
+      execution: {
+        transcriptPath: () => recording.getFilePath() ?? undefined,
+        persistSemanticMediaPurge: async (candidate, frontier) => {
+          if (!recording.isActive()) {
+            throw new Error(
+              'Semantic media purge requires an active session recording',
+            );
+          }
+          recording.recordSemanticMediaPurge(candidate, frontier);
+          await recording.flush();
+          if (!recording.isActive()) {
+            throw new Error(
+              'Semantic media purge recording did not remain active',
+            );
+          }
+        },
+      },
       requests,
     };
   }
+
+  function sendOwned(
+    fixture: Awaited<ReturnType<typeof createPurgeChat>>,
+    message: string,
+    prompt: string,
+  ): ReturnType<ChatSession['sendMessage']> {
+    return fixture.chat.sendMessage({ message }, prompt, fixture.execution);
+  }
+
+  function streamOwned(
+    fixture: Awaited<ReturnType<typeof createPurgeChat>>,
+    message: string,
+    prompt: string,
+  ): ReturnType<ChatSession['sendMessageStream']> {
+    return fixture.chat.sendMessageStream(
+      { message },
+      prompt,
+      fixture.execution,
+    );
+  }
+
+  it('commits semantic media purge to the adopted live history after rebinding', async () => {
+    const fixture = await createPurgeChat({
+      mode: 'remove',
+      providerName: 'adopted-purge',
+    });
+    await fixture.chat.setHistory(mediaHistory());
+    const detached = fixture.chat.getHistoryService();
+    const live = new HistoryService();
+    const rebind = fixture.chat.prepareHistoryRebind(live);
+    const adopt = await live.prepareProfileAdoption(detached);
+    adopt();
+    rebind();
+    await sendOwned(fixture, 'purge adopted media', 'adopted-purge');
+    await fixture.recording.flush();
+    expect(mediaEncodings(live.getAll())).toStrictEqual(['url']);
+    expect(detached.getAll()).toStrictEqual([]);
+    expect(JSON.stringify(live.getAll())).toContain('purge adopted media');
+    await fixture.chat.clearHistory();
+    await fixture.recording.dispose();
+  });
+
+  it('rejects an ownerless semantic purge without changing durable history', async () => {
+    const fixture = await createPurgeChat({
+      mode: 'remove',
+      providerName: 'unbound-purge',
+    });
+    await fixture.chat.setHistory(mediaHistory());
+
+    await expect(
+      fixture.chat.sendMessage({ message: 'next' }, 'unbound-purge'),
+    ).rejects.toThrow(
+      'Semantic media purge requires an active session recording',
+    );
+
+    expect(mediaHistoryShape(fixture.chat.getHistory())).toStrictEqual([
+      'reference',
+      'url',
+    ]);
+    expect(fixture.requests).toHaveLength(1);
+    await fixture.recording.dispose();
+  });
 
   it('sends the purge candidate through the real chat send path and commits after provider success', async () => {
     const fixture = await createPurgeChat({
@@ -417,7 +573,7 @@ describe('ChatSession media history boundaries', () => {
     });
     await fixture.chat.setHistory(mediaHistory());
 
-    await fixture.chat.sendMessage({ message: 'next' }, 'purge-success');
+    await sendOwned(fixture, 'next', 'purge-success');
     await fixture.recording.flush();
 
     const firstRequestBlocks = fixture.requests[0]?.[0]?.blocks;
@@ -465,10 +621,7 @@ describe('ChatSession media history boundaries', () => {
     });
     await fixture.chat.setHistory(mediaHistory());
 
-    await fixture.chat.sendMessage(
-      { message: 'next' },
-      'capability-cache-proof',
-    );
+    await sendOwned(fixture, 'next', 'capability-cache-proof');
 
     expect(
       fixture.requests[0]?.[0]?.blocks.map((block) =>
@@ -494,10 +647,7 @@ describe('ChatSession media history boundaries', () => {
     });
     await fixture.chat.setHistory(mediaHistory());
 
-    await fixture.chat.sendMessage(
-      { message: 'next' },
-      'capability-no-cache-proof',
-    );
+    await sendOwned(fixture, 'next', 'capability-no-cache-proof');
 
     expect(
       fixture.requests[0]?.[0]?.blocks.map((block) =>
@@ -523,8 +673,9 @@ describe('ChatSession media history boundaries', () => {
     });
     await fixture.chat.setHistory(mediaHistory());
 
-    const stream = await fixture.chat.sendMessageStream(
-      { message: 'next' },
+    const stream = await streamOwned(
+      fixture,
+      'next',
       'purge-stream-request-history',
     );
     for await (const _event of stream) {
@@ -548,7 +699,7 @@ describe('ChatSession media history boundaries', () => {
     });
     await fixture.chat.setHistory(mediaHistory());
 
-    await fixture.chat.sendMessage({ message: 'next' }, 'purge-no-cache-write');
+    await sendOwned(fixture, 'next', 'purge-no-cache-write');
 
     expect(
       fixture.chat
@@ -569,7 +720,7 @@ describe('ChatSession media history boundaries', () => {
     });
     await fixture.chat.setHistory(prefixedMediaHistory());
 
-    await fixture.chat.sendMessage({ message: 'next' }, 'purge-cache-write');
+    await sendOwned(fixture, 'next', 'purge-cache-write');
 
     expect(fixture.chat.getHistory()[0]?.blocks).toStrictEqual([
       { type: 'text', text: 'stable prefix' },
@@ -592,9 +743,9 @@ describe('ChatSession media history boundaries', () => {
     });
     await fixture.chat.setHistory(mediaHistory());
 
-    await expect(
-      fixture.chat.sendMessage({ message: 'next' }, 'purge-error'),
-    ).rejects.toThrow('provider failed');
+    await expect(sendOwned(fixture, 'next', 'purge-error')).rejects.toThrow(
+      'provider failed',
+    );
 
     expect(
       fixture.chat
@@ -617,7 +768,7 @@ describe('ChatSession media history boundaries', () => {
     });
 
     await expect(
-      fixture.chat.sendMessage({ message: 'next' }, 'turn-commit-failure'),
+      sendOwned(fixture, 'next', 'turn-commit-failure'),
     ).rejects.toThrow('turn history commit failed');
 
     expect(mediaHistoryShape(fixture.chat.getHistory())).toStrictEqual([
@@ -637,8 +788,9 @@ describe('ChatSession media history boundaries', () => {
       throw new Error('stream turn history commit failed');
     });
 
-    const stream = await fixture.chat.sendMessageStream(
-      { message: 'next' },
+    const stream = await streamOwned(
+      fixture,
+      'next',
       'stream-turn-commit-failure',
     );
     const consumeStream = async (): Promise<void> => {
@@ -668,7 +820,7 @@ describe('ChatSession media history boundaries', () => {
     };
 
     await expect(
-      fixture.chat.sendMessage({ message: 'next' }, 'purge-commit-failure'),
+      sendOwned(fixture, 'next', 'purge-commit-failure'),
     ).rejects.toThrow('purge persistence failed');
 
     expect(mediaHistoryShape(fixture.chat.getHistory())).toStrictEqual([
@@ -698,12 +850,9 @@ describe('ChatSession media history boundaries', () => {
     });
     await fixture.chat.setHistory(mediaHistory());
 
-    const first = fixture.chat.sendMessage({ message: 'first' }, 'purge-first');
+    const first = sendOwned(fixture, 'first', 'purge-first');
     await firstStarted;
-    const second = fixture.chat.sendMessage(
-      { message: 'second' },
-      'purge-second',
-    );
+    const second = sendOwned(fixture, 'second', 'purge-second');
     releaseFirst();
     await Promise.all([first, second]);
 

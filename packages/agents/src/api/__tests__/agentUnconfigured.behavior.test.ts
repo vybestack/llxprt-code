@@ -3,6 +3,23 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { resolveShellJobSettings } from '@vybestack/llxprt-code-core/config/asyncTaskServices.js';
+
+import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
+
+import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
+const createFilesystem = installTestWorkspaceFilesystem();
+import { ApprovalMode } from '@vybestack/llxprt-code-policy';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { afterEach as disposeOwnedPolicies } from 'bun:test';
+
+import { buildTestMcpRuntime } from './helpers/buildCliStyleConfig.js';
+import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { SessionClientOwner } from '../../session/session-client-owner.js';
+import { ShellJobOwner } from '../../session/shell-job-owner.js';
+import { TaskLaunchOwner } from '../../session/task-launch-owner.js';
+import { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
 
 /**
  * Behavioral tests proving an Agent backed by a manager with no active
@@ -14,13 +31,14 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { AgentDeps } from '../agentImpl.js';
 import { AgentImpl } from '../agentImpl.js';
 import type { AgentEvent } from '../event-types.js';
@@ -94,6 +112,9 @@ function makeRecordingClient(): AgentClientContract & {
 
   const client = {
     isInitialized: () => true,
+    bindTelemetry: () => {},
+    bindRuntimeSettings: () => {},
+    clearTools: () => {},
     getHistory: async () => [],
     setHistory: async () => {},
     addHistory: async () => {},
@@ -125,8 +146,8 @@ function makeRecordingClient(): AgentClientContract & {
 
 function makeLoopHolder(): LoopHolder {
   return {
-    loop: null,
-    activeRunController: null,
+    current: undefined,
+    activeRunController: undefined,
     subscriptions: [],
   };
 }
@@ -135,8 +156,6 @@ function makeOwnership(): OwnershipRecord {
   return {
     config: {
       dispose: async () => {},
-      getExtensionLoader: () => ({ unloadExtension: async () => {} }),
-      shutdownLspService: async () => {},
     } as unknown as Config,
     messageBus: {} as MessageBus,
     loopHolder: makeLoopHolder(),
@@ -151,95 +170,176 @@ function makeOwnership(): OwnershipRecord {
   } as unknown as OwnershipRecord;
 }
 
-function makeDeps(
-  manager: RuntimeProviderManager,
-  client: AgentClientContract,
-): AgentDeps {
-  const policyEngine = {
-    getRules: () => [],
-    getActiveDecision: () => 'allow',
-  };
-  const messageBus = new MessageBus(policyEngine as never, false);
-  const config = {
-    getAgentClient: () => client,
-    getSettingsService: () => ({}) as unknown as SettingsService,
-    getProviderManager: () => manager,
-    getToolRegistry: () => ({
-      getAllTools: () => [],
-      getEnabledTools: () => [],
-    }),
-    getPolicyEngine: () => policyEngine,
-    getDebugMode: () => false,
-    getApprovalMode: () => 'default',
-    getEphemeralSetting: () => undefined,
-    setEphemeralSetting: () => {},
-    getEphemeralSettings: () => ({}),
-    getMcpInstructions: () => undefined,
-    awaitMcpDiscoveryGate: () => Promise.resolve(new Map()),
-    getMcpRuntimeStatus: () => ({
-      servers: {},
-      discoveryFailures: new Map(),
-      discoveryState: 'not_started' as never,
-    }),
-    refreshMcpServers: () => Promise.resolve(),
-    getModel: () => PLACEHOLDER_MODEL,
-    getProvider: () => undefined,
-    initializeContentGeneratorConfig: async () => {},
-    getConversationLoggingEnabled: () => false,
-    getAsyncTaskManager: () => undefined,
-    getIdeMode: () => false,
-    getTargetDir: () => '/tmp',
-    getProjectRoot: () => '/tmp',
-    getProxy: () => undefined,
-    getWorkspaceContext: () => ({ addDirectory: () => {} }),
-    getUsageStatisticsEnabled: () => false,
-    setProviderManager: () => {},
-    getLspConfig: () => undefined,
-    getLspServiceClient: () => undefined,
-    getSkillManager: () => undefined,
-    getExtensionLoader: () => ({ unloadExtension: async () => {} }),
-    getMemory: () => '',
-    getFileCount: () => 0,
-    getFilePaths: () => [],
-    getCoreMemory: () => undefined,
-    getCoreFileCount: () => 0,
-    setCoreMemory: () => {},
-    getRuntimeMessageBus: () => undefined,
-    getRuntimeOAuthManager: () => undefined,
-  } as unknown as Config;
-
-  return {
-    config,
-    providerManager: manager,
-    oauthManager: {
-      dispose: async () => {},
-      attachAddItemToProviders: () => {},
-    } as unknown as OAuthManager,
-    settingsService: {} as unknown as SettingsService,
-    runtimeId: 'test-unconfigured-runtime',
-    runtimeHandle: { cleanup: () => {} },
-    messageBus,
-    loopHolder: makeLoopHolder(),
-    runtimeState: makeUnconfiguredRuntimeState(),
-    ownership: makeOwnership(),
-    rebuildLoop: () => {},
-    resolveClient: () => client,
-    displayCallbacks: {} as unknown as DisplayCallbacks,
-    editorCallbacksHolder: { editorCallbacks: {} as EditorCallbacks },
-    displayCallbacksHolder: {} as unknown as StableDisplayCallbacksHolder,
-  };
-}
-
 describe('AgentImpl: fail-closed when unconfigured (#2481)', () => {
+  disposeOwnedPolicies(async () => {
+    await Promise.all(ownedPolicies.splice(0).map((owner) => owner.dispose()));
+  });
+
+  async function makeDeps(
+    manager: RuntimeProviderManager,
+    client: AgentClientContract,
+  ): Promise<AgentDeps> {
+    const config = new Config({
+      sessionId: 'test-unconfigured-session',
+      targetDir: '/tmp',
+      cwd: '/tmp',
+      debugMode: false,
+      model: PLACEHOLDER_MODEL,
+      telemetry: { enabled: false },
+    });
+    const settingsService = new SettingsService();
+    const settingsOwner = new SessionSettingsOwner(settingsService);
+    settingsOwner.bindTelemetry(config);
+    const policy = ownPolicy();
+    const workspace = await buildTestMcpRuntime(
+      config,
+      policy.session.messageBus,
+      {},
+      undefined,
+      policy,
+    );
+    disposeOwnedPolicies(async () => {
+      await settingsOwner.dispose();
+      await workspace.dispose();
+      await config.dispose();
+    });
+    const messageBus = workspace.messageBus;
+    const filesystem = createFilesystem({
+      targetDir: config.getTargetDir(),
+      isTrusted: () => true,
+    });
+    const mediaStore = new LocalMediaStore({
+      rootDirectory: '/tmp/agent-unconfigured-media',
+      quotaBytes: 1024,
+    });
+    Object.assign(client, {
+      mediaStore,
+      assertConfig: (candidate: Config) => {
+        if (candidate !== config) throw new Error('Unexpected Config');
+      },
+      assertProviderManager: (candidate: RuntimeProviderManager) => {
+        if (candidate !== manager)
+          throw new Error('Unexpected provider manager');
+      },
+    });
+    const factories = configureProviderRuntimeFactories(config, manager);
+    const sessionClient = await SessionClientOwner.create(
+      config,
+      assembleTaskSchemaPolicy(settingsService),
+      manager,
+      () => client,
+      mediaStore,
+      () => undefined,
+      filesystem.paths,
+      settingsOwner,
+      factories.contentGeneratorFactory,
+      factories.tokenizerFactory,
+      client,
+    );
+    sessionClient.bindMcpRuntime(workspace);
+    sessionClient.bindHooks();
+    disposeOwnedPolicies(() => sessionClient.dispose());
+    return {
+      settingsOwner,
+      workspaceSkills: {
+        list: () => [],
+        find: () => undefined,
+        activate: async () => {
+          throw new Error('No skills configured');
+        },
+        reload: async () => {},
+        isAdminEnabled: () => true,
+      },
+      mediaStore,
+      sessionClient,
+      taskLaunchOwner: new TaskLaunchOwner(new AsyncTaskManager()),
+      shellOwner: new ShellJobOwner(() =>
+        resolveShellJobSettings(settingsService),
+      ),
+      switchProvider: async () => {
+        throw new Error('Unexpected provider switch');
+      },
+      config,
+      mcpOperations: {
+        trust: policy.trust,
+        ide: {
+          getClient: () => undefined,
+          isEnabled: () => false,
+          setEnabled: () => {},
+        },
+        profileDefinitions: workspace.profileDefinitions,
+        profileWrites: workspace.profileWrites,
+        subagentDefinitions: workspace.subagentDefinitions,
+        subagentWrites: workspace.subagentWrites,
+        checkpointOperations: workspace.checkpointOperations,
+        closeAdmission: () => {},
+        listPrompts: () => [],
+        listResources: () => [],
+        workspacePaths: filesystem.paths,
+        workspaceFiles: filesystem.files,
+        workspaceIgnore: filesystem.ignore,
+        workspaceScans: filesystem.scans,
+        workspaceSearch: filesystem.search,
+        addWorkspaceDirectory: (directory) =>
+          filesystem.addDirectory(directory),
+        lspInspection: {
+          read: async () => ({
+            configured: undefined,
+            alive: false,
+            reason: undefined,
+            statuses: [],
+          }),
+        },
+        policyInspection: ownPolicy().session.inspection,
+        performOAuth: async () => {
+          throw new Error('Unexpected MCP OAuth');
+        },
+        readOAuthCredentials: async () => null,
+        readServerSettings: () => ({
+          mcpServers: {},
+          blockedMcpServers: [],
+          settingsMcpServers: {},
+        }),
+        subscribeStatus: () => () => {},
+        reload: async () => {},
+        findResource: () => undefined,
+        readResource: async () => {
+          throw new Error('No MCP server configured');
+        },
+        status: () => undefined,
+        refresh: async () => {},
+        awaitDiscovery: async () => new Map(),
+      },
+      providerManager: manager,
+      oauthManager: {
+        dispose: async () => {},
+        attachAddItemToProviders: () => {},
+      } as unknown as OAuthManager,
+      settingsService,
+      runtimeId: 'test-unconfigured-runtime',
+      runtimeHandle: { cleanup: () => {} },
+      messageBus,
+      loopHolder: makeLoopHolder(),
+      runtimeState: makeUnconfiguredRuntimeState(),
+      ownership: makeOwnership(),
+      sessionIdentityOwnership: 'config',
+      rebuildLoop: () => {},
+      resolveClient: () => client,
+      displayCallbacks: {} as unknown as DisplayCallbacks,
+      editorCallbacksHolder: { editorCallbacks: {} as EditorCallbacks },
+      displayCallbacksHolder: {} as unknown as StableDisplayCallbacksHolder,
+    };
+  }
+
   let manager: RuntimeProviderManager;
   let client: ReturnType<typeof makeRecordingClient>;
   let deps: AgentDeps;
   let agent: AgentImpl;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     manager = makeUnconfiguredProviderManager();
     client = makeRecordingClient();
-    deps = makeDeps(manager, client);
+    deps = await makeDeps(manager, client);
     agent = new AgentImpl(deps);
   });
 
@@ -396,6 +496,10 @@ describe('AgentImpl: fail-closed when unconfigured (#2481)', () => {
 });
 
 describe('fromConfig real orchestration: configured vs unconfigured (#2481)', () => {
+  disposeOwnedPolicies(async () => {
+    await Promise.all(ownedPolicies.splice(0).map((owner) => owner.dispose()));
+  });
+
   it('fromConfig over a real Config (buildCliStyleConfig) drives a real turn when configured', async () => {
     const { buildCliStyleConfig } = await import(
       './helpers/buildCliStyleConfig.js'
@@ -405,17 +509,28 @@ describe('fromConfig real orchestration: configured vs unconfigured (#2481)', ()
     const built = await buildCliStyleConfig('plain-text.jsonl');
     try {
       // The real Config has FakeProvider active (configured state).
-      expect(built.config.getProviderManager()?.hasActiveProvider()).toBe(true);
+      expect(built.providerManager.hasActiveProvider()).toBe(true);
 
-      const agent = await fromConfig({ config: built.config });
-
-      // A real stream turn must resolve with exactly one done event.
-      const events: Array<{ type: string; reason?: string }> = [];
-      for await (const event of agent.stream('hello')) {
-        events.push(event as { type: string; reason?: string });
+      const agent = await fromConfig({
+        settingsOwner: built.settingsOwner,
+        settingsService: built.settingsService,
+        agentClient: built.agentClient,
+        providerManager: built.providerManager,
+        config: built.config,
+        messageBus: built.messageBus,
+        mcpRuntime: built.mcpRuntime,
+      });
+      try {
+        // A real stream turn must resolve with exactly one done event.
+        const events: Array<{ type: string; reason?: string }> = [];
+        for await (const event of agent.stream('hello')) {
+          events.push(event as { type: string; reason?: string });
+        }
+        const doneEvents = events.filter((e) => e.type === 'done');
+        expect(doneEvents).toHaveLength(1);
+      } finally {
+        await agent.dispose();
       }
-      const doneEvents = events.filter((e) => e.type === 'done');
-      expect(doneEvents).toHaveLength(1);
     } finally {
       await built.cleanup();
     }
@@ -429,14 +544,38 @@ describe('fromConfig real orchestration: configured vs unconfigured (#2481)', ()
 
     const built = await buildCliStyleConfig('plain-text.jsonl');
     try {
-      const agent = await fromConfig({ config: built.config });
-
-      // The agent should reflect the active FakeProvider, not a sentinel.
-      const provider = agent.getProvider();
-      expect(provider).toBeDefined();
-      expect(provider).not.toBe('unconfigured');
+      const agent = await fromConfig({
+        settingsOwner: built.settingsOwner,
+        settingsService: built.settingsService,
+        agentClient: built.agentClient,
+        providerManager: built.providerManager,
+        config: built.config,
+        messageBus: built.messageBus,
+        mcpRuntime: built.mcpRuntime,
+      });
+      try {
+        // The agent should reflect the active FakeProvider, not a sentinel.
+        const provider = agent.getProvider();
+        expect(provider).toBeDefined();
+        expect(provider).not.toBe('unconfigured');
+      } finally {
+        await agent.dispose();
+      }
     } finally {
       await built.cleanup();
     }
   });
 });
+
+const ownedPolicies: RuntimePolicyOwner[] = [];
+function ownPolicy(): RuntimePolicyOwner {
+  const owner = new RuntimePolicyOwner({
+    getPolicyEngineConfig: () => ({}),
+    getMcpServers: () => ({}),
+    getApprovalMode: () => ApprovalMode.DEFAULT,
+    getDebugMode: () => false,
+    initialWorkspaceTrust: true,
+  });
+  ownedPolicies.push(owner);
+  return owner;
+}

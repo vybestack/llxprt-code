@@ -228,6 +228,7 @@ function buildOrchestrator(options: BuildOptions = {}): {
     } as unknown as LoopDetectionService,
     todoContinuationService,
     ideContextTracker: {
+      isEnabled: () => false,
       getContextParts: vi.fn().mockReturnValue({
         contextParts: [],
         newIdeContext: undefined,

@@ -1,3 +1,5 @@
+import { WorkspaceTrustLifecycle } from '../services/workspace-trust-lifecycle.js';
+import { WorkspaceFilesystemOwner } from '../services/workspace-filesystem-owner.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -85,7 +87,7 @@ describe('Server Config includeDirectories (real filesystem)', () => {
     resetAgentClientMock();
   });
 
-  it('should initialize WorkspaceContext with includeDirectories', () => {
+  it('should initialize WorkspaceContext with includeDirectories', async () => {
     // Use real directories that exist for this test
     const tempDir = os.tmpdir();
     const resolved = fs.realpathSync(tempDir);
@@ -94,6 +96,7 @@ describe('Server Config includeDirectories (real filesystem)', () => {
     const dir2 = path.join(tempDir, `test-include-dir2-${Date.now()}`);
     fs.mkdirSync(dir1, { recursive: true });
     fs.mkdirSync(dir2, { recursive: true });
+    const trust = new WorkspaceTrustLifecycle();
     try {
       const paramsWithIncludeDirs: ConfigParameters = {
         ...baseParams,
@@ -101,8 +104,12 @@ describe('Server Config includeDirectories (real filesystem)', () => {
         includeDirectories: [dir1, dir2],
       };
       const config = new Config(paramsWithIncludeDirs);
-      const workspaceContext = config.getWorkspaceContext();
-      const directories = workspaceContext.getDirectories();
+      const workspace = new WorkspaceFilesystemOwner({
+        targetDir: config.getTargetDir(),
+        includeDirectories: config.getConfiguredIncludeDirectories(),
+        isTrusted: () => trust.isTrustedFolder(),
+      });
+      const directories = workspace.paths.directories();
       // Should include the target directory plus the included directories
       expect(directories).toHaveLength(3);
       expect(directories).toContain(resolved);
@@ -110,6 +117,7 @@ describe('Server Config includeDirectories (real filesystem)', () => {
       expect(directories).toContain(fs.realpathSync(dir2));
     } finally {
       // Cleanup
+      await trust.dispose();
       fs.rmSync(dir1, { recursive: true, force: true });
       fs.rmSync(dir2, { recursive: true, force: true });
     }

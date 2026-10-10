@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { configureCommandOptions } from '../command-configuration.js';
 import type { CommandModule } from 'yargs';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { getErrorMessage } from '../../utils/errors.js';
@@ -44,24 +45,26 @@ export const uninstallCommand: CommandModule = {
   command: 'uninstall <name> [--scope]',
   describe: 'Uninstalls a skill by name.',
   builder: (yargs) =>
-    yargs
-      .positional('name', {
-        describe: 'The name of the skill to uninstall.',
-        type: 'string',
-        demandOption: true,
-      })
-      .option('scope', {
-        describe:
-          'The scope to uninstall the skill from. Defaults to "user" (global).',
-        choices: ['user', 'workspace'],
-        default: 'user',
-      })
-      .check((argv) => {
-        if (!argv.name) {
-          throw new Error('The skill name must be provided.');
-        }
-        return true;
-      }),
+    configureCommandOptions(yargs, (configuration) =>
+      configuration
+        .positional('name', {
+          describe: 'The name of the skill to uninstall.',
+          type: 'string',
+          demandOption: true,
+        })
+        .option('scope', {
+          describe:
+            'The scope to uninstall the skill from. Defaults to "user" (global).',
+          choices: ['user', 'workspace'],
+          default: 'user',
+        })
+        .check((argv) => {
+          if (!argv.name) {
+            throw new Error('The skill name must be provided.');
+          }
+          return true;
+        }),
+    ),
   handler: async (argv) => {
     await handleUninstall({
       name: argv['name'] as string,

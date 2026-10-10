@@ -5,8 +5,7 @@
  */
 
 import { afterEach, describe, expect, it } from 'bun:test';
-import { metrics, trace } from '@opentelemetry/api';
-import { logs } from '@opentelemetry/api-logs';
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -41,24 +40,41 @@ function createTelemetryConfig(outfile: string): TelemetryConfig {
   };
 }
 
+function prepareRoot(config: TelemetryConfig): RootTelemetry {
+  return RootTelemetry.prepare({
+    enabled: config.getTelemetryEnabled(),
+    sessionId: config.getSessionId(),
+    outfile: config.getTelemetryOutfile(),
+    maxBytes: config.getTelemetryOutfileMaxBytes(),
+    maxFiles: config.getTelemetryOutfileMaxFiles(),
+  });
+}
+
 describe('local telemetry SDK lifecycle', () => {
+  const roots: RootTelemetry[] = [];
   const directories: string[] = [];
 
   afterEach(async () => {
-    if (isTelemetrySdkInitialized()) {
-      await shutdownTelemetry(createTelemetryConfig(''));
-    }
+    const results = await Promise.allSettled(
+      roots.splice(0).map((root) => root.close()),
+    );
+    const failures = results.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
+    );
+    if (failures.length > 0)
+      throw new AggregateError(failures, 'SDK fixture cleanup failed');
     for (const directory of directories.splice(0)) {
       rmSync(directory, { recursive: true, force: true });
     }
   });
 
   it('does nothing when flushed or shut down before initialization', async () => {
-    const config = createTelemetryConfig('');
+    const selected = prepareRoot(createTelemetryConfig(''));
+    roots.push(selected);
 
-    await expect(flushTelemetry()).resolves.toBeUndefined();
-    await expect(shutdownTelemetry(config)).resolves.toBeUndefined();
-    expect(isTelemetrySdkInitialized()).toBe(false);
+    await expect(flushTelemetry(selected)).resolves.toBeUndefined();
+    await expect(shutdownTelemetry(selected)).resolves.toBeUndefined();
+    expect(isTelemetrySdkInitialized(selected)).toBe(false);
   });
 
   it('initializes idempotently and flushes all local signals to the configured file', async () => {
@@ -66,20 +82,31 @@ describe('local telemetry SDK lifecycle', () => {
     directories.push(directory);
     const firstOutfile = join(directory, 'first.jsonl');
     const ignoredOutfile = join(directory, 'ignored.jsonl');
-    const config = createTelemetryConfig(firstOutfile);
+    const selected = prepareRoot(createTelemetryConfig(firstOutfile));
+    const unselected = RootTelemetry.prepare({
+      enabled: false,
+      sessionId: 'disabled-peer',
+      outfile: ignoredOutfile,
+      maxBytes: 1048576,
+      maxFiles: 2,
+    });
+    roots.push(selected, unselected);
 
-    initializeTelemetry(config);
-    initializeTelemetry(createTelemetryConfig(ignoredOutfile));
-    const span = trace.getTracer('local-sdk-test').startSpan('local-sdk-span');
-    expect(span.isRecording()).toBe(true);
+    await initializeTelemetry(selected);
+    await initializeTelemetry(selected);
+    unselected.events.record(() => {
+      throw new Error('An unselected SDK peer collected into its target');
+    });
+    unselected.spans.start('DENIED-PEER-SPAN').end();
+    unselected.measurements.modelResponse('DENIED-PEER-MODEL', 1, 200);
+    await unselected.flush();
+    const span = selected.spans.start('local-sdk-span');
+    expect(selected.isEnabled()).toBe(true);
     span.end();
-    metrics
-      .getMeter('local-sdk-test')
-      .createCounter('local-sdk-counter')
-      .add(1);
-    logs.getLogger('local-sdk-test').emit({ body: 'pending-local-log' });
-    await flushTelemetry();
-    await shutdownTelemetry(config);
+    selected.measurements.modelResponse('local-sdk-counter', 1, 200);
+    selected.events.record(() => ({ body: 'pending-local-log' }));
+    await flushTelemetry(selected);
+    await shutdownTelemetry(selected);
 
     const telemetry = readFileSync(firstOutfile, 'utf8');
     expect(telemetry).toContain('local-sdk-span');
@@ -97,15 +124,18 @@ describe('local telemetry SDK lifecycle', () => {
     const secondOutfile = join(directory, 'second.jsonl');
     const secondConfig = createTelemetryConfig(secondOutfile);
 
-    initializeTelemetry(firstConfig);
-    await shutdownTelemetry(firstConfig);
-    await shutdownTelemetry(firstConfig);
-    initializeTelemetry(secondConfig);
-    logs.getLogger('local-sdk-test').emit({ body: 'after-restart' });
-    await flushTelemetry();
-    await shutdownTelemetry(secondConfig);
+    const first = prepareRoot(firstConfig);
+    const selected = prepareRoot(secondConfig);
+    roots.push(first, selected);
+    await initializeTelemetry(first);
+    await shutdownTelemetry(first);
+    await shutdownTelemetry(first);
+    await initializeTelemetry(selected);
+    selected.events.record(() => ({ body: 'after-restart' }));
+    await flushTelemetry(selected);
+    await shutdownTelemetry(selected);
 
     expect(readFileSync(secondOutfile, 'utf8')).toContain('after-restart');
-    expect(isTelemetrySdkInitialized()).toBe(false);
+    expect(isTelemetrySdkInitialized(selected)).toBe(false);
   });
 });

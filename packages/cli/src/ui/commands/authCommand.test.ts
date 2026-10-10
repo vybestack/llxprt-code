@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach, vi, setSystemTime } from 'bun:test';
 import { AuthCommandExecutor } from './authCommand.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import type { CommandContext } from './types.js';
 
 // Mock browser profile discovery so tests never touch real disk. The source
@@ -62,17 +63,18 @@ describe('AuthCommandExecutor OAuth Support', () => {
     clearSessionBucketMock.mockReset();
     logoutAllBucketsMock.mockReset();
     activateNamedLoginBucketMock.mockReset();
-    executor = new AuthCommandExecutor(mockOAuthManager);
-    mockContext = {
+    executor = new AuthCommandExecutor(mockOAuthManager, () => {});
+    mockContext = createMockCommandContext({
       services: {
         config: null,
+        agent: null,
         settings: {} as never,
         git: undefined,
         logger: {} as never,
       },
       ui: {} as never,
       session: {} as never,
-    };
+    });
   });
 
   describe('@requirement REQ-001: OAuth-only authentication menu', () => {

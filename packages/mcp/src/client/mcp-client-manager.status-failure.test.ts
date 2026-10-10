@@ -1,22 +1,22 @@
+import { installTestCatalogOwners } from '@vybestack/llxprt-code-test-utils/core/config.js';
+const createTestCatalogOwner = installTestCatalogOwners();
+import { createTestOAuthBinding } from './test-support/index.js';
+import { unsupportedApprovalPolicy } from './test-support/approval-policy.js';
 /*
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
-import type { Config } from './test-support/mcpClientTestSupport.js';
-import { PromptRegistry } from './test-support/mcpClientTestSupport.js';
-import { ResourceRegistry } from './test-support/mcpClientTestSupport.js';
-import { WorkspaceContext } from './test-support/mcpClientTestSupport.js';
-import { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import type { Config as BaseConfig } from './test-support/mcpClientTestSupport.js';
+
+import {
+  buildToolGovernance,
+  ToolRegistry,
+} from '@vybestack/llxprt-code-tools';
 import type { McpClient } from './mcp-client.js';
 import { McpClientManager } from './mcp-client-manager.js';
-import {
-  addMCPStatusChangeListener,
-  removeMCPStatusChangeListener,
-} from './mcp-status.js';
 
 const { mockMcpClient } = {
   mockMcpClient: vi.fn(),
@@ -52,16 +52,18 @@ function createHarness(): {
   const clientA = createClient();
   const clientB = createClient();
   mockMcpClient.mockReturnValueOnce(clientA).mockReturnValueOnce(clientB);
-  const promptRegistry = new PromptRegistry();
-  const resourceRegistry = new ResourceRegistry();
+  const catalog = createTestCatalogOwner();
+  const promptRegistry = catalog.promptPublication;
+  const resourceRegistry = catalog.resourcePublication;
+  const configPrompts = promptRegistry;
+  const configResources = resourceRegistry;
   const config = {
     isTrustedFolder: () => true,
     getMcpServers: () => ({ 'server-a': {}, 'server-b': {} }),
     getMcpServerCommand: () => '',
-    getPromptRegistry: () => promptRegistry,
-    getResourceRegistry: () => resourceRegistry,
+
     getDebugMode: () => false,
-    getWorkspaceContext: () => new WorkspaceContext(''),
+
     getAllowedMcpServers: () => undefined,
     getBlockedMcpServers: () => undefined,
     refreshMcpContext: vi.fn(),
@@ -69,11 +71,28 @@ function createHarness(): {
   const toolRegistry = new ToolRegistry(
     config,
     { requestConfirmation: async () => false },
-    new SettingsService(),
+    () => ({
+      hideTaskAsync: false,
+      lazyMcp: false,
+      eagerServers: [],
+      governance: buildToolGovernance({
+        getEphemeralSettings: () => ({}),
+        getExcludeTools: () => [],
+      }),
+    }),
   );
   const removeTools = vi.spyOn(toolRegistry, 'removeMcpToolsByServer');
   return {
-    manager: new McpClientManager('0.0.1', toolRegistry, config),
+    manager: new McpClientManager(
+      createTestOAuthBinding(),
+      unsupportedApprovalPolicy(),
+      '0.0.1',
+      toolRegistry,
+      configPrompts,
+      configResources,
+      config,
+      config.refreshMcpContext,
+    ),
     clientA,
     clientB,
     removeTools,
@@ -81,16 +100,17 @@ function createHarness(): {
 }
 
 async function withThrowingStatusListener(
+  manager: McpClientManager,
   action: () => void | Promise<void>,
 ): Promise<void> {
   const throwingListener = () => {
     throw new Error('status listener failed');
   };
-  addMCPStatusChangeListener(throwingListener);
+  const release = manager.subscribeStatus(throwingListener);
   try {
     await action();
   } finally {
-    removeMCPStatusChangeListener(throwingListener);
+    release();
   }
 }
 
@@ -102,7 +122,7 @@ describe('McpClientManager status listener cleanup failures', () => {
     await manager.startConfiguredMcpServers();
     removeTools.mockClear();
 
-    await withThrowingStatusListener(async () => {
+    await withThrowingStatusListener(manager, async () => {
       expect(() => manager.quarantineForTrustRevocation()).toThrow(
         AggregateError,
       );
@@ -119,7 +139,7 @@ describe('McpClientManager status listener cleanup failures', () => {
     await manager.startConfiguredMcpServers();
     removeTools.mockClear();
 
-    await withThrowingStatusListener(async () => {
+    await withThrowingStatusListener(manager, async () => {
       await expect(manager.stop()).rejects.toBeInstanceOf(AggregateError);
     });
 
@@ -131,3 +151,5 @@ describe('McpClientManager status listener cleanup failures', () => {
     expect(clientB.disconnect).toHaveBeenCalledOnce();
   });
 });
+
+type Config = BaseConfig & { refreshMcpContext(): Promise<void> };

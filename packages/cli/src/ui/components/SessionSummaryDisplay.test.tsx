@@ -24,12 +24,15 @@ const useSessionStatsMock = SessionContext.useSessionStats as Mock<
 const renderWithMockedStats = (metrics: SessionMetrics) => {
   useSessionStatsMock.mockReturnValue({
     stats: {
+      sessionId: 'summary-test',
+      historyTokenCount: 0,
       sessionStartTime: new Date(),
       metrics,
       lastPromptTokenCount: 0,
       promptCount: 5,
     },
 
+    updateHistoryTokenCount: vi.fn(),
     getPromptCount: () => 5,
     startNewPrompt: vi.fn(),
   });
@@ -58,8 +61,9 @@ describe('<SessionSummaryDisplay />', () => {
         totalCalls: 0,
         totalSuccess: 0,
         totalFail: 0,
+        totalCancelled: 0,
         totalDurationMs: 0,
-        totalDecisions: { accept: 0, reject: 0, modify: 0 },
+        totalDecisions: { accept: 0, reject: 0, modify: 0, auto_accept: 0 },
         byName: {},
       },
       files: {

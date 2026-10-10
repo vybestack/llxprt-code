@@ -13,7 +13,7 @@
  * entirely when JSON output is enabled.
  */
 
-import { type Config, StreamJsonFormatter } from '@vybestack/llxprt-code-core';
+import { StreamJsonFormatter } from '@vybestack/llxprt-code-core';
 import {
   vi,
   type Mock,
@@ -24,12 +24,6 @@ import {
   afterEach,
 } from 'bun:test';
 import { createProfileNameWriter } from './nonInteractiveCli.js';
-
-function createMockConfig(): Config {
-  return {
-    getModel: () => 'test-model',
-  } as unknown as Config;
-}
 
 describe('createProfileNameWriter profile-qualified prefix (issue #2263)', () => {
   let processStdoutSpy: Mock<(...args: never[]) => unknown>;
@@ -45,12 +39,7 @@ describe('createProfileNameWriter profile-qualified prefix (issue #2263)', () =>
   });
 
   it('writes [profileName:modelName] on the first call of a turn', () => {
-    const writer = createProfileNameWriter(
-      createMockConfig(),
-      false,
-      null,
-      () => 'work:gpt-4',
-    );
+    const writer = createProfileNameWriter(false, null, () => 'work:gpt-4');
 
     writer();
 
@@ -58,12 +47,7 @@ describe('createProfileNameWriter profile-qualified prefix (issue #2263)', () =>
   });
 
   it('does not write on the second call (firstEventInTurn guard)', () => {
-    const writer = createProfileNameWriter(
-      createMockConfig(),
-      false,
-      null,
-      () => 'work:gpt-4',
-    );
+    const writer = createProfileNameWriter(false, null, () => 'work:gpt-4');
 
     writer();
     processStdoutSpy.mockClear();
@@ -73,12 +57,7 @@ describe('createProfileNameWriter profile-qualified prefix (issue #2263)', () =>
   });
 
   it('does not write when jsonOutput is true', () => {
-    const writer = createProfileNameWriter(
-      createMockConfig(),
-      true,
-      null,
-      () => 'work:gpt-4',
-    );
+    const writer = createProfileNameWriter(true, null, () => 'work:gpt-4');
 
     writer();
 
@@ -86,12 +65,7 @@ describe('createProfileNameWriter profile-qualified prefix (issue #2263)', () =>
   });
 
   it('does not write when the identity resolves to null', () => {
-    const writer = createProfileNameWriter(
-      createMockConfig(),
-      false,
-      null,
-      () => null,
-    );
+    const writer = createProfileNameWriter(false, null, () => null);
 
     writer();
 
@@ -101,7 +75,6 @@ describe('createProfileNameWriter profile-qualified prefix (issue #2263)', () =>
   it('does not write when a stream formatter is present', () => {
     const streamFormatter = new StreamJsonFormatter();
     const writer = createProfileNameWriter(
-      createMockConfig(),
       false,
       streamFormatter,
       () => 'work:gpt-4',

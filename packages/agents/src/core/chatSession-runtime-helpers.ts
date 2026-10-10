@@ -27,6 +27,6 @@ export function createConfigParams(
     sandbox: undefined,
     sessionId: 'test-session',
     model: 'gemini-1.5-pro',
-    settingsService,
+    initialSettings: settingsService.getAllGlobalSettings(),
   };
 }

@@ -4,17 +4,28 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { EventEmitter } from 'node:events';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import type { MCPServerConfig } from '../config/mcpServerConfig.js';
+import type { MCPServerConfig } from '../config/index.js';
 import {
   getErrorMessage,
   is404Error,
   UnauthorizedError,
 } from '@vybestack/llxprt-code-tools/utils/errors.js';
-import { MCPOAuthProvider } from '../auth/oauth-provider.js';
-import { MCPOAuthTokenStorage } from '../auth/oauth-token-storage.js';
-import { OAuthUtils } from '../auth/oauth-utils.js';
-import { emitHostFeedback } from '../host/hostServices.js';
+import { awaitOAuthOperation } from '../auth/index.js';
+import {
+  connectClient,
+  createJoiningTransport,
+} from './mcp-connection-lifetime.js';
+import { MCPOAuthProvider, type McpOAuthBinding } from '../auth/index.js';
+import type { MCPOAuthConfig } from '../auth/index.js';
+import type { MCPOAuthTokenStorage } from '../auth/index.js';
+import { OAuthUtils } from '../auth/index.js';
+import {
+  captureHostFeedback,
+  defaultFeedbackSink,
+  type HostFeedbackSink,
+} from '../host/hostServices.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import {
   createSSETransportWithAuth,
@@ -25,21 +36,6 @@ import {
 import { hasNetworkTransport } from './mcp-discovery-helpers.js';
 
 const debugLogger = DebugLogger.getLogger('llxprt:core:tools:mcp-client');
-
-/**
- * Per-server in-flight OAuth guard. Prevents duplicate concurrent browser
- * OAuth flows for the same server, which would otherwise each open a new
- * browser tab. The guard is scoped to interactive browser authentication only
- * (the `handleAutomaticOAuth` path); silent token read/refresh in
- * `getValidToken()` is unaffected.
- *
- * The key includes the server URL so that concurrent requests for different
- * URLs do not cross-contaminate each other. The www-authenticate header is
- * intentionally excluded because OAuth servers emit dynamic challenge fields
- * (realm, scope, nonce) that vary between requests for the same server,
- * which would prevent dedup if included.
- */
-const inFlightAuthentications = new Map<string, Promise<boolean>>();
 
 /**
  * Server-side message fragments signalling that the SSE transport has been
@@ -190,85 +186,114 @@ export function detectDeprecatedSSEEndpoint(
   );
 }
 
-/**
- * Timeout for in-flight OAuth flows. If the user never completes the browser
- * authentication, the guard entry is cleaned up after this period so that
- * subsequent attempts can start a fresh flow rather than awaiting a promise
- * that will never settle.
- */
-const OAUTH_FLOW_TIMEOUT_MS = 10 * 60 * 1000;
+export interface McpOAuthCapabilities {
+  getAuthProviderFactory?: McpOAuthBinding['getAuthProviderFactory'];
+  discover: typeof OAuthUtils.discoverOAuthConfig;
+  tokenStorage: MCPOAuthTokenStorage;
+  authenticate: (
+    server: string,
+    config: MCPOAuthConfig,
+    url?: string,
+    events?: EventEmitter,
+    signal?: AbortSignal,
+  ) => Promise<unknown>;
+}
 
-/**
- * Handle automatic OAuth discovery and authentication for a server.
- * Concurrent calls for the same server name reuse a single in-progress
- * authentication flow to avoid opening multiple browser tabs. If the flow
- * does not settle within {@link OAUTH_FLOW_TIMEOUT_MS}, the guard entry is
- * evicted so subsequent attempts can start a fresh flow.
- *
- * Note: if the timeout wins the race, the underlying browser OAuth flow
- * (`doHandleAutomaticOAuth`) is not cancelled — browser-based flows cannot
- * be reliably aborted from the Node.js side. The timed-out flow may still
- * complete in the background, but the in-flight guard is cleared so a
- * fresh attempt can proceed.
- */
+export class McpOAuthOperations {
+  private readonly requests = new Map<
+    string,
+    {
+      controller: AbortController;
+      work: Promise<boolean>;
+    }
+  >();
+
+  constructor(
+    private readonly capabilities: McpOAuthCapabilities,
+    private readonly timeoutMs = 10 * 60 * 1000,
+  ) {}
+
+  get getAuthProviderFactory(): McpOAuthBinding['getAuthProviderFactory'] {
+    return this.capabilities.getAuthProviderFactory;
+  }
+
+  get tokenStorage(): MCPOAuthTokenStorage {
+    return this.capabilities.tokenStorage;
+  }
+
+  authenticate(
+    serverName: string,
+    config: MCPServerConfig,
+    challenge: string,
+    signal?: AbortSignal,
+  ): Promise<boolean> {
+    signal?.throwIfAborted();
+    const key = JSON.stringify([
+      serverName,
+      config.httpUrl ?? config.url ?? '',
+    ]);
+    const existing = this.requests.get(key);
+    if (existing) return existing.work;
+
+    const controller = new AbortController();
+    const abort = (): void => controller.abort(signal?.reason);
+    signal?.addEventListener('abort', abort, { once: true });
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      if (controller.signal.aborted) return;
+      timedOut = true;
+      controller.abort(
+        new DOMException('MCP OAuth authentication timed out', 'TimeoutError'),
+      );
+    }, this.timeoutMs);
+    const work = doHandleAutomaticOAuth(
+      serverName,
+      config,
+      challenge,
+      this.capabilities,
+      controller.signal,
+    )
+      .catch((error: unknown) => {
+        if (timedOut) return false;
+        throw error;
+      })
+      .finally(() => {
+        clearTimeout(timeout);
+        signal?.removeEventListener('abort', abort);
+        this.requests.delete(key);
+      });
+    this.requests.set(key, { controller, work });
+    return work;
+  }
+
+  async cancelAndJoin(): Promise<void> {
+    const requests = [...this.requests.values()];
+    for (const request of requests) request.controller.abort();
+    await Promise.allSettled(requests.map(({ work }) => work));
+  }
+}
+
 export async function handleAutomaticOAuth(
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
   wwwAuthenticate: string,
+  owner: McpOAuthOperations,
+  signal?: AbortSignal,
 ): Promise<boolean> {
-  const guardKey = JSON.stringify([
-    mcpServerName,
-    mcpServerConfig.httpUrl ?? mcpServerConfig.url ?? '',
-  ]);
-  const existing = inFlightAuthentications.get(guardKey);
-  if (existing) {
-    debugLogger.log(
-      `'${mcpServerName}' OAuth already in progress, reusing existing flow`,
-    );
-    return existing;
-  }
-
-  const authPromise = doHandleAutomaticOAuth(
+  return owner.authenticate(
     mcpServerName,
     mcpServerConfig,
     wwwAuthenticate,
+    signal,
   );
-
-  // Mutable holder so the timeout closure (defined below) can check
-  // promise identity without referencing `raced` before it is declared.
-  const promiseRef: { current: Promise<boolean> | undefined } = {
-    current: undefined,
-  };
-
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  const timeoutPromise = new Promise<boolean>((resolve) => {
-    timeoutId = setTimeout(() => {
-      debugLogger.warn(
-        `OAuth flow for '${mcpServerName}' timed out after ${OAUTH_FLOW_TIMEOUT_MS}ms, clearing in-flight guard`,
-      );
-      if (inFlightAuthentications.get(guardKey) === promiseRef.current) {
-        inFlightAuthentications.delete(guardKey);
-      }
-      resolve(false);
-    }, OAUTH_FLOW_TIMEOUT_MS);
-  });
-
-  const raced = Promise.race([authPromise, timeoutPromise]).finally(() => {
-    if (timeoutId !== undefined) clearTimeout(timeoutId);
-    if (inFlightAuthentications.get(guardKey) === promiseRef.current) {
-      inFlightAuthentications.delete(guardKey);
-    }
-  });
-
-  promiseRef.current = raced;
-  inFlightAuthentications.set(guardKey, raced);
-  return raced;
 }
 
 async function doHandleAutomaticOAuth(
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
   wwwAuthenticate: string,
+  capabilities: McpOAuthCapabilities,
+  signal: AbortSignal,
 ): Promise<boolean> {
   try {
     debugLogger.log(`🔐 '${mcpServerName}' requires OAuth authentication`);
@@ -277,15 +302,16 @@ async function doHandleAutomaticOAuth(
     const resourceMetadataUri =
       OAuthUtils.parseWWWAuthenticateHeader(wwwAuthenticate);
     if (resourceMetadataUri) {
-      oauthConfig = await OAuthUtils.discoverOAuthConfig(resourceMetadataUri);
+      oauthConfig = await capabilities.discover(resourceMetadataUri, signal);
     } else if (hasNetworkTransport(mcpServerConfig)) {
       const serverUrl = new URL(
         mcpServerConfig.httpUrl ?? mcpServerConfig.url!,
       );
       const baseUrl = `${serverUrl.protocol}//${serverUrl.host}`;
-      oauthConfig = await OAuthUtils.discoverOAuthConfig(baseUrl);
+      oauthConfig = await capabilities.discover(baseUrl, signal);
     }
 
+    signal.throwIfAborted();
     if (!oauthConfig) {
       debugLogger.error(
         `[ERROR] Could not configure OAuth for '${mcpServerName}' - please authenticate manually with /mcp auth ${mcpServerName}`,
@@ -304,17 +330,21 @@ async function doHandleAutomaticOAuth(
     debugLogger.log(
       `Starting OAuth authentication for server '${mcpServerName}'...`,
     );
-    await MCPOAuthProvider.authenticate(
+    await capabilities.authenticate(
       mcpServerName,
       oauthAuthConfig,
       serverUrl,
+      undefined,
+      signal,
     );
 
+    signal.throwIfAborted();
     debugLogger.log(
       `OAuth authentication successful for server '${mcpServerName}'`,
     );
     return true;
   } catch (error) {
+    signal.throwIfAborted();
     debugLogger.error(
       `Failed to handle automatic OAuth for server '${mcpServerName}': ${getErrorMessage(error)}`,
     );
@@ -329,32 +359,38 @@ export async function connectWithSSETransport(
   client: Client,
   config: MCPServerConfig,
   accessToken?: string | null,
+  signal?: AbortSignal,
 ): Promise<void> {
-  const transport = createSSETransportWithAuth(config, accessToken);
-  try {
-    await client.connect(transport, {
-      timeout: config.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC,
-    });
-  } catch (error) {
-    await transport.close();
-    throw error;
-  }
+  const transport = createSSETransportWithAuth(config, accessToken, signal);
+  await connectClient(
+    client,
+    transport,
+    config.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC,
+    signal,
+  );
 }
 
 /**
  * Checks for rejected stored token, emits feedback message, throws UnauthorizedError.
  */
 export async function showAuthRequiredMessage(
+  tokenStorage: MCPOAuthTokenStorage,
   serverName: string,
+  signal?: AbortSignal,
+  feedback: HostFeedbackSink = defaultFeedbackSink,
 ): Promise<never> {
-  const storedToken = await getStoredOAuthToken(serverName);
+  const storedToken = await getStoredOAuthToken(
+    tokenStorage,
+    serverName,
+    signal,
+  );
   let message: string;
   if (storedToken) {
     message = `Stored OAuth token for server '${serverName}' was rejected. Please re-authenticate using: /mcp auth ${serverName}`;
   } else {
     message = `Server '${serverName}' requires OAuth authentication. Please authenticate using: /mcp auth ${serverName}`;
   }
-  emitHostFeedback('error', message);
+  captureHostFeedback(feedback)('error', message);
   throw new UnauthorizedError(message);
 }
 
@@ -368,9 +404,10 @@ export async function retryWithOAuth(
   config: MCPServerConfig,
   accessToken: string,
   httpReturned404: boolean,
+  signal?: AbortSignal,
 ): Promise<void> {
   if (httpReturned404) {
-    await connectWithSSETransport(client, config, accessToken);
+    await connectWithSSETransport(client, config, accessToken, signal);
     return;
   }
 
@@ -380,7 +417,7 @@ export async function retryWithOAuth(
   };
 
   if (config.type === 'sse') {
-    await connectWithSSETransport(client, config, accessToken);
+    await connectWithSSETransport(client, config, accessToken, signal);
     return;
   }
 
@@ -388,16 +425,27 @@ export async function retryWithOAuth(
     const { StreamableHTTPClientTransport } = await import(
       '@modelcontextprotocol/sdk/client/streamableHttp.js'
     );
-    const httpTransport = new StreamableHTTPClientTransport(
-      new URL(config.httpUrl ?? config.url!),
-      {
-        requestInit: { headers },
-      },
+    const httpTransport = createJoiningTransport(
+      (fetch) =>
+        new StreamableHTTPClientTransport(
+          new URL(config.httpUrl ?? config.url!),
+          {
+            ...{
+              requestInit: { headers },
+            },
+            fetch,
+          },
+        ),
+      signal,
     );
-    await client.connect(httpTransport, {
-      timeout: config.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC,
-    });
+    await connectClient(
+      client,
+      httpTransport,
+      config.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC,
+      signal,
+    );
   } catch (httpError) {
+    signal?.throwIfAborted();
     const is404 = is404Error(httpError);
     const shouldFallback: boolean =
       is404 && !config.type && Boolean(config.url && !config.httpUrl);
@@ -406,7 +454,7 @@ export async function retryWithOAuth(
       debugLogger.log(
         `HTTP connection failed with 404 for '${serverName}', falling back to SSE with OAuth`,
       );
-      await connectWithSSETransport(client, config, accessToken);
+      await connectWithSSETransport(client, config, accessToken, signal);
     } else {
       throw httpError;
     }
@@ -418,18 +466,23 @@ export async function retryWithOAuth(
  */
 export async function fetchWwwAuthenticateHeader(
   mcpServerConfig: MCPServerConfig,
+  signal?: AbortSignal,
 ): Promise<string | null> {
   try {
     const urlToFetch = mcpServerConfig.httpUrl ?? mcpServerConfig.url!;
-    const response = await fetch(urlToFetch, {
-      method: 'HEAD',
-      headers: {
-        Accept: mcpServerConfig.httpUrl
-          ? 'application/json'
-          : 'text/event-stream',
-      },
-      signal: AbortSignal.timeout(5000),
-    });
+    const response = await awaitOAuthOperation(signal, () =>
+      fetch(urlToFetch, {
+        method: 'HEAD',
+        headers: {
+          Accept: mcpServerConfig.httpUrl
+            ? 'application/json'
+            : 'text/event-stream',
+        },
+        signal: signal
+          ? AbortSignal.any([signal, AbortSignal.timeout(5000)])
+          : AbortSignal.timeout(5000),
+      }),
+    );
 
     if (response.status === 401) {
       const header = response.headers.get('www-authenticate');
@@ -439,6 +492,7 @@ export async function fetchWwwAuthenticateHeader(
       return header;
     }
   } catch (fetchError) {
+    signal?.throwIfAborted();
     debugLogger.debug(
       `Failed to fetch www-authenticate header: ${getErrorMessage(fetchError)}`,
     );
@@ -450,16 +504,19 @@ export async function fetchWwwAuthenticateHeader(
  * Connects to MCP server with a discovered OAuth token.
  */
 export async function connectWithOAuthToken(
+  tokenStorage: MCPOAuthTokenStorage,
   mcpClient: Client,
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
+  signal?: AbortSignal,
 ): Promise<Client> {
   debugLogger.log(
     `Retrying connection to '${mcpServerName}' with OAuth token...`,
   );
 
-  const tokenStorage = new MCPOAuthTokenStorage();
-  const credentials = await tokenStorage.getCredentials(mcpServerName);
+  const credentials = await awaitOAuthOperation(signal, () =>
+    tokenStorage.getCredentials(mcpServerName),
+  );
   if (!credentials) {
     debugLogger.error(
       `Failed to get credentials for server '${mcpServerName}' after successful OAuth authentication`,
@@ -469,9 +526,14 @@ export async function connectWithOAuthToken(
     );
   }
 
-  const accessToken = await MCPOAuthProvider.getValidToken(mcpServerName, {
-    clientId: credentials.clientId,
-  });
+  const accessToken = await MCPOAuthProvider.getValidToken(
+    tokenStorage,
+    mcpServerName,
+    {
+      clientId: credentials.clientId,
+    },
+    signal,
+  );
   if (!accessToken) {
     debugLogger.error(
       `Failed to get OAuth token for server '${mcpServerName}'`,
@@ -483,6 +545,7 @@ export async function connectWithOAuthToken(
     mcpServerName,
     mcpServerConfig,
     accessToken,
+    signal,
   );
   if (!oauthTransport) {
     debugLogger.error(
@@ -494,9 +557,12 @@ export async function connectWithOAuthToken(
   }
 
   try {
-    await mcpClient.connect(oauthTransport, {
-      timeout: mcpServerConfig.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC,
-    });
+    await connectClient(
+      mcpClient,
+      oauthTransport,
+      mcpServerConfig.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC,
+      signal,
+    );
     return mcpClient;
   } catch (retryError) {
     debugLogger.error(
@@ -504,4 +570,24 @@ export async function connectWithOAuthToken(
     );
     throw retryError;
   }
+}
+
+export function bindMcpOAuthCapabilities(
+  binding: McpOAuthBinding,
+): McpOAuthCapabilities {
+  const { tokenStorage, openBrowser, getAuthProviderFactory } = binding;
+  return {
+    tokenStorage,
+    getAuthProviderFactory,
+    discover: OAuthUtils.discoverOAuthConfig.bind(OAuthUtils),
+    authenticate: (server, config, url, events, signal) =>
+      MCPOAuthProvider.authenticate(
+        { tokenStorage, openBrowser },
+        server,
+        config,
+        url,
+        events,
+        signal,
+      ),
+  };
 }

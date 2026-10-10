@@ -242,6 +242,47 @@ describe('SettingsService — getAllGlobalSettings', () => {
     const all = svc.getAllGlobalSettings();
     expect(Object.keys(all).length).toBe(0);
   });
+
+  it('exposes effective dotted tool policy in the global snapshot without a profile import', () => {
+    const svc = new SettingsService();
+    svc.set('tools.allowed', []);
+    svc.set('tools.disabled', ['write_file']);
+
+    const snapshot = svc.getAllGlobalSettings();
+    expect(snapshot['tools.allowed']).toStrictEqual(svc.get('tools.allowed'));
+    expect(snapshot['tools.disabled']).toStrictEqual(svc.get('tools.disabled'));
+    expect(snapshot.tools).toStrictEqual({
+      allowed: [],
+      disabled: ['write_file'],
+    });
+
+    svc.set('tools.allowed', ['read_file']);
+    expect(snapshot['tools.allowed']).toStrictEqual([]);
+    expect(svc.getAllGlobalSettings()['tools.allowed']).toStrictEqual([
+      'read_file',
+    ]);
+  });
+
+  it('exposes later dotted tool writes instead of an outdated imported profile mirror', async () => {
+    const svc = new SettingsService();
+    await svc.importFromProfile({
+      tools: {
+        allowed: ['read_file', 'write_file'],
+        disabled: ['glob'],
+      },
+    });
+
+    svc.set('tools.allowed', []);
+    svc.set('tools.disabled', ['read_file']);
+
+    const snapshot = svc.getAllGlobalSettings();
+    expect(snapshot['tools.allowed']).toStrictEqual(svc.get('tools.allowed'));
+    expect(snapshot['tools.disabled']).toStrictEqual(svc.get('tools.disabled'));
+    expect(snapshot.tools).toStrictEqual({
+      allowed: [],
+      disabled: ['read_file'],
+    });
+  });
 });
 
 describe('SettingsService — getSettings / updateSettings', () => {

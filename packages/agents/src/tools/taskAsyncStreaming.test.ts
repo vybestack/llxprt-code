@@ -1,8 +1,10 @@
+import { createTaskPolicyFixture } from './__tests__/task-policy-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { TaskLaunchOwner } from '../session/task-launch-owner.js';
 
 /**
  * Async streaming behavioral coverage through the real TaskTool async path.
@@ -130,11 +132,14 @@ function createAsyncStreamingHarness(
       getSettingsService: () => new SettingsService(),
     } as unknown as Config,
     {
+      ...createTaskPolicyFixture({}),
+      readMcpInstructions: () => undefined,
       messageBus: new MessageBus(),
       orchestratorFactory: () =>
         ({ launch }) as unknown as SubagentOrchestrator,
-      getAsyncTaskManager: () =>
+      taskLaunchOwner: new TaskLaunchOwner(
         mockAsyncTaskManager as unknown as AsyncTaskManager,
+      ),
       isInteractiveEnvironment: () => false,
     },
   );

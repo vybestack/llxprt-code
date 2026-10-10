@@ -1,24 +1,25 @@
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { assembleTaskSchemaPolicy } from '../config/task-schema-policy-assembly.js';
+
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, it, expect, vi, afterEach } from 'bun:test';
 import {
   createProviderAdapterFromManager,
   createToolRegistryViewFromRegistry,
-  createTelemetryAdapterFromConfig,
+  createTelemetryAdapter,
 } from './runtimeAdapters.js';
 import type { RuntimeProviderManager } from './contracts/RuntimeProviderManager.js';
 import type { RuntimeProvider } from './contracts/RuntimeProvider.js';
 import { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/tools.js';
-import {
-  makeFakeConfig,
-  getTestRuntimeMessageBus,
-} from '../__tests__/config-test-helpers.js';
+import { makeFakeConfig } from '../__tests__/config-test-helpers.js';
 import * as loggers from '../telemetry/loggers.js';
 
 /**
@@ -41,6 +42,8 @@ function createManagerDouble(
     listProviders: () => Object.keys(providersByName),
     getProviderByName: (name: string) => providersByName[name],
     registerProvider: () => {},
+    checkpointProviderRegistry: () => () => {},
+    setRuntimeContext: () => {},
     getProviderMetrics: () => ({}),
     getSessionTokenUsage: () => ({
       input: 0,
@@ -145,12 +148,18 @@ describe('createProviderAdapterFromManager', () => {
 });
 
 describe('createToolRegistryViewFromRegistry', () => {
+  const policyOwners: RuntimePolicyOwner[] = [];
+  afterEach(async () => {
+    for (const owner of policyOwners.splice(0)) await owner.dispose();
+  });
   function createRegistryWithTools(): ToolRegistry {
     const config = makeFakeConfig();
+    const policyOwner = new RuntimePolicyOwner(config);
+    policyOwners.push(policyOwner);
     const registry = new ToolRegistry(
       config as never,
-      getTestRuntimeMessageBus(config),
-      new SettingsService(),
+      policyOwner.session.messageBus,
+      assembleTaskSchemaPolicy(new SettingsService()),
     );
     registry.registerTool(
       new MockTool(
@@ -176,7 +185,15 @@ describe('createToolRegistryViewFromRegistry', () => {
     expect(metadata!.parameterSchema!.type).toBe('object');
     // Verify the schema is sourced from the tool's actual parameter schema,
     // not a generic stub — check the MockTool's declared param property.
-    expect(metadata!.parameterSchema!.properties?.['param']).toMatchObject({
+    const properties = metadata!.parameterSchema!.properties;
+    if (
+      properties === undefined ||
+      properties === null ||
+      typeof properties !== 'object' ||
+      !('param' in properties)
+    )
+      throw new Error('Expected parameter schema');
+    expect(properties.param).toMatchObject({
       type: 'string',
     });
   });
@@ -194,7 +211,7 @@ describe('createToolRegistryViewFromRegistry', () => {
   });
 });
 
-describe('createTelemetryAdapterFromConfig', () => {
+describe('createTelemetryAdapter', () => {
   function captureLogCalls(): ReturnType<typeof vi.fn> {
     const fn = vi.fn();
     vi.spyOn(loggers, 'logApiResponse').mockImplementation(fn);
@@ -211,7 +228,15 @@ describe('createTelemetryAdapterFromConfig', () => {
 
   it('passes through a caller-provided attemptId in the response adapter', () => {
     const spy = captureLogCalls();
-    const adapter = createTelemetryAdapterFromConfig(baseConfig);
+    const adapter = createTelemetryAdapter(
+      baseConfig,
+      RootTelemetry.prepare({
+        enabled: false,
+        sessionId: 'runtime-adapter-fixture',
+        maxBytes: 1024,
+        maxFiles: 1,
+      }),
+    );
     adapter.logApiResponse({
       model: 'test-model',
       durationMs: 100,
@@ -225,7 +250,15 @@ describe('createTelemetryAdapterFromConfig', () => {
 
   it('trims whitespace from a padded response attemptId', () => {
     const spy = captureLogCalls();
-    const adapter = createTelemetryAdapterFromConfig(baseConfig);
+    const adapter = createTelemetryAdapter(
+      baseConfig,
+      RootTelemetry.prepare({
+        enabled: false,
+        sessionId: 'runtime-adapter-fixture',
+        maxBytes: 1024,
+        maxFiles: 1,
+      }),
+    );
     adapter.logApiResponse({
       model: 'test-model',
       durationMs: 100,
@@ -239,7 +272,15 @@ describe('createTelemetryAdapterFromConfig', () => {
 
   it('generates a UUID when response attemptId is undefined', () => {
     const spy = captureLogCalls();
-    const adapter = createTelemetryAdapterFromConfig(baseConfig);
+    const adapter = createTelemetryAdapter(
+      baseConfig,
+      RootTelemetry.prepare({
+        enabled: false,
+        sessionId: 'runtime-adapter-fixture',
+        maxBytes: 1024,
+        maxFiles: 1,
+      }),
+    );
     adapter.logApiResponse({ model: 'test-model', durationMs: 100 });
 
     expect(spy).toHaveBeenCalledTimes(1);
@@ -253,7 +294,15 @@ describe('createTelemetryAdapterFromConfig', () => {
 
   it('generates a UUID when response attemptId is empty string', () => {
     const spy = captureLogCalls();
-    const adapter = createTelemetryAdapterFromConfig(baseConfig);
+    const adapter = createTelemetryAdapter(
+      baseConfig,
+      RootTelemetry.prepare({
+        enabled: false,
+        sessionId: 'runtime-adapter-fixture',
+        maxBytes: 1024,
+        maxFiles: 1,
+      }),
+    );
     adapter.logApiResponse({
       model: 'test-model',
       durationMs: 100,
@@ -269,7 +318,15 @@ describe('createTelemetryAdapterFromConfig', () => {
 
   it('generates a UUID when response attemptId is whitespace-only', () => {
     const spy = captureLogCalls();
-    const adapter = createTelemetryAdapterFromConfig(baseConfig);
+    const adapter = createTelemetryAdapter(
+      baseConfig,
+      RootTelemetry.prepare({
+        enabled: false,
+        sessionId: 'runtime-adapter-fixture',
+        maxBytes: 1024,
+        maxFiles: 1,
+      }),
+    );
     adapter.logApiResponse({
       model: 'test-model',
       durationMs: 100,
@@ -285,7 +342,15 @@ describe('createTelemetryAdapterFromConfig', () => {
 
   it('maps neutral UsageStats onto nonzero usage_data token counts #2627', () => {
     const spy = captureLogCalls();
-    const adapter = createTelemetryAdapterFromConfig(baseConfig);
+    const adapter = createTelemetryAdapter(
+      baseConfig,
+      RootTelemetry.prepare({
+        enabled: false,
+        sessionId: 'runtime-adapter-fixture',
+        maxBytes: 1024,
+        maxFiles: 1,
+      }),
+    );
     adapter.logApiResponse({
       model: 'test-model',
       durationMs: 100,
@@ -310,7 +375,15 @@ describe('createTelemetryAdapterFromConfig', () => {
 
   it('passes through a caller-provided attemptId in the error adapter', () => {
     const spy = captureErrorLogCalls();
-    const adapter = createTelemetryAdapterFromConfig(baseConfig);
+    const adapter = createTelemetryAdapter(
+      baseConfig,
+      RootTelemetry.prepare({
+        enabled: false,
+        sessionId: 'runtime-adapter-fixture',
+        maxBytes: 1024,
+        maxFiles: 1,
+      }),
+    );
     adapter.logApiError({
       model: 'test-model',
       durationMs: 100,
@@ -325,7 +398,15 @@ describe('createTelemetryAdapterFromConfig', () => {
 
   it('trims whitespace from a padded error attemptId', () => {
     const spy = captureErrorLogCalls();
-    const adapter = createTelemetryAdapterFromConfig(baseConfig);
+    const adapter = createTelemetryAdapter(
+      baseConfig,
+      RootTelemetry.prepare({
+        enabled: false,
+        sessionId: 'runtime-adapter-fixture',
+        maxBytes: 1024,
+        maxFiles: 1,
+      }),
+    );
     adapter.logApiError({
       model: 'test-model',
       durationMs: 100,
@@ -340,7 +421,15 @@ describe('createTelemetryAdapterFromConfig', () => {
 
   it('generates a UUID when error attemptId is undefined', () => {
     const spy = captureErrorLogCalls();
-    const adapter = createTelemetryAdapterFromConfig(baseConfig);
+    const adapter = createTelemetryAdapter(
+      baseConfig,
+      RootTelemetry.prepare({
+        enabled: false,
+        sessionId: 'runtime-adapter-fixture',
+        maxBytes: 1024,
+        maxFiles: 1,
+      }),
+    );
     adapter.logApiError({
       model: 'test-model',
       durationMs: 100,
@@ -356,7 +445,15 @@ describe('createTelemetryAdapterFromConfig', () => {
 
   it('generates a UUID when error attemptId is empty string', () => {
     const spy = captureErrorLogCalls();
-    const adapter = createTelemetryAdapterFromConfig(baseConfig);
+    const adapter = createTelemetryAdapter(
+      baseConfig,
+      RootTelemetry.prepare({
+        enabled: false,
+        sessionId: 'runtime-adapter-fixture',
+        maxBytes: 1024,
+        maxFiles: 1,
+      }),
+    );
     adapter.logApiError({
       model: 'test-model',
       durationMs: 100,
@@ -373,7 +470,15 @@ describe('createTelemetryAdapterFromConfig', () => {
 
   it('generates a UUID when error attemptId is whitespace-only', () => {
     const spy = captureErrorLogCalls();
-    const adapter = createTelemetryAdapterFromConfig(baseConfig);
+    const adapter = createTelemetryAdapter(
+      baseConfig,
+      RootTelemetry.prepare({
+        enabled: false,
+        sessionId: 'runtime-adapter-fixture',
+        maxBytes: 1024,
+        maxFiles: 1,
+      }),
+    );
     adapter.logApiError({
       model: 'test-model',
       durationMs: 100,

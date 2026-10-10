@@ -10,7 +10,6 @@ import {
   BINARY_EXTENSIONS,
   extractExtensionsFromPatterns,
 } from './ignorePatterns.js';
-import type { Config } from '../config/config.js';
 
 // Mock the memoryTool module
 void vi.mock('@vybestack/llxprt-code-tools', () => ({
@@ -147,21 +146,17 @@ describe('FileExclusions', () => {
 
   describe('with Config', () => {
     it('should use config custom excludes when available', () => {
-      const mockConfig = {
-        getCustomExcludes: vi.fn(() => ['**/config-exclude/**']),
-      } as unknown as Config;
-
-      const excluder = new FileExclusions(mockConfig);
+      const excluder = new FileExclusions(['**/config-exclude/**']);
       const patterns = excluder.getDefaultExcludePatterns();
 
       expect(patterns).toContain('**/config-exclude/**');
-      expect(mockConfig.getCustomExcludes).toHaveBeenCalled();
+      expect(patterns.indexOf('**/config-exclude/**')).toBeGreaterThan(
+        patterns.indexOf('**/node_modules/**'),
+      );
     });
 
     it('should handle config without getCustomExcludes method', () => {
-      const mockConfig = {} as Config;
-
-      const excluder = new FileExclusions(mockConfig);
+      const excluder = new FileExclusions();
       const patterns = excluder.getDefaultExcludePatterns();
 
       // Should not throw and should include default patterns
@@ -170,11 +165,7 @@ describe('FileExclusions', () => {
     });
 
     it('should include config custom excludes in glob patterns', () => {
-      const mockConfig = {
-        getCustomExcludes: vi.fn(() => ['**/config-glob/**']),
-      } as unknown as Config;
-
-      const excluder = new FileExclusions(mockConfig);
+      const excluder = new FileExclusions(['**/config-glob/**']);
       const patterns = excluder.getGlobExcludes();
 
       expect(patterns).toContain('**/node_modules/**');

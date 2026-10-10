@@ -1,8 +1,13 @@
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
+
+import { promises as physicalFs } from 'node:fs';
+import { createSchedulerPolicyFixture } from '../core/__tests__/scheduler-policy-fixture.js';
 
 /**
  * Shared helpers for the same-path mutation ordering scheduler tests
@@ -18,7 +23,7 @@ import { join } from 'node:path';
 import { CoreToolScheduler, type ToolCall } from '../core/coreToolScheduler.js';
 import type { CompletedToolCall } from '../core/coreToolScheduler.js';
 import type { ToolCallRequestInfo } from '@vybestack/llxprt-code-core/core/turn.js';
-import { createMockConfig } from '../core/__tests__/coreToolScheduler-test-helpers.js';
+
 import { createSessionMessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import {
   BaseDeclarativeTool,
@@ -203,7 +208,7 @@ export function buildRegistry(
   const registry = new ToolRegistry(
     {},
     createSessionMessageBus(),
-    new SettingsService(),
+    assembleTaskSchemaPolicy(new SettingsService()),
   );
   for (const tool of tools) {
     registry.registerTool(tool);
@@ -221,12 +226,18 @@ export function buildScheduler(
   // Real session message bus (typed factory, no structural mock): the
   // scheduler consumes it directly through its options, and YOLO approval
   // auto-approves confirmations without consulting the bus.
-  const messageBus = createSessionMessageBus();
-  const config = createMockConfig({
-    getToolRegistry: () => registry,
-  });
+  const { config, settingsOwner, messageBus } = createSchedulerPolicyFixture();
   return new CoreToolScheduler({
+    telemetry: RootTelemetry.prepare({
+      enabled: false,
+      sessionId: 'isolated-caller-fixture',
+      maxBytes: 1024,
+      maxFiles: 1,
+    }),
     config,
+    readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+    getToolGovernance: () =>
+      settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
     messageBus,
     toolRegistry: registry,
     onToolCallsUpdate: observers.onToolCallsUpdate,
@@ -260,12 +271,18 @@ export function trackPublicationOrder(): {
 /** Real-tool host bound to a temp workspace directory. */
 export function createToolHost(targetDir: string): IToolHost {
   return {
+    readTextFile: (filePath) => physicalFs.readFile(filePath, 'utf8'),
+    writeTextFile: (filePath, content) =>
+      physicalFs.writeFile(filePath, content),
     getTargetDir: () => targetDir,
     getWorkspaceRoots: () => [targetDir],
     getApprovalMode: () => 'auto',
     setApprovalMode: () => {},
     isInteractive: () => false,
-    hasFeatureFlag: () => false,
+    runSearch: <T>(
+      _directories: readonly string[],
+      operation: () => Promise<T>,
+    ): Promise<T> => operation(),
     getFileService: () => ({
       shouldGitIgnoreFile: () => false,
       shouldLlxprtIgnoreFile: () => false,
@@ -282,7 +299,7 @@ export function createToolHost(targetDir: string): IToolHost {
     getLlxprtIgnoreFilePath: () => null,
     recordFileRead: () => {},
     getLlxprtIgnorePatterns: () => [],
-    getEphemeralSettings: () => ({}),
+    readExecutionPolicy: () => ({}),
     getDebugMode: () => false,
   };
 }

@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
+
 import { describe, expect, it } from 'bun:test';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
@@ -111,6 +113,7 @@ class ControlledUsageProvider implements RuntimeProvider {
 
 async function createBudgetScope(
   config: Config,
+  workspacePaths: WorkspacePathOperations,
   provider: ControlledUsageProvider,
   runConfig: RunConfig,
 ): Promise<SubAgentScope> {
@@ -122,7 +125,9 @@ async function createBudgetScope(
     providerAdapter,
     history: new HistoryService(),
   });
-  const { overrides } = createRuntimeOverrides({ runtimeBundle });
+  const { overrides } = createRuntimeOverrides(workspacePaths, {
+    runtimeBundle,
+  });
   const outputConfig: OutputConfig = { outputs: {} };
 
   return SubAgentScope.create(
@@ -143,15 +148,20 @@ describe('subagent aggregate output token budget', () => {
     // receiving a response and dispatching its tool calls discards work the
     // model just did. self_emitvalue only reaches emitted_vars if the call was
     // actually dispatched, so this fails if the run stops one step too early.
-    const { config } = await createMockConfig();
+    const { config, mcpRuntime } = await createMockConfig();
     const provider = new ControlledUsageProvider([
       { outputTokens: 1, continueWithTool: true },
     ]);
-    const scope = await createBudgetScope(config, provider, {
-      max_time_minutes: 5,
-      max_turns: 1,
-      max_output_tokens_total: 1_000_000,
-    });
+    const scope = await createBudgetScope(
+      config,
+      mcpRuntime.workspaceFilesystem.paths,
+      provider,
+      {
+        max_time_minutes: 5,
+        max_turns: 1,
+        max_output_tokens_total: 1_000_000,
+      },
+    );
 
     await scope.runNonInteractive(new ContextState());
 
@@ -160,17 +170,22 @@ describe('subagent aggregate output token budget', () => {
   });
 
   it('terminates the real non-interactive loop after provider usage crosses the budget', async () => {
-    const { config } = await createMockConfig();
+    const { config, mcpRuntime } = await createMockConfig();
     const provider = new ControlledUsageProvider([
       { outputTokens: 6, continueWithTool: true },
       { outputTokens: 6, continueWithTool: true },
       { outputTokens: 6, continueWithTool: true },
     ]);
-    const scope = await createBudgetScope(config, provider, {
-      max_time_minutes: 5,
-      max_turns: 20,
-      max_output_tokens_total: 10,
-    });
+    const scope = await createBudgetScope(
+      config,
+      mcpRuntime.workspaceFilesystem.paths,
+      provider,
+      {
+        max_time_minutes: 5,
+        max_turns: 20,
+        max_output_tokens_total: 10,
+      },
+    );
 
     await scope.runNonInteractive(new ContextState());
 
@@ -187,16 +202,21 @@ describe('subagent aggregate output token budget', () => {
   });
 
   it('does not terminate when cumulative provider usage stays below the budget', async () => {
-    const { config } = await createMockConfig();
+    const { config, mcpRuntime } = await createMockConfig();
     const provider = new ControlledUsageProvider([
       { outputTokens: 3, continueWithTool: true },
       { outputTokens: 3, text: 'finished below budget' },
     ]);
-    const scope = await createBudgetScope(config, provider, {
-      max_time_minutes: 5,
-      max_turns: 20,
-      max_output_tokens_total: 10,
-    });
+    const scope = await createBudgetScope(
+      config,
+      mcpRuntime.workspaceFilesystem.paths,
+      provider,
+      {
+        max_time_minutes: 5,
+        max_turns: 20,
+        max_output_tokens_total: 10,
+      },
+    );
 
     await scope.runNonInteractive(new ContextState());
 
@@ -206,17 +226,22 @@ describe('subagent aggregate output token budget', () => {
   });
 
   it('treats -1 as unlimited and runs past the otherwise effective budget', async () => {
-    const { config } = await createMockConfig();
+    const { config, mcpRuntime } = await createMockConfig();
     const provider = new ControlledUsageProvider([
       { outputTokens: 6, continueWithTool: true },
       { outputTokens: 6, continueWithTool: true },
       { outputTokens: 6, text: 'finished without aggregate cap' },
     ]);
-    const scope = await createBudgetScope(config, provider, {
-      max_time_minutes: 5,
-      max_turns: 20,
-      max_output_tokens_total: -1,
-    });
+    const scope = await createBudgetScope(
+      config,
+      mcpRuntime.workspaceFilesystem.paths,
+      provider,
+      {
+        max_time_minutes: 5,
+        max_turns: 20,
+        max_output_tokens_total: -1,
+      },
+    );
 
     await scope.runNonInteractive(new ContextState());
 
@@ -226,13 +251,18 @@ describe('subagent aggregate output token budget', () => {
   });
 
   it('uses a character estimate when provider usage metadata is absent', async () => {
-    const { config } = await createMockConfig();
+    const { config, mcpRuntime } = await createMockConfig();
     const provider = new ControlledUsageProvider([{ text: 'x'.repeat(80) }]);
-    const scope = await createBudgetScope(config, provider, {
-      max_time_minutes: 5,
-      max_turns: 20,
-      max_output_tokens_total: 10,
-    });
+    const scope = await createBudgetScope(
+      config,
+      mcpRuntime.workspaceFilesystem.paths,
+      provider,
+      {
+        max_time_minutes: 5,
+        max_turns: 20,
+        max_output_tokens_total: 10,
+      },
+    );
 
     await scope.runNonInteractive(new ContextState());
 
@@ -246,15 +276,20 @@ describe('subagent aggregate output token budget', () => {
     // The profile that motivated #3335 ran reasoning at high effort with
     // includeInContext, so reasoning dwarfed visible text. Counting only the
     // visible text would leave the budget unenforceable for exactly that shape.
-    const { config } = await createMockConfig();
+    const { config, mcpRuntime } = await createMockConfig();
     const reasoningHeavy = new ControlledUsageProvider([
       { thought: 'r'.repeat(4000), text: 'ok' },
     ]);
-    const scope = await createBudgetScope(config, reasoningHeavy, {
-      max_time_minutes: 5,
-      max_turns: 20,
-      max_output_tokens_total: 100,
-    });
+    const scope = await createBudgetScope(
+      config,
+      mcpRuntime.workspaceFilesystem.paths,
+      reasoningHeavy,
+      {
+        max_time_minutes: 5,
+        max_turns: 20,
+        max_output_tokens_total: 100,
+      },
+    );
 
     await scope.runNonInteractive(new ContextState());
 
@@ -264,13 +299,19 @@ describe('subagent aggregate output token budget', () => {
 
     // The same visible text with no reasoning stays well under the budget,
     // which is what proves the reasoning is what tripped it.
-    const { config: textOnlyConfig } = await createMockConfig();
+    const { config: textOnlyConfig, mcpRuntime: textOnlyRuntime } =
+      await createMockConfig();
     const textOnly = new ControlledUsageProvider([{ text: 'ok' }]);
-    const textOnlyScope = await createBudgetScope(textOnlyConfig, textOnly, {
-      max_time_minutes: 5,
-      max_turns: 20,
-      max_output_tokens_total: 100,
-    });
+    const textOnlyScope = await createBudgetScope(
+      textOnlyConfig,
+      textOnlyRuntime.workspaceFilesystem.paths,
+      textOnly,
+      {
+        max_time_minutes: 5,
+        max_turns: 20,
+        max_output_tokens_total: 100,
+      },
+    );
 
     await textOnlyScope.runNonInteractive(new ContextState());
 
@@ -280,17 +321,22 @@ describe('subagent aggregate output token budget', () => {
   });
 
   it('applies the same aggregate budget to the real interactive loop', async () => {
-    const { config } = await createMockConfig();
+    const { config, mcpRuntime } = await createMockConfig();
     const provider = new ControlledUsageProvider([
       { outputTokens: 6, continueWithTool: true },
       { outputTokens: 6, continueWithTool: true },
       { outputTokens: 6, continueWithTool: true },
     ]);
-    const scope = await createBudgetScope(config, provider, {
-      max_time_minutes: 5,
-      max_turns: 20,
-      max_output_tokens_total: 10,
-    });
+    const scope = await createBudgetScope(
+      config,
+      mcpRuntime.workspaceFilesystem.paths,
+      provider,
+      {
+        max_time_minutes: 5,
+        max_turns: 20,
+        max_output_tokens_total: 10,
+      },
+    );
 
     await scope.runInteractive(new ContextState(), {
       schedulerFactory: () => ({ schedule: () => undefined }),

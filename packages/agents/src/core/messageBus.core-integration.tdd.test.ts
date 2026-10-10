@@ -1,8 +1,13 @@
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
+
+import { afterEach as disposeOwnedPolicies } from 'bun:test';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
@@ -13,7 +18,7 @@ import {
   type ConfigParameters,
   ToolRegistry,
 } from '@vybestack/llxprt-code-core/index.js';
-import { IdeClient } from '@vybestack/llxprt-code-ide-integration';
+
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 import {
   BaseDeclarativeTool,
@@ -40,10 +45,8 @@ const baseConfigParams: ConfigParameters = {
   targetDir: '/test/dir',
   debugMode: false,
   userMemory: '',
-  llxprtMdFileCount: 0,
   approvalMode: ApprovalMode.DEFAULT,
   sessionId: 'phase-04-scheduler-session',
-  ideClient: IdeClient.getInstance(false),
 };
 
 interface Phase04Params {
@@ -74,6 +77,7 @@ class Phase04BusAwareInvocation extends BaseToolInvocation<
       title: 'Phase 04 scheduler confirmation',
       command: 'phase04_bus_aware_tool',
       rootCommand: 'phase04_bus_aware_tool',
+      rootCommands: ['phase04_bus_aware_tool'],
       onConfirm: async () => {},
     };
   }
@@ -126,6 +130,13 @@ class Phase04BusAwareTool extends BaseDeclarativeTool<
 }
 
 describe('MessageBus core integration TDD', () => {
+  disposeOwnedPolicies(() => {
+    for (const owner of ownedPolicies.splice(0)) owner.dispose();
+  });
+  disposeOwnedPolicies(async () => {
+    for (const owner of ownedSettings.splice(0)) await owner.dispose();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -141,12 +152,18 @@ describe('MessageBus core integration TDD', () => {
      * @matrix scheduler=CoreToolScheduler registry=explicit invocation=bus-aware ASK_USER|DENY
      */
     const config = new Config(baseConfigParams);
-    const decoyBus = new MessageBus(config.getPolicyEngine(), false);
-    const injectedBus = new MessageBus(config.getPolicyEngine(), false);
+    const settings = new SettingsService();
+    const settingsOwner = new SessionSettingsOwner(settings);
+    settingsOwner.bindTelemetry(config);
+    ownedSettings.push(settingsOwner);
+    const configPolicy = new RuntimePolicyOwner(config);
+    ownedPolicies.push(configPolicy);
+    const decoyBus = new MessageBus(configPolicy.session.decisions, false);
+    const injectedBus = configPolicy.session.messageBus;
     const injectedRegistry = new ToolRegistry(
       config,
       injectedBus,
-      new SettingsService(),
+      assembleTaskSchemaPolicy(new SettingsService()),
     );
     injectedRegistry.registerTool(new Phase04BusAwareTool(injectedBus));
 
@@ -181,12 +198,16 @@ describe('MessageBus core integration TDD', () => {
       decoyPolicyRejections.push(message as ToolPolicyRejection);
     });
 
-    vi.spyOn(config.getPolicyEngine(), 'evaluate')
+    vi.spyOn(configPolicy.session.decisions, 'evaluate')
       .mockReturnValueOnce(PolicyDecision.ASK_USER)
       .mockReturnValueOnce(PolicyDecision.DENY);
 
     const schedulerComplete = vi.fn();
     const scheduler = new CoreToolScheduler({
+      telemetry: settingsOwner.telemetry,
+      readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
       config,
       messageBus: injectedBus,
       toolRegistry: injectedRegistry,
@@ -211,6 +232,10 @@ describe('MessageBus core integration TDD', () => {
 
     const deniedComplete = vi.fn();
     const deniedScheduler = new CoreToolScheduler({
+      telemetry: settingsOwner.telemetry,
+      readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
       config,
       messageBus: injectedBus,
       toolRegistry: injectedRegistry,
@@ -245,3 +270,7 @@ describe('MessageBus core integration TDD', () => {
     expect(decoyPolicyRejections).toHaveLength(0);
   });
 });
+
+const ownedPolicies: Array<{ dispose(): void }> = [];
+
+const ownedSettings: SessionSettingsOwner[] = [];

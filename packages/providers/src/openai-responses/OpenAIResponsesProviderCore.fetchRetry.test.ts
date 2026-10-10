@@ -67,9 +67,7 @@ describe('OpenAIResponsesProvider connection-phase fetch retry', () => {
         body: mockBody,
       });
 
-    const provider = new OpenAIResponsesProvider('test-key', undefined, {
-      getEphemeralSettings: () => ({}),
-    });
+    const provider = new OpenAIResponsesProvider('test-key', undefined, {});
 
     const generator = provider.generateChatCompletion(
       createProviderCallOptions({
@@ -103,9 +101,7 @@ describe('OpenAIResponsesProvider connection-phase fetch retry', () => {
     abortError.name = 'AbortError';
     fetchMock.mockRejectedValue(abortError);
 
-    const provider = new OpenAIResponsesProvider('test-key', undefined, {
-      getEphemeralSettings: () => ({}),
-    });
+    const provider = new OpenAIResponsesProvider('test-key', undefined, {});
 
     const generator = provider.generateChatCompletion(
       createProviderCallOptions({

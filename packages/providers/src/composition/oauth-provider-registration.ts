@@ -22,16 +22,14 @@ type OAuthProviderWithAddItem = OAuthProvider & {
 type OAuthRegistrationManager = Pick<
   OAuthManager,
   'registerProvider' | 'getProvider'
-> & {
-  getTokenStore?: () => TokenStore;
-};
+> &
+  Partial<
+    Pick<OAuthManager, 'isBrowserDisabled' | 'getBrowserProfileAssociation'>
+  > & {
+    getTokenStore?: () => TokenStore;
+  };
 
-/**
- * Track which OAuth providers have been registered to avoid duplicate registration
- */
 const oauthLogger = new DebugLogger('llxprt:oauth:registration');
-
-let registeredProviders = new WeakMap<OAuthRegistrationManager, Set<string>>();
 
 /**
  * Context-aware OAuth provider registration
@@ -43,17 +41,13 @@ export function ensureOAuthProviderRegistered(
   tokenStore?: TokenStore,
   addItem?: AddItemCallback,
 ): void {
-  let registered = registeredProviders.get(oauthManager);
-  if (!registered) {
-    registered = new Set<string>();
-    registeredProviders.set(oauthManager, registered);
-  }
-  if (registered.has(providerName)) {
+  const registeredProvider = oauthManager.getProvider(providerName);
+  if (registeredProvider) {
     // The provider is already registered, but a later call may carry an
     // `addItem` UI callback that the first registration lacked. Attach it to
     // the existing provider rather than silently dropping it (issue #2891).
     if (addItem) {
-      oauthManager.getProvider(providerName)?.setAddItem?.(addItem);
+      registeredProvider.setAddItem?.(addItem);
     }
     return;
   }
@@ -74,10 +68,28 @@ export function ensureOAuthProviderRegistered(
 
   switch (providerName) {
     case 'claudecode':
-      oauthProvider = new AnthropicOAuthProvider(effectiveTokenStore, addItem);
+      oauthProvider = new AnthropicOAuthProvider(
+        effectiveTokenStore,
+        addItem,
+        () => oauthManager.isBrowserDisabled?.() ?? false,
+        (provider, bucket) =>
+          oauthManager.getBrowserProfileAssociation?.(
+            provider,
+            bucket ?? 'default',
+          ),
+      );
       break;
     case 'codex':
-      oauthProvider = new CodexOAuthProvider(effectiveTokenStore, addItem);
+      oauthProvider = new CodexOAuthProvider(
+        effectiveTokenStore,
+        addItem,
+        () => oauthManager.isBrowserDisabled?.() ?? false,
+        (provider, bucket) =>
+          oauthManager.getBrowserProfileAssociation?.(
+            provider,
+            bucket ?? 'default',
+          ),
+      );
       break;
     default:
       return; // No OAuth provider needed for this provider name
@@ -90,7 +102,6 @@ export function ensureOAuthProviderRegistered(
 
   oauthLogger.debug(() => `Registering OAuth provider '${providerName}'`);
   oauthManager.registerProvider(oauthProvider);
-  registered.add(providerName);
 }
 
 /**
@@ -120,12 +131,5 @@ export function isOAuthProviderRegistered(
   providerName: string,
   oauthManager: OAuthRegistrationManager,
 ): boolean {
-  return registeredProviders.get(oauthManager)?.has(providerName) ?? false;
-}
-
-/**
- * Reset registered providers (mainly for testing)
- */
-export function resetRegisteredProviders(): void {
-  registeredProviders = new WeakMap<OAuthRegistrationManager, Set<string>>();
+  return oauthManager.getProvider(providerName) !== undefined;
 }

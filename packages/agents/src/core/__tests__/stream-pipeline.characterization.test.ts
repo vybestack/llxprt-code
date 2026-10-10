@@ -1,3 +1,8 @@
+import { createChatPolicyFixture } from './session-policy-fixture.js';
+import {
+  createTurnCitationPolicy,
+  createTurnStreamPolicy,
+} from './session-policy-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -44,9 +49,11 @@ describe('Stream Pipeline Characterization', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mockChatInstance = {
+      ...createChatPolicyFixture(),
       sendMessageStream: mockSendMessageStream,
       getHistory: mockGetHistory,
-      getConfig: () => undefined,
+      shouldShowCitations: createTurnCitationPolicy(),
+      getStreamTimeoutPolicy: createTurnStreamPolicy(),
       getResolvedBaseUrl: () => undefined,
     };
     turn = new Turn(

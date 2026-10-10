@@ -1,3 +1,4 @@
+import { getOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -84,7 +85,7 @@ const IMAGE_TOKEN_COST = 1844;
 
 const buildContext = (): ResponsesInputBuildContext => ({
   includeReasoningInContext: true,
-  outputLimiterConfig: { getEphemeralSettings: () => ({}) },
+  outputLimits: getOutputLimits({ readExecutionPolicy: () => ({}) }),
   debug: () => {},
   mediaPdfEnabled: true,
 });

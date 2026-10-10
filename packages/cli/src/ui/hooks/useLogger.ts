@@ -5,18 +5,17 @@
  */
 
 import { useState, useEffect } from 'react';
-import type { Storage } from '@vybestack/llxprt-code-settings';
 import { Logger } from '@vybestack/llxprt-code-core';
 import { sessionId } from '@vybestack/llxprt-code-telemetry';
 
 /**
  * Hook to manage the logger instance.
  */
-export const useLogger = (storage: Storage) => {
+export const useLogger = (projectTempDir: string) => {
   const [logger, setLogger] = useState<Logger | null>(null);
 
   useEffect(() => {
-    const newLogger = new Logger(sessionId, storage);
+    const newLogger = new Logger(sessionId, projectTempDir);
     /**
      * Start async initialization, no need to await. Using await slows down the
      * time from launch to see the gemini-cli prompt and it's better to not save
@@ -28,7 +27,7 @@ export const useLogger = (storage: Storage) => {
         setLogger(newLogger);
       })
       .catch(() => {});
-  }, [storage]);
+  }, [projectTempDir]);
 
   return logger;
 };

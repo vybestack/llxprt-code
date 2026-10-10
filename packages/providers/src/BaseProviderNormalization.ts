@@ -4,10 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { CredentialResolutionError } from '@vybestack/llxprt-code-auth';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import {
   createRuntimeInvocationContext,
   type RuntimeInvocationContext,
@@ -17,23 +14,18 @@ import type { GenerateChatOptions, ProviderToolset } from './IProvider.js';
 import type {
   BaseProvider,
   NormalizedGenerateChatOptions,
-  ProviderSettings,
 } from './BaseProvider.js';
 import type { ResolvedAuthToken } from './types/providerRuntime.js';
 import { isAbortSignal } from './utils/abortSignal.js';
 
 interface RuntimeGuardInput {
   providerKey: string;
-  settings?: SettingsService | null;
-  config?: Config | null;
-  runtime?: ProviderRuntimeContext;
   metadata?: Record<string, unknown>;
   resolved?: NormalizedGenerateChatOptions['resolved'];
   stage: string;
 }
 
 interface RuntimeGuardResult {
-  runtime: ProviderRuntimeContext;
   metadata: Record<string, unknown>;
 }
 
@@ -45,28 +37,19 @@ interface ResolvedRuntimeShape {
 
 interface NormalizationDependencies {
   providerName: string;
-  defaultSettingsService: SettingsService;
-  defaultConfig?: Config;
   maybeTools?: ProviderToolset;
   authToken: ResolvedAuthToken;
   authFailure?: CredentialResolutionError;
   resolvedModel: string;
   resolvedBaseURL?: string;
-  providerSettings: ProviderSettings;
-  buildEphemeralsSnapshot: (
-    settings: SettingsService,
-  ) => Record<string, unknown>;
-}
-
-function assertPresentRuntimeParts(input: RuntimeGuardInput): string[] {
-  const missing: string[] = [];
-  if (input.settings === undefined || input.settings === null) {
-    missing.push('settings');
-  }
-  if (input.config === undefined || input.config === null) {
-    missing.push('config');
-  }
-  return missing;
+  providerSettings: {
+    temperature?: number;
+    maxTokens?: number;
+    streaming?: boolean;
+  };
+  ephemeralsSnapshot: Readonly<Record<string, unknown>>;
+  providerDefaults: Readonly<Record<string, unknown>>;
+  configuredHeaders: Readonly<Record<string, string>>;
 }
 
 function findResolvedRuntimeGaps(
@@ -101,29 +84,16 @@ function buildRuntimeMetadata(
   input: RuntimeGuardInput,
 ): Record<string, unknown> {
   return {
-    ...(input.runtime?.metadata ?? {}),
     ...(input.metadata ?? {}),
     requirement: 'REQ-SP4-001',
     stage: input.stage,
   };
 }
 
-function resolveRuntimeId(
-  metadata: Record<string, unknown>,
-  fallback: string,
-): string {
-  const currentRuntimeId =
-    typeof metadata.runtimeId === 'string' ? metadata.runtimeId : undefined;
-  return currentRuntimeId?.trim() ? currentRuntimeId : fallback;
-}
-
-export function assertProviderRuntimeContext(
+export function assertProviderRequestData(
   input: RuntimeGuardInput,
 ): RuntimeGuardResult {
-  const missingFields = [
-    ...assertPresentRuntimeParts(input),
-    ...findResolvedRuntimeGaps(input.resolved),
-  ];
+  const missingFields = [...findResolvedRuntimeGaps(input.resolved)];
   if (missingFields.length > 0) {
     throw new MissingProviderRuntimeError({
       providerKey: input.providerKey,
@@ -137,50 +107,28 @@ export function assertProviderRuntimeContext(
   }
 
   const metadata = buildRuntimeMetadata(input);
-  const runtime = input.runtime
-    ? {
-        ...input.runtime,
-        settingsService: input.settings!,
-        config: input.runtime.config ?? input.config ?? undefined,
-        metadata,
-      }
-    : {
-        settingsService: input.settings!,
-        config: input.config ?? undefined,
-        runtimeId: resolveRuntimeId(
-          metadata,
-          `${input.providerKey}:${input.stage}`,
-        ),
-        metadata,
-      };
-
-  return { runtime, metadata };
-}
-
-export function resolveGenerateChatSettings(
-  providedOptions: GenerateChatOptions,
-  fallbackSettings: SettingsService | undefined,
-  providerName: string,
-): SettingsService {
-  const settings = providedOptions.settings ?? fallbackSettings;
-  if (settings === undefined) {
-    throw new MissingProviderRuntimeError({
-      providerKey: `BaseProvider.${providerName}`,
-      missingFields: ['settings'],
-      stage: 'normalizeGenerateChatOptions',
-      metadata: {
-        hint: 'ProviderManager must supply settings via GenerateChatOptions or setRuntimeSettingsService.',
-        requirement: 'REQ-SP4-001',
-      },
-    });
-  }
-  return settings;
+  return { metadata };
 }
 
 function createResolvedOptions(
   providedOptions: GenerateChatOptions,
   deps: NormalizationDependencies,
 ): NormalizedGenerateChatOptions['resolved'] {
+  const admitted = providedOptions.modelParameters?.modelParams;
+  const temperature = admitted?.['temperature'];
+  const maxTokens = admitted?.['maxTokens'];
+  const admittedTemperature =
+    typeof temperature === 'number' ? temperature : undefined;
+  const admittedMaxTokens =
+    typeof maxTokens === 'number' ? maxTokens : undefined;
+  const temperatureDefault =
+    admitted === undefined
+      ? deps.providerSettings.temperature
+      : admittedTemperature;
+  const maxTokensDefault =
+    admitted === undefined
+      ? deps.providerSettings.maxTokens
+      : admittedMaxTokens;
   return {
     model: providedOptions.resolved?.model ?? deps.resolvedModel,
     baseURL: providedOptions.resolved?.baseURL ?? deps.resolvedBaseURL,
@@ -190,14 +138,10 @@ function createResolvedOptions(
       ? { authFailure: deps.authFailure }
       : {}),
     telemetry: providedOptions.resolved?.telemetry,
-    temperature:
-      providedOptions.resolved?.temperature ??
-      deps.providerSettings.temperature,
-    maxTokens:
-      providedOptions.resolved?.maxTokens ?? deps.providerSettings.maxTokens,
+    temperature: providedOptions.resolved?.temperature ?? temperatureDefault,
+    maxTokens: providedOptions.resolved?.maxTokens ?? maxTokensDefault,
     streaming:
-      providedOptions.resolved?.streaming ??
-      (deps.providerSettings.streaming as boolean | undefined),
+      providedOptions.resolved?.streaming ?? deps.providerSettings.streaming,
   };
 }
 
@@ -205,7 +149,6 @@ function mergeInvocationMetadata(
   providedOptions: GenerateChatOptions,
 ): Record<string, unknown> {
   return {
-    ...(providedOptions.runtime?.metadata ?? {}),
     ...(providedOptions.metadata ?? {}),
   };
 }
@@ -224,9 +167,9 @@ const INVOCATION_METHODS = [
   'getProviderOverrides',
 ] as const;
 
-function isRuntimeInvocationContext(
+export function isRuntimeInvocationContext(
   value: unknown,
-): value is GenerateChatOptions['invocation'] & RuntimeInvocationContext {
+): value is RuntimeInvocationContext {
   if (value === null || typeof value !== 'object') {
     return false;
   }
@@ -249,11 +192,17 @@ function extractLegacySignal(invocation: unknown): AbortSignal | undefined {
 }
 
 interface InvocationNormalizationInput {
-  providedOptions: GenerateChatOptions;
-  normalizedRuntime: ProviderRuntimeContext;
-  settings: SettingsService;
+  invocation?: RuntimeInvocationContext;
+  runtimeId?: string;
+  runtimeMetadata?: Record<string, unknown>;
+  modelParams?: Readonly<Record<string, unknown>>;
+  modelParamsProviderName?: string;
+  metadataSignal?: AbortSignal;
+  userMemory?: string;
   providerName: string;
-  snapshot: Record<string, unknown>;
+  snapshot: Readonly<Record<string, unknown>>;
+  providerDefaults: Readonly<Record<string, unknown>>;
+  configuredHeaders: Readonly<Record<string, string>>;
   telemetry: NormalizedGenerateChatOptions['resolved']['telemetry'];
   metadata: Record<string, unknown>;
 }
@@ -261,28 +210,27 @@ interface InvocationNormalizationInput {
 function createNormalizedInvocation(
   input: InvocationNormalizationInput,
 ): RuntimeInvocationContext {
-  const providedInvocation = isRuntimeInvocationContext(
-    input.providedOptions.invocation,
-  )
-    ? input.providedOptions.invocation
+  const providedInvocation = isRuntimeInvocationContext(input.invocation)
+    ? input.invocation
     : undefined;
-  const metadataSignal = extractLegacySignal({
-    signal: input.providedOptions.metadata?.abortSignal,
-  });
-  const legacySignal =
-    extractLegacySignal(input.providedOptions.invocation) ?? metadataSignal;
+  const metadataSignal = input.metadataSignal;
+  const legacySignal = extractLegacySignal(input.invocation) ?? metadataSignal;
   if (providedInvocation) {
     const providedSignal = extractLegacySignal(providedInvocation);
     return createRuntimeInvocationContext({
-      runtime: {
-        ...input.normalizedRuntime,
-        runtimeId: providedInvocation.runtimeId,
-      },
-      settings: input.settings,
+      runtimeId: providedInvocation.runtimeId,
+      runtimeMetadata: input.runtimeMetadata,
+      modelParams: input.modelParams,
+      modelParamsProviderName: input.modelParamsProviderName,
       providerName: input.providerName,
-      ephemeralsSnapshot: {
-        ...input.snapshot,
-        ...providedInvocation.ephemerals,
+      ephemeralsSnapshot: input.snapshot,
+      providerDefaults:
+        Object.keys(providedInvocation.providerDefaults).length > 0
+          ? providedInvocation.providerDefaults
+          : input.providerDefaults,
+      configuredHeaders: {
+        ...input.configuredHeaders,
+        ...providedInvocation.customHeaders,
       },
       telemetry: providedInvocation.telemetry ?? input.telemetry,
       metadata: providedInvocation.metadata,
@@ -296,16 +244,17 @@ function createNormalizedInvocation(
   }
 
   return createRuntimeInvocationContext({
-    runtime: input.normalizedRuntime,
-    settings: input.settings,
+    runtimeId: input.runtimeId,
+    runtimeMetadata: input.runtimeMetadata,
+    modelParams: input.modelParams,
+    modelParamsProviderName: input.modelParamsProviderName,
     providerName: input.providerName,
     ephemeralsSnapshot: input.snapshot,
+    providerDefaults: input.providerDefaults,
+    configuredHeaders: input.configuredHeaders,
     telemetry: input.telemetry,
     metadata: input.metadata,
-    userMemory:
-      typeof input.providedOptions.userMemory === 'string'
-        ? input.providedOptions.userMemory
-        : undefined,
+    userMemory: input.userMemory,
     ...(legacySignal ? { signal: legacySignal } : {}),
     fallbackRuntimeId: `${input.providerName}:normalizeGenerateChatOptions`,
   });
@@ -316,33 +265,35 @@ export function normalizeProviderGenerateChatOptions(
   providedOptions: GenerateChatOptions,
   deps: NormalizationDependencies,
 ): NormalizedGenerateChatOptions {
-  const settings = deps.defaultSettingsService;
-  const runtimeConfig = providedOptions.runtime?.config ?? null;
-  const configCandidate =
-    providedOptions.config ?? runtimeConfig ?? deps.defaultConfig ?? null;
   const metadata = mergeInvocationMetadata(providedOptions);
   const resolved = createResolvedOptions(providedOptions, deps);
-  const guard = assertProviderRuntimeContext({
+  const guard = assertProviderRequestData({
     providerKey: `BaseProvider.${deps.providerName}`,
-    settings,
-    config: configCandidate,
-    runtime: providedOptions.runtime,
     metadata,
     resolved,
     stage: 'normalizeGenerateChatOptions',
   });
-  const finalConfig = guard.runtime.config ?? configCandidate ?? undefined;
-  const normalizedRuntime: ProviderRuntimeContext = {
-    ...guard.runtime,
-    metadata: guard.metadata,
-    config: finalConfig,
-  };
   const invocation = createNormalizedInvocation({
-    providedOptions,
-    normalizedRuntime,
-    settings,
+    invocation: providedOptions.invocation,
+    runtimeId:
+      providedOptions.invocation?.runtimeId ??
+      (typeof guard.metadata.runtimeId === 'string'
+        ? guard.metadata.runtimeId.trim()
+        : undefined),
+    runtimeMetadata: guard.metadata,
+    modelParams: providedOptions.modelParameters?.modelParams,
+    modelParamsProviderName: providedOptions.modelParameters?.providerName,
+    metadataSignal: extractLegacySignal({
+      signal: providedOptions.metadata?.abortSignal,
+    }),
+    userMemory:
+      typeof providedOptions.userMemory === 'string'
+        ? providedOptions.userMemory
+        : undefined,
     providerName: deps.providerName,
-    snapshot: deps.buildEphemeralsSnapshot(settings),
+    snapshot: deps.ephemeralsSnapshot,
+    providerDefaults: deps.providerDefaults,
+    configuredHeaders: deps.configuredHeaders,
     telemetry: resolved.telemetry,
     metadata: guard.metadata,
   });
@@ -351,9 +302,6 @@ export function normalizeProviderGenerateChatOptions(
     ...providedOptions,
     contents: providedOptions.contents,
     tools: providedOptions.tools ?? deps.maybeTools,
-    settings,
-    config: finalConfig,
-    runtime: normalizedRuntime,
     metadata: guard.metadata,
     resolved,
     invocation,

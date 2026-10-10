@@ -16,6 +16,13 @@
  * so the production memory policy, the production main builder, and the real
  * core prompt assembler all remain under test.
  */
+import { instructionFixture } from './__tests__/instruction-fixture.js';
+
+import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
+const fixturePaths = installTestWorkspacePaths({
+  targetDir: process.cwd(),
+  isTrusted: () => true,
+});
 
 import { describe, it, expect, vi, beforeAll, afterAll } from 'bun:test';
 import process from 'node:process';
@@ -54,23 +61,22 @@ const ENV_TOKEN = 'ENV_PREFIX_TOKEN_3173';
  */
 async function legacyBuildSystemInstruction(
   config: Config,
+  readMcpInstructions: () => string | undefined,
   enabledToolNames: string[],
   envParts: Array<{ text?: string }>,
   model: string,
+  row: Row,
 ): Promise<string> {
-  let userMemory = config.isJitContextEnabled()
-    ? config.getGlobalMemory()
-    : config.getUserMemory();
-  const coreMemory = config.getCoreMemory();
-
-  const jitMemory = await config.getJitMemoryForPath(config.getWorkingDir());
+  let userMemory = config.isJitContextEnabled() ? row.global : row.user;
+  const coreMemory = row.core;
+  const jitMemory = row.jit;
   if (jitMemory) {
     userMemory = userMemory ? `${userMemory}\n\n${jitMemory}` : jitMemory;
   }
 
-  const mcpInstructions = config.getMcpInstructions();
+  const mcpInstructions = readMcpInstructions();
   const includeSubagentDelegation =
-    await shouldIncludeSubagentDelegationForConfig(config, enabledToolNames);
+    await shouldIncludeSubagentDelegationForConfig(undefined, enabledToolNames);
   const interactionMode = config.isInteractive()
     ? 'interactive'
     : 'non-interactive';
@@ -121,11 +127,6 @@ function makeConfig(row: Row): Config {
   const settingsService = new SettingsService();
   return {
     isJitContextEnabled: () => row.jitEnabled,
-    getGlobalMemory: () => row.global,
-    getUserMemory: () => row.user,
-    getJitMemoryForPath: async () => row.jit,
-    getCoreMemory: () => row.core,
-    getMcpInstructions: () => row.mcp,
     getWorkingDir: () => '/proj/workspace',
     isInteractive: () => true,
     getSettingsService: () => settingsService,
@@ -273,16 +274,22 @@ describe('buildSystemInstruction byte-for-byte compatibility with pre-change mai
   const observeSystemInstructionByteCompatibility = async (row: Row) => {
     const production = await buildSystemInstruction(
       makeConfig(row),
+      () => row.mcp,
       [],
       row.envParts,
       undefined,
       MODEL,
+      fixturePaths().directories(),
+      instructionFixture(row.user, row.core, row.global, row.jit),
+      {},
     );
     const legacy = await legacyBuildSystemInstruction(
       makeConfig(row),
+      () => row.mcp,
       [],
       row.envParts,
       MODEL,
+      row,
     );
 
     // Strong byte-for-byte compatibility evidence: the centralized builder

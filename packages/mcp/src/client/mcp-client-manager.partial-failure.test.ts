@@ -1,16 +1,20 @@
+import { installTestCatalogOwners } from '@vybestack/llxprt-code-test-utils/core/config.js';
+const createTestCatalogOwner = installTestCatalogOwners();
+import { createTestOAuthBinding } from './test-support/index.js';
+import { unsupportedApprovalPolicy } from './test-support/approval-policy.js';
 /*
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
-import type { Config } from './test-support/mcpClientTestSupport.js';
-import { PromptRegistry } from './test-support/mcpClientTestSupport.js';
-import { ResourceRegistry } from './test-support/mcpClientTestSupport.js';
-import { WorkspaceContext } from './test-support/mcpClientTestSupport.js';
-import { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import type { Config as BaseConfig } from './test-support/mcpClientTestSupport.js';
+
+import {
+  buildToolGovernance,
+  ToolRegistry,
+} from '@vybestack/llxprt-code-tools';
 import { McpClientManager } from './mcp-client-manager.js';
 import type { McpClient } from './mcp-client.js';
 import { MCPDiscoveryState } from './mcp-client.js';
@@ -53,16 +57,18 @@ describe('McpClientManager partial discovery failure', () => {
     mockMcpClient
       .mockReturnValueOnce(goodClient as unknown as McpClient)
       .mockReturnValueOnce(badClient as unknown as McpClient);
-    const promptRegistry = new PromptRegistry();
-    const resourceRegistry = new ResourceRegistry();
+    const catalog = createTestCatalogOwner();
+    const promptRegistry = catalog.promptPublication;
+    const resourceRegistry = catalog.resourcePublication;
+    const configPrompts = promptRegistry;
+    const configResources = resourceRegistry;
     const config = {
       isTrustedFolder: () => true,
       getMcpServers: () => ({ 'good-server': {}, 'bad-server': {} }),
       getMcpServerCommand: () => '',
-      getPromptRegistry: () => promptRegistry,
-      getResourceRegistry: () => resourceRegistry,
+
       getDebugMode: () => false,
-      getWorkspaceContext: () => new WorkspaceContext(''),
+
       getAllowedMcpServers: () => undefined,
       getBlockedMcpServers: () => undefined,
       refreshMcpContext: vi.fn(),
@@ -70,7 +76,15 @@ describe('McpClientManager partial discovery failure', () => {
     const toolRegistry = new ToolRegistry(
       config,
       { requestConfirmation: async () => false },
-      new SettingsService(),
+      () => ({
+        hideTaskAsync: false,
+        lazyMcp: false,
+        eagerServers: [],
+        governance: buildToolGovernance({
+          getEphemeralSettings: () => ({}),
+          getExcludeTools: () => [],
+        }),
+      }),
     );
     const removeTools = vi.spyOn(toolRegistry, 'removeMcpToolsByServer');
     const removePrompts = vi.spyOn(promptRegistry, 'removePromptsByServer');
@@ -78,7 +92,16 @@ describe('McpClientManager partial discovery failure', () => {
       resourceRegistry,
       'removeResourcesByServer',
     );
-    const manager = new McpClientManager('0.0.1', toolRegistry, config);
+    const manager = new McpClientManager(
+      createTestOAuthBinding(),
+      unsupportedApprovalPolicy(),
+      '0.0.1',
+      toolRegistry,
+      configPrompts,
+      configResources,
+      config,
+      config.refreshMcpContext,
+    );
 
     await manager.startConfiguredMcpServers();
     await manager.whenDiscoverySettled();
@@ -94,6 +117,8 @@ describe('McpClientManager partial discovery failure', () => {
       expect(remove).toHaveBeenCalledWith('bad-server');
       expect(remove).not.toHaveBeenCalledWith('good-server');
     }
-    expect(manager.getMcpInstructions()).toContain('good-server instructions');
+    expect(manager.readInstructions()).toContain('good-server instructions');
   });
 });
+
+type Config = BaseConfig & { refreshMcpContext(): Promise<void> };

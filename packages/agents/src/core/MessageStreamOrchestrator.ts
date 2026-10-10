@@ -5,7 +5,10 @@
  */
 
 import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import type { AgentRequestInput } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import type {
+  AgentRequestInput,
+  AgentChatRecordingExecution,
+} from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   Turn,
@@ -21,6 +24,7 @@ import {
   type EffectiveModelIdentity,
 } from './modelInfoHelpers.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   iContentFromBlocks,
@@ -44,6 +48,7 @@ import type { Todo } from '@vybestack/llxprt-code-tools';
 import type { ComplexityAnalyzer } from '@vybestack/llxprt-code-core/services/complexity-analyzer.js';
 import { handleTerminalEvent } from './MessageStreamTerminalHandler.js';
 import { applyRetryAwareLoopDetection } from './retryAwareLoopDetection.js';
+import { sendAfterAgentDecision } from './afterAgentDecisionStream.js';
 
 export interface MessageStreamDeps {
   config: Config;
@@ -74,12 +79,15 @@ export interface MessageStreamDeps {
     turns?: number,
     isInvalidStreamRetry?: boolean,
     isPayloadRecoveryRetry?: boolean,
+    recordingExecution?: AgentChatRecordingExecution,
+    modelParameters?: AdmittedModelParameters,
   ) => AsyncGenerator<ServerAgentStreamEvent, Turn>;
   createTurn?: (
     chat: ChatSession,
     promptId: string,
     agentId: string,
     providerName: string,
+    recordingExecution?: AgentChatRecordingExecution,
   ) => Turn;
 }
 
@@ -91,6 +99,8 @@ export interface StreamContext {
   turns: number;
   isInvalidStreamRetry: boolean;
   isPayloadRecoveryRetry: boolean;
+  recordingExecution?: AgentChatRecordingExecution;
+  modelParameters?: AdmittedModelParameters;
 }
 
 export interface IterationResult {
@@ -231,16 +241,22 @@ export class MessageStreamOrchestrator {
   #lastModelIdentity: string | null = null;
   constructor(private readonly deps: MessageStreamDeps) {}
 
-  private _createTurn(promptId: string): Turn {
+  private _createTurn(
+    promptId: string,
+    recordingExecution?: AgentChatRecordingExecution,
+    modelParameters?: AdmittedModelParameters,
+  ): Turn {
     const createTurn =
       this.deps.createTurn ??
-      ((chat, id, agentId, providerName) =>
-        new Turn(chat, id, agentId, providerName));
+      ((chat, id, agentId, providerName, execution) =>
+        new Turn(chat, id, agentId, providerName, execution));
     return createTurn(
       this.deps.getChat(),
       promptId,
       DEFAULT_AGENT_ID,
-      this._getProviderName(),
+      modelParameters?.route?.provider.name ??
+        this.deps.getEffectiveModelIdentity().providerName,
+      recordingExecution,
     );
   }
 
@@ -251,6 +267,8 @@ export class MessageStreamOrchestrator {
     turns: number,
     isInvalidStreamRetry: boolean,
     isPayloadRecoveryRetry: boolean = false,
+    recordingExecution?: AgentChatRecordingExecution,
+    modelParameters?: AdmittedModelParameters,
   ): AsyncGenerator<ServerAgentStreamEvent, Turn> {
     this.deps.logger.debug(() => 'DEBUG: AgentClient.sendMessageStream called');
 
@@ -267,6 +285,8 @@ export class MessageStreamOrchestrator {
       turns,
       isInvalidStreamRetry,
       isPayloadRecoveryRetry,
+      recordingExecution,
+      modelParameters,
     };
 
     const request = yield* this._preflight(narrowedRequest, ctx);
@@ -323,11 +343,12 @@ export class MessageStreamOrchestrator {
       resetCurrentSequenceModel();
       await todoContinuationService.clearPausedState();
 
-      yield* this._emitModelInfoForNewSequence();
+      yield* this._modelInfoEvents(true, ctx.modelParameters);
 
       const hookOutput = await agentHookManager.fireBeforeAgentHookSafe(
         ctx.prompt_id,
         ctx.promptText,
+        ctx.recordingExecution?.hookOwner,
       );
 
       if (
@@ -342,7 +363,11 @@ export class MessageStreamOrchestrator {
             ),
           },
         };
-        return this._createTurn(ctx.prompt_id);
+        return this._createTurn(
+          ctx.prompt_id,
+          ctx.recordingExecution,
+          ctx.modelParameters,
+        );
       }
 
       const additionalContext = hookOutput?.getAdditionalContext();
@@ -362,7 +387,7 @@ export class MessageStreamOrchestrator {
         request = [...blocks, additionalBlock] as AgentMessageInput;
       }
     } else {
-      yield* this._emitModelInfoIfChanged();
+      yield* this._modelInfoEvents(false, ctx.modelParameters);
     }
 
     incrementSessionTurnCount();
@@ -383,12 +408,20 @@ export class MessageStreamOrchestrator {
     ) {
       yield { type: AgentEventType.MaxSessionTurns };
       yield* this._fireAfterHookAndEmitClearContext(ctx);
-      return this._createTurn(ctx.prompt_id);
+      return this._createTurn(
+        ctx.prompt_id,
+        ctx.recordingExecution,
+        ctx.modelParameters,
+      );
     }
 
     if (Math.min(ctx.turns, MAX_TURNS) === 0) {
       yield* this._fireAfterHookAndEmitClearContext(ctx);
-      return this._createTurn(ctx.prompt_id);
+      return this._createTurn(
+        ctx.prompt_id,
+        ctx.recordingExecution,
+        ctx.modelParameters,
+      );
     }
     return undefined;
   }
@@ -400,7 +433,7 @@ export class MessageStreamOrchestrator {
    * @requirement:REQ-005.4
    */
   private async _injectIdeContext(): Promise<void> {
-    const { config, ideContextTracker, getChat, getHistory } = this.deps;
+    const { ideContextTracker, getChat, getHistory } = this.deps;
     const history = await getHistory();
     const lastMessage =
       history.length > 0 ? history[history.length - 1] : undefined;
@@ -410,7 +443,7 @@ export class MessageStreamOrchestrator {
       lastIContent.speaker === 'ai' &&
       lastIContent.blocks.some((b) => b.type === 'tool_call');
 
-    if (config.getIdeMode() && !hasPendingToolCall) {
+    if (ideContextTracker.isEnabled() && !hasPendingToolCall) {
       const { contextParts, newIdeContext } = ideContextTracker.getContextParts(
         history.length === 0,
       );
@@ -464,7 +497,11 @@ export class MessageStreamOrchestrator {
       iterRequest =
         await todoContinuationService.applyPendingReminder(iterRequest);
 
-      const turn = this._createTurn(ctx.prompt_id);
+      const turn = this._createTurn(
+        ctx.prompt_id,
+        ctx.recordingExecution,
+        ctx.modelParameters,
+      );
       lastTurn = turn;
 
       const iterResult: IterationResult = yield* this._processStreamIteration(
@@ -518,7 +555,7 @@ export class MessageStreamOrchestrator {
     const { state, deferredEvents } = rollback;
     let finishedOutcome: ServerFinishedOutcome | undefined;
     const events = applyRetryAwareLoopDetection(
-      turn.run(iterRequest, signal),
+      turn.run(iterRequest, signal, ctx.modelParameters),
       loopDetector,
     );
     for await (const { event, loopDetected: eventLoopDetected } of events) {
@@ -554,7 +591,7 @@ export class MessageStreamOrchestrator {
 
       if (todoContinuationService.shouldDeferStreamEvent(event)) {
         deferredEvents.push(event);
-      } else {
+      } else if (event.type !== AgentEventType.Error) {
         yield event;
       }
       this.deps.updateTelemetryTokenCount();
@@ -672,17 +709,12 @@ export class MessageStreamOrchestrator {
       for (const d of iter.deferredEvents) yield d;
       this._resetTodoState(todoContinuationService, latestSnapshot);
       const afterOut = yield* this._fireAfterHookAndEmitClearContext(ctx);
-      if (
-        afterOut?.isBlockingDecision() === true ||
-        afterOut?.shouldStopExecution() === true
-      ) {
-        yield* sendMessageStream(
-          [{ type: 'text', text: afterOut.getEffectiveReason() }],
-          ctx.signal,
-          ctx.prompt_id,
-          getBoundedTurns() - 1,
-        );
-      }
+      yield* sendAfterAgentDecision(
+        sendMessageStream,
+        ctx,
+        afterOut,
+        getBoundedTurns(),
+      );
       return { done: true, retryCount, newBaseRequest: undefined };
     }
 
@@ -735,17 +767,12 @@ export class MessageStreamOrchestrator {
     todoContinuationService.toolActivityCount = 0;
 
     const afterOut = yield* this._fireAfterHookAndEmitClearContext(ctx);
-    if (
-      afterOut?.isBlockingDecision() === true ||
-      afterOut?.shouldStopExecution() === true
-    ) {
-      yield* sendMessageStream(
-        [{ type: 'text', text: afterOut.getEffectiveReason() }],
-        ctx.signal,
-        ctx.prompt_id,
-        getBoundedTurns() - 1,
-      );
-    }
+    yield* sendAfterAgentDecision(
+      sendMessageStream,
+      ctx,
+      afterOut,
+      getBoundedTurns(),
+    );
 
     return { done: true, retryCount: 0, newBaseRequest: undefined };
   }
@@ -856,37 +883,25 @@ export class MessageStreamOrchestrator {
     }
   }
 
-  private _getProviderName(): string {
-    return this.deps.getEffectiveModelIdentity().providerName;
+  private _buildModelInfo(
+    modelParameters?: AdmittedModelParameters,
+  ): ModelInfo {
+    const route = modelParameters?.route;
+    const identity = route
+      ? { providerName: route.provider.name, model: route.model }
+      : this.deps.getEffectiveModelIdentity();
+    return buildModelInfo(this.deps.config, identity, route?.profileName);
   }
 
-  private _buildModelInfo(): ModelInfo {
-    return buildModelInfo(
-      this.deps.config,
-      this.deps.getEffectiveModelIdentity(),
-    );
-  }
-
-  private *_modelInfoEvents(force: boolean): Generator<ServerAgentStreamEvent> {
-    const info = this._buildModelInfo();
+  private *_modelInfoEvents(
+    force: boolean,
+    modelParameters?: AdmittedModelParameters,
+  ): Generator<ServerAgentStreamEvent> {
+    const info = this._buildModelInfo(modelParameters);
     const key = modelIdentityKey(info);
     if (!force && key === this.#lastModelIdentity) return;
     this.#lastModelIdentity = key;
     yield { type: AgentEventType.ModelInfo, value: info };
-  }
-
-  private async *_emitModelInfoForNewSequence(): AsyncGenerator<
-    ServerAgentStreamEvent,
-    void
-  > {
-    yield* this._modelInfoEvents(true);
-  }
-
-  private async *_emitModelInfoIfChanged(): AsyncGenerator<
-    ServerAgentStreamEvent,
-    void
-  > {
-    yield* this._modelInfoEvents(false);
   }
 
   private _resetTodoState(
@@ -906,6 +921,7 @@ export class MessageStreamOrchestrator {
       ctx.promptText,
       ctx.responseChunks.join(''),
       false,
+      ctx.recordingExecution?.hookOwner,
     );
   }
 

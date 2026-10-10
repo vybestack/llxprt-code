@@ -48,6 +48,7 @@ import {
   isShellToolHost,
   prepareShellExecution,
   appendClampNoticeToResult,
+  bindBackgroundShellHost,
   formatShellTimeoutMessage,
   validateGrepFlags,
   validatePositiveInteger,
@@ -89,16 +90,13 @@ export class ShellToolInvocation extends BaseToolInvocation<
   ShellToolParams,
   ToolResult
 > {
-  private allowlist: Set<string> = new Set();
-
   constructor(
     private readonly host: IShellToolHost,
     params: ShellToolParams,
-    allowlist: Set<string>,
+    private readonly allowlist: Set<string>,
     messageBus: IToolMessageBus,
   ) {
     super(params, messageBus);
-    this.allowlist = allowlist;
   }
 
   override getToolName(): string {
@@ -154,7 +152,7 @@ export class ShellToolInvocation extends BaseToolInvocation<
     const rootCommands = [...new Set(this.host.getCommandRoots(command))];
 
     if (!this.host.isInteractive() && !this.host.isYoloMode()) {
-      if (this.isInvocationAllowlisted(command)) {
+      if (this.host.isShellInvocationAllowlisted(command, ShellTool.Name)) {
         return false;
       }
       throw new Error(
@@ -595,9 +593,10 @@ export class ShellToolInvocation extends BaseToolInvocation<
     }
 
     const targetDir = this.host.getTargetDir();
-    const resolved = this.resolveDirPath(dirPath, targetDir);
+    const resolved = path.isAbsolute(dirPath)
+      ? dirPath
+      : path.resolve(targetDir, dirPath);
     const pathError = this.host.validatePathWithinWorkspace(
-      this.host.getWorkspaceContext(),
       resolved,
       'Directory',
     );
@@ -605,13 +604,6 @@ export class ShellToolInvocation extends BaseToolInvocation<
       throw new Error(pathError);
     }
     return resolved;
-  }
-
-  private resolveDirPath(dirPath: string, targetDir: string): string {
-    if (path.isAbsolute(dirPath)) {
-      return dirPath;
-    }
-    return path.resolve(targetDir, dirPath);
   }
 
   private formatOutputContent(
@@ -770,10 +762,6 @@ export class ShellToolInvocation extends BaseToolInvocation<
       },
     };
   }
-
-  private isInvocationAllowlisted(command: string): boolean {
-    return this.host.isShellInvocationAllowlisted(command, ShellTool.Name);
-  }
 }
 
 export class ShellTool extends BaseDeclarativeTool<
@@ -781,12 +769,17 @@ export class ShellTool extends BaseDeclarativeTool<
   ToolResult
 > {
   static readonly Name: string = 'run_shell_command';
-  private allowlist: Set<string> = new Set();
   private readonly host: IShellToolHost;
 
+  /**
+   * @param allowlist Root commands approved with "Allow for this session".
+   * Session-bound views of a tool share the owning tool's set so approvals
+   * survive the per-call views the scheduler resolves.
+   */
   constructor(
     host: IShellToolHost | IShellExecutionService,
     messageBus?: IToolMessageBus,
+    private readonly allowlist: Set<string> = new Set(),
   ) {
     super(
       ShellTool.Name,
@@ -801,6 +794,16 @@ export class ShellTool extends BaseDeclarativeTool<
     this.host = isShellToolHost(host)
       ? host
       : createShellToolHostFromExecutionService(host);
+  }
+
+  withBackgroundJobs(
+    jobs: Pick<IShellToolHost, 'launchBackgroundJob' | 'tailBackgroundJob'>,
+  ): ShellTool {
+    return new ShellTool(
+      bindBackgroundShellHost(this.host, jobs),
+      this.messageBus,
+      this.allowlist,
+    );
   }
 
   protected override validateToolParamValues(
@@ -829,10 +832,8 @@ export class ShellTool extends BaseDeclarativeTool<
       params.directory ?? '',
     );
     if (dirPath.trim() !== '') {
-      const workspaceContext = this.host.getWorkspaceContext();
       if (path.isAbsolute(dirPath)) {
         const pathError = this.host.validatePathWithinWorkspace(
-          workspaceContext,
           dirPath,
           'Directory',
         );
@@ -846,7 +847,6 @@ export class ShellTool extends BaseDeclarativeTool<
       if (dirPath.includes(path.sep) || dirPath.includes('/')) {
         const resolvedPath = path.resolve(this.host.getTargetDir(), dirPath);
         const pathError = this.host.validatePathWithinWorkspace(
-          workspaceContext,
           resolvedPath,
           'Directory',
         );
@@ -857,7 +857,7 @@ export class ShellTool extends BaseDeclarativeTool<
       }
 
       // Single-segment: try workspace basename matching first
-      const workspaceDirs = workspaceContext.getDirectories();
+      const workspaceDirs = this.host.workspaceDirectories();
       const matchingDirs = workspaceDirs.filter(
         (dir) => path.basename(dir) === dirPath,
       );
@@ -872,7 +872,7 @@ export class ShellTool extends BaseDeclarativeTool<
 
       // No basename match — try resolving as relative path within workspace
       const resolvedPath = path.resolve(this.host.getTargetDir(), dirPath);
-      if (workspaceContext.isPathWithinWorkspace(resolvedPath)) {
+      if (this.host.containsWorkspacePath(resolvedPath)) {
         return null;
       }
 

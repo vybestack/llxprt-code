@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { LocalMediaStore } from './local-media-store.js';
 import type {
   MediaDimensions,
   MediaSemanticMetadata,
@@ -64,6 +65,7 @@ export interface LocalMediaStoreFileOperations {
 }
 
 export interface LocalMediaStoreOptions {
+  readonly recordingArchive?: LocalMediaStore;
   readonly rootDirectory: string;
   readonly quotaBytes: number;
   readonly fileOperations?: LocalMediaStoreFileOperations;
@@ -123,7 +125,7 @@ export interface MediaStoredObjectFileAdmission {
 export interface StagedMediaObjectAdmission {
   readonly createdContentIds: readonly string[];
   commit(): void;
-  rollback(): Promise<void>;
+  rollback(readProtected?: () => Promise<ReadonlySet<string>>): Promise<void>;
 }
 
 export interface PublishedMediaObjectPath {

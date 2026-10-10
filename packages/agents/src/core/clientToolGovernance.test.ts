@@ -12,28 +12,20 @@ import {
   getEnabledToolNamesForPrompt,
   shouldIncludeSubagentDelegationForConfig,
 } from './clientToolGovernance.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { ToolRegistryView } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 
 function makeConfig(settings: Record<string, unknown> = {}): Config {
-  return {
-    getEphemeralSetting: (key: string) => settings[key],
-    getToolRegistry: () => undefined,
-    getSubagentManager: () => undefined,
-  } as unknown as Config;
-}
-
-function makeConfigWithTools(
-  settings: Record<string, unknown>,
-  toolRegistry: ToolRegistry,
-): Config {
-  return {
-    getEphemeralSetting: (key: string) => settings[key],
-    getToolRegistry: () => toolRegistry,
-    getSubagentManager: () => undefined,
-  } as unknown as Config;
+  return new Config({
+    sessionId: 'tool-governance',
+    targetDir: process.cwd(),
+    cwd: process.cwd(),
+    debugMode: false,
+    model: 'governance-model',
+    initialSettings: settings,
+  });
 }
 
 function makeView(toolNames: string[]): ToolRegistryView {
@@ -45,12 +37,28 @@ function makeView(toolNames: string[]): ToolRegistryView {
 describe('getToolGovernanceEphemerals', () => {
   it('returns undefined when no allowed or disabled tools', () => {
     const config = makeConfig({});
-    expect(getToolGovernanceEphemerals(config)).toBeUndefined();
+    expect(
+      getToolGovernanceEphemerals({
+        allowed:
+          readToolList(config.getInitialSettings()['tools.allowed']).length ===
+            0 && !Array.isArray(config.getInitialSettings()['tools.allowed'])
+            ? undefined
+            : readToolList(config.getInitialSettings()['tools.allowed']),
+        disabled: readToolList(config.getInitialSettings()['tools.disabled']),
+      }),
+    ).toBeUndefined();
   });
 
   it('returns allowed list when present', () => {
     const config = makeConfig({ 'tools.allowed': ['bash', 'read_file'] });
-    const result = getToolGovernanceEphemerals(config);
+    const result = getToolGovernanceEphemerals({
+      allowed:
+        readToolList(config.getInitialSettings()['tools.allowed']).length ===
+          0 && !Array.isArray(config.getInitialSettings()['tools.allowed'])
+          ? undefined
+          : readToolList(config.getInitialSettings()['tools.allowed']),
+      disabled: readToolList(config.getInitialSettings()['tools.disabled']),
+    });
     expect(result).toStrictEqual({
       allowed: ['bash', 'read_file'],
       disabled: undefined,
@@ -59,7 +67,14 @@ describe('getToolGovernanceEphemerals', () => {
 
   it('returns disabled list when present via tools.disabled', () => {
     const config = makeConfig({ 'tools.disabled': ['write_file'] });
-    const result = getToolGovernanceEphemerals(config);
+    const result = getToolGovernanceEphemerals({
+      allowed:
+        readToolList(config.getInitialSettings()['tools.allowed']).length ===
+          0 && !Array.isArray(config.getInitialSettings()['tools.allowed'])
+          ? undefined
+          : readToolList(config.getInitialSettings()['tools.allowed']),
+      disabled: readToolList(config.getInitialSettings()['tools.disabled']),
+    });
     expect(result).toStrictEqual({
       allowed: undefined,
       disabled: ['write_file'],
@@ -68,7 +83,14 @@ describe('getToolGovernanceEphemerals', () => {
 
   it('ignores the legacy disabled-tools key', () => {
     const config = makeConfig({ 'disabled-tools': ['dangerous_tool'] });
-    const result = getToolGovernanceEphemerals(config);
+    const result = getToolGovernanceEphemerals({
+      allowed:
+        readToolList(config.getInitialSettings()['tools.allowed']).length ===
+          0 && !Array.isArray(config.getInitialSettings()['tools.allowed'])
+          ? undefined
+          : readToolList(config.getInitialSettings()['tools.allowed']),
+      disabled: readToolList(config.getInitialSettings()['tools.disabled']),
+    });
     expect(result).toBeUndefined();
   });
 
@@ -77,7 +99,14 @@ describe('getToolGovernanceEphemerals', () => {
       'tools.disabled': ['new_tool'],
       'disabled-tools': ['old_tool'],
     });
-    const result = getToolGovernanceEphemerals(config);
+    const result = getToolGovernanceEphemerals({
+      allowed:
+        readToolList(config.getInitialSettings()['tools.allowed']).length ===
+          0 && !Array.isArray(config.getInitialSettings()['tools.allowed'])
+          ? undefined
+          : readToolList(config.getInitialSettings()['tools.allowed']),
+      disabled: readToolList(config.getInitialSettings()['tools.disabled']),
+    });
     expect(result?.disabled).toStrictEqual(['new_tool']);
   });
 
@@ -86,7 +115,14 @@ describe('getToolGovernanceEphemerals', () => {
       'tools.allowed': ['bash'],
       'tools.disabled': ['write_file'],
     });
-    const result = getToolGovernanceEphemerals(config);
+    const result = getToolGovernanceEphemerals({
+      allowed:
+        readToolList(config.getInitialSettings()['tools.allowed']).length ===
+          0 && !Array.isArray(config.getInitialSettings()['tools.allowed'])
+          ? undefined
+          : readToolList(config.getInitialSettings()['tools.allowed']),
+      disabled: readToolList(config.getInitialSettings()['tools.disabled']),
+    });
     expect(result).toStrictEqual({
       allowed: ['bash'],
       disabled: ['write_file'],
@@ -166,8 +202,16 @@ describe('buildToolDeclarationsFromView', () => {
   });
 
   it('falls back to getAllTools when getFunctionDeclarations not available', () => {
-    const schema1 = { name: 'bash', description: 'Run bash' };
-    const schema2 = { name: 'read_file', description: 'Read a file' };
+    const schema1 = {
+      name: 'bash',
+      description: 'Run bash',
+      parametersJsonSchema: {},
+    };
+    const schema2 = {
+      name: 'read_file',
+      description: 'Read a file',
+      parametersJsonSchema: {},
+    };
     const registry = {
       getAllTools: vi.fn().mockReturnValue([
         { name: 'bash', schema: schema1 },
@@ -181,7 +225,11 @@ describe('buildToolDeclarationsFromView', () => {
   });
 
   it('skips tools without schema in getAllTools', () => {
-    const schema1 = { name: 'bash', description: 'Run bash' };
+    const schema1 = {
+      name: 'bash',
+      description: 'Run bash',
+      parametersJsonSchema: {},
+    };
     const registry = {
       getAllTools: vi.fn().mockReturnValue([
         { name: 'bash', schema: schema1 },
@@ -195,42 +243,38 @@ describe('buildToolDeclarationsFromView', () => {
 });
 
 describe('getEnabledToolNamesForPrompt', () => {
-  it('returns empty array when no tool registry', () => {
-    const config = makeConfig({});
-    expect(getEnabledToolNamesForPrompt(config)).toStrictEqual([]);
+  it('rejects an absent tool selection', () => {
+    expect(() =>
+      Reflect.apply(getEnabledToolNamesForPrompt, undefined, [undefined]),
+    ).toThrow(TypeError);
   });
 
-  it('returns empty array when toolRegistry has no getEnabledTools', () => {
-    const config = makeConfigWithTools({}, {} as unknown as ToolRegistry);
-    expect(getEnabledToolNamesForPrompt(config)).toStrictEqual([]);
+  it('rejects a selection without enabled tool operations', () => {
+    expect(() =>
+      Reflect.apply(getEnabledToolNamesForPrompt, undefined, [{}]),
+    ).toThrow(TypeError);
   });
 
   it('returns deduplicated enabled tool names', () => {
-    const registry = {
-      getEnabledTools: vi.fn().mockReturnValue([
-        { name: 'bash' },
-        { name: 'bash' }, // duplicate
-        { name: 'read_file' },
-      ]),
-    } as unknown as ToolRegistry;
-    const config = makeConfigWithTools({}, registry);
-    expect(getEnabledToolNamesForPrompt(config)).toStrictEqual([
-      'bash',
-      'read_file',
-    ]);
+    expect(
+      getEnabledToolNamesForPrompt({
+        getFunctionDeclarations: () => [
+          { name: 'bash' },
+          { name: 'bash' },
+          { name: 'read_file' },
+        ],
+      }),
+    ).toStrictEqual(['bash', 'read_file']);
   });
 
   it('filters out empty tool names', () => {
-    const registry = {
-      getEnabledTools: vi.fn().mockReturnValue([
+    const result = getEnabledToolNamesForPrompt({
+      getFunctionDeclarations: () => [
         { name: 'bash' },
-        { name: '' }, // empty name
+        { name: '' },
         { name: 'read_file' },
-      ]),
-    } as unknown as ToolRegistry;
-    const config = makeConfigWithTools({}, registry);
-    // filter(Boolean) removes empty strings
-    const result = getEnabledToolNamesForPrompt(config);
+      ],
+    });
     expect(result).not.toContain('');
     expect(result).toContain('bash');
     expect(result).toContain('read_file');
@@ -238,13 +282,9 @@ describe('getEnabledToolNamesForPrompt', () => {
 });
 
 function makeConfigWithSubagentManager(
-  subagentManager: SubagentManager | undefined,
-): Config {
-  return {
-    getEphemeralSetting: () => undefined,
-    getToolRegistry: () => undefined,
-    getSubagentManager: () => subagentManager,
-  } as unknown as Config;
+  subagentManager: Pick<SubagentManager, 'listSubagents'> | undefined,
+): Pick<SubagentManager, 'listSubagents'> | undefined {
+  return subagentManager;
 }
 
 describe('shouldIncludeSubagentDelegationForConfig', () => {

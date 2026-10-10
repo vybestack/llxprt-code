@@ -5,23 +5,23 @@
  */
 
 import {
+  buildCodexWebSocketRequest,
+  buildNormalizedOptions,
+  captureResponsesTestRequest,
+  type ResponsesTestDeps,
+} from './responses-request.test-helpers.js';
+import {
   restoreGlobals,
   setGlobal,
   assertInstanceOf,
 } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, beforeEach, afterEach, expect, vi } from 'bun:test';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   executeOpenAIResponsesRequest,
   type PreparedResponsesRequestContext,
-  type ResponsesExecutorDeps,
 } from './openAIResponsesExecutor.js';
 import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
-import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import type { WebSocketTransport } from './openAIResponsesWebSocketTransport.js';
 import {
   CODEX_WEBSOCKET_BETA_HEADER,
@@ -47,62 +47,20 @@ void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
 
 const CODEX_BASE_URL = 'https://chatgpt.com/backend-api/codex';
 
-function buildNormalizedOptions(
-  overrides: Partial<NormalizedGenerateChatOptions> = {},
-): NormalizedGenerateChatOptions {
-  const settings = new SettingsService();
-  const runtime = createProviderRuntimeContext({
-    settingsService: settings,
-    runtimeId: 'test-runtime',
-  });
-  const config = createRuntimeConfigStub(settings, {});
-  const invocation = createRuntimeInvocationContext({
-    runtime,
-    settings,
-    providerName: 'openai-responses',
-    ephemeralsSnapshot: {},
-    fallbackRuntimeId: 'test-runtime',
-  });
-
-  const base = {
-    contents: [
-      {
-        speaker: 'human' as const,
-        blocks: [{ type: 'text' as const, text: 'Hello' }],
-      },
-    ],
-    settings,
-    config,
-    runtime,
-    invocation,
-    userMemory: undefined,
-    tools: undefined,
-    metadata: {},
-    systemInstruction: 'test system prompt',
-    resolved: {
-      model: 'gpt-5.6-sol',
-      baseURL: CODEX_BASE_URL,
-      authToken: 'test-token',
-    },
-  } as unknown as NormalizedGenerateChatOptions;
-
-  return { ...base, ...overrides };
-}
-
 function buildDeps(
-  overrides: Partial<ResponsesExecutorDeps> = {},
-): ResponsesExecutorDeps {
+  overrides: Partial<ResponsesTestDeps> = {},
+): ResponsesTestDeps {
   return {
     providerName: 'openai-responses',
-    logger: { debug: vi.fn() } as unknown as ResponsesExecutorDeps['logger'],
-    getProviderBaseURL: () => CODEX_BASE_URL,
-    getCustomHeaders: () => ({ 'X-Provider': 'p' }),
+    logger: { debug: vi.fn() } as unknown as ResponsesTestDeps['logger'],
+    requestBaseURL: CODEX_BASE_URL,
+    requestHeaders: { 'X-Provider': 'p' },
     isCodexMode: () => true,
     getCodexAccountId: async () => 'codex-account',
     resolveAuthTokenForPrompt: async () => 'codex-token',
     shouldRetryOnError: () => false,
-    getDefaultModel: () => 'gpt-5.6-sol',
-    getGlobalConfig: () => undefined,
+    defaultModel: 'gpt-5.6-sol',
+
     getMediaTransportCapabilities: (isCodex) =>
       declaredMediaTransportCapabilities(
         isCodex ? 'codex' : 'openai-responses',
@@ -217,7 +175,11 @@ describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:20
       mediaRequest: requestWithReleaseFailure(cleanup),
     };
     const iterator = executeOpenAIResponsesRequest(
-      buildNormalizedOptions(),
+      buildCodexWebSocketRequest(
+        buildDeps({
+          resolveAuthTokenForPrompt: () => Promise.reject(primary),
+        }),
+      ),
       buildDeps({
         resolveAuthTokenForPrompt: () => Promise.reject(primary),
       }),
@@ -237,7 +199,10 @@ describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:20
 
     const options = buildNormalizedOptions();
     const iterator = executeOpenAIResponsesRequest(
-      options,
+      captureResponsesTestRequest(
+        options,
+        buildDeps({ getWebSocketTransport: transport.getWebSocketTransport }),
+      ),
       buildDeps({ getWebSocketTransport: transport.getWebSocketTransport }),
     );
     const messages = await drain(iterator);
@@ -272,10 +237,20 @@ describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:20
       },
     });
     const iterator = executeOpenAIResponsesRequest(
-      options,
+      captureResponsesTestRequest(
+        options,
+        buildDeps({
+          isCodexMode: () => false,
+          requestBaseURL: 'https://api.openai.com/v1',
+          getWebSocketTransport: () => {
+            transportChecks += 1;
+            return undefined;
+          },
+        }),
+      ),
       buildDeps({
         isCodexMode: () => false,
-        getProviderBaseURL: () => 'https://api.openai.com/v1',
+        requestBaseURL: 'https://api.openai.com/v1',
         getWebSocketTransport: () => {
           transportChecks += 1;
           return undefined;
@@ -319,10 +294,16 @@ describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:20
 
       const error = await drain(
         executeOpenAIResponsesRequest(
-          options,
+          captureResponsesTestRequest(
+            options,
+            buildDeps({
+              isCodexMode: () => false,
+              requestBaseURL: 'https://api.openai.com/v1',
+            }),
+          ),
           buildDeps({
             isCodexMode: () => false,
-            getProviderBaseURL: () => 'https://api.openai.com/v1',
+            requestBaseURL: 'https://api.openai.com/v1',
           }),
         ),
       ).catch((reason: unknown) => reason);
@@ -365,7 +346,7 @@ describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:20
     });
 
     const first = await drain(
-      executeOpenAIResponsesRequest(buildNormalizedOptions(), deps),
+      executeOpenAIResponsesRequest(buildCodexWebSocketRequest(deps), deps),
     );
     expect(first).toStrictEqual([
       { speaker: 'ai', blocks: [{ type: 'text', text: 'fallback' }] },
@@ -383,7 +364,7 @@ describe('executeOpenAIResponsesRequest WebSocket selection & fallback @issue:20
     expect(fetchSpy).toHaveBeenCalledTimes(1);
 
     const second = await drain(
-      executeOpenAIResponsesRequest(buildNormalizedOptions(), deps),
+      executeOpenAIResponsesRequest(buildCodexWebSocketRequest(deps), deps),
     );
     expect(second).toStrictEqual([
       { speaker: 'ai', blocks: [{ type: 'text', text: 'fallback' }] },
@@ -433,7 +414,9 @@ describe('executeOpenAIResponsesRequest WebSocket reconnect keeps the conversati
     // Request 1: no stored parent. Opens socket 1.
     await drainHarness(
       executeOpenAIResponsesRequest(
-        buildNormalizedOptions(),
+        buildCodexWebSocketRequest(
+          buildDeps({ getWebSocketTransport: () => transport }),
+        ),
         buildDeps({ getWebSocketTransport: () => transport }),
       ),
     );
@@ -465,7 +448,10 @@ describe('executeOpenAIResponsesRequest WebSocket reconnect keeps the conversati
     });
     await drainHarness(
       executeOpenAIResponsesRequest(
-        options2,
+        captureResponsesTestRequest(
+          options2,
+          buildDeps({ getWebSocketTransport: () => transport }),
+        ),
         buildDeps({ getWebSocketTransport: () => transport }),
       ),
     );
@@ -536,7 +522,7 @@ describe('executeOpenAIResponsesRequest WebSocket lifecycle-limit retry @issue:2
 
     // Request 1: socket 1 reports the lifecycle limit, socket 2 completes.
     const first = await drainHarness(
-      executeOpenAIResponsesRequest(buildNormalizedOptions(), deps),
+      executeOpenAIResponsesRequest(buildCodexWebSocketRequest(deps), deps),
     );
 
     expect(first[0]).toStrictEqual({
@@ -553,7 +539,7 @@ describe('executeOpenAIResponsesRequest WebSocket lifecycle-limit retry @issue:2
 
     // Request 2: the WebSocket remains the transport, reusing socket 2.
     const second = await drainHarness(
-      executeOpenAIResponsesRequest(buildNormalizedOptions(), deps),
+      executeOpenAIResponsesRequest(buildCodexWebSocketRequest(deps), deps),
     );
 
     expect(second[0]).toStrictEqual({
@@ -586,7 +572,9 @@ describe('executeOpenAIResponsesRequest WebSocket handshake identity @issue:2772
 
     await drainHarness(
       executeOpenAIResponsesRequest(
-        buildNormalizedOptions(),
+        buildCodexWebSocketRequest(
+          buildDeps({ getWebSocketTransport: () => transport }),
+        ),
         buildDeps({ getWebSocketTransport: () => transport }),
       ),
     );
@@ -611,12 +599,14 @@ describe('executeOpenAIResponsesRequest WebSocket handshake identity @issue:2772
     const defaults = buildNormalizedOptions();
     const optionsWithoutIdentity = buildNormalizedOptions({
       invocation: { ...defaults.invocation, runtimeId: '' },
-      runtime: undefined,
     });
 
     await drainHarness(
       executeOpenAIResponsesRequest(
-        optionsWithoutIdentity,
+        captureResponsesTestRequest(
+          optionsWithoutIdentity,
+          buildDeps({ getWebSocketTransport: () => transport }),
+        ),
         buildDeps({ getWebSocketTransport: () => transport }),
       ),
     );
@@ -685,7 +675,7 @@ describe('executeOpenAIResponsesRequest WebSocket stateful connection renewal @i
     // statelessly over a FRESH socket — no HTTP, no fallback callback.
     const first = await drainHarness(
       executeOpenAIResponsesRequest(
-        buildNormalizedOptions({
+        buildCodexWebSocketRequest(deps, {
           contents: statefulHistoryWithDeadParent(),
         }),
         deps,
@@ -722,7 +712,7 @@ describe('executeOpenAIResponsesRequest WebSocket stateful connection renewal @i
 
     const next = await drainHarness(
       executeOpenAIResponsesRequest(
-        buildNormalizedOptions({
+        buildCodexWebSocketRequest(deps, {
           contents: [
             ...statefulHistoryWithDeadParent(),
             {
@@ -814,7 +804,7 @@ describe('executeOpenAIResponsesRequest WebSocket stateful connection renewal @i
     // so the recovery re-enters streaming on a FRESH socket — still no HTTP.
     const first = await drainHarness(
       executeOpenAIResponsesRequest(
-        buildNormalizedOptions({
+        buildCodexWebSocketRequest(deps, {
           contents: statefulHistoryWithDeadParent(),
         }),
         deps,
@@ -857,7 +847,7 @@ describe('executeOpenAIResponsesRequest WebSocket stateful connection renewal @i
 
     await drainHarness(
       executeOpenAIResponsesRequest(
-        buildNormalizedOptions({
+        buildCodexWebSocketRequest(deps, {
           contents: [
             ...statefulHistoryWithDeadParent(),
             {

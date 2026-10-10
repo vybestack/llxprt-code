@@ -1,3 +1,4 @@
+import { CoreToolScheduler } from '../../coreToolScheduler.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -5,6 +6,7 @@
  */
 
 import { describe, it, expect, vi } from 'bun:test';
+import { bindSchedulerOwner } from '../../../session/assembleSchedulerOwner.js';
 import { AgenticLoop } from '../AgenticLoop.js';
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { MockModifiableTool } from '@vybestack/llxprt-code-test-utils/core/tools.js';
@@ -58,13 +60,14 @@ describe('AgenticLoop integration - CLI-style with ASK_USER policy', () => {
 
     const toolRegistry = createToolRegistryForTest([tool]);
     const messageBus = new MessageBus(createAskPolicyEngine(), false);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine: createAskPolicyEngine(),
-      interactive: true,
-      approvalMode: ApprovalMode.DEFAULT,
-    });
+    const { config: config, settingsOwner: configSettingsOwner } =
+      createTestConfig({
+        messageBus,
+        toolRegistry,
+        policyEngine: createAskPolicyEngine(),
+        interactive: true,
+        approvalMode: ApprovalMode.DEFAULT,
+      });
 
     const approvalHandler: ApprovalHandler = async () => ({
       outcome: ToolConfirmationOutcome.ProceedOnce,
@@ -80,6 +83,20 @@ describe('AgenticLoop integration - CLI-style with ASK_USER policy', () => {
       ]);
 
     const loop = new AgenticLoop({
+      createSchedulerOwner: bindSchedulerOwner(
+        config,
+        messageBus,
+        config.isInteractive(),
+        toolRegistry,
+        (options) => new CoreToolScheduler(options),
+        () => configSettingsOwner.readToolExecutionPolicy(),
+        () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
+        undefined,
+        configSettingsOwner.telemetry,
+      ),
       agentClient: client,
       config,
       messageBus,
@@ -139,13 +156,14 @@ describe('AgenticLoop integration - CLI-style with ASK_USER policy', () => {
 
     const toolRegistry = createToolRegistryForTest([tool]);
     const messageBus = new MessageBus(createAskPolicyEngine(), false);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine: createAskPolicyEngine(),
-      interactive: true,
-      approvalMode: ApprovalMode.DEFAULT,
-    });
+    const { config: config, settingsOwner: configSettingsOwner } =
+      createTestConfig({
+        messageBus,
+        toolRegistry,
+        policyEngine: createAskPolicyEngine(),
+        interactive: true,
+        approvalMode: ApprovalMode.DEFAULT,
+      });
 
     const approvalHandler: ApprovalHandler = async () => ({
       outcome: ToolConfirmationOutcome.Cancel,
@@ -156,6 +174,20 @@ describe('AgenticLoop integration - CLI-style with ASK_USER policy', () => {
     ]);
 
     const loop = new AgenticLoop({
+      createSchedulerOwner: bindSchedulerOwner(
+        config,
+        messageBus,
+        config.isInteractive(),
+        toolRegistry,
+        (options) => new CoreToolScheduler(options),
+        () => configSettingsOwner.readToolExecutionPolicy(),
+        () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
+        undefined,
+        configSettingsOwner.telemetry,
+      ),
       agentClient: client,
       config,
       messageBus,
@@ -191,13 +223,14 @@ describe('AgenticLoop integration - CLI-style with ASK_USER policy', () => {
 
     const toolRegistry = createToolRegistryForTest([tool]);
     const messageBus = new MessageBus(createAskPolicyEngine(), false);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine: createAskPolicyEngine(),
-      interactive: true,
-      approvalMode: ApprovalMode.DEFAULT,
-    });
+    const { config: config, settingsOwner: configSettingsOwner } =
+      createTestConfig({
+        messageBus,
+        toolRegistry,
+        policyEngine: createAskPolicyEngine(),
+        interactive: true,
+        approvalMode: ApprovalMode.DEFAULT,
+      });
 
     const approvalHandler: ApprovalHandler = async () => ({
       outcome: ToolConfirmationOutcome.ProceedOnce,
@@ -212,6 +245,20 @@ describe('AgenticLoop integration - CLI-style with ASK_USER policy', () => {
     ]);
 
     const loop = new AgenticLoop({
+      createSchedulerOwner: bindSchedulerOwner(
+        config,
+        messageBus,
+        config.isInteractive(),
+        toolRegistry,
+        (options) => new CoreToolScheduler(options),
+        () => configSettingsOwner.readToolExecutionPolicy(),
+        () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
+        undefined,
+        configSettingsOwner.telemetry,
+      ),
       agentClient: client,
       config,
       messageBus,
@@ -248,13 +295,14 @@ describe('AgenticLoop integration - CLI-style with ASK_USER policy', () => {
 
     const toolRegistry = createToolRegistryForTest([tool]);
     const messageBus = new MessageBus(createAskPolicyEngine(), false);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine: createAskPolicyEngine(),
-      interactive: true,
-      approvalMode: ApprovalMode.DEFAULT,
-    });
+    const { config: config, settingsOwner: configSettingsOwner } =
+      createTestConfig({
+        messageBus,
+        toolRegistry,
+        policyEngine: createAskPolicyEngine(),
+        interactive: true,
+        approvalMode: ApprovalMode.DEFAULT,
+      });
 
     const modifiedContent = 'editor-modified-content';
     const approvalHandler: ApprovalHandler = async () => ({
@@ -268,6 +316,20 @@ describe('AgenticLoop integration - CLI-style with ASK_USER policy', () => {
     ]);
 
     const loop = new AgenticLoop({
+      createSchedulerOwner: bindSchedulerOwner(
+        config,
+        messageBus,
+        config.isInteractive(),
+        toolRegistry,
+        (options) => new CoreToolScheduler(options),
+        () => configSettingsOwner.readToolExecutionPolicy(),
+        () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
+        undefined,
+        configSettingsOwner.telemetry,
+      ),
       agentClient: client,
       config,
       messageBus,
@@ -315,13 +377,14 @@ describe('AgenticLoop integration - CLI-style with ASK_USER policy', () => {
 
       const toolRegistry = createToolRegistryForTest([tool]);
       const messageBus = new MessageBus(createAskPolicyEngine(), false);
-      const config = createTestConfig({
-        messageBus,
-        toolRegistry,
-        policyEngine: createAskPolicyEngine(),
-        interactive: true,
-        approvalMode: ApprovalMode.DEFAULT,
-      });
+      const { config: config, settingsOwner: configSettingsOwner } =
+        createTestConfig({
+          messageBus,
+          toolRegistry,
+          policyEngine: createAskPolicyEngine(),
+          interactive: true,
+          approvalMode: ApprovalMode.DEFAULT,
+        });
 
       let confirmationCount = 0;
       const approvalHandler: ApprovalHandler = async () => {
@@ -338,6 +401,20 @@ describe('AgenticLoop integration - CLI-style with ASK_USER policy', () => {
       ]);
 
       const loop = new AgenticLoop({
+        createSchedulerOwner: bindSchedulerOwner(
+          config,
+          messageBus,
+          config.isInteractive(),
+          toolRegistry,
+          (options) => new CoreToolScheduler(options),
+          () => configSettingsOwner.readToolExecutionPolicy(),
+          () =>
+            configSettingsOwner.readToolGovernance(
+              config.getExcludeTools() ?? [],
+            ),
+          undefined,
+          configSettingsOwner.telemetry,
+        ),
         agentClient: client,
         config,
         messageBus,
@@ -373,13 +450,14 @@ describe('AgenticLoop integration - CLI-style with ASK_USER policy', () => {
 
     const toolRegistry = createToolRegistryForTest([tool]);
     const messageBus = new MessageBus(createAskPolicyEngine(), false);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine: createAskPolicyEngine(),
-      interactive: true,
-      approvalMode: ApprovalMode.DEFAULT,
-    });
+    const { config: config, settingsOwner: configSettingsOwner } =
+      createTestConfig({
+        messageBus,
+        toolRegistry,
+        policyEngine: createAskPolicyEngine(),
+        interactive: true,
+        approvalMode: ApprovalMode.DEFAULT,
+      });
 
     const approvalHandler: ApprovalHandler = async () => {
       throw new Error('handler blew up');
@@ -390,6 +468,20 @@ describe('AgenticLoop integration - CLI-style with ASK_USER policy', () => {
     ]);
 
     const loop = new AgenticLoop({
+      createSchedulerOwner: bindSchedulerOwner(
+        config,
+        messageBus,
+        config.isInteractive(),
+        toolRegistry,
+        (options) => new CoreToolScheduler(options),
+        () => configSettingsOwner.readToolExecutionPolicy(),
+        () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
+        undefined,
+        configSettingsOwner.telemetry,
+      ),
       agentClient: client,
       config,
       messageBus,

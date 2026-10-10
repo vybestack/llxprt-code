@@ -22,7 +22,16 @@ import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime
  * agents package does not depend on concrete provider implementations.
  */
 export class TestRuntimeProviderManager implements RuntimeProviderManager {
-  private readonly providers = new Map<string, RuntimeProvider>();
+  private providers = new Map<string, RuntimeProvider>();
+
+  checkpointProviderRegistry(): () => void {
+    const providers = new Map(this.providers);
+    const active = this.activeProviderName;
+    return () => {
+      this.providers = new Map(providers);
+      this.activeProviderName = active;
+    };
+  }
   private activeProviderName: string | undefined;
   private runtimeContext: ProviderRuntimeContext | undefined;
 

@@ -4,23 +4,22 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { requireSessionAgent } from '../commands/historyServiceAccess.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
+import type { CliSessionPersistencePort } from '../../cliSessionPersistence.js';
 import type {
   RecordingIntegration,
   ToolCallConfirmationDetails,
   AgentRequestInput,
+  LocalMediaStore,
 } from '@vybestack/llxprt-code-core';
 import type { DebugLogger } from '@vybestack/llxprt-code-telemetry';
-import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
 import {
   getProjectHash,
   importSessionMediaPackage,
   ToolConfirmationOutcome,
 } from '@vybestack/llxprt-code-core';
-import {
-  logSlashCommand,
-  SlashCommandEvent,
-} from '@vybestack/llxprt-code-telemetry';
+import { SlashCommandEvent } from '@vybestack/llxprt-code-telemetry';
 import { join } from 'node:path';
 import { parseSlashCommand } from '../../utils/commands.js';
 import { secureInputHandler } from '../utils/secureInputHandler.js';
@@ -43,6 +42,10 @@ import type {
   RecordingSwapCallbacks,
   ResumeContext,
 } from '../../services/performResume.js';
+import {
+  importOwnerSession,
+  resumeOwnerSession,
+} from '../utils/ownerSessionUi.js';
 import type {
   HistoryItemWithoutId,
   IndividualToolCallDisplay,
@@ -50,6 +53,7 @@ import type {
   SlashCommandProcessorResult,
 } from '../types.js';
 import { MessageType, ToolCallStatus } from '../types.js';
+import { addResumeWarnings } from '../utils/resumeWarnings.js';
 import type { SlashCommandProcessorActions } from './slashCommandProcessor.js';
 import type { DialogRequest } from '../stores/dialog/dialogStore.js';
 
@@ -77,6 +81,7 @@ export interface SlashCommandHandlerDeps {
   ) => void;
   recordingIntegration?: RecordingIntegration;
   recordingSwapCallbacks?: RecordingSwapCallbacks;
+  sessionPersistence?: CliSessionPersistencePort;
   confirmationLogger: DebugLogger;
   slashCommandLogger: DebugLogger;
   /** Registers the action about to be awaited and returns its controller. */
@@ -124,7 +129,7 @@ export async function processSlashCommand(
     );
   } catch (error) {
     hasError = true;
-    handleCommandError(deps, parsed, error);
+    await handleCommandError(deps, parsed, error);
     return { type: 'handled' };
   } finally {
     finalizeCommand(deps, parsed, hasError);
@@ -304,7 +309,7 @@ async function handleActionResult(
         toolArgs: result.toolArgs,
       };
     case 'message':
-      return handleMessageResult(deps, result);
+      return handleMessageResult(deps, context, result);
     case 'dialog':
       return handleDialogResult(deps, result);
     case 'load_history':
@@ -330,10 +335,11 @@ async function handleActionResult(
   }
 }
 
-function handleMessageResult(
+async function handleMessageResult(
   deps: SlashCommandHandlerDeps,
+  context: CommandContext,
   result: Extract<ActionResult, { type: 'message' }>,
-): SlashCommandProcessorResult {
+): Promise<SlashCommandProcessorResult> {
   deps.addItem(
     {
       type:
@@ -343,7 +349,17 @@ function handleMessageResult(
     Date.now(),
   );
   if (result.messageType === 'error') {
-    deps.recordingIntegration?.recordSessionEvent('error', result.content);
+    if (context.recordingOwner === 'agent') {
+      const agent = context.services.agent;
+      if (!agent) throw new Error('Session agent is unavailable');
+      await agent.session.recordRecordingEvent({
+        type: 'session_event',
+        severity: 'error',
+        message: result.content,
+      });
+    } else {
+      deps.recordingIntegration?.recordSessionEvent('error', result.content);
+    }
   }
   return { type: 'handled' };
 }
@@ -462,9 +478,9 @@ async function handleLoadHistoryResult(
   context: CommandContext,
   result: Extract<ActionResult, { type: 'load_history' }>,
 ): Promise<SlashCommandProcessorResult> {
-  await context.services.config
-    ?.getAgentClient()
-    .setHistory(result.clientHistory);
+  const agent = context.services.agent;
+  if (!agent) throw new Error('Session agent is unavailable');
+  await agent.setHistory(result.clientHistory);
   // Display-only: replayed model text passes the same emoji filter as live
   // output (issue #2888); clientHistory keeps the recorded text verbatim.
   const emojiFilter = createEmojiFilter(
@@ -628,6 +644,38 @@ async function confirmAction(
   );
 }
 
+async function performOwnerSessionResume(
+  deps: SlashCommandHandlerDeps,
+  context: CommandContext,
+  action: PerformResumeActionReturn,
+): Promise<SlashCommandProcessorResult> {
+  const agent = context.services.agent;
+  if (agent === null) throw new Error('Session agent is unavailable');
+  try {
+    const replay =
+      action.sessionPackage === undefined
+        ? await resumeOwnerSession(
+            agent,
+            action.sessionRef,
+            resolveEmojiFilterMode(deps.config),
+          )
+        : await importOwnerSession(
+            agent,
+            action.sessionPackage.packageDirectory,
+            resolveEmojiFilterMode(deps.config),
+          );
+    context.ui.loadHistory([...replay.uiHistory]);
+    addResumeWarnings(deps.addMessage, replay.warnings);
+  } catch (error) {
+    deps.addMessage({
+      type: MessageType.ERROR,
+      content: error instanceof Error ? error.message : String(error),
+      timestamp: new Date(),
+    });
+  }
+  return { type: 'handled' };
+}
+
 async function performSessionResume(
   deps: SlashCommandHandlerDeps,
   context: CommandContext,
@@ -641,6 +689,9 @@ async function performSessionResume(
     });
     return { type: 'handled' };
   }
+  if (context.recordingOwner === 'agent') {
+    return performOwnerSessionResume(deps, context, action);
+  }
   if (!deps.recordingSwapCallbacks) {
     deps.addMessage({
       type: MessageType.ERROR,
@@ -650,8 +701,8 @@ async function performSessionResume(
     return { type: 'handled' };
   }
 
+  const { mediaStore, resumeContext } = rawResumeContext(deps, deps.config);
   const resume = deps.performResumeFn ?? performResume;
-  const resumeContext = buildResumeContext(deps, deps.config);
   let resumeResult: PerformResumeResult;
   try {
     resumeResult =
@@ -661,7 +712,7 @@ async function performSessionResume(
             action.sessionPackage,
             resumeContext.chatsDir,
             resumeContext.projectHash,
-            deps.config.getLocalMediaStore(),
+            mediaStore,
             async (imported) => {
               const result = await resume(imported.sessionId, resumeContext);
               if (!result.ok) throw new Error(result.error);
@@ -693,34 +744,44 @@ async function performSessionResume(
   uiHistory.forEach((item, index) => {
     context.ui.addItem(item, index);
   });
-  // After the restore: clearing history would erase warnings added before it.
-  for (const warning of resumeResult.warnings) {
-    deps.addMessage({
-      type: MessageType.INFO,
-      content: `Warning: ${warning}`,
-      timestamp: new Date(),
-    });
-  }
+  addResumeWarnings(deps.addMessage, resumeResult.warnings);
   return { type: 'handled' };
+}
+
+function rawResumeContext(
+  deps: SlashCommandHandlerDeps,
+  config: CliUiRuntime,
+): { mediaStore: LocalMediaStore; resumeContext: ResumeContext } {
+  const persistence = deps.sessionPersistence;
+  if (!persistence) throw new Error('CLI session persistence is unavailable');
+  const mediaStore = persistence.mediaStore;
+  if (!mediaStore) throw new Error('CLI session media store is unavailable');
+  return {
+    mediaStore,
+    resumeContext: buildResumeContext(deps, config, persistence, mediaStore),
+  };
 }
 
 function buildResumeContext(
   deps: SlashCommandHandlerDeps,
   config: CliUiRuntime,
+  persistence: CliSessionPersistencePort,
+  mediaStore: LocalMediaStore,
 ): ResumeContext {
   return {
-    chatsDir: join(config.storage.getProjectTempDir(), 'chats'),
+    chatsDir: join(config.projectTempDir, 'chats'),
     projectHash: getProjectHash(config.getProjectRoot()),
     currentSessionId: config.getSessionId(),
     currentProvider: config.getProvider() ?? 'unknown',
     currentModel: config.getModel(),
-    workspaceDirs: [...config.getWorkspaceContext().getDirectories()],
-    mediaStore: config.getLocalMediaStore(),
+    workspaceDirs: [...config.directories()],
+    mediaStore,
     maxQueueBytes: config.getSessionRecordingQueueByteLimit(),
-    persistenceFactory: (sessionId) =>
-      config.createSessionPersistenceService(sessionId),
+    persistenceFactory: (sessionId) => persistence.forRecording(sessionId),
     recordingCallbacks: deps.recordingSwapCallbacks!,
-    historyService: config.getAgentClient().getHistoryService(),
+    historyService: requireSessionAgent(
+      deps.commandContext,
+    ).agentClient.getHistoryService(),
     adoptSessionId: (sessionId) => config.adoptSessionId(sessionId),
     logger: deps.slashCommandLogger,
   };
@@ -745,8 +806,7 @@ function addUnknownCommandMessage(
   trimmed: string,
 ): void {
   const isMcpLoading =
-    deps.config?.getMcpClientManager()?.getDiscoveryState() ===
-    MCPDiscoveryState.IN_PROGRESS;
+    deps.commandContext.services.agent?.mcp.discoveryState() === 'pending';
   deps.addMessage({
     type: MessageType.ERROR,
     content: isMcpLoading
@@ -756,17 +816,30 @@ function addUnknownCommandMessage(
   });
 }
 
-function handleCommandError(
+async function handleCommandError(
   deps: SlashCommandHandlerDeps,
   parsed: ParsedCommandState,
   error: unknown,
-): void {
+): Promise<void> {
   if (deps.config && parsed.commandToExecute) {
     logParsedCommand(deps, parsed);
   }
   const errorText = error instanceof Error ? error.message : String(error);
   deps.addItem({ type: MessageType.ERROR, text: errorText }, Date.now());
-  deps.recordingIntegration?.recordSessionEvent('error', errorText);
+  if (
+    Object.getOwnPropertyDescriptor(deps.commandContext, 'recordingOwner')
+      ?.value === 'agent'
+  ) {
+    const agent = deps.commandContext.services.agent;
+    if (!agent) throw new Error('Session agent is unavailable');
+    await agent.session.recordRecordingEvent({
+      type: 'session_event',
+      severity: 'error',
+      message: errorText,
+    });
+  } else {
+    deps.recordingIntegration?.recordSessionEvent('error', errorText);
+  }
 }
 
 function finalizeCommand(
@@ -789,5 +862,5 @@ function logParsedCommand(
     parsed.commandToExecute?.name ?? '',
     parsed.subcommand,
   );
-  logSlashCommand(deps.config!, event);
+  deps.config!.logSlashCommand(event);
 }

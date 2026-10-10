@@ -4,12 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
+import { withCredentialHeader } from './AnthropicApiExecution.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import * as dumpContextModule from '../utils/dumpContext.js';
 import * as dumpSDKContextModule from '../utils/dumpSDKContext.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   createAnthropicRawPostTestAdapter,
   type RawPostTestHandler,
@@ -71,13 +72,15 @@ describe('AnthropicProvider dumpContext integration', () => {
         model: 'claude-sonnet-4-5-20250929',
         authToken: 'sk-ant-test-key',
       },
-      settings: new SettingsService(),
-      invocation: {
-        ephemerals: {
+      metadata: {},
+      invocation: createRuntimeInvocationContext({
+        runtimeId: 'dump-context',
+        providerName: 'anthropic',
+        ephemeralsSnapshot: {
           dumpcontext: 'off',
           streaming: 'disabled',
         },
-      },
+      }),
     };
 
     // Mock the API call to prevent actual network requests
@@ -123,13 +126,15 @@ describe('AnthropicProvider dumpContext integration', () => {
         model: 'claude-sonnet-4-5-20250929',
         authToken: 'sk-ant-test-key',
       },
-      settings: new SettingsService(),
-      invocation: {
-        ephemerals: {
+      metadata: {},
+      invocation: createRuntimeInvocationContext({
+        runtimeId: 'dump-context',
+        providerName: 'anthropic',
+        ephemeralsSnapshot: {
           dumpcontext: 'on',
           streaming: 'disabled',
         },
-      },
+      }),
     };
 
     // Mock the API call
@@ -187,13 +192,15 @@ describe('AnthropicProvider dumpContext integration', () => {
         model: 'claude-sonnet-4-5-20250929',
         authToken: 'sk-ant-test-key',
       },
-      settings: new SettingsService(),
-      invocation: {
-        ephemerals: {
+      metadata: {},
+      invocation: createRuntimeInvocationContext({
+        runtimeId: 'dump-context',
+        providerName: 'anthropic',
+        ephemeralsSnapshot: {
           dumpcontext: 'error',
           streaming: 'disabled',
         },
-      },
+      }),
     };
 
     // Mock successful API call
@@ -239,12 +246,14 @@ describe('AnthropicProvider dumpContext integration', () => {
         model: 'claude-sonnet-4-5-20250929',
         authToken: 'sk-ant-test-key',
       },
-      settings: new SettingsService(),
-      invocation: {
-        ephemerals: {
+      metadata: {},
+      invocation: createRuntimeInvocationContext({
+        runtimeId: 'dump-context',
+        providerName: 'anthropic',
+        ephemeralsSnapshot: {
           dumpcontext: 'error',
         },
-      },
+      }),
     };
 
     // Mock failed API call
@@ -298,22 +307,22 @@ describe('AnthropicProvider dumpContext integration', () => {
 
   it('should keep a caller-supplied credential header over the synthesized one (issue #3159)', () => {
     expect(
-      provider['withCredentialHeader'](
+      withCredentialHeader(
         { Authorization: 'Bearer caller-token' },
         true,
         'sk-ant-oauth',
       ),
     ).toStrictEqual({ Authorization: 'Bearer caller-token' });
     expect(
-      provider['withCredentialHeader'](
+      withCredentialHeader(
         { 'x-api-key': 'caller-key' },
         false,
         'sk-ant-test-key',
       ),
     ).toStrictEqual({ 'x-api-key': 'caller-key' });
-    expect(
-      provider['withCredentialHeader'](undefined, false, 'sk-ant-key'),
-    ).toStrictEqual({ 'x-api-key': 'sk-ant-key' });
+    expect(withCredentialHeader(undefined, false, 'sk-ant-key')).toStrictEqual({
+      'x-api-key': 'sk-ant-key',
+    });
   });
 
   it('should not dump context in provider when mode is now', async () => {
@@ -330,13 +339,15 @@ describe('AnthropicProvider dumpContext integration', () => {
         model: 'claude-sonnet-4-5-20250929',
         authToken: 'sk-ant-test-key',
       },
-      settings: new SettingsService(),
-      invocation: {
-        ephemerals: {
+      metadata: {},
+      invocation: createRuntimeInvocationContext({
+        runtimeId: 'dump-context',
+        providerName: 'anthropic',
+        ephemeralsSnapshot: {
           dumpcontext: 'now',
           streaming: 'disabled',
         },
-      },
+      }),
       runtime: {
         runtimeId: 'test-runtime',
         setEphemeralSettings: vi.fn(),

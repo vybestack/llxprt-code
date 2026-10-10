@@ -12,7 +12,6 @@ import {
   type ConfirmActionReturn,
 } from './types.js';
 import { MessageType } from '../types.js';
-import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import { fetchAllQuotaInfo } from './statsQuota.js';
 import {
   CodexRateLimitResetCreditsResponseSchema,
@@ -20,7 +19,14 @@ import {
   formatCodexResetCredits,
 } from '@vybestack/llxprt-code-providers';
 import type { CodexRateLimitResetCreditsResponse } from '@vybestack/llxprt-code-providers';
-import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import type { OAuthControl } from '../contexts/OAuthControlContext.js';
+type QuotaOAuthControl = Pick<
+  OAuthControl,
+  | 'getAllCodexRateLimitResetCredits'
+  | 'hasCodexToken'
+  | 'listBuckets'
+  | 'readCodexBucketToken'
+>;
 import { CodexOAuthTokenSchema } from '@vybestack/llxprt-code-auth';
 import type { CommandArgumentSchema } from './schema/types.js';
 import { randomUUID } from 'node:crypto';
@@ -76,13 +82,13 @@ function safeParseResetCredits(
 }
 
 /**
- * Resolve the OAuthManager via the runtime API, returning null when the
- * runtime infrastructure is not registered (mirrors authCommand.getOAuthManager
- * but degrades to null instead of throwing).
+ * Quota is optional when the owning runtime has no OAuth infrastructure.
  */
-function resolveOAuthManager(): OAuthManager | null {
+function resolveOAuthManager(
+  context: CommandContext,
+): QuotaOAuthControl | null {
   try {
-    return getRuntimeApi().getCliOAuthManager();
+    return context.oauthControl.isAvailable() ? context.oauthControl : null;
   } catch {
     return null;
   }
@@ -91,8 +97,8 @@ function resolveOAuthManager(): OAuthManager | null {
 /**
  * Resolve the trimmed base-url ephemeral setting, or undefined when blank.
  */
-function resolveBaseUrl(): string | undefined {
-  const value = getRuntimeApi().getEphemeralSetting('base-url');
+function resolveBaseUrl(context: CommandContext): string | undefined {
+  const value = context.runtimeApi.getEphemeralSetting('base-url');
   if (typeof value !== 'string') {
     return undefined;
   }
@@ -113,8 +119,11 @@ function addError(context: CommandContext, text: string): void {
  */
 async function statusAction(context: CommandContext): Promise<void> {
   try {
-    const runtimeApi = getRuntimeApi();
-    const quotaLines = await fetchAllQuotaInfo(runtimeApi);
+    const runtimeApi = context.runtimeApi;
+    const quotaLines = await fetchAllQuotaInfo(
+      runtimeApi,
+      context.oauthControl,
+    );
 
     if (quotaLines.length === 0) {
       addInfo(
@@ -205,7 +214,7 @@ function formatAllResetCreditsLines(
  * Credits subcommand action: show available Codex reset credits.
  */
 async function creditsAction(context: CommandContext): Promise<void> {
-  const oauthManager = resolveOAuthManager();
+  const oauthManager = resolveOAuthManager(context);
   if (!oauthManager) {
     addInfo(context, NO_RESET_CREDITS_MSG);
     return;
@@ -235,9 +244,10 @@ async function creditsAction(context: CommandContext): Promise<void> {
 /**
  * Determine whether the user is authenticated with Codex.
  */
-async function isCodexAuthed(oauthManager: OAuthManager): Promise<boolean> {
-  const token = await oauthManager.getToken('codex');
-  if (token !== null) {
+async function isCodexAuthed(
+  oauthManager: QuotaOAuthControl,
+): Promise<boolean> {
+  if (await oauthManager.hasCodexToken()) {
     return true;
   }
   const buckets = await oauthManager.listBuckets('codex');
@@ -248,7 +258,7 @@ async function isCodexAuthed(oauthManager: OAuthManager): Promise<boolean> {
  * Find all buckets with a credit that can be redeemed.
  */
 async function findRedeemableCredits(
-  oauthManager: OAuthManager,
+  oauthManager: QuotaOAuthControl,
 ): Promise<readonly RedeemableCredit[]> {
   const creditsMap = await oauthManager.getAllCodexRateLimitResetCredits();
   const redeemableCredits: RedeemableCredit[] = [];
@@ -273,11 +283,10 @@ async function findRedeemableCredits(
  * Resolve the access token + account_id for a Codex bucket.
  */
 async function resolveBucketToken(
-  oauthManager: OAuthManager,
+  oauthManager: QuotaOAuthControl,
   bucket: string,
 ): Promise<BucketTokenInfo> {
-  const tokenStore = oauthManager.getTokenStore();
-  const token = await tokenStore.getToken('codex', bucket);
+  const token = await oauthManager.readCodexBucketToken(bucket);
   if (token === null) {
     return { accessToken: null, accountId: null };
   }
@@ -298,7 +307,7 @@ async function resolveBucketToken(
 }
 
 async function findRedeemableCreditWithToken(
-  oauthManager: OAuthManager,
+  oauthManager: QuotaOAuthControl,
   redeemableCredits: readonly RedeemableCredit[],
 ): Promise<RedeemableCreditWithToken | null> {
   for (const redeemable of redeemableCredits) {
@@ -348,7 +357,7 @@ async function redeemResetCredit(
   // Both the credit listing (getAllCodexRateLimitResetCredits) and this
   // consume call resolve base-url from the same runtime settings source, so
   // list and consume always target the same backend host.
-  const baseUrl = resolveBaseUrl();
+  const baseUrl = resolveBaseUrl(context);
   const redeemRequestId = randomUUID();
   const consumeResult = await consumeCodexRateLimitResetCredit(
     accessToken,
@@ -374,8 +383,8 @@ async function redeemResetCredit(
 
   // fetchAllQuotaInfo has its own internal error handling and returns [] on
   // failure, so it never throws — no extra guard is needed here.
-  const runtimeApi = getRuntimeApi();
-  const quotaLines = await fetchAllQuotaInfo(runtimeApi);
+  const runtimeApi = context.runtimeApi;
+  const quotaLines = await fetchAllQuotaInfo(runtimeApi, context.oauthControl);
   if (quotaLines.length > 0) {
     addInfo(context, quotaLines.join('\n'));
   }
@@ -403,7 +412,7 @@ async function resetAction(
     return undefined;
   }
 
-  const oauthManager = resolveOAuthManager();
+  const oauthManager = resolveOAuthManager(context);
   if (!oauthManager) {
     addInfo(context, NOT_AUTHED_CODEX_MSG);
     return undefined;

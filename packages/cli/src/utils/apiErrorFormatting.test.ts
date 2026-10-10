@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it, vi } from 'bun:test';
-import type { Config } from '@vybestack/llxprt-code-core';
+import type { ApiErrorRuntimeInfo } from './apiErrorFormatting.js';
 import {
   getActiveProviderNameForApiError,
   getErrorFallbackModel,
@@ -18,25 +18,21 @@ function makeConfig(options: {
   managerProvider?: string;
   throwFromManager?: boolean;
   throwFromSettings?: boolean;
-}): Config {
+}): ApiErrorRuntimeInfo {
   return {
+    getActiveProviderName: () => {
+      if (options.throwFromManager === true)
+        throw new Error('provider unavailable');
+      return options.managerProvider;
+    },
     getModel: vi.fn(() => options.model ?? 'test-model'),
     getProvider: vi.fn(() => options.configProvider),
-    getProviderManager: vi.fn(() => {
-      if (options.throwFromManager === true) {
-        throw new Error('provider manager unavailable');
-      }
-      return options.managerProvider === undefined
-        ? undefined
-        : { getActiveProviderName: vi.fn(() => options.managerProvider) };
-    }),
-    getSettingsService: vi.fn(() => {
-      if (options.throwFromSettings === true) {
+    readSelectedProvider: () => {
+      if (options.throwFromSettings === true)
         throw new Error('settings unavailable');
-      }
-      return { get: vi.fn(() => options.settingsProvider) };
-    }),
-  } as unknown as Config;
+      return options.settingsProvider;
+    },
+  };
 }
 
 describe('apiErrorFormatting', () => {

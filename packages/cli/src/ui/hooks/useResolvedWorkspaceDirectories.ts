@@ -21,18 +21,16 @@ import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 export function useResolvedWorkspaceDirectories(
   workspaceDirectories?: readonly string[],
 ): readonly string[] | undefined {
-  const { getCliRuntimeServices } = useRuntimeApi();
+  const { getWorkspaceDirectories } = useRuntimeApi();
 
   return useMemo(() => {
     if (workspaceDirectories) {
       return workspaceDirectories;
     }
     try {
-      return getCliRuntimeServices()
-        .config.getWorkspaceContext()
-        .getDirectories();
+      return getWorkspaceDirectories();
     } catch {
       return undefined;
     }
-  }, [workspaceDirectories, getCliRuntimeServices]);
+  }, [workspaceDirectories, getWorkspaceDirectories]);
 }

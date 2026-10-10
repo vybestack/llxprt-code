@@ -1,3 +1,4 @@
+import { createStreamSettingsFixture } from './__tests__/stream-settings-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -5,7 +6,6 @@
  */
 
 import {
-  type Config,
   type EmojiFilter,
   JsonStreamEventType,
   StreamJsonFormatter,
@@ -65,18 +65,7 @@ function onlyAssistantMessageContent(
   return message.content;
 }
 
-function createMockConfig(overrides?: {
-  sessionId?: string;
-  includeInResponse?: boolean;
-}): Config {
-  return {
-    getSessionId: () => overrides?.sessionId ?? 'test-session',
-    getEphemeralSetting: (key: string) =>
-      key === 'reasoning.includeInResponse'
-        ? overrides?.includeInResponse
-        : undefined,
-  } as unknown as Config;
-}
+const createMockConfig = createStreamSettingsFixture;
 
 describe('processAgentStream — quiet mode', () => {
   let processStdoutSpy: Mock<typeof process.stdout.write>;
@@ -100,7 +89,7 @@ describe('processAgentStream — quiet mode', () => {
     streamJsonOutput?: boolean;
     streamFormatter?: StreamJsonFormatter | null;
     emojiFilter?: EmojiFilter | undefined;
-    config?: Config;
+    config?: ReturnType<typeof createStreamSettingsFixture>;
     quiet?: boolean;
   }) {
     const streamFormatter =
@@ -108,7 +97,7 @@ describe('processAgentStream — quiet mode', () => {
         ? null
         : overrides.streamFormatter;
     return {
-      config: overrides?.config ?? createMockConfig(),
+      ...(overrides?.config ?? createMockConfig()),
       jsonOutput: overrides?.jsonOutput ?? false,
       streamJsonOutput: overrides?.streamJsonOutput ?? streamFormatter !== null,
       quiet: overrides?.quiet ?? false,

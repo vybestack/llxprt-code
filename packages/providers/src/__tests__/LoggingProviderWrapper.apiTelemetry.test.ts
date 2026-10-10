@@ -8,6 +8,7 @@
  * causing /stats model to show "No API calls" even after making requests.
  */
 
+import { captureProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
 import { describe, expect, it, vi, beforeEach, type Mock } from 'bun:test';
 import { LoggingProviderWrapper } from '../LoggingProviderWrapper.js';
 import type { GenerateChatOptions, IContent, IProvider } from '../IProvider.js';
@@ -49,7 +50,13 @@ describe('LoggingProviderWrapper API Telemetry', () => {
   describe('logApiResponse', () => {
     it('should call logApiResponse after successful API completion when conversation logging is enabled', async () => {
       const provider = new StubProvider();
-      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+      const wrapper = new LoggingProviderWrapper(
+        provider,
+        new StubRedactor(),
+        undefined,
+        () =>
+          captureProviderRequestDiagnostics(config, runtime.sessionSettings),
+      );
 
       const settings = new SettingsService();
       const config = createConfigStub(true);
@@ -90,7 +97,13 @@ describe('LoggingProviderWrapper API Telemetry', () => {
 
     it('should call logApiResponse after successful API completion when conversation logging is disabled', async () => {
       const provider = new StubProvider();
-      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+      const wrapper = new LoggingProviderWrapper(
+        provider,
+        new StubRedactor(),
+        undefined,
+        () =>
+          captureProviderRequestDiagnostics(config, runtime.sessionSettings),
+      );
 
       const settings = new SettingsService();
       const config = createConfigStub(false); // Logging disabled
@@ -123,7 +136,13 @@ describe('LoggingProviderWrapper API Telemetry', () => {
 
     it('should include correct token counts in logApiResponse', async () => {
       const provider = new StubProvider();
-      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+      const wrapper = new LoggingProviderWrapper(
+        provider,
+        new StubRedactor(),
+        undefined,
+        () =>
+          captureProviderRequestDiagnostics(config, runtime.sessionSettings),
+      );
 
       const settings = new SettingsService();
       const config = createConfigStub(false);
@@ -159,7 +178,13 @@ describe('LoggingProviderWrapper API Telemetry', () => {
   describe('logApiError', () => {
     it('should call logApiError when API call fails', async () => {
       const provider = new ErrorProvider();
-      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+      const wrapper = new LoggingProviderWrapper(
+        provider,
+        new StubRedactor(),
+        undefined,
+        () =>
+          captureProviderRequestDiagnostics(config, runtime.sessionSettings),
+      );
 
       const settings = new SettingsService();
       const config = createConfigStub(false);
@@ -199,7 +224,13 @@ describe('LoggingProviderWrapper API Telemetry', () => {
       // Issue #684: Use the resolved model name for telemetry, not the provider default
       // This ensures /stats model shows the correct model that was actually used
       const provider = new StubProvider();
-      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+      const wrapper = new LoggingProviderWrapper(
+        provider,
+        new StubRedactor(),
+        undefined,
+        () =>
+          captureProviderRequestDiagnostics(config, runtime.sessionSettings),
+      );
 
       const settings = new SettingsService();
       const config = createConfigStub(false); // Logging disabled - uses metrics path
@@ -230,7 +261,13 @@ describe('LoggingProviderWrapper API Telemetry', () => {
 
     it('should use provider default model when resolved model is not available', async () => {
       const provider = new StubProvider();
-      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+      const wrapper = new LoggingProviderWrapper(
+        provider,
+        new StubRedactor(),
+        undefined,
+        () =>
+          captureProviderRequestDiagnostics(config, runtime.sessionSettings),
+      );
 
       const settings = new SettingsService();
       const config = createConfigStub(false);
@@ -262,7 +299,13 @@ describe('LoggingProviderWrapper API Telemetry', () => {
       // was using getDefaultModel() instead of the resolved model name.
       // The fix requires passing resolvedModelName through the logResponseStream call chain.
       const provider = new StubProvider();
-      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+      const wrapper = new LoggingProviderWrapper(
+        provider,
+        new StubRedactor(),
+        undefined,
+        () =>
+          captureProviderRequestDiagnostics(config, runtime.sessionSettings),
+      );
 
       const settings = new SettingsService();
       const config = createConfigStub(true); // Logging ENABLED - uses logResponseStream path
@@ -302,7 +345,13 @@ describe('LoggingProviderWrapper API Telemetry', () => {
   describe('finish_reasons in telemetry', () => {
     it('should populate finish_reasons when provider metadata includes finishReason (logResponseStream path)', async () => {
       const provider = new FinishReasonProvider('stop');
-      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+      const wrapper = new LoggingProviderWrapper(
+        provider,
+        new StubRedactor(),
+        undefined,
+        () =>
+          captureProviderRequestDiagnostics(config, runtime.sessionSettings),
+      );
 
       const settings = new SettingsService();
       const config = createConfigStub(true); // Logging ENABLED - uses logResponseStream path
@@ -336,7 +385,13 @@ describe('LoggingProviderWrapper API Telemetry', () => {
 
     it('should default finish_reasons to [] when no finishReason in metadata', async () => {
       const provider = new StubProvider();
-      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+      const wrapper = new LoggingProviderWrapper(
+        provider,
+        new StubRedactor(),
+        undefined,
+        () =>
+          captureProviderRequestDiagnostics(config, runtime.sessionSettings),
+      );
 
       const settings = new SettingsService();
       const config = createConfigStub(true);
@@ -370,7 +425,13 @@ describe('LoggingProviderWrapper API Telemetry', () => {
 
     it('should populate finish_reasons via processStreamForMetrics path (logging disabled)', async () => {
       const provider = new FinishReasonProvider('max_tokens');
-      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+      const wrapper = new LoggingProviderWrapper(
+        provider,
+        new StubRedactor(),
+        undefined,
+        () =>
+          captureProviderRequestDiagnostics(config, runtime.sessionSettings),
+      );
 
       const settings = new SettingsService();
       const config = createConfigStub(false); // Logging disabled - uses processStreamForMetrics
@@ -426,7 +487,13 @@ describe('LoggingProviderWrapper API Telemetry', () => {
           } as IContent;
         }
       })();
-      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+      const wrapper = new LoggingProviderWrapper(
+        provider,
+        new StubRedactor(),
+        undefined,
+        () =>
+          captureProviderRequestDiagnostics(config, runtime.sessionSettings),
+      );
 
       const settings = new SettingsService();
       const config = createConfigStub(true); // Logging ENABLED → logResponseStream path
@@ -480,7 +547,13 @@ describe('LoggingProviderWrapper API Telemetry', () => {
           } as IContent;
         }
       })();
-      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+      const wrapper = new LoggingProviderWrapper(
+        provider,
+        new StubRedactor(),
+        undefined,
+        () =>
+          captureProviderRequestDiagnostics(config, runtime.sessionSettings),
+      );
 
       const settings = new SettingsService();
       const config = createConfigStub(false); // Logging disabled → processStreamForMetrics path

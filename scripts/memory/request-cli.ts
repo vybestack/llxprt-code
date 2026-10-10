@@ -26,7 +26,6 @@ import {
   type RequestKind,
   queueRequest,
 } from './request.ts';
-import { isSourceMemoryEntrypoint } from './entrypoint.ts';
 import { resolveActiveRunDir } from './paths.ts';
 
 const sourceScriptDir = dirname(fileURLToPath(import.meta.url));
@@ -183,8 +182,8 @@ export async function runRequestCliMain(
   }
 }
 
-if (isSourceMemoryEntrypoint(import.meta.url)) {
-  void runRequestCliMain({
+export async function main(): Promise<void> {
+  await runRequestCliMain({
     usage: SOURCE_REQUEST_USAGE,
     memprofileRoot: join(sourceRepoRoot, '.memprofile'),
   });

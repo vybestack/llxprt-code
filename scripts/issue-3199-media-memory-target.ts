@@ -275,7 +275,10 @@ try {
   });
   resources.recording = recording;
   const persistence = new SessionPersistenceService(
-    new Storage(directory),
+    {
+      projectRoot: directory,
+      chatsDir: new Storage(directory).getProjectChatsDir(),
+    },
     `media-probe-${runtimeName()}`,
     { mediaStore: store, maxQueueBytes: QUEUE_BUDGET_BYTES },
   );

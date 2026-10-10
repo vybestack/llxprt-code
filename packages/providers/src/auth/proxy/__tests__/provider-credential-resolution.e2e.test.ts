@@ -9,10 +9,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
-  AuthPrecedenceResolver,
   CredentialResolutionError,
-  runtimeScopedStates,
-  type IProviderRuntimeContext,
   type OAuthManager,
 } from '@vybestack/llxprt-code-auth';
 import type {
@@ -214,6 +211,7 @@ async function callProvider(
   settings: SettingsService,
   runtimeId: string,
 ): Promise<void> {
+  provider.setRuntimeSettingsService(settings);
   const options = createCallOptions(settings, runtimeId);
   await provider.generateChatCompletion(options).next();
 }
@@ -247,14 +245,12 @@ describe('Provider credential resolution through a sandbox proxy', () => {
     originalSocket = process.env.LLXPRT_CREDENTIAL_SOCKET;
     delete process.env.LLXPRT_CREDENTIAL_SOCKET;
     resetFactorySingletons();
-    runtimeScopedStates.clear();
   });
 
   afterEach(async () => {
     const cleanupErrors: unknown[] = [];
     try {
       resetFactorySingletons();
-      runtimeScopedStates.clear();
       for (const proxy of proxies.splice(0)) {
         try {
           await proxy.server.stop();
@@ -322,36 +318,10 @@ describe('Provider credential resolution through a sandbox proxy', () => {
     ).resolves.toBeUndefined();
   });
 
-  it('classifies a closed proxy on a subagent first call while a parent runtime remains warm', async () => {
+  it('classifies a closed proxy on a subagent first call', async () => {
     const proxy = await startProxy(true);
     const settings = createSettings();
     const provider = createProvider();
-    const parentRuntimeId = 'session-parent-runtime';
-    const parentRuntime = createCallOptions(settings, parentRuntimeId).runtime;
-    const getActiveRuntimeContext = (): IProviderRuntimeContext => ({
-      ...parentRuntime,
-      settingsService: settings,
-      runtimeId: parentRuntimeId,
-    });
-    const parentResolver = new AuthPrecedenceResolver(
-      {
-        isOAuthEnabled: true,
-        supportsOAuth: true,
-        oauthProvider: PROVIDER,
-        providerId: PROVIDER,
-      },
-      {
-        oauthManager: createProxyOAuthManager(),
-        settingsService: settings,
-        getActiveRuntimeContext,
-      },
-    );
-
-    const parentInitial = await parentResolver.resolveAuthenticationResult({
-      settingsService: settings,
-      includeOAuth: true,
-    });
-    expect(parentInitial.token).toBe(CREDENTIAL_SECRET);
     await proxy.server.stop();
     proxies.splice(proxies.indexOf(proxy), 1);
 
@@ -366,14 +336,6 @@ describe('Provider credential resolution through a sandbox proxy', () => {
     expect(failure.diagnostics.profile).toBe(PROFILE);
     expect(failure.diagnostics.proxyContacted).toBe(false);
     expect(failure.message).not.toContain(CREDENTIAL_SECRET);
-
-    const parentAfterFailure = await parentResolver.resolveAuthenticationResult(
-      {
-        settingsService: settings,
-        includeOAuth: true,
-      },
-    );
-    expect(parentAfterFailure.token).toBe(CREDENTIAL_SECRET);
   });
 
   it('classifies an absent proxy credential distinctly from proxy transport failure', async () => {

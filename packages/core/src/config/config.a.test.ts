@@ -9,7 +9,7 @@ import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { Config } from './config.js';
 import { GitService } from '../services/gitService.js';
-import { ResourceRegistry } from '../resources/resource-registry.js';
+import { WorkspaceCheckpointOwner } from '../services/workspace-checkpoint-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { initializeTestConfig } from '../__tests__/config-test-helpers.js';
 import {
@@ -166,37 +166,41 @@ describe('Server Config (config.ts)', () => {
         checkpointing: false,
       });
 
-      await expect(initializeTestConfig(config)).resolves.toBeUndefined();
+      const runtime = await initializeTestConfig(config);
+      expect(runtime.messageBus).toBe(runtime.policyOwner.session.messageBus);
 
       expect(ToolRegistry).toHaveBeenCalledOnce();
     });
 
     it('should throw an error if checkpointing is enabled and GitService fails', async () => {
       const gitError = new Error('Git is not installed');
-      (
-        GitService.prototype.initialize as Mock<(...args: never[]) => unknown>
-      ).mockRejectedValue(gitError);
+      vi.spyOn(GitService.prototype, 'initialize').mockRejectedValue(gitError);
 
       const config = new Config({
         ...baseParams,
         checkpointing: true,
       });
 
-      await expect(initializeTestConfig(config)).rejects.toThrow(gitError);
+      const checkpoints = new WorkspaceCheckpointOwner(
+        config.getTargetDir(),
+        config.projectHistoryDir,
+        config.getCheckpointingEnabled(),
+      );
+      await expect(checkpoints.initialize()).rejects.toThrow(gitError);
+      await expect(checkpoints.dispose()).rejects.toThrow(gitError);
     });
 
     it('should not throw an error if checkpointing is disabled and GitService fails', async () => {
       const gitError = new Error('Git is not installed');
-      (
-        GitService.prototype.initialize as Mock<(...args: never[]) => unknown>
-      ).mockRejectedValue(gitError);
+      vi.spyOn(GitService.prototype, 'initialize').mockRejectedValue(gitError);
 
       const config = new Config({
         ...baseParams,
         checkpointing: false,
       });
 
-      await expect(initializeTestConfig(config)).resolves.toBeUndefined();
+      const runtime = await initializeTestConfig(config);
+      expect(runtime.messageBus).toBe(runtime.policyOwner.session.messageBus);
     });
 
     it('should throw an error if initialized more than once', async () => {
@@ -205,29 +209,35 @@ describe('Server Config (config.ts)', () => {
         checkpointing: false,
       });
 
-      await expect(initializeTestConfig(config)).resolves.toBeUndefined();
-      await expect(initializeTestConfig(config)).rejects.toThrow(
+      const runtime = await initializeTestConfig(config);
+      expect(runtime.messageBus).toBe(runtime.policyOwner.session.messageBus);
+      expect(() => config.initialize()).toThrow(
         'Config was already initialized',
       );
     });
 
-    it('should initialize and expose a ResourceRegistry instance', async () => {
-      const config = new Config({
-        ...baseParams,
-        checkpointing: false,
-      });
-
-      await initializeTestConfig(config);
-
-      const getResourceRegistry = (
-        config as unknown as {
-          getResourceRegistry?: () => unknown;
-        }
-      ).getResourceRegistry;
-      expect(getResourceRegistry).toBeTypeOf('function');
-      expect(getResourceRegistry?.call(config)).toBeInstanceOf(
-        ResourceRegistry,
+    it('returns an independently owned workspace catalog without storing registries on Config', async () => {
+      const config = new Config({ ...baseParams, checkpointing: false });
+      const runtime = await initializeTestConfig(config);
+      runtime.catalogOwner.resourcePublication.setResourcesForServer(
+        'fixture',
+        [{ name: 'entry', uri: 'fixture:///entry' }],
       );
+      expect(
+        runtime.catalogOwner.resourceSelection.findResource(
+          'fixture:fixture:///entry',
+        ),
+      ).toMatchObject({
+        serverName: 'fixture',
+        name: 'entry',
+        uri: 'fixture:///entry',
+      });
+      expect('getResourceRegistry' in config).toBe(false);
+      expect('getPromptRegistry' in config).toBe(false);
+      await runtime.dispose();
+      expect(() =>
+        runtime.catalogOwner.resourceSelection.listResources(),
+      ).toThrow('stopped');
     });
   });
 });

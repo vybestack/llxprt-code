@@ -1,3 +1,4 @@
+import { CoreToolScheduler } from '../../coreToolScheduler.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -6,6 +7,7 @@
 
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect } from 'bun:test';
+import { bindSchedulerOwner } from '../../../session/assembleSchedulerOwner.js';
 import { AgenticLoop } from '../AgenticLoop.js';
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
@@ -28,7 +30,7 @@ import {
 } from './agenticLoop-test-helpers.js';
 
 describe('AgenticLoop scheduler isolation', () => {
-  it('runs its tool turn on an isolated scheduler entry, leaving a pre-existing main scheduler (different owner object) and its callbacks intact', async () => {
+  it('runs its tool turn on an isolated owner, leaving a pre-existing main scheduler and its callbacks intact', async () => {
     const loopTool = new MockTool({ name: 'loop_tool' });
     loopTool.executeFn.mockResolvedValue({
       llmContent: 'loop-ok',
@@ -42,39 +44,61 @@ describe('AgenticLoop scheduler isolation', () => {
 
     const toolRegistry = createToolRegistryForTest([loopTool, mainTool]);
     const messageBus = new MessageBus(createAllowPolicyEngine(), false);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine: createAllowPolicyEngine(),
-      interactive: false,
-      approvalMode: ApprovalMode.YOLO,
-    });
-
-    // Distinct owner object for the main scheduler: the loop instance keys
-    // its own entry, so object identity (never a shared session-id string)
-    // is what keeps the two schedulers apart.
-    const mainOwner = { label: 'main-scheduler' };
+    const { config: config, settingsOwner: configSettingsOwner } =
+      createTestConfig({
+        messageBus,
+        toolRegistry,
+        policyEngine: createAllowPolicyEngine(),
+        interactive: false,
+        approvalMode: ApprovalMode.YOLO,
+      });
 
     const mainCompletions: CompletedToolCall[][] = [];
-    const mainScheduler = await config.getOrCreateScheduler(
-      mainOwner,
-      'session',
-      {
-        onAllToolCallsComplete: async (completed) => {
-          mainCompletions.push(completed);
-        },
-        getPreferredEditor: () => undefined,
-        onEditorClose: () => {},
+    const mainOwner = bindSchedulerOwner(
+      config,
+      messageBus,
+      false,
+      toolRegistry,
+      (options) => new CoreToolScheduler(options),
+      () => configSettingsOwner.readToolExecutionPolicy(),
+      () =>
+        configSettingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
+      undefined,
+      configSettingsOwner.telemetry,
+    )({
+      onAllToolCallsComplete: async (completed) => {
+        mainCompletions.push(completed);
       },
-      { interactiveMode: false },
-      { messageBus, toolRegistry },
-    );
+      getPreferredEditor: () => undefined,
+      onEditorClose: () => {},
+    });
+
+    const mainScheduler = mainOwner.acquire();
+    await mainScheduler.ready;
 
     const { client } = createScriptedAgentClient([
       [toolCallRequestEvent('loop_tool', 'call-loop'), finishedEvent()],
       [contentEvent('done'), finishedEvent()],
     ]);
-    const loop = new AgenticLoop({ agentClient: client, config, messageBus });
+    const loop = new AgenticLoop({
+      createSchedulerOwner: bindSchedulerOwner(
+        config,
+        messageBus,
+        config.isInteractive(),
+        toolRegistry,
+        (options) => new CoreToolScheduler(options),
+        () => configSettingsOwner.readToolExecutionPolicy(),
+        () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
+        undefined,
+        configSettingsOwner.telemetry,
+      ),
+      agentClient: client,
+      config,
+      messageBus,
+    });
     const events = await collectEvents(
       loop,
       'go',
@@ -105,6 +129,6 @@ describe('AgenticLoop scheduler isolation', () => {
     expect(lastMainCompletion?.[0]?.request.callId).toBe('main-call');
     expect(lastMainCompletion?.[0]?.status).toBe('success');
 
-    config.disposeScheduler(mainOwner, 'session');
+    await mainScheduler.release();
   });
 });

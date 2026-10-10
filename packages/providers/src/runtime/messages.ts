@@ -52,9 +52,8 @@ export function formatMissingRuntimeMessage({
       ? missingFields.join(', ')
       : 'runtime registration';
   const remediationSteps = [
-    'Call activateIsolatedRuntimeContext()/setCliRuntimeContext() before consuming CLI helpers.',
-    'Run registerCliProviderInfrastructure() within the activation scope so Config, SettingsService, and ProviderManager are stored.',
-    'If running tests, invoke configureCliStatelessHardening("strict") to verify the runtime wiring or temporarily switch to "legacy" only while debugging migrations.',
+    'Activate the owning runtime before consuming CLI helpers.',
+    'Pass the owning Config and provider manager explicitly to the runtime operation.',
     ...extraSteps,
   ];
 
@@ -89,7 +88,7 @@ export function formatNormalizationFailureMessage({
     missingFields.length > 0 ? missingFields.join(', ') : 'runtime metadata';
   const stageSuffix = stage ? ` (${stage})` : '';
   const remediationSteps = [
-    'Invoke ensureStatelessProviderReady() so ProviderManager receives normalized settings/config/metadata.',
+    'Supply the owning runtime context when preparing a stateless provider invocation.',
     'Re-run profile bootstrap (e.g., llx profile apply <name>) to refresh the runtime Config + SettingsService pair.',
     'Review docs/release-notes/2025-10.md#cli-guard-messaging--diagnostics for the required runtime inputs.',
     ...extraSteps,

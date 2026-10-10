@@ -1,43 +1,62 @@
+import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import type { ProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  SessionSettingsOwner,
+  type RuntimePolicyOwner,
+  type RuntimeProviderManager,
+  type Config,
+  type AgentClientContract,
+  SessionRecordingService,
+  RecordingIntegration,
+  SessionDiscovery,
+  SessionTransitionService,
+  resumeSession,
+  listSessions,
+  deleteSession,
+  writeToStdout,
+  writeToStderr,
+  getProjectHash,
+  CONTINUE_LATEST,
+  type ContinueTarget,
+  type IContent,
+  type LockHandle,
+  clientMediaStore,
+} from '@vybestack/llxprt-code-core';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type {
+  Agent,
+  AgentActivationOperation,
+  AgentProfileApplication,
+} from '@vybestack/llxprt-code-agents';
+import type { ProviderSwitcher } from '@vybestack/llxprt-code-providers/runtime/providerSwitch.js';
+
+import {
+  buildMcpAuthFactoryRegistry,
+  type McpAuthProviderFactory,
+} from '@vybestack/llxprt-code-mcp/auth/mcp-auth-factory.js';
 import { loadCliConfig } from './config/config.js';
 import chalk from 'chalk';
 import type { LoadedSettings } from './config/settings.js';
-import {
-  type Config,
-  SessionRecordingService,
-  RecordingIntegration,
-  SessionDiscovery,
-  SessionTransitionService,
-  resumeSession,
-  describeUnreadableRecording,
-  matchUnreadableRecordings,
-  CONTINUE_LATEST,
-  listSessions,
-  deleteSession,
-  getProjectHash,
-  type ContinueTarget,
-  type UnreadableRecording,
-  type IContent,
-  type LockHandle,
-} from '@vybestack/llxprt-code-core';
 import { sessionId, debugLogger } from '@vybestack/llxprt-code-telemetry';
+import { CliSessionPersistence } from './cliSessionPersistence.js';
 import {
-  ProfileManager,
-  SettingsService,
-} from '@vybestack/llxprt-code-settings';
+  classifyContinueRef,
+  describeUnreadableRecordings,
+  recordStartupWarning,
+  warnSkippedRecordings,
+} from './startupResumeWarnings.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ExtensionStorage, loadExtensions } from './config/extension.js';
-import { registerCleanup } from './utils/cleanup.js';
-import { setCliRuntimeContext } from '@vybestack/llxprt-code-providers/runtime.js';
+import { registerCleanup, runExitCleanup } from './utils/cleanup.js';
 import { promises as fsPromises } from 'fs';
 import { basename, join } from 'path';
 import { ExtensionEnablementManager } from './config/extensions/extensionEnablement.js';
-import { resolveForegroundRuntimeId } from './config/profileBootstrap.js';
-import { wireMcpAuthFactories } from './mcpHostWiring.js';
 import type { ParsedCliArgs } from './cliBootstrap.js';
 import {
   initializeObservationProducer,
@@ -55,46 +74,52 @@ export function formatSessionSummaryLine(
   return `  ${index + 1}. ${session.sessionId.slice(0, 8)}  ${modified}  ${sizeKb} KB  ${session.provider}/${session.model}`;
 }
 
-/**
- * Handle the --list-sessions and --delete-session flags. Both perform their
- * own process.exit, so this returns only when neither flag was supplied.
- */
+/** Handle session flags before starting or resuming a recording. */
 export async function handleSessionListAndDelete(
-  argv: ParsedCliArgs,
+  argv: Pick<ParsedCliArgs, 'listSessions' | 'deleteSession'>,
   chatsDir: string,
   projectHash: string,
+  config: Config,
 ): Promise<void> {
-  if (argv.listSessions === true) {
-    const { sessions } = await listSessions(chatsDir, projectHash);
-    if (sessions.length === 0) {
-      debugLogger.log('No recorded sessions for this project.');
-    } else {
-      debugLogger.log(`Sessions for this project (${sessions.length}):
-`);
-      sessions.forEach((session, i) => {
-        debugLogger.log(formatSessionSummaryLine(session, i));
-      });
-    }
-    process.exit(0);
-  }
+  const deleteRef = argv.deleteSession;
+  const shouldDelete = typeof deleteRef === 'string' && deleteRef.length > 0;
+  if (argv.listSessions !== true && !shouldDelete) return;
 
-  // Preserve old empty-string falsy behavior: only process non-empty strings
-  if (typeof argv.deleteSession === 'string' && argv.deleteSession.length > 0) {
-    const result = await deleteSession(
-      argv.deleteSession,
-      chatsDir,
-      projectHash,
-    );
-    if (result.ok) {
-      debugLogger.log(
-        chalk.green(`Deleted session ${result.deletedSessionId.slice(0, 8)}`),
-      );
-      process.exit(0);
+  let exitCode = 0;
+  try {
+    await fsPromises.mkdir(chatsDir, { recursive: true });
+    if (argv.listSessions === true) {
+      const { sessions } = await listSessions(chatsDir, projectHash);
+      if (sessions.length === 0) {
+        writeToStdout('No recorded sessions for this project.\n');
+      } else {
+        writeToStdout(`Sessions for this project (${sessions.length}):\n`);
+        sessions.forEach((session, i) => {
+          writeToStdout(`${formatSessionSummaryLine(session, i)}\n`);
+        });
+      }
+    } else if (shouldDelete) {
+      const result = await deleteSession(deleteRef, chatsDir, projectHash);
+      if (result.ok) {
+        writeToStdout(
+          `${chalk.green(`Deleted session ${result.deletedSessionId.slice(0, 8)}`)}\n`,
+        );
+      } else {
+        writeToStderr(`${chalk.red(result.error)}\n`);
+        exitCode = 1;
+      }
     }
-    debugLogger.error(chalk.red(result.error));
-    process.exit(1);
+  } finally {
+    registerCleanup(() => config.dispose());
+    await runExitCleanup();
   }
+  process.exit(exitCode);
 }
+
+type RecordingClientOwner = {
+  getAgentClient(): AgentClientContract;
+  workspaceDirectories(): readonly string[];
+};
 
 export interface ResolvedRecording {
   recordingService: SessionRecordingService;
@@ -112,12 +137,26 @@ export interface ResolvedRecording {
 
 export interface SessionRecordingSetup extends ResolvedRecording {
   recordingIntegration: RecordingIntegration;
+  sessionPersistence: CliSessionPersistence;
 }
 
 export interface RuntimeConfigBootstrap {
+  readonly oauthManager?: OAuthManager;
+  readonly providerFileLifecycle: ProviderFileLifecycle;
+  readonly policyOwner?: RuntimePolicyOwner;
+  readonly providerManager: RuntimeProviderManager;
+  /** The installed provider contributions loaded once for this CLI process. */
+  readonly providerContributions: ProviderContributionRegistry;
+  getMcpAuthProviderFactory: (
+    type: string,
+  ) => McpAuthProviderFactory | undefined;
+  activationOperation: AgentActivationOperation;
+  switchProvider: ProviderSwitcher;
+  profileApplication: AgentProfileApplication;
   config: Config;
   extensions: ReturnType<typeof loadExtensions>;
   runtimeSettingsService: SettingsService;
+  runtimeSettingsOwner: SessionSettingsOwner;
 }
 
 /**
@@ -133,72 +172,119 @@ export interface RuntimeConfigBootstrap {
  * agent.getMessageBus(); Config.initialize() likewise runs behind agent
  * construction rather than here.
  */
+function requireCliProviderFiles(
+  files: ProviderFileLifecycle | undefined,
+): ProviderFileLifecycle {
+  if (files === undefined)
+    throw new Error('CLI provider files were not assembled');
+  return files;
+}
+
+function loadBootstrapExtensions(
+  selected: ConstructorParameters<typeof ExtensionEnablementManager>[1],
+  workspaceRoot: string,
+) {
+  const extensionEnablementManager = new ExtensionEnablementManager(
+    ExtensionStorage.getUserExtensionsDir(),
+    selected,
+  );
+  return {
+    extensionEnablementManager,
+    extensions: loadExtensions(extensionEnablementManager, workspaceRoot),
+  };
+}
+
+function requireAssembled<T>(value: T | undefined, what: string): T {
+  if (value === undefined) throw new Error(`CLI ${what} was not assembled.`);
+  return value;
+}
+
 export async function bootstrapRuntimeAndConfig(
   settings: LoadedSettings,
   argv: ParsedCliArgs,
   workspaceRoot: string,
 ): Promise<RuntimeConfigBootstrap> {
-  // Single source of truth for the foreground runtime id — the same id
-  // prepareRuntimeForProfile() uses inside loadCliConfig — so the write-once
-  // default pointer is claimed idempotently across every bootstrap phase
-  // (issue #2300).
-  const runtimeId = resolveForegroundRuntimeId();
   const runtimeSettingsService = new SettingsService();
-  setCliRuntimeContext(runtimeSettingsService, undefined, {
-    runtimeId,
-    metadata: { source: 'cli-bootstrap', stage: 'pre-config' },
-  });
+  const runtimeSettingsOwner = new SessionSettingsOwner(runtimeSettingsService);
 
-  const extensionEnablementManager = new ExtensionEnablementManager(
-    ExtensionStorage.getUserExtensionsDir(),
+  const { extensionEnablementManager, extensions } = loadBootstrapExtensions(
     argv.extensions,
+    workspaceRoot,
   );
-  const extensions = loadExtensions(extensionEnablementManager, workspaceRoot);
 
   // Discover installed provider plugins once, before any provider manager is
   // constructed, so alias construction can dispatch through the resulting
   // registry (issue #2758). Installing a package is what makes a provider
   // available; there is nothing to configure. A broken plugin fails startup
   // here rather than being skipped.
-  const { loadInstalledRuntimePlugins } = await import(
-    '@vybestack/llxprt-code-providers/composition.js'
-  );
-  const providerContributions = await loadInstalledRuntimePlugins();
+  const { providerContributions, authFactories } =
+    await discoverCliProviderContributions();
 
-  // Thread the plugin-contributed MCP auth factories into the transport's
-  // startup-only registry (#2764), so a server selecting a custom
-  // `authProviderType` resolves through its plugin. Registration replaces
-  // any previously registered set (the `registerMcpHostServices`
-  // precedent), so repeated in-process bootstrap re-registers safely.
-  wireMcpAuthFactories(providerContributions);
-
-  const config = await loadCliConfig(
-    settings.merged,
-    extensions,
-    extensionEnablementManager,
-    sessionId,
-    argv,
-    workspaceRoot,
-    { settingsService: runtimeSettingsService, providerContributions },
-  );
-  const profileManager = new ProfileManager();
-  setCliRuntimeContext(runtimeSettingsService, config, {
-    runtimeId,
-    metadata: { source: 'cli-bootstrap', stage: 'post-config' },
-    profileManager,
-  });
-
-  return { config, extensions, runtimeSettingsService };
-}
-
-/**
- * Record a startup warning for the caller to show the user, and mirror it to
- * the debug log. DebugLogger.warn is silent unless debug logging is enabled, so
- * the collected string is the user-visible path.
- */
-function recordStartupWarning(sink: string[], message: string): void {
-  sink.push(message);
-  debugLogger.warn(chalk.yellow(message));
+  let oauthManager: OAuthManager | undefined;
+  let providerFileLifecycle: ProviderFileLifecycle | undefined;
+  let policyOwner: RuntimePolicyOwner | undefined;
+  let providerManager: RuntimeProviderManager | undefined;
+  let activationOperation: AgentActivationOperation | undefined;
+  let profileApplication: AgentProfileApplication | undefined;
+  let switchProvider: ProviderSwitcher | undefined;
+  try {
+    const config = await loadCliConfig(
+      settings.merged,
+      extensions,
+      extensionEnablementManager,
+      sessionId,
+      argv,
+      workspaceRoot,
+      {
+        settingsService: runtimeSettingsService,
+        sessionSettingsOwner: runtimeSettingsOwner,
+        providerContributions,
+        onRuntimeRegistrationReady: (registration) => {
+          registerCleanup(() => registration.dispose());
+        },
+        onPolicyOwnerReady: (owner) => (policyOwner = ownCliPolicy(owner)),
+        onOAuthManagerReady: (manager) => (oauthManager = manager),
+        onProviderFilesReady: (lifecycle) =>
+          (providerFileLifecycle = lifecycle),
+        onProviderManagerReady: (manager) => (providerManager = manager),
+        onActivationBootstrapReady: (operation) => {
+          activationOperation = operation;
+          registerCleanup(() => operation.dispose());
+        },
+        onProfileApplicationReady: (operation) => {
+          profileApplication = operation;
+        },
+        onProviderSwitchReady: (operation) => {
+          switchProvider = operation;
+        },
+      },
+    );
+    return {
+      oauthManager,
+      providerFileLifecycle: requireCliProviderFiles(providerFileLifecycle),
+      providerManager: requireAssembled(providerManager, 'provider manager'),
+      providerContributions,
+      policyOwner,
+      getMcpAuthProviderFactory: (type) =>
+        authFactories.getAuthProviderFactory(type),
+      config,
+      extensions,
+      runtimeSettingsService,
+      runtimeSettingsOwner,
+      switchProvider: requireAssembled(switchProvider, 'provider switch'),
+      profileApplication: requireAssembled(
+        profileApplication,
+        'profile application',
+      ),
+      activationOperation: requireAssembled(
+        activationOperation,
+        'activation bootstrap',
+      ),
+    };
+  } catch (error) {
+    await activationOperation?.dispose();
+    throw error;
+  }
 }
 
 /**
@@ -270,6 +356,7 @@ function registerRecordingCleanup(
   recordingIntegration: RecordingIntegration,
   recordingService: SessionRecordingService,
   lockHandle: LockHandle | null,
+  sessionPersistence: CliSessionPersistence,
 ): void {
   registerCleanup(async () => {
     const failures: unknown[] = [];
@@ -278,6 +365,7 @@ function registerRecordingCleanup(
       () => recordingIntegration.dispose(),
       () => recordingService.dispose(),
       () => lockHandle?.release() ?? Promise.resolve(),
+      () => Promise.resolve(sessionPersistence.close()),
     ]) {
       try {
         await operation();
@@ -297,42 +385,83 @@ function activateRecording(
   recordingService: SessionRecordingService,
   lockHandle: LockHandle | null,
   bootstrapSelection: BootstrapSelection | null,
+  sessionPersistence: CliSessionPersistence,
 ): RecordingIntegration {
   const integration = new RecordingIntegration(
     recordingService,
-    config.createSessionPersistenceService(recordingService.getSessionId()),
+    sessionPersistence.forRecording(recordingService.getSessionId()),
   );
-  registerRecordingCleanup(integration, recordingService, lockHandle);
+  registerRecordingCleanup(
+    integration,
+    recordingService,
+    lockHandle,
+    sessionPersistence,
+  );
   setupObservation(config, bootstrapSelection);
   return integration;
 }
 
-export async function setupSessionRecording(
+function createCliSessionPersistence(
   config: Config,
-  argv: ParsedCliArgs,
-  bootstrapSelection: BootstrapSelection | null,
-): Promise<SessionRecordingSetup> {
+  sessionClient: RecordingClientOwner,
+): CliSessionPersistence {
+  return new CliSessionPersistence(
+    { projectRoot: config.storageRoot, chatsDir: config.projectChatsDir },
+    {
+      mediaStore: clientMediaStore(sessionClient.getAgentClient()),
+      maxQueueBytes: config.getSessionPersistenceQueueByteLimit(),
+    },
+  );
+}
+
+async function prepareLegacyRecording(
+  config: Config,
+  argv: Pick<ParsedCliArgs, 'listSessions' | 'deleteSession'>,
+  sessionClient: RecordingClientOwner,
+): Promise<
+  ResolvedRecording & {
+    projectHash: string;
+    chatsDir: string;
+    sessionPersistence: CliSessionPersistence;
+  }
+> {
   const projectHash = getProjectHash(config.getProjectRoot());
   const chatsDir = join(config.getProjectTempDir(), 'chats');
-  await fsPromises.mkdir(chatsDir, { recursive: true });
-
   // --list-sessions / --delete-session: handle early exits.
-  await handleSessionListAndDelete(argv, chatsDir, projectHash);
+  await handleSessionListAndDelete(argv, chatsDir, projectHash, config);
+  await fsPromises.mkdir(chatsDir, { recursive: true });
+  const sessionPersistence = createCliSessionPersistence(config, sessionClient);
+  const recording = await createOrResumeRecording(
+    config,
+    projectHash,
+    chatsDir,
+    sessionClient,
+  );
+  return { ...recording, projectHash, chatsDir, sessionPersistence };
+}
 
+export async function setupSessionRecording(
+  config: Config,
+  argv: Pick<ParsedCliArgs, 'listSessions' | 'deleteSession'>,
+  bootstrapSelection: BootstrapSelection | null,
+  sessionClient: RecordingClientOwner,
+): Promise<SessionRecordingSetup> {
   const {
+    projectHash,
+    chatsDir,
+    sessionPersistence,
     recordingService,
     resumedHistory,
     resumedLockHandle,
     resumedSessionId,
     startupWarnings,
-  } = await createOrResumeRecording(config, projectHash, chatsDir);
-
+  } = await prepareLegacyRecording(config, argv, sessionClient);
   let activeRecordingService = recordingService;
   let activeLockHandle = resumedLockHandle;
   let didFallback = false;
 
   if (resumedHistory && resumedHistory.length > 0) {
-    const agentClient = config.getAgentClient();
+    const agentClient = sessionClient.getAgentClient();
     try {
       await agentClient.restoreHistory(resumedHistory);
       // Adoption happens here — AFTER a successful restoreHistory — so a
@@ -367,19 +496,12 @@ export async function setupSessionRecording(
       }
       // Rebuild the configured session recording after the failed resume.
       // Lock acquisition and file materialization remain fail-fast.
-      try {
-        activeRecordingService = await buildNewRecordingService(
-          config,
-          projectHash,
-          chatsDir,
-        );
-      } catch (buildErr) {
-        throw new Error(
-          `Failed to create fallback recording service: ${
-            buildErr instanceof Error ? buildErr.message : String(buildErr)
-          }`,
-        );
-      }
+      activeRecordingService = await buildFallbackRecording(
+        config,
+        projectHash,
+        chatsDir,
+        sessionClient,
+      );
       activeLockHandle = null;
       didFallback = true;
     }
@@ -397,11 +519,13 @@ export async function setupSessionRecording(
     activeRecordingService,
     activeLockHandle,
     bootstrapSelection,
+    sessionPersistence,
   );
 
   return {
     recordingService: activeRecordingService,
     recordingIntegration,
+    sessionPersistence,
     resumedHistory: didFallback ? null : resumedHistory,
     resumedLockHandle: activeLockHandle,
     resumedSessionId: didFallback ? null : resumedSessionId,
@@ -409,17 +533,124 @@ export async function setupSessionRecording(
   };
 }
 
+async function resumeOwnerRecording(
+  session: Agent['session'],
+  mediaStore: ReturnType<typeof clientMediaStore>,
+  continueRef: string,
+  location: { chatsDir: string; projectHash: string },
+  startupWarnings: string[],
+): Promise<IContent[] | null> {
+  // Discovery here only classifies the reference against unreadable recordings
+  // so they can be reported to the user; the owner performs the actual resume.
+  const { targets, unreadableRecordings } =
+    await SessionDiscovery.listContinueTargetsDetailed(
+      location.chatsDir,
+      location.projectHash,
+      mediaStore,
+    );
+  const { resumeRef, namedUnreadable } = classifyContinueRef(
+    continueRef,
+    targets,
+    unreadableRecordings,
+  );
+  warnSkippedRecordings(
+    unreadableRecordings.filter(
+      (recording) => !namedUnreadable.includes(recording),
+    ),
+    startupWarnings,
+  );
+  if (namedUnreadable.length > 0) {
+    recordStartupWarning(
+      startupWarnings,
+      `Could not resume session (ref: ${continueRef}): the recording is unreadable:\n` +
+        describeUnreadableRecordings(namedUnreadable),
+    );
+    await session.setRecording({ enabled: true });
+    return null;
+  }
+  let resumed: readonly IContent[];
+  try {
+    resumed = await session.resume(
+      resumeRef === CONTINUE_LATEST ? 'latest' : resumeRef,
+    );
+  } catch (error: unknown) {
+    if (
+      error instanceof Error &&
+      (error.message.includes('Ambiguous continue target name') ||
+        error.message.startsWith('Cannot adopt recording session '))
+    ) {
+      throw error;
+    }
+    recordStartupWarning(
+      startupWarnings,
+      `Could not resume session (ref: ${continueRef}): ${
+        error instanceof Error ? error.message : String(error)
+      }. Falling back to a new session.`,
+    );
+    await session.setRecording({ enabled: true });
+    return null;
+  }
+  return [...resumed];
+}
+
+export async function setupOwnerSessionRecording(
+  config: Config,
+  agent: Agent,
+  argv: Pick<ParsedCliArgs, 'listSessions' | 'deleteSession'>,
+  bootstrapSelection: BootstrapSelection | null,
+  startupWarnings: string[] = [],
+): Promise<IContent[] | null> {
+  const projectHash = getProjectHash(config.getProjectRoot());
+  const chatsDir = config.projectChatsDir;
+  await handleSessionListAndDelete(argv, chatsDir, projectHash, config);
+  await fsPromises.mkdir(chatsDir, { recursive: true });
+
+  try {
+    const continueRef = config.getContinueSessionRef();
+    let history: IContent[] | null;
+    if (continueRef) {
+      history = await resumeOwnerRecording(
+        agent.session,
+        clientMediaStore(agent.agentClient),
+        continueRef,
+        { chatsDir, projectHash },
+        startupWarnings,
+      );
+    } else {
+      await agent.session.setRecording({ enabled: true });
+      history = null;
+    }
+
+    registerCleanup(() => stopObservationProducer());
+    setupObservation(config, bootstrapSelection);
+    return history;
+  } catch (error: unknown) {
+    if (agent.session.getRecording().enabled) {
+      try {
+        await agent.session.setRecording({ enabled: false });
+      } catch (cleanupError: unknown) {
+        throw new AggregateError(
+          [error, cleanupError],
+          'Recording bootstrap and cleanup failed',
+        );
+      }
+    }
+    throw error;
+  }
+}
+
 /** Build and lock a fresh SessionRecordingService for the current run. */
 export function buildNewRecordingService(
   config: Config,
   projectHash: string,
   chatsDir: string,
+  sessionClient: RecordingClientOwner,
 ): Promise<SessionRecordingService> {
   return SessionRecordingService.createLocked({
     sessionId: config.getSessionId(),
     projectHash,
     chatsDir,
-    workspaceDirs: [...config.getWorkspaceContext().getDirectories()],
+    workspaceDirs: [...sessionClient.workspaceDirectories()],
     provider: config.getProvider() ?? 'unknown',
     model: config.getModel(),
     // The provider can change (profile load, model picker) before the first
@@ -428,7 +659,7 @@ export function buildNewRecordingService(
       provider: config.getProvider() ?? 'unknown',
       model: config.getModel(),
     }),
-    mediaStore: config.getLocalMediaStore(),
+    mediaStore: clientMediaStore(sessionClient.getAgentClient()),
     maxQueueBytes: config.getSessionRecordingQueueByteLimit(),
   });
 }
@@ -457,9 +688,10 @@ async function forkStartupCheckpoint(
   config: Config,
   projectHash: string,
   chatsDir: string,
+  sessionClient: RecordingClientOwner,
 ): Promise<ResolvedRecording> {
   const result = await new SessionTransitionService({
-    mediaStore: config.getLocalMediaStore(),
+    mediaStore: clientMediaStore(sessionClient.getAgentClient()),
     maxQueueBytes: config.getSessionRecordingQueueByteLimit(),
   }).forkFromCheckpoint(
     target,
@@ -467,7 +699,7 @@ async function forkStartupCheckpoint(
     projectHash,
     config.getProvider() ?? 'unknown',
     config.getModel(),
-    [...config.getWorkspaceContext().getDirectories()],
+    [...sessionClient.workspaceDirectories()],
   );
   if (!result.ok) {
     throw new Error(`Failed to fork checkpoint: ${result.error}`);
@@ -481,65 +713,11 @@ async function forkStartupCheckpoint(
   };
 }
 
-function describeUnreadableRecordings(
-  unreadableRecordings: readonly UnreadableRecording[],
-): string {
-  return unreadableRecordings
-    .map((recording) => `  ${describeUnreadableRecording(recording)}`)
-    .join('\n');
-}
-
-/** One visible warning naming every unreadable recording discovery skipped. */
-function warnSkippedRecordings(
-  unreadableRecordings: readonly UnreadableRecording[],
-  startupWarnings: string[],
-): void {
-  if (unreadableRecordings.length === 0) return;
-  recordStartupWarning(
-    startupWarnings,
-    `Skipped ${unreadableRecordings.length} unreadable session recording(s):\n` +
-      describeUnreadableRecordings(unreadableRecordings),
-  );
-}
-
-/**
- * Where a startup --continue reference lands once unreadable recordings are
- * accounted for: a readable session id to resume, the unreadable recordings the
- * reference names (nothing readable matches it), or neither.
- */
-function classifyContinueRef(
-  continueRef: string,
-  targets: readonly ContinueTarget[],
-  unreadableRecordings: readonly UnreadableRecording[],
-): {
-  resumeRef: string;
-  namedUnreadable: readonly UnreadableRecording[];
-} {
-  if (continueRef === CONTINUE_LATEST) {
-    return { resumeRef: continueRef, namedUnreadable: [] };
-  }
-  const resolved = SessionDiscovery.resolveContinueRef(continueRef, targets);
-  if ('target' in resolved) {
-    // Pin the readable session's id so an index or name cannot be re-resolved
-    // against a listing that still contains the unreadable recordings.
-    const sessionId =
-      resolved.target.kind === 'session'
-        ? resolved.target.session.sessionId
-        : continueRef;
-    return { resumeRef: sessionId, namedUnreadable: [] };
-  }
-  const namedUnreadable = matchUnreadableRecordings(
-    continueRef,
-    resolved.error,
-    unreadableRecordings,
-  );
-  return { resumeRef: continueRef, namedUnreadable };
-}
-
-async function buildFallbackRecording(
+async function freshSessionRecording(
   config: Config,
   projectHash: string,
   chatsDir: string,
+  sessionClient: RecordingClientOwner,
   startupWarnings: string[],
 ): Promise<ResolvedRecording> {
   return {
@@ -547,6 +725,7 @@ async function buildFallbackRecording(
       config,
       projectHash,
       chatsDir,
+      sessionClient,
     ),
     resumedHistory: null,
     resumedLockHandle: null,
@@ -560,6 +739,7 @@ async function resumeReadableSession(
   config: Config,
   projectHash: string,
   chatsDir: string,
+  sessionClient: RecordingClientOwner,
   refs: { continueRef: string; resumeRef: string },
   startupWarnings: string[],
 ): Promise<ResolvedRecording> {
@@ -569,8 +749,8 @@ async function resumeReadableSession(
     chatsDir,
     currentProvider: config.getProvider() ?? 'unknown',
     currentModel: config.getModel(),
-    workspaceDirs: [...config.getWorkspaceContext().getDirectories()],
-    mediaStore: config.getLocalMediaStore(),
+    workspaceDirs: [...sessionClient.workspaceDirectories()],
+    mediaStore: clientMediaStore(sessionClient.getAgentClient()),
     maxQueueBytes: config.getSessionRecordingQueueByteLimit(),
   });
 
@@ -579,10 +759,11 @@ async function resumeReadableSession(
       startupWarnings,
       `Could not resume session (ref: ${refs.continueRef}): ${resumeResult.error}`,
     );
-    return buildFallbackRecording(
+    return freshSessionRecording(
       config,
       projectHash,
       chatsDir,
+      sessionClient,
       startupWarnings,
     );
   }
@@ -599,6 +780,45 @@ async function resumeReadableSession(
   };
 }
 
+async function buildFallbackRecording(
+  config: Config,
+  projectHash: string,
+  chatsDir: string,
+  sessionClient: RecordingClientOwner,
+): Promise<SessionRecordingService> {
+  try {
+    return await buildNewRecordingService(
+      config,
+      projectHash,
+      chatsDir,
+      sessionClient,
+    );
+  } catch (error) {
+    throw new Error(
+      `Failed to create fallback recording service: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+function ownCliPolicy(owner: RuntimePolicyOwner): RuntimePolicyOwner {
+  registerCleanup(() => owner.dispose());
+  return owner;
+}
+
+async function discoverCliProviderContributions() {
+  const { loadInstalledRuntimePlugins } = await import(
+    '@vybestack/llxprt-code-providers/composition.js'
+  );
+  const providerContributions = await loadInstalledRuntimePlugins();
+  const authFactories = buildMcpAuthFactoryRegistry(
+    providerContributions
+      .getMcpAuthFactories()
+      .map((entry) => entry.contribution),
+  );
+
+  return { providerContributions, authFactories };
+}
+
 /**
  * Resume a recording session if --continue was supplied, otherwise create a
  * new one. Falls back to a new session when resume fails. Recordings that
@@ -609,10 +829,17 @@ export async function createOrResumeRecording(
   config: Config,
   projectHash: string,
   chatsDir: string,
+  sessionClient: RecordingClientOwner,
 ): Promise<ResolvedRecording> {
   const continueRef = config.getContinueSessionRef();
   if (!continueRef) {
-    return buildFallbackRecording(config, projectHash, chatsDir, []);
+    return freshSessionRecording(
+      config,
+      projectHash,
+      chatsDir,
+      sessionClient,
+      [],
+    );
   }
   const startupWarnings: string[] = [];
 
@@ -620,7 +847,7 @@ export async function createOrResumeRecording(
     await SessionDiscovery.listContinueTargetsDetailed(
       chatsDir,
       projectHash,
-      config.getLocalMediaStore(),
+      clientMediaStore(sessionClient.getAgentClient()),
     );
   const { resumeRef, namedUnreadable } = classifyContinueRef(
     continueRef,
@@ -639,10 +866,11 @@ export async function createOrResumeRecording(
       `Could not resume session (ref: ${continueRef}): the recording is unreadable:\n` +
         describeUnreadableRecordings(namedUnreadable),
     );
-    return buildFallbackRecording(
+    return freshSessionRecording(
       config,
       projectHash,
       chatsDir,
+      sessionClient,
       startupWarnings,
     );
   }
@@ -654,6 +882,7 @@ export async function createOrResumeRecording(
       config,
       projectHash,
       chatsDir,
+      sessionClient,
     );
     return { ...forked, startupWarnings };
   }
@@ -662,6 +891,7 @@ export async function createOrResumeRecording(
     config,
     projectHash,
     chatsDir,
+    sessionClient,
     { continueRef, resumeRef },
     startupWarnings,
   );

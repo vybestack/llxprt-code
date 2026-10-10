@@ -1,3 +1,4 @@
+import { afterEach } from 'bun:test';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -7,11 +8,12 @@
 import { describe, expect, it, vi } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import type { CircuitBreakerState } from '../LoadBalancingProvider.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
+
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import {
   extractFailoverSettings,
@@ -25,7 +27,6 @@ import {
 } from '../retryFailoverLogic.js';
 import { shouldRetryError } from '../retryDelayPolicy.js';
 import { decodeRetryFailure } from '../retryFailureTaxonomy.js';
-import type { BucketFailoverHandler } from '@vybestack/llxprt-code-core/config/config.js';
 import { CircuitBreakerManager } from '../loadBalancing/circuitBreakerManager.js';
 import { buildExtendedStats } from '../loadBalancing/statsBuilder.js';
 import {
@@ -35,7 +36,7 @@ import {
 } from '../loadBalancing/streamTimeout.js';
 import { getBaseUrlFromProvider } from '../baseUrlResolver.js';
 import { ProviderCapabilitiesService } from '../providerCapabilitiesService.js';
-import { normalizeRuntimeInputs } from '../runtimeNormalizer.js';
+import { normalizeRuntimeInputs } from './helper-request-admission.js';
 import { ProviderRuntimeNormalizationError } from '../errors.js';
 import { buildRoundRobinResolvedOptions } from '../loadBalancing/resolvedOptionsBuilder.js';
 import { BackendMetricsCollector } from '../loadBalancing/backendMetrics.js';
@@ -80,7 +81,9 @@ function statusError(status: number): Error {
   return Object.assign(new Error(`status ${status}`), { status });
 }
 
-const handlerStub: BucketFailoverHandler = {
+const handlerStub = {
+  tryBucketFailover: async () => false,
+  readFailoverBuckets: () => ['bucket'],
   getBuckets: () => ['bucket-a'],
   getCurrentBucket: () => 'bucket-a',
   isEnabled: () => true,
@@ -98,7 +101,31 @@ async function collectChunks(
   return chunks;
 }
 
+const configRoots: Config[] = [];
+
+function runtimeConfig(
+  model = 'config-model',
+  initialSettings: Readonly<Record<string, unknown>> = {},
+  provider?: string,
+): Config {
+  const config = new Config({
+    sessionId: 'extracted-helper-fixture',
+    model,
+    provider,
+    initialSettings,
+    targetDir: process.cwd(),
+    cwd: process.cwd(),
+    debugMode: false,
+  });
+  configRoots.push(config);
+  return config;
+}
+
 describe('extracted provider helper behavior', () => {
+  afterEach(async () => {
+    await Promise.all(configRoots.splice(0).map((config) => config.dispose()));
+  });
+
   it('reports every reason that makes a backend ineligible', () => {
     expect(
       getBackendSkipReasons(
@@ -305,7 +332,30 @@ describe('extracted provider helper behavior', () => {
 
   it('preserves logging option normalization and missing-config fail-fast behavior', () => {
     const settingsService = new SettingsService();
-    const config = { getConversationLoggingEnabled: () => false } as Config;
+    const config = Object.assign(
+      new Config({
+        sessionId: 'logging-policy',
+        targetDir: process.cwd(),
+        cwd: process.cwd(),
+        model: 'logging-model',
+        debugMode: false,
+      }),
+      {
+        getModel: () => '',
+        getUserMemory: () => '',
+        getTargetDir: () => process.cwd(),
+        getConversationLogPath: () => '',
+        getRedactionConfig: () => ({
+          redactApiKeys: false,
+          redactCredentials: false,
+          redactFilePaths: false,
+          redactUrls: false,
+          redactEmails: false,
+          redactPersonalInfo: false,
+        }),
+        getConversationLoggingEnabled: () => false,
+      },
+    );
     const normalized = normalizeChatCompletionOptions(
       [{ speaker: 'user', blocks: [{ type: 'text', text: 'hello' }] }],
       undefined,
@@ -325,8 +375,8 @@ describe('extracted provider helper behavior', () => {
       },
     );
 
-    expect(normalized.runtime?.runtimeId).toBe('runtime-a');
-    expect(normalized.settings).toBe(settingsService);
+    expect(normalized.invocation?.runtimeId).toBe('runtime-a');
+    expect(normalized).not.toHaveProperty('settings');
     expect(normalized.metadata).toMatchObject({
       inherited: true,
       runtime: true,
@@ -340,14 +390,11 @@ describe('extracted provider helper behavior', () => {
         'provider-a',
         debugLoggerStub(),
       ),
-    ).toThrow(/config/);
+    ).toThrow(/invocation/);
   });
 
   it('preserves token count extraction and session accumulation semantics', () => {
     const accumulateSessionTokens = vi.fn();
-    const config = {
-      getProviderManager: () => ({ accumulateSessionTokens }),
-    } as unknown as Config;
     const tokenCounts = extractTokenCountsFromResponse({
       usage: {
         prompt_tokens: 2,
@@ -357,7 +404,12 @@ describe('extracted provider helper behavior', () => {
       },
     });
 
-    accumulateTokenUsage(tokenCounts, config, 'provider-a', debugLoggerStub());
+    accumulateTokenUsage(
+      tokenCounts,
+      { accumulateSessionTokens },
+      'provider-a',
+      debugLoggerStub(),
+    );
 
     expect(tokenCounts).toMatchObject({
       input_token_count: 2,
@@ -421,10 +473,7 @@ describe('extracted provider helper behavior', () => {
     });
     const capabilitiesMap = new Map();
     const service = new ProviderCapabilitiesService(capabilitiesMap);
-    const config = {
-      getProvider: () => 'openai',
-      getModel: () => 'gpt-4-vision-preview',
-    } as unknown as Config;
+    const config = runtimeConfig('gpt-4-vision-preview', {}, 'openai');
 
     const wrapper = {
       name: 'wrapper',
@@ -467,22 +516,13 @@ describe('extracted provider helper behavior', () => {
       'base-url',
       'https://settings.example.test',
     );
-    const config = {
-      getModel: () => 'config-model',
-      getEphemeralSetting: (key: string) => {
-        if (key === 'auth-key') {
-          return 'global-token';
-        }
-        if (key === 'base-url') {
-          return 'https://config.example.test';
-        }
-        return undefined;
-      },
-      getSettingsService: () => settingsService,
-      getUserMemory: () => 'remember this',
-    } as unknown as Config;
+    settingsService.set('auth-key', 'global-token');
+    const config = runtimeConfig('config-model', {
+      'base-url': 'https://config.example.test',
+    });
     const rawOptions: GenerateChatOptions = {
       contents: [],
+      userMemory: 'remember this',
       runtime: {
         settingsService,
         config,
@@ -521,7 +561,7 @@ describe('extracted provider helper behavior', () => {
       'https://provider-a.example.test',
     );
     settingsService.setProviderSetting('provider-a', 'auth-key', 'test-token');
-    const config = createRuntimeConfigStub(settingsService);
+    const config = runtimeConfig();
     const controller = new AbortController();
     const rawOptions = createProviderCallOptions({
       providerName: 'provider-a',
@@ -548,7 +588,7 @@ describe('extracted provider helper behavior', () => {
     expect(normalized.invocation?.signal).toBe(controller.signal);
   });
 
-  it('does not apply global ephemeral settings when config owns a different SettingsService', () => {
+  it('does not apply Config construction settings to the supplied invocation store', () => {
     const invocationSettingsService = new SettingsService();
     invocationSettingsService.setProviderSetting(
       'provider-a',
@@ -565,19 +605,9 @@ describe('extracted provider helper behavior', () => {
       'auth-key',
       'provider-scoped-token',
     );
-    const configOwnedSettingsService = new SettingsService();
-    const config = createRuntimeConfigStub(configOwnedSettingsService, {
-      getModel: () => 'config-model',
-      getEphemeralSetting: (key: string) => {
-        if (key === 'auth-key') {
-          return 'global-token';
-        }
-        if (key === 'base-url') {
-          return 'https://config.example.test';
-        }
-        return undefined;
-      },
-      getUserMemory: () => 'remember this',
+    const config = runtimeConfig('config-model', {
+      'auth-key': 'global-token',
+      'base-url': 'https://config.example.test',
     });
     const rawOptions: GenerateChatOptions = {
       contents: [],
@@ -609,11 +639,7 @@ describe('extracted provider helper behavior', () => {
       'base-url',
       'https://settings.example.test',
     );
-    const config = {
-      getModel: () => 'config-model',
-      getEphemeralSetting: () => undefined,
-      getSettingsService: () => settingsService,
-    } as unknown as Config;
+    const config = runtimeConfig();
     const cyclicProvider = providerStub({ name: 'wrapper' }) as IProvider & {
       wrappedProvider?: IProvider;
     };
@@ -640,7 +666,30 @@ describe('extracted provider helper behavior', () => {
 
   it('preserves load-balancer resolved delegate option construction', () => {
     const settingsService = new SettingsService();
-    const config = { getConversationLoggingEnabled: () => false } as Config;
+    const config = Object.assign(
+      new Config({
+        sessionId: 'logging-policy',
+        targetDir: process.cwd(),
+        cwd: process.cwd(),
+        model: 'logging-model',
+        debugMode: false,
+      }),
+      {
+        getModel: () => '',
+        getUserMemory: () => '',
+        getTargetDir: () => process.cwd(),
+        getConversationLogPath: () => '',
+        getRedactionConfig: () => ({
+          redactApiKeys: false,
+          redactCredentials: false,
+          redactFilePaths: false,
+          redactUrls: false,
+          redactEmails: false,
+          redactPersonalInfo: false,
+        }),
+        getConversationLoggingEnabled: () => false,
+      },
+    );
     const options: GenerateChatOptions = {
       contents: [],
       settings: settingsService,
@@ -650,6 +699,12 @@ describe('extracted provider helper behavior', () => {
         runtimeId: 'lb-runtime',
         metadata: { parent: true },
       },
+      invocation: createRuntimeInvocationContext({
+        runtimeId: 'lb-runtime',
+        runtimeMetadata: { parent: true },
+        providerName: 'load-balancer',
+        ephemeralsSnapshot: {},
+      }),
       metadata: { request: true },
       resolved: { telemetry: { trace: 'abc' } },
     };
@@ -697,7 +752,30 @@ describe('extracted provider helper behavior', () => {
 
   it('carries the member profileId on delegate metadata alongside loadBalancerDelegate (#2643)', () => {
     const settingsService = new SettingsService();
-    const config = { getConversationLoggingEnabled: () => false } as Config;
+    const config = Object.assign(
+      new Config({
+        sessionId: 'logging-policy',
+        targetDir: process.cwd(),
+        cwd: process.cwd(),
+        model: 'logging-model',
+        debugMode: false,
+      }),
+      {
+        getModel: () => '',
+        getUserMemory: () => '',
+        getTargetDir: () => process.cwd(),
+        getConversationLogPath: () => '',
+        getRedactionConfig: () => ({
+          redactApiKeys: false,
+          redactCredentials: false,
+          redactFilePaths: false,
+          redactUrls: false,
+          redactEmails: false,
+          redactPersonalInfo: false,
+        }),
+        getConversationLoggingEnabled: () => false,
+      },
+    );
     const options: GenerateChatOptions = {
       contents: [],
       settings: settingsService,
@@ -742,17 +820,18 @@ describe('extracted provider helper behavior', () => {
 });
 
 describe('normalizeRuntimeInputs: fail-closed when no provider (#2481)', () => {
+  afterEach(async () => {
+    await Promise.all(configRoots.splice(0).map((config) => config.dispose()));
+  });
+
   it('throws ProviderRuntimeNormalizationError when no target/active provider exists', () => {
-    const settingsService = new SettingsService();
-    const config = createRuntimeConfigStub(settingsService);
     const rawOptions: GenerateChatOptions = {
       contents: [],
-      runtime: {
-        settingsService,
-        config,
+      invocation: createRuntimeInvocationContext({
         runtimeId: 'runtime-no-provider',
-        metadata: {},
-      },
+        providerName: 'openai',
+        ephemeralsSnapshot: {},
+      }),
     };
 
     expect(() =>
@@ -764,16 +843,13 @@ describe('normalizeRuntimeInputs: fail-closed when no provider (#2481)', () => {
   });
 
   it('error mentions missing provider and runtimeId', () => {
-    const settingsService = new SettingsService();
-    const config = createRuntimeConfigStub(settingsService);
     const rawOptions: GenerateChatOptions = {
       contents: [],
-      runtime: {
-        settingsService,
-        config,
+      invocation: createRuntimeInvocationContext({
         runtimeId: 'runtime-no-provider-2',
-        metadata: {},
-      },
+        providerName: 'openai',
+        ephemeralsSnapshot: {},
+      }),
     };
 
     const captured = captureThrown(() =>

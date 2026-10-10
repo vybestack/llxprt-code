@@ -20,7 +20,7 @@ import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Age
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
+  createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -84,10 +84,8 @@ function makeChatSession(
         target: null,
       },
     },
-    provider: createProviderAdapterFromManager(
-      runtimeSetup.config.getProviderManager(),
-    ),
-    telemetry: createTelemetryAdapterFromConfig(runtimeSetup.config),
+    provider: createProviderAdapterFromManager(runtimeSetup.providerManager),
+    telemetry: createTelemetryAdapter(runtimeSetup.config),
     tools: createToolRegistryViewFromRegistry(),
     providerRuntime: providerRuntimeSnapshot,
   });

@@ -1,8 +1,10 @@
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
 
 /**
  * Behavioral tests for Notification hook (ToolPermission).
@@ -16,27 +18,56 @@
  * - Every line of production code is written in response to a failing test
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { triggerToolNotificationHook } from '../core/coreToolHookTriggers.js';
 import { NotificationType } from './types.js';
-import type { Config } from '../config/config.js';
-import type { HookSystem } from './hookSystem.js';
+import { Config } from '../config/config.js';
+import { SessionHookOwner } from './session-hook-owner.js';
+import {
+  readHookDefinitions,
+  hookSessionRuntime,
+} from './hook-configuration.js';
+import { MessageBus } from '../confirmation-bus/message-bus.js';
+import type { HookExecutionOwner } from './hookEventHandler.js';
 import type { ToolCallConfirmationDetails } from '@vybestack/llxprt-code-tools';
 
 describe('Notification Hook (ToolPermission)', () => {
-  let mockConfig: Config;
-  let mockHookSystem: HookSystem;
-
+  let execution: HookExecutionOwner;
+  const owners: SessionHookOwner[] = [];
   beforeEach(() => {
-    mockHookSystem = {
-      initialize: vi.fn(async () => {}),
-      fireNotificationEvent: vi.fn(async () => ({})),
-    } as unknown as HookSystem;
-
-    mockConfig = {
-      getEnableHooks: vi.fn(() => true),
-      getHookSystem: vi.fn(() => mockHookSystem),
-    } as unknown as Config;
+    const config = new Config({
+      sessionId: 'notification',
+      targetDir: process.cwd(),
+      cwd: process.cwd(),
+      model: 'test',
+      debugMode: false,
+      enableHooks: true,
+    });
+    const root = new SessionHookOwner(
+      readHookDefinitions(config),
+      hookSessionRuntime(
+        config,
+        new WorkspaceTrustLifecycle({
+          localTrust: config.initialWorkspaceTrust,
+        }),
+        RootTelemetry.prepare({
+          enabled: false,
+          sessionId: 'isolated-caller-fixture',
+          maxBytes: 1024,
+          maxFiles: 1,
+        }),
+      ),
+      true,
+      new MessageBus(),
+    );
+    owners.push(root);
+    execution = root.execution({
+      sessionId: () => 'notification',
+      transcriptPath: () => undefined,
+    });
+  });
+  afterEach(async () => {
+    await Promise.all(owners.splice(0).map((root) => root.dispose()));
   });
 
   describe('triggerToolNotificationHook', () => {
@@ -54,8 +85,8 @@ describe('Notification Hook (ToolPermission)', () => {
       };
 
       const result = await triggerToolNotificationHook(
-        mockConfig,
         confirmationDetails,
+        execution,
       );
 
       expect(result).toBeDefined();
@@ -76,8 +107,8 @@ describe('Notification Hook (ToolPermission)', () => {
       };
 
       const result = await triggerToolNotificationHook(
-        mockConfig,
         confirmationDetails,
+        execution,
       );
 
       expect(result).toBeDefined();
@@ -88,11 +119,6 @@ describe('Notification Hook (ToolPermission)', () => {
     });
 
     it('should return undefined when hooks are disabled', async () => {
-      const disabledConfig = {
-        getEnableHooks: vi.fn(() => false),
-        getHookSystem: vi.fn(() => undefined),
-      } as unknown as Config;
-
       const confirmationDetails: ToolCallConfirmationDetails = {
         type: 'exec',
         title: 'Run shell command',
@@ -103,8 +129,8 @@ describe('Notification Hook (ToolPermission)', () => {
       };
 
       const result = await triggerToolNotificationHook(
-        disabledConfig,
         confirmationDetails,
+        undefined,
       );
 
       expect(result).toBeUndefined();
@@ -124,8 +150,8 @@ describe('Notification Hook (ToolPermission)', () => {
       };
 
       const result = await triggerToolNotificationHook(
-        mockConfig,
         confirmationDetails,
+        execution,
       );
 
       expect(result).toBeDefined();

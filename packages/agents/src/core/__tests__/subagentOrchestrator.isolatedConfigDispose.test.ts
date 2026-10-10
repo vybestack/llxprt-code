@@ -1,8 +1,20 @@
+import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+
+import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
+import { fixtureToolSelection } from './subagentOrchestrator-test-helpers.js';
+
+import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
+const fixturePaths = installTestWorkspacePaths({
+  targetDir: process.cwd(),
+  isTrusted: () => true,
+});
+import { createAgentRuntimeFactoryBindings } from '../../api/runtimeFactories.js';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 
 /**
  * Issue #3222 follow-up: the orchestrator constructs the isolated subagent
@@ -13,13 +25,16 @@
  * scope-creation failure, runtime-loader failure) through REAL
  * collaborators: provider activation's refreshAuth constructs a real
  * AgentClient on that Config, whose constructor subscribes to the
- * runtime-state registry; only Config.dispose() -> client.dispose()
- * releases that subscription. The probe reads that subscription handle
- * structurally (function -> undefined), the same idiom as the API layer's
- * disposalProbe helper.
+ * model-event emitter; Config.dispose() -> client.dispose()
+ * releases those listeners. The tests compare live event listener counts
+ * before activation, while active, and after disposal.
  */
 
 import { describe, expect, it, vi } from 'bun:test';
+import {
+  coreEvents,
+  CoreEvent,
+} from '@vybestack/llxprt-code-core/utils/events.js';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -28,7 +43,7 @@ import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+
 import type { SubAgentScope } from '../subagent.js';
 import { SubagentOrchestrator } from '../subagentOrchestrator.js';
 import type { SubagentOrchestratorOptions } from '../subagentOrchestrator.js';
@@ -37,22 +52,13 @@ import {
   createRuntimeBundle,
 } from './subagentOrchestrator-test-helpers.js';
 
-/** True while the client's runtime-state subscription is still registered. */
-function agentClientSubscribed(client: AgentClientContract): boolean {
-  return (
-    (client as unknown as { _unsubscribe?: unknown })._unsubscribe !== undefined
+function modelListenerCounts(): readonly number[] {
+  return [CoreEvent.ModelChanged, CoreEvent.ModelProfileChanged].map((event) =>
+    coreEvents.listenerCount(event),
   );
 }
 
 /** Fail-fast read of the client activation constructed on the Config. */
-function requireAgentClient(config: Config): AgentClientContract {
-  const client = config.getAgentClient() as AgentClientContract | undefined;
-  if (client === undefined) {
-    throw new Error('isolated config did not construct an agent client');
-  }
-  return client;
-}
-
 /** The isolated Config threads to the runtime loader as profile.config. */
 function isolatedConfigFromLoaderCalls(
   runtimeLoaderCalls: ReadonlyArray<readonly unknown[]>,
@@ -118,21 +124,48 @@ describe('SubagentOrchestrator - isolated Config disposal', () => {
   function buildOrchestrator(options: {
     runtimeLoader: TestRuntimeLoader;
     scopeFactory: TestScopeFactory;
-  }): SubagentOrchestrator {
+  }): {
+    orchestrator: SubagentOrchestrator;
+    clients: readonly AgentClientContract[];
+  } {
+    const clients: AgentClientContract[] = [];
+    const factories = createAgentRuntimeFactoryBindings();
     const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
     const loadProfile = vi.fn().mockResolvedValue(profile);
-    return new SubagentOrchestrator({
+    const foregroundConfig1 = makeForegroundConfig();
+    const foregroundSettings1 = createSessionSettingsFixture(foregroundConfig1);
+    const orchestrator = new SubagentOrchestrator({
+      workspaceTrust: foregroundSettings1.workspaceTrust,
+      createChildSettings: () =>
+        foregroundSettings1.settingsOwner.createChildStore(),
+      readRunPolicy: () =>
+        foregroundSettings1.settingsOwner.readSubagentRunPolicy(),
+
+      instructions: emptyInstructionReads,
+      toolRegistry: fixtureToolSelection(),
+      runtimeFactoryBindings: {
+        ...factories,
+        agentClientFactory: (...args) => {
+          const client = factories.agentClientFactory(...args);
+          clients.push(client);
+          return client;
+        },
+      },
       subagentManager: { loadSubagent } as unknown as SubagentManager,
       profileManager: { loadProfile } as unknown as ProfileManager,
-      foregroundConfig: makeForegroundConfig(),
+      workspacePaths: fixturePaths(),
+      foregroundConfig: foregroundConfig1,
+      readMcpInstructions: () => undefined,
       scopeFactory: options.scopeFactory,
       runtimeLoader: options.runtimeLoader,
       messageBus: new MessageBus(),
     });
+    return { orchestrator, clients };
   }
 
   it('disposes the orchestrator-constructed isolated Config on the success path (result.dispose)', async () => {
     await withIsolatedConfigHome(async () => {
+      const listenerBaseline = modelListenerCounts();
       const runtimeBundle = createRuntimeBundle('dispose-success');
       const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
       const scope = {
@@ -143,7 +176,10 @@ describe('SubagentOrchestrator - isolated Config disposal', () => {
         .fn<typeof SubAgentScope.create>()
         .mockResolvedValue(scope);
 
-      const orchestrator = buildOrchestrator({ runtimeLoader, scopeFactory });
+      const { orchestrator, clients } = buildOrchestrator({
+        runtimeLoader,
+        scopeFactory,
+      });
       const result = await orchestrator.launch({
         name: subagentConfig.name,
         runConfig: { max_time_minutes: 8, max_turns: 12 },
@@ -154,15 +190,24 @@ describe('SubagentOrchestrator - isolated Config disposal', () => {
       );
       // Activation's refreshAuth constructed a real, subscribed client on the
       // isolated Config.
-      const client = requireAgentClient(isolatedConfig);
-      expect(agentClientSubscribed(client)).toBe(true);
+      expect(clients).toHaveLength(2);
+      expect(() => clients[0]?.assertConfig(isolatedConfig)).not.toThrow();
+      expect(
+        modelListenerCounts().map(
+          (count, index) => count - listenerBaseline[index],
+        ),
+      ).toStrictEqual([1, 1]);
 
       await result.dispose();
 
-      // Config.dispose() released the client's registry subscription: the
+      // Config.dispose() released the client's model-event listeners: the
       // success path previously never disposed this Config, leaving the
       // constructed client (and its subscription) alive.
-      expect(agentClientSubscribed(client)).toBe(false);
+      expect(
+        modelListenerCounts().map(
+          (count, index) => count - listenerBaseline[index],
+        ),
+      ).toStrictEqual([0, 0]);
 
       // Double dispose is safe (Config.dispose is idempotent here).
       await expect(result.dispose()).resolves.toBeUndefined();
@@ -171,13 +216,17 @@ describe('SubagentOrchestrator - isolated Config disposal', () => {
 
   it('disposes the isolated Config when scope creation fails after runtime assembly', async () => {
     await withIsolatedConfigHome(async () => {
+      const listenerBaseline = modelListenerCounts();
       const runtimeBundle = createRuntimeBundle('dispose-scope-failure');
       const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
       const scopeFactory = vi
         .fn<typeof SubAgentScope.create>()
         .mockRejectedValue(new Error('scope creation failed'));
 
-      const orchestrator = buildOrchestrator({ runtimeLoader, scopeFactory });
+      const { orchestrator, clients } = buildOrchestrator({
+        runtimeLoader,
+        scopeFactory,
+      });
       await expect(
         orchestrator.launch({
           name: subagentConfig.name,
@@ -186,15 +235,23 @@ describe('SubagentOrchestrator - isolated Config disposal', () => {
       ).rejects.toThrow('scope creation failed');
 
       // The original error surfaced; the isolated Config was still disposed.
-      const client = requireAgentClient(
-        isolatedConfigFromLoaderCalls(runtimeLoader.mock.calls),
-      );
-      expect(agentClientSubscribed(client)).toBe(false);
+      expect(clients).toHaveLength(2);
+      expect(() =>
+        clients[0]?.assertConfig(
+          isolatedConfigFromLoaderCalls(runtimeLoader.mock.calls),
+        ),
+      ).not.toThrow();
+      expect(
+        modelListenerCounts().map(
+          (count, index) => count - listenerBaseline[index],
+        ),
+      ).toStrictEqual([0, 0]);
     });
   });
 
   it('disposes the isolated Config when the runtime loader fails after activation', async () => {
     await withIsolatedConfigHome(async () => {
+      const listenerBaseline = modelListenerCounts();
       const runtimeLoader = vi
         .fn()
         .mockRejectedValue(new Error('runtime loader failed'));
@@ -202,7 +259,10 @@ describe('SubagentOrchestrator - isolated Config disposal', () => {
         .fn<typeof SubAgentScope.create>()
         .mockResolvedValue({} as unknown as SubAgentScope);
 
-      const orchestrator = buildOrchestrator({ runtimeLoader, scopeFactory });
+      const { orchestrator, clients } = buildOrchestrator({
+        runtimeLoader,
+        scopeFactory,
+      });
       await expect(
         orchestrator.launch({
           name: subagentConfig.name,
@@ -211,10 +271,17 @@ describe('SubagentOrchestrator - isolated Config disposal', () => {
       ).rejects.toThrow('runtime loader failed');
 
       // The original error surfaced; the isolated Config was still disposed.
-      const client = requireAgentClient(
-        isolatedConfigFromLoaderCalls(runtimeLoader.mock.calls),
-      );
-      expect(agentClientSubscribed(client)).toBe(false);
+      expect(clients).toHaveLength(2);
+      expect(() =>
+        clients[0]?.assertConfig(
+          isolatedConfigFromLoaderCalls(runtimeLoader.mock.calls),
+        ),
+      ).not.toThrow();
+      expect(
+        modelListenerCounts().map(
+          (count, index) => count - listenerBaseline[index],
+        ),
+      ).toStrictEqual([0, 0]);
     });
   });
 });

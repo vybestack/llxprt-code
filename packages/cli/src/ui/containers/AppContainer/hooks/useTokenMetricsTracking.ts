@@ -40,7 +40,8 @@ export interface TokenMetrics {
 interface UseTokenMetricsTrackingOptions {
   uiRuntime: UiRuntime;
   updateHistoryTokenCount: (count: number) => void;
-  recordingIntegrationRef: React.MutableRefObject<RecordingIntegration | null>;
+  recordingIntegrationRef?: React.MutableRefObject<RecordingIntegration | null>;
+  recordingOwner?: 'agent' | 'raw';
 }
 
 export interface UseTokenMetricsTrackingResult {
@@ -147,8 +148,11 @@ function useHistoryTokenListener(
  */
 function useRecordingSubscription(
   uiRuntime: UiRuntime,
-  recordingIntegrationRef: React.MutableRefObject<RecordingIntegration | null>,
+  recordingIntegrationRef:
+    | React.MutableRefObject<RecordingIntegration | null>
+    | undefined,
   tokenLogger: DebugLogger,
+  recordingOwner: 'agent' | 'raw' | undefined,
 ): void {
   const recordingSubscribedServiceRef = useRef<unknown>(null);
 
@@ -158,7 +162,7 @@ function useRecordingSubscription(
     // recording integrations. The polling interval below handles this: each tick checks
     // recordingIntegrationRef.current?.onHistoryServiceReplaced, so a recording
     // integration that arrives after mount is automatically picked up on the next tick.
-    if (!recordingIntegrationRef.current) {
+    if (recordingOwner === 'agent' || !recordingIntegrationRef?.current) {
       return undefined;
     }
 
@@ -184,7 +188,7 @@ function useRecordingSubscription(
       intervalCleared = true;
       recordingSubscribedServiceRef.current = null;
     };
-  }, [uiRuntime, recordingIntegrationRef, tokenLogger]);
+  }, [uiRuntime, recordingIntegrationRef, tokenLogger, recordingOwner]);
 }
 
 function useTokenMetricsPoll(
@@ -249,6 +253,7 @@ export function useTokenMetricsTracking({
   uiRuntime,
   updateHistoryTokenCount,
   recordingIntegrationRef,
+  recordingOwner,
 }: UseTokenMetricsTrackingOptions): UseTokenMetricsTrackingResult {
   const runtime = useRuntimeApi();
   const tokenLogger = useMemo(
@@ -257,7 +262,12 @@ export function useTokenMetricsTracking({
   );
 
   useHistoryTokenListener(uiRuntime, updateHistoryTokenCount, tokenLogger);
-  useRecordingSubscription(uiRuntime, recordingIntegrationRef, tokenLogger);
+  useRecordingSubscription(
+    uiRuntime,
+    recordingIntegrationRef,
+    tokenLogger,
+    recordingOwner,
+  );
   const tokenMetrics = useTokenMetricsPoll(runtime);
 
   return { tokenMetrics };

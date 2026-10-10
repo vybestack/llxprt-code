@@ -337,10 +337,7 @@ export function useCommandCompletion(
   shellModeActive: boolean,
   config?: CliUiRuntime,
 ): UseCommandCompletionReturn {
-  const dirs = useMemo(
-    () => config?.getWorkspaceContext().getDirectories() ?? [cwd],
-    [config, cwd],
-  );
+  const dirs = useMemo(() => config?.directories() ?? [cwd], [config, cwd]);
 
   const completion = useCompletion();
   const [cursorRow, cursorCol] = buffer.cursor;
@@ -379,6 +376,7 @@ export function useCommandCompletion(
   const promptCompletion = usePromptCompletion({
     buffer,
     config,
+    agent: commandContext.services.agent ?? undefined,
     enabled: completionMode === CompletionMode.PROMPT,
   });
 

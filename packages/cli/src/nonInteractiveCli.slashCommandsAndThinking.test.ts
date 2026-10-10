@@ -1,16 +1,29 @@
+import { runHeadlessPolicyFixture } from './__tests__/headless-policy-fixture.js';
+import { makeBootstrapProfileArgs } from './test-utils/bootstrap-config.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 
 import { automock } from '@vybestack/llxprt-code-test-utils';
-import type { Config } from '@vybestack/llxprt-code-core';
 import {
+  Config,
   shutdownTelemetry,
   isTelemetrySdkInitialized,
   DebugLogger,
 } from '@vybestack/llxprt-code-core';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import {
+  OpenAIProvider,
+  ProviderManager,
+} from '@vybestack/llxprt-code-providers';
+import {} from '@vybestack/llxprt-code-providers/runtime.js';
+import { beginCliRuntimeRegistration } from '@vybestack/llxprt-code-providers/runtime/cliForegroundRuntime.js';
+import { setCommand } from './ui/commands/setCommand.js';
+import { buildCliStyleConfig } from '../../agents/src/api/__tests__/helpers/buildCliStyleConfig.js';
 import {
   type Agent,
   type AgentEvent,
@@ -30,6 +43,7 @@ import {
   type Mock,
 } from 'bun:test';
 import type { LoadedSettings } from './config/settings.js';
+import type { CommandContext } from './ui/commands/types.js';
 import type { BootstrapProfileArgs } from './config/profileBootstrap.js';
 
 // Captures the resolved query handed to the fake Agent's stream(), and the
@@ -59,22 +73,51 @@ type ConfigWithActivationParams = Config & {
   _bootstrapArgs?: BootstrapProfileArgs;
 };
 
-function makeBootstrapProfileArgs(
-  overrides: Partial<BootstrapProfileArgs> = {},
-): BootstrapProfileArgs {
-  return {
-    profileName: null,
-    profileJson: null,
-    providerOverride: null,
-    modelOverride: null,
-    keyOverride: null,
-    keyfileOverride: null,
-    keyNameOverride: null,
-    baseurlOverride: null,
-    setOverrides: null,
-    debug: null,
-    ...overrides,
-  };
+function makeConfig(sessionId: string): {
+  config: Config;
+  manager: ProviderManager;
+  settingsService: SettingsService;
+  settingsOwner: SessionSettingsOwner;
+} {
+  const settingsService = new SettingsService();
+  const config = new Config({
+    cwd: process.cwd(),
+    targetDir: process.cwd(),
+    debugMode: false,
+    sessionId,
+    model: PLACEHOLDER_MODEL,
+    provider: 'openai',
+  });
+  const settingsOwner = new SessionSettingsOwner(settingsService);
+  settingsOwner.bindTelemetry(config);
+  settingsOwner.initializeProviderSelection('openai', PLACEHOLDER_MODEL);
+  const manager = new ProviderManager({ config, settingsService });
+  manager.registerProvider(new OpenAIProvider(undefined));
+  manager.setActiveProvider('openai');
+  configureProviderRuntimeFactories(config, manager);
+  fixtureRoots.push({ config, manager, settingsOwner });
+  return { config, manager, settingsOwner, settingsService };
+}
+
+let mockProviderManager: ProviderManager;
+let mockRuntimeSettings: {
+  owner: SessionSettingsOwner;
+  store: SettingsService;
+};
+const fixtureRoots: Array<{
+  config: Config;
+  manager: ProviderManager;
+  settingsOwner: SessionSettingsOwner;
+}> = [];
+
+function runWithMcpBus(
+  params: Parameters<typeof runNonInteractive>[0],
+): Promise<void> {
+  return runHeadlessPolicyFixture(
+    params,
+    mockRuntimeSettings,
+    mockProviderManager,
+  );
 }
 
 const original = { ...(await import('@vybestack/llxprt-code-agents')) };
@@ -102,17 +145,13 @@ void vi.mock('./services/CommandService.js', () => ({
   },
 }));
 
-/**
- * Builds a fake Agent whose stream() records its input and yields the events
- * currently staged in agentState.events. Drives runNonInteractive end-to-end
- * without a real Agent/Config round-trip.
- */
-// Only `stream` and `dispose` are exercised by runNonInteractive; the cast
-// back to the full Agent interface is needed because fromConfig() is typed to
-// return a complete Agent. If production code calls a new Agent method, extend
-// this fake accordingly.
+// Direct-call streaming cases use a fake Agent; the owner command case uses a real one.
 function buildFakeAgent(): Agent {
   return {
+    getProvider: () => 'openai',
+    getModel: () => PLACEHOLDER_MODEL,
+    getCurrentSequenceModel: () => null,
+    getActiveProfileName: () => null,
     stream: (input: AgentInput, opts?: TurnOptions) => {
       agentState.streamInput = input;
       agentState.streamOpts = opts ?? null;
@@ -122,6 +161,8 @@ function buildFakeAgent(): Agent {
         }
       })();
     },
+    getEphemeralSetting: (key: string) =>
+      mockRuntimeSettings.owner.readNamedParameter(key),
     dispose: vi.fn().mockResolvedValue(undefined),
   } as unknown as Agent;
 }
@@ -166,36 +207,15 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     agentState.streamOpts = null;
     agentState.events = [{ type: 'done', reason: 'stop' }];
 
-    mockConfig = {
-      initialize: vi.fn().mockResolvedValue(undefined),
-      getMaxSessionTurns: vi.fn().mockReturnValue(10),
-      getIdeMode: vi.fn().mockReturnValue(false),
-      getContentGeneratorConfig: vi.fn().mockReturnValue({}),
-      getDebugMode: vi.fn().mockReturnValue(false),
-      getProvider: vi.fn().mockReturnValue(undefined),
-      getModel: vi.fn().mockReturnValue(PLACEHOLDER_MODEL),
-      getProviderManager: vi.fn().mockReturnValue({
-        hasActiveProvider: vi.fn().mockReturnValue(true),
-        getActiveProviderName: vi.fn().mockReturnValue('openai'),
-      }),
-      getOutputFormat: vi.fn().mockReturnValue('text'),
-      getQuiet: vi.fn().mockReturnValue(false),
-      getFolderTrust: vi.fn().mockReturnValue(false),
-      isTrustedFolder: vi.fn().mockReturnValue(false),
-      getProjectRoot: vi.fn().mockReturnValue('/tmp/test-project'),
-      getSessionId: vi.fn().mockReturnValue('test-session'),
-      getEphemeralSetting: vi.fn().mockReturnValue(undefined),
-      getSettingsService: vi.fn().mockReturnValue({
-        get: vi.fn(),
-        set: vi.fn(),
-        // #2534 D4: the degraded identity path calls getCurrentProfileName()
-        // directly (optional-call probe removed); the double provides it.
-        getCurrentProfileName: vi.fn().mockReturnValue(null),
-      }),
-      storage: {
-        getDir: vi.fn().mockReturnValue('/tmp/.llxprt'),
-      },
-    } as unknown as Config;
+    const builtOwner = makeConfig('test-session');
+    mockConfig = builtOwner.config;
+    mockProviderManager = builtOwner.manager;
+    mockRuntimeSettings = {
+      owner: builtOwner.settingsOwner,
+      store: builtOwner.settingsService,
+    };
+    vi.spyOn(mockConfig, 'getProvider').mockReturnValue(undefined);
+    vi.spyOn(mockConfig, 'getModel').mockReturnValue(PLACEHOLDER_MODEL);
 
     mockSettings = {
       system: { path: '', settings: {} },
@@ -228,7 +248,12 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     );
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    for (const root of fixtureRoots.splice(0)) {
+      await root.settingsOwner.dispose();
+      root.manager.dispose();
+      await root.config.dispose();
+    }
     // Bun's restoreAllMocks restores implementations but leaves the call
     // history of module mocks in place, so clear it explicitly.
     vi.clearAllMocks();
@@ -261,7 +286,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       { type: 'done', reason: 'stop' },
     ];
 
-    await runNonInteractive({
+    await runWithMcpBus({
       config: mockConfig,
       settings: mockSettings,
       input: rawInput,
@@ -294,7 +319,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       { type: 'done', reason: 'stop' },
     ];
 
-    await runNonInteractive({
+    await runWithMcpBus({
       config: mockConfig,
       settings: mockSettings,
       input: '/testcommand',
@@ -322,7 +347,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     mockGetCommands.mockReturnValue([mockCommand]);
 
     await expect(
-      runNonInteractive({
+      runWithMcpBus({
         config: mockConfig,
         settings: mockSettings,
         input: '/confirm',
@@ -346,7 +371,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     const { fromConfig } = await import('@vybestack/llxprt-code-agents');
 
     await expect(
-      runNonInteractive({
+      runWithMcpBus({
         config: mockConfig,
         settings: mockSettings,
         input: '/confirm',
@@ -357,6 +382,83 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     );
 
     expect(fromConfig as Mock<typeof fromConfig>).not.toHaveBeenCalled();
+  });
+
+  it('rejects runtime access from a headless command without an Agent owner', async () => {
+    mockGetCommands.mockReturnValue([
+      {
+        name: 'runtime',
+        description: 'requires runtime state',
+        action: (context: CommandContext) => {
+          context.runtimeApi.getActiveModelName();
+          return { type: 'submit_prompt', content: 'unreachable' };
+        },
+      },
+    ]);
+    await expect(
+      runWithMcpBus({
+        config: mockConfig,
+        settings: mockSettings,
+        input: '/runtime',
+        prompt_id: 'headless-owner-required',
+      }),
+    ).rejects.toThrow('Headless command requires an Agent-owned runtime API.');
+  });
+
+  it('runs a real /set command against the supplied headless Agent owner rather than another ambient runtime', async () => {
+    const {
+      config: foreign,
+      manager: foreignManager,
+      settingsService: foreignSettings,
+      settingsOwner: foreignOwner,
+    } = makeConfig('headless-foreign-agent');
+    foreignOwner.writeUserParameter('emojifilter', 'allowed');
+    const foreignRegistration = beginCliRuntimeRegistration(
+      foreignSettings,
+      foreign,
+      { runtimeId: 'headless-foreign-agent' },
+    );
+    foreignRegistration.expectManager(foreignManager);
+    mockGetCommands.mockReturnValue([setCommand]);
+    const built = await buildCliStyleConfig('plain-text.jsonl');
+    const agent = await original.fromConfig({
+      settingsService: built.settingsService,
+      settingsOwner: built.settingsOwner,
+      providerManager: built.providerManager,
+      config: built.config,
+      mcpRuntime: built.mcpRuntime,
+      messageBus: built.messageBus,
+      policyOwner: built.policyOwner,
+      sessionId: built.config.getSessionId(),
+    });
+    const { fromConfig } = await import('@vybestack/llxprt-code-agents');
+    try {
+      await expect(
+        runNonInteractive({
+          config: built.config,
+          runtimeSettings: {
+            owner: built.settingsOwner,
+            store: built.settingsService,
+          },
+          settings: mockSettings,
+          agent,
+          runtimeMessageBus: built.messageBus,
+          input: '/set emojifilter error',
+          prompt_id: 'headless-owned-set',
+        }),
+      ).rejects.toThrow(
+        'Exiting due to command result that is not supported in non-interactive mode.',
+      );
+      expect(built.settingsOwner.readNamedParameter('emojifilter')).toBe(
+        'error',
+      );
+      expect(foreignOwner.readNamedParameter('emojifilter')).toBe('allowed');
+      expect(fromConfig as Mock<typeof fromConfig>).not.toHaveBeenCalled();
+    } finally {
+      await agent.dispose();
+      await built.cleanup();
+      foreignRegistration.dispose();
+    }
   });
 
   it('creates and disposes the Agent for a slash command that submits a prompt', async () => {
@@ -377,7 +479,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       { type: 'done', reason: 'stop' },
     ];
 
-    await runNonInteractive({
+    await runWithMcpBus({
       config: mockConfig,
       settings: mockSettings,
       input: '/submits',
@@ -385,6 +487,8 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     });
 
     expect(fromConfig as Mock<typeof fromConfig>).toHaveBeenCalledTimes(1);
+    const options = (fromConfig as Mock<typeof fromConfig>).mock.calls[0][0];
+    expect(options.mcpRuntime?.messageBus).toBe(options.messageBus);
     expect(fakeAgent.dispose).toHaveBeenCalledTimes(1);
   });
 
@@ -401,7 +505,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     configWithParams._cliModelParams = { top_p: 0.9 };
     agentState.events = [{ type: 'done', reason: 'stop' }];
 
-    await runNonInteractive({
+    await runWithMcpBus({
       config: mockConfig,
       settings: mockSettings,
       input: 'hello',
@@ -435,7 +539,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     });
     agentState.events = [{ type: 'done', reason: 'stop' }];
 
-    await runNonInteractive({
+    await runWithMcpBus({
       config: mockConfig,
       settings: mockSettings,
       input: 'hello',
@@ -464,7 +568,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     );
     agentState.events = [{ type: 'done', reason: 'stop' }];
 
-    await runNonInteractive({
+    await runWithMcpBus({
       config: mockConfig,
       settings: mockSettings,
       input: 'hello',
@@ -488,7 +592,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       { type: 'done', reason: 'stop' },
     ];
 
-    await runNonInteractive({
+    await runWithMcpBus({
       config: mockConfig,
       settings: mockSettings,
       input: '/unknowncommand',
@@ -514,7 +618,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     mockGetCommands.mockReturnValue([mockCommand]);
 
     await expect(
-      runNonInteractive({
+      runWithMcpBus({
         config: mockConfig,
         settings: mockSettings,
         input: '/noaction',
@@ -542,7 +646,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       { type: 'done', reason: 'stop' },
     ];
 
-    await runNonInteractive({
+    await runWithMcpBus({
       config: mockConfig,
       settings: mockSettings,
       input: '/testargs arg1 arg2',
@@ -585,7 +689,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       { type: 'done', reason: 'stop' },
     ];
 
-    await runNonInteractive({
+    await runWithMcpBus({
       config: mockConfig,
       settings: mockSettings,
       input: 'List the files',
@@ -609,7 +713,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       { type: 'done', reason: 'stop' },
     ];
 
-    await runNonInteractive({
+    await runWithMcpBus({
       config: mockConfig,
       settings: mockSettings,
       input: 'test query',
@@ -639,7 +743,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       { type: 'done', reason: 'stop' },
     ];
 
-    await runNonInteractive({
+    await runWithMcpBus({
       config: mockConfig,
       settings: mockSettings,
       input: 'test query',
@@ -694,16 +798,11 @@ describe('runNonInteractive - slash commands and thinking output', () => {
   });
 
   async function verifyShouldFilterEmojisFromThinkingBlocksInAutoMode() {
-    const mockGetEphemeralSetting = vi.fn((key: string) => {
-      if (key === 'emojifilter') return 'auto';
-      if (key === 'reasoning.includeInResponse') return true;
-      return undefined;
-    });
-    (
-      mockConfig.getEphemeralSetting as Mock<
-        typeof mockConfig.getEphemeralSetting
-      >
-    ).mockImplementation(mockGetEphemeralSetting);
+    mockRuntimeSettings.owner.writeUserParameter('emojifilter', 'auto');
+    mockRuntimeSettings.owner.writeUserParameter(
+      'reasoning.includeInResponse',
+      true,
+    );
 
     agentState.events = [
       {
@@ -717,7 +816,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       { type: 'done', reason: 'stop' },
     ];
 
-    await runNonInteractive({
+    await runWithMcpBus({
       config: mockConfig,
       settings: mockSettings,
       input: 'Test input',
@@ -748,16 +847,11 @@ describe('runNonInteractive - slash commands and thinking output', () => {
   });
 
   async function verifyShouldSuppressThinkingBlocksWithEmojisInErrorMode() {
-    const mockGetEphemeralSetting = vi.fn((key: string) => {
-      if (key === 'emojifilter') return 'error';
-      if (key === 'reasoning.includeInResponse') return true;
-      return undefined;
-    });
-    (
-      mockConfig.getEphemeralSetting as Mock<
-        typeof mockConfig.getEphemeralSetting
-      >
-    ).mockImplementation(mockGetEphemeralSetting);
+    mockRuntimeSettings.owner.writeUserParameter('emojifilter', 'error');
+    mockRuntimeSettings.owner.writeUserParameter(
+      'reasoning.includeInResponse',
+      true,
+    );
     agentState.events = [
       {
         type: 'thinking',
@@ -769,7 +863,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       { type: 'text', text: 'Here is my answer' },
       { type: 'done', reason: 'stop' },
     ];
-    await runNonInteractive({
+    await runWithMcpBus({
       config: mockConfig,
       settings: mockSettings,
       input: 'Test input',
@@ -791,16 +885,11 @@ describe('runNonInteractive - slash commands and thinking output', () => {
   });
 
   async function verifyShouldPassThroughThinkingBlocksWhenEmojifilterIsAllowed() {
-    const mockGetEphemeralSetting = vi.fn((key: string) => {
-      if (key === 'emojifilter') return 'allowed';
-      if (key === 'reasoning.includeInResponse') return true;
-      return undefined;
-    });
-    (
-      mockConfig.getEphemeralSetting as Mock<
-        typeof mockConfig.getEphemeralSetting
-      >
-    ).mockImplementation(mockGetEphemeralSetting);
+    mockRuntimeSettings.owner.writeUserParameter('emojifilter', 'allowed');
+    mockRuntimeSettings.owner.writeUserParameter(
+      'reasoning.includeInResponse',
+      true,
+    );
 
     agentState.events = [
       {
@@ -814,7 +903,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       { type: 'done', reason: 'stop' },
     ];
 
-    await runNonInteractive({
+    await runWithMcpBus({
       config: mockConfig,
       settings: mockSettings,
       input: 'Test input',

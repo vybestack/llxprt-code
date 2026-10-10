@@ -33,12 +33,6 @@ function containsThinkingWithoutToolCall(content: IContent): boolean {
   );
 }
 
-function getReasoningContextSetting(key: string): unknown {
-  if (key === 'reasoning.includeInContext') return true;
-  if (key === 'reasoning.stripFromContext') return 'none';
-  return undefined;
-}
-
 describe('OpenAIProvider DeepSeek-reasoner reasoning+tool_calls co-emission (issue #1142)', () => {
   let provider: OpenAIProvider;
   let settingsService: SettingsService;
@@ -375,8 +369,12 @@ describe('OpenAIProvider DeepSeek-reasoner reasoning+tool_calls co-emission (iss
     const messages = buildMessagesWithReasoning(
       [combinedContent],
       {
-        settings: { get: getReasoningContextSetting },
-        invocation: { requestId: 'test', timestamp: Date.now() },
+        invocation: {
+          ephemerals: {
+            'reasoning.includeInContext': true,
+            'reasoning.stripFromContext': 'none',
+          },
+        },
         resolved: {
           model: 'deepseek-reasoner',
           authToken: { token: 'test', type: 'api-key' },
@@ -435,8 +433,12 @@ describe('OpenAIProvider DeepSeek-reasoner reasoning+tool_calls co-emission (iss
     const messages = buildMessagesWithReasoning(
       [thinkingContent, toolCallContent],
       {
-        settings: { get: getReasoningContextSetting },
-        invocation: { requestId: 'test', timestamp: Date.now() },
+        invocation: {
+          ephemerals: {
+            'reasoning.includeInContext': true,
+            'reasoning.stripFromContext': 'none',
+          },
+        },
         resolved: {
           model: 'deepseek-reasoner',
           authToken: { token: 'test', type: 'api-key' },

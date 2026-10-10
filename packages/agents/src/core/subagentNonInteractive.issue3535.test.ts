@@ -1,8 +1,19 @@
+import { createChatPolicyFixture } from './__tests__/session-policy-fixture.js';
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
+import { CoreToolRegistryHostAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreToolRegistryHostAdapter.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+
+import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
+
+import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
+const fixturePaths = installTestWorkspacePaths({
+  targetDir: process.cwd(),
+  isTrusted: () => true,
+});
 
 /**
  * Issue #3535 — a subagent whose tool dispatch hits a fatal tool error
@@ -20,7 +31,6 @@
  * which is how the structured tool_response pairing is verified.
  */
 
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import type {
   ContentBlock,
@@ -122,7 +132,7 @@ class UppercaseToolInvocation extends BaseToolInvocation<
     };
   }
 }
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeModel } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeModel.js';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
@@ -141,8 +151,6 @@ import {
   getScopeLocalFuncDefs,
   createToolExecutionConfig,
 } from './subagentRuntimeSetup.js';
-import { createSchedulerRegistryDelegate } from './__tests__/scheduler-registry-test-helpers.js';
-import { CoreToolScheduler } from './coreToolScheduler.js';
 import { SubAgentScope } from './subagent.js';
 import { classifyToolCompletions } from './subagentToolProcessing.js';
 import {
@@ -174,76 +182,43 @@ const OUTPUT_CONFIG: OutputConfig = {
 // reused session label.
 let sessionCounter = 0;
 
-function createEmptyRegistryConfig(): Config {
+function createEmptyRegistryConfig() {
   const policyEngine = new PolicyEngine({});
   policyEngine.setApprovalMode(ApprovalMode.YOLO);
   const messageBus = new MessageBus(policyEngine, false);
   const messageBusAdapter = new CoreMessageBusAdapter(messageBus);
-  // Issue #2616: prompt assembly reads settings via config.getSettingsService().
-  // An empty service reproduces the old ambient-absent defaults.
-  const settingsService = new SettingsService();
-  const toolRegistry = new ToolRegistry(
-    {
-      getEphemeralSettings: () => ({}),
-      getCoreTools: () => [],
-      getExcludeTools: () => [],
-    },
-    messageBusAdapter,
-    new SettingsService(),
-  );
-  const sessionId = `issue-3535-session-${sessionCounter++}`;
-  const fixture = {
-    getSessionId: () => sessionId,
-    getUsageStatisticsEnabled: () => false,
-    getDebugMode: () => false,
-    getApprovalMode: () => ApprovalMode.YOLO,
-    getEphemeralSettings: () => ({}),
-    getEphemeralSetting: () => undefined,
-    getAllowedTools: () => [],
-    getExcludeTools: () => [],
-    getContentGeneratorConfig: () => ({ model: 'test-model' }),
-    getModel: () => 'test-model',
-    getToolRegistry: () => toolRegistry,
-    getMessageBus: () => messageBus,
-    getPolicyEngine: () => policyEngine,
-    getTelemetryLogPromptsEnabled: () => false,
-    getImagePayloadBudgetBytes: () => 50_000,
-    isInteractive: () => false,
-    // Prompt-assembly path (createChatObject → buildSystemInstruction →
-    // resolvePromptMemory). JIT is disabled, so user memory is the empty
-    // fixture and the JIT lookup short-circuits.
-    isJitContextEnabled: () => false,
-    getUserMemory: () => undefined,
-    getGlobalMemory: () => undefined,
-    getCoreMemory: () => undefined,
-    getJitMemoryForPath: async () => undefined,
-    getMcpInstructions: () => undefined,
-    getWorkingDir: () => process.cwd(),
-    getSettingsService: () => settingsService,
-    // Forward the options object verbatim, mirroring production
-    // (packages/agents/src/api/runtimeFactories.ts). The factory previously
-    // cherry-picked constructor args and DROPPED onAllToolCallsComplete /
-    // onToolCallsUpdate / outputUpdateHandler, so a scheduler born in a fresh
-    // session never fired onAllToolCallsComplete (test deadlock, issue #3535).
-    getToolSchedulerFactory:
-      () => (options: ConstructorParameters<typeof CoreToolScheduler>[0]) =>
-        new CoreToolScheduler(options),
-  };
-  const delegate = createSchedulerRegistryDelegate({
-    config: fixture as unknown as Config,
-    messageBus,
-    toolRegistry,
-    createScheduler: async (schedulerOptions) =>
-      fixture.getToolSchedulerFactory()({
-        config: fixture as unknown as Config,
-        messageBus,
-        toolRegistry,
-        toolContextInteractiveMode: schedulerOptions.interactiveMode ?? true,
-        getPreferredEditor: () => undefined,
-        onEditorClose: () => {},
-      }),
+  const config = new Config({
+    sessionId: `issue-3535-session-${sessionCounter++}`,
+    model: 'test-model',
+    targetDir: process.cwd(),
+    cwd: process.cwd(),
+    debugMode: false,
+    approvalMode: ApprovalMode.YOLO,
+    imagePayloadBudgetBytes: 50000,
   });
-  return { ...fixture, ...delegate } as unknown as Config;
+  const root = createSessionSettingsFixture(config);
+  const toolRegistry = new ToolRegistry(
+    new CoreToolRegistryHostAdapter(config),
+    messageBusAdapter,
+    () => root.settingsOwner.readRegistryPolicy(config.getExcludeTools() ?? []),
+  );
+
+  return {
+    messageBus,
+    config,
+    executor: {
+      telemetry: root.settingsOwner.telemetry,
+      getSessionId: () => config.getSessionId(),
+      getTelemetryLogPromptsEnabled: () =>
+        config.getTelemetryLogPromptsEnabled(),
+      getExcludeTools: () => config.getExcludeTools(),
+      getToolRegistry: () => toolRegistry,
+      readExecutionPolicy: () => root.settingsOwner.readToolExecutionPolicy(),
+      readGovernance: () =>
+        root.settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
+    },
+    toolRegistry,
+  };
 }
 
 function toolCallBlock(
@@ -283,7 +258,7 @@ async function runDirectNonInteractive(
   readonly requestCount: number;
   readonly requestContents: readonly IContent[][];
 }> {
-  const config = createEmptyRegistryConfig();
+  const { config, executor, messageBus } = createEmptyRegistryConfig();
   const baseBundle = createStatelessRuntimeBundle();
   const output: OutputObject = {
     terminate_reason: SubagentTerminateMode.ERROR,
@@ -302,6 +277,7 @@ async function runDirectNonInteractive(
   let requestCount = 0;
   const requestContents: IContent[][] = [];
   const chat = {
+    ...createChatPolicyFixture(),
     // `message` is the block list of the turn being sent (the non-interactive
     // runner passes currentMessages[0].blocks, which may be empty).
     sendMessageStream: async (params: {
@@ -342,10 +318,8 @@ async function runDirectNonInteractive(
       config,
       runConfig: defaultRunConfig,
       outputConfig: options.outputConfig,
-      toolExecutorContext: config,
-      messageBus: (
-        config as unknown as { getMessageBus: () => MessageBus }
-      ).getMessageBus(),
+      toolExecutorContext: executor,
+      messageBus,
     },
     () => undefined,
   );
@@ -408,9 +382,9 @@ async function runInteractiveDirect(responses: readonly IContent[]): Promise<{
   readonly output: OutputObject;
   readonly requestContents: readonly IContent[][];
 }> {
-  const config = createEmptyRegistryConfig();
-  config.getToolRegistry().registerTool(new UppercaseTool());
-  config.getToolRegistry().registerTool(new RuntimeDisabledTool());
+  const { config, toolRegistry, messageBus } = createEmptyRegistryConfig();
+  toolRegistry.registerTool(new UppercaseTool());
+  toolRegistry.registerTool(new RuntimeDisabledTool());
   const requests: RuntimeGenerateChatOptions[] = [];
   const provider = runtimeProviderFor(responses, requests);
   // The ChatSession resolves its provider via adapter.getActiveProvider()
@@ -433,13 +407,7 @@ async function runInteractiveDirect(responses: readonly IContent[]): Promise<{
     history: new HistoryService(),
     providerAdapter,
   });
-  const toolRegistry = config.getToolRegistry();
-  const toolExecutorContext = createToolExecutionConfig(
-    bundle,
-    toolRegistry,
-    config,
-    (config as unknown as { getMessageBus: () => MessageBus }).getMessageBus(),
-  );
+  const toolExecutorContext = createToolExecutionConfig(bundle, toolRegistry);
   const scope = new (SubAgentScope as unknown as new (
     ...args: unknown[]
   ) => SubAgentScope)(
@@ -452,7 +420,10 @@ async function runInteractiveDirect(responses: readonly IContent[]): Promise<{
     toolExecutorContext,
     async () => [],
     config,
-    (config as unknown as { getMessageBus: () => MessageBus }).getMessageBus(),
+    fixturePaths(),
+    () => undefined,
+    emptyInstructionReads,
+    messageBus,
     undefined,
     OUTPUT_CONFIG,
     undefined,

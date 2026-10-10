@@ -1,9 +1,12 @@
+import type { ProviderRequestDiagnostics } from './providerRequestDiagnostics.js';
+import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { RuntimeTokenizerFactory } from './contracts/RuntimeTokenizerFactory.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 import { createHistoryProviderFileBindingStore } from '../services/history/provider-file-binding.js';
 import type { Config } from '../config/config.js';
@@ -13,15 +16,14 @@ import { RequestMediaResolver } from '../storage/request-media-resolver.js';
 import {
   hasToolSchema,
   resolveToolDescription,
-  type ToolRegistry,
-  buildToolGovernance,
+  type ToolSelection,
   isToolBlocked,
   type ToolGovernance,
 } from '@vybestack/llxprt-code-tools';
 import type { RuntimeProviderManager } from './contracts/RuntimeProviderManager.js';
 import {
   createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
+  createTelemetryAdapter,
 } from './runtimeAdapters.js';
 import type {
   AgentRuntimeContext,
@@ -29,10 +31,11 @@ import type {
   AgentRuntimeTelemetryAdapter,
   ToolRegistryView,
   ReadonlySettingsSnapshot,
+  PrepareProviderInvocation,
 } from './AgentRuntimeContext.js';
 import type { AgentRuntimeState } from './AgentRuntimeState.js';
 import { createAgentRuntimeContext } from './createAgentRuntimeContext.js';
-import type { ProviderRuntimeContext } from './providerRuntimeContext.js';
+import type { ProviderRequestCollaborators } from './providerRuntimeContext.js';
 import {
   createContentGenerator,
   type ContentGenerator,
@@ -40,12 +43,21 @@ import {
 } from '../core/contentGenerator.js';
 
 export interface AgentRuntimeProfileSnapshot {
+  readonly promptEstimator?: Pick<
+    RuntimeTokenizerFactory,
+    'estimatePrompt' | 'claimsModel' | 'getEstimatorFamily'
+  >;
   config: Config;
+  requestDiagnostics?: ProviderRequestDiagnostics;
+  telemetry: RootTelemetry;
   state: AgentRuntimeState;
   settings: ReadonlySettingsSnapshot;
-  providerRuntime: ProviderRuntimeContext;
+  providerRuntime: ProviderRequestCollaborators;
+  prepareProviderInvocation: PrepareProviderInvocation;
+  readRuntimeSettings?: () => ReadonlySettingsSnapshot;
+  readToolGovernance: () => ToolGovernance;
   contentGeneratorConfig?: ContentGeneratorConfig;
-  toolRegistry?: ToolRegistry;
+  toolRegistry?: ToolSelection;
   providerManager?: RuntimeProviderManager;
 }
 
@@ -54,7 +66,6 @@ export interface AgentRuntimeLoaderOverrides {
   telemetryAdapter?: AgentRuntimeTelemetryAdapter;
   toolsView?: ToolRegistryView;
   historyService?: HistoryService;
-  mediaStore?: LocalMediaStore;
   mediaAdmission?: MediaAdmissionService;
   mediaResolver?: RequestMediaResolver;
   contentGenerator?: ContentGenerator;
@@ -63,18 +74,20 @@ export interface AgentRuntimeLoaderOverrides {
 
 export interface AgentRuntimeLoaderOptions {
   profile: AgentRuntimeProfileSnapshot;
+  mediaStore: LocalMediaStore;
   overrides?: AgentRuntimeLoaderOverrides;
   signal?: AbortSignal;
 }
 
 export interface AgentRuntimeLoaderResult {
+  telemetryRoot: RootTelemetry;
   runtimeContext: AgentRuntimeContext;
   history: HistoryService;
   providerAdapter: AgentRuntimeProviderAdapter;
   telemetryAdapter: AgentRuntimeTelemetryAdapter;
   toolsView: ToolRegistryView;
   contentGenerator: ContentGenerator;
-  toolRegistry?: ToolRegistry;
+  toolRegistry?: ToolSelection;
   settingsSnapshot?: ReadonlySettingsSnapshot;
 }
 
@@ -94,47 +107,17 @@ function hydrateContentGeneratorConfig(
   profile: AgentRuntimeProfileSnapshot,
   contentConfig: ContentGeneratorConfig,
 ): ContentGeneratorConfig {
-  const providerManager =
-    contentConfig.providerManager ??
-    profile.providerManager ??
-    profile.config.getProviderManager();
-  const configFactory =
-    providerManager == null
-      ? undefined
-      : profile.config.getContentGeneratorFactory();
-  const contentGeneratorFactory =
-    contentConfig.contentGeneratorFactory ?? configFactory;
-
-  if (providerManager == null) {
-    return contentConfig;
-  }
+  const contentGeneratorFactory = contentConfig.contentGeneratorFactory;
 
   return {
     ...contentConfig,
-    providerManager,
     ...(contentGeneratorFactory == null ? {} : { contentGeneratorFactory }),
   };
 }
 
-function buildToolGovernanceFromProfile(
-  profile: AgentRuntimeProfileSnapshot,
-): ToolGovernance {
-  return buildToolGovernance({
-    getEphemeralSettings: () => ({
-      ...(Array.isArray(profile.settings.tools?.allowed)
-        ? { 'tools.allowed': profile.settings.tools.allowed }
-        : {}),
-      ...(Array.isArray(profile.settings.tools?.disabled)
-        ? { 'tools.disabled': profile.settings.tools.disabled }
-        : {}),
-    }),
-    getExcludeTools: () => profile.config.getExcludeTools(),
-  });
-}
-
 function createFilteredToolRegistryView(
-  registry: ToolRegistry | undefined,
-  governance: ToolGovernance,
+  registry: ToolSelection | undefined,
+  readGovernance: () => ToolGovernance,
 ): ToolRegistryView {
   if (!registry) {
     return {
@@ -143,16 +126,16 @@ function createFilteredToolRegistryView(
     };
   }
 
-  const getTools = (): ReturnType<ToolRegistry['getAllTools']> =>
+  const getTools = (): ReturnType<ToolSelection['getAllTools']> =>
     registry.getAllTools();
 
   return {
     listToolNames: () =>
       getTools()
-        .filter((tool) => !isToolBlocked(tool.name, governance))
+        .filter((tool) => !isToolBlocked(tool.name, readGovernance()))
         .map((tool) => tool.name),
     getToolMetadata: (name) => {
-      if (isToolBlocked(name, governance)) {
+      if (isToolBlocked(name, readGovernance())) {
         return undefined;
       }
       const tool = getTools().find((candidate) => candidate.name === name);
@@ -161,7 +144,7 @@ function createFilteredToolRegistryView(
       }
       const schema = hasToolSchema(tool) ? tool.schema : undefined;
       const description = resolveToolDescription(schema, tool.description);
-      const parameterSchema = schema?.parametersJsonSchema;
+      const parameterSchema = structuredClone(schema?.parametersJsonSchema);
 
       return {
         name: tool.name,
@@ -182,30 +165,25 @@ function throwIfAborted(signal: AbortSignal | undefined): void {
 export async function loadAgentRuntime(
   options: AgentRuntimeLoaderOptions,
 ): Promise<AgentRuntimeLoaderResult> {
-  const { profile, overrides = {}, signal } = options;
+  const { profile, mediaStore, overrides = {}, signal } = options;
   throwIfAborted(signal);
 
   const history = overrides.historyService ?? new HistoryService();
 
   const providerAdapter: AgentRuntimeProviderAdapter =
     overrides.providerAdapter ??
-    createProviderAdapterFromManager(
-      profile.providerManager ?? profile.config.getProviderManager(),
-    );
+    createProviderAdapterFromManager(profile.providerManager);
 
   const telemetryAdapter: AgentRuntimeTelemetryAdapter =
     overrides.telemetryAdapter ??
-    createTelemetryAdapterFromConfig(profile.config);
+    createTelemetryAdapter(profile.config, profile.telemetry);
 
-  const governance = buildToolGovernanceFromProfile(profile);
   const toolsView: ToolRegistryView =
     overrides.toolsView ??
     createFilteredToolRegistryView(
-      profile.toolRegistry ?? profile.config.getToolRegistry(),
-      governance,
+      profile.toolRegistry,
+      profile.readToolGovernance,
     );
-  const mediaStore =
-    overrides.mediaStore ?? profile.config.getLocalMediaStore();
   const mediaAdmission =
     overrides.mediaAdmission ?? new MediaAdmissionService(mediaStore);
   const mediaResolver =
@@ -214,11 +192,15 @@ export async function loadAgentRuntime(
 
   const runtimeContext = createAgentRuntimeContext({
     state: profile.state,
+    promptEstimator: profile.promptEstimator,
     settings: profile.settings,
     provider: providerAdapter,
     telemetry: telemetryAdapter,
+    requestDiagnostics: profile.requestDiagnostics,
     tools: toolsView,
     history,
+    readRuntimeSettings: profile.readRuntimeSettings,
+    prepareProviderInvocation: profile.prepareProviderInvocation,
     providerRuntime: {
       ...profile.providerRuntime,
       mediaResolver,
@@ -261,6 +243,7 @@ export async function loadAgentRuntime(
     history,
     providerAdapter,
     telemetryAdapter,
+    telemetryRoot: options.profile.telemetry,
     toolsView,
     contentGenerator,
     toolRegistry: profile.toolRegistry,

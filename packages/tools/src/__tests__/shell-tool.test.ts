@@ -1,12 +1,12 @@
 /**
- * @plan:PLAN-20260608-ISSUE1585.P10
- * @requirement:REQ-BEHAVIORAL-TDD
- */
-
-/**
  * @license
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
+ * @plan:PLAN-20260608-ISSUE1585.P10
+ * @requirement:REQ-BEHAVIORAL-TDD
  */
 
 /**
@@ -261,12 +261,10 @@ describe('shell result contracts @plan:issue1995 @plan:issue3200', () => {
   ): IShellToolHost {
     return {
       getTargetDir: () => process.cwd(),
-      getWorkspaceContext: () => ({
-        getDirectories: () => [process.cwd()],
-        isPathWithinWorkspace: (resolvedPath: string) =>
-          resolvedPath === process.cwd() ||
-          resolvedPath.startsWith(`${process.cwd()}/`),
-      }),
+      workspaceDirectories: () => [process.cwd()],
+      containsWorkspacePath: (resolvedPath: string) =>
+        resolvedPath === process.cwd() ||
+        resolvedPath.startsWith(`${process.cwd()}/`),
       isCommandAllowed: () => ({ allowed: true }),
       isShellInvocationAllowlisted: () => false,
       isInteractive: () => true,

@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { physicalFiles } from '../../__tests__/helpers/physical-files.js';
+
 /**
  * Behavioral tests for bounded acquisition in the four structural_analysis
  * modes that were missing finite budgets: definitions, hierarchy, callers,
@@ -30,12 +32,17 @@ function numberOrZero(value: number | undefined): number {
 
 function createBudgetToolHost(targetDir: string, maxItems: number): IToolHost {
   return {
+    ...physicalFiles,
     getTargetDir: () => targetDir,
     getWorkspaceRoots: () => [targetDir],
     getApprovalMode: () => 'auto',
     setApprovalMode: () => {},
     isInteractive: () => false,
-    hasFeatureFlag: () => false,
+
+    runSearch: <T>(
+      _directories: readonly string[],
+      operation: () => Promise<T>,
+    ): Promise<T> => operation(),
     getFileService: () => ({
       shouldGitIgnoreFile: () => false,
       shouldLlxprtIgnoreFile: () => false,
@@ -52,7 +59,7 @@ function createBudgetToolHost(targetDir: string, maxItems: number): IToolHost {
     getLlxprtIgnoreFilePath: () => null,
     recordFileRead: () => {},
     getLlxprtIgnorePatterns: () => [],
-    getEphemeralSettings: () => ({ 'tool-output-max-items': maxItems }),
+    readExecutionPolicy: () => ({ 'tool-output-max-items': maxItems }),
     getDebugMode: () => false,
   };
 }

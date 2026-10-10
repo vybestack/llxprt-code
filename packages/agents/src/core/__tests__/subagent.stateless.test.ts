@@ -55,21 +55,14 @@ function createTestConfig(overrides?: {
   model?: string;
   provider?: string;
 }): Config {
-  const settingsService = new SettingsService();
-
   const config = new Config({
     sessionId: 'test-session-id',
     targetDir: '/tmp/test-dir',
-    settingsService,
-  } as unknown as import('../../config/config.js').ConfigParameters);
-
-  // Set initial values if provided
-  if (overrides?.model) {
-    config.setModel(overrides.model);
-  }
-  if (overrides?.provider) {
-    config.setProvider(overrides.provider);
-  }
+    cwd: '/tmp/test-dir',
+    debugMode: false,
+    model: overrides?.model ?? 'gemini-2.0-flash',
+    provider: overrides?.provider,
+  });
 
   return config;
 }
@@ -247,6 +240,7 @@ function createRuntimeOverrides(
     options.environmentLoader ?? createEnvironmentLoader();
 
   const overrides: SubAgentRuntimeOverrides = {
+    readMcpInstructions: () => undefined,
     runtimeBundle,
     environmentContextLoader: environmentLoader,
   };
@@ -766,6 +760,9 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
           promptConfig,
           modelConfig,
           runConfig,
+          undefined,
+          undefined,
+          { readMcpInstructions: () => undefined },
         ),
       ).rejects.toThrow('runtime bundle');
     });
@@ -777,11 +774,11 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
         'REGRESSION: SubAgentScope accessed foreground Config',
       );
 
-      vi.spyOn(foregroundConfig, 'getProviderManager').mockImplementation(
-        () => {
+      Object.defineProperty(foregroundConfig, 'getProviderManager', {
+        value: () => {
           throw regressionError;
         },
-      );
+      });
       vi.spyOn(foregroundConfig, 'getToolRegistry').mockImplementation(() => {
         throw regressionError;
       });

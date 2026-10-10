@@ -15,14 +15,12 @@
  * two-argument constructor `(policyEngine?, debugMode?)` and to inject core's
  * `debugLogger` as the policy logger.
  */
-import {
-  MessageBus as PolicyMessageBus,
-  type PolicyEngine,
-} from '@vybestack/llxprt-code-policy';
+import { MessageBus as PolicyMessageBus } from '@vybestack/llxprt-code-policy';
+import type { PolicyDecisionPort } from '@vybestack/llxprt-code-policy/confirmation-bus/message-bus.js';
 import { debugLogger } from '../utils/debugLogger.js';
 
 export class MessageBus extends PolicyMessageBus {
-  constructor(policyEngine?: PolicyEngine, debugMode = false) {
+  constructor(policyEngine?: PolicyDecisionPort, debugMode = false) {
     super(policyEngine, debugMode, debugLogger);
   }
 }
@@ -34,7 +32,7 @@ export class MessageBus extends PolicyMessageBus {
  * construction stays behind the package boundary (#2378).
  */
 export function createSessionMessageBus(
-  policyEngine?: PolicyEngine,
+  policyEngine?: PolicyDecisionPort,
   debugMode?: boolean,
 ): MessageBus {
   return new MessageBus(policyEngine, debugMode);

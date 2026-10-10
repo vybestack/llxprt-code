@@ -130,6 +130,14 @@ function resolveCutSeq(cutItem: IContent | undefined): number | undefined {
   return seq;
 }
 
+export interface HistoryClearOptions {
+  /**
+   * Keep the initial human-led turn (default). When false every item is
+   * removed, which is what a user-facing "start fresh" clear needs.
+   */
+  readonly retainInitialHistory?: boolean;
+}
+
 /**
  * Service for durable history mutations that persist rewind semantics.
  */
@@ -144,8 +152,12 @@ export class HistoryMutationService {
     history: readonly IContent[],
     recording: SessionRecordingService,
     beforeCommit?: (remainingHistory: readonly IContent[]) => Promise<void>,
+    options: HistoryClearOptions = {},
   ): Promise<HistoryMutationResult | HistoryMutationError> {
-    const { cutIndex, removed } = computeClearCut(history);
+    const { cutIndex, removed } =
+      options.retainInitialHistory === false
+        ? { cutIndex: 0, removed: [...history] }
+        : computeClearCut(history);
     const remaining = history.slice(0, cutIndex);
     await beforeCommit?.(remaining);
     return this.applyMutation(remaining, removed, recording);

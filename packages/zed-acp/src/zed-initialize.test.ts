@@ -13,7 +13,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import type { Config } from '@vybestack/llxprt-code-core';
+import type { ProfileDefinitionReads } from '@vybestack/llxprt-code-core';
 import * as acp from '@agentclientprotocol/sdk';
 import {
   getCliVersion,
@@ -23,12 +23,10 @@ import { initializeZedAgent } from './zed-initialize.js';
 
 const PROFILE_NAMES = ['default', 'stepfun-37'];
 
-function buildConfig(profileNames: string[] = PROFILE_NAMES): Config {
-  return {
-    getProfileManager: () => ({
-      listProfiles: async () => profileNames,
-    }),
-  } as unknown as Config;
+function buildConfig(
+  profileNames: string[] = PROFILE_NAMES,
+): Pick<ProfileDefinitionReads, 'listProfiles'> {
+  return { listProfiles: async () => profileNames };
 }
 
 let originalCliVersion: string | undefined;

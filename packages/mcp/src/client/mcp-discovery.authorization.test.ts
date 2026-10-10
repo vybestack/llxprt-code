@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { unsupportedApprovalPolicy } from './test-support/approval-policy.js';
 
 import { describe, expect, it, vi } from 'bun:test';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -251,6 +252,7 @@ describe('MCP capability authorization', () => {
     } as unknown as Client;
 
     const tools = await discoverTools(
+      unsupportedApprovalPolicy(),
       'server',
       { command: 'server' },
       client,
@@ -276,6 +278,7 @@ describe('MCP capability authorization', () => {
     } as unknown as Client;
 
     const tools = await discoverTools(
+      unsupportedApprovalPolicy(),
       'server',
       { command: 'server', trust: true },
       client,
@@ -304,6 +307,7 @@ describe('MCP capability authorization', () => {
     } as unknown as Client;
 
     await discoverTools(
+      unsupportedApprovalPolicy(),
       'server',
       { command: 'server' },
       client,
@@ -333,6 +337,7 @@ describe('MCP capability authorization', () => {
     } as unknown as Client;
 
     const tools = await discoverTools(
+      unsupportedApprovalPolicy(),
       'server',
       { command: 'server' },
       client,

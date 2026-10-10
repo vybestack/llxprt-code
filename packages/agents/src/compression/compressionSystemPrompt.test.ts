@@ -1,3 +1,4 @@
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -14,6 +15,8 @@
  * helper now fills the gap.
  */
 
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { describe, it, expect, vi, type Mock } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type {
@@ -118,17 +121,17 @@ function buildContext(
   }> = {},
 ): CompressionContext {
   const contextProviderRuntime = {
-    settingsService: {
-      get: () => undefined,
-      set: () => {},
-      getProviderSettings: () => ({}),
-    },
+    settingsService: new SettingsService(),
     config: overrides.config,
     runtimeId: 'test-provider-runtime',
     metadata: { source: 'test' },
   };
 
   const resolveProvider = (): CompressionProviderResult => ({
+    invocation: captureProviderInvocation(
+      contextProviderRuntime,
+      provider.name,
+    ),
     provider,
     runtime: contextProviderRuntime,
     config: overrides.config,
@@ -240,7 +243,16 @@ describe('Compression system instruction (issue #3136, Step 3)', () => {
     const provider = createCapturingProvider(captured, 'VERIFIED');
     const context = buildContext(provider);
 
-    await runVerificationPass(provider, 'initial summary', context);
+    const resolved = context.resolveProvider();
+    await runVerificationPass(
+      provider,
+      'initial summary',
+      context,
+      resolved.runtime,
+      undefined,
+      undefined,
+      resolved.invocation,
+    );
 
     expect(captured.length).toBe(1);
     const sysInstr = captured[0].systemInstruction;
@@ -278,10 +290,12 @@ describe('Compression system instruction (issue #3136, Step 3)', () => {
  */
 describe('Compression request-scoped provider and interactionMode (issue #3176, D5+D8)', () => {
   function makeInteractiveConfig(interactive: boolean): Config {
-    return {
+    // Keep the real Config instance: spreading it would drop prototype
+    // methods (getTargetDir) that the compression strategies call.
+    return createRuntimeConfigStub(new SettingsService(), {
       isInteractive: () => interactive,
       getMcpClientManager: () => undefined,
-    } as unknown as Config;
+    });
   }
 
   // T8

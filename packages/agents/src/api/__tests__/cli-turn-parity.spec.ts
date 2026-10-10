@@ -1,8 +1,13 @@
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import { resolveShellJobSettings } from '@vybestack/llxprt-code-core';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { withFixtureAgent } from './helpers/agentHarness.js';
+import { TaskLaunchOwner } from '../../session/task-launch-owner.js';
+import { AsyncTaskManager } from '@vybestack/llxprt-code-core';
 
 /**
  * @plan:PLAN-20260621-COREAPIREMED.P19
@@ -60,14 +65,32 @@ import { drain } from './helpers/agentHarness.js';
  */
 async function driveReferenceLoop(
   config: Config,
+  agentClient: Agent['agentClient'],
   messageBus: MessageBus,
   input: string,
+  settingsRoot: Awaited<ReturnType<typeof buildCliStyleConfig>>,
 ): Promise<readonly AgentEvent[]> {
   const approvalHandler: AgenticLoopApprovalHandler = async () => ({
     outcome: ToolConfirmationOutcome.ProceedOnce,
   });
+  const taskLaunchOwner = new TaskLaunchOwner(new AsyncTaskManager());
   const loop = createAgenticLoop({
-    agentClient: config.getAgentClient(),
+    telemetry: RootTelemetry.prepare({
+      enabled: false,
+      sessionId: 'isolated-caller-fixture',
+      maxBytes: 1024,
+      maxFiles: 1,
+    }),
+    taskLaunchOwner,
+    readShellJobSettings: () =>
+      resolveShellJobSettings(settingsRoot.settingsService),
+    readExecutionPolicy: () =>
+      settingsRoot.settingsOwner.readToolExecutionPolicy(),
+    getToolGovernance: () =>
+      settingsRoot.settingsOwner.readToolGovernance(
+        config.getExcludeTools() ?? [],
+      ),
+    agentClient,
     config,
     messageBus,
     interactiveMode: false,
@@ -77,7 +100,12 @@ async function driveReferenceLoop(
   const controller = new AbortController();
   const loopEvents = loop.run(input, controller.signal);
   const agentEvents = mapLoopStream(loopEvents);
-  return drain(agentEvents);
+  try {
+    return await drain(agentEvents);
+  } finally {
+    taskLaunchOwner.closeAdmissionAndAbort();
+    await taskLaunchOwner.join();
+  }
 }
 
 /**
@@ -155,39 +183,48 @@ describe('CLI turn-parity (broad) @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
       // Path A: the public fromConfig agent drives a turn over its OWN
       // Config + MessageBus + FakeProvider script so it does not drain Path B.
       const agent: Agent = await fromConfig({
+        settingsOwner: built.settingsOwner,
+        settingsService: built.settingsService,
+        agentClient: built.agentClient,
+        providerManager: built.providerManager,
         config: built.config,
+        mcpRuntime: built.mcpRuntime,
         onApproval: () => ToolConfirmationOutcome.ProceedOnce,
       });
-      const pathAEvents = await drain(agent.stream('hello'));
-      const pathA = projectEvents(pathAEvents);
+      return await withFixtureAgent(agent, async () => {
+        const pathAEvents = await drain(agent.stream('hello'));
+        const pathA = projectEvents(pathAEvents);
 
-      // Path B: the reference AgenticLoop drive over an INDEPENDENT config so
-      // the finite FakeProvider script is not starved by Path A.
-      const builtRef = await buildCliStyleConfig('parity-toolcall.jsonl');
-      try {
-        const pathBEvents = await driveReferenceLoop(
-          builtRef.config,
-          builtRef.messageBus,
-          'hello',
-        );
-        const pathB = projectEvents(pathBEvents);
+        // Path B: the reference AgenticLoop drive over an INDEPENDENT config so
+        // the finite FakeProvider script is not starved by Path A.
+        const builtRef = await buildCliStyleConfig('parity-toolcall.jsonl');
+        try {
+          const pathBEvents = await driveReferenceLoop(
+            builtRef.config,
+            builtRef.agentClient,
+            builtRef.messageBus,
+            'hello',
+            builtRef,
+          );
+          const pathB = projectEvents(pathBEvents);
 
-        // REQ-INT-002: same projected tool names, isError flags, and single
-        // terminal done reason. Internal fields (prompt_id, traceId) are
-        // projected away — never compared.
-        expect(pathA).toStrictEqual(pathB);
-      } finally {
-        await builtRef.cleanup();
-      }
+          // REQ-INT-002: same projected tool names, isError flags, and single
+          // terminal done reason. Internal fields (prompt_id, traceId) are
+          // projected away — never compared.
+          expect(pathA).toStrictEqual(pathB);
+        } finally {
+          await builtRef.cleanup();
+        }
 
-      // Behavioral anchor: exactly one tool-call event with the specific tool.
-      const toolCalls = pathA.filter((e) => e.type === 'tool-call');
-      expect(toolCalls).toHaveLength(1);
-      expect(toolCalls[0].toolName).toBe('read_file');
+        // Behavioral anchor: exactly one tool-call event with the specific tool.
+        const toolCalls = pathA.filter((e) => e.type === 'tool-call');
+        expect(toolCalls).toHaveLength(1);
+        expect(toolCalls[0].toolName).toBe('read_file');
 
-      // Behavioral anchor: exactly one terminal done.
-      const dones = pathA.filter((e) => e.type === 'done');
-      expect(dones).toHaveLength(1);
+        // Behavioral anchor: exactly one terminal done.
+        const dones = pathA.filter((e) => e.type === 'done');
+        expect(dones).toHaveLength(1);
+      });
     } finally {
       await built.cleanup();
     }
@@ -205,25 +242,34 @@ describe('CLI turn-parity (broad) @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
             const built = await buildCliStyleConfig(fixture.path);
             try {
               const agent: Agent = await fromConfig({
+                settingsOwner: built.settingsOwner,
+                settingsService: built.settingsService,
+                agentClient: built.agentClient,
+                providerManager: built.providerManager,
                 config: built.config,
+                mcpRuntime: built.mcpRuntime,
                 onApproval: () => ToolConfirmationOutcome.ProceedOnce,
               });
-              const pathAEvents = await drain(agent.stream('hello'));
-              const pathA = projectEvents(pathAEvents);
+              return await withFixtureAgent(agent, async () => {
+                const pathAEvents = await drain(agent.stream('hello'));
+                const pathA = projectEvents(pathAEvents);
 
-              // Path B: reference AgenticLoop drive over an INDEPENDENT config.
-              const builtRef = await buildCliStyleConfig(fixture.path);
-              try {
-                const pathBEvents = await driveReferenceLoop(
-                  builtRef.config,
-                  builtRef.messageBus,
-                  'hello',
-                );
-                const pathB = projectEvents(pathBEvents);
-                return JSON.stringify(pathA) === JSON.stringify(pathB);
-              } finally {
-                await builtRef.cleanup();
-              }
+                // Path B: reference AgenticLoop drive over an INDEPENDENT config.
+                const builtRef = await buildCliStyleConfig(fixture.path);
+                try {
+                  const pathBEvents = await driveReferenceLoop(
+                    builtRef.config,
+                    builtRef.agentClient,
+                    builtRef.messageBus,
+                    'hello',
+                    builtRef,
+                  );
+                  const pathB = projectEvents(pathBEvents);
+                  return JSON.stringify(pathA) === JSON.stringify(pathB);
+                } finally {
+                  await builtRef.cleanup();
+                }
+              });
             } finally {
               await built.cleanup();
             }

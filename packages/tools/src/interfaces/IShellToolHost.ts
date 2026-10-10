@@ -170,10 +170,8 @@ export interface IShellToolHost {
   /**
    * Get the workspace context for path validation.
    */
-  getWorkspaceContext(): {
-    getDirectories(): string[];
-    isPathWithinWorkspace(resolvedPath: string): boolean;
-  };
+  workspaceDirectories(): readonly string[];
+  containsWorkspacePath(resolvedPath: string): boolean;
 
   /**
    * Check if a command is allowed by policy.
@@ -240,14 +238,7 @@ export interface IShellToolHost {
   /**
    * Validate a path is within workspace.
    */
-  validatePathWithinWorkspace(
-    workspaceContext: {
-      getDirectories(): string[];
-      isPathWithinWorkspace(resolvedPath: string): boolean;
-    },
-    dirPath: string,
-    label: string,
-  ): string | null;
+  validatePathWithinWorkspace(dirPath: string, label: string): string | null;
 
   /**
    * Check if a PTY PID is active.

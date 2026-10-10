@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 /**
  * Issue #3663 regression: the Claude 5 calibrated estimator must read the
  * projection's imageEntries and charge each image its anthropic-formula
@@ -373,7 +374,7 @@ describe('Claude image entries (issue #3663)', () => {
     return {
       isOAuth: false,
       reasoningEnabled: false,
-      config: {},
+      config: parseOutputLimits({}),
       unprefixToolName: (name: string) => name,
       logger: { debug: () => {} },
     };

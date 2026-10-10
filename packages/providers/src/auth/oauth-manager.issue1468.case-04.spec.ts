@@ -8,7 +8,6 @@ import { describe, expect, it, vi } from 'bun:test';
 import type { OAuthProvider } from './types.js';
 import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-core';
 import {
-  mockGetCurrentProfileName,
   createIssue1468Fixture,
   mockLoadProfile,
 } from './__tests__/oauth-manager.issue1468.test-helpers.js';
@@ -25,9 +24,9 @@ async function loadCaseFourProfile(profileName: string) {
 
 describe('Issue #1468 getProfileBuckets case 4', () => {
   it('does not fall back to foreground buckets when an explicit request profile cannot be loaded', async () => {
-    const { tokenStore, manager } = createIssue1468Fixture();
+    const { tokenStore, manager, settingsService } = createIssue1468Fixture();
 
-    mockGetCurrentProfileName.mockReturnValue('foreground-profile');
+    settingsService.setCurrentProfileName('foreground-profile');
     mockLoadProfile.mockImplementation(loadCaseFourProfile);
 
     const provider: OAuthProvider = {

@@ -12,7 +12,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-  getOpenAIProviderInfo,
+  type getOpenAIProviderInfo,
   type ProviderMessage as Message,
 } from '@vybestack/llxprt-code-providers';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
@@ -34,13 +34,10 @@ export interface UseOpenAIProviderInfoReturn extends OpenAIProviderInfo {
  */
 export function useOpenAIProviderInfo(): UseOpenAIProviderInfoReturn {
   const runtime = useRuntimeApi();
-  const getProviderInfo = useCallback(() => {
-    const services = runtime.getCliRuntimeServices();
-    return getOpenAIProviderInfo(
-      { settingsService: services.settingsService, config: services.config },
-      services.providerManager,
-    );
-  }, [runtime]);
+  const getProviderInfo = useCallback(
+    () => runtime.getOpenAIProviderInfo(),
+    [runtime],
+  );
   const [providerInfo, setProviderInfo] = useState<OpenAIProviderInfo>(() =>
     getProviderInfo(),
   );

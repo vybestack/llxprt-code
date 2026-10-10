@@ -4,21 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { installSchedulerToolFixture } from './__tests__/scheduler-tool-owner-fixture.js';
+
 import { describe, it, expect, vi } from 'bun:test';
 import { CoreToolScheduler } from './coreToolScheduler.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import type {
   ContextAwareTool,
   ToolContext,
 } from '@vybestack/llxprt-code-tools';
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
-import {
-  createMockMessageBus,
-  createMockPolicyEngine,
-} from './__tests__/coreToolScheduler-test-helpers.js';
 
 describe('CoreToolScheduler context-aware tools', () => {
+  const fixtureRoot = installSchedulerToolFixture();
   it('injects agentId into ContextAwareTool context', async () => {
     class ContextAwareMockTool extends MockTool implements ContextAwareTool {
       context?: ToolContext;
@@ -34,43 +32,23 @@ describe('CoreToolScheduler context-aware tools', () => {
       returnDisplay: 'ok',
     });
 
-    const toolRegistry = {
-      getTool: () => contextAwareTool,
-      getToolByName: () => contextAwareTool,
-      getFunctionDeclarations: () => [],
-      tools: new Map(),
-      discovery: {},
-      registerTool: () => {},
-      getToolByDisplayName: () => contextAwareTool,
-      getTools: () => [],
-      discoverTools: async () => {},
-      getAllTools: () => [],
-      getToolsByServer: () => [],
-    };
-
-    const mockPolicyEngine = createMockPolicyEngine();
-
-    const mockConfig = {
-      getSessionId: () => 'session-123',
-      getUsageStatisticsEnabled: () => true,
-      getDebugMode: () => false,
-      isInteractive: () => true,
-      getApprovalMode: () => ApprovalMode.DEFAULT,
-      getAllowedTools: () => [],
-      getToolRegistry: () => toolRegistry,
-      getContentGeneratorConfig: () => ({
-        model: 'test-model',
-      }),
-      getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
-      getEnableHooks: () => false,
-      getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
-      getModel: () => 'gemini-2.5-pro',
-    } as unknown as Config;
+    const fixture = fixtureRoot([contextAwareTool], {
+      sessionId: 'session-123',
+      approvalMode: ApprovalMode.DEFAULT,
+      interactive: true,
+    });
 
     const scheduler = new CoreToolScheduler({
-      config: mockConfig,
-      messageBus: mockConfig.getMessageBus(),
-      toolRegistry: mockConfig.getToolRegistry(),
+      config: fixture.config,
+      telemetry: fixture.settingsOwner.telemetry,
+      readExecutionPolicy: () =>
+        fixture.settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        fixture.settingsOwner.readToolGovernance(
+          fixture.config.getExcludeTools() ?? [],
+        ),
+      messageBus: fixture.messageBus,
+      toolRegistry: fixture.selection,
       onAllToolCallsComplete: vi.fn(),
       onToolCallsUpdate: vi.fn(),
       getPreferredEditor: () => 'vscode',

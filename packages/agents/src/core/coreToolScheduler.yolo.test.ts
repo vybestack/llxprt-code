@@ -4,77 +4,50 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { installSchedulerToolFixture } from './__tests__/scheduler-tool-owner-fixture.js';
+
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi } from 'bun:test';
-import type { ToolCall } from './coreToolScheduler.js';
+import type { ToolCall, CompletedToolCall } from './coreToolScheduler.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
-import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
-import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
-import {
-  createMockMessageBus,
-  createMockPolicyEngine,
-} from './__tests__/coreToolScheduler-test-helpers.js';
 
 describe('CoreToolScheduler YOLO mode', () => {
+  const fixtureRoot = installSchedulerToolFixture();
   it('should execute tool requiring confirmation directly without waiting', async () => {
     // Arrange
-    const mockTool = new MockTool();
+    const mockTool = new MockTool({ name: 'mockTool' });
     mockTool.executeFn.mockResolvedValue({
       llmContent: 'Tool executed',
       returnDisplay: 'Tool executed',
     });
     // This tool would normally require confirmation.
     mockTool.shouldConfirm = true;
-    const declarativeTool = mockTool;
 
-    const mockToolRegistry = {
-      getTool: () => declarativeTool,
-      getToolByName: () => declarativeTool,
-      // Other properties are not needed for this test but are included for type consistency.
-      getFunctionDeclarations: () => [],
-      tools: new Map(),
-      discovery: {},
-      registerTool: () => {},
-      getToolByDisplayName: () => declarativeTool,
-      getTools: () => [],
-      discoverTools: async () => {},
-      getAllTools: () => [],
-      getToolsByServer: () => [],
-    } as unknown as ToolRegistry;
-
-    const onAllToolCallsComplete = vi.fn();
+    const onAllToolCallsComplete = vi
+      .fn<(calls: CompletedToolCall[]) => Promise<void>>()
+      .mockResolvedValue(undefined);
     const onToolCallsUpdate = vi.fn();
 
-    const mockPolicyEngine = createMockPolicyEngine();
-    mockPolicyEngine.evaluate = vi
-      .fn()
-      .mockReturnValue(PolicyDecision.ASK_USER);
-
     // Configure the scheduler for YOLO mode.
-    const mockConfig = {
-      getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
-      getDebugMode: () => false,
-      getApprovalMode: () => ApprovalMode.YOLO,
-      getEphemeralSettings: () => ({}),
-      getAllowedTools: () => [],
-      getContentGeneratorConfig: () => ({
-        model: 'test-model',
-      }),
-      getToolRegistry: () => mockToolRegistry,
-      getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
-      getEnableHooks: () => false,
-      getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
-      getModel: () => 'gemini-2.5-pro',
-    } as unknown as Config;
+    const fixture = fixtureRoot([mockTool], {
+      sessionId: 'test-session-id',
+      approvalMode: ApprovalMode.YOLO,
+      interactive: false,
+    });
 
     const scheduler = new CoreToolScheduler({
-      config: mockConfig,
-      messageBus: mockConfig.getMessageBus(),
-      toolRegistry: mockToolRegistry,
+      config: fixture.config,
+      telemetry: fixture.settingsOwner.telemetry,
+      readExecutionPolicy: () =>
+        fixture.settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        fixture.settingsOwner.readToolGovernance(
+          fixture.config.getExcludeTools() ?? [],
+        ),
+      messageBus: fixture.messageBus,
+      toolRegistry: fixture.selection,
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -117,8 +90,7 @@ describe('CoreToolScheduler YOLO mode', () => {
 
     // 3. The final callback indicates the tool call was successful.
     expect(onAllToolCallsComplete).toHaveBeenCalled();
-    const completedCalls = onAllToolCallsComplete.mock
-      .calls[0][0] as ToolCall[];
+    const completedCalls = onAllToolCallsComplete.mock.calls[0][0];
     expect(completedCalls).toHaveLength(1);
     const completedCall = completedCalls[0];
     expect(completedCall.status).toBe('success');

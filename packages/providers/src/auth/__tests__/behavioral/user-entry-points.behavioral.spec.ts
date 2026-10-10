@@ -207,7 +207,10 @@ describe('User entry point behavioral scenarios', () => {
 
       await advanceTimersByTimeAsync(305 * 1000);
 
-      expect(refreshTokenSpy).toHaveBeenCalledWith(nearExpiryToken);
+      expect(refreshTokenSpy).toHaveBeenCalledWith(
+        nearExpiryToken,
+        expect.any(AbortSignal),
+      );
       expect(saveTokenSpy).toHaveBeenCalledWith(
         PROVIDER,
         expect.objectContaining({ access_token: 'refreshed-access' }),

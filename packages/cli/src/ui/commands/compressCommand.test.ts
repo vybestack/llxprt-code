@@ -108,13 +108,19 @@ describe('compressCommand', () => {
       wasRecentlyCompressed: () => false,
     };
 
-    context.services.config = {
-      getAgentClient: () =>
-        ({
-          hasChatInitialized: () => true,
-          getChat: () => chat,
-        }) as unknown as AgentClient,
-    } as CommandContext['services']['config'];
+    context.services.agent = createMockCommandContext({
+      services: {
+        agent: {
+          get agentClient() {
+            return (() =>
+              ({
+                hasChatInitialized: () => true,
+                getChat: () => chat,
+              }) as unknown as AgentClient)();
+          },
+        },
+      },
+    }).services.agent;
 
     await compressCommand.action!(context, '');
 
@@ -150,13 +156,19 @@ describe('compressCommand', () => {
       wasRecentlyCompressed: () => false,
     };
 
-    context.services.config = {
-      getAgentClient: () =>
-        ({
-          hasChatInitialized: () => true,
-          getChat: () => chat,
-        }) as unknown as AgentClient,
-    } as CommandContext['services']['config'];
+    context.services.agent = createMockCommandContext({
+      services: {
+        agent: {
+          get agentClient() {
+            return (() =>
+              ({
+                hasChatInitialized: () => true,
+                getChat: () => chat,
+              }) as unknown as AgentClient)();
+          },
+        },
+      },
+    }).services.agent;
 
     await compressCommand.action!(context, '');
 
@@ -180,13 +192,19 @@ describe('compressCommand', () => {
       wasRecentlyCompressed: () => true,
     };
 
-    context.services.config = {
-      getAgentClient: () =>
-        ({
-          hasChatInitialized: () => true,
-          getChat: () => chat,
-        }) as unknown as AgentClient,
-    } as CommandContext['services']['config'];
+    context.services.agent = createMockCommandContext({
+      services: {
+        agent: {
+          get agentClient() {
+            return (() =>
+              ({
+                hasChatInitialized: () => true,
+                getChat: () => chat,
+              }) as unknown as AgentClient)();
+          },
+        },
+      },
+    }).services.agent;
 
     await compressCommand.action!(context, '');
 
@@ -198,12 +216,18 @@ describe('compressCommand', () => {
   });
 
   it('shows unavailable-chat error when chat is not initialized', async () => {
-    context.services.config = {
-      getAgentClient: () =>
-        ({
-          hasChatInitialized: () => false,
-        }) as unknown as AgentClient,
-    } as CommandContext['services']['config'];
+    context.services.agent = createMockCommandContext({
+      services: {
+        agent: {
+          get agentClient() {
+            return (() =>
+              ({
+                hasChatInitialized: () => false,
+              }) as unknown as AgentClient)();
+          },
+        },
+      },
+    }).services.agent;
 
     await compressCommand.action!(context, '');
 
@@ -227,13 +251,19 @@ describe('compressCommand', () => {
       wasRecentlyCompressed: () => false,
     };
 
-    context.services.config = {
-      getAgentClient: () =>
-        ({
-          hasChatInitialized: () => true,
-          getChat: () => chat,
-        }) as unknown as AgentClient,
-    } as CommandContext['services']['config'];
+    context.services.agent = createMockCommandContext({
+      services: {
+        agent: {
+          get agentClient() {
+            return (() =>
+              ({
+                hasChatInitialized: () => true,
+                getChat: () => chat,
+              }) as unknown as AgentClient)();
+          },
+        },
+      },
+    }).services.agent;
 
     await compressCommand.action!(context, '');
 
@@ -257,13 +287,19 @@ describe('compressCommand', () => {
       wasRecentlyCompressed: () => false,
     };
 
-    context.services.config = {
-      getAgentClient: () =>
-        ({
-          hasChatInitialized: () => true,
-          getChat: () => chat,
-        }) as unknown as AgentClient,
-    } as CommandContext['services']['config'];
+    context.services.agent = createMockCommandContext({
+      services: {
+        agent: {
+          get agentClient() {
+            return (() =>
+              ({
+                hasChatInitialized: () => true,
+                getChat: () => chat,
+              }) as unknown as AgentClient)();
+          },
+        },
+      },
+    }).services.agent;
 
     await compressCommand.action!(context, '');
 
@@ -286,13 +322,19 @@ describe('compressCommand', () => {
       wasRecentlyCompressed: () => true,
     };
 
-    context.services.config = {
-      getAgentClient: () =>
-        ({
-          hasChatInitialized: () => true,
-          getChat: () => chat,
-        }) as unknown as AgentClient,
-    } as CommandContext['services']['config'];
+    context.services.agent = createMockCommandContext({
+      services: {
+        agent: {
+          get agentClient() {
+            return (() =>
+              ({
+                hasChatInitialized: () => true,
+                getChat: () => chat,
+              }) as unknown as AgentClient)();
+          },
+        },
+      },
+    }).services.agent;
 
     await compressCommand.action!(context, '');
 
@@ -315,13 +357,19 @@ describe('compressCommand', () => {
       wasRecentlyCompressed: () => false,
     };
 
-    context.services.config = {
-      getAgentClient: () =>
-        ({
-          hasChatInitialized: () => true,
-          getChat: () => chat,
-        }) as unknown as AgentClient,
-    } as CommandContext['services']['config'];
+    context.services.agent = createMockCommandContext({
+      services: {
+        agent: {
+          get agentClient() {
+            return (() =>
+              ({
+                hasChatInitialized: () => true,
+                getChat: () => chat,
+              }) as unknown as AgentClient)();
+          },
+        },
+      },
+    }).services.agent;
 
     await compressCommand.action!(context, '');
 
@@ -344,13 +392,19 @@ describe('compressCommand', () => {
       wasRecentlyCompressed: () => true,
     };
 
-    context.services.config = {
-      getAgentClient: () =>
-        ({
-          hasChatInitialized: () => true,
-          getChat: () => chat,
-        }) as unknown as AgentClient,
-    } as CommandContext['services']['config'];
+    context.services.agent = createMockCommandContext({
+      services: {
+        agent: {
+          get agentClient() {
+            return (() =>
+              ({
+                hasChatInitialized: () => true,
+                getChat: () => chat,
+              }) as unknown as AgentClient)();
+          },
+        },
+      },
+    }).services.agent;
 
     await compressCommand.action!(context, '');
 
@@ -375,13 +429,19 @@ describe('compressCommand', () => {
       wasRecentlyCompressed: () => false,
     };
 
-    context.services.config = {
-      getAgentClient: () =>
-        ({
-          hasChatInitialized: () => true,
-          getChat: () => chat,
-        }) as unknown as AgentClient,
-    } as CommandContext['services']['config'];
+    context.services.agent = createMockCommandContext({
+      services: {
+        agent: {
+          get agentClient() {
+            return (() =>
+              ({
+                hasChatInitialized: () => true,
+                getChat: () => chat,
+              }) as unknown as AgentClient)();
+          },
+        },
+      },
+    }).services.agent;
 
     await compressCommand.action!(context, '');
 
@@ -408,13 +468,19 @@ describe('compressCommand', () => {
       },
     };
 
-    context.services.config = {
-      getAgentClient: () =>
-        ({
-          hasChatInitialized: () => true,
-          getChat: () => chat,
-        }) as unknown as AgentClient,
-    } as CommandContext['services']['config'];
+    context.services.agent = createMockCommandContext({
+      services: {
+        agent: {
+          get agentClient() {
+            return (() =>
+              ({
+                hasChatInitialized: () => true,
+                getChat: () => chat,
+              }) as unknown as AgentClient)();
+          },
+        },
+      },
+    }).services.agent;
 
     await compressCommand.action!(context, '');
 
@@ -443,13 +509,19 @@ describe('compressCommand', () => {
       },
     };
 
-    context.services.config = {
-      getAgentClient: () =>
-        ({
-          hasChatInitialized: () => true,
-          getChat: () => chat,
-        }) as unknown as AgentClient,
-    } as CommandContext['services']['config'];
+    context.services.agent = createMockCommandContext({
+      services: {
+        agent: {
+          get agentClient() {
+            return (() =>
+              ({
+                hasChatInitialized: () => true,
+                getChat: () => chat,
+              }) as unknown as AgentClient)();
+          },
+        },
+      },
+    }).services.agent;
 
     await compressCommand.action!(context, '');
 
@@ -473,13 +545,19 @@ describe('compressCommand', () => {
       wasRecentlyCompressed: () => false,
     };
 
-    context.services.config = {
-      getAgentClient: () =>
-        ({
-          hasChatInitialized: () => true,
-          getChat: () => chat,
-        }) as unknown as AgentClient,
-    } as CommandContext['services']['config'];
+    context.services.agent = createMockCommandContext({
+      services: {
+        agent: {
+          get agentClient() {
+            return (() =>
+              ({
+                hasChatInitialized: () => true,
+                getChat: () => chat,
+              }) as unknown as AgentClient)();
+          },
+        },
+      },
+    }).services.agent;
 
     await compressCommand.action!(context, '');
 
@@ -501,13 +579,19 @@ describe('compressCommand', () => {
       wasRecentlyCompressed: () => false,
     };
 
-    context.services.config = {
-      getAgentClient: () =>
-        ({
-          hasChatInitialized: () => true,
-          getChat: () => chat,
-        }) as unknown as AgentClient,
-    } as CommandContext['services']['config'];
+    context.services.agent = createMockCommandContext({
+      services: {
+        agent: {
+          get agentClient() {
+            return (() =>
+              ({
+                hasChatInitialized: () => true,
+                getChat: () => chat,
+              }) as unknown as AgentClient)();
+          },
+        },
+      },
+    }).services.agent;
 
     await compressCommand.action!(context, '');
 

@@ -26,6 +26,8 @@
  * tool under test.
  */
 
+import { physicalFiles } from '../../../__tests__/helpers/physical-files.js';
+
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import {
   writeFileSync,
@@ -47,7 +49,7 @@ import {
 } from './test-helpers.js';
 import { ASTEditTool, ASTReadFileTool } from '../../ast-edit.js';
 import { ToolErrorType } from '../../../types/tool-error.js';
-import { createDefaultToolHost } from '../../edit-utils.js';
+import { createRealToolHost } from '../../../__tests__/helpers/create-real-tool-host.js';
 import { ToolConfirmationOutcome } from '../../tools.js';
 import type {
   IToolHost,
@@ -249,7 +251,11 @@ describe('Finding 3 (In-scope): IDE-accepted content classified from the actual 
     );
     mkdirSync(tmpDir, { recursive: true });
     host = {
-      ...createDefaultToolHost(),
+      ...physicalFiles,
+      ...createRealToolHost(process.cwd(), {
+        respectGitIgnore: true,
+        respectLlxprtIgnore: true,
+      }),
       getTargetDir: () => tmpDir,
       getWorkspaceRoots: () => [tmpDir],
       // Manual approval so shouldConfirmExecute produces confirmation details.
@@ -351,7 +357,11 @@ describe('IDE-accepted candidate diverging at line 1 with zero net line delta is
     );
     mkdirSync(tmpDir, { recursive: true });
     host = {
-      ...createDefaultToolHost(),
+      ...physicalFiles,
+      ...createRealToolHost(process.cwd(), {
+        respectGitIgnore: true,
+        respectLlxprtIgnore: true,
+      }),
       getTargetDir: () => tmpDir,
       getWorkspaceRoots: () => [tmpDir],
       getApprovalMode: () => 'default',
@@ -699,7 +709,11 @@ describe('Part B (Blocker): exact candidate coordinate mapping — changed-middl
     const original = 'const a = 1;\nconst broken = @@@;\nconst b = 2;\n';
     writeFileSync(filePath, original, 'utf-8');
     const host: IToolHost = {
-      ...createDefaultToolHost(),
+      ...physicalFiles,
+      ...createRealToolHost(process.cwd(), {
+        respectGitIgnore: true,
+        respectLlxprtIgnore: true,
+      }),
       getTargetDir: () => dir,
       getWorkspaceRoots: () => [dir],
       getApprovalMode: () => 'default',

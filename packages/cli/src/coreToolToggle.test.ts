@@ -26,7 +26,7 @@ import {
   afterEach,
   type Mock,
 } from 'bun:test';
-import type { Config, DiscoveredTool } from '@vybestack/llxprt-code-core';
+import type { DiscoveredTool } from '@vybestack/llxprt-code-core';
 import type { DiscoveredMCPTool } from '@vybestack/llxprt-code-mcp';
 import type { Settings } from './config/settingsSchema.js';
 import { generateDynamicToolSettings } from './utils/dynamicSettings.js';
@@ -64,8 +64,9 @@ const originalConsoleLog = globalThis.console.log;
 describe('generateDynamicToolSettings', () => {
   let mockConfig: Record<string, ReturnType<typeof vi.fn>>;
   let mockToolRegistry: Record<string, ReturnType<typeof vi.fn>>;
-  const asConfig = (value: Record<string, ReturnType<typeof vi.fn>>): Config =>
-    value as unknown as Config;
+  const asConfig = (value: Record<string, ReturnType<typeof vi.fn>>) => ({
+    describeToolConfiguration: () => value['describeToolConfiguration'](),
+  });
 
   // Mock tools for testing - create actual tool instances
   const mockCoreTools = [
@@ -132,13 +133,8 @@ describe('generateDynamicToolSettings', () => {
       getToolRegistry: vi.fn(() => mockToolRegistry),
       getExcludeTools: vi.fn(() => []),
       getCoreTools: vi.fn(() => ['ReadFile', 'WriteFile', 'Shell', 'Edit']), // Include core tools
-      getProfileManager: vi.fn(() => ({ some: 'manager' })),
-      getSubagentManager: vi.fn(() => ({ some: 'subagent' })),
-      getInteractiveSubagentSchedulerFactory: vi.fn(() => ({
-        some: 'factory',
-      })),
       // Add new method for our implementation
-      getToolRegistryInfo: vi.fn(() => ({
+      describeToolConfiguration: vi.fn(() => ({
         registered: mockCoreTools.map((tool) => ({
           toolClass: tool.constructor.name,
           toolName: tool.constructor.name,
@@ -224,7 +220,7 @@ describe('generateDynamicToolSettings', () => {
 
     it('should handle tools with spaces in names', () => {
       // Update mock config to return tools with spaces
-      mockConfig.getToolRegistryInfo.mockReturnValue({
+      mockConfig.describeToolConfiguration.mockReturnValue({
         registered: [
           {
             toolClass: 'ShellTool',
@@ -251,7 +247,7 @@ describe('generateDynamicToolSettings', () => {
 
     it('should handle empty tool registry', () => {
       // Update mock config to return empty registered tools
-      mockConfig.getToolRegistryInfo.mockReturnValue({
+      mockConfig.describeToolConfiguration.mockReturnValue({
         registered: [],
         unregistered: [
           {
@@ -282,10 +278,10 @@ describe('generateDynamicToolSettings', () => {
 
     it('should handle tool registry errors gracefully', () => {
       const errorConfig = {
-        getToolRegistry: vi.fn(() => {
+        describeToolConfiguration: vi.fn(() => {
           throw new Error('Tool registry error');
         }),
-      } as unknown as Config;
+      };
 
       const toolSettings = generateDynamicToolSettings(errorConfig);
       expect(toolSettings).toStrictEqual({});
@@ -382,13 +378,13 @@ describe('generateDynamicToolSettings', () => {
 
     it('should handle tool registry errors gracefully', () => {
       const errorConfig = {
-        getToolRegistry: vi.fn(() => {
+        describeToolConfiguration: vi.fn(() => {
           throw new Error('Tool registry error');
         }),
-      } as unknown as Config;
+      };
 
       try {
-        errorConfig.getToolRegistry();
+        Reflect.get(errorConfig, 'getToolRegistry')();
       } catch (error) {
         globalThis.console.error(
           'Error generating dynamic tool settings:',

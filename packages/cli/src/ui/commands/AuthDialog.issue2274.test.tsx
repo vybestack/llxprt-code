@@ -27,13 +27,11 @@ const realRealInkModule = {
 
 void vi.mock('ink', () => realRealInkModule);
 
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  useRuntimeApi: () => ({
-    getCliOAuthManager: () => ({
-      authenticate: mockAuthenticate,
-      getAuthStatus: mockGetAuthStatus,
-      toggleOAuthEnabled: mockToggleOAuthEnabled,
-    }),
+void vi.mock('../contexts/OAuthControlContext.js', () => ({
+  useOAuthControl: () => ({
+    authenticate: mockAuthenticate,
+    getAuthStatus: mockGetAuthStatus,
+    toggleOAuthEnabled: mockToggleOAuthEnabled,
   }),
 }));
 

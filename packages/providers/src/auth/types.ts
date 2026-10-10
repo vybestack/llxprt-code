@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { ProfileManager } from '@vybestack/llxprt-code-settings';
+import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 
@@ -31,9 +33,26 @@ export { KeyringTokenStore } from '@vybestack/llxprt-code-auth';
  * Runtime dependencies for OAuthManager that include MessageBus integration.
  * These are injected at runtime from the session composition root.
  */
+export interface SessionAuthPolicy {
+  readonly baseUrl?: string;
+  readonly profileName: string | null;
+  readonly bucketPrompt: unknown;
+  readonly bucketDelay: unknown;
+  readonly interactiveTimeoutMs: unknown;
+  readonly noBrowser: boolean;
+  readonly authOnly: boolean;
+}
+
 export interface OAuthManagerRuntimeMessageBusDeps {
+  readonly profileReads?: Pick<ProfileManager, 'loadProfile'>;
+  readSessionAuthPolicy?: () => SessionAuthPolicy;
   messageBus?: MessageBus;
   config?: Config;
+  invalidateAuthCaches?: (providerName: string) => void;
+  readAuthIdentity?: () => Pick<
+    ProviderRuntimeContext,
+    'runtimeId' | 'runtimeKind'
+  >;
 }
 
 /**
@@ -64,7 +83,10 @@ export interface OAuthProvider {
    * Implementations must NOT persist; OAuthManager owns persistence.
    * @returns Refreshed token or null if refresh failed
    */
-  refreshToken(currentToken: OAuthToken): Promise<OAuthToken | null>;
+  refreshToken(
+    currentToken: OAuthToken,
+    signal?: AbortSignal,
+  ): Promise<OAuthToken | null>;
 
   /**
    * Optional provider-side logout/revoke for a specific token.
@@ -109,6 +131,22 @@ export interface OAuthProvider {
  * Implemented by AuthFlowOrchestrator (Phase 6); injected into TokenAccessCoordinator
  * via setAuthenticator() to avoid a module import cycle.
  */
+export interface ProfileOAuthWork {
+  prepareRenewals(
+    profile: unknown,
+    loadProfile: (name: string) => Promise<unknown>,
+  ): Promise<() => void>;
+  getToken(request: ProfileOAuthRequest): Promise<OAuthToken | null>;
+  cancelAndJoin(): Promise<void>;
+}
+
+export interface ProfileOAuthRequest {
+  readonly providerName: string;
+  readonly profileName?: string;
+  readonly buckets: readonly string[];
+  readonly signal: AbortSignal;
+}
+
 export interface AuthCompletionOptions {
   signalAuthCompletion?: boolean;
   signal?: AbortSignal;

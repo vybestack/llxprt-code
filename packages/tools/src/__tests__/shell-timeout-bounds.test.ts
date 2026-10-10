@@ -57,11 +57,8 @@ const ABORTED_RESULT: ShellExecutionResult = {
 function createFakeHost(opts: FakeHostOptions): IShellToolHost {
   return {
     getTargetDir: () => '/tmp',
-    getWorkspaceContext: () => ({
-      getDirectories: () => ['/tmp'],
-      isPathWithinWorkspace: (p: string) =>
-        p === '/tmp' || p.startsWith('/tmp/'),
-    }),
+    workspaceDirectories: () => ['/tmp'],
+    containsWorkspacePath: (p: string) => p === '/tmp' || p.startsWith('/tmp/'),
     isCommandAllowed: () => ({ allowed: true }),
     isShellInvocationAllowlisted: () => true,
     isInteractive: () => true,

@@ -30,6 +30,10 @@ import type {
   HookType,
 } from '../../packages/core/src/hooks/types.js';
 import { HookSystem } from '../../packages/core/src/hooks/hookSystem.js';
+import {
+  fixtureHookDefinitions,
+  fixtureHookRuntime,
+} from '../../packages/core/src/hooks/__tests__/hook-runtime-fixture.js';
 
 const TEST_SCRIPTS_DIR = join(tmpdir(), 'hooks-e2e-test');
 
@@ -80,7 +84,10 @@ function createRealConfig(options: {
     }),
     getHookSystem: () => {
       if (!hookSystem) {
-        hookSystem = new HookSystem(config as Config);
+        hookSystem = new HookSystem(
+          fixtureHookDefinitions(config),
+          fixtureHookRuntime(config),
+        );
       }
       return hookSystem;
     },

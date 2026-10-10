@@ -11,41 +11,11 @@ import {
   type ContentGenerator,
 } from './contentGenerator.js';
 import type { Config } from '../config/config.js';
-import type { RuntimeProviderManager } from '../runtime/contracts/RuntimeProviderManager.js';
 import type { RuntimeContentGeneratorFactory } from '../runtime/contracts/RuntimeContentGeneratorFactory.js';
 
 const mockConfig = {
   getUsageStatisticsEnabled: vi.fn().mockReturnValue(false),
 } as unknown as Config;
-
-function createRuntimeProviderManager(): RuntimeProviderManager {
-  return {
-    getActiveProvider: vi.fn(),
-    getActiveProviderName: vi.fn(),
-    setActiveProvider: vi.fn(),
-    setRuntimeContext: vi.fn(),
-    getAvailableModels: vi.fn(async () => []),
-    getProviderNames: () => [],
-    listProviders: () => [],
-    getProviderByName: vi.fn(),
-    registerProvider: vi.fn(),
-    prepareStatelessProviderInvocation: vi.fn(),
-    getProviderMetrics: () => ({}),
-    getSessionTokenUsage: () => ({
-      input: 0,
-      output: 0,
-      cache: 0,
-      tool: 0,
-      thought: 0,
-      total: 0,
-    }),
-    getServerToolsProvider: () => null,
-    setServerToolsProvider: vi.fn(),
-    setConfig: vi.fn(),
-    hasActiveProvider: () => true,
-    accumulateSessionTokens: vi.fn(),
-  };
-}
 
 describe('createContentGenerator', () => {
   it('rejects when no provider runtime is composed, even with an API key', async () => {
@@ -76,24 +46,20 @@ describe('createContentGenerator', () => {
     );
   });
 
-  it('rejects a composed provider manager without a content-generator factory', async () => {
-    const providerManager = createRuntimeProviderManager();
-
+  it('rejects content construction without an owner-supplied factory', async () => {
     await expect(
       createContentGenerator(
         {
           model: 'test-model',
-          providerManager,
         },
         mockConfig,
       ),
     ).rejects.toThrow(
-      'Provider content generator factory is required when a provider manager is configured',
+      'No provider runtime is composed for this Config. Compose the providers package (see packages/providers/src/composition) before creating a content generator.',
     );
   });
 
-  it('creates a generator through an injected factory when a provider manager is composed', async () => {
-    const providerManager = createRuntimeProviderManager();
+  it('creates a generator through an owner-supplied factory', async () => {
     const created: ContentGenerator = {
       generateContent: vi.fn(async () => ({ candidates: [] })),
       generateContentStream: vi.fn(async function* () {
@@ -108,7 +74,6 @@ describe('createContentGenerator', () => {
     const generator = await createContentGenerator(
       {
         model: 'test-model',
-        providerManager,
         contentGeneratorFactory: factory,
       },
       mockConfig,
@@ -138,21 +103,30 @@ describe('createContentGeneratorConfig', () => {
 
   it('should configure for Gemini using GEMINI_API_KEY when set', () => {
     process.env.GEMINI_API_KEY = 'env-gemini-key';
-    const config = createContentGeneratorConfig(mockConfig);
+    const config = createContentGeneratorConfig({
+      model: mockConfig.getModel(),
+      proxy: mockConfig.getProxy(),
+    });
     expect(config.apiKey).toBe('env-gemini-key');
     expect(config.vertexai).toBe(false);
   });
 
   it('should not configure for Gemini if GEMINI_API_KEY is empty', () => {
     process.env.GEMINI_API_KEY = '';
-    const config = createContentGeneratorConfig(mockConfig);
+    const config = createContentGeneratorConfig({
+      model: mockConfig.getModel(),
+      proxy: mockConfig.getProxy(),
+    });
     expect(config.apiKey).toBeUndefined();
     expect(config.vertexai).toBeUndefined();
   });
 
   it('should configure for Vertex AI using GOOGLE_API_KEY when set', () => {
     process.env.GOOGLE_API_KEY = 'env-google-key';
-    const config = createContentGeneratorConfig(mockConfig);
+    const config = createContentGeneratorConfig({
+      model: mockConfig.getModel(),
+      proxy: mockConfig.getProxy(),
+    });
     expect(config.apiKey).toBe('env-google-key');
     expect(config.vertexai).toBe(true);
   });
@@ -160,7 +134,10 @@ describe('createContentGeneratorConfig', () => {
   it('should configure for Vertex AI using GCP project and location when set', () => {
     process.env.GOOGLE_CLOUD_PROJECT = 'env-gcp-project';
     process.env.GOOGLE_CLOUD_LOCATION = 'env-gcp-location';
-    const config = createContentGeneratorConfig(mockConfig);
+    const config = createContentGeneratorConfig({
+      model: mockConfig.getModel(),
+      proxy: mockConfig.getProxy(),
+    });
     expect(config.vertexai).toBe(true);
     expect(config.apiKey).toBeUndefined();
   });
@@ -169,7 +146,10 @@ describe('createContentGeneratorConfig', () => {
     process.env.GOOGLE_CLOUD_PROJECT = '';
     process.env.GOOGLE_CLOUD_PROJECT_ID = 'fallback-gcp-project';
     process.env.GOOGLE_CLOUD_LOCATION = 'env-gcp-location';
-    const config = createContentGeneratorConfig(mockConfig);
+    const config = createContentGeneratorConfig({
+      model: mockConfig.getModel(),
+      proxy: mockConfig.getProxy(),
+    });
     expect(config.vertexai).toBe(true);
     expect(config.apiKey).toBeUndefined();
   });
@@ -178,7 +158,10 @@ describe('createContentGeneratorConfig', () => {
     process.env.GOOGLE_API_KEY = '';
     process.env.GOOGLE_CLOUD_PROJECT = '';
     process.env.GOOGLE_CLOUD_LOCATION = '';
-    const config = createContentGeneratorConfig(mockConfig);
+    const config = createContentGeneratorConfig({
+      model: mockConfig.getModel(),
+      proxy: mockConfig.getProxy(),
+    });
     expect(config.apiKey).toBeUndefined();
     expect(config.vertexai).toBeUndefined();
   });

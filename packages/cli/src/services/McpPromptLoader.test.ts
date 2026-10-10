@@ -1,12 +1,15 @@
+import type { DiscoveredMCPPrompt } from '@vybestack/llxprt-code-mcp';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { installWorkspaceRuntimeFixture } from '../__tests__/workspace-runtime-fixture.js';
+const composeFixtureRuntime = installWorkspaceRuntimeFixture();
+
 import { McpPromptLoader } from './McpPromptLoader.js';
 import type { Config } from '@vybestack/llxprt-code-core';
-import * as cliCore from '@vybestack/llxprt-code-core';
 import type { PromptArgument } from '@modelcontextprotocol/sdk/types.js';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { CommandKind, type CommandContext } from '../ui/commands/types.js';
@@ -32,18 +35,19 @@ const mockPrompt = {
 };
 
 describe('McpPromptLoader', () => {
+  let prompts: DiscoveredMCPPrompt[] = [mockPrompt];
   const mockConfig = {
     getMcpServers: () => ({}),
   } as unknown as Config;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.spyOn(cliCore, 'getMCPServerPrompts').mockReturnValue([mockPrompt]);
+    prompts = [mockPrompt];
   });
 
   describe('parseArgs', () => {
     it('should handle multi-word positional arguments', () => {
-      const loader = new McpPromptLoader(mockConfig);
+      const loader = new McpPromptLoader(composeFixtureRuntime(mockConfig));
       const promptArgs: PromptArgument[] = [
         { name: 'arg1', required: true },
         { name: 'arg2', required: true },
@@ -54,7 +58,7 @@ describe('McpPromptLoader', () => {
     });
 
     it('should handle quoted multi-word positional arguments', () => {
-      const loader = new McpPromptLoader(mockConfig);
+      const loader = new McpPromptLoader(composeFixtureRuntime(mockConfig));
       const promptArgs: PromptArgument[] = [
         { name: 'arg1', required: true },
         { name: 'arg2', required: true },
@@ -65,7 +69,7 @@ describe('McpPromptLoader', () => {
     });
 
     it('should handle a single positional argument with multiple words', () => {
-      const loader = new McpPromptLoader(mockConfig);
+      const loader = new McpPromptLoader(composeFixtureRuntime(mockConfig));
       const promptArgs: PromptArgument[] = [{ name: 'arg1', required: true }];
       const userArgs = 'hello world';
       const result = loader.parseArgs(userArgs, promptArgs);
@@ -73,7 +77,7 @@ describe('McpPromptLoader', () => {
     });
 
     it('should handle escaped quotes in positional arguments', () => {
-      const loader = new McpPromptLoader(mockConfig);
+      const loader = new McpPromptLoader(composeFixtureRuntime(mockConfig));
       const promptArgs: PromptArgument[] = [{ name: 'arg1', required: true }];
       const userArgs = '"hello \\"world\\""';
       const result = loader.parseArgs(userArgs, promptArgs);
@@ -81,7 +85,7 @@ describe('McpPromptLoader', () => {
     });
 
     it('should handle escaped backslashes in positional arguments', () => {
-      const loader = new McpPromptLoader(mockConfig);
+      const loader = new McpPromptLoader(composeFixtureRuntime(mockConfig));
       const promptArgs: PromptArgument[] = [{ name: 'arg1', required: true }];
       const userArgs = '"hello\\\\world"';
       const result = loader.parseArgs(userArgs, promptArgs);
@@ -89,7 +93,7 @@ describe('McpPromptLoader', () => {
     });
 
     it('should handle named args followed by positional args', () => {
-      const loader = new McpPromptLoader(mockConfig);
+      const loader = new McpPromptLoader(composeFixtureRuntime(mockConfig));
       const promptArgs: PromptArgument[] = [
         { name: 'named', required: true },
         { name: 'pos', required: true },
@@ -100,7 +104,7 @@ describe('McpPromptLoader', () => {
     });
 
     it('should handle positional args followed by named args', () => {
-      const loader = new McpPromptLoader(mockConfig);
+      const loader = new McpPromptLoader(composeFixtureRuntime(mockConfig));
       const promptArgs: PromptArgument[] = [
         { name: 'pos', required: true },
         { name: 'named', required: true },
@@ -111,7 +115,7 @@ describe('McpPromptLoader', () => {
     });
 
     it('should handle positional args interspersed with named args', () => {
-      const loader = new McpPromptLoader(mockConfig);
+      const loader = new McpPromptLoader(composeFixtureRuntime(mockConfig));
       const promptArgs: PromptArgument[] = [
         { name: 'pos1', required: true },
         { name: 'named', required: true },
@@ -123,7 +127,7 @@ describe('McpPromptLoader', () => {
     });
 
     it('should treat an escaped quote at the start as a literal', () => {
-      const loader = new McpPromptLoader(mockConfig);
+      const loader = new McpPromptLoader(composeFixtureRuntime(mockConfig));
       const promptArgs: PromptArgument[] = [
         { name: 'arg1', required: true },
         { name: 'arg2', required: true },
@@ -134,7 +138,7 @@ describe('McpPromptLoader', () => {
     });
 
     it('should handle a complex mix of args', () => {
-      const loader = new McpPromptLoader(mockConfig);
+      const loader = new McpPromptLoader(composeFixtureRuntime(mockConfig));
       const promptArgs: PromptArgument[] = [
         { name: 'pos1', required: true },
         { name: 'named1', required: true },
@@ -165,16 +169,14 @@ describe('McpPromptLoader', () => {
           'test-server': { httpUrl: 'https://test-server.com' },
         }),
       }),
-      getPromptRegistry: () => ({
-        getPromptsByServer: (serverName: string) =>
-          serverName === 'test-server'
-            ? cliCore.getMCPServerPrompts(mockConfigWithPrompts, serverName)
-            : [],
-      }),
+      listPrompts: (serverName: string) =>
+        serverName === 'test-server' ? prompts : [],
     } as unknown as Config;
 
     it('should load prompts as slash commands', async () => {
-      const loader = new McpPromptLoader(mockConfigWithPrompts);
+      const loader = new McpPromptLoader(
+        composeFixtureRuntime(mockConfigWithPrompts),
+      );
       const commands = await loader.loadCommands(new AbortController().signal);
       expect(commands).toHaveLength(1);
       expect(commands[0].name).toBe('test-prompt');
@@ -187,11 +189,11 @@ describe('McpPromptLoader', () => {
         ...mockPrompt,
         name: 'Prompt Name',
       };
-      vi.spyOn(cliCore, 'getMCPServerPrompts').mockReturnValue([
-        mockPromptWithSpaces,
-      ]);
+      prompts = [mockPromptWithSpaces];
 
-      const loader = new McpPromptLoader(mockConfigWithPrompts);
+      const loader = new McpPromptLoader(
+        composeFixtureRuntime(mockConfigWithPrompts),
+      );
       const commands = await loader.loadCommands(new AbortController().signal);
 
       expect(commands).toHaveLength(1);
@@ -204,11 +206,11 @@ describe('McpPromptLoader', () => {
         ...mockPrompt,
         name: '  Prompt Name  ',
       };
-      vi.spyOn(cliCore, 'getMCPServerPrompts').mockReturnValue([
-        mockPromptWithWhitespace,
-      ]);
+      prompts = [mockPromptWithWhitespace];
 
-      const loader = new McpPromptLoader(mockConfigWithPrompts);
+      const loader = new McpPromptLoader(
+        composeFixtureRuntime(mockConfigWithPrompts),
+      );
       const commands = await loader.loadCommands(new AbortController().signal);
 
       expect(commands).toHaveLength(1);
@@ -217,16 +219,21 @@ describe('McpPromptLoader', () => {
     });
 
     it('should handle prompt invocation successfully', async () => {
-      const loader = new McpPromptLoader(mockConfigWithPrompts);
+      const loader = new McpPromptLoader(
+        composeFixtureRuntime(mockConfigWithPrompts),
+      );
       const commands = await loader.loadCommands(new AbortController().signal);
       const action = commands[0].action!;
       const context = {} as CommandContext;
       const result = await action(context, 'test-name 123 tiger');
-      expect(mockPrompt.invoke).toHaveBeenCalledWith({
-        name: 'test-name',
-        age: '123',
-        species: 'tiger',
-      });
+      expect(mockPrompt.invoke).toHaveBeenCalledWith(
+        {
+          name: 'test-name',
+          age: '123',
+          species: 'tiger',
+        },
+        expect.any(AbortSignal),
+      );
       expect(result).toStrictEqual({
         type: 'submit_prompt',
         content: JSON.stringify('Hello, world!'),
@@ -234,7 +241,9 @@ describe('McpPromptLoader', () => {
     });
 
     it('should return an error for missing required arguments', async () => {
-      const loader = new McpPromptLoader(mockConfigWithPrompts);
+      const loader = new McpPromptLoader(
+        composeFixtureRuntime(mockConfigWithPrompts),
+      );
       const commands = await loader.loadCommands(new AbortController().signal);
       const action = commands[0].action!;
       const context = {} as CommandContext;
@@ -250,7 +259,9 @@ describe('McpPromptLoader', () => {
       vi.spyOn(mockPrompt, 'invoke').mockRejectedValue(
         new Error('Invocation failed!'),
       );
-      const loader = new McpPromptLoader(mockConfigWithPrompts);
+      const loader = new McpPromptLoader(
+        composeFixtureRuntime(mockConfigWithPrompts),
+      );
       const commands = await loader.loadCommands(new AbortController().signal);
       const action = commands[0].action!;
       const context = {} as CommandContext;
@@ -270,10 +281,10 @@ describe('McpPromptLoader', () => {
 
     describe('autoExecute', () => {
       it('should set autoExecute to true for prompts with no arguments (undefined)', async () => {
-        vi.spyOn(cliCore, 'getMCPServerPrompts').mockReturnValue([
-          { ...mockPrompt, arguments: undefined },
-        ]);
-        const loader = new McpPromptLoader(mockConfigWithPrompts);
+        prompts = [{ ...mockPrompt, arguments: undefined }];
+        const loader = new McpPromptLoader(
+          composeFixtureRuntime(mockConfigWithPrompts),
+        );
         const commands = await loader.loadCommands(
           new AbortController().signal,
         );
@@ -281,10 +292,10 @@ describe('McpPromptLoader', () => {
       });
 
       it('should set autoExecute to true for prompts with empty arguments array', async () => {
-        vi.spyOn(cliCore, 'getMCPServerPrompts').mockReturnValue([
-          { ...mockPrompt, arguments: [] },
-        ]);
-        const loader = new McpPromptLoader(mockConfigWithPrompts);
+        prompts = [{ ...mockPrompt, arguments: [] }];
+        const loader = new McpPromptLoader(
+          composeFixtureRuntime(mockConfigWithPrompts),
+        );
         const commands = await loader.loadCommands(
           new AbortController().signal,
         );
@@ -292,13 +303,15 @@ describe('McpPromptLoader', () => {
       });
 
       it('should set autoExecute to false for prompts with only optional arguments', async () => {
-        vi.spyOn(cliCore, 'getMCPServerPrompts').mockReturnValue([
+        prompts = [
           {
             ...mockPrompt,
             arguments: [{ name: 'optional', required: false }],
           },
-        ]);
-        const loader = new McpPromptLoader(mockConfigWithPrompts);
+        ];
+        const loader = new McpPromptLoader(
+          composeFixtureRuntime(mockConfigWithPrompts),
+        );
         const commands = await loader.loadCommands(
           new AbortController().signal,
         );
@@ -306,13 +319,15 @@ describe('McpPromptLoader', () => {
       });
 
       it('should set autoExecute to false for prompts with required arguments', async () => {
-        vi.spyOn(cliCore, 'getMCPServerPrompts').mockReturnValue([
+        prompts = [
           {
             ...mockPrompt,
             arguments: [{ name: 'required', required: true }],
           },
-        ]);
-        const loader = new McpPromptLoader(mockConfigWithPrompts);
+        ];
+        const loader = new McpPromptLoader(
+          composeFixtureRuntime(mockConfigWithPrompts),
+        );
         const commands = await loader.loadCommands(
           new AbortController().signal,
         );

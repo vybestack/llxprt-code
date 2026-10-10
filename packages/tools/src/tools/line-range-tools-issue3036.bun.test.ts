@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { physicalFiles } from '../__tests__/helpers/physical-files.js';
+
 /**
  * Issue #3036: range-editor tools treat `content.split('\n')` as "the lines of
  * the file", but a newline-terminated file yields a phantom trailing '' element
@@ -55,12 +57,17 @@ describe('Line range tools issue #3036', () => {
     approvalMode: ApprovalMode = 'auto',
   ): IToolHost {
     return {
+      ...physicalFiles,
       getTargetDir: () => targetDir,
       getWorkspaceRoots: () => [targetDir],
       getApprovalMode: () => approvalMode,
       setApprovalMode: () => {},
       isInteractive: () => false,
-      hasFeatureFlag: () => false,
+
+      runSearch: <T>(
+        _directories: readonly string[],
+        operation: () => Promise<T>,
+      ): Promise<T> => operation(),
       getFileService: () => ({
         shouldGitIgnoreFile: () => false,
         shouldLlxprtIgnoreFile: () => false,
@@ -77,7 +84,7 @@ describe('Line range tools issue #3036', () => {
       getLlxprtIgnoreFilePath: () => null,
       recordFileRead: () => {},
       getLlxprtIgnorePatterns: () => [],
-      getEphemeralSettings: () => ({}),
+      readExecutionPolicy: () => ({}),
       getDebugMode: () => false,
     };
   }

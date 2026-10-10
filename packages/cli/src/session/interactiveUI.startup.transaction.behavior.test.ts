@@ -22,7 +22,9 @@ import { promises as fsp } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import * as crypto from 'node:crypto';
-import type { Config } from '@vybestack/llxprt-code-core';
+import { Config } from '@vybestack/llxprt-code-core';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { LoadedSettings } from '../config/settings.js';
 import {
@@ -83,10 +85,8 @@ class CountingScheduler implements PerfScheduler {
   }
 }
 
-const testConfig = {
-  getProjectRoot: () => '/test',
-  getDebugMode: () => false,
-} as unknown as Config;
+let testConfig: Config;
+let runtimeSettings: { owner: SessionSettingsOwner; store: SettingsService };
 
 const testAgent = {} as unknown as Agent;
 const testSettings = {} as unknown as LoadedSettings;
@@ -162,6 +162,15 @@ function errorMessages(err: unknown): string[] {
 describe('Finding B — transactional interactive startup', () => {
   beforeEach(() => {
     dir = fs.mkdtempSync(join(tmpdir(), 'perf-tx-startup-'));
+    testConfig = new Config({
+      sessionId: 'sess-tx',
+      targetDir: dir,
+      cwd: dir,
+      model: 'test-model',
+      debugMode: false,
+    });
+    const store = new SettingsService();
+    runtimeSettings = { store, owner: new SessionSettingsOwner(store) };
     setInteractiveStdoutObserver(null);
     setInteractiveRenderObserver(null);
     setPerfPhaseObserver(null);
@@ -169,6 +178,8 @@ describe('Finding B — transactional interactive startup', () => {
   });
 
   afterEach(async () => {
+    await runtimeSettings.owner.dispose();
+    await testConfig.dispose();
     __resetInteractiveUIStateForTesting();
     setInteractiveStdoutObserver(null);
     setInteractiveRenderObserver(null);
@@ -194,6 +205,7 @@ describe('Finding B — transactional interactive startup', () => {
     try {
       await commitInteractiveStartup({
         config: testConfig,
+        runtimeSettings,
         agent: testAgent,
         settings: testSettings,
         perfOwner: owner,
@@ -225,6 +237,7 @@ describe('Finding B — transactional interactive startup', () => {
     try {
       await commitInteractiveStartup({
         config: testConfig,
+        runtimeSettings,
         agent: testAgent,
         settings: testSettings,
         perfOwner: owner,
@@ -255,6 +268,7 @@ describe('Finding B — transactional interactive startup', () => {
     try {
       await commitInteractiveStartup({
         config: testConfig,
+        runtimeSettings,
         agent: testAgent,
         settings: testSettings,
         perfOwner: owner,
@@ -285,6 +299,7 @@ describe('Finding B — transactional interactive startup', () => {
     try {
       await commitInteractiveStartup({
         config: testConfig,
+        runtimeSettings,
         agent: testAgent,
         settings: testSettings,
         perfOwner: owner,
@@ -317,6 +332,7 @@ describe('Finding B — transactional interactive startup', () => {
     try {
       await commitInteractiveStartup({
         config: testConfig,
+        runtimeSettings,
         agent: testAgent,
         settings: testSettings,
         perfOwner: owner,
@@ -347,6 +363,7 @@ describe('Finding B — transactional interactive startup', () => {
     try {
       await commitInteractiveStartup({
         config: testConfig,
+        runtimeSettings,
         agent: testAgent,
         settings: testSettings,
         perfOwner: owner,
@@ -376,6 +393,7 @@ describe('Finding B — transactional interactive startup', () => {
     await expect(
       commitInteractiveStartup({
         config: testConfig,
+        runtimeSettings,
         agent: testAgent,
         settings: testSettings,
         perfOwner: null,
@@ -393,6 +411,7 @@ describe('Finding B — transactional interactive startup', () => {
     };
     await commitInteractiveStartup({
       config: testConfig,
+      runtimeSettings,
       agent: testAgent,
       settings: testSettings,
       perfOwner: null,
@@ -423,6 +442,7 @@ describe('Finding B — transactional interactive startup', () => {
     try {
       await commitInteractiveStartup({
         config: testConfig,
+        runtimeSettings,
         agent: testAgent,
         settings: testSettings,
         perfOwner: owner,
@@ -460,6 +480,7 @@ describe('Finding B — transactional interactive startup', () => {
     try {
       await commitInteractiveStartup({
         config: testConfig,
+        runtimeSettings,
         agent: testAgent,
         settings: testSettings,
         perfOwner: owner,
@@ -503,6 +524,7 @@ describe('Finding B — transactional interactive startup', () => {
     try {
       await commitInteractiveStartup({
         config: testConfig,
+        runtimeSettings,
         agent: testAgent,
         settings: testSettings,
         perfOwner: owner,

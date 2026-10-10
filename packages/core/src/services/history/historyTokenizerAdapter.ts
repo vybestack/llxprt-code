@@ -22,7 +22,7 @@ import { simpleTokenEstimateForText } from './historyTokenEstimation.js';
 /** Dependencies the adapter needs to resolve tokenizers. */
 export interface TokenizerAdapterDeps {
   tokenizerCache: Map<string, ITokenizer>;
-  tokenizerFactory?: RuntimeTokenizerFactory;
+  tokenizerFactory?: Pick<RuntimeTokenizerFactory, 'getTokenizer'>;
 }
 
 /**

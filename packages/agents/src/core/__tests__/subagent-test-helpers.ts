@@ -1,8 +1,15 @@
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import { createSessionPolicyFixture } from './session-policy-fixture.js';
+import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+
+import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
+
+import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 
 /**
  * Shared helpers for subagent test files. Extracted from the original
@@ -32,25 +39,28 @@ import type {
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { AgentRuntimeLoaderResult } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import { initializeTestConfig } from '@vybestack/llxprt-code-test-utils/core/config.js';
-import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import { initializeTestMcpRuntime } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import type { ToolSelection } from '@vybestack/llxprt-code-tools';
 import type { ToolErrorType } from '@vybestack/llxprt-code-tools';
 import type {
   ModelConfig,
   RunConfig,
   SubAgentRuntimeOverrides,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 
-const mockConfigs = new Set<Config>();
+const mockConfigs = new Map<
+  Config,
+  Awaited<ReturnType<typeof initializeTestMcpRuntime>>
+>();
 
 afterEach(async () => {
-  const configs = Array.from(mockConfigs);
-  mockConfigs.clear();
-  await Promise.all(configs.map((config) => config.dispose()));
+  const configs = Array.from(mockConfigs.keys());
+  await Promise.all(configs.map((config) => disposeMockConfig(config)));
 });
 
 export async function disposeMockConfig(config: Config): Promise<void> {
+  await mockConfigs.get(config)?.dispose();
   mockConfigs.delete(config);
   await config.dispose();
 }
@@ -84,35 +94,51 @@ export function createCompletedToolCallResponse(params: {
   };
 }
 
-type ToolRegistryMethodOverrides = Partial<
-  Pick<ToolRegistry, 'getTool' | 'getFunctionDeclarationsFiltered'>
+type ToolSelectionMethodOverrides = Partial<
+  Pick<
+    ToolSelection,
+    | 'getTool'
+    | 'getFunctionDeclarationsFiltered'
+    | 'getEnabledTools'
+    | 'getAllTools'
+  >
 >;
 
 export async function createMockConfig(
-  toolRegistryMethods: ToolRegistryMethodOverrides = {},
-): Promise<{ config: Config; toolRegistry: ToolRegistry }> {
+  toolRegistryMethods: ToolSelectionMethodOverrides = {},
+  initialSettings: Readonly<Record<string, unknown>> = {},
+): Promise<{
+  config: Config;
+  settingsService: SettingsService;
+  settingsOwner: ReturnType<
+    typeof createSessionSettingsFixture
+  >['settingsOwner'];
+  toolRegistry: ToolSelection;
+  mcpRuntime: Awaited<ReturnType<typeof initializeTestMcpRuntime>>;
+}> {
   // The settings service flows explicitly through ConfigParameters (issue
   // #2616: no ambient runtime context install).
   const settingsService = new SettingsService();
+  for (const [key, value] of Object.entries(initialSettings))
+    settingsService.set(key, value);
   const configParams: ConfigParameters = {
+    initialSettings,
     sessionId: 'test-session',
     model: 'gemini-2.5-pro',
     targetDir: '.',
     debugMode: false,
     cwd: process.cwd(),
-    settingsService,
   };
   const config = new Config(configParams);
-  await initializeTestConfig(config);
-  mockConfigs.add(config);
-
-  await config.refreshAuth();
+  const settingsRoot = createSessionSettingsFixture(config, settingsService);
+  const mcpRuntime = await initializeTestMcpRuntime(config);
+  mockConfigs.set(config, mcpRuntime);
 
   vi.spyOn(config, 'getContentGeneratorConfig').mockReturnValue({
     model: 'gemini-2.5-pro',
   });
 
-  const toolRegistry = config.getToolRegistry();
+  const toolRegistry = mcpRuntime.toolSelection;
   vi.spyOn(toolRegistry, 'getTool').mockImplementation(
     toolRegistryMethods.getTool ?? (() => undefined),
   );
@@ -120,7 +146,21 @@ export async function createMockConfig(
     toolRegistryMethods.getFunctionDeclarationsFiltered ?? (() => []),
   );
 
-  return { config, toolRegistry };
+  if (toolRegistryMethods.getEnabledTools)
+    vi.spyOn(toolRegistry, 'getEnabledTools').mockImplementation(
+      toolRegistryMethods.getEnabledTools,
+    );
+  if (toolRegistryMethods.getAllTools)
+    vi.spyOn(toolRegistry, 'getAllTools').mockImplementation(
+      toolRegistryMethods.getAllTools,
+    );
+  return {
+    config,
+    settingsService,
+    settingsOwner: settingsRoot.settingsOwner,
+    toolRegistry,
+    mcpRuntime,
+  };
 }
 
 export function createMockStream(
@@ -178,8 +218,9 @@ export function createStatelessRuntimeBundle(
     providerAdapter?: AgentRuntimeProviderAdapter;
     telemetryAdapter?: AgentRuntimeTelemetryAdapter;
     contentGenerator?: ContentGenerator;
-    toolRegistry?: ToolRegistry;
+    toolRegistry?: ToolSelection;
     history?: HistoryService;
+    settings?: SettingsService;
   } = {},
 ): AgentRuntimeLoaderResult {
   const toolsView = options.toolsView ?? createDefaultToolsView();
@@ -188,12 +229,13 @@ export function createStatelessRuntimeBundle(
   const telemetryAdapter =
     options.telemetryAdapter ?? createDefaultTelemetryAdapter();
   const history = options.history ?? createDefaultHistory();
-  const toolRegistry = options.toolRegistry ?? createDefaultToolRegistry();
+  const toolRegistry = options.toolRegistry ?? createDefaultToolSelection();
   const runtimeContext = createRuntimeContext(
     history,
     telemetryAdapter,
     providerAdapter,
     toolsView,
+    options.settings,
   );
   const contentGenerator =
     options.contentGenerator ?? createDefaultContentGenerator();
@@ -203,6 +245,12 @@ export function createStatelessRuntimeBundle(
     history,
     providerAdapter,
     telemetryAdapter,
+    telemetryRoot: RootTelemetry.prepare({
+      enabled: false,
+      sessionId: 'subagent-fixture',
+      maxBytes: 1024,
+      maxFiles: 1,
+    }),
     toolsView,
     contentGenerator,
     toolRegistry,
@@ -241,22 +289,22 @@ function createDefaultTelemetryAdapter(): AgentRuntimeTelemetryAdapter {
 }
 
 function createDefaultHistory(): HistoryService {
-  return {
-    clear: vi.fn(),
-    add: vi.fn(),
-    getCuratedForProvider: vi.fn(() => []),
-    getIdGeneratorCallback: vi.fn(() => vi.fn()),
-    findUnmatchedToolCalls: vi.fn(() => []),
-    generateTurnKey: vi.fn(() => `turn-${Date.now()}`),
-  } as unknown as HistoryService;
+  const history = new HistoryService();
+  vi.spyOn(history, 'clear');
+  vi.spyOn(history, 'add');
+  vi.spyOn(history, 'getCuratedForProvider');
+  vi.spyOn(history, 'getIdGeneratorCallback');
+  vi.spyOn(history, 'findUnmatchedToolCalls');
+  vi.spyOn(history, 'generateTurnKey');
+  return history;
 }
 
-function createDefaultToolRegistry(): ToolRegistry {
+function createDefaultToolSelection(): ToolSelection {
   return {
     getTool: vi.fn(),
     getFunctionDeclarationsFiltered: vi.fn(() => []),
     getAllTools: vi.fn(() => []),
-  } as unknown as ToolRegistry;
+  } as unknown as ToolSelection;
 }
 
 function createRuntimeContext(
@@ -264,8 +312,24 @@ function createRuntimeContext(
   telemetryAdapter: AgentRuntimeTelemetryAdapter,
   providerAdapter: AgentRuntimeProviderAdapter,
   toolsView: ToolRegistryView,
+  settings?: SettingsService,
 ): AgentRuntimeContext {
+  const policies = createSessionPolicyFixture(settings);
   return {
+    ...policies,
+    readPromptPolicy: () =>
+      policies.owner.readRuntimePolicy().promptPolicy ?? {},
+    readCompletionBudgetSetting: () =>
+      policies.owner.readRuntimePolicy().maxOutputTokens,
+    readPromptCachingPolicy: () =>
+      policies.owner.readRuntimePolicy().promptCaching,
+    showCitations: () =>
+      policies.owner.readRuntimePolicy().showCitations === true,
+    tokenUsageLoggingEnabled:
+      policies.owner.readRuntimePolicy().tokenUsageLoggingEnabled !== false,
+    readToolExecutionPolicy: policies.readExecutionPolicy,
+    readStreamTimeoutPolicy: () =>
+      policies.owner.readRuntimePolicy().streamTimeoutPolicy,
     state: {
       runtimeId: 'runtime-123',
       provider: 'gemini',
@@ -302,10 +366,7 @@ function createRuntimeContext(
     providerRuntime: {
       runtimeId: 'runtime-123',
       metadata: {},
-      settingsService: {
-        get: vi.fn(),
-        set: vi.fn(),
-      },
+      settingsService: policies.settings,
     } as unknown as ProviderRuntimeContext,
   } as unknown as AgentRuntimeContext;
 }
@@ -329,10 +390,12 @@ export function defaultEnvironmentLoader(): EnvironmentLoader {
 }
 
 export function createRuntimeOverrides(
+  workspacePaths: WorkspacePathOperations,
   options: {
     runtimeBundle?: AgentRuntimeLoaderResult;
     environmentLoader?: EnvironmentLoader;
-    toolRegistry?: ToolRegistry;
+    toolRegistry?: ToolSelection;
+    settings?: SettingsService;
   } = {},
 ): {
   overrides: SubAgentRuntimeOverrides;
@@ -343,12 +406,16 @@ export function createRuntimeOverrides(
     options.runtimeBundle ??
     createStatelessRuntimeBundle({
       toolRegistry: options.toolRegistry,
+      settings: options.settings,
     });
 
   const environmentLoader =
     options.environmentLoader ?? defaultEnvironmentLoader();
 
   const overrides: SubAgentRuntimeOverrides = {
+    instructions: emptyInstructionReads,
+    workspacePaths,
+    readMcpInstructions: () => undefined,
     runtimeBundle,
     environmentContextLoader: environmentLoader,
   };

@@ -4,233 +4,233 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach } from 'bun:test';
-import type { Mock } from 'bun:test';
-import { clearCommand } from './clearCommand.js';
-import { type CommandContext } from './types.js';
-import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-// Mock the telemetry service
-const realLlxprtCodeCoreModule = {
-  ...(await import('@vybestack/llxprt-code-core')),
-};
-const realLlxprtCodeTelemetryModule = {
-  ...(await import('@vybestack/llxprt-code-telemetry')),
-};
-
-void vi.mock('@vybestack/llxprt-code-core', () => {
-  const actual = realLlxprtCodeCoreModule;
-  return {
-    ...actual,
-    triggerSessionEndHook: vi.fn().mockResolvedValue(undefined),
-    triggerSessionStartHook: vi.fn().mockResolvedValue(undefined),
-  };
-});
-
-void vi.mock('@vybestack/llxprt-code-telemetry', () => {
-  const actual = realLlxprtCodeTelemetryModule;
-  return {
-    ...actual,
-    uiTelemetryService: {
-      reset: vi.fn(),
-    },
-  };
-});
-
-import type { Config } from '@vybestack/llxprt-code-core';
-import type { Agent } from '@vybestack/llxprt-code-agents';
-import { assertDefined } from '../../__tests__/assertions.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { mkdtemp, readFile, rm, writeFile, appendFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
-  triggerSessionEndHook,
-  triggerSessionStartHook,
-  SessionEndReason,
-  SessionStartSource,
+  Config,
+  HookEventName,
+  HookType,
+  escapeShellArg,
 } from '@vybestack/llxprt-code-core';
-import { uiTelemetryService } from '@vybestack/llxprt-code-telemetry';
+import type { Agent } from '@vybestack/llxprt-code-agents';
+import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
+import { clearCommand } from './clearCommand.js';
+import type { HistoryItemWithoutId } from '../types.js';
+import type { CommandContext } from './types.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
+import { assertDefined } from '../../__tests__/assertions.js';
 
+const realTelemetry = { ...(await import('@vybestack/llxprt-code-telemetry')) };
+void vi.mock('@vybestack/llxprt-code-telemetry', () => ({
+  ...realTelemetry,
+  uiTelemetryService: { reset: vi.fn() },
+}));
+import { uiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 const clearAction = clearCommand.action;
 assertDefined(clearAction);
 
 describe('clearCommand', () => {
-  let mockContext: CommandContext;
-  let mockResetChat: ReturnType<typeof vi.fn>;
+  let directory: string;
+  let config: Config;
+  let context: CommandContext;
+  let resetCount: number;
+  let uiEvents: string[];
+  let agent: ReturnType<typeof createUiSessionOwner> & {
+    resetChat: Agent['resetChat'];
+  };
 
-  beforeEach(() => {
-    mockResetChat = vi.fn().mockResolvedValue(undefined);
+  beforeEach(async () => {
     vi.clearAllMocks();
-
-    mockContext = createMockCommandContext({
-      services: {
-        config: {
-          setSessionId: vi.fn(),
-        } as unknown as Config,
-        agent: {
-          resetChat: mockResetChat,
-        } as unknown as Agent,
+    vi.spyOn(uiTelemetryService, 'reset').mockReset();
+    directory = await mkdtemp(join(tmpdir(), 'clear-hook-'));
+    const script = join(directory, 'hook.ts');
+    await writeFile(
+      script,
+      `import { appendFileSync, existsSync, readFileSync } from 'node:fs';
+const input = JSON.parse(await Bun.stdin.text());
+appendFileSync(${JSON.stringify(join(directory, 'order'))}, input.hook_event_name + '\\n');
+const failure = ${JSON.stringify(join(directory, 'failure'))};
+if (existsSync(failure) && readFileSync(failure, 'utf8') === input.hook_event_name) process.exit(1);
+console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'}));
+`,
+    );
+    const command = `exec ${escapeShellArg(process.execPath, 'bash')} ${escapeShellArg(script, 'bash')}`;
+    config = new Config({
+      sessionId: 'clear-test',
+      targetDir: directory,
+      cwd: directory,
+      model: 'clear-test',
+      debugMode: false,
+      trustedFolder: true,
+      enableHooks: true,
+      hooks: {
+        [HookEventName.SessionEnd]: [
+          { hooks: [{ type: HookType.Command, command }] },
+        ],
+        [HookEventName.SessionStart]: [
+          { hooks: [{ type: HookType.Command, command }] },
+        ],
+      },
+    });
+    resetCount = 0;
+    uiEvents = [];
+    agent = {
+      ...createUiSessionOwner(config),
+      resetChat: async () => {
+        resetCount++;
+        await appendFile(join(directory, 'order'), 'reset\n');
+      },
+    };
+    context = createMockCommandContext({
+      services: { config, agent },
+      ui: {
+        setDebugMessage: (text: string) => {
+          uiEvents.push(text);
+        },
+        updateHistoryTokenCount: (count: number) => {
+          uiEvents.push(`tokens:${count}`);
+        },
+        clear: () => {
+          uiEvents.push('clear');
+        },
+        addItem: (item: HistoryItemWithoutId) => {
+          if ('text' in item && item.text !== undefined)
+            uiEvents.push(item.text);
+        },
       },
     });
   });
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await config.dispose();
+    await rm(directory, { recursive: true, force: true });
+  });
+  async function order(): Promise<string[]> {
+    return (await readFile(join(directory, 'order'), 'utf8'))
+      .trim()
+      .split('\n');
+  }
 
   it('should set debug message, reset chat via agent, reset telemetry, update history token count, and clear UI when agent is available', async () => {
-    await clearAction(mockContext, '');
-
-    expect(mockContext.ui.setDebugMessage).toHaveBeenCalledWith(
-      'Clearing terminal and resetting chat.',
-    );
-    expect(mockContext.ui.setDebugMessage).toHaveBeenCalledTimes(1);
-
-    expect(mockResetChat).toHaveBeenCalledTimes(1);
+    const telemetryOrders: string[] = [];
+    vi.spyOn(uiTelemetryService, 'reset').mockImplementation(() => {
+      telemetryOrders.push(readFileSync(join(directory, 'order'), 'utf8'));
+      uiEvents.push('telemetry');
+    });
+    await clearAction(context, '');
+    expect(telemetryOrders).toStrictEqual([
+      'SessionEnd\nreset\nSessionStart\n',
+    ]);
+    expect(uiEvents.slice(-3)).toStrictEqual([
+      'telemetry',
+      'tokens:0',
+      'clear',
+    ]);
+    expect(resetCount).toBe(1);
+    expect(uiEvents[0]).toBe('Clearing terminal and resetting chat.');
+    expect(uiEvents).toContain('SessionStart feedback');
+    expect(uiEvents.slice(-2)).toStrictEqual(['tokens:0', 'clear']);
+    expect(await order()).toStrictEqual([
+      'SessionEnd',
+      'reset',
+      'SessionStart',
+    ]);
     expect(uiTelemetryService.reset).toHaveBeenCalledTimes(1);
-    expect(mockContext.ui.updateHistoryTokenCount).toHaveBeenCalledWith(0);
-    expect(mockContext.ui.updateHistoryTokenCount).toHaveBeenCalledTimes(1);
-    expect(mockContext.ui.clear).toHaveBeenCalledTimes(1);
-
-    // Check the order of operations.
-    const setDebugMessageOrder = (
-      mockContext.ui.setDebugMessage as Mock<(...args: never[]) => unknown>
-    ).mock.invocationCallOrder[0];
-    const resetChatOrder = mockResetChat.mock.invocationCallOrder[0];
-    const resetTelemetryOrder = (
-      uiTelemetryService.reset as Mock<(...args: never[]) => unknown>
-    ).mock.invocationCallOrder[0];
-    const updateHistoryTokenCountOrder = (
-      mockContext.ui.updateHistoryTokenCount as Mock<
-        (...args: never[]) => unknown
-      >
-    ).mock.invocationCallOrder[0];
-    const clearOrder = (
-      mockContext.ui.clear as Mock<(...args: never[]) => unknown>
-    ).mock.invocationCallOrder[0];
-
-    expect(setDebugMessageOrder).toBeLessThan(resetChatOrder);
-    expect(resetChatOrder).toBeLessThan(resetTelemetryOrder);
-    expect(resetTelemetryOrder).toBeLessThan(updateHistoryTokenCountOrder);
-    expect(updateHistoryTokenCountOrder).toBeLessThan(clearOrder);
   });
-
+  it('should ask the agent to drop the whole conversation, including the initial turn', async () => {
+    let history = ['first question', 'first answer', 'later question'];
+    agent.resetChat = async (options) => {
+      history =
+        options?.retainInitialHistory === false ? [] : history.slice(0, 2);
+    };
+    await clearAction(context, '');
+    expect(history).toStrictEqual([]);
+  });
   it('should skip reset when no agent is available (terminal-only clear)', async () => {
-    const noAgentContext = createMockCommandContext({
-      services: {
-        config: null,
-        agent: null,
-      },
+    const terminal = createMockCommandContext({
+      services: { config: null, agent: null },
+      ui: context.ui,
     });
-
-    await clearAction(noAgentContext, '');
-
-    expect(noAgentContext.ui.setDebugMessage).toHaveBeenCalledWith(
-      'Clearing terminal.',
-    );
-    expect(mockResetChat).not.toHaveBeenCalled();
+    await clearAction(terminal, '');
+    expect(resetCount).toBe(0);
+    expect(uiEvents[0]).toBe('Clearing terminal.');
+    expect(uiEvents.slice(-2)).toStrictEqual(['tokens:0', 'clear']);
     expect(uiTelemetryService.reset).toHaveBeenCalledTimes(1);
-    expect(noAgentContext.ui.clear).toHaveBeenCalledTimes(1);
   });
-
-  /**
-   * Group A: Session hook tests for clearCommand
-   * @plan PLAN-20250219-GMERGE021.R4
-   * @requirement REQ-R4-1 (SessionEnd before clear, SessionStart after clear)
-   *
-   * These tests verify that clearCommand triggers session lifecycle hooks
-   * in the correct order.
-   */
-
   it('should trigger SessionEnd hook before resetChat when clearing', async () => {
-    vi.clearAllMocks();
-
-    await clearAction(mockContext, '');
-
-    // Assert: triggerSessionEndHook called with SessionEndReason.Clear
-    expect(triggerSessionEndHook).toHaveBeenCalledWith(
-      mockContext.services.config,
-      SessionEndReason.Clear,
-    );
-
-    // Assert: triggerSessionStartHook called with SessionStartSource.Clear
-    expect(triggerSessionStartHook).toHaveBeenCalledWith(
-      mockContext.services.config,
-      SessionStartSource.Clear,
-    );
-
-    // Assert: triggerSessionEndHook called BEFORE resetChat
-    const endHookOrder = (
-      triggerSessionEndHook as Mock<(...args: never[]) => unknown>
-    ).mock.invocationCallOrder[0];
-    const resetChatOrder = mockResetChat.mock.invocationCallOrder[0];
-    expect(endHookOrder).toBeLessThan(resetChatOrder);
-
-    // Assert: triggerSessionStartHook called AFTER resetChat
-    const startHookOrder = (
-      triggerSessionStartHook as Mock<(...args: never[]) => unknown>
-    ).mock.invocationCallOrder[0];
-    expect(resetChatOrder).toBeLessThan(startHookOrder);
+    const observed: string[] = [];
+    agent.hooks.onHookExecution((request) => {
+      observed.push(request.event);
+    });
+    await clearAction(context, '');
+    expect(await order()).toStrictEqual([
+      'SessionEnd',
+      'reset',
+      'SessionStart',
+    ]);
+    expect(observed).toStrictEqual(['SessionEnd', 'SessionStart']);
+    expect(resetCount).toBe(1);
+    expect(uiEvents).toContain('SessionStart feedback');
+    expect(uiEvents.at(-1)).toBe('clear');
   });
-
   it('should complete clear even if SessionEnd hook throws', async () => {
-    vi.clearAllMocks();
-
-    // Mock triggerSessionEndHook to throw
-    (
-      triggerSessionEndHook as Mock<typeof triggerSessionEndHook>
-    ).mockRejectedValueOnce(new Error('Hook failed'));
-
-    // Execute clear and ensure it doesn't throw
-    await clearAction(mockContext, '');
-
-    // Assert: clear still completes, resetChat still called
-    expect(mockResetChat).toHaveBeenCalledTimes(1);
-    expect(mockContext.ui.clear).toHaveBeenCalledTimes(1);
+    await writeFile(join(directory, 'failure'), 'SessionEnd');
+    await clearAction(context, '');
+    expect(resetCount).toBe(1);
+    expect(await order()).toStrictEqual([
+      'SessionEnd',
+      'reset',
+      'SessionStart',
+    ]);
+    expect(uiEvents).toContain('SessionStart feedback');
+    expect(uiEvents.at(-1)).toBe('clear');
+    expect(uiTelemetryService.reset).toHaveBeenCalledTimes(1);
   });
-
   it('should complete clear even if SessionStart hook throws', async () => {
-    vi.clearAllMocks();
-
-    // Mock triggerSessionStartHook to throw
-    (
-      triggerSessionStartHook as Mock<typeof triggerSessionStartHook>
-    ).mockRejectedValueOnce(new Error('Hook failed'));
-
-    // Execute clear and ensure it doesn't throw
-    await clearAction(mockContext, '');
-
-    // Assert: clear still completes
-    expect(mockResetChat).toHaveBeenCalledTimes(1);
-    expect(mockContext.ui.clear).toHaveBeenCalledTimes(1);
+    await writeFile(join(directory, 'failure'), 'SessionStart');
+    await clearAction(context, '');
+    expect(resetCount).toBe(1);
+    expect(await order()).toStrictEqual([
+      'SessionEnd',
+      'reset',
+      'SessionStart',
+    ]);
+    expect(uiEvents).not.toContain('SessionStart feedback');
+    expect(uiEvents.at(-1)).toBe('clear');
+    expect(uiTelemetryService.reset).toHaveBeenCalledTimes(1);
   });
-
   it('should not trigger hooks when agent is absent (terminal-only clear)', async () => {
-    const noAgentContext = createMockCommandContext({
-      services: {
-        config: null,
-        agent: null,
-      },
+    const observed: string[] = [];
+    agent.hooks.onHookExecution((request) => {
+      observed.push(request.event);
     });
-
-    await clearAction(noAgentContext, '');
-
-    expect(triggerSessionEndHook).not.toHaveBeenCalled();
-    expect(triggerSessionStartHook).not.toHaveBeenCalled();
+    const terminal = createMockCommandContext({
+      services: { config: null, agent: null },
+      ui: context.ui,
+    });
+    await clearAction(terminal, '');
+    expect(observed).toStrictEqual([]);
+    expect(resetCount).toBe(0);
+    expect(uiEvents).toStrictEqual(['Clearing terminal.', 'tokens:0', 'clear']);
+    expect(uiTelemetryService.reset).toHaveBeenCalledTimes(1);
   });
-
-  it('should proceed with resetChat but not call hooks when agent is present but config is null', async () => {
-    vi.clearAllMocks();
-
-    const nullConfigContext = createMockCommandContext({
-      services: {
-        config: null,
-        agent: {
-          resetChat: mockResetChat,
-        } as unknown as Agent,
-      },
+  it('should use explicit agent hooks when agent is present but config is null', async () => {
+    const explicit = createMockCommandContext({
+      services: { config: null, agent },
+      ui: context.ui,
     });
-
-    await clearAction(nullConfigContext, '');
-
-    // agent.resetChat() still proceeds (the agent-branch path runs)
-    expect(mockResetChat).toHaveBeenCalledTimes(1);
-    expect(nullConfigContext.ui.clear).toHaveBeenCalledTimes(1);
-    // Hooks are NOT called — triggerSessionEndHookSafe/triggerSessionStartHookSafe
-    // early-return when config is null.
-    expect(triggerSessionEndHook).not.toHaveBeenCalled();
-    expect(triggerSessionStartHook).not.toHaveBeenCalled();
+    await clearAction(explicit, '');
+    expect(resetCount).toBe(1);
+    expect(await order()).toStrictEqual([
+      'SessionEnd',
+      'reset',
+      'SessionStart',
+    ]);
+    expect(uiEvents).toContain('SessionStart feedback');
+    expect(uiEvents.at(-1)).toBe('clear');
+    expect(uiTelemetryService.reset).toHaveBeenCalledTimes(1);
   });
 });

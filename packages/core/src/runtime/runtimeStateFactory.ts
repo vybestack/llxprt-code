@@ -25,7 +25,7 @@ export interface RuntimeStateConfigSource {
   getProvider?(): string | undefined;
   getModel?(): string | undefined;
   getContentGeneratorConfig?(): { model?: string } | undefined;
-  getEphemeralSetting?(key: string): unknown;
+  getInitialSettings?(): Readonly<Record<string, unknown>>;
   getProxy?(): string | undefined;
 }
 
@@ -123,10 +123,7 @@ export function createAgentRuntimeStateFromConfig(
   const model = resolveModel(config, contentConfig?.model, overrides.model);
 
   const baseUrlCandidate =
-    overrides.baseUrl ??
-    (typeof config.getEphemeralSetting === 'function'
-      ? config.getEphemeralSetting('base-url')
-      : undefined);
+    overrides.baseUrl ?? config.getInitialSettings?.()['base-url'];
   const baseUrl = isValidUrl(baseUrlCandidate) ? baseUrlCandidate : undefined;
 
   const proxyUrl =

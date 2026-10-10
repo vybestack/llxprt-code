@@ -1,3 +1,6 @@
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import { createLoopSettingsFixture } from './agenticLoop/__tests__/loop-settings-fixture.js';
+import { DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES } from '@vybestack/llxprt-code-core/config/configTypes.js';
 /**
  * @license
  * Copyright 2026 Google LLC
@@ -24,7 +27,6 @@
 import { describe, it, expect, afterEach } from 'bun:test';
 import type { ToolCall, CompletedToolCall } from './coreToolScheduler.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core';
 import {
@@ -136,8 +138,22 @@ describe('coreToolScheduler', () => {
     const registry = makeRegistry(tools);
     const updates: ToolCall[][] = [];
     const completions: CompletedToolCall[][] = [];
+    const { config, settingsOwner } = createLoopSettingsFixture({
+      interactive: true,
+      approvalMode: ApprovalMode.DEFAULT,
+      imagePayloadBudgetBytes: DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
+    });
     const scheduler = new CoreToolScheduler({
-      config: makeConfig(engine, registry, bus),
+      telemetry: RootTelemetry.prepare({
+        enabled: false,
+        sessionId: 'isolated-caller-fixture',
+        maxBytes: 1024,
+        maxFiles: 1,
+      }),
+      config,
+      readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
       messageBus: bus,
       toolRegistry: registry,
       onAllToolCallsComplete: async (calls: CompletedToolCall[]) => {
@@ -173,28 +189,6 @@ describe('coreToolScheduler', () => {
       getAllTools: () => tools,
       getToolsByServer: () => [],
     } as unknown as ToolRegistry;
-  }
-
-  function makeConfig(
-    engine: PolicyEngine,
-    registry: ToolRegistry,
-    bus: MessageBus,
-  ): Config {
-    return {
-      getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
-      getDebugMode: () => false,
-      isInteractive: () => true,
-      getApprovalMode: () => ApprovalMode.DEFAULT,
-      getEphemeralSettings: () => ({}),
-      getAllowedTools: () => [],
-      getContentGeneratorConfig: () => ({ model: 'test-model' }),
-      getToolRegistry: () => registry,
-      getMessageBus: () => bus,
-      getEnableHooks: () => false,
-      getPolicyEngine: () => engine,
-      getModel: () => 'gemini-2.5-pro',
-    } as unknown as Config;
   }
 
   async function waitForStatus<Status extends ToolCall['status']>(

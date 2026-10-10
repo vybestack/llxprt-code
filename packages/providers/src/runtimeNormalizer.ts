@@ -4,547 +4,239 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * Runtime input normalization for stateless provider invocations.
- * Extracted from ProviderManager to keep the main file under the lint
- * line budget.
- */
-
+import type { ProviderRetryOperations } from '@vybestack/llxprt-code-core/runtime/contracts/ProviderRetryOperations.js';
 import type { GenerateChatOptions, IProvider } from './IProvider.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import { isContainerSandbox } from './utils/containerSandbox.js';
-import { PROVIDER_CONFIG_KEYS } from './providerConfigKeys.js';
 import { ProviderRuntimeNormalizationError } from './errors.js';
 import { getBaseUrlFromProvider } from './baseUrlResolver.js';
 import { isAbortSignal } from './utils/abortSignal.js';
 import { safeGetDefaultModel } from './utils/safeDefaultModel.js';
-
-const logger = new DebugLogger('llxprt:provider:manager');
-
-const BASE_URL_OPTIONAL_PROVIDERS = new Set([
-  'gemini',
-  'openai',
-  'openai-responses',
-  'anthropic',
-  'openaivercel',
-  'load-balancer',
-]);
-
-interface ProviderWithWrapper {
-  wrappedProvider?: IProvider;
-}
-
-const MAX_WRAPPED_PROVIDER_DEPTH = 25;
-
-interface ProviderWithAuth {
-  getAuthToken?: () => Promise<string>;
-}
-
-function isBlankish(value: unknown): boolean {
-  return value == null || (typeof value === 'string' && value.trim() === '');
-}
-
-/**
- * Check whether a resolved auth token value is considered present.
- */
-function hasResolvedAuthToken(value: unknown): boolean {
-  if (value === undefined || value === null || value === '') {
-    return false;
-  }
-  if (value === false || value === 0) {
-    return false;
-  }
-  return !(typeof value === 'number' && Number.isNaN(value));
-}
-
-function unwrapProvider(
-  provider: IProvider | undefined,
-): IProvider | undefined {
-  const visitedProviders = new Set<IProvider>();
-  let actualProvider = provider;
-  let depth = 0;
-  while (
-    actualProvider !== undefined &&
-    'wrappedProvider' in actualProvider &&
-    !visitedProviders.has(actualProvider) &&
-    depth < MAX_WRAPPED_PROVIDER_DEPTH
-  ) {
-    visitedProviders.add(actualProvider);
-    actualProvider = (actualProvider as ProviderWithWrapper).wrappedProvider;
-    depth += 1;
-  }
-
-  if (actualProvider !== undefined && visitedProviders.has(actualProvider)) {
-    return undefined;
-  }
-  if (
-    actualProvider !== undefined &&
-    'wrappedProvider' in actualProvider &&
-    depth >= MAX_WRAPPED_PROVIDER_DEPTH
-  ) {
-    return undefined;
-  }
-  return actualProvider;
-}
+import { PROVIDER_CONFIG_KEYS } from './providerConfigKeys.js';
+import { isContainerSandbox } from './utils/containerSandbox.js';
 
 export interface RuntimeNormalizerDeps {
+  composeRetryOperations?: (
+    providerName: string,
+    profileId?: string,
+  ) => ProviderRetryOperations;
+  admitRequest: (
+    options: GenerateChatOptions,
+    providerName: string,
+  ) => GenerateChatOptions;
   getActiveProviderName: () => string | undefined;
   getProvider: (name: string) => IProvider | undefined;
 }
 
-/**
- * Normalize runtime inputs per call - no stored settings/config fallbacks.
- * This enforces that all runtime context is provided per-call and that
- * providers cannot rely on stored state.
- */
 export function normalizeRuntimeInputs(
   rawOptions: GenerateChatOptions,
   deps: RuntimeNormalizerDeps,
   providerName?: string,
 ): GenerateChatOptions {
-  const runtimeId = rawOptions.runtime?.runtimeId ?? 'unknown';
   const targetProvider = providerName ?? deps.getActiveProviderName();
-
-  const { settingsService, config } = requireRuntimeContext(
-    rawOptions,
-    runtimeId,
-  );
-
+  const runtimeId = rawOptions.invocation?.runtimeId ?? 'unknown';
   if (targetProvider === undefined) {
     throw new ProviderRuntimeNormalizationError({
       providerKey: 'ProviderManager',
-      message: `No provider is active or targeted for runtimeId=${runtimeId}. Set an explicit provider via options or activate one on the manager.`,
+      message: `No provider is active or targeted for runtimeId=${runtimeId}.`,
       requirement: 'REQ-SP4-003',
       runtimeId,
       stage: 'normalizeRuntimeInputs',
       metadata: { missingFields: ['provider'] },
     });
   }
-
-  const resolved = resolveFields(
-    rawOptions,
-    settingsService,
-    config,
-    targetProvider,
-    runtimeId,
-    deps,
+  const admitted = deps.admitRequest(rawOptions, targetProvider);
+  const invocation = admitted.invocation;
+  if (invocation === undefined)
+    throw new Error('Provider admission requires invocation policy');
+  const provider =
+    invocation.getProviderOverrides<Record<string, unknown>>(targetProvider) ??
+    {};
+  const global = invocation.ephemerals;
+  const applyGlobal = shouldApplyGlobal(global, targetProvider);
+  const instance = deps.getProvider(targetProvider);
+  assertProviderChain(instance, targetProvider, runtimeId);
+  const model = resolveModel(admitted, provider, global, applyGlobal, instance);
+  const baseURL = resolveEndpoint(
+    admitted,
+    provider,
+    global,
+    applyGlobal,
+    instance,
   );
-
-  validateResolvedFields(resolved, targetProvider, runtimeId, deps);
-
-  return buildNormalizedOptions(
-    rawOptions,
-    settingsService,
-    config,
-    resolved,
-    targetProvider,
-    runtimeId,
-  );
-}
-
-/** REQ-SP4-002: Validate and extract required settings service and config. */
-function requireRuntimeContext(
-  rawOptions: GenerateChatOptions,
-  runtimeId: string,
-): { settingsService: SettingsService; config: Config } {
-  const settingsService =
-    rawOptions.settings ?? rawOptions.runtime?.settingsService;
-  const config = rawOptions.config ?? rawOptions.runtime?.config;
-
-  if (!settingsService) {
-    throw new ProviderRuntimeNormalizationError({
-      providerKey: 'ProviderManager',
-      message:
-        'ProviderManager requires call-scoped settings; legacy provider state is disabled.',
-      requirement: 'REQ-SP4-002',
-      runtimeId,
-      stage: 'normalizeRuntimeInputs',
-      metadata: {
-        hint: 'SettingsService must be provided in options.settings or runtime.settingsService',
-      },
-    });
-  }
-
-  if (!config) {
-    throw new ProviderRuntimeNormalizationError({
-      providerKey: 'ProviderManager',
-      message:
-        'ProviderManager requires call-scoped config; legacy provider state is disabled.',
-      requirement: 'REQ-SP4-002',
-      runtimeId,
-      stage: 'normalizeRuntimeInputs',
-      metadata: {
-        hint: 'Config must be provided in options.config or runtime.config',
-      },
-    });
-  }
-
-  return { settingsService: settingsService as SettingsService, config };
-}
-
-/** REQ-SP4-003: Compose normalized.resolved with runtime helpers. */
-function resolveFields(
-  rawOptions: GenerateChatOptions,
-  settingsService: SettingsService,
-  config: Config,
-  targetProvider: string,
-  runtimeId: string,
-  deps: RuntimeNormalizerDeps,
-): Record<string, unknown> {
-  const providerSettings = settingsService.getProviderSettings(targetProvider);
-  const providerInstance = deps.getProvider(targetProvider);
-  const shouldApplyGlobalEphemerals = computeShouldApplyGlobalEphemerals(
-    settingsService,
-    config,
-    targetProvider,
-  );
-
-  logger.debug(() => {
-    const token = rawOptions.resolved?.authToken;
-    const tokenStr = typeof token === 'string' ? token : '';
-    return `[normalizeRuntimeInputs] provider=${targetProvider}, incoming authToken present=${Boolean(tokenStr.trim())} length=${tokenStr.length}`;
-  });
-
-  const resolved: Record<string, unknown> = {
-    model: resolveModelField(
-      rawOptions,
-      providerSettings,
-      config,
-      providerInstance,
-      shouldApplyGlobalEphemerals,
-    ),
-    baseURL: resolveBaseURLField(rawOptions, providerSettings),
-    authToken:
-      rawOptions.resolved?.authToken ??
-      (providerSettings['auth-key'] as string | undefined),
-    telemetry: {
-      ...rawOptions.resolved?.telemetry,
-      runtimeId,
-      normalizedAt: new Date().toISOString(),
-      provider: targetProvider,
-    },
-  };
-
-  applyGlobalAuthKey(
-    resolved,
-    rawOptions,
-    config,
-    shouldApplyGlobalEphemerals,
-    targetProvider,
-  );
-
-  resolveBaseURL(
-    resolved,
-    rawOptions,
-    config,
-    providerSettings,
-    providerInstance,
-    shouldApplyGlobalEphemerals,
-  );
-
-  return resolved;
-}
-
-/** Resolve model field, treating empty/whitespace strings as absent. */
-function resolveModelField(
-  rawOptions: GenerateChatOptions,
-  providerSettings: Record<string, unknown>,
-  config: Config,
-  providerInstance: IProvider | undefined,
-  shouldApplyGlobalEphemerals: boolean,
-): string | undefined {
-  const fromResolved = rawOptions.resolved?.model;
-  if (typeof fromResolved === 'string' && fromResolved.trim() !== '') {
-    return fromResolved;
-  }
-  const fromSettings = providerSettings.model as string | undefined;
-  if (typeof fromSettings === 'string' && fromSettings.trim() !== '') {
-    return fromSettings;
-  }
-  if (shouldApplyGlobalEphemerals) {
-    const fromConfig = config.getModel();
-    if (typeof fromConfig === 'string' && fromConfig.trim() !== '') {
-      return fromConfig;
-    }
-  }
-  const fromDefault = providerInstance
-    ? safeGetDefaultModel(providerInstance)
-    : '';
-  if (typeof fromDefault === 'string' && fromDefault.trim() !== '') {
-    return fromDefault;
-  }
-  return undefined;
-}
-
-/** Resolve baseURL field, treating empty/whitespace strings as absent. */
-function resolveBaseURLField(
-  rawOptions: GenerateChatOptions,
-  providerSettings: Record<string, unknown>,
-): string | undefined {
-  const fromResolved = rawOptions.resolved?.baseURL;
-  if (typeof fromResolved === 'string' && fromResolved.trim() !== '') {
-    return fromResolved;
-  }
-  const fromSettings = providerSettings['base-url'] as string | undefined;
-  if (typeof fromSettings === 'string' && fromSettings.trim() !== '') {
-    return fromSettings;
-  }
-  return undefined;
-}
-
-/** Determine whether global ephemeral settings should be applied. */
-function computeShouldApplyGlobalEphemerals(
-  settingsService: SettingsService,
-  config: Config,
-  targetProvider: string,
-): boolean {
-  const configSettingsService = config.getSettingsService();
-  const configMatchesSettingsService =
-    configSettingsService === settingsService;
-  const activeProviderRaw = settingsService.get('activeProvider');
-  const activeProviderName =
-    typeof activeProviderRaw === 'string' ? activeProviderRaw.trim() : '';
-  return (
-    configMatchesSettingsService &&
-    (!activeProviderName || activeProviderName === targetProvider)
-  );
-}
-
-/** Apply global auth-key from ephemeral settings if no token is set. */
-function applyGlobalAuthKey(
-  resolved: Record<string, unknown>,
-  rawOptions: GenerateChatOptions,
-  config: Config,
-  shouldApplyGlobalEphemerals: boolean,
-  targetProvider: string,
-): void {
-  const effectiveConfig = rawOptions.config ?? config;
-
-  logger.debug(() => {
-    const token = resolved.authToken;
-    const tokenStr = typeof token === 'string' ? token : '';
-    return `[normalizeRuntimeInputs] provider=${targetProvider}, resolved authToken present=${Boolean(tokenStr.trim())} length=${tokenStr.length}`;
-  });
-
-  const configWithEphemerals = effectiveConfig as Config & {
-    getEphemeralSetting?: (key: string) => unknown;
-  };
-
-  if (
-    shouldApplyGlobalEphemerals &&
-    typeof configWithEphemerals.getEphemeralSetting === 'function' &&
-    (typeof resolved.authToken !== 'string' || resolved.authToken.trim() === '')
-  ) {
-    const globalAuthKey = configWithEphemerals.getEphemeralSetting(
-      'auth-key',
-    ) as string | undefined;
-
-    logger.debug(() => {
-      const tokenStr = typeof globalAuthKey === 'string' ? globalAuthKey : '';
-      return `[normalizeRuntimeInputs] provider=${targetProvider}, global auth-key present=${Boolean(tokenStr.trim())} length=${tokenStr.length}, will use: ${globalAuthKey ? 'YES' : 'NO'}`;
-    });
-
-    if (globalAuthKey && globalAuthKey.trim() !== '') {
-      resolved.authToken = globalAuthKey.trim();
-    } else if (process.env.DEBUG) {
-      logger.debug(
-        () =>
-          `[ProviderManager] Missing auth token for provider '${targetProvider}' even after checking global auth-key.`,
-      );
-    }
-  }
-}
-
-/** Resolve base URL from config, provider, and sandbox settings. */
-function resolveBaseURL(
-  resolved: Record<string, unknown>,
-  rawOptions: GenerateChatOptions,
-  config: Config,
-  providerSettings: Record<string, unknown>,
-  providerInstance: IProvider | undefined,
-  shouldApplyGlobalEphemerals: boolean,
-): void {
-  if (isBlankish(resolved.baseURL) && shouldApplyGlobalEphemerals) {
-    const configBaseUrl =
-      typeof config.getEphemeralSetting === 'function'
-        ? (config.getEphemeralSetting('base-url') as string | undefined)
-        : undefined;
-    if (configBaseUrl && typeof configBaseUrl === 'string') {
-      const trimmed = configBaseUrl.trim();
-      if (trimmed) {
-        resolved.baseURL = trimmed;
-      }
-    }
-  }
-
-  if (isBlankish(resolved.baseURL)) {
-    const providerBaseUrl = getBaseUrlFromProvider(providerInstance);
-    if (providerBaseUrl) {
-      resolved.baseURL = providerBaseUrl;
-    }
-  }
-
-  const hasExplicitCallBaseUrl =
-    typeof rawOptions.resolved?.baseURL === 'string' &&
-    rawOptions.resolved.baseURL.trim() !== '';
-  if (isContainerSandbox() && !hasExplicitCallBaseUrl) {
-    const sandboxBaseUrl = providerSettings['sandbox-base-url'] as
-      | string
-      | undefined;
-    if (sandboxBaseUrl && typeof sandboxBaseUrl === 'string') {
-      const trimmed = sandboxBaseUrl.trim();
-      if (trimmed) {
-        resolved.baseURL = trimmed;
-      }
-    }
-  }
-}
-
-/** REQ-SP4-003: Validate required fields in resolved options. */
-function validateResolvedFields(
-  resolved: Record<string, unknown>,
-  targetProvider: string,
-  runtimeId: string,
-  deps: RuntimeNormalizerDeps,
-): void {
-  const missingFields: string[] = [];
-  if (isBlankish(resolved.model)) missingFields.push('model');
-  if (
-    isBlankish(resolved.baseURL) &&
-    !BASE_URL_OPTIONAL_PROVIDERS.has(targetProvider)
-  ) {
-    missingFields.push('baseURL');
-  }
-
-  if (
-    !hasResolvedAuthToken(resolved.authToken) &&
-    targetProvider !== 'gemini'
-  ) {
-    const providerInstance = deps.getProvider(targetProvider);
-
-    const actualProvider = unwrapProvider(providerInstance);
-
-    const canResolveAuth =
-      actualProvider !== undefined &&
-      'getAuthToken' in actualProvider &&
-      typeof (actualProvider as ProviderWithAuth).getAuthToken === 'function';
-
-    if (canResolveAuth === false) {
-      missingFields.push('authToken');
-    }
-  }
-
-  if (missingFields.length > 0) {
-    throw new ProviderRuntimeNormalizationError({
-      providerKey: 'ProviderManager',
-      message: `Incomplete runtime resolution (${missingFields.join(', ')}) for runtimeId=${runtimeId}`,
-      requirement: 'REQ-SP4-003',
-      runtimeId,
-      stage: 'normalizeRuntimeInputs',
-      metadata: { missingFields, provider: targetProvider },
-    });
-  }
-}
-
-function readConfigUserMemory(config: Config): string | undefined {
-  const configWithOptionalMemory = config as { getUserMemory?: () => string };
-  return configWithOptionalMemory.getUserMemory?.() ?? undefined;
-}
-
-function getAbortSignal(
-  metadata: Record<string, unknown>,
-): AbortSignal | undefined {
-  const value = metadata.abortSignal;
-  return isAbortSignal(value) ? value : undefined;
-}
-
-/** REQ-SP4-005: Build final normalized options with runtime context. */
-function buildNormalizedOptions(
-  rawOptions: GenerateChatOptions,
-  settingsService: SettingsService,
-  config: Config,
-  resolved: Record<string, unknown>,
-  targetProvider: string,
-  runtimeId: string,
-): GenerateChatOptions {
-  const configUserMemory = readConfigUserMemory(config);
-  const userMemory = rawOptions.userMemory ?? configUserMemory;
-  const metadata = {
-    ...rawOptions.metadata,
-    ...rawOptions.runtime?.metadata,
-    _normalized: true,
-    _normalizationTime: new Date().toISOString(),
-    _runtimeId: runtimeId,
-    _provider: targetProvider,
-  };
-
-  const normalizedRuntime: ProviderRuntimeContext = {
-    ...(rawOptions.runtime ?? {}),
-    settingsService,
-    config,
-    runtimeId,
-    metadata,
-  };
-
-  const userMemorySnapshot =
-    typeof userMemory === 'string' ? userMemory : configUserMemory;
-
-  const metadataSignal = getAbortSignal(metadata);
-  const existingInvocation = rawOptions.invocation;
-  const invocation =
-    existingInvocation === undefined ||
-    (existingInvocation.signal === undefined && metadataSignal !== undefined)
-      ? createRuntimeInvocationContext({
-          runtime: normalizedRuntime,
-          settings: settingsService,
-          providerName: targetProvider,
-          ephemeralsSnapshot:
-            existingInvocation?.ephemerals ??
-            buildEphemeralsSnapshot(settingsService, targetProvider),
-          telemetry:
-            existingInvocation?.telemetry ??
-            (resolved.telemetry as
-              | { runtimeId: string; normalizedAt: string; provider: string }
-              | undefined),
-          metadata: existingInvocation?.metadata ?? metadata,
-          userMemory: existingInvocation?.userMemory ?? userMemorySnapshot,
-          redaction: existingInvocation?.redaction,
-          signal: existingInvocation?.signal ?? metadataSignal,
-          fallbackRuntimeId: existingInvocation?.runtimeId ?? runtimeId,
-        })
-      : existingInvocation;
-
-  return {
-    ...rawOptions,
-    settings: settingsService,
-    config,
-    runtime: normalizedRuntime,
-    resolved: resolved as GenerateChatOptions['resolved'],
-    userMemory,
-    metadata,
+  assertResolvedRoute(model, baseURL, targetProvider, runtimeId);
+  const { metadata, signal } = captureRequestMetadata(
+    admitted,
     invocation,
+    runtimeId,
+    targetProvider,
+  );
+  return {
+    ...admitted,
+    ...captureRecovery(deps, admitted, targetProvider, metadata),
+    resolved: { ...admitted.resolved, model, baseURL },
+    metadata,
+    invocation: createRuntimeInvocationContext({
+      runtimeId: invocation.runtimeId,
+      providerName: targetProvider,
+      ephemeralsSnapshot: invocation.ephemerals,
+      providerDefaults: invocation.providerDefaults,
+      configuredHeaders: invocation.customHeaders,
+      modelParams: admitted.modelParameters?.modelParams,
+      modelParamsProviderName: admitted.modelParameters?.providerName,
+      metadata: invocation.metadata,
+      telemetry: invocation.telemetry,
+      userMemory: invocation.userMemory,
+      redaction: invocation.redaction,
+      signal,
+    }),
   };
+}
+
+function validString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }
 
 export function buildEphemeralsSnapshot(
   settingsService: SettingsService,
   providerName: string,
 ): Record<string, unknown> {
-  const globalEphemerals = settingsService.getAllGlobalSettings();
-  const providerEphemerals = settingsService.getProviderSettings(providerName);
+  return {
+    ...Object.fromEntries(
+      Object.entries(settingsService.getAllGlobalSettings()).filter(
+        ([key]) => !PROVIDER_CONFIG_KEYS.has(key),
+      ),
+    ),
+    [providerName]: { ...settingsService.getProviderSettings(providerName) },
+  };
+}
 
-  // @plan PLAN-20260126-SETTINGS-SEPARATION.P09
-  // Filter out provider-config settings from global level
-  const snapshot: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(globalEphemerals)) {
-    if (!PROVIDER_CONFIG_KEYS.has(key)) {
-      snapshot[key] = value;
-    }
+function shouldApplyGlobal(
+  global: Readonly<Record<string, unknown>>,
+  providerName: string,
+): boolean {
+  const active = validString(global['activeProvider']);
+  return active === undefined || active === providerName;
+}
+
+function resolveModel(
+  options: GenerateChatOptions,
+  provider: Record<string, unknown>,
+  global: Readonly<Record<string, unknown>>,
+  applyGlobal: boolean,
+  instance: IProvider | undefined,
+): string | undefined {
+  const configured =
+    validString(options.resolved?.model) ?? validString(provider.model);
+  const globalModel = applyGlobal ? validString(global.model) : undefined;
+  return (
+    configured ??
+    globalModel ??
+    (instance === undefined ? undefined : safeGetDefaultModel(instance))
+  );
+}
+
+function resolveEndpoint(
+  options: GenerateChatOptions,
+  provider: Record<string, unknown>,
+  global: Readonly<Record<string, unknown>>,
+  applyGlobal: boolean,
+  instance: IProvider | undefined,
+): string | undefined {
+  const explicit = validString(options.resolved?.baseURL);
+  if (explicit !== undefined) return explicit;
+  const sandbox = isContainerSandbox()
+    ? validString(provider['sandbox-base-url'])
+    : undefined;
+  const scoped = sandbox ?? validString(provider['base-url']);
+  const globalURL = applyGlobal ? validString(global['base-url']) : undefined;
+  return scoped ?? globalURL ?? getBaseUrlFromProvider(instance);
+}
+
+function assertProviderChain(
+  provider: IProvider | undefined,
+  name: string,
+  runtimeId: string,
+): void {
+  const seen = new Set<IProvider>();
+  let current = provider;
+  while (current && 'wrappedProvider' in current) {
+    if (seen.has(current))
+      throw new ProviderRuntimeNormalizationError({
+        providerKey: 'ProviderManager',
+        message: 'Cyclic provider chain cannot resolve authToken',
+        requirement: 'REQ-SP4-003',
+        runtimeId,
+        stage: 'normalizeRuntimeInputs',
+        metadata: { provider: name, missingFields: ['authToken'] },
+      });
+    seen.add(current);
+    const wrapped: unknown = current.wrappedProvider;
+    if (
+      typeof wrapped !== 'object' ||
+      wrapped === null ||
+      !('generateChatCompletion' in wrapped) ||
+      typeof wrapped.generateChatCompletion !== 'function'
+    )
+      return;
+    current = wrapped as IProvider;
   }
-  snapshot[providerName] = { ...providerEphemerals };
-  return snapshot;
+}
+
+function captureRequestMetadata(
+  admitted: GenerateChatOptions,
+  invocation: NonNullable<GenerateChatOptions['invocation']>,
+  runtimeId: string,
+  targetProvider: string,
+): { metadata: Record<string, unknown>; signal: AbortSignal | undefined } {
+  const metadata: Record<string, unknown> = {
+    ...admitted.metadata,
+    _normalized: true,
+    _runtimeId: runtimeId,
+    _provider: targetProvider,
+  };
+  const signal = isAbortSignal(metadata.abortSignal)
+    ? metadata.abortSignal
+    : invocation.signal;
+  return { metadata, signal };
+}
+
+function captureRecovery(
+  deps: RuntimeNormalizerDeps,
+  admitted: GenerateChatOptions,
+  providerName: string,
+  metadata: Record<string, unknown>,
+): ProviderRetryOperations | undefined {
+  const profile =
+    admitted.modelParameters?.route?.profileName ??
+    (typeof metadata.profileId === 'string' ? metadata.profileId : undefined);
+  return deps.composeRetryOperations?.(providerName, profile);
+}
+
+function assertResolvedRoute(
+  model: string | undefined,
+  baseURL: string | undefined,
+  targetProvider: string,
+  runtimeId: string,
+): void {
+  const endpointRequired = ![
+    'gemini',
+    'openai',
+    'openai-responses',
+    'anthropic',
+    'openaivercel',
+    'load-balancer',
+  ].includes(targetProvider);
+  if (!model || (endpointRequired && !baseURL))
+    throw new ProviderRuntimeNormalizationError({
+      providerKey: 'ProviderManager',
+      message: `Incomplete runtime resolution (${!model ? 'model' : 'baseURL'}) for runtimeId=${runtimeId}`,
+      requirement: 'REQ-SP4-003',
+      runtimeId,
+      stage: 'normalizeRuntimeInputs',
+      metadata: {
+        missingFields: [!model ? 'model' : 'baseURL'],
+        provider: targetProvider,
+      },
+    });
 }

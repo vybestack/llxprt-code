@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { AgentPolicyControl } from '@vybestack/llxprt-code-agents';
 
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -10,14 +11,12 @@ import { Box, Text } from 'ink';
 import {
   PolicyDecision,
   type ApprovalMode,
-  type PolicyEngine,
   type PolicyRule,
   listEditableRules,
   addEditableRule,
   updateEditableRule,
   deleteEditableRule,
   duplicateEditableRule,
-  reloadUserPolicyRules,
   type EditablePolicyRule,
 } from '@vybestack/llxprt-code-core';
 import { Colors } from '../colors.js';
@@ -39,12 +38,12 @@ import {
 
 /** Narrow runtime surface the dialog depends on. */
 export interface PoliciesDialogRuntime {
-  getPolicyEngine(): PolicyEngine;
   getApprovalMode(): ApprovalMode;
 }
 
 interface PoliciesDialogProps {
   config?: PoliciesDialogRuntime;
+  policy?: AgentPolicyControl;
   addItem: UseHistoryManagerReturn['addItem'];
   onExit: () => void;
 }
@@ -127,7 +126,7 @@ function makeRunMutation(deps: RunMutationDeps) {
 }
 
 interface PoliciesDialogStateProps {
-  engine: PolicyEngine | undefined;
+  engine: AgentPolicyControl | undefined;
   approvalMode: ApprovalMode;
   addItem: UseHistoryManagerReturn['addItem'];
 }
@@ -155,9 +154,18 @@ function usePoliciesDialogState({
   const refreshRules = useCallback(async () => {
     if (engine === undefined) return;
     const editable = await listEditableRules();
-    await reloadUserPolicyRules(engine, approvalMode);
+    await engine.reloadUserRules(approvalMode);
     if (!mountedRef.current) return;
-    patch({ rules: editable, engineRules: engine.getRules() });
+    patch({
+      rules: editable,
+      engineRules: engine.getRules().map((rule) => ({
+        ...rule,
+        argsPattern:
+          rule.argsPattern === undefined
+            ? undefined
+            : new RegExp(rule.argsPattern),
+      })),
+    });
   }, [engine, approvalMode, patch]);
 
   useEffect(() => {
@@ -279,10 +287,11 @@ function useMutationHandlers(
 
 export const PoliciesDialog: React.FC<PoliciesDialogProps> = ({
   config,
+  policy,
   addItem,
   onExit,
 }) => {
-  const engine = config?.getPolicyEngine();
+  const engine = policy;
   const approvalMode = config?.getApprovalMode() ?? ('default' as ApprovalMode);
   const { state, patch, runMutation, handleAdd } = usePoliciesDialogState({
     engine,

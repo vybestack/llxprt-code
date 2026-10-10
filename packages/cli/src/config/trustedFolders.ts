@@ -11,7 +11,6 @@ import {
   FatalConfigError,
   getErrorMessage,
   isWithinRoot,
-  getIdeTrust,
 } from '@vybestack/llxprt-code-core';
 import stripJsonComments from 'strip-json-comments';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
@@ -451,7 +450,7 @@ export function resolveWorkspaceTrust(
   settings: Settings,
   trustedFolders: LoadedTrustedFolders,
   workingDirectory: string,
-  ideTrust: boolean | undefined = getIdeTrust(),
+  ideTrust: boolean | undefined = undefined,
 ): boolean | undefined {
   if (!isFolderTrustEnabled(settings)) {
     return true;
@@ -476,7 +475,7 @@ export function resolveLocalWorkspaceTrust(
 export function isWorkspaceTrusted(
   settings: Settings,
   workingDirectory: string = process.cwd(),
-  ideTrust: boolean | undefined = getIdeTrust(),
+  ideTrust: boolean | undefined = undefined,
 ): boolean | undefined {
   if (!isFolderTrustEnabled(settings)) {
     return true;

@@ -17,11 +17,10 @@
  * supplies declarative context, not a co-owner of the bus.
  *
  * `assembleCliProviderRuntime` owns the full ordered assembly:
- *   1. bind the CLI runtime identity (setCliRuntimeContext) FIRST (issue #2300)
- *   2. build the ONE session MessageBus internally (from the Config's policy
- *      engine, or a default when no Config exists yet)
+ *   1. create an exact foreground handle (issue #2300)
+ *   2. build the session MessageBus from the Config policy when available
  *   3. construct the ProviderManager + OAuthManager on that bus
- *   4. register the CLI provider infrastructure on the SAME bus
+ *   4. bind the manager and file lifecycle to the owner Config
  *
  * These assertions observe the RESULTING STATE (the returned bus is a real
  * MessageBus, the OAuthManager is bound to that exact bus, the manager has the
@@ -41,25 +40,10 @@ import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { OAuthManager } from '../auth/index.js';
 import { assembleCliProviderRuntime } from './assembleCliProviderRuntime.js';
-import {
-  resetCliProviderInfrastructure,
-  resetCliRuntimeRegistryForTesting,
-  resetDefaultCliRuntimeIdForTesting,
-} from './runtimeSettings.js';
+import { listProviders } from './providerReadOperations.js';
+import { MissingProviderRuntimeError } from './messages.js';
 
 describe('assembleCliProviderRuntime @plan:PLAN-20270110-ISSUE2378.P04 @requirement:REQ-2378-004', () => {
-  beforeEach(() => {
-    resetCliProviderInfrastructure();
-    resetCliRuntimeRegistryForTesting();
-    resetDefaultCliRuntimeIdForTesting();
-  });
-
-  afterEach(() => {
-    resetCliProviderInfrastructure();
-    resetCliRuntimeRegistryForTesting();
-    resetDefaultCliRuntimeIdForTesting();
-  });
-
   it('owns session-bus construction internally and binds the OAuth manager to that exact bus', () => {
     const settingsService = new SettingsService();
 
@@ -74,10 +58,34 @@ describe('assembleCliProviderRuntime @plan:PLAN-20270110-ISSUE2378.P04 @requirem
     expect(result.runtimeMessageBus).toBeInstanceOf(MessageBus);
     // The OAuth manager the helper created is bound to the SAME bus it built —
     // the real signal that bus ownership lives inside the assembly, not the CLI.
-    expect(
-      (result.oauthManager as unknown as { runtimeMessageBus?: MessageBus })
-        .runtimeMessageBus,
-    ).toBe(result.runtimeMessageBus);
+    expect(result.oauthManager?.runtimeMessageBus).toBe(
+      result.runtimeMessageBus,
+    );
+  });
+
+  it('keeps same-label foreground owners separate when bootstrapped together', () => {
+    const first = assembleCliProviderRuntime({
+      settingsService: new SettingsService(),
+      config: undefined,
+      runtimeId: 'same-label',
+    });
+    const second = assembleCliProviderRuntime({
+      settingsService: new SettingsService(),
+      config: undefined,
+      runtimeId: 'same-label',
+    });
+
+    expect(first.runtimeMessageBus).not.toBe(second.runtimeMessageBus);
+    expect(first.providerManager).not.toBe(second.providerManager);
+    expect(first.registration.providerFileLifecycle).not.toBe(
+      second.registration.providerFileLifecycle,
+    );
+    expect(() => listProviders()).toThrow(MissingProviderRuntimeError);
+    expect(() => listProviders()).toThrow(
+      'Provider listing requires an explicit owner',
+    );
+    first.registration.dispose();
+    second.registration.dispose();
   });
 
   it('returns a provider manager registered with the standard providers', () => {
@@ -149,9 +157,6 @@ describe('assembleCliProviderRuntime OAuth-settings carry-through @plan:PLAN-202
   };
 
   beforeEach(() => {
-    resetCliProviderInfrastructure();
-    resetCliRuntimeRegistryForTesting();
-    resetDefaultCliRuntimeIdForTesting();
     previousConfigHome = process.env['LLXPRT_CONFIG_HOME'];
     tmpConfigHome = fs.mkdtempSync(
       path.join(os.tmpdir(), 'assemble-oauth-carry-'),
@@ -160,9 +165,6 @@ describe('assembleCliProviderRuntime OAuth-settings carry-through @plan:PLAN-202
   });
 
   afterEach(() => {
-    resetCliProviderInfrastructure();
-    resetCliRuntimeRegistryForTesting();
-    resetDefaultCliRuntimeIdForTesting();
     if (previousConfigHome === undefined) {
       delete process.env['LLXPRT_CONFIG_HOME'];
     } else {
@@ -266,10 +268,9 @@ describe('assembleCliProviderRuntime OAuth-settings carry-through @plan:PLAN-202
     });
 
     // Identity: the OAuth manager is wired to the SAME bus the helper returned.
-    expect(
-      (result.oauthManager as unknown as { runtimeMessageBus?: MessageBus })
-        .runtimeMessageBus,
-    ).toBe(result.runtimeMessageBus);
+    expect(result.oauthManager?.runtimeMessageBus).toBe(
+      result.runtimeMessageBus,
+    );
 
     // Policy: the returned bus enforces the Config's engine (DENY → not
     // confirmed), so the bus really carries the final Config's policy.

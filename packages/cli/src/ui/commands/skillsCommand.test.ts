@@ -14,11 +14,13 @@ import {
   afterEach,
   type Mock,
 } from 'bun:test';
+import { createMockAgent } from '../../__tests__/mockAgent.js';
+import { Config } from '@vybestack/llxprt-code-core';
 import { skillsCommand } from './skillsCommand.js';
 import { MessageType } from '../types.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import type { CommandContext } from './types.js';
-import type { Config, SkillDefinition } from '@vybestack/llxprt-code-core';
+import type { SkillDefinition } from '@vybestack/llxprt-code-core';
 import {
   SettingScope,
   type LoadedSettings,
@@ -44,8 +46,8 @@ function getConfig(
 function findSkill(
   skills: readonly SkillDefinition[],
   name: string,
-): SkillDefinition | null {
-  return skills.find((skill) => skill.name === name) ?? null;
+): SkillDefinition | undefined {
+  return skills.find((skill) => skill.name === name) ?? undefined;
 }
 
 describe('skillsCommand', () => {
@@ -69,17 +71,26 @@ describe('skillsCommand', () => {
     ];
     context = createMockCommandContext({
       services: {
+        agent: createMockAgent(
+          new Config({
+            sessionId: crypto.randomUUID(),
+            targetDir: process.cwd(),
+            cwd: process.cwd(),
+            debugMode: false,
+            model: 'ui-test-model',
+          }),
+        ),
         config: {
-          getSkillManager: vi.fn().mockReturnValue({
-            getAllSkills: vi.fn().mockReturnValue(skills),
-            getSkills: vi.fn().mockReturnValue(skills),
-            getSkill: vi
+          skillOperations: {
+            list: vi.fn().mockReturnValue(skills),
+            find: vi
               .fn()
-              .mockImplementation(
-                (name: string) => skills.find((s) => s.name === name) ?? null,
+              .mockImplementation((name: string) =>
+                skills.find((skill) => skill.name === name),
               ),
             isAdminEnabled: vi.fn().mockReturnValue(true),
-          }),
+            reload: vi.fn().mockResolvedValue(undefined),
+          },
         } as unknown as Config,
         settings: {
           merged: createTestMergedSettings({ skills: { disabled: [] } }),
@@ -318,7 +329,7 @@ describe('skillsCommand', () => {
       const reloadSkillsMock = vi.fn().mockImplementation(async () => {
         await new Promise((resolve) => setTimeout(resolve, 200));
       });
-      getConfig(context).reloadSkills = reloadSkillsMock;
+      getConfig(context).skillOperations!.reload = reloadSkillsMock;
 
       const actionPromise = reloadCmd.action!(context, '');
 
@@ -358,16 +369,14 @@ describe('skillsCommand', () => {
         (s) => s.name === 'reload',
       )!;
       const reloadSkillsMock = vi.fn().mockImplementation(async () => {
-        const skillManager = context.services.config!.getSkillManager();
-        (
-          skillManager.getSkills as Mock<typeof skillManager.getSkills>
-        ).mockReturnValue([
+        const skillManager = context.services.config!.skillOperations!;
+        (skillManager.list as Mock<typeof skillManager.list>).mockReturnValue([
           { name: 'skill1' },
           { name: 'skill2' },
           { name: 'skill3' },
         ] as SkillDefinition[]);
       });
-      getConfig(context).reloadSkills = reloadSkillsMock;
+      getConfig(context).skillOperations!.reload = reloadSkillsMock;
 
       await reloadCmd.action!(context, '');
 
@@ -385,12 +394,12 @@ describe('skillsCommand', () => {
         (s) => s.name === 'reload',
       )!;
       const reloadSkillsMock = vi.fn().mockImplementation(async () => {
-        const skillManager = context.services.config!.getSkillManager();
-        (
-          skillManager.getSkills as Mock<typeof skillManager.getSkills>
-        ).mockReturnValue([{ name: 'skill1' }] as SkillDefinition[]);
+        const skillManager = context.services.config!.skillOperations!;
+        (skillManager.list as Mock<typeof skillManager.list>).mockReturnValue([
+          { name: 'skill1' },
+        ] as SkillDefinition[]);
       });
-      getConfig(context).reloadSkills = reloadSkillsMock;
+      getConfig(context).skillOperations!.reload = reloadSkillsMock;
 
       await reloadCmd.action!(context, '');
 
@@ -408,15 +417,13 @@ describe('skillsCommand', () => {
         (s) => s.name === 'reload',
       )!;
       const reloadSkillsMock = vi.fn().mockImplementation(async () => {
-        const skillManager = context.services.config!.getSkillManager();
-        (
-          skillManager.getSkills as Mock<typeof skillManager.getSkills>
-        ).mockReturnValue([
+        const skillManager = context.services.config!.skillOperations!;
+        (skillManager.list as Mock<typeof skillManager.list>).mockReturnValue([
           { name: 'skill2' }, // skill1 removed, skill3 added
           { name: 'skill3' },
         ] as SkillDefinition[]);
       });
-      getConfig(context).reloadSkills = reloadSkillsMock;
+      getConfig(context).skillOperations!.reload = reloadSkillsMock;
 
       await reloadCmd.action!(context, '');
 
@@ -454,7 +461,7 @@ describe('skillsCommand', () => {
       const reloadSkillsMock = vi.fn().mockImplementation(async () => {
         await new Promise((_, reject) => setTimeout(() => reject(error), 200));
       });
-      getConfig(context).reloadSkills = reloadSkillsMock;
+      getConfig(context).skillOperations!.reload = reloadSkillsMock;
 
       const actionPromise = reloadCmd.action!(context, '');
       await advanceTimersByTimeAsync(100);
@@ -477,7 +484,7 @@ describe('skillsCommand', () => {
       const disableCmd = skillsCommand.subCommands!.find(
         (s) => s.name === 'disable',
       )!;
-      const skillManager = context.services.config!.getSkillManager();
+      const skillManager = context.services.config!.skillOperations!;
       const mockSkills = [
         {
           name: 'skill1',
@@ -494,12 +501,12 @@ describe('skillsCommand', () => {
           body: 'body2',
         },
       ];
-      (
-        skillManager.getAllSkills as Mock<typeof skillManager.getAllSkills>
-      ).mockReturnValue(mockSkills);
-      (
-        skillManager.getSkill as Mock<typeof skillManager.getSkill>
-      ).mockImplementation((name: string) => findSkill(mockSkills, name));
+      (skillManager.list as Mock<typeof skillManager.list>).mockReturnValue(
+        mockSkills,
+      );
+      (skillManager.find as Mock<typeof skillManager.find>).mockImplementation(
+        (name: string) => findSkill(mockSkills, name),
+      );
 
       const completions = await disableCmd.completion!(context, 'sk');
       expect(completions).toStrictEqual(['skill1']);
@@ -509,7 +516,7 @@ describe('skillsCommand', () => {
       const enableCmd = skillsCommand.subCommands!.find(
         (s) => s.name === 'enable',
       )!;
-      const skillManager = context.services.config!.getSkillManager();
+      const skillManager = context.services.config!.skillOperations!;
       const mockSkills = [
         {
           name: 'skill1',
@@ -526,12 +533,12 @@ describe('skillsCommand', () => {
           body: 'body2',
         },
       ];
-      (
-        skillManager.getAllSkills as Mock<typeof skillManager.getAllSkills>
-      ).mockReturnValue(mockSkills);
-      (
-        skillManager.getSkill as Mock<typeof skillManager.getSkill>
-      ).mockImplementation((name: string) => findSkill(mockSkills, name));
+      (skillManager.list as Mock<typeof skillManager.list>).mockReturnValue(
+        mockSkills,
+      );
+      (skillManager.find as Mock<typeof skillManager.find>).mockImplementation(
+        (name: string) => findSkill(mockSkills, name),
+      );
 
       const completions = await enableCmd.completion!(context, 'sk');
       expect(completions).toStrictEqual(['skill2']);

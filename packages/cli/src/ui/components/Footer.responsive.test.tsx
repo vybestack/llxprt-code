@@ -22,7 +22,7 @@ void vi.mock('../hooks/useTerminalSize.js', () =>
 
 void vi.mock('../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: () => ({
-    getActiveProviderStatus: () => ({ providerName: 'gemini' }),
+    providerStatus: () => ({ providerName: 'gemini' }),
   }),
 }));
 

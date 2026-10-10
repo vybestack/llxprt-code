@@ -26,17 +26,22 @@ import { ConsolePatcher } from '../utils/ConsolePatcher.js';
 import { registerCleanup } from '../../utils/cleanup.js';
 import type { ConsoleMessageItem } from '../types.js';
 import type { UiRuntime } from '../cliUiRuntime.js';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 
 interface UseCoreEventHandlersOptions {
   handleNewMessage: (message: ConsoleMessageItem) => void;
   uiRuntime: UiRuntime;
-  recordingIntegrationRef: MutableRefObject<RecordingIntegration | null>;
+  recordingIntegrationRef?: MutableRefObject<RecordingIntegration | null>;
+  recordingOwner?: 'agent' | 'raw';
+  agent?: Agent;
 }
 
 export function useCoreEventHandlers({
   handleNewMessage,
   uiRuntime,
   recordingIntegrationRef,
+  recordingOwner,
+  agent,
 }: UseCoreEventHandlersOptions): void {
   // Handle core event system for surfacing internal errors
   useEffect(() => {
@@ -55,10 +60,31 @@ export function useCoreEventHandlers({
         count: 1,
       });
       if (payload.severity === 'error' || payload.severity === 'warning') {
-        recordingIntegrationRef.current?.recordSessionEvent(
-          payload.severity,
-          payload.message,
-        );
+        if (recordingOwner === 'agent') {
+          if (!agent) throw new Error('Session agent is unavailable');
+          // The writer reports a failed flush once; surface it in the UI
+          // here rather than recording it, which would hit the same writer.
+          agent.session
+            .recordRecordingEvent({
+              type: 'session_event',
+              severity: payload.severity,
+              message: payload.message,
+            })
+            .catch((error: unknown) => {
+              const reason =
+                error instanceof Error ? error.message : String(error);
+              handleNewMessage({
+                type: 'error',
+                content: `Failed to record session event: ${reason}`,
+                count: 1,
+              });
+            });
+        } else {
+          recordingIntegrationRef?.current?.recordSessionEvent(
+            payload.severity,
+            payload.message,
+          );
+        }
       }
     };
 
@@ -68,7 +94,7 @@ export function useCoreEventHandlers({
     return () => {
       coreEvents.off(CoreEvent.UserFeedback, handleUserFeedback);
     };
-  }, [handleNewMessage, recordingIntegrationRef]);
+  }, [handleNewMessage, recordingIntegrationRef, recordingOwner, agent]);
 
   useEffect(() => {
     const consolePatcher = new ConsolePatcher({

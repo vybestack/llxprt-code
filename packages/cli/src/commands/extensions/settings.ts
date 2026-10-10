@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { configureCommandOptions } from '../command-configuration.js';
 import { type CommandModule } from 'yargs';
 
 import { getExtensionAndConfig } from './utils.js';
@@ -140,23 +141,26 @@ export const setCommand: CommandModule = {
   command: 'set <name> <setting>',
   describe: 'Sets a specific extension setting.',
   builder: (yargs) =>
-    yargs
-      .positional('name', {
-        describe: 'The name of the extension.',
-        type: 'string',
-        demandOption: true,
-      })
-      .positional('setting', {
-        describe: 'The name or environment variable of the setting to update.',
-        type: 'string',
-        demandOption: true,
-      })
-      .option('scope', {
-        describe: 'Setting scope: user (default) or workspace',
-        type: 'string',
-        choices: ['user', 'workspace'],
-        default: 'user',
-      }),
+    configureCommandOptions(yargs, (configuration) =>
+      configuration
+        .positional('name', {
+          describe: 'The name of the extension.',
+          type: 'string',
+          demandOption: true,
+        })
+        .positional('setting', {
+          describe:
+            'The name or environment variable of the setting to update.',
+          type: 'string',
+          demandOption: true,
+        })
+        .option('scope', {
+          describe: 'Setting scope: user (default) or workspace',
+          type: 'string',
+          choices: ['user', 'workspace'],
+          default: 'user',
+        }),
+    ),
   handler: async (argv) => {
     const settings = loadSettings(process.cwd()).merged;
     if (!(settings.experimental?.extensionConfig ?? false)) {
@@ -181,17 +185,19 @@ export const listCommand: CommandModule = {
   command: 'list <name>',
   describe: 'Lists all settings for an extension.',
   builder: (yargs) =>
-    yargs
-      .positional('name', {
-        describe: 'The name of the extension.',
-        type: 'string',
-        demandOption: true,
-      })
-      .option('scope', {
-        describe: 'Setting scope: user, workspace, or omit to merge both',
-        type: 'string',
-        choices: ['user', 'workspace'],
-      }),
+    configureCommandOptions(yargs, (configuration) =>
+      configuration
+        .positional('name', {
+          describe: 'The name of the extension.',
+          type: 'string',
+          demandOption: true,
+        })
+        .option('scope', {
+          describe: 'Setting scope: user, workspace, or omit to merge both',
+          type: 'string',
+          choices: ['user', 'workspace'],
+        }),
+    ),
   handler: async (argv) => {
     const settings = loadSettings(process.cwd()).merged;
     if (!(settings.experimental?.extensionConfig ?? false)) {

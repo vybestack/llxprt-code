@@ -1,3 +1,4 @@
+import { readFixtureSessionAuthPolicy } from './__tests__/session-auth-policy-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -869,6 +870,7 @@ describe('OAuthManager', () => {
 
       const manager = new OAuthManager(tokenStore, loadedSettings, {
         config: createRuntimeConfigStub(settingsService),
+        readSessionAuthPolicy: readFixtureSessionAuthPolicy(settingsService),
       });
 
       const result = await manager.getHigherPriorityAuth('anthropic');
@@ -887,6 +889,7 @@ describe('OAuthManager', () => {
 
       const manager = new OAuthManager(tokenStore, loadedSettings, {
         config: createRuntimeConfigStub(settingsService),
+        readSessionAuthPolicy: readFixtureSessionAuthPolicy(settingsService),
       });
 
       const result = await manager.getHigherPriorityAuth('anthropic');

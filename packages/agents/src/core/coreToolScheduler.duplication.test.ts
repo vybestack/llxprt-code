@@ -3,10 +3,16 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
+import type { IToolMessageBus } from '@vybestack/llxprt-code-tools/interfaces/IToolMessageBus.js';
+
+import { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createSchedulerPolicyFixture } from './__tests__/scheduler-policy-fixture.js';
 
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi } from 'bun:test';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
 import {
@@ -46,47 +52,9 @@ import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 /**
  * Helper function to create a mock MessageBus
  */
-function createMockMessageBus() {
-  const callbacks: Map<string, Set<(response: unknown) => void>> = new Map();
-
-  return {
-    subscribe: vi
-      .fn()
-      .mockImplementation(
-        (type: string, callback: (response: unknown) => void) => {
-          if (!callbacks.has(type)) {
-            callbacks.set(type, new Set());
-          }
-          callbacks.get(type)!.add(callback);
-          return () => {
-            callbacks.get(type)?.delete(callback);
-          };
-        },
-      ),
-    publish: vi.fn().mockImplementation((event: { type: string }) => {
-      const typeCallbacks = callbacks.get(event.type);
-      if (typeCallbacks) {
-        for (const cb of typeCallbacks) {
-          cb(event);
-        }
-      }
-    }),
-    respondToConfirmation: vi.fn(),
-    requestConfirmation: vi.fn(),
-    removeAllListeners: vi.fn(),
-    listenerCount: vi.fn().mockReturnValue(0),
-  };
-}
-
 /**
  * Helper function to create a mock PolicyEngine
  */
-function createMockPolicyEngine() {
-  return {
-    evaluate: vi.fn().mockReturnValue(PolicyDecision.ASK_USER),
-    checkDecision: vi.fn().mockReturnValue(PolicyDecision.ASK_USER),
-  };
-}
 
 /**
  * A tool that tracks execution count
@@ -95,14 +63,10 @@ class ExecutionTrackingTool extends BaseDeclarativeTool<
   { id: string },
   ToolResult
 > {
-  displayName = 'ExecutionTrackingTool';
+  override displayName = 'ExecutionTrackingTool';
   static executionCount = 0;
 
-  constructor(
-    messageBus: ReturnType<
-      typeof createMockMessageBus
-    > = createMockMessageBus(),
-  ) {
+  constructor(messageBus: IToolMessageBus) {
     super(
       'ExecutionTrackingTool',
       'ExecutionTrackingTool',
@@ -125,7 +89,7 @@ class ExecutionTrackingTool extends BaseDeclarativeTool<
     params: {
       id: string;
     },
-    messageBus: ReturnType<typeof createMockMessageBus>,
+    messageBus: IToolMessageBus,
   ): ToolInvocation<{ id: string }, ToolResult> {
     return new ExecutionTrackingToolInvocation(this, params, messageBus);
   }
@@ -142,7 +106,7 @@ class ExecutionTrackingToolInvocation extends BaseToolInvocation<
   constructor(
     _tool: ExecutionTrackingTool,
     params: { id: string },
-    messageBus: ReturnType<typeof createMockMessageBus>,
+    messageBus: IToolMessageBus,
   ) {
     super(params, messageBus);
   }
@@ -153,6 +117,7 @@ class ExecutionTrackingToolInvocation extends BaseToolInvocation<
     description: string;
     command: string;
     rootCommand: string;
+    rootCommands: string[];
     onConfirm: (outcome: ToolConfirmationOutcome) => Promise<void>;
   }> {
     return {
@@ -161,6 +126,7 @@ class ExecutionTrackingToolInvocation extends BaseToolInvocation<
       description: 'A tool for testing',
       command: 'test command',
       rootCommand: 'test',
+      rootCommands: ['test'],
       onConfirm: async () => {},
     };
   }
@@ -201,55 +167,48 @@ async function waitForStatus(
 
 describe('CoreToolScheduler Duplication Prevention', () => {
   it('should prevent duplicate confirmation processing for the same callId', async () => {
-    const mockMessageBus = createMockMessageBus();
-    const mockPolicyEngine = createMockPolicyEngine();
+    const policyDecision = PolicyDecision.ASK_USER;
 
-    const testTool = new ExecutionTrackingTool();
+    const {
+      config: mockConfig,
+      settingsOwner,
+      messageBus: runtimeMessageBus,
+    } = createSchedulerPolicyFixture(
+      {
+        getSessionId: () => 'test-session-id',
+        getUsageStatisticsEnabled: () => true,
+        getDebugMode: () => false,
+        getApprovalMode: () => ApprovalMode.DEFAULT,
+
+        getAllowedTools: () => [],
+        getContentGeneratorConfig: () => ({
+          model: 'test-model',
+        }),
+        isInteractive: () => true,
+      },
+      policyDecision,
+    );
+
+    const testTool = new ExecutionTrackingTool(runtimeMessageBus);
     ExecutionTrackingTool.resetCount();
-
-    const mockToolRegistry = {
-      getTool: () => testTool,
-      getFunctionDeclarations: () => [],
-      getFunctionDeclarationsFiltered: () => [],
-      registerTool: () => {},
-      discoverAllTools: async () => {},
-      discoverMcpTools: async () => {},
-      discoverToolsForServer: async () => {},
-      removeMcpToolsByServer: () => {},
-      getAllTools: () => [],
-      getToolsByServer: () => [],
-      tools: new Map(),
-      mcpClientManager: undefined,
-      getToolByName: () => testTool,
-      getToolByDisplayName: () => testTool,
-      getTools: () => [],
-      discoverTools: async () => {},
-      discovery: {},
-    };
-
-    const mockConfig = {
-      getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
-      getDebugMode: () => false,
-      getApprovalMode: () => ApprovalMode.DEFAULT,
-      getEphemeralSettings: () => ({}),
-      getAllowedTools: () => [],
-      getContentGeneratorConfig: () => ({
-        model: 'test-model',
-      }),
-      getToolRegistry: () => mockToolRegistry,
-      getMessageBus: () => mockMessageBus,
-      getPolicyEngine: () => mockPolicyEngine,
-      isInteractive: () => true,
-    } as unknown as Config;
+    const mockToolRegistry = new ToolRegistry(
+      {},
+      runtimeMessageBus,
+      assembleTaskSchemaPolicy(new SettingsService()),
+    );
+    mockToolRegistry.registerTool(testTool);
 
     const onAllToolCallsComplete = vi.fn();
     const onToolCallsUpdate = vi.fn();
 
     const scheduler = new CoreToolScheduler({
+      telemetry: settingsOwner.telemetry,
+      readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        settingsOwner.readToolGovernance(mockConfig.getExcludeTools() ?? []),
       config: mockConfig,
-      messageBus: mockConfig.getMessageBus(),
-      toolRegistry: mockConfig.getToolRegistry(),
+      messageBus: runtimeMessageBus,
+      toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -282,6 +241,8 @@ describe('CoreToolScheduler Duplication Prevention', () => {
     const confirmationDetails = (waitingCall as WaitingToolCall)
       .confirmationDetails;
     expect(confirmationDetails).toBeDefined();
+    if (!('onConfirm' in confirmationDetails))
+      throw new Error('Expected live confirmation');
 
     // Simulate calling handleConfirmationResponse twice with the same call ID
     // The first call should proceed with execution
@@ -328,55 +289,48 @@ describe('CoreToolScheduler Duplication Prevention', () => {
   });
 
   it('should execute tool only once when message bus confirmation is received', async () => {
-    const mockMessageBus = createMockMessageBus();
-    const mockPolicyEngine = createMockPolicyEngine();
+    const policyDecision = PolicyDecision.ASK_USER;
 
-    const testTool = new ExecutionTrackingTool();
+    const {
+      config: mockConfig,
+      settingsOwner,
+      messageBus: runtimeMessageBus,
+    } = createSchedulerPolicyFixture(
+      {
+        getSessionId: () => 'test-session-id',
+        getUsageStatisticsEnabled: () => true,
+        getDebugMode: () => false,
+        getApprovalMode: () => ApprovalMode.DEFAULT,
+
+        getAllowedTools: () => [],
+        getContentGeneratorConfig: () => ({
+          model: 'test-model',
+        }),
+        isInteractive: () => true,
+      },
+      policyDecision,
+    );
+
+    const testTool = new ExecutionTrackingTool(runtimeMessageBus);
     ExecutionTrackingTool.resetCount();
-
-    const mockToolRegistry = {
-      getTool: () => testTool,
-      getFunctionDeclarations: () => [],
-      getFunctionDeclarationsFiltered: () => [],
-      registerTool: () => {},
-      discoverAllTools: async () => {},
-      discoverMcpTools: async () => {},
-      discoverToolsForServer: async () => {},
-      removeMcpToolsByServer: () => {},
-      getAllTools: () => [],
-      getToolsByServer: () => [],
-      tools: new Map(),
-      mcpClientManager: undefined,
-      getToolByName: () => testTool,
-      getToolByDisplayName: () => testTool,
-      getTools: () => [],
-      discoverTools: async () => {},
-      discovery: {},
-    };
-
-    const mockConfig = {
-      getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
-      getDebugMode: () => false,
-      getApprovalMode: () => ApprovalMode.DEFAULT,
-      getEphemeralSettings: () => ({}),
-      getAllowedTools: () => [],
-      getContentGeneratorConfig: () => ({
-        model: 'test-model',
-      }),
-      getToolRegistry: () => mockToolRegistry,
-      getMessageBus: () => mockMessageBus,
-      getPolicyEngine: () => mockPolicyEngine,
-      isInteractive: () => true,
-    } as unknown as Config;
+    const mockToolRegistry = new ToolRegistry(
+      {},
+      runtimeMessageBus,
+      assembleTaskSchemaPolicy(new SettingsService()),
+    );
+    mockToolRegistry.registerTool(testTool);
 
     const onAllToolCallsComplete = vi.fn();
     const onToolCallsUpdate = vi.fn();
 
     const scheduler = new CoreToolScheduler({
+      telemetry: settingsOwner.telemetry,
+      readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        settingsOwner.readToolGovernance(mockConfig.getExcludeTools() ?? []),
       config: mockConfig,
-      messageBus: mockConfig.getMessageBus(),
-      toolRegistry: mockConfig.getToolRegistry(),
+      messageBus: runtimeMessageBus,
+      toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -405,12 +359,18 @@ describe('CoreToolScheduler Duplication Prevention', () => {
     expect(waitingCall).toBeDefined();
 
     // Get the correlationId
-    const correlationId = (waitingCall as WaitingToolCall).confirmationDetails
-      .correlationId;
+    if (
+      !waitingCall ||
+      waitingCall.status !== 'awaiting_approval' ||
+      !('correlationId' in waitingCall.confirmationDetails)
+    )
+      throw new Error('Expected awaiting approval');
+    const correlationId = waitingCall.confirmationDetails.correlationId;
     expect(correlationId).toBeDefined();
+    if (!correlationId) throw new Error('Expected confirmation identity');
 
     // Simulate message bus confirmation
-    mockMessageBus.publish({
+    runtimeMessageBus.publish({
       type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
       correlationId,
       outcome: ToolConfirmationOutcome.ProceedOnce,
@@ -431,55 +391,48 @@ describe('CoreToolScheduler Duplication Prevention', () => {
   });
 
   it('multiple schedulers should not cause unknown correlationId spam when one handles confirmation', async () => {
-    const mockMessageBus = createMockMessageBus();
-    const mockPolicyEngine = createMockPolicyEngine();
+    const policyDecision = PolicyDecision.ASK_USER;
 
-    const testTool = new ExecutionTrackingTool();
+    const {
+      config: mockConfig,
+      settingsOwner,
+      messageBus: runtimeMessageBus,
+    } = createSchedulerPolicyFixture(
+      {
+        getSessionId: () => 'test-session-id',
+        getUsageStatisticsEnabled: () => true,
+        getDebugMode: () => false,
+        getApprovalMode: () => ApprovalMode.DEFAULT,
+
+        getAllowedTools: () => [],
+        getContentGeneratorConfig: () => ({
+          model: 'test-model',
+        }),
+        isInteractive: () => true,
+      },
+      policyDecision,
+    );
+
+    const testTool = new ExecutionTrackingTool(runtimeMessageBus);
     ExecutionTrackingTool.resetCount();
-
-    const mockToolRegistry = {
-      getTool: () => testTool,
-      getFunctionDeclarations: () => [],
-      getFunctionDeclarationsFiltered: () => [],
-      registerTool: () => {},
-      discoverAllTools: async () => {},
-      discoverMcpTools: async () => {},
-      discoverToolsForServer: async () => {},
-      removeMcpToolsByServer: () => {},
-      getAllTools: () => [],
-      getToolsByServer: () => [],
-      tools: new Map(),
-      mcpClientManager: undefined,
-      getToolByName: () => testTool,
-      getToolByDisplayName: () => testTool,
-      getTools: () => [],
-      discoverTools: async () => {},
-      discovery: {},
-    };
-
-    const mockConfig = {
-      getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
-      getDebugMode: () => false,
-      getApprovalMode: () => ApprovalMode.DEFAULT,
-      getEphemeralSettings: () => ({}),
-      getAllowedTools: () => [],
-      getContentGeneratorConfig: () => ({
-        model: 'test-model',
-      }),
-      getToolRegistry: () => mockToolRegistry,
-      getMessageBus: () => mockMessageBus,
-      getPolicyEngine: () => mockPolicyEngine,
-      isInteractive: () => true,
-    } as unknown as Config;
+    const mockToolRegistry = new ToolRegistry(
+      {},
+      runtimeMessageBus,
+      assembleTaskSchemaPolicy(new SettingsService()),
+    );
+    mockToolRegistry.registerTool(testTool);
 
     // Create TWO schedulers (this simulates the bug where subagents create their own schedulers)
     const onAllToolCallsComplete1 = vi.fn();
     const onToolCallsUpdate1 = vi.fn();
     const scheduler1 = new CoreToolScheduler({
+      telemetry: settingsOwner.telemetry,
+      readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        settingsOwner.readToolGovernance(mockConfig.getExcludeTools() ?? []),
       config: mockConfig,
-      messageBus: mockConfig.getMessageBus(),
-      toolRegistry: mockConfig.getToolRegistry(),
+      messageBus: runtimeMessageBus,
+      toolRegistry: mockToolRegistry,
       onAllToolCallsComplete: onAllToolCallsComplete1,
       onToolCallsUpdate: onToolCallsUpdate1,
       getPreferredEditor: () => 'vscode',
@@ -489,9 +442,13 @@ describe('CoreToolScheduler Duplication Prevention', () => {
     const onAllToolCallsComplete2 = vi.fn();
     const onToolCallsUpdate2 = vi.fn();
     const scheduler2 = new CoreToolScheduler({
+      telemetry: settingsOwner.telemetry,
+      readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        settingsOwner.readToolGovernance(mockConfig.getExcludeTools() ?? []),
       config: mockConfig,
-      messageBus: mockConfig.getMessageBus(),
-      toolRegistry: mockConfig.getToolRegistry(),
+      messageBus: runtimeMessageBus,
+      toolRegistry: mockToolRegistry,
       onAllToolCallsComplete: onAllToolCallsComplete2,
       onToolCallsUpdate: onToolCallsUpdate2,
       getPreferredEditor: () => 'vscode',
@@ -520,13 +477,19 @@ describe('CoreToolScheduler Duplication Prevention', () => {
     expect(waitingCall).toBeDefined();
 
     // Get the correlationId
-    const correlationId = (waitingCall as WaitingToolCall).confirmationDetails
-      .correlationId;
+    if (
+      !waitingCall ||
+      waitingCall.status !== 'awaiting_approval' ||
+      !('correlationId' in waitingCall.confirmationDetails)
+    )
+      throw new Error('Expected awaiting approval');
+    const correlationId = waitingCall.confirmationDetails.correlationId;
     expect(correlationId).toBeDefined();
+    if (!correlationId) throw new Error('Expected confirmation identity');
 
     // Simulate message bus confirmation - this will be received by BOTH schedulers
     // scheduler1 should process it, scheduler2 should ignore it silently
-    mockMessageBus.publish({
+    runtimeMessageBus.publish({
       type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
       correlationId,
       outcome: ToolConfirmationOutcome.ProceedOnce,
@@ -553,55 +516,48 @@ describe('CoreToolScheduler Duplication Prevention', () => {
 
 describe('BUG: Tool executing before user approval in DEFAULT mode', () => {
   it('should NOT execute tool until user confirms in DEFAULT (non-YOLO) mode', async () => {
-    const mockMessageBus = createMockMessageBus();
-    const mockPolicyEngine = createMockPolicyEngine();
+    const policyDecision = PolicyDecision.ASK_USER;
 
-    const testTool = new ExecutionTrackingTool();
+    const {
+      config: mockConfig,
+      settingsOwner,
+      messageBus: runtimeMessageBus,
+    } = createSchedulerPolicyFixture(
+      {
+        getSessionId: () => 'test-session-id',
+        getUsageStatisticsEnabled: () => true,
+        getDebugMode: () => false,
+        getApprovalMode: () => ApprovalMode.DEFAULT,
+
+        getAllowedTools: () => [],
+        getContentGeneratorConfig: () => ({
+          model: 'test-model',
+        }),
+        isInteractive: () => true,
+      },
+      policyDecision,
+    );
+
+    const testTool = new ExecutionTrackingTool(runtimeMessageBus);
     ExecutionTrackingTool.resetCount();
-
-    const mockToolRegistry = {
-      getTool: () => testTool,
-      getFunctionDeclarations: () => [],
-      getFunctionDeclarationsFiltered: () => [],
-      registerTool: () => {},
-      discoverAllTools: async () => {},
-      discoverMcpTools: async () => {},
-      discoverToolsForServer: async () => {},
-      removeMcpToolsByServer: () => {},
-      getAllTools: () => [],
-      getToolsByServer: () => [],
-      tools: new Map(),
-      mcpClientManager: undefined,
-      getToolByName: () => testTool,
-      getToolByDisplayName: () => testTool,
-      getTools: () => [],
-      discoverTools: async () => {},
-      discovery: {},
-    };
-
-    const mockConfig = {
-      getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
-      getDebugMode: () => false,
-      getApprovalMode: () => ApprovalMode.DEFAULT,
-      getEphemeralSettings: () => ({}),
-      getAllowedTools: () => [],
-      getContentGeneratorConfig: () => ({
-        model: 'test-model',
-      }),
-      getToolRegistry: () => mockToolRegistry,
-      getMessageBus: () => mockMessageBus,
-      getPolicyEngine: () => mockPolicyEngine,
-      isInteractive: () => true,
-    } as unknown as Config;
+    const mockToolRegistry = new ToolRegistry(
+      {},
+      runtimeMessageBus,
+      assembleTaskSchemaPolicy(new SettingsService()),
+    );
+    mockToolRegistry.registerTool(testTool);
 
     const onAllToolCallsComplete = vi.fn();
     const onToolCallsUpdate = vi.fn();
 
     const scheduler = new CoreToolScheduler({
+      telemetry: settingsOwner.telemetry,
+      readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        settingsOwner.readToolGovernance(mockConfig.getExcludeTools() ?? []),
       config: mockConfig,
-      messageBus: mockConfig.getMessageBus(),
-      toolRegistry: mockConfig.getToolRegistry(),
+      messageBus: runtimeMessageBus,
+      toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -633,12 +589,18 @@ describe('BUG: Tool executing before user approval in DEFAULT mode', () => {
     expect(ExecutionTrackingTool.executionCount).toBe(0);
 
     // Get the correlationId
-    const correlationId = (waitingCall as WaitingToolCall).confirmationDetails
-      .correlationId;
+    if (
+      !waitingCall ||
+      waitingCall.status !== 'awaiting_approval' ||
+      !('correlationId' in waitingCall.confirmationDetails)
+    )
+      throw new Error('Expected awaiting approval');
+    const correlationId = waitingCall.confirmationDetails.correlationId;
     expect(correlationId).toBeDefined();
+    if (!correlationId) throw new Error('Expected confirmation identity');
 
     // Now simulate user confirmation via message bus
-    mockMessageBus.publish({
+    runtimeMessageBus.publish({
       type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
       correlationId,
       outcome: ToolConfirmationOutcome.ProceedOnce,

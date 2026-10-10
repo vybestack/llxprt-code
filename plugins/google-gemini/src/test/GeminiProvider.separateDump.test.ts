@@ -9,6 +9,8 @@ import { createProviderCallOptions } from './testSupport.js';
 import * as dumpSDKContextModule from '@vybestack/llxprt-code-providers/utils/dumpSDKContext.js';
 import * as geminiGenerationExecutionModule from '../gemini/geminiGenerationExecution.js';
 import type { GeminiGenerationSetup } from '../gemini/geminiGenerationSetup.js';
+import type { NormalizedGenerateChatOptions } from '@vybestack/llxprt-code-providers/BaseProvider.js';
+import type { NonOAuthContentGenerator } from '../gemini/geminiGenerationExecution.js';
 import type { ReasoningConfig } from '../gemini/geminiReasoningConfig.js';
 
 describe('Gemini non-OAuth non-streaming generate separate dump', () => {
@@ -59,11 +61,14 @@ describe('Gemini non-OAuth non-streaming generate separate dump', () => {
       candidates: [{ content: { parts: [{ text: 'Hello' }] } }],
     };
 
-    const mockContentGenerator = {
+    const mockContentGenerator: NonOAuthContentGenerator = {
       generateContent: vi.fn().mockImplementation(async () => {
         callOrder.push('apiCall');
         return mockResponse;
       }),
+      generateContentStream: async () => {
+        throw new Error('Unexpected generation path');
+      },
     };
 
     const apiRequest = {
@@ -93,7 +98,7 @@ describe('Gemini non-OAuth non-streaming generate separate dump', () => {
     );
 
     expect(callOrder).toStrictEqual(['requestDump', 'apiCall']);
-    expect(dumpSDKRequestContextSpy).toHaveBeenCalledOnce();
+    expect(dumpSDKRequestContextSpy).toHaveBeenCalledTimes(1);
     expect(dumpSDKRequestContextSpy).toHaveBeenCalledWith(
       'gemini',
       '/v1/models/generateContent',
@@ -104,15 +109,18 @@ describe('Gemini non-OAuth non-streaming generate separate dump', () => {
         transport: { type: 'http' },
       },
     );
-    expect(dumpSDKResponseContextSpy).toHaveBeenCalledOnce();
+    expect(dumpSDKResponseContextSpy).toHaveBeenCalledTimes(1);
     expect(dumpSDKContextSpy).not.toHaveBeenCalled();
     expect(result.chunks).toBeDefined();
     expect(result.chunks!.length).toBeGreaterThan(0);
   });
 
   it('should write separate related request and error response dumps in error mode', async () => {
-    const mockContentGenerator = {
+    const mockContentGenerator: NonOAuthContentGenerator = {
       generateContent: vi.fn().mockRejectedValue(new Error('API Error')),
+      generateContentStream: async () => {
+        throw new Error('Unexpected generation path');
+      },
     };
 
     const apiRequest = {
@@ -138,7 +146,7 @@ describe('Gemini non-OAuth non-streaming generate separate dump', () => {
       ),
     ).rejects.toThrow('API Error');
 
-    expect(dumpSDKRequestContextSpy).toHaveBeenCalledOnce();
+    expect(dumpSDKRequestContextSpy).toHaveBeenCalledTimes(1);
     expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
       '20260101-120000-gemini-test12',
       'gemini',
@@ -153,8 +161,11 @@ describe('Gemini non-OAuth non-streaming generate separate dump', () => {
     const mockResponse = {
       candidates: [{ content: { parts: [{ text: 'Hello' }] } }],
     };
-    const mockContentGenerator = {
+    const mockContentGenerator: NonOAuthContentGenerator = {
       generateContent: vi.fn().mockResolvedValue(mockResponse),
+      generateContentStream: async () => {
+        throw new Error('Unexpected generation path');
+      },
     };
     const mapResponseToChunks = vi
       .fn()
@@ -174,7 +185,7 @@ describe('Gemini non-OAuth non-streaming generate separate dump', () => {
       true,
     );
 
-    expect(mockContentGenerator.generateContent).toHaveBeenCalledOnce();
+    expect(mockContentGenerator.generateContent).toHaveBeenCalledTimes(1);
     expect(dumpSDKResponseContextSpy).not.toHaveBeenCalled();
   });
 
@@ -189,11 +200,14 @@ describe('Gemini non-OAuth non-streaming generate separate dump', () => {
       };
     });
 
-    const mockContentGenerator = {
+    const mockContentGenerator: NonOAuthContentGenerator = {
       generateContent: vi.fn().mockImplementation(async () => {
         callOrder.push('apiCall');
         throw new Error('API Error');
       }),
+      generateContentStream: async () => {
+        throw new Error('Unexpected generation path');
+      },
     };
     const mapResponseToChunks = vi.fn();
     const { GeminiProvider } = await import('../gemini/GeminiProvider.js');
@@ -282,16 +296,21 @@ describe('Gemini non-OAuth non-streaming generate separate dump', () => {
       shouldDumpError: true,
     };
 
-    await provider['executeGeneration'](
-      createProviderCallOptions({ providerName: 'gemini', contents: [] }),
-      setup,
-      false,
-    );
+    const call = createProviderCallOptions({
+      providerName: 'gemini',
+      contents: [],
+    });
+    const options: NormalizedGenerateChatOptions = {
+      ...call,
+      metadata: call.invocation.metadata,
+      resolved: { model: setup.currentModel, authToken: setup.authToken },
+    };
+    await provider['executeGeneration'](options, setup, false);
 
-    expect(generationSpy).toHaveBeenCalledOnce();
+    expect(generationSpy).toHaveBeenCalledTimes(1);
     // headers is the trailing parameter of executeNonOAuthGeneration
     const args = generationSpy.mock.calls[0];
-    expect(args.at(-1)).toStrictEqual({
+    expect(args[args.length - 1]).toStrictEqual({
       'x-goog-api-key': 'gk-secret',
     });
   });
@@ -342,8 +361,11 @@ describe('Gemini non-OAuth streaming generate separate dump', () => {
       }
     })();
 
-    const mockContentGenerator = {
+    const mockContentGenerator: NonOAuthContentGenerator = {
       generateContentStream: vi.fn().mockResolvedValue(mockStream),
+      generateContent: async () => {
+        throw new Error('Unexpected generation path');
+      },
     };
 
     const apiRequest = {
@@ -364,7 +386,7 @@ describe('Gemini non-OAuth streaming generate separate dump', () => {
     );
 
     // Request dump should have been called before stream creation
-    expect(dumpSDKRequestContextSpy).toHaveBeenCalledOnce();
+    expect(dumpSDKRequestContextSpy).toHaveBeenCalledTimes(1);
 
     // Response dump should NOT have been called yet - stream hasn't been consumed
     // (wrapStreamWithDump defers the response dump until after stream completes)
@@ -401,8 +423,11 @@ describe('Gemini non-OAuth streaming generate separate dump', () => {
       throw new Error('Stream interrupted');
     })();
 
-    const mockContentGenerator = {
+    const mockContentGenerator: NonOAuthContentGenerator = {
       generateContentStream: vi.fn().mockResolvedValue(mockStream),
+      generateContent: async () => {
+        throw new Error('Unexpected generation path');
+      },
     };
 
     const apiRequest = {
@@ -455,8 +480,11 @@ describe('Gemini non-OAuth streaming generate separate dump', () => {
       yield chunks[0];
       throw new Error('Gemini stream failed');
     })();
-    const mockContentGenerator = {
+    const mockContentGenerator: NonOAuthContentGenerator = {
       generateContentStream: vi.fn().mockResolvedValue(mockStream),
+      generateContent: async () => {
+        throw new Error('Unexpected generation path');
+      },
     };
     const apiRequest = {
       model: 'gemini-2.5-pro',
@@ -485,7 +513,7 @@ describe('Gemini non-OAuth streaming generate separate dump', () => {
     ).rejects.toThrow('Gemini stream failed');
 
     expect(received).toStrictEqual(chunks);
-    expect(dumpSDKRequestContextSpy).toHaveBeenCalledOnce();
+    expect(dumpSDKRequestContextSpy).toHaveBeenCalledTimes(1);
     expect(dumpSDKResponseContextSpy).toHaveBeenCalledTimes(1);
     expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
       '20260101-120000-gemini-test12',
@@ -502,10 +530,13 @@ describe('Gemini non-OAuth streaming generate separate dump', () => {
   });
 
   it('should write separate related dumps for error during stream creation in error mode', async () => {
-    const mockContentGenerator = {
+    const mockContentGenerator: NonOAuthContentGenerator = {
       generateContentStream: vi
         .fn()
         .mockRejectedValue(new Error('Connection error')),
+      generateContent: async () => {
+        throw new Error('Unexpected generation path');
+      },
     };
 
     const apiRequest = {
@@ -527,7 +558,7 @@ describe('Gemini non-OAuth streaming generate separate dump', () => {
       ),
     ).rejects.toThrow('Connection error');
 
-    expect(dumpSDKRequestContextSpy).toHaveBeenCalledOnce();
+    expect(dumpSDKRequestContextSpy).toHaveBeenCalledTimes(1);
     expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
       '20260101-120000-gemini-test12',
       'gemini',

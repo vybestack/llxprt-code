@@ -6,7 +6,7 @@
 
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { Profile } from '@vybestack/llxprt-code-settings';
-import { applyProfileSnapshot } from '@vybestack/llxprt-code-providers/runtime.js';
+import type { AgentProfileApplication } from '@vybestack/llxprt-code-agents';
 import type { CliArgs } from './cliArgParser.js';
 import type { BootstrapProfileArgs } from './profileBootstrap.js';
 
@@ -87,8 +87,9 @@ async function applyProfileSnapshotAndCollect(
   mutableWarnings: string[],
   finalProvider: string | undefined,
   appliedFromLoadedProfile: boolean,
+  application: AgentProfileApplication,
 ): Promise<SnapshotLocalState & { resolvedFinalProvider: string | undefined }> {
-  const snapshotResult = await applyProfileSnapshot(profile, {
+  const snapshotResult = await application.applySnapshot(profile, {
     profileName,
   });
   if (snapshotResult.warnings.length > 0) {
@@ -118,6 +119,7 @@ async function applyProfileSnapshotAndCollect(
 async function resolveAndApplyProfile(
   input: ProfileRuntimeApplicationInput,
   mutableWarnings: string[],
+  application: AgentProfileApplication,
 ): Promise<SnapshotLocalState & { resolvedFinalProvider: string | undefined }> {
   const {
     loadedProfile,
@@ -140,6 +142,7 @@ async function resolveAndApplyProfile(
       mutableWarnings,
       finalProvider,
       false,
+      application,
     );
   }
 
@@ -154,6 +157,7 @@ async function resolveAndApplyProfile(
       mutableWarnings,
       finalProvider,
       true,
+      application,
     );
   }
 
@@ -174,6 +178,7 @@ async function resolveAndApplyProfile(
  */
 export async function applyProfileToRuntime(
   input: ProfileRuntimeApplicationInput,
+  application: AgentProfileApplication,
 ): Promise<ProfileRuntimeApplicationResult> {
   const { profileWarnings } = input;
   const mutableWarnings = [...profileWarnings];
@@ -183,7 +188,11 @@ export async function applyProfileToRuntime(
       `[bootstrap] profileToLoad=${input.profileToLoad ?? 'none'} providerArg=${input.argv.provider ?? 'unset'} loadedProfile=${input.loadedProfile ? 'yes' : 'no'}`,
   );
 
-  const result = await resolveAndApplyProfile(input, mutableWarnings);
+  const result = await resolveAndApplyProfile(
+    input,
+    mutableWarnings,
+    application,
+  );
 
   return {
     appliedResult: result.appliedResult,

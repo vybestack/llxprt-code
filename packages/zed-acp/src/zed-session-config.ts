@@ -4,22 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * Session-scoped Config construction for the Zed integration (issue #1604).
- * Extracted from zedIntegration.ts so that near-cap file stays within its
- * max-lines budget; the behavior is unchanged and exercised by
- * zedIntegration.test.ts (createSessionScopedConfig) and the loadSession/prompt
- * suites.
- */
-
 import * as path from 'node:path';
-import {
-  type Config,
-  isWithinRoot,
-  type RuntimeProviderManager,
-} from '@vybestack/llxprt-code-core';
-import type { FileSystemService } from '@vybestack/llxprt-code-storage';
-import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import { type Config, isWithinRoot } from '@vybestack/llxprt-code-core';
 
 /**
  * Resolves the effective target directory for a session from an optional
@@ -48,72 +34,4 @@ export function resolveSessionTargetDir(
   return isWithinRoot(candidate, config.getTargetDir())
     ? candidate
     : config.getTargetDir();
-}
-
-/**
- * Builds a per-session Config proxy that overrides the file-system service,
- * provider manager, and project/target dir for a single session WITHOUT
- * mutating the shared base Config. getFileSystemService/getProviderManager
- * return the session-scoped instances (swappable via their setters), and
- * getProjectRoot/getTargetDir return the resolved session target dir; every
- * other access falls through to the base Config.
- */
-export function createSessionScopedConfig(
-  config: Config,
-  initialFileSystemService: FileSystemService,
-  targetDir: string = config.getTargetDir(),
-  resolveToolRegistry?: () => ToolRegistry | undefined,
-): Config {
-  let fileSystemService = initialFileSystemService;
-  let providerManager: RuntimeProviderManager | undefined =
-    config.getProviderManager();
-  const propertyOverrides = new Map<PropertyKey, unknown>();
-  return new Proxy(config, {
-    get(target, property, receiver) {
-      if (property === 'getToolRegistry' && resolveToolRegistry !== undefined) {
-        return () => resolveToolRegistry() ?? config.getToolRegistry();
-      }
-      if (property === 'getFileSystemService') {
-        return () => fileSystemService;
-      }
-      if (property === 'setFileSystemService') {
-        return (nextFileSystemService: FileSystemService) => {
-          fileSystemService = nextFileSystemService;
-        };
-      }
-      if (property === 'getProviderManager') {
-        return () => providerManager;
-      }
-      if (property === 'setProviderManager') {
-        return (nextProviderManager: RuntimeProviderManager) => {
-          providerManager = nextProviderManager;
-        };
-      }
-      if (property === 'getProjectRoot') {
-        return () => targetDir;
-      }
-      if (property === 'getTargetDir') {
-        return () => targetDir;
-      }
-      if (propertyOverrides.has(property)) {
-        return propertyOverrides.get(property);
-      }
-      return Reflect.get(target, property, receiver);
-    },
-    set(target, property, value) {
-      // Direct property assignment must update the SAME backing store the
-      // getter closures read from, so `config.fileSystemService = X` and
-      // `config.setFileSystemService(X)` stay reconciled (previously these
-      // diverged: set wrote to propertyOverrides while get read the closure).
-      if (property === 'fileSystemService') {
-        fileSystemService = value as FileSystemService;
-        return true;
-      }
-      if (property === 'providerManager') {
-        providerManager = value as RuntimeProviderManager;
-        return true;
-      }
-      return Reflect.set(target, property, value);
-    },
-  });
 }

@@ -19,7 +19,6 @@ import {
   expect,
   it,
   vi,
-  type Mock,
 } from 'bun:test';
 import { createMockCommandContext } from '../__tests__/mockCommandContext.js';
 import { SHORTHAND_ARGS_PLACEHOLDER } from './prompt-processors/types.js';
@@ -78,18 +77,25 @@ void vi.mock('glob', () => ({
 // createRequire indirection existed only for Vitest's hoisting, which this
 // workspace no longer uses.
 const fsMock = new FsMockContext();
-const settingsMockHoisted = { mock: fsMock.settingsMock() };
-
-void vi.mock('@vybestack/llxprt-code-settings', () => settingsMockHoisted.mock);
 
 describe('FileCommandLoader', () => {
+  function createLoader(): FileCommandLoader {
+    return new FileCommandLoader({
+      userCommandsDir: fsMock.userCommandsDir,
+      projectCommandsDir: fsMock.projectCommandsDir,
+      getProjectRoot: () => fsMock.root,
+      getExtensions: () => [],
+      getFolderTrust: () => false,
+      isTrustedFolder: () => true,
+    });
+  }
   const signal: AbortSignal = new AbortController().signal;
 
   beforeEach(async () => {
     vi.clearAllMocks();
     fsMock.clear();
     const actualGlob = realGlobModule.glob;
-    (glob.glob as Mock<typeof glob.glob>).mockImplementation(actualGlob);
+    vi.spyOn(glob, 'glob').mockImplementation(actualGlob);
     mockShellProcess.mockImplementation(
       (prompt: string, context: CommandContext) => {
         const userArgsRaw = context.invocation?.args ?? '';
@@ -115,7 +121,7 @@ describe('FileCommandLoader', () => {
       'test.toml': 'prompt = "This is a test prompt"',
     });
 
-    const loader = new FileCommandLoader(null);
+    const loader = createLoader();
     const commands = await loader.loadCommands(signal);
 
     expect(commands).toHaveLength(1);
@@ -134,7 +140,9 @@ describe('FileCommandLoader', () => {
       }),
       '',
     );
-    expect(result?.type).toBe('submit_prompt');
+    if (result?.type !== 'submit_prompt')
+      throw new Error('Expected submitted prompt');
+    expect(result.type).toBe('submit_prompt');
     expect(result.content).toBe('This is a test prompt');
   });
 
@@ -150,7 +158,7 @@ describe('FileCommandLoader', () => {
       rmSync(fsMock.userCommandsDir, { recursive: true, force: true });
       symlinkSync(realCommandsDir, fsMock.userCommandsDir, 'dir');
 
-      const loader = new FileCommandLoader(null);
+      const loader = createLoader();
       const commands = await loader.loadCommands(signal);
 
       expect(commands).toHaveLength(1);
@@ -177,7 +185,7 @@ describe('FileCommandLoader', () => {
       rmSync(symlinkPath, { recursive: true, force: true });
       symlinkSync(realNamespacedDir, symlinkPath, 'dir');
 
-      const loader = new FileCommandLoader(null);
+      const loader = createLoader();
       const commands = await loader.loadCommands(signal);
 
       expect(commands).toHaveLength(1);
@@ -193,7 +201,7 @@ describe('FileCommandLoader', () => {
       'test2.toml': 'prompt = "Prompt 2"',
     });
 
-    const loader = new FileCommandLoader(null);
+    const loader = createLoader();
     const commands = await loader.loadCommands(signal);
 
     expect(commands).toHaveLength(2);
@@ -208,6 +216,8 @@ describe('FileCommandLoader', () => {
       },
     });
     const mockConfig = {
+      userCommandsDir: fsMock.userCommandsDir,
+      projectCommandsDir: fsMock.projectCommandsDir,
       getProjectRoot: vi.fn(() => '/path/to/project'),
       getExtensions: vi.fn(() => []),
       getFolderTrust: vi.fn(() => false),
@@ -226,7 +236,7 @@ describe('FileCommandLoader', () => {
       },
     });
 
-    const loader = new FileCommandLoader(null);
+    const loader = createLoader();
     const commands = await loader.loadCommands(signal);
 
     expect(commands).toHaveLength(1);
@@ -247,6 +257,8 @@ describe('FileCommandLoader', () => {
     );
 
     const mockConfig = {
+      userCommandsDir: fsMock.userCommandsDir,
+      projectCommandsDir: fsMock.projectCommandsDir,
       getProjectRoot: vi.fn(() => process.cwd()),
       getExtensions: vi.fn(() => []),
       getFolderTrust: vi.fn(() => false),
@@ -266,7 +278,9 @@ describe('FileCommandLoader', () => {
       }),
       '',
     );
-    expect(userResult?.type).toBe('submit_prompt');
+    if (userResult?.type !== 'submit_prompt')
+      throw new Error('Expected user submitted prompt');
+    expect(userResult.type).toBe('submit_prompt');
     expect(userResult.content).toBe('User prompt');
     const projectResult = await commands[1].action?.(
       createMockCommandContext({
@@ -283,10 +297,6 @@ describe('FileCommandLoader', () => {
       projectResult?.type === 'submit_prompt',
       'Incorrect action type for project command',
     );
-    type _SubmitPromptAction3 = Extract<
-      typeof projectResult,
-      { type: 'submit_prompt' }
-    >;
     const submitResult2 = projectResult;
     expect(submitResult2.content).toBe('Project prompt');
   });
@@ -297,7 +307,7 @@ describe('FileCommandLoader', () => {
       'good.toml': 'prompt = "This one is fine"',
     });
 
-    const loader = new FileCommandLoader(null);
+    const loader = createLoader();
     const commands = await loader.loadCommands(signal);
 
     expect(commands).toHaveLength(1);
@@ -310,7 +320,7 @@ describe('FileCommandLoader', () => {
       'good.toml': 'prompt = "This one is fine"',
     });
 
-    const loader = new FileCommandLoader(null);
+    const loader = createLoader();
     const commands = await loader.loadCommands(signal);
 
     expect(commands).toHaveLength(1);
@@ -322,7 +332,7 @@ describe('FileCommandLoader', () => {
       'test.v1.toml': 'prompt = "Test prompt"',
     });
 
-    const loader = new FileCommandLoader(null);
+    const loader = createLoader();
     const commands = await loader.loadCommands(signal);
     const command = commands[0];
     expect(command).toBeDefined();
@@ -331,7 +341,7 @@ describe('FileCommandLoader', () => {
 
   it('handles file system errors gracefully', async () => {
     fsMock.mock({});
-    const loader = new FileCommandLoader(null);
+    const loader = createLoader();
     const commands = await loader.loadCommands(signal);
     expect(commands).toHaveLength(0);
   });
@@ -341,7 +351,7 @@ describe('FileCommandLoader', () => {
       'test.toml': 'prompt = "Test prompt"',
     });
 
-    const loader = new FileCommandLoader(null);
+    const loader = createLoader();
     const commands = await loader.loadCommands(signal);
     const command = commands[0];
     expect(command).toBeDefined();
@@ -353,7 +363,7 @@ describe('FileCommandLoader', () => {
       'test.toml': 'prompt = "Test prompt"\ndescription = "My test command"',
     });
 
-    const loader = new FileCommandLoader(null);
+    const loader = createLoader();
     const commands = await loader.loadCommands(signal);
     const command = commands[0];
     expect(command).toBeDefined();
@@ -366,7 +376,7 @@ describe('FileCommandLoader', () => {
         'legacy:command.toml': 'prompt = "This is a legacy command"',
       });
 
-      const loader = new FileCommandLoader(null);
+      const loader = createLoader();
       const commands = await loader.loadCommands(signal);
 
       expect(commands).toHaveLength(1);
@@ -384,7 +394,7 @@ describe('FileCommandLoader', () => {
         'simple.toml': `prompt = "Just a regular prompt"`,
       });
 
-      const loader = new FileCommandLoader(null);
+      const loader = createLoader();
       await loader.loadCommands(signal);
 
       expect(ShellProcessor).not.toHaveBeenCalled();
@@ -396,7 +406,7 @@ describe('FileCommandLoader', () => {
         'args.toml': `prompt = "Prompt with {{args}}"`,
       });
 
-      const loader = new FileCommandLoader(null);
+      const loader = createLoader();
       await loader.loadCommands(signal);
 
       expect(ShellProcessor).toHaveBeenCalledTimes(1);
@@ -408,7 +418,7 @@ describe('FileCommandLoader', () => {
         'shell.toml': `prompt = "Prompt with !{cmd}"`,
       });
 
-      const loader = new FileCommandLoader(null);
+      const loader = createLoader();
       await loader.loadCommands(signal);
 
       expect(ShellProcessor).toHaveBeenCalledTimes(1);
@@ -420,7 +430,7 @@ describe('FileCommandLoader', () => {
         'both.toml': `prompt = "Prompt with {{args}} and !{cmd}"`,
       });
 
-      const loader = new FileCommandLoader(null);
+      const loader = createLoader();
       await loader.loadCommands(signal);
 
       expect(ShellProcessor).toHaveBeenCalledTimes(1);
@@ -455,6 +465,8 @@ describe('FileCommandLoader', () => {
       });
 
       const mockConfig = {
+        userCommandsDir: fsMock.userCommandsDir,
+        projectCommandsDir: fsMock.projectCommandsDir,
         getProjectRoot: vi.fn(() => process.cwd()),
         getExtensions: vi.fn(() => [
           {
@@ -505,6 +517,8 @@ describe('FileCommandLoader', () => {
       });
 
       const mockConfig = {
+        userCommandsDir: fsMock.userCommandsDir,
+        projectCommandsDir: fsMock.projectCommandsDir,
         getProjectRoot: vi.fn(() => process.cwd()),
         getExtensions: vi.fn(() => [
           {
@@ -612,6 +626,8 @@ describe('FileCommandLoader', () => {
       });
 
       const mockConfig = {
+        userCommandsDir: fsMock.userCommandsDir,
+        projectCommandsDir: fsMock.projectCommandsDir,
         getProjectRoot: vi.fn(() => process.cwd()),
         getExtensions: vi.fn(() => [
           {
@@ -654,6 +670,8 @@ describe('FileCommandLoader', () => {
       });
 
       const mockConfig = {
+        userCommandsDir: fsMock.userCommandsDir,
+        projectCommandsDir: fsMock.projectCommandsDir,
         getProjectRoot: vi.fn(() => process.cwd()),
         getExtensions: vi.fn(() => [
           {
@@ -691,6 +709,8 @@ describe('FileCommandLoader', () => {
       });
 
       const mockConfig = {
+        userCommandsDir: fsMock.userCommandsDir,
+        projectCommandsDir: fsMock.projectCommandsDir,
         getProjectRoot: vi.fn(() => process.cwd()),
         getExtensions: vi.fn(() => [
           { name: 'a', version: '1.0.0', isActive: true, path: extensionDir },
@@ -733,7 +753,7 @@ describe('FileCommandLoader', () => {
           'prompt = "The user wants to: {{args}}"\ndescription = "Shorthand test"',
       });
 
-      const loader = new FileCommandLoader(null);
+      const loader = createLoader();
       const commands = await loader.loadCommands(signal);
       const command = commands.find((c) => c.name === 'shorthand');
       assert(command, 'Expected shorthand command');
@@ -748,8 +768,8 @@ describe('FileCommandLoader', () => {
         }),
         'do something cool',
       );
-      expect(result?.type).toBe('submit_prompt');
       assert(result?.type === 'submit_prompt', 'Incorrect action type');
+      expect(result.type).toBe('submit_prompt');
       expect(result.content).toBe('The user wants to: do something cool');
     });
   });
@@ -761,6 +781,8 @@ describe('FileCommandLoader', () => {
       });
       let trusted = initialTrust;
       const config = {
+        userCommandsDir: fsMock.userCommandsDir,
+        projectCommandsDir: fsMock.projectCommandsDir,
         getProjectRoot: () => process.cwd(),
         getExtensions: () => [],
         getFolderTrust: () => true,
@@ -792,6 +814,8 @@ describe('FileCommandLoader', () => {
       expect(command).toBeDefined();
 
       setTrusted(false);
+      if (command.action === undefined)
+        throw new Error('Missing command action');
       const result = await command.action(
         createMockCommandContext({
           invocation: {

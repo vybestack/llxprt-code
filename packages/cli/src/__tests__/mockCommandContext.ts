@@ -4,11 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { installWorkspaceRuntimeFixture } from './workspace-runtime-fixture.js';
+const composeFixtureRuntime = installWorkspaceRuntimeFixture();
+
 import { vi } from 'bun:test';
 import type { CommandContext } from '../ui/commands/types.js';
 import type { LoadedSettings } from '../config/settings.js';
 import type { GitService, Config, Logger } from '@vybestack/llxprt-code-core';
 import type { SessionStatsState } from '../ui/contexts/SessionContext.js';
+import { createMockRuntimeApi } from '../ui/components/__tests__/StatsDisplay.testHelpers.js';
 
 // A utility type to make all properties of an object, and its nested objects, partial.
 type DeepPartial<T> = T extends object
@@ -25,6 +29,9 @@ type DeepPartial<T> = T extends object
  * @returns A complete, mocked CommandContext object.
  */
 const buildDefaultMocks = (): CommandContext => ({
+  runtimeApi: createMockRuntimeApi(),
+  refreshProviderAliases: vi.fn(async () => {}),
+  oauthControl: { isAvailable: () => false } as CommandContext['oauthControl'],
   signal: new AbortController().signal,
   invocation: {
     raw: '',
@@ -32,12 +39,21 @@ const buildDefaultMocks = (): CommandContext => ({
     args: '',
   },
   services: {
-    config: {
+    config: composeFixtureRuntime({
+      getMcpServers: () => undefined,
+      getMcpServerCommand: () => undefined,
+      getBlockedMcpServers: () => undefined,
+      getProvider: () => undefined,
+      getModel: () => 'test-model',
+      isInteractive: () => true,
+      isExtensionEnabled: () => true,
+      getWorkingDir: () => process.cwd(),
+      getProjectRoot: () => process.cwd(),
+      getCheckpointingEnabled: () => false,
+      getEphemeralSettings: () => ({}),
       getEphemeralSetting: vi.fn(),
       setEphemeralSetting: vi.fn(),
-      getAgentClient: vi.fn(),
-      getSubagentManager: vi.fn(),
-    } as unknown as Config,
+    } as unknown as Config),
     agent: null,
     settings: { merged: {} } as LoadedSettings,
     git: undefined as GitService | undefined,
@@ -102,6 +118,7 @@ export const createMockCommandContext = (
         if (
           // We only want to recursively merge plain objects
           Object.prototype.toString.call(sourceValue) === '[object Object]' &&
+          Object.getPrototypeOf(sourceValue) === Object.prototype &&
           Object.prototype.toString.call(targetValue) === '[object Object]'
         ) {
           (output as Record<string, unknown>)[key] = merge(

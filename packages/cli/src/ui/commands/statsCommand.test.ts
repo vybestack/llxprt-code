@@ -1,3 +1,4 @@
+import { detectFromProviderConfig } from '../../runtime/providerInspection.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -19,21 +20,13 @@ import { statsCommand } from './statsCommand.js';
 import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { MessageType } from '../types.js';
+import { discoverProviderBuckets } from './oauthBucketDiscovery.js';
 import { formatDuration } from '../utils/formatters.js';
 
-const getCliOAuthManagerMock = vi.fn();
+const oauthManagerMock = vi.fn();
 const getEphemeralSettingMock = vi.fn();
 const getActiveProviderNameMock = vi.fn();
-const getCliProviderManagerMock = vi.fn();
-
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  getRuntimeApi: () => ({
-    maybeGetCliOAuthManager: getCliOAuthManagerMock,
-    getEphemeralSetting: getEphemeralSettingMock,
-    getActiveProviderName: getActiveProviderNameMock,
-    getCliProviderManager: getCliProviderManagerMock,
-  }),
-}));
+const providerManagerMock = vi.fn();
 
 function createEphemeralSettings(
   settings: Readonly<Record<string, string | undefined>>,
@@ -77,15 +70,35 @@ describe('statsCommand', () => {
     setSystemTime(endTime);
 
     // 1. Create the mock context with all default values
-    mockContext = createMockCommandContext();
+    mockContext = createMockCommandContext({
+      oauthControl: {
+        isAvailable: () => Boolean(oauthManagerMock()),
+        discoverBuckets: (
+          logger: Parameters<typeof discoverProviderBuckets>[1],
+        ) => discoverProviderBuckets(oauthManagerMock(), logger),
+        getAllAnthropicUsageInfo: () =>
+          oauthManagerMock().getAllAnthropicUsageInfo(),
+        getAllCodexUsageInfo: () => oauthManagerMock().getAllCodexUsageInfo(),
+      },
+      runtimeApi: {
+        getEphemeralSetting: getEphemeralSettingMock,
+        getActiveProviderName: getActiveProviderNameMock,
+        detectProviderQuota: (name: string) => {
+          const provider = providerManagerMock()?.getProviderByName(name);
+          return provider === undefined
+            ? undefined
+            : detectFromProviderConfig(provider);
+        },
+      },
+    });
 
     // 2. Directly set the property on the created mock context
     mockContext.session.stats.sessionStartTime = startTime;
 
-    getCliOAuthManagerMock.mockReset();
+    oauthManagerMock.mockReset();
     getEphemeralSettingMock.mockReset();
     getActiveProviderNameMock.mockReset();
-    getCliProviderManagerMock.mockReset();
+    providerManagerMock.mockReset();
     // Default: no API-key provider detected
     getEphemeralSettingMock.mockReturnValue(undefined);
   });
@@ -107,8 +120,10 @@ describe('statsCommand', () => {
     const modelSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'model',
     );
+    if (modelSubCommand?.action === undefined)
+      throw new Error('Missing stats subcommand action');
 
-    void modelSubCommand.action!(mockContext, '');
+    void modelSubCommand.action(mockContext, '');
 
     expect(mockContext.ui.addItem).toHaveBeenCalledWith(
       {
@@ -122,8 +137,10 @@ describe('statsCommand', () => {
     const toolsSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'tools',
     );
+    if (toolsSubCommand?.action === undefined)
+      throw new Error('Missing stats subcommand action');
 
-    void toolsSubCommand.action!(mockContext, '');
+    void toolsSubCommand.action(mockContext, '');
 
     expect(mockContext.ui.addItem).toHaveBeenCalledWith(
       {
@@ -137,8 +154,10 @@ describe('statsCommand', () => {
     const cacheSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'cache',
     );
+    if (cacheSubCommand?.action === undefined)
+      throw new Error('Missing stats subcommand action');
 
-    void cacheSubCommand.action!(mockContext, '');
+    void cacheSubCommand.action(mockContext, '');
 
     expect(mockContext.ui.addItem).toHaveBeenCalledWith(
       {
@@ -168,13 +187,15 @@ describe('statsCommand', () => {
         .mockRejectedValue(new Error('codex unavailable')),
     };
 
-    getCliOAuthManagerMock.mockReturnValue(oauthManager);
+    oauthManagerMock.mockReturnValue(oauthManager);
 
     const quotaSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'quota',
     );
+    if (quotaSubCommand?.action === undefined)
+      throw new Error('Missing stats subcommand action');
 
-    await quotaSubCommand.action!(mockContext, '');
+    await quotaSubCommand.action(mockContext, '');
 
     expect(oauthManager.getAllAnthropicUsageInfo).toHaveBeenCalledTimes(1);
     expect(oauthManager.getAllCodexUsageInfo).toHaveBeenCalledTimes(1);
@@ -230,13 +251,15 @@ describe('statsCommand', () => {
       getAllCodexUsageInfo: vi.fn().mockResolvedValue(codexUsage),
     };
 
-    getCliOAuthManagerMock.mockReturnValue(oauthManager);
+    oauthManagerMock.mockReturnValue(oauthManager);
 
     const quotaSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'quota',
     );
+    if (quotaSubCommand?.action === undefined)
+      throw new Error('Missing stats subcommand action');
 
-    await quotaSubCommand.action!(mockContext, '');
+    await quotaSubCommand.action(mockContext, '');
 
     expect(oauthManager.getAllAnthropicUsageInfo).toHaveBeenCalledTimes(1);
     expect(oauthManager.getAllCodexUsageInfo).toHaveBeenCalledTimes(1);
@@ -258,7 +281,7 @@ describe('statsCommand', () => {
 
   it('should show API-key provider quota when base-url matches supported provider', async () => {
     // No OAuth manager
-    getCliOAuthManagerMock.mockReturnValue(null);
+    oauthManagerMock.mockReturnValue(null);
 
     // Simulate Z.ai base URL with an API key
     getEphemeralSettingMock.mockImplementation(
@@ -294,8 +317,10 @@ describe('statsCommand', () => {
     const quotaSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'quota',
     );
+    if (quotaSubCommand?.action === undefined)
+      throw new Error('Missing stats subcommand action');
 
-    await quotaSubCommand.action!(mockContext, '');
+    await quotaSubCommand.action(mockContext, '');
 
     const addItemCalls = (
       mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
@@ -314,14 +339,16 @@ describe('statsCommand', () => {
   });
 
   it('should show no quota message when no OAuth and no API-key provider', async () => {
-    getCliOAuthManagerMock.mockReturnValue(null);
+    oauthManagerMock.mockReturnValue(null);
     getEphemeralSettingMock.mockReturnValue(undefined);
 
     const quotaSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'quota',
     );
+    if (quotaSubCommand?.action === undefined)
+      throw new Error('Missing stats subcommand action');
 
-    await quotaSubCommand.action!(mockContext, '');
+    await quotaSubCommand.action(mockContext, '');
 
     const addItemCalls = (
       mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
@@ -355,7 +382,7 @@ describe('statsCommand', () => {
         .mockResolvedValue(new Map<string, Record<string, unknown>>()),
     };
 
-    getCliOAuthManagerMock.mockReturnValue(oauthManager);
+    oauthManagerMock.mockReturnValue(oauthManager);
 
     // Also set up an API-key provider (Z.ai)
     getEphemeralSettingMock.mockImplementation(
@@ -391,8 +418,10 @@ describe('statsCommand', () => {
     const quotaSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'quota',
     );
+    if (quotaSubCommand?.action === undefined)
+      throw new Error('Missing stats subcommand action');
 
-    await quotaSubCommand.action!(mockContext, '');
+    await quotaSubCommand.action(mockContext, '');
 
     const addItemCalls = (
       mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
@@ -411,7 +440,7 @@ describe('statsCommand', () => {
   });
 
   it('should show Synthetic quota when base-url matches synthetic.new', async () => {
-    getCliOAuthManagerMock.mockReturnValue(null);
+    oauthManagerMock.mockReturnValue(null);
     getEphemeralSettingMock.mockImplementation(
       createEphemeralSettings({
         'base-url': 'https://api.synthetic.new/v2',
@@ -432,8 +461,10 @@ describe('statsCommand', () => {
     const quotaSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'quota',
     );
+    if (quotaSubCommand?.action === undefined)
+      throw new Error('Missing stats subcommand action');
 
-    await quotaSubCommand.action!(mockContext, '');
+    await quotaSubCommand.action(mockContext, '');
 
     const addItemCalls = (
       mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
@@ -451,7 +482,7 @@ describe('statsCommand', () => {
   });
 
   it('should show Chutes quota when base-url matches chutes.ai', async () => {
-    getCliOAuthManagerMock.mockReturnValue(null);
+    oauthManagerMock.mockReturnValue(null);
     getEphemeralSettingMock.mockImplementation(
       createEphemeralSettings({
         'base-url': 'https://api.chutes.ai/v1',
@@ -466,8 +497,10 @@ describe('statsCommand', () => {
     const quotaSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'quota',
     );
+    if (quotaSubCommand?.action === undefined)
+      throw new Error('Missing stats subcommand action');
 
-    await quotaSubCommand.action!(mockContext, '');
+    await quotaSubCommand.action(mockContext, '');
 
     const addItemCalls = (
       mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
@@ -485,7 +518,7 @@ describe('statsCommand', () => {
   });
 
   it('should gracefully handle API-key fetch failure with no OAuth', async () => {
-    getCliOAuthManagerMock.mockReturnValue(null);
+    oauthManagerMock.mockReturnValue(null);
     getEphemeralSettingMock.mockImplementation(
       createEphemeralSettings({
         'base-url': 'https://api.z.ai/v1',
@@ -504,8 +537,10 @@ describe('statsCommand', () => {
     const quotaSubCommand = statsCommand.subCommands?.find(
       (sc) => sc.name === 'quota',
     );
+    if (quotaSubCommand?.action === undefined)
+      throw new Error('Missing stats subcommand action');
 
-    await quotaSubCommand.action!(mockContext, '');
+    await quotaSubCommand.action(mockContext, '');
 
     const addItemCalls = (
       mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
@@ -526,11 +561,11 @@ describe('statsCommand', () => {
   describe('API-key provider detection order', () => {
     beforeEach(() => {
       getActiveProviderNameMock.mockReset();
-      getCliProviderManagerMock.mockReset();
+      providerManagerMock.mockReset();
     });
 
     it('should use ephemeral base-url over provider config (highest priority)', async () => {
-      getCliOAuthManagerMock.mockReturnValue(null);
+      oauthManagerMock.mockReturnValue(null);
 
       // Set up ephemeral base-url pointing to Z.ai
       getEphemeralSettingMock.mockImplementation(
@@ -545,7 +580,7 @@ describe('statsCommand', () => {
         providerConfig: { 'base-url': 'https://api.synthetic.new/v2' },
       };
       getActiveProviderNameMock.mockReturnValue('kimi');
-      getCliProviderManagerMock.mockReturnValue({
+      providerManagerMock.mockReturnValue({
         getProviderByName: vi.fn().mockReturnValue(mockProvider),
       });
 
@@ -574,8 +609,10 @@ describe('statsCommand', () => {
       const quotaSubCommand = statsCommand.subCommands?.find(
         (cmd) => cmd.name === 'quota',
       );
+      if (quotaSubCommand?.action === undefined)
+        throw new Error('Missing quota action');
 
-      await quotaSubCommand.action!(mockContext, '');
+      await quotaSubCommand.action(mockContext, '');
 
       const addItemCalls = (
         mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
@@ -593,7 +630,7 @@ describe('statsCommand', () => {
     });
 
     it('should use provider config base URL when no ephemeral base-url', async () => {
-      getCliOAuthManagerMock.mockReturnValue(null);
+      oauthManagerMock.mockReturnValue(null);
 
       // No ephemeral base-url
       getEphemeralSettingMock.mockImplementation(
@@ -605,7 +642,7 @@ describe('statsCommand', () => {
         providerConfig: { 'base-url': 'https://api.synthetic.new/v2' },
       };
       getActiveProviderNameMock.mockReturnValue('kimi'); // Name suggests kimi, but config wins
-      getCliProviderManagerMock.mockReturnValue({
+      providerManagerMock.mockReturnValue({
         getProviderByName: vi.fn().mockReturnValue(mockProvider),
       });
 
@@ -620,8 +657,10 @@ describe('statsCommand', () => {
       const quotaSubCommand = statsCommand.subCommands?.find(
         (cmd) => cmd.name === 'quota',
       );
+      if (quotaSubCommand?.action === undefined)
+        throw new Error('Missing quota action');
 
-      await quotaSubCommand.action!(mockContext, '');
+      await quotaSubCommand.action(mockContext, '');
 
       const addItemCalls = (
         mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
@@ -639,7 +678,7 @@ describe('statsCommand', () => {
     });
 
     it('should use baseProviderConfig when providerConfig has no base URL', async () => {
-      getCliOAuthManagerMock.mockReturnValue(null);
+      oauthManagerMock.mockReturnValue(null);
 
       getEphemeralSettingMock.mockImplementation(
         createEphemeralSettings({ 'auth-key': 'test-key' }),
@@ -651,7 +690,7 @@ describe('statsCommand', () => {
         baseProviderConfig: { 'base-url': 'https://api.moonshot.cn/v1' },
       };
       getActiveProviderNameMock.mockReturnValue('synthetic'); // Name suggests synthetic, but config wins
-      getCliProviderManagerMock.mockReturnValue({
+      providerManagerMock.mockReturnValue({
         getProviderByName: vi.fn().mockReturnValue(mockProvider),
       });
 
@@ -666,8 +705,10 @@ describe('statsCommand', () => {
       const quotaSubCommand = statsCommand.subCommands?.find(
         (cmd) => cmd.name === 'quota',
       );
+      if (quotaSubCommand?.action === undefined)
+        throw new Error('Missing quota action');
 
-      await quotaSubCommand.action!(mockContext, '');
+      await quotaSubCommand.action(mockContext, '');
 
       const addItemCalls = (
         mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
@@ -685,7 +726,7 @@ describe('statsCommand', () => {
     });
 
     it('should fall back to provider name detection only when no config URLs', async () => {
-      getCliOAuthManagerMock.mockReturnValue(null);
+      oauthManagerMock.mockReturnValue(null);
 
       getEphemeralSettingMock.mockImplementation(
         createEphemeralSettings({ 'auth-key': 'test-key' }),
@@ -697,7 +738,7 @@ describe('statsCommand', () => {
         baseProviderConfig: {},
       };
       getActiveProviderNameMock.mockReturnValue('kimi'); // This should be used as fallback
-      getCliProviderManagerMock.mockReturnValue({
+      providerManagerMock.mockReturnValue({
         getProviderByName: vi.fn().mockReturnValue(mockProvider),
       });
 
@@ -712,8 +753,10 @@ describe('statsCommand', () => {
       const quotaSubCommand = statsCommand.subCommands?.find(
         (cmd) => cmd.name === 'quota',
       );
+      if (quotaSubCommand?.action === undefined)
+        throw new Error('Missing quota action');
 
-      await quotaSubCommand.action!(mockContext, '');
+      await quotaSubCommand.action(mockContext, '');
 
       const addItemCalls = (
         mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
@@ -730,7 +773,7 @@ describe('statsCommand', () => {
     });
 
     it('should handle alias-loaded synthetic provider with baseProviderConfig', async () => {
-      getCliOAuthManagerMock.mockReturnValue(null);
+      oauthManagerMock.mockReturnValue(null);
 
       getEphemeralSettingMock.mockImplementation(
         createEphemeralSettings({ 'auth-key': 'test-key' }),
@@ -742,7 +785,7 @@ describe('statsCommand', () => {
         baseProviderConfig: { 'base-url': 'https://api.synthetic.new/v2' },
       };
       getActiveProviderNameMock.mockReturnValue('synthetic');
-      getCliProviderManagerMock.mockReturnValue({
+      providerManagerMock.mockReturnValue({
         getProviderByName: vi.fn().mockReturnValue(mockProvider),
       });
 
@@ -757,8 +800,10 @@ describe('statsCommand', () => {
       const quotaSubCommand = statsCommand.subCommands?.find(
         (cmd) => cmd.name === 'quota',
       );
+      if (quotaSubCommand?.action === undefined)
+        throw new Error('Missing quota action');
 
-      await quotaSubCommand.action!(mockContext, '');
+      await quotaSubCommand.action(mockContext, '');
 
       const addItemCalls = (
         mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
@@ -776,7 +821,7 @@ describe('statsCommand', () => {
     });
 
     it('should handle alias-loaded kimi provider with baseProviderConfig', async () => {
-      getCliOAuthManagerMock.mockReturnValue(null);
+      oauthManagerMock.mockReturnValue(null);
 
       getEphemeralSettingMock.mockImplementation(
         createEphemeralSettings({ 'auth-key': 'test-key' }),
@@ -788,7 +833,7 @@ describe('statsCommand', () => {
         baseProviderConfig: { 'base-url': 'https://api.moonshot.cn/v1' },
       };
       getActiveProviderNameMock.mockReturnValue('kimi');
-      getCliProviderManagerMock.mockReturnValue({
+      providerManagerMock.mockReturnValue({
         getProviderByName: vi.fn().mockReturnValue(mockProvider),
       });
 
@@ -803,8 +848,10 @@ describe('statsCommand', () => {
       const quotaSubCommand = statsCommand.subCommands?.find(
         (cmd) => cmd.name === 'quota',
       );
+      if (quotaSubCommand?.action === undefined)
+        throw new Error('Missing quota action');
 
-      await quotaSubCommand.action!(mockContext, '');
+      await quotaSubCommand.action(mockContext, '');
 
       const addItemCalls = (
         mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
@@ -822,7 +869,7 @@ describe('statsCommand', () => {
     });
 
     it('should detect provider from kebab-case base-url in providerConfig (issue #1828)', async () => {
-      getCliOAuthManagerMock.mockReturnValue(null);
+      oauthManagerMock.mockReturnValue(null);
 
       getEphemeralSettingMock.mockImplementation(
         createEphemeralSettings({ 'auth-key': 'test-key' }),
@@ -833,7 +880,7 @@ describe('statsCommand', () => {
         providerConfig: { 'base-url': 'https://api.z.ai/v1' },
       };
       getActiveProviderNameMock.mockReturnValue('custom-zai-alias');
-      getCliProviderManagerMock.mockReturnValue({
+      providerManagerMock.mockReturnValue({
         getProviderByName: vi.fn().mockReturnValue(mockProvider),
       });
 
@@ -862,8 +909,10 @@ describe('statsCommand', () => {
       const quotaSubCommand = statsCommand.subCommands?.find(
         (cmd) => cmd.name === 'quota',
       );
+      if (quotaSubCommand?.action === undefined)
+        throw new Error('Missing quota action');
 
-      await quotaSubCommand.action!(mockContext, '');
+      await quotaSubCommand.action(mockContext, '');
 
       const addItemCalls = (
         mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
@@ -880,7 +929,7 @@ describe('statsCommand', () => {
     });
 
     it('should detect provider from kebab-case base-url in baseProviderConfig (issue #1828)', async () => {
-      getCliOAuthManagerMock.mockReturnValue(null);
+      oauthManagerMock.mockReturnValue(null);
 
       getEphemeralSettingMock.mockImplementation(
         createEphemeralSettings({ 'auth-key': 'test-key' }),
@@ -892,7 +941,7 @@ describe('statsCommand', () => {
         baseProviderConfig: { 'base-url': 'https://api.synthetic.new/v2' },
       };
       getActiveProviderNameMock.mockReturnValue('my-synthetic-provider');
-      getCliProviderManagerMock.mockReturnValue({
+      providerManagerMock.mockReturnValue({
         getProviderByName: vi.fn().mockReturnValue(mockProvider),
       });
 
@@ -907,8 +956,10 @@ describe('statsCommand', () => {
       const quotaSubCommand = statsCommand.subCommands?.find(
         (cmd) => cmd.name === 'quota',
       );
+      if (quotaSubCommand?.action === undefined)
+        throw new Error('Missing quota action');
 
-      await quotaSubCommand.action!(mockContext, '');
+      await quotaSubCommand.action(mockContext, '');
 
       const addItemCalls = (
         mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>

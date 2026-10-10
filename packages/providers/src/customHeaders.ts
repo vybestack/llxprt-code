@@ -10,8 +10,8 @@ import type { IProviderConfig } from './types/IProviderConfig.js';
 function getEphemeralSettings(
   providerConfig: IProviderConfig | undefined,
 ): Record<string, unknown> | undefined {
-  const ephemerals = providerConfig?.getEphemeralSettings?.();
-  return ephemerals && typeof ephemerals === 'object' ? ephemerals : undefined;
+  const ephemerals = providerConfig?.readConnectionPolicy?.();
+  return ephemerals === undefined ? undefined : { ...ephemerals };
 }
 
 function getConfiguredHeaders(

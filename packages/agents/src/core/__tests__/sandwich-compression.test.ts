@@ -1,3 +1,4 @@
+import { createSessionPolicyFixture } from './session-policy-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -13,6 +14,8 @@
  * have been moved into the compression strategy module.
  */
 
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { ChatSession } from '../chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -93,6 +96,18 @@ function buildRuntimeContext(
   };
 
   return createAgentRuntimeContext({
+    ...createSessionPolicyFixture(
+      {
+        runtimeId: 'test-runtime',
+        settingsService: new SettingsService(),
+        config: createRuntimeConfigStub(new SettingsService()),
+      }.settingsService,
+      {
+        runtimeId: 'test-runtime',
+        settingsService: new SettingsService(),
+        config: createRuntimeConfigStub(new SettingsService()),
+      }.runtimeId,
+    ),
     state: runtimeState,
     history: historyService,
     settings: {
@@ -107,8 +122,8 @@ function buildRuntimeContext(
     tools: mockToolsView,
     providerRuntime: {
       runtimeId: 'test-runtime',
-      settingsService: { get: vi.fn(() => undefined) } as never,
-      config: {} as never,
+      settingsService: new SettingsService(),
+      config: createRuntimeConfigStub(new SettingsService()),
     },
   });
 }

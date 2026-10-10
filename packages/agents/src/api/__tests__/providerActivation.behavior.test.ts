@@ -3,6 +3,11 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { assembleModelSelection } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
+
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { makeFakeConfigForOauth } from './helpers/provider-auth-fixtures.js';
 
 /**
  * Behavioral tests for declarative provider-activation / auth intent (#2374,
@@ -22,15 +27,9 @@ import {
   type ProviderActivationResult,
 } from '@vybestack/llxprt-code-agents';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import {
-  buildCliStyleConfig,
-  type MessageBus,
-} from './helpers/buildCliStyleConfig.js';
-import { buildAgent } from './helpers/agentHarness.js';
-import {
-  getActiveProviderName,
-  getActiveModelParams,
-} from '@vybestack/llxprt-code-providers/runtime.js';
+import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
+import { buildAgent, fixturesDir } from './helpers/agentHarness.js';
+import { getActiveModelParams } from '@vybestack/llxprt-code-providers/runtime.js';
 import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
@@ -40,14 +39,20 @@ import { join } from 'node:path';
  * the public Config surface (no deep import of the manager). Used to assert
  * the resulting activation state independent of the global runtime accessor.
  */
-function configActiveProvider(config: {
-  getProviderManager():
-    | {
-        getActiveProviderName(): string | undefined;
-      }
-    | undefined;
+function configActiveProvider(manager: {
+  getActiveProviderName(): string | undefined;
 }): string | undefined {
-  return config.getProviderManager()?.getActiveProviderName();
+  return manager.getActiveProviderName();
+}
+
+async function activatedReply(
+  client: import('@vybestack/llxprt-code-core/core/clientContract.js').AgentClientContract,
+): Promise<string> {
+  const output = await client.generateDirectMessage(
+    { message: 'Generate after provider activation' },
+    'activation-proof',
+  );
+  return output.content.blocks.map(blockTextOrEmpty).join('');
 }
 
 describe('ProviderActivationIntent / executeProviderActivation (#2374)', () => {
@@ -63,22 +68,29 @@ describe('ProviderActivationIntent / executeProviderActivation (#2374)', () => {
       const result: ProviderActivationResult = await executeProviderActivation(
         built.config,
         intent,
+        built.switchProvider,
+        built.settingsService,
+        built.providerManager,
+        (method) => built.sessionClient.refreshAuth(method),
+        assembleModelSelection(built.settingsOwner),
       );
       expect(result.authFailed).toBe(false);
       expect(result.activeProvider).toBe('fake');
-      expect(configActiveProvider(built.config)).toBe('fake');
+      expect(configActiveProvider(built.providerManager)).toBe('fake');
       // Observable authenticated state: the CLI override path
       // (applyCliArgumentOverrides → resolveFromKeyArg) applies the key to the
       // active provider AND sets the auth-key ephemeral, so the config reports
       // the key as applied — the real signal that auth materialized, not just
       // that the provider name resolved.
-      expect(built.config.getEphemeralSetting('auth-key')).toBe('sk-test-key');
+      expect(built.settingsOwner.readNamedParameter('auth-key')).toBe(
+        'sk-test-key',
+      );
     } finally {
       await built.cleanup();
     }
   });
 
-  it('(b) provider-or-oauth mode with an active manager takes the provider branch: refreshAuth runs and contentGeneratorConfig is populated', async () => {
+  it('(b) provider-or-oauth mode with an active manager refreshes the session client for generation', async () => {
     const built = await buildCliStyleConfig('plain-text.jsonl');
     try {
       // buildCliStyleConfig registers FakeProvider and sets it active, so the
@@ -93,12 +105,19 @@ describe('ProviderActivationIntent / executeProviderActivation (#2374)', () => {
       const result: ProviderActivationResult = await executeProviderActivation(
         built.config,
         intent,
+        built.switchProvider,
+        built.settingsService,
+        built.providerManager,
+        (method) => built.sessionClient.refreshAuth(method),
+        assembleModelSelection(built.settingsOwner),
       );
       expect(result.authFailed).toBe(false);
       // The provider branch ran refreshAuth, producing a content generator
       // config — a real signal auth materialized (not just authFailed=false).
-      expect(built.config.getContentGeneratorConfig()).toBeDefined();
-      expect(configActiveProvider(built.config)).toBe('fake');
+      expect(await activatedReply(built.agentClient)).toBe(
+        'a plain text reply',
+      );
+      expect(configActiveProvider(built.providerManager)).toBe('fake');
     } finally {
       await built.cleanup();
     }
@@ -125,28 +144,40 @@ describe('ProviderActivationIntent / executeProviderActivation (#2374)', () => {
           };
         },
       };
-      built.config.getProviderManager()?.registerProvider(gateTriggerProvider);
+      built.providerManager.registerProvider(gateTriggerProvider);
 
       const intent: ProviderActivationIntent = {
         provider: 'gemini',
+        model: 'gemini-activation-model',
         authMode: 'provider-or-oauth',
       };
       const result: ProviderActivationResult = await executeProviderActivation(
         built.config,
         intent,
+        built.switchProvider,
+        built.settingsService,
+        built.providerManager,
+        (method) => built.sessionClient.refreshAuth(method),
+        assembleModelSelection(built.settingsOwner),
       );
 
       expect(result.authFailed).toBe(false);
       expect(result.activeProvider).toBe('gemini');
-      expect(configActiveProvider(built.config)).toBe('gemini');
+      expect(configActiveProvider(built.providerManager)).toBe('gemini');
       // The activated runtime generates through the switched provider: the
       // executor's provider branch (configure runtime factories, refresh
       // auth, attach manager) leaves the manager's active provider usable
       // without any serverToolsProvider poke.
-      const active = built.config.getProviderManager()?.getActiveProvider();
+      const active = built.providerManager.getActiveProvider();
       expect(active?.name).toBe('gemini');
       const chunks: string[] = [];
-      for await (const chunk of active!.generateChatCompletion([])) {
+      for await (const chunk of active!.generateChatCompletion({
+        contents: [],
+        invocation: built.settingsOwner.prepareProviderInvocation(
+          'gemini-activation',
+          'gemini',
+        ),
+      })) {
         const text = chunk.blocks
           .map((block) => blockTextOrEmpty(block))
           .join('');
@@ -160,7 +191,7 @@ describe('ProviderActivationIntent / executeProviderActivation (#2374)', () => {
       // textual reference to the retired concept (issue #2626 acceptance
       // grep requires zero occurrences).
       const deletedManagerMember = ['getServer', 'Tools', 'Provider'].join('');
-      const liveManager = built.config.getProviderManager();
+      const liveManager = built.providerManager;
       expect(liveManager).toBeDefined();
       expect(deletedManagerMember in (liveManager as object)).toBe(false);
     } finally {
@@ -187,7 +218,7 @@ describe('ProviderActivationIntent / executeProviderActivation (#2374)', () => {
           };
         },
       };
-      built.config.getProviderManager()?.registerProvider(switchTargetProvider);
+      built.providerManager.registerProvider(switchTargetProvider);
 
       const intent: ProviderActivationIntent = {
         provider: 'gemini',
@@ -200,17 +231,22 @@ describe('ProviderActivationIntent / executeProviderActivation (#2374)', () => {
       const result: ProviderActivationResult = await executeProviderActivation(
         built.config,
         intent,
+        built.switchProvider,
+        built.settingsService,
+        built.providerManager,
+        (method) => built.sessionClient.refreshAuth(method),
+        assembleModelSelection(built.settingsOwner),
       );
       expect(result.authFailed).toBe(false);
       expect(result.activeProvider).toBe('gemini');
-      expect(configActiveProvider(built.config)).toBe('gemini');
+      expect(configActiveProvider(built.providerManager)).toBe('gemini');
 
       // Main's legacy activation order (switchActiveProvider FIRST, then
       // updateActiveProviderApiKey/updateActiveProviderBaseUrl) persisted
       // credentials into the switched-to provider's scope. The executor must
       // preserve that persistence target: auth-key/base-url land in the
       // TARGET provider's provider-scoped settings.
-      const settings = built.config.getSettingsService();
+      const settings = built.settingsService;
       const targetScope = settings.getProviderSettings('gemini');
       expect(targetScope['auth-key']).toBe('sk-target-scope-key');
       expect(targetScope['base-url']).toBe('https://target-scope.example/v1');
@@ -223,10 +259,10 @@ describe('ProviderActivationIntent / executeProviderActivation (#2374)', () => {
       // The session still sees the credentials through the ephemerals set by
       // the override application (identical in both orders — this pins the
       // session-level behavior that must not regress through the reorder).
-      expect(built.config.getEphemeralSetting('auth-key')).toBe(
+      expect(built.settingsOwner.readNamedParameter('auth-key')).toBe(
         'sk-target-scope-key',
       );
-      expect(built.config.getEphemeralSetting('base-url')).toBe(
+      expect(built.settingsOwner.readNamedParameter('base-url')).toBe(
         'https://target-scope.example/v1',
       );
     } finally {
@@ -244,11 +280,16 @@ describe('ProviderActivationIntent / executeProviderActivation (#2374)', () => {
       const result: ProviderActivationResult = await executeProviderActivation(
         built.config,
         intent,
+        built.switchProvider,
+        built.settingsService,
+        built.providerManager,
+        (method) => built.sessionClient.refreshAuth(method),
+        assembleModelSelection(built.settingsOwner),
       );
       expect(result.authFailed).toBe(false);
       // The active provider equals the fallback defaultProvider.
       expect(result.activeProvider).toBe('fake');
-      expect(configActiveProvider(built.config)).toBe('fake');
+      expect(configActiveProvider(built.providerManager)).toBe('fake');
       // The config remains usable (no throw) — the executor resolves and the
       // config's content generator surface is intact for downstream turns.
       expect(() => built.config.getContentGeneratorConfig()).not.toThrow();
@@ -260,7 +301,7 @@ describe('ProviderActivationIntent / executeProviderActivation (#2374)', () => {
   it('(e) model + modelParams application incl. stale-param clearing', async () => {
     const built = await buildCliStyleConfig('plain-text.jsonl');
     try {
-      built.config.setEphemeralSetting('stale-param', 'old');
+      built.settingsOwner.writeUserParameter('stale-param', 'old');
       const intent: ProviderActivationIntent = {
         provider: 'fake',
         model: 'fake-model',
@@ -270,6 +311,11 @@ describe('ProviderActivationIntent / executeProviderActivation (#2374)', () => {
       const result: ProviderActivationResult = await executeProviderActivation(
         built.config,
         intent,
+        built.switchProvider,
+        built.settingsService,
+        built.providerManager,
+        (method) => built.sessionClient.refreshAuth(method),
+        assembleModelSelection(built.settingsOwner),
       );
       expect(result.authFailed).toBe(false);
       expect(built.config.getModel()).toBe('fake-model');
@@ -288,6 +334,11 @@ describe('ProviderActivationIntent / executeProviderActivation (#2374)', () => {
       const result: ProviderActivationResult = await executeProviderActivation(
         built.config,
         intent,
+        built.switchProvider,
+        built.settingsService,
+        built.providerManager,
+        (method) => built.sessionClient.refreshAuth(method),
+        assembleModelSelection(built.settingsOwner),
       );
       expect(result.authFailed).toBe(false);
     } finally {
@@ -295,109 +346,6 @@ describe('ProviderActivationIntent / executeProviderActivation (#2374)', () => {
     }
   });
 });
-
-describe('fromConfig executes the activation intent (#2374)', () => {
-  it('(a) fromConfig with activation intent activates the provider', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
-    try {
-      const intent: ProviderActivationIntent = {
-        provider: 'fake',
-        defaultProvider: 'gemini',
-        model: 'fake-model',
-        authMode: 'auto',
-      };
-      const agent: Agent = await fromConfig({
-        config: built.config,
-        activation: intent,
-      });
-      expect(agent.getProvider()).toBe('fake');
-      expect(getActiveProviderName()).toBe('fake');
-      await agent.dispose();
-    } finally {
-      await built.cleanup();
-    }
-  });
-
-  it('(d) profile-auth-ephemerals survive fromConfig (provider already active + ephemerals intact)', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
-    try {
-      // Simulate a profile-loaded provider runtime: the provider is already
-      // active and profile auth ephemerals are present.
-      built.config.setEphemeralSetting('auth-keyfile', '/tmp/profile.key');
-      built.config.setEphemeralSetting(
-        'base-url',
-        'https://profile.example/v1',
-      );
-
-      const beforeKeyfile = built.config.getEphemeralSetting('auth-keyfile');
-      const beforeBaseUrl = built.config.getEphemeralSetting('base-url');
-      expect(beforeKeyfile).toBe('/tmp/profile.key');
-      expect(beforeBaseUrl).toBe('https://profile.example/v1');
-
-      const intent: ProviderActivationIntent = {
-        provider: 'fake',
-        model: 'fake-model',
-        authMode: 'auto',
-      };
-      const agent: Agent = await fromConfig({
-        config: built.config,
-        activation: intent,
-      });
-      try {
-        // The profile auth ephemerals MUST survive fromConfig — the provider
-        // was already active WITH profile ephemerals, so fromConfig must NOT
-        // re-switch / clear them (the restoreActiveProvider compensation is
-        // unnecessary).
-        expect(built.config.getEphemeralSetting('auth-keyfile')).toBe(
-          '/tmp/profile.key',
-        );
-        expect(built.config.getEphemeralSetting('base-url')).toBe(
-          'https://profile.example/v1',
-        );
-        expect(configActiveProvider(built.config)).toBe('fake');
-      } finally {
-        await agent.dispose();
-      }
-    } finally {
-      await built.cleanup();
-    }
-  });
-
-  it('(f) fromConfig with authMode none skips auth refresh', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
-    try {
-      const intent: ProviderActivationIntent = {
-        provider: 'fake',
-        authMode: 'none',
-      };
-      const agent: Agent = await fromConfig({
-        config: built.config,
-        activation: intent,
-      });
-      expect(agent.getProvider()).toBe('fake');
-      await agent.dispose();
-    } finally {
-      await built.cleanup();
-    }
-  });
-
-  it('fromConfig without activation preserves backward-compatible behavior', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
-    try {
-      const callerBus: MessageBus = built.messageBus;
-      const agent: Agent = await fromConfig({
-        config: built.config,
-        messageBus: callerBus,
-      });
-      expect(agent.getProvider()).toBe('fake');
-      await agent.dispose();
-    } finally {
-      await built.cleanup();
-    }
-  });
-});
-
-// ─── #2374 remediation: Finding 1 (createAgent activation intent) ──────────
 
 describe('createAgent with declarative activation intent (#2374 finding 1)', () => {
   it('createAgent with activation intent yields the intended provider/auth state', async () => {
@@ -411,7 +359,7 @@ describe('createAgent with declarative activation intent (#2374 finding 1)', () 
     try {
       expect(agent.getProvider()).toBe('fake');
       expect(agent.getModel()).toBe('fake-model');
-      expect(getActiveProviderName()).toBe('fake');
+      expect(agent.providerManager.getActiveProviderName()).toBe('fake');
     } finally {
       await cleanup();
     }
@@ -452,7 +400,7 @@ describe('createAgent with declarative activation intent (#2374 finding 1)', () 
       // must NOT report the stale parsed-provider 'openai'.
       expect(agent.getProvider()).toBe('fake');
       expect(agent.getModel()).toBe('fake-model');
-      expect(getActiveProviderName()).toBe('fake');
+      expect(agent.providerManager.getActiveProviderName()).toBe('fake');
     } finally {
       await cleanup();
     }
@@ -463,13 +411,15 @@ describe('createAgent with declarative activation intent (#2374 finding 1)', () 
 
 describe('fromConfig activation intent does not desync Agent facade (#2374 round-3 fix 1)', () => {
   it('fromConfig with activation intent differing from adopted config provider reports the activated provider', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
+    const built = await buildCliStyleConfig('plain-text.jsonl', {
+      provider: 'openai',
+      activation: { provider: 'fake', model: 'fake-model' },
+    });
     try {
       // Force the adopted config to report a DIFFERENT provider than the
       // intent will activate, so the desync is observable: the config says
       // 'openai' but the runtime active provider (and the intent's target) is
       // 'fake'. After activation, the facade must report 'fake'.
-      built.config.setProvider('openai');
       expect(built.config.getProvider()).toBe('openai');
 
       const intent: ProviderActivationIntent = {
@@ -478,7 +428,12 @@ describe('fromConfig activation intent does not desync Agent facade (#2374 round
         authMode: 'auto',
       };
       const agent: Agent = await fromConfig({
+        settingsOwner: built.settingsOwner,
+        settingsService: built.settingsService,
+        agentClient: built.agentClient,
+        providerManager: built.providerManager,
         config: built.config,
+        mcpRuntime: built.mcpRuntime,
         activation: intent,
       });
       try {
@@ -510,36 +465,65 @@ describe('provider-or-oauth branches on fresh post-switch state (#2374 finding 2
         provider: 'fake',
         authMode: 'provider-or-oauth',
       };
-      const result = await executeProviderActivation(built.config, intent);
+      const result = await executeProviderActivation(
+        built.config,
+        intent,
+        built.switchProvider,
+        built.settingsService,
+        built.providerManager,
+        (method) => built.sessionClient.refreshAuth(method),
+        assembleModelSelection(built.settingsOwner),
+      );
       expect(result.authFailed).toBe(false);
       expect(result.activeProvider).toBe('fake');
-      expect(configActiveProvider(built.config)).toBe('fake');
+      expect(configActiveProvider(built.providerManager)).toBe('fake');
       // Provider-branch distinguishing observable: refreshAuth('provider') ran,
       // so the content generator config is populated AND carries the provider
       // manager (the provider-branch ensureProviderManagerOnConfig wired it).
-      const cgc = built.config.getContentGeneratorConfig();
-      expect(cgc).toBeDefined();
-      expect(cgc?.providerManager).toBeDefined();
+      expect(await activatedReply(built.agentClient)).toBe(
+        'a plain text reply',
+      );
+      await built.agentClient.startChat();
+      expect(built.agentClient.isInitialized()).toBe(true);
     } finally {
       await built.cleanup();
     }
   });
 
-  it('provider-or-oauth provider branch attaches providerManager to the content generator config (provider-branch side effect)', async () => {
+  it('provider-or-oauth provider branch binds the activated manager to the session generator', async () => {
     const built = await buildCliStyleConfig('plain-text.jsonl');
     try {
       const intent: ProviderActivationIntent = {
         provider: 'fake',
         authMode: 'provider-or-oauth',
       };
-      await executeProviderActivation(built.config, intent);
+      await executeProviderActivation(
+        built.config,
+        intent,
+        built.switchProvider,
+        built.settingsService,
+        built.providerManager,
+        (method) => built.sessionClient.refreshAuth(method),
+        assembleModelSelection(built.settingsOwner),
+      );
       // The provider branch calls ensureProviderManagerOnConfig +
       // attachProviderManagerToContentConfig, so the content generator config
       // carries the provider manager. This is the provider-branch-only side
       // effect that distinguishes it from a hypothetical no-manager path.
-      const cgc = built.config.getContentGeneratorConfig();
-      expect(cgc).toBeDefined();
-      expect(cgc?.providerManager).toBe(built.config.getProviderManager());
+      expect(await activatedReply(built.agentClient)).toBe(
+        'a plain text reply',
+      );
+      await built.agentClient.startChat();
+      expect(
+        await built.agentClient.getContentGenerator().countTokens({
+          contents: [
+            {
+              speaker: 'human',
+              blocks: [{ type: 'text', text: 'model admission boundary' }],
+            },
+          ],
+        }),
+      ).toStrictEqual({ totalTokens: 6 });
     } finally {
       await built.cleanup();
     }
@@ -569,7 +553,15 @@ describe('fromConfig surfaces auth failure (#2374 finding 3)', () => {
       // signal that fromConfig surfaced an AgentBootstrapError.
       let thrownError: unknown;
       try {
-        await fromConfig({ config: built.config, activation: intent });
+        await fromConfig({
+          settingsOwner: built.settingsOwner,
+          settingsService: built.settingsService,
+          agentClient: built.agentClient,
+          providerManager: built.providerManager,
+          config: built.config,
+          mcpRuntime: built.mcpRuntime,
+          activation: intent,
+        });
       } catch (err) {
         thrownError = err;
       }
@@ -586,8 +578,11 @@ describe('fromConfig surfaces auth failure (#2374 finding 3)', () => {
   it('fromConfig with intent for already-active provider with profile ephemerals resolves (ephemerals intact)', async () => {
     const built = await buildCliStyleConfig('plain-text.jsonl');
     try {
-      built.config.setEphemeralSetting('auth-keyfile', '/tmp/profile.key');
-      built.config.setEphemeralSetting(
+      built.settingsOwner.writeUserParameter(
+        'auth-keyfile',
+        '/tmp/profile.key',
+      );
+      built.settingsOwner.writeUserParameter(
         'base-url',
         'https://profile.example/v1',
       );
@@ -598,14 +593,19 @@ describe('fromConfig surfaces auth failure (#2374 finding 3)', () => {
         authMode: 'auto',
       };
       const agent = await fromConfig({
+        settingsOwner: built.settingsOwner,
+        settingsService: built.settingsService,
+        agentClient: built.agentClient,
+        providerManager: built.providerManager,
         config: built.config,
+        mcpRuntime: built.mcpRuntime,
         activation: intent,
       });
       try {
-        expect(built.config.getEphemeralSetting('auth-keyfile')).toBe(
+        expect(built.settingsOwner.readNamedParameter('auth-keyfile')).toBe(
           '/tmp/profile.key',
         );
-        expect(built.config.getEphemeralSetting('base-url')).toBe(
+        expect(built.settingsOwner.readNamedParameter('base-url')).toBe(
           'https://profile.example/v1',
         );
       } finally {
@@ -623,16 +623,27 @@ describe('provider-or-oauth preserves profile-auth ephemerals across switch (#23
   it('ephemerals set + provider switch in provider-or-oauth mode → overrides still applied', async () => {
     const built = await buildCliStyleConfig('plain-text.jsonl');
     try {
-      built.config.setEphemeralSetting('base-url', 'https://custom.example/v1');
+      built.settingsOwner.writeUserParameter(
+        'base-url',
+        'https://custom.example/v1',
+      );
       const intent: ProviderActivationIntent = {
         provider: 'fake',
         authMode: 'provider-or-oauth',
       };
-      const result = await executeProviderActivation(built.config, intent);
+      const result = await executeProviderActivation(
+        built.config,
+        intent,
+        built.switchProvider,
+        built.settingsService,
+        built.providerManager,
+        (method) => built.sessionClient.refreshAuth(method),
+        assembleModelSelection(built.settingsOwner),
+      );
       expect(result.authFailed).toBe(false);
       // The base-url ephemeral must survive the switch (switchActiveProvider
       // clears ephemerals; the executor snapshots+reapplies).
-      expect(built.config.getEphemeralSetting('base-url')).toBe(
+      expect(built.settingsOwner.readNamedParameter('base-url')).toBe(
         'https://custom.example/v1',
       );
     } finally {
@@ -651,7 +662,15 @@ describe('executeProviderActivation surfaces switchError (#2374 finding 6)', () 
         provider: 'nonexistent-provider-xyz',
         authMode: 'none',
       };
-      const result = await executeProviderActivation(built.config, intent);
+      const result = await executeProviderActivation(
+        built.config,
+        intent,
+        built.switchProvider,
+        built.settingsService,
+        built.providerManager,
+        (method) => built.sessionClient.refreshAuth(method),
+        assembleModelSelection(built.settingsOwner),
+      );
       expect(result.switchError).toBeDefined();
       expect(typeof result.switchError).toBe('string');
     } finally {
@@ -675,17 +694,25 @@ describe('provider-or-oauth runtime overrides (Zed features) (#2374 finding 4)',
     writeFileSync(absKeyfilePath, '  sk-from-file-123  \n', 'utf8');
     const built = await buildCliStyleConfig('plain-text.jsonl');
     try {
-      built.config.setEphemeralSetting('auth-keyfile', keyfilePath);
+      built.settingsOwner.writeUserParameter('auth-keyfile', keyfilePath);
       const intent: ProviderActivationIntent = {
         provider: 'fake',
         authMode: 'provider-or-oauth',
       };
-      const result = await executeProviderActivation(built.config, intent);
+      const result = await executeProviderActivation(
+        built.config,
+        intent,
+        built.switchProvider,
+        built.settingsService,
+        built.providerManager,
+        (method) => built.sessionClient.refreshAuth(method),
+        assembleModelSelection(built.settingsOwner),
+      );
       expect(result.authFailed).toBe(false);
       // Observable: the auth-keyfile ephemeral is normalized to the resolved
       // absolute path (~ expanded to os.homedir()), proving the file was read
       // and the key applied.
-      expect(built.config.getEphemeralSetting('auth-keyfile')).toBe(
+      expect(built.settingsOwner.readNamedParameter('auth-keyfile')).toBe(
         absKeyfilePath,
       );
     } finally {
@@ -697,7 +724,7 @@ describe('provider-or-oauth runtime overrides (Zed features) (#2374 finding 4)',
   it('(ii) base-url ephemeral applied to the active provider settings', async () => {
     const built = await buildCliStyleConfig('plain-text.jsonl');
     try {
-      built.config.setEphemeralSetting(
+      built.settingsOwner.writeUserParameter(
         'base-url',
         'https://custom-endpoint.example/v1',
       );
@@ -705,13 +732,20 @@ describe('provider-or-oauth runtime overrides (Zed features) (#2374 finding 4)',
         provider: 'fake',
         authMode: 'provider-or-oauth',
       };
-      const result = await executeProviderActivation(built.config, intent);
+      const result = await executeProviderActivation(
+        built.config,
+        intent,
+        built.switchProvider,
+        built.settingsService,
+        built.providerManager,
+        (method) => built.sessionClient.refreshAuth(method),
+        assembleModelSelection(built.settingsOwner),
+      );
       expect(result.authFailed).toBe(false);
       // Observable: setProviderBaseUrl wrote the base-url into the active
       // provider's settings via the settings service.
-      const providerSettings = built.config
-        .getSettingsService()
-        .getProviderSettings('fake');
+      const providerSettings =
+        built.settingsService.getProviderSettings('fake');
       expect(providerSettings['base-url']).toBe(
         'https://custom-endpoint.example/v1',
       );
@@ -724,21 +758,30 @@ describe('provider-or-oauth runtime overrides (Zed features) (#2374 finding 4)',
     const built = await buildCliStyleConfig('plain-text.jsonl');
     try {
       // Pre-set a base-url on the provider, then activate with base-url 'none'.
-      built.config
-        .getSettingsService()
-        .setProviderSetting('fake', 'base-url', 'https://pre-existing.example');
-      built.config.setEphemeralSetting('base-url', 'none');
+      built.settingsService.setProviderSetting(
+        'fake',
+        'base-url',
+        'https://pre-existing.example',
+      );
+      built.settingsOwner.writeUserParameter('base-url', 'none');
       const intent: ProviderActivationIntent = {
         provider: 'fake',
         authMode: 'provider-or-oauth',
       };
-      const result = await executeProviderActivation(built.config, intent);
+      const result = await executeProviderActivation(
+        built.config,
+        intent,
+        built.switchProvider,
+        built.settingsService,
+        built.providerManager,
+        (method) => built.sessionClient.refreshAuth(method),
+        assembleModelSelection(built.settingsOwner),
+      );
       expect(result.authFailed).toBe(false);
       // Observable: setProviderBaseUrl('none') clears the provider setting
       // (updateActiveProviderBaseUrl normalizes 'none' → null → undefined).
-      const providerSettings = built.config
-        .getSettingsService()
-        .getProviderSettings('fake');
+      const providerSettings =
+        built.settingsService.getProviderSettings('fake');
       expect(providerSettings['base-url']).toBeUndefined();
     } finally {
       await built.cleanup();
@@ -754,11 +797,22 @@ describe('provider-or-oauth runtime overrides (Zed features) (#2374 finding 4)',
         modelParams: { temperature: 0.42, top_p: 0.9 },
         authMode: 'provider-or-oauth',
       };
-      const result = await executeProviderActivation(built.config, intent);
+      const result = await executeProviderActivation(
+        built.config,
+        intent,
+        built.switchProvider,
+        built.settingsService,
+        built.providerManager,
+        (method) => built.sessionClient.refreshAuth(method),
+        assembleModelSelection(built.settingsOwner),
+      );
       expect(result.authFailed).toBe(false);
       // Observable: the model params were pushed onto the active provider
       // runtime via setActiveModelParam.
-      const params = getActiveModelParams();
+      const params = getActiveModelParams(
+        built.settingsService,
+        built.providerManager.getActiveProviderName(),
+      );
       expect(params['temperature']).toBe(0.42);
       expect(params['top_p']).toBe(0.9);
     } finally {
@@ -779,53 +833,6 @@ describe('provider-or-oauth runtime overrides (Zed features) (#2374 finding 4)',
  * `as unknown as Parameters<typeof executeProviderActivation>[0]` is the repo
  * idiom for typed test doubles (Pick<> + as unknown as X).
  */
-interface FakeOauthProbe {
-  oauthCalled: boolean;
-  providerCalled: boolean;
-  refreshMethod: string | undefined;
-  contentProviderManager: unknown;
-}
-
-function makeFakeConfigForOauth(hasActiveProvider: boolean): {
-  config: unknown;
-  probe: FakeOauthProbe;
-} {
-  const probe: FakeOauthProbe = {
-    oauthCalled: false,
-    providerCalled: false,
-    refreshMethod: undefined,
-    contentProviderManager: undefined,
-  };
-  const manager = {
-    hasActiveProvider: () => hasActiveProvider,
-    getActiveProviderName: () => (hasActiveProvider ? 'fake' : undefined),
-  };
-  const contentGenConfig: { providerManager?: unknown } = {};
-  const config = {
-    refreshAuth: async (method?: string) => {
-      probe.refreshMethod = method;
-      probe.oauthCalled = method === 'oauth';
-      probe.providerCalled = method === 'provider';
-    },
-    getProviderManager: () => manager,
-    getEphemeralSetting: () => undefined,
-    setEphemeralSetting: () => {},
-    getContentGeneratorConfig: () => {
-      probe.contentProviderManager = contentGenConfig.providerManager;
-      return contentGenConfig;
-    },
-    getProvider: () => undefined,
-    getModel: () => 'placeholder-model',
-    // configureProviderRuntimeFactories (provider branch) calls setProviderManager.
-    setProviderManager: () => {},
-    // configureProviderRuntimeFactories reads getSettingsService for factory
-    // construction; a no-op stub is sufficient since the provider branch only
-    // needs the call to not throw.
-    getSettingsService: () => ({ getValue: () => undefined }),
-  };
-  return { config, probe };
-}
-
 describe('provider-or-oauth oauth branch (#2374 round-3 Fix 4)', () => {
   it('takes the oauth branch when the manager has NO active provider: refreshAuth(oauth) runs, provider-branch side effects absent', async () => {
     // buildCliStyleConfig always activates FakeProvider, so it cannot exercise
@@ -835,13 +842,28 @@ describe('provider-or-oauth oauth branch (#2374 round-3 Fix 4)', () => {
     // called with 'oauth' (not 'provider'), and the provider-branch-only side
     // effects (ensureProviderManagerOnConfig, attachProviderManagerToContentConfig)
     // did NOT occur (contentGeneratorConfig.providerManager stays undefined).
-    const { config: fakeConfig, probe } = makeFakeConfigForOauth(false);
+    const {
+      config: fakeConfig,
+      probe,
+      manager,
+      refreshClient,
+    } = makeFakeConfigForOauth(false, join(fixturesDir, 'plain-text.jsonl'));
     const intent: ProviderActivationIntent = {
       authMode: 'provider-or-oauth',
     };
+    const activationSettingsOwner16 = new SessionSettingsOwner(
+      new SettingsService(),
+    );
     const result = await executeProviderActivation(
       fakeConfig as Config,
       intent,
+      async () => {
+        throw new Error('Unexpected switch in auth-only test');
+      },
+      new SettingsService(),
+      manager,
+      refreshClient,
+      assembleModelSelection(activationSettingsOwner16),
     );
     expect(result.authFailed).toBe(false);
     // Observable: refreshAuth('oauth') ran (not 'provider').
@@ -854,13 +876,28 @@ describe('provider-or-oauth oauth branch (#2374 round-3 Fix 4)', () => {
   });
 
   it('takes the provider branch when the manager HAS an active provider: refreshAuth(provider) runs', async () => {
-    const { config: fakeConfig, probe } = makeFakeConfigForOauth(true);
+    const {
+      config: fakeConfig,
+      probe,
+      manager,
+      refreshClient,
+    } = makeFakeConfigForOauth(true, join(fixturesDir, 'plain-text.jsonl'));
     const intent: ProviderActivationIntent = {
       authMode: 'provider-or-oauth',
     };
+    const activationSettingsOwner17 = new SessionSettingsOwner(
+      new SettingsService(),
+    );
     const result = await executeProviderActivation(
       fakeConfig as Config,
       intent,
+      async () => {
+        throw new Error('Unexpected switch in auth-only test');
+      },
+      new SettingsService(),
+      manager,
+      refreshClient,
+      assembleModelSelection(activationSettingsOwner17),
     );
     expect(result.authFailed).toBe(false);
     // Observable: refreshAuth('provider') ran (not 'oauth').
@@ -881,13 +918,21 @@ describe('missing-credentials fallback precedence (#2374 round-3 Fix 4)', () => 
         defaultProvider: 'fake',
         authMode: 'auto',
       };
-      const result = await executeProviderActivation(built.config, intent);
+      const result = await executeProviderActivation(
+        built.config,
+        intent,
+        built.switchProvider,
+        built.settingsService,
+        built.providerManager,
+        (method) => built.sessionClient.refreshAuth(method),
+        assembleModelSelection(built.settingsOwner),
+      );
 
       // Observable: authFailed is false even if auth had issues (swallowed).
       expect(result.authFailed).toBe(false);
       // The defaultProvider was activated.
       expect(result.activeProvider).toBe('fake');
-      expect(configActiveProvider(built.config)).toBe('fake');
+      expect(configActiveProvider(built.providerManager)).toBe('fake');
       // The config remains usable — no throw, content generator surface intact.
       expect(() => built.config.getContentGeneratorConfig()).not.toThrow();
     } finally {
@@ -907,7 +952,15 @@ describe('missing-credentials fallback precedence (#2374 round-3 Fix 4)', () => 
         provider: 'nonexistent-provider-xyz',
         authMode: 'auto',
       };
-      const result = await executeProviderActivation(built.config, intent);
+      const result = await executeProviderActivation(
+        built.config,
+        intent,
+        built.switchProvider,
+        built.settingsService,
+        built.providerManager,
+        (method) => built.sessionClient.refreshAuth(method),
+        assembleModelSelection(built.settingsOwner),
+      );
 
       // Observable: authFailed is true and authError is populated.
       expect(result.authFailed).toBe(true);

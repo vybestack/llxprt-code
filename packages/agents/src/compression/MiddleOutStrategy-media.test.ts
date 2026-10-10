@@ -1,3 +1,4 @@
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -110,6 +111,10 @@ describe('MiddleOutStrategy media sanitization', () => {
         const ctx = buildContext({
           history,
           resolveProvider: () => ({
+            invocation: captureProviderInvocation(
+              testProviderRuntime,
+              captureProvider.name,
+            ),
             provider: captureProvider,
             runtime: testProviderRuntime,
           }),
@@ -202,6 +207,10 @@ describe('MiddleOutStrategy media sanitization', () => {
         const ctx = buildContext({
           history,
           resolveProvider: () => ({
+            invocation: captureProviderInvocation(
+              testProviderRuntime,
+              captureProvider.name,
+            ),
             provider: captureProvider,
             runtime: testProviderRuntime,
           }),
@@ -287,6 +296,10 @@ describe('MiddleOutStrategy media sanitization', () => {
         const ctx = buildContext({
           history,
           resolveProvider: () => ({
+            invocation: captureProviderInvocation(
+              testProviderRuntime,
+              captureProvider.name,
+            ),
             provider: captureProvider,
             runtime: testProviderRuntime,
           }),
@@ -367,6 +380,10 @@ describe('MiddleOutStrategy media sanitization', () => {
         const ctx = buildContext({
           history,
           resolveProvider: () => ({
+            invocation: captureProviderInvocation(
+              testProviderRuntime,
+              captureProvider.name,
+            ),
             provider: captureProvider,
             runtime: testProviderRuntime,
           }),
@@ -429,6 +446,10 @@ describe('MiddleOutStrategy media sanitization', () => {
         const ctx = buildContext({
           history,
           resolveProvider: () => ({
+            invocation: captureProviderInvocation(
+              testProviderRuntime,
+              captureProvider.name,
+            ),
             provider: captureProvider,
             runtime: testProviderRuntime,
           }),
@@ -483,6 +504,10 @@ describe('MiddleOutStrategy media sanitization', () => {
         const ctx = buildContext({
           history,
           resolveProvider: () => ({
+            invocation: captureProviderInvocation(
+              testProviderRuntime,
+              defaultProvider.name,
+            ),
             provider: defaultProvider,
             runtime: testProviderRuntime,
           }),

@@ -1,23 +1,32 @@
-/** Reads the live mocked binding; a captured const would hold the real class. */
-const mockedMcpClient = (): Mock<(...args: never[]) => unknown> =>
-  McpClient as unknown as Mock<(...args: never[]) => unknown>;
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { installTestCatalogOwners } from '@vybestack/llxprt-code-test-utils/core/config.js';
 
-import { SettingsService } from '@vybestack/llxprt-code-settings';
+const createTestCatalogOwner = installTestCatalogOwners();
+import {
+  mockedMcpClient,
+  createOwnedManager,
+  createMockMcpClient,
+  createMockConfig,
+  createToolRegistry,
+  createDeferred,
+  removeArtifactsWithServerAFailure,
+  createManager,
+} from './__tests__/manager-trust-fixtures.js';
+import { createTestOAuthBinding } from './test-support/index.js';
+import { unsupportedApprovalPolicy } from './test-support/approval-policy.js';
+/** Reads the live mocked binding; a captured const would hold the real class. */
+
 import { waitFor } from '../../../test-utils/src/wait-for.js';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import type { Mock } from 'bun:test';
 import { McpClientManager } from './mcp-client-manager.js';
 import { McpClient, MCPDiscoveryState } from './mcp-client.js';
-import type { Config } from './test-support/mcpClientTestSupport.js';
-import { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import { PromptRegistry } from './test-support/mcpClientTestSupport.js';
-import { ResourceRegistry } from './test-support/mcpClientTestSupport.js';
-import type { WorkspaceContext } from './test-support/mcpClientTestSupport.js';
+const CLIENT_VERSION = '0.0.1';
+
 void vi.mock('./mcp-client.js', () => ({
   McpClient: vi.fn(),
   MCPDiscoveryState: {
@@ -27,78 +36,6 @@ void vi.mock('./mcp-client.js', () => ({
   },
   populateMcpServerCommand: vi.fn((servers, _command) => servers),
 }));
-
-function createMockMcpClient(): McpClient {
-  return {
-    connect: vi.fn(),
-    discover: vi.fn(),
-    disconnect: vi.fn(),
-    getStatus: vi.fn(),
-    invalidateCapabilities: vi.fn(),
-    abortDiscovery: vi.fn(),
-    getServerConfig: vi.fn().mockReturnValue({}),
-    getInstructions: vi.fn().mockReturnValue(''),
-  } as unknown as McpClient;
-}
-
-function createMockConfig(overrides?: Partial<Config>): Config {
-  return {
-    isTrustedFolder: () => true,
-    getMcpServers: () => ({
-      'server-a': {},
-      'server-b': {},
-    }),
-    getMcpServerCommand: () => '',
-    getPromptRegistry: () => new PromptRegistry(),
-    getResourceRegistry: () => new ResourceRegistry(),
-    getDebugMode: () => false,
-    getWorkspaceContext: () => ({}) as WorkspaceContext,
-    getAllowedMcpServers: () => undefined,
-    getBlockedMcpServers: () => undefined,
-    getExtensions: () => [],
-    refreshMcpContext: vi.fn(),
-    ...overrides,
-  } as unknown as Config;
-}
-
-function createToolRegistry(config: Config): ToolRegistry {
-  return new ToolRegistry(
-    config,
-    {
-      requestConfirmation: async () => false,
-    },
-    new SettingsService(),
-  );
-}
-
-interface Deferred<T> {
-  readonly promise: Promise<T>;
-  readonly resolve: (value: T) => void;
-}
-
-function createDeferred<T>(): Deferred<T> {
-  let resolvePromise: ((value: T) => void) | undefined;
-  const promise = new Promise<T>((resolve) => {
-    resolvePromise = resolve;
-  });
-  const resolve = (value: T): void => {
-    if (resolvePromise === undefined) {
-      throw new Error('Deferred promise was not initialized');
-    }
-    resolvePromise(value);
-  };
-  return { promise, resolve };
-}
-
-function removeArtifactsWithServerAFailure(
-  events: string[],
-  serverName: string,
-): void {
-  events.push(`artifacts-${serverName}`);
-  if (serverName === 'server-a') {
-    throw new Error('artifact cleanup failed');
-  }
-}
 
 async function refreshWithOptionalFailure(
   events: string[],
@@ -110,11 +47,7 @@ async function refreshWithOptionalFailure(
   }
 }
 
-const CLIENT_VERSION = '0.0.1';
-
 /** Builds a manager wired to a fresh tool registry derived from config. */
-const createManager = (config: Config): McpClientManager =>
-  new McpClientManager(CLIENT_VERSION, createToolRegistry(config), config);
 
 describe('McpClientManager trust transitions', () => {
   beforeEach(() => {
@@ -131,7 +64,7 @@ describe('McpClientManager trust transitions', () => {
       mockedMcpClient().mockReturnValue(client);
 
       const config = createMockConfig();
-      const manager = createManager(config);
+      const { manager } = createOwnedManager(config);
 
       await manager.onFolderTrustGained();
 
@@ -145,7 +78,7 @@ describe('McpClientManager trust transitions', () => {
 
       const refreshMcpContext = vi.fn();
       const config = createMockConfig({ refreshMcpContext });
-      const manager = createManager(config);
+      const { manager } = createOwnedManager(config);
       await manager.stop();
 
       await manager.onFolderTrustGained();
@@ -162,7 +95,7 @@ describe('McpClientManager trust transitions', () => {
       const config = createMockConfig({
         getMcpServers: () => ({}),
       });
-      const manager = createManager(config);
+      const { manager } = createOwnedManager(config);
 
       await manager.onFolderTrustGained();
 
@@ -180,18 +113,22 @@ describe('McpClientManager trust transitions', () => {
         .mockReturnValueOnce(clientB);
 
       const refreshFn = vi.fn();
-      const promptRegistry = new PromptRegistry();
-      const resourceRegistry = new ResourceRegistry();
+      const catalog = createTestCatalogOwner();
+      const promptRegistry = catalog.promptPublication;
+      const resourceRegistry = catalog.resourcePublication;
       const config = createMockConfig({
         refreshMcpContext: refreshFn,
-        getPromptRegistry: () => promptRegistry,
-        getResourceRegistry: () => resourceRegistry,
       });
       const toolRegistry = createToolRegistry(config);
       const manager = new McpClientManager(
+        createTestOAuthBinding(),
+        unsupportedApprovalPolicy(),
         CLIENT_VERSION,
         toolRegistry,
+        promptRegistry,
+        resourceRegistry,
         config,
+        config.refreshMcpContext,
       );
 
       await manager.startConfiguredMcpServers();
@@ -218,7 +155,7 @@ describe('McpClientManager trust transitions', () => {
         .mockReturnValueOnce(clientA)
         .mockReturnValueOnce(clientB);
       const config = createMockConfig();
-      const manager = createManager(config);
+      const { manager } = createOwnedManager(config);
       await manager.startConfiguredMcpServers();
 
       manager.quarantineForTrustRevocation();
@@ -267,20 +204,23 @@ describe('McpClientManager trust transitions', () => {
       mockedMcpClient()
         .mockReturnValueOnce(clientA)
         .mockReturnValueOnce(clientB);
-      const promptRegistry = new PromptRegistry();
-      const resourceRegistry = new ResourceRegistry();
-      const config = createMockConfig({
-        getPromptRegistry: () => promptRegistry,
-        getResourceRegistry: () => resourceRegistry,
-      });
+      const catalog = createTestCatalogOwner();
+      const promptRegistry = catalog.promptPublication;
+      const resourceRegistry = catalog.resourcePublication;
+      const config = createMockConfig({});
       const toolRegistry = createToolRegistry(config);
       vi.spyOn(toolRegistry, 'removeMcpToolsByServer').mockImplementation(
         (name) => removeArtifactsWithServerAFailure(events, name),
       );
       const manager = new McpClientManager(
+        createTestOAuthBinding(),
+        unsupportedApprovalPolicy(),
         CLIENT_VERSION,
         toolRegistry,
+        promptRegistry,
+        resourceRegistry,
         config,
+        config.refreshMcpContext,
       );
       await manager.startConfiguredMcpServers();
 
@@ -309,7 +249,7 @@ describe('McpClientManager trust transitions', () => {
       mockedMcpClient().mockReturnValue(clientA);
 
       const config = createMockConfig();
-      const manager = createManager(config);
+      const { manager } = createOwnedManager(config);
 
       await manager.startConfiguredMcpServers();
       expect(manager.getMcpServerCount()).toBeGreaterThan(0);
@@ -324,7 +264,7 @@ describe('McpClientManager trust transitions', () => {
       mockedMcpClient().mockReturnValue(client);
 
       const config = createMockConfig();
-      const manager = createManager(config);
+      const { manager } = createOwnedManager(config);
 
       await manager.onFolderTrustRevoked();
 
@@ -354,7 +294,7 @@ describe('McpClientManager trust transitions', () => {
         refreshMcpContext: async () =>
           refreshWithOptionalFailure(events, failRefresh),
       });
-      const manager = createManager(config);
+      const { manager } = createOwnedManager(config);
       await manager.startConfiguredMcpServers();
       failRefresh = true;
       events.length = 0;
@@ -380,7 +320,7 @@ describe('McpClientManager trust transitions', () => {
       const config = createMockConfig({
         getMcpServers: () => ({ 'server-a': {} }),
       });
-      const manager = createManager(config);
+      const { manager } = createOwnedManager(config);
       await manager.startConfiguredMcpServers();
 
       manager.quarantineForTrustRevocation();
@@ -394,12 +334,11 @@ describe('McpClientManager trust transitions', () => {
       async (failingRegistry) => {
         const client = createMockMcpClient();
         mockedMcpClient().mockReturnValue(client);
-        const promptRegistry = new PromptRegistry();
-        const resourceRegistry = new ResourceRegistry();
+        const catalog = createTestCatalogOwner();
+        const promptRegistry = catalog.promptPublication;
+        const resourceRegistry = catalog.resourcePublication;
         const config = createMockConfig({
           getMcpServers: () => ({ 'server-a': {} }),
-          getPromptRegistry: () => promptRegistry,
-          getResourceRegistry: () => resourceRegistry,
         });
         const toolRegistry = createToolRegistry(config);
         const failCleanup = () => {
@@ -421,9 +360,14 @@ describe('McpClientManager trust transitions', () => {
         };
         installCleanupFailure[failingRegistry]();
         const manager = new McpClientManager(
+          createTestOAuthBinding(),
+          unsupportedApprovalPolicy(),
           CLIENT_VERSION,
           toolRegistry,
+          promptRegistry,
+          resourceRegistry,
           config,
+          config.refreshMcpContext,
         );
         await manager.startConfiguredMcpServers();
 
@@ -444,7 +388,7 @@ describe('McpClientManager trust transitions', () => {
       const config = createMockConfig({
         getMcpServers: () => ({ 'server-a': {} }),
       });
-      const manager = createManager(config);
+      const { manager } = createOwnedManager(config);
       await manager.startConfiguredMcpServers();
 
       await expect(manager.stop()).rejects.toMatchObject({
@@ -458,15 +402,22 @@ describe('McpClientManager trust transitions', () => {
     });
 
     it('removes artifacts for every server name while disconnecting a shared client once', async () => {
+      const catalog = createTestCatalogOwner();
+
       const client = createMockMcpClient();
       mockedMcpClient().mockReturnValue(client);
       const config = createMockConfig();
       const toolRegistry = createToolRegistry(config);
       const removeTools = vi.spyOn(toolRegistry, 'removeMcpToolsByServer');
       const manager = new McpClientManager(
+        createTestOAuthBinding(),
+        unsupportedApprovalPolicy(),
         CLIENT_VERSION,
         toolRegistry,
+        catalog.promptPublication,
+        catalog.resourcePublication,
         config,
+        config.refreshMcpContext,
       );
       await manager.startConfiguredMcpServers();
       removeTools.mockClear();
@@ -490,7 +441,7 @@ describe('McpClientManager trust transitions', () => {
       const config = createMockConfig({
         getMcpServers: () => ({ 'server-a': {} }),
       });
-      const manager = createManager(config);
+      const { manager } = createOwnedManager(config);
 
       void manager.startConfiguredMcpServers();
       await waitFor(() => expect(client.connect).toHaveBeenCalledOnce());
@@ -531,17 +482,20 @@ describe('McpClientManager trust transitions', () => {
       mockedMcpClient()
         .mockReturnValueOnce(clientA)
         .mockReturnValueOnce(clientB);
-      const promptRegistry = new PromptRegistry();
-      const resourceRegistry = new ResourceRegistry();
-      const config = createMockConfig({
-        getPromptRegistry: () => promptRegistry,
-        getResourceRegistry: () => resourceRegistry,
-      });
+      const catalog = createTestCatalogOwner();
+      const promptRegistry = catalog.promptPublication;
+      const resourceRegistry = catalog.resourcePublication;
+      const config = createMockConfig({});
       const toolRegistry = createToolRegistry(config);
       const manager = new McpClientManager(
+        createTestOAuthBinding(),
+        unsupportedApprovalPolicy(),
         CLIENT_VERSION,
         toolRegistry,
+        promptRegistry,
+        resourceRegistry,
         config,
+        config.refreshMcpContext,
       );
 
       void manager.startConfiguredMcpServers();
@@ -572,12 +526,11 @@ describe('McpClientManager trust transitions', () => {
         new Error('discovery failed'),
       );
       mockedMcpClient().mockReturnValue(client);
-      const promptRegistry = new PromptRegistry();
-      const resourceRegistry = new ResourceRegistry();
+      const catalog = createTestCatalogOwner();
+      const promptRegistry = catalog.promptPublication;
+      const resourceRegistry = catalog.resourcePublication;
       const config = createMockConfig({
         getMcpServers: () => ({ 'server-a': {} }),
-        getPromptRegistry: () => promptRegistry,
-        getResourceRegistry: () => resourceRegistry,
       });
       const toolRegistry = createToolRegistry(config);
       vi.spyOn(toolRegistry, 'removeMcpToolsByServer').mockImplementationOnce(
@@ -586,9 +539,14 @@ describe('McpClientManager trust transitions', () => {
         },
       );
       const manager = new McpClientManager(
+        createTestOAuthBinding(),
+        unsupportedApprovalPolicy(),
         CLIENT_VERSION,
         toolRegistry,
+        promptRegistry,
+        resourceRegistry,
         config,
+        config.refreshMcpContext,
       );
 
       await manager.startConfiguredMcpServers();
@@ -609,7 +567,7 @@ describe('McpClientManager trust transitions', () => {
       const config = createMockConfig({
         getMcpServers: () => ({ 'server-a': {} }),
       });
-      const manager = createManager(config);
+      const { manager } = createOwnedManager(config);
 
       await manager.startConfiguredMcpServers();
       await manager.stop();
@@ -632,7 +590,7 @@ describe('McpClientManager trust transitions', () => {
       const config = createMockConfig({
         getMcpServers: () => ({ 'server-a': {} }),
       });
-      const manager = createManager(config);
+      const { manager } = createOwnedManager(config);
 
       // Start discovery (in-flight, stuck at connect)
       void manager.startConfiguredMcpServers();
@@ -670,7 +628,7 @@ describe('McpClientManager trust transitions', () => {
         getMcpServers: () => ({ 'server-a': {} }),
         isTrustedFolder: () => trusted,
       });
-      const manager = createManager(config);
+      const { manager } = createOwnedManager(config);
 
       // Start discovery (in-flight, stuck at connect)
       void manager.startConfiguredMcpServers();
@@ -701,8 +659,9 @@ describe('McpClientManager trust transitions', () => {
             }),
         );
       mockedMcpClient().mockReturnValue(client);
-      const promptRegistry = new PromptRegistry();
-      const resourceRegistry = new ResourceRegistry();
+      const catalog = createTestCatalogOwner();
+      const promptRegistry = catalog.promptPublication;
+      const resourceRegistry = catalog.resourcePublication;
       const removePrompts = vi.spyOn(promptRegistry, 'removePromptsByServer');
       const removeResources = vi.spyOn(
         resourceRegistry,
@@ -710,16 +669,20 @@ describe('McpClientManager trust transitions', () => {
       );
       const config = createMockConfig({
         getMcpServers: () => ({ 'server-a': {} }),
-        getPromptRegistry: () => promptRegistry,
-        getResourceRegistry: () => resourceRegistry,
+
         isTrustedFolder: () => trusted,
       });
       const toolRegistry = createToolRegistry(config);
       const removeTools = vi.spyOn(toolRegistry, 'removeMcpToolsByServer');
       const manager = new McpClientManager(
+        createTestOAuthBinding(),
+        unsupportedApprovalPolicy(),
         CLIENT_VERSION,
         toolRegistry,
+        promptRegistry,
+        resourceRegistry,
         config,
+        config.refreshMcpContext,
       );
       await manager.startConfiguredMcpServers();
       expect(manager.getMcpServerCount()).toBe(1);
@@ -757,7 +720,7 @@ describe('McpClientManager trust transitions', () => {
           },
         ],
       });
-      const manager = createManager(config);
+      const { manager } = createOwnedManager(config);
 
       await manager.startConfiguredMcpServers();
       expect(client.connect).not.toHaveBeenCalled();
@@ -794,7 +757,7 @@ describe('McpClientManager trust transitions', () => {
       const config = createMockConfig({
         getMcpServers: () => ({ 'server-a': {} }),
       });
-      const manager = createManager(config);
+      const { manager } = createOwnedManager(config);
 
       // Start discovery — stuck at connect
       void manager.startConfiguredMcpServers();
@@ -828,12 +791,12 @@ describe('McpClientManager trust transitions', () => {
         },
       );
       mockedMcpClient().mockReturnValue(client);
-      const promptRegistry = new PromptRegistry();
-      const resourceRegistry = new ResourceRegistry();
+      const catalog = createTestCatalogOwner();
+      const promptRegistry = catalog.promptPublication;
+      const resourceRegistry = catalog.resourcePublication;
       const config = createMockConfig({
         getMcpServers: () => ({ 'server-a': {} }),
-        getPromptRegistry: () => promptRegistry,
-        getResourceRegistry: () => resourceRegistry,
+
         isTrustedFolder: () => trusted,
       });
       const toolRegistry = createToolRegistry(config);
@@ -842,10 +805,11 @@ describe('McpClientManager trust transitions', () => {
         resourceRegistry,
         'removeResourcesByServer',
       );
-      const manager = new McpClientManager(
-        CLIENT_VERSION,
-        toolRegistry,
+      const manager = createManager(
         config,
+        promptRegistry,
+        resourceRegistry,
+        toolRegistry,
       );
 
       void manager.startConfiguredMcpServers();
@@ -881,7 +845,7 @@ describe('McpClientManager trust transitions', () => {
       const config = createMockConfig({
         getMcpServers: () => ({ 'server-a': {} }),
       });
-      const manager = createManager(config);
+      const { manager } = createOwnedManager(config);
 
       void manager.startConfiguredMcpServers();
       await discoveryStarted.promise;

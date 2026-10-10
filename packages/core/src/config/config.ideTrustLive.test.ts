@@ -3,14 +3,51 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { IdeClient } from '@vybestack/llxprt-code-ide-integration';
+
+import { WorkspaceTrustLifecycle } from '../services/workspace-trust-lifecycle.js';
+import { WorkspaceIdeOwner } from '../services/workspace-ide-owner.js';
+import { RuntimePolicyOwner } from '../policy/policy-owner.js';
+const ideOwners: WorkspaceIdeOwner[] = [];
+async function initializeWorkspace(
+  config: Config,
+  trust: WorkspaceTrustLifecycle,
+) {
+  const owner = new WorkspaceIdeOwner(config, trust, trust);
+  ideOwners.push(owner);
+  const runtime = await initializeTestMcpRuntime(
+    config,
+    McpClientManager,
+    undefined,
+    undefined,
+    new RuntimePolicyOwner(config, trust),
+  );
+  try {
+    await owner.initialize();
+    return runtime;
+  } catch (error) {
+    ideOwners.splice(ideOwners.indexOf(owner), 1);
+    const results = await Promise.allSettled([
+      runtime.dispose(),
+      owner.dispose(),
+    ]);
+    throw new AggregateError(
+      [
+        error,
+        ...results.flatMap((result) =>
+          result.status === 'rejected' ? [result.reason] : [],
+        ),
+      ],
+      `Workspace initialization failed: ${String(error)}`,
+    );
+  }
+}
 
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
+import { resolve } from 'node:path';
 
-const ideClient = {
-  addTrustChangeListener: vi.fn(),
-  removeTrustChangeListener: vi.fn(),
-};
+let ideClient: IdeClient;
 const getIdeClient = vi.fn();
 let trustChangeListener: ((trusted: boolean | undefined) => void) | undefined;
 const mcpManager = {
@@ -20,13 +57,13 @@ const mcpManager = {
   quarantineForTrustRevocation: vi.fn(),
   whenDiscoverySettled: vi.fn().mockResolvedValue(undefined),
   stop: vi.fn().mockResolvedValue(undefined),
-  getMcpInstructions: vi.fn().mockReturnValue(''),
+  readInstructions: vi.fn().mockReturnValue(''),
 };
 
 const actual = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
 void vi.mock('@vybestack/llxprt-code-ide-integration', () => ({
   ...actual,
-  IdeClient: { getInstance: getIdeClient },
+  IdeClient: { create: getIdeClient },
 }));
 
 void vi.mock('@vybestack/llxprt-code-mcp', () => ({
@@ -35,25 +72,36 @@ void vi.mock('@vybestack/llxprt-code-mcp', () => ({
 
 import type { ConfigParameters } from './config.js';
 import { Config } from './config.js';
-import { initializeTestConfig } from '../__tests__/config-test-helpers.js';
+import { initializeTestMcpRuntime } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import { McpClientManager } from '@vybestack/llxprt-code-mcp';
 import { ideContext } from '@vybestack/llxprt-code-ide-integration';
+
+const testRoot = resolve(import.meta.dir, '../..');
 
 const baseParams: ConfigParameters = {
   sessionId: 'ide-trust-test',
-  targetDir: '.',
+  targetDir: testRoot,
   debugMode: false,
   model: 'test-model',
-  cwd: '.',
+  cwd: testRoot,
 };
 
 describe('Config live IDE trust', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    ideClient = await actual.IdeClient.create();
+    vi.spyOn(ideClient, 'addTrustChangeListener');
+    vi.spyOn(ideClient, 'removeTrustChangeListener');
+    vi.spyOn(ideClient, 'getWorkspaceTrust').mockImplementation(
+      () => ideContext.getIdeContext()?.workspaceState?.isTrusted,
+    );
     ideContext.clearIdeContext();
     trustChangeListener = undefined;
-    ideClient.addTrustChangeListener.mockImplementation((listener) => {
-      trustChangeListener = listener;
-    });
+    vi.spyOn(ideClient, 'addTrustChangeListener').mockImplementation(
+      (listener) => {
+        trustChangeListener = listener;
+      },
+    );
     getIdeClient.mockResolvedValue(ideClient);
     mcpManager.startConfiguredMcpServers.mockResolvedValue(undefined);
     mcpManager.onFolderTrustGained.mockResolvedValue(undefined);
@@ -70,30 +118,36 @@ describe('Config live IDE trust', () => {
       }),
     );
     const config = new Config({ ...baseParams, trustedFolder: true });
+    const trust = new WorkspaceTrustLifecycle({
+      localTrust: config.initialWorkspaceTrust,
+    });
 
-    const initialization = initializeTestConfig(config);
+    const initialization = initializeWorkspace(config, trust);
     await waitFor(() => expect(getIdeClient).toHaveBeenCalledOnce());
-    await config.setTrustedFolderLive(false);
-    resolveIdeClient?.({});
+    await trust.setTrustedFolderLive(false);
+    resolveIdeClient?.(ideClient);
     await initialization;
-    await config.whenTrustTransitionSettled();
+    await trust.whenSettled();
 
-    expect(config.isTrustedFolder()).toBe(false);
+    expect(trust.isTrustedFolder()).toBe(false);
     expect(mcpManager.onFolderTrustRevoked).toHaveBeenCalledOnce();
   });
 
   it('does not mark initialization complete when IDE listener registration throws', async () => {
-    ideClient.addTrustChangeListener.mockImplementationOnce(() => {
+    vi.spyOn(ideClient, 'addTrustChangeListener').mockImplementationOnce(() => {
       throw new Error('listener registration failed');
     });
     const config = new Config({ ...baseParams, trustedFolder: true });
+    const trust = new WorkspaceTrustLifecycle({
+      localTrust: config.initialWorkspaceTrust,
+    });
 
-    await expect(initializeTestConfig(config)).rejects.toThrow(
+    await expect(initializeWorkspace(config, trust)).rejects.toThrow(
       'listener registration failed',
     );
     mcpManager.onFolderTrustRevoked.mockClear();
 
-    await config.setTrustedFolderLive(false);
+    await trust.setTrustedFolderLive(false);
 
     expect(mcpManager.onFolderTrustRevoked).not.toHaveBeenCalled();
   });
@@ -106,35 +160,45 @@ describe('Config live IDE trust', () => {
       }),
     );
     const config = new Config({ ...baseParams, trustedFolder: true });
+    const trust = new WorkspaceTrustLifecycle({
+      localTrust: config.initialWorkspaceTrust,
+    });
 
-    const initialization = initializeTestConfig(config);
+    const initialization = initializeWorkspace(config, trust);
     await waitFor(() => expect(getIdeClient).toHaveBeenCalledOnce());
     ideContext.setIdeContext({ workspaceState: { isTrusted: false } });
     resolveIdeClient?.(ideClient);
     await initialization;
-    await config.whenTrustTransitionSettled();
+    await trust.whenSettled();
 
-    expect(config.isTrustedFolder()).toBe(false);
+    expect(trust.isTrustedFolder()).toBe(false);
     expect(mcpManager.quarantineForTrustRevocation).toHaveBeenCalledOnce();
     expect(mcpManager.onFolderTrustRevoked).toHaveBeenCalledOnce();
   });
 
   it('applies IDE trust changes live', async () => {
     const config = new Config({ ...baseParams, trustedFolder: true });
-    await initializeTestConfig(config);
+    const trust = new WorkspaceTrustLifecycle({
+      localTrust: config.initialWorkspaceTrust,
+    });
+    await initializeWorkspace(config, trust);
     const listener = trustChangeListener;
     expect(listener).toBeDefined();
 
     listener?.(false);
-    await config.whenTrustTransitionSettled();
+    expect(mcpManager.quarantineForTrustRevocation).toHaveBeenCalledOnce();
+    await trust.whenSettled();
 
-    expect(config.isTrustedFolder()).toBe(false);
+    expect(trust.isTrustedFolder()).toBe(false);
     expect(mcpManager.onFolderTrustRevoked).toHaveBeenCalledOnce();
   });
 
   it('surfaces synchronous quarantine failures through whenTrustTransitionSettled', async () => {
     const config = new Config({ ...baseParams, trustedFolder: true });
-    await initializeTestConfig(config);
+    const trust = new WorkspaceTrustLifecycle({
+      localTrust: config.initialWorkspaceTrust,
+    });
+    await initializeWorkspace(config, trust);
     const listener = trustChangeListener;
     const quarantineFailure = new Error('quarantine failed');
     mcpManager.quarantineForTrustRevocation.mockImplementationOnce(() => {
@@ -143,21 +207,27 @@ describe('Config live IDE trust', () => {
 
     expect(() => listener?.(false)).not.toThrow();
 
-    expect(config.isTrustedFolder()).toBe(false);
-    await expect(config.whenTrustTransitionSettled()).rejects.toBe(
-      quarantineFailure,
-    );
+    expect(trust.isTrustedFolder()).toBe(false);
+    await expect(trust.whenSettled()).rejects.toBe(quarantineFailure);
+    const owner = ideOwners.pop();
+    expect(owner).toBeDefined();
+    await expect(owner?.dispose()).rejects.toMatchObject({
+      errors: [quarantineFailure],
+    });
   });
 
   it('deduplicates IDE notifications that do not change effective trust', async () => {
     const config = new Config({ ...baseParams, trustedFolder: true });
-    await initializeTestConfig(config);
+    const trust = new WorkspaceTrustLifecycle({
+      localTrust: config.initialWorkspaceTrust,
+    });
+    await initializeWorkspace(config, trust);
     const listener = trustChangeListener;
     expect(listener).toBeDefined();
 
     listener?.(true);
     listener?.(true);
-    await config.whenTrustTransitionSettled();
+    await trust.whenSettled();
 
     expect(mcpManager.onFolderTrustGained).not.toHaveBeenCalled();
     expect(mcpManager.onFolderTrustRevoked).not.toHaveBeenCalled();
@@ -178,15 +248,18 @@ describe('Config live IDE trust', () => {
     'compares cached trust when production mutates global IDE context before the first $ideTrust notification',
     async ({ localTrust, ideTrust, expectedTransition }) => {
       const config = new Config({ ...baseParams, trustedFolder: localTrust });
-      await initializeTestConfig(config);
+      const trust = new WorkspaceTrustLifecycle({
+        localTrust: config.initialWorkspaceTrust,
+      });
+      await initializeWorkspace(config, trust);
       const listener = trustChangeListener;
       expect(listener).toBeDefined();
 
       ideContext.setIdeContext({ workspaceState: { isTrusted: ideTrust } });
       listener?.(ideTrust);
-      await config.whenTrustTransitionSettled();
+      await trust.whenSettled();
 
-      expect(config.isTrustedFolder()).toBe(ideTrust);
+      expect(trust.isTrustedFolder()).toBe(ideTrust);
       expect(mcpManager[expectedTransition]).toHaveBeenCalledOnce();
     },
   );
@@ -196,28 +269,39 @@ describe('Config live IDE trust', () => {
     async (localTrust) => {
       ideContext.setIdeContext({ workspaceState: { isTrusted: !localTrust } });
       const config = new Config({ ...baseParams, trustedFolder: !localTrust });
-      await initializeTestConfig(config);
+      const trust = new WorkspaceTrustLifecycle({
+        localTrust: config.initialWorkspaceTrust,
+      });
+      await initializeWorkspace(config, trust);
       const listener = trustChangeListener;
       expect(listener).toBeDefined();
 
-      await config.setTrustedFolderLive(localTrust);
-      expect(config.isTrustedFolder()).toBe(!localTrust);
+      await trust.setTrustedFolderLive(localTrust);
+      expect(trust.isTrustedFolder()).toBe(!localTrust);
 
       ideContext.clearIdeContext();
       listener?.(undefined);
-      await config.whenTrustTransitionSettled();
+      await trust.whenSettled();
 
-      expect(config.isTrustedFolder()).toBe(localTrust);
+      expect(trust.isTrustedFolder()).toBe(localTrust);
     },
   );
 
   it('removes the IDE listener during disposal', async () => {
     const config = new Config({ ...baseParams, trustedFolder: true });
-    await initializeTestConfig(config);
+    const trust = new WorkspaceTrustLifecycle({
+      localTrust: config.initialWorkspaceTrust,
+    });
+    const owner = await initializeWorkspace(config, trust);
     const listener = trustChangeListener;
     expect(listener).toBeDefined();
 
+    await owner.dispose();
     await config.dispose();
+    await ideOwners.splice(0).reduce(async (prior, owner) => {
+      await prior;
+      await owner.dispose();
+    }, Promise.resolve());
 
     expect(ideClient.removeTrustChangeListener).toHaveBeenCalledWith(listener);
     expect(mcpManager.stop).toHaveBeenCalledOnce();

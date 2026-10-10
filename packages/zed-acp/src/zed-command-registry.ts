@@ -10,12 +10,32 @@ import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 const logger = new DebugLogger('llxprt:zed-integration:commands');
 
+export type ZedCommandAgent = Pick<Agent, 'compress' | 'getModel'> & {
+  readonly tools: Pick<Agent['tools'], 'list'>;
+  readonly memory: Pick<Agent['memory'], 'getFilePaths'>;
+  readonly profiles: Pick<Agent['profiles'], 'list'>;
+  readonly tasks: Pick<Agent['tasks'], 'list'>;
+};
+
 export interface ZedCommandContext {
-  readonly agent: Agent;
+  readonly agent: ZedCommandAgent;
 }
 
 export interface ZedCommandResult {
   readonly text: string;
+}
+
+export function projectZedCommandAgent(
+  agent: ZedCommandAgent,
+): ZedCommandAgent {
+  return {
+    compress: (options) => agent.compress(options),
+    getModel: () => agent.getModel(),
+    tools: { list: () => agent.tools.list() },
+    memory: { getFilePaths: () => agent.memory.getFilePaths() },
+    profiles: { list: () => agent.profiles.list() },
+    tasks: { list: () => agent.tasks.list() },
+  };
 }
 
 interface ZedCommandDefinition {

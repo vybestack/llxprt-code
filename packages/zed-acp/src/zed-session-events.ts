@@ -27,7 +27,9 @@ type HandleConfirmationFn = (
 ) => Promise<void>;
 
 export interface SessionStreamDeps {
-  readonly agent: Agent;
+  readonly agent: Pick<Agent, 'stream'> & {
+    readonly tools: Pick<Agent['tools'], 'get'>;
+  };
   readonly terminals: TerminalManager | null;
   readonly sendUpdate: SendUpdateFn;
   readonly sendUsage: SendUsageFn;

@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { AgentActivationOperation } from '@vybestack/llxprt-code-agents';
+
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -20,110 +22,14 @@ import type { Settings } from './settings.js';
 const actual = { ...(await import('@vybestack/llxprt-code-core')) };
 void vi.mock('@vybestack/llxprt-code-core', () => ({
   ...actual,
-  Config: vi.fn().mockImplementation((params) => {
-    let provider = params.provider;
-    let model = params.model;
-    let userMemory = params.userMemory;
-    let llxprtMdFileCount = params.llxprtMdFileCount ?? 0;
-    const ephemerals: Record<string, unknown> = {};
-    const settingsServiceInstance = new SettingsService();
-
-    return {
-      getProvider: vi.fn(() => provider),
-      setProvider: vi.fn((next: string) => {
-        provider = next;
-      }),
-      getProviderManager: vi.fn(),
-      setProviderManager: vi.fn(),
-      setRuntimeMessageBus: vi.fn(),
-      setRuntimeOAuthManager: vi.fn(),
-      setImageBackendResolver: vi.fn(),
-      setRunImageOperation: vi.fn(),
-      initialize: vi.fn(),
-      getModel: vi.fn(() => model),
-      setModel: vi.fn((next: string) => {
-        model = next;
-      }),
-      setEphemeralSetting: vi.fn((key: string, value: unknown) => {
-        if (value === undefined) {
-          delete ephemerals[key];
-        } else {
-          ephemerals[key] = value;
-        }
-      }),
-      getEphemeralSetting: vi.fn((key: string) => ephemerals[key]),
-      getEphemeralSettings: vi.fn(() => ({ ...ephemerals })),
-      getSettingsService: vi.fn(() => settingsServiceInstance),
-      getConversationLoggingEnabled: vi.fn(() => false),
-      getDebugMode: vi.fn(() => false),
-      getToolRegistry: vi.fn(() => ({})),
-      getSandboxMountDir: vi.fn(() => ''),
-      getMemoryImportFormat: vi.fn(() => 'tree'),
-      getFolderTrust: vi.fn(() => true),
-      getIdeMode: vi.fn(() => false),
-      getFileDiscoveryService: vi.fn(
-        () => params.fileDiscoveryService ?? { initialize: vi.fn() },
-      ),
-      refreshAuth: vi.fn(async () => {}),
-      setUserMemory: vi.fn((next: string) => {
-        userMemory = next;
-      }),
-      getUserMemory: vi.fn(() => userMemory),
-      setLlxprtMdFileCount: vi.fn((next: number) => {
-        llxprtMdFileCount = next;
-      }),
-      getLlxprtMdFileCount: vi.fn(() => llxprtMdFileCount),
-    };
-  }),
   isRipgrepAvailable: vi.fn().mockResolvedValue(true),
 }));
-
-const createMockSettingsService = () => {
-  const providerStore = new Map<string, Record<string, unknown>>();
-  const globalStore = new Map<string, unknown>();
-  return {
-    setProviderSetting(provider: string, key: string, value: unknown) {
-      const entry = providerStore.get(provider) ?? {};
-      if (value === undefined) {
-        delete entry[key];
-      } else {
-        entry[key] = value;
-      }
-      providerStore.set(provider, entry);
-    },
-    async updateSettings(
-      provider: string,
-      updates: Record<string, unknown>,
-    ): Promise<void> {
-      const entry = providerStore.get(provider) ?? {};
-      Object.assign(entry, updates);
-      providerStore.set(provider, entry);
-    },
-    async switchProvider(): Promise<void> {
-      // no-op
-    },
-    set(key: string, value: unknown) {
-      if (value === undefined) {
-        globalStore.delete(key);
-      } else {
-        globalStore.set(key, value);
-      }
-    },
-    get(key: string) {
-      return globalStore.get(key);
-    },
-    clear() {
-      globalStore.clear();
-      providerStore.clear();
-    },
-  };
-};
 
 const createRuntimeState = () => ({
   runtime: {
     runtimeId: 'cli.runtime.test',
     metadata: {},
-    settingsService: createMockSettingsService(),
+    settingsService: new SettingsService(),
   },
   providerManager: {
     getActiveProviderName: vi.fn(() => 'openai'),
@@ -150,10 +56,6 @@ const runtimeStateRef = {
 
 const resetRuntimeState = () => {
   runtimeStateRef.value = createRuntimeState();
-};
-
-const runtimeConfigRef = {
-  value: null as unknown,
 };
 
 void vi.mock('./profileBootstrap.js', () => ({
@@ -198,10 +100,6 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
     didFallback: false,
     requestedProvider: 'openai',
   }));
-  const getCliRuntimeContext = vi.fn(() => runtimeStateRef.value.runtime);
-  const setCliRuntimeContext = vi.fn((_service, config) => {
-    runtimeConfigRef.value = config;
-  });
   const switchActiveProvider = vi.fn(async () => ({
     changed: false,
     previousProvider: null,
@@ -209,13 +107,6 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
     infoMessages: [],
   }));
   const applyCliArgumentOverrides = vi.fn(async () => {});
-  const registerCliProviderInfrastructure = vi.fn();
-  const getCliRuntimeServices = vi.fn(() => ({
-    runtime: runtimeStateRef.value.runtime,
-    providerManager: runtimeStateRef.value.providerManager,
-    config: runtimeConfigRef.value,
-    settingsService: runtimeStateRef.value.runtime.settingsService,
-  }));
   return {
     ephemeralSettingHelp: {},
     parseEphemeralSettingValue: vi.fn((_key: string, rawValue: string) => ({
@@ -224,16 +115,11 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
     })),
     applyCliSetArguments: vi.fn(() => ({ modelParams: {} })),
     applyProfileSnapshot,
-    getCliRuntimeContext,
-    setCliRuntimeContext,
     switchActiveProvider,
     applyCliArgumentOverrides,
-    registerCliProviderInfrastructure,
-    getCliRuntimeServices,
-    getCliProviderManager: vi.fn(() => runtimeStateRef.value.providerManager),
-    getCliRuntimeConfig: vi.fn(() => runtimeConfigRef.value),
-    getCliOAuthManager: vi.fn(() => runtimeStateRef.value.oauthManager),
-    getActiveProviderStatus: vi.fn(() => ({ name: 'openai', isReady: true })),
+    providerManager: vi.fn(() => runtimeStateRef.value.providerManager),
+    oauthManager: vi.fn(() => runtimeStateRef.value.oauthManager),
+    providerStatus: vi.fn(() => ({ name: 'openai', isReady: true })),
     listProviders: vi.fn(() => getProviderManager().listProviders()),
     getActiveProviderName: vi.fn(() =>
       getProviderManager().getActiveProviderName(),
@@ -330,13 +216,8 @@ describe('loadCliConfig memory discovery', () => {
     await fs.rm(tempRoot, { recursive: true, force: true });
   });
 
-  it('loads context files from include directories even when loadMemoryFromIncludeDirectories is disabled', async () => {
-    const contextFileName = 'AGENTS.md';
-    const contextContent = '# Guidance\nAlways follow agent instructions.';
-    const includedContextPath = path.join(includeDir, contextFileName);
-    await fs.writeFile(includedContextPath, contextContent, 'utf-8');
-
-    const settings = {
+  function createSettings(contextFileName: string): Settings {
+    return {
       includeDirectories: [] as string[],
       loadMemoryFromIncludeDirectories: false,
       folderTrust: false,
@@ -350,8 +231,10 @@ describe('loadCliConfig memory discovery', () => {
         jitContext: false,
       },
     } as unknown as Settings;
+  }
 
-    const argv: CliArgs = {
+  function createArgv(): CliArgs {
+    return {
       model: undefined,
       sandbox: undefined,
       sandboxImage: undefined,
@@ -399,10 +282,22 @@ describe('loadCliConfig memory discovery', () => {
       imagePrompt: undefined,
       quiet: undefined,
     };
+  }
+
+  it('loads CLI-declared include context when the settings include-memory flag is disabled', async () => {
+    const contextFileName = 'AGENTS.md';
+    const contextContent = '# Guidance\nAlways follow agent instructions.';
+    const includedContextPath = path.join(includeDir, contextFileName);
+    await fs.writeFile(includedContextPath, contextContent, 'utf-8');
+
+    const settings = createSettings(contextFileName);
+
+    const argv = createArgv();
 
     const { ExtensionEnablementManager, ExtensionStorage } = await import(
       './extension.js'
     );
+    let operation: AgentActivationOperation | undefined;
     const config = await loadCliConfig(
       settings,
       [],
@@ -410,9 +305,62 @@ describe('loadCliConfig memory discovery', () => {
       'test-session',
       argv,
       workspaceDir,
+      {
+        onActivationBootstrapReady: (owner) => {
+          operation = owner;
+        },
+      },
     );
 
-    expect(config.getUserMemory()).toContain(contextContent);
-    expect(config.getLlxprtMdFileCount()).toBeGreaterThan(0);
+    if (operation === undefined)
+      throw new Error('Missing retained CLI activation root');
+    try {
+      expect(
+        operation.workspaceMemory.operations.snapshot().memoryContent,
+      ).toContain(contextContent);
+      expect(
+        operation.workspaceMemory.operations.snapshot().fileCount,
+      ).toBeGreaterThan(0);
+      expect(config.getProvidedInstructions()).toBe('');
+    } finally {
+      await operation.dispose();
+    }
+  });
+
+  it('releases the CLI-created workspace memory exactly once when the activation is disposed', async () => {
+    const { ExtensionEnablementManager, ExtensionStorage } = await import(
+      './extension.js'
+    );
+    let operation: AgentActivationOperation | undefined;
+    await loadCliConfig(
+      createSettings('AGENTS.md'),
+      [],
+      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir()),
+      'test-session',
+      createArgv(),
+      workspaceDir,
+      {
+        onActivationBootstrapReady: (owner) => {
+          operation = owner;
+        },
+      },
+    );
+    if (operation === undefined)
+      throw new Error('Missing retained CLI activation root');
+    const memory = operation.workspaceMemory;
+    expect(operation.workspaceMemoryOwnership).toBe('transferred');
+    const originalDispose = memory.dispose.bind(memory);
+    let memoryDisposals = 0;
+    memory.dispose = () => {
+      memoryDisposals += 1;
+      return originalDispose();
+    };
+
+    await Promise.all([operation.dispose(), operation.dispose()]);
+
+    expect(memoryDisposals).toBe(1);
+    expect(() => memory.operations.snapshot()).toThrow(
+      'Instructions are disposed',
+    );
   });
 });

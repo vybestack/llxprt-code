@@ -5,7 +5,6 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
-import type { Config } from '@vybestack/llxprt-code-core';
 import type { SettingDefinition } from '../config/settingsSchema.js';
 
 // Mock DebugLogger
@@ -264,9 +263,8 @@ describe('DynamicSettingsRegistry', () => {
 });
 
 describe('generateDynamicToolSettings', () => {
-  let mockConfig: { getToolRegistryInfo: ReturnType<typeof vi.fn> };
-  const asConfig = (value: typeof mockConfig): Config =>
-    value as unknown as Config;
+  let mockConfig: { describeToolConfiguration: ReturnType<typeof vi.fn> };
+  const asConfig = (value: typeof mockConfig) => value;
   const originalEnv = process.env;
 
   const mockRegisteredTools = [
@@ -319,7 +317,7 @@ describe('generateDynamicToolSettings', () => {
     process.env = { ...originalEnv }; // Reset env vars
 
     mockConfig = {
-      getToolRegistryInfo: vi.fn(() => ({
+      describeToolConfiguration: vi.fn(() => ({
         registered: mockRegisteredTools,
         unregistered: mockUnregisteredTools,
       })),
@@ -380,7 +378,7 @@ describe('generateDynamicToolSettings', () => {
   });
 
   it('should handle empty tool registry', () => {
-    mockConfig.getToolRegistryInfo.mockReturnValue({
+    mockConfig.describeToolConfiguration.mockReturnValue({
       registered: [],
       unregistered: [],
     });
@@ -390,7 +388,7 @@ describe('generateDynamicToolSettings', () => {
   });
 
   it('should handle only unregistered tools', () => {
-    mockConfig.getToolRegistryInfo.mockReturnValue({
+    mockConfig.describeToolConfiguration.mockReturnValue({
       registered: [],
       unregistered: mockUnregisteredTools,
     });
@@ -403,10 +401,10 @@ describe('generateDynamicToolSettings', () => {
 
   it('should handle tool registry errors gracefully', () => {
     const errorConfig = {
-      getToolRegistryInfo: vi.fn(() => {
+      describeToolConfiguration: vi.fn(() => {
         throw new Error('Tool registry error');
       }),
-    } as unknown as Config;
+    };
 
     const toolSettings = generateDynamicToolSettings(errorConfig);
     expect(toolSettings).toStrictEqual({});

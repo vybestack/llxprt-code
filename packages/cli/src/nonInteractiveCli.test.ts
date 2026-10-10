@@ -5,7 +5,7 @@
  */
 
 import {
-  type Config,
+  Config,
   EmojiFilter,
   DebugLogger,
   FatalTurnLimitedError,
@@ -79,19 +79,22 @@ function createMockConfig(overrides?: {
   sessionId?: string;
   includeInResponse?: boolean;
 }): Config {
-  return {
-    getSessionId: () => overrides?.sessionId ?? 'test-session',
-    getEphemeralSetting: (key: string) =>
-      key === 'reasoning.includeInResponse'
-        ? overrides?.includeInResponse
-        : undefined,
-  } as unknown as Config;
+  return new Config({
+    sessionId: overrides?.sessionId ?? 'test-session',
+    targetDir: process.cwd(),
+    cwd: process.cwd(),
+    debugMode: false,
+    model: 'stream-fixture',
+    initialSettings: {
+      'reasoning.includeInResponse': overrides?.includeInResponse,
+    },
+  });
 }
 
 describe('processAgentStream', () => {
   let consoleErrorSpy: Mock<(...args: never[]) => unknown>;
-  let processStdoutSpy: Mock<(...args: never[]) => unknown>;
-  let processStderrSpy: Mock<(...args: never[]) => unknown>;
+  let processStdoutSpy: Mock<typeof process.stdout.write>;
+  let processStderrSpy: Mock<typeof process.stderr.write>;
 
   beforeEach(() => {
     consoleErrorSpy = vi
@@ -123,6 +126,10 @@ describe('processAgentStream', () => {
         : overrides.streamFormatter;
     return {
       config: overrides?.config ?? createMockConfig(),
+      includeThinking:
+        overrides?.config?.getInitialSettings()[
+          'reasoning.includeInResponse'
+        ] === true,
       jsonOutput: overrides?.jsonOutput ?? false,
       // In production, streamJsonOutput and streamFormatter are always set
       // together; derive streamJsonOutput from the formatter unless a test
@@ -311,11 +318,12 @@ describe('processAgentStream', () => {
   function filterSameStreamThinking(text: string): {
     readonly filtered: string;
     readonly blocked: false;
+    readonly emojiDetected: false;
   } {
     if (text === 'filtered') {
-      return { filtered: '', blocked: false };
+      return { filtered: '', blocked: false, emojiDetected: false };
     }
-    return { filtered: text, blocked: false };
+    return { filtered: text, blocked: false, emojiDetected: false };
   }
 
   it('preserves same-stream thinking when a filtered update becomes empty', async () => {
@@ -345,10 +353,10 @@ describe('processAgentStream', () => {
       streamFromEvents(events),
       createContext({
         config: createMockConfig({ includeInResponse: true }),
-        emojiFilter: {
+        emojiFilter: Object.assign(new EmojiFilter({ mode: 'auto' }), {
           filterText: filterSameStreamThinking,
           flushBuffer: () => '',
-        },
+        }),
       }),
       Date.now(),
       () => uiTelemetryService.getMetrics(),

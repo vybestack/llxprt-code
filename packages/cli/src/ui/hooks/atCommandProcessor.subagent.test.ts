@@ -10,6 +10,7 @@ import type { AgentToolHandle } from '@vybestack/llxprt-code-agents';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import {
   createTestFile,
+  unexpectedResourceRead,
   setupAtCommandTest,
   teardownAtCommandTest,
   type AtCommandTestSetup,
@@ -47,6 +48,8 @@ describe('handleAtCommand (subagent @mentions)', () => {
     };
 
     const result = await handleAtCommand({
+      readResource: unexpectedResourceRead,
+      findResource: () => undefined,
       query: '@typescriptexpert please review',
       config: mockConfig,
       addItem: mockAddItem,
@@ -83,6 +86,8 @@ describe('handleAtCommand (subagent @mentions)', () => {
     };
 
     const result = await handleAtCommand({
+      readResource: unexpectedResourceRead,
+      findResource: () => undefined,
       query: '@unknownagent do something',
       config: mockConfig,
       addItem: mockAddItem,
@@ -107,6 +112,8 @@ describe('handleAtCommand (subagent @mentions)', () => {
 
   it('does not crash or nudge when subagentManager is undefined', async () => {
     const result = await handleAtCommand({
+      readResource: unexpectedResourceRead,
+      findResource: () => undefined,
       query: '@typescriptexpert please review',
       config: mockConfig,
       addItem: mockAddItem,
@@ -133,6 +140,8 @@ describe('handleAtCommand (subagent @mentions)', () => {
     };
 
     const result = await handleAtCommand({
+      readResource: unexpectedResourceRead,
+      findResource: () => undefined,
       query: '@typescriptexpert please review',
       config: mockConfig,
       addItem: mockAddItem,
@@ -163,6 +172,8 @@ describe('handleAtCommand (subagent @mentions)', () => {
     };
 
     const result = await handleAtCommand({
+      readResource: unexpectedResourceRead,
+      findResource: () => undefined,
       query: '@a @b do the thing',
       config: mockConfig,
       addItem: mockAddItem,
@@ -191,6 +202,8 @@ describe('handleAtCommand (subagent @mentions)', () => {
     };
 
     const result = await handleAtCommand({
+      readResource: unexpectedResourceRead,
+      findResource: () => undefined,
       query: '@typescriptexpert @typescriptexpert do the thing',
       config: mockConfig,
       addItem: mockAddItem,
@@ -231,6 +244,8 @@ describe('handleAtCommand (subagent @mentions)', () => {
     };
 
     const result = await handleAtCommand({
+      readResource: unexpectedResourceRead,
+      findResource: () => undefined,
       query: '@typescriptexpert review @realfile.txt',
       config: mockConfig,
       addItem: mockAddItem,

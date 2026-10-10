@@ -1,8 +1,13 @@
+import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { WorkspaceTrustControlPort } from '@vybestack/llxprt-code-core';
+
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { ProviderManager } from '../ProviderManager.js';
 
 /**
  * @plan:PLAN-20270110-ISSUE2378.P04
@@ -13,24 +18,17 @@
  *
  * The CLI profile bootstrap previously constructed the session MessageBus
  * itself (core's `createSessionMessageBus`) and threaded it into
- * `createProviderManager` + `registerCliProviderInfrastructure`. That is
+ * provider construction and process-wide registration. That is
  * runtime assembly the providers package must own: the CLI supplies declarative
  * context (settingsService, optional pre-Config `config`, runtimeId, metadata,
  * an oauth-settings adapter) and this helper performs the ordered assembly:
  *
- *   1. bind the CLI runtime identity via `setCliRuntimeContext` FIRST so
- *      resolution is deterministic before any infrastructure reads ambient
- *      state (issue #2300).
- *   2. build the ONE session MessageBus internally — from the Config's policy
- *      engine + debug mode when a Config already exists, else a default bus
- *      (Config is created later in loadCliConfig; this pre-Config bus is
- *      re-seeded after Config construction by the post-config phase).
- *   3. construct the ProviderManager + OAuthManager on that bus via the
- *      composition seam.
- *   4. register the CLI provider infrastructure on the SAME bus.
+ *   1. create or adopt a per-bootstrap handle without registering its label.
+ *   2. build a session MessageBus from the Config policy when available.
+ *   3. construct the ProviderManager + OAuthManager on that bus.
+ *   4. bind the selected manager and file lifecycle to the exact owner Config.
  *
- * On any failure the CLI runtime is disposed so a half-assembled runtime is
- * never left registered.
+ * Failed assembly restores the handle and Config to their previous ownership.
  */
 
 import {
@@ -39,26 +37,32 @@ import {
   type ProviderRuntimeContext,
   type RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
-import { createSessionMessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
-import { createProviderManager } from '../composition/index.js';
+import {
+  createProviderManager,
+  configureProviderRuntimeFactories,
+} from '../composition/index.js';
+import { NodeFileSystem } from '../composition/IFileSystem.js';
 import type { ProviderContributionRegistry } from '../composition/runtimePlugins/types.js';
 import {
   createFileOAuthSettingsProvider,
   type OAuthManager,
 } from '../auth/index.js';
 import {
-  registerCliProviderInfrastructure,
-  setCliRuntimeContext,
-} from './runtimeLifecycle.js';
-import { disposeCliRuntimeRegistration } from './runtimeRegistry.js';
+  beginCliRuntimeRegistration,
+  type CliRuntimeRegistrationHandle,
+} from './cliForegroundRuntime.js';
+
+import { resolveRuntimeKind } from './runtimeKind.js';
 
 /**
  * Declarative context the CLI supplies to the provider-runtime assembly. No
  * MessageBus is accepted — bus ownership lives inside this helper.
  */
 export interface AssembleCliProviderRuntimeInput {
+  readonly settingsOwner?: SessionSettingsOwner;
+  readonly trustPort?: WorkspaceTrustControlPort;
   /** The runtime SettingsService (resolved by the caller). */
   readonly settingsService: SettingsService;
   /**
@@ -69,7 +73,7 @@ export interface AssembleCliProviderRuntimeInput {
   readonly config: Config | undefined;
   /** The foreground CLI runtime id (issue #2300 — the caller resolves it). */
   readonly runtimeId: string;
-  /** Runtime metadata threaded onto the context/registry entries. */
+  /** Runtime metadata threaded onto this bootstrap's provider context. */
   readonly metadata?: Record<string, unknown>;
   /**
    * OAuth-settings surface forwarded to the composition seam so the assembled
@@ -92,6 +96,8 @@ export interface AssembleCliProviderRuntimeInput {
    * runtime plugins, which then get the built-ins-only registry.
    */
   readonly providerContributions?: ProviderContributionRegistry;
+  readonly registration?: CliRuntimeRegistrationHandle;
+  readonly oauthManager?: OAuthManager;
 }
 
 /**
@@ -101,8 +107,18 @@ export interface AssembleCliProviderRuntimeInput {
 export interface AssembledCliProviderRuntime {
   readonly runtime: ProviderRuntimeContext;
   readonly runtimeMessageBus: MessageBus;
+  readonly policyOwner?: RuntimePolicyOwner;
   readonly providerManager: RuntimeProviderManager;
   readonly oauthManager?: OAuthManager;
+  readonly registration: CliRuntimeRegistrationHandle;
+}
+
+function resolveCliOAuthSettings(
+  oauthSettings: IOAuthSettingsProvider | null | undefined,
+): IOAuthSettingsProvider | undefined {
+  return oauthSettings === undefined
+    ? createFileOAuthSettingsProvider()
+    : (oauthSettings ?? undefined);
 }
 
 /**
@@ -120,25 +136,41 @@ export function assembleCliProviderRuntime(
     oauthSettings,
     providerContributions,
   } = input;
+  if (
+    input.registration &&
+    (input.registration.runtimeId !== runtimeId ||
+      input.registration.settingsService !== settingsService)
+  ) {
+    throw new Error('CLI registration does not belong to this runtime');
+  }
+  const registration =
+    input.registration ??
+    beginCliRuntimeRegistration(settingsService, config, { runtimeId });
+  let undoAdoption: (() => void) | undefined;
+  let policyOwner: RuntimePolicyOwner | undefined;
 
   try {
-    // 1. Bind identity BEFORE creating/registering infrastructure (issue #2300).
-    setCliRuntimeContext(settingsService, config, {
-      runtimeId,
-      metadata,
-    });
-
+    if (input.registration && config) undoAdoption = registration.adopt(config);
+    if (config !== undefined) input.settingsOwner?.bindTelemetry(config);
     const runtime = {
+      sessionSettings: input.settingsOwner,
       settingsService,
       config,
       runtimeId,
+      runtimeKind: resolveRuntimeKind(undefined, metadata, 'cli-interactive'),
       metadata,
+      providerFileLifecycle: registration.providerFileLifecycle,
     } as ProviderRuntimeContext;
 
-    // 2. Build the ONE session MessageBus internally.
-    const runtimeMessageBus = config
-      ? createSessionMessageBus(config.getPolicyEngine(), config.getDebugMode())
-      : createSessionMessageBus();
+    const runtimeMessageBus = registration.messageBus;
+    if (
+      input.oauthManager !== undefined &&
+      input.oauthManager.runtimeMessageBus !== runtimeMessageBus
+    )
+      throw new Error(
+        'Supplied OAuth manager belongs to a different runtime message bus',
+      );
+    policyOwner = bindCliPolicy(config, input.trustPort, registration);
 
     // Resolve the OAuth-settings surface. Bus/OAuth ownership lives in the
     // providers package (#2378), so the fallback also lives here: when the
@@ -147,41 +179,86 @@ export function assembleCliProviderRuntime(
     // `null` opts out entirely (settings-less manager). This closes the
     // post-Config recomposition gap where the CLI re-seed omitted the adapter
     // and silently disabled every configured OAuth provider.
-    const resolvedOAuthSettings =
-      oauthSettings === undefined
-        ? createFileOAuthSettingsProvider()
-        : (oauthSettings ?? undefined);
+    const resolvedOAuthSettings = resolveCliOAuthSettings(oauthSettings);
 
     // 3. Construct the ProviderManager + OAuthManager on that bus.
-    const { manager: providerManager, oauthManager } = createProviderManager(
-      runtime,
-      {
-        config: runtime.config,
-        runtimeMessageBus,
-        ...(resolvedOAuthSettings !== undefined
-          ? { oauthSettings: resolvedOAuthSettings }
-          : {}),
-        ...(providerContributions !== undefined
-          ? { providerContributions }
-          : {}),
-      },
-    );
+    const borrowedManager = input.registration?.providerManager;
+    const { manager: providerManager, oauthManager } =
+      borrowedManager === undefined
+        ? createProviderManager(runtime, {
+            fileSystem: new NodeFileSystem(),
+            config: runtime.config,
+            runtimeMessageBus,
+            ...(resolvedOAuthSettings !== undefined
+              ? { oauthSettings: resolvedOAuthSettings }
+              : {}),
+            ...(providerContributions !== undefined
+              ? { providerContributions }
+              : {}),
+          })
+        : { manager: borrowedManager, oauthManager: input.oauthManager };
+    if (borrowedManager !== undefined && config !== undefined)
+      bindFinalProviderOwner(providerManager, config, runtime);
 
-    // 4. Register the CLI provider infrastructure on the SAME bus.
-    registerCliProviderInfrastructure(providerManager, oauthManager, {
-      messageBus: runtimeMessageBus,
-      runtimeId,
-      metadata,
-    });
+    registration.expectManager(providerManager);
 
     return {
       runtime,
       runtimeMessageBus,
+      policyOwner,
       providerManager,
       oauthManager,
+      registration,
     };
   } catch (error) {
-    disposeCliRuntimeRegistration(runtimeId);
+    void policyOwner?.dispose();
+    undoAdoption?.();
+    if (!input.registration) registration.rollback();
     throw error;
   }
+}
+
+function bindCliPolicy(
+  config: Config | undefined,
+  trust: WorkspaceTrustControlPort | undefined,
+  registration: CliRuntimeRegistrationHandle,
+): RuntimePolicyOwner | undefined {
+  if (config === undefined) return undefined;
+  const owner = new RuntimePolicyOwner(
+    config,
+    trust,
+    undefined,
+    registration.messageBus,
+  );
+  const decisions = owner.session.decisions;
+  registration.bindPolicyEvaluation((name, args, server) =>
+    decisions.evaluate(name, args, server),
+  );
+  return owner;
+}
+
+function bindFinalProviderOwner(
+  manager: RuntimeProviderManager,
+  config: Config,
+  runtime: ProviderRuntimeContext,
+): void {
+  if (!(manager instanceof ProviderManager))
+    throw new Error('CLI provider runtime requires a ProviderManager owner');
+  const selected =
+    runtime.settingsService.get('activeProvider') ?? config.getProvider();
+  if (selected !== undefined) {
+    if (typeof selected !== 'string')
+      throw new TypeError('Active provider must be a string');
+    try {
+      manager.setActiveProvider(selected);
+    } catch (error) {
+      throw new Error(
+        `Could not activate explicitly-configured provider '${selected}': ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error },
+      );
+    }
+  }
+  manager.setRuntimeContext(runtime);
+  manager.setConfig(config);
+  configureProviderRuntimeFactories(config, manager);
 }

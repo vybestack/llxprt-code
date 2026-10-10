@@ -8,11 +8,7 @@
  * Licensed under the MIT License.
  */
 
-import type {
-  IToolKeyStorage,
-  IToolMessageBus,
-  SettingsServiceBoundary,
-} from '../interfaces/index.js';
+import type { IToolKeyStorage, IToolMessageBus } from '../interfaces/index.js';
 import { ToolErrorType } from '../types/tool-error.js';
 import { ensureJsonSafe } from '../utils/unicodeUtils.js';
 import { createDefaultByteBudget } from '../acquisition/index.js';
@@ -89,7 +85,7 @@ type ParsedCodeLine =
 
 export interface CodeSearchToolDependencies {
   keyStorage?: Pick<IToolKeyStorage, 'resolveKey'>;
-  settingsService?: Pick<SettingsServiceBoundary, 'get'>;
+  readTokenLimit?: () => unknown;
 }
 
 export class CodeSearchTool extends BaseDeclarativeTool<
@@ -350,9 +346,7 @@ class CodeSearchToolInvocation extends BaseToolInvocation<
   }
 
   private getSettingMaxTokens(): number | undefined {
-    const value = this.dependencies.settingsService?.get(
-      'tool-output-max-tokens',
-    );
+    const value = this.dependencies.readTokenLimit?.();
     return typeof value === 'number' ? value : undefined;
   }
 }

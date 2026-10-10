@@ -18,15 +18,11 @@ const mockRuntime = {
   clearActiveModelParam: vi.fn(),
 };
 
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  getRuntimeApi: () => mockRuntime,
-}));
-
 describe('setCommand runtime integration', () => {
   let context: CommandContext;
 
   beforeEach(() => {
-    context = createMockCommandContext();
+    context = createMockCommandContext({ runtimeApi: mockRuntime });
     vi.clearAllMocks();
   });
 

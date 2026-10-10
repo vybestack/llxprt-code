@@ -17,7 +17,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { buildAgent, internalConfig } from './helpers/agentHarness.js';
+import { buildAgent } from './helpers/agentHarness.js';
 import {
   STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY,
   STREAM_IDLE_TIMEOUT_SETTING_KEY,
@@ -29,13 +29,12 @@ describe('createAgent typed stream timeouts @issue:2607', () => {
       streamFirstResponseTimeoutMs: 180_000,
     });
     try {
-      const config = internalConfig(agent);
-      expect(config.getEphemeralSetting('streamIdleTimeoutMs')).toBeUndefined();
+      expect(agent.getEphemeralSetting('streamIdleTimeoutMs')).toBeUndefined();
       expect(
-        config.getEphemeralSetting('streamFirstResponseTimeoutMs'),
+        agent.getEphemeralSetting('streamFirstResponseTimeoutMs'),
       ).toBeUndefined();
       expect(
-        config.getEphemeralSetting(STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY),
+        agent.getEphemeralSetting(STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY),
       ).toBe(180_000);
     } finally {
       await cleanup();
@@ -47,13 +46,12 @@ describe('createAgent typed stream timeouts @issue:2607', () => {
       streamFirstResponseTimeoutMs: 0,
     });
     try {
-      const config = internalConfig(agent);
-      expect(config.getEphemeralSetting('streamIdleTimeoutMs')).toBeUndefined();
+      expect(agent.getEphemeralSetting('streamIdleTimeoutMs')).toBeUndefined();
       expect(
-        config.getEphemeralSetting('streamFirstResponseTimeoutMs'),
+        agent.getEphemeralSetting('streamFirstResponseTimeoutMs'),
       ).toBeUndefined();
       expect(
-        config.getEphemeralSetting(STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY),
+        agent.getEphemeralSetting(STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY),
       ).toBe(0);
     } finally {
       await cleanup();
@@ -65,15 +63,14 @@ describe('createAgent typed stream timeouts @issue:2607', () => {
       streamFirstResponseTimeoutMs: 300_000,
     });
     try {
-      const config = internalConfig(agent);
-      expect(config.getEphemeralSetting('streamIdleTimeoutMs')).toBeUndefined();
+      expect(agent.getEphemeralSetting('streamIdleTimeoutMs')).toBeUndefined();
       expect(
-        config.getEphemeralSetting('streamFirstResponseTimeoutMs'),
+        agent.getEphemeralSetting('streamFirstResponseTimeoutMs'),
       ).toBeUndefined();
       // Absent would have been undefined (no ephemeral materialized); an
       // explicit 300000 is written through as a concrete value.
       expect(
-        config.getEphemeralSetting(STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY),
+        agent.getEphemeralSetting(STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY),
       ).toBe(300_000);
     } finally {
       await cleanup();
@@ -83,13 +80,12 @@ describe('createAgent typed stream timeouts @issue:2607', () => {
   it('does NOT materialize a streamFirstResponseTimeoutMs ephemeral when the field is absent', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
-      const config = internalConfig(agent);
-      expect(config.getEphemeralSetting('streamIdleTimeoutMs')).toBeUndefined();
+      expect(agent.getEphemeralSetting('streamIdleTimeoutMs')).toBeUndefined();
       expect(
-        config.getEphemeralSetting('streamFirstResponseTimeoutMs'),
+        agent.getEphemeralSetting('streamFirstResponseTimeoutMs'),
       ).toBeUndefined();
       expect(
-        config.getEphemeralSetting(STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY),
+        agent.getEphemeralSetting(STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY),
       ).toBeUndefined();
     } finally {
       await cleanup();
@@ -101,12 +97,11 @@ describe('createAgent typed stream timeouts @issue:2607', () => {
       streamIdleTimeoutMs: 7_500,
     });
     try {
-      const config = internalConfig(agent);
-      expect(config.getEphemeralSetting('streamIdleTimeoutMs')).toBeUndefined();
+      expect(agent.getEphemeralSetting('streamIdleTimeoutMs')).toBeUndefined();
       expect(
-        config.getEphemeralSetting('streamFirstResponseTimeoutMs'),
+        agent.getEphemeralSetting('streamFirstResponseTimeoutMs'),
       ).toBeUndefined();
-      expect(config.getEphemeralSetting(STREAM_IDLE_TIMEOUT_SETTING_KEY)).toBe(
+      expect(agent.getEphemeralSetting(STREAM_IDLE_TIMEOUT_SETTING_KEY)).toBe(
         7_500,
       );
     } finally {
@@ -120,16 +115,15 @@ describe('createAgent typed stream timeouts @issue:2607', () => {
       streamFirstResponseTimeoutMs: 240_000,
     });
     try {
-      const config = internalConfig(agent);
-      expect(config.getEphemeralSetting('streamIdleTimeoutMs')).toBeUndefined();
+      expect(agent.getEphemeralSetting('streamIdleTimeoutMs')).toBeUndefined();
       expect(
-        config.getEphemeralSetting('streamFirstResponseTimeoutMs'),
+        agent.getEphemeralSetting('streamFirstResponseTimeoutMs'),
       ).toBeUndefined();
-      expect(config.getEphemeralSetting(STREAM_IDLE_TIMEOUT_SETTING_KEY)).toBe(
+      expect(agent.getEphemeralSetting(STREAM_IDLE_TIMEOUT_SETTING_KEY)).toBe(
         5_000,
       );
       expect(
-        config.getEphemeralSetting(STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY),
+        agent.getEphemeralSetting(STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY),
       ).toBe(240_000);
     } finally {
       await cleanup();

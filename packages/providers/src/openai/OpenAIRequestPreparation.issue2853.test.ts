@@ -18,6 +18,7 @@ import { prepareRequest } from './OpenAIRequestPreparation.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { sanitizePromptCacheKey } from '../openai-responses/sanitizePromptCacheKey.js';
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
@@ -39,12 +40,11 @@ function createMockOptions(
     metadata: {},
     settings,
     config: undefined,
-    invocation: {
-      requestId: 'test-request',
-      timestamp: Date.now(),
-      modelBehavior: {},
-      modelParams,
-    },
+    invocation: createRuntimeInvocationContext({
+      runtimeId: 'test-request',
+      providerName: 'openai',
+      ephemeralsSnapshot: { ...{}, openai: modelParams },
+    }),
     resolved: {
       model: 'gpt-4o',
       authToken: { token: 'test-token', type: 'api-key' },

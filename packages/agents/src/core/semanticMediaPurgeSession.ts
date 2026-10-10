@@ -214,6 +214,7 @@ export class SemanticMediaPurgeSession {
   async begin(
     requiresExplicitCacheWrite = this.options.requiresExplicitCacheWrite?.() ??
       false,
+    persist?: SemanticMediaPurgeSessionOptions['persist'],
   ): Promise<SemanticMediaPurgeAttempt | undefined> {
     if (this.options.mode() === 'off') return undefined;
     const releaseAttempt = await this.acquireAttempt();
@@ -223,7 +224,14 @@ export class SemanticMediaPurgeSession {
         releaseAttempt();
         return undefined;
       }
-      const transaction = this.coordinator.begin({ mode });
+      const coordinator = persist
+        ? new SemanticMediaPurgeCoordinator(this.options.history, {
+            enabled: true,
+            explicitCacheWriteRequired: false,
+            persist,
+          })
+        : this.coordinator;
+      const transaction = coordinator.begin({ mode });
       if (
         transaction === undefined ||
         (requiresExplicitCacheWrite &&
@@ -233,7 +241,7 @@ export class SemanticMediaPurgeSession {
         return undefined;
       }
       return new SemanticMediaPurgeAttempt(
-        this.coordinator,
+        coordinator,
         transaction,
         requiresExplicitCacheWrite,
         releaseAttempt,

@@ -16,12 +16,11 @@
  * the real MockTool infra (the actual tool the scheduler invokes).
  */
 
+import { createLoopSettingsFixture } from './loop-settings-fixture.js';
 import { vi } from 'bun:test';
-import { CoreToolScheduler } from '../../coreToolScheduler.js';
 import type { AgenticLoop } from '../AgenticLoop.js';
 import type { ApprovalHandler, AgenticLoopEvent } from '../types.js';
 import type { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
-import { createSchedulerRegistryDelegate } from '../../__tests__/scheduler-registry-test-helpers.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
@@ -117,6 +116,7 @@ function buildScriptedChat(state: ScriptedClientState): AgentChatContract {
     getHistoryService: () => null,
     wasRecentlyCompressed: () => false,
     performCompression: async () => PerformCompressionResult.COMPRESSED,
+    takeHistoryAdmissions: () => [],
     recordCompletedToolCalls: (_model, completed) => {
       recordedToolCalls.push(completed);
     },
@@ -125,9 +125,25 @@ function buildScriptedChat(state: ScriptedClientState): AgentChatContract {
 
 /** Builds the AgentClientContract that streams scripted events. */
 function buildScriptedClient(state: ScriptedClientState): AgentClientContract {
-  const { scriptQueue, history, turnMessages, promptIds } = state;
+  const { history } = state;
   const chat = buildScriptedChat(state);
+  let tools = emptyScriptedTools();
   return {
+    get tools() {
+      return tools;
+    },
+    bindProviderInvocation: () => {},
+    bindRuntimeSettings: () => {},
+    bindTelemetry: () => {},
+    bindToolSelection: (selection) => {
+      tools = selection;
+    },
+    assertConfig: () => {
+      throw new Error('Scripted loop client cannot be adopted');
+    },
+    assertProviderManager: () => {
+      throw new Error('Scripted loop client has no provider manager');
+    },
     async initialize() {},
     isInitialized: () => true,
     hasChatInitialized: () => true,
@@ -137,6 +153,7 @@ function buildScriptedClient(state: ScriptedClientState): AgentClientContract {
     },
     getHistoryService: () => null,
     storeHistoryServiceForReuse: () => {},
+    prepareHistoryRebind: () => () => {},
     storeHistoryForLaterUse: async (h: IContent[]) => {
       history.push(...h);
     },
@@ -152,6 +169,7 @@ function buildScriptedClient(state: ScriptedClientState): AgentClientContract {
     setHistory: async () => {},
     restoreHistory: async () => {},
     addDirectoryContext: async () => {},
+    getContentGeneratorConfig: () => undefined,
     getContentGenerator: () => {
       throw new Error('not used by AgenticLoop');
     },
@@ -166,25 +184,7 @@ function buildScriptedClient(state: ScriptedClientState): AgentClientContract {
       throw new Error('not used');
     },
     generateEmbedding: async () => [],
-    async *sendMessageStream(
-      req: AgentRequestInput,
-      signal: AbortSignal,
-      promptId: string,
-    ): AsyncGenerator<ServerAgentStreamEvent> {
-      turnMessages.push(req);
-      promptIds.push(promptId);
-      history.push(convertPartListUnionToIContent(req));
-      const script = scriptQueue.shift();
-      if (!script) {
-        return;
-      }
-      for (const event of script) {
-        if (signal.aborted) {
-          return;
-        }
-        yield event;
-      }
-    },
+    sendMessageStream: scriptedMessageStream(state),
     getCurrentSequenceModel: () => null,
   };
 }
@@ -251,23 +251,6 @@ export function finishedEvent(): ServerAgentStreamEvent {
   };
 }
 
-/**
- * Narrows the test fixture to Config. Config is a large class with many
- * methods unrelated to the scheduler lifecycle exercised here; fully
- * instantiating it would require dozens of irrelevant dependencies. This is a
- * test-only boundary — the fixture provides real, correctly-typed lambdas for
- * every method the loop actually calls.
- */
-function testBoundaryConfig(fixture: Record<string, unknown>): Config {
-  return fixture as unknown as Config;
-}
-
-/**
- * Builds a real-ish Config wired to a per-fixture scheduler registry with a
- * REAL CoreToolScheduler factory. The registry is keyed by owner object
- * identity plus purpose exactly like the Config delegate, so loop-level
- * scheduler isolation behaves as it does in production.
- */
 export function createTestConfig(options: {
   messageBus: MessageBus;
   toolRegistry: ToolRegistry;
@@ -275,56 +258,13 @@ export function createTestConfig(options: {
   interactive: boolean;
   approvalMode?: ApprovalMode;
   imagePayloadBudgetBytes?: number;
-}): Config {
-  const { messageBus, toolRegistry, policyEngine, interactive } = options;
-  const approvalMode = options.approvalMode ?? ApprovalMode.YOLO;
-
-  const fixture = {
-    getSessionId: () => 'agentic-loop-test-session',
-    getUsageStatisticsEnabled: () => false,
-    getDebugMode: () => false,
-    getImagePayloadBudgetBytes: () =>
+}): ReturnType<typeof createLoopSettingsFixture> {
+  return createLoopSettingsFixture({
+    interactive: options.interactive,
+    approvalMode: options.approvalMode ?? ApprovalMode.YOLO,
+    imagePayloadBudgetBytes:
       options.imagePayloadBudgetBytes ?? DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
-    getApprovalMode: () => approvalMode,
-    getEphemeralSettings: () => ({}),
-    getEphemeralSetting: () => undefined,
-    getAllowedTools: (): string[] => [],
-    getExcludeTools: (): string[] => [],
-    getContentGeneratorConfig: () => ({ model: 'test-model' }),
-    getModel: () => 'test-model',
-    getToolRegistry: () => toolRegistry,
-    getMessageBus: () => messageBus,
-    getPolicyEngine: () => policyEngine,
-    getTelemetryLogPromptsEnabled: () => false,
-    isInteractive: () => interactive,
-    getNonInteractive: () => !interactive,
-    getToolSchedulerFactory:
-      () =>
-      (
-        opts: ConstructorParameters<typeof CoreToolScheduler>[0],
-      ): CoreToolScheduler =>
-        new CoreToolScheduler(opts),
-  };
-
-  const delegate = createSchedulerRegistryDelegate({
-    config: testBoundaryConfig(fixture),
-    messageBus,
-    toolRegistry,
-    // Mirrors the Config delegate's createScheduler closure: build the real
-    // scheduler with creation-time stub callbacks; the delegate refreshes
-    // the acquiring call's real callbacks via setCallbacks right after.
-    createScheduler: async (schedulerOptions) =>
-      fixture.getToolSchedulerFactory()({
-        config: testBoundaryConfig(fixture),
-        messageBus,
-        toolRegistry,
-        toolContextInteractiveMode: schedulerOptions.interactiveMode ?? true,
-        getPreferredEditor: () => undefined,
-        onEditorClose: () => {},
-      }),
   });
-
-  return testBoundaryConfig({ ...fixture, ...delegate });
 }
 
 /**
@@ -444,3 +384,39 @@ export type {
 };
 
 export { AgentEventType, DEFAULT_AGENT_ID, vi };
+
+function emptyScriptedTools(): AgentClientContract['tools'] {
+  return {
+    getTool: () => undefined,
+    getAllToolNames: () => [],
+    getAllTools: () => [],
+    getEnabledTools: () => [],
+    getFunctionDeclarations: () => [],
+    getFunctionDeclarationsFiltered: () => [],
+  };
+}
+
+function scriptedMessageStream(
+  state: ScriptedClientState,
+): AgentClientContract['sendMessageStream'] {
+  const { scriptQueue, history, turnMessages, promptIds } = state;
+  return async function* (
+    req: AgentRequestInput,
+    signal: AbortSignal,
+    promptId: string,
+  ): AsyncGenerator<ServerAgentStreamEvent> {
+    turnMessages.push(req);
+    promptIds.push(promptId);
+    history.push(convertPartListUnionToIContent(req));
+    const script = scriptQueue.shift();
+    if (!script) {
+      return;
+    }
+    for (const event of script) {
+      if (signal.aborted) {
+        return;
+      }
+      yield event;
+    }
+  };
+}

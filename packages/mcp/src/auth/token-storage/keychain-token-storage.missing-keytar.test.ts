@@ -4,19 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, describe, expect, it, vi } from 'bun:test';
-import {
-  KeychainTokenStorage,
-  resetKeytarLoader,
-  setKeytarLoader,
-} from './keychain-token-storage.js';
+import { describe, expect, it, vi } from 'bun:test';
+import { KeychainTokenStorage } from './keychain-token-storage.js';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry/utils/debugLogger.js';
 
 describe('KeychainTokenStorage when keytar is missing', () => {
-  afterEach(() => {
-    resetKeytarLoader();
-  });
-
   it('falls back without throwing when keytar cannot be loaded', async () => {
     const error = new Error("Cannot find module 'keytar'");
     (error as NodeJS.ErrnoException).code = 'ERR_MODULE_NOT_FOUND';
@@ -26,9 +18,9 @@ describe('KeychainTokenStorage when keytar is missing', () => {
       .spyOn(debugLogger, 'error')
       .mockImplementation(() => {});
 
-    setKeytarLoader(() => Promise.reject(error));
-
-    const storage = new KeychainTokenStorage('service');
+    const storage = new KeychainTokenStorage('service', undefined, () =>
+      Promise.reject(error),
+    );
 
     const isAvailable = await storage.checkKeychainAvailability();
 
@@ -51,9 +43,9 @@ describe('KeychainTokenStorage when keytar is missing', () => {
       .spyOn(debugLogger, 'error')
       .mockImplementation(() => {});
 
-    setKeytarLoader(() => Promise.reject(error));
-
-    const storage = new KeychainTokenStorage('service');
+    const storage = new KeychainTokenStorage('service', undefined, () =>
+      Promise.reject(error),
+    );
 
     const isAvailable = await storage.checkKeychainAvailability();
 

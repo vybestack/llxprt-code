@@ -3,6 +3,14 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { installZedDefinitionFixture } from './__tests__/definition-fixture.js';
+const definitionFixture = installZedDefinitionFixture();
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { createConnectionProviderManager } from './__tests__/connection-provider-fixture.js';
+import { unusedProfileApplication } from './test-profile-application.js';
+
+import type { ZedAgent } from './zedIntegration.js';
 
 /**
  * Behavioral tests for ACP session/load (loadSession) ORCHESTRATION in the Zed
@@ -25,12 +33,12 @@
  * is asserted without a provider bootstrap.
  */
 
-import { beforeEach, describe, expect, it, vi } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import type * as acp from '@agentclientprotocol/sdk';
 import { RequestError } from '@agentclientprotocol/sdk';
-import type { Config, IContent } from '@vybestack/llxprt-code-core';
+import { Config, type IContent } from '@vybestack/llxprt-code-core';
 import type { Agent, AgentMessage } from '@vybestack/llxprt-code-agents';
 import type { ChatSessionFileLister } from './zed-session-loader.js';
 
@@ -77,13 +85,6 @@ void vi.mock('@vybestack/llxprt-code-agents', () => ({
   fromConfig: (...args: unknown[]) => mockFromConfig(...args),
 }));
 
-void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
-  clearActiveModelParam: vi.fn(),
-  getActiveModelParams: vi.fn(),
-  loadProfileByName: vi.fn(),
-  setCliRuntimeContext: vi.fn(),
-}));
-
 interface StubAgentHandle {
   readonly agent: Agent;
   readonly resume: ReturnType<typeof vi.fn>;
@@ -120,10 +121,15 @@ function buildStubAgent(options: {
       throw options.recordingError;
     }
   });
-  const dispose = vi.fn(async () => undefined);
+  const settingsOwner = new SessionSettingsOwner(new SettingsService());
+  const dispose = vi.fn(async () => settingsOwner.dispose());
   const getHistory = vi.fn(async () => options.liveHistory ?? []);
   const streamText = options.streamText;
   const agent = {
+    getModel: () => 'test-model',
+    getEphemeralSetting: (key: string) => settingsOwner.readNamedParameter(key),
+    setEphemeralSetting: (key: string, value: unknown) =>
+      settingsOwner.writeUserParameter(key, value),
     getApprovalMode: () => 'default',
     setApprovalMode: vi.fn(),
     dispose,
@@ -134,7 +140,12 @@ function buildStubAgent(options: {
       }
       yield { type: 'done', reason: 'stop' };
     },
-    session: { resume, setRecording },
+    session: {
+      resume,
+      setRecording,
+      getRecordingTitle: () => undefined,
+      recordRecordingTitle: async () => undefined,
+    },
     tools: { respondToConfirmation: vi.fn() },
   } as unknown as Agent;
   return { agent, resume, setRecording, dispose, getHistory };
@@ -146,32 +157,15 @@ function modelMessage(text: string): AgentMessage {
 }
 
 function buildBaseConfig(): Config {
-  return {
-    getFileSystemService: () => ({
-      readTextFile: vi.fn(async () => 'base'),
-      writeTextFile: vi.fn(async () => undefined),
-    }),
-    getProviderManager: () => ({ id: 'base' }),
-    setProviderManager: vi.fn(),
-    getProfileManager: () => undefined,
-    getEphemeralSetting: () => undefined,
-    getDebugMode: () => false,
-    getTargetDir: () => '/project',
-    getProjectRoot: () => '/project',
-    getMaxSessionTurns: () => 50,
-    // No recording service in loadSession tests — the session lifecycle under
-    // test does not depend on session recording (only the re-attach/resume
-    // probes and session-info hydration paths are exercised here).
-    getSessionRecordingService: () => undefined,
-    // The re-attach + corrupt-vs-missing probes derive the chats dir from
-    // storage.getProjectChatsDir(); point it at a dir that never exists so the
-    // disk-resume probe's REAL readdir hits ENOENT (falling back to the plain
-    // mapping) while the injected re-attach lister decides the re-attach branch.
-    storage: {
-      getProjectTempDir: () => NONEXISTENT_CHATS_PARENT,
-      getProjectChatsDir: () => path.join(NONEXISTENT_CHATS_PARENT, 'chats'),
-    },
-  } as unknown as Config;
+  return new Config({
+    sessionId: 'base',
+    targetDir: process.cwd(),
+    cwd: process.cwd(),
+    storageRoot: NONEXISTENT_CHATS_PARENT,
+    model: 'test-model',
+    debugMode: false,
+    maxSessionTurns: 50,
+  });
 }
 
 /** Typed InitializeRequest for a client that advertises no capabilities. */
@@ -188,12 +182,18 @@ function buildInitializeRequest(): acp.InitializeRequest {
 async function makeZedAgent(
   connection: RecordingConnection,
   sessionFileLister?: ChatSessionFileLister,
-): Promise<InstanceType<typeof import('./zedIntegration.js').ZedAgent>> {
+): Promise<InstanceType<typeof ZedAgent>> {
   const mod = await import('./zedIntegration.js');
+  const config = buildBaseConfig();
+  const settingsService = new SettingsService();
   const zedAgent = new mod.ZedAgent(
-    buildBaseConfig(),
+    config,
     connection as unknown as acp.AgentSideConnection,
+    unusedProfileApplication,
+    createConnectionProviderManager(config, settingsService),
+    () => new SettingsService({ sessionSource: settingsService }),
     sessionFileLister,
+    definitionFixture(),
   );
   await zedAgent.initialize(buildInitializeRequest());
   return zedAgent;
@@ -212,6 +212,10 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     mockFromConfig.mockReset();
   });
 
+  afterEach(() => {
+    mockFromConfig.mockImplementation(actual.fromConfig);
+  });
+
   it('continues creating a session when optional recording setup fails', async () => {
     const stub = buildStubAgent({
       recordingError: new Error('recording unavailable'),
@@ -223,7 +227,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     );
 
     const created = await zedAgent.newSession({
-      cwd: '/project',
+      cwd: process.cwd(),
       mcpServers: [],
     });
 
@@ -239,7 +243,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     const zedAgent = await makeZedAgent(connection, emptyChatsLister);
 
     await expect(
-      zedAgent.newSession({ cwd: '/project', mcpServers: [] }),
+      zedAgent.newSession({ cwd: process.cwd(), mcpServers: [] }),
     ).rejects.toThrow('transport unavailable');
     expect(stub.dispose).toHaveBeenCalledTimes(1);
   });
@@ -252,13 +256,13 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     const connection = new RecordingConnection();
     const zedAgent = await makeZedAgent(connection, async () => []);
     const created = await zedAgent.newSession({
-      cwd: '/project',
+      cwd: process.cwd(),
       mcpServers: [],
     });
 
     const response = await zedAgent.resumeSession({
       sessionId: created.sessionId,
-      cwd: '/project',
+      cwd: process.cwd(),
       mcpServers: [],
     });
 
@@ -274,7 +278,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     await expect(
       zedAgent.resumeSession({
         sessionId: 'missing-session',
-        cwd: '/project',
+        cwd: process.cwd(),
         mcpServers: [],
       }),
     ).rejects.toMatchObject({ code: -32002 });
@@ -289,7 +293,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
       async () => [],
     );
     const created = await zedAgent.newSession({
-      cwd: '/project',
+      cwd: process.cwd(),
       mcpServers: [],
     });
 
@@ -313,14 +317,14 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
       async () => [],
     );
     const created = await zedAgent.newSession({
-      cwd: '/project',
+      cwd: process.cwd(),
       mcpServers: [],
     });
 
     await expect(
       zedAgent.resumeSession({
         sessionId: created.sessionId,
-        cwd: '/project/other',
+        cwd: path.join(process.cwd(), 'src'),
         mcpServers: [],
       }),
     ).rejects.toMatchObject({ code: -32002 });
@@ -334,7 +338,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
       async () => [],
     );
     const created = await zedAgent.newSession({
-      cwd: '/project',
+      cwd: process.cwd(),
       mcpServers: [],
     });
 
@@ -356,7 +360,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
       async () => [],
     );
     const created = await zedAgent.newSession({
-      cwd: '/project',
+      cwd: process.cwd(),
       mcpServers: [],
     });
 
@@ -373,9 +377,16 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     const mod = await import('./zedIntegration.js');
     // Reuse the shared typed constructor args (F15) rather than re-inlining the
     // ZedAgent setup; assert the capability from a fresh initialize() call.
+    const config = buildBaseConfig();
+    const settingsService = new SettingsService();
     const zedAgent = new mod.ZedAgent(
-      buildBaseConfig(),
+      config,
       connection as unknown as acp.AgentSideConnection,
+      unusedProfileApplication,
+      createConnectionProviderManager(config, settingsService),
+      () => new SettingsService({ sessionSource: settingsService }),
+      undefined,
+      definitionFixture(),
     );
     const response = await zedAgent.initialize(buildInitializeRequest());
     expect(response.agentCapabilities?.loadSession).toBe(true);
@@ -424,7 +435,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
 
     const response = await zedAgent.loadSession({
       sessionId: 'session-abc',
-      cwd: '/project',
+      cwd: process.cwd(),
       mcpServers: [],
     } as acp.LoadSessionRequest);
 
@@ -460,7 +471,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     try {
       await zedAgent.loadSession({
         sessionId: 'missing-session',
-        cwd: '/project',
+        cwd: process.cwd(),
         mcpServers: [],
       } as acp.LoadSessionRequest);
     } catch (e) {
@@ -491,7 +502,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     try {
       await zedAgent.loadSession({
         sessionId: 'corrupt-session',
-        cwd: '/project',
+        cwd: process.cwd(),
         mcpServers: [],
       } as acp.LoadSessionRequest);
     } catch (e) {
@@ -551,7 +562,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
 
     const params: acp.LoadSessionRequest = {
       sessionId: 'lock-session',
-      cwd: '/project',
+      cwd: process.cwd(),
       mcpServers: [],
     } as acp.LoadSessionRequest;
 
@@ -623,7 +634,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
 
     const params: acp.LoadSessionRequest = {
       sessionId: 'dup-session',
-      cwd: '/project',
+      cwd: process.cwd(),
       mcpServers: [],
     } as acp.LoadSessionRequest;
 
@@ -663,7 +674,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     const zedAgent = await makeZedAgent(connection, emptyChatsLister);
 
     const created = await zedAgent.newSession({
-      cwd: '/project',
+      cwd: process.cwd(),
       mcpServers: [],
     } as acp.NewSessionRequest);
     // newSession built exactly one agent.
@@ -671,7 +682,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
 
     const response = await zedAgent.loadSession({
       sessionId: created.sessionId,
-      cwd: '/project',
+      cwd: process.cwd(),
       mcpServers: [],
     } as acp.LoadSessionRequest);
 
@@ -722,13 +733,13 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     const zedAgent = await makeZedAgent(connection, emptyChatsLister);
 
     const created = await zedAgent.newSession({
-      cwd: '/project',
+      cwd: process.cwd(),
       mcpServers: [],
     } as acp.NewSessionRequest);
 
     await zedAgent.loadSession({
       sessionId: created.sessionId,
-      cwd: '/project',
+      cwd: process.cwd(),
       mcpServers: [],
     } as acp.LoadSessionRequest);
 
@@ -756,7 +767,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     const zedAgent = await makeZedAgent(connection, emptyChatsLister);
 
     const created = await zedAgent.newSession({
-      cwd: '/project',
+      cwd: process.cwd(),
       mcpServers: [],
     } as acp.NewSessionRequest);
     connection.clearSessionUpdateFailure();
@@ -766,7 +777,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     try {
       await zedAgent.loadSession({
         sessionId: created.sessionId,
-        cwd: '/project',
+        cwd: process.cwd(),
         mcpServers: [],
       } as acp.LoadSessionRequest);
     } catch (e) {
@@ -808,7 +819,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
 
     const params: acp.LoadSessionRequest = {
       sessionId: 'replay-fail-session',
-      cwd: '/project',
+      cwd: process.cwd(),
       mcpServers: [],
     } as acp.LoadSessionRequest;
 
@@ -858,7 +869,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
 
     const params: acp.LoadSessionRequest = {
       sessionId: 'partial-fail-session',
-      cwd: '/project',
+      cwd: process.cwd(),
       mcpServers: [],
     } as acp.LoadSessionRequest;
 
@@ -930,7 +941,12 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
       getHistory: vi.fn(async () => []),
       dispose: firstDispose,
       async *stream() {},
-      session: { resume: firstResume, setRecording: vi.fn() },
+      session: {
+        resume: firstResume,
+        setRecording: vi.fn(),
+        getRecordingTitle: () => undefined,
+        recordRecordingTitle: async () => undefined,
+      },
       tools: { respondToConfirmation: vi.fn() },
     } as unknown as Agent;
 
@@ -956,7 +972,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
 
     const params: acp.LoadSessionRequest = {
       sessionId: 'concurrent-session',
-      cwd: '/project',
+      cwd: process.cwd(),
       mcpServers: [],
     } as acp.LoadSessionRequest;
 

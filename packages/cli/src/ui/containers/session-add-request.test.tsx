@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
+const composeFixtureRuntime = installWorkspaceRuntimeFixture();
+
 import { describe, expect, it, vi } from 'bun:test';
 import { StrictMode } from 'react';
 import { Config } from '@vybestack/llxprt-code-core';
@@ -12,13 +15,13 @@ import { createTurnStore } from '../stores/turn/turnStore.js';
 
 // Provider identity is unrelated to history delivery.
 const runtime = {
-  getActiveProviderStatus: () => ({
+  providerStatus: () => ({
     providerName: 'test',
     modelName: 'model',
     isPaidMode: false,
   }),
   getActiveProfileName: () => undefined,
-  getCliProviderManager: () => undefined,
+  providerManager: () => undefined,
 };
 void vi.mock('../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: () => runtime,
@@ -39,7 +42,10 @@ describe('session add request delivery', () => {
     turn.commands.requestAddItem({ type: 'info', text: 'deliver once' }, 100);
     const tree = (
       <StrictMode>
-        <SessionController config={config} turnStore={turn}>
+        <SessionController
+          config={composeFixtureRuntime(config)}
+          turnStore={turn}
+        >
           {null}
         </SessionController>
       </StrictMode>

@@ -6,7 +6,7 @@
 
 import levenshtein from 'fast-levenshtein';
 import type { AnyDeclarativeTool, AnyToolInvocation } from '../index.js';
-import { isTool } from '../index.js';
+import { isTool } from '@vybestack/llxprt-code-tools';
 import {
   SHELL_TOOL_NAMES,
   splitCommands,

@@ -10,6 +10,8 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
+import type { RuntimeApi } from '../contexts/RuntimeContext.js';
+import { firstNonEmptyString } from '../../utils/coalesce.js';
 import type {
   SlashCommand,
   CommandContext,
@@ -17,82 +19,13 @@ import type {
   MessageActionReturn,
 } from './types.js';
 import { CommandKind } from './types.js';
-import {
-  getProviderManager,
-  refreshAliasProviders,
-} from '@vybestack/llxprt-code-providers/composition.js';
 import { MessageType } from '../types.js';
-import {
-  writeProviderAliasConfig,
-  type ProviderAliasConfig,
-} from '@vybestack/llxprt-code-providers/composition.js';
-import type { IProvider } from '@vybestack/llxprt-code-providers';
-import { getRuntimeApi } from '../contexts/RuntimeContext.js';
-import { firstNonEmptyString } from '../../utils/coalesce.js';
+import { writeProviderAliasConfig } from '@vybestack/llxprt-code-providers/composition.js';
 import type {
   AgentOAuthUIEvent,
   AgentProviderSwitchResult,
 } from '@vybestack/llxprt-code-agents';
 import { UNCONFIGURED_PROVIDER } from '@vybestack/llxprt-code-core';
-import {
-  getOptionalString,
-  hasFunction,
-  hasObject,
-} from '../../utils/typeGuards.js';
-
-type WrappedProvider = IProvider & { wrappedProvider: IProvider };
-
-function hasWrappedProvider(provider: IProvider): provider is WrappedProvider {
-  return (
-    'wrappedProvider' in provider &&
-    (provider as { wrappedProvider?: unknown }).wrappedProvider !== undefined &&
-    (provider as { wrappedProvider?: unknown }).wrappedProvider !== null
-  );
-}
-
-function unwrapProvider(provider: IProvider): IProvider {
-  if (hasWrappedProvider(provider)) {
-    return provider.wrappedProvider;
-  }
-  return provider;
-}
-
-function resolveBaseProviderId(provider: IProvider): string {
-  const constructorName = provider.constructor.name;
-  if (constructorName === 'OpenAIProvider') {
-    return 'openai';
-  }
-  if (constructorName === 'OpenAIResponsesProvider') {
-    return 'openai-responses';
-  }
-  return provider.name;
-}
-
-function getProviderBaseUrl(provider: IProvider): string | undefined {
-  if (hasObject(provider, 'providerConfig')) {
-    const configBaseUrl = getOptionalString(provider.providerConfig, 'baseUrl');
-    if (configBaseUrl && configBaseUrl !== 'none') {
-      return configBaseUrl;
-    }
-  }
-
-  if (hasObject(provider, 'baseProviderConfig')) {
-    const baseConfigUrl = getOptionalString(
-      provider.baseProviderConfig,
-      'baseURL',
-    );
-    if (baseConfigUrl && baseConfigUrl !== 'none') {
-      return baseConfigUrl;
-    }
-  }
-
-  if (hasFunction(provider, 'getBaseURL')) {
-    const baseUrl = provider.getBaseURL();
-    return typeof baseUrl === 'string' ? baseUrl : undefined;
-  }
-
-  return undefined;
-}
 
 /**
  * Translates the agent's OAuthUIEvent type into a UI MessageType. The agent
@@ -140,39 +73,6 @@ function formatOAuthText(event: AgentOAuthUIEvent): string {
   }
 }
 
-function buildAliasConfig(
-  provider: IProvider,
-  configBaseUrl: string | undefined,
-): ProviderAliasConfig | null {
-  const unwrapped = unwrapProvider(provider);
-  const baseProviderId = resolveBaseProviderId(unwrapped);
-
-  const resolvedBaseUrl = firstNonEmptyString(
-    configBaseUrl && configBaseUrl !== 'none' ? configBaseUrl : undefined,
-    getProviderBaseUrl(unwrapped),
-  );
-
-  if (!resolvedBaseUrl) {
-    return null;
-  }
-
-  const defaultModel = firstNonEmptyString(
-    unwrapped.getCurrentModel?.(),
-    unwrapped.getDefaultModel(),
-  );
-
-  const aliasConfig: ProviderAliasConfig = {
-    baseProvider: baseProviderId,
-    'base-url': resolvedBaseUrl,
-    description: `User-defined alias for ${baseProviderId}`,
-  };
-
-  if (defaultModel) {
-    aliasConfig.defaultModel = defaultModel;
-  }
-  return aliasConfig;
-}
-
 /**
  * Reserved alias names that cannot be used for user-saved provider aliases.
  * These are internal sentinel identities that must not collide with real
@@ -195,42 +95,7 @@ function validateAliasName(alias: string): string | null {
   return null;
 }
 
-type AliasResolveResult =
-  | { ok: true; provider: IProvider }
-  | { ok: false; content: string };
-
-function resolveActiveProviderForAlias(
-  providerManager: ReturnType<typeof getProviderManager>,
-): AliasResolveResult {
-  try {
-    const provider = providerManager.getActiveProvider();
-    if (provider === undefined) {
-      return {
-        ok: false,
-        content: 'No active provider set. Use /setup to configure a provider.',
-      };
-    }
-    return { ok: true, provider };
-  } catch (error) {
-    return {
-      ok: false,
-      content: `Failed to determine active provider: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    };
-  }
-}
-
-function resolveAliasConfigBaseUrl(
-  config: NonNullable<CommandContext['services']['config']>,
-): string | undefined {
-  return typeof config.getEphemeralSetting === 'function'
-    ? (config.getEphemeralSetting('base-url') as string | undefined)
-    : undefined;
-}
-
 async function handleSaveAlias(
-  providerManager: ReturnType<typeof getProviderManager>,
   context: CommandContext,
   rawArgs: string,
 ): Promise<MessageActionReturn> {
@@ -250,7 +115,7 @@ async function handleSaveAlias(
     };
   }
 
-  const resolveResult = resolveActiveProviderForAlias(providerManager);
+  const resolveResult = context.runtimeApi.getActiveProviderAliasConfig();
   if (!resolveResult.ok) {
     return {
       type: 'message',
@@ -259,8 +124,7 @@ async function handleSaveAlias(
     };
   }
 
-  const configBaseUrl = resolveAliasConfigBaseUrl(config);
-  const aliasConfig = buildAliasConfig(resolveResult.provider, configBaseUrl);
+  const aliasConfig = resolveResult.config;
   if (!aliasConfig) {
     return {
       type: 'message',
@@ -272,7 +136,7 @@ async function handleSaveAlias(
 
   try {
     writeProviderAliasConfig(alias, aliasConfig);
-    refreshAliasProviders();
+    await context.refreshProviderAliases();
   } catch (error) {
     return {
       type: 'message',
@@ -290,15 +154,12 @@ async function handleSaveAlias(
   };
 }
 
-function resolveCurrentProvider(
-  runtime: ReturnType<typeof getRuntimeApi>,
-  providerManager: ReturnType<typeof getProviderManager>,
-): string | null {
+function resolveCurrentProvider(runtime: RuntimeApi): string | null {
   try {
     return runtime.getActiveProviderName();
   } catch {
     try {
-      return providerManager.getActiveProviderName() ?? null;
+      return runtime.providerStatus().providerName ?? null;
     } catch {
       return null;
     }
@@ -309,9 +170,8 @@ async function switchProvider(
   context: CommandContext,
   providerName: string,
 ): Promise<MessageActionReturn> {
-  const runtime = getRuntimeApi();
-  const providerManager = getProviderManager();
-  const currentProvider = resolveCurrentProvider(runtime, providerManager);
+  const runtime = context.runtimeApi;
+  const currentProvider = resolveCurrentProvider(runtime);
   const agent = context.services.agent;
 
   if (providerName === currentProvider) {
@@ -358,10 +218,19 @@ async function switchProvider(
     context.ui.addItem({ type: MessageType.INFO, text: info }, Date.now());
   }
 
-  context.recordingIntegration?.recordProviderSwitch(
-    switchResult.nextProvider,
-    switchResult.defaultModel ?? runtime.getActiveModelName(),
-  );
+  const model = switchResult.defaultModel ?? runtime.getActiveModelName();
+  if (context.recordingOwner === 'agent') {
+    await agent.session.recordRecordingEvent({
+      type: 'provider_switch',
+      provider: switchResult.nextProvider,
+      model,
+    });
+  } else {
+    context.recordingIntegration?.recordProviderSwitch(
+      switchResult.nextProvider,
+      model,
+    );
+  }
 
   const extendedContext = context as CommandContext & {
     checkPaymentModeChange?: (forcePreviousProvider?: string) => void;
@@ -396,7 +265,7 @@ export const providerCommand: SlashCommand = {
     }
 
     if (/^save\b/i.test(trimmedArgs)) {
-      return handleSaveAlias(getProviderManager(), context, trimmedArgs);
+      return handleSaveAlias(context, trimmedArgs);
     }
 
     try {

@@ -30,14 +30,11 @@
 import { basename } from 'node:path';
 import {
   CheckpointService,
-  HistoryMutationService,
-  MediaAdmissionService,
   RecordingIntegration,
   SessionDiscovery,
   SessionRecordingService,
   SessionTransitionService,
   deleteSession as deleteRecordedSession,
-  exportSessionMediaPackage,
   importSessionMediaPackage,
   replaySession,
   resumeSession,
@@ -47,16 +44,39 @@ import {
   type ResumeRequest,
   type SessionSummary,
   type LockHandle,
+  type HistoryClearOptions,
 } from '@vybestack/llxprt-code-core';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { SemanticMediaPurgeFrontier } from '@vybestack/llxprt-code-core/services/history/semantic-media-purge.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { LocalMediaStore } from '@vybestack/llxprt-code-core';
+import type { AgentSessionPersistence } from './recordedHistoryPersistence.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import {
+  adoptRecordingSessionId,
   captureRollbackFailure,
+  cleanupPreviousSession,
   cleanupSessionResources,
+  prepareSessionArtifacts,
+  restoreConfigSessionId,
+  rethrowSessionTransitionFailure,
   rollbackPreparedSessionArtifacts,
 } from './sessionControlRollback.js';
+import { exportRecordedSession } from './sessionControlExport.js';
+import { sessionInfoFromReplay } from './sessionControlInfo.js';
+import { recordSessionEvent } from './recordSessionEvent.js';
+import type { SessionRecordingEvent } from './recordSessionEvent.js';
+import {
+  persistSemanticMediaPurge as persistPurge,
+  restartRecording,
+  replayOwnerRecording,
+  seedOwnerRecording,
+} from './recordedHistoryPersistence.js';
+import {
+  clearOwnerHistory,
+  restoreOwnerTurns,
+} from './sessionControlHistoryMutation.js';
 import { warnSkippedRecordings } from './skippedRecordings.js';
 import type {
   AgentSessionControl,
@@ -84,8 +104,13 @@ const logger = new DebugLogger('llxprt:agents:session-control');
  * @requirement:REQ-010
  */
 export interface SessionControlDeps {
+  readonly readRecordingQueueLimit: () => number;
   /** The live Config (storage, project root, workspace context). */
   readonly config: Config;
+  readonly directories: () => readonly string[];
+  readonly mediaStore: LocalMediaStore;
+  readonly persistence: AgentSessionPersistence;
+  readonly sessionIdentityOwnership: 'config' | 'facade';
   /** The per-agent session id (AgentImpl uses deps.runtimeId). */
   readonly sessionId: () => string;
   /** Resolves the live AgentClient (the same contract restoreHistory uses). */
@@ -97,6 +122,7 @@ export interface SessionControlDeps {
 }
 
 export class SessionControl implements AgentSessionControl {
+  private recordingSessionId: string;
   /**
    * The live recording service when recording is enabled, or null when it is
    * disabled. getRecording reflects this directly.
@@ -140,6 +166,8 @@ export class SessionControl implements AgentSessionControl {
    * @requirement:REQ-010
    */
   private opChain: Promise<void> = Promise.resolve();
+  private disposalPromise: Promise<void> | undefined;
+  private admissionClosed = false;
 
   /**
    * True when {@link integration} is committed as the live integration but its
@@ -153,13 +181,14 @@ export class SessionControl implements AgentSessionControl {
    */
   private integrationNeedsSubscribe = false;
   private checkpointService: CheckpointService | undefined;
+  private adoptedPath: string | null = null;
 
-  constructor(private readonly deps: SessionControlDeps) {}
+  constructor(private readonly deps: SessionControlDeps) {
+    this.recordingSessionId = deps.sessionId();
+  }
 
   private getCheckpointService(): CheckpointService {
-    this.checkpointService ??= new CheckpointService(
-      this.deps.config.getLocalMediaStore(),
-    );
+    this.checkpointService ??= new CheckpointService(this.deps.mediaStore);
     return this.checkpointService;
   }
 
@@ -174,6 +203,8 @@ export class SessionControl implements AgentSessionControl {
    * @requirement:REQ-010
    */
   private runExclusive<T>(fn: () => Promise<T>): Promise<T> {
+    if (this.admissionClosed)
+      return Promise.reject(new Error('Session disposed'));
     const priorSettled = this.opChain;
     const run = (async () => {
       await priorSettled;
@@ -191,8 +222,8 @@ export class SessionControl implements AgentSessionControl {
    * `target:'latest'` resolves to CONTINUE_LATEST; any other target is a
    * session reference (id or, when options.prefix is set, an id-prefix that the
    * core SessionDiscovery resolves). On success the returned recording service
-   * is adopted as the live recording (installed on Config as the active
-   * recording, same swap semantics as setRecording) and the returned session
+   * is adopted as this owner's live recording (same swap semantics as
+   * setRecording) and the returned session
    * lock is retained. The resumed resources remain local while the prior
    * recording service and session lock are released and the reconstructed
    * IContent history is fed through the client restore path. Only after the new
@@ -272,8 +303,8 @@ export class SessionControl implements AgentSessionControl {
       currentProvider: this.deps.getProvider(),
       currentModel: this.deps.getModel(),
       workspaceDirs: this.workspaceDirs(),
-      mediaStore: this.deps.config.getLocalMediaStore(),
-      maxQueueBytes: this.deps.config.getSessionRecordingQueueByteLimit(),
+      mediaStore: this.deps.mediaStore,
+      maxQueueBytes: this.deps.readRecordingQueueLimit(),
     };
     const result = await resumeSession(request);
     if (!result.ok) {
@@ -298,15 +329,15 @@ export class SessionControl implements AgentSessionControl {
     const priorIntegration = this.integration;
     const priorLockHandle = this.currentLockHandle;
     const priorNeedsSubscribe = this.integrationNeedsSubscribe;
-    const client = this.deps.resolveClient();
-    const priorHistory = await client.getHistory();
-    const integration = new RecordingIntegration(
+    const priorSessionId = this.recordingSessionId;
+    const { client, priorHistory, integration } = await prepareSessionArtifacts(
       recording,
-      this.deps.config.createSessionPersistenceService(
-        recording.getSessionId(),
-      ),
+      lockHandle,
+      this.deps.persistence.forRecording(recording.getSessionId()),
+      this.deps.resolveClient,
     );
     let historyReplacementAttempted = false;
+    let adoptionAttempted = false;
     let priorIntegrationUnsubscribed = false;
     try {
       if (priorIntegration !== null && !priorNeedsSubscribe) {
@@ -314,28 +345,39 @@ export class SessionControl implements AgentSessionControl {
         priorIntegrationUnsubscribed = true;
       }
       historyReplacementAttempted = true;
-      await client.setHistory(history);
-      const subscribed = this.attachIntegrationToHistory(integration);
-      this.deps.config.setSessionRecordingService(recording);
+      await client.setHistory(history, { historyOrigin: this });
+      integration.rememberRecordedHistory(history);
+      this.integrationNeedsSubscribe = !this.attachHistory(integration);
+      adoptRecordingSessionId(
+        this.deps.config,
+        this.deps.sessionIdentityOwnership,
+        priorSessionId,
+        recording,
+        () => {
+          adoptionAttempted = true;
+        },
+      );
       this.recording = recording;
       this.integration = integration;
-      this.integrationNeedsSubscribe = !subscribed;
       this.currentLockHandle = lockHandle;
+      this.recordingSessionId = recording.getSessionId();
     } catch (error: unknown) {
       const rollbackFailures = await rollbackPreparedSessionArtifacts({
         integration,
         recording,
         lockHandle,
       });
+      await restoreConfigSessionId(
+        this.deps.config,
+        this.deps.sessionIdentityOwnership,
+        priorSessionId,
+        adoptionAttempted,
+        rollbackFailures,
+      );
       this.recording = priorRecording;
       this.integration = priorIntegration;
       this.integrationNeedsSubscribe = priorNeedsSubscribe;
       this.currentLockHandle = priorLockHandle;
-      await captureRollbackFailure(rollbackFailures, () =>
-        this.deps.config.setSessionRecordingService(
-          priorRecording ?? undefined,
-        ),
-      );
       if (historyReplacementAttempted) {
         await captureRollbackFailure(rollbackFailures, () =>
           client.setHistory(priorHistory),
@@ -345,30 +387,18 @@ export class SessionControl implements AgentSessionControl {
         this.integrationNeedsSubscribe = true;
         await captureRollbackFailure(rollbackFailures, () => {
           this.integrationNeedsSubscribe =
-            !this.attachIntegrationToHistory(priorIntegration);
+            !this.attachHistory(priorIntegration);
         });
       }
-      if (rollbackFailures.length > 0) {
-        throw new AggregateError(
-          [error, ...rollbackFailures],
-          'Session transition and rollback both failed',
-        );
-      }
-      throw error;
+      rethrowSessionTransitionFailure(error, rollbackFailures);
     }
 
-    const cleanupFailures = await cleanupSessionResources(
+    this.adoptedPath = recording.getFilePath();
+    await cleanupPreviousSession(
       priorIntegration,
       priorRecording,
       priorLockHandle,
     );
-    if (cleanupFailures.length === 1) throw cleanupFailures[0];
-    if (cleanupFailures.length > 1) {
-      throw new AggregateError(
-        cleanupFailures,
-        'Previous session cleanup failed after transition',
-      );
-    }
   }
 
   /**
@@ -399,7 +429,7 @@ export class SessionControl implements AgentSessionControl {
       return;
     }
     try {
-      integration.subscribeToHistory(historyService);
+      integration.subscribeToHistory(historyService, this);
       this.integrationNeedsSubscribe = false;
     } catch (error) {
       const deadRecording = this.recording;
@@ -408,7 +438,6 @@ export class SessionControl implements AgentSessionControl {
       this.integration = null;
       this.integrationNeedsSubscribe = false;
       this.currentLockHandle = null;
-      this.deps.config.setSessionRecordingService(undefined);
       const cleanupFailures = await cleanupSessionResources(
         integration,
         deadRecording,
@@ -431,7 +460,19 @@ export class SessionControl implements AgentSessionControl {
     }
   }
 
-  async createCheckpoint(name: string): Promise<CheckpointInfo> {
+  flushRecording = (event?: SessionRecordingEvent): Promise<void> =>
+    this.runExclusive(async () => {
+      await this.ensureSubscribed();
+      recordSessionEvent(this.integration, event);
+      await this.integration?.flushAtTurnBoundary();
+    });
+
+  recordRecordingEvent = this.flushRecording;
+
+  async createCheckpoint(
+    name: string,
+    options?: { readonly overwrite?: boolean },
+  ): Promise<CheckpointInfo> {
     return this.runExclusive(async () => {
       await this.ensureSubscribed();
       if (this.recording === null) {
@@ -443,6 +484,7 @@ export class SessionControl implements AgentSessionControl {
         recording,
         this.persistenceProjectHash(),
         name,
+        options?.overwrite === true,
       );
       const replay = await this.replayRecording(recording);
       const checkpoint = replay.checkpoints?.find(
@@ -481,7 +523,7 @@ export class SessionControl implements AgentSessionControl {
           replay = await replaySession(
             target.source.filePath,
             this.persistenceProjectHash(),
-            { mediaStore: this.deps.config.getLocalMediaStore() },
+            { mediaStore: this.deps.mediaStore },
           );
           replayByFilePath.set(target.source.filePath, replay);
         }
@@ -504,7 +546,11 @@ export class SessionControl implements AgentSessionControl {
     });
   }
 
-  async renameCheckpoint(ref: string, name: string): Promise<void> {
+  async renameCheckpoint(
+    ref: string,
+    name: string,
+    options?: { readonly overwrite?: boolean },
+  ): Promise<void> {
     await this.runExclusive(async () => {
       const target = await this.resolveCheckpointTarget(ref);
       const trimmedName = name.trim();
@@ -515,14 +561,18 @@ export class SessionControl implements AgentSessionControl {
           this.persistenceProjectHash(),
           target.checkpointId,
           trimmedName,
+          options?.overwrite === true,
         );
         return;
       }
-      const validatedName = await SessionDiscovery.validateAvailableName(
-        trimmedName,
-        this.chatsDir(),
-        this.persistenceProjectHash(),
-      );
+      const validatedName =
+        options?.overwrite === true
+          ? trimmedName
+          : await SessionDiscovery.validateAvailableName(
+              trimmedName,
+              this.chatsDir(),
+              this.persistenceProjectHash(),
+            );
       await this.getCheckpointService().renameCheckpointClosed(
         target.source.filePath,
         this.persistenceProjectHash(),
@@ -530,6 +580,7 @@ export class SessionControl implements AgentSessionControl {
         target.source.sessionId,
         target.checkpointId,
         validatedName,
+        options?.overwrite === true,
       );
     });
   }
@@ -555,7 +606,10 @@ export class SessionControl implements AgentSessionControl {
     });
   }
 
-  async nameCurrentSession(name: string): Promise<void> {
+  async nameCurrentSession(
+    name: string,
+    options?: { readonly overwrite?: boolean },
+  ): Promise<void> {
     await this.runExclusive(async () => {
       if (this.recording === null) await this.startRecording();
       const recording = this.requireRecording();
@@ -566,6 +620,7 @@ export class SessionControl implements AgentSessionControl {
         recording,
         this.persistenceProjectHash(),
         normalizedName,
+        options?.overwrite === true,
       );
     });
   }
@@ -586,15 +641,17 @@ export class SessionControl implements AgentSessionControl {
   async listSessions(): Promise<readonly SessionInfo[]> {
     return this.runExclusive(async () => {
       const targets = await this.continueTargets();
-      const sessions: SessionInfo[] = [];
-      for (const target of targets) {
-        if (target.kind !== 'session') continue;
-        sessions.push(await this.sessionInfoFor(target.session));
-      }
-      return sessions;
+      return Promise.all(
+        targets
+          .filter((target) => target.kind === 'session')
+          .map((target) => this.sessionInfoFor(target.session)),
+      );
     });
   }
 
+  listBrowserTargets = () => this.runExclusive(() => this.continueTargets());
+  listBrowserTargetsDetailed = () =>
+    this.runExclusive(() => this.discoverContinueTargets());
   async deleteSession(ref: string): Promise<void> {
     await this.runExclusive(async () => {
       const chatsDir = this.chatsDir();
@@ -621,27 +678,17 @@ export class SessionControl implements AgentSessionControl {
   }
 
   async exportSession(ref: string, destination: string): Promise<void> {
-    await this.runExclusive(async () => {
-      const targets = await this.continueTargets();
-      const resolved = SessionDiscovery.resolveContinueRef(ref, targets);
-      if ('error' in resolved) throw new Error(resolved.error);
-      const source =
-        resolved.target.kind === 'session'
-          ? resolved.target.session
-          : resolved.target.source;
-      if (this.recording?.getSessionId() === source.sessionId) {
-        if (this.integration !== null) {
-          await this.integration.flushAtTurnBoundary();
-        }
-        await this.recording.flush();
-      }
-      await exportSessionMediaPackage(
-        source.filePath,
-        this.persistenceProjectHash(),
-        this.deps.config.getLocalMediaStore(),
+    await this.runExclusive(async () =>
+      exportRecordedSession(
+        ref,
         destination,
-      );
-    });
+        await this.discoverContinueTargets(),
+        this.persistenceProjectHash(),
+        this.deps.mediaStore,
+        this.recording,
+        this.integration,
+      ),
+    );
   }
 
   async importSession(packageDirectory: string): Promise<SessionInfo> {
@@ -650,7 +697,7 @@ export class SessionControl implements AgentSessionControl {
         packageDirectory,
         this.chatsDir(),
         this.persistenceProjectHash(),
-        this.deps.config.getLocalMediaStore(),
+        this.deps.mediaStore,
         async (imported) => {
           await this.resumeInternal(imported.sessionId);
           return this.currentSessionInfo();
@@ -659,62 +706,37 @@ export class SessionControl implements AgentSessionControl {
     );
   }
 
-  async clearHistory(): Promise<void> {
-    await this.runExclusive(async () => {
-      const client = this.deps.resolveClient();
-      const history = await client.getHistory();
-      const recording = this.requireRecording();
-      const result = await new HistoryMutationService().clear(
-        history,
-        recording,
-        async (remainingHistory) => {
-          const admission = new MediaAdmissionService(
-            this.deps.config.getLocalMediaStore(),
-          );
-          const context = {
-            turnId: 'clear-history-preflight',
-            source: 'clear-history-preflight',
-          };
-          const admitted = await admission.admitContents(
-            remainingHistory,
-            context,
-          );
-          await admission.releaseContents(admitted, context);
-        },
+  async restoreTurns(turns: number): Promise<{
+    readonly remainingHistory: readonly IContent[];
+    readonly itemsRemoved: number;
+  }> {
+    return this.runExclusive(async () => {
+      await this.ensureSubscribed();
+      return restoreOwnerTurns(
+        turns,
+        this.deps.resolveClient(),
+        this.requireRecording(),
+        this.integration,
+        this,
+        () => this.resubscribeIntegration(),
       );
-      if (!result.ok) throw new Error(result.error);
-      this.integration?.unsubscribeFromHistory();
-      const mutationFailures: unknown[] = [];
-      try {
-        await client.resetChat();
-        await client.restoreHistory(result.remainingHistory);
-      } catch (error: unknown) {
-        mutationFailures.push(error);
-        try {
-          await client.setHistory(history);
-        } catch (rollbackError: unknown) {
-          mutationFailures.push(rollbackError);
-        }
-        try {
-          await this.restoreRecordedHistory(
-            recording,
-            history.slice(result.remainingHistory.length),
-          );
-        } catch (rollbackError: unknown) {
-          mutationFailures.push(rollbackError);
-        }
-      }
-      const resubscribeError = this.resubscribeIntegration();
-      if (resubscribeError !== undefined)
-        mutationFailures.push(resubscribeError);
-      if (mutationFailures.length > 1) {
-        throw new AggregateError(
-          mutationFailures,
-          'History mutation, rollback, or recording resubscription failed',
-        );
-      }
-      if (mutationFailures.length === 1) throw mutationFailures[0];
     });
+  }
+  getHistory = (): Promise<readonly IContent[]> =>
+    this.runExclusive(() => this.deps.resolveClient().getHistory());
+
+  async clearHistory(options?: HistoryClearOptions): Promise<void> {
+    await this.runExclusive(() =>
+      clearOwnerHistory(
+        options,
+        this.deps.resolveClient(),
+        this.requireRecording(),
+        this.integration,
+        this,
+        this.deps.mediaStore,
+        () => this.resubscribeIntegration(),
+      ),
+    );
   }
 
   /**
@@ -734,7 +756,7 @@ export class SessionControl implements AgentSessionControl {
         await this.startRecording();
         return;
       }
-      await this.stopRecording();
+      await this.teardownActiveSession();
     });
   }
 
@@ -746,14 +768,24 @@ export class SessionControl implements AgentSessionControl {
    * @requirement:REQ-010
    */
   getRecording(): SessionRecordingState {
-    const service = this.recording;
-    const enabled = service?.isActive() ?? false;
-    const path = service?.getFilePath() ?? null;
+    const path = this.recording?.getFilePath() ?? null;
     return {
-      enabled,
+      enabled: this.recording?.isActive() ?? false,
       format: RECORDING_FORMAT,
       ...(path !== null ? { path } : {}),
     };
+  }
+
+  getRecordingTitle(): string | null | undefined {
+    return this.recording?.getSessionMetadataTitle();
+  }
+
+  async recordRecordingTitle(title: string | null): Promise<void> {
+    await this.runExclusive(async () => {
+      if (this.recording?.isActive() !== true) return;
+      this.recording.recordSessionMetadata(title);
+      await this.recording.flush();
+    });
   }
 
   private requireRecording(): SessionRecordingService {
@@ -766,29 +798,26 @@ export class SessionControl implements AgentSessionControl {
   private async replayRecording(
     recording: SessionRecordingService,
   ): Promise<Extract<ReplayResult, { ok: true }>> {
-    const filePath = recording.getFilePath();
-    if (filePath === null) throw new Error('Recording is not materialized');
-    const replay = await replaySession(
-      filePath,
+    return replayOwnerRecording(
+      recording.getFilePath(),
       this.persistenceProjectHash(),
-      {
-        mediaStore: this.deps.config.getLocalMediaStore(),
-      },
+      this.deps.mediaStore,
     );
-    if (!replay.ok) throw new Error(replay.error);
-    return replay;
   }
 
   /** Readable continue targets; skipped recordings go to the module logger. */
-  private async continueTargets(): Promise<ContinueTarget[]> {
-    const { targets, unreadableRecordings } =
-      await SessionDiscovery.listContinueTargetsDetailed(
-        this.chatsDir(),
-        this.persistenceProjectHash(),
-        this.deps.config.getLocalMediaStore(),
-      );
-    warnSkippedRecordings(logger, unreadableRecordings);
-    return targets;
+  private continueTargets = async (): Promise<ContinueTarget[]> =>
+    (await this.discoverContinueTargets()).targets;
+
+  /** Targets plus the unreadable recordings discovery skipped. */
+  private async discoverContinueTargets() {
+    const listing = await SessionDiscovery.listContinueTargetsDetailed(
+      this.chatsDir(),
+      this.persistenceProjectHash(),
+      this.deps.mediaStore,
+    );
+    warnSkippedRecordings(logger, listing.unreadableRecordings);
+    return listing;
   }
 
   private async resolveCheckpointTarget(
@@ -817,8 +846,8 @@ export class SessionControl implements AgentSessionControl {
         ? this.recording
         : undefined;
     const result = await new SessionTransitionService({
-      mediaStore: this.deps.config.getLocalMediaStore(),
-      maxQueueBytes: this.deps.config.getSessionRecordingQueueByteLimit(),
+      mediaStore: this.deps.mediaStore,
+      maxQueueBytes: this.deps.readRecordingQueueLimit(),
     }).forkFromCheckpoint(
       target,
       this.chatsDir(),
@@ -847,7 +876,7 @@ export class SessionControl implements AgentSessionControl {
     );
     if (target?.kind === 'session') return this.sessionInfoFor(target.session);
     const replay = await this.replayRecording(recording);
-    return this.sessionInfoFromReplay(
+    return sessionInfoFromReplay(
       recording.getSessionId(),
       replay,
       new Date().toISOString(),
@@ -858,36 +887,14 @@ export class SessionControl implements AgentSessionControl {
     const replay = await replaySession(
       summary.filePath,
       this.persistenceProjectHash(),
-      { mediaStore: this.deps.config.getLocalMediaStore() },
+      { mediaStore: this.deps.mediaStore },
     );
     if (!replay.ok) throw new Error(replay.error);
-    return this.sessionInfoFromReplay(
+    return sessionInfoFromReplay(
       summary.sessionId,
       replay,
       summary.lastModified.toISOString(),
     );
-  }
-
-  private sessionInfoFromReplay(
-    id: string,
-    replay: Extract<ReplayResult, { ok: true }>,
-    modifiedAt: string,
-  ): SessionInfo {
-    return {
-      id,
-      name: replay.sessionName ?? null,
-      title: replay.metadata.title,
-      createdAt: replay.metadata.startTime,
-      modifiedAt,
-      ...(replay.ancestry === undefined
-        ? {}
-        : {
-            parentSessionId: replay.ancestry.parentSessionId,
-            parentSequence: replay.ancestry.parentSequence,
-            checkpointId: replay.ancestry.checkpointId,
-            checkpointName: replay.ancestry.checkpointName,
-          }),
-    };
   }
 
   // ─── Recording helpers ───────────────────────────────────────────────────
@@ -896,10 +903,8 @@ export class SessionControl implements AgentSessionControl {
    * Starts a fresh recording service for this session, replacing any prior one
    * (the prior service + integration are flushed + disposed first). The current
    * history is recorded as content events so the file materializes and
-   * getRecording().path is defined. The freshly built service is installed on
-   * Config via setSessionRecordingService so the rest of the system (which reads
-   * the active recording via config.getSessionRecordingService) observes the
-   * swap. A RecordingIntegration is then subscribed to the client's
+   * getRecording().path is defined. The freshly built service belongs to this
+   * session owner. A RecordingIntegration is subscribed to the client's
    * HistoryService so EVERY subsequent turn's 'contentAdded' event is appended
    * to the JSONL file — this is what makes recording continuous rather than a
    * one-shot snapshot.
@@ -910,7 +915,7 @@ export class SessionControl implements AgentSessionControl {
    * stored service), so getHistoryService() is non-null here and the single
    * subscription established now captures all future turns. If it is
    * nonetheless null at this moment (no client/chat), the integration is still
-   * created and Config still owns the service; the subscription is deferred
+   * created and this owner retains the service; the subscription is deferred
    * (integrationNeedsSubscribe) and the next startRecording/resume re-attempts
    * it via {@link ensureSubscribed} (FINDING A3).
    *
@@ -924,36 +929,33 @@ export class SessionControl implements AgentSessionControl {
     // so a pending-subscribe flag from an earlier null-history enable does not
     // survive across the fresh service swap.
     await this.ensureSubscribed();
-    await this.stopRecording();
+    await this.teardownActiveSession();
     const service = await SessionRecordingService.createLocked({
-      sessionId: this.deps.sessionId(),
+      sessionId: this.recordingSessionId,
       projectHash: this.persistenceProjectHash(),
       chatsDir: this.chatsDir(),
       workspaceDirs: this.workspaceDirs(),
       cwd: this.deps.config.getProjectRoot(),
       provider: this.deps.getProvider(),
       model: this.deps.getModel(),
-      mediaStore: this.deps.config.getLocalMediaStore(),
-      maxQueueBytes: this.deps.config.getSessionRecordingQueueByteLimit(),
+      mediaStore: this.deps.mediaStore,
+      maxQueueBytes: this.deps.readRecordingQueueLimit(),
     });
-    const history = await this.deps.resolveClient().getHistory();
-    for (const item of history) {
-      service.recordContent(item);
-    }
-    await service.flush();
-    // FINDING F8: build + subscribe the integration BEFORE committing
-    // this.recording and the Config recording service, so a subscribe failure
-    // cannot leave recording PARTIALLY enabled (fields/Config set with no live
-    // integration). On failure dispose the integration AND the freshly built
-    // service (neither is referenced by any field yet) and rethrow; the instance
-    // fields stay untouched so recording remains cleanly disabled.
-    const integration = new RecordingIntegration(
-      service,
-      this.deps.config.createSessionPersistenceService(service.getSessionId()),
-    );
-    let subscribed: boolean;
+    let integration: RecordingIntegration | null = null;
     try {
-      subscribed = this.attachIntegrationToHistory(integration);
+      const client = this.deps.resolveClient();
+      const history = await client.getHistory();
+      await restartRecording(service, this.adoptedPath, this.deps.mediaStore);
+      seedOwnerRecording(service, history, client.getHistoryService(), this);
+      await service.flush();
+      integration = new RecordingIntegration(
+        service,
+        this.deps.persistence.forRecording(service.getSessionId()),
+      );
+      const subscribed = this.attachHistory(integration);
+      this.recording = service;
+      this.integration = integration;
+      this.integrationNeedsSubscribe = !subscribed;
     } catch (error: unknown) {
       const cleanupFailures = await cleanupSessionResources(
         integration,
@@ -968,32 +970,20 @@ export class SessionControl implements AgentSessionControl {
       }
       throw error;
     }
-    this.recording = service;
-    this.deps.config.setSessionRecordingService(service);
-    this.integration = integration;
-    // FINDING A3: when the HistoryService was unavailable the integration is
-    // committed but dead; flag it so a later operation re-attaches it rather
-    // than leaving continuous recording permanently off.
-    this.integrationNeedsSubscribe = !subscribed;
   }
 
-  private async restoreRecordedHistory(
-    recording: SessionRecordingService,
-    removedHistory: readonly IContent[],
+  async persistSemanticMediaPurge(
+    history: readonly IContent[],
+    frontier: SemanticMediaPurgeFrontier,
   ): Promise<void> {
-    for (const content of removedHistory) recording.recordContent(content);
-    await recording.flush();
-    if (!recording.isActive()) {
-      throw new Error('Recording failed during history rollback');
-    }
+    return persistPurge(this.requireRecording(), history, frontier);
   }
 
   private resubscribeIntegration(): Error | undefined {
     const integration = this.integration;
     if (integration === null) return undefined;
     try {
-      this.integrationNeedsSubscribe =
-        !this.attachIntegrationToHistory(integration);
+      this.integrationNeedsSubscribe = !this.attachHistory(integration);
       return undefined;
     } catch (error: unknown) {
       this.integrationNeedsSubscribe = true;
@@ -1014,12 +1004,10 @@ export class SessionControl implements AgentSessionControl {
    * @plan:PLAN-20260617-COREAPI.P20
    * @requirement:REQ-010
    */
-  private attachIntegrationToHistory(
-    integration: RecordingIntegration,
-  ): boolean {
+  private attachHistory(integration: RecordingIntegration): boolean {
     const historyService = this.deps.resolveClient().getHistoryService();
     if (historyService !== null) {
-      integration.subscribeToHistory(historyService);
+      integration.subscribeToHistory(historyService, this);
       return true;
     }
     // No HistoryService yet: the integration is left unsubscribed, so NO
@@ -1028,28 +1016,16 @@ export class SessionControl implements AgentSessionControl {
     // loss; warn so it is diagnosable AND flag it for bounded re-attach.
     logger.warn(
       () =>
-        `attachIntegrationToHistory: HistoryService unavailable for session ${this.deps.sessionId()}; ` +
+        `attachHistory: HistoryService unavailable for session ${this.deps.sessionId()}; ` +
         `recording integration left unsubscribed (subsequent turns will not be recorded until re-subscribed)`,
     );
     return false;
   }
 
   /**
-   * Flushes + disposes the live recording service (if any), clears it from
-   * Config (so the system no longer sees an active recording), and releases any
-   * session lock held by a prior resume. Each teardown step is guarded so a
-   * single failure does not skip the others.
-   * @plan:PLAN-20260617-COREAPI.P20
-   * @requirement:REQ-010
-   */
-  private async stopRecording(): Promise<void> {
-    await this.teardownActiveSession();
-  }
-
-  /**
    * Disposes the live RecordingIntegration (unsubscribing its HistoryService
-   * listeners) and the live recording service (if any), clears the private
-   * fields, and clears the service from Config. The integration is disposed
+   * listeners) and the live recording service (if any), clearing the private
+   * fields. The integration is disposed
    * FIRST so no 'contentAdded' event can reach a service mid-disposal. No-op
    * when no recording is active.
    * @plan:PLAN-20260617-COREAPI.P20
@@ -1061,7 +1037,6 @@ export class SessionControl implements AgentSessionControl {
     this.integration = null;
     this.integrationNeedsSubscribe = false;
     this.recording = null;
-    this.deps.config.setSessionRecordingService(undefined);
     const errors: unknown[] = [];
     if (integration !== null) {
       await captureRollbackFailure(errors, () => integration.dispose());
@@ -1100,11 +1075,18 @@ export class SessionControl implements AgentSessionControl {
    * @plan:PLAN-20260617-COREAPI.P20
    * @requirement:REQ-010
    */
-  async dispose(): Promise<void> {
+  closeAdmission(): void {
+    this.admissionClosed = true;
+  }
+
+  dispose(): Promise<void> {
+    this.closeAdmission();
     // FINDING A1: serialize teardown through the op-chain mutex so dispose never
     // races a concurrent resume()/setRecording() adopting resources it is
     // releasing (double-dispose / released-then-adopted lock).
-    await this.runExclusive(() => this.teardownActiveSession());
+    return (this.disposalPromise ??= this.opChain
+      .then(() => this.teardownActiveSession())
+      .finally(() => this.deps.persistence.close()));
   }
 
   /**
@@ -1126,7 +1108,7 @@ export class SessionControl implements AgentSessionControl {
   }
 
   private persistenceProjectHash(): string {
-    return basename(this.deps.config.storage.getProjectTempDir());
+    return basename(this.deps.config.projectTempDir);
   }
 
   // ─── Path derivation ─────────────────────────────────────────────────────
@@ -1140,7 +1122,7 @@ export class SessionControl implements AgentSessionControl {
    * @requirement:REQ-010
    */
   private chatsDir(): string {
-    return this.deps.config.storage.getProjectChatsDir();
+    return this.deps.config.projectChatsDir;
   }
 
   /**
@@ -1149,6 +1131,6 @@ export class SessionControl implements AgentSessionControl {
    * @requirement:REQ-010
    */
   private workspaceDirs(): string[] {
-    return [...this.deps.config.getWorkspaceContext().getDirectories()];
+    return [...this.deps.directories()];
   }
 }

@@ -9,12 +9,10 @@ import {
   getErrorMessage,
   getGlobalCoreMemoryFilePath,
   getProjectCoreMemoryFilePath,
-  loadCoreMemoryContent,
   MemoryTool,
 } from '@vybestack/llxprt-code-core';
 import * as fs from 'fs/promises';
 import { MessageType } from '../types.js';
-import { loadHierarchicalLlxprtMemory } from '../../config/environmentLoader.js';
 import type { SlashCommand, SlashCommandActionReturn } from './types.js';
 import { CommandKind } from './types.js';
 import type { LoadedSettings } from '../../config/settings.js';
@@ -27,46 +25,15 @@ async function refreshMemoryContent(
   config: CliUiRuntime,
   settings: LoadedSettings,
 ): Promise<{ memoryContent: string; fileCount: number }> {
-  if (config.isJitContextEnabled()) {
-    const contextManager = config.getContextManager();
-    if (contextManager) {
-      await contextManager.refresh();
-    }
-    return {
-      memoryContent: config.getUserMemory(),
-      fileCount: config.getLlxprtMdFileCount(),
-    };
-  }
-
-  const result = await loadHierarchicalLlxprtMemory(
-    config.getWorkingDir(),
-    config.shouldLoadMemoryFromIncludeDirectories()
-      ? config.getWorkspaceContext().getDirectories()
-      : [],
-    config.getDebugMode(),
-    config.getFileService(),
-    settings.merged,
-    config.getExtensions(),
-    config.isTrustedFolder(),
-    settings.merged.ui.memoryImportFormat ?? 'tree',
-    config.getFileFilteringOptions(),
-  );
-  config.setUserMemory(result.memoryContent);
-  config.setLlxprtMdFileCount(result.fileCount);
-  config.setLlxprtMdFilePaths(result.filePaths);
-  return { memoryContent: result.memoryContent, fileCount: result.fileCount };
+  void settings;
+  return config.refreshMemory();
 }
 
 /**
  * Refreshes core memory with fail-open behavior.
  */
 async function refreshCoreMemory(config: CliUiRuntime): Promise<void> {
-  try {
-    const coreContent = await loadCoreMemoryContent(config.getWorkingDir());
-    config.setCoreMemory(coreContent);
-  } catch {
-    // Non-fatal: keep existing core memory
-  }
+  await config.refreshMemory();
 }
 
 const MEMORY_ADD_USAGE =
@@ -99,13 +66,8 @@ function handleCoreMemoryAdd(
         writeFile: fs.writeFile,
         mkdir: fs.mkdir,
       });
-      try {
-        const coreContent = await loadCoreMemoryContent(workingDir);
-        context.services.config?.setCoreMemory(coreContent);
-        await context.services.config?.updateSystemInstructionIfInitialized();
-      } catch {
-        // Non-fatal: memory is written to disk; cache will sync on next refresh
-      }
+      await context.services.config?.refreshMemory();
+      await context.services.config?.updateSystemInstructionIfInitialized();
 
       context.ui.addItem(
         {

@@ -29,15 +29,11 @@ import {
 import { useCancellation } from '../useAgentStreamLifecycle.js';
 import { StreamingState, type HistoryItemWithoutId } from '../../../types.js';
 import type { QueuedSubmission } from '../types.js';
-import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
 import {
   RecordingIntegration,
   SessionRecordingService,
 } from '@vybestack/llxprt-code-core';
-import type {
-  StreamRuntime,
-  UiMcpClientManager,
-} from '../../../cliUiRuntime.js';
+import type { StreamRuntime } from '../../../cliUiRuntime.js';
 import { KeypressProvider } from '../../../contexts/KeypressContext.js';
 import { createFakeAgentFromMockClient } from '../../__tests__/useAgentStream-test-helpers.js';
 import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
@@ -133,6 +129,7 @@ function createDeps(options: Partial<DoubleCancelDeps> = {}): DoubleCancelDeps {
 }
 
 interface SubmitQueryOverrides {
+  agent?: UseSubmitQueryDeps['agent'];
   runtime?: StreamRuntime;
   queuedSubmissionsRef?: React.MutableRefObject<QueuedSubmission[]>;
   queueOperations?: ReturnType<typeof createQueueOperations>;
@@ -163,7 +160,7 @@ function createUseSubmitQueryDeps(
     runtime:
       overrides.runtime ??
       createStreamRuntimeForTest({}, createMockOverrides()),
-    agent: createMockAgent(),
+    agent: overrides.agent ?? createMockAgent(),
     addItem: overrides.addItem ?? vi.fn().mockReturnValue(1),
     removeItems: vi.fn(),
     settings: createLoadedSettings(),
@@ -372,17 +369,21 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
   it('keeps submission callbacks and event subscriptions stable across rerenders', () => {
     const unsubscribeMcp = vi.fn();
     const onMcpClientUpdate = vi.fn(() => unsubscribeMcp);
-    const setupAsyncTaskAutoTrigger = vi.fn(() => vi.fn());
+    const agent = createMockAgent();
+    const subscribeNotifications = vi.spyOn(
+      agent.tasks,
+      'subscribeNotifications',
+    );
     const runtime = createStreamRuntimeForTest(
       {},
       {
         events: { onMcpClientUpdate },
-        asyncTasks: { setupAsyncTaskAutoTrigger },
       },
     );
     const deps = createDeps();
     const { result, rerender, unmount } = renderUseSubmitQuery(deps, {
       runtime,
+      agent,
     });
     const initialSubmitQuery = result.current.submitQuery;
     const initialSchedule = result.current.scheduleNextQueuedSubmission;
@@ -392,7 +393,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     expect(result.current.submitQuery).toBe(initialSubmitQuery);
     expect(result.current.scheduleNextQueuedSubmission).toBe(initialSchedule);
     expect(onMcpClientUpdate).toHaveBeenCalledTimes(1);
-    expect(setupAsyncTaskAutoTrigger).toHaveBeenCalledTimes(1);
+    expect(subscribeNotifications).toHaveBeenCalledTimes(1);
 
     unmount();
     expect(unsubscribeMcp).toHaveBeenCalledTimes(1);
@@ -535,17 +536,10 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
   });
 
   it('processes a non-string submission immediately even when MCP discovery is in progress (issue #2516)', async () => {
-    const discoveryState = MCPDiscoveryState.IN_PROGRESS;
-    const mcpManager: UiMcpClientManager = {
-      getDiscoveryState: () => discoveryState,
-      getMcpServerCount: () => 1,
-      restartServer: vi.fn().mockResolvedValue(undefined),
-    };
     const runtime = createStreamRuntimeForTest(
       {},
       {
         mcp: {
-          getMcpClientManager: () => mcpManager,
           getMcpServers: () => ({ server: { command: 'unused' } }),
         },
       },

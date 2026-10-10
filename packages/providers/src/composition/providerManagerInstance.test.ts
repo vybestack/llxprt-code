@@ -17,10 +17,7 @@ import {
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { OpenAIProvider } from '@vybestack/llxprt-code-providers';
 import { MockFileSystem } from './IFileSystem.js';
-import {
-  setFileSystem,
-  bindOpenAIAliasIdentity,
-} from './providerManagerInstance.js';
+import { bindOpenAIAliasIdentity } from './providerManagerInstance.js';
 
 // Mock os module and set homedir before imports
 const realOsModule = { ...(await import('os')) };
@@ -60,7 +57,6 @@ describe('API key sanitization regression tests', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockFileSystem = new MockFileSystem();
-    setFileSystem(mockFileSystem);
   });
 
   it('should sanitize API keys containing Unicode replacement characters', () => {

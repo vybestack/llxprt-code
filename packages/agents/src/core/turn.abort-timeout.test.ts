@@ -1,3 +1,6 @@
+import { createChatPolicyFixture } from './__tests__/session-policy-fixture.js';
+import { createTurnCitationPolicy } from './__tests__/session-policy-fixture.js';
+import { createTurnStreamPolicy } from './__tests__/session-policy-fixture.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -72,9 +75,11 @@ describe('Turn run - abort and idle timeout', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mockChatInstance = {
+      ...createChatPolicyFixture(),
       sendMessageStream: mockSendMessageStream,
       getHistory: mockGetHistory,
-      getConfig: () => undefined,
+      shouldShowCitations: createTurnCitationPolicy(),
+      getStreamTimeoutPolicy: createTurnStreamPolicy({}),
       getResolvedBaseUrl: () => undefined,
     };
     turn = new Turn(
@@ -131,16 +136,12 @@ describe('Turn run - abort and idle timeout', () => {
       const returnSpy = vi.fn().mockResolvedValue(undefined);
 
       mockChatInstance = {
+        ...createChatPolicyFixture(),
         sendMessageStream: mockSendMessageStream,
         getHistory: mockGetHistory,
-        getConfig: () => ({
-          getSettingsService: () => ({ get: () => undefined }),
-          getEphemeralSetting: (key: string) => {
-            if (key === 'stream-idle-timeout-ms') {
-              return 30_000;
-            }
-            return undefined;
-          },
+        shouldShowCitations: createTurnCitationPolicy(),
+        getStreamTimeoutPolicy: createTurnStreamPolicy({
+          'stream-idle-timeout-ms': 30_000,
         }),
         getResolvedBaseUrl: () => undefined,
       };
@@ -318,16 +319,12 @@ describe('Turn run - abort and idle timeout', () => {
       const abortSignals: AbortSignal[] = [];
 
       mockChatInstance = {
+        ...createChatPolicyFixture(),
         sendMessageStream: mockSendMessageStream,
         getHistory: mockGetHistory,
-        getConfig: () => ({
-          getSettingsService: () => ({ get: () => undefined }),
-          getEphemeralSetting: (key: string) => {
-            if (key === 'stream-idle-timeout-ms') {
-              return testTimeoutMs;
-            }
-            return undefined;
-          },
+        shouldShowCitations: createTurnCitationPolicy(),
+        getStreamTimeoutPolicy: createTurnStreamPolicy({
+          'stream-idle-timeout-ms': testTimeoutMs,
         }),
         getResolvedBaseUrl: () => undefined,
       };
@@ -550,15 +547,16 @@ function makeTurnWithConfig(
   getEphemeralSetting?: (key: string) => unknown,
 ): Turn {
   const chatInstance: MockedChatInstance = {
+    ...createChatPolicyFixture(),
     sendMessageStream: mockSendMessageStream,
     getHistory: mockGetHistory,
-    getConfig: () =>
-      getEphemeralSetting === undefined
-        ? undefined
-        : {
-            getEphemeralSetting,
-            getSettingsService: () => ({ get: () => undefined }),
-          },
+    shouldShowCitations: createTurnCitationPolicy(),
+    getStreamTimeoutPolicy: createTurnStreamPolicy({
+      'stream-idle-timeout-ms': getEphemeralSetting?.('stream-idle-timeout-ms'),
+      'stream-first-response-timeout-ms': getEphemeralSetting?.(
+        'stream-first-response-timeout-ms',
+      ),
+    }),
     getResolvedBaseUrl: () => undefined,
   };
   return new Turn(

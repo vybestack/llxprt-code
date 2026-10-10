@@ -1,11 +1,11 @@
 /**
- * @plan:issue3589
- */
-
-/**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
+ * @plan:issue3589
  */
 
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
@@ -66,12 +66,10 @@ describe('shell result contracts @plan:issue1995 @plan:issue3200', () => {
   ): IShellToolHost {
     return {
       getTargetDir: () => process.cwd(),
-      getWorkspaceContext: () => ({
-        getDirectories: () => [process.cwd()],
-        isPathWithinWorkspace: (resolvedPath: string) =>
-          resolvedPath === process.cwd() ||
-          resolvedPath.startsWith(`${process.cwd()}/`),
-      }),
+      workspaceDirectories: () => [process.cwd()],
+      containsWorkspacePath: (resolvedPath: string) =>
+        resolvedPath === process.cwd() ||
+        resolvedPath.startsWith(`${process.cwd()}/`),
       isCommandAllowed: () => ({ allowed: true }),
       isShellInvocationAllowlisted: () => false,
       isInteractive: () => true,

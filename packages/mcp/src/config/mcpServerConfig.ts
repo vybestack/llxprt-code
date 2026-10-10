@@ -5,7 +5,7 @@
  */
 
 import type { AuthProviderType } from '@vybestack/llxprt-code-auth/mcp-auth-provider-type.js';
-import type { MCPOAuthConfig } from '../auth/oauth-provider.js';
+import type { MCPOAuthConfig } from '../auth/index.js';
 
 /** The extension state MCP needs while reconciling configured servers. */
 export interface McpExtensionConfig {

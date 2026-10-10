@@ -15,18 +15,14 @@ import {
 import { LoadedSettings } from '../../../src/config/settings.js';
 import { Logger } from '@vybestack/llxprt-code-core';
 import { SessionStatsState } from '../../../src/ui/contexts/SessionContext.js';
+import { createMockRuntimeApi } from '../../../src/ui/components/__tests__/StatsDisplay.testHelpers.js';
 
-// Mock the RuntimeContext
 const mockSetActiveModel = vi.fn();
-void vi.mock('../../../src/ui/contexts/RuntimeContext.js', () => ({
-  getRuntimeApi: () => ({
-    setActiveModel: mockSetActiveModel,
-  }),
-}));
 
 // Create mock command context
 function createMockContext(): CommandContext {
   return {
+    runtimeApi: createMockRuntimeApi({ setActiveModel: mockSetActiveModel }),
     services: {
       config: null,
       settings: {} as LoadedSettings,

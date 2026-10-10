@@ -1,3 +1,7 @@
+import {
+  captureResponsesTestRequest,
+  type ResponsesTestDeps,
+} from './responses-request.test-helpers.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -22,10 +26,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { Storage } from '@vybestack/llxprt-code-storage';
-import {
-  executeOpenAIResponsesRequest,
-  type ResponsesExecutorDeps,
-} from './openAIResponsesExecutor.js';
+import { executeOpenAIResponsesRequest } from './openAIResponsesExecutor.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
@@ -100,8 +101,9 @@ function buildNormalizedOptions(
   });
   const config = createRuntimeConfigStub(settings, {});
   const invocation = createRuntimeInvocationContext({
-    runtime,
-    settings,
+    runtimeId: runtime.runtimeId,
+    runtimeMetadata: runtime.metadata,
+
     providerName: 'openai-responses',
     ephemeralsSnapshot: ephemerals,
     fallbackRuntimeId: 'test-runtime',
@@ -132,22 +134,22 @@ function buildNormalizedOptions(
   } as unknown as NormalizedGenerateChatOptions;
 }
 
-function buildDeps(): ResponsesExecutorDeps {
+function buildDeps(): ResponsesTestDeps {
   return {
     providerName: 'openai-responses',
     isWebSocketTransportActive: () => false,
     logger: {
       debug: () => undefined,
-    } as unknown as ResponsesExecutorDeps['logger'],
-    getProviderBaseURL: () => 'https://api.openai.com/v1',
-    getCustomHeaders: () => undefined,
+    } as unknown as ResponsesTestDeps['logger'],
+    requestBaseURL: 'https://api.openai.com/v1',
+    requestHeaders: undefined,
     isCodexMode: () => false,
     getCodexAccountId: async () => 'codex-account',
     resolveAuthTokenForPrompt: async () => 'test-token',
     generateSyntheticCallId: () => 'call_synthetic_test',
     shouldRetryOnError: () => false,
-    getDefaultModel: () => 'gpt-5',
-    getGlobalConfig: () => undefined,
+    defaultModel: 'gpt-5',
+
     getUnallowedModelParameters: () => new Set<string>(),
   };
 }
@@ -176,7 +178,7 @@ async function drainExpectingError(
 ): Promise<unknown> {
   try {
     for await (const _chunk of executeOpenAIResponsesRequest(
-      options,
+      captureResponsesTestRequest(options, buildDeps()),
       buildDeps(),
     )) {
       void _chunk;

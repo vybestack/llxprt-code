@@ -11,7 +11,7 @@ import { updateEventEmitter } from './updateEventEmitter.js';
 import type { HistoryItem } from '../ui/types.js';
 import { MessageType } from '../ui/types.js';
 import { spawnWrapper } from './spawnWrapper.js';
-import type { spawn, ChildProcess } from 'child_process';
+import type { SpawnOptions, ChildProcess } from 'child_process';
 import * as fs from 'node:fs';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import * as path from 'node:path';
@@ -170,7 +170,7 @@ function spawnUpdateProcess(
   updateCommand: string,
   lockFilePath: string,
   cleanupLock: () => void,
-  spawnFn: typeof spawn,
+  spawnFn: (command: string, options: SpawnOptions) => ChildProcess,
 ): ChildProcess {
   const updateProcess = spawnFn(updateCommand, {
     stdio: 'ignore',
@@ -212,7 +212,10 @@ export function handleAutoUpdate(
   info: UpdateObject | null,
   settings: LoadedSettings,
   projectRoot: string,
-  spawnFn: typeof spawn = spawnWrapper,
+  spawnFn: (
+    command: string,
+    options: SpawnOptions,
+  ) => ChildProcess = spawnWrapper,
 ): ChildProcess | undefined {
   if (info == null) {
     return undefined;

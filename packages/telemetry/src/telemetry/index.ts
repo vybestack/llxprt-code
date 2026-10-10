@@ -117,3 +117,13 @@ export type {
   HookExecutionResult,
 } from '../internal/interfaces.js';
 export { HookEventName } from '../internal/interfaces.js';
+
+export { RootTelemetry, createRootTelemetry } from './root-telemetry.js';
+export type {
+  RootTelemetryOptions,
+  TelemetryEventOperations,
+  TelemetrySpanOperations,
+  TelemetrySpan,
+  TelemetryMeasurementOperations,
+  RootTelemetryTransports,
+} from './root-telemetry.js';

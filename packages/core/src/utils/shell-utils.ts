@@ -33,7 +33,6 @@
 
 import type { AnyToolInvocation } from '../index.js';
 import type { ShellReplacementMode } from '../config/configTypes.js';
-import { normalizeShellReplacement } from '../config/config.js';
 import { quote } from 'shell-quote';
 import { isWindows } from './runtime.js';
 import { doesToolInvocationMatch } from './tool-utils.js';
@@ -655,7 +654,6 @@ type PermissionCheckResult = {
 };
 
 export interface ShellPermissionConfig {
-  getEphemeralSetting(key: string): unknown;
   getShellReplacement(): ShellReplacementMode;
   getExcludeTools(): string[] | undefined;
   getCoreTools(): string[] | undefined;
@@ -664,14 +662,7 @@ export interface ShellPermissionConfig {
 function resolveShellReplacementMode(
   config: ShellPermissionConfig,
 ): 'allowlist' | 'all' | 'none' {
-  const ephemeralValue = config.getEphemeralSetting('shell-replacement') as
-    | 'allowlist'
-    | 'all'
-    | 'none'
-    | boolean
-    | undefined;
-  const configValue = config.getShellReplacement();
-  return normalizeShellReplacement(ephemeralValue ?? configValue);
+  return config.getShellReplacement();
 }
 
 function hasHeredocOperator(command: string): boolean {
@@ -1057,10 +1048,8 @@ export function checkCommandPermissions(
 
   // Debug logging when VERBOSE is set
   if (process.env.VERBOSE === 'true') {
-    const ephemeralValue = config.getEphemeralSetting('shell-replacement');
     const configValue = config.getShellReplacement();
     debugLogger.log('[SHELL-UTILS] Shell replacement check:', {
-      ephemeralValue,
       configValue,
       shellReplacementMode,
       language,

@@ -36,6 +36,7 @@ export const DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES = 100;
 // Helper function to create a mock MessageBus
 export function createMockMessageBus() {
   return {
+    evaluate: vi.fn().mockReturnValue(PolicyDecision.ALLOW),
     subscribe: vi.fn().mockReturnValue(() => {}),
     publish: vi.fn(),
     respondToConfirmation: vi.fn(),

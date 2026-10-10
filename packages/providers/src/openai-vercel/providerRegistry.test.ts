@@ -54,9 +54,7 @@ describe('OpenAIVercelProvider Registry Integration', () => {
 
     // Register OpenAIVercelProvider (simulating what CLI does)
     providerManager.registerProvider(
-      new OpenAIVercelProvider('test-api-key', undefined, {
-        settingsService,
-      }),
+      new OpenAIVercelProvider('test-api-key', undefined, {}),
     );
   });
 

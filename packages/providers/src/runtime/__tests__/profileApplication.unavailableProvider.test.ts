@@ -1,3 +1,6 @@
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { assembleModelSelection } from '../providerMutations.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -12,6 +15,7 @@
  * and every subsequent prompt was swallowed with no error.
  */
 
+import type { ProviderSwitcher } from '../index.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 import {
@@ -23,17 +27,17 @@ import {
   clearActiveModelParamMock,
   getActiveModelParamsMock,
   setEphemeralSettingMock,
-  getCliRuntimeServicesMock,
   getActiveProviderOrThrowMock,
   isCliStatelessProviderModeEnabledMock,
-  isCliRuntimeStatelessReadyMock,
   createProviderKeyStorageMock,
   providerManagerStub,
+  configStub,
+  mockProfileManager,
   resetProfileApplicationStubs,
   restoreGcpEnvVars,
 } from './profileApplicationTestSetup.js';
 
-void vi.mock('../runtimeSettings.js', () => ({
+void vi.mock('../index.js', () => ({
   switchActiveProvider: switchActiveProviderMock,
   setActiveModel: setActiveModelMock,
   updateActiveProviderBaseUrl: updateActiveProviderBaseUrlMock,
@@ -43,15 +47,45 @@ void vi.mock('../runtimeSettings.js', () => ({
   getActiveModelParams: getActiveModelParamsMock,
   setEphemeralSetting: setEphemeralSettingMock,
   createProviderKeyStorage: createProviderKeyStorageMock,
-  getCliRuntimeServices: getCliRuntimeServicesMock,
+
   getActiveProviderOrThrow: getActiveProviderOrThrowMock,
   isCliStatelessProviderModeEnabled: isCliStatelessProviderModeEnabledMock,
-  isCliRuntimeStatelessReady: isCliRuntimeStatelessReadyMock,
 }));
 
-const { applyProfileWithGuards, selectAvailableProvider } = await import(
+const { applyProfileCascade, selectAvailableProvider } = await import(
   '../profileApplication.js'
 );
+
+async function applyProfileForTest(
+  profile: Profile,
+  options: Parameters<typeof applyProfileCascade>[1],
+  switchProvider: ProviderSwitcher,
+): ReturnType<typeof applyProfileCascade> {
+  const settings = new SettingsService();
+  const owner = new SessionSettingsOwner(settings);
+  try {
+    return await applyProfileCascade(
+      profile,
+      options,
+      configStub as never,
+      settings,
+      providerManagerStub as never,
+      mockProfileManager as never,
+      switchProvider,
+      assembleModelSelection(owner),
+      {
+        readEndpoint: () => owner.readSelectedEndpoint(),
+        applyParameter: (key, value) => owner.writeUserParameter(key, value),
+      },
+    );
+  } finally {
+    await owner.dispose();
+  }
+}
+
+const unreachableSwitch: ProviderSwitcher = async () => {
+  throw new Error('Provider switch must not run in this test');
+};
 
 describe('selectAvailableProvider (issue #2479)', () => {
   it('throws when the requested provider is not registered', () => {
@@ -106,7 +140,7 @@ describe('selectAvailableProvider (issue #2479)', () => {
   });
 });
 
-describe('applyProfileWithGuards with unavailable provider (issue #2479)', () => {
+describe('applyProfileCascade with unavailable provider (issue #2479)', () => {
   let savedGcpProject: string | undefined;
   let savedGcpLocation: string | undefined;
 
@@ -125,15 +159,16 @@ describe('applyProfileWithGuards with unavailable provider (issue #2479)', () =>
     // Exact corruption from the field: a runtime snapshot of an active
     // load-balancer session saved as a standard profile. 'load-balancer'
     // is a virtual provider name that is never registered at startup.
+    const corruptEphemeralSettings = {
+      'context-limit': 200000,
+      maxOutputTokens: 60000,
+    };
     const corruptProfile: Profile = {
       version: 1,
       provider: 'load-balancer',
       model: 'gemini-2.5-pro',
       modelParams: {},
-      ephemeralSettings: {
-        'context-limit': 200000,
-        maxOutputTokens: 60000,
-      },
+      ephemeralSettings: corruptEphemeralSettings,
     };
 
     providerManagerStub.available = ['gemini', 'openai', 'anthropic'];
@@ -144,7 +179,11 @@ describe('applyProfileWithGuards with unavailable provider (issue #2479)', () =>
     ]);
 
     await expect(
-      applyProfileWithGuards(corruptProfile, { profileName: 'zai' }),
+      applyProfileForTest(
+        corruptProfile,
+        { profileName: 'zai' },
+        unreachableSwitch,
+      ),
     ).rejects.toThrow(/Provider 'load-balancer' is not available/);
 
     // The session must not have been mutated: no provider switch happened.
@@ -167,7 +206,11 @@ describe('applyProfileWithGuards with unavailable provider (issue #2479)', () =>
     ]);
 
     await expect(
-      applyProfileWithGuards(profile, { profileName: 'broken' }),
+      applyProfileForTest(
+        profile,
+        { profileName: 'broken' },
+        unreachableSwitch,
+      ),
     ).rejects.toThrow(/Provider 'not-a-real-provider' is not available/);
 
     expect(setEphemeralSettingMock).not.toHaveBeenCalled();

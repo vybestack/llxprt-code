@@ -4,7 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeEach, describe, expect, it, vi } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { installDefinitionRuntimeFixture } from '../../__tests__/definition-runtime-fixture.js';
+const definitionFixture = installDefinitionRuntimeFixture();
 import { profileCommand } from './profileCommand.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import type { CommandContext } from './types.js';
@@ -17,7 +19,7 @@ const runtimeMocks = {
   listSavedProfiles: vi.fn(),
   setDefaultProfileName: vi.fn(),
   getActiveProfileName: vi.fn(),
-  getActiveProviderStatus: vi.fn(),
+  providerStatus: vi.fn(),
   saveLoadBalancerProfile: vi.fn(),
   getEphemeralSettings: vi.fn(),
 };
@@ -35,10 +37,6 @@ const tokenStoreMocks = {
   listBuckets: vi.fn(),
 };
 
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  getRuntimeApi: () => runtimeMocks,
-}));
-
 const actual = {
   ...(await import('@vybestack/llxprt-code-providers/auth.js')),
 };
@@ -50,11 +48,30 @@ void vi.mock('@vybestack/llxprt-code-providers/auth.js', () => ({
 describe('profileCommand', () => {
   let context: CommandContext;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    const definitions = definitionFixture();
+    for (const name of ['alpha', 'beta'])
+      await definitions.profileWrites.saveProfile(name, {
+        version: 1,
+        provider: 'gemini',
+        model: 'fixture',
+        modelParams: {},
+        ephemeralSettings: {},
+      });
     context = createMockCommandContext({
+      runtimeApi: runtimeMocks,
       services: {
-        agent: { setProvider: agentMocks.setProvider },
+        agent: {
+          workspace: definitions,
+          setProvider: agentMocks.setProvider,
+          profiles: { load: runtimeMocks.loadProfileByName },
+          saveProfileSnapshot: runtimeMocks.saveProfileSnapshot,
+          deleteProfileByName: runtimeMocks.deleteProfileByName,
+          setDefaultProfileName: runtimeMocks.setDefaultProfileName,
+          getProvider: () => 'gemini',
+          sessionClient: { publishTools: async () => {} },
+        },
       },
     });
     runtimeMocks.listSavedProfiles.mockResolvedValue(['alpha', 'beta']);
@@ -64,12 +81,14 @@ describe('profileCommand', () => {
       nextProvider: 'openai',
       infoMessages: [],
     });
-    runtimeMocks.getActiveProviderStatus.mockReturnValue({
+    runtimeMocks.providerStatus.mockReturnValue({
       providerName: 'gemini',
       modelName: 'gemini-1.5-pro',
     });
     tokenStoreMocks.listBuckets.mockResolvedValue(['bucket-a', 'bucket-b']);
   });
+
+  afterEach(() => vi.restoreAllMocks());
 
   describe('save subcommand', () => {
     const save = profileCommand.subCommands!.find(
@@ -159,7 +178,7 @@ describe('profileCommand', () => {
 
       const result = await load.action!(context, 'demo');
       expect(runtimeMocks.loadProfileByName).toHaveBeenCalledWith('demo');
-      expect(agentMocks.setProvider).toHaveBeenCalledWith('openai', 'gpt-4');
+      expect(agentMocks.setProvider).not.toHaveBeenCalled();
       expect(result?.type).toBe('message');
       expect(result).toBeDefined();
       expect((result as { content: string }).content).toContain('message one');
@@ -169,18 +188,13 @@ describe('profileCommand', () => {
     });
 
     it('refreshes Gemini tools after profile load', async () => {
-      const setToolsSpy = vi.fn();
-      const providerManagerMock = {
-        setActiveProvider: vi.fn(),
-        getActiveProvider: vi.fn().mockReturnValue({ name: 'openai' }),
-      };
+      const setToolsSpy = vi.fn(async () => {});
 
       const contextWithConfig = createMockCommandContext({
         services: {
-          config: {
-            getAgentClient: () => ({ setTools: setToolsSpy }),
-            getProviderManager: () => providerManagerMock,
-            setProvider: vi.fn(),
+          agent: {
+            ...context.services.agent,
+            sessionClient: { publishTools: setToolsSpy },
           },
         },
       });
@@ -195,7 +209,7 @@ describe('profileCommand', () => {
       expect(setToolsSpy).toHaveBeenCalled();
     });
 
-    it('surfaces a user-visible warning when agent is null but providerName is set (#2374 finding 7)', async () => {
+    it('rejects a missing agent before loading or switching any provider', async () => {
       const contextWithoutAgent = createMockCommandContext({
         services: {
           agent: null,
@@ -212,8 +226,9 @@ describe('profileCommand', () => {
 
       expect(result?.type).toBe('message');
       const content = (result as { content: string }).content;
-      expect(content).toContain('openai');
+      expect(result).toMatchObject({ messageType: 'error' });
       expect(content).toMatch(/unavailable|restart/i);
+      expect(runtimeMocks.loadProfileByName).not.toHaveBeenCalled();
       // The agent facade was never available, so setProvider was never called.
       expect(agentMocks.setProvider).not.toHaveBeenCalled();
     });

@@ -8,7 +8,8 @@ import { useCallback, useState } from 'react';
 import { MessageType } from '../types.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 import { type RecordingIntegration } from '@vybestack/llxprt-code-core';
-import { NO_ACTIVE_PROVIDER_ERROR_MESSAGE } from '@vybestack/llxprt-code-providers/runtime.js';
+import type { Agent } from '@vybestack/llxprt-code-agents';
+import { NO_ACTIVE_PROVIDER_ERROR_MESSAGE } from '@vybestack/llxprt-code-providers/runtime/providerReadOperations.js';
 import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
 
 interface UseProviderDialogParams {
@@ -19,6 +20,8 @@ interface UseProviderDialogParams {
   }) => void;
   dialogs: DialogOpeners;
   recordingIntegration?: RecordingIntegration;
+  recordingOwner?: 'agent' | 'raw';
+  agent?: Agent;
 }
 
 function addProviderError(
@@ -65,6 +68,8 @@ export const useProviderDialog = ({
   addMessage,
   dialogs,
   recordingIntegration,
+  recordingOwner,
+  agent,
 }: UseProviderDialogParams) => {
   const runtime = useRuntimeApi();
   const [providers, setProviders] = useState<string[]>([]);
@@ -95,10 +100,20 @@ export const useProviderDialog = ({
          * @pseudocode:cli-runtime.md line 9
          */
         const result = await runtime.setProvider(providerName);
-        recordingIntegration?.recordProviderSwitch(
-          result.nextProvider,
-          result.defaultModel ?? runtime.getActiveModelName(),
-        );
+        const model = result.defaultModel ?? runtime.getActiveModelName();
+        if (recordingOwner === 'agent') {
+          if (!agent) throw new Error('Session agent is unavailable');
+          await agent.session.recordRecordingEvent({
+            type: 'provider_switch',
+            provider: result.nextProvider,
+            model,
+          });
+        } else {
+          recordingIntegration?.recordProviderSwitch(
+            result.nextProvider,
+            model,
+          );
+        }
         notifyProviderSwitch({
           addMessage,
           prevProvider: prev,
@@ -111,7 +126,7 @@ export const useProviderDialog = ({
       }
       dialogs.provider.close();
     },
-    [addMessage, dialogs, runtime, recordingIntegration],
+    [addMessage, dialogs, runtime, recordingIntegration, recordingOwner, agent],
   );
 
   return {

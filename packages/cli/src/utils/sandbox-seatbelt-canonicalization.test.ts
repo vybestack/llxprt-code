@@ -60,11 +60,12 @@ describe('#3475 seatbelt path canonicalization', () => {
     fs.symlinkSync(cyclic, cyclic);
     const cliConfig = {
       getTargetDir: () => tmpRoot,
-      getWorkspaceContext: () => ({ getDirectories: () => [cyclic] }),
     } as unknown as Config;
     let thrown: unknown;
     try {
-      buildSeatbeltArgs('/tmp/profile.sb', 'node-opts', cliConfig);
+      buildSeatbeltArgs('/tmp/profile.sb', 'node-opts', cliConfig, [], () => [
+        cyclic,
+      ]);
     } catch (error) {
       thrown = error;
     }
@@ -89,11 +90,12 @@ describe('#3475 seatbelt path canonicalization', () => {
     fs.symlinkSync(cyclic, cyclic);
     const cliConfig = {
       getTargetDir: () => cyclic,
-      getWorkspaceContext: () => ({ getDirectories: () => [] }),
     } as unknown as Config;
     let thrown: unknown;
     try {
-      buildSeatbeltArgs('/tmp/profile.sb', 'node-opts', cliConfig);
+      buildSeatbeltArgs('/tmp/profile.sb', 'node-opts', cliConfig, [], () => [
+        cyclic,
+      ]);
     } catch (error) {
       thrown = error;
     }

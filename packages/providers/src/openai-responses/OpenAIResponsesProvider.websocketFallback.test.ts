@@ -88,8 +88,9 @@ function buildOptions(
     config: createRuntimeConfigStub(settings),
   });
   const invocation = createRuntimeInvocationContext({
-    runtime,
-    settings,
+    runtimeId: runtime.runtimeId,
+    runtimeMetadata: runtime.metadata,
+
     providerName: provider.name,
     ephemeralsSnapshot: { retries: 1, retrywait: 1 },
   });

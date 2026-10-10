@@ -19,7 +19,6 @@ import { describe, it, expect } from 'bun:test';
 // Import from auth package main entry using canonical specifier
 import {
   AuthPrecedenceResolver,
-  flushRuntimeAuthScope,
   KeyringTokenStore,
   CodexDeviceFlow,
   AnthropicDeviceFlow,
@@ -35,9 +34,6 @@ import {
   encodeFrame,
   FrameDecoder,
   resolveProfileId,
-  buildCacheKey,
-  ensureRuntimeState,
-  runtimeScopedStates,
 } from '../index.js';
 
 import type {
@@ -45,8 +41,6 @@ import type {
   ISettingsService,
   IDebugLogger,
   IProviderKeyStorage,
-  IProviderRuntimeContext,
-  GetActiveRuntimeContext,
   OAuthToken,
   AuthPrecedenceConfig,
   OAuthManager,
@@ -90,23 +84,6 @@ describe('Auth package public export tests', () => {
       expect(typeof resolver.hasNonOAuthAuthentication).toBe('function');
       expect(typeof resolver.isOAuthOnlyAvailable).toBe('function');
       expect(typeof resolver.getAuthMethodName).toBe('function');
-      expect(typeof resolver.invalidateCache).toBe('function');
-      expect(typeof resolver.invalidateProviderCache).toBe('function');
-    });
-  });
-
-  describe('flushRuntimeAuthScope export', () => {
-    it('flushRuntimeAuthScope is exported from main entry', () => {
-      expect(flushRuntimeAuthScope).toBeDefined();
-      expect(typeof flushRuntimeAuthScope).toBe('function');
-    });
-
-    it('flushRuntimeAuthScope returns flush result for unknown runtime', () => {
-      const result = flushRuntimeAuthScope('nonexistent-runtime-id');
-      expect(result).toStrictEqual({
-        runtimeId: 'nonexistent-runtime-id',
-        revokedTokens: [],
-      });
     });
   });
 
@@ -174,21 +151,6 @@ describe('Auth package public export tests', () => {
       expect(resolveProfileId).toBeDefined();
       expect(typeof resolveProfileId).toBe('function');
     });
-
-    it('buildCacheKey is exported', () => {
-      expect(buildCacheKey).toBeDefined();
-      expect(typeof buildCacheKey).toBe('function');
-    });
-
-    it('ensureRuntimeState is exported', () => {
-      expect(ensureRuntimeState).toBeDefined();
-      expect(typeof ensureRuntimeState).toBe('function');
-    });
-
-    it('runtimeScopedStates is exported', () => {
-      expect(runtimeScopedStates).toBeDefined();
-      expect(runtimeScopedStates).toBeInstanceOf(Map);
-    });
   });
 
   describe('DI interface type exports', () => {
@@ -231,33 +193,6 @@ describe('Auth package public export tests', () => {
         hasKey: async () => false,
       };
       expect(_storage).toBeDefined();
-    });
-
-    it('IProviderRuntimeContext type is available', () => {
-      const _ctx: IProviderRuntimeContext = {
-        settingsService: {
-          get: () => undefined,
-          getProviderSettings: () => ({}),
-          on: () => {},
-          off: () => {},
-        },
-        runtimeId: 'test',
-        metadata: {},
-      };
-      expect(_ctx).toBeDefined();
-    });
-
-    it('GetActiveRuntimeContext type is available', () => {
-      const _fn: GetActiveRuntimeContext = () => ({
-        settingsService: {
-          get: () => undefined,
-          getProviderSettings: () => ({}),
-          on: () => {},
-          off: () => {},
-        },
-        runtimeId: 'test',
-      });
-      expect(_fn).toBeDefined();
     });
 
     it('OAuthToken type is available', () => {

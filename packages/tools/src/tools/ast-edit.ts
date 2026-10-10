@@ -24,7 +24,6 @@ import type {
   IIdeService,
   ILspService,
 } from '../interfaces/index.js';
-import { hasWorkspaceContextCap } from '../interfaces/host-capabilities.js';
 import type {
   ModifiableDeclarativeTool,
   ModifyContext,
@@ -78,10 +77,7 @@ function validateFilePathParam(
   }
 
   const pathError = validatePathWithinWorkspace(
-    hasWorkspaceContextCap(host)
-      ? (host.getWorkspaceContext().getDirectories?.() ??
-          host.getWorkspaceRoots())
-      : host.getWorkspaceRoots(),
+    host.getWorkspaceRoots(),
     params.file_path,
   );
   if (pathError) {

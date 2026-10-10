@@ -51,6 +51,7 @@ interface ReductionResult {
 
 export interface PendingContextWindowEnforcerDeps {
   historyService: HistoryService;
+  historyOrigin?: object;
   logger: DebugLogger;
   ineffectiveCompressionReductionThreshold: number;
   getContextLimits(provider?: IProvider): ContextLimits;
@@ -483,6 +484,7 @@ export class PendingContextWindowEnforcer {
     await this.deps.historyService.replaceAll(
       [...invalidateResponsesStatefulChain(newHistory)],
       this.deps.getRuntimeModel(),
+      { origin: this.deps.historyOrigin },
     );
     // Post-truncation rebuild: the prefix is already destroyed (#3070).
     this.deps.historyService.resetCacheAnchorSeq();

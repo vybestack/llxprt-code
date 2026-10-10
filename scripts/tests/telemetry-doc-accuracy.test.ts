@@ -82,9 +82,22 @@ function extractLlxprtCodeNames(text: string): string[] {
 }
 
 describe('telemetry doc accuracy (doc vs source)', () => {
-  it('initializeTelemetry is invoked from the config constructor when enabled', () => {
+  it('session assembly selects private telemetry before consumers and Config does not initialize it', () => {
     const configCtor = readSrc('packages/core/src/config/configConstructor.ts');
-    expect(configCtor).toContain('initializeTelemetry');
+    const assembly = readSrc(
+      'packages/providers/src/runtime/runtimeContextFactory.ts',
+    );
+    const owner = readSrc(
+      'packages/core/src/session/session-settings-owner.ts',
+    );
+    const doc = readSrc('docs/telemetry.md');
+    expect(configCtor).not.toContain('initializeTelemetry');
+    expect(assembly).toContain(
+      'settingsOwner.bindTelemetry(options.config, options.borrowedTelemetry)',
+    );
+    expect(owner).toContain('RootTelemetry.prepare');
+    expect(doc).toMatch(/private.*root|root.*private/i);
+    expect(doc).toMatch(/borrow.*child|child.*borrow/i);
   });
 
   it('active dependencies and source contain no remote telemetry SDK or exporter', () => {
@@ -126,8 +139,8 @@ describe('telemetry doc accuracy (doc vs source)', () => {
     }
   });
 
-  it('sdk.ts uses File*Exporter when an outfile is set and Console*Exporter otherwise', () => {
-    const sdk = readSrc('packages/telemetry/src/telemetry/sdk.ts');
+  it('private root transports use file exporters with an outfile and console exporters otherwise', () => {
+    const sdk = readSrc('packages/telemetry/src/telemetry/root-telemetry.ts');
     expect(sdk).toContain('FileSpanExporter');
     expect(sdk).toContain('FileLogExporter');
     expect(sdk).toContain('FileMetricExporter');
@@ -136,12 +149,17 @@ describe('telemetry doc accuracy (doc vs source)', () => {
     expect(sdk).toContain('ConsoleMetricExporter');
   });
 
-  it('sdk.ts creates exactly one HTTP instrumentation and no custom spans', () => {
+  it('private providers do not register global HTTP instrumentation and spans use explicit root context', () => {
+    const root = readSrc('packages/telemetry/src/telemetry/root-telemetry.ts');
     const sdk = readSrc('packages/telemetry/src/telemetry/sdk.ts');
-    const constructions = sdk.match(/new HttpInstrumentation\s*\(/g) ?? [];
-    expect(constructions).toHaveLength(1);
-    expect(sdk).not.toMatch(/new \w+Instrumentation\s*\([^)]/);
+    expect(root).not.toMatch(/new \w+Instrumentation\s*\(/);
+    expect(root).not.toMatch(/\.register\s*\(/);
+    expect(root).toContain('tracer.startSpan');
+    expect(root).toContain('ROOT_CONTEXT');
     expect(sdk).not.toMatch(/\bstartSpan\s*\(/);
+    expect(readSrc('docs/telemetry.md')).toMatch(
+      /no.*global.*HTTP instrumentation/i,
+    );
   });
 
   it('docs/telemetry.md states the telemetry.enabled default is false', () => {

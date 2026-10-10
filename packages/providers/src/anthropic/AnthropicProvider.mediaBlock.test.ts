@@ -198,7 +198,7 @@ describe('AnthropicProvider MediaBlock support', () => {
     ];
 
     const generator = provider.generateChatCompletion(
-      buildCallOptions(messages),
+      buildCallOptions(messages, { resolved: { streaming: true } }),
     );
     for await (const _chunk of generator) {
       // consume
@@ -270,7 +270,7 @@ describe('AnthropicProvider MediaBlock support', () => {
     ];
 
     const generator = provider.generateChatCompletion(
-      buildCallOptions(messages),
+      buildCallOptions(messages, { resolved: { streaming: true } }),
     );
     for await (const _chunk of generator) {
       // consume
@@ -328,7 +328,7 @@ describe('AnthropicProvider MediaBlock support', () => {
     ];
 
     const generator = provider.generateChatCompletion(
-      buildCallOptions(messages),
+      buildCallOptions(messages, { resolved: { streaming: true } }),
     );
     for await (const _chunk of generator) {
       // consume
@@ -375,7 +375,7 @@ describe('AnthropicProvider MediaBlock support', () => {
     ];
 
     const generator = provider.generateChatCompletion(
-      buildCallOptions(messages),
+      buildCallOptions(messages, { resolved: { streaming: true } }),
     );
     for await (const _chunk of generator) {
       // consume
@@ -442,7 +442,7 @@ describe('AnthropicProvider MediaBlock support', () => {
     ];
 
     const generator = provider.generateChatCompletion(
-      buildCallOptions(messages),
+      buildCallOptions(messages, { resolved: { streaming: true } }),
     );
     for await (const _chunk of generator) {
       // consume
@@ -496,7 +496,7 @@ describe('AnthropicProvider MediaBlock support', () => {
     ];
 
     const generator = provider.generateChatCompletion(
-      buildCallOptions(messages),
+      buildCallOptions(messages, { resolved: { streaming: true } }),
     );
     for await (const _chunk of generator) {
       // consume
@@ -537,7 +537,7 @@ describe('AnthropicProvider MediaBlock support', () => {
     ];
 
     const generator = provider.generateChatCompletion(
-      buildCallOptions(messages),
+      buildCallOptions(messages, { resolved: { streaming: true } }),
     );
     for await (const _chunk of generator) {
       // consume
@@ -602,7 +602,7 @@ describe('AnthropicProvider MediaBlock support', () => {
     ];
 
     const generator = provider.generateChatCompletion(
-      buildCallOptions(messages),
+      buildCallOptions(messages, { resolved: { streaming: true } }),
     );
     for await (const _chunk of generator) {
       // consume
@@ -657,7 +657,7 @@ describe('AnthropicProvider MediaBlock support', () => {
     ];
 
     const generator = provider.generateChatCompletion(
-      buildCallOptions(messages),
+      buildCallOptions(messages, { resolved: { streaming: true } }),
     );
     for await (const _chunk of generator) {
       // consume
@@ -710,7 +710,7 @@ describe('AnthropicProvider MediaBlock support', () => {
     ];
 
     const generator = provider.generateChatCompletion(
-      buildCallOptions(messages),
+      buildCallOptions(messages, { resolved: { streaming: true } }),
     );
     for await (const _chunk of generator) {
       // consume

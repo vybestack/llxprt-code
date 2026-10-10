@@ -132,7 +132,7 @@ export class WorkspaceContext {
    */
   isPathWithinWorkspace(pathToCheck: string): boolean {
     try {
-      const fullyResolvedPath = this.fullyResolvedPath(pathToCheck);
+      const fullyResolvedPath = this.resolvePath(pathToCheck);
 
       for (const dir of this.directories) {
         if (this.isPathWithinRoot(fullyResolvedPath, dir)) {
@@ -151,7 +151,7 @@ export class WorkspaceContext {
    * If the path does not exist, it returns the fully resolved path as it would be
    * if it did exist.
    */
-  private fullyResolvedPath(pathToCheck: string): string {
+  resolvePath(pathToCheck: string): string {
     try {
       return fs.realpathSync(pathToCheck);
     } catch (e: unknown) {

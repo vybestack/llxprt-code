@@ -1,8 +1,11 @@
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import { createSessionSettingsFixture } from './session-settings-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 
 /**
  * @plan:PLAN-20260617-COREAPI.P15
@@ -26,7 +29,9 @@ import { rebuildLoop, createLoopHolder } from '../../loop/rebuildLoop.js';
 import type { LoopHolder, RebuildLoopDeps } from '../../loop/rebuildLoop.js';
 import type { AgenticLoop } from '../../../core/agenticLoop/AgenticLoop.js';
 import type { AgenticLoopOptions } from '../../../core/agenticLoop/types.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { toConfigParameters } from '@vybestack/llxprt-code-agents';
+import { afterEach } from 'bun:test';
 
 export { createLoopHolder };
 export type { LoopHolder };
@@ -58,9 +63,8 @@ export function createRebuildLoopProbe(): RebuildLoopProbe {
   let client: AgenticLoopOptions['agentClient'] =
     {} as AgenticLoopOptions['agentClient'];
 
-  const config = {
-    isInteractive: () => false,
-  } as unknown as RebuildLoopDeps['config'];
+  const config = createInteractiveConfig(false);
+  const { settingsOwner } = createSessionSettingsFixture(config);
   const messageBus = {} as RebuildLoopDeps['messageBus'];
 
   class FakeAgenticLoop {
@@ -70,9 +74,19 @@ export function createRebuildLoopProbe(): RebuildLoopProbe {
   }
 
   const baseDeps: RebuildLoopDeps = {
+    telemetry: RootTelemetry.prepare({
+      enabled: false,
+      sessionId: 'isolated-caller-fixture',
+      maxBytes: 1024,
+      maxFiles: 1,
+    }),
     loopHolder: holder,
     resolveClient: () => client,
+    toolSelection: { getTool: () => undefined, getAllToolNames: () => [] },
     config,
+    readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+    getToolGovernance: () =>
+      settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
     messageBus,
     AgenticLoopCtor: FakeAgenticLoop as unknown as typeof AgenticLoop,
   };
@@ -94,5 +108,20 @@ export function makeClient(tag: string): AgenticLoopOptions['agentClient'] {
 
 /** Builds a minimal config fixture whose isInteractive() returns the given flag. */
 export function createInteractiveConfig(interactive: boolean): Config {
-  return { isInteractive: () => interactive } as unknown as Config;
+  const config = new Config({
+    ...toConfigParameters({
+      provider: 'fake',
+      model: 'fake-model',
+      workingDir: process.cwd(),
+    }),
+    interactive,
+  });
+  const policyOwner = new RuntimePolicyOwner(config);
+  ownedPolicies.push(policyOwner);
+  return config;
 }
+
+const ownedPolicies: RuntimePolicyOwner[] = [];
+afterEach(async () => {
+  for (const owner of ownedPolicies.splice(0)) await owner.dispose();
+});

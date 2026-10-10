@@ -9,7 +9,6 @@ import * as fc from 'fast-check';
 import { chmod, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type {
   IContent,
   InlineMediaBlock,
@@ -127,7 +126,6 @@ describe('request-media-resolution', () => {
   function serializedProviderStructures(
     contents: IContent[],
   ): Record<string, string> {
-    const settings = { get: (_key: string): unknown => undefined };
     const anthropicOptions = {
       isOAuth: false,
       reasoningEnabled: false,
@@ -137,7 +135,12 @@ describe('request-media-resolution', () => {
     };
     return {
       chat: JSON.stringify(
-        buildMessagesWithReasoning(contents, { settings }, 'openai', undefined),
+        buildMessagesWithReasoning(
+          contents,
+          { invocation: { ephemerals: {} } },
+          'openai',
+          undefined,
+        ),
       ),
       anthropic: JSON.stringify(
         convertToAnthropicMessages(contents, anthropicOptions),
@@ -172,10 +175,9 @@ describe('request-media-resolution', () => {
         };
         const resolver = new RequestMediaResolver(store);
         const runtime = {
-          settingsService: new SettingsService(),
-          runtimeId: 'provider-parity',
-          mediaResolver: resolver,
-          requestMediaBudgetBytes: reference.normalizedBase64Length * 2,
+          requestId: 'provider-parity',
+          resolver,
+          aggregateBudgetBytes: reference.normalizedBase64Length * 2,
         };
 
         const resolved = await resolveRequestMedia(
@@ -361,10 +363,9 @@ describe('request-media-resolution', () => {
             const resolver = new RequestMediaResolver(store);
             const resolved = await resolveRequestMedia(
               {
-                settingsService: new SettingsService(),
-                runtimeId: 'provider-property-parity',
-                mediaResolver: resolver,
-                requestMediaBudgetBytes: reference.normalizedBase64Length * 2,
+                requestId: 'provider-property-parity',
+                resolver,
+                aggregateBudgetBytes: reference.normalizedBase64Length * 2,
               },
               history(decoratedReference, sample.mediaFirst),
               undefined,
@@ -404,10 +405,9 @@ describe('request-media-resolution', () => {
         });
         const resolver = new RequestMediaResolver(store);
         const runtime = {
-          settingsService: new SettingsService(),
-          runtimeId: 'provider-budget',
-          mediaResolver: resolver,
-          requestMediaBudgetBytes: reference.normalizedBase64Length - 1,
+          requestId: 'provider-budget',
+          resolver,
+          aggregateBudgetBytes: reference.normalizedBase64Length - 1,
         };
 
         const error = await resolveRequestMedia(
@@ -439,7 +439,7 @@ describe('request-media-resolution', () => {
         ];
 
         const error = await resolveRequestMedia(
-          undefined,
+          { requestId: 'provider-request' },
           contents,
           controller.signal,
         ).catch((reason: unknown) => reason);
@@ -458,7 +458,6 @@ describe('request-media-resolution', () => {
           semanticMetadata: {},
         });
         const contents = history(reference);
-        const settings = { get: (_key: string): unknown => undefined };
         const anthropicOptions = {
           isOAuth: false,
           reasoningEnabled: false,
@@ -470,7 +469,7 @@ describe('request-media-resolution', () => {
         expect(() =>
           buildMessagesWithReasoning(
             contents,
-            { settings },
+            { invocation: { ephemerals: {} } },
             'openai',
             undefined,
           ),
@@ -485,7 +484,7 @@ describe('request-media-resolution', () => {
 
       it('runs every unchanged-request cleanup once in LIFO order after a failure', async () => {
         const resolved = await resolveRequestMedia(
-          undefined,
+          { requestId: 'provider-request' },
           [{ speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] }],
           undefined,
         );
