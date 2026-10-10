@@ -8,6 +8,8 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { ProviderCuratedStreamOptions } from '@vybestack/llxprt-code-core/services/history/provider-curated-stream.js';
+import type { ProviderRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import {
   HookEventName,
   HookType,
@@ -65,15 +67,17 @@ class ObservedDiskHistory extends HistoryService {
     }
   }
 
-  override async *getCuratedForProviderStream(
-    tail: IContent[] = [],
-    signal?: AbortSignal,
+  // The source request path opens its snapshot here, not through
+  // getCuratedForProviderStream, so this is where curation reads the journal.
+  override prepareCuratedForProviderSnapshot(
+    tailContents: readonly IContent[] = [],
+    options: ProviderCuratedStreamOptions = {},
     historyOverride?: Iterable<IContent> | AsyncIterable<IContent>,
-  ): AsyncGenerator<IContent, void, unknown> {
-    yield* super.getCuratedForProviderStream(
-      tail,
-      signal,
-      historyOverride ?? this.observedRows(signal),
+  ): Promise<ProviderRequestSnapshot> {
+    return super.prepareCuratedForProviderSnapshot(
+      tailContents,
+      options,
+      historyOverride ?? this.observedRows(options.signal),
     );
   }
 }
@@ -357,7 +361,7 @@ function readHookReceipt(path: string): {
 }
 
 describe('issue854 real StreamProcessor Responses BODY demand', () => {
-  it('preserves exact BODY and estimation without predraining disk history', async () => {
+  it('preserves exact BODY and estimation without holding a journal reader across the provider call', async () => {
     const fixture = await createFixture();
     try {
       await runBodyFixture(fixture);
@@ -375,8 +379,14 @@ describe('issue854 real StreamProcessor Responses BODY demand', () => {
       expect(
         fixture.processor.getPromptEnvelopeEstimate()?.estimatedPromptTokens,
       ).toBe(await independentEstimate(fixture));
-      expect(observation.beforeBody).toBeLessThan(rowCount);
-      expect(observation.afterFirstPull).toBeLessThan(rowCount);
+      // Curation reads the journal once, before the provider call, into the
+      // request snapshot. BODY streaming then reads that snapshot, so the
+      // journal reader is closed and never touched again.
+      expect(observation.beforeBody).toBe(rowCount);
+      expect(observation.afterFirstPull).toBe(rowCount);
+      expect(fixture.history.pulled).toBe(rowCount);
+      expect(fixture.history.activeReaders).toBe(0);
+      expect(fixture.history.closedReaders).toBe(1);
     } finally {
       await fixture.dispose();
     }
