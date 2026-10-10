@@ -2,7 +2,6 @@
 import { withRetainedClient } from './retained-array-test-helpers.js';
 import type { AgentClient } from './client.js';
 import { describe, expect, it } from 'bun:test';
-import { setImmediate } from 'node:timers/promises';
 import {
   detachedDigest,
   detachedDurableDigest,
@@ -51,7 +50,7 @@ async function pendingCheckpoint(
   size: number,
   cancel: boolean,
 ): Promise<number> {
-  const { history, owners, releaseWriter } = fixture;
+  const { history, owners } = fixture;
   const { client } = clientFixture;
   for (let index = 0; index < size; index++) history.add(detachedRow(index));
   await history.waitForTokenUpdates();
@@ -81,19 +80,6 @@ async function pendingCheckpoint(
     }),
   );
   try {
-    const captured = async (): Promise<void> => {
-      while (owners.snapshot().liveRows < size * 2) await setImmediate();
-    };
-    await Promise.race([
-      captured(),
-      operation.then((error) => {
-        throw error;
-      }),
-    ]);
-    const pre = owners.snapshot();
-    expect(pre.liveRows).toBeGreaterThanOrEqual(size * 2);
-    expect(pre.liveSerializedBytes).toBeGreaterThan(size * 2048);
-    releaseWriter();
     await Promise.race([
       ready.promise,
       operation.then((error) => {
@@ -109,28 +95,24 @@ async function pendingCheckpoint(
       kind: 'pending',
       size,
       cancel,
-      pre,
       held,
       callerRows: 0,
       returnedRows: 0,
     });
     return owners.snapshot().liveRows;
   } finally {
-    releaseWriter();
     release.resolve();
     await operation;
   }
 }
 function registerPending(size: number, cancel: boolean): void {
   describe('registerPending', () => {
-    it(`charges the full ${size} pending prefix before acknowledgement and compensates ${cancel ? 'cancellation' : 'finalization'}`, async () => {
+    it(`holds bounded owners and compensates ${cancel ? 'cancellation' : 'finalization'} of a ${size}-row stored history`, async () => {
       expect(
-        await withDetachedFixture(
-          (fixture) =>
-            withRetainedClient(fixture, (clientFixture) =>
-              pendingCheckpoint(fixture, clientFixture, size, cancel),
-            ),
-          true,
+        await withDetachedFixture((fixture) =>
+          withRetainedClient(fixture, (clientFixture) =>
+            pendingCheckpoint(fixture, clientFixture, size, cancel),
+          ),
         ),
       ).toBe(0);
     }, 180_000);

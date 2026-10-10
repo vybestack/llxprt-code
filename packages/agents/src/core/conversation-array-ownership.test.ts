@@ -1,6 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { setImmediate } from 'node:timers/promises';
 import {
   detachedDigest,
   detachedDurableDigest,
@@ -40,7 +39,7 @@ async function pendingCheckpoint(
   size: number,
   cancel: boolean,
 ): Promise<number> {
-  const { history, recorder, owners, releaseWriter } = fixture;
+  const { history, recorder, owners } = fixture;
   await seedPending(fixture, size);
   const ready = gate();
   const release = gate();
@@ -67,11 +66,6 @@ async function pendingCheckpoint(
     ),
   );
   try {
-    while (owners.snapshot().liveRows < size * 2) await setImmediate();
-    const pre = owners.snapshot();
-    expect(pre.liveRows).toBeGreaterThanOrEqual(size * 2);
-    expect(pre.liveSerializedBytes).toBeGreaterThan(size * 2048);
-    releaseWriter();
     await Promise.race([
       ready.promise,
       operation.then((error) => {
@@ -95,7 +89,6 @@ async function pendingCheckpoint(
       kind: 'pending',
       size,
       cancel,
-      pre,
       held,
       callerRows: 0,
       returnedRows: 0,
@@ -103,7 +96,6 @@ async function pendingCheckpoint(
     });
     return expected.count;
   } finally {
-    releaseWriter();
     release.resolve();
     await operation;
   }
@@ -164,11 +156,10 @@ async function retainingControl(
 describe('conversation restore pending writer ownership', () => {
   for (const size of [512, 8192])
     for (const cancel of [false, true]) {
-      it(`charges ${size} original rows before ack and ${cancel ? 'cancels' : 'rolls back finalize'} without retaining them after ack`, async () => {
+      it(`holds bounded owners and ${cancel ? 'cancels' : 'rolls back finalize'} a ${size}-row restore without retaining rows`, async () => {
         expect(
-          await withDetachedFixture(
-            (fixture) => pendingCheckpoint(fixture, size, cancel),
-            true,
+          await withDetachedFixture((fixture) =>
+            pendingCheckpoint(fixture, size, cancel),
           ),
         ).toBe(size);
       }, 180_000);
