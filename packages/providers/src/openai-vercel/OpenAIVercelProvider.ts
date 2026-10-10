@@ -51,6 +51,11 @@ import { getToolIdStrategy } from '@vybestack/llxprt-code-tools/ToolIdStrategy.j
 import { isQwenBaseURL } from '../utils/qwenEndpoint.js';
 import { isAbortSignal } from '../utils/abortSignal.js';
 import { acquireRequestScopedBody } from '../utils/requestScopedBody.js';
+import { readsRequestRowsAtTransport } from '../BaseProviderNormalization.js';
+import {
+  dropTransportRows,
+  openTransportRowsMedia,
+} from '../utils/transportRows.js';
 import { shouldRetryOnStatus } from '../utils/retryStrategy.js';
 import { filterThinkingForContext } from '../reasoning/reasoningUtils.js';
 import { resolveToolFormat } from '../utils/toolFormatDetection.js';
@@ -165,6 +170,11 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     return false;
   }
 
+  /** The transport reads `requestRows` itself (issue #854 WP10). */
+  protected override ownsRequestRowsTransport(): boolean {
+    return true;
+  }
+
   private convertToModelMessages(
     contents: IContent[],
     options?: { includeReasoningInContext?: boolean; resolvedModel?: string },
@@ -191,11 +201,13 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     options: NormalizedGenerateChatOptions,
   ): Promise<VercelMediaPreparation> {
     requireAssembledSystemInstruction(options.systemInstruction);
-    const mediaRequest = await resolveRequestMedia(
-      options.runtime,
-      options.contents,
-      options.invocation.signal,
-    );
+    const mediaRequest = readsRequestRowsAtTransport(options)
+      ? await openTransportRowsMedia(options)
+      : await resolveRequestMedia(
+          options.runtime,
+          options.contents,
+          options.invocation.signal,
+        );
     try {
       return {
         mediaRequest,
@@ -262,6 +274,10 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
       materializedMessages.push(
         ...this.convertRequestContents(effectiveOptions, modelId, rs),
       );
+      // The SDK messages are the one body this request needs; the transient
+      // neutral rows go away now that they exist (issue #854 WP10).
+      if (readsRequestRowsAtTransport(effectiveOptions))
+        dropTransportRows(mediaRequest);
 
       const formattedTools = convertToolsToOpenAIVercel(tools);
       logChatPayload(logger, materializedMessages, formattedTools ?? undefined);
