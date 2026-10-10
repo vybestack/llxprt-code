@@ -8,11 +8,8 @@ import type { ModelGenerationSettings } from '@vybestack/llxprt-code-core/llm-ty
 import type { ProviderContentEnvelope } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import {
-  publishProviderFallbackCandidate,
-  ProviderFallbackInvariantError,
-  type ProviderFallbackCandidate,
-} from './providerFallbackCandidate.js';
+import type { ProviderFallbackCandidate } from './providerFallbackCandidate.js';
+import { executeFallbackTransaction } from './providerFallbackTransaction.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type {
   RuntimeProvider as IProvider,
@@ -89,12 +86,6 @@ interface OverflowReductionResult {
   compressionFailure?: Error;
   truncationFailure?: Error;
   truncationApplied: boolean;
-}
-
-interface FallbackStateSnapshot {
-  readonly restoreHistory: () => Promise<void>;
-  readonly cacheAnchorSeq: number;
-  readonly promptTokenBaseline: number | null;
 }
 
 export class ProviderContentEnforcer {
@@ -617,7 +608,16 @@ export class ProviderContentEnforcer {
     compressionFailure: Error | undefined,
     targetTokenCount: number | undefined,
   ): Promise<OverflowReductionResult> {
-    const fallbackOutcome = await this.executeFallbackTruncation(
+    const fallbackOutcome = await executeFallbackTransaction(
+      {
+        historyService: this.deps.historyService,
+        logger: this.deps.logger,
+        model: this.deps.runtimeContext.state.model,
+        performFallbackCompression: this.deps.performFallbackCompression,
+        getPromptTokenBaseline: this.deps.getPromptTokenBaseline,
+        resetPromptTokenBaseline: this.deps.resetPromptTokenBaseline,
+        restorePromptTokenBaseline: this.deps.restorePromptTokenBaseline,
+      },
       promptId,
       targetTokenCount,
     );
@@ -641,117 +641,6 @@ export class ProviderContentEnforcer {
       result.truncationFailure = fallbackOutcome.truncationFailure;
     }
     return result;
-  }
-
-  private async restoreFallbackState(
-    snapshot: FallbackStateSnapshot,
-  ): Promise<void> {
-    await snapshot.restoreHistory();
-    if (snapshot.cacheAnchorSeq === 0) {
-      this.deps.historyService.resetCacheAnchorSeq();
-    } else {
-      this.deps.historyService.setCacheAnchorSeq(snapshot.cacheAnchorSeq);
-    }
-    this.deps.restorePromptTokenBaseline(snapshot.promptTokenBaseline);
-  }
-
-  private async restoreRejectedFallback(
-    snapshot: FallbackStateSnapshot,
-    fallbackError: unknown,
-  ): Promise<Error> {
-    const failure = this.normalizeError(fallbackError);
-    try {
-      await this.restoreFallbackState(snapshot);
-      return failure;
-    } catch (rollbackError) {
-      throw new AggregateError(
-        [failure, this.normalizeError(rollbackError)],
-        'Provider truncation fallback failed and its state rollback also failed',
-      );
-    }
-  }
-
-  /**
-   * Executes fallback truncation and commits its candidate history atomically.
-   * The existing history remains untouched unless the complete candidate is
-   * accepted and its token accounting succeeds.
-   */
-  private async executeFallbackTruncation(
-    promptId: string,
-    targetTokenCount: number | undefined,
-  ): Promise<{
-    truncationApplied: boolean;
-    truncationFailure?: Error;
-  }> {
-    const cacheAnchorSeq = this.deps.historyService.getCacheAnchorSeq();
-    const promptTokenBaseline = this.deps.getPromptTokenBaseline();
-    return this.deps.historyService.detachedValues.withRollbackCheckpoint(
-      (restoreHistory) =>
-        this.executeCapturedFallback(
-          { restoreHistory, cacheAnchorSeq, promptTokenBaseline },
-          promptId,
-          targetTokenCount,
-        ),
-    );
-  }
-
-  private async executeCapturedFallback(
-    snapshot: FallbackStateSnapshot,
-    promptId: string,
-    targetTokenCount: number | undefined,
-  ): Promise<{
-    truncationApplied: boolean;
-    truncationFailure?: Error;
-  }> {
-    let truncationFailure: Error | undefined;
-    let fallbackSucceeded = false;
-    const candidate = { installed: false, committed: false };
-    try {
-      fallbackSucceeded = await this.deps.performFallbackCompression(
-        promptId,
-        async (rows) => {
-          if (candidate.installed)
-            throw new ProviderFallbackInvariantError(
-              'Fallback candidate may only be installed once',
-            );
-          await publishProviderFallbackCandidate(
-            this.deps.historyService,
-            rows,
-            this.deps.runtimeContext.state.model,
-          );
-          candidate.installed = true;
-          this.deps.historyService.resetCacheAnchorSeq();
-          this.deps.resetPromptTokenBaseline();
-          candidate.committed = true;
-        },
-        targetTokenCount,
-      );
-      if (!fallbackSucceeded && candidate.installed) {
-        throw new Error(
-          'Fallback compression rejected after installing candidate history',
-        );
-      }
-      if (fallbackSucceeded && !candidate.committed)
-        throw new ProviderFallbackInvariantError(
-          'Fallback compression succeeded without providing candidate history',
-        );
-    } catch (fallbackError) {
-      truncationFailure = candidate.installed
-        ? await this.restoreRejectedFallback(snapshot, fallbackError)
-        : this.normalizeError(fallbackError);
-      candidate.committed = false;
-      this.deps.logger.warn(
-        () =>
-          '[CompressionHandler] Provider truncation fallback rejected during hard-limit enforcement',
-        truncationFailure,
-      );
-      if (fallbackError instanceof ProviderFallbackInvariantError)
-        throw truncationFailure;
-    }
-    return {
-      truncationApplied: fallbackSucceeded && candidate.committed,
-      truncationFailure,
-    };
   }
 
   private projectSuccess(

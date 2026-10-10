@@ -8,6 +8,7 @@ import { HookEventName } from '@vybestack/llxprt-code-core/hooks/types.js';
 import type { RuntimeProviderToolset } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import { sourceBeforeModelHook } from './source-before-model-hook.js';
 import type { CompressionHandler } from '../compression/CompressionHandler.js';
+import type { SourcePendingRows } from '../compression/source-candidate.js';
 import {
   enforceAndStreamSourcePromptEnvelopeRetries,
   type PreparedSourcePromptEnvelopeSend,
@@ -116,14 +117,20 @@ export async function streamDiskSource(
     signal: input.signal,
   });
   let recomposedPending: IContent[] | undefined;
+  const pending: SourcePendingRows = {
+    read: async () =>
+      (recomposedPending ??= await rawPendingInput(
+        source,
+        preparedPending,
+        input.signal,
+      )),
+    replace: (rows) => {
+      recomposedPending = rows;
+    },
+  };
   const reopen = async (): Promise<PendingAwareRequestSelection> => {
-    recomposedPending ??= await rawPendingInput(
-      source,
-      preparedPending,
-      input.signal,
-    );
     const rebuilt = await input.history.prepareCuratedForProviderSnapshot(
-      recomposedPending,
+      await pending.read(),
       { signal: input.signal },
     );
     return pendingAwareRequestSelection(
@@ -152,6 +159,7 @@ export async function streamDiskSource(
         estimate,
         reopen,
         source.pendingSelection !== undefined,
+        pending,
       ),
     onPrepared: input.onPrepared,
     shouldRetryOnError: () => false,

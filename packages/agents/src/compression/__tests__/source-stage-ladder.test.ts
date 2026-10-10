@@ -3,6 +3,8 @@ import { describe, expect, it } from 'bun:test';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import { ProviderSourceEnforcer } from '../provider-source-enforcement.js';
 import { runSourceStages } from '../source-stage-ladder.js';
+import type { FallbackTransactionOutcome } from '../providerFallbackTransaction.js';
+import { ContextOverflowError } from '../contextOverflowError.js';
 
 const limits = {
   completionBudget: 100,
@@ -16,6 +18,11 @@ function ladder(
   measurements: number[],
   compressResults: PerformCompressionResult[],
   compressFailure?: Error,
+  hardLimit: {
+    fallback?: FallbackTransactionOutcome;
+    toolFailure?: Error;
+    replacedCount?: number;
+  } = {},
 ) {
   const stages: string[] = [];
   const queue = [...measurements];
@@ -38,6 +45,15 @@ function ladder(
       return results.shift() ?? PerformCompressionResult.NOOP;
     },
     replaceSource: async () => void stages.push('replace'),
+    fallback: async (target: number | undefined) => {
+      stages.push(`fallback:${target}`);
+      return hardLimit.fallback ?? { truncationApplied: true };
+    },
+    truncateToolResponses: async () => {
+      stages.push('tools');
+      if (hardLimit.toolFailure !== undefined) throw hardLimit.toolFailure;
+      return { replacedCount: hardLimit.replacedCount ?? 1 };
+    },
     warn: () => stages.push('warn'),
   };
   return { stages, enforcer, actions };
@@ -91,19 +107,77 @@ describe('source stage ladder order and thresholds', () => {
     expect(stages[stages.length - 1]).toBe('estimate');
   });
 
-  it('fails visibly instead of sending when the remaining ladder is unavailable', async () => {
+  it('runs deficit-exact fallback truncation after a failed compression and sends when it fits', async () => {
     const failure = new Error('compressor exploded');
     const { stages, enforcer, actions } = ladder(
-      [3400, 3400, 3400],
+      [3400, 3400, 3400, 1000],
       [],
       failure,
+    );
+    await runSourceStages(enforcer, actions, true);
+    expect(
+      stages.map((stage) => stage.replace(/^fallback:.*/, 'fallback')),
+    ).toStrictEqual([
+      'estimate',
+      'density',
+      'replace',
+      'estimate',
+      'compress',
+      'warn',
+      'replace',
+      'estimate',
+      'fallback',
+      'replace',
+      'estimate',
+    ]);
+  });
+
+  it('truncates tool responses only after fallback leaves the request over the limit', async () => {
+    const { stages, enforcer, actions } = ladder(
+      [3400, 3400, 3400, 3400, 1000],
+      [PerformCompressionResult.NOOP],
+    );
+    await runSourceStages(enforcer, actions, true);
+    expect(
+      stages.map((stage) => stage.replace(/^fallback:.*/, 'fallback')),
+    ).toStrictEqual([
+      'estimate',
+      'density',
+      'replace',
+      'estimate',
+      'compress',
+      'replace',
+      'estimate',
+      'fallback',
+      'replace',
+      'estimate',
+      'tools',
+      'replace',
+      'estimate',
+    ]);
+  });
+
+  it('returns structured overflow only after fallback and tool truncation are exhausted', async () => {
+    const toolFailure = new Error('ranking failed');
+    const { stages, enforcer, actions } = ladder(
+      [3400, 3400, 3400, 3400, 3400],
+      [PerformCompressionResult.NOOP],
+      undefined,
+      {
+        fallback: {
+          truncationApplied: false,
+          truncationFailure: new Error('fallback rejected'),
+        },
+        toolFailure,
+      },
     );
     const error = await runSourceStages(enforcer, actions, true).catch(
       (caught: unknown) => caught,
     );
-    expect((error as Error).message).toContain('fallback escalation');
-    expect((error as Error).cause).toBe(failure);
-    expect(stages).toContain('warn');
+    expect(error).toBeInstanceOf(ContextOverflowError);
+    expect((error as Error).message).toContain('fallback rejected');
+    expect((error as Error).message).toContain('ranking failed');
+    expect(stages).toContain('tools');
   });
 
   it('rejects an unrecoverable pending boundary only above the safety limit', async () => {

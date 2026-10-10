@@ -71,7 +71,16 @@ import {
   ProviderSourceEnforcer,
   type ProviderSourceLimits,
 } from './provider-source-enforcement.js';
-import { runSourceStages } from './source-stage-ladder.js';
+import {
+  runSourceStages,
+  type SourceStageActions,
+} from './source-stage-ladder.js';
+import { SourceCandidate, type SourcePendingRows } from './source-candidate.js';
+import { truncateSourceToolResponses } from './source-tool-truncation.js';
+import {
+  executeFallbackTransaction,
+  type FallbackTransactionDeps,
+} from './providerFallbackTransaction.js';
 
 const diskRunners = {
   'middle-out': runDiskMiddleOut,
@@ -469,22 +478,7 @@ export class CompressionHandler {
       restorePromptTokenBaseline: (baseline) => {
         this.lastPromptTokenCount = baseline;
       },
-      performFallbackCompression: async (
-        promptId,
-        applyResult,
-        targetTokenCount,
-      ) => {
-        this.pushSuppressDensityDirty();
-        try {
-          return await this.performProviderDiskFallback(
-            promptId,
-            applyResult,
-            targetTokenCount,
-          );
-        } finally {
-          this.popSuppressDensityDirty();
-        }
-      },
+      performFallbackCompression: this.performSuppressedFallback,
     });
   }
 
@@ -492,10 +486,83 @@ export class CompressionHandler {
     return this.createProviderContentEnforcer().sourceContextLimits(provider);
   }
 
+  private readonly performSuppressedFallback: ProviderContentEnforcementDeps['performFallbackCompression'] =
+    async (promptId, applyResult, targetTokenCount) => {
+      this.pushSuppressDensityDirty();
+      try {
+        return await this.performProviderDiskFallback(
+          promptId,
+          applyResult,
+          targetTokenCount,
+        );
+      } finally {
+        this.popSuppressDensityDirty();
+      }
+    };
+
+  private fallbackTransactionDeps(): FallbackTransactionDeps {
+    return {
+      historyService: this.historyService,
+      logger: this.logger,
+      model: this.runtimeContext.state.model,
+      performFallbackCompression: this.performSuppressedFallback,
+      getPromptTokenBaseline: () => this.lastPromptTokenCount,
+      resetPromptTokenBaseline: () => {
+        this.lastPromptTokenCount = null;
+      },
+      restorePromptTokenBaseline: (baseline) => {
+        this.lastPromptTokenCount = baseline;
+      },
+    };
+  }
+
+  private sourceStageActions<S>(
+    promptId: string,
+    candidate: SourceCandidate<S>,
+    limits: ProviderSourceLimits,
+  ): SourceStageActions {
+    return {
+      optimizeDensity: async () => {
+        await this.ensureDensityOptimized();
+        await this.historyService.waitForTokenUpdates();
+      },
+      compress: async () => {
+        const result = await this.performCompression(promptId, {
+          bypassCooldown: true,
+          trigger: 'auto',
+        });
+        await this.historyService.waitForTokenUpdates();
+        return result;
+      },
+      replaceSource: () => candidate.replace(),
+      fallback: async (historyTarget) => {
+        const outcome = await executeFallbackTransaction(
+          this.fallbackTransactionDeps(),
+          promptId,
+          historyTarget,
+        );
+        await this.historyService.waitForTokenUpdates();
+        return outcome;
+      },
+      truncateToolResponses: () =>
+        truncateSourceToolResponses({
+          historyService: this.historyService,
+          logger: this.logger,
+          model: this.runtimeContext.state.model,
+          marginAdjustedLimit: limits.marginAdjustedLimit,
+          completionBudget: limits.completionBudget,
+          candidate,
+        }),
+      warn: (message, error) => this.logger.warn(() => message, error),
+    };
+  }
+
   /**
-   * Runs the density/compression stages over disk candidates. `estimate`
-   * measures one candidate, `reopen` rebuilds the pending-aware candidate from
-   * the durable journal. The provider callback stays unmigrated and rejects.
+   * Runs the full reduction ladder over disk candidates: density, compression,
+   * ineffective-compression retry, hard-limit fallback, tool-response
+   * truncation. `estimate` measures one candidate, `reopen` rebuilds the
+   * pending-aware candidate from the durable journal and `pending`. The
+   * provider callback stays unmigrated and rejects.
    */
   async enforceProviderSource<S>(
     provider: IProvider,
@@ -504,6 +571,7 @@ export class CompressionHandler {
     estimate: (candidate: S) => Promise<number>,
     reopen: () => Promise<S>,
     pendingRecoverable: boolean,
+    pending: SourcePendingRows,
   ): Promise<S> {
     try {
       provider.setCompressionCallback?.(async () => {
@@ -512,34 +580,18 @@ export class CompressionHandler {
         );
       });
       await this.historyService.waitForTokenUpdates();
-      let current = source;
+      const candidate = new SourceCandidate(source, estimate, reopen, pending);
+      const limits = this.sourceContextLimits(provider);
       await runSourceStages(
         new ProviderSourceEnforcer({
-          limits: this.sourceContextLimits(provider),
-          estimate: () => estimate(current),
+          limits,
+          estimate: () => candidate.estimate(),
           getHistoryTokens: () => this.historyService.getTotalTokens(),
         }),
-        {
-          optimizeDensity: async () => {
-            await this.ensureDensityOptimized();
-            await this.historyService.waitForTokenUpdates();
-          },
-          compress: async () => {
-            const result = await this.performCompression(promptId, {
-              bypassCooldown: true,
-              trigger: 'auto',
-            });
-            await this.historyService.waitForTokenUpdates();
-            return result;
-          },
-          replaceSource: async () => {
-            current = await reopen();
-          },
-          warn: (message, error) => this.logger.warn(() => message, error),
-        },
+        this.sourceStageActions(promptId, candidate, limits),
         pendingRecoverable,
       );
-      return current;
+      return candidate.value;
     } catch (error) {
       this.clearProviderCompressionCallback(provider);
       throw error;
