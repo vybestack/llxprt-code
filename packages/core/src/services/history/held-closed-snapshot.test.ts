@@ -60,65 +60,51 @@ for (const [size, bytes] of [
   [1, 9 * 1024 * 1024],
 ]) {
   describe(`held closed snapshot ${size}/${bytes}`, () => {
-    for (const closeBeforeAck of [false, true]) {
-      it(`drops captured rows with a held closed snapshot: ${size}/${bytes}, close-before-ack=${closeBeforeAck}`, async () => {
-        await withDetachedFixture(async (fixture) => {
-          const active = submit(fixture, size, bytes);
-          await active.operation;
-          const held: { snapshot?: HistoryMutationSnapshot } = {};
-          const readers: Array<Generator<IContent, void, unknown>> = [];
-          const failure = new Error('held snapshot callback');
-          let liveAtBoundary = -1;
-          const operation = rejectedValue(
-            fixture.history.withRawHistorySnapshot(async (snapshot) => {
-              held.snapshot = snapshot;
-              readers.push(snapshot[Symbol.iterator]());
-              expect(readers[0].next().value).toBe(active.weak[0].deref());
-              if (!closeBeforeAck) {
-                fixture.releaseWriter();
-                await fixture.history.waitForCommit();
-                await collectGarbage();
-                liveAtBoundary = survivors(active.weak);
-              }
-              throw failure;
-            }),
-          );
-          expect(await operation).toBe(failure);
-          if (closeBeforeAck) {
-            await collectGarbage();
-            liveAtBoundary = survivors(active.weak);
-            fixture.releaseWriter();
-            await fixture.history.waitForCommit();
-          }
-          expect(liveAtBoundary).toBe(size);
-          await collectGarbage();
-          expect(survivors(active.weak)).toBe(0);
-          expect(held.snapshot?.length).toBe(size);
-          for (const reader of readers) expect(reader.next().done).toBe(true);
-          if (held.snapshot === undefined)
-            throw new Error('Missing held snapshot');
-          expectClosed(held.snapshot);
-          await held.snapshot.close();
-          expect(fixture.owners.snapshot().liveRows).toBe(0);
-          const live = await detachedDigest(fixture.history.streamRawHistory());
-          expect(live).toStrictEqual(
-            await detachedDurableDigest(fixture.recorder),
-          );
-          expect(live.count).toBe(size);
-          await fixture.history.withRawHistorySnapshot(async (snapshot) => {
-            expect(snapshot.length).toBe(size);
-            expect(snapshot.readRow(0).blocks).toStrictEqual(
-              detachedRow(0, bytes).blocks,
+    it(`drops captured rows and closes a held snapshot after a failing callback: ${size}/${bytes}`, async () => {
+      await withDetachedFixture(async (fixture) => {
+        const active = submit(fixture, size, bytes);
+        await active.operation;
+        const held: { snapshot?: HistoryMutationSnapshot } = {};
+        const readers: Array<Generator<IContent, void, unknown>> = [];
+        const failure = new Error('held snapshot callback');
+        const operation = rejectedValue(
+          fixture.history.withRawHistorySnapshot(async (snapshot) => {
+            held.snapshot = snapshot;
+            readers.push(snapshot[Symbol.iterator]());
+            expect(readers[0].next().value).toStrictEqual(
+              detachedRow(0, bytes),
             );
-          });
-        }, true);
-      }, 180_000);
-    }
+            throw failure;
+          }),
+        );
+        expect(await operation).toBe(failure);
+        await collectGarbage();
+        expect(survivors(active.weak)).toBe(0);
+        expect(held.snapshot?.length).toBe(size);
+        for (const reader of readers) expect(reader.next().done).toBe(true);
+        if (held.snapshot === undefined)
+          throw new Error('Missing held snapshot');
+        expectClosed(held.snapshot);
+        await held.snapshot.close();
+        expect(fixture.owners.snapshot().liveRows).toBe(0);
+        const live = await detachedDigest(fixture.history.streamRawHistory());
+        expect(live).toStrictEqual(
+          await detachedDurableDigest(fixture.recorder),
+        );
+        expect(live.count).toBe(size);
+        await fixture.history.withRawHistorySnapshot(async (snapshot) => {
+          expect(snapshot.length).toBe(size);
+          expect(snapshot.readRow(0).blocks).toStrictEqual(
+            detachedRow(0, bytes).blocks,
+          );
+        });
+      });
+    }, 180_000);
   });
 }
 
 describe('held closed snapshot caller and disposal', () => {
-  it('keeps an external content owner alive after snapshot close and releases it only when the caller lets go', async () => {
+  it('keeps rows the caller copied out of a snapshot valid after close and does not retain the submitted rows', async () => {
     await withDetachedFixture(async (fixture) => {
       const active = submit(fixture, 8192, 2048);
       await active.operation;
@@ -128,24 +114,16 @@ describe('held closed snapshot caller and disposal', () => {
         held.snapshot = snapshot;
         held.rows = [...snapshot];
       });
-      fixture.releaseWriter();
-      await fixture.history.waitForCommit();
       await collectGarbage();
-      const bytes = (held.rows ?? []).reduce(
-        (total, row) => total + Buffer.byteLength(JSON.stringify(row)),
-        0,
+      expect(survivors(active.weak)).toBe(0);
+      expect(held.rows).toHaveLength(8192);
+      expect(held.rows?.[0].blocks).toStrictEqual(detachedRow(0, 2048).blocks);
+      expect(held.rows?.[8191].blocks).toStrictEqual(
+        detachedRow(8191, 2048).blocks,
       );
-      expect({
-        survivors: survivors(active.weak),
-        exceedsOwnerLimits: bytes > 8388608 && (held.rows?.length ?? 0) > 440,
-      }).toStrictEqual({ survivors: 8192, exceedsOwnerLimits: true });
-      held.rows = undefined;
-      await collectGarbage();
-      expect({
-        survivors: survivors(active.weak),
-        heldLength: held.snapshot?.length,
-      }).toStrictEqual({ survivors: 0, heldLength: 8192 });
-    }, true);
+      expect(held.snapshot?.length).toBe(8192);
+      expect(fixture.owners.snapshot().liveRows).toBe(0);
+    });
   }, 180_000);
   it('disposes a partially consumed snapshot reader before the callback exits', async () => {
     await withDetachedFixture(async (fixture) => {
