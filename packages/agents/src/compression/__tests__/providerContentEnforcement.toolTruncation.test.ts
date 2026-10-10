@@ -1,13 +1,12 @@
-import { curatedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  *
- * Behavioral integration tests for the ProviderContentEnforcer last-resort
+ * Behavioral integration tests for the source-ladder last-resort
  * tool-response truncation path (issue #1321).
  *
- * These tests use the REAL ProviderContentEnforcer over a REAL HistoryService
+ * These tests drive a REAL CompressionHandler over a REAL HistoryService
  * with REAL deterministic token estimation. No projection mocks, no spy
  * shenanigans. The oversized tool responses genuinely exceed the configured
  * context limit, and truncating them genuinely brings the payload under it.
@@ -33,24 +32,13 @@ import type {
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
+import { enforceProviderSourceForTest } from './support/enforce-provider-source.js';
 import {
-  ProviderContentEnforcer,
-  type ProviderContentEnforcementDeps,
-} from '../providerContentEnforcement.js';
+  buildHandlerHarness,
+  type HandlerHarness,
+} from './support/handler-harness.js';
 import { CONTEXT_TRUNCATION_MARKER } from '../toolResultTruncator.js';
-import type { ProviderContentEnvelope } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
-
-function makeLogger(): DebugLogger {
-  return {
-    debug: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-    child: vi.fn().mockReturnThis(),
-  } as unknown as DebugLogger;
-}
 
 function buildRuntimeContext(
   historyService: HistoryService,
@@ -122,9 +110,7 @@ function makeToolResponseEntry(
   };
 }
 
-interface EnforcerHarness {
-  enforcer: ProviderContentEnforcer;
-  deps: ProviderContentEnforcementDeps;
+interface EnforcerHarness extends HandlerHarness {
   historyService: HistoryService;
   runtimeContext: AgentRuntimeContext;
 }
@@ -135,7 +121,6 @@ function buildEnforcerHarness(
     contextLimit?: number;
     generationConfig?: Record<string, unknown>;
     performCompressionResult?: PerformCompressionResult;
-    performFallbackCompressionResult?: boolean;
   } = {},
 ): EnforcerHarness {
   const historyService = new HistoryService();
@@ -143,44 +128,27 @@ function buildEnforcerHarness(
     compressionThreshold: overrides.compressionThreshold,
     contextLimit: overrides.contextLimit,
   });
-  const performCompression = vi
-    .fn()
-    .mockResolvedValue(
-      overrides.performCompressionResult ?? PerformCompressionResult.COMPRESSED,
-    );
-  const performFallbackCompression = vi
-    .fn()
-    .mockResolvedValue(overrides.performFallbackCompressionResult ?? false);
-  const ensureDensityOptimized = vi.fn().mockResolvedValue(undefined);
-  const deps: ProviderContentEnforcementDeps = {
-    historyService,
-    runtimeContext,
-    generationConfig: overrides.generationConfig ?? {},
-    providerRuntimeNullable: undefined,
-    logger: makeLogger(),
-    ensureDensityOptimized,
-    performCompression,
-    performFallbackCompression,
-    getPromptTokenBaseline: () => null,
-    resetPromptTokenBaseline: () => {},
-    restorePromptTokenBaseline: () => {},
-  };
-  return {
-    enforcer: new ProviderContentEnforcer(deps),
-    deps,
-    historyService,
-    runtimeContext,
-  };
+  const handlerHarness = buildHandlerHarness(historyService, runtimeContext, {
+    generationConfig: overrides.generationConfig,
+  });
+  handlerHarness.performCompression.mockResolvedValue(
+    overrides.performCompressionResult ?? PerformCompressionResult.COMPRESSED,
+  );
+  return { ...handlerHarness, historyService, runtimeContext };
 }
 
-function buildEnvelope(
-  contents: IContent[],
-  pendingContents: IContent[] | undefined,
-): ProviderContentEnvelope {
-  return {
-    contents,
-    ...(pendingContents !== undefined ? { pendingContents } : {}),
-  } as ProviderContentEnvelope;
+function enforce(
+  harness: EnforcerHarness,
+  pending: IContent[],
+  promptId: string,
+): Promise<IContent[]> {
+  return enforceProviderSourceForTest(
+    harness.handler,
+    harness.historyService,
+    pending,
+    promptId,
+    undefined,
+  );
 }
 
 /**
@@ -203,7 +171,6 @@ const densityFixture1_observePreservesProviderToolCallResponsePairingIDsAndNames
       contextLimit: 15000,
       generationConfig: { maxOutputTokens: 100 },
       performCompressionResult: PerformCompressionResult.FAILED,
-      performFallbackCompressionResult: false,
     });
     const { historyService } = harness;
 
@@ -214,12 +181,8 @@ const densityFixture1_observePreservesProviderToolCallResponsePairingIDsAndNames
     );
 
     const pending = textContent('human', 'pending');
-    const envelope = buildEnvelope(
-      [...curatedHistoryForTest(historyService)],
-      [pending],
-    );
 
-    const result = await harness.enforcer.enforce(envelope, 'prompt-pairing');
+    const result = await enforce(harness, [pending], 'prompt-pairing');
 
     // Every tool call in the payload must have a matching tool response.
     const toolCalls = result
@@ -265,7 +228,6 @@ const densityFixture2_observeMetadataOnlyStubDoesNotLeakOriginalPayloadContent =
       contextLimit: 15000,
       generationConfig: { maxOutputTokens: 100 },
       performCompressionResult: PerformCompressionResult.FAILED,
-      performFallbackCompressionResult: false,
     });
     const { historyService } = harness;
 
@@ -277,12 +239,8 @@ const densityFixture2_observeMetadataOnlyStubDoesNotLeakOriginalPayloadContent =
     );
 
     const pending = textContent('human', 'pending');
-    const envelope = buildEnvelope(
-      [...curatedHistoryForTest(historyService)],
-      [pending],
-    );
 
-    const result = await harness.enforcer.enforce(envelope, 'prompt-stub');
+    const result = await enforce(harness, [pending], 'prompt-stub');
 
     const allToolResponses = result
       .flatMap((c) => c.blocks)
@@ -331,7 +289,6 @@ const densityFixture3_observeTruncatesPendingToolResponseCandidatesEmptyHistoryT
       contextLimit: 15000,
       generationConfig: { maxOutputTokens: 100 },
       performCompressionResult: PerformCompressionResult.FAILED,
-      performFallbackCompressionResult: false,
     });
 
     // Empty history — oversized response is only in pending.
@@ -339,9 +296,8 @@ const densityFixture3_observeTruncatesPendingToolResponseCandidatesEmptyHistoryT
       makeToolCallEntry('call-pending', 'read_file'),
       makeToolResponseEntry('call-pending', 'read_file', 'x'.repeat(100000)),
     ];
-    const envelope = buildEnvelope([...pending], pending);
 
-    const result = await harness.enforcer.enforce(envelope, 'prompt-turn1');
+    const result = await enforce(harness, pending, 'prompt-turn1');
 
     // The pending tool response should have been truncated.
     const toolResponses = result
@@ -361,7 +317,7 @@ const densityFixture3_observeTruncatesPendingToolResponseCandidatesEmptyHistoryT
     return { result, stubbed, callIdObservation, toolNameObservation };
   };
 
-describe('ProviderContentEnforcer last-resort tool-response truncation (issue #1321)', () => {
+describe('CompressionHandler last-resort tool-response truncation (issue #1321)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -420,7 +376,6 @@ async function observeDensityCase4() {
     contextLimit: 15000,
     generationConfig: { maxOutputTokens: 100 },
     performCompressionResult: PerformCompressionResult.FAILED,
-    performFallbackCompressionResult: false,
   });
   const { historyService } = harness;
 
@@ -431,12 +386,8 @@ async function observeDensityCase4() {
   );
 
   const pending = textContent('human', 'pending');
-  const envelope = buildEnvelope(
-    [...curatedHistoryForTest(historyService)],
-    [pending],
-  );
 
-  const result = await harness.enforcer.enforce(envelope, 'prompt-1');
+  const result = await enforce(harness, [pending], 'prompt-1');
 
   expect(result).toBeDefined();
   expect(result.length).toBeGreaterThan(0);
@@ -479,7 +430,6 @@ async function observeDensityCase6() {
     contextLimit: 15000,
     generationConfig: { maxOutputTokens: 100 },
     performCompressionResult: PerformCompressionResult.FAILED,
-    performFallbackCompressionResult: false,
   });
   const { historyService } = harness;
 
@@ -494,12 +444,8 @@ async function observeDensityCase6() {
   );
 
   const pending = textContent('human', 'pending');
-  const envelope = buildEnvelope(
-    [...curatedHistoryForTest(historyService)],
-    [pending],
-  );
 
-  await harness.enforcer.enforce(envelope, 'prompt-minimal');
+  await enforce(harness, [pending], 'prompt-minimal');
 
   const rawResponses = (await collectRawHistory(historyService))
     .flatMap((e) => e.blocks)
@@ -529,7 +475,6 @@ async function observeDensityCase7() {
     contextLimit: 200,
     generationConfig: { maxOutputTokens: 10 },
     performCompressionResult: PerformCompressionResult.FAILED,
-    performFallbackCompressionResult: false,
   });
   const { historyService } = harness;
 
@@ -540,13 +485,9 @@ async function observeDensityCase7() {
   );
 
   const pending = textContent('human', 'pending');
-  const envelope = buildEnvelope(
-    [...curatedHistoryForTest(historyService)],
-    [pending],
-  );
 
   return {
-    actual: harness.enforcer.enforce(envelope, 'prompt-exhausted'),
+    actual: enforce(harness, [pending], 'prompt-exhausted'),
     expected0: /context limit/i,
   };
 }
@@ -557,7 +498,6 @@ async function observeDensityCase8() {
     contextLimit: 200,
     generationConfig: { maxOutputTokens: 10 },
     performCompressionResult: PerformCompressionResult.FAILED,
-    performFallbackCompressionResult: false,
   });
   const { historyService } = harness;
 
@@ -565,13 +505,9 @@ async function observeDensityCase8() {
   historyService.add(textContent('ai', 'answer'));
 
   const pending = textContent('human', 'pending');
-  const envelope = buildEnvelope(
-    [...curatedHistoryForTest(historyService)],
-    [pending],
-  );
 
   return {
-    actual: harness.enforcer.enforce(envelope, 'prompt-no-candidates'),
+    actual: enforce(harness, [pending], 'prompt-no-candidates'),
     expected0: /context limit/i,
   };
 }
@@ -593,7 +529,6 @@ async function observeDensityCase10() {
     contextLimit: 15000,
     generationConfig: { maxOutputTokens: 100 },
     performCompressionResult: PerformCompressionResult.FAILED,
-    performFallbackCompressionResult: false,
   });
   const { historyService } = harness;
 
@@ -604,12 +539,8 @@ async function observeDensityCase10() {
   );
 
   const pending = textContent('human', 'pending');
-  const envelope = buildEnvelope(
-    [...curatedHistoryForTest(historyService)],
-    [pending],
-  );
 
-  const result = await harness.enforcer.enforce(envelope, 'prompt-budget');
+  const result = await enforce(harness, [pending], 'prompt-budget');
 
   // marginAdjustedLimit = 15000 - 1000 (safety) = 14000.
   // After truncation the payload should be well under that.
@@ -624,7 +555,6 @@ async function observeDensityCase11() {
     contextLimit: 15000,
     generationConfig: { maxOutputTokens: 100 },
     performCompressionResult: PerformCompressionResult.FAILED,
-    performFallbackCompressionResult: false,
   });
   const { historyService } = harness;
 
@@ -638,12 +568,8 @@ async function observeDensityCase11() {
     makeToolCallEntry('call-pending', 'search'),
     makeToolResponseEntry('call-pending', 'search', 'pending result'),
   ];
-  const envelope = buildEnvelope(
-    [...curatedHistoryForTest(historyService), ...pending],
-    pending,
-  );
 
-  const result = await harness.enforcer.enforce(envelope, 'prompt-ready');
+  const result = await enforce(harness, pending, 'prompt-ready');
 
   const allText = result
     .flatMap((c) => c.blocks)

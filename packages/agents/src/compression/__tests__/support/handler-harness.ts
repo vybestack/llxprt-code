@@ -32,23 +32,29 @@ function spyPerformCompression(handler: CompressionHandler) {
 /**
  * A real CompressionHandler over a real HistoryService. Compression itself is
  * a spy (default NOOP) so tests decide what it does to the history; density
- * optimisation is a no-op and the disk fallback defaults to "not applied".
+ * optimisation is a no-op and the disk fallback defaults to "not applied"
+ * unless `realDiskFallback` keeps the handler's own TopDownTruncation fallback.
  */
 export function buildHandlerHarness(
   history: HistoryService,
   runtimeContext: AgentRuntimeContext,
+  options: {
+    realDiskFallback?: boolean;
+    generationConfig?: Record<string, unknown>;
+  } = {},
 ): HandlerHarness {
   const handler = new CompressionHandler(
     runtimeContext,
     history,
-    {},
+    options.generationConfig ?? {},
     () => ({ provider: {} as never, runtime: {} as never }),
     async () => {},
   );
   vi.spyOn(handler, 'ensureDensityOptimized').mockResolvedValue(undefined);
   const performCompression = spyPerformCompression(handler);
   const internals = handler as unknown as HandlerInternals;
-  internals.performProviderDiskFallback = async () => false;
+  if (options.realDiskFallback !== true)
+    internals.performProviderDiskFallback = async () => false;
   return {
     handler,
     performCompression,

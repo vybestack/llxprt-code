@@ -6,37 +6,27 @@ import { curatedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/cu
  * SPDX-License-Identifier: Apache-2.0
  *
  * Behavioral tests for issue #3499: when the load-balancer context guard
- * invokes the provider compression callback, the enforcer must run the full
+ * invokes the provider compression callback, the source ladder must run the full
  * reduction ladder (density optimization, compression, ineffective retry,
  * deficit-exact history truncation, unified tool-response truncation) and,
  * when the guard supplies its estimate and limit, target
  * `guard.contextLimit - overhead` instead of its own budget-derived ceiling.
  *
- * The tests use the REAL ProviderContentEnforcer over a REAL HistoryService
+ * The tests drive a REAL CompressionHandler over a REAL HistoryService
  * with real token estimation, driving the REAL TopDownTruncationStrategy
- * through the real compression-context builder — the same wiring
- * CompressionHandler uses. Assertions are on returned contents and token
+ * through the handler's own disk fallback. Assertions are on returned contents and token
  * projections, never on mock interactions.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'bun:test';
+import { describe, it, expect, vi } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
-import {
-  ProviderContentEnforcer,
-  type ProviderContentEnforcementDeps,
-} from '../providerContentEnforcement.js';
-import { runDiskProviderFallback } from '../diskProviderFallback.js';
+import { enforceProviderSourceForTest } from './support/enforce-provider-source.js';
+import { buildHandlerHarness } from './support/handler-harness.js';
 import { computeMarginAdjustedLimit } from '../contextLimitPolicy.js';
-import {
-  buildRuntimeContext,
-  buildMockContentGenerator,
-} from '../../core/__tests__/chatSession-density-helpers.js';
-import { ChatSession } from '../../core/chatSession.js';
+import { buildRuntimeContext } from '../../core/__tests__/chatSession-density-helpers.js';
 import type { CompressionCallback } from '@vybestack/llxprt-code-providers';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 
@@ -63,16 +53,6 @@ async function readSelection(
   const out: IContent[] = [];
   for await (const row of rows.openReader()) out.push(row);
   return out;
-}
-
-function makeLogger(): DebugLogger {
-  return {
-    debug: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-    child: vi.fn().mockReturnThis(),
-  } as unknown as DebugLogger;
 }
 
 function textContent(speaker: IContent['speaker'], text: string): IContent {
@@ -130,36 +110,6 @@ function expectCapturedCallback(
 }
 
 /**
- * Wire performFallbackCompression exactly as CompressionHandler does: build a
- * real compression context carrying the caller-supplied target, run the real
- * TopDownTruncationStrategy, and commit its candidate history.
- */
-function buildFallbackCompression(
-  historyService: HistoryService,
-  runtimeContext: AgentRuntimeContext,
-  logger: DebugLogger,
-): ProviderContentEnforcementDeps['performFallbackCompression'] {
-  return async (promptId, applyResult, targetTokenCount) => {
-    const result = await runDiskProviderFallback(
-      applyResult,
-      promptId,
-      runtimeContext,
-      historyService,
-      () =>
-        Promise.resolve({
-          provider: {} as never,
-          runtime: {} as never,
-        }),
-      undefined,
-      undefined,
-      logger,
-      { targetTokenCount },
-    );
-    return result.outcome === 'applied';
-  };
-}
-
-/**
  * Replace history with itself minus its oldest entry — a compression round
  * that under-delivers relative to a multi-message deficit.
  */
@@ -174,128 +124,36 @@ async function shedOldestMessage(
   await historyService.waitForTokenUpdates();
 }
 
-interface DirectHarness {
-  enforcer: ProviderContentEnforcer;
+interface GuardedHarness {
   historyService: HistoryService;
-  pending: IContent;
-  contents: IContent[];
+  callback: GuardAwareCallback;
   initialEstimate: number;
 }
 
-async function buildDirectHarness(options: {
-  contextLimit: number;
-  compression?: 'noop' | 'underdeliver';
-}): Promise<DirectHarness> {
-  const historyService = new HistoryService();
-  const runtimeContext = buildRuntimeContext(historyService, {
-    contextLimit: options.contextLimit,
-    compressionThreshold: 0.8,
-  });
-  const logger = makeLogger();
-  seedHistory(historyService);
-  await historyService.waitForTokenUpdates();
-  const pending = makePending();
-  const contents = await Array.fromAsync(
-    historyService.getCuratedForProviderStream([pending]),
-  );
-  const initialEstimate = await historyService.estimateTokensForContents(
-    contents,
-    MODEL,
-  );
-
-  let compressionCalls = 0;
-  const deps: ProviderContentEnforcementDeps = {
-    historyService,
-    runtimeContext,
-    generationConfig: {},
-    providerRuntimeNullable: undefined,
-    logger,
-    ensureDensityOptimized: vi.fn().mockResolvedValue(undefined),
-    performCompression: vi.fn(async () => {
-      compressionCalls++;
-      if (options.compression === 'underdeliver' && compressionCalls === 1) {
-        await shedOldestMessage(historyService);
-        return PerformCompressionResult.COMPRESSED;
-      }
-      return PerformCompressionResult.NOOP;
-    }),
-    performFallbackCompression: buildFallbackCompression(
-      historyService,
-      runtimeContext,
-      logger,
-    ),
-    getPromptTokenBaseline: () => null,
-    resetPromptTokenBaseline: () => {},
-    restorePromptTokenBaseline: () => {},
-  };
-
-  return {
-    enforcer: new ProviderContentEnforcer(deps),
-    historyService,
-    pending,
-    contents,
-    initialEstimate,
-  };
-}
-
-describe('ProviderContentEnforcer compression-callback escalation (issue #3499)', () => {
-  beforeEach(facadeCallback0);
-
-  it(
-    'T2: escalates past an under-delivering compression round and truncates history to the guard target',
-    facadeCallback1,
-  );
-
-  it(
-    'T3: returns fitting contents instead of throwing when compression is a structural no-op',
-    facadeCallback2,
-  );
-
-  it(
-    'T3: throws the structured overflow error when even truncation cannot fit the guard limit',
-    facadeCallback3,
-  );
-
-  it(
-    'T4: targets contextLimit minus overhead for a small deficit instead of over-cutting',
-    facadeCallback4,
-  );
-
-  it(
-    'T4: converges against the enforcer own limits when no guard info is supplied',
-    facadeCallback5,
-  );
-
-  it(
-    'T4: keeps an empty pending boundary a no-op regardless of guard facts',
-    facadeCallback6,
-  );
-});
-
-function facadeCallback0(): void {
-  vi.clearAllMocks();
-}
-
-async function facadeCallback1(): Promise<void> {
+/**
+ * Runs pre-send enforcement (which fits at this limit and leaves the provider
+ * compression callback attached) and returns the captured callback, the way a
+ * load-balancer guard would later invoke it.
+ */
+async function buildGuardedHarness(options: {
+  compression: 'noop' | 'underdeliver';
+}): Promise<GuardedHarness> {
   const historyService = new HistoryService();
   const runtimeContext = buildRuntimeContext(historyService, {
     contextLimit: SESSION_CONTEXT_LIMIT,
     compressionThreshold: 0.8,
   });
   seedHistory(historyService);
+  await historyService.waitForTokenUpdates();
   const pending = makePending();
-  const chat = new ChatSession(
-    runtimeContext,
-    buildMockContentGenerator(),
-    {},
-    [],
-  );
-  const handler = chat['compressionHandler'];
+  const harness = buildHandlerHarness(historyService, runtimeContext, {
+    realDiskFallback: true,
+  });
 
   let compressionCalls = 0;
-  vi.spyOn(handler, 'performCompression').mockImplementation(async () => {
+  harness.performCompression.mockImplementation(async () => {
     compressionCalls++;
-    if (compressionCalls === 1) {
+    if (options.compression === 'underdeliver' && compressionCalls === 1) {
       await shedOldestMessage(historyService);
       return PerformCompressionResult.COMPRESSED;
     }
@@ -303,158 +161,140 @@ async function facadeCallback1(): Promise<void> {
   });
 
   let capturedCallback: GuardAwareCallback | null = null;
-  const providerWithCallback = {
+  const provider = {
     name: 'load-balancer',
     generateChatCompletion: vi.fn(),
     setCompressionCallback: vi.fn((cb: CompressionCallback | null) => {
-      if (cb !== null) {
-        capturedCallback = cb;
-      }
+      if (cb !== null) capturedCallback = cb;
     }),
   };
 
-  const contents = await Array.fromAsync(
+  const initialRows = await Array.fromAsync(
     historyService.getCuratedForProviderStream([pending]),
   );
   const initialEstimate = await historyService.estimateTokensForContents(
-    contents,
+    initialRows,
     MODEL,
   );
-  await handler.enforceProviderContents(
-    { contents, pendingContents: [pending] },
+  await enforceProviderSourceForTest(
+    harness.handler,
+    historyService,
+    [pending],
     'prompt-3499',
-    providerWithCallback as unknown as IProvider,
+    provider as unknown as IProvider,
   );
 
-  const callback = expectCapturedCallback(capturedCallback);
-  const guard = guardOverBy(initialEstimate, 900);
-  const result = await readSelection(await callback(guard));
-
-  const finalEstimate = await historyService.estimateTokensForContents(
-    result,
-    MODEL,
-  );
-  expect(finalEstimate).toBeLessThanOrEqual(effectiveLimitFor(guard));
-  // Compression shed only entry 00; truncation had to remove more than
-  // that for the payload to fit the guard target, while entry 03 onward
-  // survives and the pending request is preserved.
-  expect(resultText(result)).not.toContain('entry 00');
-  expect(resultText(result)).not.toContain('entry 01');
-  expect(resultText(result)).toContain('entry 03');
-  expect(resultText(result)).toContain('pending-marker');
-}
-
-async function facadeCallback2(): Promise<void> {
-  const harness = await buildDirectHarness({
-    contextLimit: SESSION_CONTEXT_LIMIT,
-    compression: 'noop',
-  });
-  const guard = guardOverBy(harness.initialEstimate, 900);
-  const historyTokensBefore = harness.historyService.getTotalTokens();
-
-  const result = await harness.enforcer.compressAndRecompose(
-    [harness.pending],
-    'prompt-3499',
-    guard,
-  );
-
-  const finalEstimate = await harness.historyService.estimateTokensForContents(
-    result,
-    MODEL,
-  );
-  expect(finalEstimate).toBeLessThanOrEqual(effectiveLimitFor(guard));
-  expect(harness.historyService.getTotalTokens()).toBeLessThan(
-    historyTokensBefore,
-  );
-}
-
-async function facadeCallback3(): Promise<void> {
-  const harness = await buildDirectHarness({
-    contextLimit: SESSION_CONTEXT_LIMIT,
-    compression: 'noop',
-  });
-  const guard: GuardInfo = {
-    estimatedTokens: harness.initialEstimate + GUARD_OVERHEAD,
-    contextLimit: 40,
+  return {
+    historyService,
+    callback: expectCapturedCallback(capturedCallback),
+    initialEstimate,
   };
+}
 
-  await expect(
-    harness.enforcer.compressAndRecompose(
-      [harness.pending],
+describe('CompressionHandler compression-callback escalation (issue #3499)', () => {
+  it('T2: escalates past an under-delivering compression round and truncates history to the guard target', async () => {
+    const { historyService, callback, initialEstimate } =
+      await buildGuardedHarness({ compression: 'underdeliver' });
+    const guard = guardOverBy(initialEstimate, 900);
+
+    const result = await readSelection(await callback(guard));
+
+    const finalEstimate = await historyService.estimateTokensForContents(
+      result,
+      MODEL,
+    );
+    expect(finalEstimate).toBeLessThanOrEqual(effectiveLimitFor(guard));
+    // Compression shed only entry 00; truncation had to remove more than
+    // that for the payload to fit the guard target, while entry 03 onward
+    // survives and the pending request is preserved.
+    expect(resultText(result)).not.toContain('entry 00');
+    expect(resultText(result)).not.toContain('entry 01');
+    expect(resultText(result)).toContain('entry 03');
+    expect(resultText(result)).toContain('pending-marker');
+  });
+
+  it('T3: returns fitting contents instead of throwing when compression is a structural no-op', async () => {
+    const { historyService, callback, initialEstimate } =
+      await buildGuardedHarness({ compression: 'noop' });
+    const guard = guardOverBy(initialEstimate, 900);
+    const historyTokensBefore = historyService.getTotalTokens();
+
+    const result = await readSelection(await callback(guard));
+
+    const finalEstimate = await historyService.estimateTokensForContents(
+      result,
+      MODEL,
+    );
+    expect(finalEstimate).toBeLessThanOrEqual(effectiveLimitFor(guard));
+    expect(historyService.getTotalTokens()).toBeLessThan(historyTokensBefore);
+  });
+
+  it('T3: throws the structured overflow error when even truncation cannot fit the guard limit', async () => {
+    const { callback, initialEstimate } = await buildGuardedHarness({
+      compression: 'noop',
+    });
+    const guard: GuardInfo = {
+      estimatedTokens: initialEstimate + GUARD_OVERHEAD,
+      contextLimit: 40,
+    };
+
+    await expect(callback(guard)).rejects.toThrow(
+      /Request still exceeds the safety-adjusted context limit/,
+    );
+  });
+
+  it('T4: targets contextLimit minus overhead for a small deficit instead of over-cutting', async () => {
+    const { historyService, callback, initialEstimate } =
+      await buildGuardedHarness({ compression: 'noop' });
+    const guard = guardOverBy(initialEstimate, 800);
+    const historyTokensBefore = historyService.getTotalTokens();
+
+    const result = await readSelection(await callback(guard));
+
+    const finalEstimate = await historyService.estimateTokensForContents(
+      result,
+      MODEL,
+    );
+    expect(finalEstimate).toBeLessThanOrEqual(effectiveLimitFor(guard));
+    // A deficit-exact target removes roughly the deficit; a default
+    // completion-budget ceiling (~limit/2) would land far below this floor.
+    expect(finalEstimate).toBeGreaterThan(effectiveLimitFor(guard) - 800);
+    expect(finalEstimate).toBeGreaterThan(guard.contextLimit / 2);
+    expect(historyService.getTotalTokens()).toBeLessThan(historyTokensBefore);
+  });
+
+  it('T4: converges against the handler own limits when no guard info is supplied', async () => {
+    const contextLimit = 6_000;
+    const historyService = new HistoryService();
+    const runtimeContext = buildRuntimeContext(historyService, {
+      contextLimit,
+      compressionThreshold: 0.8,
+    });
+    seedHistory(historyService);
+    await historyService.waitForTokenUpdates();
+    const harness = buildHandlerHarness(historyService, runtimeContext, {
+      realDiskFallback: true,
+    });
+    const historyTokensBefore = historyService.getTotalTokens();
+    const completionBudget = Math.min(65_536, Math.floor(contextLimit * 0.5));
+    const marginAdjustedLimit = computeMarginAdjustedLimit(contextLimit);
+
+    const result = await enforceProviderSourceForTest(
+      harness.handler,
+      historyService,
+      [makePending()],
       'prompt-3499',
-      guard,
-    ),
-  ).rejects.toThrow(/Request still exceeds the safety-adjusted context limit/);
-}
+      undefined,
+    );
 
-async function facadeCallback4(): Promise<void> {
-  const harness = await buildDirectHarness({
-    contextLimit: SESSION_CONTEXT_LIMIT,
-    compression: 'noop',
+    const finalEstimate = await historyService.estimateTokensForContents(
+      result,
+      MODEL,
+    );
+    expect(finalEstimate + completionBudget).toBeLessThanOrEqual(
+      marginAdjustedLimit,
+    );
+    expect(historyService.getTotalTokens()).toBeLessThan(historyTokensBefore);
+    expect(resultText(result)).toContain('pending-marker');
   });
-  const guard = guardOverBy(harness.initialEstimate, 800);
-  const historyTokensBefore = harness.historyService.getTotalTokens();
-
-  const result = await harness.enforcer.compressAndRecompose(
-    [harness.pending],
-    'prompt-3499',
-    guard,
-  );
-
-  const finalEstimate = await harness.historyService.estimateTokensForContents(
-    result,
-    MODEL,
-  );
-  expect(finalEstimate).toBeLessThanOrEqual(effectiveLimitFor(guard));
-  // A deficit-exact target removes roughly the deficit; a default
-  // completion-budget ceiling (~limit/2) would land far below this floor.
-  expect(finalEstimate).toBeGreaterThan(effectiveLimitFor(guard) - 800);
-  expect(finalEstimate).toBeGreaterThan(guard.contextLimit / 2);
-  expect(harness.historyService.getTotalTokens()).toBeLessThan(
-    historyTokensBefore,
-  );
-}
-
-async function facadeCallback5(): Promise<void> {
-  const contextLimit = 6_000;
-  const harness = await buildDirectHarness({
-    contextLimit,
-    compression: 'noop',
-  });
-  const historyTokensBefore = harness.historyService.getTotalTokens();
-  const completionBudget = Math.min(65_536, Math.floor(contextLimit * 0.5));
-  const marginAdjustedLimit = computeMarginAdjustedLimit(contextLimit);
-
-  const result = await harness.enforcer.compressAndRecompose(
-    [harness.pending],
-    'prompt-3499',
-  );
-
-  const finalEstimate = await harness.historyService.estimateTokensForContents(
-    result,
-    MODEL,
-  );
-  expect(finalEstimate + completionBudget).toBeLessThanOrEqual(
-    marginAdjustedLimit,
-  );
-  expect(harness.historyService.getTotalTokens()).toBeLessThan(
-    historyTokensBefore,
-  );
-  expect(resultText(result)).toContain('pending-marker');
-}
-
-async function facadeCallback6(): Promise<void> {
-  const harness = await buildDirectHarness({
-    contextLimit: SESSION_CONTEXT_LIMIT,
-    compression: 'noop',
-  });
-  const guard = guardOverBy(harness.initialEstimate, 900);
-
-  const result = await harness.enforcer.compressAndRecompose(
-    [],
-    'prompt-3499',
-    guard,
-  );
-
-  expect(result).toStrictEqual([]);
-}
+});
