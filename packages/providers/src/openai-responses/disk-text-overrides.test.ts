@@ -152,6 +152,29 @@ describe('Responses source route request overrides and dumps', () => {
     });
   }, 60000);
 
+  it('keeps the input override in model params across consecutive requests', async () => {
+    const override = { input: [{ role: 'user', content: 'override twice' }] };
+    const options = withEphemerals(
+      setup,
+      setup.options(requestSelection({ ...rowsOf(history), close: () => {} })),
+      override,
+    );
+    await send(setup, options, true);
+    const again = {
+      ...options,
+      requestRows: requestSelection({ ...rowsOf(history), close: () => {} }),
+    };
+    await send(setup, again, true);
+    expect(bodies).toHaveLength(2);
+    for (const body of bodies)
+      expect((JSON.parse(body) as { input: unknown }).input).toStrictEqual([
+        { role: 'user', content: 'override twice' },
+      ]);
+    expect(options.invocation?.modelParams['input']).toStrictEqual([
+      { role: 'user', content: 'override twice' },
+    ]);
+  }, 60000);
+
   it('streams a request dump whose body equals the array route wire body', async () => {
     const dump = { dumpcontext: 'on' };
     const rows = rowsOf(history);

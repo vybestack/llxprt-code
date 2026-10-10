@@ -97,7 +97,9 @@ export function translateRequestOverrides(
         );
       }
     } else {
-      requestOverrides[key] = value;
+      // The request-scoped body lease splices the arrays it owns, so an array
+      // shared with the caller's model params must be copied here.
+      requestOverrides[key] = Array.isArray(value) ? [...value] : value;
     }
   }
   return requestOverrides;
