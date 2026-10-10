@@ -3,6 +3,8 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { WorkspaceIgnoreOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
+import type { WorkspaceTextOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 
 import {
   getErrorMessage,
@@ -12,10 +14,7 @@ import {
   type ContentBlock,
 } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
-import type {
-  FileSystemService,
-  FilterFilesOptions,
-} from '@vybestack/llxprt-code-storage';
+import type { FilterFilesOptions } from '@vybestack/llxprt-code-storage';
 import type * as acp from '@agentclientprotocol/sdk';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -82,7 +81,15 @@ function resolverPartsToContentBlocks(parts: ResolverPart[]): ContentBlock[] {
 
 export class ZedPathResolver {
   constructor(
-    private readonly config: Config,
+    private readonly config: Pick<
+      Config,
+      | 'getFileFilteringOptions'
+      | 'getTargetDir'
+      | 'getEnableRecursiveFileSearch'
+    > &
+      Pick<WorkspaceTextOperations, 'readTextFile'> & {
+        readonly ignore: WorkspaceIgnoreOperations;
+      },
     private readonly debug: DebugFn,
   ) {}
 
@@ -105,7 +112,7 @@ export class ZedPathResolver {
 
     const atPathToResolvedSpecMap = new Map<string, string>();
 
-    const fileDiscovery = this.config.getFileService();
+    const fileDiscovery = this.config.ignore;
     const fileFilteringOptions: FilterFilesOptions =
       this.config.getFileFilteringOptions();
 
@@ -217,7 +224,7 @@ export class ZedPathResolver {
   private async resolvePathSpecs(
     atPathCommandParts: ResolverFilePart[],
     abortSignal: AbortSignal,
-    fileDiscovery: ReturnType<Config['getFileService']>,
+    fileDiscovery: WorkspaceIgnoreOperations,
     fileFilteringOptions: FilterFilesOptions,
     pathSpecsToRead: string[],
     contentLabelsForDisplay: string[],
@@ -246,7 +253,7 @@ export class ZedPathResolver {
   private appendResolvedPathSpec(
     currentPathSpec: string,
     pathName: string,
-    fileDiscovery: ReturnType<Config['getFileService']>,
+    fileDiscovery: WorkspaceIgnoreOperations,
     fileFilteringOptions: FilterFilesOptions,
     pathSpecsToRead: string[],
     contentLabelsForDisplay: string[],
@@ -393,7 +400,7 @@ export class ZedPathResolver {
 
   private resolveGlobIgnore(): string[] {
     try {
-      return this.config.getFileExclusions().getCoreIgnorePatterns();
+      return this.config.ignore.getCoreIgnorePatterns();
     } catch {
       return [];
     }
@@ -481,7 +488,7 @@ export class ZedPathResolver {
     processedQueryParts: ResolverPart[],
   ): Promise<void> {
     const targetDir = this.config.getTargetDir();
-    const fileSystemService = this.config.getFileSystemService();
+    const fileSystemService = this.config;
     processedQueryParts.push({
       type: 'text',
       text: '\n--- Content from referenced files ---',
@@ -508,7 +515,9 @@ export class ZedPathResolver {
     spec: string,
     label: string,
     targetDir: string,
-    fileSystemService: FileSystemService,
+    fileSystemService: Pick<WorkspaceTextOperations, 'readTextFile'> & {
+      readonly ignore: WorkspaceIgnoreOperations;
+    },
     abortSignal: AbortSignal,
     processedQueryParts: ResolverPart[],
   ): Promise<void> {
@@ -537,7 +546,9 @@ export class ZedPathResolver {
     spec: string,
     label: string,
     targetDir: string,
-    fileSystemService: FileSystemService,
+    fileSystemService: Pick<WorkspaceTextOperations, 'readTextFile'> & {
+      readonly ignore: WorkspaceIgnoreOperations;
+    },
     abortSignal: AbortSignal,
     processedQueryParts: ResolverPart[],
   ): Promise<void> {
@@ -584,7 +595,9 @@ export class ZedPathResolver {
   private async readAndAppendGlobMatch(
     match: string,
     absolute: string,
-    fileSystemService: FileSystemService,
+    fileSystemService: Pick<WorkspaceTextOperations, 'readTextFile'> & {
+      readonly ignore: WorkspaceIgnoreOperations;
+    },
     abortSignal: AbortSignal,
     processedQueryParts: ResolverPart[],
   ): Promise<boolean> {
@@ -601,16 +614,19 @@ export class ZedPathResolver {
   }
 
   private shouldSkipDiscoveredPath(filePath: string): boolean {
-    return this.config
-      .getFileService()
-      .shouldIgnoreFile(filePath, this.config.getFileFilteringOptions());
+    return this.config.ignore.shouldIgnoreFile(
+      filePath,
+      this.config.getFileFilteringOptions(),
+    );
   }
 
   private async appendSingleFile(
     spec: string,
     label: string,
     targetDir: string,
-    fileSystemService: FileSystemService,
+    fileSystemService: Pick<WorkspaceTextOperations, 'readTextFile'> & {
+      readonly ignore: WorkspaceIgnoreOperations;
+    },
     abortSignal: AbortSignal,
     processedQueryParts: ResolverPart[],
   ): Promise<void> {

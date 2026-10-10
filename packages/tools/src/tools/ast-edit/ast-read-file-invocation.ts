@@ -7,7 +7,6 @@
  */
 
 import * as path from 'path';
-import fs from 'fs';
 import {
   type ToolInvocation,
   type ToolLocation,
@@ -143,12 +142,7 @@ export class ASTReadFileToolInvocation
           error: { message: sizeError.message, type: sizeError.type },
         };
       }
-      const fileSystemService = this.host.getFileSystemService?.() as
-        | { readTextFile?: (filePath: string) => Promise<string> }
-        | undefined;
-      const content = fileSystemService?.readTextFile
-        ? await fileSystemService.readTextFile(this.params.file_path)
-        : await fs.promises.readFile(this.params.file_path, 'utf-8');
+      const content = await this.host.readTextFile(this.params.file_path);
 
       // Validate authoritative content immediately after acquisition: a host
       // file service may return bytes divergent from native stat, so the same

@@ -22,9 +22,9 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import { installSchedulerToolFixture } from '../../core/__tests__/scheduler-tool-owner-fixture.js';
+const fixtureRoot = installSchedulerToolFixture();
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { AnyDeclarativeTool } from '@vybestack/llxprt-code-tools';
 import { Kind } from '@vybestack/llxprt-code-tools';
 import { ToolControl } from '../control/toolControl.js';
@@ -52,24 +52,29 @@ function buildDepsWithRealTools(
   tools: readonly AnyDeclarativeTool[],
   opts: { readonly enabledNames?: readonly string[] } = {},
 ): ToolControlDeps {
-  const enabledSet = new Set(opts.enabledNames ?? tools.map((t) => t.name));
-  const toolMap = new Map(tools.map((t) => [t.name, t]));
-  const toolRegistry = {
-    getAllTools: () => [...tools],
-    getEnabledTools: () => tools.filter((t) => enabledSet.has(t.name)),
-    getTool: (name: string): AnyDeclarativeTool | undefined =>
-      toolMap.get(name),
-  };
-  const settingsService = { set: () => {} };
-  const config = {
-    getToolRegistry: () => toolRegistry,
-    getSettingsService: () => settingsService,
-  } as unknown as Config;
-  const messageBus = new MessageBus();
+  const fixture = fixtureRoot(tools, { enabledNames: opts.enabledNames });
   return {
-    messageBus,
-    config,
+    selection: fixture.selection,
+    describeConfiguration: () => ({
+      registered: tools.map((tool) => ({ displayName: tool.displayName })),
+      unregistered: [],
+    }),
+    messageBus: fixture.messageBus,
+    config: fixture.config,
+    setAllowedTools: (names) => fixture.settingsOwner.setAllowedTools(names),
+    readExecutionPolicy: () => fixture.settingsOwner.readToolExecutionPolicy(),
+    getToolGovernance: () =>
+      fixture.settingsOwner.readToolGovernance(
+        fixture.config.getExcludeTools() ?? [],
+      ),
+    shellOwner: fixture.shellOwner,
     editorCallbacksHolder: { editorCallbacks: noopEditorCallbacks },
+    displayCallbacksHolder: {},
+    resolveClient: () => {
+      throw new Error(
+        'Client resolution is outside the tool projection fixture',
+      );
+    },
     keysDeps: { getStorage: () => getToolKeyStorage() },
   };
 }
@@ -277,12 +282,15 @@ describe('McpControl details() resource description projection @plan:ISSUE-2376'
     };
     const deps: McpControlDeps = {
       isMcpAuthenticated: () => false,
-      getManager: () => undefined,
+      getMcpRuntimeStatus: () => undefined,
       getToolRegistry: () => undefined,
       getServerConfigs: () => ({
-        srv: { type: 'stdio', command: 'fake' },
+        srv: { command: 'fake' },
       }),
-      getResourceRegistry: () => resourceRegistry,
+      listResources: () =>
+        resourceRegistry
+          .getAllResources()
+          .map((resource) => ({ ...resource, discoveredAt: 1 })),
       getOAuthStatus: async () => 'not-required',
       getRequiresAuth: () => false,
     };

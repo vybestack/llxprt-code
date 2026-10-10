@@ -1,8 +1,25 @@
+import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
+
+import type {
+  ToolExecutionPolicy,
+  ToolGovernance,
+} from '@vybestack/llxprt-code-tools';
+
+import type { ToolSelection } from '@vybestack/llxprt-code-tools';
+import { bindChildToolRegistry } from '../../session/childToolAssembly.js';
+import type { TaskLaunchOwner } from '../../session/task-launch-owner.js';
+import type { ShellJobOwner } from '../../session/shell-job-owner.js';
+import {
+  ChildToolDisplay,
+  type ChildToolDisplayCallbacks,
+} from '../../session/childToolDisplay.js';
+import type { SchedulerConstruction } from '../../session/assembleSchedulerOwner.js';
 
 /**
  * @plan:PLAN-20260617-COREAPI.P17
@@ -55,6 +72,7 @@ import type { StableDisplayCallbacksHolder } from '../agentBootstrap.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { ToolKeysControl } from './toolKeysControl.js';
 import type { ToolKeysControlDeps } from './toolKeysControl.js';
+import { createClientToolChannel } from '../../session/clientToolChannel.js';
 
 const logger = new DebugLogger('llxprt:agents:tool-control');
 
@@ -81,10 +99,21 @@ export class ToolControlError extends Error {
  * @requirement:REQ-006
  */
 export interface ToolControlDeps {
+  readonly telemetry: RootTelemetry;
+  readonly taskLaunchOwner?: TaskLaunchOwner;
+  readonly shellOwner: ShellJobOwner;
+  readonly childDisplay?: ChildToolDisplay;
+  readonly schedulerFactory?: SchedulerConstruction;
   /** The shared confirmation bus (respondToConfirmation publishes here). */
   readonly messageBus: MessageBus;
   /** The Config carrying the tool registry + settings service. */
   readonly config: Config;
+  readonly selection: ToolSelection;
+  readonly readExecutionPolicy: () => ToolExecutionPolicy;
+  readonly readApprovalMode?: () => ApprovalMode;
+  readonly getToolGovernance: () => ToolGovernance;
+  readonly setAllowedTools: (names: readonly string[]) => void;
+  readonly describeConfiguration: AgentToolControl['describeConfiguration'];
   /**
    * The mutable editor-callbacks holder shared with the scheduler factory so
    * `setEditorCallbacks` is observable by the next turn's scheduler.
@@ -117,13 +146,71 @@ type ToolUpdateCallback = (u: ToolUpdate) => void;
  * @pseudocode tool-confirmation-merge.md steps 10-109
  */
 export class ToolControl implements AgentToolControl {
+  private readonly childDisplay: ChildToolDisplay;
+
+  subscribeChildTools(callbacks: ChildToolDisplayCallbacks): Unsubscribe {
+    if (this.disposal) throw new Error('Agent tools disposed');
+    return this.childDisplay.subscribe(callbacks);
+  }
   private readonly confirmationCallbacks = new Set<ConfirmationCallback>();
   private readonly toolUpdateCallbacks = new Set<ToolUpdateCallback>();
   private readonly seen = new Set<string>();
+  private readonly clientChannels = new Set<
+    ReturnType<AgentToolControl['openClientChannel']>
+  >();
+  private disposal?: Promise<void>;
+
+  openClientChannel(
+    onComplete?: (calls: CompletedToolCall[]) => void | Promise<void>,
+  ): ReturnType<AgentToolControl['openClientChannel']> {
+    if (this.disposal) throw new Error('Agent tools disposed');
+    const channel = createClientToolChannel(
+      this.deps.config,
+      this.deps.messageBus,
+      () => this.deps.editorCallbacksHolder.editorCallbacks,
+      async (calls) => {
+        this.recordCompletedToolCalls(calls);
+        await onComplete?.(calls);
+      },
+      this.deps.selection,
+      this.deps.schedulerFactory,
+      this.deps.readExecutionPolicy,
+      this.deps.getToolGovernance,
+      this.deps.readApprovalMode,
+      this.deps.telemetry,
+    );
+    this.clientChannels.add(channel);
+    return {
+      ...channel,
+      release: async () => {
+        try {
+          await channel.release();
+        } finally {
+          this.clientChannels.delete(channel);
+        }
+      },
+    };
+  }
+
+  dispose(): Promise<void> {
+    this.childDisplay.clear();
+    this.disposal ??= Promise.allSettled(
+      [...this.clientChannels].map((channel) => channel.release()),
+    ).then((results) => {
+      this.clientChannels.clear();
+      const errors = results.flatMap((result) =>
+        result.status === 'rejected' ? [result.reason] : [],
+      );
+      if (errors.length > 0)
+        throw new AggregateError(errors, 'Client tool channel cleanup failed');
+    });
+    return this.disposal;
+  }
   // @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007
   readonly keys: AgentToolKeyControl;
 
   constructor(private readonly deps: ToolControlDeps) {
+    this.childDisplay = deps.childDisplay ?? new ChildToolDisplay();
     this.keys = new ToolKeysControl(deps.keysDeps);
   }
 
@@ -140,8 +227,14 @@ export class ToolControl implements AgentToolControl {
    * @requirement:REQ-017
    * @plan:ISSUE-2376
    */
+  describeConfiguration(): ReturnType<
+    AgentToolControl['describeConfiguration']
+  > {
+    return this.deps.describeConfiguration();
+  }
+
   list(): readonly ToolInfo[] {
-    const registry = this.deps.config.getToolRegistry();
+    const registry = this.deps.selection;
     const allTools = registry.getAllTools().map((t) =>
       projectRegistryTool({
         name: t.name,
@@ -168,8 +261,13 @@ export class ToolControl implements AgentToolControl {
    * @plan:ISSUE-2376
    */
   get(name: string): AgentToolHandle | undefined {
-    const registry = this.deps.config.getToolRegistry();
-    const tool = registry.getTool(name);
+    const registry = this.deps.selection;
+    const tool = bindChildToolRegistry(
+      registry,
+      this.childDisplay,
+      this.deps.taskLaunchOwner,
+      this.deps.shellOwner,
+    ).getTool(name);
     if (tool === undefined) {
       return undefined;
     }
@@ -185,8 +283,7 @@ export class ToolControl implements AgentToolControl {
    * @requirement:REQ-006
    */
   async setEnabled(names: readonly string[]): Promise<void> {
-    const settingsService = this.deps.config.getSettingsService();
-    settingsService.set('tools.allowed', [...names]);
+    this.deps.setAllowedTools(names);
   }
 
   /**

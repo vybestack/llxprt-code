@@ -15,7 +15,11 @@ import {
   type Mock,
 } from 'bun:test';
 import { IdeClient, IDEConnectionStatus } from './ide-client.js';
-import { IdeContextNotificationSchema } from './ideContext.js';
+import {
+  ideContext,
+  IdeContextNotificationSchema,
+  type IdeContext,
+} from './ideContext.js';
 import * as fs from 'node:fs';
 import { getIdeProcessInfo } from './process-utils.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -140,6 +144,29 @@ describe('IdeClient', () => {
     const c = await IdeClient.getInstance();
 
     expect(c).not.toBe(a);
+  });
+
+  describe('owner-created client context', () => {
+    it('publishes context changes to its own listeners without touching the legacy global context', async () => {
+      (
+        fs.promises.readFile as Mock<typeof fs.promises.readFile>
+      ).mockResolvedValue(JSON.stringify({ port: '8080' }));
+      ideContext.clearIdeContext();
+      const client = await IdeClient.create();
+      const seen: Array<IdeContext | undefined> = [];
+      client.addContextChangeListener((context) => seen.push(context));
+
+      await client.connect();
+
+      expect(client.getIdeContext()?.workspaceState?.isTrusted).toBe(true);
+      expect(seen.at(-1)?.workspaceState?.isTrusted).toBe(true);
+      expect(ideContext.getIdeContext()).toBeUndefined();
+
+      await client.disconnect();
+
+      expect(client.getIdeContext()).toBeUndefined();
+      expect(seen.at(-1)).toBeUndefined();
+    });
   });
 
   describe('connect', () => {

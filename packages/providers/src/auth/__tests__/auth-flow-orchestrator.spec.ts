@@ -26,7 +26,6 @@ import type {
 } from '../types.js';
 import { AuthFlowOrchestrator } from '../auth-flow-orchestrator.js';
 import { ProviderRegistry } from '../provider-registry.js';
-import { oauthRuntimeBridge } from '../runtime-accessor-bridge.js';
 
 // Shared mock ephemeral-setting function so tests can reconfigure mid-test
 const mockGetEphemeralSetting = vi.fn((key: string) => {
@@ -128,7 +127,17 @@ function createOrchestrator(
   const registry = providerRegistry ?? new ProviderRegistry();
   const facade = facadeRef ?? createFacadeRef();
 
-  return new AuthFlowOrchestrator(tokenStore, registry, facade);
+  return new AuthFlowOrchestrator(
+    tokenStore,
+    registry,
+    facade,
+    undefined,
+    () => {},
+    () => ({
+      prompt: mockGetEphemeralSetting('auth-bucket-prompt'),
+      delay: mockGetEphemeralSetting('auth-bucket-delay'),
+    }),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -141,16 +150,9 @@ describe('AuthFlowOrchestrator', () => {
       if (key === 'auth-bucket-delay') return 0;
       return undefined;
     });
-    oauthRuntimeBridge.setAccessors({
-      getEphemeralSetting: mockGetEphemeralSetting,
-      getProviderManager: () => undefined,
-      getRuntimeContext: () => undefined,
-      getCurrentProfileName: () => null,
-    });
   });
 
   afterEach(() => {
-    oauthRuntimeBridge.setAccessors(undefined);
     delete (global as { __oauth_auth_complete?: boolean })
       .__oauth_auth_complete;
   });

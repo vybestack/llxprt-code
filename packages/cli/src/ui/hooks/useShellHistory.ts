@@ -9,7 +9,6 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { isNodeError } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
-import { Storage } from '@vybestack/llxprt-code-settings';
 
 const MAX_HISTORY_LENGTH = 100;
 
@@ -19,14 +18,6 @@ export interface UseShellHistoryReturn {
   getPreviousCommand: () => string | null;
   getNextCommand: () => string | null;
   resetHistoryPosition: () => void;
-}
-
-async function getHistoryFilePath(
-  projectRoot: string,
-  configStorage?: Storage,
-): Promise<string> {
-  const storage = configStorage ?? new Storage(projectRoot);
-  return storage.getHistoryFilePath();
 }
 
 // Handle multiline commands
@@ -83,8 +74,7 @@ async function writeHistoryFile(
 }
 
 export function useShellHistory(
-  projectRoot: string,
-  storage?: Storage,
+  selectedHistoryFilePath: string,
 ): UseShellHistoryReturn {
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
@@ -92,13 +82,13 @@ export function useShellHistory(
 
   useEffect(() => {
     async function loadHistory() {
-      const filePath = await getHistoryFilePath(projectRoot, storage);
+      const filePath = selectedHistoryFilePath;
       setHistoryFilePath(filePath);
       const loadedHistory = await readHistoryFile(filePath);
       setHistory(loadedHistory.reverse()); // Newest first
     }
     void loadHistory();
-  }, [projectRoot, storage]);
+  }, [selectedHistoryFilePath]);
 
   const addCommandToHistory = useCallback(
     (command: string) => {

@@ -1,52 +1,27 @@
+import { createProviderConfigFixture } from './__tests__/provider-config-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, describe, expect, it } from 'bun:test';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { describe, expect, it } from 'bun:test';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
-import type {
-  AgentRuntimeProviderAdapter,
-  ReadonlySettingsSnapshot,
-} from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type { AgentRuntimeProviderAdapter } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { resetProviderManager } from '../composition/providerManagerInstance.js';
 import { assembleCliProviderRuntime } from './assembleCliProviderRuntime.js';
-import { setActiveModel } from './providerMutations.js';
+import { setActiveModel, assembleModelSelection } from './providerMutations.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { switchActiveProvider } from './providerSwitch.js';
-import { disposeCliRuntime } from './runtimeRegistry.js';
 
 const RUNTIME_ID = 'issue3576-codex-context-limit';
 
-function requireProviderName(config: Config): string {
-  const provider = config.getProvider();
-  if (provider === undefined) {
-    throw new Error('runtime config has no active provider');
-  }
-  return provider;
-}
-
-function liveContextLimitSettings(config: Config): ReadonlySettingsSnapshot {
-  return {
-    get contextLimit(): number | undefined {
-      const value = config.getEphemeralSetting('context-limit');
-      return typeof value === 'number' ? value : undefined;
-    },
-  };
-}
-
 describe('Codex effective context limit runtime integration', () => {
-  afterEach(async () => {
-    await disposeCliRuntime(RUNTIME_ID);
-    resetProviderManager();
-  });
-
   it('updates the live effective limit across Astra, Sol, and Spark model selection', async () => {
     const settingsService = new SettingsService();
-    const config = new Config({
+    const settingsOwner = new SessionSettingsOwner(settingsService);
+    const { config: config } = createProviderConfigFixture({
       sessionId: 'issue3576-session',
       targetDir: process.cwd(),
       debugMode: false,
@@ -61,17 +36,32 @@ describe('Codex effective context limit runtime integration', () => {
       oauthSettings: null,
     });
 
-    await switchActiveProvider('codex');
+    await switchActiveProvider(
+      'codex',
+      { clientReplacement: 'deferred' },
+      config,
+      settingsService,
+      assembled.providerManager,
+      null,
+      'agent',
+      async () => {},
+      settingsOwner,
+    );
 
     const state: AgentRuntimeState = {
       runtimeId: RUNTIME_ID,
       sessionId: 'issue3576-session',
       updatedAt: Date.now(),
       get provider(): string {
-        return requireProviderName(config);
+        const provider = settingsOwner.readSelectedProvider();
+        if (provider === undefined)
+          throw new Error('Missing selected provider');
+        return provider;
       },
       get model(): string {
-        return config.getModel();
+        const model = settingsOwner.readSelectedModel();
+        if (model === undefined) throw new Error('Missing selected model');
+        return model;
       },
     };
     const provider: AgentRuntimeProviderAdapter = {
@@ -86,7 +76,15 @@ describe('Codex effective context limit runtime integration', () => {
     };
     const context = createAgentRuntimeContext({
       state,
-      settings: liveContextLimitSettings(config),
+      settings: settingsOwner.readRuntimePolicy(),
+      readRuntimeSettings: () => settingsOwner.readRuntimePolicy(),
+      prepareProviderInvocation: (providerName, parameters, signal) =>
+        settingsOwner.prepareProviderInvocation(
+          RUNTIME_ID,
+          providerName,
+          parameters,
+          signal,
+        ),
       provider,
       telemetry: {
         logApiRequest: () => undefined,
@@ -100,13 +98,28 @@ describe('Codex effective context limit runtime integration', () => {
       providerRuntime: assembled.runtime,
     });
 
-    await setActiveModel('gpt-6-astra');
+    await setActiveModel(
+      'gpt-6-astra',
+      assembleModelSelection(settingsOwner),
+      settingsService,
+      assembled.providerManager.getActiveProvider(),
+    );
     expect(context.ephemerals.contextLimit()).toBe(872000);
 
-    await setActiveModel('gpt-5.6-sol');
+    await setActiveModel(
+      'gpt-5.6-sol',
+      assembleModelSelection(settingsOwner),
+      settingsService,
+      assembled.providerManager.getActiveProvider(),
+    );
     expect(context.ephemerals.contextLimit()).toBe(262144);
 
-    await setActiveModel('gpt-5.3-codex-spark');
+    await setActiveModel(
+      'gpt-5.3-codex-spark',
+      assembleModelSelection(settingsOwner),
+      settingsService,
+      assembled.providerManager.getActiveProvider(),
+    );
     expect(context.ephemerals.contextLimit()).toBe(131072);
   });
 });

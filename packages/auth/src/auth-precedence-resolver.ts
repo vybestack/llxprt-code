@@ -8,10 +8,6 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import type { ISettingsService } from './interfaces/settings-service.js';
-import type {
-  IProviderRuntimeContext,
-  GetActiveRuntimeContext,
-} from './interfaces/runtime-context.js';
 import type { IDebugLogger } from './interfaces/index.js';
 import type { IProviderKeyStorage } from './interfaces/provider-key-storage.js';
 import { ProxyProviderKeyStorage } from './proxy/proxy-provider-key-storage.js';
@@ -22,27 +18,13 @@ import {
   type CredentialResolutionErrorKind,
   type CredentialResolutionResult,
 } from './credential-resolution-error.js';
-import { type OAuthToken } from './types.js';
 import type {
   AuthPrecedenceConfig,
   ResolveAuthOptions,
   OAuthManager,
   OAuthTokenRequestMetadata,
-  RuntimeScopedState,
 } from './precedence.js';
-import {
-  buildCacheKey,
-  ensureRuntimeState,
-  flushRuntimeAuthScope,
-  getValidCachedEntry,
-  invalidateEntry,
-  invalidateProviderRuntimeCache,
-  recordCacheHit,
-  recordCacheMiss,
-  registerSettingsSubscriptions,
-  resolveProfileId,
-  storeRuntimeScopedToken,
-} from './precedence.js';
+import { resolveProfileId } from './precedence.js';
 
 export type { ResolveAuthOptions } from './precedence.js';
 
@@ -66,9 +48,6 @@ interface OAuthResolutionContext {
   providerKey: string | undefined;
   providerId: string;
   profileId: string | null;
-  profileScopeId: string;
-  runtimeContext: IProviderRuntimeContext | null;
-  runtimeState: RuntimeScopedState | null;
 }
 
 interface OAuthEnablementManager extends OAuthManager {
@@ -103,7 +82,6 @@ export class AuthPrecedenceResolver {
   private settingsService?: ISettingsService;
   private providerKeyStorage?: IProviderKeyStorage;
   private logger: IDebugLogger;
-  private getActiveRuntimeContextFn?: GetActiveRuntimeContext;
 
   /**
    * Constructs an AuthPrecedenceResolver.
@@ -121,7 +99,6 @@ export class AuthPrecedenceResolver {
       settingsService?: ISettingsService;
       providerKeyStorage?: IProviderKeyStorage;
       logger?: IDebugLogger;
-      getActiveRuntimeContext?: GetActiveRuntimeContext;
     },
   ) {
     this.config = config;
@@ -129,7 +106,6 @@ export class AuthPrecedenceResolver {
     this.settingsService = options?.settingsService;
     this.providerKeyStorage = options?.providerKeyStorage;
     this.logger = options?.logger ?? AuthPrecedenceResolver.NO_OP_LOGGER;
-    this.getActiveRuntimeContextFn = options?.getActiveRuntimeContext;
   }
 
   /**
@@ -144,15 +120,6 @@ export class AuthPrecedenceResolver {
   }
 
   /**
-   * Get the active runtime context via injected function.
-   * Returns null if no function was injected or if it returns null/undefined.
-   */
-  private getActiveRuntimeContext(): IProviderRuntimeContext | null {
-    if (typeof this.getActiveRuntimeContextFn !== 'function') return null;
-    return this.getActiveRuntimeContextFn() ?? null;
-  }
-
-  /**
    * @plan PLAN-20251018-STATELESSPROVIDER2.P06
    * @requirement REQ-SP2-001
    * @pseudocode base-provider-call-contract.md lines 1-2
@@ -162,15 +129,9 @@ export class AuthPrecedenceResolver {
   ): ISettingsService {
     if (override != null) return override;
     if (this.settingsService != null) return this.settingsService;
-    const context = this.getActiveRuntimeContext();
-    const settingsService = (
-      context as { settingsService?: ISettingsService | null }
-    ).settingsService;
-    if (settingsService == null) {
-      throw new Error('Active provider runtime context not available');
-    }
-    this.settingsService = settingsService;
-    return settingsService;
+    throw new Error(
+      'AuthPrecedenceResolver requires a settingsService (constructor option, setSettingsService, or per-call override)',
+    );
   }
 
   /**
@@ -197,10 +158,7 @@ export class AuthPrecedenceResolver {
     );
     const providerKey = this.normalizeProviderId(this.config.providerId);
     const provider = this.resolveProviderIdentifier(providerKey);
-    const runtimeId =
-      options?.runtimeId ??
-      this.getActiveRuntimeContext()?.runtimeId ??
-      'no-runtime';
+    const runtimeId = options?.runtimeId ?? 'no-runtime';
     const trace: ResolutionTrace = {
       attemptedMechanisms: [],
       failures: [],
@@ -386,17 +344,12 @@ export class AuthPrecedenceResolver {
       providerKey,
       profileId,
     );
-    if ((await this.isOAuthDisabledByManager()) === true) {
-      this.invalidateDisabledOAuthEntry(context);
-      return null;
-    }
-    const cachedToken = this.getCachedOAuthToken(context);
-    if (cachedToken !== null) return cachedToken;
+    if ((await this.isOAuthDisabledByManager()) === true) return null;
     const remediation = `Run /auth ${this.config.oauthProvider} login to authenticate.`;
     trace.configuredSource = true;
     trace.remediation = remediation;
     try {
-      const token = await this.fetchAndCacheOAuthToken(context);
+      const token = await this.fetchOAuthToken(context);
       if (token === null) {
         trace.credentialMissing = true;
       }
@@ -414,37 +367,7 @@ export class AuthPrecedenceResolver {
   ): OAuthResolutionContext {
     const providerId = this.resolveProviderIdentifier(providerKey);
     const profileId = explicitProfileId ?? resolveProfileId(settingsService);
-    const runtime = this.tryGetRuntimeState(settingsService, providerId);
-    return {
-      settingsService,
-      providerKey,
-      providerId,
-      profileId,
-      profileScopeId: profileId ?? 'no-profile',
-      runtimeContext: runtime.runtimeContext,
-      runtimeState: runtime.runtimeState,
-    };
-  }
-
-  private tryGetRuntimeState(
-    settingsService: ISettingsService,
-    providerId: string,
-  ): {
-    runtimeContext: IProviderRuntimeContext | null;
-    runtimeState: RuntimeScopedState | null;
-  } {
-    const runtimeContext = this.getActiveRuntimeContext();
-    if (!runtimeContext) {
-      return { runtimeContext: null, runtimeState: null };
-    }
-    const runtimeState = ensureRuntimeState(runtimeContext);
-    registerSettingsSubscriptions(
-      runtimeState,
-      settingsService,
-      providerId,
-      this.logger,
-    );
-    return { runtimeContext, runtimeState };
+    return { settingsService, providerKey, providerId, profileId };
   }
 
   private async isOAuthDisabledByManager(): Promise<boolean> {
@@ -472,106 +395,24 @@ export class AuthPrecedenceResolver {
     }
   }
 
-  private invalidateDisabledOAuthEntry(context: OAuthResolutionContext): void {
-    const runtimeState = context.runtimeState;
-    if (runtimeState == null) return;
-    const cacheKey = buildCacheKey(
-      runtimeState.runtimeAuthScopeId,
-      context.providerId,
-      context.profileScopeId,
-    );
-    if (runtimeState.entries.has(cacheKey)) {
-      invalidateEntry(runtimeState, cacheKey, 'oauth-disabled');
-    }
-  }
-
-  private getCachedOAuthToken(context: OAuthResolutionContext): string | null {
-    const runtimeState = context.runtimeState;
-    if (runtimeState == null) return null;
-    const cachedEntry = getValidCachedEntry(
-      runtimeState,
-      context.providerId,
-      context.profileScopeId,
-    );
-    if (cachedEntry !== null) {
-      recordCacheHit(runtimeState);
-      return cachedEntry.token;
-    }
-    recordCacheMiss(runtimeState);
-    return null;
-  }
-
-  private async fetchAndCacheOAuthToken(
+  private async fetchOAuthToken(
     context: OAuthResolutionContext,
   ): Promise<string | null> {
-    const requestMetadata = this.buildOAuthRequestMetadata(context);
     const token = await this.oauthManager!.getToken(
       this.config.oauthProvider!,
-      requestMetadata,
+      this.buildOAuthRequestMetadata(context),
     );
-    if (token == null || token === '') return null;
-    const oauthToken = await this.tryGetOAuthTokenMetadata(requestMetadata);
-    this.storeOAuthTokenMetadata(context, token, oauthToken);
-    return token;
+    return token == null || token === '' ? null : token;
   }
 
   private buildOAuthRequestMetadata(
     context: OAuthResolutionContext,
   ): OAuthTokenRequestMetadata {
-    const runtimeMetadata = this.extractRuntimeMetadata(context.runtimeContext);
     return {
-      runtimeAuthScopeId:
-        context.runtimeState?.runtimeAuthScopeId ?? 'no-runtime',
+      runtimeAuthScopeId: 'no-runtime',
       providerId: context.providerId,
       profileId: context.profileId ?? undefined,
-      cliScope: runtimeMetadata,
-      runtimeMetadata,
     };
-  }
-
-  private extractRuntimeMetadata(
-    runtimeContext: IProviderRuntimeContext | null,
-  ): Record<string, unknown> | undefined {
-    const metadata = runtimeContext?.metadata;
-    return metadata != null && typeof metadata === 'object'
-      ? metadata
-      : undefined;
-  }
-
-  private storeOAuthTokenMetadata(
-    context: OAuthResolutionContext,
-    token: string,
-    oauthToken: OAuthToken | null,
-  ): void {
-    const runtimeState = context.runtimeState;
-    if (runtimeState == null) return;
-    storeRuntimeScopedToken(
-      runtimeState,
-      context.providerId,
-      context.profileScopeId,
-      token,
-      oauthToken,
-    );
-  }
-
-  private async tryGetOAuthTokenMetadata(
-    requestMetadata: OAuthTokenRequestMetadata,
-  ): Promise<OAuthToken | null> {
-    if (typeof this.oauthManager?.getOAuthToken !== 'function') return null;
-    try {
-      return await this.oauthManager.getOAuthToken(
-        this.config.oauthProvider!,
-        requestMetadata,
-      );
-    } catch (tokenError) {
-      if (process.env.DEBUG) {
-        this.logger.debug(
-          `Failed to fetch OAuth token metadata for ${this.config.oauthProvider}:`,
-          tokenError,
-        );
-      }
-      return null;
-    }
   }
 
   /**
@@ -900,40 +741,5 @@ export class AuthPrecedenceResolver {
    */
   updateOAuthManager(oauthManager: OAuthManager): void {
     this.oauthManager = oauthManager;
-  }
-
-  /**
-   * Invalidates the cached OAuth tokens for this resolver.
-   * This should be called during logout to ensure fresh tokens are fetched
-   * on the next authentication attempt.
-   *
-   * @plan PLAN-20251023-STATELESS-HARDENING
-   * @requirement Issue #975 - OAuth logout cache invalidation
-   */
-  invalidateCache(): void {
-    const ctx = this.getActiveRuntimeContext();
-    if (ctx === null) {
-      return;
-    }
-    try {
-      flushRuntimeAuthScope(ctx.runtimeId);
-    } catch (error) {
-      this.logger.debug(
-        `Failed to flush runtime auth scope ${ctx.runtimeId}: ${error}`,
-      );
-    }
-  }
-
-  /**
-   * Invalidates cached OAuth tokens for a specific provider.
-   * This enables surgical cache invalidation for a single provider rather than
-   * the all-or-nothing invalidateCache() behavior.
-   *
-   * @param providerId - The provider ID to invalidate cache entries for
-   * @param profileId - Optional profile ID to invalidate only that specific profile
-   * @fix issue1861 - Token revocation handling
-   */
-  invalidateProviderCache(providerId: string, profileId?: string): void {
-    invalidateProviderRuntimeCache(providerId, profileId);
   }
 }

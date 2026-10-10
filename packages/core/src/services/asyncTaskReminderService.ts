@@ -26,10 +26,16 @@ export interface ReminderResult {
  * @pseudocode async-task-reminder-service.md
  */
 export class AsyncTaskReminderService {
-  private readonly taskManager: AsyncTaskManager;
+  private readonly taskManager: Pick<
+    AsyncTaskManager,
+    | 'getAllTasks'
+    | 'getRunningTasks'
+    | 'getPendingNotifications'
+    | 'markNotified'
+  >;
   private shellSource: ShellNotificationSource | undefined;
 
-  constructor(taskManager: AsyncTaskManager) {
+  constructor(taskManager: AsyncTaskReminderService['taskManager']) {
     this.taskManager = taskManager;
   }
 

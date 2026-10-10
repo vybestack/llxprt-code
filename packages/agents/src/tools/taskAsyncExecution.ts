@@ -3,6 +3,10 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type {
+  TaskLaunchOwner,
+  TaskLaunch,
+} from '../session/task-launch-owner.js';
 
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
@@ -12,7 +16,7 @@ import type {
 import type { SubAgentScope } from '../core/subagent.js';
 import { type ContextState } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import type { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
-import type { SubagentSchedulerFactory } from '../core/subagentScheduler.js';
+import type { AgentDisplayCallbacks } from '../api/agent.js';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
 import { createStreamNormalizer } from '@vybestack/llxprt-code-tools/utils/textDelta.js';
 import {
@@ -22,7 +26,6 @@ import {
 import { type TaskToolInvocationParams } from './taskToolGovernance.js';
 import {
   handleBackgroundAbort,
-  readEphemeralSettings,
   setupAsyncTimeout,
   setupForegroundRelay,
   TASK_TIMEOUT_DEFAULT_SETTING,
@@ -40,7 +43,6 @@ import {
 } from '@vybestack/llxprt-code-tools/utils/timeoutResolution.js';
 
 export interface AsyncSetupResult {
-  launchResult: Awaited<ReturnType<SubagentOrchestrator['launch']>>;
   agentId: string;
   scope: SubAgentScope;
   contextState: ContextState;
@@ -54,13 +56,19 @@ export interface AsyncSetupResult {
 
 /** Collaborators needed to run an async task. */
 export interface AsyncTaskCollaborators {
+  taskLaunchOwner?: TaskLaunchOwner;
   config: Config;
+  readTaskPolicy: () => Readonly<{
+    'task-default-timeout-seconds'?: unknown;
+    'task-max-timeout-seconds'?: unknown;
+    globalAsyncEnabled: boolean;
+    profileAsyncEnabled: boolean;
+  }>;
   normalized: TaskToolInvocationParams;
   params: { timeout_seconds?: number; grace_period_seconds?: number };
   createOrchestrator: () => SubagentOrchestrator;
-  getAsyncTaskManager?: () => AsyncTaskManager | undefined;
   isInteractiveEnvironment?: () => boolean;
-  getSchedulerFactory?: () => SubagentSchedulerFactory | undefined;
+  openChildDisplay?: () => AgentDisplayCallbacks;
   buildLaunchRequest: (timeoutMs?: number) => SubagentLaunchRequest;
   buildContextState: () => ContextState;
 }
@@ -85,13 +93,13 @@ export function normalizeSubagentStreamingText(text: string): string {
  * Reads global + ephemeral settings to determine whether async subagents are
  * enabled. Returns an error `ToolResult` when disabled, otherwise `undefined`.
  */
-export function checkAsyncSettings(config: Config): ToolResult | undefined {
-  const settingsService = config.getSettingsService();
-  const globalSettings = settingsService.getAllGlobalSettings();
-  const subagentsSettings = globalSettings['subagents'] as
-    | { asyncEnabled?: boolean; maxAsync?: number }
-    | undefined;
-  const globalAsyncEnabled = subagentsSettings?.asyncEnabled !== false;
+export function checkAsyncSettings(
+  policy: Readonly<{
+    globalAsyncEnabled: boolean;
+    profileAsyncEnabled: boolean;
+  }>,
+): ToolResult | undefined {
+  const globalAsyncEnabled = policy.globalAsyncEnabled;
   if (!globalAsyncEnabled) {
     return {
       llmContent:
@@ -104,9 +112,7 @@ export function checkAsyncSettings(config: Config): ToolResult | undefined {
     };
   }
 
-  const ephemeralSettings = readEphemeralSettings(config);
-  const profileAsyncEnabled =
-    ephemeralSettings['subagents.async.enabled'] !== false;
+  const profileAsyncEnabled = policy.profileAsyncEnabled;
   if (!profileAsyncEnabled) {
     return {
       llmContent:
@@ -149,28 +155,19 @@ export function createAsyncSlotResult(
  * Validates async preconditions and reserves a booking slot. Returns either
  * an error ToolResult or the validated orchestrator + task manager + booking id.
  */
-export function resolveAsyncContext(collaborators: AsyncTaskCollaborators):
+export function resolveAsyncContext(
+  collaborators: AsyncTaskCollaborators,
+  asyncTaskManager: AsyncTaskManager,
+):
   | ToolResult
   | {
       asyncTaskManager: AsyncTaskManager;
       orchestrator: SubagentOrchestrator;
       bookingId: string;
     } {
-  const settingsCheck = checkAsyncSettings(collaborators.config);
+  const settingsCheck = checkAsyncSettings(collaborators.readTaskPolicy());
   if (settingsCheck) {
     return settingsCheck;
-  }
-
-  const asyncTaskManager = collaborators.getAsyncTaskManager?.();
-  if (asyncTaskManager === undefined) {
-    return {
-      llmContent: 'Async mode requires AsyncTaskManager to be configured.',
-      returnDisplay: 'Error: Async mode not available.',
-      error: {
-        message: 'AsyncTaskManager not configured',
-        type: ToolErrorType.EXECUTION_FAILED,
-      },
-    };
   }
 
   let orchestrator: SubagentOrchestrator;
@@ -195,23 +192,35 @@ export function resolveAsyncContext(collaborators: AsyncTaskCollaborators):
  * Cleans up partially-allocated async resources after a failed launch:
  * foreground relay, slot reservation, timeout timer, and scope disposal.
  */
-function cleanupFailedAsyncLaunch(
+async function cleanupFailedAsyncLaunch(
+  primaryError: unknown,
   cleanupForegroundRelay: () => void,
   taskRegistered: boolean,
   bookingId: string | undefined,
   asyncTaskManager: AsyncTaskManager,
   timeoutId: NodeJS.Timeout | null,
   dispose: (() => Promise<void>) | undefined,
-): void {
-  cleanupForegroundRelay();
-  if (!taskRegistered && bookingId) {
-    asyncTaskManager.cancelReservation(bookingId);
-  }
-  if (timeoutId) {
-    clearTimeout(timeoutId);
-  }
-  if (dispose) {
-    void dispose().catch(() => {});
+): Promise<void> {
+  try {
+    await cleanupAsyncSteps([
+      cleanupForegroundRelay,
+      () => {
+        if (!taskRegistered && bookingId) {
+          asyncTaskManager.cancelReservation(bookingId);
+        }
+      },
+      () => {
+        if (timeoutId) clearTimeout(timeoutId);
+      },
+      async () => {
+        await dispose?.();
+      },
+    ]);
+  } catch (cleanupError) {
+    throw new AggregateError(
+      [primaryError, cleanupError],
+      'Async launch and cleanup failed',
+    );
   }
 }
 
@@ -242,19 +251,35 @@ function createLaunchTimeoutResult(resolution: TimeoutResolution): ToolResult {
  * subagent, registers the task, and arms the timeout. Returns either an error
  * `ToolResult` (on launch failure) or the `AsyncSetupResult`.
  */
+function registerLaunchedTask(
+  manager: AsyncTaskManager,
+  id: string,
+  task: TaskToolInvocationParams,
+  launch: TaskLaunch,
+  bookingId: string | undefined,
+): void {
+  manager.registerTask(
+    {
+      id,
+      subagentName: task.subagentName,
+      goalPrompt: task.goalPrompt,
+      abortController: launch.controller,
+    },
+    bookingId,
+  );
+  launch.register(id);
+}
+
 export async function setupAsyncInfrastructure(
   collaborators: AsyncTaskCollaborators,
   foregroundSignal: AbortSignal,
   orchestrator: SubagentOrchestrator,
   asyncTaskManager: AsyncTaskManager,
   bookingId: string | undefined,
+  launch: TaskLaunch,
 ): Promise<(AsyncSetupResult & { error?: undefined }) | ToolResult> {
-  let launchResult: Awaited<ReturnType<SubagentOrchestrator['launch']>>;
-  let agentId: string | undefined;
-  let scope: SubAgentScope;
-  let contextState: ContextState;
   let dispose: (() => Promise<void>) | undefined;
-  const asyncAbortController = new AbortController();
+  const asyncAbortController = launch.controller;
   let timeoutId: NodeJS.Timeout | null = null;
   let taskRegistered = false;
   const timedOut = { value: false };
@@ -269,39 +294,52 @@ export async function setupAsyncInfrastructure(
 
   // Arm the timeout BEFORE launch so the abort signal bounds it; carrying the
   // full resolution lets the result and timeout failure report the bound (#3031).
-  const timeoutSetup = setupAsyncTimeout(
-    collaborators.config,
-    collaborators.params.timeout_seconds,
-    asyncAbortController,
-    timedOut,
-  );
-  timeoutId = timeoutSetup.timeoutId;
-  const resolution = timeoutSetup.resolution;
-  const timeoutMs = effectiveTimeoutMs(resolution);
-
+  let resolution: TimeoutResolution | undefined;
   try {
+    asyncAbortController.signal.throwIfAborted();
+    const timeoutSetup = setupAsyncTimeout(
+      collaborators.readTaskPolicy(),
+      collaborators.params.timeout_seconds,
+      asyncAbortController,
+      timedOut,
+    );
+    timeoutId = timeoutSetup.timeoutId;
+    resolution = timeoutSetup.resolution;
+    const timeoutMs = effectiveTimeoutMs(resolution);
+
     const launchRequest = collaborators.buildLaunchRequest(timeoutMs);
-    launchResult = await orchestrator.launch(
+    const launchResult = await orchestrator.launch(
       launchRequest,
       asyncAbortController.signal,
     );
-    agentId = launchResult.agentId;
-    scope = launchResult.scope;
+    const { agentId, scope } = launchResult;
     dispose = launchResult.dispose;
-    contextState = collaborators.buildContextState();
+    asyncAbortController.signal.throwIfAborted();
+    const contextState = collaborators.buildContextState();
 
-    asyncTaskManager.registerTask(
-      {
-        id: agentId,
-        subagentName: collaborators.normalized.subagentName,
-        goalPrompt: collaborators.normalized.goalPrompt,
-        abortController: asyncAbortController,
-      },
+    registerLaunchedTask(
+      asyncTaskManager,
+      agentId,
+      collaborators.normalized,
+      launch,
       bookingId,
     );
     taskRegistered = true;
+    cleanupForegroundRelay();
+    return {
+      agentId,
+      scope,
+      contextState,
+      dispose,
+      asyncAbortController,
+      timeoutId,
+      timedOut,
+      cleanupForegroundRelay,
+      resolution,
+    };
   } catch (error) {
-    cleanupFailedAsyncLaunch(
+    await cleanupFailedAsyncLaunch(
+      error,
       cleanupForegroundRelay,
       taskRegistered,
       bookingId,
@@ -309,7 +347,7 @@ export async function setupAsyncInfrastructure(
       timeoutId,
       dispose,
     );
-    if (timedOut.value) {
+    if (timedOut.value && resolution) {
       return createLaunchTimeoutResult(resolution);
     }
     return createErrorResult(
@@ -317,19 +355,6 @@ export async function setupAsyncInfrastructure(
       `Failed to launch async subagent '${collaborators.normalized.subagentName}'.`,
     );
   }
-
-  return {
-    launchResult,
-    agentId,
-    scope,
-    contextState,
-    dispose,
-    asyncAbortController,
-    timeoutId,
-    timedOut,
-    cleanupForegroundRelay,
-    resolution,
-  };
 }
 
 /**
@@ -397,8 +422,8 @@ export function executeInBackground(
   emitClosingSubagentTag?: () => void,
   cleanupForegroundRelay?: () => void,
   timedOut?: { value: boolean },
-): void {
-  void (async () => {
+): Promise<void> {
+  return (async () => {
     try {
       const environmentInteractive =
         collaborators.isInteractiveEnvironment?.() ?? true;
@@ -407,10 +432,9 @@ export function executeInBackground(
         environmentInteractive &&
         typeof scope.runInteractive === 'function'
       ) {
-        const schedulerFactory = collaborators.getSchedulerFactory?.();
-        const interactiveOptions = schedulerFactory
-          ? { schedulerFactory }
-          : undefined;
+        const interactiveOptions = {
+          displayCallbacks: collaborators.openChildDisplay?.(),
+        };
         await scope.runInteractive(contextState, interactiveOptions);
       } else {
         await scope.runNonInteractive(contextState);
@@ -450,19 +474,14 @@ export function executeInBackground(
         error instanceof Error ? error.message : String(error);
       asyncTaskManager.failTask(agentId, errorMessage);
     } finally {
-      emitClosingSubagentTag?.();
-
-      if (timeoutId !== null) {
-        clearTimeout(timeoutId);
-      }
-
-      cleanupForegroundRelay?.();
-
-      try {
-        await dispose();
-      } catch {
-        // Swallow dispose errors
-      }
+      await cleanupAsyncSteps([
+        () => emitClosingSubagentTag?.(),
+        () => {
+          if (timeoutId !== null) clearTimeout(timeoutId);
+        },
+        () => cleanupForegroundRelay?.(),
+        dispose,
+      ]);
     }
   })();
 }
@@ -472,73 +491,33 @@ export function executeInBackground(
  * infrastructure, stream, and kick off background execution. Returns the
  * "task launched" `ToolResult` immediately.
  */
-export async function executeAsyncTask(
-  collaborators: AsyncTaskCollaborators,
-  signal: AbortSignal,
-  updateOutput?: (update: LiveOutputUpdate) => void,
-): Promise<ToolResult> {
-  const ctx = resolveAsyncContext(collaborators);
-  if (!('asyncTaskManager' in ctx)) {
-    return ctx;
+async function cleanupAsyncSteps(
+  steps: ReadonlyArray<() => void | Promise<void>>,
+): Promise<void> {
+  const errors: unknown[] = [];
+  for (const step of steps) {
+    try {
+      await step();
+    } catch (error) {
+      errors.push(error);
+    }
   }
-  const { asyncTaskManager, orchestrator, bookingId } = ctx;
+  if (errors.length > 0)
+    throw new AggregateError(errors, 'Async task cleanup failed');
+}
 
-  const setupResult = await setupAsyncInfrastructure(
-    collaborators,
-    signal,
-    orchestrator,
-    asyncTaskManager,
-    bookingId,
-  );
-  if ('error' in setupResult && setupResult.error) {
-    return setupResult;
-  }
-
-  const {
-    agentId,
-    scope,
-    contextState,
-    dispose,
-    asyncAbortController,
-    timeoutId,
-    timedOut,
-    cleanupForegroundRelay,
-    resolution,
-  } = setupResult as AsyncSetupResult;
-
-  const asyncStreaming = setupAsyncStreaming(
-    collaborators.normalized.subagentName,
-    scope,
-    agentId,
-    updateOutput,
-  );
-
-  executeInBackground(
-    collaborators,
-    scope,
-    contextState,
-    agentId,
-    asyncTaskManager,
-    dispose,
-    asyncAbortController.signal,
-    timeoutId,
-    resolution,
-    asyncStreaming?.emitAsyncClosingSubagentTag,
-    cleanupForegroundRelay,
-    timedOut,
-  );
-
+function createAcceptedResult(
+  subagentName: string,
+  agentId: string,
+  resolution: TimeoutResolution,
+): ToolResult {
   return attachTimeoutMetadata(
     {
       llmContent:
-        `Async task launched: subagent '${collaborators.normalized.subagentName}' (ID: ${agentId}). ` +
+        `Async task launched: subagent '${subagentName}' (ID: ${agentId}). ` +
         `Task is running in background. Use 'check_async_tasks' to monitor progress.`,
-      returnDisplay: `Async task started: **${collaborators.normalized.subagentName}** (\`${agentId}\`)`,
-      metadata: {
-        agentId,
-        async: true,
-        status: 'running',
-      },
+      returnDisplay: `Async task started: **${subagentName}** (\`${agentId}\`)`,
+      metadata: { agentId, async: true, status: 'running' },
     },
     resolution,
     {
@@ -546,4 +525,110 @@ export async function executeAsyncTask(
       maxSetting: TASK_TIMEOUT_MAX_SETTING,
     },
   );
+}
+
+async function startAsyncStreaming(
+  collaborators: AsyncTaskCollaborators,
+  setup: AsyncSetupResult,
+  manager: AsyncTaskManager,
+  updateOutput?: (update: LiveOutputUpdate) => void,
+): Promise<ReturnType<typeof setupAsyncStreaming>> {
+  try {
+    return setupAsyncStreaming(
+      collaborators.normalized.subagentName,
+      setup.scope,
+      setup.agentId,
+      updateOutput,
+    );
+  } catch (error) {
+    manager.failTask(
+      setup.agentId,
+      error instanceof Error ? error.message : String(error),
+    );
+    await cleanupFailedAsyncLaunch(
+      error,
+      setup.cleanupForegroundRelay,
+      true,
+      undefined,
+      manager,
+      setup.timeoutId,
+      setup.dispose,
+    );
+    throw error;
+  }
+}
+
+export function executeAsyncTask(
+  collaborators: AsyncTaskCollaborators,
+  signal: AbortSignal,
+  updateOutput?: (update: LiveOutputUpdate) => void,
+): Promise<ToolResult> {
+  const owner = collaborators.taskLaunchOwner;
+  if (!owner)
+    return Promise.resolve({
+      llmContent: 'Async task requires an Agent task launch owner.',
+      returnDisplay: 'Error: Async task is not bound to an Agent.',
+      error: {
+        message: 'Async task requires an Agent task launch owner',
+        type: ToolErrorType.EXECUTION_FAILED,
+      },
+    });
+  return owner.start(async (launch, publish) => {
+    const ctx = resolveAsyncContext(collaborators, owner.manager);
+    if (!('asyncTaskManager' in ctx)) {
+      publish(ctx);
+      return;
+    }
+    const { asyncTaskManager, orchestrator, bookingId } = ctx;
+    const setup = await setupAsyncInfrastructure(
+      collaborators,
+      signal,
+      orchestrator,
+      asyncTaskManager,
+      bookingId,
+      launch,
+    );
+    if (!('scope' in setup)) {
+      publish(setup);
+      return;
+    }
+    const {
+      agentId,
+      scope,
+      contextState,
+      dispose,
+      asyncAbortController,
+      timeoutId,
+      timedOut,
+      cleanupForegroundRelay,
+      resolution,
+    } = setup;
+    const streaming = await startAsyncStreaming(
+      collaborators,
+      setup,
+      asyncTaskManager,
+      updateOutput,
+    );
+    publish(
+      createAcceptedResult(
+        collaborators.normalized.subagentName,
+        agentId,
+        resolution,
+      ),
+    );
+    await executeInBackground(
+      collaborators,
+      scope,
+      contextState,
+      agentId,
+      asyncTaskManager,
+      dispose,
+      asyncAbortController.signal,
+      timeoutId,
+      resolution,
+      streaming?.emitAsyncClosingSubagentTag,
+      cleanupForegroundRelay,
+      timedOut,
+    );
+  });
 }

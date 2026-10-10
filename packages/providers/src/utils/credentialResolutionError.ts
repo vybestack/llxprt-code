@@ -17,7 +17,7 @@ interface CredentialFailureFallback {
 }
 
 function resolveProfile(options: NormalizedGenerateChatOptions): string {
-  const profile = options.settings.get('currentProfile');
+  const profile = options.invocation.getEphemeral('currentProfile');
   return typeof profile === 'string' && profile.trim() !== ''
     ? profile
     : 'no-profile';
@@ -36,6 +36,8 @@ export function createCredentialResolutionError(
     kind: 'no-credential-configured',
   },
 ): CredentialResolutionError {
+  if (fallback.cause instanceof CredentialResolutionError)
+    return fallback.cause;
   if (options.resolved.authFailure !== undefined) {
     const failure = options.resolved.authFailure;
     const hasLiveCause = fallback.cause !== undefined;
@@ -57,7 +59,7 @@ export function createCredentialResolutionError(
     {
       provider,
       profile: resolveProfile(options),
-      runtimeId: options.runtime?.runtimeId ?? 'no-runtime',
+      runtimeId: options.invocation.runtimeId,
       attemptedMechanisms: 'unknown',
       proxyMode: Boolean(process.env.LLXPRT_CREDENTIAL_SOCKET),
       proxyContacted: 'unknown',

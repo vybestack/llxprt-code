@@ -9,8 +9,7 @@ import type {
   AttemptLifecycleObserver,
   AttemptStartInfo,
 } from './attemptLifecycle.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { logApiError } from '@vybestack/llxprt-code-core/telemetry/loggers.js';
+import type { ProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
 import { ApiErrorEvent } from '@vybestack/llxprt-code-core/telemetry/types.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { getPerfPhaseObserver } from '@vybestack/llxprt-code-core/perf/perfPhaseObserver.js';
@@ -90,7 +89,7 @@ interface ResolvedAttemptTokens {
 export interface AttemptRecorderOptions {
   readonly providerName: string;
   readonly defaultModelName: string;
-  readonly config: Config | undefined;
+  readonly config: ProviderRequestDiagnostics | undefined;
   readonly logicalRequestId: string;
   /**
    * When true, the wrapper (LoggingProviderWrapper) is the sole lifecycle
@@ -137,7 +136,7 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
   private readonly wrapperOwned: boolean;
   private readonly providerName: string;
   private readonly defaultModelName: string;
-  private readonly config: Config | undefined;
+  private readonly config: ProviderRequestDiagnostics | undefined;
   private readonly logicalRequestId: string;
 
   constructor(opts: AttemptRecorderOptions) {
@@ -461,7 +460,7 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
     const modelName = info.modelName || attempt.modelName;
 
     const isConversationLoggingEnabled =
-      this.config?.getConversationLoggingEnabled() === true;
+      this.config?.conversationLoggingEnabled === true;
 
     if (info.status === 'success') {
       this.emitSuccessRecord(
@@ -633,7 +632,7 @@ export class AttemptRecorder implements AttemptLifecycleObserver {
       errorEvent.usage_metadata_present =
         attempt.latestTokenUsage !== undefined;
       errorEvent.provider_owned = true;
-      logApiError(this.config, errorEvent);
+      this.config.recordApiError(errorEvent);
     } catch (err) {
       this.logger.error(
         () =>

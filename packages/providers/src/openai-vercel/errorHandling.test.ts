@@ -80,9 +80,7 @@ describe('OpenAIVercelProvider - Error Handling', () => {
       (...args: never[]) => unknown
     >;
 
-    provider = new OpenAIVercelProvider('test-api-key', undefined, {
-      settingsService,
-    });
+    provider = new OpenAIVercelProvider('test-api-key', undefined);
   });
 
   afterEach(() => {

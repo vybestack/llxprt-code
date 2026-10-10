@@ -175,7 +175,13 @@ ${this.host.getTargetDir()}
     )}".`;
   }
 
-  async execute(signal: AbortSignal): Promise<ToolResult> {
+  execute(signal: AbortSignal): Promise<ToolResult> {
+    return this.host.runSearch(this.host.getWorkspaceRoots(), () =>
+      this.executeScan(signal),
+    );
+  }
+
+  private async executeScan(signal: AbortSignal): Promise<ToolResult> {
     const {
       paths: inputPatterns,
       include = [],
@@ -503,7 +509,7 @@ ${this.host.getTargetDir()}
   }
 
   private resolveLimits(): ReadManyFilesLimits {
-    const ephemeralSettings = this.host.getEphemeralSettings();
+    const ephemeralSettings = this.host.readExecutionPolicy();
     const rawMaxItems = Number(
       (ephemeralSettings['tool-output-max-items'] as number | undefined) ??
         DEFAULT_MAX_FILE_COUNT,
@@ -591,14 +597,14 @@ ${this.host.getTargetDir()}
     limits: ReadManyFilesLimits,
     aggregateByteBudget: ByteBudget,
   ): Promise<ProcessFilesResult> {
-    const ephemeralSettings = this.host.getEphemeralSettings();
+    const ephemeralSettings = this.host.readExecutionPolicy();
     // Resolve both image policies once from one settings snapshot inside one
     // guard so malformed settings surface as structured tool errors.
     let imageResizePolicy: ImageResizePolicy | undefined;
     let imageBudget: ImageDimensionBudget | undefined;
     try {
-      imageResizePolicy = resolveImageResizePolicy(ephemeralSettings);
-      imageBudget = resolveImageDimensionBudget(ephemeralSettings);
+      imageResizePolicy = resolveImageResizePolicy({ ...ephemeralSettings });
+      imageBudget = resolveImageDimensionBudget({ ...ephemeralSettings });
     } catch (error) {
       return createImageConfigurationToolResult(
         getErrorMessage(error),

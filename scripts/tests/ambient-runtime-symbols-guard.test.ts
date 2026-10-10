@@ -31,6 +31,34 @@ import {
   scanForBannedAmbientSymbols,
 } from './ambient-runtime-symbols-guard.js';
 
+it.each([
+  'getActiveProfileName',
+  'setDefaultProfileName',
+  'getRuntimeDiagnosticsSnapshot',
+])(
+  'rejects deleted free profile accessor %s while allowing owner methods',
+  (name) => {
+    const root = mkdtempSync(join(tmpdir(), 'profile-accessor-guard-'));
+    try {
+      const file = join(root, 'consumer.ts');
+      writeFileSync(
+        file,
+        `import { ${name} } from '@vybestack/llxprt-code-providers/runtime.js';\n`,
+      );
+      expect(scanForBannedAmbientSymbols([root]).violations).toHaveLength(1);
+      writeFileSync(file, `export function ${name}() {}\n`);
+      expect(scanForBannedAmbientSymbols([root]).violations).toHaveLength(1);
+      writeFileSync(
+        file,
+        `class Owner { ${name}() {} }\nconst value = agent.${name}();\n`,
+      );
+      expect(scanForBannedAmbientSymbols([root]).violations).toEqual([]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  },
+);
+
 /**
  * Enumerates every packages/<pkg>/src source root dynamically so the guard
  * covers the whole monorepo; a package lacking a src/ directory makes
@@ -53,7 +81,111 @@ function repoPackageSrcRoots(): string[] {
   return roots.sort();
 }
 
+it.each(['errors.ts', 'RetryOrchestrator.ts'])(
+  'rejects ambient identity in migrated retry consumer %s',
+  (name) => {
+    const root = mkdtempSync(join(tmpdir(), 'retry-identity-guard-'));
+    try {
+      const file = join(root, name);
+      writeFileSync(
+        file,
+        'import { getActiveRuntimeKind as kind } from "./runtime/active-runtime-identity.js";\n',
+      );
+      expect(scanForBannedAmbientSymbols([root]).violations).toHaveLength(1);
+      writeFileSync(
+        file,
+        'export function suffix(runtimeKind: string | undefined) { return runtimeKind; }\n',
+      );
+      expect(scanForBannedAmbientSymbols([root]).violations).toEqual([]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  },
+);
 describe('ambient runtime symbols guard', () => {
+  it.each([
+    'ownershipByConfig',
+    'oauthRuntimeBridge',
+    'OAuthRuntimeBridge',
+    'OAuthRuntimeAccessors',
+    'buildOAuthRuntimeAccessors',
+    'registerOAuthRuntimeAccessors',
+    'getBrowserProfileAssociationStore',
+  ])(
+    'rejects the deleted OAuth bridge symbol %s without banning unrelated accessors',
+    (symbol) => {
+      const root = mkdtempSync(join(tmpdir(), 'oauth-bridge-guard-'));
+      try {
+        const file = join(root, 'consumer.ts');
+        writeFileSync(file, `export const ${symbol} = {};\n`);
+        expect(scanForBannedAmbientSymbols([root]).violations).toHaveLength(1);
+        writeFileSync(
+          file,
+          'export function getEphemeralSetting() {}\nexport function getBrowserProfileAssociation() {}\nexport function getInteractiveAuthTimeoutMs() {}\n',
+        );
+        expect(scanForBannedAmbientSymbols([root]).violations).toEqual([]);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.each([
+    'runtimeRegistry',
+    'setDefaultCliRuntimeId',
+    'upsertRuntimeEntry',
+    'registerCliProviderInfrastructure',
+    'enterRuntimeScope',
+    'runWithRuntimeScope',
+    'getCurrentRuntimeScope',
+  ])('rejects removed provider identity mechanism %s', (symbol) => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), 'provider-identity-guard-'));
+    try {
+      writeFileSync(
+        join(fixtureRoot, 'consumer.ts'),
+        `export const ${symbol} = 1;\n`,
+      );
+      expect(
+        scanForBannedAmbientSymbols([fixtureRoot]).violations,
+      ).toHaveLength(1);
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects module-owned OAuth registration state but allows instance fields and local names', () => {
+    const fixtureRoot = mkdtempSync(
+      join(tmpdir(), 'oauth-registration-guard-'),
+    );
+    try {
+      const file = join(fixtureRoot, 'oauth-provider-registration.ts');
+      writeFileSync(
+        file,
+        'let registeredProviders = new WeakMap<object, Set<string>>();\n',
+      );
+      const rejected = scanForBannedAmbientSymbols([fixtureRoot]);
+      expect(rejected.violations).toEqual([
+        {
+          file,
+          line: 1,
+          text: 'let registeredProviders = new WeakMap<object, Set<string>>();',
+        },
+      ]);
+
+      writeFileSync(
+        file,
+        [
+          'class Manager { registeredProviders = new Map(); }',
+          'function names(manager: Manager) { const registeredProviders = manager.registeredProviders; return registeredProviders; }',
+          '// registeredProviders is an instance field, not a module registry.',
+        ].join('\n'),
+      );
+      expect(scanForBannedAmbientSymbols([fixtureRoot]).violations).toEqual([]);
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
   it('reports a violation for a file referencing a deleted symbol', () => {
     const fixtureRoot = mkdtempSync(join(tmpdir(), 'ambient-guard-fixture-'));
     try {
@@ -85,7 +217,7 @@ describe('ambient runtime symbols guard', () => {
     }
   });
 
-  it.each(BANNED_AMBIENT_SYMBOLS)(
+  it.each([...BANNED_AMBIENT_SYMBOLS])(
     'reports a violation for every banned symbol (%s) on its own fixture',
     (bannedSymbol) => {
       const fixtureRoot = mkdtempSync(
@@ -179,10 +311,15 @@ describe('ambient runtime symbols guard', () => {
   });
 
   it('keeps the banned list aligned with the deleted mechanisms', () => {
+    expect(BANNED_AMBIENT_SYMBOLS).toContain('resetRegisteredProviders');
     expect(BANNED_AMBIENT_SYMBOLS).toContain('settingsServiceInstance');
     expect(BANNED_AMBIENT_SYMBOLS).toContain('setProviderRuntimeStateFactory');
     expect(BANNED_AMBIENT_SYMBOLS).toContain(
       'deactivateSettingsRuntimeContext',
     );
+    // PR B: AgentRuntimeState module-level registries and subscribe entry.
+    expect(BANNED_AMBIENT_SYMBOLS).toContain('runtimeStateRegistry');
+    expect(BANNED_AMBIENT_SYMBOLS).toContain('subscriptionRegistry');
+    expect(BANNED_AMBIENT_SYMBOLS).toContain('subscribeToAgentRuntimeState');
   });
 });

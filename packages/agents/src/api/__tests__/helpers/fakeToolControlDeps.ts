@@ -1,3 +1,5 @@
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { resolveShellJobSettings } from '@vybestack/llxprt-code-core/config/asyncTaskServices.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -23,7 +25,7 @@ import {
   MessageBusType,
   type ToolConfirmationResponse,
 } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 // @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007
 import { getToolKeyStorage } from '@vybestack/llxprt-code-core';
 import type {
@@ -34,6 +36,25 @@ import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import type { AnyDeclarativeTool } from '@vybestack/llxprt-code-tools';
 import type { EditorCallbacks } from '../../config-types.js';
 import type { ToolControlDeps } from '../../control/toolControl.js';
+import { ShellJobOwner } from '../../../session/shell-job-owner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+
+import { afterEach } from 'bun:test';
+
+const fixtureRoots: Array<{
+  config: Config;
+  settingsOwner: SessionSettingsOwner;
+  shellOwner: ShellJobOwner;
+}> = [];
+afterEach(async () => {
+  await Promise.all(
+    fixtureRoots.splice(0).map(async (root) => {
+      await root.shellOwner.dispose();
+      await root.settingsOwner.dispose();
+      await root.config.dispose();
+    }),
+  );
+});
 
 export { MessageBusType };
 
@@ -110,7 +131,6 @@ export function createToolControlDeps(
   tools: readonly FakeRegistryToolEntry[] = [],
 ): ToolControlDepsHandle {
   const messageBus = new MessageBus();
-  let allowed: readonly string[] | undefined;
   const editorCallbacksHolder = { editorCallbacks: noopEditorCallbacks };
   const responses: ToolConfirmationResponse[] = [];
 
@@ -131,30 +151,49 @@ export function createToolControlDeps(
   );
   const enabledTools = allTools.filter((t) => enabledNames.has(t.name));
 
-  const settingsService = {
-    set: (key: string, value: unknown): void => {
-      if (key === 'tools.allowed' && Array.isArray(value)) {
-        allowed = value as readonly string[];
-      }
-    },
-  };
+  const settingsService = new SettingsService();
+  const settingsOwner = new SessionSettingsOwner(settingsService);
 
   const toolMap = new Map(allTools.map((t) => [t.name, t]));
   const toolRegistry = {
+    getAllToolNames: () => [...toolMap.keys()],
+    getFunctionDeclarations: () => allTools.map((tool) => tool.schema),
+    getFunctionDeclarationsFiltered: (names: string[]) =>
+      allTools
+        .filter((tool) => names.includes(tool.name))
+        .map((tool) => tool.schema),
     getAllTools: () => allTools,
     getEnabledTools: () => enabledTools,
     getTool: (name: string): AnyDeclarativeTool | undefined =>
       toolMap.get(name),
   };
 
-  const config = {
-    getToolRegistry: () => toolRegistry,
-    getSettingsService: () => settingsService,
-  } as unknown as Config;
-
+  const config = new Config({
+    sessionId: 'tool-control-fixture',
+    model: 'tool-control-fixture',
+    targetDir: process.cwd(),
+    cwd: process.cwd(),
+    debugMode: false,
+  });
+  const shellOwner = new ShellJobOwner(() =>
+    resolveShellJobSettings(settingsService),
+  );
+  fixtureRoots.push({ config, settingsOwner, shellOwner });
   const deps: ToolControlDeps = {
+    telemetry: settingsOwner.bindTelemetry(config),
+    readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+    getToolGovernance: () => settingsOwner.readToolGovernance([]),
+    selection: toolRegistry,
+    setAllowedTools: (names) => {
+      settingsOwner.setAllowedTools(names);
+    },
+    describeConfiguration: () => ({
+      registered: allTools.map((tool) => ({ displayName: tool.name })),
+      unregistered: [],
+    }),
     messageBus,
     config,
+    shellOwner,
     editorCallbacksHolder,
     displayCallbacksHolder: {},
     resolveClient: () => {
@@ -167,7 +206,12 @@ export function createToolControlDeps(
   return {
     deps,
     messageBus,
-    lastAllowed: () => allowed,
+    lastAllowed: () => {
+      const value = settingsOwner.readNamedParameter('tools.allowed');
+      return Array.isArray(value)
+        ? value.filter((name): name is string => typeof name === 'string')
+        : undefined;
+    },
     editorCallbacksHolder,
     responses: () => responses,
   };

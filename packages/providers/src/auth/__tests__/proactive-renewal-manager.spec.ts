@@ -249,7 +249,10 @@ describe('ProactiveRenewalManager', () => {
       // Fire the timer
       await advanceTimersByTimeAsync(305 * 1000);
 
-      expect(provider.refreshToken).toHaveBeenCalledWith(currentToken);
+      expect(provider.refreshToken).toHaveBeenCalledWith(
+        currentToken,
+        expect.any(AbortSignal),
+      );
       expect(tokenStore.saveToken).toHaveBeenCalled();
     });
 
@@ -300,14 +303,18 @@ describe('ProactiveRenewalManager', () => {
       const nowSec = Date.now() / 1000;
       const token = createMockToken(nowSec + 600);
 
-      // Make getToken block to simulate in-flight
-      let resolveGetToken: ((value: OAuthToken | null) => void) | undefined;
+      let entered = (): void => {};
+      const reading = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      let resolveGetToken = (_value: OAuthToken | null): void => {};
       (
         tokenStore.getToken as Mock<typeof tokenStore.getToken>
       ).mockImplementation(
         () =>
           new Promise<OAuthToken | null>((resolve) => {
             resolveGetToken = resolve;
+            entered();
           }),
       );
       (
@@ -317,13 +324,11 @@ describe('ProactiveRenewalManager', () => {
       // Start first renewal (will block on getToken)
       const firstRun = manager.runProactiveRenewal('test-provider', 'default');
 
-      // Start second renewal — should bail due to in-flight
       const secondRun = manager.runProactiveRenewal('test-provider', 'default');
-      await secondRun;
-
-      // Resolve the blocked getToken and complete first run
-      resolveGetToken?.(token);
-      await firstRun;
+      expect(secondRun).toBe(firstRun);
+      await reading;
+      resolveGetToken(token);
+      await Promise.all([firstRun, secondRun]);
 
       // Only one call to acquireRefreshLock
       expect(tokenStore.acquireRefreshLock).toHaveBeenCalledTimes(1);

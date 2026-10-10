@@ -3,16 +3,19 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { installTestCatalogOwners } from '@vybestack/llxprt-code-test-utils/core/config.js';
+const createTestCatalogOwner = installTestCatalogOwners();
+import { createTestOAuthBinding } from './test-support/index.js';
+
+import { unsupportedApprovalPolicy } from './test-support/approval-policy.js';
 
 import { waitFor } from '../../../test-utils/src/wait-for.js';
 import { vi, describe, it, expect, afterEach, type Mock } from 'bun:test';
 import { McpClientManager } from './mcp-client-manager.js';
 import { McpClient, populateMcpServerCommand } from './mcp-client.js';
-import type { Config } from './test-support/mcpClientTestSupport.js';
+import type { Config as BaseConfig } from './test-support/mcpClientTestSupport.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import type { PromptRegistry } from './test-support/mcpClientTestSupport.js';
-import type { ResourceRegistry } from './test-support/mcpClientTestSupport.js';
-import type { WorkspaceContext } from './test-support/mcpClientTestSupport.js';
+
 import type {
   MCPServerConfig,
   LlxprtExtension,
@@ -35,21 +38,30 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     (McpClient as unknown as Mock<(...args: never[]) => unknown>).mockReset();
   });
 
-  const createRegistries = () => ({
-    promptRegistry: {
-      removePromptsByServer: vi.fn(),
-    } as unknown as PromptRegistry,
-    resourceRegistry: {
-      removeResourcesByServer: vi.fn(),
-    } as unknown as ResourceRegistry,
-    toolRegistry: {
-      removeMcpToolsByServer: vi.fn(),
-    } as unknown as ToolRegistry,
-  });
+  const createRegistries = () => {
+    const catalog = createTestCatalogOwner();
+    return {
+      catalog,
+      promptRegistry: {
+        ...catalog.promptPublication,
+        removePromptsByServer: vi.fn(
+          catalog.promptPublication.removePromptsByServer,
+        ),
+      },
+      resourceRegistry: {
+        ...catalog.resourcePublication,
+        removeResourcesByServer: vi.fn(
+          catalog.resourcePublication.removeResourcesByServer,
+        ),
+      },
+      toolRegistry: {
+        removeMcpToolsByServer: vi.fn(),
+      } as unknown as ToolRegistry,
+    };
+  };
 
   const createConfig = (
     servers: Record<string, unknown>,
-    registries: ReturnType<typeof createRegistries>,
     options: {
       getServers?: () => Record<string, MCPServerConfig>;
       trusted?: boolean;
@@ -60,17 +72,13 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
       isTrustedFolder: () => options.trusted ?? true,
       getMcpServers: options.getServers ?? (() => servers),
       getMcpServerCommand: () => options.mcpServerCommand ?? '',
-      getPromptRegistry: () => registries.promptRegistry,
-      getResourceRegistry: () => registries.resourceRegistry,
+
       getDebugMode: () => false,
-      getWorkspaceContext: () => ({}) as WorkspaceContext,
+
       getEnableExtensionReloading: () => false,
-      getExtensionEvents: () => undefined,
       getAllowedMcpServers: () => undefined,
       getBlockedMcpServers: () => undefined,
-      getAgentClient: () => ({
-        isInitialized: () => false,
-      }),
+
       getExtensions: () => [],
       refreshMcpContext: vi.fn(),
     }) as unknown as Config;
@@ -101,7 +109,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
   ): void => {
     (
       McpClient as unknown as Mock<(...args: never[]) => unknown>
-    ).mockImplementation((serverName) => {
+    ).mockImplementation((_oauth, _approvalPolicy, serverName) => {
       const client = clientsByServer[serverName].shift();
       if (client === undefined) {
         throw new Error(`No queued MCP client for '${serverName}'`);
@@ -117,11 +125,16 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     useClientsByServer({ 'my-server': [goodClient, freshClient] });
 
     const registries = createRegistries();
-    const config = createConfig({ 'my-server': {} }, registries);
+    const config = createConfig({ 'my-server': {} });
     const manager = new McpClientManager(
+      createTestOAuthBinding(),
+      unsupportedApprovalPolicy(),
       '0.0.1',
       registries.toolRegistry,
+      registries.promptRegistry,
+      registries.resourceRegistry,
       config,
+      config.refreshMcpContext,
     );
 
     await manager.startConfiguredMcpServers();
@@ -143,7 +156,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     expect(freshClient.discover).toHaveBeenCalledOnce();
 
     expect(manager.getMcpServerCount()).toBe(1);
-    expect(manager.getClient('my-server')).toBe(
+    expect<unknown>(manager.getClient('my-server')).toBe(
       freshClient as unknown as McpClient,
     );
 
@@ -170,11 +183,16 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     useClientsByServer({ 'my-server': [goodClient, freshClient] });
 
     const registries = createRegistries();
-    const config = createConfig({ 'my-server': {} }, registries);
+    const config = createConfig({ 'my-server': {} });
     const manager = new McpClientManager(
+      createTestOAuthBinding(),
+      unsupportedApprovalPolicy(),
       '0.0.1',
       registries.toolRegistry,
+      registries.promptRegistry,
+      registries.resourceRegistry,
       config,
+      config.refreshMcpContext,
     );
 
     await manager.startConfiguredMcpServers();
@@ -193,7 +211,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     expect(failures.get('my-server')).toContain('reconnect refused');
 
     expect(manager.getMcpServerCount()).toBe(0);
-    expect(manager.getClient('my-server')).toBeUndefined();
+    expect<unknown>(manager.getClient('my-server')).toBeUndefined();
   });
 
   it('restart (all servers) does not leave a stale dead client when existing.disconnect throws', async () => {
@@ -208,11 +226,16 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     });
 
     const registries = createRegistries();
-    const config = createConfig({ 'server-a': {}, 'server-b': {} }, registries);
+    const config = createConfig({ 'server-a': {}, 'server-b': {} });
     const manager = new McpClientManager(
+      createTestOAuthBinding(),
+      unsupportedApprovalPolicy(),
       '0.0.1',
       registries.toolRegistry,
+      registries.promptRegistry,
+      registries.resourceRegistry,
       config,
+      config.refreshMcpContext,
     );
 
     await manager.startConfiguredMcpServers();
@@ -231,8 +254,12 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
 
     expect(manager.getMcpServerCount()).toBe(2);
     expect(manager.getDiscoveryFailures().size).toBe(0);
-    expect(manager.getClient('server-a')).toBe(freshA as unknown as McpClient);
-    expect(manager.getClient('server-b')).toBe(freshB as unknown as McpClient);
+    expect<unknown>(manager.getClient('server-a')).toBe(
+      freshA as unknown as McpClient,
+    );
+    expect<unknown>(manager.getClient('server-b')).toBe(
+      freshB as unknown as McpClient,
+    );
   });
 
   it('restartServer reports a discovery failure when connectAndDiscover throws an unexpected error (not masked)', async () => {
@@ -247,12 +274,17 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     useClientsByServer({ 'my-server': [goodClient, freshClient] });
 
     const registries = createRegistries();
-    const config = createConfig({ 'my-server': {} }, registries);
+    const config = createConfig({ 'my-server': {} });
     const eventEmitter = new EventEmitter();
     const manager = new McpClientManager(
+      createTestOAuthBinding(),
+      unsupportedApprovalPolicy(),
       '0.0.1',
       registries.toolRegistry,
+      registries.promptRegistry,
+      registries.resourceRegistry,
       config,
+      config.refreshMcpContext,
       eventEmitter,
     );
 
@@ -281,11 +313,16 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     useClientsByServer({ 'my-server': [initialClient, freshClient] });
 
     const registries = createRegistries();
-    const config = createConfig({ 'my-server': {} }, registries);
+    const config = createConfig({ 'my-server': {} });
     const manager = new McpClientManager(
+      createTestOAuthBinding(),
+      unsupportedApprovalPolicy(),
       '0.0.1',
       registries.toolRegistry,
+      registries.promptRegistry,
+      registries.resourceRegistry,
       config,
+      config.refreshMcpContext,
     );
 
     await manager.startConfiguredMcpServers();
@@ -295,7 +332,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     await manager.whenDiscoverySettled();
 
     expect(manager.getMcpServerCount()).toBe(1);
-    expect(manager.getClient('my-server')).toBe(
+    expect<unknown>(manager.getClient('my-server')).toBe(
       freshClient as unknown as McpClient,
     );
     expect(initialClient.disconnect).toHaveBeenCalledOnce();
@@ -310,12 +347,17 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     useClientsByServer({ 'my-server': [initialClient, freshClient] });
 
     const registries = createRegistries();
-    const config = createConfig({ 'my-server': {} }, registries);
+    const config = createConfig({ 'my-server': {} });
     const eventEmitter = new EventEmitter();
     const manager = new McpClientManager(
+      createTestOAuthBinding(),
+      unsupportedApprovalPolicy(),
       '0.0.1',
       registries.toolRegistry,
+      registries.promptRegistry,
+      registries.resourceRegistry,
       config,
+      config.refreshMcpContext,
       eventEmitter,
     );
 
@@ -360,13 +402,21 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
       removed: { command: 'removed' },
     };
     const registries = createRegistries();
-    const config = createConfig({}, registries, {
-      getServers: () => configuredServers,
-    });
+    const config = createConfig(
+      {},
+      {
+        getServers: () => configuredServers,
+      },
+    );
     const manager = new McpClientManager(
+      createTestOAuthBinding(),
+      unsupportedApprovalPolicy(),
       '0.0.1',
       registries.toolRegistry,
+      registries.promptRegistry,
+      registries.resourceRegistry,
       config,
+      config.refreshMcpContext,
     );
 
     await manager.startConfiguredMcpServers();
@@ -379,11 +429,11 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     await manager.reconcileConfiguredMcpServers();
     await manager.whenDiscoverySettled();
 
-    expect(manager.getClient('initial')).toBe(initialClient);
+    expect<unknown>(manager.getClient('initial')).toBe(initialClient);
     expect(initialClient.disconnect).not.toHaveBeenCalled();
-    expect(manager.getClient('removed')).toBeUndefined();
+    expect<unknown>(manager.getClient('removed')).toBeUndefined();
     expect(removedClient.disconnect).toHaveBeenCalledOnce();
-    expect(manager.getClient('added')).toBe(addedClient);
+    expect<unknown>(manager.getClient('added')).toBe(addedClient);
     expect(registries.toolRegistry.removeMcpToolsByServer).toHaveBeenCalledWith(
       'removed',
     );
@@ -406,24 +456,34 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     useClientsByServer({ good: [goodClient], bad: [badClient] });
     let configuredServers: Record<string, MCPServerConfig> = {};
     const registries = createRegistries();
-    const config = createConfig({}, registries, {
-      getServers: () => configuredServers,
-    });
+    const config = createConfig(
+      {},
+      {
+        getServers: () => configuredServers,
+      },
+    );
     const manager = new McpClientManager(
+      createTestOAuthBinding(),
+      unsupportedApprovalPolicy(),
       '0.0.1',
       registries.toolRegistry,
+      registries.promptRegistry,
+      registries.resourceRegistry,
       config,
+      config.refreshMcpContext,
     );
     configuredServers = {
       good: { command: 'good' },
       bad: { command: 'bad' },
     };
 
-    await manager.reconcileConfiguredMcpServers();
+    await expect(manager.reconcileConfiguredMcpServers()).rejects.toThrow(
+      'connection refused',
+    );
     await manager.whenDiscoverySettled();
 
-    expect(manager.getClient('good')).toBe(goodClient);
-    expect(manager.getClient('bad')).toBeUndefined();
+    expect<unknown>(manager.getClient('good')).toBe(goodClient);
+    expect<unknown>(manager.getClient('bad')).toBeUndefined();
     expect(manager.getDiscoveryFailures().get('bad')).toBe(
       'connection refused',
     );
@@ -433,19 +493,27 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     const client = createMockMcpClient();
     useClientsByServer({ added: [client] });
     const registries = createRegistries();
-    const config = createConfig({ added: { command: 'added' } }, registries, {
-      trusted: false,
-    });
+    const config = createConfig(
+      { added: { command: 'added' } },
+      {
+        trusted: false,
+      },
+    );
     const manager = new McpClientManager(
+      createTestOAuthBinding(),
+      unsupportedApprovalPolicy(),
       '0.0.1',
       registries.toolRegistry,
+      registries.promptRegistry,
+      registries.resourceRegistry,
       config,
+      config.refreshMcpContext,
     );
 
     await manager.reconcileConfiguredMcpServers();
 
     expect(client.connect).not.toHaveBeenCalled();
-    expect(manager.getClient('added')).toBeUndefined();
+    expect<unknown>(manager.getClient('added')).toBeUndefined();
   });
 
   it('reconciles a changed configured server with a fresh client', async () => {
@@ -460,13 +528,21 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
       changed: { command: 'before' },
     };
     const registries = createRegistries();
-    const config = createConfig({}, registries, {
-      getServers: () => configuredServers,
-    });
+    const config = createConfig(
+      {},
+      {
+        getServers: () => configuredServers,
+      },
+    );
     const manager = new McpClientManager(
+      createTestOAuthBinding(),
+      unsupportedApprovalPolicy(),
       '0.0.1',
       registries.toolRegistry,
+      registries.promptRegistry,
+      registries.resourceRegistry,
       config,
+      config.refreshMcpContext,
     );
 
     await manager.startConfiguredMcpServers();
@@ -478,7 +554,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
 
     expect(initialClient.disconnect).toHaveBeenCalledOnce();
     expect(freshClient.connect).toHaveBeenCalledOnce();
-    expect(manager.getClient('changed')).toBe(freshClient);
+    expect<unknown>(manager.getClient('changed')).toBe(freshClient);
   });
 
   it('does not resurrect a removed server whose discovery is still in flight', async () => {
@@ -499,18 +575,26 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
       slow: { command: 'slow' },
     };
     const registries = createRegistries();
-    const config = createConfig({}, registries, {
-      getServers: () => configuredServers,
-    });
+    const config = createConfig(
+      {},
+      {
+        getServers: () => configuredServers,
+      },
+    );
     const manager = new McpClientManager(
+      createTestOAuthBinding(),
+      unsupportedApprovalPolicy(),
       '0.0.1',
       registries.toolRegistry,
+      registries.promptRegistry,
+      registries.resourceRegistry,
       config,
+      config.refreshMcpContext,
     );
 
     void manager.startConfiguredMcpServers();
     await waitFor(() => {
-      expect(manager.getClient('fast')).toBeDefined();
+      expect<unknown>(manager.getClient('fast')).toBeDefined();
     });
 
     configuredServers = { fast: { command: 'fast' } };
@@ -520,8 +604,10 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     resolveSlowConnect();
     await manager.whenDiscoverySettled();
 
-    expect(manager.getClient('slow')).toBeUndefined();
-    expect(manager.getClient('fast')).toBe(fastClient as unknown as McpClient);
+    expect<unknown>(manager.getClient('slow')).toBeUndefined();
+    expect<unknown>(manager.getClient('fast')).toBe(
+      fastClient as unknown as McpClient,
+    );
   });
 
   it('does not remove extension-owned clients during reconcile', async () => {
@@ -534,13 +620,21 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     useClientsByServer({ extsrv: [extensionClient] });
     let configuredServers: Record<string, MCPServerConfig> = {};
     const registries = createRegistries();
-    const config = createConfig({}, registries, {
-      getServers: () => configuredServers,
-    });
+    const config = createConfig(
+      {},
+      {
+        getServers: () => configuredServers,
+      },
+    );
     const manager = new McpClientManager(
+      createTestOAuthBinding(),
+      unsupportedApprovalPolicy(),
       '0.0.1',
       registries.toolRegistry,
+      registries.promptRegistry,
+      registries.resourceRegistry,
       config,
+      config.refreshMcpContext,
     );
 
     await manager.startExtension({
@@ -549,7 +643,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
       mcpServers: { extsrv: { command: 'ext-command' } },
     } as unknown as LlxprtExtension);
     await manager.whenDiscoverySettled();
-    expect(manager.getClient('extsrv')).toBeDefined();
+    expect<unknown>(manager.getClient('extsrv')).toBeDefined();
 
     const otherClient = createMockMcpClient({
       getServerConfig: vi.fn().mockReturnValue({ command: 'other' }),
@@ -560,7 +654,7 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     await manager.reconcileConfiguredMcpServers();
     await manager.whenDiscoverySettled();
 
-    expect(manager.getClient('extsrv')).toBe(
+    expect<unknown>(manager.getClient('extsrv')).toBe(
       extensionClient as unknown as McpClient,
     );
     expect(extensionClient.disconnect).not.toHaveBeenCalled();
@@ -574,14 +668,19 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     const liveServers: Record<string, MCPServerConfig> = {
       added: { command: 'added' },
     };
-    const config = createConfig(liveServers, registries, {
+    const config = createConfig(liveServers, {
       trusted: false,
       mcpServerCommand: 'some-command',
     });
     const manager = new McpClientManager(
+      createTestOAuthBinding(),
+      unsupportedApprovalPolicy(),
       '0.0.1',
       registries.toolRegistry,
+      registries.promptRegistry,
+      registries.resourceRegistry,
       config,
+      config.refreshMcpContext,
     );
 
     await manager.startConfiguredMcpServers();
@@ -589,3 +688,5 @@ describe('McpClientManager restart lifecycle with disconnect aggregation', () =>
     expect(populateMcpServerCommand).not.toHaveBeenCalled();
   });
 });
+
+type Config = BaseConfig & { refreshMcpContext(): Promise<void> };

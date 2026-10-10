@@ -169,6 +169,7 @@ export async function recordHistoryWithUsage(
     userInputWasFunctionResponse?: boolean;
   },
   afterPublication?: () => void | Promise<void>,
+  origin?: object,
 ): Promise<void> {
   const includeThoughts =
     runtimeContext.ephemerals.reasoning.includeInContext();
@@ -223,6 +224,7 @@ export async function recordHistoryWithUsage(
       }
       await afterPublication?.();
     },
+    origin,
   );
 }
 

@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { physicalFiles } from './helpers/physical-files.js';
+
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import {
   writeFileSync,
@@ -52,9 +54,18 @@ function createHostWithSettings(
   });
   return {
     ...baseHost,
-    getEphemeralSettings: () => ({
-      ...baseHost.getEphemeralSettings(),
-      ...settings,
+    readExecutionPolicy: () => ({
+      ...baseHost.readExecutionPolicy(),
+      'tool-output-max-items': settings['tool-output-max-items'],
+      'tool-output-max-tokens': settings['tool-output-max-tokens'],
+      'tool-output-truncate-mode': settings['tool-output-truncate-mode'],
+      ...(settings['tool-output-item-size-limit'] === undefined
+        ? {}
+        : {
+            'tool-output-item-size-limit':
+              settings['tool-output-item-size-limit'],
+          }),
+      'file-read-max-lines': settings['file-read-max-lines'],
     }),
   };
 }
@@ -672,7 +683,11 @@ describe('ReadManyFiles discovery records are bounded before filtering/dedup (is
         'tool-output-max-tokens': 1_000_000,
         'tool-output-truncate-mode': 'truncate',
       });
-      const host = { ...baseHost, getWorkspaceRoots: () => [tempDir, tempDir] };
+      const host = {
+        ...physicalFiles,
+        ...baseHost,
+        getWorkspaceRoots: () => [tempDir, tempDir],
+      };
       const tool = new ReadManyFilesTool(host);
       const result = await tool.execute(
         { paths: ['**/*.txt'] },
@@ -722,6 +737,7 @@ describe('read-many-files warn-mode discovery truncation (issue #3202)', () => {
       'tool-output-truncate-mode': 'warn',
     });
     const host = {
+      ...physicalFiles,
       ...baseHost,
       getWorkspaceRoots: () => [tempDir.dir, tempDir.dir, tempDir.dir],
     };

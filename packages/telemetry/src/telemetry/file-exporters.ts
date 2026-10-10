@@ -221,7 +221,7 @@ export class FileLogExporter extends FileExporter implements LogRecordExporter {
     // Per-record writes for the same cap-overshoot reason as spans.
     try {
       for (const log of logs) {
-        this.writeToFile(this.serialize(log));
+        this.writeToFile(this.serialize({ ...log, body: log.body }));
       }
       resultCallback({
         code: ExportResultCode.SUCCESS,

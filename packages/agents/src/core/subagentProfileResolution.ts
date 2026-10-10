@@ -1,3 +1,4 @@
+import type { ProfileDefinitionReads } from '@vybestack/llxprt-code-core';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -7,7 +8,6 @@
 import {
   isLoadBalancerProfile,
   type Profile,
-  type ProfileManager,
 } from '@vybestack/llxprt-code-settings';
 import type { ProviderActivationIntent } from '../api/config-types.js';
 import { expandTilde, getStringSetting } from './subagentSettingsAccess.js';
@@ -44,7 +44,7 @@ export interface RuntimeProfileResolution {
  */
 export async function resolveRuntimeProfile(
   profile: Profile,
-  profileManager: ProfileManager,
+  profileManager: Pick<ProfileDefinitionReads, 'loadProfile'>,
 ): Promise<RuntimeProfileResolution> {
   if (!isLoadBalancerProfile(profile)) {
     return { effectiveProfile: profile, primaryProfile: profile };

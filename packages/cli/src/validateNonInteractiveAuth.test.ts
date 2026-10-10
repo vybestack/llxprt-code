@@ -1,3 +1,5 @@
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -18,15 +20,10 @@ import { type Config, OutputFormat } from '@vybestack/llxprt-code-core';
  */
 type NonInteractiveConfig = Pick<
   Config,
-  | 'getProvider'
-  | 'getProviderManager'
-  | 'getEphemeralSetting'
-  | 'setEphemeralSetting'
-  | 'getOutputFormat'
-  | 'isInteractive'
+  'getProvider' | 'getOutputFormat' | 'isInteractive'
 >;
 
-import { validateNonInteractiveAuth } from './validateNonInteractiveAuth.js';
+import { validateNonInteractiveAuth as validateOwnerAuth } from './validateNonInteractiveAuth.js';
 import type { LoadedSettings } from './config/settings.js';
 
 describe('validateNonInteractiveAuth (gate-only)', () => {
@@ -43,10 +40,14 @@ describe('validateNonInteractiveAuth (gate-only)', () => {
     'GOOGLE_API_KEY',
   ] as const;
 
+  let settingsStore: SettingsService;
+  let settingsOwner: SessionSettingsOwner;
   let originalEnvVars: Map<string, string | undefined>;
   let processExitSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    settingsStore = new SettingsService();
+    settingsOwner = new SessionSettingsOwner(settingsStore);
     originalEnvVars = new Map();
     for (const envVar of authEnvVars) {
       originalEnvVars.set(envVar, process.env[envVar]);
@@ -58,7 +59,8 @@ describe('validateNonInteractiveAuth (gate-only)', () => {
     });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await settingsOwner.dispose();
     for (const envVar of authEnvVars) {
       const originalValue = originalEnvVars.get(envVar);
       if (originalValue !== undefined) {
@@ -70,20 +72,20 @@ describe('validateNonInteractiveAuth (gate-only)', () => {
     vi.restoreAllMocks();
   });
 
+  const configuredState = new Map<NonInteractiveConfig, boolean>();
+
   function makeConfig(
     provider: string | undefined = undefined,
     hasActive = false,
   ): NonInteractiveConfig {
-    return {
+    const config: NonInteractiveConfig = {
       getProvider: () => provider,
-      getProviderManager: () => ({
-        hasActiveProvider: () => hasActive,
-      }),
-      getEphemeralSetting: () => undefined,
-      setEphemeralSetting: () => {},
+
       getOutputFormat: () => OutputFormat.TEXT,
       isInteractive: () => false,
     };
+    configuredState.set(config, hasActive);
+    return config;
   }
 
   function makeSettings(
@@ -98,6 +100,23 @@ describe('validateNonInteractiveAuth (gate-only)', () => {
     } as unknown as LoadedSettings;
   }
 
+  const validateNonInteractiveAuth = (
+    external: boolean | undefined,
+    config: NonInteractiveConfig,
+    settings?: LoadedSettings,
+    cleanup?: () => Promise<void>,
+  ) =>
+    validateOwnerAuth(
+      external,
+      config,
+      settings,
+      cleanup,
+      {
+        hasActiveProvider: () => configuredState.get(config) ?? false,
+      },
+      (key, value) => settingsOwner.writeUserParameter(key, value),
+    );
+
   // ─── Gate: provider-only check ──────────────────────────────────────────
 
   it('exits with FATAL_CONFIG_ERROR (52) when no provider is configured', async () => {
@@ -111,11 +130,7 @@ describe('validateNonInteractiveAuth (gate-only)', () => {
     const cleanupSpy = vi.fn().mockResolvedValue(undefined);
     const nonInteractiveConfig: NonInteractiveConfig = {
       getProvider: () => undefined,
-      getProviderManager: () => ({
-        hasActiveProvider: () => false,
-      }),
-      getEphemeralSetting: () => undefined,
-      setEphemeralSetting: () => {},
+
       getOutputFormat: () => OutputFormat.TEXT,
       isInteractive: () => false,
     };
@@ -134,11 +149,7 @@ describe('validateNonInteractiveAuth (gate-only)', () => {
     const cleanupSpy = vi.fn().mockRejectedValue(new Error('cleanup failed'));
     const nonInteractiveConfig: NonInteractiveConfig = {
       getProvider: () => undefined,
-      getProviderManager: () => ({
-        hasActiveProvider: () => false,
-      }),
-      getEphemeralSetting: () => undefined,
-      setEphemeralSetting: () => {},
+
       getOutputFormat: () => OutputFormat.TEXT,
       isInteractive: () => false,
     };
@@ -193,14 +204,9 @@ describe('validateNonInteractiveAuth (gate-only)', () => {
   // ─── Compression settings ───────────────────────────────────────────────
 
   it('applies compression settings from settings.merged when present', async () => {
-    const setEphemeralSpy = vi.fn();
     const nonInteractiveConfig: NonInteractiveConfig = {
       getProvider: () => 'gemini',
-      getProviderManager: () => ({
-        hasActiveProvider: () => true,
-      }),
-      getEphemeralSetting: () => undefined,
-      setEphemeralSetting: setEphemeralSpy,
+
       getOutputFormat: () => OutputFormat.TEXT,
       isInteractive: () => false,
     };
@@ -209,36 +215,31 @@ describe('validateNonInteractiveAuth (gate-only)', () => {
       'compression-threshold': 0.5,
     });
 
+    configuredState.set(nonInteractiveConfig, true);
     await validateNonInteractiveAuth(undefined, nonInteractiveConfig, settings);
 
-    expect(setEphemeralSpy).toHaveBeenCalledWith('compression-threshold', 0.5);
-    expect(setEphemeralSpy).toHaveBeenCalledWith('context-limit', 100000);
+    expect(settingsOwner.readNamedParameter('compression-threshold')).toBe(0.5);
+    expect(settingsOwner.readRuntimePolicy().contextLimit).toBe(100000);
   });
 
   it('does not apply compression settings when settings is undefined', async () => {
-    const setEphemeralSpy = vi.fn();
     const nonInteractiveConfig: NonInteractiveConfig = {
       getProvider: () => 'gemini',
-      getProviderManager: () => ({
-        hasActiveProvider: () => true,
-      }),
-      getEphemeralSetting: () => undefined,
-      setEphemeralSetting: setEphemeralSpy,
+
       getOutputFormat: () => OutputFormat.TEXT,
       isInteractive: () => false,
     };
 
+    configuredState.set(nonInteractiveConfig, true);
     await validateNonInteractiveAuth(undefined, nonInteractiveConfig);
 
-    expect(setEphemeralSpy).not.toHaveBeenCalled();
+    expect(settingsStore.getAllGlobalSettings()).toStrictEqual({});
   });
 
   it('exits with FATAL_CONFIG_ERROR (52) when provider manager is undefined', async () => {
     const nonInteractiveConfig: NonInteractiveConfig = {
       getProvider: () => 'gemini',
-      getProviderManager: () => undefined,
-      getEphemeralSetting: () => undefined,
-      setEphemeralSetting: () => {},
+
       getOutputFormat: () => OutputFormat.TEXT,
       isInteractive: () => false,
     };

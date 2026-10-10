@@ -309,38 +309,14 @@ const saveCommand: SlashCommand = {
       };
     }
 
-    let finalSystemPrompt: string;
-
     if (mode === 'manual') {
       // Manual mode: use input directly
-      finalSystemPrompt = input;
+      const finalSystemPrompt = input;
       return handleManualMode(context, name, profile, finalSystemPrompt, {
         existed: exists,
       });
     }
-    // Auto mode: generate using LLM
-    const configService = services.config; // @plan:PLAN-20250117-SUBAGENTCONFIG.P14 @requirement:REQ-003
-    if (!configService) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content:
-          'Configuration service unavailable. Set up the CLI before using auto mode.',
-      };
-    }
-
-    try {
-      finalSystemPrompt = await generateAutoPrompt(configService, input);
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: `Error: Failed to generate system prompt (${errorMessage}). Try manual mode or check your connection.`,
-      };
-    }
-    return saveSubagent(context, name, profile, finalSystemPrompt, exists);
+    return handleAutoMode(context, name, profile, input, exists);
   },
 };
 
@@ -673,6 +649,22 @@ const menuCommand: SlashCommand = {
  * @requirement:REQ-004
  * Legacy completion removed - now fully schema-driven
  */
+function requireAutoPromptAgent(
+  agent: CommandContext['services']['agent'],
+): Parameters<typeof generateAutoPrompt>[0] {
+  if (!agent) throw new Error('Session agent is unavailable');
+  return {
+    getProvider: () => agent.getProvider(),
+    get agentClient() {
+      return agent.agentClient;
+    },
+    sessionClient: {
+      createDetachedAgentClient: (id) =>
+        agent.sessionClient.createDetachedAgentClient(id),
+    },
+  };
+}
+
 export const subagentCommand: SlashCommand = {
   name: 'subagent',
   description: 'Manage subagent configurations.',
@@ -695,3 +687,39 @@ export const subagentCommand: SlashCommand = {
     deleteCommand,
   ],
 };
+
+async function handleAutoMode(
+  context: CommandContext,
+  name: string,
+  profile: string,
+  input: string,
+  exists: boolean,
+): Promise<SlashCommandActionReturn> {
+  // Auto mode: generate using LLM
+  const configService = context.services.config; // @plan:PLAN-20250117-SUBAGENTCONFIG.P14 @requirement:REQ-003
+  if (!configService) {
+    return {
+      type: 'message',
+      messageType: 'error',
+      content:
+        'Configuration service unavailable. Set up the CLI before using auto mode.',
+    };
+  }
+
+  let finalSystemPrompt: string;
+  try {
+    finalSystemPrompt = await generateAutoPrompt(
+      requireAutoPromptAgent(context.services.agent),
+      input,
+      configService.getContentGeneratorConfig(),
+    );
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return {
+      type: 'message',
+      messageType: 'error',
+      content: `Error: Failed to generate system prompt (${errorMessage}). Try manual mode or check your connection.`,
+    };
+  }
+  return saveSubagent(context, name, profile, finalSystemPrompt, exists);
+}

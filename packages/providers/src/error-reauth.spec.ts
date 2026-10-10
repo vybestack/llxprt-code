@@ -4,22 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'bun:test';
 import {
   AllBucketsExhaustedError,
   isAuthBucketFailureReason,
 } from './errors.js';
-import {
-  resetCliRuntimeRegistryForTesting,
-  setDefaultCliRuntimeId,
-  upsertRuntimeEntry,
-} from './runtime/runtimeRegistry.js';
-
 describe('error re-authentication', () => {
-  afterEach(() => {
-    resetCliRuntimeRegistryForTesting();
-  });
-
   /**
    * @plan PLAN-20260827-ISSUE2562.P04
    * @requirement REQ-2562-3
@@ -34,6 +24,7 @@ describe('error re-authentication', () => {
           'bucket-a': 'expired-refresh-failed',
           'bucket-b': 'expired-refresh-failed',
         },
+        undefined,
       );
 
       expect(error.message).toContain('re-authenticate');
@@ -45,6 +36,7 @@ describe('error re-authentication', () => {
         ['bucket-a'],
         new Error('Auth error'),
         { 'bucket-a': 'reauth-failed' },
+        undefined,
       );
 
       expect(error.message).toContain('re-authenticate');
@@ -56,6 +48,7 @@ describe('error re-authentication', () => {
         ['bucket-a'],
         new Error('Auth timed out'),
         { 'bucket-a': 'reauth-timeout' },
+        undefined,
       );
 
       expect(error.message).toContain('re-authenticate');
@@ -67,6 +60,7 @@ describe('error re-authentication', () => {
         ['bucket-a'],
         new Error('Rate limited'),
         { 'bucket-a': 'quota-exhausted' },
+        undefined,
       );
 
       expect(error.message).not.toContain('re-authenticate');
@@ -77,6 +71,8 @@ describe('error re-authentication', () => {
         'anthropic',
         ['bucket-a'],
         new Error('Rate limited'),
+        undefined,
+        undefined,
       );
 
       expect(error.message).not.toContain('re-authenticate');
@@ -88,22 +84,19 @@ describe('error re-authentication', () => {
         ['bucket-a', 'bucket-b'],
         new Error('Mixed failure'),
         { 'bucket-a': 'quota-exhausted', 'bucket-b': 'reauth-failed' },
+        undefined,
       );
 
       expect(error.message).toContain('re-authenticate');
     });
 
     it('directs subagent re-authentication to the interactive host', () => {
-      upsertRuntimeEntry('p04-error-subagent', {
-        runtimeKind: 'subagent',
-      });
-      setDefaultCliRuntimeId('p04-error-subagent');
-
       const error = new AllBucketsExhaustedError(
         'anthropic',
         ['work'],
         new Error('Auth failed'),
         { work: 'reauth-failed' },
+        'subagent',
       );
 
       expect(error.message).toContain('interactive host session');
@@ -114,14 +107,12 @@ describe('error re-authentication', () => {
     });
 
     it('directs agent re-authentication to the interactive host', () => {
-      upsertRuntimeEntry('p04-error-agent', { runtimeKind: 'agent' });
-      setDefaultCliRuntimeId('p04-error-agent');
-
       const error = new AllBucketsExhaustedError(
         'anthropic',
         ['work'],
         new Error('Auth failed'),
         { work: 'reauth-failed' },
+        'agent',
       );
 
       expect(error.message).toContain('interactive host session');
@@ -137,6 +128,7 @@ describe('error re-authentication', () => {
         ['work'],
         new Error('Auth failed'),
         { work: 'reauth-failed' },
+        undefined,
       );
 
       expect(error.message).toContain(
@@ -145,14 +137,12 @@ describe('error re-authentication', () => {
     });
 
     it('preserves the existing re-authentication wording in a host runtime', () => {
-      upsertRuntimeEntry('p04-error-host', { runtimeKind: 'cli-interactive' });
-      setDefaultCliRuntimeId('p04-error-host');
-
       const error = new AllBucketsExhaustedError(
         'anthropic',
         ['work'],
         new Error('Auth failed'),
         { work: 'reauth-failed' },
+        'cli-interactive',
       );
 
       expect(error.message).toContain(

@@ -1,406 +1,180 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
-/**
- * @plan:PLAN-20260603-ISSUE1584.P12
- * @requirement:REQ-API-001
- * @pseudocode consumer-migration.md lines 10-15
- */
-
-import { describe, expect, it, beforeEach, afterEach, vi } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
+import { useRuntimeTestOwners } from './__tests__/runtime-owner-test-helpers.js';
 import {
-  getDefaultCliRuntimeId,
-  resetCliRuntimeRegistryForTesting,
-  runtimeRegistry,
-} from './runtimeRegistry.js';
-import { configureCliStatelessHardening } from './statelessHardening.js';
-import {
-  setCliRuntimeContext,
-  registerCliProviderInfrastructure,
-  resetCliProviderInfrastructure,
   activateIsolatedRuntimeContext,
-} from './runtimeLifecycle.js';
-import type {
-  Config,
-  RuntimeProviderManager,
-  MessageBus,
-} from '@vybestack/llxprt-code-core';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { OAuthManager } from '../auth/index.js';
-import { getCliProviderManager } from './runtimeAccessors.js';
+  beginCliRuntimeRegistration,
+  createIsolatedRuntimeContext,
+  createRuntimeActivationBindings,
+} from './index.js';
 
-/**
- * Test suite for runtimeLifecycle module
- *
- * These characterization tests verify the behavioral contracts of the
- * runtime lifecycle functions after extraction from runtimeSettings.ts.
- */
-describe('runtimeLifecycle', () => {
-  let mockConfig: Config;
-  let mockSettingsService: SettingsService;
-  let mockRuntimeProviderManager: RuntimeProviderManager;
-  let mockOAuthManager: OAuthManager;
-  let mockMessageBus: MessageBus;
+describe('explicit runtime lifecycle', () => {
+  const owners = useRuntimeTestOwners();
 
-  beforeEach(() => {
-    resetCliRuntimeRegistryForTesting();
-    configureCliStatelessHardening(null);
-
-    // Create mock instances
-    mockConfig = {
-      getModel: vi.fn().mockReturnValue('gpt-4'),
-      getProvider: vi.fn().mockReturnValue('openai'),
-      getEphemeralSettings: vi.fn().mockReturnValue({}),
-      getEphemeralSetting: vi
-        .fn()
-        .mockImplementation((_key: string) => undefined),
-      setEphemeralSetting: vi.fn(),
-      setProviderManager: vi.fn(),
-      setProvider: vi.fn(),
-      setModel: vi.fn(),
-    } as unknown as Config;
-
-    mockSettingsService = {
-      get: vi.fn().mockImplementation((key: string) => {
-        if (key === 'activeProvider') return 'openai';
-        return undefined;
-      }),
-      getProviderSettings: vi.fn().mockReturnValue({ model: 'gpt-4' }),
-      setProviderSetting: vi.fn(),
-      set: vi.fn(),
-    } as unknown as SettingsService;
-
-    mockRuntimeProviderManager = {
-      getActiveProvider: vi.fn().mockReturnValue({
-        name: 'openai',
-        getDefaultModel: vi.fn().mockReturnValue('gpt-4'),
-        isPaidMode: vi.fn().mockReturnValue(false),
-      }),
-      getActiveProviderName: vi.fn().mockReturnValue('openai'),
-      listProviders: vi.fn().mockReturnValue(['openai', 'anthropic']),
-      getProviderMetrics: vi.fn().mockReturnValue({}),
-      getSessionTokenUsage: vi.fn().mockReturnValue({
-        input: 0,
-        output: 0,
-        cache: 0,
-        tool: 0,
-        thought: 0,
-        total: 0,
-      }),
-      getAvailableModels: vi.fn().mockResolvedValue([]),
-      setConfig: vi.fn(),
-      prepareStatelessProviderInvocation: vi.fn(),
-    } as unknown as RuntimeProviderManager;
-
-    mockOAuthManager = {
-      configureProactiveRenewalsForProfile: vi
-        .fn()
-        .mockResolvedValue(undefined),
-    } as unknown as OAuthManager;
-
-    mockMessageBus = {} as unknown as MessageBus;
+  it('adopts infrastructure onto the supplied Config without cross-owner replacement', async () => {
+    const first = owners.isolated({ runtimeId: 'same-label' });
+    const second = owners.isolated({ runtimeId: 'same-label' });
+    await Promise.all([first.activate(), second.activate()]);
+    expect('providerManager' in first.config).toBe(false);
+    expect('providerManager' in second.config).toBe(false);
+    expect(first.providerFileLifecycle).not.toBe(second.providerFileLifecycle);
   });
 
-  afterEach(() => {
-    resetCliRuntimeRegistryForTesting();
-    configureCliStatelessHardening(null);
-  });
-
-  describe('setCliRuntimeContext', () => {
-    it('should set context and register entry in registry', () => {
-      const runtimeId = 'test-runtime-1';
-      setCliRuntimeContext(mockSettingsService, mockConfig, { runtimeId });
-
-      const entry = runtimeRegistry.get(runtimeId);
-      expect(entry).toBeDefined();
-      expect(entry?.settingsService).toBe(mockSettingsService);
-      expect(entry?.config).toBe(mockConfig);
+  it('carries merged activation metadata and an explicit override label through prepare and cleanup', async () => {
+    const observations: Array<{
+      phase: string;
+      runtimeId: string;
+      metadata: Record<string, unknown>;
+    }> = [];
+    const handle = owners.isolated({
+      runtimeId: 'constructed-label',
+      metadata: { base: 'retained', override: 'before' },
+      prepare: ({ runtimeId, metadata }) => {
+        observations.push({ phase: 'prepare', runtimeId, metadata });
+      },
+      onCleanup: ({ runtimeId, metadata }) => {
+        observations.push({ phase: 'cleanup', runtimeId, metadata });
+      },
     });
-
-    it('should throw when runtimeId is omitted (issue #2300)', () => {
-      // runtimeId is now REQUIRED — no implicit process-derived fallback.
-      // Cast to simulate a caller that omits the required option.
-      const omitOptions = {} as Parameters<typeof setCliRuntimeContext>[2];
-      expect(() =>
-        setCliRuntimeContext(mockSettingsService, mockConfig, omitOptions),
-      ).toThrow(/runtimeId/i);
+    await activateIsolatedRuntimeContext(handle, {
+      runtimeId: 'activated-label',
+      metadata: { override: 'after', added: true },
     });
-
-    it('should throw when runtimeId is an empty or whitespace-only string', () => {
-      expect(() =>
-        setCliRuntimeContext(mockSettingsService, mockConfig, {
-          runtimeId: '',
-        }),
-      ).toThrow(/runtimeId/i);
-      expect(() =>
-        setCliRuntimeContext(mockSettingsService, mockConfig, {
-          runtimeId: '   ',
-        }),
-      ).toThrow(/runtimeId/i);
-    });
-
-    it('should include metadata in the entry', () => {
-      const runtimeId = 'test-runtime-2';
-      const metadata = { customKey: 'customValue' };
-
-      setCliRuntimeContext(mockSettingsService, mockConfig, {
+    await handle.cleanup();
+    expect(
+      observations.map(({ phase, runtimeId, metadata }) => ({
+        phase,
         runtimeId,
-        metadata,
-      });
-
-      const entry = runtimeRegistry.get(runtimeId);
-      expect(entry?.metadata).toHaveProperty('customKey', 'customValue');
-      expect(entry?.metadata).toHaveProperty('source', 'cli-runtime');
-    });
-
-    it('should support multiple runtimes with different IDs', () => {
-      // The first runtime claims the foreground default; additional runtimes
-      // are background/isolated and MUST opt out of the default pointer
-      // (setAsDefault: false) so they never overwrite it (issue #2300).
-      setCliRuntimeContext(mockSettingsService, mockConfig, {
-        runtimeId: 'runtime-A',
-      });
-      setCliRuntimeContext(mockSettingsService, mockConfig, {
-        runtimeId: 'runtime-B',
-        setAsDefault: false,
-      });
-
-      expect(runtimeRegistry.size).toBe(2);
-      expect(runtimeRegistry.has('runtime-A')).toBe(true);
-      expect(runtimeRegistry.has('runtime-B')).toBe(true);
-    });
-
-    it('should throw when a second runtime overwrites the default without a hand-off (issue #2300)', () => {
-      setCliRuntimeContext(mockSettingsService, mockConfig, {
-        runtimeId: 'runtime-A',
-      });
-      expect(() =>
-        setCliRuntimeContext(mockSettingsService, mockConfig, {
-          runtimeId: 'runtime-B',
-        }),
-      ).toThrow(/Refusing to overwrite the default CLI runtime pointer/);
-      expect(getDefaultCliRuntimeId()).toBe('runtime-A');
-    });
-
-    it('should allow a deliberate foreground hand-off via allowDefaultHandoff', () => {
-      setCliRuntimeContext(mockSettingsService, mockConfig, {
-        runtimeId: 'runtime-A',
-      });
-      setCliRuntimeContext(mockSettingsService, mockConfig, {
-        runtimeId: 'runtime-B',
-        allowDefaultHandoff: true,
-      });
-      expect(getDefaultCliRuntimeId()).toBe('runtime-B');
-    });
-
-    it('should be idempotent when re-affirming the same default id', () => {
-      setCliRuntimeContext(mockSettingsService, mockConfig, {
-        runtimeId: 'runtime-A',
-      });
-      expect(() =>
-        setCliRuntimeContext(mockSettingsService, mockConfig, {
-          runtimeId: 'runtime-A',
-        }),
-      ).not.toThrow();
-      expect(getDefaultCliRuntimeId()).toBe('runtime-A');
-    });
-
-    it('should update existing entry when called with same ID', () => {
-      const runtimeId = 'test-runtime-3';
-      const newConfig = {
-        getProvider: vi.fn().mockReturnValue('anthropic'),
-      } as unknown as Config;
-
-      setCliRuntimeContext(mockSettingsService, mockConfig, { runtimeId });
-      setCliRuntimeContext(mockSettingsService, newConfig, { runtimeId });
-
-      expect(runtimeRegistry.size).toBe(1);
-      const entry = runtimeRegistry.get(runtimeId);
-      expect(entry?.config).toBe(newConfig);
-    });
+        base: metadata.base,
+        override: metadata.override,
+        added: metadata.added,
+      })),
+    ).toStrictEqual([
+      {
+        phase: 'prepare',
+        runtimeId: 'activated-label',
+        base: 'retained',
+        override: 'after',
+        added: true,
+      },
+      {
+        phase: 'cleanup',
+        runtimeId: 'activated-label',
+        base: 'retained',
+        override: 'after',
+        added: true,
+      },
+    ]);
+    expect(
+      handle.providerFileLifecycle.retainsScope('session', handle.runtimeId),
+    ).toBe(false);
   });
 
-  describe('registerCliProviderInfrastructure', () => {
-    it('should throw when runtimeId is omitted', () => {
-      const omitOptions = {
-        messageBus: mockMessageBus,
-      } as Parameters<typeof registerCliProviderInfrastructure>[2];
+  it.each(['agent', 'subagent'] as const)(
+    'preserves explicit %s runtime kind through owner activation and later metadata updates',
+    async (runtimeKind) => {
+      const base = createRuntimeActivationBindings();
+      const contexts: Array<{
+        runtimeKind: string | undefined;
+        runtimeId: string | undefined;
+        config: unknown;
+      }> = [];
+      const handle = owners.isolated({
+        runtimeKind,
+        activationBindings: {
+          ...base,
+          setRuntimeContext: (settings, config, options) => {
+            contexts.push({
+              runtimeKind: options.runtimeKind,
+              runtimeId: options.runtimeId,
+              config,
+            });
+            return base.setRuntimeContext(settings, config, options);
+          },
+        },
+      });
+      await handle.activate({
+        runtimeId: 'typed-owner',
+        metadata: { step: 1 },
+      });
+      await handle.activate({ metadata: { step: 2 } });
+      expect(contexts.map((context) => context.runtimeKind)).toStrictEqual([
+        runtimeKind,
+        runtimeKind,
+      ]);
+      expect(
+        contexts.every((context) => context.config === handle.config),
+      ).toBe(true);
+      expect('providerManager' in handle.config).toBe(false);
+      expect(handle.oauthManager.runtimeMessageBus).toBeDefined();
+    },
+  );
+
+  it('releasing a foreground handle removes its authority and rejects subsequent adoption', () => {
+    const foreground = owners.foreground();
+    foreground.registration.dispose();
+    expect(foreground.registration.config).toBeUndefined();
+    expect(foreground.registration.providerManager).toBeUndefined();
+    expect(() => foreground.registration.adopt(owners.config().config)).toThrow(
+      'disposed',
+    );
+    expect(() =>
+      foreground.registration.expectManager(foreground.providerManager),
+    ).toThrow('disposed');
+    expect(() => foreground.registration.dispose()).not.toThrow();
+  });
+
+  it('refuses a different Config without overwriting the original owner', () => {
+    const foreground = owners.foreground();
+    const { config: other } = owners.config();
+    expect(() => foreground.registration.adopt(other)).toThrow(
+      'another Config',
+    );
+    expect(foreground.registration.config).toBe(foreground.config);
+    expect('providerFileLifecycle' in other).toBe(false);
+  });
+
+  it('rollback restores a newly attached file lifecycle on exactly its owner', () => {
+    const { config, settingsService } = owners.config();
+    const registration = beginCliRuntimeRegistration(settingsService, config, {
+      runtimeId: 'rollback',
+    });
+    expect(registration.config).toBe(config);
+    registration.rollback();
+    expect('providerFileLifecycle' in config).toBe(false);
+    expect(registration.config).toBeUndefined();
+  });
+
+  it('rejects invalid creation and activation labels before modifying owner infrastructure', async () => {
+    const { config, settingsService } = owners.config();
+    for (const runtimeId of ['', '  ']) {
       expect(() =>
-        registerCliProviderInfrastructure(
-          mockRuntimeProviderManager,
-          mockOAuthManager,
-          omitOptions,
+        createIsolatedRuntimeContext(
+          {
+            config,
+            runtimeId,
+          },
+          settingsService,
         ),
-      ).toThrow(/runtimeId/i);
-    });
-
-    it('should update runtime entry with providerManager', () => {
-      const runtimeId = 'test-runtime-infra-1';
-      setCliRuntimeContext(mockSettingsService, mockConfig, { runtimeId });
-
-      registerCliProviderInfrastructure(
-        mockRuntimeProviderManager,
-        mockOAuthManager,
-        {
-          messageBus: mockMessageBus,
-          runtimeId,
-        },
-      );
-
-      const entry = runtimeRegistry.get(runtimeId);
-      expect(entry?.providerManager).toBe(mockRuntimeProviderManager);
-      expect(entry?.oauthManager).toBe(mockOAuthManager);
-    });
-
-    it('should allow getCliProviderManager to return registered manager', () => {
-      const runtimeId = 'test-runtime-infra-2';
-      setCliRuntimeContext(mockSettingsService, mockConfig, { runtimeId });
-
-      registerCliProviderInfrastructure(
-        mockRuntimeProviderManager,
-        mockOAuthManager,
-        {
-          messageBus: mockMessageBus,
-          runtimeId,
-        },
-      );
-
-      const manager = getCliProviderManager();
-      expect(manager).toBe(mockRuntimeProviderManager);
-    });
-
-    it('should link provider manager to config when config exists', () => {
-      const runtimeId = 'test-runtime-infra-3';
-      setCliRuntimeContext(mockSettingsService, mockConfig, { runtimeId });
-
-      registerCliProviderInfrastructure(
-        mockRuntimeProviderManager,
-        mockOAuthManager,
-        {
-          messageBus: mockMessageBus,
-          runtimeId,
-        },
-      );
-
-      expect(mockConfig.setProviderManager).toHaveBeenCalledWith(
-        mockRuntimeProviderManager,
-      );
-      expect(mockRuntimeProviderManager.setConfig).toHaveBeenCalledWith(
-        mockConfig,
-      );
-    });
-  });
-
-  describe('resetCliProviderInfrastructure', () => {
-    it('should clear providerManager from runtime entry', () => {
-      const runtimeId = 'test-runtime-reset-1';
-      setCliRuntimeContext(mockSettingsService, mockConfig, { runtimeId });
-      registerCliProviderInfrastructure(
-        mockRuntimeProviderManager,
-        mockOAuthManager,
-        {
-          messageBus: mockMessageBus,
-          runtimeId,
-        },
-      );
-
-      resetCliProviderInfrastructure(runtimeId);
-
-      const entry = runtimeRegistry.get(runtimeId);
-      expect(entry?.providerManager).toBeNull();
-      expect(entry?.oauthManager).toBeNull();
-    });
-
-    it('should not throw when called on non-existent runtime', () => {
+      ).toThrow('Invalid runtimeId');
       expect(() =>
-        resetCliProviderInfrastructure('non-existent-runtime'),
-      ).not.toThrow();
-    });
-
-    it('should use active runtime ID when not provided', () => {
-      const runtimeId = 'test-runtime-reset-2';
-      setCliRuntimeContext(mockSettingsService, mockConfig, { runtimeId });
-      registerCliProviderInfrastructure(
-        mockRuntimeProviderManager,
-        mockOAuthManager,
-        {
-          messageBus: mockMessageBus,
+        beginCliRuntimeRegistration(settingsService, config, {
           runtimeId,
-        },
-      );
-
-      // Call without runtimeId - should use the active one
-      resetCliProviderInfrastructure();
-
-      const entry = runtimeRegistry.get(runtimeId);
-      expect(entry?.providerManager).toBeNull();
-    });
-  });
-
-  describe('activateIsolatedRuntimeContext', () => {
-    const createMockHandle = (
-      overrides: Partial<
-        import('./runtimeContextFactory.js').IsolatedRuntimeContextHandle
-      > = {},
-    ): import('./runtimeContextFactory.js').IsolatedRuntimeContextHandle => ({
-      runtimeId: 'isolated-runtime',
-      metadata: {},
-      settingsService: mockSettingsService,
-      config: mockConfig,
-      providerManager: mockRuntimeProviderManager as never,
-      oauthManager: mockOAuthManager,
-      activate: vi.fn().mockResolvedValue(undefined),
-      cleanup: vi.fn().mockResolvedValue(undefined),
-      ...overrides,
-    });
-
-    it('should create entry with merged metadata', async () => {
-      const mockHandle = createMockHandle({
-        runtimeId: 'isolated-runtime-1',
-        metadata: { baseKey: 'baseValue' },
-      });
-
-      await activateIsolatedRuntimeContext(mockHandle, {
-        metadata: { overrideKey: 'overrideValue' },
-      });
-
-      const entry = runtimeRegistry.get('isolated-runtime-1');
-      expect(entry?.metadata).toHaveProperty('baseKey', 'baseValue');
-      expect(entry?.metadata).toHaveProperty('overrideKey', 'overrideValue');
-      expect(mockHandle.activate).toHaveBeenCalled();
-    });
-
-    it('should use custom runtimeId from options', async () => {
-      const mockHandle = createMockHandle({
-        runtimeId: 'handle-runtime-id',
-      });
-
-      await activateIsolatedRuntimeContext(mockHandle, {
-        runtimeId: 'custom-runtime-id',
-      });
-
-      expect(runtimeRegistry.has('custom-runtime-id')).toBe(true);
-    });
-
-    it('should call activate with merged options', async () => {
-      const mockHandle = createMockHandle({
-        runtimeId: 'isolated-runtime-2',
-      });
-
-      await activateIsolatedRuntimeContext(mockHandle, {
-        runtimeId: 'custom-runtime-2',
-        metadata: { testKey: 'testValue' },
-      });
-
-      expect(mockHandle.activate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          runtimeId: 'custom-runtime-2',
-          metadata: { testKey: 'testValue' },
         }),
-      );
-    });
+      ).toThrow('Invalid runtimeId');
+    }
+    expect('providerFileLifecycle' in config).toBe(false);
+    const handle = owners.isolated();
+    await expect(handle.activate({ runtimeId: '' })).rejects.toThrow(
+      'Invalid runtimeId',
+    );
+    expect('providerManager' in handle.config).toBe(false);
+    expect(
+      handle.providerFileLifecycle.retainsScope('session', handle.runtimeId),
+    ).toBe(false);
   });
 });

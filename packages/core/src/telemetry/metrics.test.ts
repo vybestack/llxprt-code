@@ -4,253 +4,242 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
-import type {
-  Counter,
-  Meter,
-  Attributes,
-  Context,
-  Histogram,
-} from '@opentelemetry/api';
-import type { Config } from '../config/config.js';
-
-/**
- * vi.hoisted makes these mock instances available to the hoisted vi.mock()
- * factory in both Vitest (which hoists vi.mock above all declarations) and
- * Bun (where vi.hoisted is a pass-through). The mock functions and instances
- * are created here so the factory can reference them.
- */
-const {
-  mockCounterAddFn,
-  mockHistogramRecordFn,
-  mockCreateCounterFn,
-  mockCreateHistogramFn,
-  mockMeterInstance,
-  mockGetMeterFn,
-} = (() => {
-  const counterAdd: Mock<
-    (value: number, attributes?: Attributes, context?: Context) => void
-  > = vi.fn();
-  const histogramRecord: Mock<
-    (value: number, attributes?: Attributes, context?: Context) => void
-  > = vi.fn();
-  const createCounter: Mock<(name: string, options?: unknown) => Counter> =
-    vi.fn();
-  const createHistogram: Mock<(name: string, options?: unknown) => Histogram> =
-    vi.fn();
-
-  const counterInstance = {
-    add: counterAdd,
-  } as unknown as Counter;
-
-  const histogramInstance = {
-    record: histogramRecord,
-  } as unknown as Histogram;
-
-  const meterInstance = {
-    createCounter: createCounter.mockReturnValue(counterInstance),
-    createHistogram: createHistogram.mockReturnValue(histogramInstance),
-  } as unknown as Meter;
-
-  const getMeter = vi.fn().mockReturnValue(meterInstance);
-
-  return {
-    mockCounterAddFn: counterAdd,
-    mockHistogramRecordFn: histogramRecord,
-    mockCreateCounterFn: createCounter,
-    mockCreateHistogramFn: createHistogram,
-    mockMeterInstance: meterInstance,
-    mockGetMeterFn: getMeter,
-  };
-})();
-
-void vi.mock('@opentelemetry/api', () => ({
-  metrics: {
-    getMeter: mockGetMeterFn,
-  },
-  ValueType: {
-    INT: 1,
-  },
-}));
-
-const {
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { mkdirSync, mkdtempSync, existsSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { z } from 'zod';
+import {
+  METRIC_TOKEN_USAGE,
+  METRIC_FILE_OPERATION_COUNT,
+  METRIC_SESSION_COUNT,
+} from '@vybestack/llxprt-code-telemetry/telemetry/constants.js';
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import {
   FileOperation,
   initializeMetrics,
   recordTokenUsageMetrics,
   recordFileOperationMetric,
-  resetMetricsState,
-} = await import('./metrics.js');
-
-/**
- * Resets all mock functions to their default state and re-establishes return
- * values that mockClear() wipes. Called from beforeEach so every test starts
- * from a clean mock state without re-declaring the mocks.
- */
-function resetMockDefaults(): void {
-  mockCounterAddFn.mockClear();
-  mockCreateCounterFn.mockClear();
-  mockCreateHistogramFn.mockClear();
-  mockHistogramRecordFn.mockClear();
-  mockGetMeterFn.mockClear();
-
-  const mockCounterInstance = {
-    add: mockCounterAddFn,
-  } as unknown as Counter;
-  const mockHistogramInstance = {
-    record: mockHistogramRecordFn,
-  } as unknown as Histogram;
-
-  mockCreateCounterFn.mockReturnValue(mockCounterInstance);
-  mockCreateHistogramFn.mockReturnValue(mockHistogramInstance);
-  mockGetMeterFn.mockReturnValue(mockMeterInstance);
+} from './metrics.js';
+const metricRecord = z.object({
+  scopeMetrics: z.array(
+    z.object({
+      metrics: z.array(
+        z.object({
+          descriptor: z.object({ name: z.string() }),
+          dataPoints: z.array(
+            z.object({ attributes: z.record(z.unknown()), value: z.number() }),
+          ),
+        }),
+      ),
+    }),
+  ),
+});
+let selected: RootTelemetry;
+let file: string;
+async function points(): Promise<
+  Array<{ attributes: Record<string, unknown>; value: number }>
+> {
+  await selected.flush();
+  return readFileSync(file, 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .flatMap((line) =>
+      metricRecord.parse(JSON.parse(line)).scopeMetrics.flatMap((scope) =>
+        scope.metrics.flatMap((metric) => {
+          const first = metric.dataPoints[0];
+          let expectedMetric = METRIC_SESSION_COUNT;
+          if (first.attributes.operation !== undefined)
+            expectedMetric = METRIC_FILE_OPERATION_COUNT;
+          else if (first.attributes.model !== undefined)
+            expectedMetric = METRIC_TOKEN_USAGE;
+          expect(metric.descriptor.name).toBe(expectedMetric);
+          return metric.dataPoints;
+        }),
+      ),
+    );
 }
 
 describe('Telemetry Metrics', () => {
   beforeEach(() => {
-    resetMetricsState();
-    resetMockDefaults();
+    const directory = join(tmpdir(), 'llxprt-telemetry-listener');
+    mkdirSync(directory, { recursive: true });
+    file = join(
+      mkdtempSync(join(directory, 'native-metrics-')),
+      'metrics.jsonl',
+    );
+    selected = RootTelemetry.prepare({
+      enabled: false,
+      sessionId: 'test-session-id',
+      outfile: file,
+      maxBytes: 1048576,
+      maxFiles: 2,
+    });
+  });
+  afterEach(async () => {
+    await selected.close();
   });
 
   describe('recordTokenUsageMetrics', () => {
-    const mockConfig = {
-      getSessionId: () => 'test-session-id',
-    } as unknown as Config;
-
-    it('should not record metrics if not initialized', () => {
-      recordTokenUsageMetrics(mockConfig, 'gemini-pro', 100, 'input');
-      expect(mockCounterAddFn).not.toHaveBeenCalled();
+    it('should not record metrics if not initialized', async () => {
+      recordTokenUsageMetrics(selected, 'gemini-pro', 100, 'input');
+      expect(existsSync(file)).toBe(false);
     });
 
-    it('should record token usage with the correct attributes', () => {
-      initializeMetrics(mockConfig);
-      recordTokenUsageMetrics(mockConfig, 'gemini-pro', 100, 'input');
-      expect(mockCounterAddFn).toHaveBeenCalledTimes(2);
-      expect(mockCounterAddFn).toHaveBeenNthCalledWith(1, 1, {
-        'session.id': 'test-session-id',
+    it('should record token usage with the correct attributes', async () => {
+      await initializeMetrics(selected);
+      recordTokenUsageMetrics(selected, 'gemini-pro', 100, 'input');
+      expect(await points()).toHaveLength(2);
+      expect(await points()).toContainEqual({
+        value: 1,
+        attributes: {
+          'session.id': 'test-session-id',
+        },
       });
-      expect(mockCounterAddFn).toHaveBeenNthCalledWith(2, 100, {
-        'session.id': 'test-session-id',
-        model: 'gemini-pro',
-        type: 'input',
-      });
-    });
-
-    it('should record token usage for different types', () => {
-      initializeMetrics(mockConfig);
-      mockCounterAddFn.mockClear();
-
-      recordTokenUsageMetrics(mockConfig, 'gemini-pro', 50, 'output');
-      expect(mockCounterAddFn).toHaveBeenCalledWith(50, {
-        'session.id': 'test-session-id',
-        model: 'gemini-pro',
-        type: 'output',
-      });
-
-      recordTokenUsageMetrics(mockConfig, 'gemini-pro', 25, 'thought');
-      expect(mockCounterAddFn).toHaveBeenCalledWith(25, {
-        'session.id': 'test-session-id',
-        model: 'gemini-pro',
-        type: 'thought',
-      });
-
-      recordTokenUsageMetrics(mockConfig, 'gemini-pro', 75, 'cache');
-      expect(mockCounterAddFn).toHaveBeenCalledWith(75, {
-        'session.id': 'test-session-id',
-        model: 'gemini-pro',
-        type: 'cache',
-      });
-
-      recordTokenUsageMetrics(mockConfig, 'gemini-pro', 125, 'tool');
-      expect(mockCounterAddFn).toHaveBeenCalledWith(125, {
-        'session.id': 'test-session-id',
-        model: 'gemini-pro',
-        type: 'tool',
+      expect(await points()).toContainEqual({
+        value: 100,
+        attributes: {
+          'session.id': 'test-session-id',
+          model: 'gemini-pro',
+          type: 'input',
+        },
       });
     });
 
-    it('should handle different models', () => {
-      initializeMetrics(mockConfig);
-      mockCounterAddFn.mockClear();
+    it('should record token usage for different types', async () => {
+      await initializeMetrics(selected);
 
-      recordTokenUsageMetrics(mockConfig, 'gemini-ultra', 200, 'input');
-      expect(mockCounterAddFn).toHaveBeenCalledWith(200, {
-        'session.id': 'test-session-id',
-        model: 'gemini-ultra',
-        type: 'input',
+      recordTokenUsageMetrics(selected, 'gemini-pro', 50, 'output');
+      expect(await points()).toContainEqual({
+        value: 50,
+        attributes: {
+          'session.id': 'test-session-id',
+          model: 'gemini-pro',
+          type: 'output',
+        },
+      });
+
+      recordTokenUsageMetrics(selected, 'gemini-pro', 25, 'thought');
+      expect(await points()).toContainEqual({
+        value: 25,
+        attributes: {
+          'session.id': 'test-session-id',
+          model: 'gemini-pro',
+          type: 'thought',
+        },
+      });
+
+      recordTokenUsageMetrics(selected, 'gemini-pro', 75, 'cache');
+      expect(await points()).toContainEqual({
+        value: 75,
+        attributes: {
+          'session.id': 'test-session-id',
+          model: 'gemini-pro',
+          type: 'cache',
+        },
+      });
+
+      recordTokenUsageMetrics(selected, 'gemini-pro', 125, 'tool');
+      expect(await points()).toContainEqual({
+        value: 125,
+        attributes: {
+          'session.id': 'test-session-id',
+          model: 'gemini-pro',
+          type: 'tool',
+        },
+      });
+    });
+
+    it('should handle different models', async () => {
+      await initializeMetrics(selected);
+
+      recordTokenUsageMetrics(selected, 'gemini-ultra', 200, 'input');
+      expect(await points()).toContainEqual({
+        value: 200,
+        attributes: {
+          'session.id': 'test-session-id',
+          model: 'gemini-ultra',
+          type: 'input',
+        },
       });
     });
   });
 
   describe('recordFileOperationMetric', () => {
-    const mockConfig = {
-      getSessionId: () => 'test-session-id',
-    } as unknown as Config;
-
-    it('should not record metrics if not initialized', () => {
+    it('should not record metrics if not initialized', async () => {
       recordFileOperationMetric(
-        mockConfig,
+        selected,
         FileOperation.CREATE,
         10,
         'text/plain',
         'txt',
       );
-      expect(mockCounterAddFn).not.toHaveBeenCalled();
+      expect(existsSync(file)).toBe(false);
     });
 
-    it('should record file creation with all attributes', () => {
-      initializeMetrics(mockConfig);
+    it('should record file creation with all attributes', async () => {
+      await initializeMetrics(selected);
       recordFileOperationMetric(
-        mockConfig,
+        selected,
         FileOperation.CREATE,
         10,
         'text/plain',
         'txt',
       );
 
-      expect(mockCounterAddFn).toHaveBeenCalledTimes(2);
-      expect(mockCounterAddFn).toHaveBeenNthCalledWith(1, 1, {
-        'session.id': 'test-session-id',
+      expect(await points()).toHaveLength(2);
+      expect(await points()).toContainEqual({
+        value: 1,
+        attributes: {
+          'session.id': 'test-session-id',
+        },
       });
-      expect(mockCounterAddFn).toHaveBeenNthCalledWith(2, 1, {
-        'session.id': 'test-session-id',
-        operation: FileOperation.CREATE,
-        lines: 10,
-        mimetype: 'text/plain',
-        extension: 'txt',
-      });
-    });
-
-    it('should record file read with minimal attributes', () => {
-      initializeMetrics(mockConfig);
-      mockCounterAddFn.mockClear();
-
-      recordFileOperationMetric(mockConfig, FileOperation.READ);
-      expect(mockCounterAddFn).toHaveBeenCalledWith(1, {
-        'session.id': 'test-session-id',
-        operation: FileOperation.READ,
+      expect(await points()).toContainEqual({
+        value: 1,
+        attributes: {
+          'session.id': 'test-session-id',
+          operation: FileOperation.CREATE,
+          lines: 10,
+          mimetype: 'text/plain',
+          extension: 'txt',
+        },
       });
     });
 
-    it('should record file update with some attributes', () => {
-      initializeMetrics(mockConfig);
-      mockCounterAddFn.mockClear();
+    it('should record file read with minimal attributes', async () => {
+      await initializeMetrics(selected);
+
+      recordFileOperationMetric(selected, FileOperation.READ);
+      expect(await points()).toContainEqual({
+        value: 1,
+        attributes: {
+          'session.id': 'test-session-id',
+          operation: FileOperation.READ,
+        },
+      });
+    });
+
+    it('should record file update with some attributes', async () => {
+      await initializeMetrics(selected);
 
       recordFileOperationMetric(
-        mockConfig,
+        selected,
         FileOperation.UPDATE,
         undefined,
         'application/javascript',
       );
-      expect(mockCounterAddFn).toHaveBeenCalledWith(1, {
-        'session.id': 'test-session-id',
-        operation: FileOperation.UPDATE,
-        mimetype: 'application/javascript',
+      expect(await points()).toContainEqual({
+        value: 1,
+        attributes: {
+          'session.id': 'test-session-id',
+          operation: FileOperation.UPDATE,
+          mimetype: 'application/javascript',
+        },
       });
     });
 
-    it('should include diffStat when provided', () => {
-      initializeMetrics(mockConfig);
-      mockCounterAddFn.mockClear();
+    it('should include diffStat when provided', async () => {
+      await initializeMetrics(selected);
 
       const diffStat = {
         ai_added_lines: 5,
@@ -260,7 +249,7 @@ describe('Telemetry Metrics', () => {
       };
 
       recordFileOperationMetric(
-        mockConfig,
+        selected,
         FileOperation.UPDATE,
         undefined,
         undefined,
@@ -268,22 +257,24 @@ describe('Telemetry Metrics', () => {
         diffStat,
       );
 
-      expect(mockCounterAddFn).toHaveBeenCalledWith(1, {
-        'session.id': 'test-session-id',
-        operation: FileOperation.UPDATE,
-        ai_added_lines: 5,
-        ai_removed_lines: 2,
-        user_added_lines: 3,
-        user_removed_lines: 1,
+      expect(await points()).toContainEqual({
+        value: 1,
+        attributes: {
+          'session.id': 'test-session-id',
+          operation: FileOperation.UPDATE,
+          ai_added_lines: 5,
+          ai_removed_lines: 2,
+          user_added_lines: 3,
+          user_removed_lines: 1,
+        },
       });
     });
 
-    it('should not include diffStat attributes when diffStat is not provided', () => {
-      initializeMetrics(mockConfig);
-      mockCounterAddFn.mockClear();
+    it('should not include diffStat attributes when diffStat is not provided', async () => {
+      await initializeMetrics(selected);
 
       recordFileOperationMetric(
-        mockConfig,
+        selected,
         FileOperation.UPDATE,
         10,
         'text/plain',
@@ -291,18 +282,20 @@ describe('Telemetry Metrics', () => {
         undefined,
       );
 
-      expect(mockCounterAddFn).toHaveBeenCalledWith(1, {
-        'session.id': 'test-session-id',
-        operation: FileOperation.UPDATE,
-        lines: 10,
-        mimetype: 'text/plain',
-        extension: 'txt',
+      expect(await points()).toContainEqual({
+        value: 1,
+        attributes: {
+          'session.id': 'test-session-id',
+          operation: FileOperation.UPDATE,
+          lines: 10,
+          mimetype: 'text/plain',
+          extension: 'txt',
+        },
       });
     });
 
-    it('should handle diffStat with all zero values', () => {
-      initializeMetrics(mockConfig);
-      mockCounterAddFn.mockClear();
+    it('should handle diffStat with all zero values', async () => {
+      await initializeMetrics(selected);
 
       const diffStat = {
         ai_added_lines: 0,
@@ -312,7 +305,7 @@ describe('Telemetry Metrics', () => {
       };
 
       recordFileOperationMetric(
-        mockConfig,
+        selected,
         FileOperation.UPDATE,
         undefined,
         undefined,
@@ -320,13 +313,16 @@ describe('Telemetry Metrics', () => {
         diffStat,
       );
 
-      expect(mockCounterAddFn).toHaveBeenCalledWith(1, {
-        'session.id': 'test-session-id',
-        operation: FileOperation.UPDATE,
-        ai_added_lines: 0,
-        ai_removed_lines: 0,
-        user_added_lines: 0,
-        user_removed_lines: 0,
+      expect(await points()).toContainEqual({
+        value: 1,
+        attributes: {
+          'session.id': 'test-session-id',
+          operation: FileOperation.UPDATE,
+          ai_added_lines: 0,
+          ai_removed_lines: 0,
+          user_added_lines: 0,
+          user_removed_lines: 0,
+        },
       });
     });
   });

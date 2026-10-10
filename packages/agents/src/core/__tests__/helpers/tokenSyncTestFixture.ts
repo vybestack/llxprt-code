@@ -71,7 +71,6 @@ export function createTokenSyncTestFixture(): TokenSyncTestFixture {
     setQuotaErrorOccurred: vi.fn(),
     getEphemeralSettings: vi.fn().mockReturnValue({}),
     getEphemeralSetting: vi.fn().mockReturnValue(undefined),
-    getProviderManager: vi.fn().mockReturnValue(providerManager),
   };
 
   const runtimeSetup = createChatSessionRuntime({

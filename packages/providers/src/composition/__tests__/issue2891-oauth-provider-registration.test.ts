@@ -4,149 +4,173 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * Issue #2891 (FIX 2): OAuth provider registration hazards.
- *
- * Two latent defects contributed to `claudecode` appearing unauthenticated:
- *
- *  1. `ensureOAuthProviderRegistered` keeps a per-manager dedup set. A provider
- *     first registered WITHOUT an `addItem` UI callback could never receive one
- *     later, because the second call short-circuited on the dedup set. The UI
- *     callback was silently lost for the lifetime of the manager.
- *
- *  2. When no token store is reachable the provider is not registered at all.
- *     `TokenAccessCoordinator.getToken()` then returns null immediately because
- *     `providerRegistry.getProvider('claudecode')` is falsy — presenting as
- *     "not authenticated" even with a valid persisted token.
- *
- * These tests exercise the real `ensureOAuthProviderRegistered` and the real
- * `AnthropicOAuthProvider`; only the manager is a local fake, so that provider
- * registration is observable.
- */
-
-import { describe, it, expect, beforeEach } from 'bun:test';
-
-import type { OAuthProvider, TokenStore } from '../../auth/index.js';
-import type { OAuthUICallback } from '@vybestack/llxprt-code-auth';
+import { describe, it, expect } from 'bun:test';
+import type {
+  OAuthUICallback,
+  OAuthUIEvent,
+} from '@vybestack/llxprt-code-auth';
+import {
+  OAuthError,
+  OAuthErrorType,
+} from '@vybestack/llxprt-code-auth/oauth-errors.js';
+import {
+  OAuthManager,
+  AnthropicOAuthProvider,
+  CodexOAuthProvider,
+  createTokenStore,
+} from '../../auth/index.js';
 import {
   ensureOAuthProviderRegistered,
   isOAuthProviderRegistered,
-  resetRegisteredProviders,
 } from '../oauth-provider-registration.js';
 
-/**
- * Minimal in-memory token store. Registration only needs to hold a reference,
- * so the methods are never exercised by these tests.
- */
-function makeTokenStore(): TokenStore {
-  return {
-    saveToken: async () => {},
-    getToken: async () => null,
-    removeToken: async () => {},
-    listProviders: async () => [],
-  } as unknown as TokenStore;
+function captureAuthorization(events: OAuthUIEvent[]): OAuthUICallback {
+  return (event) => {
+    events.push(event);
+    throw new OAuthError(
+      OAuthErrorType.USER_CANCELLED,
+      'claudecode',
+      'Authorization captured',
+    );
+  };
 }
 
-/**
- * Local fake manager: records registered providers so registration is
- * observable. Mirrors the `OAuthRegistrationManager` structural type.
- */
-class FakeOAuthManager {
-  readonly providers = new Map<string, OAuthProvider>();
-  private readonly tokenStore?: TokenStore;
-
-  constructor(tokenStore?: TokenStore) {
-    this.tokenStore = tokenStore;
-  }
-
-  registerProvider(provider: OAuthProvider): void {
-    this.providers.set(provider.name, provider);
-  }
-
-  getProvider(name: string): OAuthProvider | undefined {
-    return this.providers.get(name);
-  }
-
-  // Only present when a store was supplied, so the "no store reachable"
-  // case can be represented faithfully.
-  getTokenStore?: () => TokenStore;
-
-  static withTokenStore(tokenStore: TokenStore): FakeOAuthManager {
-    const manager = new FakeOAuthManager(tokenStore);
-    manager.getTokenStore = () => tokenStore;
-    return manager;
-  }
-}
-
-/** Read the provider's captured UI callback without altering behavior. */
-function readAddItem(provider: OAuthProvider): OAuthUICallback | undefined {
-  return (provider as unknown as { addItem?: OAuthUICallback }).addItem;
-}
-
-describe('Issue #2891 FIX 2 - ensureOAuthProviderRegistered', () => {
-  beforeEach(() => {
-    resetRegisteredProviders();
-  });
-
-  it('attaches a later-supplied addItem to the ALREADY-registered provider', () => {
-    const manager = new FakeOAuthManager();
-    const tokenStore = makeTokenStore();
-
-    // First registration happens before the UI exists, so there is no addItem.
-    ensureOAuthProviderRegistered('claudecode', manager, tokenStore, undefined);
-
-    const firstInstance = manager.getProvider('claudecode');
-    expect(firstInstance).toBeDefined();
-    expect(readAddItem(firstInstance!)).toBeUndefined();
-
-    // Later, once the UI is available, the callback is supplied.
-    const addItem: OAuthUICallback = (() => {
-      // Identity is what matters here; the body is never invoked.
-    }) as unknown as OAuthUICallback;
-
-    ensureOAuthProviderRegistered('claudecode', manager, tokenStore, addItem);
-
-    // The observable contract: whatever provider the manager now exposes for
-    // 'claudecode' MUST carry the later-supplied callback. Before the fix the
-    // dedup set short-circuited the second call and the callback was dropped.
-    // Asserted on a fresh lookup (not the captured reference) so the test stays
-    // valid whether the fix mutates the existing instance or re-registers one.
-    expect(readAddItem(manager.getProvider('claudecode')!)).toBe(addItem);
-
-    // ...and 'claudecode' must still resolve to a single registration rather
-    // than accumulating duplicates.
-    expect(manager.providers.size).toBe(1);
-  });
-
-  it('registers the provider when the token store is reachable only via getTokenStore()', () => {
-    const tokenStore = makeTokenStore();
-    const manager = FakeOAuthManager.withTokenStore(tokenStore);
-
-    // Caller passes `undefined`; the manager fallback must supply the store.
-    ensureOAuthProviderRegistered('claudecode', manager, undefined, undefined);
+describe('OAuth registration ownership (#2891, #2616)', () => {
+  it('recognizes directly registered providers before composition registration', () => {
+    const manager = new OAuthManager(createTokenStore());
+    manager.registerProvider(
+      new AnthropicOAuthProvider(manager.getTokenStore()),
+    );
 
     expect(isOAuthProviderRegistered('claudecode', manager)).toBe(true);
-    expect(manager.getProvider('claudecode')).toBeDefined();
   });
 
-  it('does NOT register the provider when no token store is reachable', () => {
-    const manager = new FakeOAuthManager();
+  it.each([AnthropicOAuthProvider, CodexOAuthProvider])(
+    'preserves directly registered %p identity across repeated registration',
+    (Provider) => {
+      const manager = new OAuthManager(createTokenStore());
+      const provider = new Provider(manager.getTokenStore());
+      manager.registerProvider(provider);
 
-    ensureOAuthProviderRegistered('claudecode', manager, undefined, undefined);
+      ensureOAuthProviderRegistered(provider.name, manager);
+      ensureOAuthProviderRegistered(provider.name, manager);
 
-    // This is the state that makes TokenAccessCoordinator.getToken() return
-    // null immediately, presenting as "not authenticated".
-    expect(isOAuthProviderRegistered('claudecode', manager)).toBe(false);
-    expect(manager.getProvider('claudecode')).toBeUndefined();
+      expect(manager.getProvider(provider.name)).toBe(provider);
+    },
+  );
+
+  it('keeps two managers independent', () => {
+    const first = new OAuthManager(createTokenStore());
+    const second = new OAuthManager(createTokenStore());
+    for (const name of ['claudecode', 'codex']) {
+      ensureOAuthProviderRegistered(name, first);
+      expect(isOAuthProviderRegistered(name, second)).toBe(false);
+      expect(first.getProvider(name)).toBeDefined();
+      ensureOAuthProviderRegistered(name, second);
+      expect(second.getProvider(name)).toBeDefined();
+      expect(second.getProvider(name)).not.toBe(first.getProvider(name));
+    }
   });
 
-  it('leaves unknown provider names unregistered', () => {
-    const tokenStore = makeTokenStore();
-    const manager = new FakeOAuthManager();
+  it.each([
+    { direct: false, initiallyAttached: false },
+    { direct: false, initiallyAttached: true },
+    { direct: true, initiallyAttached: false },
+    { direct: true, initiallyAttached: true },
+  ])(
+    'routes a later callback only to its manager (%j)',
+    async ({ direct, initiallyAttached }) => {
+      const first = new OAuthManager(createTokenStore());
+      const second = new OAuthManager(createTokenStore());
+      const originalEvents: OAuthUIEvent[] = [];
+      const firstEvents: OAuthUIEvent[] = [];
+      const secondEvents: OAuthUIEvent[] = [];
+      if (direct) {
+        first.registerProvider(
+          new AnthropicOAuthProvider(
+            first.getTokenStore(),
+            initiallyAttached
+              ? captureAuthorization(originalEvents)
+              : undefined,
+          ),
+        );
+      } else {
+        ensureOAuthProviderRegistered(
+          'claudecode',
+          first,
+          undefined,
+          initiallyAttached ? captureAuthorization(originalEvents) : undefined,
+        );
+      }
+      ensureOAuthProviderRegistered(
+        'claudecode',
+        second,
+        undefined,
+        captureAuthorization(secondEvents),
+      );
+      const original = first.getProvider('claudecode');
+      ensureOAuthProviderRegistered(
+        'claudecode',
+        first,
+        undefined,
+        captureAuthorization(firstEvents),
+      );
+      const firstProvider = first.getProvider('claudecode');
+      const secondProvider = second.getProvider('claudecode');
+      if (!firstProvider || !secondProvider)
+        throw new Error('Missing registered providers');
 
-    ensureOAuthProviderRegistered('not-a-provider', manager, tokenStore);
+      await expect(firstProvider.initiateAuth()).rejects.toThrow(
+        'Authorization captured',
+      );
+      expect(secondEvents).toHaveLength(0);
+      await expect(secondProvider.initiateAuth()).rejects.toThrow(
+        'Authorization captured',
+      );
 
+      expect(firstProvider).toBe(original);
+      expect(originalEvents).toHaveLength(0);
+      expect(firstEvents).toHaveLength(1);
+      expect(secondEvents).toHaveLength(1);
+      for (const event of [...firstEvents, ...secondEvents]) {
+        expect(event.type).toBe('oauth_url');
+        expect(event.text).toContain('code_challenge=');
+      }
+    },
+  );
+
+  it('registers using the manager token store when none is passed', () => {
+    const manager = new OAuthManager(createTokenStore());
+    ensureOAuthProviderRegistered('claudecode', manager);
+    expect(manager.getProvider('claudecode')).toBeInstanceOf(
+      AnthropicOAuthProvider,
+    );
+  });
+
+  it('skips registration without a reachable token store, then permits an explicit store', () => {
+    const manager = new OAuthManager(createTokenStore());
+    const registration = {
+      registerProvider: manager.registerProvider.bind(manager),
+      getProvider: manager.getProvider.bind(manager),
+    };
+    ensureOAuthProviderRegistered('claudecode', registration);
+    expect(manager.getSupportedProviders()).toStrictEqual([]);
+    expect(isOAuthProviderRegistered('claudecode', registration)).toBe(false);
+
+    ensureOAuthProviderRegistered(
+      'claudecode',
+      registration,
+      manager.getTokenStore(),
+    );
+    expect(manager.getProvider('claudecode')).toBeInstanceOf(
+      AnthropicOAuthProvider,
+    );
+  });
+
+  it('leaves unsupported provider names unregistered', () => {
+    const manager = new OAuthManager(createTokenStore());
+    ensureOAuthProviderRegistered('not-a-provider', manager);
     expect(isOAuthProviderRegistered('not-a-provider', manager)).toBe(false);
-    expect(manager.providers.size).toBe(0);
+    expect(manager.getSupportedProviders()).toStrictEqual([]);
   });
 });

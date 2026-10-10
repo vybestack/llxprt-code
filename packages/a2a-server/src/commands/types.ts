@@ -4,7 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { GitService, LlxprtExtension } from '@vybestack/llxprt-code-core';
+import type {
+  WorkspaceCheckpointOperations,
+  LlxprtExtension,
+} from '@vybestack/llxprt-code-core';
 import type { AgentExecutor, ExecutionEventBus } from '@a2a-js/sdk/server';
 
 export interface CommandArgument {
@@ -26,7 +29,7 @@ export interface CommandContext {
     enabled: boolean;
     getProjectTempCheckpointsDir(): string;
   };
-  git?: GitService;
+  git?: Pick<WorkspaceCheckpointOperations, 'restoreProjectFromSnapshot'>;
   agentExecutor?: AgentExecutor;
   eventBus?: ExecutionEventBus;
 }

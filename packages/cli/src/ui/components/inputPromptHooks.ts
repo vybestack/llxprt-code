@@ -247,7 +247,7 @@ const useCompletionState = ({
   'buffer' | 'config' | 'slashCommands' | 'commandContext' | 'shellModeActive'
 >): CompletionState => {
   const [reverseSearchActive, setReverseSearchActive] = useState(false);
-  const shellHistory = useShellHistory(config.getProjectRoot(), config.storage);
+  const shellHistory = useShellHistory(config.historyFilePath);
   const completion = useCommandCompletion(
     buffer,
     config.getTargetDir(),

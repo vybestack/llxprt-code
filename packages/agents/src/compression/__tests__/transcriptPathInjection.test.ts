@@ -1,3 +1,4 @@
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -57,6 +58,10 @@ async function captureRequestText(
     history: generateHistory(20),
     resolveProvider: (): CompressionProviderResult =>
       ({
+        invocation: captureProviderInvocation(
+          testProviderRuntime,
+          provider.name,
+        ),
         provider,
         runtime: testProviderRuntime,
       }) as unknown as CompressionProviderResult,

@@ -17,7 +17,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { Storage } from '@vybestack/llxprt-code-settings';
-import type { FileDiscoveryService } from '@vybestack/llxprt-code-storage';
+import type { WorkspaceIgnoreOperations } from '@vybestack/llxprt-code-core';
 import type { Settings } from './settings.js';
 import type { CliArgs } from './cliArgParser.js';
 import type { ContextResolutionResult } from './interactiveContext.js';
@@ -132,6 +132,7 @@ export async function resolveMemoryContent(
   cwd: string,
   context: ContextResolutionResult,
   profileMergedSettings: Settings,
+  ignore: Pick<WorkspaceIgnoreOperations, 'shouldIgnoreFile'>,
 ): Promise<{ memoryContent: string; fileCount: number; filePaths: string[] }> {
   if (context.jitContextEnabled) {
     return { memoryContent: '', fileCount: 0, filePaths: [] };
@@ -142,7 +143,7 @@ export async function resolveMemoryContent(
       ? (context.includeDirectories as string[])
       : [],
     context.debugMode,
-    context.fileService,
+    ignore,
     profileMergedSettings,
     context.allExtensions,
     context.trustedFolder,
@@ -157,7 +158,7 @@ export async function loadHierarchicalLlxprtMemory(
   currentWorkingDirectory: string,
   includeDirectoriesToReadLlxprt: readonly string[] = [],
   debugMode: boolean,
-  fileService: FileDiscoveryService,
+  fileService: Pick<WorkspaceIgnoreOperations, 'shouldIgnoreFile'>,
   settings: Settings,
   extensions: LlxprtExtension[],
   folderTrust: boolean,

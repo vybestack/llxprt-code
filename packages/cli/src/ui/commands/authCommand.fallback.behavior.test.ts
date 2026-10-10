@@ -8,23 +8,18 @@
  * Behavioral coverage for the /auth command ACTION runtime infrastructure guard
  * (issue #2300).
  *
- * When getCliOAuthManager() throws after runtime infrastructure resolution,
- * the runtime is only partially registered. The command must fail clearly
- * instead of synthesizing a fallback OAuthManager that masks broken bootstrap
- * state.
+ * When the owner-scoped OAuth control cannot resolve its runtime manager,
+ * the command must fail clearly instead of synthesizing OAuth infrastructure
+ * that masks broken bootstrap state.
  */
 
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
 
-const runtimeApi = {
-  getCliOAuthManager: vi.fn().mockImplementation(() => {
-    throw new Error('OAuthManager missing from runtime registration');
+const oauthControl = {
+  getSupportedProviders: vi.fn().mockImplementation(() => {
+    throw new Error('OAuth runtime infrastructure is unavailable');
   }),
 };
-
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  getRuntimeApi: () => runtimeApi,
-}));
 
 void vi.mock('@vybestack/llxprt-code-core', () => ({
   DebugLogger: vi.fn().mockImplementation(() => ({
@@ -48,12 +43,13 @@ describe('auth command action rejects partial runtime infrastructure (issue #230
   let context: CommandContext;
 
   beforeEach(() => {
-    runtimeApi.getCliOAuthManager.mockReset();
-    runtimeApi.getCliOAuthManager.mockImplementation(() => {
-      throw new Error('OAuthManager missing from runtime registration');
+    oauthControl.getSupportedProviders.mockReset();
+    oauthControl.getSupportedProviders.mockImplementation(() => {
+      throw new Error('OAuth runtime infrastructure is unavailable');
     });
 
     context = {
+      oauthControl,
       services: {
         settings: {} as never,
         logger: {} as never,
@@ -64,21 +60,22 @@ describe('auth command action rejects partial runtime infrastructure (issue #230
     } as unknown as CommandContext;
   });
 
-  it('throws instead of synthesizing OAuth infrastructure when getCliOAuthManager rejects partial infrastructure', async () => {
+  it('throws instead of synthesizing OAuth infrastructure when the owner control cannot resolve it', async () => {
     await expect(action(context, 'gemini status')).rejects.toThrow(
-      /Auth command requires registered OAuth runtime infrastructure: .*OAuthManager/,
+      /Auth command requires registered OAuth runtime infrastructure: .*unavailable/,
     );
   });
 
-  it('does not register when getCliOAuthManager already returns a manager', async () => {
-    runtimeApi.getCliOAuthManager.mockReturnValue({
-      getSupportedProviders: () => ['gemini', 'anthropic', 'codex'],
-      isOAuthEnabled: () => false,
-      isAuthenticated: async () => false,
-      getHigherPriorityAuth: async () => null,
-      peekStoredToken: async () => null,
+  it('does not register new infrastructure when the owner control is ready', async () => {
+    oauthControl.getSupportedProviders.mockReturnValue([
+      'gemini',
+      'anthropic',
+      'codex',
+    ]);
+    context.oauthControl = {
+      ...context.oauthControl,
       getAuthStatusWithBuckets: async () => [],
-    });
+    };
 
     const result = await action(context, 'gemini status');
 

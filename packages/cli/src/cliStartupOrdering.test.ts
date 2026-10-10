@@ -20,6 +20,8 @@ import {
   mock,
 } from 'bun:test';
 import type { Config } from '@vybestack/llxprt-code-core';
+import { installDefinitionRuntimeFixture } from './__tests__/definition-runtime-fixture.js';
+const definitionFixture = installDefinitionRuntimeFixture();
 import {
   guardUnconfiguredProvider,
   UNCONFIGURED_PROVIDER_MESSAGE,
@@ -28,7 +30,7 @@ import { buildImageModeFlags } from './config/imageModeDispatch.js';
 
 function makeConfig(hasActive: boolean, interactive: boolean): Config {
   return {
-    getProviderManager: () => ({ hasActiveProvider: () => hasActive }),
+    getProvider: () => (hasActive ? 'fake' : undefined),
     isInteractive: () => interactive,
     getOutputFormat: () => 'text',
     getListExtensions: () => false,
@@ -43,8 +45,19 @@ function makeConfig(hasActive: boolean, interactive: boolean): Config {
  */
 type ZedIntegrationCall = {
   config: unknown;
-  options?: { onExitCleanup?: () => void | Promise<void> };
+  options?: {
+    onExitCleanup?: () => void | Promise<void>;
+    providerInputs?: {
+      providerContributions?: unknown;
+      oauthSettings?: unknown;
+    };
+  };
 };
+
+/** The contributions `bootstrapRuntimeAndConfig` reports as already loaded. */
+const loadedProviderContributions = Object.freeze({ loaded: 'by-cli' });
+/** The OAuth settings surface the CLI's own provider manager is built with. */
+const cliOAuthSettings = Object.freeze({ source: 'cli-adapter' });
 const zedIntegrationCalls: ZedIntegrationCall[] = [];
 
 function setupCommonMainMocks(callOrder: string[], config: Config): void {
@@ -53,7 +66,7 @@ function setupCommonMainMocks(callOrder: string[], config: Config): void {
       callOrder.push('activation');
       return { authFailed: false, token: undefined, intent: undefined };
     },
-    configureProvidersAndServices: async () => ({}),
+    configureProvidersAndServices: async (...args: unknown[]) => args[5],
     connectIdeClientIfEnabled: async () => {},
     ensureAcpProviderActivated: () => {
       callOrder.push('acp-activated');
@@ -69,9 +82,19 @@ function setupCommonMainMocks(callOrder: string[], config: Config): void {
   void mock.module('./cliSessionBootstrap.js', () => ({
     bootstrapRuntimeAndConfig: async () => ({
       config,
+      providerManager: {
+        hasActiveProvider: () => config.getProvider() !== undefined,
+      },
       runtimeSettingsService: {},
+      profileApplication: {},
+      providerContributions: loadedProviderContributions,
+      activationOperation: {
+        dispose: () => {},
+        workspaceDefinitions: definitionFixture().definitionOwner,
+      },
     }),
     setupSessionRecording: async () => undefined,
+    setupOwnerSessionRecording: async () => null,
   }));
   void mock.module('./session/nonInteractiveSession.js', () => ({
     dispatchInteractiveOrNonInteractive: async () => {
@@ -116,10 +139,14 @@ function setupCommonMainMocks(callOrder: string[], config: Config): void {
   void mock.module('@vybestack/llxprt-code-zed-acp', () => ({
     runZedIntegration: async (
       zedConfig: unknown,
-      options?: { onExitCleanup?: () => void | Promise<void> },
+      _profileApplication: unknown,
+      options?: ZedIntegrationCall['options'],
     ) => {
       zedIntegrationCalls.push({ config: zedConfig, options });
     },
+  }));
+  void mock.module('./auth/oauth-settings-adapter.js', () => ({
+    createOAuthSettingsAdapter: () => cliOAuthSettings,
   }));
   void mock.module('./config/pathMigration.js', () => ({
     runStartupMigration: () => ({ migrated: false }),
@@ -158,6 +185,7 @@ describe('guardUnconfiguredProvider: production main-boundary guard (#2481)', ()
     const result = await guardUnconfiguredProvider(
       makeConfig(true, false),
       cleanupFn,
+      { hasActiveProvider: () => true },
     );
     expect(result).toBeUndefined();
     expect(process.exit).not.toHaveBeenCalled();
@@ -168,6 +196,7 @@ describe('guardUnconfiguredProvider: production main-boundary guard (#2481)', ()
     const result = await guardUnconfiguredProvider(
       makeConfig(false, true),
       cleanupFn,
+      { hasActiveProvider: () => false },
     );
     expect(result).toBeUndefined();
     expect(process.exit).not.toHaveBeenCalled();
@@ -176,7 +205,9 @@ describe('guardUnconfiguredProvider: production main-boundary guard (#2481)', ()
 
   it('exits with code 52 when unconfigured and non-interactive', async () => {
     await expect(
-      guardUnconfiguredProvider(makeConfig(false, false), cleanupFn),
+      guardUnconfiguredProvider(makeConfig(false, false), cleanupFn, {
+        hasActiveProvider: () => false,
+      }),
     ).rejects.toThrow('process.exit(52) called');
     expect(cleanupFn).toHaveBeenCalledTimes(1);
   });
@@ -194,6 +225,7 @@ describe('guardUnconfiguredProvider: production main-boundary guard (#2481)', ()
       guardResult: guardUnconfiguredProvider(
         makeConfig(false, false),
         cleanupFn,
+        { hasActiveProvider: () => false },
       ),
       stderrChunks,
     };
@@ -215,7 +247,9 @@ describe('guardUnconfiguredProvider: production main-boundary guard (#2481)', ()
       .fn()
       .mockRejectedValue(new Error('cleanup failed'));
     await expect(
-      guardUnconfiguredProvider(makeConfig(false, false), failingCleanup),
+      guardUnconfiguredProvider(makeConfig(false, false), failingCleanup, {
+        hasActiveProvider: () => false,
+      }),
     ).rejects.toThrow('process.exit(52) called');
     expect(failingCleanup).toHaveBeenCalledTimes(1);
   });
@@ -242,9 +276,10 @@ describe('main() orchestration: guard stops before activation (#2481)', () => {
       guardUnconfiguredProvider: async (
         cfg: Config,
         runCleanup: () => Promise<void>,
+        providerState: Parameters<typeof realGuard>[2],
       ) => {
         callOrder.push('guard');
-        return realGuard(cfg, runCleanup);
+        return realGuard(cfg, runCleanup, providerState);
       },
       UNCONFIGURED_PROVIDER_MESSAGE,
     }));
@@ -314,9 +349,29 @@ describe('main() orchestration: guard stops before activation (#2481)', () => {
     expect(call.config).toBe(config);
     expect(callOrder).not.toContain('exit-cleanup');
 
+    expect(call.options?.onExitCleanup).toBeDefined();
     await call.options?.onExitCleanup?.();
 
     expect(callOrder).toContain('exit-cleanup');
+  });
+
+  it('ACP/Zed: sessions use the CLI-loaded provider contributions and OAuth settings', async () => {
+    const config = {
+      ...makeConfig(false, false),
+      getExperimentalZedIntegration: () => true,
+    } as unknown as Config;
+    vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('unexpected process.exit');
+    });
+
+    await runMainWithConfig(config);
+
+    expect(zedIntegrationCalls).toHaveLength(1);
+    const [call] = zedIntegrationCalls;
+    expect(call.options?.providerInputs?.providerContributions).toBe(
+      loadedProviderContributions,
+    );
+    expect(call.options?.providerInputs?.oauthSettings).toBe(cliOAuthSettings);
   });
 });
 
@@ -434,7 +489,7 @@ describe('main() image mode: bypasses the conversational stdin guard (#2128)', (
         token: undefined,
         intent: undefined,
       }),
-      configureProvidersAndServices: async () => ({}),
+      configureProvidersAndServices: async (...args: unknown[]) => args[5],
       connectIdeClientIfEnabled: async () => {},
       ensureAcpProviderActivated: () => {},
     }));
@@ -446,8 +501,14 @@ describe('main() image mode: bypasses the conversational stdin guard (#2128)', (
       bootstrapRuntimeAndConfig: async () => ({
         config,
         runtimeSettingsService: {},
+        profileApplication: {},
+        activationOperation: {
+          dispose: () => {},
+          workspaceDefinitions: definitionFixture().definitionOwner,
+        },
       }),
       setupSessionRecording: async () => undefined,
+      setupOwnerSessionRecording: async () => null,
     }));
     void mock.module('./session/nonInteractiveSession.js', () => ({
       dispatchInteractiveOrNonInteractive: async () => {},

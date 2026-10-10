@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { configureCommandOptions } from '../command-configuration.js';
 import type { CommandModule } from 'yargs';
 import { type SkillDefinition } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
@@ -69,36 +70,38 @@ export const installCommand: CommandModule = {
   command: 'install <source> [--scope] [--path]',
   describe: 'Installs a skill from a git repository URL or a local path.',
   builder: (yargs) =>
-    yargs
-      .positional('source', {
-        describe:
-          'The git repository URL or local path of the skill to install.',
-        type: 'string',
-        demandOption: true,
-      })
-      .option('scope', {
-        describe:
-          'The scope to install the skill into. Defaults to "user" (global).',
-        choices: ['user', 'workspace'],
-        default: 'user',
-      })
-      .option('path', {
-        describe:
-          'Sub-path within the repository to install from (only used for git repository sources).',
-        type: 'string',
-      })
-      .option('consent', {
-        describe:
-          'Acknowledge the security risks of installing a skill and skip the confirmation prompt.',
-        type: 'boolean',
-        default: false,
-      })
-      .check((argv) => {
-        if (!argv.source) {
-          throw new Error('The source argument must be provided.');
-        }
-        return true;
-      }),
+    configureCommandOptions(yargs, (configuration) =>
+      configuration
+        .positional('source', {
+          describe:
+            'The git repository URL or local path of the skill to install.',
+          type: 'string',
+          demandOption: true,
+        })
+        .option('scope', {
+          describe:
+            'The scope to install the skill into. Defaults to "user" (global).',
+          choices: ['user', 'workspace'],
+          default: 'user',
+        })
+        .option('path', {
+          describe:
+            'Sub-path within the repository to install from (only used for git repository sources).',
+          type: 'string',
+        })
+        .option('consent', {
+          describe:
+            'Acknowledge the security risks of installing a skill and skip the confirmation prompt.',
+          type: 'boolean',
+          default: false,
+        })
+        .check((argv) => {
+          if (!argv.source) {
+            throw new Error('The source argument must be provided.');
+          }
+          return true;
+        }),
+    ),
   handler: async (argv) => {
     await handleInstall({
       source: argv['source'] as string,

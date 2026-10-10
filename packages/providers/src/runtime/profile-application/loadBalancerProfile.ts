@@ -16,9 +16,9 @@ import {
   type LoadBalancerProfile,
   type Profile,
 } from '@vybestack/llxprt-code-settings';
-import { ProfileManager } from '@vybestack/llxprt-code-settings';
+import type { ProfileManager } from '@vybestack/llxprt-code-settings';
 import { isLoadBalancerProfile } from '@vybestack/llxprt-code-settings/profiles/types.js';
-import type { getCliRuntimeServices } from '../runtimeSettings.js';
+import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 
 import {
   getProfileEphemeralSettings,
@@ -265,7 +265,8 @@ async function resolveLoadBalancerSubProfiles(
 export async function maybeRegisterLoadBalancerProfile(
   profileInput: Profile,
   options: { profileName?: string },
-  runtimeServices: ReturnType<typeof getCliRuntimeServices>,
+  providerManager: RuntimeProviderManager,
+  profileManagerInstance: Pick<ProfileManager, 'loadProfile'>,
   lbLogger: LoadBalancerResolutionDeps['lbLogger'],
 ): Promise<void> {
   if (!isLoadBalancerProfile(profileInput)) {
@@ -276,16 +277,12 @@ export async function maybeRegisterLoadBalancerProfile(
     () =>
       `Detected type: loadbalancer profile with ${profileInput.profiles.length} profile references`,
   );
-  const profileManagerInstance =
-    'profileManager' in runtimeServices && runtimeServices.profileManager
-      ? runtimeServices.profileManager
-      : new ProfileManager();
   const resolvedSubProfiles = await resolveLoadBalancerSubProfiles(
     profileInput,
     {
       lbName,
       profileManagerInstance,
-      providerManager: runtimeServices.providerManager,
+      providerManager,
       lbLogger,
     },
   );
@@ -298,11 +295,8 @@ export async function maybeRegisterLoadBalancerProfile(
     () =>
       `Created LoadBalancingProvider config with ${lbConfig.subProfiles.length} sub-profiles`,
   );
-  runtimeServices.providerManager.registerProvider(
-    new LoadBalancingProvider(
-      lbConfig,
-      runtimeServices.providerManager as never,
-    ),
+  providerManager.registerProvider(
+    new LoadBalancingProvider(lbConfig, providerManager as never),
   );
   lbLogger.debug(() => `Registered LoadBalancingProvider as "load-balancer"`);
 }

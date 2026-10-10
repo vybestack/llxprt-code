@@ -34,14 +34,6 @@ describe('ActivateSkillTool', () => {
         location: '/path/to/test-skill/SKILL.md',
         resourceDirectory: '/path/to/test-skill',
       }),
-      getSkillManager: vi.fn().mockReturnValue({
-        getSkills: vi.fn().mockReturnValue(skills),
-        getSkill: vi
-          .fn()
-          .mockImplementation((name: string) =>
-            name === 'test-skill' ? skills[0] : null,
-          ),
-      }),
       listSkills: vi.fn().mockReturnValue(skills),
       getSkill: vi
         .fn()
@@ -136,7 +128,6 @@ describe('ActivateSkillTool', () => {
       }));
       return {
         activateSkill: vi.fn(),
-        getSkillManager: vi.fn(),
         listSkills: vi.fn().mockReturnValue(skills),
         getSkill: vi
           .fn()

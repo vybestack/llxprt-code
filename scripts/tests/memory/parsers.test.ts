@@ -420,27 +420,36 @@ describe('source and installed memprofile utility entries', () => {
     const installedAnalyze = join(root, 'bundle', 'memprofile-analyze.js');
     buildUtilityEntries(root, [
       {
-        entrypoint: join(parserRepoRoot, 'scripts/memory/request-cli.ts'),
+        entrypoint: join(parserRepoRoot, 'scripts/memory/request-cli-entry.ts'),
         destination: sourceRequest,
       },
       {
-        entrypoint: join(parserRepoRoot, 'scripts/memory/report.ts'),
+        entrypoint: join(parserRepoRoot, 'scripts/memory/report-entry.ts'),
         destination: sourceReport,
       },
       {
-        entrypoint: join(parserRepoRoot, 'scripts/memory/heapanalyze.ts'),
+        entrypoint: join(parserRepoRoot, 'scripts/memory/heapanalyze-entry.ts'),
         destination: sourceAnalyze,
       },
       {
-        entrypoint: join(parserRepoRoot, 'scripts/memory/installed-request.ts'),
+        entrypoint: join(
+          parserRepoRoot,
+          'scripts/memory/installed-request-entry.ts',
+        ),
         destination: installedRequest,
       },
       {
-        entrypoint: join(parserRepoRoot, 'scripts/memory/installed-report.ts'),
+        entrypoint: join(
+          parserRepoRoot,
+          'scripts/memory/installed-report-entry.ts',
+        ),
         destination: installedReport,
       },
       {
-        entrypoint: join(parserRepoRoot, 'scripts/memory/installed-analyze.ts'),
+        entrypoint: join(
+          parserRepoRoot,
+          'scripts/memory/installed-analyze-entry.ts',
+        ),
         destination: installedAnalyze,
       },
     ]);

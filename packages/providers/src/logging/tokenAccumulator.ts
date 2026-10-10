@@ -10,7 +10,7 @@
  * line budget.
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 
 export interface AccumulableTokenCounts {
@@ -29,7 +29,7 @@ export interface AccumulableTokenCounts {
  */
 export function accumulateTokenUsage(
   tokenCounts: AccumulableTokenCounts,
-  config: Config | undefined,
+  config: ProviderRequestDiagnostics | undefined,
   providerName: string,
   debug: DebugLogger,
 ): void {
@@ -62,35 +62,5 @@ export function accumulateTokenUsage(
   );
 
   // Call accumulateSessionTokens if providerManager is available
-  const providerManager = config?.getProviderManager();
-  if (providerManager) {
-    try {
-      debug.debug(
-        () =>
-          `[TokenTracking] Accumulating ${usage.input + usage.output + usage.cache + usage.tool + usage.thought} tokens for provider ${providerName}, cacheReads=${usage.cacheReads}, cacheWrites=${usage.cacheWrites}`,
-      );
-      providerManager.accumulateSessionTokens(providerName, usage);
-    } catch (error) {
-      debug.warn(() => `Failed to accumulate session tokens: ${error}`);
-    }
-  } else {
-    debug.warn(
-      () =>
-        `[TokenTracking] No provider manager found in config - tokens not accumulated for ${providerName}`,
-    );
-  }
-}
-
-/** Resolve a candidate value into a Config when it has the logging method. */
-export function resolveLoggingConfig(candidate: unknown): Config | undefined {
-  if (
-    typeof candidate === 'object' &&
-    candidate !== null &&
-    'getConversationLoggingEnabled' in candidate &&
-    typeof (candidate as { getConversationLoggingEnabled?: unknown })
-      .getConversationLoggingEnabled === 'function'
-  ) {
-    return candidate as Config;
-  }
-  return undefined;
+  config?.accumulateSessionTokens?.(providerName, usage);
 }

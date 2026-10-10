@@ -58,6 +58,49 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
       }, 45_000);
     });
 
+    it('ignores compiler-proven stale Core JS but still checks handwritten and shipped JS', async () => {
+      const { code, stdout } = await withFixture(({ root, write }) => {
+        write(
+          'packages/core/src/config/emitted.ts',
+          'export const current = 2;',
+        );
+        write(
+          'packages/core/src/config/emitted.js',
+          '// ~/.llxprt/legacy\nexport const current = 1;\n//# sourceMappingURL=emitted.js.map',
+        );
+        write(
+          'packages/core/src/config/emitted.js.map',
+          JSON.stringify({ file: 'emitted.js', sources: ['emitted.ts'] }),
+        );
+        write(
+          'packages/core/src/config/manual.js',
+          '// ~/.llxprt/manual\nexport const manual = 1;',
+        );
+        write(
+          'packages/core/src/config/shipped.ts',
+          'export const current = 2;',
+        );
+        write(
+          'packages/core/src/config/shipped.js',
+          '// ~/.llxprt/shipped\nexport const current = 1;\n//# sourceMappingURL=shipped.js.map',
+        );
+        write(
+          'packages/core/src/config/shipped.js.map',
+          JSON.stringify({ file: 'shipped.js', sources: ['shipped.ts'] }),
+        );
+        write(
+          'packages/core/package.json',
+          JSON.stringify({
+            exports: { './shipped.js': './src/config/shipped.js' },
+          }),
+        );
+        return runScript(root, 1);
+      });
+      expect(code).toBe(1);
+      expect(stdout).not.toContain('emitted.js:');
+      expect(stdout).toContain('manual.js:');
+      expect(stdout).toContain('shipped.js:');
+    });
     // ── Built-in RED/GREEN self-test ────────────────────────────────────
     describe('built-in self-test (--self-test)', () => {
       it('passes the RED/GREEN self-test', async () => {

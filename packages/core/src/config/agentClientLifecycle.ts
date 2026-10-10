@@ -7,14 +7,16 @@
  * (e.g. on model switch, auth refresh, provider change).
  */
 
-import type { DebugLogger } from '../debug/DebugLogger.js';
+import type { RuntimeContentGeneratorFactory } from '../runtime/contracts/RuntimeContentGeneratorFactory.js';
+import type { ContentGenerator } from '../core/contentGenerator.js';
+import { DebugLogger } from '../debug/DebugLogger.js';
 import { createContentGeneratorConfig } from '../core/contentGenerator.js';
 import type {
   AgentClientContract,
   AgentClientFactory,
 } from '../core/clientContract.js';
 import type { IContent } from '../services/history/IContent.js';
-import { createAgentRuntimeStateFromConfig } from '../runtime/runtimeStateFactory.js';
+import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import type { Config } from './config.js';
 
 /**
@@ -65,13 +67,13 @@ function isBlockWithSignature(block: unknown): block is Record<
  * coupling the helpers to the full Config surface.
  */
 export interface AgentClientLifecycleContext {
-  readonly agentClient: AgentClientContract;
   readonly contentGeneratorConfig: ReturnType<
     typeof createContentGeneratorConfig
   >;
-  readonly providerManager: Config['providerManager'];
-  readonly contentGeneratorFactory: Config['contentGeneratorFactory'];
-  readonly runtimeState: Config['runtimeState'];
+  readonly contentGeneratorFactory:
+    | RuntimeContentGeneratorFactory<ContentGenerator>
+    | undefined;
+  readonly runtimeState: AgentRuntimeState;
 }
 
 /**
@@ -146,31 +148,24 @@ function hasCallableProperty<TObject extends object, TKey extends PropertyKey>(
  * responsible for assigning the runtime state (it is protected).
  */
 export function buildNewContentGeneratorConfig(
-  config: Config,
-  providerManager: Config['providerManager'],
-  contentGeneratorFactory: Config['contentGeneratorFactory'],
-  runtimeState: Config['runtimeState'],
+  contentGeneratorFactory:
+    | RuntimeContentGeneratorFactory<ContentGenerator>
+    | undefined,
+  runtimeState: AgentRuntimeState,
 ): {
   contentGeneratorConfig: ReturnType<typeof createContentGeneratorConfig>;
-  runtimeState: Config['runtimeState'];
+  runtimeState: AgentRuntimeState;
 } {
-  const newContentGeneratorConfig = createContentGeneratorConfig(config);
-  if (providerManager) {
-    newContentGeneratorConfig.providerManager = providerManager;
-  }
+  const newContentGeneratorConfig = createContentGeneratorConfig({
+    model: runtimeState.model,
+    proxy: runtimeState.proxyUrl,
+  });
   if (contentGeneratorFactory) {
     newContentGeneratorConfig.contentGeneratorFactory = contentGeneratorFactory;
   }
-  const updatedRuntimeState = createAgentRuntimeStateFromConfig(config, {
-    runtimeId: runtimeState.runtimeId,
-    overrides: {
-      model: newContentGeneratorConfig.model,
-      proxyUrl: newContentGeneratorConfig.proxy ?? runtimeState.proxyUrl,
-    },
-  });
   return {
     contentGeneratorConfig: newContentGeneratorConfig,
-    runtimeState: updatedRuntimeState,
+    runtimeState,
   };
 }
 
@@ -209,6 +204,68 @@ export async function transferHistoryToNewClient(
   logger.debug('History stored in new client', {
     storedHistoryLength: historyToStore.length,
   });
+}
+
+export async function prepareProfileClient(
+  config: Config,
+  previousClient: AgentClientContract,
+  factory: AgentClientFactory,
+  selectedState: AgentRuntimeState,
+  contentGeneratorFactory: RuntimeContentGeneratorFactory<ContentGenerator>,
+): Promise<
+  ReturnType<typeof buildNewContentGeneratorConfig> & {
+    client: AgentClientContract;
+    prepareHistoryCommit: () => Promise<() => void>;
+    retire: () => Promise<void>;
+    discard: () => Promise<void>;
+  }
+> {
+  const history = structuredClone(await previousClient.getHistory());
+  const prepared = buildNewContentGeneratorConfig(
+    contentGeneratorFactory,
+    selectedState,
+  );
+  const client = factory(
+    config,
+    prepared.runtimeState,
+    undefined,
+    previousClient.mediaStore,
+  );
+  await prepareAgentClientReplacement(
+    new DebugLogger('llxprt:config:prepareProfileClientReplacement'),
+    client,
+    undefined,
+    history,
+    null,
+    prepared.contentGeneratorConfig,
+    previousClient.getContentGeneratorConfig()?.vertexai,
+  );
+  return {
+    ...prepared,
+    client,
+    prepareHistoryCommit: async () => {
+      const live = previousClient.getHistoryService();
+      const candidate = client.getHistoryService();
+      if (live === null) return () => {};
+      if (candidate === null)
+        throw new Error('Prepared profile chat has no history');
+      const adopt = await live.prepareProfileAdoption(candidate);
+      const detachPrevious = previousClient.prepareHistoryRebind(candidate);
+      const attachCandidate = client.prepareHistoryRebind(
+        live,
+        previousClient.hasChatInitialized()
+          ? previousClient.getChat()
+          : undefined,
+      );
+      return () => {
+        detachPrevious();
+        adopt();
+        attachCandidate();
+      };
+    },
+    retire: () => previousClient.dispose(),
+    discard: () => client.dispose(),
+  };
 }
 
 export async function prepareAgentClientReplacement(
@@ -258,62 +315,4 @@ export async function disposePreviousAgentClient(
   ) {
     await previousAgentClient.dispose();
   }
-}
-
-/**
- * Requires that an agent client factory is available, throwing a descriptive
- * error if it was not injected.
- */
-export function requireAgentClientFactory(
-  factory: AgentClientFactory | undefined,
-  operation: string,
-): AgentClientFactory {
-  if (!factory) {
-    throw new Error(
-      `agentClientFactory is required before Config.${operation}() can create an AgentClient`,
-    );
-  }
-  return factory;
-}
-
-function createDetachedRuntimeId(baseRuntimeId: string | undefined): string {
-  const timestamp = Date.now().toString(36);
-  const suffix = Math.random().toString(36).slice(2, 8);
-  return `${baseRuntimeId ?? 'llxprt-session'}#subagent-auto#${timestamp}-${suffix}`;
-}
-
-/**
- * Creates a detached agent client with a fresh runtime state isolated from
- * the session's primary agent client. The returned client has its tool set
- * cleared. Used for one-shot operations such as subagent auto-prompt
- * generation that need a clean, isolated runtime scope.
- */
-export async function createDetachedAgentClient(
-  config: Config,
-  runtimeId?: string,
-): Promise<AgentClientContract> {
-  const factory = requireAgentClientFactory(
-    config.getAgentClientFactory(),
-    'createDetachedAgentClient',
-  );
-  const baseRuntimeId = config.getSessionId();
-  const detachedId = runtimeId ?? createDetachedRuntimeId(baseRuntimeId);
-  const detachedRuntimeState = createAgentRuntimeStateFromConfig(config, {
-    runtimeId: detachedId,
-  });
-  const client = factory(config, detachedRuntimeState);
-  try {
-    client.clearTools();
-  } catch (error) {
-    try {
-      await client.dispose();
-    } catch (cleanupError) {
-      throw new AggregateError(
-        [error, cleanupError],
-        'Detached agent client setup and cleanup failed',
-      );
-    }
-    throw error;
-  }
-  return client;
 }

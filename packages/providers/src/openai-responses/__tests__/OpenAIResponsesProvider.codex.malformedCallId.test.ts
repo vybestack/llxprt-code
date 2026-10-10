@@ -6,7 +6,8 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
-import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
+import type { GenerateChatOptions } from '../../IProvider.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 
 function buildProviderWithOAuth() {
   const oauthManager = {
@@ -31,27 +32,19 @@ function buildProviderWithOAuth() {
   );
 }
 
-function buildCodexOptions(overrides?: Partial<NormalizedGenerateChatOptions>) {
-  const base: NormalizedGenerateChatOptions = {
-    contents: [],
-    tools: undefined,
+function buildCodexOptions(
+  overrides?: Partial<GenerateChatOptions>,
+): GenerateChatOptions {
+  return createProviderCallOptions({
+    providerName: 'codex',
+    systemInstruction: 'test system prompt',
     resolved: {
       baseURL: 'https://chatgpt.com/backend-api/codex',
       model: 'gpt-5.2',
-      authToken: undefined,
+      authToken: 'test-api-key',
     },
-    invocation: {
-      metadata: {},
-      ephemerals: undefined,
-      userMemory: undefined,
-      getModelBehavior: () => undefined,
-    },
-    settings: undefined,
-    systemInstruction: 'test system prompt',
-    userMemory: undefined,
-  };
-
-  return { ...base, ...(overrides ?? {}) } as NormalizedGenerateChatOptions;
+    ...overrides,
+  });
 }
 
 let originalFetch: typeof globalThis.fetch;
@@ -70,11 +63,13 @@ describe('OpenAIResponsesProvider Codex Mode - malformed call ids', () => {
 
     const encoder = new TextEncoder();
 
+    let transported = '';
     const fetchMock = vi.fn(async (_url: unknown, init?: RequestInit) => {
       if (init?.body === undefined || init.body === null) {
         throw new Error('Expected request body');
       }
       const bodyText = await new Response(init.body).text();
+      transported = bodyText;
       const parsed = JSON.parse(bodyText) as { input: unknown[] };
 
       const functionCallIds = new Set(
@@ -152,15 +147,10 @@ describe('OpenAIResponsesProvider Codex Mode - malformed call ids', () => {
       ],
     });
 
-    const iterator = (
-      provider as unknown as {
-        generateChatCompletionWithOptions: (
-          options: NormalizedGenerateChatOptions,
-        ) => AsyncIterableIterator<unknown>;
-      }
-    ).generateChatCompletionWithOptions(options);
+    const iterator = provider.generateChatCompletion(options);
 
     await iterator.next();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(transported).toContain('echo hi');
+    expect(transported).not.toContain('call3or3EL9f1eJ6fimZIHmJRVG2');
   });
 });

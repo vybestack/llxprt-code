@@ -1,3 +1,4 @@
+import { getOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 /**
  * Copyright 2025 Vybestack LLC
  *
@@ -33,7 +34,7 @@ import type {
 import { PDF_AGGREGATE_MAX_BYTES } from '../../utils/mediaUtils.js';
 
 const stubConfig: ToolOutputSettingsProvider = {
-  getEphemeralSettings: () => ({}),
+  readExecutionPolicy: () => ({}),
 };
 
 function buildContext(
@@ -41,7 +42,7 @@ function buildContext(
 ): ResponsesInputBuildContext {
   return {
     includeReasoningInContext: true,
-    outputLimiterConfig: stubConfig,
+    outputLimits: getOutputLimits(stubConfig),
     debug: () => {},
     mediaPdfEnabled: true,
     ...overrides,

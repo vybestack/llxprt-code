@@ -1,12 +1,13 @@
 /**
- * @plan:PLAN-20260608-ISSUE1585.P04
- * @requirement:REQ-INTERFACE-OWNERSHIP, REQ-BEHAVIORAL-TDD
- */
-
-/**
  * @license
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { physicalFiles } from './helpers/physical-files.js';
+/**
+ * @plan:PLAN-20260608-ISSUE1585.P04
+ * @requirement:REQ-INTERFACE-OWNERSHIP, REQ-BEHAVIORAL-TDD
  */
 
 /**
@@ -38,12 +39,17 @@ import type {
  */
 function createFakeToolHost(overrides?: Partial<IToolHost>): IToolHost {
   return {
+    ...physicalFiles,
     getTargetDir: () => '/tmp/workspace',
     getWorkspaceRoots: () => ['/tmp/workspace'],
     getApprovalMode: () => 'auto',
     setApprovalMode: () => {},
     isInteractive: () => false,
-    hasFeatureFlag: () => false,
+
+    runSearch: <T>(
+      _directories: readonly string[],
+      operation: () => Promise<T>,
+    ): Promise<T> => operation(),
     getFileService: () => ({
       shouldGitIgnoreFile: () => false,
       shouldLlxprtIgnoreFile: () => false,
@@ -60,7 +66,7 @@ function createFakeToolHost(overrides?: Partial<IToolHost>): IToolHost {
     getLlxprtIgnoreFilePath: () => null,
     recordFileRead: () => {},
     getLlxprtIgnorePatterns: () => [],
-    getEphemeralSettings: () => ({}),
+    readExecutionPolicy: () => ({}),
     getDebugMode: () => false,
     ...overrides,
   };

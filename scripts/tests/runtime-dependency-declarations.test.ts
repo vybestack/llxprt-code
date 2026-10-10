@@ -376,6 +376,21 @@ describe('production source is defined by entrypoint reachability', () => {
     }
   });
 
+  it('follows TypeScript source instead of an emitted JavaScript sibling', () => {
+    const violations = violationsFor({
+      files: {
+        'index.ts': "export * from './src/impl.js';\n",
+        'src/impl.ts': "import 'source-only';\n",
+        'src/impl.js': "import 'emitted-only';\n",
+      },
+    });
+
+    expect(violations.map((violation) => violation.importedPackage)).toEqual([
+      'source-only',
+    ]);
+    expect(violations[0].file).toBe(`${WORKSPACE_DIR}/src/impl.ts`);
+  });
+
   it('scans a file reachable only transitively', () => {
     const violations = violationsFor({
       files: {

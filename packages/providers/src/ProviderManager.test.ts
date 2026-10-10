@@ -18,8 +18,13 @@ import {
 
 function createRuntimeConfigStub(): Config {
   return {
+    onEphemeralSettingChange: () => () => {},
+    onTelemetrySettingsChange: () => () => {},
+
+    getTargetDir: () => process.cwd(),
+    getConversationLogPath: () => '',
+
     getConversationLoggingEnabled: () => false,
-    getProviderManager: () => ({ accumulateSessionTokens: () => {} }),
     getRedactionConfig: () => ({
       redactApiKeys: false,
       redactCredentials: false,

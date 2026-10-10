@@ -4,8 +4,8 @@
  * @project-plans/debuglogging/requirements.md
  */
 
+import { readInvocationPolicyRecord } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import {
-  hasHeaderName,
   instantiateClient,
   isAnthropicMessageStream,
   withSemanticMediaPurgeCacheEvidence,
@@ -33,10 +33,7 @@ import {
 } from '../utils/systemPromptPlacement.js';
 import { isRuntimeAuthTokenProvider } from '../utils/authToken.js';
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
-import {
-  CredentialResolutionError,
-  type OAuthManager,
-} from '@vybestack/llxprt-code-auth';
+import { type OAuthManager } from '@vybestack/llxprt-code-auth';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderTelemetryContext } from '../types/providerRuntime.js';
 import type { DumpMode } from '../utils/dumpContext.js';
@@ -64,12 +61,15 @@ import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runti
 import { projectAnthropicPromptEnvelope } from '../runtime/promptEnvelopeProjections.js';
 import {
   buildAnthropicRequestHeaders,
+  withCredentialHeader,
   createAnthropicApiCall,
   executeAnthropicApiCall,
 } from './AnthropicApiExecution.js';
 import { collectUnsupportedMedia } from '../utils/mediaUtils.js';
-import { createCredentialResolutionError } from '../utils/credentialResolutionError.js';
-import { createAnthropicMissingCredentialError } from './AnthropicCredentialResolution.js';
+import {
+  createAnthropicMissingCredentialError,
+  resolveAnthropicCredential,
+} from './AnthropicCredentialResolution.js';
 import {
   isAnthropicImageDimensionLimitError,
   parseAnthropicImageDimensionLimit,
@@ -91,6 +91,7 @@ import {
   finishMediaRequest,
   type MediaRequestOutcome,
   resolveRequestMedia,
+  captureRequestMediaInput,
 } from '../utils/request-media-resolution.js';
 
 export class AnthropicProvider extends BaseProvider {
@@ -135,6 +136,19 @@ export class AnthropicProvider extends BaseProvider {
     // @requirement REQ-SP4-002: Eliminate constructor-captured config and user-memory
   }
 
+  private resolveMediaRequest(
+    options: NormalizedGenerateChatOptions,
+  ): Promise<ResolvedMediaRequest> {
+    const { contents, invocation } = options;
+    const media = captureRequestMediaInput(
+      options.metadata['logicalRequestId'],
+      invocation.runtimeId,
+      this.requestMediaBudgetBytes,
+      this.requestMediaResolver,
+    );
+    return resolveRequestMedia(media, contents, invocation.signal);
+  }
+
   private async resolveTransportPreparation(
     options: NormalizedGenerateChatOptions,
   ): Promise<AnthropicTransportPreparation> {
@@ -145,12 +159,7 @@ export class AnthropicProvider extends BaseProvider {
       throw new Error('Unknown Anthropic prompt-envelope transport token');
     }
     const mediaRequest =
-      prepared?.mediaRequest ??
-      (await resolveRequestMedia(
-        options.runtime,
-        options.contents,
-        options.invocation.signal,
-      ));
+      prepared?.mediaRequest ?? (await this.resolveMediaRequest(options));
     try {
       return {
         prepared,
@@ -241,24 +250,14 @@ export class AnthropicProvider extends BaseProvider {
       return this.getAuthTokenForPrompt();
     }
 
-    try {
-      const freshToken = await runtimeAuthToken.provide();
-      if (!freshToken) {
-        throw createCredentialResolutionError(options, this.name, {
-          kind: 'credential-not-found',
-        });
-      }
-      this.getAuthLogger().debug(() => 'Refreshed OAuth token for call');
-      return freshToken;
-    } catch (cause) {
-      if (cause instanceof CredentialResolutionError) {
-        throw cause;
-      }
-      throw createCredentialResolutionError(options, this.name, {
-        kind: 'credential-source-failed',
-        cause,
-      });
-    }
+    return resolveAnthropicCredential({
+      options,
+      providerName: this.name,
+      oauthProvider: this.baseProviderConfig.oauthProvider,
+      oauthEligible: this.isOAuthEligible(options.resolved.baseURL),
+      readToken: runtimeAuthToken.provide,
+      readFallback: () => this.getAuthTokenForPrompt(),
+    });
   }
 
   /**
@@ -523,10 +522,9 @@ export class AnthropicProvider extends BaseProvider {
     // @plan PLAN-20251023-STATELESS-HARDENING.P08: Don't reference deprecated instance fields
     // Tools format should be derived from runtime context only
     try {
-      const settingsService = this.resolveSettingsService();
-
-      // First check SettingsService for toolFormat override in provider settings.
-      const providerSettings = settingsService.getProviderSettings(this.name);
+      const providerSettings = readInvocationPolicyRecord(
+        this.captureOwnerPolicy()[this.name],
+      );
 
       const toolFormatOverride = providerSettings.toolFormat as
         | ToolFormat
@@ -850,7 +848,7 @@ export class AnthropicProvider extends BaseProvider {
       isOAuth,
       placement,
       providerName: this.name,
-      config: options.config ?? options.runtime?.config ?? this.globalConfig,
+      config: undefined,
       getMaxTokensForModel: (m) => this.getMaxTokensForModel(m),
       unprefixToolName: (name, oauth) => this.unprefixToolName(name, oauth),
       providerConfig: this.providerConfig,
@@ -874,11 +872,7 @@ export class AnthropicProvider extends BaseProvider {
     options: GenerateChatOptions,
   ): Promise<PromptEnvelopeProjection> {
     const normalized = await this.normalizeOptionsForProjection(options);
-    const mediaRequest = await resolveRequestMedia(
-      normalized.runtime,
-      normalized.contents,
-      normalized.invocation.signal,
-    );
+    const mediaRequest = await this.resolveMediaRequest(normalized);
     const resolvedOptions = {
       ...normalized,
       contents: mediaRequest.withContents((contents) => contents),
@@ -946,26 +940,6 @@ export class AnthropicProvider extends BaseProvider {
     }
   }
 
-  /** #3159: the SDK generates the credential header (x-api-key for an API key,
-   * Authorization: Bearer for OAuth). Record the NAME in dump metadata;
-   * shared redaction replaces the value with [REDACTED]. A caller-supplied
-   * credential header always wins over the synthesized one.
-   */
-  private withCredentialHeader(
-    headers: Record<string, string> | undefined,
-    isOAuth: boolean,
-    authToken: string,
-  ): Record<string, string> | undefined {
-    const name = isOAuth ? 'Authorization' : 'x-api-key';
-    if (headers !== undefined && hasHeaderName(headers, name)) {
-      return headers;
-    }
-    const value = isOAuth ? `Bearer ${authToken}` : authToken;
-    return headers === undefined
-      ? { [name]: value }
-      : { ...headers, [name]: value };
-  }
-
   private async executeApiCall(
     options: NormalizedGenerateChatOptions,
     requestContext: Awaited<ReturnType<typeof prepareAnthropicRequest>>,
@@ -979,7 +953,7 @@ export class AnthropicProvider extends BaseProvider {
     authToken: string,
   ) {
     const dumpHeaders: Record<string, string> | undefined =
-      this.withCredentialHeader(headers, isOAuth, authToken);
+      withCredentialHeader(headers, isOAuth, authToken);
     const dumpMode = options.invocation.ephemerals.dumpcontext as
       | DumpMode
       | undefined;

@@ -5,7 +5,7 @@
  */
 
 import type { EventEmitter } from 'node:events';
-import type { ChildProcess } from 'node:child_process';
+import type { ShellProcessIdentity } from './shellJobTypes.js';
 import type { ShellJobState, TerminalDetails } from './shellJobTypes.js';
 import type { ShellJobRecord } from './shellJobTypes.js';
 import { toPublicJob } from './shellJobTypes.js';
@@ -28,8 +28,8 @@ export interface ShellJobContext {
  * point: every path (exit, error, cancel, log-cap breach, dispose) calls this.
  * If the guard has already fired, this is a no-op returning false.
  *
- * On success, the record is updated, the event is emitted, and the terminal
- * promise is resolved.
+ * On success, the record is updated and the terminal promise is resolved.
+ * The manager completes resource bookkeeping before delivering notifications.
  */
 export function applyTerminal(
   ctx: ShellJobContext,
@@ -59,26 +59,25 @@ export function applyTerminal(
     record.escalateTimer = undefined;
   }
 
-  emitTerminalEvent(ctx, state);
   record.resolveTerminal();
   return true;
 }
 
-function emitTerminalEvent(ctx: ShellJobContext, state: ShellJobState): void {
+export function emitTerminalEvent(
+  ctx: ShellJobContext,
+  state: ShellJobState,
+): unknown[] {
+  if (state === 'running') return [];
   const job = toPublicJob(ctx.record);
-  switch (state) {
-    case 'completed':
-      ctx.emitter.emit('job-completed', job);
-      break;
-    case 'failed':
-      ctx.emitter.emit('job-failed', job);
-      break;
-    case 'cancelled':
-      ctx.emitter.emit('job-cancelled', job);
-      break;
-    default:
-      break;
+  const errors: unknown[] = [];
+  for (const listener of ctx.emitter.rawListeners(`job-${state}`)) {
+    try {
+      listener.call(ctx.emitter, job);
+    } catch (error) {
+      errors.push(error);
+    }
   }
+  return errors;
 }
 
 /**
@@ -95,7 +94,7 @@ export function createJobContext(
   };
 }
 
-export function childIsRunning(child: ChildProcess): boolean {
+export function childIsRunning(child: ShellProcessIdentity): boolean {
   return !child.killed && child.exitCode === null && child.signalCode === null;
 }
 

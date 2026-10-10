@@ -1,9 +1,38 @@
+import type { ImageOperationRunner } from '@vybestack/llxprt-code-core/services/image/imageCapability.js';
+import type {
+  SessionStartSource,
+  SessionEndReason,
+} from '@vybestack/llxprt-code-core/hooks/types.js';
+import type {
+  ProfileDefinitionReads,
+  ProfileDefinitionWrites,
+  SubagentDefinitionReads,
+  SubagentDefinitionWrites,
+  WorkspaceCheckpointOperations,
+} from '@vybestack/llxprt-code-core';
+import type { DiscoveredMCPPrompt } from '@vybestack/llxprt-code-mcp';
+import type {
+  WorkspaceIgnoreOperations,
+  WorkspaceSearchOperations,
+} from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import type {
+  RuntimeProviderManager,
+  RuntimeModel,
+} from '@vybestack/llxprt-code-core';
 /**
  * @plan:PLAN-20260617-COREAPI.P05
  * @requirement:REQ-001, REQ-017
  * @plan:PLAN-20260621-COREAPIREMED.P06
  */
+import type { IdeClient } from '@vybestack/llxprt-code-ide-integration';
 
+import type { ChildToolDisplayCallbacks } from '../session/childToolDisplay.js';
+import type { Profile } from '@vybestack/llxprt-code-settings';
+import type { AgentProfileApplication } from './profileApplicationAssembly.js';
+import type { AgentExecutionCoordinator } from './agentExecutionCoordinator.js';
+
+import type { SessionRecordingEvent } from './control/recordSessionEvent.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type {
@@ -25,10 +54,15 @@ import type {
   OutputUpdateHandler,
   ToolCallsUpdateHandler,
 } from '@vybestack/llxprt-code-core/scheduler/types.js';
-import type { PolicyDecision } from '@vybestack/llxprt-code-core';
+import type {
+  PolicyDecision,
+  DiscoveredMCPResource,
+  ContinueTarget,
+} from '@vybestack/llxprt-code-core';
 // @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-004 @pseudocode agents-projection.md line 95
 import type { McpOAuthStatus } from '@vybestack/llxprt-code-core';
-import type { EditorCallbacks } from './config-types.js';
+import type { ToolCallRequestInfo } from '@vybestack/llxprt-code-core/core/turn.js';
+import type { BrowserListing, EditorCallbacks } from './config-types.js';
 import type {
   AgentEvent,
   AgentToolCall,
@@ -171,6 +205,8 @@ export type AgentOAuthUIEvent =
  * `agent.setProvider(name, model, opts)`.
  */
 export interface AgentProviderSwitchOptions {
+  readonly preserveEphemerals?: string[];
+  readonly skipModelDefaults?: boolean;
   /** When true, initiate OAuth automatically for providers that require it. */
   readonly autoOAuth?: boolean;
   /**
@@ -253,6 +289,7 @@ export interface McpServerInfo {
   readonly status:
     | 'connected'
     | 'connecting'
+    | 'disconnecting'
     | 'disconnected'
     | 'error'
     | 'disabled';
@@ -563,6 +600,24 @@ export interface AgentDisplayCallbacks {
 }
 
 export interface AgentToolControl {
+  subscribeChildTools(callbacks: ChildToolDisplayCallbacks): Unsubscribe;
+  /**
+   * Opens an Agent-owned client execution channel. Completion and history
+   * recording remain fixed for its lifetime; rendering subscriptions are
+   * removable. Release cancels and joins work without disposing borrowed state.
+   */
+  openClientChannel(
+    onComplete?: (calls: CompletedToolCall[]) => void | Promise<void>,
+  ): {
+    readonly ready: Promise<void>;
+    schedule(
+      request: ToolCallRequestInfo | ToolCallRequestInfo[],
+      signal: AbortSignal,
+    ): Promise<void>;
+    cancelAll(): void;
+    subscribe(callbacks: AgentDisplayCallbacks): Unsubscribe;
+    release(): Promise<void>;
+  };
   /**
    * Returns a frozen snapshot of every registered tool projected to
    * {@link ToolInfo} (name, displayName, description, parametersSchema,
@@ -570,6 +625,10 @@ export interface AgentToolControl {
    * for UI consumers (see #2376).
    */
   list(): readonly ToolInfo[];
+  describeConfiguration(): {
+    registered: Array<{ displayName: string }>;
+    unregistered: Array<{ displayName: string; reason?: string }>;
+  };
   /**
    * Named-tool lookup; returns the matching {@link AgentToolHandle} or
    * `undefined` when no tool is registered under `name`.
@@ -605,7 +664,13 @@ export interface AgentToolControl {
 }
 
 export interface AgentMcpControl {
+  listPrompts(server: string): DiscoveredMCPPrompt[];
+  listResources(): DiscoveredMCPResource[];
+  subscribeStatus(listener: () => void): Unsubscribe;
+  findResource(identifier: string): DiscoveredMCPResource | undefined;
+  readResource(server: string, uri: string): Promise<unknown>;
   listServers(): readonly McpServerInfo[];
+  listBlockedServers(): readonly McpBlockedServer[];
   status(): McpStatus;
   toolsByServer(): Readonly<Record<string, readonly ToolInfo[]>>;
   auth(server: string): Promise<McpServerAuthStatus>;
@@ -630,7 +695,10 @@ export interface AgentMcpControl {
    */
   reload(): Promise<void>;
   // @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
-  authenticate(server: string): Promise<McpServerAuthStatus>;
+  authenticate(
+    server: string,
+    onDisplayMessage?: (message: string) => void,
+  ): Promise<McpServerAuthStatus>;
   // @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
   details(opts?: McpDetailsOptions): Promise<McpDetailStatus>;
 }
@@ -678,6 +746,15 @@ export interface AgentAuthControl {
 }
 
 export interface AgentIdeControl {
+  isTrustedFolder(): boolean;
+  getIdeTrust(): boolean | undefined;
+  setTrustedFolderLive(trusted: boolean): Promise<void>;
+  whenTrustTransitionSettled(): Promise<void>;
+  getIdeClient(): IdeClient | undefined;
+  getIdeMode(): boolean;
+  setIdeMode(enabled: boolean): void;
+  setIdeClientConnected(): Promise<void>;
+  setIdeClientDisconnected(): Promise<void>;
   current(): IdeInfo | null;
   detected(): readonly IdeInfo[];
   trust(name: string): Promise<void>;
@@ -704,21 +781,44 @@ export interface AgentSessionControl {
     options?: { readonly prefix?: boolean },
   ): Promise<readonly AgentHistoryItem[]>;
   /** Creates a durable branch point in the active recording. */
-  createCheckpoint(name: string): Promise<CheckpointInfo>;
+  createCheckpoint(
+    name: string,
+    options?: { readonly overwrite?: boolean },
+  ): Promise<CheckpointInfo>;
+  /** Durably removes the last N human-led turns and updates the live history. */
+  restoreTurns(turns: number): Promise<{
+    readonly remainingHistory: readonly AgentHistoryItem[];
+    readonly itemsRemoved: number;
+  }>;
+  /** Reads live conversation history through the session owner. */
+  getHistory(): Promise<readonly AgentHistoryItem[]>;
+  /** Durably clears non-initial turns and updates the live history. */
+  clearHistory(): Promise<void>;
   /** Creates and activates a self-contained child session from a checkpoint. */
   forkFromCheckpoint(ref: string): Promise<SessionInfo>;
   /** Lists live recording-native checkpoints in the current project. */
   listCheckpoints(): Promise<readonly CheckpointInfo[]>;
   /** Renames a checkpoint reference while preserving its branch point. */
-  renameCheckpoint(ref: string, name: string): Promise<void>;
+  renameCheckpoint(
+    ref: string,
+    name: string,
+    options?: { readonly overwrite?: boolean },
+  ): Promise<void>;
   /** Tombstones a checkpoint reference without deleting existing children. */
   deleteCheckpoint(ref: string): Promise<void>;
   /** Assigns a project-unique name to the active living session. */
-  nameCurrentSession(name: string): Promise<void>;
+  nameCurrentSession(
+    name: string,
+    options?: { readonly overwrite?: boolean },
+  ): Promise<void>;
   /** Activates a living session or forks a child from a checkpoint. */
   resumeSession(ref: string): Promise<SessionInfo>;
   /** Lists living recording sessions in the current project. */
   listSessions(): Promise<readonly SessionInfo[]>;
+  /** Lists browser targets with source paths and checkpoint identities. */
+  listBrowserTargets(): Promise<readonly ContinueTarget[]>;
+  /** Browser targets plus the recordings discovery skipped as unreadable. */
+  listBrowserTargetsDetailed(): Promise<BrowserListing>;
   /** Deletes a non-active session when no live checkpoint references block it. */
   deleteSession(ref: string): Promise<void>;
   /** Exports a living session and every reachable media object to a portable package. */
@@ -727,9 +827,15 @@ export interface AgentSessionControl {
   importSession(packageDirectory: string): Promise<SessionInfo>;
   setRecording(state: SessionRecordingState): Promise<void>;
   getRecording(): SessionRecordingState;
+  /** Flushes the active recording and its pending history persistence. */
+  flushRecording(): Promise<void>;
+  /** Records and durably flushes a provider, directory, or session event. */
+  recordRecordingEvent(event: SessionRecordingEvent): Promise<void>;
+  getRecordingTitle(): string | null | undefined;
+  recordRecordingTitle(title: string | null): Promise<void>;
 }
 
-export interface AgentProfileControl {
+export interface AgentProfileControl extends AgentProfileApplication {
   list(): readonly ProfileSummary[];
   get(name: string): ProfileDetail | undefined;
   create(
@@ -752,8 +858,10 @@ export interface AgentHookControl {
   onHookExecution(
     cb: (req: HookExecutionRequest, resp: HookExecutionResponse) => void,
   ): Unsubscribe;
-  triggerSessionStart(): Promise<AgentSessionStartResult>;
-  triggerSessionEnd(): Promise<void>;
+  triggerSessionStart(
+    source?: SessionStartSource,
+  ): Promise<AgentSessionStartResult>;
+  triggerSessionEnd(reason?: SessionEndReason): Promise<void>;
   clear(): void;
   // @plan:PLAN-20260622-COREAPIGAP.P10 @requirement:REQ-004
   listHooks(): readonly HookInfo[];
@@ -796,6 +904,7 @@ export interface PolicyRuleView {
  * @requirement:REQ-002
  */
 export interface AgentPolicyControl {
+  reloadUserRules(mode: ApprovalMode): Promise<void>;
   getRules(): readonly PolicyRuleView[];
   getDefaultDecision(): PolicyDecision;
   isNonInteractive(): boolean;
@@ -848,6 +957,10 @@ export type AgentTaskInfo = AgentSubagentTaskInfo | AgentShellJobInfo;
  * @requirement:REQ-003
  */
 export interface AgentTasksControl {
+  subscribeNotifications(
+    isBusy: () => boolean,
+    deliver: (message: string) => Promise<void>,
+  ): (() => void) & { drain(): Promise<void> };
   list(): readonly AgentTaskInfo[];
   listRunning(): readonly AgentTaskInfo[];
   get(id: string): AgentTaskInfo | undefined;
@@ -896,7 +1009,7 @@ export interface SkillInfo {
 }
 
 /**
- * Skills query/reload operations (REQ-013). Backed by Config.getSkillManager()
+ * Skills query/reload operations (REQ-013). Backed by workspace skill operations
  * so clients no longer need raw Config for skill queries.
  * @plan:PLAN-20260626-RUNTIMEBOUNDARY.P03
  */
@@ -913,7 +1026,15 @@ export interface AgentSkillsControl {
  * no longer need raw Config for workspace queries.
  * @plan:PLAN-20260626-RUNTIMEBOUNDARY.P04
  */
-export interface AgentWorkspaceControl {
+export interface AgentWorkspaceControl
+  extends WorkspaceIgnoreOperations,
+    WorkspaceSearchOperations {
+  readonly checkpoints: WorkspaceCheckpointOperations;
+  readonly profileDefinitions: ProfileDefinitionReads;
+  readonly profileWrites: ProfileDefinitionWrites;
+  readonly subagentDefinitions: SubagentDefinitionReads;
+  readonly subagentWrites: SubagentDefinitionWrites;
+  containsPath(filePath: string): boolean;
   getDirectories(): readonly string[];
   addDirectory(path: string): void;
   getWorkingDirectory(): string;
@@ -955,6 +1076,30 @@ export interface AgentLspControl {
 }
 
 export interface Agent {
+  readonly sessionClient: {
+    readonly runImageOperation: ImageOperationRunner;
+    refreshAuth(authMethod?: string): Promise<void>;
+    publishTools(): Promise<void>;
+    createDetachedAgentClient(id?: string): Promise<AgentClientContract>;
+  };
+  readonly agentClient: AgentClientContract;
+  readonly providerManager: RuntimeProviderManager;
+  captureProfile(): Profile;
+  saveProfileSnapshot(
+    name: string,
+    additionalConfig?: Partial<Profile>,
+  ): Promise<Profile>;
+  deleteProfileByName(name: string): Promise<void>;
+  getActiveProfileName(): string | null;
+  setDefaultProfileName(name: string | null): void;
+  getRuntimeDiagnosticsSnapshot(): {
+    providerName: string | null;
+    modelName: string | null;
+    profileName: string | null;
+    modelParams: Record<string, unknown>;
+    ephemeralSettings: Record<string, unknown>;
+  };
+
   chat(input: AgentInput, opts?: TurnOptions): Promise<AgentResult>;
   stream(input: AgentInput, opts?: TurnOptions): AsyncIterable<AgentEvent>;
 
@@ -973,6 +1118,9 @@ export interface Agent {
     options?: AgentProviderSwitchOptions,
   ): Promise<AgentProviderSwitchResult>;
   getProviderStatus(): ProviderStatus;
+  hasActiveProvider(): boolean;
+  getProviderContextLimit(): number | undefined;
+  listAvailableModels(provider?: string): Promise<RuntimeModel[]>;
   getModel(): string;
   setModel(model: string): Promise<void>;
   getCurrentSequenceModel(): string | null;
@@ -1020,6 +1168,11 @@ export interface Agent {
   clearModelParam(key: string): void;
 
   readonly profiles: AgentProfileControl;
+  /** Per-owner safe window for future revision-bearing profile commands. */
+  readonly execution: Pick<
+    AgentExecutionCoordinator,
+    'withSafeBoundary' | 'executeCommand'
+  >;
   readonly tools: AgentToolControl;
   readonly mcp: AgentMcpControl;
   readonly auth: AgentAuthControl;

@@ -40,18 +40,30 @@ describe('settings-surface parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
   it('T8a numeric normalize: agent.setEphemeralSetting("context-limit","1000") yields the Config-normalized number 1000 and parity with the Config (REQ-INT-003)', async () => {
     const built = await buildCliStyleConfig('plain-text.jsonl');
     try {
-      const agent: Agent = await fromConfig({ config: built.config });
+      const agent: Agent = await fromConfig({
+        settingsOwner: built.settingsOwner,
+        settingsService: built.settingsService,
+        agentClient: built.agentClient,
+        providerManager: built.providerManager,
+        config: built.config,
+        mcpRuntime: built.mcpRuntime,
+      });
+      try {
+        agent.setEphemeralSetting('context-limit', '1000');
+        const viaAgent = agent.getEphemeralSetting('context-limit');
 
-      agent.setEphemeralSetting('context-limit', '1000');
-      const viaAgent = agent.getEphemeralSetting('context-limit');
+        // Config normalization: numeric string → number.
+        expect(viaAgent).toBe(1000);
+        expect(typeof viaAgent).toBe('number');
 
-      // Config normalization: numeric string → number.
-      expect(viaAgent).toBe(1000);
-      expect(typeof viaAgent).toBe('number');
-
-      // Parity: the SAME set on the Config yields the same value.
-      built.config.setEphemeralSetting('context-limit', '1000');
-      expect(viaAgent).toBe(built.config.getEphemeralSetting('context-limit'));
+        // Parity: the SAME set on the Config yields the same value.
+        built.settingsOwner.writeUserParameter('context-limit', '1000');
+        expect(viaAgent).toBe(
+          built.settingsOwner.readNamedParameter('context-limit'),
+        );
+      } finally {
+        await agent.dispose();
+      }
     } finally {
       await built.cleanup();
     }
@@ -60,15 +72,27 @@ describe('settings-surface parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
   it('T8b streaming enum: agent.setEphemeralSetting("streaming","enabled") yields "enabled" and parity with the Config (REQ-INT-003)', async () => {
     const built = await buildCliStyleConfig('plain-text.jsonl');
     try {
-      const agent: Agent = await fromConfig({ config: built.config });
+      const agent: Agent = await fromConfig({
+        settingsOwner: built.settingsOwner,
+        settingsService: built.settingsService,
+        agentClient: built.agentClient,
+        providerManager: built.providerManager,
+        config: built.config,
+        mcpRuntime: built.mcpRuntime,
+      });
+      try {
+        agent.setEphemeralSetting('streaming', 'enabled');
+        const viaAgent = agent.getEphemeralSetting('streaming');
 
-      agent.setEphemeralSetting('streaming', 'enabled');
-      const viaAgent = agent.getEphemeralSetting('streaming');
+        expect(viaAgent).toBe('enabled');
 
-      expect(viaAgent).toBe('enabled');
-
-      built.config.setEphemeralSetting('streaming', 'enabled');
-      expect(viaAgent).toBe(built.config.getEphemeralSetting('streaming'));
+        built.settingsOwner.writeUserParameter('streaming', 'enabled');
+        expect(viaAgent).toBe(
+          built.settingsOwner.readNamedParameter('streaming'),
+        );
+      } finally {
+        await agent.dispose();
+      }
     } finally {
       await built.cleanup();
     }
@@ -77,14 +101,24 @@ describe('settings-surface parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
   it('T8c invalid streaming throws with "must resolve" — the Config rule propagates, never swallowed (REQ-INT-003)', async () => {
     const built = await buildCliStyleConfig('plain-text.jsonl');
     try {
-      const agent: Agent = await fromConfig({ config: built.config });
-
-      // The Config rule (configBase.ts:207) throws
-      // 'Streaming setting must resolve to "enabled" or "disabled"'; the
-      // agent MUST propagate it, never swallow.
-      expect(() => agent.setEphemeralSetting('streaming', 123)).toThrow(
-        /must resolve/,
-      );
+      const agent: Agent = await fromConfig({
+        settingsOwner: built.settingsOwner,
+        settingsService: built.settingsService,
+        agentClient: built.agentClient,
+        providerManager: built.providerManager,
+        config: built.config,
+        mcpRuntime: built.mcpRuntime,
+      });
+      try {
+        // The Config rule (configBase.ts:207) throws
+        // 'Streaming setting must resolve to "enabled" or "disabled"'; the
+        // agent MUST propagate it, never swallow.
+        expect(() => agent.setEphemeralSetting('streaming', 123)).toThrow(
+          /must resolve/,
+        );
+      } finally {
+        await agent.dispose();
+      }
     } finally {
       await built.cleanup();
     }
@@ -93,19 +127,29 @@ describe('settings-surface parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
   it('T8d deep-equal: agent.getEphemeralSettings() deep-equals built.config.getEphemeralSettings() after the same mutations (REQ-INT-003)', async () => {
     const built = await buildCliStyleConfig('plain-text.jsonl');
     try {
-      const agent: Agent = await fromConfig({ config: built.config });
+      const agent: Agent = await fromConfig({
+        settingsOwner: built.settingsOwner,
+        settingsService: built.settingsService,
+        agentClient: built.agentClient,
+        providerManager: built.providerManager,
+        config: built.config,
+        mcpRuntime: built.mcpRuntime,
+      });
+      try {
+        agent.setEphemeralSetting('context-limit', 50000);
+        agent.setEphemeralSetting('streaming', 'disabled');
+        agent.setEphemeralSetting('parity-key', 'v');
 
-      agent.setEphemeralSetting('context-limit', 50000);
-      agent.setEphemeralSetting('streaming', 'disabled');
-      agent.setEphemeralSetting('parity-key', 'v');
+        built.settingsOwner.writeUserParameter('context-limit', 50000);
+        built.settingsOwner.writeUserParameter('streaming', 'disabled');
+        built.settingsOwner.writeUserParameter('parity-key', 'v');
 
-      built.config.setEphemeralSetting('context-limit', 50000);
-      built.config.setEphemeralSetting('streaming', 'disabled');
-      built.config.setEphemeralSetting('parity-key', 'v');
-
-      expect(agent.getEphemeralSettings()).toStrictEqual(
-        built.config.getEphemeralSettings(),
-      );
+        expect(agent.getEphemeralSettings()).toStrictEqual(
+          built.settingsOwner.captureNamedParameters(),
+        );
+      } finally {
+        await agent.dispose();
+      }
     } finally {
       await built.cleanup();
     }
@@ -121,13 +165,24 @@ describe('settings-surface parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
         async (key, value) => {
           const built = await buildCliStyleConfig('plain-text.jsonl');
           try {
-            const agent: Agent = await fromConfig({ config: built.config });
-            agent.setEphemeralSetting(key, value);
-            built.config.setEphemeralSetting(key, value);
-            return (
-              agent.getEphemeralSetting(key) ===
-              built.config.getEphemeralSetting(key)
-            );
+            const agent: Agent = await fromConfig({
+              settingsOwner: built.settingsOwner,
+              settingsService: built.settingsService,
+              agentClient: built.agentClient,
+              providerManager: built.providerManager,
+              config: built.config,
+              mcpRuntime: built.mcpRuntime,
+            });
+            try {
+              agent.setEphemeralSetting(key, value);
+              built.settingsOwner.writeUserParameter(key, value);
+              return (
+                agent.getEphemeralSetting(key) ===
+                built.settingsOwner.readNamedParameter(key)
+              );
+            } finally {
+              await agent.dispose();
+            }
           } finally {
             await built.cleanup();
           }
@@ -141,13 +196,24 @@ describe('settings-surface parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
       fc.asyncProperty(fc.constantFrom('enabled', 'disabled'), async (mode) => {
         const built = await buildCliStyleConfig('plain-text.jsonl');
         try {
-          const agent: Agent = await fromConfig({ config: built.config });
-          agent.setEphemeralSetting('streaming', mode);
-          built.config.setEphemeralSetting('streaming', mode);
-          return (
-            agent.getEphemeralSetting('streaming') ===
-            built.config.getEphemeralSetting('streaming')
-          );
+          const agent: Agent = await fromConfig({
+            settingsOwner: built.settingsOwner,
+            settingsService: built.settingsService,
+            agentClient: built.agentClient,
+            providerManager: built.providerManager,
+            config: built.config,
+            mcpRuntime: built.mcpRuntime,
+          });
+          try {
+            agent.setEphemeralSetting('streaming', mode);
+            built.settingsOwner.writeUserParameter('streaming', mode);
+            return (
+              agent.getEphemeralSetting('streaming') ===
+              built.settingsOwner.readNamedParameter('streaming')
+            );
+          } finally {
+            await agent.dispose();
+          }
         } finally {
           await built.cleanup();
         }

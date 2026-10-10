@@ -19,15 +19,12 @@ import type {
   HydratedModel,
 } from '@vybestack/llxprt-code-core';
 import type { Profile } from '@vybestack/llxprt-code-settings';
-import type { ToolInfo } from '@vybestack/llxprt-code-agents';
+import type { Agent, ToolInfo } from '@vybestack/llxprt-code-agents';
 import type { ModelInfo, WelcomeState } from '../hooks/useWelcomeOnboarding.js';
 import type { ProfileListItem } from '../stores/settings/settingsStore.js';
 import { getProjectHash } from '@vybestack/llxprt-code-core';
 import { join } from 'node:path';
-import type {
-  PerformResumeResult,
-  ResumeContext,
-} from '../../services/performResume.js';
+import type { ResumeContext } from '../../services/performResume.js';
 import { firstNonEmptyString } from '../../utils/coalesce.js';
 import { FolderTrustDialog } from './FolderTrustDialog.js';
 import { WelcomeDialog } from './WelcomeOnboarding/WelcomeDialog.js';
@@ -393,11 +390,16 @@ export function renderSessionBrowserDialog(
   config: CliUiRuntime,
   commandContext: {
     ui: { pendingItem: unknown };
+    recordingOwner?: 'agent';
+    services: { agent: Agent | null };
     recordingSwapCallbacks?: ResumeContext['recordingCallbacks'];
   },
   handleSessionBrowserSelect: (
     target: ContinueTarget,
-  ) => Promise<PerformResumeResult>,
+  ) => Promise<
+    | { ok: true; history?: unknown; metadata?: unknown; warnings?: unknown }
+    | { ok: false; error: string }
+  >,
   close: () => void,
 ) {
   const chatsDir = join(config.getProjectTempDir(), 'chats');
@@ -412,9 +414,17 @@ export function renderSessionBrowserDialog(
         currentSessionId={currentSessionId}
         hasActiveConversation={hasActiveConversation}
         activeRecording={
-          commandContext.recordingSwapCallbacks?.getCurrentRecording() ?? null
+          commandContext.recordingOwner === 'agent'
+            ? null
+            : (commandContext.recordingSwapCallbacks?.getCurrentRecording() ??
+              null)
         }
-        mediaStore={config.getLocalMediaStore()}
+        ownerAgent={
+          commandContext.recordingOwner === 'agent'
+            ? (commandContext.services.agent ?? undefined)
+            : undefined
+        }
+        mediaStore={commandContext.services.agent?.agentClient.mediaStore}
         onSelect={handleSessionBrowserSelect}
         onClose={close}
       />

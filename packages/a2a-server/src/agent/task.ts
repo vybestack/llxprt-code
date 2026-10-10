@@ -10,7 +10,7 @@ import type {
   ToolConfirmation,
   ToolUpdate,
 } from '@vybestack/llxprt-code-agents';
-import type { Agent } from '@vybestack/llxprt-code-agents';
+import type { Agent, McpServerInfo } from '@vybestack/llxprt-code-agents';
 import {
   parseAndFormatApiError,
   ToolConfirmationOutcome,
@@ -51,6 +51,7 @@ import {
   mapOutcomeStringToEnum,
 } from './task-support.js';
 import { resolveTimestamp } from './task-runtime-helpers.js';
+import { createTaskRuntime, type TaskRuntime } from './task-runtime.js';
 
 /**
  * Maps the public McpServerInfo status projection onto the a2a protocol's
@@ -58,14 +59,15 @@ import { resolveTimestamp } from './task-runtime-helpers.js';
  * the enum lacks; both report as DISCONNECTED, matching the legacy default
  * for servers with no healthy connection.
  */
-function mapPublicMcpStatus(
-  status: 'connected' | 'connecting' | 'disconnected' | 'error' | 'disabled',
-): MCPServerStatus {
+function mapPublicMcpStatus(status: McpServerInfo['status']): MCPServerStatus {
   if (status === 'connected') {
     return MCPServerStatus.CONNECTED;
   }
   if (status === 'connecting') {
     return MCPServerStatus.CONNECTING;
+  }
+  if (status === 'disconnecting') {
+    return MCPServerStatus.DISCONNECTING;
   }
   return MCPServerStatus.DISCONNECTED;
 }
@@ -85,7 +87,7 @@ export class Task {
   taskState: TaskState;
   eventBus?: ExecutionEventBus;
 
-  private readonly agent: Agent;
+  private readonly agent: TaskRuntime;
   private readonly autoExecute: boolean;
   private promptCount = 0;
   private currentPromptId: string;
@@ -121,9 +123,11 @@ export class Task {
   constructor(
     taskId: string,
     contextId: string,
-    agent: Agent,
+    agent: TaskRuntime,
     eventBus?: ExecutionEventBus,
     autoExecute = false,
+    private readonly disposeAgent: () => Promise<void> = () =>
+      Promise.resolve(),
   ) {
     this.id = taskId;
     this.contextId = contextId;
@@ -141,18 +145,21 @@ export class Task {
     eventBus?: ExecutionEventBus,
     autoExecute = false,
   ): Promise<Task> {
-    return new Task(taskId, contextId, agent, eventBus, autoExecute);
-  }
-
-  get agentFacade(): Agent {
-    return this.agent;
+    return new Task(
+      taskId,
+      contextId,
+      createTaskRuntime(agent),
+      eventBus,
+      autoExecute,
+      () => agent.dispose(),
+    );
   }
 
   async dispose(): Promise<void> {
     // A paused approval turn would otherwise outlive the task: abort it so
     // its suspended generator ends before the underlying agent goes away.
     this.#abortActiveTurn();
-    await this.agent.dispose();
+    await this.disposeAgent();
   }
 
   getMetadata(): TaskMetadata {
@@ -171,7 +178,7 @@ export class Task {
         parameterSchema: info?.parametersSchema,
       };
     };
-    const mcpServers = this.agent.mcp.listServers().map((server) => ({
+    const mcpServers = this.agent.listMcpServers().map((server) => ({
       name: server.name,
       status: mapPublicMcpStatus(server.status),
       tools: (server.tools ?? []).map((tool) =>
@@ -479,7 +486,7 @@ export class Task {
         confirmation.toolCallId +
         '.',
     );
-    this.agent.tools.respondToConfirmation(
+    this.agent.respondToConfirmation(
       confirmation.confirmationId,
       ToolConfirmationOutcome.ProceedOnce,
     );
@@ -548,7 +555,7 @@ export class Task {
       // fire-onto-bus, so a process-global env window around this call would
       // shield nothing while exposing other tasks to transient mutation.
       // Real isolation needs a facade-level credential-context API.
-      this.agent.tools.respondToConfirmation(
+      this.agent.respondToConfirmation(
         confirmation.confirmationId,
         confirmationOutcome,
         confirmPayload,

@@ -4,15 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  SettingsService,
-  SETTINGS_REGISTRY,
-} from '@vybestack/llxprt-code-settings';
-const PROVIDER_CONFIG_KEYS = new Set(
-  SETTINGS_REGISTRY.filter((entry) => entry.category === 'provider-config').map(
-    (entry) => entry.key,
-  ),
-);
+import { readInvocationPolicyRecord } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type {
   RuntimeGenerateChatOptions as GenerateChatOptions,
   RuntimeProviderToolset as ProviderToolset,
@@ -85,18 +78,14 @@ function buildEphemeralsSnapshot(
 ): Record<string, unknown> {
   // @plan PLAN-20260126-SETTINGS-SEPARATION.P09
   // Filter out provider-config settings from global level (same as ProviderManager)
-  const globalSettings = settings.getAllGlobalSettings();
-  const snapshot: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(globalSettings)) {
-    if (!PROVIDER_CONFIG_KEYS.has(key)) {
-      snapshot[key] = value;
-    }
-  }
+  const global = settings.getAllGlobalSettings();
+  const snapshot: Record<string, unknown> = { ...global };
   if (overrides) {
     Object.assign(snapshot, overrides);
   }
 
   snapshot[providerName] = {
+    ...readInvocationPolicyRecord(global[providerName]),
     ...settings.getProviderSettings(providerName),
   };
 
@@ -198,8 +187,9 @@ function ensureInvocation(
       : undefined;
 
   return createRuntimeInvocationContext({
-    runtime,
-    settings,
+    runtimeId: runtime.runtimeId,
+    runtimeMetadata: runtime.metadata,
+
     providerName,
     metadata,
     ephemeralsSnapshot,
@@ -217,9 +207,6 @@ function ensureInvocation(
 export function createProviderCallOptions(
   init: ProviderCallOptionsInit,
 ): GenerateChatOptions & {
-  settings: SettingsService;
-  config: Config;
-  runtime: ProviderRuntimeContext;
   invocation: RuntimeInvocationContext;
 } {
   if (!init.providerName) {
@@ -257,11 +244,31 @@ export function createProviderCallOptions(
     contents: init.contents ?? [],
     tools: init.tools,
     metadata: mergedMetadata,
-    settings,
-    config,
-    runtime,
     invocation,
-    resolved: init.resolved,
+    resolved: {
+      model:
+        stringValue(settings.getProviderSettings(init.providerName).model) ??
+        stringValue(settings.get('model')),
+      baseURL:
+        stringValue(
+          settings.getProviderSettings(init.providerName)['base-url'],
+        ) ?? stringValue(settings.get('base-url')),
+      ...(hasInlineAuthentication(settings, init.providerName)
+        ? {
+            authToken: {
+              provide: () =>
+                stringValue(
+                  settings.getProviderSettings(init.providerName)['auth-key'],
+                ) ??
+                stringValue(settings.get('auth-key')) ??
+                stringValue(
+                  settings.getProviderSettings(init.providerName).apiKey,
+                ),
+            },
+          }
+        : {}),
+      ...init.resolved,
+    },
     userMemory: init.userMemory,
     // Issue #3136: providers require a non-empty systemInstruction on real
     // chat completions. Defaulting here lets existing tests that previously
@@ -277,4 +284,18 @@ export function createProviderCallOptions(
         ? init.systemInstruction
         : 'test system prompt',
   };
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value : undefined;
+}
+
+function hasInlineAuthentication(
+  settings: SettingsService,
+  providerName: string,
+): boolean {
+  const provider = settings.getProviderSettings(providerName);
+  return [provider['auth-key'], settings.get('auth-key'), provider.apiKey].some(
+    (value) => typeof value === 'string' && value.trim() !== '',
+  );
 }

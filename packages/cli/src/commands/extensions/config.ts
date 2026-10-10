@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { configureCommandOptions } from '../command-configuration.js';
 import { type CommandModule } from 'yargs';
 
 import { getExtensionAndConfig } from './utils.js';
@@ -270,22 +271,24 @@ export const configCommand: CommandModule = {
   command: 'config [name] [setting]',
   describe: 'Configure extension settings interactively.',
   builder: (yargs) =>
-    yargs
-      .positional('name', {
-        describe: 'The name of the extension (optional).',
-        type: 'string',
-      })
-      .positional('setting', {
-        describe:
-          'The name or environment variable of a specific setting (optional).',
-        type: 'string',
-      })
-      .option('scope', {
-        describe: 'Setting scope: user (default) or workspace',
-        type: 'string',
-        choices: ['user', 'workspace'],
-        default: 'user',
-      }),
+    configureCommandOptions(yargs, (configuration) =>
+      configuration
+        .positional('name', {
+          describe: 'The name of the extension (optional).',
+          type: 'string',
+        })
+        .positional('setting', {
+          describe:
+            'The name or environment variable of a specific setting (optional).',
+          type: 'string',
+        })
+        .option('scope', {
+          describe: 'Setting scope: user (default) or workspace',
+          type: 'string',
+          choices: ['user', 'workspace'],
+          default: 'user',
+        }),
+    ),
   handler: async (argv) => {
     const settings = loadSettings(process.cwd()).merged;
     if (!(settings.experimental?.extensionConfig ?? false)) {

@@ -4,13 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
+const composeFixtureRuntime = installWorkspaceRuntimeFixture();
+
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { directoryCommand, expandHomeDir } from './directoryCommand.js';
 import {
   loadServerHierarchicalMemory,
   type Config,
-  type WorkspaceContext,
 } from '@vybestack/llxprt-code-core';
+import type { WorkspaceContext } from '@vybestack/llxprt-code-core/utils/workspaceContext.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
+import { assertDefined } from '../../__tests__/assertions.js';
+import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
 import type { CommandContext } from './types.js';
 import { MessageType } from '../types.js';
 import * as os from 'os';
@@ -55,6 +61,8 @@ describe('directoryCommand', () => {
     (c) => c.name === 'show',
   );
 
+  assertDefined(addCommand);
+  assertDefined(showCommand);
   beforeEach(() => {
     mockLoadServerHierarchicalMemory.mockReset();
     mockLoadServerHierarchicalMemory.mockResolvedValue({
@@ -74,15 +82,11 @@ describe('directoryCommand', () => {
     } as unknown as WorkspaceContext;
 
     mockConfig = {
-      getWorkspaceContext: () => mockWorkspaceContext,
+      getMcpServers: () => undefined,
       isRestrictiveSandbox: vi.fn().mockReturnValue(false),
-      getAgentClient: vi.fn().mockReturnValue({
-        addDirectoryContext: vi.fn(),
-      }),
       getWorkingDir: () => '/test/dir',
       shouldLoadMemoryFromIncludeDirectories: () => false,
       getDebugMode: () => false,
-      getFileService: () => ({}),
       getExtensions: () => [],
       getExtensionContextFilePaths: () => [],
       getFileFilteringOptions: () => ({ ignore: [], include: [] }),
@@ -93,7 +97,17 @@ describe('directoryCommand', () => {
 
     mockContext = {
       services: {
-        config: mockConfig,
+        config: {
+          ...composeFixtureRuntime(mockConfig),
+          directories: () => mockWorkspaceContext.getDirectories(),
+          addDirectory: (directory: string) =>
+            mockWorkspaceContext.addDirectory(directory),
+        },
+        agent: createMockCommandContext({
+          services: {
+            agent: { agentClient: createUiSessionOwner().agentClient },
+          },
+        }).services.agent,
         settings: {
           merged: {
             ui: {},
@@ -241,7 +255,17 @@ describe('directoryCommand', () => {
         ...mockContext,
         services: {
           ...mockContext.services,
-          config: mockConfig,
+          config: {
+            ...composeFixtureRuntime(mockConfig),
+            directories: () => mockWorkspaceContext.getDirectories(),
+            addDirectory: (directory: string) =>
+              mockWorkspaceContext.addDirectory(directory),
+          },
+          agent: createMockCommandContext({
+            services: {
+              agent: { agentClient: createUiSessionOwner().agentClient },
+            },
+          }).services.agent,
         },
       };
 
@@ -285,7 +309,17 @@ describe('directoryCommand', () => {
         ...mockContext,
         services: {
           ...mockContext.services,
-          config: mockConfig,
+          config: {
+            ...composeFixtureRuntime(mockConfig),
+            directories: () => mockWorkspaceContext.getDirectories(),
+            addDirectory: (directory: string) =>
+              mockWorkspaceContext.addDirectory(directory),
+          },
+          agent: createMockCommandContext({
+            services: {
+              agent: { agentClient: createUiSessionOwner().agentClient },
+            },
+          }).services.agent,
         },
       };
 
@@ -319,7 +353,17 @@ describe('directoryCommand', () => {
         ...mockContext,
         services: {
           ...mockContext.services,
-          config: mockConfig,
+          config: {
+            ...composeFixtureRuntime(mockConfig),
+            directories: () => mockWorkspaceContext.getDirectories(),
+            addDirectory: (directory: string) =>
+              mockWorkspaceContext.addDirectory(directory),
+          },
+          agent: createMockCommandContext({
+            services: {
+              agent: { agentClient: createUiSessionOwner().agentClient },
+            },
+          }).services.agent,
         },
       };
 
@@ -359,7 +403,17 @@ describe('directoryCommand', () => {
         ...mockContext,
         services: {
           ...mockContext.services,
-          config: mockConfig,
+          config: {
+            ...composeFixtureRuntime(mockConfig),
+            directories: () => mockWorkspaceContext.getDirectories(),
+            addDirectory: (directory: string) =>
+              mockWorkspaceContext.addDirectory(directory),
+          },
+          agent: createMockCommandContext({
+            services: {
+              agent: { agentClient: createUiSessionOwner().agentClient },
+            },
+          }).services.agent,
         },
       };
 
@@ -418,7 +472,17 @@ describe('directoryCommand', () => {
         ...mockContext,
         services: {
           ...mockContext.services,
-          config: mockConfig,
+          config: {
+            ...composeFixtureRuntime(mockConfig),
+            directories: () => mockWorkspaceContext.getDirectories(),
+            addDirectory: (directory: string) =>
+              mockWorkspaceContext.addDirectory(directory),
+          },
+          agent: createMockCommandContext({
+            services: {
+              agent: { agentClient: createUiSessionOwner().agentClient },
+            },
+          }).services.agent,
         },
       };
 
@@ -441,6 +505,8 @@ describe('directoryCommand', () => {
       const rejectedRawPath = '~/untrusted-project';
       const rejectedExpandedPath = expandHomeDir(rejectedRawPath);
 
+      const admitted: string[] = [];
+      let refreshed: readonly string[] = [];
       const mockLoadedTrustedFolders: Partial<LoadedTrustedFolders> = {
         isPathTrusted: vi
           .fn()
@@ -461,7 +527,23 @@ describe('directoryCommand', () => {
         ...mockContext,
         services: {
           ...mockContext.services,
-          config: mockConfig,
+          config: {
+            ...composeFixtureRuntime(mockConfig),
+            directories: () => mockWorkspaceContext.getDirectories(),
+            addDirectory: (directory: string) => {
+              admitted.push(directory);
+              mockWorkspaceContext.addDirectory(directory);
+            },
+            refreshMemory: async () => {
+              refreshed = [...admitted];
+              return { memoryContent: '', fileCount: 0, filePaths: [] };
+            },
+          },
+          agent: createMockCommandContext({
+            services: {
+              agent: { agentClient: createUiSessionOwner().agentClient },
+            },
+          }).services.agent,
         },
       };
 
@@ -475,12 +557,9 @@ describe('directoryCommand', () => {
         trustedPath,
       );
 
-      expect(mockLoadServerHierarchicalMemory).toHaveBeenCalledTimes(1);
-      const includeDirectoriesArg =
-        mockLoadServerHierarchicalMemory.mock.calls[0][1];
-      expect(includeDirectoriesArg).toContain(trustedPath);
-      expect(includeDirectoriesArg).not.toContain(rejectedRawPath);
-      expect(includeDirectoriesArg).not.toContain(rejectedExpandedPath);
+      expect(refreshed).toStrictEqual([trustedPath]);
+      expect(refreshed).not.toContain(rejectedRawPath);
+      expect(refreshed).not.toContain(rejectedExpandedPath);
     });
   });
 });

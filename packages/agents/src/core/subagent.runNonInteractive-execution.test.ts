@@ -1,3 +1,4 @@
+import { createChatPolicyFixture } from './__tests__/session-policy-fixture.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -139,6 +140,7 @@ describe('subagent.ts', () => {
       ).mockImplementation(
         () =>
           ({
+            ...createChatPolicyFixture(),
             sendMessageStream: mockSendMessageStream,
             getHistory: vi.fn().mockReturnValue([]),
             getHistoryService: vi.fn().mockReturnValue({
@@ -157,10 +159,12 @@ describe('subagent.ts', () => {
     });
 
     it('should terminate with GOAL if no outputs are expected and model stops', async () => {
-      const { config } = await createMockConfig();
+      const { config, mcpRuntime } = await createMockConfig();
       mockSendMessageStream.mockImplementation(createMockStream(['stop']));
 
-      const { overrides } = createRuntimeOverrides();
+      const { overrides } = createRuntimeOverrides(
+        mcpRuntime.workspaceFilesystem.paths,
+      );
       const scope = await SubAgentScope.create(
         'test-agent',
         config,
@@ -204,7 +208,7 @@ describe('subagent.ts', () => {
 
     const observePromptsTheModelToFinishOutstandingTodosBeforeCompleting =
       async () => {
-        const { config } = await createMockConfig();
+        const { config, mcpRuntime } = await createMockConfig();
 
         mockSendMessageStream.mockImplementation(
           createMockStream(['stop', 'stop']),
@@ -229,7 +233,9 @@ describe('subagent.ts', () => {
             },
           ]);
 
-        const { overrides } = createRuntimeOverrides();
+        const { overrides } = createRuntimeOverrides(
+          mcpRuntime.workspaceFilesystem.paths,
+        );
         const scope = await SubAgentScope.create(
           'test-agent',
           config,
@@ -255,7 +261,7 @@ describe('subagent.ts', () => {
       };
 
     it('should handle self_emitvalue and terminate with GOAL when outputs are met', async () => {
-      const { config } = await createMockConfig();
+      const { config, mcpRuntime } = await createMockConfig();
       const outputConfig: OutputConfig = {
         outputs: { result: 'The final result' },
       };
@@ -274,7 +280,9 @@ describe('subagent.ts', () => {
         ]),
       );
 
-      const { overrides: emitOverrides } = createRuntimeOverrides();
+      const { overrides: emitOverrides } = createRuntimeOverrides(
+        mcpRuntime.workspaceFilesystem.paths,
+      );
       const scope = await SubAgentScope.create(
         'test-agent',
         config,
@@ -294,7 +302,7 @@ describe('subagent.ts', () => {
       expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
     });
     it('rejects a malformed self_emitvalue call with null arguments (issue 3540)', async () => {
-      const { config } = await createMockConfig();
+      const { config, mcpRuntime } = await createMockConfig();
       const outputConfig: OutputConfig = {
         outputs: { result: 'The final result' },
       };
@@ -313,7 +321,9 @@ describe('subagent.ts', () => {
         ]),
       );
 
-      const { overrides: emitOverrides } = createRuntimeOverrides();
+      const { overrides: emitOverrides } = createRuntimeOverrides(
+        mcpRuntime.workspaceFilesystem.paths,
+      );
       const scope = await SubAgentScope.create(
         'test-agent',
         config,
@@ -340,7 +350,7 @@ describe('subagent.ts', () => {
         parameters: { type: 'object', properties: {} },
       };
 
-      const { config } = await createMockConfig({
+      const { config, mcpRuntime } = await createMockConfig({
         getFunctionDeclarationsFiltered: vi
           .fn()
           .mockReturnValue([listFilesToolDef]),
@@ -369,7 +379,7 @@ describe('subagent.ts', () => {
       });
 
       const runtimeBundle = createStatelessRuntimeBundle({
-        toolRegistry: config.getToolRegistry(),
+        toolRegistry: mcpRuntime.toolSelection,
         toolsView: {
           listToolNames: () => ['list_files'],
           getToolMetadata: () => ({
@@ -385,10 +395,13 @@ describe('subagent.ts', () => {
         },
       });
       const historyAddSpy = vi.spyOn(runtimeBundle.history, 'add');
-      const { overrides } = createRuntimeOverrides({
-        runtimeBundle,
-        toolRegistry: config.getToolRegistry(),
-      });
+      const { overrides } = createRuntimeOverrides(
+        mcpRuntime.workspaceFilesystem.paths,
+        {
+          runtimeBundle,
+          toolRegistry: mcpRuntime.toolSelection,
+        },
+      );
 
       const scope = await SubAgentScope.create(
         'test-agent',
@@ -403,7 +416,7 @@ describe('subagent.ts', () => {
 
       await scope.runNonInteractive(new ContextState());
 
-      const [toolExecutorConfig, toolRequest, abortSignal] = (
+      const [createSchedulerOwner, toolRequest, abortSignal] = (
         executeToolCall as Mock<typeof executeToolCall>
       ).mock.calls[0];
       expect(toolRequest).toMatchObject({
@@ -411,7 +424,7 @@ describe('subagent.ts', () => {
         args: { path: '.' },
       });
       expect(abortSignal).toBeInstanceOf(AbortSignal);
-      expect(typeof toolExecutorConfig.getToolRegistry).toBe('function');
+      expect(typeof createSchedulerOwner).toBe('function');
 
       const secondCallArgs = mockSendMessageStream.mock.calls[1][0];
       expect(secondCallArgs.message).toStrictEqual([
@@ -423,7 +436,7 @@ describe('subagent.ts', () => {
     });
 
     it('should provide specific tool error responses to the model', async () => {
-      const { config } = await createMockConfig();
+      const { config, mcpRuntime } = await createMockConfig();
       const toolConfig: ToolConfig = { tools: ['failing_tool'] };
 
       mockSendMessageStream.mockImplementation(
@@ -452,7 +465,7 @@ describe('subagent.ts', () => {
       });
 
       const runtimeBundle = createStatelessRuntimeBundle({
-        toolRegistry: config.getToolRegistry(),
+        toolRegistry: mcpRuntime.toolSelection,
         toolsView: {
           listToolNames: () => ['failing_tool'],
           getToolMetadata: () => ({
@@ -462,10 +475,13 @@ describe('subagent.ts', () => {
           }),
         },
       });
-      const { overrides } = createRuntimeOverrides({
-        runtimeBundle,
-        toolRegistry: config.getToolRegistry(),
-      });
+      const { overrides } = createRuntimeOverrides(
+        mcpRuntime.workspaceFilesystem.paths,
+        {
+          runtimeBundle,
+          toolRegistry: mcpRuntime.toolSelection,
+        },
+      );
 
       const scope = await SubAgentScope.create(
         'test-agent',
@@ -500,7 +516,7 @@ describe('subagent.ts', () => {
 
     const observeFilterFunctionCallFromErrorResponsePartsInNonInteractiveFlowAnthropicBoundary =
       async () => {
-        const { config } = await createMockConfig();
+        const { config, mcpRuntime } = await createMockConfig();
         const toolConfig: ToolConfig = { tools: ['erroring_tool'] };
 
         mockSendMessageStream.mockImplementation(
@@ -534,7 +550,7 @@ describe('subagent.ts', () => {
         });
 
         const runtimeBundle = createStatelessRuntimeBundle({
-          toolRegistry: config.getToolRegistry(),
+          toolRegistry: mcpRuntime.toolSelection,
           toolsView: {
             listToolNames: () => ['erroring_tool'],
             getToolMetadata: () => ({
@@ -544,10 +560,13 @@ describe('subagent.ts', () => {
             }),
           },
         });
-        const { overrides } = createRuntimeOverrides({
-          runtimeBundle,
-          toolRegistry: config.getToolRegistry(),
-        });
+        const { overrides } = createRuntimeOverrides(
+          mcpRuntime.workspaceFilesystem.paths,
+          {
+            runtimeBundle,
+            toolRegistry: mcpRuntime.toolSelection,
+          },
+        );
 
         const scope = await SubAgentScope.create(
           'test-agent',
@@ -591,7 +610,7 @@ describe('subagent.ts', () => {
         },
       });
 
-      const { config } = await createMockConfig({
+      const { config, mcpRuntime } = await createMockConfig({
         getFunctionDeclarationsFiltered: vi.fn().mockReturnValue([
           {
             name: 'write_file',
@@ -609,16 +628,19 @@ describe('subagent.ts', () => {
       });
 
       const runtimeBundle = createStatelessRuntimeBundle({
-        toolRegistry: config.getToolRegistry(),
+        toolRegistry: mcpRuntime.toolSelection,
         toolsView: {
           listToolNames,
           getToolMetadata,
         },
       });
-      const { overrides } = createRuntimeOverrides({
-        runtimeBundle,
-        toolRegistry: config.getToolRegistry(),
-      });
+      const { overrides } = createRuntimeOverrides(
+        mcpRuntime.workspaceFilesystem.paths,
+        {
+          runtimeBundle,
+          toolRegistry: mcpRuntime.toolSelection,
+        },
+      );
 
       mockSendMessageStream.mockImplementation(
         createMockStream([
@@ -678,7 +700,7 @@ describe('subagent.ts', () => {
     });
 
     it('should nudge the model if it stops before emitting all required variables', async () => {
-      const { config } = await createMockConfig();
+      const { config, mcpRuntime } = await createMockConfig();
       const outputConfig: OutputConfig = {
         outputs: { required_var: 'Must be present' },
       };
@@ -698,7 +720,9 @@ describe('subagent.ts', () => {
         ]),
       );
 
-      const { overrides: nudgeOverrides } = createRuntimeOverrides();
+      const { overrides: nudgeOverrides } = createRuntimeOverrides(
+        mcpRuntime.workspaceFilesystem.paths,
+      );
       const scope = await SubAgentScope.create(
         'test-agent',
         config,

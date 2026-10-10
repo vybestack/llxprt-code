@@ -1,9 +1,11 @@
+import type { ProviderRequestDiagnostics } from '../providerRequestDiagnostics.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { RuntimeKind } from '../providerRuntimeContext.js';
 /**
  * Core-owned structural chat/tool contracts for runtime provider calls.
  *
@@ -16,11 +18,9 @@
  * @requirement:REQ-SHIM-001
  */
 
+import type { AdmittedModelParameters } from '../admittedModelParameters.js';
 import type { ToolDeclaration } from '../../llm-types/toolDeclaration.js';
-import type { Config } from '../../config/config.js';
 import type { IContent } from '../../services/history/IContent.js';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { ProviderRuntimeContext } from '../providerRuntimeContext.js';
 import type { RuntimeInvocationContext } from '../RuntimeInvocationContext.js';
 import type { TelemetryContext } from './TelemetryContext.js';
 import type { StructuredError } from '../../core/turn.js';
@@ -69,12 +69,14 @@ export interface RuntimeSystemPromptAssembler {
   }): Promise<string>;
 }
 
-export interface RuntimeGenerateChatOptions {
+import type { ProviderRetryOperations } from './ProviderRetryOperations.js';
+
+export interface RuntimeGenerateChatOptions extends ProviderRetryOperations {
+  modelParameters?: AdmittedModelParameters;
+  runtimeKind?: RuntimeKind;
+  requestDiagnostics?: ProviderRequestDiagnostics;
   contents: IContent[];
   tools?: RuntimeProviderToolset;
-  settings?: SettingsService;
-  config?: Config;
-  runtime?: ProviderRuntimeContext;
   invocation?: RuntimeInvocationContext;
   onProviderError?: (error: StructuredError) => void;
   /**

@@ -3,34 +3,50 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { PolicyControl } from '../../../../agents/src/api/control/policyControl.js';
+import { createMockAgent } from '../../__tests__/mockAgent.js';
 
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { policiesCommand } from './policiesCommand.js';
 import {
   type CommandContext,
   type MessageActionReturn,
   type OpenDialogActionReturn,
 } from './types.js';
-import { PolicyDecision, type PolicyEngine } from '@vybestack/llxprt-code-core';
+import { PolicyDecision } from '@vybestack/llxprt-code-core';
 import { assertDefined } from '../../__tests__/assertions.js';
 
-function makeMockEngine(): PolicyEngine {
-  return {
-    getRules: () => [
-      {
-        toolName: 'edit',
-        decision: PolicyDecision.ALLOW,
-        priority: 1.05,
-        source: 'Default: defaults.toml',
-      },
-    ],
-    getDefaultDecision: () => PolicyDecision.ASK_USER,
-    isNonInteractive: () => false,
-  } as unknown as PolicyEngine;
+const ownedPolicies: RuntimePolicyOwner[] = [];
+function makePolicy(): PolicyControl {
+  const config = new Config({
+    sessionId: 'policy-command',
+    cwd: process.cwd(),
+    targetDir: process.cwd(),
+    debugMode: false,
+    model: 'test',
+    policyEngineConfig: {
+      rules: [
+        {
+          toolName: 'edit',
+          decision: PolicyDecision.ALLOW,
+          priority: 1.05,
+          source: 'Default: defaults.toml',
+        },
+      ],
+    },
+  });
+  const owner = new RuntimePolicyOwner(config);
+  ownedPolicies.push(owner);
+  return new PolicyControl({ inspection: owner.session.inspection });
 }
 
 describe('policiesCommand', () => {
   let mockContext: CommandContext;
+  afterEach(async () => {
+    for (const owner of ownedPolicies.splice(0)) await owner.dispose();
+  });
 
   beforeEach(() => {
     mockContext = {
@@ -68,10 +84,19 @@ describe('policiesCommand', () => {
       });
     });
 
-    it('should render the list table when config is available', () => {
-      mockContext.services.config = {
-        getPolicyEngine: () => makeMockEngine(),
-      } as unknown as CommandContext['services']['config'];
+    it('should render the list table when the session policy is available', () => {
+      mockContext.services.agent = {
+        ...createMockAgent(
+          new Config({
+            sessionId: 'commands',
+            cwd: process.cwd(),
+            targetDir: process.cwd(),
+            debugMode: false,
+            model: 'test',
+          }),
+        ),
+        policy: makePolicy(),
+      };
 
       assertDefined(policiesCommand.action);
       const result = policiesCommand.action(
@@ -102,8 +127,17 @@ describe('policiesCommand', () => {
 
     it('should render a tier-grouped table from the agent policy engine', () => {
       mockContext.services.agent = {
-        policy: makeMockEngine(),
-      } as unknown as CommandContext['services']['agent'];
+        ...createMockAgent(
+          new Config({
+            sessionId: 'commands',
+            cwd: process.cwd(),
+            targetDir: process.cwd(),
+            debugMode: false,
+            model: 'test',
+          }),
+        ),
+        policy: makePolicy(),
+      };
 
       const listSub = policiesCommand.subCommands!.find(
         (c) => c.name === 'list',
@@ -133,10 +167,19 @@ describe('policiesCommand', () => {
       });
     });
 
-    it('should return a dialog action when config is available', () => {
-      mockContext.services.config = {
-        getPolicyEngine: () => makeMockEngine(),
-      } as unknown as CommandContext['services']['config'];
+    it('should return a dialog action when the session policy is available', () => {
+      mockContext.services.agent = {
+        ...createMockAgent(
+          new Config({
+            sessionId: 'commands',
+            cwd: process.cwd(),
+            targetDir: process.cwd(),
+            debugMode: false,
+            model: 'test',
+          }),
+        ),
+        policy: makePolicy(),
+      };
 
       const menuSub = policiesCommand.subCommands!.find(
         (c) => c.name === 'menu',
@@ -152,8 +195,17 @@ describe('policiesCommand', () => {
 
     it('should return a dialog action when agent is available', () => {
       mockContext.services.agent = {
-        policy: makeMockEngine(),
-      } as unknown as CommandContext['services']['agent'];
+        ...createMockAgent(
+          new Config({
+            sessionId: 'commands',
+            cwd: process.cwd(),
+            targetDir: process.cwd(),
+            debugMode: false,
+            model: 'test',
+          }),
+        ),
+        policy: makePolicy(),
+      };
 
       const menuSub = policiesCommand.subCommands!.find(
         (c) => c.name === 'menu',

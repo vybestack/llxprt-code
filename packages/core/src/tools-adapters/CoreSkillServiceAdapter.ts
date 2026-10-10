@@ -1,80 +1,43 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
-import path from 'node:path';
 import type {
   ISkillService,
   SkillActivationResult,
   SkillInfo,
-  SkillManager as ToolsSkillManager,
 } from '@vybestack/llxprt-code-tools';
-import type { Config } from '../config/config.js';
-import type { SkillDefinition } from '../skills/skillLoader.js';
-
-function toSkillInfo(skill: SkillDefinition): SkillInfo {
-  return {
-    name: skill.name,
-    description: skill.description,
-    location: skill.location,
-  };
-}
+import type { WorkspaceSkillOperations } from '../skills/workspace-skill-owner.js';
 
 export class CoreSkillServiceAdapter implements ISkillService {
-  constructor(private readonly config: Config) {}
+  constructor(
+    private readonly operations: Pick<
+      WorkspaceSkillOperations,
+      'activate' | 'list' | 'find'
+    >,
+  ) {}
 
-  async activateSkill(name: string): Promise<SkillActivationResult> {
-    const skillManager = this.config.getSkillManager();
-    const skill = skillManager.getSkill(name);
-
-    if (!skill) {
-      return {
-        success: false,
-        error: `Skill "${name}" not found. Available skills are: ${skillManager
-          .getSkills()
-          .map((s) => s.name)
-          .join(', ')}`,
-        availableSkills: skillManager.getSkills().map((s) => s.name),
-      };
-    }
-
-    skillManager.activateSkill(name);
-    const resourceDirectory = path.dirname(skill.location);
-    this.config.getWorkspaceContext().addDirectory(resourceDirectory);
-
-    return {
-      success: true,
-      instructions: skill.body,
-      description: skill.description,
-      location: skill.location,
-      resourceDirectory,
-    };
-  }
-
-  getSkillManager(): ToolsSkillManager {
-    const skillManager = this.config.getSkillManager();
-    return {
-      discoverSkills: async () => {
-        await skillManager.discoverSkills(
-          this.config.storage,
-          this.config.getExtensions(),
-        );
-      },
-      getSkills: () => this.listSkills(),
-      getSkill: (name: string) => this.getSkill(name),
-      setDisabledSkills: (names: string[]) =>
-        skillManager.setDisabledSkills(names),
-    };
+  activateSkill(name: string): Promise<SkillActivationResult> {
+    return this.operations.activate(name);
   }
 
   listSkills(): SkillInfo[] {
-    return this.config.getSkillManager().getSkills().map(toSkillInfo);
+    return this.operations.list().map(({ name, description, location }) => ({
+      name,
+      description,
+      location,
+    }));
   }
 
   getSkill(name: string): SkillInfo | null {
-    const skill = this.config.getSkillManager().getSkill(name);
-    return skill ? toSkillInfo(skill) : null;
+    const skill = this.operations.find(name);
+    return skill
+      ? {
+          name: skill.name,
+          description: skill.description,
+          location: skill.location,
+        }
+      : null;
   }
 }

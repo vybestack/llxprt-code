@@ -11,7 +11,6 @@ import {
   getIdeInstaller,
   type IdeClient,
   type File,
-  ideContext,
   LLXPRT_CODE_COMPANION_EXTENSION_NAME,
 } from '@vybestack/llxprt-code-core';
 import {
@@ -57,15 +56,9 @@ async function getIdeStatusMessageWithFiles(ideClient: IdeClient): Promise<{
   switch (connection.status) {
     case IDEConnectionStatus.Connected: {
       let content = `[CONNECTED] Connected to ${ideClient.getDetectedIdeDisplayName()}`;
-      try {
-        const context = ideContext.getIdeContext();
-        const openFiles = context?.workspaceState?.openFiles;
-
-        if (openFiles && openFiles.length > 0) {
-          content += formatFileList(openFiles);
-        }
-      } catch {
-        // Ignore
+      const openFiles = ideClient.getIdeContext()?.workspaceState?.openFiles;
+      if (openFiles && openFiles.length > 0) {
+        content += formatFileList(openFiles);
       }
       return {
         messageType: 'info',
@@ -204,7 +197,7 @@ function buildEnableCommand(config: IdeState): SlashCommand {
     action: async (context: CommandContext) => {
       context.services.settings.setValue(SettingScope.User, 'ui.ideMode', true);
       config.setIdeMode(true);
-      config.setIdeClientConnected();
+      await config.setIdeClientConnected();
     },
   };
 }
@@ -222,7 +215,7 @@ function buildDisableCommand(config: IdeState): SlashCommand {
         false,
       );
       config.setIdeMode(false);
-      config.setIdeClientDisconnected();
+      await config.setIdeClientDisconnected();
     },
   };
 }

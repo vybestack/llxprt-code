@@ -123,9 +123,16 @@ export interface IProviderConfig {
    */
   allowBrowserEnvironment?: boolean;
 
-  /**
-   * Get ephemeral settings (session-only settings).
-   * @returns The ephemeral settings object
-   */
-  getEphemeralSettings?: () => Record<string, unknown>;
+  readConnectionPolicy?: () => ProviderConnectionPolicy;
+}
+
+export interface ProviderConnectionPolicy {
+  readonly 'auth-key'?: unknown;
+  readonly 'base-url'?: unknown;
+  readonly 'custom-headers'?: unknown;
+  readonly 'user-agent'?: unknown;
+  readonly 'socket-timeout'?: unknown;
+  readonly 'socket-keepalive'?: unknown;
+  readonly 'socket-nodelay'?: unknown;
+  readonly openaiResponsesEnabled?: unknown;
 }

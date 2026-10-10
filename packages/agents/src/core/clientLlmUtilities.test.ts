@@ -3,8 +3,19 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { instructionFixture } from './__tests__/instruction-fixture.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 
-import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'bun:test';
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('test system prompt'),
@@ -28,7 +39,7 @@ import {
   generateContent,
   generateEmbedding,
 } from './clientLlmUtilities.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { BaseLLMClient } from './baseLlmClient.js';
 import type { ModelOutput } from '@vybestack/llxprt-code-core/llm-types/index.js';
@@ -41,17 +52,33 @@ const SYSTEM_PROMPT = 'test system prompt';
 const USER_MEMORY = 'user memory';
 const EMBEDDING_MODEL = 'embedding-model';
 
-function makeConfig(overrides: Partial<Config> = {}): Config {
+function makeConfig(): Config {
+  return new Config({
+    sessionId: SESSION_ID,
+    cwd: process.cwd(),
+    targetDir: process.cwd(),
+    model: TEST_MODEL,
+    debugMode: false,
+  });
+}
+
+function createPromptPolicyFixture() {
+  let owner: SessionSettingsOwner | undefined;
   return {
-    getUserMemory: vi.fn().mockReturnValue(USER_MEMORY),
-    getCoreMemory: vi.fn().mockReturnValue(undefined),
-    getMcpInstructions: vi.fn().mockReturnValue(undefined),
-    isInteractive: vi.fn().mockReturnValue(true),
-    getSettingsService: vi.fn().mockReturnValue({
-      get: vi.fn().mockReturnValue(undefined),
-    }),
-    ...overrides,
-  } as unknown as Config;
+    initialize: () => {
+      owner = new SessionSettingsOwner(new SettingsService());
+    },
+    dispose: async () => {
+      if (owner === undefined) throw new Error('Missing prompt policy owner');
+      await owner.dispose();
+    },
+    read: () => {
+      if (owner === undefined) throw new Error('Missing prompt policy owner');
+      const policy = owner.readRuntimePolicy().promptPolicy;
+      if (policy === undefined) throw new Error('Expected owner prompt policy');
+      return policy;
+    },
+  };
 }
 
 function makeContentGenerator(
@@ -84,6 +111,10 @@ function makeBaseLlmClient(
 }
 
 describe('generateJson', () => {
+  const promptPolicy = createPromptPolicyFixture();
+  beforeEach(promptPolicy.initialize);
+  afterEach(promptPolicy.dispose);
+
   let config: Config;
   let contentGenerator: ContentGenerator;
   let baseLlmClient: BaseLLMClient;
@@ -110,6 +141,7 @@ describe('generateJson', () => {
 
     const result = await generateJson(
       config,
+      () => undefined,
       contentGenerator,
       baseLlmClient,
       contents,
@@ -118,6 +150,10 @@ describe('generateJson', () => {
       TEST_MODEL,
       {},
       SESSION_ID,
+      undefined,
+      [],
+      instructionFixture(USER_MEMORY, ''),
+      promptPolicy.read(),
     );
 
     expect(result).toStrictEqual({ key: 'value' });
@@ -133,6 +169,7 @@ describe('generateJson', () => {
 
     await generateJson(
       config,
+      () => undefined,
       contentGenerator,
       baseLlmClient,
       contents,
@@ -142,6 +179,9 @@ describe('generateJson', () => {
       {},
       SESSION_ID,
       'request-provider',
+      [],
+      instructionFixture(USER_MEMORY, ''),
+      promptPolicy.read(),
     );
 
     expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
@@ -167,6 +207,7 @@ describe('generateJson', () => {
 
     const result = await generateJson(
       config,
+      () => undefined,
       contentGenerator,
       baseLlmClient,
       contents,
@@ -175,6 +216,10 @@ describe('generateJson', () => {
       TEST_MODEL,
       {},
       SESSION_ID,
+      undefined,
+      [],
+      instructionFixture(USER_MEMORY, ''),
+      promptPolicy.read(),
     );
 
     expect(result).toStrictEqual({
@@ -199,6 +244,7 @@ describe('generateJson', () => {
     await expect(
       generateJson(
         config,
+        () => undefined,
         contentGenerator,
         baseLlmClient,
         contents,
@@ -207,12 +253,20 @@ describe('generateJson', () => {
         TEST_MODEL,
         {},
         SESSION_ID,
+        undefined,
+        [],
+        instructionFixture(USER_MEMORY, ''),
+        promptPolicy.read(),
       ),
     ).rejects.toThrow('API failure');
   });
 });
 
 describe('generateContent', () => {
+  const promptPolicy = createPromptPolicyFixture();
+  beforeEach(promptPolicy.initialize);
+  afterEach(promptPolicy.dispose);
+
   let config: Config;
   let contentGenerator: ContentGenerator;
   const abortSignal = new AbortController().signal;
@@ -245,6 +299,7 @@ describe('generateContent', () => {
 
     const result = await generateContent(
       config,
+      () => undefined,
       contentGenerator,
       contents,
       { temperature: 0.5 },
@@ -252,6 +307,10 @@ describe('generateContent', () => {
       TEST_MODEL,
       SESSION_ID,
       baseConfig,
+      undefined,
+      [],
+      instructionFixture(USER_MEMORY, ''),
+      promptPolicy.read(),
     );
 
     expect(result).toBe(mockResponse);
@@ -278,6 +337,7 @@ describe('generateContent', () => {
 
     await generateContent(
       config,
+      () => undefined,
       contentGenerator,
       contents,
       {},
@@ -285,6 +345,10 @@ describe('generateContent', () => {
       TEST_MODEL,
       SESSION_ID,
       {},
+      undefined,
+      [],
+      instructionFixture(USER_MEMORY, ''),
+      promptPolicy.read(),
     );
 
     expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
@@ -315,6 +379,7 @@ describe('generateContent', () => {
     await expect(
       generateContent(
         config,
+        () => undefined,
         contentGenerator,
         contents,
         {},
@@ -322,6 +387,10 @@ describe('generateContent', () => {
         TEST_MODEL,
         SESSION_ID,
         {},
+        undefined,
+        [],
+        instructionFixture(USER_MEMORY, ''),
+        promptPolicy.read(),
       ),
     ).rejects.toThrow(`Failed to generate content with model ${TEST_MODEL}`);
   });
@@ -378,6 +447,10 @@ describe('generateEmbedding', () => {
  * CONTENT delivered to the LLM client — not on mock-call bookkeeping.
  */
 describe('buildLightweightSystemPrompt core memory (issue #3176, D7)', () => {
+  const promptPolicy = createPromptPolicyFixture();
+  beforeEach(promptPolicy.initialize);
+  afterEach(promptPolicy.dispose);
+
   const DISK_FALLBACK_SENTINEL = 'DISK_FALLBACK_FIRED';
   let contentGenerator: ContentGenerator;
   let baseLlmClient: BaseLLMClient;
@@ -411,12 +484,11 @@ describe('buildLightweightSystemPrompt core memory (issue #3176, D7)', () => {
   // T6
   it('passes in-memory core memory and avoids the disk fallback (D7)', async () => {
     const IN_MEMORY = 'IN_MEMORY_CORE_SENTINEL';
-    const configWithMemory = makeConfig({
-      getCoreMemory: vi.fn().mockReturnValue(IN_MEMORY),
-    });
+    const configWithMemory = makeConfig();
 
     await generateJson(
       configWithMemory,
+      () => undefined,
       contentGenerator,
       baseLlmClient,
       [
@@ -430,6 +502,10 @@ describe('buildLightweightSystemPrompt core memory (issue #3176, D7)', () => {
       TEST_MODEL,
       {},
       SESSION_ID,
+      undefined,
+      [],
+      instructionFixture(USER_MEMORY, IN_MEMORY),
+      promptPolicy.read(),
     );
 
     const sysInstr = captureSystemInstruction();
@@ -438,18 +514,19 @@ describe('buildLightweightSystemPrompt core memory (issue #3176, D7)', () => {
     // … and the disk fallback did NOT fire.
     expect(sysInstr).not.toContain(DISK_FALLBACK_SENTINEL);
     // The config's getCoreMemory was the source, proving the wiring.
-    expect(configWithMemory.getCoreMemory).toHaveBeenCalled();
+    expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ coreMemory: IN_MEMORY }),
+    );
   });
 
   // T7
   it('delivers the full core-memory content to the model (no suppression)', async () => {
     const CORE_CONTENT = 'FULL_CORE_MEMORY_BODY';
-    const configWithMemory = makeConfig({
-      getCoreMemory: vi.fn().mockReturnValue(CORE_CONTENT),
-    });
+    const configWithMemory = makeConfig();
 
     await generateJson(
       configWithMemory,
+      () => undefined,
       contentGenerator,
       baseLlmClient,
       [
@@ -463,6 +540,10 @@ describe('buildLightweightSystemPrompt core memory (issue #3176, D7)', () => {
       TEST_MODEL,
       {},
       SESSION_ID,
+      undefined,
+      [],
+      instructionFixture(USER_MEMORY, CORE_CONTENT),
+      promptPolicy.read(),
     );
 
     // The content must be the actual in-memory value, not an empty string

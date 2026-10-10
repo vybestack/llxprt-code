@@ -8,7 +8,6 @@ import * as fs from 'node:fs/promises';
 import * as fsSync from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Storage } from '@vybestack/llxprt-code-settings';
 
 import {
   type SkillDefinition,
@@ -121,7 +120,12 @@ export class SkillManager {
    * preserved, while `.agents/skills/` wins within each user or workspace tier.
    */
   async discoverSkills(
-    storage: Storage,
+    directories: {
+      readonly userSkillsDir: string;
+      readonly userAgentSkillsDir: string;
+      readonly projectSkillsDir: string;
+      readonly projectAgentSkillsDir: string;
+    },
     extensions: LlxprtExtension[] = [],
   ): Promise<void> {
     this.clearSkills();
@@ -149,13 +153,13 @@ export class SkillManager {
 
     // 3. User skills
     const userSkills = await loadSkillsFromDir(
-      Storage.getUserSkillsDir(),
+      directories.userSkillsDir,
       'user',
     );
     this.addSkillsWithPrecedence(userSkills);
     try {
       const userAgentSkills = await loadSkillsFromDir(
-        Storage.getUserAgentSkillsDir(),
+        directories.userAgentSkillsDir,
         'user',
       );
       this.addSkillsWithPrecedence(userAgentSkills);
@@ -166,12 +170,12 @@ export class SkillManager {
 
     // 4. Workspace skills (highest precedence)
     const projectSkills = await loadSkillsFromDir(
-      storage.getProjectSkillsDir(),
+      directories.projectSkillsDir,
       'project',
     );
     this.addSkillsWithPrecedence(projectSkills);
     const projectAgentSkills = await loadSkillsFromDir(
-      storage.getProjectAgentSkillsDir(),
+      directories.projectAgentSkillsDir,
       'project',
     );
     this.addSkillsWithPrecedence(projectAgentSkills);

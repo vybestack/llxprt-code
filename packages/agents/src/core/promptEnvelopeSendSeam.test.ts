@@ -4,12 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import {
   assertInstanceOf,
   errorMessage,
 } from '@vybestack/llxprt-code-test-utils';
 import { describe, expect, it } from 'bun:test';
-import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
@@ -34,10 +34,15 @@ function buildPrepared(
     estimate: null,
     options: {
       contents: [],
-      invocation: { signal: callerSignal },
+      invocation: createRuntimeInvocationContext({
+        runtimeId: 'prepared-test',
+        providerName: 'openai',
+        ephemeralsSnapshot: {},
+        signal: callerSignal,
+      }),
       metadata: { abortSignal: callerSignal },
       promptEnvelopeTransportToken: transportToken,
-    } as RuntimeGenerateChatOptions,
+    },
   };
 }
 
@@ -98,9 +103,12 @@ describe('preparePromptEnvelopeAfterEnforcement', () => {
     const candidateEstimates: number[] = [];
 
     const result = await preparePromptEnvelopeAfterEnforcement({
+      tokenizerFactory: runtime.tokenizerFactory,
       provider,
       contents: firstCandidate,
-      buildOptions: (contents) => ({ contents, config: runtime.config }),
+      buildOptions: (contents) => ({
+        contents,
+      }),
       enforce: async (_contents, estimate) => {
         candidateEstimates.push(await estimate(firstCandidate));
         candidateEstimates.push(await estimate(selectedCandidate));
@@ -140,9 +148,12 @@ describe('preparePromptEnvelopeAfterEnforcement', () => {
     const candidateEstimates: number[] = [];
 
     const result = await preparePromptEnvelopeAfterEnforcement({
+      tokenizerFactory: runtime.tokenizerFactory,
       provider,
       contents: candidate,
-      buildOptions: (contents) => ({ contents, config: runtime.config }),
+      buildOptions: (contents) => ({
+        contents,
+      }),
       enforce: async (contents, estimate) => {
         candidateEstimates.push(await estimate(contents));
         return contents;
@@ -174,9 +185,12 @@ describe('preparePromptEnvelopeAfterEnforcement', () => {
     const candidateEstimates: number[] = [];
 
     const result = await preparePromptEnvelopeAfterEnforcement({
+      tokenizerFactory: runtime.tokenizerFactory,
       provider,
       contents: candidate,
-      buildOptions: (contents) => ({ contents, config: runtime.config }),
+      buildOptions: (contents) => ({
+        contents,
+      }),
       enforce: async (contents, estimate) => {
         candidateEstimates.push(await estimate(contents));
         return contents;
@@ -221,9 +235,12 @@ describe('preparePromptEnvelopeAfterEnforcement', () => {
 
     await expect(
       preparePromptEnvelopeAfterEnforcement({
+        tokenizerFactory: runtime.tokenizerFactory,
         provider,
         contents: candidate,
-        buildOptions: (contents) => ({ contents, config: runtime.config }),
+        buildOptions: (contents) => ({
+          contents,
+        }),
         enforce: async (_contents, estimate) => {
           await estimate(candidate);
           throw new Error('enforcement failed');
@@ -278,9 +295,12 @@ describe('preparePromptEnvelopeAfterEnforcement', () => {
     const candidateEstimates: number[] = [];
 
     const result = await preparePromptEnvelopeAfterEnforcement({
+      tokenizerFactory: runtime.tokenizerFactory,
       provider,
       contents: fullCandidate,
-      buildOptions: (contents) => ({ contents, config: runtime.config }),
+      buildOptions: (contents) => ({
+        contents,
+      }),
       enforce: async (_contents, estimate) => {
         candidateEstimates.push(await estimate(fullCandidate));
         candidateEstimates.push(await estimate(reducedCandidate));
@@ -332,11 +352,8 @@ describe('preparePromptEnvelopeAfterEnforcement', () => {
           },
         }),
     };
-    const runtime = createChatSessionRuntime({ provider });
-
     const error = await prepareAtSendSeam(provider, {
       contents: [],
-      config: runtime.config,
     }).catch((reason: unknown) => reason);
 
     expect(error).toBeInstanceOf(Error);
@@ -408,9 +425,12 @@ describe('preparePromptEnvelopeAfterEnforcement', () => {
     const runtime = createChatSessionRuntime({ provider });
 
     const result = await enforceAndSendWithPromptEnvelopeRetries({
+      tokenizerFactory: runtime.tokenizerFactory,
       provider,
       contents: [],
-      buildOptions: (contents) => ({ contents, config: runtime.config }),
+      buildOptions: (contents) => ({
+        contents,
+      }),
       enforce: (contents) => Promise.resolve(contents),
       fallbackEstimate: () => Promise.resolve(0),
       send: () => Promise.resolve('sent'),
@@ -460,9 +480,12 @@ describe('preparePromptEnvelopeAfterEnforcement', () => {
     }> = [];
 
     const result = await enforceAndSendWithPromptEnvelopeRetries({
+      tokenizerFactory: runtime.tokenizerFactory,
       provider,
       contents: [],
-      buildOptions: (contents) => ({ contents, config: runtime.config }),
+      buildOptions: (contents) => ({
+        contents,
+      }),
       enforce: (contents) => Promise.resolve(contents),
       fallbackEstimate: () => Promise.resolve(0),
       send: (_contents, prepared, attemptIndex) => {
@@ -519,10 +542,11 @@ describe('preparePromptEnvelopeAfterEnforcement', () => {
       },
     };
     const runtime = createChatSessionRuntime({ provider });
-    const preparer = createPromptEnvelopePreparer(provider, (contents) => ({
-      contents,
-      config: runtime.config,
-    }));
+    const preparer = createPromptEnvelopePreparer(
+      provider,
+      (contents) => ({ contents }),
+      runtime.tokenizerFactory,
+    );
     await preparer.prepare([]);
     await preparer.prepare([
       { speaker: 'human', blocks: [{ type: 'text', text: 'candidate' }] },
@@ -577,10 +601,11 @@ describe('preparePromptEnvelopeAfterEnforcement', () => {
       },
     };
     const runtime = createChatSessionRuntime({ provider });
-    const preparer = createPromptEnvelopePreparer(provider, (candidate) => ({
-      contents: candidate,
-      config: runtime.config,
-    }));
+    const preparer = createPromptEnvelopePreparer(
+      provider,
+      (candidate) => ({ contents: candidate }),
+      runtime.tokenizerFactory,
+    );
 
     const first = await preparer.prepare(contents);
     await preparer.releaseUnused();

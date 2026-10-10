@@ -6,7 +6,7 @@
 
 import { type IModel } from '@vybestack/llxprt-code-providers/IModel.js';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { IProviderConfig } from '@vybestack/llxprt-code-providers/types/IProviderConfig.js';
 import {
   BaseProvider,
   type BaseProviderConfig,
@@ -14,7 +14,7 @@ import {
 } from '@vybestack/llxprt-code-providers/BaseProvider.js';
 import { declaredMediaTransportCapabilities } from '@vybestack/llxprt-code-providers/providerMediaTransportCapabilities.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import { readInvocationPolicyRecord } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import type {
   GenerateContentParameters,
   GenerateContentResponse,
@@ -47,11 +47,12 @@ import {
 } from './geminiGenerationExecution.js';
 import { requireAssembledSystemInstruction } from '@vybestack/llxprt-code-providers/utils/systemPromptPlacement.js';
 import { buildGeminiDumpContents } from './geminiDumpConversion.js';
-import type { ToolOutputSettingsProvider } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
+import type { OutputLimitConfig } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import {
   finishMediaRequest,
   type MediaRequestOutcome,
   resolveRequestMedia,
+  captureRequestMediaInput,
 } from '@vybestack/llxprt-code-providers/utils/request-media-resolution.js';
 
 /**
@@ -83,7 +84,7 @@ export class GeminiProvider extends BaseProvider {
   constructor(
     apiKey?: string,
     baseURL?: string,
-    config?: Config,
+    config?: IProviderConfig,
     createClient: CreateGeminiApiClient = createGeminiApiClient,
   ) {
     const baseConfig: BaseProviderConfig = {
@@ -103,11 +104,9 @@ export class GeminiProvider extends BaseProvider {
   }
 
   private getStreamingPreference(
-    _options: NormalizedGenerateChatOptions,
+    options: NormalizedGenerateChatOptions,
   ): boolean {
-    const ephemeralSettings = this.providerConfig?.getEphemeralSettings?.();
-    const streamingSetting = ephemeralSettings?.['streaming'];
-    return streamingSetting !== 'disabled';
+    return options.invocation.ephemerals['streaming'] !== 'disabled';
   }
 
   clearClientCache(_runtimeKey?: string): void {
@@ -125,7 +124,7 @@ export class GeminiProvider extends BaseProvider {
   buildContextDumpBody(
     history: IContent[],
     model?: string,
-    config?: ToolOutputSettingsProvider,
+    config?: OutputLimitConfig,
   ): Record<string, unknown> {
     const contents = buildGeminiDumpContents(history, model, config);
     return model ? { model, contents } : { contents };
@@ -139,16 +138,15 @@ export class GeminiProvider extends BaseProvider {
     authMode: GeminiAuthMode;
     token: string;
   }> {
-    const standardAuth = await this.authResolver.resolveAuthentication({
-      settingsService: this.resolveSettingsService(),
-      includeOAuth: false,
-    });
+    // Gemini has no OAuth path, so the owner-bound non-OAuth read is the
+    // whole standard chain (keyfile, key name, environment).
+    const standardAuth = await this.getAuthToken();
 
-    if (standardAuth) {
+    if (standardAuth !== '') {
       return { authMode: 'gemini-api-key', token: standardAuth };
     }
 
-    if (hasVertexAICredentials(this.resolveSettingsServiceIfAvailable())) {
+    if (hasVertexAICredentials(this.captureOwnerPolicy())) {
       setupVertexAIAuth();
       return { authMode: 'vertex-ai', token: 'USE_VERTEX_AI' };
     }
@@ -168,10 +166,6 @@ export class GeminiProvider extends BaseProvider {
         ...(customHeaders ?? {}),
       },
     };
-  }
-
-  override setConfig(config: Config): void {
-    super.setConfig?.(config);
   }
 
   async getModels(): Promise<IModel[]> {
@@ -203,8 +197,9 @@ export class GeminiProvider extends BaseProvider {
 
   override getCurrentModel(): string {
     try {
-      const settingsService = this.resolveSettingsService();
-      const providerSettings = settingsService.getProviderSettings(this.name);
+      const providerSettings = readInvocationPolicyRecord(
+        this.captureOwnerPolicy()[this.name],
+      );
       if (
         providerSettings.model !== undefined &&
         providerSettings.model !== null &&
@@ -226,8 +221,9 @@ export class GeminiProvider extends BaseProvider {
 
   override getModelParams(): Record<string, unknown> | undefined {
     try {
-      const settingsService = this.resolveSettingsService();
-      const providerSettings = settingsService.getProviderSettings(this.name);
+      const providerSettings = readInvocationPolicyRecord(
+        this.captureOwnerPolicy()[this.name],
+      );
 
       const reservedKeys = new Set([
         'enabled',
@@ -265,26 +261,12 @@ export class GeminiProvider extends BaseProvider {
   }
 
   override isPaidMode(): boolean {
-    const settingsService = this.resolveSettingsServiceIfAvailable();
+    const settingsService = this.captureOwnerPolicy();
     return (
       !!process.env.GEMINI_API_KEY ||
       !!getSettingOrEnv(settingsService, 'GOOGLE_API_KEY') ||
       hasVertexAICredentials(settingsService)
     );
-  }
-
-  private resolveSettingsServiceIfAvailable(): SettingsService | undefined {
-    try {
-      return this.resolveSettingsService();
-    } catch (error) {
-      this.getLogger().debug(
-        () =>
-          `SettingsService is unavailable for Gemini auth probing: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-      );
-      return undefined;
-    }
   }
 
   override clearState(): void {
@@ -302,7 +284,7 @@ export class GeminiProvider extends BaseProvider {
   }
 
   private hasDirectVertexCredentials(
-    settingsService: SettingsService | undefined,
+    settingsService: Readonly<Record<string, unknown>> | undefined,
   ): boolean {
     return Boolean(
       getSettingOrEnv(settingsService, 'GOOGLE_APPLICATION_CREDENTIALS'),
@@ -335,7 +317,7 @@ export class GeminiProvider extends BaseProvider {
     baseURL?: string,
   ): GeminiApiClientOptions {
     const isVertex = authMode === 'vertex-ai';
-    const settingsService = this.resolveSettingsServiceIfAvailable();
+    const settingsService = this.captureOwnerPolicy();
     const vertexConfig = getVertexAIAuthConfig(settingsService);
     if (
       isVertex &&
@@ -363,7 +345,12 @@ export class GeminiProvider extends BaseProvider {
     requireAssembledSystemInstruction(options.systemInstruction);
 
     const mediaRequest = await resolveRequestMedia(
-      options.runtime,
+      captureRequestMediaInput(
+        options.metadata?.['logicalRequestId'],
+        options.invocation.runtimeId,
+        this.requestMediaBudgetBytes,
+        this.requestMediaResolver,
+      ),
       options.contents,
       options.invocation.signal,
     );
@@ -376,7 +363,6 @@ export class GeminiProvider extends BaseProvider {
       const streamingEnabled = this.getStreamingPreference(effectiveOptions);
       const setup = await buildGenerationSetup(
         effectiveOptions,
-        this.globalConfig,
         () => this.determineBestAuth(),
         () => this.createHttpOptions(),
         () => this.getBaseURL(),
@@ -437,7 +423,6 @@ export class GeminiProvider extends BaseProvider {
     );
     return executeNonOAuthGeneration(
       options,
-      this.globalConfig,
       setup.contentsWithSignatures,
       setup.requestConfig,
       setup.currentModel,

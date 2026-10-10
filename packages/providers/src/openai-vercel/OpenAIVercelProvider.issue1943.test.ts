@@ -101,7 +101,7 @@ describe('Per-call resolved model vs provider model (issue #1943 finding 1)', ()
     const format = resolveToolFormat(
       'moonshot-v1-kimi-k2', // resolved model
       'openaivercel',
-      settingsService,
+      settingsService.getProviderSettings('openaivercel').toolFormat,
     );
     expect(format).toBe('kimi');
   });
@@ -111,7 +111,7 @@ describe('Per-call resolved model vs provider model (issue #1943 finding 1)', ()
     const format = resolveToolFormat(
       'gpt-4o', // resolved model
       'openaivercel',
-      settingsService,
+      settingsService.getProviderSettings('openaivercel').toolFormat,
     );
     expect(format).toBe('openai');
   });
@@ -122,7 +122,7 @@ describe('Per-call resolved model vs provider model (issue #1943 finding 1)', ()
     const format = resolveToolFormat(
       'moonshot-v1-kimi-k2', // resolved model is kimi
       'openaivercel',
-      settingsService,
+      settingsService.getProviderSettings('openaivercel').toolFormat,
     );
     expect(format).toBe('openai'); // override suppresses auto-detection
   });
@@ -133,7 +133,7 @@ describe('Per-call resolved model vs provider model (issue #1943 finding 1)', ()
     const format = resolveToolFormat(
       'mistral-large-latest', // resolved model is mistral
       'openaivercel',
-      settingsService,
+      settingsService.getProviderSettings('openaivercel').toolFormat,
     );
     expect(format).toBe('openai'); // override suppresses auto-detection
   });
@@ -142,25 +142,33 @@ describe('Per-call resolved model vs provider model (issue #1943 finding 1)', ()
     const settingsService = new SettingsService();
     // First call with kimi model
     expect(
-      resolveToolFormat('moonshot-v1-kimi-k2', 'openaivercel', settingsService),
+      resolveToolFormat(
+        'moonshot-v1-kimi-k2',
+        'openaivercel',
+        settingsService.getProviderSettings('openaivercel').toolFormat,
+      ),
     ).toBe('kimi');
     // Second call with gpt model (different resolved.model)
-    expect(resolveToolFormat('gpt-4o', 'openaivercel', settingsService)).toBe(
-      'openai',
-    );
+    expect(
+      resolveToolFormat(
+        'gpt-4o',
+        'openaivercel',
+        settingsService.getProviderSettings('openaivercel').toolFormat,
+      ),
+    ).toBe('openai');
   });
 
   it('detects different format when resolved model changes mid-session from gpt to mistral', () => {
     const settingsService = new SettingsService();
-    expect(resolveToolFormat('gpt-4o', 'openaivercel', settingsService)).toBe(
-      'openai',
-    );
     expect(
       resolveToolFormat(
-        'mistral-large-latest',
+        'gpt-4o',
         'openaivercel',
-        settingsService,
+        settingsService.getProviderSettings('openaivercel').toolFormat,
       ),
-    ).toBe('mistral');
+    ).toBe('openai');
+    expect(resolveToolFormat('mistral-large-latest', 'openaivercel')).toBe(
+      'mistral',
+    );
   });
 });

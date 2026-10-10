@@ -7,14 +7,11 @@
 import { DebugLogger } from '../debug/DebugLogger.js';
 import { getErrorMessage } from '../utils/errors.js';
 
-const HOOK_INITIALIZATION_TIMEOUT_MS = 30_000;
-
 export interface LiveTrustTransitionDependencies {
   downgradeApprovalMode(): void;
   removeTrustedPolicyRules(): void;
   updateTrustPolicy(trusted: boolean): void;
-  transitionMcp(trusted: boolean): Promise<void> | undefined;
-  initializeHooks(signal: AbortSignal): Promise<void> | undefined;
+  notifyTrustTransition(trusted: boolean): Promise<void> | undefined;
   emitTrustChanged(trusted: boolean): void;
 }
 
@@ -99,44 +96,19 @@ export class LiveTrustTransitionLifecycle {
       return;
     }
     const failures: unknown[] = [];
-    await this.collectMcpFailure(trusted, failures);
-    await this.collectHookFailure(failures);
+    await this.collectObserverFailure(trusted, failures);
     this.retainFailures(failures, sequence);
   }
 
-  private async collectMcpFailure(
+  private async collectObserverFailure(
     trusted: boolean,
     failures: unknown[],
   ): Promise<void> {
     try {
-      await this.dependencies.transitionMcp(trusted);
+      await this.dependencies.notifyTrustTransition(trusted);
     } catch (error) {
       LiveTrustTransitionLifecycle.logger.error(
         `Error during trust transition side-effects: ${getErrorMessage(error)}`,
-      );
-      failures.push(error);
-    }
-  }
-
-  private async collectHookFailure(failures: unknown[]): Promise<void> {
-    if (this.disposing) {
-      return;
-    }
-    try {
-      await waitForHookInitialization(
-        (signal) => this.dependencies.initializeHooks(signal),
-        this.abortController.signal,
-      );
-    } catch (error) {
-      const initializationWasCancelled =
-        this.abortController.signal.aborted &&
-        error instanceof DOMException &&
-        error.name === 'AbortError';
-      if (initializationWasCancelled) {
-        return;
-      }
-      LiveTrustTransitionLifecycle.logger.error(
-        `Error re-initializing hooks during trust transition: ${getErrorMessage(error)}`,
       );
       failures.push(error);
     }
@@ -206,45 +178,4 @@ export class LiveTrustTransitionLifecycle {
     this.disposing = true;
     this.abortController.abort();
   }
-}
-
-function abortError(message: string): DOMException {
-  return new DOMException(message, 'AbortError');
-}
-
-function waitForHookInitialization(
-  initialize: (signal: AbortSignal) => Promise<void> | undefined,
-  lifecycleSignal: AbortSignal,
-): Promise<void> {
-  if (lifecycleSignal.aborted) {
-    return Promise.reject(abortError('Hook initialization was cancelled'));
-  }
-  const operationController = new AbortController();
-  return new Promise<void>((resolve, reject) => {
-    let settled = false;
-    const finish = (settle: () => void): void => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timeoutId);
-      lifecycleSignal.removeEventListener('abort', onAbort);
-      settle();
-    };
-    const onAbort = () => {
-      operationController.abort();
-      finish(() => reject(abortError('Hook initialization was cancelled')));
-    };
-    const timeoutId = setTimeout(() => {
-      operationController.abort();
-      finish(() => reject(new Error('Hook initialization timed out')));
-    }, HOOK_INITIALIZATION_TIMEOUT_MS);
-    lifecycleSignal.addEventListener('abort', onAbort, { once: true });
-    Promise.resolve()
-      .then(() => initialize(operationController.signal))
-      .then(
-        () => finish(resolve),
-        (error: unknown) => finish(() => reject(error)),
-      );
-  });
 }

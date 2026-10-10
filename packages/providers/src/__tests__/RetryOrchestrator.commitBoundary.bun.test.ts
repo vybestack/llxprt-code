@@ -23,6 +23,7 @@
  * way a real SDK-backed stream is.
  */
 
+import { retryOperationFixture } from './retry-operation-fixture.js';
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
@@ -150,33 +151,31 @@ function trackedStream(factory: StreamFactory): {
 }
 
 function onAuthErrorOptions(handler: OnAuthErrorHandler): GenerateChatOptions {
-  return {
-    contents: [],
-    resolved: { authToken: 'revoked-token' },
-    runtime: {
-      config: {
-        getOnAuthErrorHandler: () => handler,
-      },
+  return retryOperationFixture(
+    {
+      contents: [],
+      resolved: { authToken: 'revoked-token' },
     },
-  } as unknown as GenerateChatOptions;
+    handler,
+    undefined,
+  ) as unknown as GenerateChatOptions;
 }
 
 function bucketFailoverOptions(
   tryFailover: () => Promise<boolean>,
 ): GenerateChatOptions {
-  return {
-    contents: [],
-    runtime: {
-      config: {
-        getBucketFailoverHandler: () => ({
-          getBuckets: () => ['bucket1'],
-          getCurrentBucket: () => 'bucket1',
-          tryFailover,
-          isEnabled: () => true,
-        }),
-      },
+  return retryOperationFixture(
+    {
+      contents: [],
     },
-  } as unknown as GenerateChatOptions;
+    undefined,
+    {
+      getBuckets: () => ['bucket1'],
+      getCurrentBucket: () => 'bucket1',
+      tryFailover,
+      isEnabled: () => true,
+    },
+  ) as unknown as GenerateChatOptions;
 }
 
 interface TrackedStreamResult {

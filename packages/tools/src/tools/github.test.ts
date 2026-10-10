@@ -16,13 +16,13 @@
  * @pseudocode 003-github-broker.md lines 38-55
  */
 
+import type { GitHubReportOperations } from '../interfaces/github-report-operations.js';
 import { describe, it, expect } from 'bun:test';
 import {
   GithubTool,
   MUTATING_OPS,
   SUPPORTED_OPS,
   renderChecks,
-  type GitHubBrokerClient,
 } from './github.js';
 import {
   GITHUB_OP_SPECS,
@@ -37,15 +37,15 @@ function textOrEmpty(value: string | null | undefined): string {
 
 function stubClient(
   result: Record<string, unknown> = { ok: true },
-): GitHubBrokerClient & { calls: Array<[string, Record<string, unknown>]> } {
+): GitHubReportOperations & {
+  calls: Array<[string, Record<string, unknown>]>;
+} {
   const calls: Array<[string, Record<string, unknown>]> = [];
-  return {
-    calls,
-    async runOperation(op, params) {
-      calls.push([op, params]);
-      return result;
-    },
+  const dispatch: GitHubReportOperations['readReport'] = async (op, params) => {
+    calls.push([op, params]);
+    return result;
   };
+  return { calls, readReport: dispatch, submitReport: dispatch };
 }
 
 /**
@@ -301,10 +301,12 @@ describe('github tool', () => {
      * @requirement REQ-013
      */
     it('reports a broker failure as a tool error', async () => {
-      const failing: GitHubBrokerClient = {
-        async runOperation() {
-          throw new Error('NOT_FOUND: no such issue');
-        },
+      const reject = async (): Promise<Record<string, unknown>> => {
+        throw new Error('NOT_FOUND: no such issue');
+      };
+      const failing: GitHubReportOperations = {
+        readReport: reject,
+        submitReport: reject,
       };
       const tool = new GithubTool(failing);
       const result = await tool
@@ -325,10 +327,12 @@ describe('github tool', () => {
      */
 
     it('prefixes a failure with the github context and guards an empty message', async () => {
-      const empty: GitHubBrokerClient = {
-        async runOperation() {
-          throw new Error('');
-        },
+      const reject = async (): Promise<Record<string, unknown>> => {
+        throw new Error('');
+      };
+      const empty: GitHubReportOperations = {
+        readReport: reject,
+        submitReport: reject,
       };
       const tool = new GithubTool(empty);
       const result = await tool

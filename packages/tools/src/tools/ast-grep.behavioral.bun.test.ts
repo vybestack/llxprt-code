@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { physicalFiles } from '../__tests__/helpers/physical-files.js';
+
 /**
  * Behavioral tests for bounded acquisition in ast_grep (issue #3205).
  *
@@ -33,12 +35,17 @@ function arrayLength(value: readonly unknown[] | undefined): number {
 
 function createToolHost(targetDir: string): IToolHost {
   return {
+    ...physicalFiles,
     getTargetDir: () => targetDir,
     getWorkspaceRoots: () => [targetDir],
     getApprovalMode: () => 'auto',
     setApprovalMode: () => {},
     isInteractive: () => false,
-    hasFeatureFlag: () => false,
+
+    runSearch: <T>(
+      _directories: readonly string[],
+      operation: () => Promise<T>,
+    ): Promise<T> => operation(),
     getFileService: () => ({
       shouldGitIgnoreFile: () => false,
       shouldLlxprtIgnoreFile: () => false,
@@ -55,7 +62,7 @@ function createToolHost(targetDir: string): IToolHost {
     getLlxprtIgnoreFilePath: () => null,
     recordFileRead: () => {},
     getLlxprtIgnorePatterns: () => [],
-    getEphemeralSettings: () => ({}),
+    readExecutionPolicy: () => ({}),
     getDebugMode: () => false,
   };
 }

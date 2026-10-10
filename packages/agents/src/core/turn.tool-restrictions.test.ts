@@ -1,3 +1,6 @@
+import { createChatPolicyFixture } from './__tests__/session-policy-fixture.js';
+import { createTurnCitationPolicy } from './__tests__/session-policy-fixture.js';
+import { createTurnStreamPolicy } from './__tests__/session-policy-fixture.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -36,9 +39,11 @@ describe('Turn run - hook tool restrictions', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mockChatInstance = {
+      ...createChatPolicyFixture(),
       sendMessageStream: mockSendMessageStream,
       getHistory: mockGetHistory,
-      getConfig: () => undefined,
+      shouldShowCitations: createTurnCitationPolicy(),
+      getStreamTimeoutPolicy: createTurnStreamPolicy({}),
       getResolvedBaseUrl: () => undefined,
     };
     turn = new Turn(

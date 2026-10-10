@@ -1,3 +1,6 @@
+import { SessionSettingsOwner } from '../session/session-settings-owner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { afterEach } from 'bun:test';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -26,6 +29,17 @@ function makeConfig(telemetry?: ConfigParameters['telemetry']): Config {
     usageStatisticsEnabled: false,
     telemetry,
   });
+}
+
+const owners: SessionSettingsOwner[] = [];
+afterEach(async () => {
+  for (const owner of owners.splice(0)) await owner.dispose();
+});
+function settingsFor(config: Config): SessionSettingsOwner {
+  const owner = new SessionSettingsOwner(new SettingsService());
+  owner.bindTelemetry(config);
+  owners.push(owner);
+  return owner;
 }
 
 describe('Config telemetry perf copy isolation', () => {
@@ -84,58 +98,59 @@ describe('Config telemetry perf copy isolation', () => {
   });
 
   describe('update/get copy isolation', () => {
-    it('updateTelemetrySettings clones a provided perf so caller mutation cannot affect internal state', () => {
+    it('updateTelemetrySettings clones a provided perf so caller mutation cannot affect internal state', async () => {
       const config = makeConfig();
+      const owner = settingsFor(config);
       const callerPerf = { enabled: true, memory: true };
-      config.updateTelemetrySettings({ perf: callerPerf });
+      await owner.updateTelemetrySettings({ perf: callerPerf });
 
       // The stored perf must not be the caller's reference.
-      expect(
-        (config as unknown as { telemetrySettings: { perf?: unknown } })
-          .telemetrySettings.perf,
-      ).not.toBe(callerPerf);
+      expect(owner.readTelemetrySettings().perf).not.toBe(callerPerf);
 
       // Mutating the caller object after update has no effect.
       callerPerf.enabled = false;
       callerPerf.memory = false;
-      expect(config.getTelemetrySettings().perf).toStrictEqual({
+      expect(owner.readTelemetrySettings().perf).toStrictEqual({
         enabled: true,
         memory: true,
       });
     });
 
-    it('a perf obtained via get, then mutated, does not leak back through update', () => {
+    it('a perf obtained via get, then mutated, does not leak back through update', async () => {
       const config = makeConfig({
         perf: { enabled: true, memory: true },
       });
-      const snapshot = config.getTelemetrySettings();
+      const owner = settingsFor(config);
+      const snapshot = owner.readTelemetrySettings();
       // Hand the (already-isolated) perf back in via update, then mutate it.
-      config.updateTelemetrySettings({ perf: snapshot.perf });
+      await owner.updateTelemetrySettings({ perf: snapshot.perf });
       snapshot.perf!.enabled = false;
 
-      expect(config.getTelemetrySettings().perf?.enabled).toBe(true);
+      expect(owner.readTelemetrySettings().perf?.enabled).toBe(true);
     });
 
-    it('omitting perf in update retains the previously-cloned internal perf', () => {
+    it('omitting perf in update retains the previously-cloned internal perf', async () => {
       const config = makeConfig({
         perf: { enabled: true, memory: true },
       });
-      config.updateTelemetrySettings({ logPrompts: false });
+      const owner = settingsFor(config);
+      await owner.updateTelemetrySettings({ logPrompts: false });
 
-      expect(config.getTelemetrySettings().perf).toStrictEqual({
+      expect(owner.readTelemetrySettings().perf).toStrictEqual({
         enabled: true,
         memory: true,
       });
     });
 
-    it('providing a perf replaces it entirely — enabled/memory are not deep-merged', () => {
+    it('providing a perf replaces it entirely — enabled/memory are not deep-merged', async () => {
       const config = makeConfig({
         perf: { enabled: true, memory: true },
       });
+      const owner = settingsFor(config);
       // New perf omits memory: shallow replacement, not a merge.
-      config.updateTelemetrySettings({ perf: { enabled: true } });
+      await owner.updateTelemetrySettings({ perf: { enabled: true } });
 
-      expect(config.getTelemetrySettings().perf).toStrictEqual({
+      expect(owner.readTelemetrySettings().perf).toStrictEqual({
         enabled: true,
       });
     });

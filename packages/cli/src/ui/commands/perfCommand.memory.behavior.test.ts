@@ -27,15 +27,16 @@ function memorySubCommand(): SlashCommand {
 function contextWithHistory(history: readonly IContent[]): CommandContext {
   return {
     services: {
-      config: {
-        getAgentClient: () => ({
+      agent: {
+        agentClient: {
           getHistoryService: () => ({
             getAll: () => history,
             getChronologyTrace: () => [],
             getRawHistory: () => history,
           }),
-        }),
+        },
       },
+      config: {},
     },
   } as unknown as CommandContext;
 }
@@ -98,7 +99,14 @@ describe('/perf memory', () => {
 
   it('degrades honestly when the agent client has no history service', async () => {
     const context = {
-      services: { config: { getAgentClient: () => null } },
+      services: {
+        agent: {
+          get agentClient() {
+            return { getHistoryService: () => null };
+          },
+        },
+        config: {},
+      },
     } as unknown as CommandContext;
     const output = await run(memorySubCommand(), context);
     expect(output).toContain('History is not available');

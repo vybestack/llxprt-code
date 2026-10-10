@@ -644,6 +644,46 @@ describe('IdeClient connection lifecycle isolation', () => {
     ideClient.removeTrustChangeListener(throwingListener);
   });
 
+  it('throwing context observer cannot block denied-trust commit or delivery, and its error is surfaced', async () => {
+    const connectPromise = ideClient.connect();
+    await flushAsync();
+    const fake = createdFakes[0];
+    await driveSuccess(fake, { workspaceState: { isTrusted: true } });
+    await connectPromise;
+    expect(ideClient.getWorkspaceTrust()).toBe(true);
+
+    const observerFailure = new Error('context observer exploded');
+    const trustTransitions: Array<boolean | undefined> = [];
+    const trustListener = (isTrusted: boolean | undefined) => {
+      trustTransitions.push(isTrusted);
+    };
+    const contextsSeenByOtherObserver: Array<boolean | undefined> = [];
+    const throwingObserver = () => {
+      throw observerFailure;
+    };
+    const otherObserver = (
+      context: { workspaceState?: { isTrusted?: boolean } } | undefined,
+    ) => {
+      contextsSeenByOtherObserver.push(context?.workspaceState?.isTrusted);
+    };
+    ideClient.addTrustChangeListener(trustListener);
+    ideClient.addContextChangeListener(throwingObserver);
+    ideClient.addContextChangeListener(otherObserver);
+
+    expect(() =>
+      fake.fireContextNotification({ workspaceState: { isTrusted: false } }),
+    ).toThrow(observerFailure);
+
+    expect(ideClient.getWorkspaceTrust()).toBe(false);
+    expect(trustTransitions).toStrictEqual([false]);
+    expect(contextsSeenByOtherObserver).toStrictEqual([false]);
+    expect(ideClient.getIdeContext()?.workspaceState?.isTrusted).toBe(false);
+
+    ideClient.removeTrustChangeListener(trustListener);
+    ideClient.removeContextChangeListener(throwingObserver);
+    ideClient.removeContextChangeListener(otherObserver);
+  });
+
   it('stale disconnect with multiple old diffs does not closeDiff a new-lifecycle diff through the new client', async () => {
     // Blocking defect: disconnect() iterates the live shared diffResponses Map
     // and each closeDiff() dereferences mutable this.client. If disconnect

@@ -54,6 +54,7 @@ interface BuildCommandsParams {
   readonly packageDirs?: readonly string[];
   readonly heapMb?: number;
   readonly nodeOptions?: string;
+  readonly emittedSiblings?: readonly string[];
 }
 
 interface RunnerModule {
@@ -99,6 +100,18 @@ describe('run-lint runner — a full run is partitioned per package (#3387)', ()
       ['packages/cli'],
       ['packages/core'],
     ]);
+  });
+
+  it('ignores only explicitly classified emitted siblings while linting JS-only source', async () => {
+    const { buildLintCommands } = await loadRunner();
+    const [command] = buildLintCommands({
+      targets: ['packages/mcp'],
+      forwardedArgs: [],
+      cache: false,
+      emittedSiblings: ['packages/mcp/src/auth/emitted.js'],
+    }).filter((candidate) => candidate.label === 'packages/mcp');
+    expect(command.args).toContain('packages/mcp/src/auth/emitted.js');
+    expect(command.args).not.toContain('packages/mcp/src/auth/handwritten.js');
   });
 
   it('sorts package groups so the run order is deterministic', async () => {

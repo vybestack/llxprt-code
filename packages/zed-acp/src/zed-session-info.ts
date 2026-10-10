@@ -1,3 +1,4 @@
+import type { LifecycleSession } from './zed-session-pagination.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -252,4 +253,20 @@ export class SessionTitleTracker {
   getUpdatedAt(): string | undefined {
     return this.updatedAt;
   }
+}
+
+export function presentLifecycleSession(
+  sessionId: string,
+  cwd: string,
+  createdAt: string,
+  tracker: SessionTitleTracker,
+): LifecycleSession {
+  const title = tracker.getTitle();
+  return {
+    sessionId,
+    cwd,
+    updatedAt: tracker.getUpdatedAt() ?? createdAt,
+    createdAt,
+    ...(title === undefined ? {} : { title }),
+  };
 }

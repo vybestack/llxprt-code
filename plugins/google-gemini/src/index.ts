@@ -38,7 +38,7 @@ const createGeminiPluginProvider: ProviderAliasFactory = (
   entry: ProviderAliasEntry,
   context: ProviderFactoryContext,
 ) => {
-  const config = context.config;
+  const config = context.openaiProviderConfig;
 
   const aliasApiKey = resolveAliasEnvApiKey(entry, context.authOnlyEnabled);
 
@@ -51,10 +51,6 @@ const createGeminiPluginProvider: ProviderAliasFactory = (
   );
 
   enforceAliasAuthOnly(provider, context.authOnlyEnabled);
-
-  if (config && typeof provider.setConfig === 'function') {
-    provider.setConfig(config);
-  }
 
   overrideAliasDefaultModel(provider, entry);
 

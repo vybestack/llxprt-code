@@ -3,6 +3,12 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createUiSessionOwner } from './__tests__/uiSessionOwner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+
+import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { createProviderSessionCapabilities as preflightCapabilities } from './integration-tests/__tests__/session-client-owner-fixture.js';
+import { handoffCliConfig } from './test-utils/bootstrap-config.js';
 
 import {
   describe,
@@ -29,15 +35,17 @@ import { loadCliConfig } from './config/config.js';
 import { parseArguments } from './config/cliArgParser.js';
 import { appEvents, AppEvent, type AppEvents } from './utils/events.js';
 import { EventEmitter } from 'node:events';
-import type { Config } from '@vybestack/llxprt-code-core';
-import { FatalConfigError, OutputFormat } from '@vybestack/llxprt-code-core';
+import { Config, FatalConfigError } from '@vybestack/llxprt-code-core';
+import {
+  ProviderManager,
+  type IProvider,
+} from '@vybestack/llxprt-code-providers';
 import { dynamicSettingsRegistry } from './utils/dynamicSettings.js';
 import { shouldRelaunchForMemory, isDebugMode } from './utils/bootstrap.js';
 import { relaunchAppInChildProcess } from './utils/relaunch.js';
 import { getCliVersion } from './utils/version.js';
 import { createForegroundAgent } from './cliAgentBootstrap.js';
 import { __setRenderForTesting } from './session/interactiveUI.js';
-import { createTestSessionMediaConfig } from './__tests__/sessionMediaConfig.js';
 
 // Custom error to identify mock process.exit calls
 class MockProcessExitError extends Error {
@@ -159,26 +167,27 @@ void vi.mock('./utils/cleanup.js', () => ({
 // Agent (#2378).
 void vi.mock('./cliAgentBootstrap.js', () => ({
   createForegroundAgent: vi.fn(async () => ({
+    workspace: createUiSessionOwner().workspace,
+    ide: createUiSessionOwner().ide,
     dispose: vi.fn().mockResolvedValue(undefined),
     getMessageBus: vi.fn(() => ({})),
+    session: {
+      setRecording: vi.fn(async () => {}),
+      getRecording: vi.fn(() => ({ enabled: true })),
+    },
     tools: { get: vi.fn(() => undefined) },
   })),
 }));
 
 // Mock the public activation preflight so main() does not invoke real provider
 // runtime mutators. These tests verify surrounding CLI orchestration.
-const { preflightAgentActivationMock } = {
-  preflightAgentActivationMock: vi.fn().mockResolvedValue({
+const { preflightMock } = {
+  preflightMock: vi.fn().mockResolvedValue({
     authFailed: false,
     activeProvider: 'gemini',
     infoMessages: [],
   }),
 };
-const actualActual2 = { ...(await import('@vybestack/llxprt-code-agents')) };
-void vi.mock('@vybestack/llxprt-code-agents', () => ({
-  ...actualActual2,
-  preflightAgentActivation: preflightAgentActivationMock,
-}));
 
 void vi.mock('./ui/utils/mouse.js', () => ({
   enableMouseEvents: vi.fn(),
@@ -204,6 +213,40 @@ void vi.mock('@vybestack/llxprt-code-core', () => ({
   writeToStderr: vi.fn().mockReturnValue(true),
   patchStdio: vi.fn(() => vi.fn()),
 }));
+
+const interactiveConfigs: Config[] = [];
+
+function makeInteractiveConfig(
+  directory: string,
+  sessionId: string,
+): { config: Config; manager: ProviderManager } {
+  const config = new Config({
+    sessionId,
+    targetDir: directory,
+    cwd: directory,
+    model: 'gemini-2.5-pro',
+    provider: 'gemini',
+    interactive: true,
+    debugMode: false,
+  });
+  const manager = new ProviderManager({
+    config,
+    settingsService: new SettingsService(),
+  });
+  const provider: IProvider = {
+    name: 'gemini',
+    getDefaultModel: () => 'gemini-2.5-pro',
+    getModels: async () => [],
+    async *generateChatCompletion() {
+      yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ready' }] };
+    },
+  };
+  manager.registerProvider(provider);
+  manager.setActiveProvider('gemini');
+  configureProviderRuntimeFactories(config, manager);
+  interactiveConfigs.push(config);
+  return { config, manager };
+}
 
 describe('cli.tsx main function', () => {
   /**
@@ -239,7 +282,7 @@ describe('cli.tsx main function', () => {
     dynamicSettingsRegistry.reset();
     // Re-establish the default resolved value after afterEach's
     // vi.restoreAllMocks() clears mock implementations.
-    preflightAgentActivationMock.mockResolvedValue({
+    preflightMock.mockResolvedValue({
       authFailed: false,
       activeProvider: 'gemini',
       infoMessages: [],
@@ -256,6 +299,9 @@ describe('cli.tsx main function', () => {
   });
 
   afterEach(async () => {
+    for (const config of interactiveConfigs.splice(0)) {
+      await config.dispose();
+    }
     await rm(projectTempDir, { recursive: true, force: true });
 
     // Restore original env variables
@@ -482,49 +528,10 @@ describe('cli.tsx main function', () => {
 
   it('initializes content generator config before interactive provider usage', async () => {
     const freshSessionId = randomUUID();
-    const providerManager = {
-      getActiveProvider: vi.fn().mockReturnValue({ name: 'gemini' }),
-      getActiveProviderName: vi.fn().mockReturnValue('gemini'),
-      hasActiveProvider: vi.fn().mockReturnValue(true),
-    };
-    const mockConfig = {
-      initialize: vi.fn().mockResolvedValue(undefined),
-      refreshAuth: vi.fn().mockResolvedValue(undefined),
-      getProvider: vi.fn(() => undefined),
-      getProviderManager: vi.fn(() => providerManager),
-      getConversationLoggingEnabled: vi.fn(() => false),
-      getMcpServers: vi.fn(() => ({})),
-      getDebugMode: vi.fn(() => false),
-      getIdeMode: vi.fn(() => false),
-      getIdeClient: vi.fn(() => null),
-      getListExtensions: vi.fn(() => false),
-      getOutputFormat: vi.fn(() => OutputFormat.TEXT),
-      getToolRegistryInfo: vi.fn(() => ({ registered: [], unregistered: [] })),
-      getSandbox: vi.fn(() => false),
-      getModel: vi.fn(() => 'gemini-2.5-pro'),
-      getProjectRoot: vi.fn(() => '/tmp/project'),
-      isInteractive: vi.fn(() => true),
-      getSessionId: vi.fn(() => freshSessionId),
-      getQuestion: vi.fn(() => ''),
-      isContinueSession: vi.fn(() => false),
-      getExperimentalZedIntegration: vi.fn(() => false),
-      getZedIntegrationEnabled: vi.fn(() => false),
-      getTrustedFolder: vi.fn(() => true),
-      getScreenReader: vi.fn(() => false),
-      storage: {},
-      getProjectTempDir: vi.fn(() => projectTempDir),
-      ...createTestSessionMediaConfig(projectTempDir),
-      getContinueSessionRef: vi.fn(() => null),
-      getWorkspaceContext: vi.fn(() => ({
-        getDirectories: () => ['/tmp/project'],
-      })),
-      setTerminalBackground: vi.fn(),
-      getTerminalBackground: vi.fn(() => undefined),
-      getPolicyEngine: vi.fn(() => null),
-      getTelemetrySettings: vi.fn(() => ({
-        perf: { enabled: false, memory: false },
-      })),
-    } as unknown as Config;
+    const { config: mockConfig, manager } = makeInteractiveConfig(
+      projectTempDir,
+      freshSessionId,
+    );
 
     const loadSettingsMock = loadSettings as Mock<typeof loadSettings>;
     loadSettingsMock.mockReturnValue({
@@ -536,8 +543,17 @@ describe('cli.tsx main function', () => {
       errors: [],
     } as unknown as LoadedSettings);
 
-    (loadCliConfig as Mock<typeof loadCliConfig>).mockResolvedValueOnce(
-      mockConfig,
+    (loadCliConfig as Mock<typeof loadCliConfig>).mockImplementationOnce(
+      handoffCliConfig(
+        mockConfig,
+        (store, owner) => ({
+          ...preflightCapabilities(mockConfig, manager, store, owner),
+          workspaceMemoryOwnership: 'transferred',
+          preflight: preflightMock,
+          dispose: () => {},
+        }),
+        manager,
+      ),
     );
     (parseArguments as Mock<typeof parseArguments>).mockResolvedValueOnce({
       model: undefined,
@@ -646,49 +662,10 @@ describe('cli.tsx main function', () => {
   it('should call setupTerminalAndTheme when isInteractive is true', async () => {
     const freshSessionId = randomUUID();
     const { setupTerminalAndTheme } = await import('./utils/terminalTheme.js');
-    const providerManager = {
-      getActiveProvider: vi.fn().mockReturnValue({ name: 'gemini' }),
-      getActiveProviderName: vi.fn().mockReturnValue('gemini'),
-      hasActiveProvider: vi.fn().mockReturnValue(true),
-    };
-    const mockConfig = {
-      initialize: vi.fn().mockResolvedValue(undefined),
-      refreshAuth: vi.fn().mockResolvedValue(undefined),
-      getProvider: vi.fn(() => undefined),
-      getProviderManager: vi.fn(() => providerManager),
-      getConversationLoggingEnabled: vi.fn(() => false),
-      getMcpServers: vi.fn(() => ({})),
-      getDebugMode: vi.fn(() => false),
-      getIdeMode: vi.fn(() => false),
-      getIdeClient: vi.fn(() => null),
-      getListExtensions: vi.fn(() => false),
-      getOutputFormat: vi.fn(() => OutputFormat.TEXT),
-      getToolRegistryInfo: vi.fn(() => ({ registered: [], unregistered: [] })),
-      getSandbox: vi.fn(() => false),
-      getModel: vi.fn(() => 'gemini-2.5-pro'),
-      getProjectRoot: vi.fn(() => '/tmp/project'),
-      isInteractive: vi.fn(() => true),
-      getSessionId: vi.fn(() => freshSessionId),
-      getQuestion: vi.fn(() => ''),
-      isContinueSession: vi.fn(() => false),
-      getExperimentalZedIntegration: vi.fn(() => false),
-      getZedIntegrationEnabled: vi.fn(() => false),
-      getTrustedFolder: vi.fn(() => true),
-      getScreenReader: vi.fn(() => false),
-      storage: {},
-      getProjectTempDir: vi.fn(() => projectTempDir),
-      ...createTestSessionMediaConfig(projectTempDir),
-      getContinueSessionRef: vi.fn(() => null),
-      getWorkspaceContext: vi.fn(() => ({
-        getDirectories: () => ['/tmp/project'],
-      })),
-      setTerminalBackground: vi.fn(),
-      getTerminalBackground: vi.fn(() => undefined),
-      getPolicyEngine: vi.fn(() => null),
-      getTelemetrySettings: vi.fn(() => ({
-        perf: { enabled: false, memory: false },
-      })),
-    } as unknown as Config;
+    const { config: mockConfig, manager } = makeInteractiveConfig(
+      projectTempDir,
+      freshSessionId,
+    );
 
     const loadSettingsMock = loadSettings as Mock<typeof loadSettings>;
     loadSettingsMock.mockReturnValue({
@@ -700,8 +677,17 @@ describe('cli.tsx main function', () => {
       errors: [],
     } as unknown as LoadedSettings);
 
-    (loadCliConfig as Mock<typeof loadCliConfig>).mockResolvedValueOnce(
-      mockConfig,
+    (loadCliConfig as Mock<typeof loadCliConfig>).mockImplementationOnce(
+      handoffCliConfig(
+        mockConfig,
+        (store, owner) => ({
+          ...preflightCapabilities(mockConfig, manager, store, owner),
+          workspaceMemoryOwnership: 'transferred',
+          preflight: preflightMock,
+          dispose: () => {},
+        }),
+        manager,
+      ),
     );
     (parseArguments as Mock<typeof parseArguments>).mockResolvedValueOnce({
       model: undefined,

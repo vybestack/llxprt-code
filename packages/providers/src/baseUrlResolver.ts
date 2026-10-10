@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 /**
  * Base URL resolution from provider config objects.
  * Extracted from ProviderManager to keep the main file under the lint
@@ -32,7 +33,9 @@ function resolveUrlCandidate(
   return undefined;
 }
 
-function getReportedBaseUrl(provider: IProvider): string | undefined {
+function getReportedBaseUrl(
+  provider: IProvider | RuntimeProvider,
+): string | undefined {
   const maybeHasBaseUrl = provider as {
     getBaseURL?: () => string | undefined;
   };
@@ -53,14 +56,14 @@ function getReportedBaseUrl(provider: IProvider): string | undefined {
  * Checks baseProviderConfig, providerConfig, and getBaseURL() in order.
  */
 export function getBaseUrlFromProvider(
-  provider: IProvider | undefined,
+  provider: IProvider | RuntimeProvider | undefined,
 ): string | undefined {
   if (!provider) {
     return undefined;
   }
 
-  const visited = new Set<IProvider>();
-  let current: IProvider | undefined = provider;
+  const visited = new Set<IProvider | RuntimeProvider>();
+  let current: IProvider | RuntimeProvider | undefined = provider;
 
   while (current !== undefined) {
     if (visited.has(current)) {

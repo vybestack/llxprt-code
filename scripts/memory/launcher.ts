@@ -35,7 +35,6 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import { isSourceMemoryEntrypoint } from './entrypoint.ts';
 import { resolveInstalledMemprofileRoot } from './runtime-paths.ts';
 import process from 'node:process';
 import {
@@ -645,6 +644,6 @@ export function runLauncher(runtime: LauncherRuntime): void {
   }
 }
 
-if (isSourceMemoryEntrypoint(import.meta.url)) {
+export async function main(): Promise<void> {
   runLauncher(createSourceLauncherRuntime());
 }

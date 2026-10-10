@@ -52,7 +52,7 @@ export const imageCommand: SlashCommand = {
       return;
     }
 
-    const runner = context.services.config?.getRunImageOperation?.();
+    const runner = context.services.agent?.sessionClient.runImageOperation;
     if (typeof runner !== 'function') {
       context.ui.addItem(
         {

@@ -1,3 +1,4 @@
+import { createProviderConfigFixture } from '../runtime/__tests__/provider-config-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -8,13 +9,10 @@
  */
 
 import { describe, expect, it, vi } from 'bun:test';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { OAuthManager } from './oauth-manager.js';
 import type { OAuthProvider } from './types.js';
-import type {
-  OAuthToken,
-  TokenStore,
-  Config,
-} from '@vybestack/llxprt-code-core';
+import type { OAuthToken, TokenStore } from '@vybestack/llxprt-code-core';
 
 async function getBucketAToken(
   _provider: string,
@@ -80,7 +78,15 @@ describe('OAuthManager concurrency', () => {
       releaseAuthLock: vi.fn(async () => undefined),
     };
 
-    const oauthManager = new OAuthManager(tokenStore);
+    const { config: config } = createProviderConfigFixture({
+      sessionId: 'concurrency',
+      targetDir: process.cwd(),
+      cwd: process.cwd(),
+      debugMode: false,
+      model: 'gpt-5',
+      settingsService: new SettingsService(),
+    });
+    const oauthManager = new OAuthManager(tokenStore, undefined, { config });
 
     const provider: OAuthProvider = {
       name: 'anthropic',
@@ -101,19 +107,6 @@ describe('OAuthManager concurrency', () => {
       'getProfileBuckets',
     ).mockImplementation(() => resolveBucketsSerially(bucketResolutionState));
 
-    let storedFailoverHandler: unknown;
-    const config: Pick<
-      Config,
-      'getBucketFailoverHandler' | 'setBucketFailoverHandler'
-    > = {
-      getBucketFailoverHandler: vi.fn(() => storedFailoverHandler as never),
-      setBucketFailoverHandler: vi.fn((handler) => {
-        storedFailoverHandler = handler;
-      }),
-    };
-    (oauthManager as unknown as { config?: Config }).config =
-      config as unknown as Config;
-
     const [tokenA, tokenB] = await Promise.all([
       oauthManager.getOAuthToken('anthropic'),
       oauthManager.getOAuthToken('anthropic'),
@@ -121,7 +114,10 @@ describe('OAuthManager concurrency', () => {
 
     expect(tokenA?.access_token).toBe('token-bucket-a');
     expect(tokenB?.access_token).toBe('token-bucket-a');
-    expect(config.setBucketFailoverHandler).toHaveBeenCalledTimes(1);
+    expect(oauthManager.readFailoverBuckets('anthropic')).toStrictEqual([
+      'bucket-a',
+      'bucket-b',
+    ]);
   });
 
   describe('Token Refresh Locking (Issue #1151)', () => {

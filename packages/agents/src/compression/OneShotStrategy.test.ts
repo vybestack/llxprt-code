@@ -1,3 +1,4 @@
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -13,6 +14,7 @@
  * everything above the preserved messages.
  */
 
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { describe, it, expect } from 'bun:test';
 import type {
   IContent,
@@ -152,11 +154,7 @@ const noopLogger = {
 } as unknown as Logger;
 
 const testProviderRuntime = {
-  settingsService: {
-    get: () => undefined,
-    set: () => {},
-    getProviderSettings: () => ({}),
-  },
+  settingsService: new SettingsService(),
   config: undefined,
   runtimeId: 'test-provider-runtime',
   metadata: { source: 'test' },
@@ -179,11 +177,7 @@ function buildContext(
 ): CompressionContext {
   const defaultProvider = createFakeProvider('default-provider');
   const contextProviderRuntime = {
-    settingsService: {
-      get: () => undefined,
-      set: () => {},
-      getProviderSettings: () => ({}),
-    },
+    settingsService: new SettingsService(),
     config: undefined,
     runtimeId: 'test-provider-runtime',
     metadata: { source: 'test' },
@@ -235,7 +229,16 @@ function buildContext(
       contents.length * 100,
     currentTokenCount: overrides.currentTokenCount ?? 5000,
     logger: noopLogger,
-    resolveProvider,
+    resolveProvider: (profileName) => {
+      const resolved = resolveProvider(profileName);
+      return {
+        ...resolved,
+        invocation: captureProviderInvocation(
+          resolved.runtime,
+          resolved.provider.name,
+        ),
+      };
+    },
     promptResolver,
     promptBaseDir: '/tmp/test-prompts',
     promptContext: {

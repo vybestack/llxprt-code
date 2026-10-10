@@ -26,15 +26,24 @@ export interface PolicyLogger {
  * MessageBus provides event-driven communication for tool confirmations and policy decisions.
  * Uses EventEmitter for pub/sub pattern and integrates with PolicyEngine for authorization.
  */
+export interface PolicyDecisionPort {
+  evaluate(
+    toolName: string,
+    args: Record<string, unknown>,
+    serverName?: string,
+  ): PolicyDecision;
+}
+
 export class MessageBus {
   private readonly emitter: EventEmitter;
-  private readonly policyEngine: PolicyEngine;
+  private readonly pendingConfirmations = new Set<() => void>();
+  private readonly policyEngine: PolicyDecisionPort;
   private readonly debugMode: boolean;
   private readonly logger?: PolicyLogger;
   private readonly confirmationTimeoutMs: number;
 
   constructor(
-    policyEngine?: PolicyEngine,
+    policyEngine?: PolicyDecisionPort,
     debugMode = false,
     logger?: PolicyLogger,
     confirmationTimeoutMs = 300000,
@@ -74,6 +83,14 @@ export class MessageBus {
     this.emitter.off(type, handler as MessageHandler);
   }
 
+  evaluate(
+    toolName: string,
+    args: Record<string, unknown>,
+    serverName?: string,
+  ): PolicyDecision {
+    return this.policyEngine.evaluate(toolName, args, serverName);
+  }
+
   async requestConfirmation(
     toolCall: PolicyFunctionCall,
     args: Record<string, unknown>,
@@ -85,11 +102,7 @@ export class MessageBus {
       throw new Error('Tool call must have a name');
     }
 
-    const decision = this.policyEngine.evaluate(
-      toolCall.name,
-      args,
-      serverName,
-    );
+    const decision = this.evaluate(toolCall.name, args, serverName);
 
     if (this.debugMode) {
       this.logger?.log(
@@ -113,10 +126,12 @@ export class MessageBus {
     }
 
     return new Promise<boolean>((resolve) => {
-      const timeout = setTimeout(() => {
-        unsubscribe();
-        resolve(false);
-      }, this.confirmationTimeoutMs);
+      const cancel = this.cancelConfirmation(
+        () => clearTimeout(timeout),
+        () => unsubscribe(),
+        resolve,
+      );
+      const timeout = setTimeout(cancel, this.confirmationTimeoutMs);
 
       const unsubscribe = this.subscribe<ToolConfirmationResponse>(
         MessageBusType.TOOL_CONFIRMATION_RESPONSE,
@@ -124,6 +139,7 @@ export class MessageBus {
           if (response.correlationId === correlationId) {
             clearTimeout(timeout);
             unsubscribe();
+            this.pendingConfirmations.delete(cancel);
             let resolvedConfirmation: boolean;
             if (response.outcome !== undefined) {
               const isCancel = response.outcome === ConfirmationOutcome.Cancel;
@@ -142,6 +158,7 @@ export class MessageBus {
         },
       );
 
+      this.pendingConfirmations.add(cancel);
       this.publish({
         type: MessageBusType.TOOL_CONFIRMATION_REQUEST,
         toolCall,
@@ -180,10 +197,12 @@ export class MessageBus {
     const correlationId = randomUUID();
 
     return new Promise<boolean>((resolve) => {
-      const timeout = setTimeout(() => {
-        unsubscribe();
-        resolve(false);
-      }, this.confirmationTimeoutMs);
+      const cancel = this.cancelConfirmation(
+        () => clearTimeout(timeout),
+        () => unsubscribe(),
+        resolve,
+      );
+      const timeout = setTimeout(cancel, this.confirmationTimeoutMs);
 
       const unsubscribe = this.subscribe<BucketAuthConfirmationResponse>(
         MessageBusType.BUCKET_AUTH_CONFIRMATION_RESPONSE,
@@ -191,11 +210,13 @@ export class MessageBus {
           if (response.correlationId === correlationId) {
             clearTimeout(timeout);
             unsubscribe();
+            this.pendingConfirmations.delete(cancel);
             resolve(response.confirmed);
           }
         },
       );
 
+      this.pendingConfirmations.add(cancel);
       this.publish({
         type: MessageBusType.BUCKET_AUTH_CONFIRMATION_REQUEST,
         correlationId,
@@ -216,6 +237,24 @@ export class MessageBus {
       correlationId,
       confirmed,
     });
+  }
+
+  private cancelConfirmation(
+    clear: () => void,
+    unsubscribe: () => void,
+    resolve: (confirmed: boolean) => void,
+  ): () => void {
+    const cancel = (): void => {
+      clear();
+      unsubscribe();
+      this.pendingConfirmations.delete(cancel);
+      resolve(false);
+    };
+    return cancel;
+  }
+
+  cancelPendingConfirmations(): void {
+    for (const cancel of this.pendingConfirmations) cancel();
   }
 
   removeAllListeners(): void {

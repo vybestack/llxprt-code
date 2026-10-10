@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
+const composeFixtureRuntime = installWorkspaceRuntimeFixture();
+
 import {
   advanceTimersByTimeAsync,
   automock,
@@ -213,6 +216,7 @@ describe('InputPrompt', () => {
     mockedUseShellHistory.mockReturnValue(mockShellHistory);
 
     mockCommandCompletion = {
+      activeHint: '',
       suggestions: [],
       activeSuggestionIndex: -1,
       isLoadingSuggestions: false,
@@ -266,14 +270,12 @@ describe('InputPrompt', () => {
       onSubmit: vi.fn(),
       userMessages: [],
       onClearScreen: vi.fn(),
-      config: {
+      config: composeFixtureRuntime({
+        getMcpServers: () => undefined,
         getProjectRoot: () => path.join('test', 'project'),
         getTargetDir: () => path.join('test', 'project', 'src'),
         getVimMode: () => false,
-        getWorkspaceContext: () => ({
-          getDirectories: () => ['/test/project/src'],
-        }),
-      } as unknown as Config,
+      } as unknown as Config),
       slashCommands: mockSlashCommands,
       commandContext: mockCommandContext,
       shellModeActive: false,
@@ -323,7 +325,7 @@ describe('InputPrompt', () => {
         props.onSubmit = (value) => submittedValues.push(value);
         const rendered = renderWithProviders(
           <InputPromptWithRealBuffer props={props} initialText={initialText} />,
-          { kittyProtocolEnabled: true },
+          {},
         );
         let pasteCount = 0;
 
@@ -402,7 +404,7 @@ describe('InputPrompt', () => {
     });
 
     it.each([
-      { name: 'standard', kittyProtocolEnabled: false, escapeSequence: '\x1B' },
+      { name: 'standard', escapeSequence: '\x1B' },
       {
         name: 'kitty',
         kittyProtocolEnabled: true,
@@ -410,10 +412,10 @@ describe('InputPrompt', () => {
       },
     ])(
       'resets reverse search state on Escape ($name)',
-      async ({ kittyProtocolEnabled, escapeSequence }) => {
+      async ({ escapeSequence }) => {
         const { stdin, stdout, unmount } = renderWithProviders(
           <InputPrompt {...props} />,
-          { kittyProtocolEnabled },
+          {},
         );
 
         await act(async () => {
@@ -797,14 +799,14 @@ describe('InputPrompt', () => {
       async ({
         showSuggestions,
         ghostText,
-        suggestions,
+        suggestions: [...suggestions],
         expectedAcceptCall,
       }) => {
         const mockAccept = vi.fn();
         mockedUseCommandCompletion.mockReturnValue({
           ...mockCommandCompletion,
           showSuggestions,
-          suggestions,
+          suggestions: [...suggestions],
           promptCompletion: {
             text: ghostText,
             accept: mockAccept,

@@ -29,9 +29,6 @@ const mockRuntime = {
   clearActiveModelParam: vi.fn(),
 };
 
-void vi.mock('../../contexts/RuntimeContext.js', () => ({
-  getRuntimeApi: () => mockRuntime,
-}));
 import { setCommand } from '../setCommand.js';
 import { assertDefined } from '../../../__tests__/assertions.js';
 
@@ -73,6 +70,7 @@ assertDefined(commandSchema);
 describe('setCommand schema integration', () => {
   // Mock context for testing
   const mockContext: CommandContext = createMockCommandContext({
+    runtimeApi: mockRuntime,
     services: {
       config: {
         getEphemeralSettings: () => ({
@@ -80,15 +78,6 @@ describe('setCommand schema integration', () => {
           'compression-threshold': 0.7,
           streaming: 'enabled',
           'socket-timeout': 60_000,
-        }),
-        getProviderManager: () => ({
-          getActiveProvider: () => ({
-            name: 'test-provider',
-            getModelParams: () => ({
-              temperature: 0.7,
-              max_tokens: 1000,
-            }),
-          }),
         }),
       } as unknown as Config,
     },

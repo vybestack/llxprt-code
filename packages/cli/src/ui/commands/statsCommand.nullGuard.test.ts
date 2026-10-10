@@ -1,3 +1,4 @@
+import { detectFromProviderConfig } from '../../runtime/providerInspection.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -18,19 +19,9 @@ import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { MessageType } from '../types.js';
 
-const getCliOAuthManagerMock = vi.fn();
 const getEphemeralSettingMock = vi.fn();
 const getActiveProviderNameMock = vi.fn();
-const getCliProviderManagerMock = vi.fn();
-
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  getRuntimeApi: () => ({
-    getCliOAuthManager: getCliOAuthManagerMock,
-    getEphemeralSetting: getEphemeralSettingMock,
-    getActiveProviderName: getActiveProviderNameMock,
-    getCliProviderManager: getCliProviderManagerMock,
-  }),
-}));
+const providerManagerMock = vi.fn();
 
 describe('statsCommand null sessionStartTime guard', () => {
   let mockContext: CommandContext;
@@ -39,11 +30,21 @@ describe('statsCommand null sessionStartTime guard', () => {
     vi.useFakeTimers();
     setSystemTime(new Date('2025-07-14T10:00:30.000Z'));
 
-    mockContext = createMockCommandContext();
-    getCliOAuthManagerMock.mockReset();
+    mockContext = createMockCommandContext({
+      runtimeApi: {
+        getEphemeralSetting: getEphemeralSettingMock,
+        getActiveProviderName: getActiveProviderNameMock,
+        detectProviderQuota: (name: string) => {
+          const provider = providerManagerMock()?.getProviderByName(name);
+          return provider === undefined
+            ? undefined
+            : detectFromProviderConfig(provider);
+        },
+      },
+    });
     getEphemeralSettingMock.mockReset();
     getActiveProviderNameMock.mockReset();
-    getCliProviderManagerMock.mockReset();
+    providerManagerMock.mockReset();
     getEphemeralSettingMock.mockReturnValue(undefined);
   });
 

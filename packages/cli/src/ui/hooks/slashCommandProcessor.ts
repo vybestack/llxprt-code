@@ -87,6 +87,7 @@ export const useSlashCommandProcessor = (
   todoContext?: TodoContextValue,
   recordingIntegration?: RecordingIntegration,
   recordingSwapCallbacks?: RecordingSwapCallbacks,
+  recordingOwner?: 'agent' | 'raw',
 ) =>
   useSlashCommandProcessorCore({
     config,
@@ -106,4 +107,5 @@ export const useSlashCommandProcessor = (
     todoContext,
     recordingIntegration,
     recordingSwapCallbacks,
+    recordingOwner,
   });

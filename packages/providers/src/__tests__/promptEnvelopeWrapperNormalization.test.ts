@@ -1,3 +1,6 @@
+import { captureProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
+import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
+const fixtureOwners = installRuntimeTestOwners();
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -27,7 +30,7 @@ import type {
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { IModel } from '../IModel.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
 function makeContent(text: string): IContent {
@@ -36,33 +39,31 @@ function makeContent(text: string): IContent {
 
 /** Minimal Config shape the wrapper's logging path validates. */
 function buildConfigStub(): Config {
-  return {
-    getConversationLoggingEnabled: () => false,
-    getRedactionConfig: () => ({
-      redactApiKeys: false,
-      redactCredentials: false,
-      redactFilePaths: false,
-      redactUrls: false,
-      redactEmails: false,
-      redactPersonalInfo: false,
-    }),
-    getProviderManager: () => ({ accumulateSessionTokens: () => {} }),
-  } as unknown as Config;
+  return new Config({
+    sessionId: 'envelope',
+    targetDir: process.cwd(),
+    cwd: process.cwd(),
+    debugMode: false,
+    model: 'test-model',
+    telemetry: { enabled: false },
+  });
 }
 
 interface ObservedOptions {
   readonly runtimeId: string | undefined;
   readonly settingsPresent: boolean;
-  readonly configPresent: boolean;
+  readonly ownerFields: string[];
   readonly metadataSource: unknown;
   readonly normalizerApplied: unknown;
 }
 
 function observe(options: GenerateChatOptions): ObservedOptions {
   return {
-    runtimeId: options.runtime?.runtimeId,
-    settingsPresent: options.settings !== undefined,
-    configPresent: (options.config ?? options.runtime?.config) !== undefined,
+    runtimeId: options.invocation?.runtimeId,
+    settingsPresent: options.invocation !== undefined,
+    ownerFields: Object.keys(options).filter((key) =>
+      ['runtime', 'config', 'settings'].includes(key),
+    ),
     metadataSource: options.metadata?.source,
     normalizerApplied: options.metadata?.normalizerApplied,
   };
@@ -127,7 +128,13 @@ function buildManagedWrapper(base: RecordingProvider): {
     metadata: { source: 'ProviderManager.syncProviderRuntime' },
   };
 
-  const wrapper = new LoggingProviderWrapper(base);
+  const wrapperSettings1 = fixtureOwners.adopt(
+    config,
+    new SettingsService(),
+  ).settingsOwner;
+  const wrapper = new LoggingProviderWrapper(base, config, undefined, () =>
+    captureProviderRequestDiagnostics(config, wrapperSettings1),
+  );
   wrapper.setRuntimeContextResolver(() => runtime);
   wrapper.setOptionsNormalizer((options) => ({
     ...options,
@@ -146,7 +153,7 @@ describe('LoggingProviderWrapper projection normalization parity (issue #2817)',
 
     expect(base.projectionInput?.runtimeId).toBe('managed-runtime');
     expect(base.projectionInput?.settingsPresent).toBe(true);
-    expect(base.projectionInput?.configPresent).toBe(true);
+    expect(base.projectionInput?.ownerFields).toStrictEqual([]);
   });
 
   it('applies the ProviderManager options normalizer to projection options', async () => {
@@ -179,7 +186,7 @@ describe('LoggingProviderWrapper projection normalization parity (issue #2817)',
     // undefined, which would hide normalization being skipped on both.)
     expect(base.projectionInput?.runtimeId).toBe('managed-runtime');
     expect(base.projectionInput?.settingsPresent).toBe(true);
-    expect(base.projectionInput?.configPresent).toBe(true);
+    expect(base.projectionInput?.ownerFields).toStrictEqual([]);
     expect(base.projectionInput?.metadataSource).toBe(
       'LoggingProviderWrapper.generateChatCompletion',
     );
@@ -187,7 +194,7 @@ describe('LoggingProviderWrapper projection normalization parity (issue #2817)',
 
     expect(base.transportInput?.runtimeId).toBe('managed-runtime');
     expect(base.transportInput?.settingsPresent).toBe(true);
-    expect(base.transportInput?.configPresent).toBe(true);
+    expect(base.transportInput?.ownerFields).toStrictEqual([]);
     expect(base.transportInput?.metadataSource).toBe(
       'LoggingProviderWrapper.generateChatCompletion',
     );
@@ -200,8 +207,8 @@ describe('LoggingProviderWrapper projection normalization parity (issue #2817)',
     expect(base.projectionInput?.settingsPresent).toBe(
       base.transportInput?.settingsPresent,
     );
-    expect(base.projectionInput?.configPresent).toBe(
-      base.transportInput?.configPresent,
+    expect(base.projectionInput?.ownerFields).toStrictEqual(
+      base.transportInput?.ownerFields,
     );
     expect(base.projectionInput?.normalizerApplied).toBe(
       base.transportInput?.normalizerApplied,

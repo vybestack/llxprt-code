@@ -22,6 +22,7 @@ import {
   type Mock,
 } from 'bun:test';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
+import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import { SubAgentScope } from './subagent.js';
 import {
   ContextState,
@@ -151,8 +152,11 @@ describe('subagent.ts', () => {
     (
       ChatSession as unknown as Mock<(...args: never[]) => unknown>
     ).mockImplementation(
-      () =>
+      (runtime: AgentRuntimeContext) =>
         ({
+          getStreamTimeoutPolicy: () => runtime.readStreamTimeoutPolicy(),
+          shouldShowCitations: () => runtime.showCitations(),
+          getResolvedBaseUrl: () => undefined,
           sendMessageStream: mockSendMessageStream,
           recordCompletedToolCalls: vi.fn(),
           getHistory: vi.fn().mockReturnValue([]),
@@ -176,7 +180,7 @@ describe('subagent.ts', () => {
     const promptConfig: PromptConfig = { systemPrompt: 'Execute task.' };
 
     it('should terminate with MAX_TURNS if the limit is reached', async () => {
-      const { config } = await createMockConfig();
+      const { config, mcpRuntime, settingsService } = await createMockConfig();
       const runConfig: RunConfig = { ...defaultRunConfig, max_turns: 2 };
 
       // Model keeps looping by calling emitvalue repeatedly
@@ -204,7 +208,10 @@ describe('subagent.ts', () => {
         ]),
       );
 
-      const { overrides: maxTurnOverrides } = createRuntimeOverrides();
+      const { overrides: maxTurnOverrides } = createRuntimeOverrides(
+        mcpRuntime.workspaceFilesystem.paths,
+        { settings: settingsService },
+      );
       const scope = await SubAgentScope.create(
         'test-agent',
         config,
@@ -225,7 +232,7 @@ describe('subagent.ts', () => {
     });
 
     it('should terminate with TIMEOUT if the time limit is reached during an LLM call', async () => {
-      const { config } = await createMockConfig();
+      const { config, mcpRuntime, settingsService } = await createMockConfig();
       // Install fake timers after config creation so config/auth setup runs on
       // real timers; fake timers freeze Date.now/performance.now/hrtime and
       // stop Bun's per-test timeout from firing.
@@ -251,7 +258,10 @@ describe('subagent.ts', () => {
       let scope: SubAgentScope | undefined;
       let runPromise: Promise<void> | undefined;
       try {
-        const { overrides: timeoutOverrides } = createRuntimeOverrides();
+        const { overrides: timeoutOverrides } = createRuntimeOverrides(
+          mcpRuntime.workspaceFilesystem.paths,
+          { settings: settingsService },
+        );
         scope = await SubAgentScope.create(
           'test-agent',
           config,
@@ -316,9 +326,13 @@ describe('subagent.ts', () => {
 
     const observeActivelyAbortAStalledNonInteractiveResponseStreamBeforeTheOverallRun =
       async () => {
-        const { config } = await createMockConfig();
+        const { config, mcpRuntime, settingsOwner, settingsService } =
+          await createMockConfig();
         const testTimeoutMs = 30_000; // 30 second timeout for this test
-        config.setEphemeralSetting('stream-idle-timeout-ms', testTimeoutMs);
+        settingsOwner.writeUserParameter(
+          'stream-idle-timeout-ms',
+          testTimeoutMs,
+        );
         // Install fake timers after config creation so config/auth setup runs
         // on real timers; fake timers freeze Date.now/performance.now/hrtime
         // and stop Bun's per-test timeout from firing.
@@ -356,7 +370,10 @@ describe('subagent.ts', () => {
           },
         );
 
-        const { overrides } = createRuntimeOverrides();
+        const { overrides } = createRuntimeOverrides(
+          mcpRuntime.workspaceFilesystem.paths,
+          { settings: settingsService },
+        );
         const scope = await SubAgentScope.create(
           'test-agent',
           config,
@@ -402,10 +419,13 @@ describe('subagent.ts', () => {
       };
 
     it('should terminate with ERROR if the model call throws', async () => {
-      const { config } = await createMockConfig();
+      const { config, mcpRuntime, settingsService } = await createMockConfig();
       mockSendMessageStream.mockRejectedValue(new Error('API Failure'));
 
-      const { overrides: errorOverrides } = createRuntimeOverrides();
+      const { overrides: errorOverrides } = createRuntimeOverrides(
+        mcpRuntime.workspaceFilesystem.paths,
+        { settings: settingsService },
+      );
       const scope = await SubAgentScope.create(
         'test-agent',
         config,
@@ -434,7 +454,8 @@ describe('subagent.ts', () => {
 
     const observeActivelyAbortAHungNonInteractiveModelCallWhenTheTimeLimit =
       async () => {
-        const { config } = await createMockConfig();
+        const { config, mcpRuntime, settingsService } =
+          await createMockConfig();
         const runConfig: RunConfig = {
           max_time_minutes: 0.001,
           max_turns: 100,
@@ -471,7 +492,10 @@ describe('subagent.ts', () => {
           },
         );
 
-        const { overrides } = createRuntimeOverrides();
+        const { overrides } = createRuntimeOverrides(
+          mcpRuntime.workspaceFilesystem.paths,
+          { settings: settingsService },
+        );
         const scope = await SubAgentScope.create(
           'test-agent',
           config,
@@ -516,7 +540,7 @@ describe('subagent.ts', () => {
 
   it('treats eager completed-tool persistence as best-effort during interactive runs', async () => {
     const promptConfig: PromptConfig = { systemPrompt: 'Execute task.' };
-    const { config } = await createMockConfig();
+    const { config, mcpRuntime, settingsService } = await createMockConfig();
     const runConfig: RunConfig = { ...defaultRunConfig, max_turns: 1 };
     const recordCompletedToolCalls = vi.fn(() => {
       throw new Error('history write failed');
@@ -524,8 +548,11 @@ describe('subagent.ts', () => {
     (
       ChatSession as unknown as Mock<(...args: never[]) => unknown>
     ).mockImplementationOnce(
-      () =>
+      (runtime: AgentRuntimeContext) =>
         ({
+          getStreamTimeoutPolicy: () => runtime.readStreamTimeoutPolicy(),
+          shouldShowCitations: () => runtime.showCitations(),
+          getResolvedBaseUrl: () => undefined,
           sendMessageStream: mockSendMessageStream,
           recordCompletedToolCalls,
           getHistory: vi.fn().mockReturnValue([]),
@@ -549,7 +576,11 @@ describe('subagent.ts', () => {
         }),
       },
     });
-    const { overrides } = createRuntimeOverrides({ runtimeBundle });
+    const { overrides } = createRuntimeOverrides(
+      mcpRuntime.workspaceFilesystem.paths,
+      { settings: settingsService },
+      { runtimeBundle },
+    );
 
     const scope = await SubAgentScope.create(
       'interactive-best-effort-agent',
@@ -616,10 +647,14 @@ describe('subagent.ts', () => {
 
   describe('dispose', () => {
     it('should abort active operations when dispose is called', async () => {
-      const { config } = await createMockConfig();
+      const { config, mcpRuntime, settingsService } = await createMockConfig();
 
       const runtimeBundle = createStatelessRuntimeBundle();
-      const { overrides } = createRuntimeOverrides({ runtimeBundle });
+      const { overrides } = createRuntimeOverrides(
+        mcpRuntime.workspaceFilesystem.paths,
+        { settings: settingsService },
+        { runtimeBundle },
+      );
 
       const scope = await SubAgentScope.create(
         'test-agent',
@@ -644,7 +679,7 @@ describe('subagent.ts', () => {
     });
 
     it('should clean up parent abort signal listener when dispose is called', async () => {
-      const { config } = await createMockConfig();
+      const { config, mcpRuntime, settingsService } = await createMockConfig();
 
       const parentAbortController = new AbortController();
       const removeEventListenerSpy = vi.spyOn(
@@ -653,7 +688,11 @@ describe('subagent.ts', () => {
       );
 
       const runtimeBundle = createStatelessRuntimeBundle();
-      const { overrides } = createRuntimeOverrides({ runtimeBundle });
+      const { overrides } = createRuntimeOverrides(
+        mcpRuntime.workspaceFilesystem.paths,
+        { settings: settingsService },
+        { runtimeBundle },
+      );
 
       const scope = await SubAgentScope.create(
         'test-agent',
@@ -679,10 +718,14 @@ describe('subagent.ts', () => {
     });
 
     it('should be safe to call dispose multiple times', async () => {
-      const { config } = await createMockConfig();
+      const { config, mcpRuntime, settingsService } = await createMockConfig();
 
       const runtimeBundle = createStatelessRuntimeBundle();
-      const { overrides } = createRuntimeOverrides({ runtimeBundle });
+      const { overrides } = createRuntimeOverrides(
+        mcpRuntime.workspaceFilesystem.paths,
+        { settings: settingsService },
+        { runtimeBundle },
+      );
 
       const scope = await SubAgentScope.create(
         'test-agent',
@@ -704,10 +747,14 @@ describe('subagent.ts', () => {
     });
 
     it('should nullify active abort controller reference', async () => {
-      const { config } = await createMockConfig();
+      const { config, mcpRuntime, settingsService } = await createMockConfig();
 
       const runtimeBundle = createStatelessRuntimeBundle();
-      const { overrides } = createRuntimeOverrides({ runtimeBundle });
+      const { overrides } = createRuntimeOverrides(
+        mcpRuntime.workspaceFilesystem.paths,
+        { settings: settingsService },
+        { runtimeBundle },
+      );
 
       const scope = await SubAgentScope.create(
         'test-agent',
@@ -733,14 +780,15 @@ describe('subagent.ts', () => {
     });
 
     it('unblocks a stalled non-interactive run so no async work leaks between tests', async () => {
-      const { config } = await createMockConfig();
+      const { config, mcpRuntime, settingsOwner, settingsService } =
+        await createMockConfig();
       // Install fake timers after config creation so config/auth setup runs on
       // real timers; fake timers freeze Date.now/performance.now/hrtime and
       // stop Bun's per-test timeout from firing.
       vi.useFakeTimers();
       // Keep the idle watchdog from firing during the test window so only dispose
       // can unblock the stalled stream consumption.
-      config.setEphemeralSetting('stream-idle-timeout-ms', 60_000);
+      settingsOwner.writeUserParameter('stream-idle-timeout-ms', 60_000);
 
       let capturedSignal: AbortSignal | undefined;
       mockSendMessageStream.mockImplementation(
@@ -762,7 +810,11 @@ describe('subagent.ts', () => {
       let runRejection: Promise<unknown> | undefined;
       try {
         const runtimeBundle = createStatelessRuntimeBundle();
-        const { overrides } = createRuntimeOverrides({ runtimeBundle });
+        const { overrides } = createRuntimeOverrides(
+          mcpRuntime.workspaceFilesystem.paths,
+          { settings: settingsService },
+          { runtimeBundle },
+        );
 
         scope = await SubAgentScope.create(
           'test-agent',

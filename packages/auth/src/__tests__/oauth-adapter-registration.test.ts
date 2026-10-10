@@ -18,9 +18,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { AuthPrecedenceResolver } from '../auth-precedence-resolver.js';
 import type { OAuthManager, OAuthTokenRequestMetadata } from '../precedence.js';
 import type { OAuthToken } from '../types.js';
-import { ensureRuntimeState, runtimeScopedStates } from '../precedence.js';
 import type { ISettingsService } from '../interfaces/settings-service.js';
-import type { IProviderRuntimeContext } from '../interfaces/runtime-context.js';
 
 // ─── In-memory ISettingsService ──────────────────────────────────────────────
 
@@ -54,19 +52,6 @@ function createInMemorySettingsService(
       }
     },
   };
-}
-
-function createTestRuntimeContext(
-  runtimeId: string,
-  settingsService?: ISettingsService,
-): IProviderRuntimeContext {
-  const context: IProviderRuntimeContext = {
-    settingsService: settingsService ?? createInMemorySettingsService(),
-    runtimeId,
-    metadata: {},
-  };
-  ensureRuntimeState(context);
-  return context;
 }
 
 // ─── Fake provider OAuthManagers ─────────────────────────────────────────────
@@ -151,27 +136,14 @@ class MultiProviderOAuthManager implements OAuthManager {
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe('Adapter registration and provider injection', () => {
-  beforeEach(() => {
-    for (const key of [...runtimeScopedStates.keys()]) {
-      runtimeScopedStates.delete(key);
-    }
-  });
+  beforeEach(() => {});
 
-  afterEach(() => {
-    for (const key of [...runtimeScopedStates.keys()]) {
-      runtimeScopedStates.delete(key);
-    }
-  });
+  afterEach(() => {});
 
   describe('new provider registration without auth package changes', () => {
     it('AcmeOAuthManager resolves tokens for a previously unknown provider', async () => {
       const settings = createInMemorySettingsService();
       const oauthManager = new AcmeOAuthManager();
-
-      const runtimeContext = createTestRuntimeContext(
-        'runtime-acme-registration',
-        settings,
-      );
 
       // AuthPrecedenceResolver doesn't know anything about "acme-ai" —
       // it just passes the provider name to the OAuthManager
@@ -185,7 +157,6 @@ describe('Adapter registration and provider injection', () => {
         {
           settingsService: settings,
           oauthManager,
-          getActiveRuntimeContext: () => runtimeContext,
         },
       );
 
@@ -199,11 +170,6 @@ describe('Adapter registration and provider injection', () => {
       const settings = createInMemorySettingsService();
       const oauthManager = new ZetaCorpOAuthManager();
 
-      const runtimeContext = createTestRuntimeContext(
-        'runtime-zetacorp-registration',
-        settings,
-      );
-
       const resolver = new AuthPrecedenceResolver(
         {
           providerId: 'zetacorp',
@@ -214,7 +180,6 @@ describe('Adapter registration and provider injection', () => {
         {
           settingsService: settings,
           oauthManager,
-          getActiveRuntimeContext: () => runtimeContext,
         },
       );
 
@@ -230,11 +195,6 @@ describe('Adapter registration and provider injection', () => {
       oauthManager.registerProviderToken('provider-alpha', 'alpha-token');
       oauthManager.registerProviderToken('provider-beta', 'beta-token');
 
-      const runtimeContext = createTestRuntimeContext(
-        'runtime-multi-registration',
-        settings,
-      );
-
       // Resolve for alpha
       const resolverAlpha = new AuthPrecedenceResolver(
         {
@@ -246,7 +206,6 @@ describe('Adapter registration and provider injection', () => {
         {
           settingsService: settings,
           oauthManager,
-          getActiveRuntimeContext: () => runtimeContext,
         },
       );
       const alphaResult = await resolverAlpha.resolveAuthentication({
@@ -265,7 +224,6 @@ describe('Adapter registration and provider injection', () => {
         {
           settingsService: settings,
           oauthManager,
-          getActiveRuntimeContext: () => runtimeContext,
         },
       );
       const betaResult = await resolverBeta.resolveAuthentication({
@@ -294,11 +252,6 @@ describe('Adapter registration and provider injection', () => {
         }),
       };
 
-      const runtimeContext = createTestRuntimeContext(
-        'runtime-tracking',
-        settings,
-      );
-
       const resolver = new AuthPrecedenceResolver(
         {
           providerId: 'brand-new-provider',
@@ -309,7 +262,6 @@ describe('Adapter registration and provider injection', () => {
         {
           settingsService: settings,
           oauthManager: trackingManager,
-          getActiveRuntimeContext: () => runtimeContext,
         },
       );
 
@@ -341,14 +293,6 @@ describe('Adapter registration and provider injection', () => {
 
       for (const providerName of providerNames) {
         // Clean runtime state between iterations
-        for (const key of [...runtimeScopedStates.keys()]) {
-          runtimeScopedStates.delete(key);
-        }
-        const ctx = createTestRuntimeContext(
-          `runtime-${providerName}`,
-          settings,
-        );
-
         const resolver = new AuthPrecedenceResolver(
           {
             providerId: providerName,
@@ -359,7 +303,6 @@ describe('Adapter registration and provider injection', () => {
           {
             settingsService: settings,
             oauthManager,
-            getActiveRuntimeContext: () => ctx,
           },
         );
 
@@ -390,11 +333,6 @@ describe('Adapter registration and provider injection', () => {
         }),
       };
 
-      const runtimeContext = createTestRuntimeContext(
-        'runtime-metadata',
-        settings,
-      );
-
       const resolver = new AuthPrecedenceResolver(
         {
           providerId: 'metadata-provider',
@@ -405,7 +343,6 @@ describe('Adapter registration and provider injection', () => {
         {
           settingsService: settings,
           oauthManager: metadataManager,
-          getActiveRuntimeContext: () => runtimeContext,
         },
       );
 
@@ -435,11 +372,6 @@ describe('Adapter registration and provider injection', () => {
         }),
       };
 
-      const runtimeContext = createTestRuntimeContext(
-        'runtime-lambda',
-        settings,
-      );
-
       const resolver = new AuthPrecedenceResolver(
         {
           providerId: 'lambda-provider',
@@ -450,7 +382,6 @@ describe('Adapter registration and provider injection', () => {
         {
           settingsService: settings,
           oauthManager: lambdaManager,
-          getActiveRuntimeContext: () => runtimeContext,
         },
       );
 
@@ -470,11 +401,6 @@ describe('Adapter registration and provider injection', () => {
         isAuthenticated: async () => false,
       };
 
-      const runtimeContext = createTestRuntimeContext(
-        'runtime-error',
-        settings,
-      );
-
       const resolver = new AuthPrecedenceResolver(
         {
           providerId: 'error-provider',
@@ -485,7 +411,6 @@ describe('Adapter registration and provider injection', () => {
         {
           settingsService: settings,
           oauthManager: errorManager,
-          getActiveRuntimeContext: () => runtimeContext,
         },
       );
 

@@ -153,6 +153,9 @@ describe('useSlashCommandActions', () => {
         const managers = useManagers(null);
         const actions = useSlashCommandActions(callbacks);
         return useCommandContext({
+          runtimeApi: context.runtimeApi,
+          refreshProviderAliases: context.refreshProviderAliases,
+          oauthControl: context.oauthControl,
           ...managers,
           config: null,
           agent: null,

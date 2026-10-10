@@ -16,7 +16,7 @@
  *
  * Filesystem isolation follows the established composition-test pattern:
  * `vi.mock('strip-json-comments')`, `vi.mock('os')`, and a {@link MockFileSystem}
- * wired via {@link setFileSystem} so the factory never reads the real user
+ * injected into the owner factory so it never reads the real user
  * settings file.
  */
 
@@ -50,7 +50,6 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { MockFileSystem } from '../composition/IFileSystem.js';
-import { setFileSystem } from '../composition/providerManagerInstance.js';
 import { createHeadlessProviderManager } from '../composition/headlessFactory.js';
 import { OpenAIProvider } from '../openai/OpenAIProvider.js';
 import type { IProvider, GenerateChatOptions } from '../IProvider.js';
@@ -65,11 +64,13 @@ describe('headless provider-manager construction (issue #1594)', () => {
     mockFileSystem = new MockFileSystem();
     // No mock settings file is registered, so resolveUserSettings() returns
     // undefined and the factory uses defaults — no real user settings are read.
-    setFileSystem(mockFileSystem);
   });
 
   it('constructs a working manager for openai', () => {
-    const { manager } = createHeadlessProviderManager({ provider: 'openai' });
+    const { manager } = createHeadlessProviderManager({
+      fileSystem: mockFileSystem,
+      provider: 'openai',
+    });
 
     expect(manager.hasActiveProvider()).toBe(true);
     expect(manager.getActiveProviderName()).toBe('openai');
@@ -78,6 +79,7 @@ describe('headless provider-manager construction (issue #1594)', () => {
 
   it('constructs a working manager for anthropic', () => {
     const { manager } = createHeadlessProviderManager({
+      fileSystem: mockFileSystem,
       provider: 'anthropic',
     });
 
@@ -88,6 +90,7 @@ describe('headless provider-manager construction (issue #1594)', () => {
 
   it('returns an OAuth manager alongside the provider manager', () => {
     const { oauthManager } = createHeadlessProviderManager({
+      fileSystem: mockFileSystem,
       provider: 'openai',
     });
     expect(oauthManager).toBeDefined();
@@ -96,6 +99,7 @@ describe('headless provider-manager construction (issue #1594)', () => {
   it('throws when an unregistered provider is requested', () => {
     expect(() =>
       createHeadlessProviderManager({
+        fileSystem: mockFileSystem,
         provider: 'this-provider-does-not-exist',
       }),
     ).toThrow(/Provider .* not found/);
@@ -108,6 +112,7 @@ describe('headless provider-manager construction (issue #1594)', () => {
     // the option is functional (not a no-op) without needing network or keys.
     const requestedModel = 'gpt-4o';
     const { manager } = createHeadlessProviderManager({
+      fileSystem: mockFileSystem,
       provider: 'openai',
       model: requestedModel,
     });
@@ -166,7 +171,10 @@ describe('headless provider-manager construction (issue #1594)', () => {
       }
     }
 
-    const { manager } = createHeadlessProviderManager({ provider: 'openai' });
+    const { manager } = createHeadlessProviderManager({
+      fileSystem: mockFileSystem,
+      provider: 'openai',
+    });
     manager.registerProvider(new InlineFakeProvider());
     manager.setActiveProvider('inline-fake');
 

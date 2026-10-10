@@ -22,7 +22,7 @@ import {
 import { AgentClient } from './client.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ChatSession } from './chatSession.js';
-import { ideContext } from '@vybestack/llxprt-code-ide-integration';
+import { createClientIdeFixture } from './__tests__/client-ide-fixture.js';
 import {
   setupAgentClient,
   type MockResponseShape,
@@ -170,17 +170,6 @@ void vi.mock('@vybestack/llxprt-code-core/telemetry/index.js', () => ({
 void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   retryWithBackoff: vi.fn((apiCall) => apiCall()),
 }));
-const actual3 = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
-void vi.mock('@vybestack/llxprt-code-ide-integration', () => ({
-  ...actual3,
-  ideContext: {
-    ...actual3.ideContext,
-    getIdeContext: vi.fn(),
-    subscribeToIdeContext: vi.fn(),
-    setIdeContext: vi.fn(),
-    clearIdeContext: vi.fn(),
-  },
-}));
 const actual4 = {
   ...(await import('@vybestack/llxprt-code-core/core/tokenLimits.js')),
 };
@@ -209,6 +198,7 @@ void vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
 
 describe('Agent Client (client.ts)', () => {
   let client: AgentClient;
+  let ide: Awaited<ReturnType<typeof createClientIdeFixture>>;
 
   beforeEach(async () => {
     const ctx = await setupAgentClient({
@@ -217,6 +207,7 @@ describe('Agent Client (client.ts)', () => {
       mockEmbedContentFn,
     });
     client = ctx.client;
+    ide = await createClientIdeFixture(client);
 
     mockTodoStoreConstructor.mockImplementation(() => ({
       readTodos: todoStoreReadMock,
@@ -230,6 +221,7 @@ describe('Agent Client (client.ts)', () => {
 
   afterEach(async () => {
     await client.dispose();
+    await ide.dispose();
     vi.restoreAllMocks();
   });
 
@@ -243,7 +235,7 @@ describe('Agent Client (client.ts)', () => {
         // Reset the ideContextTracker so it is in "delta mode" (not forced full)
         // by calling recordSentContext with a dummy context
         client['ideContextTracker']['forceFullIdeContext'] = false;
-        vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(true);
+        ide.setEnabled(true);
         mockTurnRunFn.mockReturnValue(mockStream);
 
         const mockChat: Partial<ChatSession> = {
@@ -418,9 +410,7 @@ describe('Agent Client (client.ts)', () => {
         };
 
         // Setup current context
-        (
-          ideContext.getIdeContext as Mock<typeof ideContext.getIdeContext>
-        ).mockReturnValue({
+        await ide.update({
           workspaceState: {
             openFiles: [
               { ...currentActiveFile, isActive: true, timestamp: Date.now() },
@@ -484,9 +474,7 @@ describe('Agent Client (client.ts)', () => {
         };
 
         // Setup current context (same as previous)
-        (
-          ideContext.getIdeContext as Mock<typeof ideContext.getIdeContext>
-        ).mockReturnValue({
+        await ide.update({
           workspaceState: {
             openFiles: [
               { ...activeFile, isActive: true, timestamp: Date.now() },

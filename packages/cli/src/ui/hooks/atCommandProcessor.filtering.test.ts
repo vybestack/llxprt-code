@@ -20,6 +20,7 @@ import * as path from 'path';
 import * as fsPromises from 'fs/promises';
 import {
   createTestFile,
+  unexpectedResourceRead,
   setupAtCommandTest,
   teardownAtCommandTest,
   type AtCommandTestSetup,
@@ -68,6 +69,8 @@ describe('handleAtCommand (filtering)', () => {
       const query = '@node_modules/package.json';
 
       const result = await handleAtCommand({
+        readResource: unexpectedResourceRead,
+        findResource: () => undefined,
         query,
         config: mockConfig,
         addItem: mockAddItem,
@@ -102,6 +105,8 @@ describe('handleAtCommand (filtering)', () => {
       const query = `@${relativePath}`;
 
       const result = await handleAtCommand({
+        readResource: unexpectedResourceRead,
+        findResource: () => undefined,
         query,
         config: mockConfig,
         addItem: mockAddItem,
@@ -134,6 +139,8 @@ describe('handleAtCommand (filtering)', () => {
       const query = `@${relativePath1} @${relativePath2}`;
 
       const result = await handleAtCommand({
+        readResource: unexpectedResourceRead,
+        findResource: () => undefined,
         query,
         config: mockConfig,
         addItem: mockAddItem,
@@ -168,6 +175,8 @@ describe('handleAtCommand (filtering)', () => {
       const query = '@.git/config';
 
       const result = await handleAtCommand({
+        readResource: unexpectedResourceRead,
+        findResource: () => undefined,
         query,
         config: mockConfig,
         addItem: mockAddItem,
@@ -203,6 +212,8 @@ describe('handleAtCommand (filtering)', () => {
       const query = `@${invalidFile}`;
 
       const result = await handleAtCommand({
+        readResource: unexpectedResourceRead,
+        findResource: () => undefined,
         query,
         config: mockConfig,
         addItem: mockAddItem,
@@ -236,6 +247,8 @@ describe('handleAtCommand (filtering)', () => {
       const query = '@build/output.js';
 
       const result = await handleAtCommand({
+        readResource: unexpectedResourceRead,
+        findResource: () => undefined,
         query,
         config: mockConfig,
         addItem: mockAddItem,
@@ -270,6 +283,8 @@ describe('handleAtCommand (filtering)', () => {
     const query = `@${relativePath}`;
 
     const result = await handleAtCommand({
+      readResource: unexpectedResourceRead,
+      findResource: () => undefined,
       query,
       config: mockConfig,
       addItem: mockAddItem,
@@ -308,6 +323,8 @@ describe('handleAtCommand (filtering)', () => {
     const query = `@${relativePath1} @${relativePath2}`;
 
     const result = await handleAtCommand({
+      readResource: unexpectedResourceRead,
+      findResource: () => undefined,
       query,
       config: mockConfig,
       addItem: mockAddItem,

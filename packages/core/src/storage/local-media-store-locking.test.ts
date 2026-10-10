@@ -10,6 +10,7 @@ import {
 } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
+import { unwatchFile, watchFile } from 'node:fs';
 import {
   chmod,
   link as publishLink,
@@ -21,7 +22,6 @@ import {
   rm,
   stat,
   utimes,
-  watch,
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -110,37 +110,39 @@ describe('local-media-store-locking', () => {
     }
   }
 
-  async function waitForPath(path: string, directory: string): Promise<void> {
-    if (await Bun.file(path).exists()) return;
-    const controller = new AbortController();
-    const events = watch(directory, { signal: controller.signal });
-    try {
-      if (await Bun.file(path).exists()) return;
-      for await (const _event of events) {
-        if (await Bun.file(path).exists()) return;
-      }
-      throw new Error(`Filesystem watch ended before ${path} appeared`);
-    } finally {
-      controller.abort();
-    }
+  function waitForFileState(
+    path: string,
+    ready: () => Promise<boolean>,
+  ): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const observe = (): void => {
+        void ready().then(
+          (isReady) => {
+            if (isReady) {
+              unwatchFile(path, observe);
+              resolve();
+            }
+          },
+          (error: unknown) => {
+            unwatchFile(path, observe);
+            reject(error);
+          },
+        );
+      };
+      watchFile(path, { interval: 10 }, observe);
+      observe();
+    });
   }
 
-  async function waitForMtimeAfterEpoch(
+  function waitForPath(path: string, _directory: string): Promise<void> {
+    return waitForFileState(path, () => Bun.file(path).exists());
+  }
+
+  function waitForMtimeAfterEpoch(
     path: string,
-    directory: string,
+    _directory: string,
   ): Promise<void> {
-    if ((await stat(path)).mtimeMs > 0) return;
-    const controller = new AbortController();
-    const events = watch(directory, { signal: controller.signal });
-    try {
-      if ((await stat(path)).mtimeMs > 0) return;
-      for await (const _event of events) {
-        if ((await stat(path)).mtimeMs > 0) return;
-      }
-      throw new Error(`Filesystem watch ended before ${path} was renewed`);
-    } finally {
-      controller.abort();
-    }
+    return waitForFileState(path, async () => (await stat(path)).mtimeMs > 0);
   }
 
   function parseChildReference(serialized: string): MediaReferenceBlock {

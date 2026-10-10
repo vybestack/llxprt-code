@@ -132,54 +132,21 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
         warnings: [],
       }),
     ),
-    getCliRuntimeContext: vi.fn(() => runtimeSettingsState.context),
-    setCliRuntimeContext: vi.fn(
-      (
-        settingsService: SettingsService,
-        config?: ServerConfig.Config,
-        options: {
-          metadata?: Record<string, unknown>;
-          runtimeId?: string;
-        } = {},
-      ) => {
-        runtimeSettingsState.context = {
-          settingsService,
-          config: config ?? null,
-          runtimeId: options.runtimeId ?? 'mock-runtime',
-          metadata: options.metadata ?? {},
-        };
-      },
-    ),
     switchActiveProvider: vi.fn(async () => ({
       changed: true,
       previousProvider: null,
       nextProvider: 'mock-provider',
       infoMessages: [],
     })),
-    registerCliProviderInfrastructure: vi.fn(
-      (manager: ServerConfig.RuntimeProviderManager, oauthManager: unknown) => {
-        runtimeSettingsState.providerManager = manager;
-        runtimeSettingsState.oauthManager = oauthManager ?? null;
-      },
-    ),
     applyCliArgumentOverrides: vi.fn(async () => {}),
-    getCliRuntimeConfig: vi.fn(
-      () => runtimeSettingsState.context?.config ?? null,
-    ),
-    getCliRuntimeServices: vi.fn(() => ({
-      config: runtimeSettingsState.context?.config ?? null,
-      settingsService:
-        runtimeSettingsState.context?.settingsService ?? new SettingsService(),
-      providerManager: getProviderManager(),
-    })),
-    getCliProviderManager: vi.fn(() => runtimeSettingsState.providerManager),
-    getCliOAuthManager: vi.fn(() => {
+    providerManager: vi.fn(() => runtimeSettingsState.providerManager),
+    oauthManager: vi.fn(() => {
       if (runtimeSettingsState.oauthManager == null) {
         throw new Error('OAuthManager missing from runtime registration');
       }
       return runtimeSettingsState.oauthManager;
     }),
-    getActiveProviderStatus: vi.fn(() => ({
+    providerStatus: vi.fn(() => ({
       name:
         runtimeSettingsState.providerManager?.getActiveProviderName() ??
         runtimeSettingsState.context?.config?.getProvider() ??

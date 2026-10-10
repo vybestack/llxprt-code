@@ -4,15 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * The public image-operation capability contract exposed on `Config`.
- *
- * Declared once here and reused by the Config composition root, the CLI UI
- * runtime, and the `/image` command so the three consumers cannot drift.
- * It is deliberately narrower than {@link ImageOperationResult}: it carries
- * only the bounded path/identity metadata, never the base64 media payload.
- */
-
 /** Normalized input accepted by the shared image-operation runner. */
 export interface ImageOperationRunnerInput {
   readonly prompt: string;

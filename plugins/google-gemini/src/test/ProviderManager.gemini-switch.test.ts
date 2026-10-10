@@ -7,7 +7,6 @@
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { ProviderManager } from '@vybestack/llxprt-code-providers/ProviderManager.js';
 import type { IProvider } from '@vybestack/llxprt-code-providers/IProvider.js';
-import { ContentGeneratorRole } from '@vybestack/llxprt-code-providers/ContentGeneratorRole.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { GeminiProvider } from '../gemini/GeminiProvider.js';
@@ -31,11 +30,15 @@ describe('ProviderManager - Gemini switching', () => {
     manager = new ProviderManager(runtime);
     mockProvider = {
       name: 'openai',
+      getDefaultModel: () => 'test-model',
       async getModels() {
         return [];
       },
       async *generateChatCompletion() {
-        yield { role: ContentGeneratorRole.ASSISTANT, content: 'test' };
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'test' }],
+        } satisfies import('@vybestack/llxprt-code-core/services/history/IContent.js').IContent;
       },
     };
   });
@@ -117,7 +120,7 @@ describe('ProviderManager - Gemini switching', () => {
       roundtripManager.setConfig(makeFakeConfig());
 
       const gemini = new GeminiProvider();
-      const openai = new OpenAIProvider();
+      const openai = new OpenAIProvider(undefined);
       gemini.setRuntimeSettingsService(settings);
       openai.setRuntimeSettingsService(settings);
       settings.setProviderSetting('gemini', 'auth-key', 'gemini-key-1');

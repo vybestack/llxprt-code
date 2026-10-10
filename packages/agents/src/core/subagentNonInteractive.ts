@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
+import type { StreamTimeoutPolicy } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 /**
  * @fileoverview Non-interactive subagent execution path.
  *
@@ -19,6 +21,7 @@
 
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
 import type {
   IContent,
   ToolCallBlock,
@@ -86,6 +89,8 @@ export interface NonInteractiveRunContext {
   readonly outputConfig?: OutputConfig;
   readonly toolExecutorContext: ToolExecutionConfig;
   readonly messageBus?: MessageBus;
+  readonly hookOwner?: HookExecutionOwner;
+  readonly modelParameters?: AdmittedModelParameters;
 }
 
 /** Result of a single non-interactive turn iteration. */
@@ -199,7 +204,7 @@ export async function consumeNonInteractiveStream(
   responseStream: AsyncIterable<StreamEvent>,
   abortController: AbortController,
   currentTurn: number,
-  config: Config,
+  timeoutPolicy: StreamTimeoutPolicy,
   logger: DebugLogger,
   subagentId: string,
   output: OutputObject,
@@ -221,7 +226,7 @@ export async function consumeNonInteractiveStream(
   let reportedOutputTokens: number | undefined;
   let outputCharacterCount = 0;
   const iterator = responseStream[Symbol.asyncIterator]();
-  const effectiveTimeoutMs = resolveStreamIdleTimeoutMs(config);
+  const effectiveTimeoutMs = resolveStreamIdleTimeoutMs(timeoutPolicy);
 
   try {
     const readResult = await readStreamToCompletion(
@@ -392,6 +397,29 @@ function resolveNonInteractiveToolName(
  * Execute a single non-interactive turn: send the message, consume the
  * stream, and parse any textual tool calls.
  */
+async function sendNonInteractiveHookRequest(
+  chat: ChatSession,
+  currentMessages: IContent[],
+  toolsList: ToolDeclaration[],
+  signal: AbortSignal,
+  promptId: string,
+  modelParameters: AdmittedModelParameters | undefined,
+  hookOwner: HookExecutionOwner | undefined,
+): ReturnType<ChatSession['sendMessageStream']> {
+  return chat.sendMessageStream(
+    {
+      message: currentMessages[0]?.blocks ?? [],
+      modelParameters,
+      hookOwner,
+      config: {
+        abortSignal: signal,
+        tools: toolsList,
+      },
+    },
+    promptId,
+  );
+}
+
 export async function runNonInteractiveTurn(
   chat: ChatSession,
   currentMessages: IContent[],
@@ -404,25 +432,22 @@ export async function runNonInteractiveTurn(
   config: Config,
   logger: DebugLogger,
   output: OutputObject,
+  modelParameters?: AdmittedModelParameters,
+  hookOwner?: HookExecutionOwner,
 ): Promise<{
   functionCalls: ToolCallBlock[];
   textResponse: string;
   effectiveEmitterAvailable: boolean;
 }> {
-  const blocks = currentMessages[0]?.blocks ?? [];
-  const messageParams = {
-    message: blocks,
-    config: {
-      abortSignal: abortController.signal,
-      tools: toolsList,
-    },
-  } as unknown as Parameters<typeof chat.sendMessageStream>[0];
-
-  const responseStream = await chat.sendMessageStream(
-    messageParams,
+  const responseStream = await sendNonInteractiveHookRequest(
+    chat,
+    currentMessages,
+    toolsList,
+    abortController.signal,
     `${sessionId}#${subagentId}#${currentTurn}`,
+    modelParameters,
+    hookOwner,
   );
-
   const {
     functionCalls: rawCalls,
     textResponse,
@@ -434,7 +459,7 @@ export async function runNonInteractiveTurn(
     responseStream,
     abortController,
     currentTurn,
-    config,
+    chat.getStreamTimeoutPolicy(),
     logger,
     subagentId,
     output,
@@ -447,7 +472,6 @@ export async function runNonInteractiveTurn(
     };
   }
   recordTurnOutputTokens(execCtx, reportedOutputTokens, outputCharacterCount);
-
   const effectiveEmitterAvailable = hasEffectiveEmitter(
     toolsList,
     hookRestrictedAllowedTools,
@@ -522,6 +546,7 @@ export async function dispatchNonInteractiveTurnResult(
         toolExecutorContext: ctx.toolExecutorContext,
         config: ctx.config,
         messageBus: ctx.messageBus,
+        hookOwner: ctx.hookOwner,
       },
     );
     const emittedKeysAfterToolCalls = Object.keys(ctx.output.emitted_vars);
@@ -605,6 +630,8 @@ async function runNonInteractiveLoopIteration(
       ctx.config,
       ctx.logger,
       ctx.output,
+      ctx.modelParameters,
+      ctx.hookOwner,
     );
   if (abortController.signal.aborted === true) return { action: 'abort' };
 

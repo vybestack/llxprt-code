@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 /**
  * Behavioral tests for the openai-vercel local-endpoint auth exemption (issue #2506).
  *
@@ -53,10 +54,11 @@ function buildOptions(
   authToken: ResolvedAuthToken | undefined,
 ): NormalizedGenerateChatOptions {
   return {
-    settings: {
-      get: () => undefined,
-    } as unknown as NormalizedGenerateChatOptions['settings'],
-    invocation: {} as NormalizedGenerateChatOptions['invocation'],
+    invocation: createRuntimeInvocationContext({
+      runtimeId: 'local-auth',
+      providerName: 'openaivercel',
+      ephemeralsSnapshot: {},
+    }),
     metadata: {},
     resolved: {
       model: 'llama3',

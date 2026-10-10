@@ -6,15 +6,13 @@
 
 import { describe, expect, it, vi } from 'bun:test';
 import { ListSubagentsTool } from './list-subagents.js';
-import type { ISubagentService, SubagentConfig } from '../interfaces/index.js';
+import type { ISubagentCatalog, SubagentConfig } from '../interfaces/index.js';
 
 describe('ListSubagentsTool', () => {
-  const createMockService = (): ISubagentService =>
-    ({
-      executeSubagent: vi.fn(),
-      listSubagents: vi.fn().mockResolvedValue([]),
-      getSubagentConfig: vi.fn(),
-    }) as unknown as ISubagentService;
+  const createMockService = (): ISubagentCatalog => ({
+    listSubagents: vi.fn().mockResolvedValue([]),
+    getSubagentConfig: vi.fn(),
+  });
 
   it('returns summaries for available subagents', async () => {
     const service = createMockService();
@@ -27,7 +25,7 @@ describe('ListSubagentsTool', () => {
       updatedAt: '2025-01-05T00:00:00Z',
     } satisfies SubagentConfig);
 
-    const tool = new ListSubagentsTool({ getSubagentService: () => service });
+    const tool = new ListSubagentsTool(service);
     const invocation = tool.build({});
     const result = await invocation.execute(new AbortController().signal);
 
@@ -50,7 +48,7 @@ describe('ListSubagentsTool', () => {
       updatedAt: '2025-01-05T00:00:00Z',
     });
 
-    const tool = new ListSubagentsTool({ getSubagentService: () => service });
+    const tool = new ListSubagentsTool(service);
     const invocation = tool.build({});
     const result = await invocation.execute(new AbortController().signal);
 
@@ -61,7 +59,7 @@ describe('ListSubagentsTool', () => {
     const service = createMockService();
     vi.spyOn(service, 'listSubagents').mockResolvedValue([]);
 
-    const tool = new ListSubagentsTool({ getSubagentService: () => service });
+    const tool = new ListSubagentsTool(service);
     const invocation = tool.build({});
     const result = await invocation.execute(new AbortController().signal);
 
@@ -72,10 +70,13 @@ describe('ListSubagentsTool', () => {
     );
   });
 
-  it('throws when SubagentManager is unavailable', () => {
-    const tool = new ListSubagentsTool({ getSubagentService: () => undefined });
-    expect(() => tool.build({})).toThrow(
-      'SubagentManager service is unavailable. Please configure subagents before invoking this tool.',
+  it('surfaces catalog listing failures rather than reporting an empty list', async () => {
+    const service = createMockService();
+    vi.spyOn(service, 'listSubagents').mockRejectedValue(
+      new Error('Directory unavailable'),
+    );
+    await expect(new ListSubagentsTool(service).execute({})).rejects.toThrow(
+      'Directory unavailable',
     );
   });
 });

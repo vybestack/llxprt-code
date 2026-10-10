@@ -1,3 +1,5 @@
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -22,7 +24,7 @@ import {
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
+  createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { createTokenSyncTestFixture } from './__tests__/helpers/tokenSyncTestFixture.js';
@@ -126,10 +128,15 @@ function buildTokenSyncView(
     sessionId,
   });
   const providerManager = {
+    setActiveProvider: () => {},
+    getProviderByName: () => mockProvider,
     getActiveProvider: vi.fn(() => mockProvider),
   };
-  mockConfig.getProviderManager = vi.fn().mockReturnValue(providerManager);
   return createAgentRuntimeContext({
+    ...createSessionPolicyFixture(
+      providerRuntimeSnapshot.settingsService,
+      providerRuntimeSnapshot.runtimeId,
+    ),
     state: runtimeState,
     history: historyService,
     settings: {
@@ -138,8 +145,16 @@ function buildTokenSyncView(
       preserveThreshold: 0.2,
       telemetry: { enabled: true, target: null },
     },
-    provider: providerAdapterFromStub(mockConfig.getProviderManager()),
-    telemetry: createTelemetryAdapterFromConfig(mockConfig),
+    provider: providerAdapterFromStub(providerManager),
+    telemetry: createTelemetryAdapter(
+      mockConfig,
+      RootTelemetry.prepare({
+        enabled: false,
+        sessionId: 'isolated-adapter-fixture',
+        maxBytes: 1024,
+        maxFiles: 1,
+      }),
+    ),
     tools: createToolRegistryViewFromRegistry(),
     providerRuntime: providerRuntimeSnapshot,
   });

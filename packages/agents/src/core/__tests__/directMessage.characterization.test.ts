@@ -1,8 +1,14 @@
+import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
+import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
+import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { installModelToolFixture } from './model-tool-fixture.js';
+const modelTools = installModelToolFixture();
 
 /**
  * Direct-message characterization tests — pins the OBSERVABLE non-streaming
@@ -21,7 +27,6 @@
  */
 
 import { describe, it, expect, vi, type Mock } from 'bun:test';
-import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import * as fc from 'fast-check';
 
 import { ChatSession } from '../chatSession.js';
@@ -36,7 +41,7 @@ import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Age
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
+  createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -109,16 +114,18 @@ function makeProviderStream(chunks: IContent[]): AsyncGenerator<IContent> {
 // ---------------------------------------------------------------------------
 
 interface DirectHarness {
-  chat: ChatSession;
+  chat: Pick<ChatSession, 'generateDirectMessage'>;
   historyService: HistoryService;
-  generateChatCompletionMock: Mock;
+  generateChatCompletionMock: Mock<() => AsyncIterableIterator<IContent>>;
 }
 
 function createDirectHarness(
-  generateChatCompletionMock: Mock,
+  generateChatCompletionMock: Mock<() => AsyncIterableIterator<IContent>>,
   options?: {
-    tools?: ToolDeclaration[];
-    hookConfig?: Config;
+    tools?: NonNullable<
+      Parameters<ChatSession['generateDirectMessage']>[0]['config']
+    >['tools'];
+    hookOwner?: HookExecutionOwner;
     historyService?: HistoryService;
   },
 ): DirectHarness {
@@ -138,7 +145,7 @@ function createDirectHarness(
 
   const manager = new TestRuntimeProviderManager(providerRuntime);
   manager.setConfig(config);
-  config.setProviderManager(manager);
+  configureProviderRuntimeFactories(config, manager);
 
   const provider: IProvider = {
     name: 'stub',
@@ -156,7 +163,7 @@ function createDirectHarness(
     sessionId: config.getSessionId(),
   });
   const historyService = options?.historyService ?? new HistoryService();
-  const effectiveConfig = options?.hookConfig ?? config;
+  const requestRuntime = providerRuntime;
   const view = createAgentRuntimeContext({
     state: runtimeState,
     history: historyService,
@@ -167,10 +174,15 @@ function createDirectHarness(
       telemetry: { enabled: true, target: null },
       'reasoning.includeInContext': true,
     },
-    provider: createProviderAdapterFromManager(config.getProviderManager()),
-    telemetry: createTelemetryAdapterFromConfig(config),
-    tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
-    providerRuntime: { ...providerRuntime, config: effectiveConfig },
+    provider: createProviderAdapterFromManager(manager),
+    telemetry: createTelemetryAdapter(
+      config,
+      createSessionSettingsFixture(config).settingsOwner.telemetry,
+    ),
+    tools: createToolRegistryViewFromRegistry(modelTools()),
+    providerRuntime: requestRuntime,
+    prepareProviderInvocation: (name, parameters, signal) =>
+      captureProviderInvocation(requestRuntime, name, parameters, signal),
   });
 
   const generationConfig: Record<string, unknown> = {};
@@ -185,7 +197,17 @@ function createDirectHarness(
     [],
   );
 
-  return { chat, historyService, generateChatCompletionMock };
+  return {
+    chat: {
+      generateDirectMessage: (params, promptId) =>
+        chat.generateDirectMessage(
+          { ...params, hookOwner: options?.hookOwner },
+          promptId,
+        ),
+    },
+    historyService,
+    generateChatCompletionMock,
+  };
 }
 
 /**
@@ -199,20 +221,13 @@ function configWithHooks(
     beforeModel?: () => BeforeModelHookOutput | undefined;
     afterModel?: () => AfterModelHookOutput | undefined;
   },
-): Config {
-  const hookConfig = Object.create(baseConfig) as Config;
-  Object.defineProperties(hookConfig, {
-    getEnableHooks: { value: () => true },
-    getHookSystem: {
-      value: () => ({
-        initialize: async () => undefined,
-        fireBeforeToolSelectionEvent: async () => undefined,
-        fireBeforeModelEvent: async () => hooks.beforeModel?.(),
-        fireAfterModelEvent: async () => hooks.afterModel?.(),
-      }),
-    },
-  });
-  return hookConfig;
+): HookExecutionOwner {
+  return {
+    sessionId: () => baseConfig.getSessionId(),
+    transcriptPath: () => undefined,
+    beforeModel: async () => hooks.beforeModel?.(),
+    afterModel: async () => hooks.afterModel?.(),
+  };
 }
 
 // ===========================================================================
@@ -224,10 +239,10 @@ describe('P12: blocking BeforeModel hook (characterization)', () => {
     const blockReason = 'Request denied by policy guard';
     const mock = vi.fn(() =>
       makeProviderStream([textTerminalIContent('should never be seen')]),
-    ) as Mock;
+    ) as Mock<() => AsyncIterableIterator<IContent>>;
     const baseConfig = new Config(createConfigParams(new SettingsService()));
     const harness = createDirectHarness(mock, {
-      hookConfig: configWithHooks(baseConfig, {
+      hookOwner: configWithHooks(baseConfig, {
         beforeModel: () =>
           new BeforeModelHookOutput({
             decision: 'block',
@@ -248,12 +263,12 @@ describe('P12: blocking BeforeModel hook (characterization)', () => {
     const blockReason = 'Blocked: quota exceeded';
     const mock = vi.fn(() =>
       makeProviderStream([textTerminalIContent('unused')]),
-    ) as Mock;
+    ) as Mock<() => AsyncIterableIterator<IContent>>;
     const baseConfig = new Config(createConfigParams(new SettingsService()));
     const historyService = new HistoryService();
     const harness = createDirectHarness(mock, {
       historyService,
-      hookConfig: configWithHooks(baseConfig, {
+      hookOwner: configWithHooks(baseConfig, {
         beforeModel: () =>
           new BeforeModelHookOutput({
             decision: 'block',
@@ -284,12 +299,12 @@ describe('P12: blocking BeforeModel hook (characterization)', () => {
       fc.asyncProperty(reasonArb, async (blockReason: string) => {
         const mock = vi.fn(() =>
           makeProviderStream([textTerminalIContent('should not appear')]),
-        ) as Mock;
+        ) as Mock<() => AsyncIterableIterator<IContent>>;
         const baseConfig = new Config(
           createConfigParams(new SettingsService()),
         );
         const harness = createDirectHarness(mock, {
-          hookConfig: configWithHooks(baseConfig, {
+          hookOwner: configWithHooks(baseConfig, {
             beforeModel: () =>
               new BeforeModelHookOutput({
                 decision: 'block',
@@ -322,7 +337,7 @@ describe('P12: normal completion path (characterization)', () => {
           totalTokens: 20,
         }),
       ]),
-    ) as Mock;
+    ) as Mock<() => AsyncIterableIterator<IContent>>;
     const harness = createDirectHarness(mock);
 
     const result = await harness.chat.generateDirectMessage(
@@ -344,7 +359,7 @@ describe('P12: normal completion path (characterization)', () => {
         textTerminalIContent(' world'),
         textTerminalIContent('!'),
       ]),
-    ) as Mock;
+    ) as Mock<() => AsyncIterableIterator<IContent>>;
     const harness = createDirectHarness(mock);
 
     const result = await harness.chat.generateDirectMessage(
@@ -388,7 +403,7 @@ describe('P12: normal completion path (characterization)', () => {
           textTerminalIContent('Hello'),
           thinkingThenTextIContent('Let me think', 'world!'),
         ]),
-      ) as Mock;
+      ) as Mock<() => AsyncIterableIterator<IContent>>;
       const harness = createDirectHarness(mock);
 
       const result = await harness.chat.generateDirectMessage(
@@ -437,7 +452,7 @@ describe('P12: normal completion path (characterization)', () => {
         textTerminalIContent('Calling tool: '),
         toolCallOnlyIContent(),
       ]),
-    ) as Mock;
+    ) as Mock<() => AsyncIterableIterator<IContent>>;
     const harness = createDirectHarness(mock);
 
     const result = await harness.chat.generateDirectMessage(
@@ -456,7 +471,7 @@ describe('P12: normal completion path (characterization)', () => {
       fc.asyncProperty(textArb, async (modelText: string) => {
         const mock = vi.fn(() =>
           makeProviderStream([textTerminalIContent(modelText)]),
-        ) as Mock;
+        ) as Mock<() => AsyncIterableIterator<IContent>>;
         const harness = createDirectHarness(mock);
         const result = await harness.chat.generateDirectMessage(
           { message: 'q' },
@@ -492,7 +507,7 @@ describe('P12: normal completion path (characterization)', () => {
               totalTokens: usage.totalTokens,
             }),
           ]),
-        ) as Mock;
+        ) as Mock<() => AsyncIterableIterator<IContent>>;
         const harness = createDirectHarness(mock);
         const result = await harness.chat.generateDirectMessage(
           { message: 'q' },
@@ -515,10 +530,10 @@ describe('P12: after-model hook filtering (characterization)', () => {
   it('hook-modified text is reflected in observable visible text', async () => {
     const mock = vi.fn(() =>
       makeProviderStream([textTerminalIContent('original provider text')]),
-    ) as Mock;
+    ) as Mock<() => AsyncIterableIterator<IContent>>;
     const baseConfig = new Config(createConfigParams(new SettingsService()));
     const harness = createDirectHarness(mock, {
-      hookConfig: configWithHooks(baseConfig, {
+      hookOwner: configWithHooks(baseConfig, {
         beforeModel: () => new BeforeModelHookOutput({}),
         afterModel: () =>
           new AfterModelHookOutput({
@@ -547,10 +562,10 @@ describe('P12: after-model hook filtering (characterization)', () => {
   it('preserves provider text when after-model hook does not modify', async () => {
     const mock = vi.fn(() =>
       makeProviderStream([textTerminalIContent('plain provider text')]),
-    ) as Mock;
+    ) as Mock<() => AsyncIterableIterator<IContent>>;
     const baseConfig = new Config(createConfigParams(new SettingsService()));
     const harness = createDirectHarness(mock, {
-      hookConfig: configWithHooks(baseConfig, {
+      hookOwner: configWithHooks(baseConfig, {
         beforeModel: () => new BeforeModelHookOutput({}),
         afterModel: () => new AfterModelHookOutput({}),
       }),
@@ -572,12 +587,12 @@ describe('P12: after-model hook filtering (characterization)', () => {
       fc.asyncProperty(filteredTextArb, async (filteredText: string) => {
         const mock = vi.fn(() =>
           makeProviderStream([textTerminalIContent('pre-hook provider text')]),
-        ) as Mock;
+        ) as Mock<() => AsyncIterableIterator<IContent>>;
         const baseConfig = new Config(
           createConfigParams(new SettingsService()),
         );
         const harness = createDirectHarness(mock, {
-          hookConfig: configWithHooks(baseConfig, {
+          hookOwner: configWithHooks(baseConfig, {
             beforeModel: () => new BeforeModelHookOutput({}),
             afterModel: () =>
               new AfterModelHookOutput({

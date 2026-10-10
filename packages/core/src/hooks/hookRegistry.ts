@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '../config/config.js';
+import type { HookDefinitionConfiguration } from './hook-configuration.js';
 import type { HookDefinition, HookConfig } from './types.js';
 import { HookEventName } from './types.js';
 import { DebugLogger } from '../debug/index.js';
@@ -45,11 +45,16 @@ export interface HookRegistryEntry {
  * Hook registry that loads and validates hook definitions from multiple sources
  */
 export class HookRegistry {
-  private readonly config: Config;
+  private readonly readConfiguration: () => HookDefinitionConfiguration;
+  private readonly isTrustedFolder: () => boolean;
   private entries: HookRegistryEntry[] = [];
 
-  constructor(config: Config) {
-    this.config = config;
+  constructor(
+    readConfiguration: () => HookDefinitionConfiguration,
+    isTrustedFolder: () => boolean,
+  ) {
+    this.readConfiguration = readConfiguration;
+    this.isTrustedFolder = isTrustedFolder;
   }
 
   /**
@@ -177,7 +182,7 @@ export class HookRegistry {
    * Check if project hooks are trusted, warn and auto-trust if not
    */
   private checkProjectHooksTrust(): void {
-    const projectHooks = this.config.getProjectHooks();
+    const projectHooks = this.readConfiguration().projectHooks;
 
     // Collect all hook configs from project settings
     const allProjectHooks: HookConfig[] =
@@ -211,22 +216,22 @@ export class HookRegistry {
    */
   private processHooksFromConfig(): void {
     // Check project hooks trust if folder is trusted
-    if (this.config.isTrustedFolder()) {
+    if (this.isTrustedFolder()) {
       this.checkProjectHooksTrust();
     }
 
     // Get hooks from the main config (this comes from the merged settings)
-    const configHooks = this.config.getHooks();
+    const configHooks = this.readConfiguration().hooks;
 
     // Skip project hooks if folder is not trusted
-    if (!this.config.isTrustedFolder()) {
+    if (!this.isTrustedFolder()) {
       debugLogger.log('Skipping project hooks - folder not trusted');
     } else if (configHooks) {
       this.processHooksConfiguration(configHooks, ConfigSource.Project);
     }
 
     // Get hooks from extensions (always allowed)
-    const extensions = this.config.getExtensions();
+    const extensions = this.readConfiguration().extensions;
     for (const extension of extensions) {
       if (extension.isActive && extension.hooks) {
         this.processHooksConfiguration(
@@ -292,7 +297,7 @@ export class HookRegistry {
     eventName: HookEventName,
     source: ConfigSource,
   ): void {
-    const disabledHooks = this.config.getDisabledHooks();
+    const disabledHooks = this.readConfiguration().disabledHooks;
 
     if (
       definition == null ||

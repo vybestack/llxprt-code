@@ -3,37 +3,64 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { describe, expect, it } from 'bun:test';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
+import {
+  Config,
+  createProviderRuntimeContext,
+} from '@vybestack/llxprt-code-core';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { ProviderManager } from '../ProviderManager.js';
+import { OpenAIProvider } from '../openai/OpenAIProvider.js';
+import { switchActiveProvider } from './providerSwitch.js';
+import { switchProviderForProfile } from './profile-application/switchProfileProvider.js';
 
-/**
- * Test suite for Issue #1049: Fix timeout settings preservation
- *
- * These unit tests verify that timeout settings are included in preserveEphemerals
- * so they survive provider switches.
- *
- * @see https://github.com/vybestack/llxprt-code/issues/1049
- */
-describe('Profile Application - preserveEphemerals (Issue #1049)', () => {
-  /**
-   * This test verifies that the applyProfileWithGuards function includes
-   * timeout settings in the preserveEphemerals array when calling switchActiveProvider.
-   */
-  it('should include timeout settings in preserveEphemerals array', () => {
-    const filePath = path.join(__dirname, 'profileApplication.ts');
-    const content = fs.readFileSync(filePath, 'utf-8');
+class LocalConfig extends Config {}
 
-    const timeoutKeys = [
-      'task-default-timeout-seconds',
-      'task-max-timeout-seconds',
-      'shell-default-timeout-seconds',
-      'shell-max-timeout-seconds',
-    ];
-
-    for (const key of timeoutKeys) {
-      expect(content).toContain(`'${key}'`);
+describe('Profile Application timeout preservation (Issue #1049)', () => {
+  it('preserves profile timeouts while clearing unrelated provider settings', async () => {
+    const settings = new SettingsService();
+    const settingsOwner = new SessionSettingsOwner(settings);
+    const config = new LocalConfig({
+      sessionId: 'profile-timeouts',
+      targetDir: process.cwd(),
+      cwd: process.cwd(),
+      model: 'initial',
+      debugMode: false,
+    });
+    const manager = new ProviderManager(
+      createProviderRuntimeContext({ settingsService: settings, config }),
+    );
+    manager.registerProvider(new OpenAIProvider('test-key'));
+    const timeouts = {
+      'task-default-timeout-seconds': 120,
+      'task-max-timeout-seconds': 300,
+      'shell-default-timeout-seconds': 45,
+      'shell-max-timeout-seconds': 180,
+    };
+    try {
+      for (const [key, value] of Object.entries(timeouts))
+        settingsOwner.writeUserParameter(key, value);
+      settingsOwner.writeUserParameter('temperature', 0.6);
+      await switchProviderForProfile('openai', (name, options = {}) =>
+        switchActiveProvider(
+          name,
+          options,
+          config,
+          settings,
+          manager,
+          null,
+          'agent',
+          async () => {},
+          settingsOwner,
+        ),
+      );
+      expect(settingsOwner.captureNamedParameters()).toMatchObject(timeouts);
+      expect(settingsOwner.readNamedParameter('temperature')).toBeUndefined();
+      expect(manager.getActiveProviderName()).toBe('openai');
+    } finally {
+      await settingsOwner.dispose();
+      await config.dispose();
     }
   });
 });

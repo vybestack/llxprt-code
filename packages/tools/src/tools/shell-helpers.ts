@@ -30,6 +30,25 @@ import {
 } from '../utils/timeoutResolution.js';
 import type { ToolResult } from './tools.js';
 
+export function bindBackgroundShellHost(
+  host: IShellToolHost,
+  jobs: Pick<IShellToolHost, 'launchBackgroundJob' | 'tailBackgroundJob'>,
+): IShellToolHost {
+  return new Proxy(host, {
+    get(target, key, receiver): unknown {
+      if (key === 'launchBackgroundJob') {
+        return (input: Parameters<IShellToolHost['launchBackgroundJob']>[0]) =>
+          jobs.launchBackgroundJob(input);
+      }
+      if (key === 'tailBackgroundJob') {
+        return (id: string) => jobs.tailBackgroundJob(id);
+      }
+      const value: unknown = Reflect.get(target, key, receiver);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+}
+
 /** Type for shell tool parameters (used by filter helpers). */
 export interface ShellFilterParams {
   grep_pattern?: string;
@@ -410,12 +429,10 @@ export function createShellToolHostFromExecutionService(
   const targetDir = process.cwd();
   return {
     getTargetDir: () => targetDir,
-    getWorkspaceContext: () => ({
-      getDirectories: () => [targetDir],
-      isPathWithinWorkspace: (resolvedPath: string) =>
-        resolvedPath === targetDir ||
-        resolvedPath.startsWith(`${targetDir}${path.sep}`),
-    }),
+    workspaceDirectories: () => [targetDir],
+    containsWorkspacePath: (resolvedPath) =>
+      resolvedPath === targetDir ||
+      resolvedPath.startsWith(`${targetDir}${path.sep}`),
     isCommandAllowed: (command: string) => {
       const allowed = service.isCommandAllowed(command);
       return allowed
@@ -457,7 +474,7 @@ export function createShellToolHostFromExecutionService(
       return root ? [root] : [];
     },
     stripShellWrapper: (command: string) => command,
-    validatePathWithinWorkspace: (_workspaceContext, dirPath) =>
+    validatePathWithinWorkspace: (dirPath) =>
       standaloneValidatePathWithinWorkspace(targetDir, dirPath),
     isPtyActive: () => false,
     formatMemoryUsage: (bytes: number) => {

@@ -15,6 +15,7 @@
  */
 
 import { finalizeMutationEffects } from './historyMutationFailure.js';
+import { retainContentOrigins } from './historyOrigin.js';
 import { CompressionOperationQueue } from './historyCompressionQueue.js';
 import {
   type ChronologyMarker,
@@ -53,13 +54,15 @@ import {
   type ChronologyState,
 } from './historyChronology.js';
 
-// Preserve the CompressionConfig export from the same path for consumers.
+// Preserve the CompressionConfig type export from the same path for consumers.
 export type { CompressionConfig };
 
 import {
   type MutationFailure,
   combineMutationFailures,
 } from './historyMutationFailure.js';
+
+type HistoryTokenizerSelection = Pick<RuntimeTokenizerFactory, 'getTokenizer'>;
 
 export interface PreparedHistoryBatchEffect {
   publish(): void | Promise<void>;
@@ -106,12 +109,14 @@ export interface HistoryMediaOwner {
 
 export interface HistoryBatchPublication {
   readonly contents: readonly IContent[];
+  readonly origin?: object;
   readonly nextHistory: readonly IContent[];
   readonly addedTokens: number;
   readonly totalTokens: number;
 }
 
 export interface HistoryBatchOptions {
+  readonly origin?: object;
   readonly afterPublication?: () => void | Promise<void>;
   readonly adoptedOwners?: readonly HistoryOwnedMediaReservation[];
 }
@@ -146,13 +151,14 @@ export abstract class HistoryServiceCore
   ): Promise<void>;
 
   protected history: IContent[] = [];
+  protected contentOrigins = new Map<IContent, object>();
   protected totalTokens: number = 0;
   protected baseTokenOffset: number = 0;
   protected tokenizerCache = new Map<string, ITokenizer>();
   protected tokenizerLock: Promise<void> = Promise.resolve();
   protected pendingTokenizerFailure: { error: unknown } | undefined;
   private syncGeneration: number = 0;
-  private historyMutationInProgress = false;
+  protected historyMutationInProgress = false;
   private historyMutationQueue: QueuedHistoryMutation[] = [];
   private batchParticipants = new Set<HistoryBatchParticipant>();
   protected mediaOwner: HistoryMediaOwner | undefined;
@@ -182,7 +188,7 @@ export abstract class HistoryServiceCore
    * to obtain tokenizers instead of constructing provider tokenizers directly.
    * This eliminates the core→providers import dependency on the injection path.
    */
-  private tokenizerFactory?: RuntimeTokenizerFactory;
+  protected tokenizerFactory?: HistoryTokenizerSelection;
   protected activeTokenizationModel = 'gpt-4.1';
   protected activeTokenizationProvider?: string;
 
@@ -210,7 +216,7 @@ export abstract class HistoryServiceCore
    * When set, getTokenizerForModel will prefer the factory over
    * constructing provider tokenizers directly.
    */
-  setTokenizerFactory(factory: RuntimeTokenizerFactory): void {
+  setTokenizerFactory(factory: HistoryTokenizerSelection): void {
     this.tokenizerFactory = factory;
     this.tokenizerCache.clear();
   }
@@ -503,19 +509,19 @@ export abstract class HistoryServiceCore
    * provider-facing history (z.ai rejects empty human turns with HTTP 400
    * error 1213). All other content with a valid speaker is accepted.
    */
-  add(content: IContent, modelName?: string): void {
+  add(content: IContent, modelName?: string, origin?: object): void {
     if (this.isCompressing) {
       logQueuedDuringCompression(this.logger, content);
       this.queueCompressionOperation(() => {
         this.runSynchronousHistoryMutation(() => {
-          this.addInternal(content, modelName);
+          this.addInternal(content, modelName, origin);
         });
       });
       return;
     }
 
     this.runSynchronousHistoryMutation(() => {
-      this.addInternal(content, modelName);
+      this.addInternal(content, modelName, origin);
     });
   }
 
@@ -556,7 +562,11 @@ export abstract class HistoryServiceCore
     }
   }
 
-  private addInternal(content: IContent, modelName?: string): void {
+  private addInternal(
+    content: IContent,
+    modelName?: string,
+    origin?: object,
+  ): void {
     // Reject zero-block turns: a Content with no blocks corrupts provider-
     // facing history (notably z.ai rejects empty human turns with HTTP 400
     // error 1213, issue #2410). This is a systemic safety net — earlier
@@ -589,8 +599,10 @@ export abstract class HistoryServiceCore
     this.history.push(content);
 
     try {
-      this.emit('contentAdded', content);
+      this.emit('contentAdded', content, origin);
       this.mediaOwner?.adopt([content]);
+      if (origin !== undefined) this.contentOrigins.set(content, origin);
+      else this.contentOrigins.delete(content);
     } catch (error: unknown) {
       // Roll back the insertion. The consumed chronology sequence number is
       // intentionally NOT reclaimed: sequence numbers are never reused, and
@@ -941,6 +953,7 @@ export abstract class HistoryServiceCore
         ? undefined
         : {
             contents: input.publishedContents,
+            origin: input.options.origin,
             nextHistory,
             addedTokens,
             totalTokens: this.baseTokenOffset + input.nextHistoryTokens,
@@ -963,9 +976,7 @@ export abstract class HistoryServiceCore
       this.history = nextHistory;
       this.totalTokens = input.nextHistoryTokens;
       historyPublished = true;
-      if (input.publishedContents !== undefined) {
-        this.emit('contentBatchAdded', input.publishedContents);
-      }
+      if (publication) this.emit('contentBatchAdded', publication.contents);
       this.emit('tokensUpdated', {
         totalTokens: this.getTotalTokens(),
         addedTokens,
@@ -973,6 +984,13 @@ export abstract class HistoryServiceCore
       });
       await input.options.afterPublication?.();
       await finalizeMutationEffects(effects);
+      this.contentOrigins = retainContentOrigins(
+        this.contentOrigins,
+        nextHistory,
+        input.publishedContents,
+        input.options.origin,
+        previousHistory,
+      );
     } catch (error: unknown) {
       if (historyPublished) {
         this.invalidatePendingSyncs();

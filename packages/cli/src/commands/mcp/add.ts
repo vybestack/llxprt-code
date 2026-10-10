@@ -5,6 +5,7 @@
  */
 
 // File for 'llxprt mcp add' command
+import { configureCommandOptions } from '../command-configuration.js';
 import type { ArgumentsCamelCase, CommandModule } from 'yargs';
 import { loadSettings, SettingScope } from '../../config/settings.js';
 import type { Settings } from '../../config/settings.js';
@@ -12,19 +13,8 @@ import type { MCPServerConfig } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { exitCli } from '../utils.js';
 
-type AddCommandArgs = {
-  name: string;
-  commandOrUrl: string;
+type ServerArgumentTail = {
   args?: Array<string | number>;
-  scope: string;
-  transport: string;
-  env?: string[];
-  header?: string[];
-  timeout?: number;
-  trust?: boolean;
-  description?: string;
-  includeTools?: string[];
-  excludeTools?: string[];
   '--'?: string[];
 };
 
@@ -194,81 +184,87 @@ async function addMcpServer(
 export const addCommand: CommandModule = {
   command: 'add <name> <commandOrUrl> [args...]',
   describe: 'Add a server',
-  builder: (yargs) =>
-    yargs
-      .usage('Usage: llxprt mcp add [options] <name> <commandOrUrl> [args...]')
-      .parserConfiguration({
-        'unknown-options-as-args': true, // Pass unknown options as server args
-        'populate--': true, // Populate server args after -- separator
-      })
-      .positional('name', {
-        describe: 'Name of the server',
-        type: 'string',
-        demandOption: true,
-      })
-      .positional('commandOrUrl', {
-        describe: 'Command (stdio) or URL (sse, http)',
-        type: 'string',
-        demandOption: true,
-      })
-      .option('scope', {
-        alias: 's',
-        describe: 'Configuration scope (user or project)',
-        type: 'string',
-        default: 'project',
-        choices: ['user', 'project'],
-      })
-      .option('transport', {
-        alias: ['t', 'type'],
-        describe: 'Transport type (stdio, sse, http, streamable-http)',
-        type: 'string',
-        default: 'stdio',
-        choices: ['stdio', 'sse', 'http', 'streamable-http'],
-      })
-      .option('env', {
-        alias: 'e',
-        describe: 'Set environment variables (e.g. -e KEY=value)',
-        type: 'array',
-        string: true,
-      })
-      .option('header', {
-        alias: 'H',
-        describe:
-          'Set HTTP headers for SSE and HTTP transports (e.g. -H "X-Api-Key: abc123" -H "Authorization: Bearer abc123")',
-        type: 'array',
-        string: true,
-      })
-      .option('timeout', {
-        describe: 'Set connection timeout in milliseconds',
-        type: 'number',
-      })
-      .option('trust', {
-        describe:
-          'Trust the server (bypass all tool call confirmation prompts)',
-        type: 'boolean',
-      })
-      .option('description', {
-        describe: 'Set the description for the server',
-        type: 'string',
-      })
-      .option('include-tools', {
-        describe: 'A comma-separated list of tools to include',
-        type: 'array',
-        string: true,
-      })
-      .option('exclude-tools', {
-        describe: 'A comma-separated list of tools to exclude',
-        type: 'array',
-        string: true,
-      })
-      .middleware((argv: ArgumentsCamelCase<AddCommandArgs>) => {
-        // Handle -- separator args as server args if present
-        const separatorArgs = argv['--'];
-        if (separatorArgs !== undefined) {
-          const existingArgs = argv.args ?? [];
-          argv.args = [...existingArgs, ...separatorArgs];
-        }
-      }),
+  builder: (yargs) => {
+    configureCommandOptions(yargs, (configuration) =>
+      configuration
+        .usage(
+          'Usage: llxprt mcp add [options] <name> <commandOrUrl> [args...]',
+        )
+        .parserConfiguration({
+          'unknown-options-as-args': true, // Pass unknown options as server args
+          'populate--': true, // Populate server args after -- separator
+        })
+        .positional('name', {
+          describe: 'Name of the server',
+          type: 'string',
+          demandOption: true,
+        })
+        .positional('commandOrUrl', {
+          describe: 'Command (stdio) or URL (sse, http)',
+          type: 'string',
+          demandOption: true,
+        })
+        .option('scope', {
+          alias: 's',
+          describe: 'Configuration scope (user or project)',
+          type: 'string',
+          default: 'project',
+          choices: ['user', 'project'],
+        })
+        .option('transport', {
+          alias: ['t', 'type'],
+          describe: 'Transport type (stdio, sse, http, streamable-http)',
+          type: 'string',
+          default: 'stdio',
+          choices: ['stdio', 'sse', 'http', 'streamable-http'],
+        })
+        .option('env', {
+          alias: 'e',
+          describe: 'Set environment variables (e.g. -e KEY=value)',
+          type: 'array',
+          string: true,
+        })
+        .option('header', {
+          alias: 'H',
+          describe:
+            'Set HTTP headers for SSE and HTTP transports (e.g. -H "X-Api-Key: abc123" -H "Authorization: Bearer abc123")',
+          type: 'array',
+          string: true,
+        })
+        .option('timeout', {
+          describe: 'Set connection timeout in milliseconds',
+          type: 'number',
+        })
+        .option('trust', {
+          describe:
+            'Trust the server (bypass all tool call confirmation prompts)',
+          type: 'boolean',
+        })
+        .option('description', {
+          describe: 'Set the description for the server',
+          type: 'string',
+        })
+        .option('include-tools', {
+          describe: 'A comma-separated list of tools to include',
+          type: 'array',
+          string: true,
+        })
+        .option('exclude-tools', {
+          describe: 'A comma-separated list of tools to exclude',
+          type: 'array',
+          string: true,
+        }),
+    );
+    yargs.middleware((argv: ArgumentsCamelCase<ServerArgumentTail>) => {
+      // Handle -- separator args as server args if present
+      const separatorArgs = argv['--'];
+      if (separatorArgs !== undefined) {
+        const existingArgs = argv.args ?? [];
+        argv.args = [...existingArgs, ...separatorArgs];
+      }
+    });
+    return yargs;
+  },
   handler: async (argv) => {
     await addMcpServer(
       argv.name as string,

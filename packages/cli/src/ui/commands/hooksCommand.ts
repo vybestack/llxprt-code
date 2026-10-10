@@ -77,28 +77,13 @@ async function listHooks(context: CommandContext): Promise<void> {
     return;
   }
 
-  const hookSystem = config.getHookSystem();
-  if (!hookSystem) {
-    context.ui.addItem(
-      {
-        type: MessageType.INFO,
-        text: 'Hooks system is not enabled. Enable it in settings with hooksConfig.enabled.',
-      },
-      Date.now(),
-    );
-    return;
-  }
-
-  await hookSystem.initialize();
-  const hookRegistry = hookSystem.getRegistry();
-  const allHooks = hookRegistry.getAllHooks();
-
-  const historyItem: HistoryItemHooksList = {
-    type: MessageType.HOOKS_LIST,
-    hooks: allHooks,
-  };
-
-  context.ui.addItem(historyItem);
+  context.ui.addItem(
+    {
+      type: MessageType.INFO,
+      text: 'Hook execution requires an active Agent. Enable hooks in settings with hooksConfig.enabled.',
+    },
+    Date.now(),
+  );
 }
 
 /**
@@ -162,52 +147,10 @@ async function enableHook(
     return;
   }
 
-  const hookSystem = config.getHookSystem();
-  if (!hookSystem) {
-    context.ui.addItem(
-      {
-        type: MessageType.ERROR,
-        text: 'Hooks system is not enabled.',
-      },
-      Date.now(),
-    );
-    return;
-  }
-
-  await hookSystem.initialize();
-  const hookRegistry = hookSystem.getRegistry();
-
-  // Find the hook
-  const allHooks = hookRegistry.getAllHooks();
-  const matchingHook = allHooks.find(
-    (entry) => hookRegistry.getHookName(entry) === hookName,
-  );
-
-  if (!matchingHook) {
-    context.ui.addItem(
-      {
-        type: MessageType.ERROR,
-        text: `Hook '${hookName}' not found.`,
-      },
-      Date.now(),
-    );
-    return;
-  }
-
-  // Remove from disabled list
-  const disabledHooks = config.getDisabledHooks();
-  const newDisabledHooks = disabledHooks.filter(
-    (name: string) => name !== hookName,
-  );
-  config.setDisabledHooks(newDisabledHooks);
-
-  // Update the registry
-  hookRegistry.setHookEnabled(hookName, true);
-
   context.ui.addItem(
     {
       type: MessageType.INFO,
-      text: `Enabled hook '${hookName}'.`,
+      text: 'Hook execution requires an active Agent. Enable hooks in settings with hooksConfig.enabled.',
     },
     Date.now(),
   );
@@ -249,52 +192,10 @@ async function disableHook(
     return;
   }
 
-  const hookSystem = config.getHookSystem();
-  if (!hookSystem) {
-    context.ui.addItem(
-      {
-        type: MessageType.ERROR,
-        text: 'Hooks system is not enabled.',
-      },
-      Date.now(),
-    );
-    return;
-  }
-
-  await hookSystem.initialize();
-  const hookRegistry = hookSystem.getRegistry();
-
-  // Find the hook
-  const allHooks = hookRegistry.getAllHooks();
-  const matchingHook = allHooks.find(
-    (entry: HookRegistryEntry) => hookRegistry.getHookName(entry) === hookName,
-  );
-
-  if (!matchingHook) {
-    context.ui.addItem(
-      {
-        type: MessageType.ERROR,
-        text: `Hook '${hookName}' not found.`,
-      },
-      Date.now(),
-    );
-    return;
-  }
-
-  // Add to disabled list
-  const disabledHooks = config.getDisabledHooks();
-  if (!disabledHooks.includes(hookName)) {
-    const newDisabledHooks = [...disabledHooks, hookName];
-    config.setDisabledHooks(newDisabledHooks);
-  }
-
-  // Update the registry
-  hookRegistry.setHookEnabled(hookName, false);
-
   context.ui.addItem(
     {
       type: MessageType.INFO,
-      text: `Disabled hook '${hookName}'.`,
+      text: 'Hook execution requires an active Agent. Enable hooks in settings with hooksConfig.enabled.',
     },
     Date.now(),
   );
@@ -327,6 +228,7 @@ async function enableAllHooks(context: CommandContext): Promise<void> {
       },
       Date.now(),
     );
+    await listHooks(context);
     return;
   }
 
@@ -341,56 +243,13 @@ async function enableAllHooks(context: CommandContext): Promise<void> {
     return;
   }
 
-  const hookSystem = config.getHookSystem();
-  if (!hookSystem) {
-    context.ui.addItem(
-      {
-        type: MessageType.ERROR,
-        text: 'Hooks system is not enabled.',
-      },
-      Date.now(),
-    );
-    return;
-  }
-
-  await hookSystem.initialize();
-  const hookRegistry = hookSystem.getRegistry();
-  const allHooks = hookRegistry.getAllHooks();
-
-  if (allHooks.length === 0) {
-    context.ui.addItem(
-      {
-        type: MessageType.INFO,
-        text: 'No hooks registered.',
-      },
-      Date.now(),
-    );
-    return;
-  }
-
-  // Clear disabled hooks list
-  config.setDisabledHooks([]);
-
-  // Enable all hooks in registry
-  for (const hook of allHooks) {
-    const hookName = hookRegistry.getHookName(hook);
-    hookRegistry.setHookEnabled(hookName, true);
-  }
-
   context.ui.addItem(
     {
       type: MessageType.INFO,
-      text: `Enabled all ${allHooks.length} hook(s).`,
+      text: 'Hook execution requires an active Agent. Enable hooks in settings with hooksConfig.enabled.',
     },
     Date.now(),
   );
-
-  // Show updated list
-  const historyItem: HistoryItemHooksList = {
-    type: MessageType.HOOKS_LIST,
-    hooks: allHooks,
-  };
-  context.ui.addItem(historyItem);
 }
 
 /**
@@ -421,6 +280,7 @@ async function disableAllHooks(context: CommandContext): Promise<void> {
       },
       Date.now(),
     );
+    await listHooks(context);
     return;
   }
 
@@ -435,88 +295,25 @@ async function disableAllHooks(context: CommandContext): Promise<void> {
     return;
   }
 
-  const hookSystem = config.getHookSystem();
-  if (!hookSystem) {
-    context.ui.addItem(
-      {
-        type: MessageType.ERROR,
-        text: 'Hooks system is not enabled.',
-      },
-      Date.now(),
-    );
-    return;
-  }
-
-  await hookSystem.initialize();
-  const hookRegistry = hookSystem.getRegistry();
-  const allHooks = hookRegistry.getAllHooks();
-
-  if (allHooks.length === 0) {
-    context.ui.addItem(
-      {
-        type: MessageType.INFO,
-        text: 'No hooks registered.',
-      },
-      Date.now(),
-    );
-    return;
-  }
-
-  // Build list of all hook names
-  const allHookNames = allHooks.map((hook) => hookRegistry.getHookName(hook));
-
-  // Set all hooks as disabled in config
-  config.setDisabledHooks(allHookNames);
-
-  // Disable all hooks in registry
-  for (const hookName of allHookNames) {
-    hookRegistry.setHookEnabled(hookName, false);
-  }
-
   context.ui.addItem(
     {
       type: MessageType.INFO,
-      text: `Disabled all ${allHooks.length} hook(s).`,
+      text: 'Hook execution requires an active Agent. Enable hooks in settings with hooksConfig.enabled.',
     },
     Date.now(),
   );
-
-  // Show updated list
-  const historyItem: HistoryItemHooksList = {
-    type: MessageType.HOOKS_LIST,
-    hooks: allHooks,
-  };
-  context.ui.addItem(historyItem);
 }
 
 async function completeHookNames(
   context: CommandContext,
   partialArg: string,
 ): Promise<string[]> {
-  const agent = context.services.agent;
-  if (agent) {
-    return agent.hooks
+  return (
+    context.services.agent?.hooks
       .listHooks()
-      .map((h) => h.name)
-      .filter((name) => name.startsWith(partialArg));
-  }
-
-  const { config } = context.services;
-  if (!config) {
-    return [];
-  }
-
-  const hookSystem = config.getHookSystem();
-  if (!hookSystem) {
-    return [];
-  }
-
-  await hookSystem.initialize();
-  const hookRegistry = hookSystem.getRegistry();
-  const hookNames = hookRegistry
-    .getAllHooks()
-    .map((entry) => hookRegistry.getHookName(entry));
-  return hookNames.filter((name) => name.startsWith(partialArg));
+      .map((hook) => hook.name)
+      .filter((name) => name.startsWith(partialArg)) ?? []
+  );
 }
 
 const listCommand: SlashCommand = {

@@ -7,12 +7,10 @@
  * @requirement REQ-001,REQ-INT-001
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import fc from 'fast-check';
-import type { OAuthCredentials, TokenStorage } from './token-storage/types.js';
+import type { OAuthCredentials, TokenStorage } from './token-storage/index.js';
 import type { MCPOAuthToken } from './token-store.js';
-import { MCPOAuthTokenStorage } from './oauth-token-storage.js';
-import { mcpServerRequiresOAuth } from '../client/mcp-status.js';
 import * as mcpAuth from './index.js';
 
 class MockTokenStorage implements TokenStorage {
@@ -71,75 +69,122 @@ async function seedToken(
   });
 }
 
-describe('getMcpServerOAuthStatus — REQ-001 canonical helper', () => {
+describe('getMcpServerOAuthStatus owner input', () => {
   let store: MockTokenStorage;
-  let priorStore: TokenStorage;
 
   beforeEach(() => {
-    priorStore = MCPOAuthTokenStorage.getTokenStore();
     store = new MockTokenStorage();
-    MCPOAuthTokenStorage.setTokenStore(store);
   });
 
-  afterEach(() => {
-    MCPOAuthTokenStorage.setTokenStore(priorStore);
-    mcpServerRequiresOAuth.clear();
+  it('respects explicit false even when another owner requires the same server', async () => {
+    await mcpAuth.getMcpServerOAuthStatus(
+      'srv',
+      { requiresOAuth: true },
+      async () => null,
+    );
+    const reads: string[] = [];
+    const result = await mcpAuth.getMcpServerOAuthStatus(
+      'srv',
+      { requiresOAuth: false },
+      async (name) => {
+        reads.push(name);
+        return null;
+      },
+    );
+    expect({ result, reads }).toStrictEqual({
+      result: 'not-required',
+      reads: [],
+    });
   });
 
   // T1: NOT-required, storage never read (throwing store proves short-circuit).
   it('returns not-required when not required, without reading storage', async () => {
     store.setShouldThrow(true);
-    const result = await mcpAuth.getMcpServerOAuthStatus('srv');
+    const result = await mcpAuth.getMcpServerOAuthStatus(
+      'srv',
+      undefined,
+      store.getCredentials.bind(store),
+    );
     expect(result).toBe('not-required');
   });
 
   // T2: required via opts, empty store → none.
   it('returns none when required via opts and no credentials exist', async () => {
-    const result = await mcpAuth.getMcpServerOAuthStatus('srv', {
-      requiresOAuth: true,
-    });
+    const result = await mcpAuth.getMcpServerOAuthStatus(
+      'srv',
+      {
+        requiresOAuth: true,
+      },
+      store.getCredentials.bind(store),
+    );
     expect(result).toBe('none');
   });
 
-  // T3: required via map, empty store → none.
-  it('returns none when required via map and no credentials exist', async () => {
-    mcpServerRequiresOAuth.set('srv', true);
-    const result = await mcpAuth.getMcpServerOAuthStatus('srv');
+  // T3: required via explicit owner input, empty store → none.
+  it('returns none when required via explicit owner input and no credentials exist', async () => {
+    await mcpAuth.getMcpServerOAuthStatus(
+      'srv',
+      { requiresOAuth: true },
+      async () => null,
+    );
+    const result = await mcpAuth.getMcpServerOAuthStatus(
+      'srv',
+      {
+        requiresOAuth: true,
+      },
+      store.getCredentials.bind(store),
+    );
     expect(result).toBe('none');
   });
 
   // T4: required + non-expired creds → authenticated.
   it('returns authenticated when required and non-expired credentials exist', async () => {
     await seedToken(store, 'srv', Date.now() + 10 * 60 * 1000);
-    const result = await mcpAuth.getMcpServerOAuthStatus('srv', {
-      requiresOAuth: true,
-    });
+    const result = await mcpAuth.getMcpServerOAuthStatus(
+      'srv',
+      {
+        requiresOAuth: true,
+      },
+      store.getCredentials.bind(store),
+    );
     expect(result).toBe('authenticated');
   });
 
   // T5: required + expired creds → expired (within buffer + past value).
   it('returns expired when required and credentials are within the expiry buffer', async () => {
     await seedToken(store, 'srv', Date.now() + 60_000);
-    const result = await mcpAuth.getMcpServerOAuthStatus('srv', {
-      requiresOAuth: true,
-    });
+    const result = await mcpAuth.getMcpServerOAuthStatus(
+      'srv',
+      {
+        requiresOAuth: true,
+      },
+      store.getCredentials.bind(store),
+    );
     expect(result).toBe('expired');
   });
 
   it('returns expired when required and credentials are in the past', async () => {
     await seedToken(store, 'srv', Date.now() - 1000);
-    const result = await mcpAuth.getMcpServerOAuthStatus('srv', {
-      requiresOAuth: true,
-    });
+    const result = await mcpAuth.getMcpServerOAuthStatus(
+      'srv',
+      {
+        requiresOAuth: true,
+      },
+      store.getCredentials.bind(store),
+    );
     expect(result).toBe('expired');
   });
 
   // T6: required + storage throws → none (never throws).
   it('returns none when required and the storage read throws', async () => {
     store.setShouldThrow(true);
-    const result = await mcpAuth.getMcpServerOAuthStatus('srv', {
-      requiresOAuth: true,
-    });
+    const result = await mcpAuth.getMcpServerOAuthStatus(
+      'srv',
+      {
+        requiresOAuth: true,
+      },
+      store.getCredentials.bind(store),
+    );
     expect(result).toBe('none');
   });
 
@@ -151,35 +196,46 @@ describe('getMcpServerOAuthStatus — REQ-001 canonical helper', () => {
         async (offsetMs) => {
           const serverName = 'srv-prop1';
           await seedToken(store, serverName, Date.now() + offsetMs);
-          const result = await mcpAuth.getMcpServerOAuthStatus(serverName, {
-            requiresOAuth: true,
-          });
+          const result = await mcpAuth.getMcpServerOAuthStatus(
+            serverName,
+            {
+              requiresOAuth: true,
+            },
+            store.getCredentials.bind(store),
+          );
           expect(result).toBe('authenticated');
         },
       ),
     );
   });
 
-  function expectedRequiredStatus(
-    hint: boolean,
-    runtime: boolean,
-  ): 'none' | 'not-required' {
-    return hint || runtime ? 'none' : 'not-required';
+  function expectedRequiredStatus(hint: boolean): 'none' | 'not-required' {
+    return hint ? 'none' : 'not-required';
   }
 
-  // PROP2: OR-combine requiredness (hint || runtime).
-  it('OR-combines requiresOAuth hint with the runtime map (property)', async () => {
+  // Independent owners can supply different requiredness for the same name.
+  it('isolates explicit requiredness from another owner (property)', async () => {
     await fc.assert(
       fc.asyncProperty(
         fc.boolean(),
         fc.boolean(),
         fc.string({ minLength: 1 }),
         async (hint, runtime, name) => {
-          mcpServerRequiresOAuth.set(name, runtime);
-          const result = await mcpAuth.getMcpServerOAuthStatus(name, {
-            requiresOAuth: hint,
-          });
-          const expected = expectedRequiredStatus(hint, runtime);
+          await mcpAuth.getMcpServerOAuthStatus(
+            name,
+            {
+              requiresOAuth: runtime,
+            },
+            store.getCredentials.bind(store),
+          );
+          const result = await mcpAuth.getMcpServerOAuthStatus(
+            name,
+            {
+              requiresOAuth: hint,
+            },
+            store.getCredentials.bind(store),
+          );
+          const expected = expectedRequiredStatus(hint);
           expect(result).toBe(expected);
         },
       ),
@@ -191,9 +247,13 @@ describe('getMcpServerOAuthStatus — REQ-001 canonical helper', () => {
     store.setShouldThrow(true);
     await fc.assert(
       fc.asyncProperty(fc.string({ minLength: 1 }), async (name) => {
-        const result = await mcpAuth.getMcpServerOAuthStatus(name, {
-          requiresOAuth: true,
-        });
+        const result = await mcpAuth.getMcpServerOAuthStatus(
+          name,
+          {
+            requiresOAuth: true,
+          },
+          store.getCredentials.bind(store),
+        );
         expect(result).toBe('none');
       }),
     );

@@ -30,6 +30,7 @@ import {
 } from './streamResponseHelpers.js';
 
 interface FinalizeStreamResponseOptions {
+  readonly origin?: object;
   readonly logger: DebugLogger;
   readonly conversationManager: ConversationManager;
   readonly historyService: HistoryService;
@@ -44,6 +45,22 @@ interface FinalizeStreamResponseOptions {
   readonly preparedUserTurn: PreparedUserTurn | undefined;
   readonly mediaAdmissions: readonly MediaAdmissionRelease[];
 }
+export async function failStreamProcessing(
+  error: unknown,
+  admissions: readonly MediaAdmissionRelease[],
+  runtimeContext: AgentRuntimeContext,
+): Promise<never> {
+  try {
+    await runtimeContext.mediaAdmission?.releaseAdmissions(admissions);
+  } catch (cleanupError: unknown) {
+    throw new AggregateError(
+      [error, cleanupError],
+      'Stream processing failed and media cleanup was incomplete',
+    );
+  }
+  throw error;
+}
+
 async function settlePublishedStreamAdmissions(
   options: FinalizeStreamResponseOptions,
 ): Promise<void> {
@@ -90,6 +107,7 @@ async function commitFinalizedStreamHistory(
       acc,
       historyOptions,
       () => settlePublishedStreamAdmissions(options),
+      options.origin,
     );
   } finally {
     clearMatchedEagerToolResponseCallIds(

@@ -3,6 +3,20 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import {
+  type SessionSettingsOwner,
+  type RuntimePolicyOwner,
+  type RuntimeProviderManager,
+  FatalError,
+  type MessageBus,
+  type ProviderRuntimeContext,
+  createRuntimeSettingsService,
+} from '@vybestack/llxprt-code-core';
+
+import type {
+  AgentActivationOperation,
+  AgentProfileApplication,
+} from '@vybestack/llxprt-code-agents';
 
 /**
  * @plan:PLAN-20260603-ISSUE1584.P12
@@ -10,18 +24,17 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
-import {
-  FatalError,
-  type MessageBus,
-  type ProviderRuntimeContext,
-  createRuntimeSettingsService,
-} from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { parseProfileJson } from '@vybestack/llxprt-code-settings';
-import type { ProviderManager } from '@vybestack/llxprt-code-providers';
+import type {
+  ProviderManager,
+  ProviderFileLifecycle,
+} from '@vybestack/llxprt-code-providers';
 import { createOAuthSettingsAdapter } from '../auth/oauth-settings-adapter.js';
-import { assembleCliProviderRuntime } from '@vybestack/llxprt-code-providers/runtime.js';
+import { assembleCliProviderRuntime } from '@vybestack/llxprt-code-providers/runtime/assembleCliProviderRuntime.js';
+import type { CliRuntimeRegistrationHandle } from '@vybestack/llxprt-code-providers/runtime/cliForegroundRuntime.js';
+import type { ProviderSwitcher } from '@vybestack/llxprt-code-providers/runtime/providerSwitch.js';
 import type { ProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 
@@ -59,6 +72,7 @@ export interface BootstrapProfileArgs {
 }
 
 export interface RuntimeBootstrapMetadata {
+  readonly sessionSettingsOwner?: SessionSettingsOwner;
   settingsService?: SettingsService;
   config?: ProviderRuntimeContext['config'];
   oauthManager?: OAuthManager;
@@ -85,6 +99,17 @@ export interface ParsedBootstrapArgs {
  * provider assembly and the post-Config re-assembly alike.
  */
 export interface CliRuntimeOverrides {
+  onOAuthManagerReady?: (manager: OAuthManager | undefined) => void;
+  onProviderFilesReady?: (lifecycle: ProviderFileLifecycle) => void;
+  readonly sessionSettingsOwner?: SessionSettingsOwner;
+  onPolicyOwnerReady?: (owner: RuntimePolicyOwner) => void;
+  onProviderManagerReady?: (manager: RuntimeProviderManager) => void;
+  onActivationBootstrapReady?: (operation: AgentActivationOperation) => void;
+  onProfileApplicationReady?: (application: AgentProfileApplication) => void;
+  onProviderSwitchReady?: (switchProvider: ProviderSwitcher) => void;
+  onRuntimeRegistrationReady?: (
+    registration: CliRuntimeRegistrationHandle,
+  ) => void;
   settingsService?: SettingsService;
   /**
    * Provider contributions from the installed plugin packages, discovered and
@@ -94,10 +119,12 @@ export interface CliRuntimeOverrides {
 }
 
 export interface BootstrapRuntimeState {
+  policyOwner?: RuntimePolicyOwner;
   runtime: ProviderRuntimeContext;
   runtimeMessageBus: MessageBus;
   providerManager: ProviderManager;
   oauthManager?: OAuthManager;
+  registration?: CliRuntimeRegistrationHandle;
 }
 
 export interface ProfileApplicationResult {
@@ -441,6 +468,7 @@ export async function prepareRuntimeForProfile(
   const assembled = assembleCliProviderRuntime({
     settingsService,
     config: runtimeConfig,
+    settingsOwner: runtimeInit.sessionSettingsOwner,
     runtimeId,
     metadata,
     oauthSettings: createOAuthSettingsAdapter(),
@@ -454,6 +482,7 @@ export async function prepareRuntimeForProfile(
     runtimeMessageBus: assembled.runtimeMessageBus,
     providerManager: assembled.providerManager as ProviderManager,
     oauthManager: assembled.oauthManager,
+    registration: assembled.registration,
   };
 }
 

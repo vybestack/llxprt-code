@@ -134,9 +134,7 @@ const FakeAnthropicClass = Anthropic as unknown as {
   reset(): void;
 };
 
-const ANTHROPIC_CONSTRUCTOR_OPTS = {
-  getEphemeralSettings: () => ({ streaming: 'disabled' }),
-};
+const ANTHROPIC_CONSTRUCTOR_OPTS = {};
 
 class TestAnthropicProvider extends AnthropicProvider {
   private nextAuthToken = 'token-A';
@@ -175,6 +173,7 @@ class TestAnthropicProviderOAuth extends AnthropicProvider {
 const createSettings = (runtimeId: string): SettingsService => {
   const svc = new SettingsService();
   svc.set('call-id', runtimeId);
+  svc.set('streaming', 'disabled');
   return svc;
 };
 
@@ -309,8 +308,9 @@ describe('Anthropic provider stateless contract tests', () => {
       config,
     });
     const invocation = createRuntimeInvocationContext({
-      runtime,
-      settings,
+      runtimeId: runtime.runtimeId,
+      runtimeMetadata: runtime.metadata,
+
       providerName: 'anthropic',
       ephemeralsSnapshot: {
         streaming: 'enabled',

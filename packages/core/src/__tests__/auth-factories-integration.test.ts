@@ -49,9 +49,6 @@ function assertFactoryAcceptsCoreTypes(
   _config: AuthPrecedenceConfig,
   _settingsService: AuthISettingsService,
   _oauthManager?: OAuthManager,
-  _getActiveRuntimeContext?: () => {
-    settingsService: AuthISettingsService;
-  } | null,
 ): void {
   // Intentionally empty — compile-time signature check only.
   // If the factory signature changes to reject these types, compilation fails.
@@ -168,7 +165,7 @@ describe('Core auth-factories integration', () => {
       expect(auth).toBe('factory-test-key');
     });
 
-    it('createAuthPrecedenceResolver works without optional oauthManager and getActiveRuntimeContext', async () => {
+    it('createAuthPrecedenceResolver works without an optional oauthManager', async () => {
       const config: AuthPrecedenceConfig = {
         apiKey: 'minimal-factory-key',
         envKeyNames: [],

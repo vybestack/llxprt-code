@@ -1,3 +1,4 @@
+import type { ToolExecutionPolicy } from './tool-execution-policy.js';
 /**
  * @plan:PLAN-20260608-ISSUE1585.P03
  * @requirement:REQ-INTERFACE-OWNERSHIP
@@ -59,6 +60,10 @@ export interface IToolHostGitStatsService {
 }
 
 export interface IToolHost {
+  runSearch<T>(
+    directories: readonly string[],
+    operation: () => Promise<T>,
+  ): Promise<T>;
   /** Returns the target directory for file operations. */
   getTargetDir(): string;
 
@@ -75,7 +80,6 @@ export interface IToolHost {
   isInteractive(): boolean;
 
   /** Whether a specific feature flag is enabled. */
-  hasFeatureFlag(flag: string): boolean;
 
   /** Returns file discovery/filtering services needed by filesystem tools. */
   getFileService(): IToolHostFileService;
@@ -93,19 +97,21 @@ export interface IToolHost {
   getFileFilteringRespectLlxprtIgnore(): boolean;
 
   /** Returns the absolute path to the .llxprtignore file if it should be used. */
-  getLlxprtIgnoreFilePath(): string | null;
+  getLlxprtIgnoreFilePath(directory?: string): string | null;
 
   /** Records a file read operation for host telemetry. */
   recordFileRead(filePath: string, lines?: number, mimeType?: string): void;
 
   /** Returns the filesystem service used for file reads/writes when available. */
-  getFileSystemService?(): IToolHostFileSystemService | undefined;
+  readTextFile(filePath: string): Promise<string>;
+  writeTextFile(filePath: string, content: string): Promise<void>;
+  deleteFile?(filePath: string): Promise<void>;
 
   /** Returns the file-service .llxprtignore patterns when available. */
-  getLlxprtIgnorePatterns(): string[];
+  getLlxprtIgnorePatterns(directory?: string): string[];
 
   /** Returns ephemeral settings used for output limits and feature toggles. */
-  getEphemeralSettings(): Record<string, unknown>;
+  readExecutionPolicy(): ToolExecutionPolicy;
 
   /** Whether debug logging is enabled. */
   getDebugMode(): boolean;

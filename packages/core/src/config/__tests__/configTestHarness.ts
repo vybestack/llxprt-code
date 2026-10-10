@@ -7,7 +7,7 @@
 /**
  * Shared harness for the split config test files
  * (config.a/b/b2/d.test.ts). Centralizes the mock module bodies, the
- * AgentClient/CoreToolScheduler mock classes, the baseParams construction and
+ * AgentClient mock, the baseParams construction and
  * the beforeEach reset so the four files stay in sync.
  *
  * Hoisting note: vitest hoists `vi.mock(...)` to the top of the consuming file
@@ -24,8 +24,6 @@
 import { vi } from 'bun:test';
 import type { Mock } from 'bun:test';
 import type { ConfigParameters, SandboxConfig } from '../config.js';
-import type { ToolSchedulerFactoryOptions } from '../../core/toolSchedulerContract.js';
-import type { AgentClientContract } from '../../core/clientContract.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type * as IdeIntegrationModule from '@vybestack/llxprt-code-ide-integration';
 
@@ -246,7 +244,7 @@ export function buildFetchMockBody(hoisted: HoistedConfigMocks) {
 }
 
 // ---------------------------------------------------------------------------
-// Shared AgentClient / CoreToolScheduler mock classes
+// Shared AgentClient mock
 // ---------------------------------------------------------------------------
 
 export const AgentClient = vi.fn().mockImplementation(() => ({
@@ -262,15 +260,6 @@ export const AgentClient = vi.fn().mockImplementation(() => ({
   clearTools: vi.fn(),
   stripThoughtsFromHistory: vi.fn(),
 }));
-
-export class CoreToolScheduler {
-  constructor(_options: ToolSchedulerFactoryOptions) {}
-  schedule = vi.fn().mockResolvedValue(undefined);
-  cancelAll = vi.fn();
-  dispose = vi.fn();
-  setCallbacks = vi.fn();
-  handleConfirmationResponse = vi.fn().mockResolvedValue(undefined);
-}
 
 // ---------------------------------------------------------------------------
 // Shared base params + constants
@@ -314,12 +303,7 @@ export function createBaseParams(
     telemetry: sharedConfigTestConstants.TELEMETRY_SETTINGS,
     sessionId: sharedConfigTestConstants.SESSION_ID,
     model: sharedConfigTestConstants.MODEL,
-    settingsService,
-    agentClientFactory: (config, runtimeState) =>
-      new (AgentClient as unknown as new (
-        ...args: unknown[]
-      ) => AgentClientContract)(config, runtimeState),
-    toolSchedulerFactory: (options) => new CoreToolScheduler(options),
+    initialSettings: settingsService.getAllGlobalSettings(),
   };
 }
 

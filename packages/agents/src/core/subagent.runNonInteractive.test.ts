@@ -1,3 +1,4 @@
+import { createChatPolicyFixture } from './__tests__/session-policy-fixture.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -112,7 +113,7 @@ describe('subagent.ts', () => {
 
   describe('create (toolConfig preservation — Issue #2069)', () => {
     it('explicit empty toolConfig + outputConfig yields only self_emitvalue', async () => {
-      const { config } = await createMockConfig();
+      const { config, mcpRuntime } = await createMockConfig();
       const runtimeToolsView: ToolRegistryView = {
         listToolNames: vi.fn(() => ['read_file', 'write_file']),
         getToolMetadata: vi.fn(() => ({
@@ -124,7 +125,10 @@ describe('subagent.ts', () => {
       const runtimeBundle = createStatelessRuntimeBundle({
         toolsView: runtimeToolsView,
       });
-      const { overrides } = createRuntimeOverrides({ runtimeBundle });
+      const { overrides } = createRuntimeOverrides(
+        mcpRuntime.workspaceFilesystem.paths,
+        { runtimeBundle },
+      );
 
       mockSendMessageStream = vi.fn();
       mockSendMessageStream.mockImplementation(createMockStream(['stop']));
@@ -133,6 +137,7 @@ describe('subagent.ts', () => {
       ).mockImplementation(
         () =>
           ({
+            ...createChatPolicyFixture(),
             sendMessageStream: mockSendMessageStream,
             getHistory: vi.fn().mockReturnValue([]),
             getHistoryService: vi.fn().mockReturnValue({
@@ -160,7 +165,7 @@ describe('subagent.ts', () => {
     });
 
     it('omitted toolConfig + outputConfig yields runtime default tools plus self_emitvalue', async () => {
-      const { config } = await createMockConfig();
+      const { config, mcpRuntime } = await createMockConfig();
       const runtimeToolsView: ToolRegistryView = {
         listToolNames: vi.fn(() => ['read_file', 'write_file']),
         getToolMetadata: vi.fn(() => ({
@@ -172,7 +177,10 @@ describe('subagent.ts', () => {
       const runtimeBundle = createStatelessRuntimeBundle({
         toolsView: runtimeToolsView,
       });
-      const { overrides } = createRuntimeOverrides({ runtimeBundle });
+      const { overrides } = createRuntimeOverrides(
+        mcpRuntime.workspaceFilesystem.paths,
+        { runtimeBundle },
+      );
 
       mockSendMessageStream = vi.fn();
       mockSendMessageStream.mockImplementation(createMockStream(['stop']));
@@ -181,6 +189,7 @@ describe('subagent.ts', () => {
       ).mockImplementation(
         () =>
           ({
+            ...createChatPolicyFixture(),
             sendMessageStream: mockSendMessageStream,
             getHistory: vi.fn().mockReturnValue([]),
             getHistoryService: vi.fn().mockReturnValue({
@@ -230,6 +239,7 @@ describe('subagent.ts', () => {
       ).mockImplementation(
         () =>
           ({
+            ...createChatPolicyFixture(),
             sendMessageStream: mockSendMessageStream,
             getHistory: vi.fn().mockReturnValue([]),
             getHistoryService: vi.fn().mockReturnValue({
@@ -259,7 +269,7 @@ describe('subagent.ts', () => {
     };
 
     it('should correctly template the system prompt and initialize ChatSession', async () => {
-      const { config } = await createMockConfig();
+      const { config, mcpRuntime } = await createMockConfig();
       const promptConfig: PromptConfig = {
         systemPrompt: 'Hello ${name}, your task is ${task}.',
       };
@@ -270,7 +280,10 @@ describe('subagent.ts', () => {
       mockSendMessageStream.mockImplementation(createMockStream(['stop']));
 
       const runtimeBundle = createStatelessRuntimeBundle();
-      const { overrides } = createRuntimeOverrides({ runtimeBundle });
+      const { overrides } = createRuntimeOverrides(
+        mcpRuntime.workspaceFilesystem.paths,
+        { runtimeBundle },
+      );
 
       const scope = await SubAgentScope.create(
         'test-agent',
@@ -298,12 +311,14 @@ describe('subagent.ts', () => {
     });
 
     it('should include output instructions in the system prompt when outputs are defined', async () => {
-      const { config } = await createMockConfig();
+      const { config, mcpRuntime } = await createMockConfig();
       const promptConfig: PromptConfig = { systemPrompt: 'Execute task.' };
 
       mockSendMessageStream.mockImplementation(createMockStream(['stop']));
 
-      const { overrides } = createRuntimeOverrides();
+      const { overrides } = createRuntimeOverrides(
+        mcpRuntime.workspaceFilesystem.paths,
+      );
       const scope = await SubAgentScope.create(
         'test-agent',
         config,
@@ -323,12 +338,14 @@ describe('subagent.ts', () => {
     });
 
     it('should always start with empty chat history when using systemPrompt', async () => {
-      const { config } = await createMockConfig();
+      const { config, mcpRuntime } = await createMockConfig();
       const promptConfig: PromptConfig = { systemPrompt: 'Test prompt' };
 
       mockSendMessageStream.mockImplementation(createMockStream(['stop']));
 
-      const { overrides } = createRuntimeOverrides();
+      const { overrides } = createRuntimeOverrides(
+        mcpRuntime.workspaceFilesystem.paths,
+      );
       const scope = await SubAgentScope.create(
         'test-agent',
         config,
@@ -353,10 +370,12 @@ describe('subagent.ts', () => {
     });
 
     it('should reject with required error when PromptConfig lacks systemPrompt', async () => {
-      const { config } = await createMockConfig();
+      const { config, mcpRuntime } = await createMockConfig();
       const malformedPromptConfig = {} as unknown as PromptConfig;
 
-      const { overrides } = createRuntimeOverrides();
+      const { overrides } = createRuntimeOverrides(
+        mcpRuntime.workspaceFilesystem.paths,
+      );
 
       const scope = await SubAgentScope.create(
         'test-agent',
@@ -376,14 +395,16 @@ describe('subagent.ts', () => {
     });
 
     it('should substitute placeholders for missing template variables', async () => {
-      const { config } = await createMockConfig();
+      const { config, mcpRuntime } = await createMockConfig();
       const promptConfig: PromptConfig = {
         systemPrompt: 'Hello {{name}}, your session is {{session_id}}.',
       };
 
       mockSendMessageStream.mockImplementation(createMockStream(['stop']));
 
-      const { overrides } = createRuntimeOverrides();
+      const { overrides } = createRuntimeOverrides(
+        mcpRuntime.workspaceFilesystem.paths,
+      );
       const scope = await SubAgentScope.create(
         'test-agent',
         config,
@@ -403,14 +424,16 @@ describe('subagent.ts', () => {
     });
 
     it('should substitute placeholder for missing sessionId template variable', async () => {
-      const { config } = await createMockConfig();
+      const { config, mcpRuntime } = await createMockConfig();
       const promptConfig: PromptConfig = {
         systemPrompt: 'Session: {{session_id}}',
       };
 
       mockSendMessageStream.mockImplementation(createMockStream(['stop']));
 
-      const { overrides } = createRuntimeOverrides();
+      const { overrides } = createRuntimeOverrides(
+        mcpRuntime.workspaceFilesystem.paths,
+      );
       const scope = await SubAgentScope.create(
         'test-agent',
         config,
@@ -429,12 +452,14 @@ describe('subagent.ts', () => {
     });
 
     it('should always include outputConfig instructions in system instruction when systemPrompt is used', async () => {
-      const { config } = await createMockConfig();
+      const { config, mcpRuntime } = await createMockConfig();
       const promptConfig: PromptConfig = { systemPrompt: 'Do the thing.' };
 
       mockSendMessageStream.mockImplementation(createMockStream(['stop']));
 
-      const { overrides } = createRuntimeOverrides();
+      const { overrides } = createRuntimeOverrides(
+        mcpRuntime.workspaceFilesystem.paths,
+      );
       const scope = await SubAgentScope.create(
         'test-agent',
         config,
@@ -453,12 +478,14 @@ describe('subagent.ts', () => {
     });
 
     it('should pass interactionMode subagent when building system prompt', async () => {
-      const { config } = await createMockConfig();
+      const { config, mcpRuntime } = await createMockConfig();
       const promptConfig: PromptConfig = { systemPrompt: 'Execute task.' };
 
       mockSendMessageStream.mockImplementation(createMockStream(['stop']));
 
-      const { overrides } = createRuntimeOverrides();
+      const { overrides } = createRuntimeOverrides(
+        mcpRuntime.workspaceFilesystem.paths,
+      );
       const scope = await SubAgentScope.create(
         'test-agent',
         config,

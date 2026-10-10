@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { NodeFileSystem } from './IFileSystem.js';
 
 /**
  * @plan:PLAN-20260603-ISSUE1584.P12
@@ -28,16 +29,23 @@ let anthropicCtorState: new (...args: unknown[]) => unknown = class {};
 function makeWrapper(
   get: () => new (...args: unknown[]) => unknown,
 ): new (...args: unknown[]) => unknown {
-  return function (...args: unknown[]) {
-    return Reflect.construct(get(), args, new.target);
+  return class {
+    constructor(...args: unknown[]) {
+      const instance = Reflect.construct(get(), args, new.target);
+      if (typeof instance !== 'object' || instance === null)
+        throw new Error('Provider constructor did not create an instance');
+      return instance;
+    }
   };
 }
 
 void mock.module('../ProviderManager.js', () => {
   class MockProviderManager {
+    setRetryOperationsFactory(): void {}
     setConfig(): void {}
     setActiveProvider(): void {}
     registerProvider(): void {}
+    registerAliasRefresher(): void {}
   }
   return { ProviderManager: MockProviderManager };
 });
@@ -63,8 +71,6 @@ void mock.module('./oauth-provider-registration.js', () => ({
   ) => registerStandardOAuthProvidersState(oauthManager, tokenStore, addItem),
   isOAuthProviderRegistered: (...args: unknown[]) =>
     isOAuthProviderRegisteredState(...args),
-  resetRegisteredProviders: (...args: unknown[]) =>
-    resetRegisteredProvidersState(...args),
 }));
 
 // Mutable state for the oauth-provider-registration mock
@@ -76,7 +82,6 @@ let registerStandardOAuthProvidersState: (
 ) => void = () => {};
 let isOAuthProviderRegisteredState: (...args: unknown[]) => boolean = () =>
   false;
-let resetRegisteredProvidersState: (...args: unknown[]) => void = () => {};
 
 function createRegisterStandardOAuthProvidersMock(
   ensureMock: ReturnType<typeof vi.fn>,
@@ -112,7 +117,7 @@ describe('claudecode OAuth registration with environment key', () => {
     process.env.ANTHROPIC_API_KEY = 'sk-test-key';
 
     const ensureOAuthProviderRegisteredMock = vi.fn();
-    const anthropicCtor = vi.fn(() => ({}));
+    const anthropicCtor = vi.fn((..._args: unknown[]) => ({}));
 
     // Wire mutable state for this test
     ensureOAuthProviderRegisteredState = ensureOAuthProviderRegisteredMock;
@@ -121,10 +126,13 @@ describe('claudecode OAuth registration with environment key', () => {
         ensureOAuthProviderRegisteredMock,
       );
     isOAuthProviderRegisteredState = vi.fn();
-    resetRegisteredProvidersState = vi.fn();
     openaiCtorState = class {} as new (...args: unknown[]) => unknown;
     openaiResponsesCtorState = class {} as new (...args: unknown[]) => unknown;
-    anthropicCtorState = anthropicCtor;
+    anthropicCtorState = class {
+      constructor(...args: unknown[]) {
+        return anthropicCtor(...args);
+      }
+    };
 
     const mockSettingsService = new SettingsService();
     const activeContext = {
@@ -132,19 +140,15 @@ describe('claudecode OAuth registration with environment key', () => {
       metadata: { scope: 'test' },
     };
 
-    const {
-      createProviderManager,
-      resetProviderManager,
-      registerProviderManagerSingleton,
-    } = await import('./providerManagerInstance.js');
+    const { createProviderManager } = await import(
+      './providerManagerInstance.js'
+    );
 
-    resetProviderManager();
-
-    const { manager, oauthManager } = createProviderManager(activeContext, {
+    const { oauthManager } = createProviderManager(activeContext, {
+      fileSystem: new NodeFileSystem(),
       config: undefined,
       allowBrowserEnvironment: false,
     });
-    registerProviderManagerSingleton(manager, oauthManager);
 
     const registeredClaudecode =
       ensureOAuthProviderRegisteredMock.mock.calls.some(
@@ -158,7 +162,7 @@ describe('claudecode OAuth registration with environment key', () => {
     // manager (the claudecode alias); the API-key-only anthropic alias does
     // not. The primary behavioral A7 proof remains the real alias test.
     const callsWithOAuthManager = ctorCalls.filter(
-      (call) => (call as unknown[])[3] !== undefined,
+      (call) => call[3] !== undefined,
     );
     expect(callsWithOAuthManager).toHaveLength(1);
     expect(callsWithOAuthManager[0]?.[3]).toBe(oauthManager);
@@ -172,7 +176,7 @@ describe('claudecode OAuth registration with environment key', () => {
     const openaiCtor = vi.fn(() => ({}));
     const openaiResponsesCtor = vi.fn(() => ({}));
     const openaivercelCtor = vi.fn(() => ({}));
-    const anthropicCtor = vi.fn(() => ({}));
+    const anthropicCtor = vi.fn((..._args: unknown[]) => ({}));
 
     // Wire mutable state for this test
     ensureOAuthProviderRegisteredState = ensureOAuthProviderRegisteredMock;
@@ -181,7 +185,6 @@ describe('claudecode OAuth registration with environment key', () => {
         ensureOAuthProviderRegisteredMock,
       );
     isOAuthProviderRegisteredState = vi.fn();
-    resetRegisteredProvidersState = vi.fn();
     openaiCtorState = openaiCtor as unknown as new (
       ...args: unknown[]
     ) => unknown;
@@ -196,20 +199,17 @@ describe('claudecode OAuth registration with environment key', () => {
     ) => unknown;
 
     const mockSettingsService = new SettingsService();
+    mockSettingsService.set('authOnly', true);
     const activeContext = {
       settingsService: mockSettingsService,
       metadata: { scope: 'test' },
     };
 
-    const {
-      createProviderManager,
-      resetProviderManager,
-      registerProviderManagerSingleton,
-    } = await import('./providerManagerInstance.js');
+    const { createProviderManager } = await import(
+      './providerManagerInstance.js'
+    );
 
-    resetProviderManager();
     const mockConfig = {
-      setProviderManager(): void {},
       getEphemeralSettings() {
         return { authOnly: true };
       },
@@ -218,11 +218,11 @@ describe('claudecode OAuth registration with environment key', () => {
       },
     } as unknown as Config;
 
-    const { manager, oauthManager } = createProviderManager(activeContext, {
+    createProviderManager(activeContext, {
+      fileSystem: new NodeFileSystem(),
       config: mockConfig,
       allowBrowserEnvironment: false,
     });
-    registerProviderManagerSingleton(manager, oauthManager);
 
     // No alias may receive an API key while authOnly is on — not the alias
     // that happens to be registered first, and not the ones that declare
@@ -245,7 +245,7 @@ describe('claudecode OAuth registration with environment key', () => {
     process.env.ANTHROPIC_API_KEY = 'sk-test-key';
 
     const ensureOAuthProviderRegisteredMock = vi.fn();
-    const anthropicCtor = vi.fn(() => ({}));
+    const anthropicCtor = vi.fn((..._args: unknown[]) => ({}));
 
     // Wire mutable state for this test
     ensureOAuthProviderRegisteredState = ensureOAuthProviderRegisteredMock;
@@ -254,7 +254,6 @@ describe('claudecode OAuth registration with environment key', () => {
         ensureOAuthProviderRegisteredMock,
       );
     isOAuthProviderRegisteredState = vi.fn();
-    resetRegisteredProvidersState = vi.fn();
     openaiCtorState = class {} as new (...args: unknown[]) => unknown;
     openaiResponsesCtorState = class {} as new (...args: unknown[]) => unknown;
     openaiVercelCtorState = class {} as new (...args: unknown[]) => unknown;
@@ -268,15 +267,11 @@ describe('claudecode OAuth registration with environment key', () => {
       metadata: { scope: 'test' },
     };
 
-    const {
-      createProviderManager,
-      resetProviderManager,
-      registerProviderManagerSingleton,
-    } = await import('./providerManagerInstance.js');
+    const { createProviderManager } = await import(
+      './providerManagerInstance.js'
+    );
 
-    resetProviderManager();
     const mockConfig = {
-      setProviderManager(): void {},
       getEphemeralSettings() {
         return {};
       },
@@ -285,11 +280,11 @@ describe('claudecode OAuth registration with environment key', () => {
       },
     } as unknown as Config;
 
-    const { manager, oauthManager } = createProviderManager(activeContext, {
+    createProviderManager(activeContext, {
+      fileSystem: new NodeFileSystem(),
       config: mockConfig,
       allowBrowserEnvironment: false,
     });
-    registerProviderManagerSingleton(manager, oauthManager);
 
     // Without authOnly, an alias still receives the key its own `apiKeyEnv`
     // names. The family below resolves its key ONLY from that alias-level
@@ -304,7 +299,7 @@ describe('claudecode OAuth registration with environment key', () => {
     const openaiCtor = vi.fn(() => ({}));
     const openaiResponsesCtor = vi.fn(() => ({}));
     const openaivercelCtor = vi.fn(() => ({}));
-    const anthropicCtor = vi.fn(() => ({}));
+    const anthropicCtor = vi.fn((..._args: unknown[]) => ({}));
 
     // Wire mutable state for this test
     ensureOAuthProviderRegisteredState = ensureOAuthProviderRegisteredMock;
@@ -313,7 +308,6 @@ describe('claudecode OAuth registration with environment key', () => {
         ensureOAuthProviderRegisteredMock,
       );
     isOAuthProviderRegisteredState = vi.fn();
-    resetRegisteredProvidersState = vi.fn();
     openaiCtorState = openaiCtor as unknown as new (
       ...args: unknown[]
     ) => unknown;
@@ -333,19 +327,15 @@ describe('claudecode OAuth registration with environment key', () => {
       metadata: { scope: 'test' },
     };
 
-    const {
-      createProviderManager,
-      resetProviderManager,
-      registerProviderManagerSingleton,
-    } = await import('./providerManagerInstance.js');
+    const { createProviderManager } = await import(
+      './providerManagerInstance.js'
+    );
 
-    resetProviderManager();
-
-    const { manager, oauthManager } = createProviderManager(activeContext, {
+    const { oauthManager } = createProviderManager(activeContext, {
+      fileSystem: new NodeFileSystem(),
       config: undefined,
       allowBrowserEnvironment: false,
     });
-    registerProviderManagerSingleton(manager, oauthManager);
 
     expect(openaiCtor).toHaveBeenCalled();
     expect(openaivercelCtor).toHaveBeenCalled();

@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { physicalFiles } from './helpers/physical-files.js';
+
 /**
  * Behavioral tests for issue #3597 (apply_patch must reject hunks that arrive
  * out of original-file line order instead of duplicating file content).
@@ -72,12 +74,17 @@ describe('ApplyPatchTool hunk ordering (issue #3597)', () => {
     approvalMode: ApprovalMode = 'auto',
   ): IToolHost {
     return {
+      ...physicalFiles,
       getTargetDir: () => targetDir,
       getWorkspaceRoots: () => [targetDir],
       getApprovalMode: () => approvalMode,
       setApprovalMode: () => {},
       isInteractive: () => false,
-      hasFeatureFlag: () => false,
+
+      runSearch: <T>(
+        _directories: readonly string[],
+        operation: () => Promise<T>,
+      ): Promise<T> => operation(),
       getFileService: () => ({
         shouldGitIgnoreFile: () => false,
         shouldLlxprtIgnoreFile: () => false,
@@ -94,7 +101,7 @@ describe('ApplyPatchTool hunk ordering (issue #3597)', () => {
       getLlxprtIgnoreFilePath: () => null,
       recordFileRead: () => {},
       getLlxprtIgnorePatterns: () => [],
-      getEphemeralSettings: () => ({}),
+      readExecutionPolicy: () => ({}),
       getDebugMode: () => false,
     };
   }

@@ -32,7 +32,6 @@ describe('getOpenAIProviderInfo runtime integration', () => {
 
     const config = createRuntimeConfigStub(settingsService, {
       getProvider: () => 'openai',
-      getProviderManager: () => providerManager,
       getModel: () => 'config-model',
     });
 
@@ -50,7 +49,6 @@ describe('getOpenAIProviderInfo runtime integration', () => {
     const settingsService = new SettingsService();
     const config = createRuntimeConfigStub(settingsService, {
       getProvider: () => 'openai',
-      getProviderManager: () => null,
       getModel: () => 'config-model',
     });
 
@@ -69,7 +67,6 @@ describe('getOpenAIProviderInfo runtime integration', () => {
 
     const config = createRuntimeConfigStub(settingsService, {
       getProvider: () => 'anthropic',
-      getProviderManager: () => providerManager,
     });
 
     const info = getOpenAIProviderInfo(
@@ -96,7 +93,6 @@ describe('getOpenAIProviderInfo runtime integration', () => {
 
     const config = createRuntimeConfigStub(settingsService, {
       getProvider: () => 'openai',
-      getProviderManager: () => providerManager,
       getModel: () => 'gpt-4o',
     });
 
@@ -120,7 +116,6 @@ describe('getOpenAIProviderInfo runtime integration', () => {
 
     const config = createRuntimeConfigStub(settingsService, {
       getProvider: () => 'openai',
-      getProviderManager: () => providerManager,
       getModel: () => 'gpt-5.4',
     });
 
@@ -143,7 +138,6 @@ describe('getOpenAIProviderInfo runtime integration', () => {
 
     const config = createRuntimeConfigStub(settingsService, {
       getProvider: () => 'openai',
-      getProviderManager: () => providerManager,
       getModel: () => 'gpt-5.4-mini',
     });
 
@@ -170,7 +164,6 @@ describe('getOpenAIProviderInfo runtime integration', () => {
     const providerManager = createProviderManagerStub(providerStub);
     const config = createRuntimeConfigStub(settingsService, {
       getProvider: () => 'openai',
-      getProviderManager: () => providerManager,
       getModel: () => model,
     });
 
@@ -191,7 +184,6 @@ describe('getOpenAIProviderInfo runtime integration', () => {
       const providerManager = createProviderManagerStub(providerStub);
       const config = createRuntimeConfigStub(settingsService, {
         getProvider: () => 'openai',
-        getProviderManager: () => providerManager,
         getModel: () => model,
       });
 
@@ -221,7 +213,6 @@ describe('getOpenAIProviderInfo runtime integration', () => {
     const providerManager = createProviderManagerStub(providerStub);
     const config = createRuntimeConfigStub(settingsService, {
       getProvider: () => 'openai',
-      getProviderManager: () => providerManager,
       getModel: () => 'gpt-5.6',
     });
 
@@ -247,7 +238,6 @@ describe('getOpenAIProviderInfo runtime integration', () => {
     const providerManager = createProviderManagerStub(providerStub);
     const config = createRuntimeConfigStub(settingsService, {
       getProvider: () => 'openai',
-      getProviderManager: () => providerManager,
       getModel: () => 'gpt-5.6',
     });
 
@@ -272,7 +262,6 @@ describe('getOpenAIProviderInfo runtime integration', () => {
     const providerManager = createProviderManagerStub(providerStub);
     const config = createRuntimeConfigStub(settingsService, {
       getProvider: () => 'openai',
-      getProviderManager: () => providerManager,
       getModel: () => 'gpt-5.6',
     });
 
@@ -294,7 +283,6 @@ describe('getOpenAIProviderInfo runtime integration', () => {
       const providerManager = createProviderManagerStub(providerStub);
       const config = createRuntimeConfigStub(settingsService, {
         getProvider: () => 'openai',
-        getProviderManager: () => providerManager,
         getModel: () => 'gpt-5.5',
       });
 
@@ -319,7 +307,6 @@ describe('getOpenAIProviderInfo runtime integration', () => {
       const providerManager = createProviderManagerStub(providerStub);
       const config = createRuntimeConfigStub(settingsService, {
         getProvider: () => 'openai',
-        getProviderManager: () => providerManager,
         getModel: () => 'gpt-5.6',
       });
 
@@ -342,7 +329,6 @@ describe('getOpenAIProviderInfo runtime integration', () => {
       const providerManager = createProviderManagerStub(providerStub);
       const config = createRuntimeConfigStub(settingsService, {
         getProvider: () => 'openai',
-        getProviderManager: () => providerManager,
         getModel: () => 'gpt-5.5',
       });
 
@@ -364,7 +350,6 @@ describe('getOpenAIProviderInfo runtime integration', () => {
       const providerManager = createProviderManagerStub(providerStub);
       const config = createRuntimeConfigStub(settingsService, {
         getProvider: () => 'openai',
-        getProviderManager: () => providerManager,
         getModel: () => 'gpt-5.6',
       });
 
@@ -388,7 +373,6 @@ describe('getOpenAIProviderInfo runtime integration', () => {
       const providerManager = createProviderManagerStub(providerStub);
       const config = createRuntimeConfigStub(settingsService, {
         getProvider: () => 'openai',
-        getProviderManager: () => providerManager,
         getModel: () => 'gpt-5.5',
       });
 
@@ -413,7 +397,6 @@ describe('getOpenAIProviderInfo runtime integration', () => {
       const providerManager = createProviderManagerStub(providerStub);
       const config = createRuntimeConfigStub(settingsService, {
         getProvider: () => 'openai',
-        getProviderManager: () => providerManager,
         getModel: () => 'gpt-5.6',
       });
 
@@ -444,7 +427,6 @@ describe('getOpenAIProviderInfo runtime integration', () => {
       const providerManager = createProviderManagerStub(providerStub);
       const config = createRuntimeConfigStub(settingsService, {
         getProvider: () => 'openai',
-        getProviderManager: () => providerManager,
         getModel: () => 'gpt-5.5',
       });
 
@@ -472,7 +454,6 @@ describe('getOpenAIProviderInfo runtime integration', () => {
       const providerManager = createProviderManagerStub(providerStub);
       const config = createRuntimeConfigStub(settingsService, {
         getProvider: () => 'openai',
-        getProviderManager: () => providerManager,
         getModel: () => 'gpt-5.5',
       });
 

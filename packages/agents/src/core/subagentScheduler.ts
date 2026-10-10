@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { AgentDisplayCallbacks } from '../api/agent.js';
 import type { ToolCallRequestInfo } from './turn.js';
 import type {
   CompletedToolCall,
@@ -21,12 +21,16 @@ export interface SubagentSchedulerHandle {
     request: ToolCallRequestInfo | ToolCallRequestInfo[],
     signal: AbortSignal,
   ): Promise<void> | void;
-  dispose?: () => void;
+  dispose?: () => void | Promise<void>;
 }
 
 export type SubagentSchedulerFactory = (args: {
-  schedulerConfig: Config;
   onAllToolCallsComplete: (calls: CompletedToolCall[]) => Promise<void>;
   outputUpdateHandler: OutputUpdateHandler;
   onToolCallsUpdate?: ToolCallsUpdateHandler;
 }) => SubagentSchedulerHandle | Promise<SubagentSchedulerHandle>;
+
+export interface SubagentExecutionOptions {
+  schedulerFactory?: SubagentSchedulerFactory;
+  displayCallbacks?: AgentDisplayCallbacks;
+}

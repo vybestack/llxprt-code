@@ -3,6 +3,15 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
+
+import { createTestFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import { WorkspaceFilesystemOwner } from '../services/workspace-filesystem-owner.js';
+import { afterEach as disposeOwnedPolicies } from 'bun:test';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+
+import { summarizeToolOutput } from '../utils/summarizer.js';
+import { testConfigInitialization } from '@vybestack/llxprt-code-test-utils/core/config.js';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import os from 'node:os';
@@ -10,14 +19,14 @@ import os from 'node:os';
 import { Config } from '../config/config.js';
 import { CoreShellToolHostAdapter } from './CoreShellToolHostAdapter.js';
 import { debugLogger } from '../utils/debugLogger.js';
-import type { ShellJob, ShellJobManager } from '../services/shellJobManager.js';
+import { ShellJobManager, type ShellJob } from '../services/shellJobManager.js';
+import { SessionSettingsOwner } from '../session/session-settings-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ShellTool, type IToolMessageBus } from '@vybestack/llxprt-code-tools';
 import { initializeParser, isParserAvailable } from '../utils/shell-parser.js';
 import type { ContentGeneratorConfig } from '../core/contentGenerator.js';
 import type { IContent } from '../services/history/IContent.js';
 import { createTestAgentClient } from '../__tests__/config-test-helpers.js';
-import { MessageBus } from '../confirmation-bus/message-bus.js';
 
 /**
  * Windows-only end-to-end coverage for the real background-job path that was
@@ -37,8 +46,10 @@ let sessionIdCounter = 0;
 function makeAdapter(): {
   config: Config;
   adapter: CoreShellToolHostAdapter;
+  settingsOwner: SessionSettingsOwner;
 } {
   sessionIdCounter += 1;
+  const settingsOwner = new SessionSettingsOwner(new SettingsService());
   const config = new Config({
     model: 'test-model',
     question: 'test question',
@@ -48,10 +59,19 @@ function makeAdapter(): {
     sessionId: `adapter-e2e-${Date.now()}-${sessionIdCounter}`,
     debugMode: false,
     cwd: os.tmpdir(),
-    settingsService: new SettingsService(),
   });
-  const adapter = new CoreShellToolHostAdapter(config);
-  return { config, adapter };
+  const adapter = new CoreShellToolHostAdapter(
+    config,
+    new WorkspaceFilesystemOwner({
+      targetDir: config.getTargetDir(),
+      isTrusted: () =>
+        new WorkspaceTrustLifecycle({
+          localTrust: config.initialWorkspaceTrust,
+        }).isTrustedFolder(),
+    }).paths,
+    () => settingsOwner.readToolExecutionPolicy(),
+  );
+  return { config, adapter, settingsOwner };
 }
 
 /**
@@ -92,19 +112,6 @@ function waitForTerminal(
   });
 }
 
-/**
- * Returns the ShellJobManager the adapter lazily built. Lives outside the test
- * body so its guard is not a conditional-in-test. Throwing here (rather than
- * asserting) also preserves the precise TypeScript narrowing the caller needs.
- */
-function requireManager(config: Config): ShellJobManager {
-  const manager = config.getShellJobManager();
-  if (manager === undefined) {
-    throw new Error('ShellJobManager was not created by the adapter');
-  }
-  return manager;
-}
-
 /** Extracts the real job id the tool printed, throwing if absent. */
 function extractJobId(llm: string): string {
   const match = /Job ID: (shell_\w+)/.exec(llm);
@@ -124,8 +131,8 @@ const pwshAvailable =
   isParserAvailable('powershell');
 describe('inactivity termination passthrough @plan:issue3589', () => {
   it('H: reports a real silent command killed by the inactivity window', async () => {
-    const { config, adapter } = makeAdapter();
-    config.setEphemeralSetting('shell-inactivity-timeout-seconds', 1);
+    const { adapter, settingsOwner } = makeAdapter();
+    settingsOwner.writeUserParameter('shell-inactivity-timeout-seconds', 1);
 
     const result = await adapter.executeShellCommand(
       os.platform() === 'win32' ? 'Start-Sleep -Seconds 5' : 'sleep 5',
@@ -138,8 +145,8 @@ describe('inactivity termination passthrough @plan:issue3589', () => {
   }, 15000);
 
   it('H: exposes the effective inactivity window in milliseconds', () => {
-    const { config, adapter } = makeAdapter();
-    config.setEphemeralSetting('shell-inactivity-timeout-seconds', 1);
+    const { adapter, settingsOwner } = makeAdapter();
+    settingsOwner.writeUserParameter('shell-inactivity-timeout-seconds', 1);
 
     expect(adapter.getShellExecutionConfig()).toHaveProperty(
       'inactivityTimeoutMs',
@@ -149,36 +156,40 @@ describe('inactivity termination passthrough @plan:issue3589', () => {
 });
 
 describe('CoreShellToolHostAdapter', () => {
+  it('rejects background launches without an Agent owner', () => {
+    const { adapter } = makeAdapter();
+    expect(() =>
+      adapter.launchBackgroundJob({
+        command: 'echo unowned',
+        cwd: os.tmpdir(),
+      }),
+    ).toThrow('Background jobs require an Agent owner');
+  });
+
   describe.skipIf(os.platform() !== 'win32')(
     'CoreShellToolHostAdapter -> real ShellJobManager (Windows end-to-end)',
     () => {
-      let config: Config;
       let adapter: CoreShellToolHostAdapter;
+      let manager: ShellJobManager;
 
       beforeEach(() => {
-        const built = makeAdapter();
-        config = built.config;
-        adapter = built.adapter;
+        adapter = makeAdapter().adapter;
+        manager = new ShellJobManager();
       });
 
       afterEach(async () => {
-        const manager = config.getShellJobManager();
-        if (manager !== undefined) {
-          // dispose() rejects by design when Windows survivors are retained.
-          // Catch so teardown does not mask real test results or leak processes.
-          try {
-            await manager.dispose();
-          } catch (err) {
-            debugLogger.warn(
-              '[CoreShellToolHostAdapter.test] dispose() rejected during teardown:',
-              err instanceof Error ? err.message : String(err),
-            );
-          }
+        try {
+          await manager.dispose();
+        } catch (err) {
+          debugLogger.warn(
+            '[CoreShellToolHostAdapter.test] dispose() rejected during teardown:',
+            err instanceof Error ? err.message : String(err),
+          );
         }
       });
 
-      it('launchBackgroundJob returns a shell_ id and the real output is retrievable via tailBackgroundJob', async () => {
-        const job = adapter.launchBackgroundJob({
+      it('bound background launch returns a shell_ id and the real output is retrievable', async () => {
+        const job = manager.launch({
           command: "Write-Output 'adapter-e2e-success'",
           cwd: os.tmpdir(),
         });
@@ -187,7 +198,6 @@ describe('CoreShellToolHostAdapter', () => {
         expect(job.id).toMatch(/^shell_/);
         expect(job.state).toBe('running');
 
-        const manager = requireManager(config);
         const terminal = await waitForTerminal(manager, job.id);
 
         // The real process reached a terminal state with a real exit code.
@@ -195,19 +205,18 @@ describe('CoreShellToolHostAdapter', () => {
         expect(terminal.exitCode).toBe(0);
 
         // The real command output is retrievable through the adapter's tail.
-        const tail = adapter.tailBackgroundJob(job.id);
+        const tail = manager.tailOutput(job.id);
         expect(tail.output).toContain('adapter-e2e-success');
       });
 
-      it('launchBackgroundJob reports the real non-zero exit code for a failing command', async () => {
-        const job = adapter.launchBackgroundJob({
+      it('bound background launch reports the real non-zero exit code for a failing command', async () => {
+        const job = manager.launch({
           command: 'exit 7',
           cwd: os.tmpdir(),
         });
 
         expect(job.id).toMatch(/^shell_/);
 
-        const manager = requireManager(config);
         const terminal = await waitForTerminal(manager, job.id);
 
         // A real failing command surfaces its real non-zero exit code.
@@ -216,7 +225,13 @@ describe('CoreShellToolHostAdapter', () => {
       });
 
       it('ShellTool wired to the real adapter launches a REAL background job with a shell_ id and contract-clean output', async () => {
-        const tool = new ShellTool(adapter, createInertMessageBus());
+        const tool = new ShellTool(
+          adapter,
+          createInertMessageBus(),
+        ).withBackgroundJobs({
+          launchBackgroundJob: (input) => manager.launch(input),
+          tailBackgroundJob: (id) => manager.tailOutput(id),
+        });
 
         const invocation = tool.build({
           command: "Write-Output 'via-shell-tool'",
@@ -233,12 +248,11 @@ describe('CoreShellToolHostAdapter', () => {
         // prove the process actually ran: terminal state + retrievable output.
         const jobId = extractJobId(llm);
 
-        const manager = requireManager(config);
         const terminal = await waitForTerminal(manager, jobId);
         expect(terminal.state).toBe('completed');
         expect(terminal.exitCode).toBe(0);
 
-        const tail = adapter.tailBackgroundJob(jobId);
+        const tail = manager.tailOutput(jobId);
         expect(tail.output).toContain('via-shell-tool');
       });
     },
@@ -266,6 +280,7 @@ describe('CoreShellToolHostAdapter', () => {
         allowedTools: string[] = [],
         excludeTools: string[] = [],
       ): { config: Config; adapter: CoreShellToolHostAdapter } {
+        const settingsOwner = new SessionSettingsOwner(new SettingsService());
         const config = new Config({
           model: 'test-model',
           question: 'test question',
@@ -275,12 +290,24 @@ describe('CoreShellToolHostAdapter', () => {
           sessionId: `perm-${Date.now()}-${++sessionIdCounter}`,
           debugMode: false,
           cwd: os.tmpdir(),
-          settingsService: new SettingsService(),
           coreTools: allowedTools,
           allowedTools,
           excludeTools,
         });
-        return { config, adapter: new CoreShellToolHostAdapter(config) };
+        return {
+          config,
+          adapter: new CoreShellToolHostAdapter(
+            config,
+            new WorkspaceFilesystemOwner({
+              targetDir: config.getTargetDir(),
+              isTrusted: () =>
+                new WorkspaceTrustLifecycle({
+                  localTrust: config.initialWorkspaceTrust,
+                }).isTrustedFolder(),
+            }).paths,
+            () => settingsOwner.readToolExecutionPolicy(),
+          ),
+        };
       }
 
       it('(a) exact issue #3181 reproduction command passes adapter validation', () => {
@@ -403,6 +430,7 @@ describe('CoreShellToolHostAdapter', () => {
       // configure one and let the provider vary.
       const settingsService = new SettingsService();
       settingsService.set('utilityModel', 'utility-model-x');
+      const settingsOwner = new SessionSettingsOwner(settingsService);
       const config = new Config({
         model: 'test-model',
         question: 'test question',
@@ -412,27 +440,48 @@ describe('CoreShellToolHostAdapter', () => {
         sessionId: `adapter-summarize-${Date.now()}-${sessionIdCounter}`,
         debugMode: false,
         cwd: os.tmpdir(),
-        settingsService,
-        agentClientFactory: () => agentClient,
+        initialSettings: settingsService.getAllGlobalSettings(),
       });
+      const configPolicy = new RuntimePolicyOwner(config);
+      ownedPolicies.push(configPolicy);
 
-      const messageBus = new MessageBus(
-        config.getPolicyEngine(),
-        config.getDebugMode(),
+      const messageBus = configPolicy.session.messageBus;
+      await config.initialize(
+        testConfigInitialization(
+          config,
+          messageBus,
+          configPolicy,
+          createTestFilesystem(config),
+        ),
       );
-      await config.initialize({ messageBus });
       if (providerManager !== undefined) {
         const target = config as unknown as {
           contentGeneratorConfig: ContentGeneratorConfig;
         };
         target.contentGeneratorConfig = {
           model: 'test-model',
-          providerManager:
-            providerManager as unknown as ContentGeneratorConfig['providerManager'],
         };
       }
       return {
-        adapter: new CoreShellToolHostAdapter(config),
+        adapter: new CoreShellToolHostAdapter(
+          config,
+          new WorkspaceFilesystemOwner({
+            targetDir: config.getTargetDir(),
+            isTrusted: () =>
+              new WorkspaceTrustLifecycle({
+                localTrust: config.initialWorkspaceTrust,
+              }).isTrustedFolder(),
+          }).paths,
+          () => settingsOwner.readToolExecutionPolicy(),
+          (content, signal, budget) =>
+            summarizeToolOutput(
+              content,
+              agentClient,
+              signal,
+              budget,
+              config.getUtilityModel(),
+            ),
+        ),
         summarizedPromptLengths,
       };
     }
@@ -503,4 +552,9 @@ describe('CoreShellToolHostAdapter', () => {
       .map((block) => (block.type === 'text' ? block.text : ''))
       .join('');
   }
+});
+
+const ownedPolicies: Array<{ dispose(): void }> = [];
+disposeOwnedPolicies(() => {
+  for (const owner of ownedPolicies.splice(0)) owner.dispose();
 });

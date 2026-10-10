@@ -142,7 +142,7 @@ export function createMockRuntimeApi(
     listAvailableModels: vi.fn(() => []),
     getActiveModelName: vi.fn(() => 'mock-model'),
     getActiveProfileName: vi.fn(() => null),
-    getActiveProviderStatus: vi.fn(() => ({ status: 'ready' })),
+    providerStatus: vi.fn(() => ({ status: 'ready' })),
     getActiveModelParams: vi.fn(() => ({})),
     getEphemeralSettings: vi.fn(() => ({})),
     setEphemeralSetting: vi.fn(() => {}),
@@ -164,12 +164,7 @@ export function createMockRuntimeApi(
       totalTokens: 0,
       totalRequests: 0,
     })),
-    getCliProviderManager: vi.fn(() => null),
-    getCliOAuthManager: vi.fn(() => {
-      throw new Error('OAuthManager missing from runtime registration');
-    }),
-    maybeGetCliOAuthManager: vi.fn(() => null),
-    registerCliProviderInfrastructure: vi.fn(() => {}),
+    providerManager: vi.fn(() => null),
     getRuntimeDiagnosticsSnapshot: vi.fn(() => ({})),
     getActiveToolFormatState: vi.fn(() => ({
       format: 'default',
@@ -184,9 +179,7 @@ export function createMockRuntimeApi(
       thought: 0,
       total: 0,
     })),
-    getCliRuntimeServices: vi.fn(() => null),
-    enterRuntimeScope: vi.fn(() => {}),
-    runWithRuntimeScope: vi.fn(<T>(cb: () => T): T => cb()),
+
     setProvider: vi.fn(async () => ({
       success: true,
       provider: 'mock-provider',

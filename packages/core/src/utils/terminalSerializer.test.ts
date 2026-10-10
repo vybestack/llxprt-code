@@ -9,12 +9,15 @@ import { Terminal } from '@xterm/headless';
 import {
   serializeTerminalToObject,
   convertColorToHex,
-  ColorMode,
   type AnsiOutput,
+  type ColorMode,
 } from './terminalSerializer.js';
 
 const RED_FG = '\x1b[31m';
 const RESET = '\x1b[0m';
+const DEFAULT_MODE: ColorMode = 0;
+const PALETTE_MODE: ColorMode = 1;
+const RGB_MODE: ColorMode = 2;
 
 function writeToTerminal(terminal: Terminal, data: string): Promise<void> {
   return new Promise((resolve) => {
@@ -330,22 +333,22 @@ describe('terminalSerializer', () => {
   describe('convertColorToHex', () => {
     it('should convert RGB color to hex', () => {
       const color = (100 << 16) | (200 << 8) | 50;
-      const hex = convertColorToHex(color, ColorMode.RGB, '#000000');
+      const hex = convertColorToHex(color, RGB_MODE, '#000000');
       expect(hex).toBe('#64c832');
     });
 
     it('should convert palette color to hex', () => {
-      const hex = convertColorToHex(1, ColorMode.PALETTE, '#000000');
+      const hex = convertColorToHex(1, PALETTE_MODE, '#000000');
       expect(hex).toBe('#800000');
     });
 
     it('should return default color for ColorMode.DEFAULT', () => {
-      const hex = convertColorToHex(0, ColorMode.DEFAULT, '#ffffff');
+      const hex = convertColorToHex(0, DEFAULT_MODE, '#ffffff');
       expect(hex).toBe('#ffffff');
     });
 
     it('should return default color for invalid palette index', () => {
-      const hex = convertColorToHex(999, ColorMode.PALETTE, '#000000');
+      const hex = convertColorToHex(999, PALETTE_MODE, '#000000');
       expect(hex).toBe('#000000');
     });
   });

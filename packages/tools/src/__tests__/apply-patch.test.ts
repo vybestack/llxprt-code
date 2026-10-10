@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { physicalFiles } from './helpers/physical-files.js';
+
 /**
  * Focused behavioral tests for ApplyPatchTool regressions from issue #2133.
  *
@@ -65,12 +67,17 @@ describe('ApplyPatchTool issue #2133 regressions', () => {
 
   function createFakeToolHost(targetDir: string): IToolHost {
     return {
+      ...physicalFiles,
       getTargetDir: () => targetDir,
       getWorkspaceRoots: () => [targetDir],
       getApprovalMode: () => 'auto',
       setApprovalMode: () => {},
       isInteractive: () => false,
-      hasFeatureFlag: () => false,
+
+      runSearch: <T>(
+        _directories: readonly string[],
+        operation: () => Promise<T>,
+      ): Promise<T> => operation(),
       getFileService: () => ({
         shouldGitIgnoreFile: () => false,
         shouldLlxprtIgnoreFile: () => false,
@@ -87,7 +94,7 @@ describe('ApplyPatchTool issue #2133 regressions', () => {
       getLlxprtIgnoreFilePath: () => null,
       recordFileRead: () => {},
       getLlxprtIgnorePatterns: () => [],
-      getEphemeralSettings: () => ({}),
+      readExecutionPolicy: () => ({}),
       getDebugMode: () => false,
     };
   }

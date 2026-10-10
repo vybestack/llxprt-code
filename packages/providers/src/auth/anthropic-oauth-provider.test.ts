@@ -4,15 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-  vi,
-  type Mock,
-} from 'bun:test';
+import { describe, it, expect, beforeEach, vi, type Mock } from 'bun:test';
 import { AnthropicOAuthProvider } from './anthropic-oauth-provider.js';
 import type { TokenStore } from '@vybestack/llxprt-code-core';
 
@@ -36,7 +28,6 @@ void vi.mock('./ClipboardService.js', () => ({
 import { ClipboardService } from './ClipboardService.js';
 
 // Register real runtime accessors via the bridge (no mock theater)
-import { oauthRuntimeBridge } from './runtime-accessor-bridge.js';
 
 // Mock the device flow implementation
 void vi.mock(
@@ -83,14 +74,6 @@ describe('AnthropicOAuthProvider', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-
-    // Register runtime accessors with defaults (getEphemeralSetting → undefined)
-    oauthRuntimeBridge.setAccessors({
-      getEphemeralSetting: () => undefined,
-      getProviderManager: () => undefined,
-      getRuntimeContext: () => undefined,
-      getCurrentProfileName: () => null,
-    });
 
     mockTokenStore = {
       getToken: vi.fn().mockResolvedValue(null),
@@ -143,10 +126,6 @@ describe('AnthropicOAuthProvider', () => {
         typeof ClipboardService.copyToClipboard
       >
     ).mockResolvedValue(undefined);
-  });
-
-  afterEach(() => {
-    oauthRuntimeBridge.setAccessors(undefined);
   });
 
   it('should call addItem with type "oauth_url" when initiating auth', async () => {

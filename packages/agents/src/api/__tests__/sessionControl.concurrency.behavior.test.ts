@@ -14,26 +14,27 @@
  * REAL SessionRecordingService + SessionLockManager) and an HONEST fake client
  * whose HistoryService can be swapped for a throwing one — never mocks-were-
  * called theater. Every assertion is on real observable state: on-disk lock
- * files, the Config-installed recording service identity, and the number of
- * live 'contentAdded' subscribers on the real HistoryService.
+ * files, the owner recording projection, actual JSONL content, and the number
+ * of live 'contentAdded' subscribers on the real HistoryService.
  *
  * A1 (serialized state mutation): two concurrent resume() calls settle with the
  *     final recording/lock belonging to the LAST operation, no orphaned lock
  *     files, both promises settle.
  * A2 (atomic resume subscribe): when the post-restore subscribe throws, resume
- *     rejects, Config is NOT left pointing at the resumed service, and the
- *     adopted lock file is released (gone).
+ *     rejects without publishing an owner recording, and the adopted lock file
+ *     is released (gone).
  * A3 (bounded re-attach): a startRecording whose HistoryService was unavailable
  *     leaves the integration unsubscribed; the NEXT operation re-attaches it so
  *     later content events reach the recording file.
  */
 
 import { assertNotNull, errorMessage } from '@vybestack/llxprt-code-test-utils';
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect, spyOn } from 'bun:test';
 import {
   mkdirSync,
   mkdtempSync,
   rmSync,
+  readFileSync,
   readdirSync,
   writeFileSync,
 } from 'node:fs';
@@ -44,16 +45,13 @@ import {
   replaySession,
   SessionRecordingService,
 } from '@vybestack/llxprt-code-core';
-import { SessionPersistenceService } from '@vybestack/llxprt-code-core/storage/SessionPersistenceService.js';
+import { SessionControl } from '../control/sessionControl.js';
+import { AgentSessionPersistence } from '../control/recordedHistoryPersistence.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import { SessionControl } from '../control/sessionControl.js';
 import type { SessionControlDeps } from '../control/sessionControl.js';
-
-/** Alias for the recording-service type used in the FakeConfig projection. */
-type SessionRecordingServiceType = SessionRecordingService;
 
 class IsolatedTestStorage extends Storage {
   constructor(private readonly projectTempDir: string) {
@@ -73,62 +71,57 @@ function humanText(text: string): IContent {
 /**
  * Minimal in-memory Config projection exposing ONLY the surface SessionControl
  * touches: a fixed project root, a storage whose getProjectChatsDir() drives
- * the chats-dir derivation, a workspace context, and the recording-service
- * get/set pair. The installed recording service is observable so A2 can assert
- * Config was not left pointing at a half-installed resumed service.
+ * the chats-dir derivation, a workspace context, and persistence inputs.
+ * Recording ownership is observable through the real SessionControl and JSONL.
  */
 interface FakeConfig {
+  readonly getSessionId: () => string;
+  readonly adoptSessionId: (sessionId: string) => void;
   readonly getProjectRoot: () => string;
-  readonly storage: {
-    readonly getProjectTempDir: () => string;
-    readonly getProjectChatsDir: () => string;
-  };
-  readonly getWorkspaceContext: () => {
-    readonly getDirectories: () => readonly string[];
-  };
+  readonly projectTempDir: string;
+  readonly projectChatsDir: string;
+
   readonly getLocalMediaStore: () => LocalMediaStore;
   readonly getSessionRecordingQueueByteLimit: () => number;
-  readonly createSessionPersistenceService: (
-    sessionId: string,
-  ) => SessionPersistenceService;
+  readonly persistence: AgentSessionPersistence;
   readonly getPersistenceChatsDir: () => string;
-  setSessionRecordingService: (
-    service: SessionRecordingServiceType | undefined,
-  ) => void;
-  getSessionRecordingService: () => SessionRecordingServiceType | undefined;
 }
 
 function buildFakeConfig(
   projectRoot: string,
   persistenceRoot = projectRoot,
   persistenceQueueBytes = 1024 * 1024,
+  initialSessionId = 'fake-recording-id',
 ): FakeConfig {
-  let installed: SessionRecordingServiceType | undefined;
   const mediaStore = new LocalMediaStore({
     rootDirectory: join(projectRoot, 'media'),
     quotaBytes: 1024 * 1024,
   });
   const persistenceStorage = new IsolatedTestStorage(persistenceRoot);
+  let sessionId = initialSessionId;
   return {
-    getProjectRoot: () => projectRoot,
-    storage: {
-      getProjectTempDir: () => projectRoot,
-      getProjectChatsDir: () => join(projectRoot, 'chats'),
+    getSessionId: () => sessionId,
+    adoptSessionId: (next) => {
+      sessionId = next;
     },
-    getWorkspaceContext: () => ({ getDirectories: () => [projectRoot] }),
+    getProjectRoot: () => projectRoot,
+    projectTempDir: projectRoot,
+    projectChatsDir: join(projectRoot, 'chats'),
+
     getLocalMediaStore: () => mediaStore,
     getSessionRecordingQueueByteLimit: () => 1024 * 1024,
-    createSessionPersistenceService: (sessionId) =>
-      new SessionPersistenceService(persistenceStorage, sessionId, {
+    persistence: new AgentSessionPersistence(
+      {
+        projectRoot: persistenceStorage.getProjectRoot(),
+        chatsDir: persistenceStorage.getProjectChatsDir(),
+      },
+      {
         mediaStore,
         maxQueueBytes: persistenceQueueBytes,
-      }),
+      },
+    ),
     getPersistenceChatsDir: () =>
       join(persistenceStorage.getProjectTempDir(), 'chats'),
-    setSessionRecordingService: (service) => {
-      installed = service;
-    },
-    getSessionRecordingService: () => installed,
   };
 }
 
@@ -174,9 +167,15 @@ function buildDeps(
   config: FakeConfig,
   client: AgentClientContract,
   sessionId: string,
+  mediaStore: LocalMediaStore,
 ): SessionControlDeps {
   return {
     config: config as unknown as SessionControlDeps['config'],
+    readRecordingQueueLimit: () => config.getSessionRecordingQueueByteLimit(),
+    mediaStore,
+    persistence: config.persistence,
+    directories: () => [config.getProjectRoot()],
+    sessionIdentityOwnership: 'config',
     sessionId: () => sessionId,
     resolveClient: () => client,
     getProvider: () => 'fake',
@@ -254,7 +253,207 @@ function unwrapFulfilled<T>(outcome: PromiseSettledResult<T>): T {
   return outcome.value;
 }
 
+describe('Agent session persistence ownership', () => {
+  it('gives simultaneous same-label journals distinct paths when their timestamps match', async () => {
+    await withProjectRoot(async (projectRoot) => {
+      const timestamp = spyOn(Date.prototype, 'toISOString').mockReturnValue(
+        '2026-09-27T00:00:00.000Z',
+      );
+      try {
+        const storage = new IsolatedTestStorage(projectRoot);
+        const first = new AgentSessionPersistence(
+          {
+            projectRoot: storage.getProjectRoot(),
+            chatsDir: storage.getProjectChatsDir(),
+          },
+          {},
+        );
+        const second = new AgentSessionPersistence(
+          {
+            projectRoot: storage.getProjectRoot(),
+            chatsDir: storage.getProjectChatsDir(),
+          },
+          {},
+        );
+        const [left, right] = await Promise.all([
+          Promise.resolve().then(() => first.forRecording('same-label')),
+          Promise.resolve().then(() => second.forRecording('same-label')),
+        ]);
+        expect(left.getSessionFilePath()).not.toBe(right.getSessionFilePath());
+        first.close();
+        second.close();
+      } finally {
+        timestamp.mockRestore();
+      }
+    });
+  });
+
+  it('keeps same-label simultaneous journals isolated and leaves the surviving owner usable', async () => {
+    await withProjectRoot(async (projectRoot) => {
+      const storage = new IsolatedTestStorage(projectRoot);
+      const first = new AgentSessionPersistence(
+        {
+          projectRoot: storage.getProjectRoot(),
+          chatsDir: storage.getProjectChatsDir(),
+        },
+        {
+          maxQueueBytes: 4096,
+        },
+      );
+      const second = new AgentSessionPersistence(
+        {
+          projectRoot: storage.getProjectRoot(),
+          chatsDir: storage.getProjectChatsDir(),
+        },
+        {
+          maxQueueBytes: 4096,
+        },
+      );
+      const left = first.forRecording('same-label');
+      const right = second.forRecording('same-label');
+      await Promise.all([
+        left.save([humanText('left journal')]),
+        right.save([humanText('right journal')]),
+      ]);
+      expect(left.getSessionFilePath()).not.toBe(right.getSessionFilePath());
+      expect(readFileSync(left.getSessionFilePath(), 'utf8')).toContain(
+        'left journal',
+      );
+      expect(readFileSync(right.getSessionFilePath(), 'utf8')).toContain(
+        'right journal',
+      );
+      first.close();
+      expect(() => first.forRecording('same-label')).toThrow('closed');
+      await right.save([humanText('right again')]);
+      expect(
+        JSON.parse(readFileSync(right.getSessionFilePath(), 'utf8')).generation,
+      ).toBe(2);
+      second.close();
+    });
+  });
+
+  it('records through its injected owner even when Config has no persistence factory', async () => {
+    await withProjectRoot(async (projectRoot) => {
+      const config = buildFakeConfig(projectRoot);
+      const client = buildFakeClient();
+      const control = new SessionControl(
+        buildDeps(
+          config,
+          client.contract,
+          'owned-session',
+          config.getLocalMediaStore(),
+        ),
+      );
+      try {
+        await control.setRecording({ enabled: true });
+        client.contract.getHistoryService()?.add(humanText('owned agent turn'));
+        await control.flushRecording();
+        expect(readFileSync(control.getRecording().path!, 'utf8')).toContain(
+          'owned agent turn',
+        );
+      } finally {
+        await control.dispose();
+      }
+      expect(() => config.persistence.forRecording('owned-session')).toThrow(
+        'closed',
+      );
+      expect(remainingLockFiles(projectRoot)).toStrictEqual([]);
+    });
+  });
+});
+
 describe('SessionControl concurrency + atomicity (issue #1604 A1/A2/A3) @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010', () => {
+  it('keeps same-label controllers bound to their own media stores after Config getters change', async () => {
+    await withProjectRoot(async (projectRoot) => {
+      const sessionId = 'same-label';
+      const firstRoot = join(projectRoot, 'first');
+      const secondRoot = join(projectRoot, 'second');
+      const firstConfig = buildFakeConfig(firstRoot);
+      const secondConfig = buildFakeConfig(secondRoot);
+      const firstStore = firstConfig.getLocalMediaStore();
+      const secondStore = secondConfig.getLocalMediaStore();
+      const firstRef = await firstStore.admit({
+        bytes: new Uint8Array([10, 11, 12]),
+        mimeType: 'image/png',
+        semanticMetadata: {},
+      });
+      const secondRef = await secondStore.admit({
+        bytes: new Uint8Array([20, 21, 22]),
+        mimeType: 'image/png',
+        semanticMetadata: {},
+      });
+      const first = new SessionControl(
+        buildDeps(
+          {
+            ...firstConfig,
+            getLocalMediaStore: () => {
+              throw new Error('first Config getter used');
+            },
+          },
+          buildFakeClient([
+            { speaker: 'human', blocks: [firstRef] },
+            humanText('first discarded'),
+          ]).contract,
+          sessionId,
+          firstStore,
+        ),
+      );
+      const second = new SessionControl(
+        buildDeps(
+          {
+            ...secondConfig,
+            getLocalMediaStore: () => {
+              throw new Error('second Config getter used');
+            },
+          },
+          buildFakeClient([
+            { speaker: 'human', blocks: [secondRef] },
+            humanText('second discarded'),
+          ]).contract,
+          sessionId,
+          secondStore,
+        ),
+      );
+      try {
+        await first.setRecording({ enabled: true });
+        await second.setRecording({ enabled: true });
+        await first.createCheckpoint('first-media');
+        await second.createCheckpoint('second-media');
+        const firstPath = first.getRecording().path;
+        const secondPath = second.getRecording().path;
+        if (!firstPath || !secondPath)
+          throw new Error('Missing recording path');
+        expect(readFileSync(firstPath, 'utf8')).toContain(firstRef.contentId);
+        expect(readFileSync(firstPath, 'utf8')).not.toContain(
+          secondRef.contentId,
+        );
+        expect(readFileSync(secondPath, 'utf8')).toContain(secondRef.contentId);
+        expect(readFileSync(secondPath, 'utf8')).not.toContain(
+          firstRef.contentId,
+        );
+        const firstRestored = await first.restoreTurns(1);
+        const secondRestored = await second.restoreTurns(1);
+        expect(JSON.stringify(firstRestored.remainingHistory)).toContain(
+          firstRef.contentId,
+        );
+        expect(JSON.stringify(firstRestored.remainingHistory)).not.toContain(
+          secondRef.contentId,
+        );
+        expect(JSON.stringify(secondRestored.remainingHistory)).toContain(
+          secondRef.contentId,
+        );
+        expect(JSON.stringify(secondRestored.remainingHistory)).not.toContain(
+          firstRef.contentId,
+        );
+      } finally {
+        await first.dispose();
+        await second.dispose();
+        await firstStore.close();
+        await secondStore.close();
+      }
+    });
+  });
+
   it('A1: serializes resume() racing stopRecording so the teardown cannot dispose the resource resume is adopting — the LAST-submitted op wins with a clean, consistent final state and no orphaned lock @requirement:REQ-010', async () => {
     await withProjectRoot(async (projectRoot) => {
       const sessionId = 'concurrent-session-id';
@@ -264,11 +463,21 @@ describe('SessionControl concurrency + atomicity (issue #1604 A1/A2/A3) @plan:PL
         humanText('recorded turn alpha'),
       );
 
-      const config = buildFakeConfig(projectRoot);
+      const config = buildFakeConfig(
+        projectRoot,
+        projectRoot,
+        1024 * 1024,
+        sessionId,
+      );
       const liveHistory = [humanText('live turn')];
       const client = buildFakeClient(liveHistory);
       const control = new SessionControl(
-        buildDeps(config, client.contract, sessionId),
+        buildDeps(
+          config,
+          client.contract,
+          sessionId,
+          config.getLocalMediaStore(),
+        ),
       );
 
       // Fire resume() and setRecording({ enabled: false }) concurrently.
@@ -296,11 +505,10 @@ describe('SessionControl concurrency + atomicity (issue #1604 A1/A2/A3) @plan:PL
       expect(client.replacementCount()).toBe(1);
 
       // LAST-submitted op wins: stop ran AFTER resume fully committed, so the
-      // final state is cleanly DISABLED — recording off, Config cleared, and the
-      // resumed lock released (no orphaned lock file). A non-serialized
-      // interleaving would leave recording enabled or a dangling lock here.
+      // final state is cleanly DISABLED and the resumed lock is released.
+      // A non-serialized interleaving would leave recording enabled or a lock.
       expect(control.getRecording().enabled).toBe(false);
-      expect(config.getSessionRecordingService()).toBeUndefined();
+      expect(control.getRecording().path).toBeUndefined();
       expect(remainingLockFiles(projectRoot)).toStrictEqual([]);
 
       // Dispose after an already-clean teardown is a safe no-op.
@@ -317,10 +525,20 @@ describe('SessionControl concurrency + atomicity (issue #1604 A1/A2/A3) @plan:PL
         humanText('recorded turn omega'),
       );
 
-      const config = buildFakeConfig(projectRoot);
+      const config = buildFakeConfig(
+        projectRoot,
+        projectRoot,
+        1024 * 1024,
+        sessionId,
+      );
       const client = buildFakeClient([humanText('live turn')]);
       const control = new SessionControl(
-        buildDeps(config, client.contract, sessionId),
+        buildDeps(
+          config,
+          client.contract,
+          sessionId,
+          config.getLocalMediaStore(),
+        ),
       );
 
       // Two concurrent resume('latest') calls. The session lock is EXCLUSIVE, so
@@ -342,21 +560,27 @@ describe('SessionControl concurrency + atomicity (issue #1604 A1/A2/A3) @plan:PL
         ((rejected as PromiseRejectedResult).reason as Error).message,
       ).toMatch(/in use/i);
 
-      // The winner's recording is active + Config-installed, and EXACTLY ONE
-      // lock file survives (the rejected op did not orphan a second lock nor
-      // release the winner's). The lock is named after the resolved session
-      // FILE (core locks the target file), so assert the COUNT, not the name.
+      // The winner's recording remains active and EXACTLY ONE lock survives.
+      // The lock is named after the resolved session file, not the session ID.
+      const winningPath = control.getRecording().path;
+      if (typeof winningPath !== 'string')
+        throw new Error('Winning recording has no file');
       expect(control.getRecording().enabled).toBe(true);
-      expect(config.getSessionRecordingService()?.isActive()).toBe(true);
+      expect(readFileSync(winningPath, 'utf8')).toContain(
+        'recorded turn omega',
+      );
       expect(remainingLockFiles(projectRoot)).toHaveLength(1);
 
-      // Teardown releases the surviving lock (no leak past dispose).
+      // Teardown releases the surviving lock without losing the recording.
       await control.dispose();
       expect(remainingLockFiles(projectRoot)).toStrictEqual([]);
+      expect(readFileSync(winningPath, 'utf8')).toContain(
+        'recorded turn omega',
+      );
     });
   });
 
-  it('A2: a post-restore subscribe failure rejects resume, leaves Config NOT pointing at the resumed service, and releases the adopted lock file @requirement:REQ-010', async () => {
+  it('A2: a post-restore subscribe failure rejects resume without adopting recording or leaking a lock @requirement:REQ-010', async () => {
     await withProjectRoot(async (projectRoot) => {
       const sessionId = 'atomic-resume-session';
       const config = buildFakeConfig(projectRoot);
@@ -402,14 +626,19 @@ describe('SessionControl concurrency + atomicity (issue #1604 A1/A2/A3) @plan:PL
       client.setHistoryService(throwingHistory);
 
       const control = new SessionControl(
-        buildDeps(config, client.contract, sessionId),
+        buildDeps(
+          config,
+          client.contract,
+          sessionId,
+          config.getLocalMediaStore(),
+        ),
       );
 
       // resume MUST reject with the subscribe failure (not silently half-enable).
       await expect(control.resume('latest')).rejects.toThrow('subscribe boom');
 
-      expect(config.getSessionRecordingService()).toBeUndefined();
-      expect(control.getRecording().enabled).toBe(false);
+      expect(control.getRecording()).toMatchObject({ enabled: false });
+      expect(control.getRecording().path).toBeUndefined();
       expect(await client.contract.getHistory()).toStrictEqual(liveHistory);
       expect(await mediaStore.hasReservations(mediaReference.contentId)).toBe(
         false,
@@ -429,7 +658,12 @@ describe('SessionControl concurrency + atomicity (issue #1604 A1/A2/A3) @plan:PL
       const config = buildFakeConfig(projectRoot, persistenceRoot);
       const client = buildFakeClient([humanText('checkpoint seed')]);
       const control = new SessionControl(
-        buildDeps(config, client.contract, 'checkpoint-persistence'),
+        buildDeps(
+          config,
+          client.contract,
+          'checkpoint-persistence',
+          config.getLocalMediaStore(),
+        ),
       );
       await control.setRecording({ enabled: true });
       const persistenceChats = config.getPersistenceChatsDir();
@@ -462,7 +696,12 @@ describe('SessionControl concurrency + atomicity (issue #1604 A1/A2/A3) @plan:PL
       const liveHistory = new HistoryService();
       client.setHistoryService(liveHistory);
       const control = new SessionControl(
-        buildDeps(config, client.contract, sessionId),
+        buildDeps(
+          config,
+          client.contract,
+          sessionId,
+          config.getLocalMediaStore(),
+        ),
       );
       await control.setRecording({ enabled: true });
 
@@ -501,7 +740,7 @@ describe('SessionControl concurrency + atomicity (issue #1604 A1/A2/A3) @plan:PL
   it('restores the original history when the cleared-history restore fails', async () => {
     await withProjectRoot(async (projectRoot) => {
       const sessionId = 'clear-restore-rollback';
-      const originalHistory = [
+      const originalHistory: IContent[] = [
         humanText('initial turn'),
         { speaker: 'ai', blocks: [{ type: 'text', text: 'response' }] },
         humanText('later turn'),
@@ -509,10 +748,17 @@ describe('SessionControl concurrency + atomicity (issue #1604 A1/A2/A3) @plan:PL
       const config = buildFakeConfig(projectRoot);
       const client = buildFakeClient(originalHistory);
       const control = new SessionControl(
-        buildDeps(config, client.contract, sessionId),
+        buildDeps(
+          config,
+          client.contract,
+          sessionId,
+          config.getLocalMediaStore(),
+        ),
       );
       await control.setRecording({ enabled: true });
       const recordingPath = control.getRecording().path;
+      if (typeof recordingPath !== 'string')
+        throw new Error('Missing recording file');
       expect(recordingPath).toBeDefined();
       const restoreHistory = client.contract.restoreHistory.bind(
         client.contract,
@@ -530,7 +776,7 @@ describe('SessionControl concurrency + atomicity (issue #1604 A1/A2/A3) @plan:PL
       expect(await client.contract.getHistory()).toStrictEqual(originalHistory);
       expect(restoreAttempt).toBe(1);
       expect(client.replacementCount()).toBe(1);
-      const replay = await replaySession(recordingPath!, basename(projectRoot));
+      const replay = await replaySession(recordingPath, basename(projectRoot));
       if (replay.ok !== true) {
         throw new Error(`Expected replay success: ${replay.error}`);
       }
@@ -548,12 +794,18 @@ describe('SessionControl concurrency + atomicity (issue #1604 A1/A2/A3) @plan:PL
       const client = buildFakeClient([humanText('seed turn')]);
       client.setHistoryService(null);
       const control = new SessionControl(
-        buildDeps(config, client.contract, sessionId),
+        buildDeps(
+          config,
+          client.contract,
+          sessionId,
+          config.getLocalMediaStore(),
+        ),
       );
 
       await control.setRecording({ enabled: true });
-      const recording = config.getSessionRecordingService();
-      expect(recording).toBeDefined();
+      const path = control.getRecording().path;
+      if (typeof path !== 'string') throw new Error('Missing recording file');
+      assertNotNull(path, 'Recording did not materialize');
 
       // Now a HistoryService becomes available (as it would once the client's
       // chat materializes). No listener is attached yet (enable could not
@@ -572,13 +824,16 @@ describe('SessionControl concurrency + atomicity (issue #1604 A1/A2/A3) @plan:PL
         /Failed to resume session/,
       );
 
-      // The previously-dead integration is now subscribed to the live history:
-      // exactly one 'contentAdded' listener was attached by the re-attach.
+      // Re-attachment makes subsequent content durable in this owner's file.
       expect(liveHistory.listenerCount('contentAdded')).toBe(beforeCount + 1);
-
-      await control.dispose();
-      // Dispose unsubscribed the re-attached integration (no leaked listener).
+      liveHistory.add(humanText('turn after bounded reattachment'));
+      expect(control.getRecording()).toMatchObject({ enabled: true, path });
+      await control.setRecording({ enabled: false });
+      expect(readFileSync(path, 'utf8')).toContain(
+        'turn after bounded reattachment',
+      );
       expect(liveHistory.listenerCount('contentAdded')).toBe(0);
+      await control.dispose();
     });
   });
 });

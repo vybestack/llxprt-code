@@ -3,78 +3,26 @@
  * ConfigBase extends this and adds abstract methods + complex multi-line logic.
  */
 
+import type { MemorySettings } from './configTypes.js';
+
 /**
  * @plan:PLAN-20260603-ISSUE1584.P12
  * @requirement:REQ-API-001
  * @pseudocode consumer-migration.md lines 10-15
  */
 
-import {
-  awaitMcpDiscoveryGate,
-  mcpRuntimeStatus,
-  refreshMcpServers,
-  type McpRuntimeStatus,
-} from './configMcpRuntime.js';
 import * as path from 'node:path';
 import { ConfigMediaDefaults } from './configMediaDefaults.js';
-import type { EventEmitter } from 'node:events';
-import type { SubagentSchedulerFactory } from '../core/subagentTypes.js';
-import type {
-  ContentGenerator,
-  ContentGeneratorConfig,
-} from '../core/contentGenerator.js';
-import type {
-  AgentClientContract,
-  AgentClientFactory,
-} from '../core/clientContract.js';
-import type { ToolSchedulerFactory } from '../core/toolSchedulerContract.js';
-import type { TaskToolRegistration } from './toolRegistryFactory.js';
-import type { ToolRecord } from './toolRegistryFactory.js';
-import type { PromptRegistry } from '../prompts/prompt-registry.js';
-import type { ResourceRegistry } from '../resources/resource-registry.js';
-import type {
-  GitHubBrokerClient,
-  ToolRegistry,
-} from '@vybestack/llxprt-code-tools';
-import type { McpClientManager } from '@vybestack/llxprt-code-mcp';
+import type { ContentGeneratorConfig } from '../core/contentGenerator.js';
+
 import { LLXPRT_CONFIG_DIR as LLXPRT_DIR } from '@vybestack/llxprt-code-tools';
-import type { MessageBus } from '../confirmation-bus/message-bus.js';
-import type { OAuthManager } from '@vybestack/llxprt-code-auth';
-import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import type { HookDefinition, HookEventName } from '../hooks/types.js';
-import type { HookSystem } from '../hooks/hookSystem.js';
-import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
-import type { GitService } from '../services/gitService.js';
-import type { ContextManager } from '../services/contextManager.js';
-import type { SessionRecordingService } from '../recording/SessionRecordingService.js';
-import { sessionMediaServices } from '../storage/session-media-service-factories.js';
-import type { AsyncTaskManager } from '../services/asyncTaskManager.js';
-import type { ShellJobManager } from '../services/shellJobManager.js';
-import type { AsyncTaskReminderService } from '../services/asyncTaskReminderService.js';
-import type { AsyncTaskAutoTrigger } from '../services/asyncTaskAutoTrigger.js';
-import type { FileSystemService } from '../services/fileSystemService.js';
 import type { EnvironmentSanitizationConfig } from '../services/environmentSanitization.js';
 import type { OutputFormat } from '../utils/output-format.js';
 import { shouldAttemptBrowserLaunch } from '../utils/browser.js';
-import type { WorkspaceContext } from '../utils/workspaceContext.js';
-import type { ExtensionLoader } from '../utils/extensionLoader.js';
-import type { RuntimeProviderManager } from '../runtime/contracts/RuntimeProviderManager.js';
-import type { RuntimeContentGeneratorFactory } from '../runtime/contracts/RuntimeContentGeneratorFactory.js';
-import type { RuntimeTokenizerFactory } from '../runtime/contracts/RuntimeTokenizerFactory.js';
-import type { IdeClient } from '@vybestack/llxprt-code-ide-integration';
-import type {
-  ProfileManager,
-  SettingsService,
-  Storage,
-} from '@vybestack/llxprt-code-settings';
-import type { SubagentManager } from './subagentManager.js';
-import type { FileExclusions } from '../utils/ignorePatterns.js';
-import type { PolicyEngine } from '../policy/policy-engine.js';
-import type { SkillManager } from '../skills/skillManager.js';
-import type { LspState } from './lspIntegration.js';
-import type { PostSkillDiscoveryToolRegistrar } from './configTypes.js';
+import type { PolicyEngineConfig } from '../policy/types.js';
+import type { LspConfig } from '@vybestack/llxprt-code-ide-integration';
 import type { ApprovalMode, MCPServerConfig } from './configTypes.js';
-import type { ImageOperationRunner } from '../services/image/imageCapability.js';
 import { resolvePerfSettings } from './configConstructor.js';
 import {
   type AccessibilitySettings,
@@ -88,28 +36,23 @@ import {
   type LlxprtExtension,
   type SandboxConfig,
   type ActiveExtension,
-  type BucketFailoverHandler,
-  type OnAuthErrorHandler,
   type FileFilteringOptions,
 } from './configTypes.js';
 
 export abstract class ConfigBaseCore extends ConfigMediaDefaults {
-  protected toolRegistry!: ToolRegistry;
-  protected mcpClientManager?: McpClientManager;
   protected allowedMcpServers!: string[];
   protected blockedMcpServers!: Array<{ name: string; extensionName: string }>;
-  protected promptRegistry!: PromptRegistry;
-  protected resourceRegistry!: ResourceRegistry;
   protected readonly sessionId!: string;
   protected adoptedSessionId: string | undefined;
-  protected readonly settingsService!: SettingsService;
-  protected fileSystemService!: FileSystemService;
-  protected contentGeneratorConfig!: ContentGeneratorConfig;
+  protected readonly initialSettings!: Readonly<Record<string, unknown>>;
+  protected readonly provider: string | undefined;
+  protected contentGeneratorConfig:
+    | Readonly<Omit<ContentGeneratorConfig, 'contentGeneratorFactory'>>
+    | undefined;
   protected readonly embeddingModel: string | undefined;
   protected readonly sandbox: SandboxConfig | undefined;
   protected readonly targetDir!: string;
   protected readonly configuredIncludeDirectories!: readonly string[];
-  protected workspaceContext!: WorkspaceContext;
   protected readonly debugMode!: boolean;
   protected readonly outputFormat!: OutputFormat;
   protected readonly quiet!: boolean;
@@ -118,7 +61,7 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
    * @plan PLAN-20250212-LSP.P33
    * @requirement REQ-CFG-010, REQ-CFG-015, REQ-CFG-070
    */
-  protected readonly _lspState: LspState = {};
+  protected readonly lspConfig: LspConfig | undefined;
   protected readonly coreTools: string[] | undefined;
   protected readonly allowedTools: string[] | undefined;
   protected readonly excludeTools: string[] | undefined;
@@ -126,19 +69,15 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
   protected readonly toolCallCommand: string | undefined;
   protected readonly mcpServerCommand: string | undefined;
   protected mcpServers: Record<string, MCPServerConfig> | undefined;
-  protected userMemory!: string;
-  protected llxprtMdFileCount!: number;
-  protected llxprtMdFilePaths!: string[];
+  protected readonly memorySettings!: MemorySettings;
+  protected readonly providedInstructions!: string;
   protected approvalMode!: ApprovalMode;
   protected readonly jitContextEnabled?: boolean;
-  protected contextManager?: ContextManager;
   protected terminalBackground: string | undefined = undefined;
   protected readonly showMemoryUsage!: boolean;
   protected readonly accessibility!: AccessibilitySettings;
   protected telemetrySettings!: TelemetrySettings;
   protected readonly usageStatisticsEnabled!: boolean;
-  protected agentClient!: AgentClientContract;
-  protected runtimeState!: AgentRuntimeState;
   protected readonly fileFiltering!: {
     respectGitIgnore: boolean;
     respectLlxprtIgnore: boolean;
@@ -146,57 +85,25 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
     disableFuzzySearch: boolean;
   };
   protected alwaysAllowedCommands: Set<string> = new Set();
-  protected fileDiscoveryService: FileDiscoveryService | null = null;
-  protected gitService: GitService | undefined = undefined;
-  protected sessionRecordingService: SessionRecordingService | undefined =
-    undefined;
-  private readonly sessionMedia = sessionMediaServices(this);
-  readonly getLocalMediaStore = this.sessionMedia.store;
-  readonly createSessionPersistenceService = this.sessionMedia.persistence;
-  // @plan PLAN-20260130-ASYNCTASK.P09
-  protected asyncTaskManager: AsyncTaskManager | undefined = undefined;
   // #1995 slice 2 — session-owned background shell jobs
-  protected shellJobManager: ShellJobManager | undefined = undefined;
-  // @plan PLAN-20260130-ASYNCTASK.P22
-  protected asyncTaskReminderService?: AsyncTaskReminderService;
-  protected asyncTaskAutoTrigger?: AsyncTaskAutoTrigger;
   protected readonly checkpointing!: boolean;
   protected readonly dumpOnError!: boolean;
   protected readonly proxy: string | undefined;
   protected readonly cwd!: string;
   protected readonly bugCommand: BugCommandSettings | undefined;
   protected readonly originalModel!: string;
-  /**
-   * #2534 Domain C2: terminal fallback for Configs constructed without an
-   * active provider (pre-activation bootstrap, unit-test fixtures). It is NOT
-   * a second store: the provider-scoped settings store and the
-   * contentGeneratorConfig.model projection always win on read; this field is
-   * only consulted when both are absent, and only the constructor,
-   * setModel, and resetModelToDefault transitions write it.
-   */
-  protected model!: string;
   protected readonly extensionContextFilePaths!: string[];
   protected readonly noBrowser!: boolean;
   protected folderTrust!: boolean;
   protected ideMode!: boolean;
-  protected ideClient: IdeClient | undefined;
   protected inFallbackMode = false;
   protected _modelSwitchedDuringSession: boolean = false;
   protected readonly maxSessionTurns!: number;
   protected readonly _activeExtensions!: ActiveExtension[];
   protected readonly listExtensions!: boolean;
-  protected readonly _extensionLoader!: ExtensionLoader;
+  protected extensions: LlxprtExtension[] = [];
   protected readonly enableExtensionReloading!: boolean;
-  protected providerManager?: RuntimeProviderManager;
-  protected contentGeneratorFactory?: RuntimeContentGeneratorFactory<ContentGenerator>;
-  protected tokenizerFactory?: RuntimeTokenizerFactory;
-  protected profileManager?: ProfileManager;
-  protected subagentManager?: SubagentManager;
-  protected subagentSchedulerFactory?: SubagentSchedulerFactory;
-  protected bucketFailoverHandler?: BucketFailoverHandler;
-  protected onAuthErrorHandler?: OnAuthErrorHandler;
-  // Track all potential tools for settings UI
-  protected allPotentialTools: ToolRecord[] = [];
+
   protected readonly summarizeToolOutput:
     | Record<string, SummarizeToolOutputSettings>
     | undefined;
@@ -205,13 +112,7 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
   protected readonly loadMemoryFromIncludeDirectories: boolean = false;
   protected readonly chatCompression: ChatCompressionSettings | undefined;
   protected readonly interactive!: boolean;
-  protected trustedFolder: boolean | undefined;
   protected readonly useRipgrep!: boolean;
-  /**
-   * @plan PLAN-20260731-GHBROKER.P15
-   * @requirement REQ-003
-   */
-  protected readonly githubBrokerClient?: GitHubBrokerClient;
   protected readonly shouldUseNodePtyShell!: boolean;
   protected readonly allowPtyThemeOverride!: boolean;
   protected readonly ptyScrollbackLimit!: number;
@@ -222,10 +123,24 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
   protected readonly enablePromptCompletion: boolean = false;
   protected readonly shellReplacement: 'allowlist' | 'all' | 'none' =
     'allowlist';
-  readonly storage!: Storage;
-  protected readonly fileExclusions!: FileExclusions;
-  protected readonly eventEmitter?: EventEmitter;
-  protected readonly policyEngine!: PolicyEngine;
+  readonly storageRoot!: string;
+  readonly globalConfigRoot!: string;
+  readonly globalDataRoot!: string;
+  readonly globalLogRoot!: string;
+  readonly globalAgentsRoot!: string;
+  readonly projectTempDir!: string;
+  readonly projectHistoryDir!: string;
+  readonly projectChatsDir!: string;
+  readonly projectCheckpointsDir!: string;
+  readonly historyFilePath!: string;
+  readonly projectCommandsDir!: string;
+  readonly projectSkillsDir!: string;
+  readonly projectAgentSkillsDir!: string;
+  readonly userCommandsDir!: string;
+  readonly userSkillsDir!: string;
+  readonly userAgentSkillsDir!: string;
+  readonly customExcludes!: readonly string[];
+  protected readonly policyEngineConfig!: PolicyEngineConfig;
 
   truncateToolOutputThreshold!: number;
   truncateToolOutputLines!: number;
@@ -244,259 +159,15 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
   protected readonly projectHooks:
     | { [K in HookEventName]?: HookDefinition[] }
     | undefined;
-  protected skillManager!: SkillManager;
   protected readonly skillsSupport!: boolean;
   protected disabledSkills!: string[];
   protected readonly enableHooksUI!: boolean;
   protected adminSkillsEnabled: boolean = true;
   protected readonly sanitizationConfig?: EnvironmentSanitizationConfig;
-  protected readonly _onReload:
-    | (() => Promise<{
-        disabledSkills?: string[];
-        adminSkillsEnabled?: boolean;
-      }>)
-    | undefined;
-  protected readonly _onReloadMcpServers:
-    | (() => Promise<{
-        mcpServers: Record<string, MCPServerConfig>;
-        blockedMcpServers: Array<{ name: string; extensionName: string }>;
-        settingsMcpServers: Record<string, MCPServerConfig>;
-      }>)
-    | undefined;
   protected readonly outputSettings!: OutputSettings;
   protected readonly introspectionAgentSettings!: IntrospectionAgentSettings;
   protected readonly useWriteTodos!: boolean;
-  /**
-   * @plan:PLAN-20260216-HOOKSYSTEMREWRITE.P03
-   * @requirement:HOOK-001,HOOK-002
-   * Lazily-created HookSystem instance, only when enableHooks=true
-   */
-  protected hookSystem: HookSystem | undefined;
-  /**
-   * @plan PLAN-20260610-ISSUE1592.P01
-   * @requirement REQ-INV-002
-   */
-  getToolSchedulerFactory(): ToolSchedulerFactory | undefined {
-    return this.toolSchedulerFactory;
-  }
-  /**
-   * @plan PLAN-20260610-ISSUE1592.P01
-   * @requirement REQ-INV-002
-   */
-  setToolSchedulerFactory(factory: ToolSchedulerFactory | undefined): void {
-    this.toolSchedulerFactory = factory;
-  }
-  /**
-   * @plan PLAN-20260610-ISSUE1592.P01
-   * @requirement REQ-INV-003
-   * Public typed setter so the runtime composition root can inject the
-   * agent client factory without mutating a protected field via a cast.
-   */
-  setAgentClientFactory(factory: AgentClientFactory | undefined): void {
-    this.agentClientFactory = factory;
-  }
-  /**
-   * @plan PLAN-20260610-ISSUE1592.P01
-   * @requirement REQ-INV-003
-   * Public typed getter so the runtime composition root can detect whether
-   * an agent client factory has already been provided before injecting one.
-   */
-  getAgentClientFactory(): AgentClientFactory | undefined {
-    return this.agentClientFactory;
-  }
-  /**
-   * @plan PLAN-20260610-ISSUE1592.P01
-   * @requirement REQ-INV-003
-   * Public typed setter so the runtime composition root can inject the
-   * task tool registration without mutating a protected field via a cast.
-   */
-  setTaskToolRegistration(
-    registration: TaskToolRegistration | undefined,
-  ): void {
-    this.taskToolRegistration = registration;
-  }
-  /**
-   * Public typed setter so the CLI composition root can inject the
-   * image-backend resolver (constructed from the providers package) without
-   * mutating a protected field via a cast. Core keeps the type loose to
-   * avoid importing providers.
-   */
-  setImageBackendResolver(resolver: (() => unknown) | null | undefined): void {
-    this.imageBackendResolver = resolver;
-  }
-  /**
-   * Inject the common image-operation runner so `/image`, direct CLI image
-   * mode, and the generate_image tool converge on one service.
-   */
-  setRunImageOperation(runner: ImageOperationRunner | undefined): void {
-    this.runImageOperationCapability = runner;
-  }
-  /**
-   * @plan PLAN-20260610-ISSUE1592.P01
-   * @requirement REQ-INV-003
-   */
-  protected agentClientFactory: AgentClientFactory | undefined;
-  /**
-   * @plan PLAN-20260610-ISSUE1592.P01
-   * @requirement REQ-INV-002
-   */
-  protected toolSchedulerFactory: ToolSchedulerFactory | undefined;
-  /**
-   * @plan PLAN-20260610-ISSUE1592.P01
-   * @requirement REQ-INV-003
-   */
-  protected taskToolRegistration: TaskToolRegistration | undefined;
-  /**
-   * Injected image-backend resolver closure (used by the common image-operation
-   * runner, NOT by GenerateImageTool directly). Typed loosely (`unknown`) so
-   * core does not import the providers package.
-   */
-  protected imageBackendResolver: (() => unknown) | null | undefined;
-  protected runImageOperationCapability: ImageOperationRunner | undefined;
-  protected postSkillDiscoveryToolRegistrar:
-    | PostSkillDiscoveryToolRegistrar
-    | undefined;
   protected initialized = false;
-  private runtimeMessageBus: MessageBus | undefined;
-  private runtimeOAuthManager: OAuthManager | undefined;
-
-  // ---- Simple field accessors ----
-
-  setProviderManager(providerManager: RuntimeProviderManager) {
-    this.providerManager = providerManager;
-  }
-  getProviderManager(): RuntimeProviderManager | undefined {
-    return this.providerManager;
-  }
-  setRuntimeMessageBus(messageBus: MessageBus): void {
-    this.runtimeMessageBus = messageBus;
-  }
-  getRuntimeMessageBus(): MessageBus | undefined {
-    return this.runtimeMessageBus;
-  }
-  /**
-   * Associates the exact assembled OAuthManager with this Config's runtime
-   * bundle. The seam is Config-associated (not ambient): agent construction
-   * (fromConfig) adopts THIS manager by reference, so the OAuthManager the
-   * Agent sees is the exact one the providers runtime assembled on the same
-   * bus — no second OAuthManager is constructed or looked up.
-   *
-   * @plan:PLAN-20270110-ISSUE2378.P03 @requirement:REQ-2378-003
-   */
-  setRuntimeOAuthManager(oauthManager: OAuthManager | undefined): void {
-    this.runtimeOAuthManager = oauthManager;
-  }
-  /**
-   * Returns the exact assembled OAuthManager associated with this Config, or
-   * undefined when no runtime bundle has been attached. Consumers that need the
-   * session OAuthManager read it from here (or from the Agent facade) instead of
-   * ambient lookup.
-   *
-   * @plan:PLAN-20270110-ISSUE2378.P03 @requirement:REQ-2378-003
-   */
-  getRuntimeOAuthManager(): OAuthManager | undefined {
-    return this.runtimeOAuthManager;
-  }
-  /**
-   * @plan:PLAN-20260603-ISSUE1584.P16a
-   * @requirement:REQ-DEP-001
-   */
-  setContentGeneratorFactory(
-    factory: RuntimeContentGeneratorFactory<ContentGenerator> | undefined,
-  ): void {
-    this.contentGeneratorFactory = factory;
-  }
-  getContentGeneratorFactory():
-    | RuntimeContentGeneratorFactory<ContentGenerator>
-    | undefined {
-    return this.contentGeneratorFactory;
-  }
-  /**
-   * @plan:PLAN-20260603-ISSUE1584.P16a
-   * @requirement:REQ-DEP-001
-   */
-  setTokenizerFactory(factory: RuntimeTokenizerFactory | undefined): void {
-    this.tokenizerFactory = factory;
-  }
-  getTokenizerFactory(): RuntimeTokenizerFactory | undefined {
-    return this.tokenizerFactory;
-  }
-  setProfileManager(manager: ProfileManager | undefined): void {
-    this.profileManager = manager;
-  }
-  getProfileManager(): ProfileManager | undefined {
-    return this.profileManager;
-  }
-  setSubagentManager(manager: SubagentManager | undefined): void {
-    this.subagentManager = manager;
-  }
-  getSubagentManager(): SubagentManager | undefined {
-    return this.subagentManager;
-  }
-  /**
-   * Set the bucket failover handler for rate limit/quota error handling
-   * @plan PLAN-20251213issue490
-   */
-  setBucketFailoverHandler(handler: BucketFailoverHandler | undefined): void {
-    this.bucketFailoverHandler = handler;
-  }
-  /**
-   * Get the bucket failover handler
-   * @plan PLAN-20251213issue490
-   */
-  getBucketFailoverHandler(): BucketFailoverHandler | undefined {
-    return this.bucketFailoverHandler;
-  }
-  /**
-   * Set the auth error handler for 401/403 token revocation handling
-   * @fix issue1861
-   */
-  setOnAuthErrorHandler(handler: OnAuthErrorHandler | undefined): void {
-    this.onAuthErrorHandler = handler;
-  }
-  /**
-   * Get the auth error handler
-   * @fix issue1861
-   */
-  getOnAuthErrorHandler(): OnAuthErrorHandler | undefined {
-    return this.onAuthErrorHandler;
-  }
-  /**
-   * Set the session recording service for hooks to access transcript path
-   * @plan PLAN-20250219-GMERGE022.B2
-   * @requirement R1
-   */
-  setSessionRecordingService(
-    service: SessionRecordingService | undefined,
-  ): void {
-    this.sessionRecordingService = service;
-  }
-  /**
-   * Get the session recording service
-   * @plan PLAN-20250219-GMERGE022.B2
-   * @requirement R1
-   */
-  getSessionRecordingService(): SessionRecordingService | undefined {
-    return this.sessionRecordingService;
-  }
-  /**
-   * Never constructs a manager; read-only paths (exit-time shutdown notice)
-   * must use it so a job-free session does not build one and mkdtemp its log directory.
-   */
-  peekShellJobManager(): ShellJobManager | undefined {
-    return this.shellJobManager;
-  }
-  setInteractiveSubagentSchedulerFactory(
-    factory: SubagentSchedulerFactory | undefined,
-  ): void {
-    this.subagentSchedulerFactory = factory;
-  }
-  getInteractiveSubagentSchedulerFactory():
-    | SubagentSchedulerFactory
-    | undefined {
-    return this.subagentSchedulerFactory;
-  }
-
   isContinueSession(): boolean {
     return Boolean(this.continueSession);
   }
@@ -509,7 +180,17 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
   getTerminalBackground(): string | undefined {
     return this.terminalBackground;
   }
-  getContentGeneratorConfig(): ContentGeneratorConfig | undefined {
+  setContentGeneratorConfig(value: ContentGeneratorConfig): void {
+    this.contentGeneratorConfig = Object.freeze({
+      model: value.model,
+      ...(value.apiKey === undefined ? {} : { apiKey: value.apiKey }),
+      ...(value.vertexai === undefined ? {} : { vertexai: value.vertexai }),
+      ...(value.proxy === undefined ? {} : { proxy: value.proxy }),
+    });
+  }
+  getContentGeneratorConfig():
+    | Readonly<Omit<ContentGeneratorConfig, 'contentGeneratorFactory'>>
+    | undefined {
     return this.contentGeneratorConfig;
   }
   isInFallbackMode(): boolean {
@@ -536,20 +217,17 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
   getConfiguredIncludeDirectories(): readonly string[] {
     return [...this.configuredIncludeDirectories];
   }
-  getWorkspaceContext(): WorkspaceContext {
-    return this.workspaceContext;
+  getDisabledSkills(): string[] {
+    return [...this.disabledSkills];
   }
-  getToolRegistry(): ToolRegistry {
-    return this.toolRegistry;
+  setDisabledSkills(names: string[]): void {
+    this.disabledSkills = [...names];
   }
-  getPromptRegistry(): PromptRegistry {
-    return this.promptRegistry;
+  isAdminSkillsEnabled(): boolean {
+    return this.adminSkillsEnabled;
   }
-  getResourceRegistry(): ResourceRegistry {
-    return this.resourceRegistry;
-  }
-  getSkillManager(): SkillManager {
-    return this.skillManager;
+  setAdminSkillsEnabled(enabled: boolean): void {
+    this.adminSkillsEnabled = enabled;
   }
   getDebugMode(): boolean {
     return this.debugMode;
@@ -581,21 +259,6 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
   getMcpServers(): Record<string, MCPServerConfig> | undefined {
     return this.mcpServers;
   }
-  getMcpClientManager(): McpClientManager | undefined {
-    return this.mcpClientManager;
-  }
-  getMcpRuntimeStatus(): McpRuntimeStatus | undefined {
-    return mcpRuntimeStatus(this.mcpClientManager);
-  }
-  async refreshMcpServers(server?: string): Promise<void> {
-    await refreshMcpServers(this.mcpClientManager, server);
-  }
-  async awaitMcpDiscoveryGate(): Promise<ReadonlyMap<string, string>> {
-    return awaitMcpDiscoveryGate(this.mcpClientManager);
-  }
-  getMcpInstructions(): string | undefined {
-    return this.mcpClientManager?.getMcpInstructions();
-  }
   getAllowedMcpServers(): string[] | undefined {
     return this.allowedMcpServers;
   }
@@ -607,23 +270,13 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
   setMcpServers(mcpServers: Record<string, MCPServerConfig>): void {
     this.mcpServers = mcpServers;
   }
-  setCoreMemory(_content: string): void {}
-  setUserMemory(newUserMemory: string): void {
-    this.userMemory = newUserMemory;
-  }
-  setLlxprtMdFileCount(count: number): void {
-    this.llxprtMdFileCount = count;
-  }
-  setLlxprtMdFilePaths(paths: string[]): void {
-    this.llxprtMdFilePaths = paths;
-  }
   getApprovalMode(): ApprovalMode {
     return this.approvalMode;
   }
   /**
    * The single JIT-context predicate. It resolves from the
    * constructor-assigned `jitContextEnabled` field and nothing else, so every
-   * consumer (the memory accessors, the ContextManager lifecycle, the prompt
+   * consumer (workspace discovery, session instruction reads, the prompt
    * builders and the CLI) observes one answer. A second predicate with a
    * different resolution order would let the workspace memory hierarchy be
    * sent twice or not at all (issue #3135).
@@ -634,14 +287,20 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
   isJitContextEnabled(): boolean {
     return this.jitContextEnabled === true;
   }
-  getContextManager(): ContextManager | undefined {
-    return this.contextManager;
-  }
   getAccessibility(): AccessibilitySettings {
     return this.accessibility;
   }
-  getPolicyEngine(): PolicyEngine {
-    return this.policyEngine;
+  getPolicyEngineConfig(): PolicyEngineConfig {
+    return {
+      ...this.policyEngineConfig,
+      rules: this.policyEngineConfig.rules?.map((rule) => ({
+        ...rule,
+        modes: rule.modes?.slice(),
+        argsPattern: rule.argsPattern
+          ? new RegExp(rule.argsPattern.source, rule.argsPattern.flags)
+          : undefined,
+      })),
+    };
   }
   getShowMemoryUsage(): boolean {
     return this.showMemoryUsage;
@@ -697,14 +356,11 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
   getMaxConversationsStored(): number {
     return this.telemetrySettings.maxConversationsStored ?? 1000;
   }
-  getAgentClient(): AgentClientContract {
-    return this.agentClient;
-  }
   getLlxprtDir(): string {
     return path.join(this.targetDir, LLXPRT_DIR);
   }
   getProjectTempDir(): string {
-    return this.storage.getProjectTempDir();
+    return this.projectTempDir;
   }
   getEnableRecursiveFileSearch(): boolean {
     return this.fileFiltering.enableRecursiveFileSearch;
@@ -725,8 +381,7 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
     };
   }
   getCustomExcludes(): string[] {
-    const customExcludes: string[] = [];
-    return customExcludes;
+    return [...this.customExcludes];
   }
   getCheckpointingEnabled(): boolean {
     return this.checkpointing;
@@ -743,10 +398,6 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
   getBugCommand(): BugCommandSettings | undefined {
     return this.bugCommand;
   }
-  getFileService(): FileDiscoveryService {
-    this.fileDiscoveryService ??= new FileDiscoveryService(this.targetDir);
-    return this.fileDiscoveryService;
-  }
   getUsageStatisticsEnabled(): boolean {
     return this.usageStatisticsEnabled;
   }
@@ -762,40 +413,28 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
   getExtensionManagement(): boolean {
     return this.extensionManagement;
   }
-  getExtensionLoader(): ExtensionLoader {
-    return this._extensionLoader;
-  }
   getExtensions(): LlxprtExtension[] {
-    return this._extensionLoader.getExtensions();
+    return [...this.extensions];
+  }
+  setExtensions(extensions: readonly LlxprtExtension[]): void {
+    this.extensions = [...extensions];
   }
   getActiveExtensions(): ActiveExtension[] {
     return this._activeExtensions;
   }
   isExtensionEnabled(extensionName: string): boolean {
-    const extension = this._extensionLoader
-      .getExtensions()
-      .find((ext) => ext.name === extensionName);
+    const extension = this.getExtensions().find(
+      (ext) => ext.name === extensionName,
+    );
     // If extension not found, default to true to avoid filtering
     return extension ? extension.isActive : true;
   }
   getEnableExtensionReloading(): boolean {
     return this.enableExtensionReloading;
   }
-  getExtensionEvents(): EventEmitter | undefined {
-    return this.eventEmitter;
-  }
-  /**
-   * #2534 Domain C1: the settings global 'activeProvider' key is the single
-   * active-provider store. Config is a reader/writer of that store, never an
-   * independent field owner.
-   */
   getProvider(): string | undefined {
-    const value = this.settingsService.get('activeProvider');
+    const value = this.provider;
     return typeof value === 'string' && value !== '' ? value : undefined;
-  }
-
-  setProvider(provider: string): void {
-    this.settingsService.set('activeProvider', provider);
   }
   getNoBrowser(): boolean {
     return this.noBrowser;
@@ -808,41 +447,20 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
     | undefined {
     return this.summarizeToolOutput;
   }
-  getIdeClient(): IdeClient | undefined {
-    return this.ideClient;
-  }
   getIdeMode(): boolean {
     return this.ideMode;
   }
   getFolderTrust(): boolean {
     return this.folderTrust;
   }
-  setIdeMode(value: boolean): void {
-    this.ideMode = value;
-  }
-  setIdeClientDisconnected(): void {
-    void this.ideClient?.disconnect();
-  }
-  setIdeClientConnected(): void {
-    void this.ideClient?.connect();
-  }
   getComplexityAnalyzerSettings(): ComplexityAnalyzerSettings {
     return this.complexityAnalyzerSettings;
-  }
-  clearEphemeralSettings(): void {
-    this.settingsService.clear();
   }
   isInteractive(): boolean {
     return this.interactive;
   }
   getNonInteractive(): boolean {
     return !this.interactive;
-  }
-  getFileSystemService(): FileSystemService {
-    return this.fileSystemService;
-  }
-  setFileSystemService(fileSystemService: FileSystemService): void {
-    this.fileSystemService = fileSystemService;
   }
   getChatCompression(): ChatCompressionSettings | undefined {
     return this.chatCompression;
@@ -858,17 +476,6 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
   }
   getUseRipgrep(): boolean {
     return this.useRipgrep;
-  }
-  /**
-   * The brokered-GitHub transport, or undefined when the CLI layer has not
-   * supplied one. The `github` tool is registered only when present, so a
-   * host without the wiring does not advertise a tool it cannot serve.
-   *
-   * @plan PLAN-20260731-GHBROKER.P15
-   * @requirement REQ-003, REQ-004
-   */
-  getGitHubBrokerClient(): GitHubBrokerClient | undefined {
-    return this.githubBrokerClient;
   }
   getShouldUseNodePtyShell(): boolean {
     return this.shouldUseNodePtyShell;
@@ -905,53 +512,18 @@ export abstract class ConfigBaseCore extends ConfigMediaDefaults {
   }
   getUtilityModel(): string | undefined {
     // Interim utilityModel source; real setting tracked in the companion feature issue (#2614 umbrella)
-    const raw = this.settingsService.get('utilityModel');
+    const raw = this.initialSettings.utilityModel;
     if (typeof raw !== 'string') {
       return undefined;
     }
     const trimmed = raw.trim();
     return trimmed === '' ? undefined : trimmed;
   }
-  getSettingsService(): SettingsService {
-    return this.settingsService;
-  }
-  getFileExclusions(): FileExclusions {
-    return this.fileExclusions;
-  }
-  getAllPotentialTools() {
-    return this.allPotentialTools;
-  }
-  getToolRegistryInfo() {
-    return {
-      registered: this.allPotentialTools.filter((t) => t.isRegistered),
-      unregistered: this.allPotentialTools.filter((t) => !t.isRegistered),
-    };
+  getInitialSettings(): Readonly<Record<string, unknown>> {
+    return this.initialSettings;
   }
   getEnableHooks(): boolean {
     return this.enableHooks;
-  }
-  /**
-   * @plan PLAN-20260610-ISSUE1592.P01
-   * @requirement REQ-INV-003
-   */
-  getTaskToolRegistration(): TaskToolRegistration | undefined {
-    return this.taskToolRegistration;
-  }
-  getImageBackendResolver(): (() => unknown) | null | undefined {
-    return this.imageBackendResolver;
-  }
-  getRunImageOperation(): ImageOperationRunner | undefined {
-    return this.runImageOperationCapability;
-  }
-  getPostSkillDiscoveryToolRegistrar():
-    | PostSkillDiscoveryToolRegistrar
-    | undefined {
-    return this.postSkillDiscoveryToolRegistrar;
-  }
-  setPostSkillDiscoveryToolRegistrar(
-    registrar: PostSkillDiscoveryToolRegistrar | undefined,
-  ): void {
-    this.postSkillDiscoveryToolRegistrar = registrar;
   }
   getEnableHooksUI(): boolean {
     return this.enableHooksUI;

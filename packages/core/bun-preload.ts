@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { fileURLToPath } from 'node:url';
+import { installSourceEmittedSiblingResolution } from '../../scripts/source-emitted-sibling-resolution.js';
+
 /**
  * Bun test preload for the core workspace.
  *
@@ -16,6 +19,10 @@
  * createProviderRuntimeContext / test-utils, so this preload no longer
  * installs or clears any ambient runtime context.
  */
+
+installSourceEmittedSiblingResolution(
+  fileURLToPath(new URL('../..', import.meta.url)),
+);
 
 // Safety: mark environment as CI so that browser-launching code paths
 // (shouldLaunchBrowser) short-circuit. This prevents any test from

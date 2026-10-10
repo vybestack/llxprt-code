@@ -135,18 +135,22 @@ describe('validateCustomTheme', () => {
   });
 
   it('should return isValid: true for a theme missing optional DiffAdded and DiffRemoved colors', () => {
-    const legacyTheme: Partial<CustomTheme> = { ...validTheme };
-    delete legacyTheme.DiffAdded;
-    delete legacyTheme.DiffRemoved;
+    const {
+      DiffAdded: _added,
+      DiffRemoved: _removed,
+      ...legacyTheme
+    } = validTheme;
     const result = validateCustomTheme(legacyTheme);
     expect(result.isValid).toBe(true);
     expect(result.error).toBeUndefined();
   });
 
   it('should return a warning if DiffAdded and DiffRemoved are missing', () => {
-    const legacyTheme: Partial<CustomTheme> = { ...validTheme };
-    delete legacyTheme.DiffAdded;
-    delete legacyTheme.DiffRemoved;
+    const {
+      DiffAdded: _added,
+      DiffRemoved: _removed,
+      ...legacyTheme
+    } = validTheme;
     const result = validateCustomTheme(legacyTheme);
     expect(result.isValid).toBe(true);
     expect(result.warning).toBe('Missing field(s) DiffAdded, DiffRemoved');
@@ -206,9 +210,11 @@ describe('themeManager.loadCustomThemes', () => {
 
   it('should use values from DEFAULT_THEME when DiffAdded and DiffRemoved are not provided', () => {
     // In llxprt-code, the DEFAULT_THEME is GreenScreen, not darkTheme
-    const legacyTheme: Partial<CustomTheme> = { ...baseTheme };
-    delete legacyTheme.DiffAdded;
-    delete legacyTheme.DiffRemoved;
+    const {
+      DiffAdded: _added,
+      DiffRemoved: _removed,
+      ...legacyTheme
+    } = baseTheme;
 
     themeManager.loadCustomThemes({ 'Legacy Custom Theme': legacyTheme });
     const result = themeManager.getTheme('Legacy Custom Theme')!;
@@ -216,6 +222,8 @@ describe('themeManager.loadCustomThemes', () => {
     // Should use GreenScreen colors for missing fields
     expect(result.colors.DiffAdded).toBe('#00ff00'); // GreenScreen DiffAdded
     expect(result.colors.DiffRemoved).toBe('#6a9955'); // GreenScreen DiffRemoved
+    if (legacyTheme.AccentBlue === undefined)
+      throw new Error('Missing fixture accent');
     expect(result.colors.AccentBlue).toBe(legacyTheme.AccentBlue);
     expect(result.name).toBe(legacyTheme.name);
   });

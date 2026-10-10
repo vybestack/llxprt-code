@@ -480,14 +480,8 @@ describe('getActiveProviderNameForApiError', () => {
     providerManagerName?: string,
   ): Config =>
     ({
-      getProviderManager: vi.fn(() =>
-        providerManagerName === undefined
-          ? undefined
-          : { getActiveProviderName: vi.fn(() => providerManagerName) },
-      ),
-      getSettingsService: vi.fn(() => ({
-        get: vi.fn(() => activeProvider),
-      })),
+      getActiveProviderName: () => providerManagerName,
+      readSelectedProvider: () => activeProvider,
     }) as unknown as Config;
 
   it('prefers the provider manager active provider when available', () => {
@@ -514,17 +508,10 @@ describe('handleSubmissionError', () => {
   const mockParseAndFormatApiError = parseAndFormatApiError as Mock<
     typeof parseAndFormatApiError
   >;
-  const makeConfig = (activeProvider: unknown, providerManagerName?: string) =>
+  const makeConfig = (activeProvider: unknown, _providerManagerName?: string) =>
     createStreamRuntimeForTest({
       getModel: vi.fn(() => 'test-model'),
-      getProviderManager: vi.fn(() =>
-        providerManagerName === undefined
-          ? undefined
-          : { getActiveProviderName: vi.fn(() => providerManagerName) },
-      ),
-      getSettingsService: vi.fn(() => ({
-        get: vi.fn(() => activeProvider),
-      })),
+      readSelectedProvider: () => activeProvider,
     });
   const mockConfig = makeConfig(undefined);
 
@@ -678,7 +665,7 @@ describe('showCitations', () => {
   it('returns true when settingsService.get returns true', () => {
     const mockSettingsService = { get: vi.fn(() => true) };
     const config = makeConfig({
-      getSettingsService: vi.fn(() => mockSettingsService),
+      readCitations: () => mockSettingsService.get(),
     });
     expect(showCitations(makeSettings(undefined), config)).toBe(true);
   });
@@ -686,7 +673,7 @@ describe('showCitations', () => {
   it('returns false when settingsService overrides merged settings', () => {
     const mockSettingsService = { get: vi.fn(() => false) };
     const config = makeConfig({
-      getSettingsService: vi.fn(() => mockSettingsService),
+      readCitations: () => mockSettingsService.get(),
     });
     expect(showCitations(makeSettings(true), config)).toBe(false);
   });
@@ -694,14 +681,14 @@ describe('showCitations', () => {
   it('falls through to settings.merged when settingsService.get returns undefined', () => {
     const mockSettingsService = { get: vi.fn(() => undefined) };
     const config = makeConfig({
-      getSettingsService: vi.fn(() => mockSettingsService),
+      readCitations: () => mockSettingsService.get(),
     });
     expect(showCitations(makeSettings(true), config)).toBe(true);
   });
 
   it('falls through to settings.merged when settingsService throws', () => {
     const config = makeConfig({
-      getSettingsService: vi.fn(() => {
+      readCitations: vi.fn(() => {
         throw new Error('unavailable');
       }),
     });
@@ -709,12 +696,12 @@ describe('showCitations', () => {
   });
 
   it('falls through to settings.merged when settingsService returns null', () => {
-    const config = makeConfig({ getSettingsService: vi.fn(() => null) });
+    const config = makeConfig({ readCitations: () => undefined });
     expect(showCitations(makeSettings(true), config)).toBe(true);
   });
 
   it('returns false when both settings sources are absent (no tier fallback)', () => {
-    const config = makeConfig({ getSettingsService: vi.fn(() => null) });
+    const config = makeConfig({ readCitations: () => undefined });
     expect(showCitations(makeSettings(undefined), config)).toBe(false);
   });
 });
@@ -729,7 +716,7 @@ describe('getCurrentProfileName', () => {
       getCurrentProfileName: vi.fn(() => 'custom-profile'),
     };
     const config = makeConfig({
-      getSettingsService: vi.fn(() => mockSettingsService),
+      readProfileName: () => mockSettingsService.getCurrentProfileName(),
     });
     expect(getCurrentProfileName(config)).toBe('custom-profile');
   });
@@ -737,19 +724,19 @@ describe('getCurrentProfileName', () => {
   it('returns null when settingsService.getCurrentProfileName returns null', () => {
     const mockSettingsService = { getCurrentProfileName: vi.fn(() => null) };
     const config = makeConfig({
-      getSettingsService: vi.fn(() => mockSettingsService),
+      readProfileName: () => mockSettingsService.getCurrentProfileName(),
     });
     expect(getCurrentProfileName(config)).toBeNull();
   });
 
   it('returns null when settingsService returns null', () => {
-    const config = makeConfig({ getSettingsService: vi.fn(() => null) });
+    const config = makeConfig({ readProfileName: () => null });
     expect(getCurrentProfileName(config)).toBeNull();
   });
 
   it('returns null when getSettingsService throws', () => {
     const config = makeConfig({
-      getSettingsService: vi.fn(() => {
+      readProfileName: vi.fn(() => {
         throw new Error('unavailable');
       }),
     });
@@ -757,9 +744,9 @@ describe('getCurrentProfileName', () => {
   });
 
   it('returns null when settingsService has no getCurrentProfileName method', () => {
-    const mockSettingsService = {}; // No getCurrentProfileName
+    const mockSettingsService = { getCurrentProfileName: () => null };
     const config = makeConfig({
-      getSettingsService: vi.fn(() => mockSettingsService),
+      readProfileName: () => mockSettingsService.getCurrentProfileName(),
     });
     expect(getCurrentProfileName(config)).toBeNull();
   });

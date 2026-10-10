@@ -1,3 +1,4 @@
+import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -12,7 +13,7 @@
 
 import { homedir } from 'node:os';
 import { readFile } from 'node:fs/promises';
-import type { Config } from '@vybestack/llxprt-code-core';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { updateActiveProviderApiKey } from './providerMutations.js';
 import { createProviderKeyStorage } from '../auth/index.js';
 
@@ -22,13 +23,15 @@ import { createProviderKeyStorage } from '../auth/index.js';
  */
 export async function resolveFromKeyArg(
   keyToUse: string | undefined,
-  config: Config,
+  config: { setEphemeralSetting(key: string, value: unknown): void },
+  settingsService: Pick<SettingsService, 'setProviderSetting'>,
+  provider: ReturnType<RuntimeProviderManager['getActiveProvider']>,
 ): Promise<boolean> {
   if (!keyToUse) {
     return false;
   }
   const trimmed = keyToUse.trim();
-  await updateActiveProviderApiKey(trimmed);
+  await updateActiveProviderApiKey(trimmed, config, settingsService, provider);
   config.setEphemeralSetting('auth-key', trimmed);
   config.setEphemeralSetting('auth-keyfile', undefined);
   return true;
@@ -39,13 +42,20 @@ export async function resolveFromKeyArg(
  */
 export async function resolveFromKeyName(
   keyNameToUse: string | null,
-  config: Config,
+  config: { setEphemeralSetting(key: string, value: unknown): void },
+  settingsService: Pick<SettingsService, 'setProviderSetting'>,
+  provider: ReturnType<RuntimeProviderManager['getActiveProvider']>,
 ): Promise<boolean> {
   if (!keyNameToUse) {
     return false;
   }
   const resolvedKey = await resolveNamedKey(keyNameToUse);
-  await updateActiveProviderApiKey(resolvedKey);
+  await updateActiveProviderApiKey(
+    resolvedKey,
+    config,
+    settingsService,
+    provider,
+  );
   config.setEphemeralSetting('auth-key-name', keyNameToUse);
   config.setEphemeralSetting('auth-key', undefined);
   config.setEphemeralSetting('auth-keyfile', undefined);
@@ -57,13 +67,20 @@ export async function resolveFromKeyName(
  */
 export async function resolveFromProfileKeyName(
   profileKeyName: string | undefined,
-  config: Config,
+  config: { setEphemeralSetting(key: string, value: unknown): void },
+  settingsService: Pick<SettingsService, 'setProviderSetting'>,
+  provider: ReturnType<RuntimeProviderManager['getActiveProvider']>,
 ): Promise<boolean> {
   if (!profileKeyName) {
     return false;
   }
   const resolvedKey = await resolveNamedKey(profileKeyName);
-  await updateActiveProviderApiKey(resolvedKey);
+  await updateActiveProviderApiKey(
+    resolvedKey,
+    config,
+    settingsService,
+    provider,
+  );
   config.setEphemeralSetting('auth-key-name', profileKeyName);
   config.setEphemeralSetting('auth-key', undefined);
   config.setEphemeralSetting('auth-keyfile', undefined);
@@ -75,14 +92,21 @@ export async function resolveFromProfileKeyName(
  */
 export async function resolveFromKeyfile(
   keyfileToUse: string | undefined,
-  config: Config,
+  config: { setEphemeralSetting(key: string, value: unknown): void },
+  settingsService: Pick<SettingsService, 'setProviderSetting'>,
+  provider: ReturnType<RuntimeProviderManager['getActiveProvider']>,
 ): Promise<void> {
   if (!keyfileToUse) {
     return;
   }
   const resolvedPath = keyfileToUse.replace(/^~/, homedir());
   const keyContent = await readFile(resolvedPath, 'utf-8');
-  await updateActiveProviderApiKey(keyContent.trim());
+  await updateActiveProviderApiKey(
+    keyContent.trim(),
+    config,
+    settingsService,
+    provider,
+  );
   config.setEphemeralSetting('auth-key', undefined);
   config.setEphemeralSetting('auth-keyfile', resolvedPath);
 }

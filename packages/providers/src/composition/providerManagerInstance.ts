@@ -9,10 +9,13 @@
  * @requirement:REQ-API-001
  * @pseudocode consumer-migration.md lines 10-15
  */
+import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core';
+import type { RuntimeSettingsState } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { SessionAuthPolicy } from '../auth/types.js';
 
+import { createOwnerAuthCacheInvalidator } from '../auth/owner-cache-invalidation.js';
 import {
   type Config,
-  type MessageBus,
   type RuntimeContentGeneratorFactory,
   type ContentGenerator,
   type RuntimeProviderManager,
@@ -24,12 +27,11 @@ import { ProviderManager } from '../ProviderManager.js';
 import { FakeProvider } from '../fake/FakeProvider.js';
 import { ProviderContentGenerator } from '../ProviderContentGenerator.js';
 import { createRuntimeTokenizerFactory } from './runtimeTokenizerFactory.js';
-import { type IFileSystem, NodeFileSystem } from './IFileSystem.js';
+import type { IFileSystem } from './IFileSystem.js';
+import type { ProviderManagerFactoryOptions } from './providerManagerFactoryOptions.js';
 import stripJsonComments from 'strip-json-comments';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { OAuthManager, createTokenStore } from '../auth/index.js';
-import type { OAuthManagerRuntimeMessageBusDeps } from '../auth/index.js';
-import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
 import { registerStandardOAuthProviders } from './oauth-provider-registration.js';
 import type { OAuthUICallback } from '@vybestack/llxprt-code-auth';
 
@@ -50,34 +52,6 @@ export { createRuntimeTokenizerFactory } from './runtimeTokenizerFactory.js';
 
 const logger = new DebugLogger('llxprt:provider:manager:instance');
 
-let fileSystemInstance: IFileSystem | null = null;
-let singletonManager: ProviderManager | null = null;
-let singletonOAuthManager: OAuthManager | null = null;
-let openAIContexts = new WeakMap<ProviderManager, OpenAIRegistrationContext>();
-
-interface ProviderManagerFactoryOptions {
-  config?: Config;
-  allowBrowserEnvironment?: boolean;
-  activateConfiguredProvider?: boolean;
-  /**
-   * OAuth settings surface injected by the composition root (CLI). Supplies
-   * OAuth enablement read/write with full fidelity (comment-preserving writes
-   * live in the CLI's settings layer). When omitted, the OAuth manager runs
-   * without a settings provider — matching the prior behavior when no user
-   * settings file was present.
-   */
-  oauthSettings?: IOAuthSettingsProvider;
-  addItem?: OAuthUICallback;
-  runtimeMessageBus?: MessageBus;
-  /**
-   * The provider contribution registry alias construction dispatches through.
-   * The composition root (CLI) loads the configured runtime plugins once at
-   * startup and passes the resulting local immutable registry here. When
-   * omitted, alias construction uses the built-ins-only registry.
-   */
-  providerContributions?: ProviderContributionRegistry;
-}
-
 type RuntimeContextShape = ProviderRuntimeContext;
 
 interface OpenAIRegistrationContext {
@@ -95,17 +69,9 @@ interface OpenAIRegistrationContext {
   providerContributions?: ProviderContributionRegistry;
 }
 
-function createRuntimeContentGeneratorFactory(
-  config: Config,
-): RuntimeContentGeneratorFactory<ContentGenerator> {
+function createRuntimeContentGeneratorFactory(): RuntimeContentGeneratorFactory<ContentGenerator> {
   return {
-    createContentGenerator(manager: RuntimeProviderManager) {
-      return new ProviderContentGenerator(manager, {
-        model: config.getModel(),
-        providerManager: manager,
-        proxy: config.getProxy(),
-      });
-    },
+    createContentGenerator: () => new ProviderContentGenerator(),
   };
 }
 
@@ -114,31 +80,29 @@ function createRuntimeContentGeneratorFactory(
  * @requirement:REQ-DEP-001
  */
 export function configureProviderRuntimeFactories(
-  config: Config,
+  _config: Config,
   manager: RuntimeProviderManager,
-): void {
-  config.setProviderManager(manager);
-  const configWithFactories = config as Config & Record<string, unknown>;
-  const setContentGeneratorFactory =
-    configWithFactories['setContentGeneratorFactory'];
-  if (typeof setContentGeneratorFactory === 'function') {
-    setContentGeneratorFactory.call(
-      config,
-      createRuntimeContentGeneratorFactory(config),
-    );
-  }
-  const setTokenizerFactory = configWithFactories['setTokenizerFactory'];
-  const getTokenizerFactory = configWithFactories['getTokenizerFactory'];
-  const existingTokenizerFactory =
-    typeof getTokenizerFactory === 'function'
-      ? getTokenizerFactory.call(config)
-      : undefined;
-  if (
-    typeof setTokenizerFactory === 'function' &&
-    existingTokenizerFactory === undefined
-  ) {
-    setTokenizerFactory.call(config, createRuntimeTokenizerFactory());
-  }
+  supplied: {
+    readonly tokenizerFactory?: RuntimeTokenizerFactory;
+    readonly contentGeneratorFactory?: RuntimeContentGeneratorFactory<ContentGenerator>;
+  } = {},
+): {
+  readonly tokenizerFactory: RuntimeTokenizerFactory;
+  readonly contentGeneratorFactory: RuntimeContentGeneratorFactory<ContentGenerator>;
+} {
+  const installedTokenizerFactory = manager.getTokenizerFactory?.();
+  const tokenizerFactory =
+    supplied.tokenizerFactory ??
+    installedTokenizerFactory ??
+    createRuntimeTokenizerFactory();
+  if (tokenizerFactory !== installedTokenizerFactory)
+    manager.setTokenizerFactory?.(tokenizerFactory);
+  return {
+    tokenizerFactory,
+    contentGeneratorFactory:
+      supplied.contentGeneratorFactory ??
+      createRuntimeContentGeneratorFactory(),
+  };
 }
 
 /**
@@ -212,21 +176,6 @@ function resolveExplicitProvider(
   }
 
   return undefined;
-}
-
-/**
- * Set a custom file system implementation (mainly for testing).
- */
-export function setFileSystem(fs: IFileSystem): void {
-  fileSystemInstance = fs;
-}
-
-/**
- * Get the file system implementation to use.
- */
-function getFileSystem(): IFileSystem {
-  fileSystemInstance ??= new NodeFileSystem();
-  return fileSystemInstance;
 }
 
 /**
@@ -345,18 +294,10 @@ function resolveOpenaiBaseUrl(
 
 function resolveAuthOnlyFlag(
   settingsService: RuntimeContextShape['settingsService'],
-  config?: Config,
   userSettings?: UserSettingsView,
 ): boolean {
-  if (config && typeof config.getEphemeralSettings === 'function') {
-    const authOnlyValue = config.getEphemeralSettings().authOnly;
-    if (authOnlyValue !== undefined) {
-      const coerced = coerceAuthOnly(authOnlyValue);
-      if (typeof coerced === 'boolean') {
-        return coerced;
-      }
-    }
-  }
+  const sessionAuthOnly = coerceAuthOnly(settingsService.get('authOnly'));
+  if (typeof sessionAuthOnly === 'boolean') return sessionAuthOnly;
 
   if (userSettings) {
     const mergedAuthOnly = userSettings.authOnly;
@@ -392,7 +333,7 @@ function registerOAuthProviders(
 
 /** Resolves OpenAI-specific settings from user settings and ephemeral overrides. */
 function resolveOpenaiSettings(
-  config: Config | undefined,
+  settings: RuntimeContextShape['settingsService'],
   userSettings: UserSettingsView | undefined,
   authOnlyEnabled: boolean,
   allowBrowserEnvironment: boolean,
@@ -402,7 +343,17 @@ function resolveOpenaiSettings(
   openaiProviderConfig: IProviderConfig;
 } {
   const settingsData: Record<string, unknown> = userSettings ?? {};
-  const ephemeralSettings = config?.getEphemeralSettings() ?? {};
+  const readConnectionPolicy = () => ({
+    'auth-key': settings.get('auth-key'),
+    'base-url': settings.get('base-url'),
+    'custom-headers': settings.get('custom-headers'),
+    'user-agent': settings.get('user-agent'),
+    'socket-timeout': settings.get('socket-timeout'),
+    'socket-keepalive': settings.get('socket-keepalive'),
+    'socket-nodelay': settings.get('socket-nodelay'),
+    openaiResponsesEnabled: settings.get('openaiResponsesEnabled'),
+  });
+  const ephemeralSettings = readConnectionPolicy();
   // Apply the same schema defaults the CLI's merged-settings layer supplied for
   // these keys (enableTextToolCallParsing/textToolCallModels/
   // openaiResponsesEnabled/providerToolFormatOverrides). Reading the raw user
@@ -448,9 +399,7 @@ function resolveOpenaiSettings(
         | undefined) ?? {},
     openaiResponsesEnabled: effectiveOpenaiResponsesEnabled,
     allowBrowserEnvironment,
-    getEphemeralSettings: config
-      ? () => config.getEphemeralSettings()
-      : undefined,
+    readConnectionPolicy,
   };
 
   return { openaiApiKey, openaiBaseUrl, openaiProviderConfig };
@@ -548,13 +497,28 @@ function tryActivateFakeProvider(
   return { manager };
 }
 
+function readOwnerAuthPolicy(
+  settings: RuntimeSettingsState,
+): SessionAuthPolicy {
+  const baseUrl = settings.get('base-url');
+  const profile = settings.get('currentProfile');
+  return {
+    profileName: typeof profile === 'string' ? profile : null,
+    baseUrl: typeof baseUrl === 'string' ? baseUrl : undefined,
+    bucketPrompt: settings.get('auth-bucket-prompt'),
+    bucketDelay: settings.get('auth-bucket-delay'),
+    interactiveTimeoutMs: settings.get('auth.interactiveTimeoutMs'),
+    noBrowser: settings.get('auth.noBrowser') === true,
+    authOnly: settings.get('authOnly') === true,
+  };
+}
+
 export function createProviderManager(
   context: RuntimeContextShape,
-  options: ProviderManagerFactoryOptions = {},
+  options: ProviderManagerFactoryOptions,
 ): { manager: ProviderManager; oauthManager: OAuthManager } {
-  const fs = getFileSystem();
-  const userSettings = resolveUserSettings(fs);
-  const manager = new ProviderManager(context);
+  const userSettings = resolveUserSettings(options.fileSystem);
+  const manager = options.manager ?? new ProviderManager(context);
 
   // @plan:PLAN-20250214-CREDPROXY.P33
   const tokenStore = createTokenStore();
@@ -564,15 +528,17 @@ export function createProviderManager(
    * @requirement REQ-D01-003
    * @pseudocode lines 122-133
    */
-  const oauthRuntimeDeps: OAuthManagerRuntimeMessageBusDeps = {
+  const oauthManager = new OAuthManager(tokenStore, options.oauthSettings, {
     messageBus: options.runtimeMessageBus,
     config: options.config,
-  };
-  const oauthManager = new OAuthManager(
-    tokenStore,
-    options.oauthSettings,
-    oauthRuntimeDeps,
-  );
+    readAuthIdentity: () => manager.getAuthIdentity(),
+    readSessionAuthPolicy: () => readOwnerAuthPolicy(context.settingsService),
+    invalidateAuthCaches: createOwnerAuthCacheInvalidator((name) =>
+      manager.getProviderByName(name),
+    ),
+  });
+
+  bindOwnerRetryOperations(manager, oauthManager);
 
   const {
     config,
@@ -599,12 +565,11 @@ export function createProviderManager(
 
   const authOnlyEnabled = resolveAuthOnlyFlag(
     context.settingsService,
-    config,
     userSettings,
   );
   const { openaiApiKey, openaiBaseUrl, openaiProviderConfig } =
     resolveOpenaiSettings(
-      config,
+      context.settingsService,
       userSettings,
       authOnlyEnabled,
       allowBrowserEnvironment,
@@ -639,80 +604,46 @@ export function createProviderManager(
     authOnlyEnabled,
     providerContributions,
   };
-  openAIContexts.set(manager, openAIContext);
+  registerAliasRefresher(manager, openAIContext);
 
   return { manager, oauthManager };
 }
 
-/**
- * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P08
- * @requirement REQ-D01-003.3
- * @requirement REQ-D01-004.3
- * @requirement REQ-D01-001.4
- * @pseudocode lines 92-102
- */
-export function registerProviderManagerSingleton(
+function bindOwnerRetryOperations(
   manager: ProviderManager,
   oauthManager: OAuthManager,
 ): void {
-  singletonManager = manager;
-  singletonOAuthManager = oauthManager;
-}
-
-export function getProviderManager(
-  config?: Config,
-  allowBrowserEnvironment = false,
-  oauthSettings?: IOAuthSettingsProvider,
-  addItem?: OAuthUICallback,
-): ProviderManager {
-  void config;
-  void allowBrowserEnvironment;
-  void oauthSettings;
-  if (singletonManager && addItem && singletonOAuthManager) {
-    attachAddItemToOAuthProviders(singletonOAuthManager, addItem);
-  }
-
-  if (!singletonManager) {
-    throw new Error(
-      'ProviderManager singleton has not been registered. Initialize provider infrastructure at the composition root before requesting it.',
-    );
-  }
-
-  return singletonManager;
-}
-
-export function resetProviderManager(): void {
-  singletonManager = null;
-  singletonOAuthManager = null;
-  openAIContexts = new WeakMap();
-}
-
-export function getOAuthManager(): OAuthManager | null {
-  return singletonOAuthManager;
-}
-
-export function refreshAliasProviders(): void {
-  if (!singletonManager) {
-    return;
-  }
-
-  const context = openAIContexts.get(singletonManager);
-  if (!context) {
-    return;
-  }
-
-  const aliasEntries = loadProviderAliasEntries();
-  registerAliasProviders(
-    singletonManager,
-    aliasEntries,
-    context.apiKey,
-    context.baseUrl,
-    context.providerConfig,
-    context.oauthManager,
-    context.config,
-    context.authOnlyEnabled,
-    { providerContributions: context.providerContributions },
+  manager.setRetryOperationsFactory((providerName, profileId) =>
+    oauthManager.composeRetryOperations(
+      providerName,
+      profileId ? { profileId } : undefined,
+    ),
   );
 }
 
-export { getProviderManager as providerManager };
+function registerAliasRefresher(
+  manager: ProviderManager,
+  context: OpenAIRegistrationContext,
+): void {
+  manager.registerAliasRefresher(() => {
+    registerAliasProviders(
+      manager,
+      loadProviderAliasEntries(),
+      context.apiKey,
+      context.baseUrl,
+      context.providerConfig,
+      context.oauthManager,
+      context.config,
+      context.authOnlyEnabled,
+      { providerContributions: context.providerContributions },
+    );
+  });
+}
+
+export function refreshAliasProviders(manager: RuntimeProviderManager): void {
+  if (!(manager instanceof ProviderManager)) {
+    throw new Error('Alias refresh requires a ProviderManager owner.');
+  }
+
+  manager.refreshAliases();
+}

@@ -1,19 +1,15 @@
+import type { SubagentDefinitionReads } from '@vybestack/llxprt-code-core';
+import type { PromptPolicy } from '@vybestack/llxprt-code-core/core/prompts.js';
 /**
  * @license
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  getCoreSystemPromptAsync,
-  loadCoreMemoryContent,
-} from '@vybestack/llxprt-code-core/core/prompts.js';
-import process from 'node:process';
-import {
-  getEnabledToolNamesForPrompt,
-  shouldIncludeSubagentDelegationForConfig,
-} from './clientToolGovernance.js';
-import { resolveProviderForSystemPrompt } from './systemPromptProvider.js';
+import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
+
+import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { shouldIncludeSubagentDelegationForConfig } from './clientToolGovernance.js';
 import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
 import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { getErrorMessage } from '@vybestack/llxprt-code-core/utils/errors.js';
@@ -27,56 +23,27 @@ import type { BaseLLMClient } from './baseLlmClient.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 
-/**
- * Config-scoped async snapshot for the on-disk core-memory content loaded
- * when `config.getCoreMemory()` returns `undefined` (JIT context disabled).
- *
- * The exact `loadCoreMemoryContent(process.cwd())` result — including the
- * empty string — is cached per Config so the two-file `.LLXPRT_SYSTEM` disk
- * read happens at most once per Config lifetime, not once per auxiliary LLM
- * call (issue #3176, finding D7). This mirrors the disk-load fallback in
- * `resolveEffectiveMemories` but makes it a snapshot rather than a per-call
- * re-read.
- */
-const coreMemorySnapshotCache = new WeakMap<Config, Promise<string>>();
-
-/**
- * Resolves a defined `coreMemory` value for the auxiliary prompt path.
- * Prefers `config.getCoreMemory()` (in-memory when JIT is enabled); falls
- * back to a cached disk snapshot otherwise so `getCoreSystemPromptAsync`
- * never performs a per-call `.LLXPRT_SYSTEM` load.
- */
-async function resolveAuxiliaryCoreMemory(config: Config): Promise<string> {
-  const explicit = config.getCoreMemory();
-  if (explicit !== undefined) {
-    return explicit;
-  }
-  let snapshot = coreMemorySnapshotCache.get(config);
-  if (snapshot === undefined) {
-    snapshot = loadCoreMemoryContent(process.cwd());
-    coreMemorySnapshotCache.set(config, snapshot);
-  }
-  return snapshot;
-}
-
 async function buildLightweightSystemPrompt(
   config: Config,
+  readMcpInstructions: () => string | undefined,
   model: string,
   provider: string | undefined,
+  enabledToolNames: string[],
+  instructions: InstructionReadOperations,
+  promptPolicy: PromptPolicy,
+  subagents?: Pick<SubagentDefinitionReads, 'listSubagents'>,
 ): Promise<string> {
-  const userMemory = config.getUserMemory();
-  const coreMemory = await resolveAuxiliaryCoreMemory(config);
-  const mcpInstructions = config.getMcpInstructions();
-  const enabledToolNames = getEnabledToolNamesForPrompt(config);
+  const { memoryContent: userMemory, coreMemory } = instructions.snapshot();
+  const mcpInstructions = readMcpInstructions();
   const includeSubagentDelegation =
-    await shouldIncludeSubagentDelegationForConfig(config, enabledToolNames);
+    await shouldIncludeSubagentDelegationForConfig(subagents, enabledToolNames);
   return getCoreSystemPromptAsync({
     userMemory,
     coreMemory,
     mcpInstructions,
     model,
-    provider: provider ?? resolveProviderForSystemPrompt(config),
-    settings: config.getSettingsService(),
+    provider,
+    policy: promptPolicy,
     includeSubagentDelegation,
     tools: enabledToolNames,
     interactionMode: config.isInteractive() ? 'interactive' : 'non-interactive',
@@ -91,6 +58,7 @@ async function buildLightweightSystemPrompt(
  */
 export async function generateJson(
   config: Config,
+  readMcpInstructions: () => string | undefined,
   _contentGenerator: ContentGenerator,
   baseLlmClient: BaseLLMClient,
   contents: IContent[],
@@ -99,30 +67,30 @@ export async function generateJson(
   model: string,
   generationConfig: ModelGenerationSettings = {},
   lastPromptId: string,
-  provider?: string,
+  provider: string | undefined,
+  enabledToolNames: string[],
+  instructions: InstructionReadOperations,
+  promptPolicy: PromptPolicy,
+  subagents?: Pick<SubagentDefinitionReads, 'listSubagents'>,
 ): Promise<Record<string, unknown>> {
   const logger = new DebugLogger('llxprt:core:clientLlmUtilities');
 
   try {
     const systemInstruction = await buildLightweightSystemPrompt(
       config,
+      readMcpInstructions,
       model,
       provider,
+      enabledToolNames,
+      instructions,
+      promptPolicy,
+      subagents,
     );
 
     // Already neutral IContent[] — read TextBlock.text directly (no Google Part access).
     const iContents = contents;
 
-    const prompt = iContents
-      .map((ic) =>
-        ic.blocks
-          .filter((b) => b.type === 'text')
-          .map((b) => (b as { text: string }).text)
-          .filter((s) => s.length > 0)
-          .join('\n'),
-      )
-      .filter((s) => s.length > 0)
-      .join('\n\n');
+    const prompt = jsonRequestPrompt(iContents);
 
     const apiCall = async () =>
       baseLlmClient.generateJson({
@@ -180,6 +148,7 @@ export async function generateJson(
  */
 export async function generateContent(
   config: Config,
+  readMcpInstructions: () => string | undefined,
   contentGenerator: ContentGenerator,
   contents: IContent[],
   generationConfig: ModelGenerationSettings,
@@ -187,7 +156,11 @@ export async function generateContent(
   model: string,
   lastPromptId: string,
   baseGenerateContentConfig: ModelGenerationSettings,
-  provider?: string,
+  provider: string | undefined,
+  enabledToolNames: string[],
+  instructions: InstructionReadOperations,
+  promptPolicy: PromptPolicy,
+  subagents?: Pick<SubagentDefinitionReads, 'listSubagents'>,
 ): Promise<ModelOutput> {
   const configToUse: ModelGenerationSettings = {
     ...baseGenerateContentConfig,
@@ -197,8 +170,13 @@ export async function generateContent(
   try {
     const systemInstruction = await buildLightweightSystemPrompt(
       config,
+      readMcpInstructions,
       model,
       provider,
+      enabledToolNames,
+      instructions,
+      promptPolicy,
+      subagents,
     );
 
     const icontents = contents;
@@ -261,4 +239,17 @@ export async function generateEmbedding(
   });
 
   return result as number[][];
+}
+
+function jsonRequestPrompt(iContents: IContent[]): string {
+  return iContents
+    .map((ic) =>
+      ic.blocks
+        .filter((b) => b.type === 'text')
+        .map((b) => (b as { text: string }).text)
+        .filter((s) => s.length > 0)
+        .join('\n'),
+    )
+    .filter((s) => s.length > 0)
+    .join('\n\n');
 }

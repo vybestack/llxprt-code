@@ -13,6 +13,7 @@ import {
   createMockTokenStore,
   createMCPCredentials,
   setupDiagnosticsTest,
+  createDiagnosticsOAuthControl,
   teardownDiagnosticsTest,
   type DiagnosticsTestSetup,
 } from './__tests__/diagnosticsCommand-test-helpers.js';
@@ -23,9 +24,6 @@ const runtimeMocks = {
 };
 
 // Mock modules before imports
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  getRuntimeApi: runtimeMocks.getRuntimeApiMock,
-}));
 
 async function githubBucketNames(provider: string): Promise<string[]> {
   return provider === 'github' ? ['default'] : [];
@@ -49,7 +47,13 @@ describe('diagnosticsCommand OAuth token display', () => {
 
   beforeEach(() => {
     setup = setupDiagnosticsTest();
+    Object.defineProperty(setup.mockContext, 'runtimeApi', {
+      get: () => runtimeMocks.getRuntimeApiMock(),
+    });
     mockContext = setup.mockContext;
+    mockContext.oauthControl = createDiagnosticsOAuthControl(() =>
+      runtimeMocks.getRuntimeApiMock().oauthFixture(),
+    );
     mockTokenStore = setup.mockTokenStore;
   });
 
@@ -87,13 +91,13 @@ describe('diagnosticsCommand OAuth token display', () => {
           modelParams: {},
           ephemeralSettings: {},
         })),
-        getActiveProviderStatus: vi.fn(() => ({
+        providerStatus: vi.fn(() => ({
           providerName: 'test-provider',
         })),
-        getCliProviderManager: vi.fn(() => ({
+        providerManager: vi.fn(() => ({
           getProviderByName: vi.fn(() => null),
         })),
-        maybeGetCliOAuthManager: vi.fn(() => mockOAuthManager),
+        oauthFixture: vi.fn(() => mockOAuthManager),
       });
 
       const result = await diagnosticsCommand.action?.(mockContext, '');
@@ -135,13 +139,13 @@ describe('diagnosticsCommand OAuth token display', () => {
           modelParams: {},
           ephemeralSettings: {},
         })),
-        getActiveProviderStatus: vi.fn(() => ({
+        providerStatus: vi.fn(() => ({
           providerName: 'test-provider',
         })),
-        getCliProviderManager: vi.fn(() => ({
+        providerManager: vi.fn(() => ({
           getProviderByName: vi.fn(() => null),
         })),
-        maybeGetCliOAuthManager: vi.fn(() => mockOAuthManager),
+        oauthFixture: vi.fn(() => mockOAuthManager),
       });
 
       const result = await diagnosticsCommand.action?.(mockContext, '');
@@ -178,13 +182,13 @@ describe('diagnosticsCommand OAuth token display', () => {
           modelParams: {},
           ephemeralSettings: {},
         })),
-        getActiveProviderStatus: vi.fn(() => ({
+        providerStatus: vi.fn(() => ({
           providerName: 'test-provider',
         })),
-        getCliProviderManager: vi.fn(() => ({
+        providerManager: vi.fn(() => ({
           getProviderByName: vi.fn(() => null),
         })),
-        maybeGetCliOAuthManager: vi.fn(() => mockOAuthManager),
+        oauthFixture: vi.fn(() => mockOAuthManager),
       });
 
       const result = await diagnosticsCommand.action?.(mockContext, '');
@@ -229,13 +233,13 @@ describe('diagnosticsCommand OAuth token display', () => {
           modelParams: {},
           ephemeralSettings: {},
         })),
-        getActiveProviderStatus: vi.fn(() => ({
+        providerStatus: vi.fn(() => ({
           providerName: 'test-provider',
         })),
-        getCliProviderManager: vi.fn(() => ({
+        providerManager: vi.fn(() => ({
           getProviderByName: vi.fn(() => null),
         })),
-        maybeGetCliOAuthManager: vi.fn(() => mockOAuthManager),
+        oauthFixture: vi.fn(() => mockOAuthManager),
       });
 
       const result = await diagnosticsCommand.action?.(mockContext, '');
@@ -282,13 +286,13 @@ describe('diagnosticsCommand OAuth token display', () => {
           modelParams: {},
           ephemeralSettings: {},
         })),
-        getActiveProviderStatus: vi.fn(() => ({
+        providerStatus: vi.fn(() => ({
           providerName: 'test-provider',
         })),
-        getCliProviderManager: vi.fn(() => ({
+        providerManager: vi.fn(() => ({
           getProviderByName: vi.fn(() => null),
         })),
-        maybeGetCliOAuthManager: vi.fn(() => mockOAuthManager),
+        oauthFixture: vi.fn(() => mockOAuthManager),
       });
 
       const result = await diagnosticsCommand.action?.(mockContext, '');
@@ -321,13 +325,13 @@ describe('diagnosticsCommand OAuth token display', () => {
           modelParams: {},
           ephemeralSettings: {},
         })),
-        getActiveProviderStatus: vi.fn(() => ({
+        providerStatus: vi.fn(() => ({
           providerName: 'test-provider',
         })),
-        getCliProviderManager: vi.fn(() => ({
+        providerManager: vi.fn(() => ({
           getProviderByName: vi.fn(() => null),
         })),
-        maybeGetCliOAuthManager: vi.fn(() => mockOAuthManager),
+        oauthFixture: vi.fn(() => mockOAuthManager),
       });
 
       const result = await diagnosticsCommand.action?.(mockContext, '');
@@ -360,13 +364,13 @@ describe('diagnosticsCommand OAuth token display', () => {
           modelParams: {},
           ephemeralSettings: {},
         })),
-        getActiveProviderStatus: vi.fn(() => ({
+        providerStatus: vi.fn(() => ({
           providerName: 'test-provider',
         })),
-        getCliProviderManager: vi.fn(() => ({
+        providerManager: vi.fn(() => ({
           getProviderByName: vi.fn(() => null),
         })),
-        maybeGetCliOAuthManager: vi.fn(() => mockOAuthManager),
+        oauthFixture: vi.fn(() => mockOAuthManager),
       });
 
       const result = await diagnosticsCommand.action?.(mockContext, '');
@@ -396,13 +400,13 @@ describe('diagnosticsCommand OAuth token display', () => {
           modelParams: {},
           ephemeralSettings: {},
         })),
-        getActiveProviderStatus: vi.fn(() => ({
+        providerStatus: vi.fn(() => ({
           providerName: 'test-provider',
         })),
-        getCliProviderManager: vi.fn(() => ({
+        providerManager: vi.fn(() => ({
           getProviderByName: vi.fn(() => null),
         })),
-        maybeGetCliOAuthManager: vi.fn(() => mockOAuthManager),
+        oauthFixture: vi.fn(() => mockOAuthManager),
       });
 
       const result = await diagnosticsCommand.action?.(mockContext, '');
@@ -438,13 +442,13 @@ describe('diagnosticsCommand OAuth token display', () => {
           modelParams: {},
           ephemeralSettings: {},
         })),
-        getActiveProviderStatus: vi.fn(() => ({
+        providerStatus: vi.fn(() => ({
           providerName: 'test-provider',
         })),
-        getCliProviderManager: vi.fn(() => ({
+        providerManager: vi.fn(() => ({
           getProviderByName: vi.fn(() => null),
         })),
-        maybeGetCliOAuthManager: vi.fn(() => mockOAuthManager),
+        oauthFixture: vi.fn(() => mockOAuthManager),
       });
 
       const result = await diagnosticsCommand.action?.(mockContext, '');
@@ -478,13 +482,13 @@ describe('diagnosticsCommand OAuth token display', () => {
           modelParams: {},
           ephemeralSettings: {},
         })),
-        getActiveProviderStatus: vi.fn(() => ({
+        providerStatus: vi.fn(() => ({
           providerName: 'test-provider',
         })),
-        getCliProviderManager: vi.fn(() => ({
+        providerManager: vi.fn(() => ({
           getProviderByName: vi.fn(() => null),
         })),
-        maybeGetCliOAuthManager: vi.fn(() => mockOAuthManager),
+        oauthFixture: vi.fn(() => mockOAuthManager),
       });
 
       const result = await diagnosticsCommand.action?.(mockContext, '');
@@ -523,13 +527,13 @@ describe('diagnosticsCommand OAuth token display', () => {
           modelParams: {},
           ephemeralSettings: {},
         })),
-        getActiveProviderStatus: vi.fn(() => ({
+        providerStatus: vi.fn(() => ({
           providerName: 'test-provider',
         })),
-        getCliProviderManager: vi.fn(() => ({
+        providerManager: vi.fn(() => ({
           getProviderByName: vi.fn(() => null),
         })),
-        maybeGetCliOAuthManager: vi.fn(() => mockOAuthManager),
+        oauthFixture: vi.fn(() => mockOAuthManager),
       });
 
       const result = await diagnosticsCommand.action?.(mockContext, '');
@@ -562,13 +566,13 @@ describe('diagnosticsCommand OAuth token display', () => {
           modelParams: {},
           ephemeralSettings: {},
         })),
-        getActiveProviderStatus: vi.fn(() => ({
+        providerStatus: vi.fn(() => ({
           providerName: 'test-provider',
         })),
-        getCliProviderManager: vi.fn(() => ({
+        providerManager: vi.fn(() => ({
           getProviderByName: vi.fn(() => null),
         })),
-        maybeGetCliOAuthManager: vi.fn(() => mockOAuthManager),
+        oauthFixture: vi.fn(() => mockOAuthManager),
       });
 
       const result = await diagnosticsCommand.action?.(mockContext, '');
@@ -602,13 +606,13 @@ describe('diagnosticsCommand OAuth token display', () => {
           modelParams: {},
           ephemeralSettings: {},
         })),
-        getActiveProviderStatus: vi.fn(() => ({
+        providerStatus: vi.fn(() => ({
           providerName: 'test-provider',
         })),
-        getCliProviderManager: vi.fn(() => ({
+        providerManager: vi.fn(() => ({
           getProviderByName: vi.fn(() => null),
         })),
-        maybeGetCliOAuthManager: vi.fn(() => mockOAuthManager),
+        oauthFixture: vi.fn(() => mockOAuthManager),
       });
 
       const result = await diagnosticsCommand.action?.(mockContext, '');
@@ -641,13 +645,13 @@ describe('diagnosticsCommand OAuth token display', () => {
           modelParams: {},
           ephemeralSettings: {},
         })),
-        getActiveProviderStatus: vi.fn(() => ({
+        providerStatus: vi.fn(() => ({
           providerName: 'test-provider',
         })),
-        getCliProviderManager: vi.fn(() => ({
+        providerManager: vi.fn(() => ({
           getProviderByName: vi.fn(() => null),
         })),
-        maybeGetCliOAuthManager: vi.fn(() => mockOAuthManager),
+        oauthFixture: vi.fn(() => mockOAuthManager),
       });
 
       const result = await diagnosticsCommand.action?.(mockContext, '');

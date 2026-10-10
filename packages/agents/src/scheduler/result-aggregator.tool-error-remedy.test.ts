@@ -1,3 +1,5 @@
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createSessionPolicyFixture } from '../core/__tests__/session-policy-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -65,6 +67,10 @@ function createFakeFileHost(targetDir: string): IToolHost {
     setApprovalMode: () => {},
     isInteractive: () => false,
     hasFeatureFlag: () => false,
+    runSearch: <T>(
+      _directories: readonly string[],
+      operation: () => Promise<T>,
+    ): Promise<T> => operation(),
     getFileService: () => ({
       shouldGitIgnoreFile: () => false,
       shouldLlxprtIgnoreFile: () => false,
@@ -81,9 +87,11 @@ function createFakeFileHost(targetDir: string): IToolHost {
     getLlxprtIgnoreFilePath: () => null,
     recordFileRead: () => {},
     getLlxprtIgnorePatterns: () => [],
-    getEphemeralSettings: () => ({
-      'tool-output-max-tokens': DEFAULT_MAX_TOKENS,
-    }),
+    readExecutionPolicy: createSessionPolicyFixture(
+      createFixtureSettings({
+        'tool-output-max-tokens': DEFAULT_MAX_TOKENS,
+      }),
+    ).readExecutionPolicy,
     getDebugMode: () => false,
   };
 }
@@ -112,9 +120,11 @@ function makeCallbacks(): {
     },
     getFallbackOutputConfig: () =>
       ({
-        getEphemeralSettings: () => ({
-          'tool-output-max-tokens': DEFAULT_MAX_TOKENS,
-        }),
+        readExecutionPolicy: createSessionPolicyFixture(
+          createFixtureSettings({
+            'tool-output-max-tokens': DEFAULT_MAX_TOKENS,
+          }),
+        ).readExecutionPolicy,
       }) satisfies ToolOutputSettingsProvider,
   };
   return { callbacks, lastError: () => captured };
@@ -170,3 +180,11 @@ describe('ResultAggregator — real tool error remedy (issue #3037, AC6)', () =>
     }
   });
 });
+
+function createFixtureSettings(
+  values: Readonly<Record<string, unknown>>,
+): SettingsService {
+  const settings = new SettingsService();
+  for (const [key, value] of Object.entries(values)) settings.set(key, value);
+  return settings;
+}

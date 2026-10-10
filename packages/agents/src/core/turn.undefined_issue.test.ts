@@ -1,3 +1,6 @@
+import { createChatPolicyFixture } from './__tests__/session-policy-fixture.js';
+import { createTurnCitationPolicy } from './__tests__/session-policy-fixture.js';
+import { createTurnStreamPolicy } from './__tests__/session-policy-fixture.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -39,9 +42,11 @@ describe('Turn tool-call name passthrough (issue 3535)', () => {
     vi.resetAllMocks();
     turn = new Turn(
       {
+        ...createChatPolicyFixture(),
         sendMessageStream: mockSendMessageStream,
         getHistory: mockGetHistory,
-        getConfig: () => undefined,
+        shouldShowCitations: createTurnCitationPolicy(),
+        getStreamTimeoutPolicy: createTurnStreamPolicy({}),
         getResolvedBaseUrl: () => undefined,
       } as unknown as ChatSession,
       'prompt-3535',

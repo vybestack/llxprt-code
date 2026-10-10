@@ -14,14 +14,16 @@ import {
   type ToolInvocation,
   type ToolMcpConfirmationDetails,
   type ToolResult,
-  type PolicyUpdateOptions,
   ToolErrorType,
   type CallableTool,
   type ToolCallRequest as FunctionCall,
   type ContentPart as Part,
 } from '@vybestack/llxprt-code-tools';
 import type { IToolMessageBus } from '@vybestack/llxprt-code-tools';
-import type { McpTrustConfig } from '../host/hostInterfaces.js';
+import type {
+  McpApprovalPolicy,
+  McpTrustConfig,
+} from '../host/hostInterfaces.js';
 import { firstTruthyString } from '../utils/string-fallback.js';
 
 type ToolParams = Record<string, unknown>;
@@ -64,9 +66,8 @@ class DiscoveredMCPToolInvocation extends BaseToolInvocation<
   ToolParams,
   ToolResult
 > {
-  private static readonly allowlist: Set<string> = new Set();
-
   constructor(
+    private readonly approvalPolicy: McpApprovalPolicy,
     private readonly mcpTool: CallableTool,
     readonly serverName: string,
     readonly serverToolName: string,
@@ -74,11 +75,9 @@ class DiscoveredMCPToolInvocation extends BaseToolInvocation<
     readonly trust: boolean | undefined,
     params: ToolParams = {},
     messageBus: IToolMessageBus,
-    private readonly cliConfig?: McpTrustConfig,
+    _cliConfig?: McpTrustConfig,
+    private readonly isAuthorized?: () => boolean,
   ) {
-    // Use composite format for policy checks: serverName__toolName
-    // This enables server wildcards (e.g., "google-workspace__*")
-    // while still allowing specific tool rules
     super(
       params,
       messageBus,
@@ -88,28 +87,17 @@ class DiscoveredMCPToolInvocation extends BaseToolInvocation<
     );
   }
 
-  protected override getPolicyUpdateOptions(
-    _outcome: ToolConfirmationOutcome,
-  ): PolicyUpdateOptions | undefined {
-    return { mcpName: this.serverName };
-  }
-
   override async shouldConfirmExecute(
     _abortSignal: AbortSignal,
   ): Promise<ToolCallConfirmationDetails | false> {
-    const serverAllowListKey = this.serverName;
-    const toolAllowListKey = `${this.serverName}.${this.serverToolName}`;
-
-    if (this.cliConfig?.isTrustedFolder() === true && this.trust === true) {
-      return false; // server is trusted, no confirmation needed
-    }
-
-    if (
-      DiscoveredMCPToolInvocation.allowlist.has(serverAllowListKey) ||
-      DiscoveredMCPToolInvocation.allowlist.has(toolAllowListKey)
-    ) {
-      return false; // server and/or tool already allowlisted
-    }
+    const target = {
+      serverName: this.serverName,
+      toolName: this.serverToolName,
+    };
+    const decision = this.approvalPolicy.evaluate(target, this.params);
+    if (decision === 'deny')
+      throw new Error('MCP tool execution denied by policy');
+    if (decision === 'allow') return false;
 
     const confirmationDetails: ToolMcpConfirmationDetails = {
       type: 'mcp',
@@ -118,14 +106,27 @@ class DiscoveredMCPToolInvocation extends BaseToolInvocation<
       toolName: this.serverToolName, // Display original tool name in confirmation
       toolDisplayName: this.displayName, // Display global registry name exposed to model and user
       onConfirm: async (outcome: ToolConfirmationOutcome) => {
-        if (outcome === ToolConfirmationOutcome.ProceedAlwaysServer) {
-          DiscoveredMCPToolInvocation.allowlist.add(serverAllowListKey);
-        } else if (outcome === ToolConfirmationOutcome.ProceedAlwaysTool) {
-          DiscoveredMCPToolInvocation.allowlist.add(toolAllowListKey);
-        } else if (outcome === ToolConfirmationOutcome.ProceedAlwaysAndSave) {
-          DiscoveredMCPToolInvocation.allowlist.add(toolAllowListKey);
-          await this.publishPolicyUpdate(outcome);
+        let approval:
+          | 'tool-session'
+          | 'server-session'
+          | 'tool-saved'
+          | undefined;
+        switch (outcome) {
+          case ToolConfirmationOutcome.ProceedAlwaysServer:
+            approval = 'server-session';
+            break;
+          case ToolConfirmationOutcome.ProceedAlwaysTool:
+            approval = 'tool-session';
+            break;
+          case ToolConfirmationOutcome.ProceedAlwaysAndSave:
+            approval = 'tool-saved';
+            break;
+          default:
+            return;
         }
+        if (this.isAuthorized && !this.isAuthorized())
+          throw new Error('MCP capability is no longer authorized');
+        await this.approvalPolicy.approve(target, approval);
       },
     };
     return confirmationDetails;
@@ -168,19 +169,14 @@ class DiscoveredMCPToolInvocation extends BaseToolInvocation<
       },
     ];
 
-    // Race MCP tool call with abort signal to respect cancellation
     const rawResponseParts = await new Promise<Part[]>((resolve, reject) => {
       if (signal.aborted) {
-        const error = new Error('Tool call aborted');
-        error.name = 'AbortError';
-        reject(error);
+        reject(signal.reason);
         return;
       }
       const onAbort = () => {
         cleanup();
-        const error = new Error('Tool call aborted');
-        error.name = 'AbortError';
-        reject(error);
+        reject(signal.reason);
       };
       const cleanup = () => {
         signal.removeEventListener('abort', onAbort);
@@ -188,7 +184,7 @@ class DiscoveredMCPToolInvocation extends BaseToolInvocation<
       signal.addEventListener('abort', onAbort, { once: true });
 
       this.mcpTool
-        .callTool(functionCalls)
+        .callTool(functionCalls, signal)
         .then((res) => {
           cleanup();
           resolve(res);
@@ -242,6 +238,7 @@ export class DiscoveredMCPTool extends BaseDeclarativeTool<
   ToolResult
 > {
   constructor(
+    private readonly approvalPolicy: McpApprovalPolicy,
     private readonly mcpTool: CallableTool,
     readonly serverName: string,
     readonly serverToolName: string,
@@ -250,6 +247,8 @@ export class DiscoveredMCPTool extends BaseDeclarativeTool<
     readonly trust?: boolean,
     nameOverride?: string,
     private readonly cliConfig?: McpTrustConfig,
+    private readonly isAuthorized?: () => boolean,
+    messageBus?: IToolMessageBus,
   ) {
     super(
       nameOverride ?? generateMcpToolName(serverName, serverToolName),
@@ -259,6 +258,26 @@ export class DiscoveredMCPTool extends BaseDeclarativeTool<
       parameterSchema,
       true, // isOutputMarkdown
       false, // canUpdateOutput
+      messageBus,
+    );
+  }
+
+  withSessionApproval(
+    policy: McpApprovalPolicy,
+    bus: IToolMessageBus,
+  ): DiscoveredMCPTool {
+    return new DiscoveredMCPTool(
+      policy,
+      this.mcpTool,
+      this.serverName,
+      this.serverToolName,
+      this.description,
+      structuredClone(this.parameterSchema),
+      this.trust,
+      this.name,
+      this.cliConfig,
+      this.isAuthorized,
+      bus,
     );
   }
 
@@ -267,6 +286,7 @@ export class DiscoveredMCPTool extends BaseDeclarativeTool<
     messageBus: IToolMessageBus,
   ): ToolInvocation<ToolParams, ToolResult> {
     return new DiscoveredMCPToolInvocation(
+      this.approvalPolicy,
       this.mcpTool,
       this.serverName,
       this.serverToolName,
@@ -275,6 +295,7 @@ export class DiscoveredMCPTool extends BaseDeclarativeTool<
       params,
       messageBus,
       this.cliConfig,
+      this.isAuthorized,
     );
   }
 }

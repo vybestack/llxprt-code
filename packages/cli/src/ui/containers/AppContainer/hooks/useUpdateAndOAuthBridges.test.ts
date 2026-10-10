@@ -13,15 +13,6 @@ import {
   interactiveAuthCoordinator,
   type AuthCompletionOptions,
 } from '@vybestack/llxprt-code-providers/auth.js';
-import {
-  resetRuntimeScopeForTesting,
-  runWithRuntimeScope,
-} from '@vybestack/llxprt-code-providers/runtime.js';
-import { getActiveRuntimeKind } from '@vybestack/llxprt-code-providers/runtime/runtimeAccessors.js';
-import {
-  resetCliRuntimeRegistryForTesting,
-  upsertRuntimeEntry,
-} from '@vybestack/llxprt-code-providers/runtime/runtimeRegistry.js';
 import { renderHook } from '../../../../__tests__/render.js';
 import type { HistoryItemWithoutId } from '../../../types.js';
 import type { UpdateObject } from '../../../utils/updateCheck.js';
@@ -36,8 +27,8 @@ interface AuthenticationCall {
 type AuthenticationHandler = (signal: AbortSignal | undefined) => Promise<void>;
 
 class RecordingOAuthManager {
-  readonly providers = new Map<string, unknown>();
   readonly authenticationCalls: AuthenticationCall[] = [];
+  attachProviderMessages(): void {}
 
   constructor(private readonly authenticationHandler?: AuthenticationHandler) {}
 
@@ -57,9 +48,9 @@ class RecordingOAuthManager {
 
 function createHookHarness(
   manager: RecordingOAuthManager,
-  runInInteractiveHostScope: <T>(callback: () => T) => T = (callback) =>
-    callback(),
-  getCliOAuthManagerOverride?: () => unknown,
+  oauthControlOverride?: Parameters<
+    typeof useUpdateAndOAuthBridges
+  >[0]['oauthControl'],
 ): {
   readonly items: Array<Omit<HistoryItemWithoutId, 'id'>>;
   readonly renderResult: ReturnType<typeof renderHook>;
@@ -79,8 +70,7 @@ function createHookHarness(
     useUpdateAndOAuthBridges({
       addItem,
       setUpdateInfo,
-      getCliOAuthManager: getCliOAuthManagerOverride ?? (() => manager),
-      runInInteractiveHostScope,
+      oauthControl: oauthControlOverride ?? manager,
     }),
   );
   return { items, renderResult };
@@ -96,8 +86,6 @@ describe('useUpdateAndOAuthBridges interactive authentication integration', () =
     interactiveAuthCoordinator.unbindHost();
     oauthUIBridge.clearCallback();
     oauthUIBridge.clearPending();
-    resetRuntimeScopeForTesting();
-    resetCliRuntimeRegistryForTesting();
   });
 
   afterEach(async () => {
@@ -105,8 +93,6 @@ describe('useUpdateAndOAuthBridges interactive authentication integration', () =
     interactiveAuthCoordinator.unbindHost();
     oauthUIBridge.clearCallback();
     oauthUIBridge.clearPending();
-    resetRuntimeScopeForTesting();
-    resetCliRuntimeRegistryForTesting();
   });
 
   it('maps waiting and settled events to visible authentication messages', () => {
@@ -179,19 +165,14 @@ describe('useUpdateAndOAuthBridges interactive authentication integration', () =
 
   it('settles host authentication as failed when the OAuth manager is unresolvable', async () => {
     const manager = new RecordingOAuthManager();
-    // The mount effect wires provider callbacks through the same getter, so
-    // the getter must succeed at mount and only fail when the host handler
-    // resolves the manager for an incoming challenge.
-    let throwOnResolve = false;
-    const { renderResult } = createHookHarness(manager, undefined, () => {
-      if (throwOnResolve) {
+    const { renderResult } = createHookHarness(manager, {
+      attachProviderMessages: () => manager.attachProviderMessages(),
+      authenticate: () => {
         throw new Error('runtime context not ready');
-      }
-      return manager;
+      },
     });
 
     expect(interactiveAuthCoordinator.hasHost()).toBe(true);
-    throwOnResolve = true;
     const outcome = await interactiveAuthCoordinator.requestAuth(
       {
         provider: 'codex',
@@ -210,69 +191,24 @@ describe('useUpdateAndOAuthBridges interactive authentication integration', () =
     renderResult.unmount();
   });
 
-  it('settles host authentication as failed when the OAuth manager does not support authentication', async () => {
+  it('uses the bound interactive host manager for an unrelated subagent requester', async () => {
     const manager = new RecordingOAuthManager();
-    const { renderResult } = createHookHarness(manager, undefined, () => ({
-      providers: new Map(),
-    }));
+    const { renderResult } = createHookHarness(manager);
 
-    expect(interactiveAuthCoordinator.hasHost()).toBe(true);
-    const outcome = await interactiveAuthCoordinator.requestAuth(
-      {
-        provider: 'codex',
-        bucket: 'work',
-        requester: { runtimeKind: 'subagent' },
-        reason: 'reauthentication-required',
-        correlationId: 'host-nonconforming-correlation',
-      },
-      { timeoutMs: 2000 },
-    );
-
-    expect(outcome.kind).toBe('failed');
-    expect(outcome.correlationId).toBe('host-nonconforming-correlation');
-    expect(outcome.error).toBeInstanceOf(InteractiveAuthHostUnavailableError);
-    expect(manager.authenticationCalls).toHaveLength(0);
-    renderResult.unmount();
-  });
-
-  it('runs the complete host authentication flow in the interactive host runtime scope', async () => {
-    upsertRuntimeEntry('interactive-host', {
-      runtimeKind: 'cli-interactive',
+    const outcome = await interactiveAuthCoordinator.requestAuth({
+      provider: 'codex',
+      bucket: 'work',
+      requester: { runtimeKind: 'subagent', runtimeId: 'requesting-subagent' },
+      reason: 'authentication-required',
+      correlationId: 'host-scope-correlation',
     });
-    upsertRuntimeEntry('requesting-subagent', { runtimeKind: 'subagent' });
-    const observedRuntimeKinds: Array<ReturnType<typeof getActiveRuntimeKind>> =
-      [];
-    const manager = new RecordingOAuthManager(async () => {
-      await Promise.resolve();
-      observedRuntimeKinds.push(getActiveRuntimeKind());
-    });
-    const { renderResult } = createHookHarness(manager, (callback) =>
-      runWithRuntimeScope(
-        { runtimeId: 'interactive-host', metadata: {} },
-        callback,
-      ),
-    );
-
-    const outcome = await runWithRuntimeScope(
-      { runtimeId: 'requesting-subagent', metadata: {} },
-      () =>
-        interactiveAuthCoordinator.requestAuth({
-          provider: 'codex',
-          bucket: 'work',
-          requester: {
-            runtimeKind: 'subagent',
-            runtimeId: 'requesting-subagent',
-          },
-          reason: 'authentication-required',
-          correlationId: 'host-scope-correlation',
-        }),
-    );
 
     expect(outcome).toStrictEqual({
       kind: 'succeeded',
       correlationId: 'host-scope-correlation',
     });
-    expect(observedRuntimeKinds).toStrictEqual(['cli-interactive']);
+    expect(manager.authenticationCalls).toHaveLength(1);
+    expect(manager.authenticationCalls[0]?.provider).toBe('codex');
     renderResult.unmount();
   });
 
@@ -351,8 +287,7 @@ describe('useUpdateAndOAuthBridges interactive authentication integration', () =
         useUpdateAndOAuthBridges({
           addItem,
           setUpdateInfo,
-          getCliOAuthManager: () => props.manager,
-          runInInteractiveHostScope: (callback) => callback(),
+          oauthControl: props.manager,
         }),
       { initialProps: { manager: firstManager } },
     );

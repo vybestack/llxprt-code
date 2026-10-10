@@ -22,12 +22,12 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { withRecordingLifetimeFixture } from '../../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import { continueCommand } from '../continueCommand.js';
 import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
 import {
   exportSessionMediaPackage,
   LocalMediaStore,
-  RecordingIntegration,
   SessionDiscovery,
   SessionRecordingService,
 } from '@vybestack/llxprt-code-core';
@@ -94,38 +94,53 @@ function isPerformResumeAction(
   return result !== undefined && result.type === 'perform_resume';
 }
 
-class ExportBoundaryRecordingService extends SessionRecordingService {
-  async flushInitialContent(): Promise<void> {
-    await super.flush();
-  }
-
-  override async flush(): Promise<void> {
-    this.recordContent({
-      speaker: 'human',
-      blocks: [{ type: 'text', text: 'active recording boundary' }],
-    });
-    await super.flush();
-  }
-}
-
-class RejectingFlushRecordingService extends SessionRecordingService {
-  private rejectNextFlush = true;
-
-  override async flush(): Promise<void> {
-    if (this.rejectNextFlush) {
-      this.rejectNextFlush = false;
-      throw new Error('integration flush rejected');
-    }
-    await super.flush();
-  }
-}
-
 describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
   let ctx: CommandContext;
 
   beforeEach(() => {
     ctx = createMockCommandContext();
   });
+
+  it('exports the active facade recording even when a borrowed sibling cleared the Config pointer', async () => {
+    await withRecordingLifetimeFixture(async ({ agent, config, borrow }) => {
+      const sibling = await borrow();
+      await agent.setHistory([
+        { speaker: 'human', blocks: [{ type: 'text', text: 'owner export' }] },
+      ]);
+      await agent.session.setRecording({ enabled: true });
+      await sibling.dispose();
+      const history = agent.agentClient.getHistoryService();
+      if (history === null) throw new Error('Expected live history');
+      history.add({
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'pending export boundary' }],
+      });
+      const path = agent.session.getRecording().path;
+      if (path === undefined) throw new Error('Expected active recording path');
+      const sessionInfo = (await agent.session.listSessions()).at(0);
+      if (sessionInfo === undefined) throw new Error('Expected listed session');
+      const destination = join(config.projectTempDir, 'owner-export');
+      const commandContext = createMockCommandContext({
+        services: {
+          agent,
+          config: {
+            isInteractive: () => true,
+            projectChatsDir: join(config.projectTempDir, 'chats'),
+            projectTempDir: config.projectTempDir,
+          },
+        },
+      });
+      const result = await continueCommand.action!(
+        commandContext,
+        `export ${sessionInfo.id} ${destination}`,
+      );
+      assertType(result, isMessageAction);
+      expect(result.messageType).toBe('info');
+      expect(
+        await readFile(join(destination, 'session.jsonl'), 'utf8'),
+      ).toContain('pending export boundary');
+    });
+  }, 30000);
 
   describe('No-args path @requirement:REQ-EN-001', () => {
     it('returns dialog action when interactive with no args', async () => {
@@ -399,13 +414,13 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
 
         ctx = createMockCommandContext({
           services: {
+            agent: {
+              agentClient: { mediaStore: undefined },
+            },
             config: {
               isInteractive: () => true,
-              storage: {
-                getProjectChatsDir: () => chatsDir,
-                getProjectTempDir: () => projectTempDir,
-              },
-              getLocalMediaStore: () => undefined,
+              projectChatsDir: chatsDir,
+              projectTempDir,
             },
           },
         });
@@ -470,11 +485,8 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
           services: {
             config: {
               isInteractive: () => true,
-              storage: {
-                getProjectChatsDir: () => chatsDir,
-                getProjectTempDir: () => projectTempDir,
-              },
-              getLocalMediaStore: () => undefined,
+              projectChatsDir: chatsDir,
+              projectTempDir,
             },
           },
         });
@@ -543,13 +555,13 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       });
       ctx = createMockCommandContext({
         services: {
+          agent: {
+            agentClient: { mediaStore: destinationStore },
+          },
           config: {
             isInteractive: () => false,
-            storage: {
-              getProjectChatsDir: () => destinationChats,
-              getProjectTempDir: () => projectTemp,
-            },
-            getLocalMediaStore: () => destinationStore,
+            projectChatsDir: destinationChats,
+            projectTempDir: projectTemp,
           },
         },
         ui: {
@@ -579,147 +591,37 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       }
     });
 
-    it('awaits integration and active recording flushes before exporting', async () => {
-      const root = await mkdtemp(join(tmpdir(), 'continue-export-'));
-      const projectTemp = join(root, 'portable-project');
-      const chatsDir = join(projectTemp, 'chats');
-      const mediaStore = new LocalMediaStore({
-        rootDirectory: join(projectTemp, 'media'),
-        quotaBytes: 1024,
-      });
-      const recording = new ExportBoundaryRecordingService({
-        sessionId: randomUUID(),
-        projectHash: 'portable-project',
-        chatsDir,
-        workspaceDirs: [],
-        provider: 'test',
-        model: 'test',
-        mediaStore,
-      });
-      recording.recordContent({
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'discoverable export' }],
-      });
-      await recording.flushInitialContent();
-      const integrationRecording = new SessionRecordingService({
-        sessionId: randomUUID(),
-        projectHash: 'portable-project',
-        chatsDir,
-        workspaceDirs: [],
-        provider: 'test',
-        model: 'test',
-      });
-      integrationRecording.recordContent({
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'integration boundary' }],
-      });
-      const integration = new RecordingIntegration(integrationRecording);
-      const packageDirectory = join(root, 'exported-session');
-      ctx = createMockCommandContext({
-        services: {
-          config: {
-            isInteractive: () => true,
-            storage: {
-              getProjectChatsDir: () => chatsDir,
-              getProjectTempDir: () => projectTemp,
-            },
-            getLocalMediaStore: () => mediaStore,
-            getSessionRecordingService: () => recording,
+    it('returns the owner export error without publishing a package', async () => {
+      await withRecordingLifetimeFixture(async ({ agent }) => {
+        await agent.setHistory([
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'failed export' }],
           },
-        },
-        recordingIntegration: integration,
-      });
-
-      try {
+        ]);
+        await agent.session.setRecording({ enabled: true });
+        const sessionInfo = (await agent.session.listSessions()).at(0);
+        if (sessionInfo === undefined)
+          throw new Error('Expected listed session');
+        const sourcePath = agent.session.getRecording().path;
+        if (sourcePath === undefined)
+          throw new Error('Expected recording path');
+        const destination = join(sourcePath, 'not-a-directory');
+        ctx = createMockCommandContext({ services: { agent } });
         const result = await continueCommand.action!(
           ctx,
-          `export ${recording.getSessionId()} ${packageDirectory}`,
+          `export ${sessionInfo.id} ${destination}`,
         );
-
-        assertType(result, isMessageAction);
-        expect(result.messageType).toBe('info');
-        expect(
-          await readFile(join(packageDirectory, 'session.jsonl'), 'utf8'),
-        ).toContain('active recording boundary');
-        const integrationPath = integrationRecording.getFilePath();
-        assertNotNull(integrationPath, 'Expected integration recording path');
-        expect(await readFile(integrationPath, 'utf8')).toContain(
-          'integration boundary',
-        );
-      } finally {
-        await integration.dispose();
-        await integrationRecording.dispose();
-        await recording.dispose();
-        await rm(root, { recursive: true, force: true });
-      }
-    });
-
-    it('propagates an integration flush failure without publishing an export', async () => {
-      const root = await mkdtemp(join(tmpdir(), 'continue-export-failure-'));
-      const projectTemp = join(root, 'portable-project');
-      const chatsDir = join(projectTemp, 'chats');
-      const mediaStore = new LocalMediaStore({
-        rootDirectory: join(projectTemp, 'media'),
-        quotaBytes: 1024,
-      });
-      const recording = new SessionRecordingService({
-        sessionId: randomUUID(),
-        projectHash: 'portable-project',
-        chatsDir,
-        workspaceDirs: [],
-        provider: 'test',
-        model: 'test',
-        mediaStore,
-      });
-      recording.recordContent({
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'discoverable failed export' }],
-      });
-      await recording.flush();
-      const integrationRecording = new RejectingFlushRecordingService({
-        sessionId: randomUUID(),
-        projectHash: 'portable-project',
-        chatsDir,
-        workspaceDirs: [],
-        provider: 'test',
-        model: 'test',
-      });
-      const integration = new RecordingIntegration(integrationRecording);
-      const packageDirectory = join(root, 'must-not-exist');
-      ctx = createMockCommandContext({
-        services: {
-          config: {
-            isInteractive: () => true,
-            storage: {
-              getProjectChatsDir: () => chatsDir,
-              getProjectTempDir: () => projectTemp,
-            },
-            getLocalMediaStore: () => mediaStore,
-            getSessionRecordingService: () => recording,
-          },
-        },
-        recordingIntegration: integration,
-      });
-
-      try {
-        const result = await continueCommand.action!(
-          ctx,
-          `export ${recording.getSessionId()} ${packageDirectory}`,
-        );
-
         assertType(result, isMessageAction);
         expect(result.messageType).toBe('error');
-        expect(result.content).toContain('integration flush rejected');
-        await expect(stat(packageDirectory)).rejects.toMatchObject({
-          code: 'ENOENT',
+        expect(result.content).toBe(
+          'Session package export and cleanup failed',
+        );
+        await expect(stat(destination)).rejects.toMatchObject({
+          code: 'ENOTDIR',
         });
-      } finally {
-        await integration.dispose();
-        await integrationRecording.dispose();
-        await recording.dispose();
-        await rm(root, { recursive: true, force: true });
-      }
-    });
+      });
+    }, 30000);
 
     it('validates an import into a staged resume action without publishing it', async () => {
       const root = await mkdtemp(join(tmpdir(), 'continue-import-'));
@@ -761,13 +663,13 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       });
       ctx = createMockCommandContext({
         services: {
+          agent: {
+            agentClient: { mediaStore: destinationStore },
+          },
           config: {
             isInteractive: () => true,
-            storage: {
-              getProjectChatsDir: () => destinationChats,
-              getProjectTempDir: () => join(root, 'portable-project'),
-            },
-            getLocalMediaStore: () => destinationStore,
+            projectChatsDir: destinationChats,
+            projectTempDir: join(root, 'portable-project'),
           },
         },
       });
@@ -842,13 +744,13 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
       });
       ctx = createMockCommandContext({
         services: {
+          agent: {
+            agentClient: { mediaStore: destinationStore },
+          },
           config: {
             isInteractive: () => true,
-            storage: {
-              getProjectChatsDir: () => destinationChats,
-              getProjectTempDir: () => join(root, 'portable-project'),
-            },
-            getLocalMediaStore: () => destinationStore,
+            projectChatsDir: destinationChats,
+            projectTempDir: join(root, 'portable-project'),
           },
         },
       });

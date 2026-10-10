@@ -19,11 +19,12 @@
  * their old pinning tests are re-expressed here as public-surface behavior.
  */
 
-import { describe, it, expect, afterEach, afterAll } from 'bun:test';
+import { describe, it, expect, afterEach, afterAll, vi } from 'bun:test';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-core';
+import { MCPServerStatus } from '@vybestack/llxprt-code-mcp';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { createTaskAgent } from '../config/config.js';
 import { Task } from './task.js';
@@ -119,12 +120,33 @@ describe('Task over the Agent facade (#3221)', () => {
     }
   }, 30_000);
 
-  it('agentFacade exposes the Agent and delegating calls reach it', async () => {
+  it('reports a disconnecting MCP server without marking it disconnected', async () => {
+    process.env.LLXPRT_FAKE_RESPONSES = FIXTURE;
+    const agent = await buildAgent();
+    try {
+      vi.spyOn(agent.mcp, 'listServers').mockReturnValue([
+        {
+          name: 'transient-server',
+          config: { command: 'node' },
+          status: 'disconnecting',
+        },
+      ]);
+      const task = await Task.create('task-id', 'context-id', agent);
+      expect(task.getMetadata().mcpServers).toMatchObject([
+        { name: 'transient-server', status: MCPServerStatus.DISCONNECTING },
+      ]);
+    } finally {
+      vi.restoreAllMocks();
+      await disposeAgent(agent);
+    }
+  }, 30_000);
+
+  it('keeps Agent authority private while steering the task', async () => {
     process.env.LLXPRT_FAKE_RESPONSES = FIXTURE;
     const agent = await buildAgent();
     try {
       const task = await Task.create('task-id', 'context-id', agent);
-      expect(task.agentFacade).toBe(agent);
+      expect('agentFacade' in task).toBe(false);
       // Steer text delegates to the Agent facade (no-op without an active turn).
       expect(() => task.injectSteerText('steer')).not.toThrow();
     } finally {

@@ -3,13 +3,12 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { describe, expect, it, vi } from 'bun:test';
-import * as telemetryLoggers from '@vybestack/llxprt-code-core/telemetry/loggers.js';
+import { describe, expect, it } from 'bun:test';
+import type { ProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
 import type { ConversationRequestEvent } from '@vybestack/llxprt-code-core/telemetry/types.js';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
 import { logConversationRequestEntry } from './conversationLogger.js';
 
@@ -18,20 +17,27 @@ describe('conversation request tool persistence', () => {
     const dir = await mkdtemp(join(tmpdir(), 'issue3694-logger-'));
     resetConversationFileWriterForTesting();
     const events: ConversationRequestEvent[] = [];
-    const sink = vi
-      .spyOn(telemetryLoggers, 'logConversationRequest')
-      .mockImplementation((_config, event) => {
-        events.push(event);
-      });
     try {
-      const config = new Config({
-        cwd: dir,
-        targetDir: dir,
-        debugMode: false,
-        sessionId: 'logger-test',
-        model: 'test-model',
-        telemetry: { enabled: false, conversationLogPath: dir },
-      });
+      const config: ProviderRequestDiagnostics = {
+        conversationLoggingEnabled: true,
+        conversationLogPath: dir,
+        redaction: {
+          redactApiKeys: false,
+          redactCredentials: false,
+          redactFilePaths: false,
+          redactUrls: false,
+          redactEmails: false,
+          redactPersonalInfo: false,
+        },
+        recordApiError: () => undefined,
+        recordApiRequest: () => undefined,
+        recordApiResponse: () => undefined,
+        recordTokenUsage: () => undefined,
+        recordConversationRequest: (event) => {
+          events.push(event);
+        },
+        recordConversationResponse: () => undefined,
+      };
       const ctx = {
         providerName: 'test',
         conversationId: 'conversation',
@@ -100,7 +106,6 @@ describe('conversation request tool persistence', () => {
       expect(entries[2]).not.toHaveProperty('context.tools');
       expect(events[2].redacted_tools).toBeUndefined();
     } finally {
-      sink.mockRestore();
       resetConversationFileWriterForTesting();
       await rm(dir, { recursive: true, force: true });
     }

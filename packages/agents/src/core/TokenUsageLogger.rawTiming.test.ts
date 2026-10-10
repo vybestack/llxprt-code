@@ -1,3 +1,8 @@
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import { afterEach as closeInvocationRoots } from 'bun:test';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+const retainedInvocationOwners: SessionSettingsOwner[] = [];
+
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -24,7 +29,7 @@ import {
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
+  createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { RAW_TOKEN_DELTA_SINK_KEY } from '@vybestack/llxprt-code-providers';
@@ -143,8 +148,18 @@ function buildTokenSyncView(
   const providerManager = {
     getActiveProvider: vi.fn(() => mockProvider),
   };
-  mockConfig.getProviderManager = vi.fn().mockReturnValue(providerManager);
+  const invocationOwner = new SessionSettingsOwner(
+    fixture.runtimeSetup.settingsService,
+  );
+  retainedInvocationOwners.push(invocationOwner);
   return createAgentRuntimeContext({
+    prepareProviderInvocation: (name, parameters, signal) =>
+      invocationOwner.prepareProviderInvocation(
+        runtimeState.runtimeId,
+        name,
+        parameters,
+        signal,
+      ),
     state: runtimeState,
     history: historyService,
     settings: {
@@ -153,8 +168,16 @@ function buildTokenSyncView(
       preserveThreshold: 0.2,
       telemetry: { enabled: true, target: null },
     },
-    provider: providerAdapterFromStub(mockConfig.getProviderManager()),
-    telemetry: createTelemetryAdapterFromConfig(mockConfig),
+    provider: providerAdapterFromStub(providerManager),
+    telemetry: createTelemetryAdapter(
+      mockConfig,
+      RootTelemetry.prepare({
+        enabled: false,
+        sessionId: 'isolated-adapter-fixture',
+        maxBytes: 1024,
+        maxFiles: 1,
+      }),
+    ),
     tools: createToolRegistryViewFromRegistry(),
     providerRuntime: providerRuntimeSnapshot,
   });
@@ -184,6 +207,11 @@ async function collectConsumedText(
 }
 
 describe('TokenUsageLogger raw token-delta timing (#3493)', () => {
+  closeInvocationRoots(async () => {
+    for (const owner of retainedInvocationOwners.splice(0))
+      await owner.dispose();
+  });
+
   let logFile: string;
 
   beforeEach(() => {

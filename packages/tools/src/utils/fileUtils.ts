@@ -590,6 +590,7 @@ async function processSvgFile(
   filePath: string,
   relativePathForDisplay: string,
   stats: fs.Stats,
+  readText: (filePath: string) => Promise<string>,
 ): Promise<ProcessedFileReadResult> {
   const svgMaxSizeBytes = 1 * 1024 * 1024;
   if (stats.size > svgMaxSizeBytes) {
@@ -598,7 +599,7 @@ async function processSvgFile(
       returnDisplay: `Skipped large SVG file (>1MB): ${relativePathForDisplay}`,
     };
   }
-  const content = await readFileWithEncoding(filePath);
+  const content = await readText(filePath);
   return {
     llmContent: content,
     returnDisplay: `Read SVG as text: ${relativePathForDisplay}`,
@@ -610,8 +611,9 @@ async function processTextFile(
   relativePathForDisplay: string,
   offset: number | undefined,
   limit: number | undefined,
+  readText: (filePath: string) => Promise<string>,
 ): Promise<ProcessedFileReadResult> {
-  const content = await readFileWithEncoding(filePath);
+  const content = await readText(filePath);
   const lines = content.split('\n');
   const originalLineCount = countLines(lines);
 
@@ -743,14 +745,13 @@ async function processFileByType(
   limit: number | undefined,
   imageResizePolicy: ImageResizePolicy | undefined,
   imageBudget: ImageDimensionBudget | undefined,
+  readText: (filePath: string) => Promise<string>,
 ): Promise<ProcessedFileReadResult> {
   switch (fileType) {
     case 'binary':
       return processBinaryFile(relativePathForDisplay);
     case 'svg':
-      return processSvgFile(filePath, relativePathForDisplay, stats);
-    case 'text':
-      return processTextFile(filePath, relativePathForDisplay, offset, limit);
+      return processSvgFile(filePath, relativePathForDisplay, stats, readText);
     case 'image':
     case 'pdf':
     case 'audio':
@@ -763,7 +764,13 @@ async function processFileByType(
         imageBudget,
       );
     default:
-      return processTextFile(filePath, relativePathForDisplay, offset, limit);
+      return processTextFile(
+        filePath,
+        relativePathForDisplay,
+        offset,
+        limit,
+        readText,
+      );
   }
 }
 
@@ -774,6 +781,7 @@ export async function processSingleFileContent(
   limit?: number,
   imageResizePolicy?: ImageResizePolicy,
   imageBudget?: ImageDimensionBudget,
+  readText: (filePath: string) => Promise<string> = readFileWithEncoding,
 ): Promise<ProcessedFileReadResult> {
   try {
     const accessError = validateFileAccess(filePath);
@@ -800,6 +808,7 @@ export async function processSingleFileContent(
       limit,
       imageResizePolicy,
       imageBudget,
+      readText,
     );
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);

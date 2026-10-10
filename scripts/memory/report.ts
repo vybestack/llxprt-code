@@ -29,7 +29,6 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_TOP_TYPES, type Sample, parseSamples } from './sample.ts';
-import { isSourceMemoryEntrypoint } from './entrypoint.ts';
 import { MEMPROFILE_DIR_NAME, resolveSamplesPath } from './paths.ts';
 
 const MB = 1024 * 1024;
@@ -318,7 +317,7 @@ export function runReportCliMain(runtime: ReportCliRuntime): void {
   }
 }
 
-if (isSourceMemoryEntrypoint(import.meta.url)) {
+export async function main(): Promise<void> {
   runReportCliMain({
     usage: REPORT_USAGE,
     memprofileRoot: join(sourceRepoRoot, MEMPROFILE_DIR_NAME),

@@ -1,10 +1,11 @@
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it } from 'bun:test';
 import { ANTHROPIC_DEFAULT_BASE_URL } from '@vybestack/llxprt-code-providers';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
@@ -17,6 +18,8 @@ import { HistoryService } from '@vybestack/llxprt-code-core/services/history/His
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ChatSession } from '../chatSession.js';
 import { TestRuntimeProviderManager } from '../../test-utils/runtimeProviderManager.js';
+
+const settingsOwners: SessionSettingsOwner[] = [];
 
 const UNUSED_CONTENT_GENERATOR: ContentGenerator = {
   generateContent: () => Promise.reject(new Error('Not used by this test')),
@@ -40,6 +43,8 @@ function createChatSession(options: {
   baseUrl?: string;
 }): ChatSession {
   const settingsService = new SettingsService();
+  const settingsOwner = new SessionSettingsOwner(settingsService);
+  settingsOwners.push(settingsOwner);
   const providerRuntime = createProviderRuntimeContext({
     settingsService,
     runtimeId: 'resolved-base-url-test',
@@ -71,12 +76,23 @@ function createChatSession(options: {
       getToolMetadata: () => undefined,
     },
     providerRuntime,
+    prepareProviderInvocation: (name, parameters, signal) =>
+      settingsOwner.prepareProviderInvocation(
+        runtimeState.runtimeId,
+        name,
+        parameters,
+        signal,
+      ),
   });
 
   return new ChatSession(runtimeContext, UNUSED_CONTENT_GENERATOR, {}, []);
 }
 
 describe('ChatSession.getResolvedBaseUrl', () => {
+  afterEach(async () => {
+    for (const owner of settingsOwners.splice(0)) await owner.dispose();
+  });
+
   /**
    * @plan:PLAN-20260824-ISSUE2231.P01
    * @requirement:REQ-2231-4

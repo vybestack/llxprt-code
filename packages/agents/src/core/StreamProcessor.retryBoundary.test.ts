@@ -1,9 +1,11 @@
+import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.js';
 /**
  * @license
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { buildRuntimeContext } from './streamRequestHelpers.js';
 /**
  * Behavioral tests for StreamProcessor stream retry boundary fix.
  * Verifies that first chunk consumption happens inside retryWithBackoff.
@@ -11,6 +13,8 @@
  * @issue #1750 — Stream retry boundary
  */
 
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { StreamProcessor } from './StreamProcessor.js';
 import { EmptyStreamError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
@@ -72,6 +76,7 @@ describe('StreamProcessor._buildAndSendStreamRequest — stream retry boundary (
     processor = Object.create(StreamProcessor.prototype);
 
     const mockRuntimeContext = {
+      ...createSessionPolicyFixture(),
       state: {
         model: 'test-model',
         baseUrl: 'https://test.example.com',
@@ -127,12 +132,12 @@ describe('StreamProcessor._buildAndSendStreamRequest — stream retry boundary (
     };
 
     const mockProviderRuntimeBuilder = () => ({
-      config: {
+      config: createRuntimeConfigStub(new SettingsService(), {
         getEnableHooks: () => false,
         getHookSystem: () => null,
         getUserMemory: () => undefined,
-      },
-      settingsService: {},
+      }),
+      settingsService: new SettingsService(),
       metadata: {},
     });
 
@@ -166,27 +171,14 @@ describe('StreamProcessor._buildAndSendStreamRequest — stream retry boundary (
       const tools = [];
       const baseRuntimeContext = {
         config: configInstance,
-        settingsService: {},
+        settingsService: new SettingsService(),
         runtimeId: 'test-runtime',
         metadata: { source: 'test' },
       };
 
-      const buildRuntimeContext = (
-        processor as unknown as {
-          _buildRuntimeContext: (
-            baseRuntimeContext: unknown,
-            params: { config?: { abortSignal?: AbortSignal; tools?: unknown } },
-          ) => { config?: unknown; metadata?: Record<string, unknown> };
-        }
-      )._buildRuntimeContext;
-
-      const runtimeContext = buildRuntimeContext.call(
-        processor,
-        baseRuntimeContext,
-        {
-          config: { abortSignal: abortController.signal, tools },
-        },
-      );
+      const runtimeContext = buildRuntimeContext(baseRuntimeContext, {
+        config: { abortSignal: abortController.signal, tools },
+      });
 
       expect(runtimeContext.config).toBe(configInstance);
       expect(runtimeContext.config).not.toHaveProperty('abortSignal');
@@ -590,6 +582,7 @@ describe('StreamProcessor.makeApiCallAndProcessStream — cancellation before fi
     ) as StreamProcessor;
     Object.assign(processor, {
       runtimeContext: {
+        ...createSessionPolicyFixture(),
         state: {
           model: 'test-model',
           baseUrl: 'https://test.example.com',

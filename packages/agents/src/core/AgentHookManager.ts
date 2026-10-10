@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   triggerBeforeAgentHook,
   triggerAfterAgentHook,
@@ -13,6 +12,7 @@ import type {
   BeforeAgentHookOutput,
   AfterAgentHookOutput,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
+import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 
 /**
  * Hook state for tracking BeforeAgent/AfterAgent deduplication.
@@ -31,11 +31,6 @@ export interface HookState {
  */
 export class AgentHookManager {
   private readonly hookStateMap: Map<string, HookState> = new Map();
-  private readonly config: Config;
-
-  constructor(config: Config) {
-    this.config = config;
-  }
 
   /**
    * Safely fire BeforeAgent hook with deduplication.
@@ -44,6 +39,7 @@ export class AgentHookManager {
   async fireBeforeAgentHookSafe(
     prompt_id: string,
     prompt: string,
+    owner?: HookExecutionOwner,
   ): Promise<BeforeAgentHookOutput | undefined> {
     if (!this.hookStateMap.has(prompt_id)) {
       this.hookStateMap.set(prompt_id, {
@@ -55,9 +51,13 @@ export class AgentHookManager {
 
     const hookState = this.hookStateMap.get(prompt_id)!;
     hookState.activeCalls++;
+    if (owner?.signal?.aborted === true) return undefined;
 
     if (!hookState.hasFiredBeforeAgent) {
-      const result = await triggerBeforeAgentHook(this.config, prompt);
+      const result =
+        owner === undefined
+          ? await triggerBeforeAgentHook(prompt)
+          : await triggerBeforeAgentHook(prompt, owner);
       hookState.hasFiredBeforeAgent = true;
       return result;
     }
@@ -74,6 +74,7 @@ export class AgentHookManager {
     prompt: string,
     responseChunk: string,
     hasPendingToolCalls: boolean,
+    owner?: HookExecutionOwner,
   ): Promise<AfterAgentHookOutput | undefined> {
     const hookState = this.hookStateMap.get(prompt_id);
     if (!hookState) {
@@ -82,14 +83,17 @@ export class AgentHookManager {
 
     hookState.cumulativeResponse += responseChunk;
     hookState.activeCalls--;
+    if (owner?.signal?.aborted === true) return undefined;
 
     if (hookState.activeCalls === 0 && !hasPendingToolCalls) {
-      return triggerAfterAgentHook(
-        this.config,
-        prompt,
-        hookState.cumulativeResponse,
-        false, // stop_hook_active
-      );
+      return owner === undefined
+        ? triggerAfterAgentHook(prompt, hookState.cumulativeResponse, false)
+        : triggerAfterAgentHook(
+            prompt,
+            hookState.cumulativeResponse,
+            false,
+            owner,
+          );
     }
 
     return undefined;

@@ -17,7 +17,6 @@
 
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { OpenAIResponsesRequest } from './OpenAIResponsesTypes.js';
 
 export interface StatefulConversation {
@@ -141,7 +140,11 @@ function readObservedRetainedTokens(
  *   returned.
  */
 export function computeStatefulConversation(
-  options: NormalizedGenerateChatOptions,
+  options: {
+    readonly invocation: {
+      readonly modelBehavior: Readonly<Record<string, unknown>>;
+    };
+  },
   content: IContent[],
   invocationEphemerals: Record<string, unknown>,
   explicitUserStore: boolean | undefined,
@@ -168,7 +171,7 @@ export function computeStatefulConversation(
   const explicitStateful =
     normalizeStatefulValue(ephemeralValue) ??
     normalizeStatefulValue(
-      options.invocation.getModelBehavior(RESPONSES_STATEFUL_KEY),
+      options.invocation.modelBehavior[RESPONSES_STATEFUL_KEY],
     );
   // B2: statefulness defaults ON for Codex (opt-out only via explicit
   // responses-stateful:false or store:false). Non-Codex keeps its explicit

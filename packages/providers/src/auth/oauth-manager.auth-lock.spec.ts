@@ -7,11 +7,10 @@
  * Related to issue #1652: Prevents concurrent authentication and token contamination
  */
 
-import { describe, expect, it, vi, beforeEach, afterEach } from 'bun:test';
+import { describe, expect, it, vi } from 'bun:test';
 import { OAuthManager } from './oauth-manager.js';
 import type { OAuthProvider } from './types.js';
 import type { OAuthToken, TokenStore } from '@vybestack/llxprt-code-core';
-import { oauthRuntimeBridge } from './runtime-accessor-bridge.js';
 
 function makeToken(accessToken: string, expiryOffset = 3600): OAuthToken {
   return {
@@ -95,21 +94,6 @@ function tokenForRefreshRead(
 }
 
 describe('OAuthManager auth lock and TOCTOU defense (Issue #1652)', () => {
-  beforeEach(() => {
-    // Register runtime accessors matching the old mock defaults
-    oauthRuntimeBridge.setAccessors({
-      getEphemeralSetting: (key: string) =>
-        key === 'auth-bucket-delay' ? 0 : undefined,
-      getProviderManager: () => undefined,
-      getRuntimeContext: () => undefined,
-      getCurrentProfileName: () => null,
-    });
-  });
-
-  afterEach(() => {
-    oauthRuntimeBridge.setAccessors(undefined);
-  });
-
   describe('Phase 5: TOCTOU Defense', () => {
     /**
      * Test 5.1: Cross-process auth skipped in onAuthBucket

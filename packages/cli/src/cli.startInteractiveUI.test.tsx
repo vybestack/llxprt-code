@@ -1,3 +1,5 @@
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -14,10 +16,10 @@ import {
   type Mock,
 } from 'bun:test';
 import { validateDnsResolutionOrder, startInteractiveUI } from './cli.js';
-import type { Config } from '@vybestack/llxprt-code-core';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
-import type { Agent } from '@vybestack/llxprt-code-agents';
+import { Config, DebugLogger } from '@vybestack/llxprt-code-core';
+import { createMockAgent } from './__tests__/mockAgent.js';
 import type { LoadedSettings } from './config/settings.js';
+import { CliSessionPersistence } from './cliSessionPersistence.js';
 
 // Mock writeToStdout for exit-handler tests
 const { mockWriteToStdout } = {
@@ -73,7 +75,9 @@ void vi.mock('./ui/utils/mouse.js', () => ({
 // before any module mock for the 'ink' specifier could apply. Injecting through
 // that seam is the supported way to capture render calls.
 async function injectRenderSpy() {
-  const renderSpy = vi.fn().mockReturnValue({ unmount: vi.fn() });
+  const renderSpy = vi
+    .fn()
+    .mockReturnValue({ unmount: vi.fn(), clear: vi.fn() });
   const { __setRenderForTesting } = await import('./session/interactiveUI.js');
   __setRenderForTesting(
     renderSpy as unknown as Parameters<typeof __setRenderForTesting>[0],
@@ -118,8 +122,14 @@ describe('validateDnsResolutionOrder', () => {
   });
 });
 
+const startupOwners: SessionSettingsOwner[] = [];
+
 describe('startInteractiveUI', () => {
+  afterEach(async () => {
+    for (const owner of startupOwners.splice(0)) await owner.dispose();
+  });
   beforeEach(async () => {
+    mockAgent = createMockAgent(mockConfig);
     const { __resetInteractiveUIStateForTesting } = await import(
       './session/interactiveUI.js'
     );
@@ -134,23 +144,14 @@ describe('startInteractiveUI', () => {
   });
 
   // Mock dependencies
-  const mockConfig = {
-    getProjectRoot: () => '/root',
-    getScreenReader: () => false,
-    getQuestion: () => '',
-    isContinueSession: () => false,
-    getSessionId: () => 'session-1',
-    storage: {},
-    getDebugMode: () => false,
-    getTerminalBackground: () => undefined,
-    // Perf disabled: buildAndStartPerfOwner reads getTelemetrySettings() and
-    // returns null (no perf owner) without touching any other runtime seam.
-    getTelemetrySettings: () => ({ perf: { enabled: false } }),
-  } as Config;
-  const mockAgent = {
-    dispose: vi.fn().mockResolvedValue(undefined),
-    getConfig: () => mockConfig,
-  } as unknown as Agent;
+  const mockConfig = new Config({
+    sessionId: 'session-1',
+    targetDir: '/root',
+    cwd: '/root',
+    model: 'test-model',
+    debugMode: false,
+  });
+  let mockAgent: ReturnType<typeof createMockAgent>;
   const mockSettings = {
     merged: {
       ui: {
@@ -174,6 +175,15 @@ describe('startInteractiveUI', () => {
       mockSettings,
       mockStartupWarnings,
       mockWorkspaceRoot,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      'raw',
+      rawPersistence(),
+      startupSettings(),
     );
 
     // Verify render was called with correct options
@@ -202,6 +212,15 @@ describe('startInteractiveUI', () => {
       mockSettings,
       mockStartupWarnings,
       mockWorkspaceRoot,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      'raw',
+      rawPersistence(),
+      startupSettings(),
     );
 
     // Verify all startup tasks were called
@@ -243,10 +262,7 @@ describe('startInteractiveUI', () => {
       return process;
     });
 
-    const mouseEnabledConfig = {
-      ...mockConfig,
-      getScreenReader: () => false,
-    } as Config;
+    const mouseEnabledConfig = mockConfig;
     const mouseEnabledSettings = {
       merged: {
         ui: {
@@ -264,6 +280,15 @@ describe('startInteractiveUI', () => {
         mouseEnabledSettings,
         mockStartupWarnings,
         mockWorkspaceRoot,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        'raw',
+        rawPersistence(),
+        startupSettings(),
       );
 
       for (const handler of exitHandlers) {
@@ -303,10 +328,7 @@ describe('startInteractiveUI', () => {
       throw renderError;
     });
 
-    const mouseEnabledConfig = {
-      ...mockConfig,
-      getScreenReader: () => false,
-    } as Config;
+    const mouseEnabledConfig = mockConfig;
     const mouseEnabledSettings = {
       merged: {
         ui: {
@@ -324,6 +346,15 @@ describe('startInteractiveUI', () => {
         mouseEnabledSettings,
         mockStartupWarnings,
         mockWorkspaceRoot,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        'raw',
+        rawPersistence(),
+        startupSettings(),
       ),
     ).rejects.toThrow('render failed');
 
@@ -334,6 +365,33 @@ describe('startInteractiveUI', () => {
       restoreTerminalProtocolsSync,
     );
     processOffSpy.mockRestore();
+  });
+
+  it('requires every raw startup to supply its own session persistence, never inheriting one from an earlier startup', async () => {
+    await injectRenderSpy();
+    const startRaw = (persistence: CliSessionPersistence | undefined) =>
+      startInteractiveUI(
+        mockConfig,
+        mockAgent,
+        mockSettings,
+        mockStartupWarnings,
+        mockWorkspaceRoot,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        'raw',
+        persistence,
+        startupSettings(),
+      );
+
+    await startRaw(rawPersistence());
+
+    await expect(startRaw(undefined)).rejects.toThrow(
+      'Raw interactive startup requires its own CLI session persistence',
+    );
   });
 
   async function observeNonTtyExitCleanup(): Promise<{
@@ -369,10 +427,7 @@ describe('startInteractiveUI', () => {
       configurable: true,
     });
 
-    const mouseEnabledConfig = {
-      ...mockConfig,
-      getScreenReader: () => false,
-    } as Config;
+    const mouseEnabledConfig = mockConfig;
     const mouseEnabledSettings = {
       merged: {
         ui: {
@@ -392,6 +447,15 @@ describe('startInteractiveUI', () => {
         mouseEnabledSettings,
         mockStartupWarnings,
         mockWorkspaceRoot,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        'raw',
+        rawPersistence(),
+        startupSettings(),
       );
 
       mockWriteToStdout.mockClear();
@@ -433,3 +497,20 @@ describe('startInteractiveUI', () => {
     }
   });
 });
+
+function startupSettings(): {
+  owner: SessionSettingsOwner;
+  store: SettingsService;
+} {
+  const store = new SettingsService();
+  const owner = new SessionSettingsOwner(store);
+  startupOwners.push(owner);
+  return { owner, store };
+}
+
+function rawPersistence(): CliSessionPersistence {
+  return new CliSessionPersistence(
+    { projectRoot: '/root', chatsDir: '/root/chats' },
+    {},
+  );
+}

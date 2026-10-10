@@ -621,7 +621,7 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       ];
 
       const generator = provider.generateChatCompletion(
-        buildCallOptions(messages),
+        buildCallOptions(messages, { ...{}, resolved: { streaming: true } }),
       );
 
       const chunks: IContent[] = [];
@@ -688,7 +688,7 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       ];
 
       const generator = provider.generateChatCompletion(
-        buildCallOptions(messages),
+        buildCallOptions(messages, { ...{}, resolved: { streaming: true } }),
       );
 
       const chunks: IContent[] = [];
@@ -755,7 +755,7 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       ];
 
       const generator = provider.generateChatCompletion(
-        buildCallOptions(messages),
+        buildCallOptions(messages, { ...{}, resolved: { streaming: true } }),
       );
 
       const chunks: IContent[] = [];
@@ -824,7 +824,7 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       ];
 
       const generator = provider.generateChatCompletion(
-        buildCallOptions(messages),
+        buildCallOptions(messages, { ...{}, resolved: { streaming: true } }),
       );
 
       const chunks: IContent[] = [];

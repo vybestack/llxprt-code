@@ -14,8 +14,9 @@ import {
   ListResourcesResultSchema,
   type Tool as McpTool,
 } from '@modelcontextprotocol/sdk/types.js';
-import type { MCPServerConfig } from '../config/mcpServerConfig.js';
+import type { MCPServerConfig } from '../config/index.js';
 import type {
+  McpApprovalPolicy,
   McpPromptRegistry,
   McpTrustConfig,
 } from '../host/hostInterfaces.js';
@@ -74,6 +75,7 @@ function readAuthorization(
  * Discovers and sanitizes tools from a connected MCP client.
  */
 export async function discoverTools(
+  approvalPolicy: McpApprovalPolicy,
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
   mcpClient: Client,
@@ -116,6 +118,7 @@ export async function discoverTools(
     const discoveredTools: DiscoveredMCPTool[] = [];
     for (const toolDef of response.tools) {
       const tool = processToolDefinition(
+        approvalPolicy,
         toolDef,
         mcpServerName,
         mcpServerConfig,
@@ -143,6 +146,7 @@ export async function discoverTools(
 }
 
 function processToolDefinition(
+  approvalPolicy: McpApprovalPolicy,
   toolDef: McpTool,
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
@@ -168,6 +172,7 @@ function processToolDefinition(
     debug.log(`Created McpCallableTool for ${toolDef.name}`);
 
     return new DiscoveredMCPTool(
+      approvalPolicy,
       mcpCallableTool,
       mcpServerName,
       toolDef.name,
@@ -176,6 +181,7 @@ function processToolDefinition(
       mcpServerConfig.trust,
       undefined,
       cliConfig,
+      isAuthorized,
     );
   } catch (error) {
     debugLogger.error(
@@ -303,13 +309,14 @@ export function registerMcpPrompts(
     promptRegistry.registerPrompt({
       ...prompt,
       serverName: mcpServerName,
-      invoke: (params: Record<string, unknown>) =>
+      invoke: (params: Record<string, unknown>, signal?: AbortSignal) =>
         invokeMcpPrompt(
           mcpServerName,
           mcpClient,
           prompt.name,
           params,
           isAuthorized,
+          signal,
         ),
     });
     if (!isAuthorized()) {
@@ -328,6 +335,7 @@ export async function invokeMcpPrompt(
   promptName: string,
   promptParams: Record<string, unknown>,
   isAuthorized: () => boolean,
+  signal?: AbortSignal,
 ): Promise<GetPromptResult> {
   const checkAuthorized = requireAuthorization(isAuthorized);
   try {
@@ -341,10 +349,10 @@ export async function invokeMcpPrompt(
       }
     }
 
-    const response = await mcpClient.getPrompt({
-      name: promptName,
-      arguments: sanitizedParams,
-    });
+    const response = await mcpClient.getPrompt(
+      { name: promptName, arguments: sanitizedParams },
+      { signal },
+    );
     if (!checkAuthorized()) {
       throw new Error(MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE);
     }

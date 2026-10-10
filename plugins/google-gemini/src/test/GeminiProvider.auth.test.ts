@@ -26,6 +26,15 @@ void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
 
 const mockSettingsService = {
   get: vi.fn(),
+  getAllGlobalSettings: () =>
+    Object.fromEntries(
+      [
+        'GOOGLE_API_KEY',
+        'GOOGLE_APPLICATION_CREDENTIALS',
+        'GOOGLE_CLOUD_PROJECT',
+        'GOOGLE_CLOUD_LOCATION',
+      ].map((key) => [key, mockSettingsService.get(key)]),
+    ),
   getProviderSettings: vi.fn().mockReturnValue({}),
 };
 
@@ -132,7 +141,9 @@ describe('GeminiProvider Authentication', () => {
 
   it('should check AuthResolver before falling back to Vertex AI', async () => {
     const mockAuthResolver = {
-      resolveAuthentication: vi.fn().mockResolvedValue('test-key'),
+      resolveAuthenticationResult: vi
+        .fn()
+        .mockResolvedValue({ token: 'test-key' }),
     };
 
     const provider = createProviderWithRuntimeSettings();
@@ -148,8 +159,8 @@ describe('GeminiProvider Authentication', () => {
       }
     ).determineBestAuth();
 
-    expect(mockAuthResolver.resolveAuthentication).toHaveBeenCalledWith({
-      settingsService: expect.anything(),
+    expect(mockAuthResolver.resolveAuthenticationResult).toHaveBeenCalledWith({
+      settingsService: mockSettingsService,
       includeOAuth: false,
     });
     expect(auth.authMode).toBe('gemini-api-key');
@@ -158,7 +169,7 @@ describe('GeminiProvider Authentication', () => {
 
   it('should fallback to Vertex AI if no standard auth', async () => {
     const mockAuthResolver = {
-      resolveAuthentication: vi.fn().mockResolvedValue(null),
+      resolveAuthenticationResult: vi.fn().mockResolvedValue({ token: null }),
     };
     process.env.GOOGLE_APPLICATION_CREDENTIALS = '/path/to/credentials.json';
 
@@ -180,7 +191,7 @@ describe('GeminiProvider Authentication', () => {
 
   it('uses runtime settings for Vertex AI project and location', async () => {
     const mockAuthResolver = {
-      resolveAuthentication: vi.fn().mockResolvedValue(null),
+      resolveAuthenticationResult: vi.fn().mockResolvedValue({ token: null }),
     };
     mockVertexAISettings();
 
@@ -326,9 +337,11 @@ describe('GeminiProvider Authentication', () => {
     process.env.GEMINI_API_KEY = 'env-key';
     mockSettingsService.get.mockImplementation(readPreferredGeminiApiKey);
     const mockAuthResolver = {
-      resolveAuthentication: vi.fn(
+      resolveAuthenticationResult: vi.fn(
         ({ settingsService }: { settingsService: SettingsService }) =>
-          Promise.resolve(resolvePreferredGeminiApiKey(settingsService)),
+          Promise.resolve({
+            token: resolvePreferredGeminiApiKey(settingsService) ?? null,
+          }),
       ),
     };
 
@@ -346,7 +359,7 @@ describe('GeminiProvider Authentication', () => {
     ).determineBestAuth();
 
     expect(auth.token).toBe('settings-key');
-    expect(mockAuthResolver.resolveAuthentication).toHaveBeenCalledWith({
+    expect(mockAuthResolver.resolveAuthenticationResult).toHaveBeenCalledWith({
       settingsService: mockSettingsService,
       includeOAuth: false,
     });
@@ -381,7 +394,7 @@ describe('GeminiProvider Authentication', () => {
   // no longer crosses into the container).
   it('gives a sandbox-aware auth message when LLXPRT_CREDENTIAL_SOCKET is set', async () => {
     const mockAuthResolver = {
-      resolveAuthentication: vi.fn().mockResolvedValue(null),
+      resolveAuthenticationResult: vi.fn().mockResolvedValue({ token: null }),
     };
     process.env.LLXPRT_CREDENTIAL_SOCKET = '/tmp/test-cred-socket.sock';
 
@@ -404,7 +417,7 @@ describe('GeminiProvider Authentication', () => {
 
   it('keeps the standard auth message when not in a sandbox', async () => {
     const mockAuthResolver = {
-      resolveAuthentication: vi.fn().mockResolvedValue(null),
+      resolveAuthenticationResult: vi.fn().mockResolvedValue({ token: null }),
     };
 
     const provider = createProviderWithRuntimeSettings();
@@ -421,7 +434,7 @@ describe('GeminiProvider Authentication', () => {
   // message must match that routing rather than claiming a sandbox.
   it('keeps the standard auth message when LLXPRT_CREDENTIAL_SOCKET is empty', async () => {
     const mockAuthResolver = {
-      resolveAuthentication: vi.fn().mockResolvedValue(null),
+      resolveAuthenticationResult: vi.fn().mockResolvedValue({ token: null }),
     };
     process.env.LLXPRT_CREDENTIAL_SOCKET = '';
 

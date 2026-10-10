@@ -1,3 +1,4 @@
+import { createTaskPolicyFixture } from './__tests__/task-policy-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -68,6 +69,11 @@ describe('TaskTool', () => {
         }),
       } as unknown as Config;
       const tool = new TaskTool(configWithSettings, {
+        ...createTaskPolicyFixture({
+          'task-default-timeout-seconds': 60,
+          'task-max-timeout-seconds': 120,
+        }),
+        readMcpInstructions: () => undefined,
         messageBus: new MessageBus(),
         orchestratorFactory: () => orchestrator,
       });
@@ -126,6 +132,11 @@ describe('TaskTool', () => {
       } as unknown as Config;
 
       const tool = new TaskTool(configWithSettings, {
+        ...createTaskPolicyFixture({
+          'task-default-timeout-seconds': 60,
+          'task-max-timeout-seconds': 120,
+        }),
+        readMcpInstructions: () => undefined,
         messageBus: new MessageBus(),
         orchestratorFactory: () => orchestrator,
       });
@@ -194,6 +205,11 @@ describe('TaskTool', () => {
         }),
       } as unknown as Config;
       const tool = new TaskTool(configWithSettings, {
+        ...createTaskPolicyFixture({
+          'task-default-timeout-seconds': 60,
+          'task-max-timeout-seconds': 120,
+        }),
+        readMcpInstructions: () => undefined,
         messageBus: new MessageBus(),
         orchestratorFactory: () => orchestrator,
       });
@@ -254,6 +270,11 @@ describe('TaskTool', () => {
         }),
       } as unknown as Config;
       const tool = new TaskTool(configWithSettings, {
+        ...createTaskPolicyFixture({
+          'task-default-timeout-seconds': 60,
+          'task-max-timeout-seconds': -1,
+        }),
+        readMcpInstructions: () => undefined,
         messageBus: new MessageBus(),
         orchestratorFactory: () => orchestrator,
       });
@@ -322,6 +343,11 @@ describe('TaskTool', () => {
         }),
       } as unknown as Config;
       const tool = new TaskTool(configWithSettings, {
+        ...createTaskPolicyFixture({
+          'task-default-timeout-seconds': 60,
+          'task-max-timeout-seconds': 120,
+        }),
+        readMcpInstructions: () => undefined,
         messageBus: new MessageBus(),
         orchestratorFactory: () => orchestrator,
         isInteractiveEnvironment: () => true,
@@ -387,6 +413,11 @@ describe('TaskTool', () => {
         }),
       } as unknown as Config;
       const tool = new TaskTool(configWithSettings, {
+        ...createTaskPolicyFixture({
+          'task-default-timeout-seconds': 60,
+          'task-max-timeout-seconds': 120,
+        }),
+        readMcpInstructions: () => undefined,
         messageBus: new MessageBus(),
         orchestratorFactory: () => orchestrator,
       });
@@ -412,6 +443,8 @@ describe('TaskTool', () => {
 
   it('validates required parameters', () => {
     const tool = new TaskTool(config, {
+      ...createTaskPolicyFixture({}),
+      readMcpInstructions: () => undefined,
       messageBus: new MessageBus(),
       orchestratorFactory: () => {
         throw new Error('should not be called');

@@ -1,3 +1,4 @@
+import { captureResponsesTestRequest } from '../responses-request.test-helpers.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -126,7 +127,10 @@ describe('OpenAIResponsesProvider Codex stateful — chain invalidation, request
         ];
         await drainHarness(
           executeOpenAIResponsesRequest(
-            buildOptions(contents),
+            captureResponsesTestRequest(
+              buildOptions(contents),
+              buildDeps({ getWebSocketTransport: () => transport }),
+            ),
             buildDeps({ getWebSocketTransport: () => transport }),
           ),
         );
@@ -168,7 +172,10 @@ describe('OpenAIResponsesProvider Codex stateful — chain invalidation, request
         };
         await drainHarness(
           executeOpenAIResponsesRequest(
-            buildOptions(contents, ephemerals),
+            captureResponsesTestRequest(
+              buildOptions(contents, ephemerals),
+              buildDeps({ getWebSocketTransport: () => transport }),
+            ),
             buildDeps({ getWebSocketTransport: () => transport }),
           ),
         );
@@ -208,7 +215,10 @@ describe('OpenAIResponsesProvider Codex stateful — chain invalidation, request
         ];
         await drainHarness(
           executeOpenAIResponsesRequest(
-            buildOptions(contents),
+            captureResponsesTestRequest(
+              buildOptions(contents),
+              buildDeps({ getWebSocketTransport: () => transport }),
+            ),
             buildDeps({ getWebSocketTransport: () => transport }),
           ),
         );
@@ -252,7 +262,10 @@ describe('OpenAIResponsesProvider Codex stateful — chain invalidation, request
         };
         await drainHarness(
           executeOpenAIResponsesRequest(
-            buildOptions(contents, ephemerals),
+            captureResponsesTestRequest(
+              buildOptions(contents, ephemerals),
+              buildDeps({ getWebSocketTransport: () => transport }),
+            ),
             buildDeps({ getWebSocketTransport: () => transport }),
           ),
         );
@@ -294,7 +307,10 @@ describe('OpenAIResponsesProvider Codex stateful — chain invalidation, request
         };
         await drainHarness(
           executeOpenAIResponsesRequest(
-            buildOptions(contents, ephemerals),
+            captureResponsesTestRequest(
+              buildOptions(contents, ephemerals),
+              buildDeps({ getWebSocketTransport: () => transport }),
+            ),
             buildDeps({ getWebSocketTransport: () => transport }),
           ),
         );
@@ -323,7 +339,10 @@ describe('OpenAIResponsesProvider Codex stateful — chain invalidation, request
         ];
         const messages = await drainHarness(
           executeOpenAIResponsesRequest(
-            buildOptions(contents, { 'responses-stateful': false }),
+            captureResponsesTestRequest(
+              buildOptions(contents, { 'responses-stateful': false }),
+              buildDeps({ getWebSocketTransport: () => transport }),
+            ),
             buildDeps({ getWebSocketTransport: () => transport }),
           ),
         );
@@ -380,7 +399,10 @@ describe('OpenAIResponsesProvider Codex stateful — chain invalidation, request
         ];
         await drainHarness(
           executeOpenAIResponsesRequest(
-            buildOptions(contents),
+            captureResponsesTestRequest(
+              buildOptions(contents),
+              buildDeps({ getWebSocketTransport: () => transport }),
+            ),
             buildDeps({ getWebSocketTransport: () => transport }),
           ),
         );
@@ -432,7 +454,10 @@ describe('OpenAIResponsesProvider Codex stateful — chain invalidation, request
         ];
         const turn1Output = await drainHarness(
           executeOpenAIResponsesRequest(
-            buildOptions(turn1Contents),
+            captureResponsesTestRequest(
+              buildOptions(turn1Contents),
+              buildDeps({ getWebSocketTransport: () => transport1 }),
+            ),
             buildDeps({ getWebSocketTransport: () => transport1 }),
           ),
         );
@@ -478,7 +503,10 @@ describe('OpenAIResponsesProvider Codex stateful — chain invalidation, request
         try {
           await drainHarness(
             executeOpenAIResponsesRequest(
-              buildOptions(turn2Contents),
+              captureResponsesTestRequest(
+                buildOptions(turn2Contents),
+                buildDeps({ getWebSocketTransport: () => transport2 }),
+              ),
               buildDeps({ getWebSocketTransport: () => transport2 }),
             ),
           );
@@ -578,8 +606,9 @@ describe('OpenAIResponsesProvider Codex stateful provider-level remediation @iss
       config: createRuntimeConfigStub(settings),
     });
     const invocation = createRuntimeInvocationContext({
-      runtime,
-      settings,
+      runtimeId: runtime.runtimeId,
+      runtimeMetadata: runtime.metadata,
+
       providerName: provider.name,
       ephemeralsSnapshot: { 'responses-stateful': false },
     });

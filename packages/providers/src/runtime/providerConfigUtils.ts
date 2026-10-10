@@ -1,9 +1,11 @@
+import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   sanitizeForByteString,
   needsSanitization,
@@ -47,6 +49,9 @@ export interface ProviderConfigResult {
  */
 export async function setProviderApiKey(
   apiKey: string | undefined,
+  config: { setEphemeralSetting(key: string, value: unknown): void },
+  settingsService: Pick<SettingsService, 'get' | 'setProviderSetting'>,
+  provider: ReturnType<RuntimeProviderManager['getActiveProvider']>,
 ): Promise<ProviderConfigResult> {
   try {
     const trimmed = apiKey?.trim();
@@ -54,7 +59,12 @@ export async function setProviderApiKey(
       trimmed && trimmed.toLowerCase() !== 'none' && trimmed !== ''
         ? sanitizeApiKey(trimmed)
         : null;
-    const result = await updateActiveProviderApiKey(normalized);
+    const result = await updateActiveProviderApiKey(
+      normalized,
+      config,
+      settingsService,
+      provider,
+    );
     return {
       success: true,
       message: result.message,
@@ -77,12 +87,22 @@ export async function setProviderApiKey(
  */
 export async function setProviderBaseUrl(
   baseUrl: string | undefined,
+  config: { setEphemeralSetting(key: string, value: unknown): void },
+  settingsService: Pick<SettingsService, 'get' | 'setProviderSetting'>,
 ): Promise<ProviderConfigResult> {
   try {
     const trimmed = baseUrl?.trim() ?? '';
     const normalized =
       trimmed === '' || trimmed.toLowerCase() === 'none' ? null : trimmed;
-    const result = await updateActiveProviderBaseUrl(normalized);
+    const result = await updateActiveProviderBaseUrl(
+      normalized,
+      config,
+      settingsService,
+      (() => {
+        const name = settingsService.get('activeProvider');
+        return typeof name === 'string' ? name : undefined;
+      })(),
+    );
     return {
       success: true,
       message: result.message,

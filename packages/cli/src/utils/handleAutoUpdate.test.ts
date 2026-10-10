@@ -11,7 +11,8 @@ import { updateEventEmitter } from './updateEventEmitter.js';
 import type { UpdateObject } from '../ui/utils/updateCheck.js';
 import type { LoadedSettings } from '../config/settings.js';
 import EventEmitter from 'node:events';
-import type { ChildProcess } from 'node:child_process';
+import { ChildProcess, type SpawnOptions } from 'node:child_process';
+import { PassThrough } from 'node:stream';
 import { handleAutoUpdate } from './handleAutoUpdate.js';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -28,6 +29,10 @@ const realUpdateEventEmitterModule = {
   ...(await import('./updateEventEmitter.js')),
 };
 
+const mockWriteSync = vi.fn<(fd: number, value: string) => number>();
+const mockReaddirSync = vi.fn<(path: fs.PathLike) => string[]>();
+const mockRealpathSync = vi.fn<(path: fs.PathLike) => string>();
+
 void vi.mock('./installationInfo.js', () => {
   const importedModule = realInstallationInfoModule;
   return {
@@ -36,14 +41,15 @@ void vi.mock('./installationInfo.js', () => {
   };
 });
 
+const mockUpdateEventEmitter = Object.assign(new EventEmitter(), {
+  emit: vi.fn<typeof updateEventEmitter.emit>(),
+});
+
 void vi.mock('./updateEventEmitter.js', () => {
   const importedModule = realUpdateEventEmitterModule;
   return {
     ...importedModule,
-    updateEventEmitter: {
-      ...importedModule.updateEventEmitter,
-      emit: vi.fn(),
-    },
+    updateEventEmitter: mockUpdateEventEmitter,
   };
 });
 
@@ -53,13 +59,13 @@ void vi.mock('node:fs', () => ({
   existsSync: vi.fn(),
   readFileSync: vi.fn(),
   writeFileSync: vi.fn(),
-  writeSync: vi.fn(),
+  writeSync: mockWriteSync,
   openSync: vi.fn(),
   closeSync: vi.fn(),
   mkdirSync: vi.fn(),
   unlinkSync: vi.fn(),
-  readdirSync: vi.fn(),
-  realpathSync: vi.fn(),
+  readdirSync: mockReaddirSync,
+  realpathSync: mockRealpathSync,
   constants: importedModule.constants,
 }));
 
@@ -72,24 +78,17 @@ void vi.mock('node:os', () => ({
 const mockGetInstallationInfo = getInstallationInfo as Mock<
   typeof getInstallationInfo
 >;
-const mockUpdateEventEmitter = updateEventEmitter as Mock<
-  typeof updateEventEmitter
->;
 const mockExistsSync = fs.existsSync as Mock<typeof fs.existsSync>;
 const mockReadFileSync = fs.readFileSync as Mock<typeof fs.readFileSync>;
-const _mockWriteFileSync = fs.writeFileSync as Mock<typeof fs.writeFileSync>;
-const mockWriteSync = fs.writeSync as Mock<typeof fs.writeSync>;
 const mockOpenSync = fs.openSync as Mock<typeof fs.openSync>;
 const mockCloseSync = fs.closeSync as Mock<typeof fs.closeSync>;
 const mockMkdirSync = fs.mkdirSync as Mock<typeof fs.mkdirSync>;
 const mockUnlinkSync = fs.unlinkSync as Mock<typeof fs.unlinkSync>;
-const mockReaddirSync = fs.readdirSync as Mock<typeof fs.readdirSync>;
-const mockRealpathSync = fs.realpathSync as Mock<typeof fs.realpathSync>;
 const mockHomedir = os.homedir as Mock<typeof os.homedir>;
 const TEST_CONFIG_HOME = path.resolve('/tmp/llxprt-test-config-home');
 
 describe('handleAutoUpdate', () => {
-  let mockSpawn: Mock<(...args: never[]) => unknown>;
+  let mockSpawn: Mock<(command: string, options: SpawnOptions) => ChildProcess>;
   let mockUpdateInfo: UpdateObject;
   let mockSettings: LoadedSettings;
   let mockChildProcess: ChildProcess;
@@ -97,7 +96,8 @@ describe('handleAutoUpdate', () => {
   let originalDataHome: string | undefined;
 
   beforeEach(() => {
-    mockSpawn = vi.fn();
+    mockSpawn =
+      vi.fn<(command: string, options: SpawnOptions) => ChildProcess>();
     vi.clearAllMocks();
     mockUpdateInfo = {
       update: {
@@ -116,17 +116,15 @@ describe('handleAutoUpdate', () => {
       },
     } as LoadedSettings;
 
-    mockChildProcess = Object.assign(new EventEmitter(), {
-      stdin: Object.assign(new EventEmitter(), {
-        write: vi.fn(),
-        end: vi.fn(),
-      }),
-      stdout: new EventEmitter(),
-      stderr: new EventEmitter(),
-      unref: vi.fn(),
-    }) as unknown as ChildProcess;
+    mockChildProcess = new ChildProcess();
+    Object.defineProperties(mockChildProcess, {
+      stdin: { value: new PassThrough() },
+      stdout: { value: new PassThrough() },
+      stderr: { value: new PassThrough() },
+    });
+    vi.spyOn(mockChildProcess, 'unref').mockImplementation(() => {});
 
-    mockSpawn.mockReturnValue(mockChildProcess as unknown);
+    mockSpawn.mockReturnValue(mockChildProcess);
 
     // Default mock behavior
     mockHomedir.mockReturnValue('/home/test');
@@ -312,7 +310,10 @@ describe('handleAutoUpdate', () => {
   });
 
   it('should use the "@nightly" tag for nightly updates', async () => {
-    mockUpdateInfo.update.latest = '2.0.0-nightly';
+    mockUpdateInfo = {
+      ...mockUpdateInfo,
+      update: { ...mockUpdateInfo.update, latest: '2.0.0-nightly' },
+    };
     mockGetInstallationInfo.mockReturnValue({
       updateCommand: 'npm i -g @vybestack/llxprt-code@latest',
       updateMessage: 'This is an additional message.',
@@ -457,6 +458,8 @@ describe('handleAutoUpdate', () => {
         mockOpenSync.mockReturnValue(42);
 
         setTimeout(() => {
+          if (mockChildProcess.stderr === null)
+            throw new Error('Missing fixture stderr');
           mockChildProcess.stderr.emit('data', 'An error occurred');
           mockChildProcess.emit('close', 1);
           resolve();
@@ -528,7 +531,7 @@ describe('handleAutoUpdate', () => {
         '.llxprt-code-abc123',
         '@vybestack',
         'some-other-package',
-      ] as unknown as fs.Dirent[]);
+      ]);
 
       handleAutoUpdate(mockUpdateInfo, mockSettings, '/root', mockSpawn);
 
@@ -557,10 +560,7 @@ describe('handleAutoUpdate', () => {
       process.argv[1] = testPath;
 
       mockRealpathSync.mockReturnValue(testPath);
-      mockReaddirSync.mockReturnValue([
-        '.llxprt-code-temp',
-        '@vybestack',
-      ] as unknown as fs.Dirent[]);
+      mockReaddirSync.mockReturnValue(['.llxprt-code-temp', '@vybestack']);
 
       handleAutoUpdate(mockUpdateInfo, mockSettings, '/root', mockSpawn);
 

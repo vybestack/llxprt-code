@@ -85,6 +85,7 @@ describe('policiesCommand — agent surface', () => {
         getRules: () => [],
         getDefaultDecision: () => PolicyDecision.ASK_USER,
         isNonInteractive: () => false,
+        reloadUserRules: async () => {},
       } as unknown as AgentPolicyControl,
     });
 
@@ -103,6 +104,7 @@ describe('policiesCommand — agent surface', () => {
         getRules: () => [],
         getDefaultDecision: () => PolicyDecision.ASK_USER,
         isNonInteractive: () => false,
+        reloadUserRules: async () => {},
       } as unknown as AgentPolicyControl,
     });
 
@@ -313,8 +315,11 @@ describe('hooksCommand — agent surface', () => {
 
     expect(setDisabledHooks).toHaveBeenCalledWith(['hook1', 'hook2']);
     const addItem = context.ui.addItem as ReturnType<typeof vi.fn>;
-    const lastCall = addItem.mock.calls[addItem.mock.calls.length - 1];
-    expect(lastCall[0].text).toContain('Disabled all 2');
+    const notice = addItem.mock.calls[addItem.mock.calls.length - 2][0];
+    const refreshed = addItem.mock.calls[addItem.mock.calls.length - 1][0];
+    expect(notice.text).toContain('Disabled all 2');
+    expect(refreshed.type).toBe(MessageType.HOOKS_LIST);
+    expect(refreshed.hooks).toHaveLength(2);
   });
 
   it('enables all hooks by clearing disabled set via agent.hooks', async () => {
@@ -335,8 +340,11 @@ describe('hooksCommand — agent surface', () => {
 
     expect(setDisabledHooks).toHaveBeenCalledWith([]);
     const addItem = context.ui.addItem as ReturnType<typeof vi.fn>;
-    const lastCall = addItem.mock.calls[addItem.mock.calls.length - 1];
-    expect(lastCall[0].text).toContain('Enabled all 2');
+    const notice = addItem.mock.calls[addItem.mock.calls.length - 2][0];
+    const refreshed = addItem.mock.calls[addItem.mock.calls.length - 1][0];
+    expect(notice.text).toContain('Enabled all 2');
+    expect(refreshed.type).toBe(MessageType.HOOKS_LIST);
+    expect(refreshed.hooks).toHaveLength(2);
   });
 });
 

@@ -19,15 +19,8 @@
  *   H) getToken propagates errors from Gemini normally (G4 dead-code removed)
  */
 
-import {
-  describe,
-  it,
-  expect,
-  vi,
-  beforeEach,
-  afterEach,
-  type Mock,
-} from 'bun:test';
+import { OAuthBucketManager as RealOAuthBucketManager } from '../src/auth/OAuthBucketManager.js';
+import { describe, it, expect, vi, type Mock } from 'bun:test';
 import { TokenAccessCoordinator } from '../src/auth/token-access-coordinator.js';
 import type {
   OAuthProvider,
@@ -39,7 +32,6 @@ import {
   SecureStoreError,
   isRuntimeReplacedError,
 } from '@vybestack/llxprt-code-storage';
-import { oauthRuntimeBridge } from '../src/auth/runtime-accessor-bridge.js';
 
 // --------------------------------------------------------------------------
 // Minimal stub helpers
@@ -126,8 +118,6 @@ function createMockFacade() {
   };
 }
 
-// Register runtime accessors via the bridge (no mock theater)
-
 // Mock @vybestack/llxprt-code-core ProfileManager
 void vi.mock('@vybestack/llxprt-code-core', () => {
   const actual = realLlxprtCodeCoreModule;
@@ -155,7 +145,12 @@ function makeCoordinator(opts?: {
   const provider = opts?.provider;
   const registry = createMockRegistry(provider, opts?.oauthEnabled ?? true);
   const renewalManager = createMockRenewalManager();
-  const bucketManager = createMockBucketManager();
+  const realBuckets = new RealOAuthBucketManager(tokenStore);
+  const bucketManager = {
+    ...createMockBucketManager(),
+    ensureFailoverHandler: realBuckets.ensureFailoverHandler.bind(realBuckets),
+    readFailoverHandler: realBuckets.readFailoverHandler.bind(realBuckets),
+  };
   const facade = createMockFacade();
 
   const coordinator = new TokenAccessCoordinator(
@@ -180,26 +175,8 @@ function makeCoordinator(opts?: {
 }
 
 // --------------------------------------------------------------------------
-// Register runtime accessors for all tests in this file
 // --------------------------------------------------------------------------
 describe('TokenAccessCoordinator', () => {
-  beforeEach(() => {
-    oauthRuntimeBridge.setAccessors({
-      getEphemeralSetting: () => undefined,
-      getProviderManager: () => ({
-        getProviderByName: () => null,
-      }),
-      getRuntimeContext: () => ({
-        runtimeId: 'test-runtime',
-      }),
-      getCurrentProfileName: () => null,
-    });
-  });
-
-  afterEach(() => {
-    oauthRuntimeBridge.setAccessors(undefined);
-  });
-
   // --------------------------------------------------------------------------
   // A) Authenticator guard
   // --------------------------------------------------------------------------

@@ -6,12 +6,10 @@
 
 import fs from 'node:fs';
 import os from 'node:os';
-import type { ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { getShellConfiguration } from '../utils/shell-utils.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import {
-  SIGKILL_TIMEOUT_MS,
   boundedTaskkill,
   isKillablePid,
   type TaskkillResult,
@@ -23,7 +21,7 @@ import {
   applyTerminal,
   childIsRunning,
   createJobContext,
-  killProcessGroupSafe,
+  emitTerminalEvent,
   readJobState,
   type ShellJobContext,
 } from './shellJobInternal.js';
@@ -37,6 +35,7 @@ import {
   type ShellJob,
   type ShellJobLaunchInput,
   type ShellJobRecord,
+  type ShellProcessIdentity,
   type ShellJobState,
   type ShellJobTailOptions,
   type ShellJobTailResult,
@@ -44,10 +43,10 @@ import {
 } from './shellJobTypes.js';
 import { ShellExecutionService } from './shellExecutionService.js';
 import {
-  spawnDetached,
   spawnWindowsBackground,
   type SpawnedProcess,
 } from './shellJobSpawn.js';
+import { spawnShellJobGroup, type ShellJobGroup } from './shellJobGroup.js';
 
 export type {
   ShellJob,
@@ -72,7 +71,7 @@ export interface ShellJobPrefixLookup {
  * never a numeric pid alone — which is safe against PID reuse.
  */
 export interface SurvivorEntry {
-  readonly child: ChildProcess;
+  readonly child: ShellProcessIdentity;
   readonly pid: number | undefined;
 }
 
@@ -118,9 +117,8 @@ export class ShellJobDisposalError extends Error {
 }
 
 /**
- * Manages background shell jobs using direct detached spawn. Each job runs in
- * its own process group; cancellation targets the group with SIGTERM → SIGKILL
- * escalation. Terminal transitions are exactly-once through a guarded primitive.
+ * Manages background shell jobs with a self-signalling POSIX group supervisor.
+ * Command results and observed group drain have separate lifetimes. Terminal transitions are exactly-once through a guarded primitive.
  *
  * Under Bun, `Bun.spawn` is used instead of `node:child_process.spawn` because
  * Bun's ChildProcess `exit` event is intermittently not delivered for the first
@@ -153,6 +151,10 @@ export class ShellJobManager {
    * the check and the assignment.
    */
   private disposalPromise: Promise<void> | null = null;
+  private readonly notificationErrors: unknown[] = [];
+  private readonly posixGroups = new Map<string, ShellJobGroup>();
+  private ownershipLost = false;
+  private readonly groupErrors: unknown[] = [];
 
   constructor(options?: {
     maxBackgroundJobs?: number;
@@ -185,9 +187,11 @@ export class ShellJobManager {
    * failure, or spawn-setup failure.
    */
   launch(input: ShellJobLaunchInput): ShellJob {
-    if (this.disposalPromise !== null) {
+    if (this.disposalPromise !== null || this.ownershipLost) {
       throw new Error(
-        'Cannot launch a background job: ShellJobManager is disposing or disposed.',
+        this.ownershipLost
+          ? 'Cannot launch a background job: shell supervisor ownership was lost.'
+          : 'Cannot launch a background job: ShellJobManager is disposing or disposed.',
       );
     }
     // On Windows, live survivors (unkillable process trees whose budget was
@@ -229,14 +233,7 @@ export class ShellJobManager {
       throw e;
     }
 
-    const { executable, argsPrefix, env } = this.prepareSpawn();
-    const spawned = spawnDetached(
-      executable,
-      [...argsPrefix, input.command],
-      input.cwd,
-      env,
-      logFd,
-    );
+    const spawned = this.spawnPosix(input, id, logFd);
 
     let resolveTerminal!: () => void;
     const terminalPromise = new Promise<void>((resolve) => {
@@ -254,22 +251,17 @@ export class ShellJobManager {
       logPath,
       child: spawned.child,
       exited: spawned.exited,
-      onError: spawned.onError,
+      onError: (handler) => spawned.onError(handler),
       terminalPromise,
       resolveTerminal,
     };
     record.phase = null;
 
     const ctx = createJobContext(record, this.emitter);
+    this.retainGroup(ctx, spawned);
     this.attachListeners(ctx);
     this.jobs.set(id, ctx);
     this.budget.consume();
-
-    try {
-      fs.closeSync(logFd);
-    } catch {
-      // Parent's copy of the fd may already be closed by the OS after spawn.
-    }
 
     this.ensureCapPollRunning();
     return toPublicJob(record);
@@ -278,7 +270,7 @@ export class ShellJobManager {
   /**
    * Windows-specific launch path using Start-Process semantics. Opens a
    * stdout/stderr log pair, spawns via spawnWindowsBackground, and registers
-   * the job. The POSIX path in launch() stays byte-for-byte unchanged.
+   * the job.
    */
   private launchWindows(input: ShellJobLaunchInput, id: string): ShellJob {
     let logPath: string;
@@ -341,6 +333,51 @@ export class ShellJobManager {
 
     this.ensureCapPollRunning();
     return toPublicJob(record);
+  }
+
+  private spawnPosix(
+    input: ShellJobLaunchInput,
+    id: string,
+    logFd: number,
+  ): ShellJobGroup {
+    try {
+      const { executable, argsPrefix, env } = this.prepareSpawn();
+      return spawnShellJobGroup(
+        executable,
+        [...argsPrefix, input.command],
+        input.cwd,
+        env,
+        logFd,
+      );
+    } catch (error) {
+      this.budget.release();
+      this.logStore.deleteLog(id);
+      throw error;
+    } finally {
+      fs.closeSync(logFd);
+    }
+  }
+
+  private retainGroup(ctx: ShellJobContext, group: ShellJobGroup): void {
+    this.posixGroups.set(ctx.record.id, group);
+    group.onOwnershipLost((error) => {
+      this.ownershipLost = true;
+      debugLogger.error('[ShellJobManager] ownership lost:', error);
+    });
+    void group.drained.then(
+      () => {
+        this.posixGroups.delete(ctx.record.id);
+        this.enforceRetention();
+      },
+      (error: unknown) => {
+        this.ownershipLost = true;
+        this.groupErrors.push(error);
+        this.handleError(
+          ctx,
+          error instanceof Error ? error : new Error(String(error)),
+        );
+      },
+    );
   }
 
   private prepareSpawn(): {
@@ -469,6 +506,7 @@ export class ShellJobManager {
       this.budget.releaseActive();
       this.maybeStopCapPoll();
       this.enforceRetention();
+      this.notificationErrors.push(...emitTerminalEvent(ctx, state));
     }
   }
 
@@ -487,12 +525,16 @@ export class ShellJobManager {
       return false;
     }
     if (ctx.record.state !== 'running') {
+      const group = this.posixGroups.get(id);
+      group?.stop();
+      await group?.drained;
       return false;
     }
 
     // The first terminal claimant owns termination and the terminal transition.
     if (ctx.record.phase === 'capping' || ctx.record.phase === 'cancelling') {
       await ctx.record.terminalPromise;
+      await this.posixGroups.get(id)?.drained;
       return false;
     }
 
@@ -505,6 +547,7 @@ export class ShellJobManager {
       await this.awaitBoundedCancel(ctx);
     } else {
       await ctx.record.terminalPromise;
+      await this.posixGroups.get(id)?.drained;
     }
     return readJobState(ctx.record) === 'cancelled';
   }
@@ -545,11 +588,7 @@ export class ShellJobManager {
       }
       return;
     }
-    killProcessGroupSafe(pid, 'SIGTERM');
-
-    record.escalateTimer = setTimeout(() => {
-      killProcessGroupSafe(pid, 'SIGKILL');
-    }, SIGKILL_TIMEOUT_MS);
+    this.posixGroups.get(record.id)?.stop();
   }
 
   get(id: string): ShellJob | undefined {
@@ -656,8 +695,8 @@ export class ShellJobManager {
 
   /**
    * Terminate every running job CONCURRENTLY (not sequentially). Each job
-   * receives SIGTERM → SIGKILL escalation; cancel() returns promptly because
-   * the `exited` Promise resolves reliably. Zero orphans.
+   * receives supervisor-owned SIGTERM → SIGKILL escalation. POSIX groups remain
+   * retained independently of command status until the OS confirms absence.
    *
    * On Windows, only tracked survivors (force-finalised without observing
    * the original child exit) whose ORIGINAL ChildProcess handle confirms
@@ -665,8 +704,10 @@ export class ShellJobManager {
    * which is vulnerable to PID reuse.
    *
    * Idempotent: concurrent and repeated calls share one disposal promise and
-   * settle identically (both resolve, or both reject with the same
-   * {@link ShellJobDisposalError} instance).
+   * settle identically. Subscriber failures are retained independently of job
+   * retention and reported as an AggregateError after cleanup, together with
+   * any cleanup failure. Without subscriber failures, cleanup errors retain
+   * their original type (including {@link ShellJobDisposalError}).
    *
    * The {@link disposalPromise} lifecycle gate is assigned within this method's
    * own synchronous call stack — before this method returns, and therefore
@@ -677,7 +718,21 @@ export class ShellJobManager {
     if (this.disposalPromise !== null) {
       return this.disposalPromise;
     }
-    this.disposalPromise = this.disposeInternal();
+    this.disposalPromise = Promise.resolve().then(async () => {
+      const cleanupErrors: unknown[] = [];
+      try {
+        await this.disposeInternal();
+      } catch (error) {
+        cleanupErrors.push(error);
+      }
+      if (this.notificationErrors.length > 0) {
+        throw new AggregateError(
+          [...this.notificationErrors, ...cleanupErrors],
+          'Shell job disposal encountered terminal notification failures',
+        );
+      }
+      if (cleanupErrors.length > 0) throw cleanupErrors[0];
+    });
     return this.disposalPromise;
   }
 
@@ -685,7 +740,26 @@ export class ShellJobManager {
     this.stopCapPoll();
     const running = this.getRunningJobs();
     const cancelPromises = running.map((job) => this.cancel(job.id));
-    await Promise.all(cancelPromises);
+    for (const group of this.posixGroups.values()) group.stop();
+    const results = await Promise.allSettled([
+      ...cancelPromises,
+      ...Array.from(this.posixGroups.values(), (group) => group.drained),
+    ]);
+    const failures = results.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
+    );
+    if (failures.length > 0 || this.groupErrors.length > 0) {
+      for (const [id, ctx] of this.jobs) {
+        if (!this.posixGroups.has(id) && ctx.record.state !== 'running') {
+          this.logStore.deleteLog(id);
+          this.jobs.delete(id);
+        }
+      }
+      throw new AggregateError(
+        [...new Set([...failures, ...this.groupErrors])],
+        'Shell process group cleanup failed; logs retained',
+      );
+    }
 
     // Reconcile any jobs that somehow didn't reach terminal.
     for (const ctx of this.jobs.values()) {
@@ -879,7 +953,7 @@ export class ShellJobManager {
       if (ctx.record.phase === 'cancelling') {
         return;
       }
-      killProcessGroupSafe(ctx.record.pid, 'SIGTERM');
+      this.sendTermAndEscalate(ctx);
       this.finalizeJob(ctx, 'failed', {
         failureReason: `Log output exceeded cap (${this.logMaxBytes} bytes)`,
       });
@@ -964,7 +1038,10 @@ export class ShellJobManager {
     const excess = terminal.length - historyLimit;
     for (let i = 0; i < excess && i < terminal.length; i++) {
       const ctx = terminal[i];
-      if (ctx.record.notifiedAt === undefined) {
+      if (
+        ctx.record.notifiedAt === undefined ||
+        this.posixGroups.has(ctx.record.id)
+      ) {
         break;
       }
       this.logStore.deleteLog(ctx.record.id);

@@ -56,21 +56,29 @@ describe('config-injection parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
       // onApproval mirrors Path B's ProceedOnce so the tool's confirmation
       // request is answered (the established headless-approval pattern).
       const agent: Agent = await fromConfig({
+        settingsOwner: built.settingsOwner,
+        settingsService: built.settingsService,
+        agentClient: built.agentClient,
+        providerManager: built.providerManager,
         config,
+        mcpRuntime: built.mcpRuntime,
         onApproval: () => ToolConfirmationOutcome.ProceedOnce,
       });
+      try {
+        // REQ-INT-001: the adopted Config is the SAME instance.
+        expect(internalConfig(agent)).toBe(config);
 
-      // REQ-INT-001: the adopted Config is the SAME instance.
-      expect(internalConfig(agent)).toBe(config);
+        // REQ-INT-001: the agent reports a non-empty runtime id.
+        const id = agent.getRuntimeId();
+        expect(typeof id).toBe('string');
+        expect(id.length).toBeGreaterThan(0);
 
-      // REQ-INT-001: the agent reports a non-empty runtime id.
-      const id = agent.getRuntimeId();
-      expect(typeof id).toBe('string');
-      expect(id.length).toBeGreaterThan(0);
-
-      // REQ-INT-001: a stream turn ends with exactly one terminal done.
-      const events: AgentEvent[] = await drain(agent.stream('hello'));
-      expect(countType(events, 'done')).toBe(1);
+        // REQ-INT-001: a stream turn ends with exactly one terminal done.
+        const events: AgentEvent[] = await drain(agent.stream('hello'));
+        expect(countType(events, 'done')).toBe(1);
+      } finally {
+        await agent.dispose();
+      }
     } finally {
       await built.cleanup();
     }
@@ -80,15 +88,28 @@ describe('config-injection parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
     const built = await buildCliStyleConfig('plain-text.jsonl');
     try {
       const config = built.config;
-      const agent: Agent = await fromConfig({ config });
+      const agent: Agent = await fromConfig({
+        settingsOwner: built.settingsOwner,
+        settingsService: built.settingsService,
+        agentClient: built.agentClient,
+        providerManager: built.providerManager,
+        config,
+        mcpRuntime: built.mcpRuntime,
+      });
+      try {
+        // The agent's provider/model reflect the ADOPTED Config's active runtime.
+        expect(agent.getProvider()).toBe('fake');
+        expect(agent.getModel()).toBe('fake-model');
 
-      // The agent's provider/model reflect the ADOPTED Config's active runtime.
-      expect(agent.getProvider()).toBe('fake');
-      expect(agent.getModel()).toBe('fake-model');
-
-      // Parity: the agent values equal the Config's own active values.
-      expect(agent.getProvider()).toBe(config.getProvider());
-      expect(agent.getModel()).toBe(config.getModel());
+        // Parity: the agent values equal the Config's own active values.
+        const configuredProvider = config.getProvider();
+        if (configuredProvider === undefined)
+          throw new Error('Missing configured provider');
+        expect(agent.getProvider()).toBe(configuredProvider);
+        expect(agent.getModel()).toBe(config.getModel());
+      } finally {
+        await agent.dispose();
+      }
     } finally {
       await built.cleanup();
     }
@@ -98,12 +119,19 @@ describe('config-injection parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
     const built = await buildCliStyleConfig('plain-text.jsonl');
     try {
       const config = built.config;
-      const agent: Agent = await fromConfig({ config });
+      const agent: Agent = await fromConfig({
+        settingsOwner: built.settingsOwner,
+        settingsService: built.settingsService,
+        agentClient: built.agentClient,
+        providerManager: built.providerManager,
+        config,
+        mcpRuntime: built.mcpRuntime,
+      });
       await agent.dispose();
 
       // The caller-supplied Config is STILL usable: reading ephemeral settings
       // does not throw and returns a real object.
-      const settings = config.getEphemeralSettings();
+      const settings = built.settingsService.getAllGlobalSettings();
       expect(typeof settings).toBe('object');
       expect(settings).not.toBeNull();
     } finally {
@@ -142,15 +170,24 @@ describe('config-injection parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
       const built = await buildCliStyleConfig('plain-text.jsonl');
       try {
         const agent: Agent = await fromConfig({
+          settingsOwner: built.settingsOwner,
+          settingsService: built.settingsService,
+          agentClient: built.agentClient,
+          providerManager: built.providerManager,
           config: built.config,
+          mcpRuntime: built.mcpRuntime,
           sessionId,
         });
-        return (
-          agent.getProvider() === 'fake' &&
-          agent.getModel() === 'fake-model' &&
-          agent.getProvider() === built.config.getProvider() &&
-          agent.getModel() === built.config.getModel()
-        );
+        try {
+          return (
+            agent.getProvider() === 'fake' &&
+            agent.getModel() === 'fake-model' &&
+            agent.getProvider() === built.config.getProvider() &&
+            agent.getModel() === built.config.getModel()
+          );
+        } finally {
+          await agent.dispose();
+        }
       } finally {
         await built.cleanup();
       }
@@ -163,10 +200,19 @@ describe('config-injection parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
         const built = await buildCliStyleConfig('plain-text.jsonl');
         try {
           const agent: Agent = await fromConfig({
+            settingsOwner: built.settingsOwner,
+            settingsService: built.settingsService,
+            agentClient: built.agentClient,
+            providerManager: built.providerManager,
             config: built.config,
+            mcpRuntime: built.mcpRuntime,
             sessionId,
           });
-          return internalConfig(agent) === built.config;
+          try {
+            return internalConfig(agent) === built.config;
+          } finally {
+            await agent.dispose();
+          }
         } finally {
           await built.cleanup();
         }

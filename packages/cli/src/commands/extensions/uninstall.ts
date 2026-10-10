@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { configureCommandOptions } from '../command-configuration.js';
 import type { CommandModule } from 'yargs';
 import { uninstallExtension } from '../../config/extension.js';
 import { exitCli } from '../utils.js';
@@ -44,20 +45,22 @@ export const uninstallCommand: CommandModule = {
   command: 'uninstall <names..>',
   describe: 'Uninstalls one or more extensions.',
   builder: (yargs) =>
-    yargs
-      .positional('names', {
-        describe: 'The names or source paths of the extensions to uninstall.',
-        type: 'string',
-        array: true,
-      })
-      .check((argv) => {
-        if (!argv.names || argv.names.length === 0) {
-          throw new Error(
-            'Please include at least one extension name to uninstall.',
-          );
-        }
-        return true;
-      }),
+    configureCommandOptions(yargs, (configuration) =>
+      configuration
+        .positional('names', {
+          describe: 'The names or source paths of the extensions to uninstall.',
+          type: 'string',
+          array: true,
+        })
+        .check((argv) => {
+          if (!argv.names || argv.names.length === 0) {
+            throw new Error(
+              'Please include at least one extension name to uninstall.',
+            );
+          }
+          return true;
+        }),
+    ),
   handler: async (argv) => {
     await handleUninstall({
       names: argv['names'] as string[],

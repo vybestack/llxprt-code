@@ -1,8 +1,14 @@
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { createToolRegistryViewFromRegistry } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
+import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
+import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 
 /**
  * SubAgentScope stream idle timeout behavioral tests.
@@ -36,11 +42,9 @@ import {
   createContentGenerator,
   type ContentGenerator,
 } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { AgentRuntimeLoaderResult } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
-import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
-import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ToolRegistry } from '@vybestack/llxprt-code-tools/tools/tool-registry.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
@@ -132,72 +136,69 @@ describe('subagent.ts', () => {
       max_turns: 10,
     };
 
-    const createRuntimeBundle = (config: Config): AgentRuntimeLoaderResult => {
-      const history = {
-        clear: vi.fn(),
-        add: vi.fn(),
-        getCuratedForProvider: vi.fn(() => []),
-        getIdGeneratorCallback: vi.fn(() => vi.fn()),
-        findUnmatchedToolCalls: vi.fn(() => []),
-        generateTurnKey: vi.fn(() => `turn-${Date.now()}`),
-      } as unknown as HistoryService;
-
-      const runtimeContext: AgentRuntimeContext = {
-        state: {
-          runtimeId: config.getSessionId(),
-          provider: config.getProvider(),
-          model: config.getModel(),
-          sessionId: config.getSessionId(),
-          proxyUrl: undefined,
-          modelParams: {},
-        },
-        history,
-        ephemerals: {
-          compressionThreshold: () => 0.8,
-          contextLimit: () => 60_000,
-          preserveThreshold: () => 0.2,
-          toolFormatOverride: () => undefined,
-        },
-        telemetry: {
-          logApiRequest: vi.fn(),
-          logApiResponse: vi.fn(),
-          logApiError: vi.fn(),
-        },
-        provider: {
-          getActiveProvider: vi.fn(
-            () =>
-              ({
-                name: config.getProvider(),
-                generateChatCompletion: vi.fn(async function* () {}),
-                getDefaultModel: () => config.getModel(),
-              }) as IProvider,
-          ),
-          setActiveProvider: vi.fn(),
-        },
-        tools: {
-          listToolNames: () => [],
-          getToolMetadata: () => undefined,
-        },
-        providerRuntime: {
-          runtimeId: config.getSessionId(),
-          metadata: {},
-          settingsService: config.getSettingsService(),
-          config,
-        } as unknown as ProviderRuntimeContext,
+    const createRuntimeBundle = (
+      config: Config,
+      settingsService: SettingsService,
+    ): AgentRuntimeLoaderResult => {
+      const { settingsOwner } = createSessionSettingsFixture(
+        config,
+        settingsService,
+      );
+      const history = new HistoryService();
+      const state = createAgentRuntimeState({
+        runtimeId: config.getSessionId(),
+        sessionId: config.getSessionId(),
+        provider: 'stub',
+        model: config.getModel(),
+        modelParams: {},
+      });
+      const provider = {
+        getActiveProvider: vi.fn(() => ({
+          name: 'stub',
+          isDefault: true,
+          getModels: async () => [],
+          generateChatCompletion: vi.fn(async function* () {}),
+          getDefaultModel: () => config.getModel(),
+        })),
+        setActiveProvider: vi.fn(),
       };
-
+      const telemetry = {
+        logApiRequest: vi.fn(),
+        logApiResponse: vi.fn(),
+        logApiError: vi.fn(),
+      };
+      const toolRegistry = new ToolRegistry(config, mockMessageBus, () =>
+        settingsOwner.readRegistryPolicy([]),
+      );
+      const runtimeContext = createAgentRuntimeContext({
+        state,
+        history,
+        provider,
+        telemetry,
+        settings: settingsOwner.readRuntimePolicy(),
+        readRuntimeSettings: () => settingsOwner.readRuntimePolicy(),
+        providerRuntime: createProviderRuntimeContext({
+          runtimeId: state.runtimeId,
+          settingsService,
+          config,
+        }),
+        prepareProviderInvocation: (name, parameters, signal) =>
+          settingsOwner.prepareProviderInvocation(
+            state.runtimeId,
+            name,
+            parameters,
+            signal,
+          ),
+        tools: createToolRegistryViewFromRegistry(toolRegistry),
+      });
       return {
         runtimeContext,
         history,
-        providerAdapter: runtimeContext.provider,
-        telemetryAdapter: runtimeContext.telemetry,
+        providerAdapter: provider,
+        telemetryAdapter: telemetry,
         toolsView: runtimeContext.tools,
         contentGenerator: {} as ContentGenerator,
-        toolRegistry: new ToolRegistry(
-          config,
-          mockMessageBus,
-          new SettingsService(),
-        ),
+        toolRegistry,
       };
     };
 
@@ -223,21 +224,25 @@ describe('subagent.ts', () => {
         targetDir: '.',
         debugMode: false,
         cwd: process.cwd(),
-        settingsService,
+        initialSettings: settingsService.getAllGlobalSettings(),
       };
       const configWithTimeout = new Config(configParams);
-      configWithTimeout.setEphemeralSetting(
-        'stream-idle-timeout-ms',
-        customTimeoutMs,
-      );
-      await initializeTestConfig(configWithTimeout);
+      settingsService.set('stream-idle-timeout-ms', customTimeoutMs);
+      const mcpRuntime = await initializeTestConfig(configWithTimeout);
 
+      const runtimeBundle = createRuntimeBundle(
+        configWithTimeout,
+        settingsService,
+      );
       const overrides: SubAgentRuntimeOverrides = {
-        runtimeBundle: createRuntimeBundle(configWithTimeout),
+        instructions: mcpRuntime.workspaceMemory.operations,
+        workspacePaths: mcpRuntime.workspaceFilesystem.paths,
+        readMcpInstructions: () => undefined,
+        runtimeBundle,
         toolRegistry: new ToolRegistry(
           configWithTimeout,
           mockMessageBus,
-          new SettingsService(),
+          assembleTaskSchemaPolicy(new SettingsService()),
         ),
       };
 
@@ -274,6 +279,8 @@ describe('subagent.ts', () => {
               return slowStream();
             }),
             getConfig: () => configWithTimeout,
+            getStreamTimeoutPolicy: () =>
+              runtimeBundle.runtimeContext.readStreamTimeoutPolicy(),
             getHistory: vi.fn().mockReturnValue([]),
             getHistoryService: vi.fn().mockReturnValue({
               clear: vi.fn(),
@@ -316,18 +323,25 @@ describe('subagent.ts', () => {
         targetDir: '.',
         debugMode: false,
         cwd: process.cwd(),
-        settingsService,
+        initialSettings: settingsService.getAllGlobalSettings(),
       };
       const configWithTimeout = new Config(configParams);
-      configWithTimeout.setEphemeralSetting('stream-idle-timeout-ms', 0); // Disabled
-      await initializeTestConfig(configWithTimeout);
+      settingsService.set('stream-idle-timeout-ms', 0); // Disabled
+      const mcpRuntime = await initializeTestConfig(configWithTimeout);
 
+      const runtimeBundle = createRuntimeBundle(
+        configWithTimeout,
+        settingsService,
+      );
       const overrides: SubAgentRuntimeOverrides = {
-        runtimeBundle: createRuntimeBundle(configWithTimeout),
+        instructions: mcpRuntime.workspaceMemory.operations,
+        workspacePaths: mcpRuntime.workspaceFilesystem.paths,
+        readMcpInstructions: () => undefined,
+        runtimeBundle,
         toolRegistry: new ToolRegistry(
           configWithTimeout,
           mockMessageBus,
-          new SettingsService(),
+          assembleTaskSchemaPolicy(new SettingsService()),
         ),
       };
 
@@ -370,6 +384,8 @@ describe('subagent.ts', () => {
               return stalledStream();
             }),
             getConfig: () => configWithTimeout,
+            getStreamTimeoutPolicy: () =>
+              runtimeBundle.runtimeContext.readStreamTimeoutPolicy(),
             getHistory: vi.fn().mockReturnValue([]),
             getHistoryService: vi.fn().mockReturnValue({
               clear: vi.fn(),
@@ -442,21 +458,25 @@ describe('subagent.ts', () => {
         targetDir: '.',
         debugMode: false,
         cwd: process.cwd(),
-        settingsService,
+        initialSettings: settingsService.getAllGlobalSettings(),
       };
       const configWithTimeout = new Config(configParams);
-      configWithTimeout.setEphemeralSetting(
-        'stream-idle-timeout-ms',
-        configTimeoutMs,
-      );
-      await initializeTestConfig(configWithTimeout);
+      settingsService.set('stream-idle-timeout-ms', configTimeoutMs);
+      const mcpRuntime = await initializeTestConfig(configWithTimeout);
 
+      const runtimeBundle = createRuntimeBundle(
+        configWithTimeout,
+        settingsService,
+      );
       const overrides: SubAgentRuntimeOverrides = {
-        runtimeBundle: createRuntimeBundle(configWithTimeout),
+        instructions: mcpRuntime.workspaceMemory.operations,
+        workspacePaths: mcpRuntime.workspaceFilesystem.paths,
+        readMcpInstructions: () => undefined,
+        runtimeBundle,
         toolRegistry: new ToolRegistry(
           configWithTimeout,
           mockMessageBus,
-          new SettingsService(),
+          assembleTaskSchemaPolicy(new SettingsService()),
         ),
       };
 
@@ -503,6 +523,8 @@ describe('subagent.ts', () => {
               return slowStream();
             }),
             getConfig: () => configWithTimeout,
+            getStreamTimeoutPolicy: () =>
+              runtimeBundle.runtimeContext.readStreamTimeoutPolicy(),
             getHistory: vi.fn().mockReturnValue([]),
             getHistoryService: vi.fn().mockReturnValue({
               clear: vi.fn(),

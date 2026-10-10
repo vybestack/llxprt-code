@@ -11,7 +11,6 @@ import {
 } from './types.js';
 import { MessageType } from '../types.js';
 import type { ToolInfo } from '@vybestack/llxprt-code-agents';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   canonicalizeToolName,
   INVALID_TOOL_NAME,
@@ -48,21 +47,14 @@ function stripQuotes(value: string): string {
   return trimmed;
 }
 
-function getSettingsService(context: CommandContext): SettingsService | null {
-  const config = context.services.config;
-  if (config) {
-    return config.getSettingsService();
-  }
-  return null;
-}
-
 function readToolLists(context: CommandContext): {
   disabled: Set<string>;
   allowed: Set<string>;
 } {
-  const settings = getSettingsService(context);
+  const runtime = context.services.agent;
 
-  const read = (key: string): unknown => settings?.get(key) ?? undefined;
+  const read = (key: string): unknown =>
+    runtime?.getEphemeralSetting(key) ?? undefined;
 
   const disabled = Array.isArray(read('tools.disabled'))
     ? new Set((read('tools.disabled') as string[]).map(canonicalizeToolName))
@@ -86,11 +78,11 @@ function persistToolLists(
   const allowedList = Array.from(new Set(allowed)).map((name) =>
     name === INVALID_TOOL_NAME ? '' : name,
   );
-  const settings = getSettingsService(context);
+  const runtime = context.services.agent;
 
-  if (settings) {
-    settings.set('tools.disabled', disabledList);
-    settings.set('tools.allowed', allowedList);
+  if (runtime) {
+    runtime.setEphemeralSetting('tools.disabled', disabledList);
+    runtime.setEphemeralSetting('tools.allowed', allowedList);
   }
 }
 
@@ -212,11 +204,7 @@ async function handleToggleTool(
 
   persistToolLists(context, disabled, allowed);
 
-  const config = context.services.config;
-  const agentClient =
-    typeof config?.getAgentClient === 'function'
-      ? config.getAgentClient()
-      : undefined;
+  const agentClient = context.services.agent?.agentClient;
 
   if (agentClient && typeof agentClient.setTools === 'function') {
     try {

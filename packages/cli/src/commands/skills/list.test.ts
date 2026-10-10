@@ -15,13 +15,16 @@ import {
   type Mock,
 } from 'bun:test';
 import { format } from 'node:util';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { handleList, listCommand } from './list.js';
 import { loadSettings, type LoadedSettings } from '../../config/settings.js';
 import { loadCliConfig } from '../../config/config.js';
 import {
   discoverSkillsForConfig,
   type SkillDefinition,
-  type Config,
+  Config,
 } from '@vybestack/llxprt-code-core';
 import chalk from 'chalk';
 
@@ -82,18 +85,28 @@ describe('skills list command', () => {
   const mockDiscoverSkills = discoverSkillsForConfig as Mock<
     typeof discoverSkillsForConfig
   >;
-  const mockConfig = {} as unknown as Config;
+  let config: Config;
+  let directory: string;
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    directory = await mkdtemp(join(tmpdir(), 'llxprt-skills-list-'));
+    config = new Config({
+      sessionId: 'skills-list-test',
+      targetDir: directory,
+      cwd: directory,
+      model: 'test-model',
+      debugMode: false,
+    });
     mockLoadSettings.mockReturnValue({
       merged: {},
     } as unknown as LoadedSettings);
-    mockLoadCliConfig.mockResolvedValue(mockConfig);
+    mockLoadCliConfig.mockResolvedValue(config);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.restoreAllMocks();
+    await rm(directory, { recursive: true, force: true });
   });
 
   describe('handleList', () => {
@@ -103,7 +116,9 @@ describe('skills list command', () => {
       await handleList();
 
       expect(mockDiscoverSkills).toHaveBeenCalledTimes(1);
-      expect(mockDiscoverSkills).toHaveBeenCalledWith(mockConfig);
+      expect(
+        Object.keys(mockDiscoverSkills.mock.calls[0]?.[0] ?? {}),
+      ).toStrictEqual(['list']);
     });
 
     it('should log a message if no skills are discovered', async () => {

@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { PolicyDecision } from '@vybestack/llxprt-code-policy';
 
 import type { AgentEvent, Agent } from '@vybestack/llxprt-code-agents';
 
@@ -27,6 +28,13 @@ export function createFakeAgent(
 
 function createStubTools(): Agent['tools'] {
   return {
+    describeConfiguration: () => ({ registered: [], unregistered: [] }),
+    subscribeChildTools: () => () => {},
+    openClientChannel: () => {
+      throw new Error(
+        'Client tools are not configured in this event-only fixture',
+      );
+    },
     list: () => [],
     get: () => undefined,
     async setEnabled() {},
@@ -78,6 +86,9 @@ function createBaseFakeAgent(gen: () => AsyncIterable<AgentEvent>): Agent {
     },
     injectSteer: () => {},
     getProvider: () => 'test',
+    hasActiveProvider: () => true,
+    getProviderContextLimit: () => undefined,
+    listAvailableModels: async () => [],
     async setProvider() {},
     getProviderStatus: () => ({
       provider: 'test',
@@ -103,8 +114,16 @@ function createBaseFakeAgent(gen: () => AsyncIterable<AgentEvent>): Agent {
     ide: {} as unknown as Agent['ide'],
     session: {} as unknown as Agent['session'],
     hooks: {} as unknown as Agent['hooks'],
-    policy: {} as unknown as Agent['policy'],
-    tasks: {} as unknown as Agent['tasks'],
+    policy: createStubPolicy(),
+    tasks: {
+      list: () => [],
+      listRunning: () => [],
+      get: () => undefined,
+      cancel: async () => false,
+      cancelAllRunning: async () => 0,
+      subscribeNotifications: () =>
+        Object.assign(() => {}, { drain: async () => {} }),
+    },
     memory: {} as unknown as Agent['memory'],
     skills: {} as unknown as Agent['skills'],
     workspace: {} as unknown as Agent['workspace'],
@@ -136,4 +155,13 @@ function createBaseFakeAgent(gen: () => AsyncIterable<AgentEvent>): Agent {
     listTools: () => [],
     async dispose() {},
   } as unknown as Agent;
+}
+
+function createStubPolicy(): Agent['policy'] {
+  return {
+    getRules: () => [],
+    getDefaultDecision: () => PolicyDecision.ASK_USER,
+    isNonInteractive: () => false,
+    reloadUserRules: async () => {},
+  };
 }

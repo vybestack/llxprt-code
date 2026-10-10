@@ -56,7 +56,7 @@ export class SessionLifecycle {
   list(params: acp.ListSessionsRequest): Promise<acp.ListSessionsResponse> {
     const projectRoot = this.config.getProjectRoot();
     return listRecordedSessions(
-      this.config.storage.getProjectChatsDir(),
+      this.config.projectChatsDir,
       getProjectHash(projectRoot),
       projectRoot,
       params,
@@ -116,7 +116,7 @@ export class SessionLifecycle {
     }
     const projectRoot = this.config.getProjectRoot();
     const summaries = await SessionDiscovery.listSessions(
-      this.config.storage.getProjectChatsDir(),
+      this.config.projectChatsDir,
       getProjectHash(projectRoot),
     );
     const target = summaries.find(
@@ -152,7 +152,7 @@ export class SessionLifecycle {
     try {
       result = await deleteSessionById(
         params.sessionId,
-        this.config.storage.getProjectChatsDir(),
+        this.config.projectChatsDir,
         getProjectHash(projectRoot),
       );
     } catch (error) {

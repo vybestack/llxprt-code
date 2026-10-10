@@ -33,15 +33,17 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { iContentFromAgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import {
   AgentEventType,
   type ToolCallRequestInfo,
 } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { CompletedToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
-import type { SchedulerHandle } from '@vybestack/llxprt-code-core/session/sessionExecutionServices.js';
+import type { SchedulerLease } from '../../session/sessionSchedulerOwner.js';
 import {
   MessageBusType,
   type ToolConfirmationRequest,
@@ -159,7 +161,7 @@ export class AgenticLoop {
   private readonly config: AgenticLoopOptions['config'];
   private readonly messageBus: AgenticLoopOptions['messageBus'];
   private readonly approvalHandler?: AgenticLoopOptions['approvalHandler'];
-  private readonly interactiveMode: boolean;
+  private readonly createSchedulerOwner: AgenticLoopOptions['createSchedulerOwner'];
   private readonly displayCallbacks: AgenticLoopOptions['displayCallbacks'];
   private readonly ownedToolCallIds = new Set<string>();
   private promptCount = 0;
@@ -176,7 +178,7 @@ export class AgenticLoop {
     this.config = options.config;
     this.messageBus = options.messageBus;
     this.approvalHandler = options.approvalHandler;
-    this.interactiveMode = options.interactiveMode ?? false;
+    this.createSchedulerOwner = options.createSchedulerOwner;
     this.displayCallbacks = options.displayCallbacks;
   }
 
@@ -314,6 +316,8 @@ export class AgenticLoop {
     message: AgentMessageInput,
     signal: AbortSignal,
     promptId?: string,
+    recordingExecution?: AgentChatRecordingExecution,
+    modelParameters?: AdmittedModelParameters,
   ): AsyncGenerator<AgenticLoopEvent> {
     if (this.isRunning) {
       throw new Error('AgenticLoop.run does not support concurrent executions');
@@ -329,6 +333,8 @@ export class AgenticLoop {
           currentMessage,
           signal,
           currentPromptId,
+          recordingExecution,
+          modelParameters,
         );
         const steerText = this.drainSteer();
         const steerContinuation =
@@ -376,6 +382,8 @@ export class AgenticLoop {
     message: AgentMessageInput,
     signal: AbortSignal,
     promptId: string,
+    recordingExecution?: AgentChatRecordingExecution,
+    modelParameters?: AdmittedModelParameters,
   ): AsyncGenerator<AgenticLoopEvent, TurnRunResult> {
     const toolCallRequests: ToolCallRequestInfo[] = [];
     const streamResult = yield* this.streamAndCollect(
@@ -383,6 +391,8 @@ export class AgenticLoop {
       signal,
       promptId,
       toolCallRequests,
+      recordingExecution,
+      modelParameters,
     );
 
     if (signal.aborted || !streamResult.shouldScheduleTools) {
@@ -407,7 +417,11 @@ export class AgenticLoop {
 
     let completed: CompletedToolCall[] | null;
     try {
-      const result = yield* this.scheduleAndAwait(dedupedRequests, signal);
+      const result = yield* this.scheduleAndAwait(
+        dedupedRequests,
+        signal,
+        recordingExecution?.hookOwner,
+      );
       completed = result.completed;
     } finally {
       for (const request of dedupedRequests) {
@@ -471,11 +485,18 @@ export class AgenticLoop {
     signal: AbortSignal,
     promptId: string,
     toolCallRequests: ToolCallRequestInfo[],
+    recordingExecution?: AgentChatRecordingExecution,
+    modelParameters?: AdmittedModelParameters,
   ): AsyncGenerator<AgenticLoopEvent, StreamCollectionResult> {
     const stream = this.agentClient.sendMessageStream(
       message,
       signal,
       promptId,
+      undefined,
+      false,
+      false,
+      recordingExecution,
+      modelParameters,
     );
     let shouldScheduleTools = true;
     for await (const event of stream) {
@@ -501,6 +522,7 @@ export class AgenticLoop {
   private async *scheduleAndAwait(
     requests: ToolCallRequestInfo[],
     signal: AbortSignal,
+    hookOwner?: AgentChatRecordingExecution['hookOwner'],
   ): AsyncGenerator<AgenticLoopEvent, TurnToolResult> {
     const queue = new AgenticEventQueue();
 
@@ -532,7 +554,7 @@ export class AgenticLoop {
     );
 
     const scheduleTask = scheduler
-      .schedule(requests, signal)
+      .schedule(requests, signal, hookOwner)
       .then(() => {
         if (!acceptedToolUpdateSeen) {
           resolveCompletion([]);
@@ -548,12 +570,10 @@ export class AgenticLoop {
         resolveCompletion([]);
       });
 
-    let normalExit = false;
     try {
       yield* this.drainWhileRunning(completionTask, state, queue, signal);
 
       if (signal.aborted) {
-        scheduler.cancelAll();
         await Promise.race([scheduleTask, completionTask, abortPromise]);
         yield* flushBuffered(queue);
       } else {
@@ -565,20 +585,12 @@ export class AgenticLoop {
         queue.flushOutputOmissionNotices();
         yield* flushBuffered(queue);
       }
-      normalExit = completed !== null && !signal.aborted;
       return { completed };
     } finally {
-      if (!normalExit) {
-        scheduler.cancelAll();
-        await Promise.race([scheduleTask, completionTask, abortPromise]);
-      }
       forwardingState.active = false;
       queue.close();
       cleanupAbortListener();
-      // Pass the loop's cached handle: after a disposeAll sweep that
-      // replaced this key's entry, a bare-key release could otherwise
-      // decrement a scheduler this loop never acquired.
-      this.config.disposeScheduler(this, 'agentic-loop', scheduler);
+      await scheduler.release();
     }
   }
 
@@ -603,7 +615,7 @@ export class AgenticLoop {
     rejectCompletion: (error: unknown) => void,
     forwardingState: { active: boolean },
     markAcceptedUpdate: () => void,
-  ): Promise<SchedulerHandle> {
+  ): Promise<SchedulerLease> {
     const display = this.displayCallbacks;
     const pushQueueEvent = (event: AgenticLoopEvent): boolean => {
       try {
@@ -622,66 +634,58 @@ export class AgenticLoop {
       }
     };
 
-    // The loop instance is its own registry owner ('agentic-loop' purpose):
-    // object identity keeps this transient per-turn scheduler separate from
-    // the CLI main scheduler ('session' purpose) even though both live on the
-    // same Config, and the loop's setCallbacks can never clobber the main
-    // scheduler's callbacks.
-    return this.config.getOrCreateScheduler(
-      this,
-      'agentic-loop',
-      {
-        outputUpdateHandler: (callId, update) => {
-          if (!forwardingState.active) {
-            return;
-          }
-          if (
-            update.mode === 'append' &&
-            !pushQueueEvent({
-              kind: 'tool_output',
-              callId,
-              chunk: update.data,
-            })
-          ) {
-            return;
-          }
-          display?.outputUpdateHandler?.(callId, update);
-        },
-        onToolCallsUpdate: (toolCalls) => {
-          if (!forwardingState.active) {
-            return;
-          }
-          if (toolCalls.length > 0) {
-            markAcceptedUpdate();
-          }
-          if (!pushQueueEvent({ kind: 'tool_update', toolCalls })) {
-            return;
-          }
-          if (
-            toolCalls.some((tc) => tc.status === 'awaiting_approval') &&
-            !pushQueueEvent({ kind: 'awaiting_approval', toolCalls })
-          ) {
-            return;
-          }
-          display?.onToolCallsUpdate?.(toolCalls);
-        },
-        onAllToolCallsComplete: async (completed) => {
-          try {
-            if (forwardingState.active) {
-              pushQueueEvent({ kind: 'tool_update', toolCalls: [] });
-              display?.onToolCallsUpdate?.([]);
-            }
-          } finally {
-            resolveCompletion(completed);
-          }
-        },
-        getPreferredEditor: display?.getPreferredEditor ?? (() => undefined),
-        onEditorOpen: display?.onEditorOpen ?? (() => {}),
-        onEditorClose: display?.onEditorClose ?? (() => {}),
+    const owner = this.createSchedulerOwner({
+      outputUpdateHandler: (callId, update) => {
+        if (!forwardingState.active) {
+          return;
+        }
+        if (
+          update.mode === 'append' &&
+          !pushQueueEvent({
+            kind: 'tool_output',
+            callId,
+            chunk: update.data,
+          })
+        ) {
+          return;
+        }
+        display?.outputUpdateHandler?.(callId, update);
       },
-      { interactiveMode: this.interactiveMode },
-      { messageBus: this.messageBus },
-    );
+      onToolCallsUpdate: (toolCalls) => {
+        if (!forwardingState.active) {
+          return;
+        }
+        if (toolCalls.length > 0) {
+          markAcceptedUpdate();
+        }
+        if (!pushQueueEvent({ kind: 'tool_update', toolCalls })) {
+          return;
+        }
+        if (
+          toolCalls.some((tc) => tc.status === 'awaiting_approval') &&
+          !pushQueueEvent({ kind: 'awaiting_approval', toolCalls })
+        ) {
+          return;
+        }
+        display?.onToolCallsUpdate?.(toolCalls);
+      },
+      onAllToolCallsComplete: async (completed) => {
+        try {
+          if (forwardingState.active) {
+            pushQueueEvent({ kind: 'tool_update', toolCalls: [] });
+            display?.onToolCallsUpdate?.([]);
+          }
+        } finally {
+          resolveCompletion(completed);
+        }
+      },
+      getPreferredEditor: display?.getPreferredEditor ?? (() => undefined),
+      onEditorOpen: display?.onEditorOpen ?? (() => {}),
+      onEditorClose: display?.onEditorClose ?? (() => {}),
+    });
+    const lease = owner.acquire();
+    await lease.ready;
+    return lease;
   }
 
   /**

@@ -35,7 +35,7 @@ export const registerActivateSkillTool: PostSkillDiscoveryToolRegistrar = (
   messageBus,
 ) => {
   // Build the replacement before touching the registry. Construction is the
-  // only step here that can throw, and Config.reloadSkills() lets that
+  // only step here that can throw, and workspace skill reload lets that
   // propagate. Unregistering first would leave the registry without a tool the
   // live chat session is still advertising, because the setTools() that would
   // have corrected the session never runs on the failure path.

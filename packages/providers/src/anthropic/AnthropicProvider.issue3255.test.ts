@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { describe, expect, it } from 'bun:test';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { RuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
@@ -99,7 +100,7 @@ async function prepare(fixture: RequestFixture): Promise<PreparedFixture> {
     isOAuth: false,
     placement: 'system-field',
     providerName: PROVIDER_NAME,
-    config: options.config,
+    config: parseOutputLimits(options.invocation.ephemerals),
     getMaxTokensForModel: () => 32000,
     unprefixToolName: (name: string) => name,
     providerConfig: undefined,

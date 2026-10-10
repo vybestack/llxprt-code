@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { OutputLimitConfig } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type { Part, Schema } from './geminiWireTypes.js';
 import { SchemaType } from './geminiWireTypes.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
@@ -108,7 +109,7 @@ export function buildRequestConfig(
   const modelParams = options.invocation.modelParams;
   const requestConfig: Record<string, unknown> = { ...modelParams };
 
-  const rawMaxOutput = options.settings.get('maxOutputTokens');
+  const rawMaxOutput = options.invocation.getEphemeral('maxOutputTokens');
   const genericMaxOutput =
     typeof rawMaxOutput === 'number' &&
     Number.isFinite(rawMaxOutput) &&
@@ -157,7 +158,7 @@ export function prepareContentsWithSignatures(
 export function convertToGeminiContents(
   content: NormalizedGenerateChatOptions['contents'],
   currentModel: string,
-  configForMessages: unknown,
+  configForMessages: OutputLimitConfig | undefined,
 ): Array<{ role: string; parts: Part[] }> {
   return convertHistoryToGeminiFormat(
     content,

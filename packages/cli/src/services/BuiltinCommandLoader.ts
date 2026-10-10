@@ -21,6 +21,7 @@ import { aboutCommand } from '../ui/commands/aboutCommand.js';
 import { authCommand } from '../ui/commands/authCommand.js';
 import { bugCommand } from '../ui/commands/bugCommand.js';
 import { chatCommand } from '../ui/commands/chatCommand.js';
+import { chatOwnerCommand } from '../ui/commands/chatOwnerCommand.js';
 import { clearCommand } from '../ui/commands/clearCommand.js';
 import { compressCommand } from '../ui/commands/compressCommand.js';
 import { copyCommand } from '../ui/commands/copyCommand.js';
@@ -83,7 +84,10 @@ import { continueCommand } from '../ui/commands/continueCommand.js';
 export class BuiltinCommandLoader implements ICommandLoader {
   private extensionEnablementManager?: ExtensionEnablementSource;
 
-  constructor(private config: CliUiRuntime | null) {
+  constructor(
+    private config: CliUiRuntime | null,
+    private recordingOwner: 'agent' | 'raw' = 'raw',
+  ) {
     // Access extensionEnablementManager if available on config
     if (config && 'extensionEnablementManager' in config) {
       this.extensionEnablementManager = config.extensionEnablementManager;
@@ -139,7 +143,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       aboutCommand,
       authCommand,
       bugCommand,
-      chatCommand,
+      this.recordingOwner === 'agent' ? chatOwnerCommand : chatCommand,
       clearCommand,
       compressCommand,
       copyCommand,
@@ -213,7 +217,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
     if (this.config?.isSkillsSupportEnabled() !== true) {
       return [];
     }
-    if (this.config.getSkillManager().isAdminEnabled() === false) {
+    if (this.config.isAdminSkillsEnabled() === false) {
       return [
         {
           name: 'skills',

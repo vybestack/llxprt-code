@@ -1,29 +1,56 @@
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
+
+import { afterEach as afterFixtureTest, vi } from 'bun:test';
+afterFixtureTest(() => {
+  fixtureFilesystem = undefined;
+});
+import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
+const makeFixtureFilesystem = installTestWorkspaceFilesystem();
+let fixtureFilesystem: ReturnType<typeof makeFixtureFilesystem> | undefined;
+function fixturePaths() {
+  fixtureFilesystem ??= makeFixtureFilesystem({
+    targetDir: process.cwd(),
+    isTrusted: () => true,
+  });
+  return fixtureFilesystem.paths;
+}
+function fixtureScans() {
+  fixturePaths();
+  if (!fixtureFilesystem) throw new Error('Fixture filesystem absent');
+  return fixtureFilesystem.scans;
+}
+function fixtureIgnore() {
+  fixturePaths();
+  if (!fixtureFilesystem) throw new Error('Fixture filesystem absent');
+  return fixtureFilesystem.ignore;
+}
+function fixtureFiles() {
+  fixturePaths();
+  if (!fixtureFilesystem) throw new Error('Fixture filesystem absent');
+  return fixtureFilesystem.files;
+}
 
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { vi, type Mock } from 'bun:test';
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import {
+  ApprovalMode,
   type AnyDeclarativeTool,
   CoreToolHostAdapter,
   GlobTool,
   type MessageBus,
   ReadManyFilesTool,
   ToolRegistry,
-  COMMON_IGNORE_PATTERNS,
-  DEFAULT_FILE_EXCLUDES,
 } from '@vybestack/llxprt-code-core';
 import type {
   AgentToolHandle,
   AgentToolInvocation,
 } from '@vybestack/llxprt-code-agents';
-import {
-  FileDiscoveryService,
-  StandardFileSystemService,
-} from '@vybestack/llxprt-code-storage';
 import * as os from 'os';
 import * as fsPromises from 'fs/promises';
 import * as fs from 'fs';
@@ -123,73 +150,38 @@ export interface AtCommandTestSetup {
   mockOnDebugMessage: ReturnType<typeof vi.fn>;
   abortController: AbortController;
   originalCwd: string;
+  settingsOwner: SessionSettingsOwner;
+  telemetry: RootTelemetry;
   getToolHandle: (name: string) => AgentToolHandle | undefined;
 }
 
 function buildMockConfig(testRootDir: string): CliUiRuntime {
-  const getToolRegistry = vi.fn();
-
   const mockConfig = {
-    getToolRegistry,
     getTargetDir: () => testRootDir,
     isSandboxed: () => false,
 
-    getFileService: () => new FileDiscoveryService(testRootDir),
+    ignore: fixtureIgnore(),
     getFileFilteringRespectGitIgnore: () => true,
     getFileFilteringRespectLlxprtIgnore: () => true,
     getFileFilteringOptions: () => ({
       respectGitIgnore: true,
       respectLlxprtIgnore: true,
     }),
-    getFileSystemService: () => new StandardFileSystemService(),
     getEnableRecursiveFileSearch: vi.fn(() => true),
-    getWorkspaceContext: () => {
-      const workspaceRoot = fs.realpathSync(testRootDir);
-      return {
-        isPathWithinWorkspace: (inputPath: string) => {
-          const absoluteInput = path.isAbsolute(inputPath)
-            ? inputPath
-            : path.resolve(testRootDir, inputPath);
-          let resolved: string;
-          try {
-            resolved = fs.realpathSync(absoluteInput);
-          } catch {
-            if (absoluteInput.startsWith(testRootDir)) {
-              resolved = path.resolve(
-                workspaceRoot,
-                path.relative(testRootDir, absoluteInput),
-              );
-            } else {
-              resolved = path.normalize(absoluteInput);
-            }
-          }
-          return (
-            resolved === workspaceRoot ||
-            resolved.startsWith(workspaceRoot + path.sep)
-          );
-        },
-        getDirectories: () => [workspaceRoot],
-      };
+    directories: () => fixturePaths().directories(),
+    contains: (inputPath: string) =>
+      fixturePaths().contains(path.resolve(testRootDir, inputPath)),
+    addDirectory: (directory: string) => {
+      fixturePaths();
+      if (!fixtureFilesystem) throw new Error('Missing filesystem root');
+      fixtureFilesystem.addDirectory(directory);
     },
     getEphemeralSettings: () => ({}), // No disabled tools
     getMcpServers: () => ({}),
     getMcpServerCommand: () => undefined,
-    getResourceRegistry: () => ({
-      getAllResources: () => [],
-      findResourceByUri: () => undefined,
-    }),
-    getMcpClientManager: () => undefined,
-    getPromptRegistry: () => ({
-      getPromptsByServer: () => [],
-      getAllPrompts: () => [],
-      getPrompt: () => undefined,
-      clear: () => {},
-    }),
+    listResources: () => [],
+    listPrompts: () => [],
     getDebugMode: () => false,
-    getFileExclusions: () => ({
-      getGlobExcludes: () => COMMON_IGNORE_PATTERNS,
-      getReadManyFilesExcludes: () => DEFAULT_FILE_EXCLUDES,
-    }),
   } as unknown as CliUiRuntime;
 
   return mockConfig;
@@ -219,17 +211,46 @@ export async function setupAtCommandTest(): Promise<AtCommandTestSetup> {
     removeAllListeners: vi.fn(),
     listenerCount: vi.fn().mockReturnValue(0),
   } as unknown as MessageBus;
-  const toolHost = new CoreToolHostAdapter(mockConfig);
+  const sessionSettings = new SettingsService();
+  const settingsOwner = new SessionSettingsOwner(sessionSettings);
+  const telemetry = RootTelemetry.prepare({
+    enabled: false,
+    sessionId: 'at-command-test',
+    maxBytes: 1024,
+    maxFiles: 1,
+  });
+  let approvalMode = ApprovalMode.DEFAULT;
+  const hostConfig = {
+    getSessionId: () => 'at-command-test',
+    getTargetDir: () => testRootDir,
+    getApprovalMode: () => approvalMode,
+    setApprovalMode: (mode: ApprovalMode) => {
+      approvalMode = mode;
+    },
+    isInteractive: () => false,
+    getFileFilteringOptions: () => mockConfig.getFileFilteringOptions(),
+    getFileFilteringRespectLlxprtIgnore: () =>
+      mockConfig.getFileFilteringRespectLlxprtIgnore(),
+    getConversationLoggingEnabled: () => false,
+    getDebugMode: () => false,
+  };
+  const toolHost = new CoreToolHostAdapter(
+    hostConfig,
+    fixturePaths(),
+    fixtureFiles(),
+    fixtureIgnore(),
+    fixtureScans(),
+    () => settingsOwner.readToolExecutionPolicy(),
+    { isTrustedFolder: () => true, getIdeTrust: () => undefined },
+    telemetry,
+  );
   const registry = new ToolRegistry(
     mockConfig,
     mockMessageBus,
-    new SettingsService(),
+    assembleTaskSchemaPolicy(sessionSettings),
   );
   registry.registerTool(new ReadManyFilesTool(toolHost));
   registry.registerTool(new GlobTool(toolHost));
-  (
-    mockConfig.getToolRegistry as Mock<typeof mockConfig.getToolRegistry>
-  ).mockReturnValue(registry);
 
   const getToolHandle = (name: string): AgentToolHandle | undefined => {
     const tool = registry.getTool(name);
@@ -244,6 +265,8 @@ export async function setupAtCommandTest(): Promise<AtCommandTestSetup> {
     mockOnDebugMessage,
     abortController,
     originalCwd,
+    settingsOwner,
+    telemetry,
     getToolHandle,
   };
 }
@@ -252,6 +275,12 @@ export async function teardownAtCommandTest(
   setup: AtCommandTestSetup,
 ): Promise<void> {
   setup.abortController.abort();
+  await setup.settingsOwner.dispose();
+  await setup.telemetry.close();
   process.chdir(setup.originalCwd);
   await fsPromises.rm(setup.testRootDir, { recursive: true, force: true });
+}
+
+export async function unexpectedResourceRead(): Promise<never> {
+  throw new Error('File-only test must not read MCP resources');
 }

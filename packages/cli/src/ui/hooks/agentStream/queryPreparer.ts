@@ -26,13 +26,16 @@ import {
   handleAtCommand,
 } from '../atCommandProcessor.js';
 import type { StreamRuntime, UiSubagentManager } from '../../cliUiRuntime.js';
+import type { FindMcpResource } from '../atCommandProcessorHelpers.js';
 import type { AgentToolHandle } from '@vybestack/llxprt-code-agents';
 
 export interface PrepareQueryDeps {
+  findResource: FindMcpResource;
   runtime: StreamRuntime;
   // @plan:ISSUE-2376 — resolves read_many_files/glob via the public Agent
   // surface for @file processing, replacing direct
   // getToolRegistry().getTool access.
+  readResource: (server: string, uri: string) => Promise<unknown>;
   getToolHandle: (name: string) => AgentToolHandle | undefined;
   /**
    * Subagent manager for @subagent mention resolution. StreamRuntime does not
@@ -160,6 +163,8 @@ async function processStringQuery(
       query: trimmedQuery,
       config: buildAtCommandRuntimeFromStream(runtime),
       getToolHandle: deps.getToolHandle,
+      readResource: deps.readResource,
+      findResource: deps.findResource,
       addItem,
       onDebugMessage,
       messageId: userMessageTimestamp,

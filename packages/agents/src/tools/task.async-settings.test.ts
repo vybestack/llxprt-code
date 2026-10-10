@@ -1,17 +1,26 @@
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
+
+import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
+const fixturePaths = installTestWorkspacePaths({
+  targetDir: process.cwd(),
+  isTrusted: () => true,
+});
+import { TaskLaunchOwner } from '../session/task-launch-owner.js';
 
 /**
  * TaskTool async mode settings tests.
  * Split from task.async.test.ts to stay under file-level max-lines.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { TaskTool, type TaskToolParams } from './task.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
 import { SubagentTerminateMode } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
@@ -20,13 +29,23 @@ import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message
 
 describe('TaskTool', () => {
   let config: Config;
+  let settingsRoot: ReturnType<typeof createSessionSettingsFixture>;
   let messageBus: MessageBus;
 
   beforeEach(() => {
-    config = {
-      getSessionId: () => 'session-123',
-    } as unknown as Config;
+    config = new Config({
+      sessionId: 'session-123',
+      model: 'task-async-fixture',
+      targetDir: process.cwd(),
+      cwd: process.cwd(),
+      debugMode: false,
+    });
+    settingsRoot = createSessionSettingsFixture(config);
     messageBus = new MessageBus();
+  });
+
+  afterEach(async () => {
+    await config.dispose();
   });
 
   describe('async mode settings', () => {
@@ -36,19 +55,28 @@ describe('TaskTool', () => {
         tryReserveAsyncSlot: () => 'booking-1',
         registerTask: vi.fn(),
       };
-      const configWithDisabledGlobalAsync = {
-        ...config,
-        getSettingsService: () => ({
-          getAllGlobalSettings: () => ({
-            subagents: { asyncEnabled: false },
-          }),
-        }),
-      } as unknown as Config;
+      const configWithDisabledGlobalAsync = config;
+      settingsRoot.settingsOwner.writeUserParameter(
+        'subagents.asyncEnabled',
+        false,
+      );
       const tool = new TaskTool(configWithDisabledGlobalAsync, {
+        createChildSettings: () =>
+          settingsRoot.settingsOwner.createChildStore(),
+        readTaskPolicy: () => settingsRoot.settingsOwner.readTaskPolicy(),
+        readRunPolicy: () => settingsRoot.settingsOwner.readSubagentRunPolicy(),
+        readGovernance: () =>
+          settingsRoot.settingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
+        workspacePaths: fixturePaths(),
+        readMcpInstructions: () => undefined,
+        instructions: emptyInstructionReads,
         orchestratorFactory: () => ({}) as SubagentOrchestrator,
         messageBus,
-        getAsyncTaskManager: () =>
+        taskLaunchOwner: new TaskLaunchOwner(
           mockAsyncTaskManager as unknown as AsyncTaskManager,
+        ),
       });
       const params: TaskToolParams = {
         subagent_name: 'helper',
@@ -71,22 +99,32 @@ describe('TaskTool', () => {
         tryReserveAsyncSlot: () => 'booking-1',
         registerTask: vi.fn(),
       };
-      const configWithDisabledProfileAsync = {
-        ...config,
-        getSettingsService: () => ({
-          getAllGlobalSettings: () => ({
-            subagents: { asyncEnabled: true },
-          }),
-        }),
-        getEphemeralSettings: () => ({
-          'subagents.async.enabled': false,
-        }),
-      } as unknown as Config;
+      const configWithDisabledProfileAsync = config;
+      settingsRoot.settingsOwner.writeUserParameter(
+        'subagents.asyncEnabled',
+        true,
+      );
+      settingsRoot.settingsOwner.writeUserParameter(
+        'subagents.async.enabled',
+        false,
+      );
       const tool = new TaskTool(configWithDisabledProfileAsync, {
+        createChildSettings: () =>
+          settingsRoot.settingsOwner.createChildStore(),
+        readTaskPolicy: () => settingsRoot.settingsOwner.readTaskPolicy(),
+        readRunPolicy: () => settingsRoot.settingsOwner.readSubagentRunPolicy(),
+        readGovernance: () =>
+          settingsRoot.settingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
+        workspacePaths: fixturePaths(),
+        readMcpInstructions: () => undefined,
+        instructions: emptyInstructionReads,
         orchestratorFactory: () => ({}) as SubagentOrchestrator,
         messageBus,
-        getAsyncTaskManager: () =>
+        taskLaunchOwner: new TaskLaunchOwner(
           mockAsyncTaskManager as unknown as AsyncTaskManager,
+        ),
       });
       const params: TaskToolParams = {
         subagent_name: 'helper',
@@ -123,23 +161,33 @@ describe('TaskTool', () => {
         },
         dispose: vi.fn().mockResolvedValue(undefined),
       });
-      const configWithEnabledAsync = {
-        ...config,
-        getSettingsService: () => ({
-          getAllGlobalSettings: () => ({
-            subagents: { asyncEnabled: true },
-          }),
-        }),
-        getEphemeralSettings: () => ({
-          'subagents.async.enabled': true,
-        }),
-      } as unknown as Config;
+      const configWithEnabledAsync = config;
+      settingsRoot.settingsOwner.writeUserParameter(
+        'subagents.asyncEnabled',
+        true,
+      );
+      settingsRoot.settingsOwner.writeUserParameter(
+        'subagents.async.enabled',
+        true,
+      );
       const tool = new TaskTool(configWithEnabledAsync, {
+        createChildSettings: () =>
+          settingsRoot.settingsOwner.createChildStore(),
+        readTaskPolicy: () => settingsRoot.settingsOwner.readTaskPolicy(),
+        readRunPolicy: () => settingsRoot.settingsOwner.readSubagentRunPolicy(),
+        readGovernance: () =>
+          settingsRoot.settingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
+        workspacePaths: fixturePaths(),
+        readMcpInstructions: () => undefined,
+        instructions: emptyInstructionReads,
         orchestratorFactory: () =>
           ({ launch: launchMock }) as unknown as SubagentOrchestrator,
         messageBus,
-        getAsyncTaskManager: () =>
+        taskLaunchOwner: new TaskLaunchOwner(
           mockAsyncTaskManager as unknown as AsyncTaskManager,
+        ),
         isInteractiveEnvironment: () => false,
       });
       const params: TaskToolParams = {
@@ -176,18 +224,26 @@ describe('TaskTool', () => {
         },
         dispose: vi.fn().mockResolvedValue(undefined),
       });
-      const configWithoutSettings = {
-        ...config,
-        getSettingsService: () => ({
-          getAllGlobalSettings: () => ({}),
-        }),
-      } as unknown as Config;
+      const configWithoutSettings = config;
+
       const tool = new TaskTool(configWithoutSettings, {
+        createChildSettings: () =>
+          settingsRoot.settingsOwner.createChildStore(),
+        readTaskPolicy: () => settingsRoot.settingsOwner.readTaskPolicy(),
+        readRunPolicy: () => settingsRoot.settingsOwner.readSubagentRunPolicy(),
+        readGovernance: () =>
+          settingsRoot.settingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
+        workspacePaths: fixturePaths(),
+        readMcpInstructions: () => undefined,
+        instructions: emptyInstructionReads,
         orchestratorFactory: () =>
           ({ launch: launchMock }) as unknown as SubagentOrchestrator,
         messageBus,
-        getAsyncTaskManager: () =>
+        taskLaunchOwner: new TaskLaunchOwner(
           mockAsyncTaskManager as unknown as AsyncTaskManager,
+        ),
         isInteractiveEnvironment: () => false,
       });
       const params: TaskToolParams = {

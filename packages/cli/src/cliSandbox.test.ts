@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { Config } from '@vybestack/llxprt-code-core';
+
 /**
  * Behavioral tests for the pure helper functions extracted into cliSandbox.ts
  * (#2378 review remediation). These test the OBSERVABLE input→output
@@ -44,7 +46,11 @@ void vi.mock('./utils/sandbox.js', () => ({
   start_sandbox: vi.fn(async () => 7),
 }));
 void vi.mock('./config/config.js', () => ({
-  loadCliConfig: vi.fn(async () => ({})),
+  loadCliConfig: vi.fn(async () => ({
+    getTargetDir: () => process.cwd(),
+    getConfiguredIncludeDirectories: () => [],
+    isTrustedFolder: () => true,
+  })),
 }));
 
 function restoreEnvironmentVariable(
@@ -231,11 +237,15 @@ describe('CLI sandbox', () => {
     argv: SandboxHopOptions['argv'] = {} as SandboxHopOptions['argv'],
   ): SandboxHopOptions {
     return {
-      config: {
-        getSandbox: () => ({ command: 'docker', image: 'test-image' }),
-        getDebugMode: () => false,
-        isInteractive: () => interactive,
-      } as SandboxHopOptions['config'],
+      config: new Config({
+        targetDir: process.cwd(),
+        cwd: process.cwd(),
+        sessionId: 'sandbox-hop-fixture',
+        debugMode: false,
+        model: 'test-model',
+        interactive,
+        sandbox: { command: 'docker', image: 'test-image' },
+      }),
       settings: {
         merged: { ui: { autoConfigureMaxOldSpaceSize: false } },
       } as SandboxHopOptions['settings'],

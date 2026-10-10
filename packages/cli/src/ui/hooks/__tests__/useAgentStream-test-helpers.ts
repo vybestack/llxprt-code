@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { createUiSessionOwner } from '../../../__tests__/uiSessionOwner.js';
 import type { IContent } from '@vybestack/llxprt-code-core';
 import { AgentEventType } from '@vybestack/llxprt-code-core';
 
@@ -161,6 +162,13 @@ function createFakeStream(
 
 function createStubToolControl(): Agent['tools'] {
   return {
+    describeConfiguration: () => ({ registered: [], unregistered: [] }),
+    subscribeChildTools: () => () => {},
+    openClientChannel: () => {
+      throw new Error(
+        'Client tools are not configured in this event-only fixture',
+      );
+    },
     list: () => [],
     get: () => undefined,
     async setEnabled() {},
@@ -217,10 +225,26 @@ function createStatsControl() {
   };
 }
 
+function createProviderReads(
+  owner: ReturnType<typeof createUiSessionOwner>,
+): Pick<
+  Agent,
+  'hasActiveProvider' | 'getProviderContextLimit' | 'listAvailableModels'
+> {
+  return {
+    hasActiveProvider: () => owner.providerManager.hasActiveProvider(),
+    getProviderContextLimit: () =>
+      owner.providerManager.getActiveProvider()?.getContextLimit?.(),
+    listAvailableModels: (provider) =>
+      owner.providerManager.getAvailableModels(provider),
+  };
+}
+
 function createBaseAgent(
   mockClient: Record<string, unknown>,
   streamFn: ReturnType<typeof createFakeStream>,
 ): Agent {
+  const owner = createUiSessionOwner();
   return {
     async chat() {
       return { text: '', toolCalls: [], finishReason: 'stop' };
@@ -228,6 +252,7 @@ function createBaseAgent(
     stream: streamFn,
     injectSteer: () => {},
     getProvider: () => 'test',
+    ...createProviderReads(owner),
     async setProvider() {},
     getProviderStatus: () => ({
       provider: 'test',
@@ -253,17 +278,28 @@ function createBaseAgent(
     clearModelParam: () => {},
     profiles: {} as unknown as Agent['profiles'],
     tools: createStubToolControl(),
-    mcp: {} as unknown as Agent['mcp'],
     auth: {} as unknown as Agent['auth'],
     ide: {} as unknown as Agent['ide'],
     session: {} as unknown as Agent['session'],
     hooks: {} as unknown as Agent['hooks'],
     policy: {} as unknown as Agent['policy'],
-    tasks: {} as unknown as Agent['tasks'],
+    tasks: {
+      list: () => [],
+      listRunning: () => [],
+      get: () => undefined,
+      cancel: async () => false,
+      cancelAllRunning: async () => 0,
+      subscribeNotifications: () =>
+        Object.assign(() => {}, { drain: async () => {} }),
+    },
     memory: {} as unknown as Agent['memory'],
     skills: {} as unknown as Agent['skills'],
-    workspace: {} as unknown as Agent['workspace'],
     lsp: {} as unknown as Agent['lsp'],
+    agentClient: owner.agentClient,
+    sessionClient: owner.sessionClient,
+    workspace: owner.workspace,
+    mcp: owner.mcp,
+    providerManager: owner.providerManager,
     ...createHistoryControl(mockClient),
     async compress() {
       return { status: 'skipped' };

@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { physicalFiles } from './helpers/physical-files.js';
+
 /**
  * Behavioral tests for issue #3033 (apply_patch agent-experience fixes).
  * Drives the real `ApplyPatchTool` through `validateBuildAndExecute` against a
@@ -89,7 +91,7 @@ describe('ApplyPatchTool temporary workspace lifecycle', () => {
     targetDir: string,
     options?: FakeHostOptions,
   ): IToolHost & FakeToolHostRecorder {
-    const fileSystemService = options?.fileSystemService;
+    const { fileSystemService = physicalFiles } = options ?? {};
     let recordedApprovalMode: ApprovalMode | undefined = undefined;
     const host: IToolHost & FakeToolHostRecorder = {
       get recordedApprovalMode(): ApprovalMode | undefined {
@@ -102,7 +104,11 @@ describe('ApplyPatchTool temporary workspace lifecycle', () => {
         recordedApprovalMode = mode;
       },
       isInteractive: () => false,
-      hasFeatureFlag: () => false,
+
+      runSearch: <T>(
+        _directories: readonly string[],
+        operation: () => Promise<T>,
+      ): Promise<T> => operation(),
       getFileService: () => ({
         shouldGitIgnoreFile: () => false,
         shouldLlxprtIgnoreFile: () => false,
@@ -118,11 +124,12 @@ describe('ApplyPatchTool temporary workspace lifecycle', () => {
       getFileFilteringRespectLlxprtIgnore: () => true,
       getLlxprtIgnoreFilePath: () => null,
       recordFileRead: () => {},
-      getFileSystemService: fileSystemService
-        ? (): IToolHostFileSystemService => fileSystemService
-        : undefined,
+      deleteFile: fileSystemService.deleteFile?.bind(fileSystemService),
+      readTextFile: (filePath) => fileSystemService.readTextFile(filePath),
+      writeTextFile: (filePath, content) =>
+        fileSystemService.writeTextFile(filePath, content),
       getLlxprtIgnorePatterns: () => [],
-      getEphemeralSettings: () => ({}),
+      readExecutionPolicy: () => ({}),
       getDebugMode: () => false,
     };
     return host;

@@ -5,7 +5,9 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
-import type { Config } from '../config/config.js';
+import { Config } from '../config/config.js';
+import { SessionSettingsOwner } from '../session/session-settings-owner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type {
   ServerContentEvent,
   ServerAgentStreamEvent,
@@ -27,14 +29,28 @@ const CONTENT_CHUNK_SIZE = 50;
 describe('LoopDetectionService', () => {
   let service: LoopDetectionService;
   let mockConfig: Config;
+  let settingsOwner: SessionSettingsOwner;
 
   beforeEach(() => {
-    mockConfig = {
-      getTelemetryEnabled: () => true,
-      getEphemeralSetting: vi.fn().mockReturnValue(undefined),
-    } as unknown as Config;
-    service = new LoopDetectionService(mockConfig);
+    mockConfig = new Config({
+      sessionId: 'loop-policy',
+      targetDir: process.cwd(),
+      model: 'test',
+      debugMode: false,
+    });
+    settingsOwner = new SessionSettingsOwner(new SettingsService());
+    settingsOwner.bindTelemetry(mockConfig);
+    service = new LoopDetectionService(
+      mockConfig,
+      () => settingsOwner.readLoopDetectionPolicy(),
+      () => settingsOwner.telemetry,
+    );
     vi.clearAllMocks();
+  });
+
+  afterEach(async () => {
+    await settingsOwner.dispose();
+    await mockConfig.dispose();
   });
 
   const createToolCallRequestEvent = (
@@ -195,13 +211,8 @@ describe('LoopDetectionService', () => {
       return isLoop;
     }
 
-    function loopDetectionConfig(threshold: number) {
-      mockConfig.getEphemeralSetting = vi
-        .fn()
-        .mockImplementation((key: string) => {
-          if (key === 'contentLoopThreshold') return threshold;
-          return undefined;
-        });
+    function loopDetectionConfig(threshold: number): void {
+      settingsOwner.writeUserParameter('contentLoopThreshold', threshold);
     }
 
     it('should detect a loop with longer repeating patterns (e.g. ~150 chars)', () => {
@@ -224,7 +235,11 @@ describe('LoopDetectionService', () => {
       // With threshold=3, we need 3 matching 50-char chunks; a 143-char repeating
       // pattern produces average chunk distance ~143 which is <= 250.
       loopDetectionConfig(3);
-      service = new LoopDetectionService(mockConfig);
+      service = new LoopDetectionService(
+        mockConfig,
+        () => settingsOwner.readLoopDetectionPolicy(),
+        () => settingsOwner.telemetry,
+      );
       service.reset('');
       const userPattern = `I will not output any text.
   I will just end the turn.
@@ -243,7 +258,11 @@ describe('LoopDetectionService', () => {
       // within the maxAllowedDistance window (CONTENT_CHUNK_SIZE * 5 = 250).
       // With threshold=3, average chunk distance ~103 which is <= 250.
       loopDetectionConfig(3);
-      service = new LoopDetectionService(mockConfig);
+      service = new LoopDetectionService(
+        mockConfig,
+        () => settingsOwner.readLoopDetectionPolicy(),
+        () => settingsOwner.telemetry,
+      );
       service.reset('');
       const userPattern =
         'I have added all the requested logs and verified the test file. I will now mark the task as complete.\n  ';
@@ -715,23 +734,33 @@ describe('LoopDetectionService', () => {
 describe('LoopDetectionService Max Turns Detection', () => {
   let service: LoopDetectionService;
   let mockConfig: Config;
+  let settingsOwner: SessionSettingsOwner;
   let abortController: AbortController;
 
   beforeEach(() => {
-    mockConfig = {
-      getEphemeralSetting: vi.fn().mockReturnValue(200), // Default max turns
-      getDebugMode: () => false,
-      getTelemetryEnabled: () => true,
-    } as unknown as Config;
-
-    service = new LoopDetectionService(mockConfig);
+    mockConfig = new Config({
+      sessionId: 'loop-turns',
+      targetDir: process.cwd(),
+      model: 'test',
+      debugMode: false,
+    });
+    settingsOwner = new SessionSettingsOwner(new SettingsService());
+    settingsOwner.bindTelemetry(mockConfig);
+    settingsOwner.writeUserParameter('maxTurnsPerPrompt', 200);
+    service = new LoopDetectionService(
+      mockConfig,
+      () => settingsOwner.readLoopDetectionPolicy(),
+      () => settingsOwner.telemetry,
+    );
     service.reset('test-prompt');
     abortController = new AbortController();
     vi.clearAllMocks();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.restoreAllMocks();
+    await settingsOwner.dispose();
+    await mockConfig.dispose();
   });
 
   const advanceTurns = async (count: number) => {
@@ -742,7 +771,7 @@ describe('LoopDetectionService Max Turns Detection', () => {
 
   it('should detect max turns exceeded when limit is reached', async () => {
     // Set max turns to 50 for testing
-    mockConfig.getEphemeralSetting = vi.fn().mockReturnValue(50);
+    settingsOwner.writeUserParameter('maxTurnsPerPrompt', 50);
 
     // Advance to just before the limit
     await advanceTurns(49);
@@ -757,12 +786,13 @@ describe('LoopDetectionService Max Turns Detection', () => {
         'event.name': 'loop_detected',
         loop_type: LoopType.MAX_TURNS_EXCEEDED,
       }),
+      settingsOwner.telemetry,
     );
   });
 
   it('should not trigger max turns when set to -1 (unlimited)', async () => {
     // Set max turns to -1 for unlimited
-    mockConfig.getEphemeralSetting = vi.fn().mockReturnValue(-1);
+    settingsOwner.writeUserParameter('maxTurnsPerPrompt', -1);
 
     // Advance many turns
     await advanceTurns(200);
@@ -773,7 +803,7 @@ describe('LoopDetectionService Max Turns Detection', () => {
 
   it('should use default value of -1 (unlimited) when setting is undefined', async () => {
     // Return undefined to test default
-    mockConfig.getEphemeralSetting = vi.fn().mockReturnValue(undefined);
+    settingsOwner.writeUserParameter('maxTurnsPerPrompt', undefined);
 
     // Advance many turns - should not trigger because default is -1 (unlimited)
     await advanceTurns(200);
@@ -784,7 +814,7 @@ describe('LoopDetectionService Max Turns Detection', () => {
 
   it('should reset turn count when reset() is called', async () => {
     // Set max turns to 10 for testing
-    mockConfig.getEphemeralSetting = vi.fn().mockReturnValue(10);
+    settingsOwner.writeUserParameter('maxTurnsPerPrompt', 10);
 
     // Advance 8 turns
     await advanceTurns(8);
@@ -803,7 +833,7 @@ describe('LoopDetectionService Max Turns Detection', () => {
 
   it('should not interfere with other loop detection mechanisms', async () => {
     // Set high max turns so it doesn't trigger, but let other settings use defaults
-    setMaxTurnsConfigForTest(mockConfig);
+    settingsOwner.writeUserParameter('maxTurnsPerPrompt', 1000);
 
     // Trigger a tool call loop instead with default threshold of 50
     const toolCall = { name: 'test_tool', args: { param: 'value' } };
@@ -817,6 +847,7 @@ describe('LoopDetectionService Max Turns Detection', () => {
     expect(loggers.logLoopDetected).toHaveBeenCalledWith(
       mockConfig,
       expectToolCallLoopPayload(),
+      settingsOwner.telemetry,
     );
   });
 });
@@ -825,12 +856,5 @@ function expectToolCallLoopPayload() {
   return expect.objectContaining({
     'event.name': 'loop_detected',
     loop_type: LoopType.CONSECUTIVE_IDENTICAL_TOOL_CALLS,
-  });
-}
-
-function setMaxTurnsConfigForTest(config: Config): void {
-  config.getEphemeralSetting = vi.fn().mockImplementation((key: string) => {
-    if (key === 'maxTurnsPerPrompt') return 1000;
-    return undefined; // Use defaults for other settings
   });
 }

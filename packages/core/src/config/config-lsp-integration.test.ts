@@ -1,3 +1,8 @@
+import {
+  createLspFixture,
+  getRegisteredLspNavigationTools,
+} from '../__tests__/lsp-runtime-fixture.js';
+import { LspServiceClient } from '@vybestack/llxprt-code-ide-integration';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -11,7 +16,8 @@
  */
 
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { WorkspaceTrustLifecycle } from '../services/workspace-trust-lifecycle.js';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { fileURLToPath } from 'node:url';
 import { Readable, Writable } from 'node:stream';
 import type { ConfigParameters } from './config.js';
@@ -32,27 +38,12 @@ function containsAllSubstrings(value: string, parts: string[]): boolean {
   return parts.every((p) => value.includes(p));
 }
 
-function getRegisteredLspNavigationTools(
-  config: Config,
-): Array<{ serverName?: string }> {
-  const tools = config
-    .getToolRegistry()
-    .getAllTools()
-    .filter(
-      (tool: { serverName?: string }) => tool.serverName === 'lsp-navigation',
-    );
-  if (tools.length === 0) {
-    throw new Error('LSP navigation tools are not registered yet');
-  }
-  return tools;
-}
-
 /**
  * Reports whether the configured LSP service is running or recorded why it is
  * unavailable.
  */
 function isLspServiceRunningOrUnavailable(
-  client: ReturnType<Config['getLspServiceClient']>,
+  client: LspServiceClient | undefined,
 ): boolean {
   const isAlive = client?.isAlive() === true;
   const hasUnavailableReason = client?.getUnavailableReason() !== undefined;
@@ -179,10 +170,11 @@ void vi.mock('../services/gitService.js', () => ({
 void vi.mock('@vybestack/llxprt-code-mcp', () => ({
   McpClientManager: vi.fn().mockImplementation(() => ({
     startConfiguredMcpServers: vi.fn().mockResolvedValue(undefined),
-    getMcpInstructions: vi.fn().mockReturnValue(''),
+    readInstructions: vi.fn().mockReturnValue(''),
   })),
   DiscoveredMCPTool: class DiscoveredMCPToolMock {
     constructor(
+      _approvalPolicy: unknown,
       _callableTool: unknown,
       serverName: string,
       serverToolName: string,
@@ -257,6 +249,13 @@ void vi.mock('../utils/events.js', () => {
 });
 
 describe('Config LSP Integration (P33)', () => {
+  let trust: WorkspaceTrustLifecycle;
+  beforeEach(() => {
+    trust = new WorkspaceTrustLifecycle();
+  });
+  afterEach(async () => {
+    await trust.dispose();
+  });
   const isWindows = process.platform === 'win32';
   const mockTargetDir = fileURLToPath(new URL('../../../../', import.meta.url));
   const mockSessionId = 'test-session-id';
@@ -284,9 +283,10 @@ describe('Config LSP Integration (P33)', () => {
         lsp: false,
       });
       const config = new Config(params);
-      await initializeTestConfig(config);
+      const { lspService, lspRoot } = createLspFixture(config, trust);
+      await initializeTestConfig(config, undefined, lspRoot);
 
-      const lspClient = config.getLspServiceClient();
+      const lspClient = lspService;
       expect(lspClient).toBeUndefined();
     });
 
@@ -295,7 +295,8 @@ describe('Config LSP Integration (P33)', () => {
         lsp: false,
       });
       const config = new Config(params);
-      await initializeTestConfig(config);
+      const { lspRoot } = createLspFixture(config, trust);
+      await initializeTestConfig(config, undefined, lspRoot);
 
       const lspConfig = config.getLspConfig();
       expect(lspConfig).toBeUndefined();
@@ -306,10 +307,11 @@ describe('Config LSP Integration (P33)', () => {
         lsp: false,
       });
       const config = new Config(params);
-      await initializeTestConfig(config);
+      const { lspService, lspRoot } = createLspFixture(config, trust);
+      await initializeTestConfig(config, undefined, lspRoot);
 
       // Verify service client was never created
-      expect(config.getLspServiceClient()).toBeUndefined();
+      expect(lspService).toBeUndefined();
     });
   });
 
@@ -319,7 +321,8 @@ describe('Config LSP Integration (P33)', () => {
         // lsp key omitted — absent means disabled
       });
       const config = new Config(params);
-      await initializeTestConfig(config);
+      const { lspRoot } = createLspFixture(config, trust);
+      await initializeTestConfig(config, undefined, lspRoot);
 
       const lspConfig = config.getLspConfig();
       expect(lspConfig).toBeUndefined();
@@ -330,9 +333,10 @@ describe('Config LSP Integration (P33)', () => {
         // lsp key omitted — absent means disabled
       });
       const config = new Config(params);
-      await initializeTestConfig(config);
+      const { lspService, lspRoot } = createLspFixture(config, trust);
+      await initializeTestConfig(config, undefined, lspRoot);
 
-      const lspClient = config.getLspServiceClient();
+      const lspClient = lspService;
       expect(lspClient).toBeUndefined();
     });
   });
@@ -343,7 +347,8 @@ describe('Config LSP Integration (P33)', () => {
         lsp: {},
       });
       const config = new Config(params);
-      await initializeTestConfig(config);
+      const { lspRoot } = createLspFixture(config, trust);
+      await initializeTestConfig(config, undefined, lspRoot);
 
       const lspConfig = config.getLspConfig();
       expect(lspConfig).toBeDefined();
@@ -359,7 +364,8 @@ describe('Config LSP Integration (P33)', () => {
         },
       });
       const config = new Config(params);
-      await initializeTestConfig(config);
+      const { lspRoot } = createLspFixture(config, trust);
+      await initializeTestConfig(config, undefined, lspRoot);
 
       const lspConfig = config.getLspConfig();
       expect(lspConfig?.diagnosticTimeout).toBe(customTimeout);
@@ -373,7 +379,8 @@ describe('Config LSP Integration (P33)', () => {
         },
       });
       const config = new Config(params);
-      await initializeTestConfig(config);
+      const { lspRoot } = createLspFixture(config, trust);
+      await initializeTestConfig(config, undefined, lspRoot);
 
       const lspConfig = config.getLspConfig();
       expect(lspConfig?.includeSeverities).toStrictEqual(['error', 'warning']);
@@ -390,7 +397,8 @@ describe('Config LSP Integration (P33)', () => {
         },
       });
       const config = new Config(params);
-      await initializeTestConfig(config);
+      const { lspRoot } = createLspFixture(config, trust);
+      await initializeTestConfig(config, undefined, lspRoot);
 
       const lspConfig = config.getLspConfig();
       expect(lspConfig?.firstTouchTimeout).toBe(customTimeout);
@@ -406,7 +414,8 @@ describe('Config LSP Integration (P33)', () => {
         },
       });
       const config = new Config(params);
-      await initializeTestConfig(config);
+      const { lspRoot } = createLspFixture(config, trust);
+      await initializeTestConfig(config, undefined, lspRoot);
 
       const lspConfig = config.getLspConfig();
       expect(lspConfig?.includeSeverities).toStrictEqual(['error']);
@@ -420,7 +429,8 @@ describe('Config LSP Integration (P33)', () => {
         },
       });
       const config = new Config(params);
-      await initializeTestConfig(config);
+      const { lspRoot } = createLspFixture(config, trust);
+      await initializeTestConfig(config, undefined, lspRoot);
 
       const lspConfig = config.getLspConfig();
       expect(lspConfig?.includeSeverities).toStrictEqual(['error', 'warning']);
@@ -443,12 +453,13 @@ describe('Config LSP Integration (P33)', () => {
           },
         });
         const config = new Config(params);
-        await initializeTestConfig(config);
+        const { lspService, lspRoot } = createLspFixture(config, trust);
+        await initializeTestConfig(config, undefined, lspRoot);
 
         const lspConfig = config.getLspConfig();
         expect(lspConfig?.navigationTools).toBe(false);
 
-        const lspClient = config.getLspServiceClient();
+        const lspClient = lspService;
         expect(lspClient).toBeDefined();
         expect(startSpy).toHaveBeenCalledOnce();
         expect(lspClient?.isAlive()).toBe(true);
@@ -470,13 +481,18 @@ describe('Config LSP Integration (P33)', () => {
           },
         });
         const config = new Config(params);
-        await initializeTestConfig(config);
+        const { lspRoot } = createLspFixture(config, trust);
+        const runtime = await initializeTestConfig(config, undefined, lspRoot);
 
         const lspConfig = config.getLspConfig();
         expect(lspConfig?.navigationTools).toBe(true);
 
-        await waitFor(() => getRegisteredLspNavigationTools(config));
-        const lspNavTools = getRegisteredLspNavigationTools(config);
+        await waitFor(() =>
+          getRegisteredLspNavigationTools(runtime.toolSelection),
+        );
+        const lspNavTools = getRegisteredLspNavigationTools(
+          runtime.toolSelection,
+        );
         expect(lspNavTools.length).toBeGreaterThan(0);
       });
     }
@@ -492,13 +508,18 @@ describe('Config LSP Integration (P33)', () => {
           },
         });
         const config = new Config(params);
-        await initializeTestConfig(config);
+        const { lspRoot } = createLspFixture(config, trust);
+        const runtime = await initializeTestConfig(config, undefined, lspRoot);
 
         const lspConfig = config.getLspConfig();
         expect(lspConfig?.navigationTools).toBeUndefined();
 
-        await waitFor(() => getRegisteredLspNavigationTools(config));
-        const lspNavTools = getRegisteredLspNavigationTools(config);
+        await waitFor(() =>
+          getRegisteredLspNavigationTools(runtime.toolSelection),
+        );
+        const lspNavTools = getRegisteredLspNavigationTools(
+          runtime.toolSelection,
+        );
         expect(lspNavTools.length).toBeGreaterThan(0);
       });
     }
@@ -535,9 +556,10 @@ describe('Config LSP Integration (P33)', () => {
           },
         });
         const config = new Config(params);
-        await initializeTestConfig(config);
+        const { lspService, lspRoot } = createLspFixture(config, trust);
+        await initializeTestConfig(config, undefined, lspRoot);
 
-        const lspClient = config.getLspServiceClient();
+        const lspClient = lspService;
         expect(lspClient?.isAlive()).toBe(true);
 
         const transport = lspClient?.getMcpTransportStreams();
@@ -559,9 +581,10 @@ describe('Config LSP Integration (P33)', () => {
         },
       });
       const config = new Config(params);
-      await initializeTestConfig(config);
+      const { lspRoot } = createLspFixture(config, trust);
+      const runtime = await initializeTestConfig(config, undefined, lspRoot);
 
-      const toolRegistry = config.getToolRegistry();
+      const toolRegistry = runtime.toolSelection;
       const tools = toolRegistry.getAllTools();
 
       // No tools should be registered with serverName 'lsp-navigation'
@@ -583,15 +606,16 @@ describe('Config LSP Integration (P33)', () => {
         },
       });
       const config = new Config(params);
-      await initializeTestConfig(config);
+      const { lspService, lspRoot } = createLspFixture(config, trust);
+      const runtime = await initializeTestConfig(config, undefined, lspRoot);
 
-      const lspClient = config.getLspServiceClient();
+      const lspClient = lspService;
       expect(lspClient?.isAlive()).toBe(false);
       expect(lspClient?.getUnavailableReason()).toContain(
         'Server command not executable',
       );
 
-      const toolRegistry = config.getToolRegistry();
+      const toolRegistry = runtime.toolSelection;
       const tools = toolRegistry.getAllTools();
       const lspNavTools = tools.filter(
         (t: { serverName?: string }) => t.serverName === 'lsp-navigation',
@@ -601,6 +625,16 @@ describe('Config LSP Integration (P33)', () => {
   });
 
   describe('LSP Service Lifecycle', () => {
+    it('releases an owner rejected before initialization without a tool registry', async () => {
+      const config = new Config(
+        createBaseConfigParams({ lsp: { servers: [] } }),
+      );
+      const { lspService, lspRoot } = createLspFixture(config, trust);
+
+      await expect(lspRoot.dispose()).resolves.toBeUndefined();
+      expect(lspService?.isAlive()).toBe(false);
+    });
+
     it('should call start() on LspServiceClient during initialize', async () => {
       const params = createBaseConfigParams({
         lsp: {
@@ -608,30 +642,33 @@ describe('Config LSP Integration (P33)', () => {
         },
       });
       const config = new Config(params);
-      await initializeTestConfig(config);
+      const { lspService, lspRoot } = createLspFixture(config, trust);
+      await initializeTestConfig(config, undefined, lspRoot);
 
-      const lspClient = config.getLspServiceClient();
+      const lspClient = lspService;
       expect(lspClient).toBeDefined();
       expect(isLspServiceRunningOrUnavailable(lspClient)).toBe(true);
     });
 
-    it('should call shutdown() on LspServiceClient when shutdownLspService is called', async () => {
+    it('should call shutdown() on LspServiceClient when its explicit workspace owner closes', async () => {
       const params = createBaseConfigParams({
         lsp: {
           servers: [],
         },
       });
       const config = new Config(params);
-      await initializeTestConfig(config);
+      const { lspService, lspRoot } = createLspFixture(config, trust);
+      await initializeTestConfig(config, undefined, lspRoot);
 
-      const lspClient = config.getLspServiceClient();
+      const lspClient = lspService;
       expect(isLspServiceRunningOrUnavailable(lspClient)).toBe(true);
 
-      await config.shutdownLspService();
+      await lspRoot.dispose();
 
       // After shutdown, service should no longer be available
-      const lspClientAfter = config.getLspServiceClient();
-      expect(lspClientAfter).toBeUndefined();
+      const lspClientAfter = lspService;
+      await expect(lspRoot.inspection.read()).rejects.toThrow('stopped');
+      expect(lspClientAfter?.isAlive()).toBe(false);
     });
 
     it('should handle startup gracefully with empty servers', async () => {
@@ -642,12 +679,13 @@ describe('Config LSP Integration (P33)', () => {
         },
       });
       const config = new Config(params);
+      const { lspService, lspRoot } = createLspFixture(config, trust);
 
       // Should not throw
-      await initializeTestConfig(config);
+      await initializeTestConfig(config, undefined, lspRoot);
 
       // Service is created and start was attempted (empty servers is valid)
-      const lspClient = config.getLspServiceClient();
+      const lspClient = lspService;
       expect(lspClient).toBeDefined();
       expect(isLspServiceRunningOrUnavailable(lspClient)).toBe(true);
     });
@@ -661,8 +699,9 @@ describe('Config LSP Integration (P33)', () => {
         },
       });
       const config = new Config(params);
+      const { lspRoot } = createLspFixture(config, trust);
 
-      await initializeTestConfig(config);
+      await initializeTestConfig(config, undefined, lspRoot);
 
       // Config should still be accessible even though service failed
       const lspConfig = config.getLspConfig();
@@ -687,25 +726,27 @@ describe('Config LSP Integration (P33)', () => {
         lsp: customConfig,
       });
       const config = new Config(params);
-      await initializeTestConfig(config);
+      const { lspRoot } = createLspFixture(config, trust);
+      await initializeTestConfig(config, undefined, lspRoot);
 
       const lspConfig = config.getLspConfig();
       expect(lspConfig).toStrictEqual(customConfig);
     });
 
-    it('should return same LspServiceClient instance from getLspServiceClient()', async () => {
+    it('keeps the explicit client live until its retained workspace owner closes', async () => {
       const params = createBaseConfigParams({
         lsp: {
           servers: [],
         },
       });
       const config = new Config(params);
-      await initializeTestConfig(config);
+      const { lspService, lspRoot } = createLspFixture(config, trust);
+      await initializeTestConfig(config, undefined, lspRoot);
 
-      const client1 = config.getLspServiceClient();
-      const client2 = config.getLspServiceClient();
-
-      expect(client1).toBe(client2);
+      expect((await lspRoot.inspection.read()).alive).toBe(true);
+      await lspRoot.dispose();
+      expect(lspService?.isAlive()).toBe(false);
+      await expect(lspRoot.inspection.read()).rejects.toThrow('stopped');
     });
   });
 
@@ -717,9 +758,10 @@ describe('Config LSP Integration (P33)', () => {
         },
       });
       const config = new Config(params);
-      await initializeTestConfig(config);
+      const { lspRoot } = createLspFixture(config, trust);
+      await initializeTestConfig(config, undefined, lspRoot);
 
-      await expect(initializeTestConfig(config)).rejects.toThrow(
+      expect(() => config.initialize()).toThrow(
         'Config was already initialized',
       );
     });
@@ -732,10 +774,11 @@ describe('Config LSP Integration (P33)', () => {
         lsp: false,
       });
       const config = new Config(params);
-      await initializeTestConfig(config);
+      const { lspRoot } = createLspFixture(config, trust);
+      await initializeTestConfig(config, undefined, lspRoot);
 
       // Should not throw even though no service exists
-      await config.shutdownLspService();
+      await lspRoot.dispose();
     });
   });
 
@@ -749,7 +792,8 @@ describe('Config LSP Integration (P33)', () => {
         },
       });
       const config = new Config(params);
-      await initializeTestConfig(config);
+      const { lspRoot } = createLspFixture(config, trust);
+      await initializeTestConfig(config, undefined, lspRoot);
 
       const lspConfig = config.getLspConfig();
       expect(lspConfig?.includeSeverities).toStrictEqual(['error']);
@@ -772,7 +816,8 @@ describe('Config LSP Integration (P33)', () => {
         },
       });
       const config = new Config(params);
-      await initializeTestConfig(config);
+      const { lspRoot } = createLspFixture(config, trust);
+      await initializeTestConfig(config, undefined, lspRoot);
 
       const lspConfig = config.getLspConfig();
       expect(lspConfig?.navigationTimeout).toBe(customTimeout);
@@ -789,7 +834,8 @@ describe('Config LSP Integration (P33)', () => {
         },
       });
       const config = new Config(params);
-      await initializeTestConfig(config);
+      const { lspRoot } = createLspFixture(config, trust);
+      await initializeTestConfig(config, undefined, lspRoot);
 
       const lspConfig = config.getLspConfig();
       expect(lspConfig?.requestTimeout).toBe(customTimeout);
@@ -822,9 +868,10 @@ describe('Config LSP Integration (P33)', () => {
           },
         });
         const config = new Config(params);
-        await initializeTestConfig(config);
+        const { lspService, lspRoot } = createLspFixture(config, trust);
+        await initializeTestConfig(config, undefined, lspRoot);
 
-        const lspClient = config.getLspServiceClient();
+        const lspClient = lspService;
         expect(lspClient?.isAlive()).toBe(false);
         expect(lspClient?.getUnavailableReason()).toContain('not found');
 
@@ -865,9 +912,10 @@ describe('Config LSP Integration (P33)', () => {
           },
         });
         const config = new Config(params);
-        await initializeTestConfig(config);
+        const { lspService, lspRoot } = createLspFixture(config, trust);
+        await initializeTestConfig(config, undefined, lspRoot);
 
-        const lspClient = config.getLspServiceClient();
+        const lspClient = lspService;
         expect(lspClient?.isAlive()).toBe(true);
 
         const lspErrorCalls = consoleErrorSpy.mock.calls.filter((call) =>

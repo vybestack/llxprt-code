@@ -39,9 +39,11 @@ const getMcpStatus = async (
     };
   }
 
-  const mcpServers: RuntimeMcpServers = config.getMcpServers() ?? {};
+  const mcpServers: RuntimeMcpServers = Object.fromEntries(
+    agent.mcp.listServers().map((server) => [server.name, server.config]),
+  );
   const serverNames = Object.keys(mcpServers);
-  const blockedMcpServers = config.getBlockedMcpServers() ?? [];
+  const blockedMcpServers = agent.mcp.listBlockedServers();
 
   if (serverNames.length === 0 && blockedMcpServers.length === 0) {
     const docsUrl =
@@ -91,10 +93,15 @@ const authCommand: SlashCommand = {
       };
     }
 
-    const mcpServers: RuntimeMcpServers = config.getMcpServers() ?? {};
+    const mcpServers: RuntimeMcpServers = Object.fromEntries(
+      (context.services.agent?.mcp.listServers() ?? []).map((server) => [
+        server.name,
+        server.config,
+      ]),
+    );
 
     if (!serverName) {
-      return listOAuthServers(mcpServers);
+      return listOAuthServers(context.services.agent, mcpServers);
     }
 
     const server = mcpServers[serverName];
@@ -106,7 +113,7 @@ const authCommand: SlashCommand = {
       };
     }
 
-    return performMcpOAuth(context, serverName, server, config);
+    return performMcpOAuth(context, serverName);
   },
 };
 

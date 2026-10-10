@@ -1,3 +1,4 @@
+import type { ToolExecutionPolicy } from '../interfaces/tool-execution-policy.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -12,7 +13,7 @@ import {
 export { DEFAULT_MAX_TOKENS } from './toolOutputMaxTokens.js';
 
 export interface ToolOutputSettingsProvider {
-  getEphemeralSettings(): Record<string, unknown>;
+  readExecutionPolicy(): ToolExecutionPolicy;
 }
 
 export const DEFAULT_TRUNCATE_MODE = 'warn';
@@ -41,7 +42,7 @@ export interface OutputLimitConfig {
 export function getOutputLimits(
   config: ToolOutputSettingsProvider,
 ): OutputLimitConfig {
-  const ephemeralSettings = config.getEphemeralSettings();
+  const ephemeralSettings = config.readExecutionPolicy();
 
   return {
     tokenLimit: parseToolOutputMaxTokens(

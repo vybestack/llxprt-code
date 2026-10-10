@@ -1,3 +1,5 @@
+import { createChatPolicyFixture } from './__tests__/session-policy-fixture.js';
+import { createTurnStreamPolicy } from './__tests__/session-policy-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -66,8 +68,9 @@ function createTurn(
   baseUrl?: string,
 ): Turn {
   const chat: FixtureChat = {
+    ...createChatPolicyFixture(),
     getHistory: () => history,
-    getConfig: () => undefined,
+    getStreamTimeoutPolicy: createTurnStreamPolicy({}),
     getResolvedBaseUrl: () => baseUrl,
     sendMessageStream: () => Promise.reject(new Error(errorMessage)),
   };

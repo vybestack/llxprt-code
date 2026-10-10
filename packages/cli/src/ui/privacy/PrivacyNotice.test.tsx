@@ -10,17 +10,7 @@ import { PrivacyNotice } from './PrivacyNotice.js';
 import type { ModelState } from '../cliUiRuntime.js';
 
 function makeConfig(activeProviderName: string | undefined): ModelState {
-  const providerManager = {
-    getActiveProvider: () =>
-      activeProviderName === undefined
-        ? undefined
-        : { name: activeProviderName },
-    getActiveProviderName: () => activeProviderName,
-    hasActiveProvider: () => activeProviderName !== undefined,
-  };
-  return {
-    getProviderManager: () => providerManager,
-  } as unknown as ModelState;
+  return { getProvider: () => activeProviderName } as unknown as ModelState;
 }
 
 describe('PrivacyNotice: unconfigured state (#2481)', () => {
@@ -33,7 +23,7 @@ describe('PrivacyNotice: unconfigured state (#2481)', () => {
   it('renders ONLY the neutral setup notice when no provider is active (mutually exclusive)', () => {
     const config = makeConfig(undefined);
     const { lastFrame } = renderWithProviders(
-      <PrivacyNotice onExit={mockOnExit} config={config} />,
+      <PrivacyNotice onExit={mockOnExit} provider={config.getProvider()} />,
     );
 
     const frame = lastFrame();
@@ -50,7 +40,7 @@ describe('PrivacyNotice: unconfigured state (#2481)', () => {
   it('uses the canonical vybestack docs URL (not a stale fork URL)', () => {
     const config = makeConfig(undefined);
     const { lastFrame } = renderWithProviders(
-      <PrivacyNotice onExit={mockOnExit} config={config} />,
+      <PrivacyNotice onExit={mockOnExit} provider={config.getProvider()} />,
     );
 
     const frame = lastFrame();
@@ -63,7 +53,7 @@ describe('PrivacyNotice: unconfigured state (#2481)', () => {
   it('renders ONLY the Gemini consent content when gemini is the explicit active provider (mutually exclusive)', () => {
     const config = makeConfig('gemini');
     const { lastFrame } = renderWithProviders(
-      <PrivacyNotice onExit={mockOnExit} config={config} />,
+      <PrivacyNotice onExit={mockOnExit} provider={config.getProvider()} />,
     );
 
     const frame = lastFrame();
@@ -83,7 +73,7 @@ describe('PrivacyNotice: unconfigured state (#2481)', () => {
   it('renders ONLY the MultiProvider notice for non-gemini active provider (mutually exclusive)', () => {
     const config = makeConfig('openai');
     const { lastFrame } = renderWithProviders(
-      <PrivacyNotice onExit={mockOnExit} config={config} />,
+      <PrivacyNotice onExit={mockOnExit} provider={config.getProvider()} />,
     );
 
     const frame = lastFrame();

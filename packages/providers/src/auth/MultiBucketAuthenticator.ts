@@ -50,7 +50,7 @@ export interface MultiBucketAuthCallbacks {
   ) => Promise<void>;
   onPrompt: (provider: string, bucket: string) => Promise<boolean>;
   onDelay: (ms: number, bucket: string) => Promise<void>;
-  getEphemeralSetting: <T>(key: string) => T | undefined;
+  readPolicy: () => { readonly prompt?: unknown; readonly delay?: unknown };
 }
 
 /**
@@ -77,9 +77,10 @@ export class MultiBucketAuthenticator {
       bucket: string,
     ) => Promise<boolean>,
     private readonly onDelay: (ms: number, bucket: string) => Promise<void>,
-    private readonly getEphemeralSetting: <T>(
-      key: string,
-    ) => T | undefined = () => undefined,
+    private readonly readPolicy: () => {
+      readonly prompt?: unknown;
+      readonly delay?: unknown;
+    } = () => ({}),
   ) {}
 
   /**
@@ -92,7 +93,7 @@ export class MultiBucketAuthenticator {
       callbacks.onAuthBucket,
       callbacks.onPrompt,
       callbacks.onDelay,
-      callbacks.getEphemeralSetting,
+      callbacks.readPolicy,
     );
   }
 
@@ -142,12 +143,11 @@ export class MultiBucketAuthenticator {
   private createAuthState(
     options: MultiBucketAuthOptions,
   ): MultiBucketAuthState {
+    const policy = this.readPolicy();
     const effectiveDelay =
-      options.delay ??
-      this.getEphemeralSetting<number>('auth-bucket-delay') ??
-      5000;
+      options.delay ?? (typeof policy.delay === 'number' ? policy.delay : 5000);
     const rawShowPromptSetting =
-      this.getEphemeralSetting<boolean>('auth-bucket-prompt');
+      typeof policy.prompt === 'boolean' ? policy.prompt : undefined;
     const effectiveShowPrompt =
       options.showPrompt ?? rawShowPromptSetting ?? false;
 

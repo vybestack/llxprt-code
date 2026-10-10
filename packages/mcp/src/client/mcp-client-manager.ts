@@ -4,18 +4,22 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { MCPServerConfig, McpExtensionConfig } from '../config/index.js';
+import type { McpOAuthBinding } from '../auth/index.js';
 import type {
-  MCPServerConfig,
-  McpExtensionConfig,
-} from '../config/mcpServerConfig.js';
-import type { McpHostConfig } from '../host/hostInterfaces.js';
-import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+  McpApprovalPolicy,
+  McpHostConfig,
+  McpPromptRegistry,
+  McpResourceRegistry,
+} from '../host/hostInterfaces.js';
+import type { McpToolPublication } from '@vybestack/llxprt-code-tools';
 import {
-  McpClient,
   MCPDiscoveryState,
   populateMcpServerCommand,
+  type McpClient,
 } from './mcp-client.js';
-import { MCPServerStatus, updateMCPServerStatus } from './mcp-status.js';
+import { MCPServerStatus } from './mcp-status.js';
+import { McpOwnerStatus } from './mcp-owner-status.js';
 import {
   applyFakeServerDiscovery,
   isFakeMcpDiscoveryActive,
@@ -27,7 +31,8 @@ import {
 } from '@vybestack/llxprt-code-tools/utils/errors.js';
 import type { EventEmitter } from 'node:events';
 import {
-  emitHostFeedback,
+  captureHostFeedback,
+  type HostFeedbackSink,
   MCP_CLIENT_UPDATE_EVENT,
 } from '../host/hostServices.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
@@ -40,14 +45,25 @@ import { RetryableClientDisconnections } from './retryable-client-disconnections
 import { collectMcpInstructions } from './mcp-instructions.js';
 import {
   collectMcpServers,
+  createConfiguredMcpClient,
   consumeMcpContextRefreshes,
   getConfiguredMcpReconciliation,
+  abortMcpDiscoveryControllers,
+  quarantineMcpClients,
+  collectMcpRetirementClients,
+  cancelMcpRefreshTimer,
+  rejectMcpReconciliationErrors,
+  settleMcpDisconnections,
   isAllowedMcpServer,
   recordPendingDiscoveryTimeouts,
+  recordMcpDiscoveryFailure,
+  rejectConflictingMcpExtension,
+  rejectReservedExtensionMcpServer,
   reconcileConfiguredMcpClients,
   removeAndDisconnectMcpClient,
   removeMcpServerArtifacts,
   restartMcpClients,
+  restartMcpServer,
   startConfiguredMcpClients,
   removeMcpServerState,
   stopMcpExtension,
@@ -73,6 +89,12 @@ export const DEFAULT_MCP_DISCOVERY_SETTLE_TIMEOUT_MS = 10_000;
  */
 export class McpClientManager {
   private clients: Map<string, McpClient> = new Map();
+  private readonly serverStatus = new McpOwnerStatus();
+  readonly getServerStates = this.serverStatus.states;
+  readonly getStatusServers = this.serverStatus.servers;
+  readonly getServerStatus = this.serverStatus.status;
+  readonly subscribeStatus = this.serverStatus.subscribe;
+
   // If we have ongoing MCP client discovery, this completes once that is done.
   private discoveryPromise: Promise<void> | undefined;
   private discoveryState: MCPDiscoveryState = MCPDiscoveryState.NOT_STARTED;
@@ -85,6 +107,7 @@ export class McpClientManager {
     extensionName: string;
   }> = [];
   private readonly discoveryFailures: Map<string, string> = new Map();
+  private readonly discoveryErrors = new Map<string, unknown>();
   private trustGeneration = 0;
   private readonly discoveringServers = new Map<string, Promise<void>>();
   private readonly queuedDiscoveryConfigs = new Map<string, MCPServerConfig>();
@@ -97,16 +120,32 @@ export class McpClientManager {
     string,
     AbortController
   >();
+  private readonly emitFeedback: HostFeedbackSink;
+  private readonly oauth: McpOAuthBinding;
   constructor(
+    oauth: McpOAuthBinding,
+    private readonly approvalPolicy: McpApprovalPolicy,
     private readonly clientVersion: string,
-    private readonly toolRegistry: ToolRegistry,
+    private readonly toolRegistry: McpToolPublication,
+    private readonly promptPublication: McpPromptRegistry,
+    private readonly resourcePublication: McpResourceRegistry,
     private readonly cliConfig: McpHostConfig,
+    private readonly refreshContext: () => Promise<void>,
     private readonly eventEmitter?: EventEmitter,
     private readonly settleTimeoutMs: number = DEFAULT_MCP_DISCOVERY_SETTLE_TIMEOUT_MS,
-  ) {}
-  getBlockedMcpServers() {
-    return this.blockedMcpServers;
+    feedback?: HostFeedbackSink,
+  ) {
+    this.emitFeedback = captureHostFeedback(feedback);
+    this.oauth = { ...oauth };
   }
+  private emitClientUpdate(): void {
+    if (this.stopped) return;
+    this.eventEmitter?.emit(MCP_CLIENT_UPDATE_EVENT, {
+      clients: new Map(this.clients),
+    });
+  }
+
+  getBlockedMcpServers = () => this.blockedMcpServers;
   /**
    * For all the MCP servers associated with this extension:
    *
@@ -118,7 +157,7 @@ export class McpClientManager {
     await stopMcpExtension({
       extension,
       disconnect: (name) => this.disconnectClient(name, true),
-      refresh: () => this.cliConfig.refreshMcpContext(),
+      refresh: () => this.refreshContext(),
     });
   }
 
@@ -144,7 +183,7 @@ export class McpClientManager {
     // refreshMcpContext here sees pre-discovery tool state, but connectAndDiscover
     // emits McpClientUpdate + calls scheduleMcpContextRefresh once each server
     // connects, so the context converges as servers come online.
-    await this.cliConfig.refreshMcpContext();
+    await this.refreshContext();
   }
 
   private async disconnectClient(name: string, skipRefresh = false) {
@@ -152,9 +191,7 @@ export class McpClientManager {
     if (existing) {
       try {
         this.clients.delete(name);
-        this.eventEmitter?.emit(MCP_CLIENT_UPDATE_EVENT, {
-          clients: new Map(this.clients),
-        });
+        this.emitClientUpdate();
         await existing.disconnect();
       } catch (error) {
         logger.warn(
@@ -164,7 +201,7 @@ export class McpClientManager {
         if (!skipRefresh) {
           // This is required to update the content generator configuration with the
           // new tool configuration and system instructions.
-          await this.cliConfig.refreshMcpContext();
+          await this.refreshContext();
         }
       }
     }
@@ -196,32 +233,26 @@ export class McpClientManager {
       return;
     }
     if (
-      config.extension &&
-      Object.prototype.hasOwnProperty.call(
-        this.cliConfig.getMcpServers() ?? {},
+      rejectReservedExtensionMcpServer(
         name,
+        config,
+        this.cliConfig.getMcpServers(),
+        (message) => logger.warn(message),
       )
-    ) {
-      logger.warn(
-        `Skipping MCP config for server with name "${name}" from extension "${config.extension.name}" because configured server names are reserved.`,
-      );
+    )
       return;
-    }
     const pendingDiscovery = this.discoveringServers.get(name);
     if (pendingDiscovery) {
       this.queuedDiscoveryConfigs.set(name, config);
       return pendingDiscovery;
     }
     const existing = this.clients.get(name);
-    if (existing && existing.getServerConfig().extension !== config.extension) {
-      const extensionText = config.extension
-        ? ` from extension "${config.extension.name}"`
-        : '';
-      logger.warn(
-        `Skipping MCP config for server with name "${name}"${extensionText} as it already exists.`,
-      );
+    if (
+      rejectConflictingMcpExtension(name, config, existing, (message) =>
+        logger.warn(message),
+      )
+    )
       return;
-    }
 
     const currentDiscoveryPromise: Promise<void> = this.buildDiscoveryPromise(
       name,
@@ -252,61 +283,66 @@ export class McpClientManager {
     }
   }
 
-  private buildDiscoveryPromise(
+  private async buildDiscoveryPromise(
     name: string,
     config: MCPServerConfig,
     existing: McpClient | undefined,
   ): Promise<void> {
-    return new Promise<void>((resolve) => {
-      void (async () => {
-        this.pendingDiscoveryServers.add(name);
-        try {
-          await this.connectAndDiscover(name, config, existing);
-        } catch (error) {
-          this.pendingDiscoveryServers.delete(name);
-          if (!isAuthenticationError(error)) {
-            this.discoveryFailures.set(name, getErrorMessage(error));
-            emitHostFeedback(
-              'error',
-              `Error during discovery for server '${name}': ${getErrorMessage(
-                error,
-              )}`,
-              error,
-            );
-          }
-          resolve();
-          return;
-        }
-        this.pendingDiscoveryServers.delete(name);
-        resolve();
-      })();
-    });
+    this.pendingDiscoveryServers.add(name);
+    this.discoveryState = MCPDiscoveryState.IN_PROGRESS;
+    this.discoveryFailures.delete(name);
+    this.discoveryErrors.delete(name);
+    this.serverStatus.ensure(name, config);
+    try {
+      await this.connectAndDiscover(name, config, existing);
+    } catch (error) {
+      this.discoveryErrors.set(name, error);
+      this.pendingDiscoveryServers.delete(name);
+      if (!isAuthenticationError(error)) {
+        this.reportDiscoveryFailure(name, error);
+      }
+      return;
+    }
+    this.pendingDiscoveryServers.delete(name);
+  }
+
+  private reportDiscoveryFailure(name: string, error: unknown): void {
+    if (this.stopped) return;
+    recordMcpDiscoveryFailure(
+      name,
+      error,
+      this.discoveryFailures,
+      this.serverStatus,
+      this.emitFeedback,
+    );
   }
 
   private removeServerArtifacts(name: string): void {
     removeMcpServerArtifacts(
       name,
       this.toolRegistry,
-      this.cliConfig.getPromptRegistry(),
-      this.cliConfig.getResourceRegistry(),
+      this.promptPublication,
+      this.resourcePublication,
     );
   }
 
   private createClient(name: string, config: MCPServerConfig): McpClient {
-    const client = new McpClient(
+    const client = createConfiguredMcpClient(
+      this.oauth,
+      this.approvalPolicy,
+      this.clientVersion,
+      this.toolRegistry,
+      this.promptPublication,
+      this.resourcePublication,
+      this.cliConfig,
       name,
       config,
-      this.toolRegistry,
-      this.cliConfig.getPromptRegistry(),
-      this.cliConfig.getResourceRegistry(),
-      this.cliConfig.getWorkspaceContext(),
-      this.cliConfig,
-      this.cliConfig.getDebugMode(),
-      this.clientVersion,
       async () => {
         debugLogger.log('Tools changed, updating agent context...');
         await this.scheduleMcpContextRefresh();
       },
+      this.emitFeedback,
+      this.serverStatus.begin(name, config),
     );
     this.clientDisconnections.activate(client);
     return client;
@@ -330,10 +366,7 @@ export class McpClientManager {
       isCurrent: () => this.clients.get(name) === client,
       removeCurrent: () => this.clients.delete(name),
       removeArtifacts: () => this.removeServerArtifacts(name),
-      emitCleanup: () =>
-        this.eventEmitter?.emit(MCP_CLIENT_UPDATE_EVENT, {
-          clients: new Map(this.clients),
-        }),
+      emitCleanup: () => this.emitClientUpdate(),
       disconnect: (currentClient) =>
         this.clientDisconnections.disconnect(currentClient),
       reportError: (message, error) =>
@@ -376,9 +409,7 @@ export class McpClientManager {
       }
 
       this.clients.set(name, client);
-      this.eventEmitter?.emit(MCP_CLIENT_UPDATE_EVENT, {
-        clients: new Map(this.clients),
-      });
+      this.emitClientUpdate();
       await client.discover(
         this.cliConfig,
         () => !this.isDiscoveryInvalid(generationBeforeConnect),
@@ -393,9 +424,7 @@ export class McpClientManager {
       }
 
       this.discoveryFailures.delete(name);
-      this.eventEmitter?.emit(MCP_CLIENT_UPDATE_EVENT, {
-        clients: new Map(this.clients),
-      });
+      this.emitClientUpdate();
     } catch (error) {
       this.connectingClients.delete(name);
       if (this.clients.get(name) === client) {
@@ -415,28 +444,19 @@ export class McpClientManager {
           `Error cleaning up failed MCP client '${name}': ${getErrorMessage(cleanupError)}`,
         );
       }
-      this.eventEmitter?.emit(MCP_CLIENT_UPDATE_EVENT, {
-        clients: new Map(this.clients),
-      });
+      this.emitClientUpdate();
       // Record the per-server failure so the discovery gate can surface a
       // warning without aborting the whole turn (issue #2516). Auth errors
       // are excluded so an interactive OAuth flow is not treated as a failure;
       // clear any stale timeout entry too, so a server that was awaiting auth
       // when the settle timeout fired is not left with a bogus "Timed out".
-      if (!isAuthenticationError(error)) {
-        this.discoveryFailures.set(name, getErrorMessage(error));
-        emitHostFeedback(
-          'error',
-          `Error during discovery for server '${name}': ${getErrorMessage(
-            error,
-          )}`,
-          error,
-        );
-      } else {
+      if (this.isDiscoveryInvalid(generationBeforeConnect)) return;
+      if (isAuthenticationError(error)) {
         // Interactive auth is not a failure — clear any stale timeout entry
         // recorded by recordPendingDiscoveryTimeouts while auth was pending.
         this.discoveryFailures.delete(name);
       }
+      throw error;
     }
   }
 
@@ -476,9 +496,7 @@ export class McpClientManager {
     this.fakeDiscoveryControllers.set(name, discoveryController);
     this.clients.set(name, client);
     try {
-      this.eventEmitter?.emit(MCP_CLIENT_UPDATE_EVENT, {
-        clients: new Map(this.clients),
-      });
+      this.emitClientUpdate();
       if (!isAuthorized()) {
         await this.removeAndDisconnectClient(name, client);
         return;
@@ -491,6 +509,9 @@ export class McpClientManager {
         fixture,
         isAuthorized,
         discoveryController.signal,
+        (status) => {
+          if (isAuthorized()) this.serverStatus.update(name, status);
+        },
       );
       if (!isAuthorized()) {
         await this.removeAndDisconnectClient(name, client);
@@ -502,21 +523,20 @@ export class McpClientManager {
       ) {
         if (outcome.failure !== undefined) {
           this.discoveryFailures.set(name, outcome.failure);
+          this.serverStatus.update(name, MCPServerStatus.DISCONNECTED);
         }
         await this.removeAndDisconnectClient(name, client);
         return;
       }
 
       client.markConnectedForFakeDiscovery();
-      this.eventEmitter?.emit(MCP_CLIENT_UPDATE_EVENT, {
-        clients: new Map(this.clients),
-      });
+      this.emitClientUpdate();
       if (!isAuthorized()) {
         await this.removeAndDisconnectClient(name, client);
       }
     } catch (error) {
       try {
-        updateMCPServerStatus(name, MCPServerStatus.DISCONNECTED);
+        this.serverStatus.update(name, MCPServerStatus.DISCONNECTED);
       } finally {
         await this.removeAndDisconnectClient(name, client);
       }
@@ -535,9 +555,8 @@ export class McpClientManager {
    * @plan:PLAN-20260617-COREAPI.P22
    * @requirement:REQ-013
    */
-  getDiscoveryFailures(): ReadonlyMap<string, string> {
-    return new Map(this.discoveryFailures);
-  }
+  readonly getDiscoveryFailures = (): ReadonlyMap<string, string> =>
+    new Map(this.discoveryFailures);
 
   private enqueueDiscovery(promise: Promise<void>): void {
     if (this.discoveryPromise) {
@@ -546,17 +565,14 @@ export class McpClientManager {
       this.discoveryState = MCPDiscoveryState.IN_PROGRESS;
       this.discoveryPromise = promise;
     }
-    this.eventEmitter?.emit(MCP_CLIENT_UPDATE_EVENT, {
-      clients: new Map(this.clients),
-    });
+    this.emitClientUpdate();
     const currentPromise = this.discoveryPromise;
     void currentPromise.then((_) => {
       if (currentPromise === this.discoveryPromise) {
         this.discoveryPromise = undefined;
         this.discoveryState = MCPDiscoveryState.COMPLETED;
-        this.eventEmitter?.emit(MCP_CLIENT_UPDATE_EVENT, {
-          clients: new Map(this.clients),
-        });
+        this.serverStatus.publishDiscoveryComplete();
+        this.emitClientUpdate();
       }
     });
   }
@@ -566,7 +582,7 @@ export class McpClientManager {
    * settings or command line arguments).
    *
    * It connects to each server, discovers its available tools, and registers
-   * them with the `ToolRegistry`.
+   * them with the `McpToolPublication`.
    *
    * For any server which is already connected, it will first be disconnected.
    *
@@ -574,10 +590,7 @@ export class McpClientManager {
    * ExtensionLoader explicitly calls `loadExtension`.
    */
   async startConfiguredMcpServers(): Promise<void> {
-    const emitUpdate = () =>
-      this.eventEmitter?.emit(MCP_CLIENT_UPDATE_EVENT, {
-        clients: new Map(this.clients),
-      });
+    const emitUpdate = () => this.emitClientUpdate();
     await startConfiguredMcpClients({
       trusted: this.cliConfig.isTrustedFolder(),
       resolveServers: () =>
@@ -590,7 +603,7 @@ export class McpClientManager {
       },
       emitUpdate,
       discover: (name, config) => this.maybeDiscoverMcpServer(name, config),
-      refresh: () => this.cliConfig.refreshMcpContext(),
+      refresh: () => this.refreshContext(),
     });
   }
 
@@ -651,15 +664,13 @@ export class McpClientManager {
 
     if (discoverPromises.length === 0) {
       this.discoveryState = MCPDiscoveryState.COMPLETED;
-      this.eventEmitter?.emit(MCP_CLIENT_UPDATE_EVENT, {
-        clients: new Map(this.clients),
-      });
-      await this.cliConfig.refreshMcpContext();
+      this.emitClientUpdate();
+      await this.refreshContext();
       return;
     }
 
     await Promise.all(discoverPromises);
-    await this.cliConfig.refreshMcpContext();
+    await this.refreshContext();
   }
 
   /**
@@ -682,34 +693,27 @@ export class McpClientManager {
       ...this.clients.entries(),
       ...this.connectingClients.entries(),
     ]);
-    for (const [name, client] of clientsToQuarantine) {
-      try {
-        client.invalidateCapabilities();
-      } catch (error) {
-        appendFailures(failures, error);
-      }
-      try {
-        client.abortDiscovery();
-      } catch (error) {
-        appendFailures(failures, error);
-      }
-      this.clientDisconnections.retire(client);
-      this.quarantinedClients.set(name, client);
-    }
+    quarantineMcpClients(
+      clientsToQuarantine,
+      (name) => this.serverStatus.retire(name),
+      (name, client) => {
+        this.clientDisconnections.retire(client);
+        this.quarantinedClients.set(name, client);
+      },
+      failures,
+    );
     this.clients.clear();
     this.connectingClients.clear();
     for (const name of serverNames) {
       removeMcpServerState(
         name,
-        () => updateMCPServerStatus(name, MCPServerStatus.DISCONNECTED),
+        () => this.serverStatus.update(name, MCPServerStatus.DISCONNECTED),
         () => this.removeServerArtifacts(name),
         failures,
       );
     }
     try {
-      this.eventEmitter?.emit(MCP_CLIENT_UPDATE_EVENT, {
-        clients: new Map(this.clients),
-      });
+      this.emitClientUpdate();
     } catch (error) {
       appendFailures(failures, error);
     }
@@ -741,7 +745,7 @@ export class McpClientManager {
       }),
     );
     try {
-      await this.cliConfig.refreshMcpContext();
+      await this.refreshContext();
     } catch (error) {
       appendFailures(failures, error);
       debugLogger.error(
@@ -765,10 +769,17 @@ export class McpClientManager {
       reconciliation,
       failedNames: this.discoveryFailures.keys(),
       remove: (name, client) => this.removeAndDisconnectClient(name, client),
-      deleteFailure: (name) => this.discoveryFailures.delete(name),
+      deleteFailure: (name) => {
+        this.discoveryFailures.delete(name);
+        this.serverStatus.forget(name);
+      },
       discover: (name, config) => this.maybeDiscoverMcpServer(name, config),
-      refresh: () => this.cliConfig.refreshMcpContext(),
+      refresh: () => this.refreshContext(),
     });
+    rejectMcpReconciliationErrors(
+      reconciliation.discoveries,
+      this.discoveryErrors,
+    );
   }
 
   /**
@@ -778,90 +789,91 @@ export class McpClientManager {
     await restartMcpClients({
       clients: this.clients,
       discover: (name, config) => this.maybeDiscoverMcpServer(name, config),
-      refresh: () => this.cliConfig.refreshMcpContext(),
-      reportError: (name, error) => {
+      refresh: () => this.refreshContext(),
+      reportError: (name, error) =>
         logger.error(
           `Error restarting client '${name}': ${getErrorMessage(error)}`,
-        );
-      },
+        ),
     });
   }
 
   /**
    * Restart a single MCP server by name.
    */
-  async restartServer(name: string) {
-    const client = this.clients.get(name);
-    if (!client) {
-      throw new Error(`No MCP server registered with the name "${name}"`);
-    }
-    await this.maybeDiscoverMcpServer(name, client.getServerConfig());
-    await this.cliConfig.refreshMcpContext();
+  restartServer(name: string): Promise<void> {
+    return restartMcpServer({
+      name,
+      clients: this.clients,
+      configured: this.cliConfig.getMcpServers(),
+      discover: (server, config) => this.maybeDiscoverMcpServer(server, config),
+      refresh: () => this.refreshContext(),
+    });
   }
 
   /**
    * Stops all running local MCP servers and closes all client connections.
    * This is the cleanup method to be called on application exit.
    */
-  async stop(): Promise<void> {
+  cancelDiscovery(): Promise<void> {
     this.stopped = true;
+    this.serverStatus.stopAdmission();
     this.trustGeneration++;
     this.refreshRequestedWhilePending = false;
-    if (this.pendingRefreshTimer !== undefined) {
-      clearTimeout(this.pendingRefreshTimer);
-      this.pendingRefreshTimer = undefined;
-      this.pendingRefreshTimerResolve?.();
-      this.pendingRefreshTimerResolve = undefined;
-    }
-    const pendingRefresh = this.pendingRefreshPromise;
-    for (const controller of this.fakeDiscoveryControllers.values()) {
-      controller.abort();
-    }
+    cancelMcpRefreshTimer(
+      this.pendingRefreshTimer,
+      this.pendingRefreshTimerResolve,
+    );
+    this.pendingRefreshTimer = undefined;
+    this.pendingRefreshTimerResolve = undefined;
+    return abortMcpDiscoveryControllers(
+      this.fakeDiscoveryControllers.values(),
+      this.clients.values(),
+      this.connectingClients.values(),
+      (client) => this.clientDisconnections.disconnect(client),
+      this.discoveringServers.values(),
+      this.pendingRefreshPromise,
+    );
+  }
+
+  async stop(): Promise<void> {
+    const cancellation = this.cancelDiscovery();
     const failures: unknown[] = [];
-    const serverNames = new Set(this.discoveringServers.keys());
-    const clientsByIdentity = new Map<McpClient, string>();
-    for (const client of this.clientDisconnections.getFailed()) {
-      clientsByIdentity.set(client, 'retired');
-    }
-    for (const [name, client] of [
-      ...this.clients.entries(),
-      ...this.connectingClients.entries(),
-      ...this.quarantinedClients.entries(),
-    ]) {
-      serverNames.add(name);
-      clientsByIdentity.set(client, clientsByIdentity.get(client) ?? name);
-      this.clientDisconnections.retire(client);
-    }
+    const { serverNames, clientsByIdentity } = collectMcpRetirementClients(
+      this.clientDisconnections.getFailed(),
+      [this.clients, this.connectingClients, this.quarantinedClients],
+      this.discoveringServers.keys(),
+    );
     this.clients.clear();
     this.connectingClients.clear();
     this.quarantinedClients.clear();
     for (const name of serverNames) {
       removeMcpServerState(
         name,
-        () => updateMCPServerStatus(name, MCPServerStatus.DISCONNECTED),
+        () => this.serverStatus.update(name, MCPServerStatus.DISCONNECTING),
         () => this.removeServerArtifacts(name),
         failures,
       );
     }
-    for (const result of await Promise.allSettled([
-      ...Array.from(clientsByIdentity.keys(), (client) =>
-        this.clientDisconnections.disconnect(client),
-      ),
-      this.whenDiscoverySettled(),
-      pendingRefresh ?? Promise.resolve(),
-    ])) {
-      if (result.status === 'rejected') {
-        appendFailures(failures, result.reason);
-      }
-    }
+    failures.push(
+      ...(await settleMcpDisconnections(
+        [
+          ...Array.from(clientsByIdentity.keys(), (client) =>
+            this.clientDisconnections.disconnect(client),
+          ),
+          this.whenDiscoverySettled(),
+          cancellation,
+        ],
+        serverNames,
+        (name) => this.serverStatus.update(name, MCPServerStatus.DISCONNECTED),
+      )),
+    );
+    this.serverStatus.release();
     if (failures.length > 0) {
       throw new AggregateError(failures, 'MCP client manager stop failed');
     }
   }
 
-  getDiscoveryState(): MCPDiscoveryState {
-    return this.discoveryState;
-  }
+  readonly getDiscoveryState = (): MCPDiscoveryState => this.discoveryState;
 
   /**
    * Resolves once any in-flight discovery pass has settled. When no discovery
@@ -890,10 +902,7 @@ export class McpClientManager {
           this.pendingDiscoveryServers,
           this.discoveryFailures,
           this.settleTimeoutMs,
-          () =>
-            this.eventEmitter?.emit(MCP_CLIENT_UPDATE_EVENT, {
-              clients: new Map(this.clients),
-            }),
+          () => this.emitClientUpdate(),
         );
         resolve();
       }, settleTimeout);
@@ -912,13 +921,11 @@ export class McpClientManager {
     }
   }
 
-  getMcpServers(): Record<string, MCPServerConfig> {
-    return collectMcpServers(this.clients);
-  }
+  readonly getMcpServers = (): Record<string, MCPServerConfig> =>
+    collectMcpServers(this.clients);
 
-  getClient(name: string): McpClient | undefined {
-    return this.clients.get(name);
-  }
+  readonly getClient = (name: string): McpClient | undefined =>
+    this.clients.get(name);
 
   private async consumeMcpContextRefreshes(): Promise<void> {
     try {
@@ -940,7 +947,7 @@ export class McpClientManager {
               this.pendingRefreshTimerResolve = resolve;
             },
           ),
-        refresh: () => this.cliConfig.refreshMcpContext(),
+        refresh: () => this.refreshContext(),
         reportError: (error) =>
           debugLogger.error(
             `Error refreshing MCP context: ${getErrorMessage(error)}`,
@@ -961,11 +968,7 @@ export class McpClientManager {
     return this.pendingRefreshPromise;
   }
 
-  getMcpServerCount(): number {
-    return this.clients.size;
-  }
+  readonly getMcpServerCount = (): number => this.clients.size;
 
-  getMcpInstructions(): string {
-    return collectMcpInstructions(this.clients);
-  }
+  readInstructions = (): string => collectMcpInstructions(this.clients);
 }

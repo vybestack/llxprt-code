@@ -12,6 +12,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  LocalMediaStore,
   DebugLogger,
   SessionRecordingService,
   getProjectHash,
@@ -108,21 +109,31 @@ describe('processSlashCommand /continue <id> with an unreadable recording presen
       commands: [continueCommand],
       config: {
         getEphemeralSetting: () => 'auto',
-        storage: { getProjectTempDir: () => root },
+        projectTempDir: root,
         getSessionRecordingQueueByteLimit: () => Number.MAX_SAFE_INTEGER,
-        createSessionPersistenceService: () => undefined,
-        getLocalMediaStore: () => undefined,
+        logSlashCommand: () => {},
         getProjectRoot: () => projectRoot,
         getSessionId: () => 'current-session',
         getProvider: () => 'test-provider',
         getModel: () => 'test-model',
-        getWorkspaceContext: () => ({ getDirectories: () => [root] }),
-        getAgentClient: () => ({ getHistoryService: () => undefined }),
+        directories: () => [root],
         adoptSessionId: () => {},
       } as never,
       commandContext: createMockCommandContext({
         ui: { addItem: commands.addItem, clear: commands.clearItems },
+        services: {
+          agent: {
+            agentClient: { getHistoryService: () => undefined },
+          },
+        },
       }),
+      sessionPersistence: {
+        mediaStore: new LocalMediaStore({
+          rootDirectory: join(root, 'media'),
+          quotaBytes: 1024,
+        }),
+        forRecording: () => undefined,
+      } as never,
       actions: {} as never,
       addItem,
       addMessage: (message) => {

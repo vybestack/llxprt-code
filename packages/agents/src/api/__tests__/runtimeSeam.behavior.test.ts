@@ -81,7 +81,12 @@ describe('runtime-seam behavior @plan:PLAN-20260621-COREAPIREMED.P17 @requiremen
     let agent: Agent | undefined;
     try {
       agent = await fromConfig({
+        settingsOwner: built.settingsOwner,
+        settingsService: built.settingsService,
+        agentClient: built.agentClient,
+        providerManager: built.providerManager,
         config: built.config,
+        mcpRuntime: built.mcpRuntime,
         sessionId: 'known-runtime-id-T6a',
       });
       expect(asWithRuntimeId(agent).getRuntimeId()).toBe(
@@ -97,7 +102,14 @@ describe('runtime-seam behavior @plan:PLAN-20260621-COREAPIREMED.P17 @requiremen
     const built = await buildCliStyleConfig('plain-text.jsonl');
     let agent: Agent | undefined;
     try {
-      agent = await fromConfig({ config: built.config });
+      agent = await fromConfig({
+        settingsOwner: built.settingsOwner,
+        settingsService: built.settingsService,
+        agentClient: built.agentClient,
+        providerManager: built.providerManager,
+        config: built.config,
+        mcpRuntime: built.mcpRuntime,
+      });
       expect(agent.getProvider()).toBe('fake');
       expect(agent.getModel()).toBe('fake-model');
     } finally {
@@ -116,8 +128,15 @@ describe('runtime-seam behavior @plan:PLAN-20260621-COREAPIREMED.P17 @requiremen
       // one on the supplied Config (no second manager constructed). Mirrors the
       // sibling fromConfig.behavior T6 plain idiom (NOT a mock, NOT an
       // agent-root accessor).
-      const callerManager = config.getProviderManager();
-      agent = await fromConfig({ config });
+      const callerManager = built.providerManager;
+      agent = await fromConfig({
+        settingsOwner: built.settingsOwner,
+        settingsService: built.settingsService,
+        agentClient: built.agentClient,
+        providerManager: built.providerManager,
+        config,
+        mcpRuntime: built.mcpRuntime,
+      });
       expect(captureProviderManager(agent)).toBe(callerManager);
     } finally {
       await agent?.dispose();
@@ -134,7 +153,12 @@ describe('runtime-seam behavior @plan:PLAN-20260621-COREAPIREMED.P17 @requiremen
         let agent: Agent | undefined;
         try {
           agent = await fromConfig({
+            settingsOwner: built.settingsOwner,
+            settingsService: built.settingsService,
+            agentClient: built.agentClient,
+            providerManager: built.providerManager,
             config: built.config,
+            mcpRuntime: built.mcpRuntime,
             sessionId: runtimeId,
           });
           expect(asWithRuntimeId(agent).getRuntimeId()).toBe(runtimeId);
@@ -153,10 +177,15 @@ describe('runtime-seam behavior @plan:PLAN-20260621-COREAPIREMED.P17 @requiremen
         let agent: Agent | undefined;
         try {
           agent = await fromConfig({
+            settingsOwner: built.settingsOwner,
+            settingsService: built.settingsService,
+            agentClient: built.agentClient,
+            providerManager: built.providerManager,
             config: built.config,
+            mcpRuntime: built.mcpRuntime,
             sessionId: runtimeId,
           });
-          const callerManager = built.config.getProviderManager();
+          const callerManager = built.providerManager;
           expect(captureProviderManager(agent)).toBe(callerManager);
         } finally {
           await agent?.dispose();

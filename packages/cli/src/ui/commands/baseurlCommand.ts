@@ -10,7 +10,6 @@ import type {
   MessageActionReturn,
 } from './types.js';
 import { CommandKind } from './types.js';
-import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 
 export const baseurlCommand: SlashCommand = {
   name: 'baseurl',
@@ -44,7 +43,7 @@ export const baseurlCommand: SlashCommand = {
     }
 
     // Fallback: Runtime API (tracked migration debt for null agent)
-    const runtime = getRuntimeApi();
+    const runtime = context.runtimeApi;
     try {
       const result = await runtime.updateActiveProviderBaseUrl(baseUrl);
       return {
@@ -53,7 +52,7 @@ export const baseurlCommand: SlashCommand = {
         content: result.message,
       };
     } catch (error) {
-      const status = runtime.getActiveProviderStatus();
+      const status = runtime.providerStatus();
       return {
         type: 'message',
         messageType: 'error',

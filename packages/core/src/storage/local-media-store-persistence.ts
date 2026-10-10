@@ -73,6 +73,8 @@ export class LocalMediaStorePersistence extends LocalMediaStoreReservations {
   private readonly staleLockMs: number;
   protected override readonly reservationLeaseMs: number;
   private readonly quotaScanMaxEntries: number;
+  private readonly operations = new Set<Promise<unknown>>();
+  private closing: Promise<void> | undefined;
 
   constructor(options: LocalMediaStoreOptions) {
     super();
@@ -99,7 +101,39 @@ export class LocalMediaStorePersistence extends LocalMediaStoreReservations {
     this.quotaScanMaxEntries = quotaScanMaxEntries;
   }
 
+  override close(): Promise<void> {
+    this.closing ??= this.joinAndClose();
+    return this.closing;
+  }
+
+  private async joinAndClose(): Promise<void> {
+    await Promise.allSettled([...this.operations]);
+    await super.close();
+  }
+
   async runExclusive<T>(
+    operation: string,
+    contentId: string | undefined,
+    work: () => Promise<T>,
+  ): Promise<T> {
+    if (this.closing !== undefined) {
+      throw new MediaStoreError(
+        operation,
+        contentId,
+        new Error('Local media store is closed'),
+      );
+    }
+    this.assertOpen(operation, contentId);
+    const pending = this.executeExclusive(operation, contentId, work);
+    this.operations.add(pending);
+    try {
+      return await pending;
+    } finally {
+      this.operations.delete(pending);
+    }
+  }
+
+  private async executeExclusive<T>(
     operation: string,
     contentId: string | undefined,
     work: () => Promise<T>,
@@ -232,14 +266,19 @@ export class LocalMediaStorePersistence extends LocalMediaStoreReservations {
 
   async rollbackStagedObjects(
     published: readonly PublishedMediaObjectPath[],
+    readProtected?: () => Promise<ReadonlySet<string>>,
   ): Promise<void> {
     await this.runExclusive(
       'rollback staged object batch',
       undefined,
       async () => {
+        const protectedIds = (await readProtected?.()) ?? new Set<string>();
         const removable: string[] = [];
         for (const entry of published) {
-          if (!(await this.hasReservationsUnlocked(entry.contentId))) {
+          if (
+            !protectedIds.has(entry.contentId) &&
+            !(await this.hasReservationsUnlocked(entry.contentId))
+          ) {
             removable.push(entry.path);
           }
         }
@@ -634,7 +673,7 @@ export class LocalMediaStorePersistence extends LocalMediaStoreReservations {
     throw error;
   }
 
-  private async reserveUnlocked(
+  async reserveUnlocked(
     reference: MediaReferenceBlock,
     ownerId: string,
   ): Promise<Uint8Array> {

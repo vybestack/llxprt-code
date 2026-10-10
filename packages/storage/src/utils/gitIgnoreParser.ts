@@ -41,8 +41,7 @@ export interface GitIgnoreParserOptions {
  */
 export class GitIgnoreParser implements GitIgnoreFilter {
   private projectRoot: string;
-  private cache: Map<string, Ignore> = new Map();
-  private globalPatterns: Ignore | undefined;
+  private cache: Map<string, { content: string; patterns: Ignore }> = new Map();
   private processedExtraPatterns: Ignore;
   private readonly loadGitSources: boolean;
   private readonly extraPatterns?: string[];
@@ -247,18 +246,10 @@ export class GitIgnoreParser implements GitIgnoreFilter {
   private loadGitIgnoreSources(ig: Ignore, relativePath: string): void {
     ig.add('.git');
 
-    if (this.globalPatterns === undefined) {
-      const excludeFile = path.join(
-        this.projectRoot,
-        '.git',
-        'info',
-        'exclude',
-      );
-      this.globalPatterns = fs.existsSync(excludeFile)
-        ? this.loadPatternsForFile(excludeFile)
-        : ignore();
-    }
-    ig.add(this.globalPatterns);
+    this.applyPatternsFile(
+      path.join(this.projectRoot, '.git', 'info', 'exclude'),
+      ig,
+    );
 
     const pathParts = relativePath.split(path.sep);
 
@@ -287,20 +278,25 @@ export class GitIgnoreParser implements GitIgnoreFilter {
   }
 
   private applyDirGitignore(dir: string, ig: Ignore): void {
-    const cached = this.cache.get(dir);
-    if (cached) {
-      ig.add(cached);
+    this.applyPatternsFile(path.join(dir, '.gitignore'), ig);
+  }
+
+  private applyPatternsFile(patternsFile: string, ig: Ignore): void {
+    let content: string;
+    try {
+      content = fs.readFileSync(patternsFile, 'utf8');
+    } catch {
+      content = '';
+    }
+    const cached = this.cache.get(patternsFile);
+    if (cached?.content === content) {
+      ig.add(cached.patterns);
       return;
     }
-
-    const gitignorePath = path.join(dir, '.gitignore');
-    if (fs.existsSync(gitignorePath)) {
-      const patterns = this.loadPatternsForFile(gitignorePath);
-      this.cache.set(dir, patterns);
-      ig.add(patterns);
-    } else {
-      this.cache.set(dir, ignore());
-    }
+    const patterns =
+      content === '' ? ignore() : this.loadPatternsForFile(patternsFile);
+    this.cache.set(patternsFile, { content, patterns });
+    ig.add(patterns);
   }
 
   /**

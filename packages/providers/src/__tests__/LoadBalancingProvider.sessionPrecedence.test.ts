@@ -58,8 +58,9 @@ function makeUpstreamInvocation(
   settings: SettingsService,
 ): RuntimeInvocationContext {
   return createRuntimeInvocationContext({
-    runtime: makeRuntime(settings),
-    settings,
+    runtimeId: makeRuntime(settings).runtimeId,
+    runtimeMetadata: makeRuntime(settings).metadata,
+
     providerName: 'load-balancer',
     ephemeralsSnapshot: settings.getAllGlobalSettings(),
     metadata: {},

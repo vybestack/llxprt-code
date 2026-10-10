@@ -4,25 +4,26 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import {
   buildToolResponsePayload,
   EMPTY_TOOL_RESULT_PLACEHOLDER,
 } from './toolResponsePayload.js';
 import type { ToolResponseBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import {
+  parseOutputLimits,
+  type OutputLimitConfig,
+} from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 
 describe('toolResponsePayload', () => {
   describe('buildToolResponsePayload respects configurable limits', () => {
-    let mockConfig: Config;
+    let mockConfig: OutputLimitConfig;
 
     beforeEach(() => {
-      mockConfig = {
-        getEphemeralSettings: vi.fn().mockReturnValue({
-          'tool-output-max-tokens': 50000,
-          'tool-output-truncate-mode': 'warn',
-        }),
-      } as unknown as Config;
+      mockConfig = parseOutputLimits({
+        'tool-output-max-tokens': 50000,
+        'tool-output-truncate-mode': 'warn',
+      });
     });
 
     it('should NOT truncate tool response to 1024 chars when config allows larger output', () => {
@@ -225,12 +226,10 @@ warn`);
     });
 
     it('should sanitize replacement chars and control chars with config path', () => {
-      const configWithLimits = {
-        getEphemeralSettings: vi.fn().mockReturnValue({
-          'tool-output-max-tokens': 50000,
-          'tool-output-truncate-mode': 'warn',
-        }),
-      } as unknown as Config;
+      const configWithLimits = parseOutputLimits({
+        'tool-output-max-tokens': 50000,
+        'tool-output-truncate-mode': 'warn',
+      });
 
       const block: ToolResponseBlock = {
         type: 'tool_response',

@@ -1,11 +1,15 @@
+import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 
+import type { ToolExecutionPolicy } from '@vybestack/llxprt-code-tools';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
+import type { ToolLookup } from '@vybestack/llxprt-code-tools';
 import type {
   ToolCallRequestInfo,
   ToolCallResponseInfo,
@@ -24,7 +28,7 @@ import type { SerializableConfirmationDetails } from '@vybestack/llxprt-code-cor
 import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core/core/turn.js';
 import { createErrorResponse } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import { buildToolGovernance, canonicalizeToolName } from './toolGovernance.js';
+import { canonicalizeToolName, type ToolGovernance } from './toolGovernance.js';
 import type { LiveOutputUpdate } from '@vybestack/llxprt-code-core/utils/terminalSerializer.js';
 import { triggerToolNotificationHook } from '@vybestack/llxprt-code-core/core/coreToolHookTriggers.js';
 import { ToolExecutor } from '../scheduler/tool-executor.js';
@@ -36,6 +40,7 @@ import {
 } from '../scheduler/result-aggregator.js';
 import {
   ConfirmationCoordinator,
+  ConfirmationRequiredError,
   type StatusMutator,
   type SchedulerAccessor,
   type EditorCallbacks,
@@ -62,6 +67,7 @@ import type { ToolSchedulerContract } from '@vybestack/llxprt-code-core/core/too
 interface QueuedRequest {
   request: ToolCallRequestInfo | ToolCallRequestInfo[];
   signal: AbortSignal;
+  hookOwner?: HookExecutionOwner;
   resolve: () => void;
   reject: (reason?: Error) => void;
 }
@@ -93,9 +99,13 @@ export type {
  * @pseudocode lines 56-72
  */
 export interface CoreToolSchedulerOptions {
+  telemetry: RootTelemetry;
+  readApprovalMode?: () => ApprovalMode;
+  getToolGovernance: () => ToolGovernance;
+  readExecutionPolicy: () => ToolExecutionPolicy;
   config: Config;
   messageBus: MessageBus;
-  toolRegistry: ToolRegistry;
+  toolRegistry: ToolLookup;
   outputUpdateHandler?: OutputUpdateHandler;
   onAllToolCallsComplete?: AllToolCallsCompleteHandler;
   onToolCallsUpdate?: ToolCallsUpdateHandler;
@@ -113,6 +123,8 @@ export class CoreToolScheduler implements ToolSchedulerContract {
   private onToolCallsUpdate?: ToolCallsUpdateHandler;
   private getPreferredEditor: () => EditorType | undefined = () => undefined;
   private config: Config;
+  private readonly telemetry: RootTelemetry;
+  private readonly getToolGovernance: () => ToolGovernance;
   private readonly toolExecutor: ToolExecutor;
   private readonly toolDispatcher: ToolDispatcher;
   private readonly confirmationCoordinator: ConfirmationCoordinator;
@@ -122,7 +134,21 @@ export class CoreToolScheduler implements ToolSchedulerContract {
   private isScheduling = false;
   private toolContextInteractiveMode: boolean;
   private requestQueue: QueuedRequest[] = [];
+  private readonly hookOwners = new Map<string, HookExecutionOwner>();
   private readonly resultAggregator: ResultAggregator;
+  private readonly executions = new Set<Promise<unknown>>();
+
+  async joinExecutions(): Promise<void> {
+    const errors: unknown[] = [];
+    while (this.executions.size > 0) {
+      for (const result of await Promise.allSettled(this.executions)) {
+        if (result.status === 'rejected') errors.push(result.reason);
+      }
+    }
+    if (errors.length > 0) {
+      throw new AggregateError(errors, 'Tool execution join failed');
+    }
+  }
 
   // Track all callIds seen at the scheduler boundary to prevent duplicate execution
   private seenCallIds: Set<string> = new Set();
@@ -134,7 +160,9 @@ export class CoreToolScheduler implements ToolSchedulerContract {
    */
   constructor(options: CoreToolSchedulerOptions) {
     this.config = options.config;
-    this.toolExecutor = new ToolExecutor(this.config);
+    this.telemetry = options.telemetry;
+    this.getToolGovernance = options.getToolGovernance;
+    this.toolExecutor = new ToolExecutor();
     this.toolDispatcher = new ToolDispatcher(
       options.toolRegistry,
       options.config,
@@ -148,7 +176,9 @@ export class CoreToolScheduler implements ToolSchedulerContract {
         this.setStatusInternal(callId, 'success', response),
       setError: (callId, response) =>
         this.setStatusInternal(callId, 'error', response),
-      getFallbackOutputConfig: () => this.config,
+      getFallbackOutputConfig: () => ({
+        readExecutionPolicy: options.readExecutionPolicy,
+      }),
     };
     this.resultAggregator = new ResultAggregator(resultPublishCallbacks);
 
@@ -172,6 +202,7 @@ export class CoreToolScheduler implements ToolSchedulerContract {
       attemptExecution: (signal) =>
         this.attemptExecutionOfScheduledCalls(signal),
       getToolCalls: () => this.toolCalls,
+      getHookOwner: (callId) => this.hookOwners.get(callId),
     };
     const editorCallbacks: EditorCallbacks = {
       getPreferredEditor: () => this.getPreferredEditor(),
@@ -184,7 +215,8 @@ export class CoreToolScheduler implements ToolSchedulerContract {
       statusMutator,
       schedulerAccessor,
       editorCallbacks,
-      (config, details) => triggerToolNotificationHook(config, details),
+      (config, details, owner) => triggerToolNotificationHook(details, owner),
+      options.readApprovalMode,
     );
     this.confirmationCoordinator.subscribe();
   }
@@ -212,6 +244,7 @@ export class CoreToolScheduler implements ToolSchedulerContract {
   dispose(): void {
     this.confirmationCoordinator.dispose();
     this.seenCallIds.clear();
+    this.hookOwners.clear();
   }
 
   private setStatusInternal(
@@ -332,6 +365,7 @@ export class CoreToolScheduler implements ToolSchedulerContract {
   schedule(
     request: ToolCallRequestInfo | ToolCallRequestInfo[],
     signal: AbortSignal,
+    hookOwner?: HookExecutionOwner,
   ): Promise<void> {
     if (this.isRunning() || this.isScheduling) {
       return new Promise((resolve, reject) => {
@@ -351,6 +385,7 @@ export class CoreToolScheduler implements ToolSchedulerContract {
         this.requestQueue.push({
           request,
           signal,
+          hookOwner,
           resolve: () => {
             signal.removeEventListener('abort', abortHandler);
             resolve();
@@ -362,7 +397,7 @@ export class CoreToolScheduler implements ToolSchedulerContract {
         });
       });
     }
-    return this._schedule(request, signal);
+    return this._schedule(request, signal, hookOwner);
   }
 
   private deduplicateRequests(
@@ -466,7 +501,9 @@ export class CoreToolScheduler implements ToolSchedulerContract {
           createErrorResponse(
             reqInfo,
             error instanceof Error ? error : new Error(String(error)),
-            ToolErrorType.UNHANDLED_EXCEPTION,
+            error instanceof ConfirmationRequiredError
+              ? ToolErrorType.POLICY_VIOLATION
+              : ToolErrorType.UNHANDLED_EXCEPTION,
           ),
         );
       });
@@ -475,6 +512,7 @@ export class CoreToolScheduler implements ToolSchedulerContract {
   private async _schedule(
     request: ToolCallRequestInfo | ToolCallRequestInfo[],
     signal: AbortSignal,
+    hookOwner?: HookExecutionOwner,
   ): Promise<void> {
     this.isScheduling = true;
     try {
@@ -487,7 +525,7 @@ export class CoreToolScheduler implements ToolSchedulerContract {
       const freshRequests = this.deduplicateRequests(request);
       if (freshRequests.length === 0) return;
 
-      const governance = buildToolGovernance(this.config);
+      const governance = this.getToolGovernance();
       const newToolCalls = this.toolDispatcher.resolveAndValidate(
         freshRequests,
         governance,
@@ -496,6 +534,10 @@ export class CoreToolScheduler implements ToolSchedulerContract {
       if (newToolCalls.length === 0) return;
 
       this.toolCalls = this.toolCalls.concat(newToolCalls);
+      if (hookOwner !== undefined) {
+        for (const call of newToolCalls)
+          this.hookOwners.set(call.request.callId, hookOwner);
+      }
       this.notifyToolCallsUpdate();
 
       for (const toolCall of newToolCalls) {
@@ -625,6 +667,7 @@ export class CoreToolScheduler implements ToolSchedulerContract {
       .execute({
         call: scheduledCall,
         signal,
+        hookOwner: this.hookOwners.get(callId),
         onLiveOutput: scheduledCall.tool.canUpdateOutput
           ? (id: string, update: LiveOutputUpdate) => {
               if (this.outputUpdateHandler) {
@@ -764,6 +807,13 @@ export class CoreToolScheduler implements ToolSchedulerContract {
           },
         );
 
+        for (const execution of toolPromises) {
+          this.executions.add(execution);
+          void execution.then(
+            () => this.executions.delete(execution),
+            () => this.executions.delete(execution),
+          );
+        }
         const batchPromise = Promise.all(toolPromises);
         await this.awaitBatchOrAbort(callsToExecute, batchPromise, signal);
       }
@@ -861,7 +911,8 @@ export class CoreToolScheduler implements ToolSchedulerContract {
       // Clean up signal mappings for completed calls
       for (const call of completedCalls) {
         this.confirmationCoordinator.deleteSignal(call.request.callId);
-        logToolCall(this.config, new ToolCallEvent(call));
+        this.hookOwners.delete(call.request.callId);
+        logToolCall(this.config, new ToolCallEvent(call), this.telemetry);
       }
 
       if (this.onAllToolCallsComplete) {
@@ -912,6 +963,7 @@ export class CoreToolScheduler implements ToolSchedulerContract {
     this.resultAggregator.reset();
     this.confirmationCoordinator.reset();
     this.seenCallIds.clear();
+    this.hookOwners.clear();
 
     // 3. Cancel all active tool calls
     this.toolCalls = this.toolCalls.map((call) => {

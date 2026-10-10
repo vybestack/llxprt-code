@@ -10,6 +10,8 @@ import {
   checkCommandPermissions as checkCommandPermissionsImpl,
 } from './shell-utils.js';
 import { Config } from '../config/config.js';
+import { SessionSettingsOwner } from '../session/session-settings-owner.js';
+import { normalizeShellReplacement } from '../config/configTypes.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   initializeParser as initializeShellParsers,
@@ -26,13 +28,26 @@ const detectCommandSubstitution = (cmd: string): boolean =>
   detectCommandSubstitutionImpl(cmd, 'bash');
 const checkCommandPermissions = (
   cmd: string,
-  cfg: Config,
+  cfg: Pick<Config, 'getShellReplacement' | 'getCoreTools' | 'getExcludeTools'>,
 ): ReturnType<typeof checkCommandPermissionsImpl> =>
   checkCommandPermissionsImpl(cmd, cfg, undefined, 'bash');
 
 describe('Shell replacement settings', () => {
   let config: Config;
   let settingsService: SettingsService;
+  let owner: SessionSettingsOwner;
+  const shellPolicy = {
+    getCoreTools: (): string[] | undefined => config.getCoreTools(),
+    getExcludeTools: (): string[] | undefined => config.getExcludeTools(),
+    getShellReplacement: (): ReturnType<Config['getShellReplacement']> => {
+      const value = owner.readNamedParameter('shell-replacement');
+      if (value === undefined) return config.getShellReplacement();
+      if (typeof value === 'boolean') return normalizeShellReplacement(value);
+      if (value === 'all' || value === 'none' || value === 'allowlist')
+        return normalizeShellReplacement(value);
+      return normalizeShellReplacement(undefined);
+    },
+  };
 
   beforeAll(async () => {
     await initializeShellParsers();
@@ -40,6 +55,7 @@ describe('Shell replacement settings', () => {
 
   beforeEach(() => {
     settingsService = new SettingsService();
+    owner = new SessionSettingsOwner(settingsService);
 
     config = new Config({
       model: 'test-model',
@@ -50,7 +66,6 @@ describe('Shell replacement settings', () => {
       sessionId: 'test-session',
       debugMode: false,
       cwd: '.',
-      settingsService,
     });
   });
 
@@ -96,14 +111,14 @@ describe('Shell replacement settings', () => {
     it('should allow command substitution by default (allowlist mode) when no coreTools restriction', () => {
       // Default is now 'allowlist' which allows substitution but validates inner commands
       // With no coreTools restriction, all commands are allowed
-      const result = checkCommandPermissions('echo $(date)', config);
+      const result = checkCommandPermissions('echo $(date)', shellPolicy);
       expect(result.allAllowed).toBe(true);
       expect(result.disallowedCommands).toHaveLength(0);
     });
 
     it('should block command substitution when mode is none', () => {
-      config.setEphemeralSetting('shell-replacement', 'none');
-      const result = checkCommandPermissions('echo $(date)', config);
+      owner.writeUserParameter('shell-replacement', 'none');
+      const result = checkCommandPermissions('echo $(date)', shellPolicy);
       expect(result.allAllowed).toBe(false);
       expect(result.disallowedCommands).toContain('echo $(date)');
       expect(result.blockReason).toContain('Command substitution');
@@ -111,15 +126,15 @@ describe('Shell replacement settings', () => {
     });
 
     it('should allow command substitution when ephemeral setting is all', () => {
-      config.setEphemeralSetting('shell-replacement', 'all');
+      owner.writeUserParameter('shell-replacement', 'all');
 
-      const result = checkCommandPermissions('echo $(date)', config);
+      const result = checkCommandPermissions('echo $(date)', shellPolicy);
       expect(result.allAllowed).toBe(true);
       expect(result.disallowedCommands).toHaveLength(0);
     });
 
     it('should allow command substitution when config setting is all (legacy true)', () => {
-      const configWithShellReplacement = new Config({
+      config = new Config({
         model: 'test-model',
         question: 'test question',
         embeddingModel: 'test-embedding',
@@ -129,19 +144,15 @@ describe('Shell replacement settings', () => {
         debugMode: false,
         cwd: '.',
         shellReplacement: true, // Legacy true maps to 'all'
-        settingsService: new SettingsService(),
       });
 
-      const result = checkCommandPermissions(
-        'echo $(date)',
-        configWithShellReplacement,
-      );
+      const result = checkCommandPermissions('echo $(date)', shellPolicy);
       expect(result.allAllowed).toBe(true);
       expect(result.disallowedCommands).toHaveLength(0);
     });
 
     it('should respect ephemeral setting over config setting', () => {
-      const configWithShellReplacement = new Config({
+      config = new Config({
         model: 'test-model',
         question: 'test question',
         embeddingModel: 'test-embedding',
@@ -151,28 +162,21 @@ describe('Shell replacement settings', () => {
         debugMode: false,
         cwd: '.',
         shellReplacement: 'none', // Block all substitution
-        settingsService: new SettingsService(),
       });
 
-      configWithShellReplacement.setEphemeralSetting(
-        'shell-replacement',
-        'all',
-      );
+      owner.writeUserParameter('shell-replacement', 'all');
 
-      const result = checkCommandPermissions(
-        'echo $(date)',
-        configWithShellReplacement,
-      );
+      const result = checkCommandPermissions('echo $(date)', shellPolicy);
       expect(result.allAllowed).toBe(true);
       expect(result.disallowedCommands).toHaveLength(0);
     });
 
     it('should handle complex commands with substitution when mode is all', () => {
-      config.setEphemeralSetting('shell-replacement', 'all');
+      owner.writeUserParameter('shell-replacement', 'all');
 
       const complexCommand =
         'for file in $(ls *.txt); do echo "Processing $file"; done';
-      const result = checkCommandPermissions(complexCommand, config);
+      const result = checkCommandPermissions(complexCommand, shellPolicy);
       expect(result.allAllowed).toBe(true);
       expect(result.disallowedCommands).toHaveLength(0);
     });
@@ -181,13 +185,13 @@ describe('Shell replacement settings', () => {
       const command = 'echo $(date) && diff <(ls dir1) <(ls dir2)';
 
       // Should block when mode is 'none'
-      config.setEphemeralSetting('shell-replacement', 'none');
-      let result = checkCommandPermissions(command, config);
+      owner.writeUserParameter('shell-replacement', 'none');
+      let result = checkCommandPermissions(command, shellPolicy);
       expect(result.allAllowed).toBe(false);
 
       // Should allow when mode is 'all'
-      config.setEphemeralSetting('shell-replacement', 'all');
-      result = checkCommandPermissions(command, config);
+      owner.writeUserParameter('shell-replacement', 'all');
+      result = checkCommandPermissions(command, shellPolicy);
       expect(result.allAllowed).toBe(true);
     });
 
@@ -205,7 +209,6 @@ describe('Shell replacement settings', () => {
         cwd: '.',
         shellReplacement: 'allowlist',
         coreTools: ['run_shell_command(echo)'],
-        settingsService: new SettingsService(),
       });
 
       // echo is allowed, date is not - so echo $(date) should be blocked
@@ -220,30 +223,30 @@ describe('Shell replacement settings', () => {
 
     it('should handle legacy boolean values in ephemeral setting', () => {
       // Legacy true should map to 'all'
-      config.setEphemeralSetting('shell-replacement', true);
-      let result = checkCommandPermissions('echo $(date)', config);
+      owner.writeUserParameter('shell-replacement', true);
+      let result = checkCommandPermissions('echo $(date)', shellPolicy);
       expect(result.allAllowed).toBe(true);
 
       // Legacy false should map to 'none'
-      config.setEphemeralSetting('shell-replacement', false);
-      result = checkCommandPermissions('echo $(date)', config);
+      owner.writeUserParameter('shell-replacement', false);
+      result = checkCommandPermissions('echo $(date)', shellPolicy);
       expect(result.allAllowed).toBe(false);
       expect(result.blockReason).toContain('Command substitution');
     });
 
     it('should handle invalid values by falling back to allowlist', () => {
       // Invalid values should be treated as 'allowlist' (default)
-      config.setEphemeralSetting('shell-replacement', 'invalid');
-      let result = checkCommandPermissions('echo $(date)', config);
+      owner.writeUserParameter('shell-replacement', 'invalid');
+      let result = checkCommandPermissions('echo $(date)', shellPolicy);
       // With no coreTools restriction, allowlist allows all
       expect(result.allAllowed).toBe(true);
 
-      config.setEphemeralSetting('shell-replacement', 1);
-      result = checkCommandPermissions('echo $(date)', config);
+      owner.writeUserParameter('shell-replacement', 1);
+      result = checkCommandPermissions('echo $(date)', shellPolicy);
       expect(result.allAllowed).toBe(true);
 
-      config.setEphemeralSetting('shell-replacement', {});
-      result = checkCommandPermissions('echo $(date)', config);
+      owner.writeUserParameter('shell-replacement', {});
+      result = checkCommandPermissions('echo $(date)', shellPolicy);
       expect(result.allAllowed).toBe(true);
     });
 
@@ -257,7 +260,7 @@ describe('Shell replacement settings', () => {
       ];
 
       for (const cmd of regularCommands) {
-        const result = checkCommandPermissions(cmd, config);
+        const result = checkCommandPermissions(cmd, shellPolicy);
         expect(result.allAllowed).toBe(true);
       }
     });
@@ -269,8 +272,8 @@ describe('Shell replacement settings', () => {
       const cmd = 'echo "$(echo \x27foo && bar\x27)"';
       expect(detectCommandSubstitution(cmd)).toBe(true);
 
-      config.setEphemeralSetting('shell-replacement', 'none');
-      const result = checkCommandPermissions(cmd, config);
+      owner.writeUserParameter('shell-replacement', 'none');
+      const result = checkCommandPermissions(cmd, shellPolicy);
       expect(result.allAllowed).toBe(false);
       expect(result.isHardDenial).toBe(true);
       expect(result.blockReason).toContain('Command substitution');
@@ -341,7 +344,6 @@ EOF`;
           cwd: '.',
           shellReplacement: 'allowlist',
           coreTools: ['run_shell_command(echo)'],
-          settingsService: new SettingsService(),
         });
 
         const result = checkCommandPermissions(
@@ -370,7 +372,6 @@ EOF`;
           cwd: '.',
           shellReplacement: 'allowlist',
           coreTools: ['run_shell_command(echo)'],
-          settingsService: new SettingsService(),
         });
 
         const result = checkCommandPermissions(

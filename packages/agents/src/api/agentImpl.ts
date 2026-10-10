@@ -11,29 +11,40 @@
  * @requirement:REQ-017
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
-import { getResponseTextFromBlocks } from '@vybestack/llxprt-code-core';
-import { uiTelemetryService } from '@vybestack/llxprt-code-core/telemetry/uiTelemetry.js';
-import type {
+import { generateDetachedText } from './detached-generation.js';
+import { executeHookCompression } from './compression-execution.js';
+import {
   ApprovalMode,
-  RuntimeProviderManager,
+  type RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
 // @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007
-import { getToolKeyStorage } from '@vybestack/llxprt-code-core';
-import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+// @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007
+import { assembleAgentTools } from './agent-tool-assembly.js';
+
 import {
-  switchActiveProvider,
-  setActiveModel,
+  updateActiveProviderApiKey,
+  updateActiveProviderBaseUrl,
+} from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
+import {
   setActiveModelParam,
   clearActiveModelParam,
-} from '@vybestack/llxprt-code-providers/runtime.js';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
+} from '@vybestack/llxprt-code-providers/runtime/providerModelParameters.js';
+import {
+  setAgentSelectedModel,
+  restoreAgentChatVisibility,
+  assembleProfilePersistence,
+  buildProfileProviderStatus,
+  snapshotModelParams,
+} from './profilePersistenceAssembly.js';
+
+import type { ActiveRun } from './directProviderAdmission.js';
+import { assembleForegroundRun } from './foreground-run-assembly.js';
+import { streamForegroundRun } from './foregroundRunLifecycle.js';
+import { AgentExecutionCoordinator } from './agentExecutionCoordinator.js';
 import type {
   AgentHistoryItem,
   AgentInput,
@@ -57,32 +68,32 @@ import type {
   AgentProviderSwitchResult,
 } from './agent.js';
 import type { AgentEvent } from './event-types.js';
-import { mapLoopStream } from './eventAdapter.js';
-import { ToolControl } from './control/toolControl.js';
-import { McpControl } from './control/mcpControl.js';
-import type { McpControlDeps } from './control/mcpControl.js';
+import type { ToolControl } from './control/toolControl.js';
+import type { McpControl } from './control/mcpControl.js';
 // @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
-import { buildMcpControlDeps } from './control/mcpControlWiring.js';
-import { AuthControl } from './control/authControl.js';
+// @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
+import { buildOwnedMcpControl } from './control/mcpControlWiring.js';
+
+import { AuthControl, isOAuthPromptHandler } from './control/authControl.js';
 import { IdeControl } from './control/ideControl.js';
-import type { IdeControlDeps } from './control/ideControl.js';
-import { HookControl } from './control/hooks.js';
-import type { HookControlDeps } from './control/hooks.js';
+import { type HookControl, createAgentHookControl } from './control/hooks.js';
 import { PolicyControl } from './control/policyControl.js';
-import type { PolicyControlDeps } from './control/policyControl.js';
-import { TasksControl } from './control/tasksControl.js';
-import type { TasksControlDeps } from './control/tasksControl.js';
+import { createTasksControl } from './control/tasksControl.js';
+import type { TasksControl } from './control/tasksControl.js';
 import { SessionControl } from './control/sessionControl.js';
+import { AgentSessionPersistence } from './control/recordedHistoryPersistence.js';
 import type { SessionControlDeps } from './control/sessionControl.js';
-import { ProfilesControl } from './control/profilesControl.js';
-import { buildNewControls } from './control/newControls.js';
-import type { NewControls } from './control/newControls.js';
-import type { LoopHolder, RebuildLoopDeps } from './loop/rebuildLoop.js';
-import { resolveLoopOrError } from './loop/rebuildLoop.js';
-import type {
-  ApprovalHandler,
-  DisplayCallbacks,
-} from '../core/agenticLoop/types.js';
+import {
+  createRecordingExecution,
+  currentRecordingPath,
+} from './recordingExecution.js';
+import { assembleAgentProfiles } from './profileApplicationAssembly.js';
+import { assembleProviderReads } from './provider-read-assembly.js';
+import { assembleProfileReplacement } from './profileReplacement.js';
+import { buildNewControls, type NewControls } from './control/newControls.js';
+
+import { AgentBusyError } from './loop/agentBusyError.js';
+
 import { UNCONFIGURED_PROVIDER } from './constants.js';
 
 /**
@@ -92,89 +103,42 @@ import { UNCONFIGURED_PROVIDER } from './constants.js';
  */
 const UNCONFIGURED_AGENT_MESSAGE =
   'No provider is configured. Run /setup to choose a hosted provider, configure a local model, set up a custom compatible endpoint, or select an existing profile before using the agent.';
-import { registerInternalConfig } from './internalConfigAccess.js';
 import {
   drainToResult,
   buildAgentResult,
   buildProviderInfos,
   buildToolInfosFromRegistry,
-  toPartListUnion,
   type OwnershipRecord,
-  type StableDisplayCallbacksHolder,
 } from './agentBootstrap.js';
 import type { EditorCallbacks } from './config-types.js';
-import type { AgentAuth } from './config-types.js';
-import type { OAuthPromptHandler } from './config-types.js';
 import { createAgentAuthState } from './control/authState.js';
-import type { AgentAuthState } from './control/authState.js';
+import type { AgentAuthState, AuthWinner } from './control/authState.js';
 import { computeAuthWinner } from './control/authState.js';
-import type { AuthWinner } from './control/authState.js';
 import type { AgentSchedulerHandle } from './config-types.js';
 import { toRuntimeSwitchOptions } from './providerSwitchOptionsAdapter.js';
 import {
   projectSessionStats,
-  readCompressionTokenCount,
+  projectCurrentSequenceModel,
+  subscribeSessionStats,
 } from './agentStatsProjector.js';
 import {
-  disposeOAuthManager,
-  collectActiveExtensions,
-  unloadExtensionSafely,
+  releaseAgentFinalResources,
+  disposeAgentObservers,
+  disposeConfigInfrastructure,
+  joinAgentWork,
+  joinCapturedRun,
+  collectDisposalError,
+  finishOwnedHooks,
 } from './agentDisposeHelpers.js';
 
 import { AggregateDisposeError } from './disposeErrors.js';
+import {
+  SessionLifecycle,
+  type SessionCleanupAction,
+} from './sessionLifecycle.js';
 
-/**
- * The bootstrap dependency bundle injected into AgentImpl by buildAgent.
- * @pseudocode createAgent.md steps 150-160
- */
-export interface AgentDeps {
-  readonly config: Config;
-  readonly providerManager: RuntimeProviderManager;
-  readonly oauthManager: OAuthManager;
-  readonly settingsService: SettingsService;
-  readonly runtimeId: string;
-  readonly runtimeHandle: {
-    cleanup: () => Promise<void> | void;
-  };
-  readonly messageBus: MessageBus;
-  readonly loopHolder: LoopHolder;
-  readonly runtimeState: AgentRuntimeState;
-  readonly ownership: OwnershipRecord;
-  readonly rebuildLoop: (deps: RebuildLoopDeps) => unknown;
-  readonly resolveClient: () => AgentClientContract;
-  /**
-   * The HistoryService instance createAgent eagerly created + stored for reuse
-   * (storeHistoryServiceForReuse). Used as a fallback in the historyService
-   * getter so the REQ-005 identity probe returns a non-null instance BEFORE
-   * the chat is initialized (startChat runs lazily on the first turn). Because
-   * transferHistoryToNewClient reuses the SAME stored instance across a
-   * switch, this fallback keeps the before/after identity probe consistent.
-   * @plan:PLAN-20260617-COREAPI.P16
-   * @requirement:REQ-005
-   */
-  readonly initialHistoryService?: HistoryService;
-  /**
-   * The approvalHandler createAgent built (wrapApprovalHandler(onApproval)).
-   * Threaded through so every P16 client-rebinding rebuild reuses it.
-   * @plan:PLAN-20260617-COREAPI.P16
-   */
-  readonly approvalHandler?: ApprovalHandler;
-  /** Stable forwarding DisplayCallbacks; reads live from the holders. @plan:PLAN-20260617-COREAPI.P16 */
-  readonly displayCallbacks: DisplayCallbacks;
-  /** Shared editor-callbacks holder, threaded for ToolControl + forwarding object. */
-  readonly editorCallbacksHolder: { editorCallbacks: EditorCallbacks };
-  /** Shared display-callbacks holder, threaded for ToolControl + forwarding object. */
-  readonly displayCallbacksHolder: StableDisplayCallbacksHolder;
-  readonly onOAuthPrompt?: unknown;
-  readonly editorCallbacks?: EditorCallbacks;
-  /**
-   * The initial auth config threaded from createAgent (parsed.auth). Used to
-   * seed the per-agent auth-state holder at construction.
-   * @plan:PLAN-20260617-COREAPI.P18
-   * @requirement:REQ-008
-   */
-  readonly initialAuth?: AgentAuth;
-}
+import type { AgentDeps } from './agent-deps.js';
+export type { AgentDeps } from './agent-deps.js';
 
 /**
  * Mutable per-agent provider/model/param state holder.
@@ -203,7 +167,12 @@ export interface AgentProviderState {
  * @requirement:REQ-003
  */
 export class AgentImpl implements Agent {
-  readonly profiles: ProfilesControl;
+  private readonly coordinator = new AgentExecutionCoordinator();
+  readonly execution: Agent['execution'] = this.coordinator;
+  private get activeRun(): ActiveRun | undefined {
+    return this.coordinator.current();
+  }
+  readonly profiles: ReturnType<typeof assembleAgentProfiles>;
   readonly tools: ToolControl;
   readonly mcp: McpControl;
   readonly auth: AuthControl;
@@ -254,12 +223,17 @@ export class AgentImpl implements Agent {
   /**
    * The Config-owned AgentClient (the eager post-auth client refreshAuth
    * created). Captured at construction so the T13 disposal probe observes its
-   * `_unsubscribe` handle transition `function → undefined` after config.dispose()
-   * disposes it (dispose.md line 60). The SAME instance dispose() tears down.
+   * `handleModelChanged` handler leaving the coreEvents emitter after
+   * config.dispose() disposes it (dispose.md line 60). The SAME instance
+   * dispose() tears down.
    * @plan:PLAN-20260617-COREAPI.P24
    * @requirement:REQ-016
    */
-  readonly agentClient: AgentClientContract;
+  readonly sessionClient: Agent['sessionClient'];
+
+  get agentClient(): AgentClientContract {
+    return this.deps.sessionClient.getAgentClient();
+  }
 
   /**
    * Per-agent mutable provider/model/param state. Initialized from the
@@ -281,15 +255,50 @@ export class AgentImpl implements Agent {
    * @plan:PLAN-20260617-COREAPI.P18
    * @requirement:REQ-008
    */
-  private readonly authState: AgentAuthState;
+  private readonly authState: AgentAuthState = createAgentAuthState();
 
   /** Mutable editor-callbacks holder shared with ToolControl + forwarding object. */
   private readonly editorCallbacksHolder: { editorCallbacks: EditorCallbacks };
 
   /** Mutable display-callbacks holder shared with ToolControl + stable forwarding object. */
-  private readonly displayCallbacksHolder: StableDisplayCallbacksHolder;
+
+  private readonly profilePersistence: ReturnType<
+    typeof assembleProfilePersistence
+  >;
+  readonly captureProfile: Agent['captureProfile'];
+  readonly saveProfileSnapshot: Agent['saveProfileSnapshot'];
+  readonly deleteProfileByName: Agent['deleteProfileByName'];
+  readonly getActiveProfileName: Agent['getActiveProfileName'];
+  readonly setDefaultProfileName: Agent['setDefaultProfileName'];
+  readonly getRuntimeDiagnosticsSnapshot: Agent['getRuntimeDiagnosticsSnapshot'];
+
+  readonly hasActiveProvider: Agent['hasActiveProvider'];
+  readonly getProviderContextLimit: Agent['getProviderContextLimit'];
+  readonly listAvailableModels: Agent['listAvailableModels'];
 
   constructor(private readonly deps: AgentDeps) {
+    this.sessionClient = deps.sessionClient.operations;
+    const reads = assembleProviderReads(
+      deps.providerManager,
+      () => this.getProviderStatus().provider,
+    );
+    this.hasActiveProvider = reads.hasActiveProvider;
+    this.getProviderContextLimit = reads.getProviderContextLimit;
+    this.listAvailableModels = reads.listAvailableModels;
+    this.profilePersistence = assembleProfilePersistence(
+      deps.config,
+      deps.settingsService,
+      deps.providerManager,
+      () => deps.settingsOwner.captureNamedParameters(),
+      deps.mcpOperations.profileWrites,
+    );
+    this.captureProfile = this.profilePersistence.captureProfile;
+    this.saveProfileSnapshot = this.profilePersistence.saveProfileSnapshot;
+    this.deleteProfileByName = this.profilePersistence.deleteProfileByName;
+    this.getActiveProfileName = this.profilePersistence.getActiveProfileName;
+    this.setDefaultProfileName = this.profilePersistence.setDefaultProfileName;
+    this.getRuntimeDiagnosticsSnapshot =
+      this.profilePersistence.getRuntimeDiagnosticsSnapshot;
     this.ownership = deps.ownership;
     this.providerManager = deps.providerManager;
     this.runtimeId = deps.runtimeId;
@@ -298,7 +307,7 @@ export class AgentImpl implements Agent {
     // scheduler/coordinator the facade owns so the T13 disposal probe reads the
     // genuine live objects dispose() tears down (no second bus, no clones).
     this.messageBus = deps.messageBus;
-    this.agentClient = deps.config.getAgentClient();
+
     const rs = deps.runtimeState;
     this.providerState = {
       provider: rs.provider,
@@ -310,54 +319,100 @@ export class AgentImpl implements Agent {
       baseUrl: rs.baseUrl,
     };
     // @plan:PLAN-20260617-COREAPI.P18 @requirement:REQ-008
-    this.authState = createAgentAuthState();
     this.seedAuthState(rs.provider);
     // Shared mutable holders threaded from finalizeAgent.
     this.editorCallbacksHolder = deps.editorCallbacksHolder;
-    this.displayCallbacksHolder = deps.displayCallbacksHolder;
-    this.tools = new ToolControl({
-      messageBus: deps.messageBus,
-      config: deps.config,
-      editorCallbacksHolder: this.editorCallbacksHolder,
-      displayCallbacksHolder: this.displayCallbacksHolder,
-      resolveClient: () => this.deps.resolveClient(),
-      keysDeps: { getStorage: () => getToolKeyStorage() },
-    });
-    this.profiles = new ProfilesControl({
-      getState: () => this.providerState,
-      applySwitch: (provider, model) =>
-        this.applyProviderSwitch(provider, model),
-      applyParams: (params) => this.applyProfileParams(params),
-      setKeyName: (keyName) => {
-        this.providerState.keyName = keyName;
-      },
-      setLoadBalancer: (isLb) => {
-        this.providerState.isLoadBalancer = isLb;
-      },
-      workingDir: deps.config.getTargetDir(),
-    });
+    this.tools = assembleAgentTools(deps);
+    this.profiles = assembleAgentProfiles(
+      deps.config,
+      deps.settingsService,
+      deps.providerManager,
+      deps.oauthManager,
+      deps.switchProvider,
+      deps.settingsOwner,
+      this.providerState,
+      this.authState,
+      this.captureProfile,
+      (changed, signal) => this.prepareReplacement(changed, signal),
+      deps.mcpOperations.profileDefinitions,
+    );
     this.auth = this.buildAuthControl();
     this.mcp = this.buildMcpControl();
-    this.ide = this.buildIdeControl();
+    this.ide = new IdeControl({
+      trust: deps.mcpOperations.trust,
+      ide: deps.mcpOperations.ide,
+      ideModeEnabled: () => deps.mcpOperations.ide.isEnabled(),
+      getEditorCallbacks: () => this.editorCallbacksHolder.editorCallbacks,
+    });
     this.session = this.buildSessionControl();
     this.hooks = this.buildHookControl();
-    this.policy = this.buildPolicyControl();
-    this.tasks = this.buildTasksControl();
-    this.newControls = buildNewControls(this.deps.config);
-    this.memory = this.newControls.memory;
+    this.policy = new PolicyControl({
+      inspection: deps.sessionClient.policyInspection,
+    });
+    this.tasks = createTasksControl(deps.taskLaunchOwner, deps.shellOwner);
+    this.newControls = buildNewControls(
+      deps.config,
+      deps.workspaceSkills,
+      deps.mcpOperations,
+    );
+    this.memory = deps.sessionClient.memoryOperations;
     this.skills = this.newControls.skills;
     this.workspace = this.newControls.workspace;
     this.lsp = this.newControls.lsp;
-    registerInternalConfig(this, this.deps.config);
   }
 
+  private readonly prepareReplacement = (
+    changed: boolean,
+    signal: AbortSignal,
+  ) =>
+    assembleProfileReplacement(
+      {
+        telemetry: this.deps.settingsOwner.telemetry,
+        loopHolder: this.deps.loopHolder,
+        toolSelection: this.deps.sessionClient.toolCatalog.selection,
+        readApprovalMode: () => this.getApprovalMode(),
+        readExecutionPolicy: () =>
+          this.deps.settingsOwner.readToolExecutionPolicy(),
+        getToolGovernance: () =>
+          this.deps.sessionClient.toolCatalog.readGovernance(),
+        config: this.deps.config,
+        messageBus: this.deps.messageBus,
+        resolveClient: this.deps.resolveClient,
+        approvalHandler: this.deps.approvalHandler,
+        displayCallbacks: this.deps.displayCallbacks,
+      },
+      () => this.deps.sessionClient.prepareProfileClientReplacement(),
+      () => this.activeRun,
+    )(changed, signal);
+
   private buildSessionControl(): SessionControl {
+    const mediaStore =
+      this.deps.mediaStore ?? this.deps.resolveClient().mediaStore;
+    if (mediaStore === undefined)
+      throw new Error('Agent client requires explicit media store');
     const sessionDeps: SessionControlDeps = {
+      readRecordingQueueLimit: () =>
+        this.deps.settingsOwner.readRecordingQueueLimit(
+          this.deps.config.getSessionRecordingQueueByteLimit(),
+        ),
       config: this.deps.config,
+      directories: () => this.deps.mcpOperations.workspacePaths.directories(),
+      mediaStore,
+      persistence: new AgentSessionPersistence(
+        {
+          projectRoot: this.deps.config.storageRoot,
+          chatsDir: this.deps.config.projectChatsDir,
+        },
+        {
+          mediaStore,
+          maxQueueBytes: this.deps.config.getSessionPersistenceQueueByteLimit(),
+        },
+      ),
+      sessionIdentityOwnership: this.deps.sessionIdentityOwnership,
       sessionId: () => this.deps.runtimeId,
       resolveClient: () => this.deps.resolveClient(),
       getProvider: () => this.providerState.provider,
-      getModel: () => this.providerState.model,
+      getModel: () => this.getModel(),
     };
     return new SessionControl(sessionDeps);
   }
@@ -400,13 +455,13 @@ export class AgentImpl implements Agent {
    * @requirement:REQ-015
    */
   private buildHookControl(): HookControl {
-    const hookDeps: HookControlDeps = {
-      config: this.deps.config,
-      messageBus: this.deps.messageBus,
-      sessionId: () => this.deps.runtimeId,
-      cwd: () => this.deps.config.getTargetDir(),
-    };
-    return new HookControl(hookDeps);
+    return createAgentHookControl(
+      this.deps.sessionClient.hookOperations,
+      this.deps.messageBus,
+      this.readHookSessionId,
+      () => this.deps.config.getTargetDir(),
+      () => currentRecordingPath(this.session),
+    );
   }
 
   /**
@@ -440,6 +495,7 @@ export class AgentImpl implements Agent {
    * @requirement:REQ-008
    */
   private buildAuthControl(): AuthControl {
+    const { settingsService } = this.deps;
     const onOAuthPromptHandler = isOAuthPromptHandler(this.deps.onOAuthPrompt)
       ? this.deps.onOAuthPrompt
       : undefined;
@@ -450,10 +506,15 @@ export class AgentImpl implements Agent {
         this.providerState.keyName = keyName;
       },
       updateProviderApiKey: async (apiKey: string | null) => {
-        const { updateActiveProviderApiKey } = await import(
-          '@vybestack/llxprt-code-providers/runtime.js'
+        await updateActiveProviderApiKey(
+          apiKey,
+          {
+            setEphemeralSetting: (key, value) =>
+              this.deps.settingsOwner.writeUserParameter(key, value),
+          },
+          settingsService,
+          this.deps.providerManager.getActiveProvider(),
         );
-        await updateActiveProviderApiKey(apiKey);
       },
     };
     return new AuthControl({
@@ -464,11 +525,16 @@ export class AgentImpl implements Agent {
       onOAuthPrompt: onOAuthPromptHandler,
       setBaseUrl: async (baseUrl) => {
         this.providerState.baseUrl = baseUrl ?? undefined;
-        const { updateActiveProviderBaseUrl } = await import(
-          '@vybestack/llxprt-code-providers/runtime.js'
-        );
         try {
-          await updateActiveProviderBaseUrl(baseUrl ?? '');
+          await updateActiveProviderBaseUrl(
+            baseUrl ?? '',
+            {
+              setEphemeralSetting: (key, value) =>
+                this.deps.settingsOwner.writeUserParameter(key, value),
+            },
+            this.deps.settingsService,
+            this.providerState.provider,
+          );
         } catch {
           // No-op under the fake seam.
         }
@@ -491,54 +557,14 @@ export class AgentImpl implements Agent {
    */
   private buildMcpControl(): McpControl {
     // @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006 @pseudocode Dependencies/buildMcpControl
-    const mcpDeps: McpControlDeps = buildMcpControlDeps({
+    const mcp = this.deps.mcpOperations;
+    return buildOwnedMcpControl(mcp, {
+      toolSelection: this.deps.sessionClient.toolCatalog.selection,
       config: this.deps.config,
       isMcpAuthenticated: (server) => this.authState.mcpAuth.has(server),
-      markAuthenticated: (server) => {
-        this.authState.mcpAuth.add(server);
-      },
+      markAuthenticated: (server) => this.authState.mcpAuth.add(server),
       resolveClient: () => this.deps.resolveClient(),
     });
-    return new McpControl(mcpDeps);
-  }
-
-  /**
-   * Builds the IdeControl wired to the live IDE detection/connection surface
-   * plus the SHARED editor-callbacks holder (the same holder
-   * tools.setEditorCallbacks writes), so openEditor/closeEditor fire the
-   * registered editor callbacks.
-   * @plan:PLAN-20260617-COREAPI.P22
-   * @requirement:REQ-014
-   */
-  private buildIdeControl(): IdeControl {
-    const ideDeps: IdeControlDeps = {
-      ideModeEnabled: () => this.deps.config.getIdeMode(),
-      getEditorCallbacks: () => this.editorCallbacksHolder.editorCallbacks,
-    };
-    return new IdeControl(ideDeps);
-  }
-
-  /**
-   * @plan:PLAN-20260622-COREAPIGAP.P06
-   * @requirement:REQ-002
-   */
-  private buildPolicyControl(): PolicyControl {
-    const policyDeps: PolicyControlDeps = {
-      getEngine: () => this.deps.config.getPolicyEngine(),
-    };
-    return new PolicyControl(policyDeps);
-  }
-
-  /**
-   * @plan:PLAN-20260622-COREAPIGAP.P08
-   * @requirement:REQ-003
-   */
-  private buildTasksControl(): TasksControl {
-    const tasksDeps: TasksControlDeps = {
-      getManager: () => this.deps.config.getAsyncTaskManager(),
-      getShellJobManager: () => this.deps.config.getShellJobManager(),
-    };
-    return new TasksControl(tasksDeps);
   }
 
   /**
@@ -554,21 +580,13 @@ export class AgentImpl implements Agent {
    * @requirement:REQ-013
    * @requirement:REQ-019
    */
-  private async awaitMcpDiscoveryGate(
-    opts?: TurnOptions,
-  ): Promise<ReadonlyMap<string, string>> {
-    if (opts?.mcpDiscovery === 'skip') {
-      return new Map();
-    }
-    return this.deps.config.awaitMcpDiscoveryGate();
-  }
 
   /**
    * Injects a mid-turn steer message into the active agent loop. Delegates to
    * the current loop's injectSteer. No-op when no loop is running.
    */
   injectSteer(text: string): void {
-    this.deps.loopHolder.current?.injectSteer(text);
+    this.activeRun?.loop?.injectSteer(text);
   }
 
   /**
@@ -577,70 +595,33 @@ export class AgentImpl implements Agent {
    * @requirement:REQ-003
    * @pseudocode createAgent.md steps 130-148 (loop drives the turn)
    */
-  async *stream(
-    input: AgentInput,
-    opts?: TurnOptions,
-  ): AsyncIterable<AgentEvent> {
-    if (!this.isProviderReady()) {
-      yield {
-        type: 'error',
-        error: {
-          message: UNCONFIGURED_AGENT_MESSAGE,
+  stream(input: AgentInput, opts?: TurnOptions): AsyncIterable<AgentEvent> {
+    return streamForegroundRun(
+      assembleForegroundRun(
+        {
+          recording: createRecordingExecution(
+            this.session,
+            this.readHookSessionId,
+            this.deps.sessionClient.hookOperations,
+          ),
+          isApplying: () => this.profiles.isApplying(),
+          isReady: () => this.isProviderReady(),
+          admitRun: (run) => this.coordinator.admit(run),
+          releaseRun: (run) => this.coordinator.release(run),
+          awaitDiscovery: () => this.deps.mcpOperations.awaitDiscovery(),
+          notifyConfirmation: this.tools.notifyConfirmation.bind(this.tools),
+          notifyToolUpdate: this.tools.notifyToolUpdate.bind(this.tools),
         },
-      };
-      yield { type: 'done', reason: 'error' };
-      return;
-    }
-    // @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ-013
-    // MCP discovery gate: by default await readiness before the model turn.
-    // Per-server discovery failures are NON-FATAL — each failed server is
-    // surfaced as a warning notice, then the turn proceeds with whatever tools
-    // are available (issue #2516). The await is bounded by the manager so a
-    // never-settling server cannot hang the turn.
-    //
-    // Failures are emitted as `notice` (NOT `error`): an `error` event would
-    // set AgentResult.error and make consumers treat the turn as failed — the
-    // exact fatal behavior #2516 removes. Stream consumers see the per-server
-    // warning inline; chat()/non-streaming consumers query the dedicated MCP
-    // control surface (agent.mcp.status()/discoveryState()) which projects the
-    // per-server failures as 'partial'/'failed' + per-server error status.
-    const discoveryFailures = await this.awaitMcpDiscoveryGate(opts);
-    for (const [server, message] of discoveryFailures.entries()) {
-      yield {
-        type: 'notice',
-        message: `MCP server '${server}' discovery failed: ${message}`,
-      };
-    }
-    const init = resolveLoopOrError(
-      this.deps.loopHolder,
-      this.deps.resolveClient,
-      () => this.rebuild(),
+        this.deps.settingsService,
+        this.deps.providerManager,
+        this.deps.loopHolder,
+        this.deps.resolveClient,
+        () => this.rebuild(),
+        () => this.getModel(),
+      ),
+      input,
+      opts,
     );
-    if (init.error !== undefined) {
-      yield { type: 'error', error: init.error };
-      yield { type: 'done', reason: 'error' };
-      return;
-    }
-    const loop = init.loop;
-    const message = toPartListUnion(input);
-    const effectiveSignal =
-      opts?.signal ??
-      this.deps.loopHolder.activeRunController?.signal ??
-      new AbortController().signal;
-    const loopEvents = loop.run(message, effectiveSignal, opts?.promptId);
-    const mapped = mapLoopStream(loopEvents);
-    for await (const event of mapped) {
-      // @plan:PLAN-20260617-COREAPI.P17 @requirement:REQ-006
-      // Tap the public stream so ToolControl fires onConfirmationRequest
-      // (with details from the awaiting_approval ToolCall) and onToolUpdate
-      // callbacks — driven from the SAME projection the eventAdapter produces.
-      if (event.type === 'tool-confirmation') {
-        this.tools.notifyConfirmation(event.confirmation);
-      } else if (event.type === 'tool-status') {
-        this.tools.notifyToolUpdate(event.update);
-      }
-      yield event;
-    }
   }
 
   /**
@@ -698,6 +679,8 @@ export class AgentImpl implements Agent {
     model?: string,
     options?: AgentProviderSwitchOptions,
   ): Promise<AgentProviderSwitchResult> {
+    this.assertProfileIdle();
+    if (this.activeRun !== undefined) throw new AgentBusyError();
     return this.applyProviderSwitch(provider, model, options);
   }
 
@@ -710,25 +693,11 @@ export class AgentImpl implements Agent {
    * @requirement:REQ-008
    */
   getProviderStatus(): ProviderStatus {
-    const s = this.providerState;
-    const winner = this.computeWinner(s.provider);
-    const keyNamePart =
-      winner === 'keyName' && s.keyName !== undefined
-        ? { keyName: s.keyName }
-        : {};
-    const keyFilePart =
-      winner === 'keyfile' && this.authState.keyFile !== undefined
-        ? { keyFile: this.authState.keyFile }
-        : {};
-    const baseUrlPart = s.baseUrl !== undefined ? { baseUrl: s.baseUrl } : {};
-    return {
-      provider: s.provider === UNCONFIGURED_PROVIDER ? '' : s.provider,
-      model: s.model,
-      authStatus: winner !== 'none' ? 'authenticated' : 'unauthenticated',
-      ...baseUrlPart,
-      ...keyNamePart,
-      ...keyFilePart,
-    };
+    return buildProfileProviderStatus(
+      this.providerState,
+      this.computeWinner(this.providerState.provider),
+      this.authState.keyFile,
+    );
   }
 
   /**
@@ -737,24 +706,26 @@ export class AgentImpl implements Agent {
    * @requirement:REQ-004
    */
   getModel(): string {
-    return this.providerState.model;
+    return (
+      this.deps.settingsOwner.readSelectedModel() ?? this.providerState.model
+    );
   }
 
   /**
    * Changes the active model (provider unchanged), preserving context.
-   * setActiveModel does NOT rebuild, so config.initializeContentGeneratorConfig
-   * is called explicitly, then rebuildLoop().
    * @plan:PLAN-20260617-COREAPI.P16
    * @requirement:REQ-004
    * @requirement:REQ-005
    * @pseudocode switch-rebind.md steps 50-60
    */
   async setModel(model: string): Promise<void> {
+    this.assertProfileIdle();
+    if (this.activeRun !== undefined) throw new AgentBusyError();
     if (!this.isProviderReady()) {
       throw new Error(UNCONFIGURED_AGENT_MESSAGE);
     }
-    await setActiveModel(model);
-    await this.deps.config.initializeContentGeneratorConfig();
+    await this.setOwnerModel(model);
+    await this.deps.sessionClient.refreshAuth();
     await this.restoreChatVisibility();
     this.rebuild();
     this.providerState.model = model;
@@ -775,8 +746,7 @@ export class AgentImpl implements Agent {
     // assertion (agentClient!). At runtime no client exists before
     // initialization, so widen to the truthful runtime type to keep a genuine
     // null-guard (the T9c contract: a missing client yields null, never throws).
-    const client = this.deps.resolveClient() as AgentClientContract | undefined;
-    return client?.getCurrentSequenceModel() ?? null;
+    return projectCurrentSequenceModel(this.deps.resolveClient());
   }
 
   /**
@@ -803,17 +773,20 @@ export class AgentImpl implements Agent {
 
   /** @plan:PLAN-20260621-COREAPIREMED.P12 @requirement:REQ-002 @pseudocode lines 20-22 */
   getEphemeralSetting(key: string): unknown {
-    return this.deps.config.getEphemeralSetting(key);
+    this.coordinator.assertSettingsAdmission();
+    return this.deps.settingsOwner.readNamedParameter(key);
   }
 
   /** @plan:PLAN-20260621-COREAPIREMED.P12 @requirement:REQ-002 @pseudocode lines 30-33 */
   setEphemeralSetting(key: string, value: unknown): void {
-    this.deps.config.setEphemeralSetting(key, value);
+    this.assertProfileIdle();
+    this.deps.settingsOwner.writeUserParameter(key, value);
   }
 
   /** @plan:PLAN-20260621-COREAPIREMED.P12 @requirement:REQ-002 @pseudocode lines 40-42 */
   getEphemeralSettings(): Readonly<Record<string, unknown>> {
-    return this.deps.config.getEphemeralSettings();
+    this.coordinator.assertSettingsAdmission();
+    return this.deps.settingsOwner.captureNamedParameters();
   }
 
   /**
@@ -822,7 +795,9 @@ export class AgentImpl implements Agent {
    * @pseudocode lines 1-4
    */
   getApprovalMode(): ApprovalMode {
-    return this.deps.config.getApprovalMode();
+    return this.ide.isTrustedFolder()
+      ? this.deps.config.getApprovalMode()
+      : ApprovalMode.DEFAULT;
   }
 
   /**
@@ -831,6 +806,10 @@ export class AgentImpl implements Agent {
    * @pseudocode lines 10-17
    */
   setApprovalMode(mode: ApprovalMode): void {
+    if (!this.ide.isTrustedFolder() && mode !== ApprovalMode.DEFAULT)
+      throw new Error(
+        'Cannot enable privileged approval modes in an untrusted folder.',
+      );
     this.deps.config.setApprovalMode(mode);
   }
 
@@ -841,23 +820,21 @@ export class AgentImpl implements Agent {
    * @pseudocode switch-rebind.md steps 110-112
    */
   getModelParams(): Readonly<Record<string, unknown>> {
-    return Object.freeze(
-      Object.assign(
-        Object.create(null) as Record<string, unknown>,
-        this.providerState.modelParams,
-      ),
-    );
+    return snapshotModelParams(this.providerState.modelParams);
   }
 
   /**
    * Lazily sets a model param (no content-generator rebuild); the next provider
-   * call reads it. Also updates the per-agent map so getModelParams reflects it.
+   * ordinary admission reads it. Also updates the per-agent map so getModelParams reflects it.
    * @plan:PLAN-20260617-COREAPI.P16
    * @requirement:REQ-004
    * @pseudocode switch-rebind.md steps 90-94
    */
   setModelParam(key: string, value: unknown): void {
-    setActiveModelParam(key, value);
+    this.coordinator.assertNoCommit();
+    const { providerManager, settingsService } = this.deps;
+    const providerName = providerManager.getActiveProviderName();
+    setActiveModelParam(key, value, settingsService, providerName);
     this.providerState.modelParams[key] = value;
   }
 
@@ -868,7 +845,10 @@ export class AgentImpl implements Agent {
    * @pseudocode switch-rebind.md steps 100-103
    */
   clearModelParam(key: string): void {
-    clearActiveModelParam(key);
+    this.coordinator.assertNoCommit();
+    const { providerManager, settingsService } = this.deps;
+    const providerName = providerManager.getActiveProviderName();
+    clearActiveModelParam(key, settingsService, providerName);
     delete this.providerState.modelParams[key];
   }
 
@@ -896,8 +876,7 @@ export class AgentImpl implements Agent {
    */
   async addHistory(message: AgentMessage): Promise<void> {
     const client = this.deps.resolveClient();
-    const icontent = message as unknown as IContent;
-    await client.addHistory(icontent);
+    await client.addHistory(message);
   }
 
   /**
@@ -910,9 +889,7 @@ export class AgentImpl implements Agent {
    */
   async restoreHistory(items: readonly AgentHistoryItem[]): Promise<void> {
     const client = this.deps.resolveClient();
-    await client.restoreHistory([...items] as Parameters<
-      typeof client.restoreHistory
-    >[0]);
+    await client.restoreHistory([...items]);
   }
 
   /**
@@ -966,33 +943,19 @@ export class AgentImpl implements Agent {
   async compress(opts?: {
     readonly promptId?: string;
   }): Promise<CompressionResult> {
-    if (!this.isProviderReady()) {
-      throw new Error(UNCONFIGURED_AGENT_MESSAGE);
-    }
+    if (!this.isProviderReady()) throw new Error(UNCONFIGURED_AGENT_MESSAGE);
     const promptId = opts?.promptId ?? `compress-${Date.now()}`;
     // Ensure the chat is initialized before accessing it: setHistory can run
     // before the first turn (startChat is otherwise lazy on first turn).
-    await this.restoreChatVisibility();
-    const chat = this.deps.resolveClient().getChat();
-    const originalTokenCount = readCompressionTokenCount(this.historyService);
-    const raw = await chat.performCompression(promptId);
-    if (raw === PerformCompressionResult.COMPRESSED) {
-      const newTokenCount = readCompressionTokenCount(this.historyService);
-      return {
-        status: 'compressed',
-        originalTokenCount: Math.max(originalTokenCount, newTokenCount),
-        newTokenCount,
-        promptId,
-      };
-    }
-    if (raw === PerformCompressionResult.NOOP) {
-      // Structural no-op: history unchanged by a deterministic strategy guard.
-      // Distinct from 'skipped' (cooldown/empty) per issue #2602.
-      return { status: 'noop', promptId };
-    }
-    const status: 'skipped' | 'failed' =
-      raw === PerformCompressionResult.FAILED ? 'failed' : 'skipped';
-    return { status, promptId };
+    return executeHookCompression(
+      promptId,
+      () => this.restoreChatVisibility(),
+      () => this.deps.resolveClient().getChat(),
+      this.session,
+      this.readHookSessionId,
+      this.deps.sessionClient.hookOperations,
+      () => this.historyService,
+    );
   }
 
   /**
@@ -1002,9 +965,8 @@ export class AgentImpl implements Agent {
    * @plan:PLAN-20260617-COREAPI.P20
    * @requirement:REQ-010
    */
-  getStats(): SessionStats {
-    return projectSessionStats(this.historyService);
-  }
+  readonly getStats = (): SessionStats =>
+    projectSessionStats(this.historyService);
 
   /**
    * Subscribes to live SessionStats updates. Stats are sourced from the
@@ -1015,16 +977,8 @@ export class AgentImpl implements Agent {
    * @plan:PLAN-20260617-COREAPI.P20
    * @requirement:REQ-010
    */
-  onStats(cb: (stats: SessionStats) => void): Unsubscribe {
-    const handler = (): void => {
-      cb(projectSessionStats(this.historyService));
-    };
-    cb(projectSessionStats(this.historyService));
-    uiTelemetryService.on('update', handler);
-    return () => {
-      uiTelemetryService.off('update', handler);
-    };
-  }
+  readonly onStats = (cb: (stats: SessionStats) => void): Unsubscribe =>
+    subscribeSessionStats(() => this.historyService, cb);
 
   /**
    * Side-channel single-shot generation. Delegates to the client's detached
@@ -1039,10 +993,16 @@ export class AgentImpl implements Agent {
       throw new Error(UNCONFIGURED_AGENT_MESSAGE);
     }
     const client = this.deps.resolveClient();
-    const message = toPartListUnion(input);
-    const promptId = opts?.promptId ?? `generate-${Date.now()}`;
-    const response = await client.generateDirectMessage({ message }, promptId);
-    return getResponseTextFromBlocks(response.content.blocks) ?? '';
+    return generateDetachedText(
+      input,
+      opts?.promptId ?? `generate-${Date.now()}`,
+      client.generateDirectMessage.bind(client),
+      createRecordingExecution(
+        this.session,
+        this.readHookSessionId,
+        this.deps.sessionClient.hookOperations,
+      ),
+    );
   }
 
   /**
@@ -1061,11 +1021,9 @@ export class AgentImpl implements Agent {
       throw new Error(UNCONFIGURED_AGENT_MESSAGE);
     }
     const client = this.deps.resolveClient();
-    const contentsArr = [...contents] as Parameters<
-      typeof client.generateJson
-    >[0];
+    const contentsArr = [...contents];
     const signal = opts?.signal ?? new AbortController().signal;
-    const model = opts?.model ?? this.providerState.model;
+    const model = opts?.model ?? this.getModel();
     return client.generateJson(contentsArr, { ...schema }, signal, model);
   }
 
@@ -1080,8 +1038,7 @@ export class AgentImpl implements Agent {
     if (!this.isProviderReady()) {
       throw new Error(UNCONFIGURED_AGENT_MESSAGE);
     }
-    const client = this.deps.resolveClient();
-    return client.generateEmbedding([...texts]);
+    return this.deps.resolveClient().generateEmbedding([...texts]);
   }
 
   /**
@@ -1091,13 +1048,12 @@ export class AgentImpl implements Agent {
    */
   listProviders(): readonly ProviderInfo[] {
     const names = this.deps.providerManager.listProviders();
-    const configured = new Set(names);
-    return buildProviderInfos(names, configured);
+    return buildProviderInfos(names, new Set(names));
   }
 
   /** Projects the enriched ToolInfo[] from the registry (added by #2376). */
   listTools(): readonly ToolInfo[] {
-    const registry = this.deps.config.getToolRegistry();
+    const registry = this.deps.sessionClient.toolCatalog.selection;
     return buildToolInfosFromRegistry(
       registry.getAllTools(),
       new Set(registry.getEnabledTools().map((t) => t.name)),
@@ -1153,7 +1109,7 @@ export class AgentImpl implements Agent {
     let infoMessages: readonly string[] = [];
     let defaultModel: string | undefined;
     try {
-      const switchResult = await switchActiveProvider(
+      const switchResult = await this.deps.switchProvider(
         provider,
         toRuntimeSwitchOptions(options),
       );
@@ -1178,8 +1134,8 @@ export class AgentImpl implements Agent {
       // Real provider switch succeeded; apply the requested model (if any) via
       // setActiveModel + the explicit model-only rebuild.
       if (model !== undefined && model !== this.providerState.model) {
-        await setActiveModel(model);
-        await this.deps.config.initializeContentGeneratorConfig();
+        await this.setOwnerModel(model);
+        await this.deps.sessionClient.refreshAuth();
       }
       await this.restoreChatVisibility();
     } else if (model !== undefined && model !== this.providerState.model) {
@@ -1188,7 +1144,7 @@ export class AgentImpl implements Agent {
       // change, so the client/HistoryService identity is preserved).
       // setActiveModel updates the model on the existing provider; the
       // rebuild() below propagates it to the loop (#2374 deepthinker finding).
-      await setActiveModel(model);
+      await this.setOwnerModel(model);
     }
     // Under the fake seam (providerChanged === false), the client is unchanged;
     // history/HistoryService identity is trivially preserved (same client).
@@ -1217,14 +1173,14 @@ export class AgentImpl implements Agent {
    * @plan:PLAN-20260617-COREAPI.P16
    * @requirement:REQ-005
    */
-  private async restoreChatVisibility(): Promise<void> {
-    const client = this.deps.resolveClient();
-    if (!client.hasChatInitialized()) {
-      const carriedHistory = await client.getHistory();
-      await client.startChat(
-        carriedHistory.length > 0 ? carriedHistory : undefined,
-      );
-    }
+  private setOwnerModel(
+    model: string,
+  ): ReturnType<typeof setAgentSelectedModel> {
+    return setAgentSelectedModel(model, this.deps);
+  }
+
+  private restoreChatVisibility(): Promise<void> {
+    return restoreAgentChatVisibility(this.deps.resolveClient());
   }
 
   /**
@@ -1234,11 +1190,9 @@ export class AgentImpl implements Agent {
    * @requirement:REQ-009
    * @pseudocode switch-rebind.md steps 90-94
    */
-  private applyProfileParams(params: Readonly<Record<string, unknown>>): void {
-    for (const [key, value] of Object.entries(params)) {
-      setActiveModelParam(key, value);
-      this.providerState.modelParams[key] = value;
-    }
+  private assertProfileIdle(): void {
+    this.coordinator.assertNoCommit();
+    if (this.profiles.isApplying()) throw new AgentBusyError();
   }
 
   /**
@@ -1250,7 +1204,14 @@ export class AgentImpl implements Agent {
    */
   private rebuild(): void {
     this.deps.rebuildLoop({
+      telemetry: this.deps.settingsOwner.telemetry,
       loopHolder: this.deps.loopHolder,
+      toolSelection: this.deps.sessionClient.toolCatalog.selection,
+      readApprovalMode: () => this.getApprovalMode(),
+      readExecutionPolicy: () =>
+        this.deps.settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        this.deps.sessionClient.toolCatalog.readGovernance(),
       resolveClient: this.deps.resolveClient,
       config: this.deps.config,
       messageBus: this.deps.messageBus,
@@ -1265,7 +1226,10 @@ export class AgentImpl implements Agent {
    * generateEmbedding/compress/setModel to prevent model-dependent operations
    * when no provider is configured.
    */
+
+  private readonly readHookSessionId = (): string => this.deps.runtimeId;
   private isProviderReady(): boolean {
+    if (this.ownership.disposed) throw new Error('Agent is closed');
     return this.deps.providerManager.hasActiveProvider();
   }
 
@@ -1296,7 +1260,7 @@ export class AgentImpl implements Agent {
    *   40-47 dispose facade-held injected-factory scheduler/coordinator handles
    *   50-52 unsubscribe every recorded bus subscription + detach hooks
    *   55    runtimeHandle.cleanup() (unregister runtime context)
-   *   60    config.dispose() (agentClient + mcpClientManager)
+   *   60    config.dispose() (agentClient)
    *   70    config.shutdownLspService() (NET-NEW) + set lspShutDown marker
    *   80    extensions teardown (NET-NEW, headless no-op) + extensionsDisposed
    *   81-83 release every session lock (NET-NEW) + sessionLocksReleased
@@ -1308,170 +1272,102 @@ export class AgentImpl implements Agent {
    * @requirement:REQ-015
    * @pseudocode dispose.md 10-14, 20, 30, 40-47, 50-52, 55, 60, 70, 80-83, 90-92, 100-102
    */
-  async dispose(): Promise<void> {
-    const ownership = this.ownership;
-    // @pseudocode dispose.md 11-13: idempotency guard.
-    if (ownership.disposed) {
-      return;
-    }
-    ownership.disposed = true;
-    // @pseudocode dispose.md 14: error accumulator (collect, never short-circuit).
+  private lifecycle?: SessionLifecycle;
+
+  dispose(): Promise<void> {
+    this.lifecycle ??= this.createShutdownLifecycle();
+    return this.lifecycle.dispose();
+  }
+
+  private stopShutdownAdmissions(): readonly SessionCleanupAction[] {
+    return [
+      () => {
+        this.ownership.disposed = true;
+      },
+      () => this.deps.taskLaunchOwner.closeAdmissionAndAbort(),
+      () => this.deps.sessionClient.closeHookAdmission(),
+      () => this.hooks.closeAdmission(),
+      () => this.profilePersistence.closeAdmission(),
+      () => this.deps.mcpOperations.closeAdmission(),
+      () => this.deps.shellOwner.closeAdmission(),
+      () => this.newControls.closeAdmission(),
+      () => this.session.closeAdmission(),
+    ];
+  }
+
+  private createShutdownLifecycle(): SessionLifecycle {
     const errors: unknown[] = [];
+    const pending: Array<Promise<void>> = [];
+    const run = this.activeRun;
     const holder = this.deps.loopHolder;
-
-    // @pseudocode dispose.md 20: REQ-015 SessionEnd-on-dispose lifecycle hook.
-    await this.safe(errors, () => this.hooks.triggerSessionEnd());
-
-    // @pseudocode dispose.md 30: abort the facade-owned active-run controller
-    // (its .signal was passed to loop.run; AgenticLoop self-cleans in finally).
-    await this.safe(errors, () => {
-      holder.activeRunController?.abort();
+    const start = (action: SessionCleanupAction): void => {
+      pending.push(collectDisposalError(errors, action));
+    };
+    return new SessionLifecycle({
+      stopAdmissions: [
+        ...this.stopShutdownAdmissions(),
+        () => start(() => this.deps.sessionClient.closeImageAdmission()),
+        () => start(() => this.deps.sessionClient.toolCatalog.closeAdmission()),
+        () => start(() => this.tools.dispose()),
+      ],
+      abortActiveAndPending: [
+        () => run?.controller.abort(),
+        () => holder.activeRunController?.abort(),
+        () => start(() => this.coordinator.dispose()),
+        () => start(() => this.deps.shellOwner.dispose()),
+      ],
+      cancelAndJoinOwnedWork: [
+        () =>
+          joinAgentWork(
+            this,
+            this.deps.taskLaunchOwner,
+            this.ownership,
+            errors,
+          ),
+        () => joinCapturedRun(run, errors),
+        () =>
+          collectDisposalError(errors, () => this.profilePersistence.join()),
+        async () => {
+          await Promise.all(pending);
+        },
+      ],
+      flushRecording: [
+        async () => {
+          await finishOwnedHooks(this.hooks, this.deps.sessionClient, errors);
+          await disposeAgentObservers(
+            this.ownership,
+            this.hooks,
+            this.newControls,
+            holder.subscriptions,
+            errors,
+          );
+          await collectDisposalError(errors, () => this.session.dispose());
+        },
+      ],
+      releaseResources: [
+        async () => {
+          await this.releaseShutdownResources(errors);
+          if (errors.length > 0) throw new AggregateDisposeError(errors);
+        },
+      ],
     });
+  }
 
-    // @pseudocode dispose.md 40-47: CONDITIONAL T19 teardown. Dispose every
-    // scheduler handle created via the caller-injected toolSchedulerFactory and
-    // retained by the facade. Each handle backs BOTH the conceptual scheduler
-    // (40-42) and coordinator (45-47) rows — the injected recording fake exposes
-    // a single handle whose `disposed` flag covers both — so each is disposed
-    // exactly ONCE here (no double-dispose). The caller-owned factory FUNCTION is
-    // never disposed. Per-turn loop schedulers stay owned + disposed by
-    // AgenticLoop through config.disposeScheduler under the loop's own
-    // registry owner, so dispose() does NOT touch them. A
-    // failing handle's rejection is collected into errors → AggregateDisposeError.
-    for (const handle of ownership.injectedSchedulerHandles) {
-      await this.safe(errors, () => handle.dispose());
-    }
-
-    // @pseudocode dispose.md 50-52: unsubscribe every recorded bus subscription
-    // and detach the hooks control's shared-MessageBus subscriptions, driving
-    // the bus emitter's listener tally to its post-dispose baseline (zero).
-    this.safeSync(errors, () => {
-      this.hooks.detach();
-    });
-    this.safeSync(errors, () => {
-      this.newControls.dispose();
-    });
-    const subs = holder.subscriptions;
-    if (subs !== undefined) {
-      for (const unsubscribe of subs) {
-        this.safeSync(errors, () => {
-          unsubscribe();
-        });
-      }
-    }
-
-    // @pseudocode dispose.md 55: runtimeHandle.cleanup() unregisters the runtime
-    // context (and tears down OAuth infra within).
-    await this.safe(errors, () => this.deps.runtimeHandle.cleanup());
-
-    // @pseudocode dispose.md 60: config.dispose() disposes agentClient
-    // (_unsubscribe → undefined) and stops mcpClientManager.
-    // @plan:PLAN-20260621-COREAPIREMED.P09 @requirement:REQ-001.3
-    // SKIP when the Config is caller-owned (fromConfig): the caller retains the
-    // Config lifecycle and disposes it. An agent-owned Config (createAgent) is
-    // torn down here as before.
-    if (ownership.configOwnership !== 'caller') {
-      await this.safe(errors, () => this.deps.config.dispose());
-    }
-
-    // @pseudocode dispose.md 70: NET-NEW LSP shutdown wiring. shutdownLspService
-    // exists on Config but Config.dispose() does not call it; wire it here and
-    // set the completion marker AFTER the await succeeds (T13 observable).
-    // @plan:PLAN-20260621-COREAPIREMED.P09 @requirement:REQ-001.3
-    // SKIP the caller-owned Config's LSP service too (the caller owns it).
-    if (ownership.configOwnership !== 'caller') {
-      await this.safe(errors, async () => {
-        await this.deps.config.shutdownLspService();
-        ownership.lspShutDown = true;
-      });
-    }
-
-    // @plan:PLAN-20260617-COREAPI.P24 @requirement:REQ-016
-    // @pseudocode dispose.md 80: NET-NEW extensions teardown. The pseudocode's
-    // `extensionsManager.dispose()` does not exist; the real Config-owned seam is
-    // the ExtensionLoader reachable via ownership.config.getExtensionLoader().
-    // Tear down every active extension via its documented dynamic-unload path
-    // (ExtensionLoader.unloadExtension), collecting any failing unload into
-    // errors[] via safe(), then set the completion marker AFTER the awaited loop
-    // (T13 observable). Headless agents have zero active extensions, so the loop
-    // is vacuously empty while remaining a genuine awaited teardown call-path.
-    const activeExtensions = collectActiveExtensions(
-      ownership.config.getExtensionLoader(),
+  private async releaseShutdownResources(errors: unknown[]): Promise<void> {
+    await collectDisposalError(errors, () => this.deps.sessionClient.dispose());
+    await collectDisposalError(errors, () => this.deps.runtimeHandle.cleanup());
+    await disposeConfigInfrastructure(
+      this.ownership,
+      this.deps.mediaOwner,
+      errors,
     );
-    for (const extension of activeExtensions) {
-      await this.safe(errors, () =>
-        unloadExtensionSafely(ownership.config.getExtensionLoader(), extension),
-      );
-    }
-    ownership.extensionsDisposed = true;
-
-    // @pseudocode dispose.md 81-83: NET-NEW session-lock release. Release every
-    // facade-owned lock, then set the completion marker AFTER the loop completes
-    // (vacuously true with zero locks in headless mode; T13 observable).
-    for (const lock of ownership.sessionLocks) {
-      await this.safe(errors, () => lock.release());
-    }
-    ownership.sessionLocksReleased = true;
-
-    // @pseudocode dispose.md 81-83 (REQ-010): release SessionControl-owned
-    // resources — the active recording service and the on-disk session lock a
-    // resume acquired — so neither leaks past agent teardown. Guarded via safe()
-    // so a failing release is collected into errors[] rather than swallowed.
-    await this.safe(errors, () => this.session.dispose());
-
-    // @pseudocode dispose.md 90-92: defensive OAuth teardown (runtimeHandle.cleanup
-    // at line 55 should already have disposed it).
-    await this.safe(errors, () => disposeOAuthManager(this.deps.oauthManager));
-
-    // @pseudocode dispose.md 100-102: surface collected failures (do not swallow).
-    if (errors.length > 0) {
-      throw new AggregateDisposeError(errors);
-    }
+    this.ownership.extensionsDisposed = true;
+    await releaseAgentFinalResources(
+      this.ownership,
+      this.deps.oauthManager,
+      errors,
+    );
   }
-
-  /**
-   * Awaits fn and pushes any throw/rejection into the errors accumulator so the
-   * teardown continues. Never rethrows mid-teardown.
-   * @plan:PLAN-20260617-COREAPI.P24
-   * @requirement:REQ-016
-   * @pseudocode dispose.md 110-113
-   */
-  private async safe(
-    errors: unknown[],
-    fn: () => Promise<void> | void,
-  ): Promise<void> {
-    try {
-      await fn();
-    } catch (e: unknown) {
-      errors.push(e);
-    }
-  }
-
-  /**
-   * Synchronous variant of {@link safe} for non-awaitable teardown steps
-   * (unsubscribe / detach). Pushes any throw into the errors accumulator.
-   * @plan:PLAN-20260617-COREAPI.P24
-   * @requirement:REQ-016
-   * @pseudocode dispose.md 110-113
-   */
-  private safeSync(errors: unknown[], fn: () => void): void {
-    try {
-      fn();
-    } catch (e: unknown) {
-      errors.push(e);
-    }
-  }
-}
-
-/**
- * Type guard narrowing the unknown onOAuthPrompt dep to OAuthPromptHandler.
- * The AgentConfigSchema guarantees the shape when present; this guard avoids
- * an unsafe cast.
- * @plan:PLAN-20260617-COREAPI.P18
- * @requirement:REQ-008
- */
-function isOAuthPromptHandler(v: unknown): v is OAuthPromptHandler {
-  return typeof v === 'function';
 }
 
 /**

@@ -46,8 +46,13 @@ describe('finalizeAgent post-auth client guard', () => {
       let captured: unknown;
       try {
         await fromConfig({
+          settingsOwner: built.settingsOwner,
+          settingsService: built.settingsService,
+          providerManager: built.providerManager,
+          runtimeFactoryBindings: built.runtimeFactoryBindings,
           config: built.config,
           messageBus: built.messageBus,
+          policyOwner: built.policyOwner,
           activation: {
             provider: 'fake',
             model: 'fake-model',

@@ -328,6 +328,91 @@ describe('RecordingIntegration duplicate content guard @issue:3132', () => {
     expect(hasNoDuplicates(collectToolResponseCallIds(live))).toBe(true);
   });
 
+  it('does not append resumed content again when a rebuild reassigns turn IDs', async () => {
+    harness.historyService.add({
+      ...textContent('resumed message'),
+      metadata: { turnId: 'original-turn-id' },
+    });
+    await harness.integration.flushAtTurnBoundary();
+    const original = harness.historyService.getAll()[0];
+    harness.historyService.clear();
+    harness.historyService.add({
+      ...original,
+      metadata: {
+        turnId: 'replacement-turn-id',
+        chronology: original.metadata?.chronology,
+      },
+    });
+
+    const events = await flushAndReadEvents();
+    expect(textsOf(recordedContents(events))).toStrictEqual([
+      'resumed message',
+    ]);
+  });
+
+  it('does not re-record seeded disk history when live history is empty at subscribe time', async () => {
+    harness.historyService.add({
+      ...textContent('disk-only resumed message'),
+      metadata: { turnId: 'disk-turn' },
+    });
+    await harness.integration.flushAtTurnBoundary();
+    const diskHistory = harness.historyService.getAll();
+    await harness.integration.dispose();
+
+    const resumedIntegration = new RecordingIntegration(
+      harness.recordingService,
+    );
+    const liveHistory = new HistoryService();
+    resumedIntegration.rememberRecordedHistory(diskHistory);
+    resumedIntegration.subscribeToHistory(liveHistory);
+    try {
+      liveHistory.add({
+        ...diskHistory[0],
+        metadata: {
+          turnId: 'rebuilt-turn',
+          chronology: diskHistory[0].metadata?.chronology,
+        },
+      });
+      await resumedIntegration.flushAtTurnBoundary();
+      const filePath = harness.recordingService.getFilePath();
+      expect(filePath).not.toBeNull();
+      const events = await readEvents(filePath ?? '');
+      expect(textsOf(recordedContents(events))).toStrictEqual([
+        'disk-only resumed message',
+      ]);
+    } finally {
+      await resumedIntegration.dispose();
+      liveHistory.dispose();
+    }
+  });
+
+  it('does not re-record an unstamped disk snapshot when its history is rebuilt', async () => {
+    const snapshot = textContent('unstamped disk snapshot');
+    harness.recordingService.recordContent(snapshot);
+    await harness.recordingService.flush();
+    const resumedIntegration = new RecordingIntegration(
+      harness.recordingService,
+    );
+    const liveHistory = new HistoryService();
+    resumedIntegration.rememberRecordedHistory([snapshot]);
+    resumedIntegration.subscribeToHistory(liveHistory);
+    try {
+      liveHistory.add(snapshot);
+      liveHistory.add(textContent('unstamped disk snapshot'));
+      await resumedIntegration.flushAtTurnBoundary();
+      const filePath = harness.recordingService.getFilePath();
+      expect(filePath).not.toBeNull();
+      const events = await readEvents(filePath ?? '');
+      expect(textsOf(recordedContents(events))).toStrictEqual([
+        'unstamped disk snapshot',
+        'unstamped disk snapshot',
+      ]);
+    } finally {
+      await resumedIntegration.dispose();
+      liveHistory.dispose();
+    }
+  });
+
   it('records a compression between turns without duplicating content', async () => {
     harness.historyService.add(textContent('turn-1-user'));
     harness.historyService.add(textContent('turn-1-ai', 'ai'));

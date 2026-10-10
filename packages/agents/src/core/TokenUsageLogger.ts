@@ -724,8 +724,7 @@ export class TokenUsageLogger {
 export function createTokenUsageLogger(
   view: AgentRuntimeContext,
 ): TokenUsageLogger {
-  const settingsService = view.providerRuntime.settingsService;
-  const tokenUsageEnabled = settingsService.get('token-usage-log') !== false;
+  const tokenUsageEnabled = view.tokenUsageLoggingEnabled;
   const config = view.providerRuntime.config;
   const sessionId = view.state.sessionId;
   let logFilePath: string | undefined;

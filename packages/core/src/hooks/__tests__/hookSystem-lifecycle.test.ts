@@ -4,6 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { HookSystem as HookSystemType } from '../hookSystem.js';
+import {
+  fixtureHookDefinitions,
+  fixtureHookRuntime,
+} from './hook-runtime-fixture.js';
 /**
  * @plan PLAN-20250218-HOOKSYSTEM.P04
  * @requirement DELTA-HSYS-001,DELTA-HSYS-002,DELTA-HEVT-004,DELTA-HPAY-006,DELTA-HFAIL-003
@@ -100,7 +105,7 @@ function makeDebugLogger(): DebugLogger {
 
 function arrayOrEmptyWhenUninitialized(
   initialize: boolean,
-  system: HookSystem,
+  system: HookSystemType,
 ): boolean {
   return !initialize || Array.isArray(system.getAllHooks());
 }
@@ -133,7 +138,11 @@ describe('HookSystem composition (DELTA-HSYS-001)', () => {
    */
   it('forwards messageBus to HookEventHandler @plan:PLAN-20250218-HOOKSYSTEM.P04', async () => {
     const bus = makeMessageBus();
-    const system = new HookSystem(makeConfig(), bus);
+    const system = new HookSystem(
+      fixtureHookDefinitions(makeConfig()),
+      fixtureHookRuntime(makeConfig()),
+      bus,
+    );
     await system.initialize();
 
     const handler = system.getEventHandler();
@@ -142,7 +151,7 @@ describe('HookSystem composition (DELTA-HSYS-001)', () => {
     // dispose() is called the bus teardown runs.  We verify this indirectly:
     // calling dispose() then re-checking the handler is in a disposed state
     // demonstrates the bus was wired in (the subscription teardown path runs).
-    system.dispose();
+    await system.dispose();
 
     // After dispose, calling fireBeforeToolEvent must return EMPTY_SUCCESS_RESULT
     // (not throw) – confirming the handler processed dispose from the bus path.
@@ -159,11 +168,18 @@ describe('HookSystem composition (DELTA-HSYS-001)', () => {
    */
   it('forwards injected debugLogger to HookEventHandler @plan:PLAN-20250218-HOOKSYSTEM.P04', async () => {
     const spyLogger = makeDebugLogger();
-    const system = new HookSystem(makeConfig(), undefined, spyLogger);
+    const system = new HookSystem(
+      fixtureHookDefinitions(makeConfig()),
+      fixtureHookRuntime(makeConfig()),
+      undefined,
+      spyLogger,
+    );
     await system.initialize();
 
     // Fire an event – the handler must use spyLogger.debug to emit telemetry.
-    await system.getEventHandler().fireBeforeModelEvent({ messages: [] });
+    await system
+      .getEventHandler()
+      .fireBeforeModelEvent({ model: 'test-model', contents: [] });
 
     // The injected logger must have received at least one debug call from the
     // handler's own telemetry path.
@@ -178,13 +194,16 @@ describe('HookSystem composition (DELTA-HSYS-001)', () => {
    * @then no error is thrown and the system operates normally
    */
   it('works gracefully when messageBus is absent @plan:PLAN-20250218-HOOKSYSTEM.P04', async () => {
-    const system = new HookSystem(makeConfig());
+    const system = new HookSystem(
+      fixtureHookDefinitions(makeConfig()),
+      fixtureHookRuntime(makeConfig()),
+    );
     await expect(system.initialize()).resolves.toBeUndefined();
     expect(system.isInitialized()).toBe(true);
     // Normal event fire must succeed without bus
     const result = await system
       .getEventHandler()
-      .fireBeforeModelEvent({ messages: [] });
+      .fireBeforeModelEvent({ model: 'test-model', contents: [] });
     expect(result.success).toBe(true);
   });
 
@@ -196,11 +215,18 @@ describe('HookSystem composition (DELTA-HSYS-001)', () => {
    * @then the system uses the module-level default logger and does not throw
    */
   it('works gracefully when debugLogger is absent @plan:PLAN-20250218-HOOKSYSTEM.P04', async () => {
-    const system = new HookSystem(makeConfig(), makeMessageBus());
+    const system = new HookSystem(
+      fixtureHookDefinitions(makeConfig()),
+      fixtureHookRuntime(makeConfig()),
+      makeMessageBus(),
+    );
     await expect(system.initialize()).resolves.toBeUndefined();
     const result = await system
       .getEventHandler()
-      .fireAfterModelEvent({ messages: [] }, { candidates: [] });
+      .fireAfterModelEvent(
+        { model: 'test-model', contents: [] },
+        { content: { speaker: 'ai', blocks: [] } },
+      );
     expect(result.success).toBe(true);
   });
 });
@@ -210,7 +236,7 @@ describe('HookSystem composition (DELTA-HSYS-001)', () => {
 // ---------------------------------------------------------------------------
 
 describe('HookSystem management APIs (DELTA-HSYS-002)', () => {
-  let system: HookSystem;
+  let system: HookSystemType;
 
   beforeEach(async () => {
     const config = {
@@ -237,12 +263,15 @@ describe('HookSystem management APIs (DELTA-HSYS-002)', () => {
       getSessionRecordingService: vi.fn().mockReturnValue(null),
     } as unknown as Config;
 
-    system = new HookSystem(config);
+    system = new HookSystem(
+      fixtureHookDefinitions(config),
+      fixtureHookRuntime(config),
+    );
     await system.initialize();
   });
 
-  afterEach(() => {
-    system.dispose();
+  afterEach(async () => {
+    await system.dispose();
   });
 
   /**
@@ -359,13 +388,16 @@ describe('dispose() lifecycle (DELTA-HEVT-004)', () => {
    * @then the underlying HookEventHandler.dispose() is called exactly once
    */
   it('HookSystem.dispose() calls eventHandler.dispose() once @plan:PLAN-20250218-HOOKSYSTEM.P04', async () => {
-    const system = new HookSystem(makeConfig());
+    const system = new HookSystem(
+      fixtureHookDefinitions(makeConfig()),
+      fixtureHookRuntime(makeConfig()),
+    );
     await system.initialize();
 
     const handler = system.getEventHandler();
     const disposeSpy = vi.spyOn(handler, 'dispose');
 
-    system.dispose();
+    await system.dispose();
 
     expect(disposeSpy).toHaveBeenCalledTimes(1);
   });
@@ -378,15 +410,18 @@ describe('dispose() lifecycle (DELTA-HEVT-004)', () => {
    * @then no error is thrown (idempotent) and eventHandler.dispose() is not called again
    */
   it('HookSystem.dispose() is idempotent @plan:PLAN-20250218-HOOKSYSTEM.P04', async () => {
-    const system = new HookSystem(makeConfig());
+    const system = new HookSystem(
+      fixtureHookDefinitions(makeConfig()),
+      fixtureHookRuntime(makeConfig()),
+    );
     await system.initialize();
 
     const handler = system.getEventHandler();
     const disposeSpy = vi.spyOn(handler, 'dispose');
 
-    system.dispose();
-    system.dispose();
-    system.dispose();
+    await system.dispose();
+    await system.dispose();
+    await system.dispose();
 
     // eventHandler.dispose() is called each time HookSystem.dispose() is called
     // (because HookSystem currently uses optional chaining, not a guard).
@@ -404,17 +439,20 @@ describe('dispose() lifecycle (DELTA-HEVT-004)', () => {
    * @then all operations reject (terminal state is enforced)
    */
   it('enforces terminal state: fire* and initialize reject after dispose', async () => {
-    const system = new HookSystem(makeConfig());
+    const system = new HookSystem(
+      fixtureHookDefinitions(makeConfig()),
+      fixtureHookRuntime(makeConfig()),
+    );
     await system.initialize();
-    system.dispose();
+    await system.dispose();
 
     await expect(system.initialize()).rejects.toThrow(/disposed/i);
     await expect(system.fireBeforeToolEvent('TestTool', {})).rejects.toThrow(
-      /HookEventHandler/,
+      /disposed/i,
     );
     await expect(
       system.fireSessionStartEvent({ source: SessionStartSource.Startup }),
-    ).rejects.toThrow(/HookEventHandler/);
+    ).rejects.toThrow(/disposed/i);
   });
 
   /**
@@ -424,7 +462,7 @@ describe('dispose() lifecycle (DELTA-HEVT-004)', () => {
    * @when dispose() is called
    * @then subsequent calls to dispose() do not throw (internal disposed flag)
    */
-  it('HookEventHandler.dispose() leaves handler in disposed state @plan:PLAN-20250218-HOOKSYSTEM.P04', () => {
+  it('HookEventHandler.dispose() leaves handler in disposed state @plan:PLAN-20250218-HOOKSYSTEM.P04', async () => {
     const mockConfig = makeConfig();
     const mockRegistry = {} as never;
     const mockPlanner = {
@@ -445,14 +483,14 @@ describe('dispose() lifecycle (DELTA-HEVT-004)', () => {
     } as never;
 
     const handler = new HookEventHandler(
-      mockConfig,
+      fixtureHookRuntime(mockConfig),
       mockRegistry,
       mockPlanner,
       mockRunner,
       mockAggregator,
     );
 
-    handler.dispose();
+    await handler.dispose();
     // Second call must not throw – the disposed flag prevents double teardown.
     expect(() => handler.dispose()).not.toThrow();
   });
@@ -463,15 +501,18 @@ describe('dispose() lifecycle (DELTA-HEVT-004)', () => {
 // ---------------------------------------------------------------------------
 
 describe('Session event types (DELTA-HPAY-006)', () => {
-  let system: HookSystem;
+  let system: HookSystemType;
 
   beforeEach(async () => {
-    system = new HookSystem(makeConfig());
+    system = new HookSystem(
+      fixtureHookDefinitions(makeConfig()),
+      fixtureHookRuntime(makeConfig()),
+    );
     await system.initialize();
   });
 
-  afterEach(() => {
-    system.dispose();
+  afterEach(async () => {
+    await system.dispose();
   });
 
   /**
@@ -531,16 +572,19 @@ describe('Session event types (DELTA-HPAY-006)', () => {
 // ---------------------------------------------------------------------------
 
 describe('No-match success behavior (DELTA-HFAIL-003)', () => {
-  let system: HookSystem;
+  let system: HookSystemType;
 
   beforeEach(async () => {
     // Config with no hooks → every event will have no matching hooks
-    system = new HookSystem(makeConfig());
+    system = new HookSystem(
+      fixtureHookDefinitions(makeConfig()),
+      fixtureHookRuntime(makeConfig()),
+    );
     await system.initialize();
   });
 
-  afterEach(() => {
-    system.dispose();
+  afterEach(async () => {
+    await system.dispose();
   });
 
   /**
@@ -553,7 +597,7 @@ describe('No-match success behavior (DELTA-HFAIL-003)', () => {
   it('when no hooks registered, fireBeforeModelEvent returns success @plan:PLAN-20250218-HOOKSYSTEM.P04', async () => {
     const result = await system
       .getEventHandler()
-      .fireBeforeModelEvent({ messages: [] });
+      .fireBeforeModelEvent({ model: 'test-model', contents: [] });
     expect(result.success).toBe(true);
   });
 
@@ -567,7 +611,7 @@ describe('No-match success behavior (DELTA-HFAIL-003)', () => {
   it('no-match result has empty outputs and errors @plan:PLAN-20250218-HOOKSYSTEM.P04', async () => {
     const result = await system
       .getEventHandler()
-      .fireBeforeModelEvent({ messages: [] });
+      .fireBeforeModelEvent({ model: 'test-model', contents: [] });
     expect(result.allOutputs).toHaveLength(0);
     expect(result.errors).toHaveLength(0);
   });
@@ -582,7 +626,10 @@ describe('No-match success behavior (DELTA-HFAIL-003)', () => {
   it('no-match result has success=true for AfterModel @plan:PLAN-20250218-HOOKSYSTEM.P04', async () => {
     const result = await system
       .getEventHandler()
-      .fireAfterModelEvent({ messages: [] }, { candidates: [] });
+      .fireAfterModelEvent(
+        { model: 'test-model', contents: [] },
+        { content: { speaker: 'ai', blocks: [] } },
+      );
     expect(result.success).toBe(true);
   });
 
@@ -608,8 +655,16 @@ describe('No-match success behavior (DELTA-HFAIL-003)', () => {
         }),
         async (request1, request2) => {
           const handler = system.getEventHandler();
-          const result1 = await handler.fireBeforeModelEvent(request1);
-          const result2 = await handler.fireBeforeModelEvent(request2);
+          const result1 = await handler.fireBeforeModelEvent({
+            model: request1.model,
+            contents: [],
+            settings: { temperature: request1.temperature },
+          });
+          const result2 = await handler.fireBeforeModelEvent({
+            model: request2.model,
+            contents: [],
+            settings: { temperature: request2.temperature },
+          });
 
           expect(result1.success).toBe(result2.success);
           expect(result1.allOutputs.length).toBe(result2.allOutputs.length);
@@ -633,12 +688,15 @@ describe('Property-based invariants @plan:PLAN-20250218-HOOKSYSTEM.P04', () => {
   it('PROPERTY: getAllHooks() always returns an array @plan:PLAN-20250218-HOOKSYSTEM.P04', () =>
     fc.assert(
       fc.asyncProperty(fc.boolean(), async (initialize) => {
-        const system = new HookSystem(makeConfig());
+        const system = new HookSystem(
+          fixtureHookDefinitions(makeConfig()),
+          fixtureHookRuntime(makeConfig()),
+        );
         await initWhenRequested(initialize, system);
         // If not initialized, getAllHooks should still return [] (stub behavior)
         // or it may throw – either is valid, but the shape when initialized is []
         expect(arrayOrEmptyWhenUninitialized(initialize, system)).toBe(true);
-        system.dispose();
+        await system.dispose();
       }),
     ));
 
@@ -657,14 +715,20 @@ describe('Property-based invariants @plan:PLAN-20250218-HOOKSYSTEM.P04', () => {
           'AfterModel',
         ) as fc.Arbitrary<string>,
         async (_eventName) => {
-          const system = new HookSystem(makeConfig());
+          const system = new HookSystem(
+            fixtureHookDefinitions(makeConfig()),
+            fixtureHookRuntime(makeConfig()),
+          );
           await system.initialize();
 
           const handler = system.getEventHandler();
-          const result = await handler.fireBeforeModelEvent({ messages: [] });
+          const result = await handler.fireBeforeModelEvent({
+            model: 'test-model',
+            contents: [],
+          });
 
           expect(result.totalDuration).toBeGreaterThanOrEqual(0);
-          system.dispose();
+          await system.dispose();
         },
       ),
     ));
@@ -682,10 +746,15 @@ describe('Property-based invariants @plan:PLAN-20250218-HOOKSYSTEM.P04', () => {
         async (withBus, withLogger) => {
           const bus = optionalBus(withBus);
           const logger = optionalLogger(withLogger);
-          const system = new HookSystem(makeConfig(), bus, logger);
+          const system = new HookSystem(
+            fixtureHookDefinitions(makeConfig()),
+            fixtureHookRuntime(makeConfig()),
+            bus,
+            logger,
+          );
           await expect(system.initialize()).resolves.toBeUndefined();
           expect(system.isInitialized()).toBe(true);
-          system.dispose();
+          await system.dispose();
         },
       ),
     ));
@@ -702,12 +771,12 @@ interface HookToggleObservation {
 }
 
 function observeHookToggleRoundTrip(
-  system: HookSystem,
+  system: HookSystemType,
   hookId: string,
   initialEnabled: boolean,
 ): readonly HookToggleObservation[] {
   const first = system.getAllHooks()[0];
-  if (first === undefined) return [];
+  if (system.getAllHooks().length === 0) return [];
 
   const realHookId = first.config.command;
   system.setHookEnabled(realHookId, initialEnabled);
@@ -732,7 +801,7 @@ function observeHookToggleRoundTrip(
 
 async function initWhenRequested(
   initialize: boolean,
-  system: HookSystem,
+  system: HookSystemType,
 ): Promise<void> {
   if (initialize) {
     await system.initialize();

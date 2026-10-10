@@ -13,6 +13,7 @@
 
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
+import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
 import { isSessionScopedSettingKey } from '@vybestack/llxprt-code-settings';
 import type { GenerateChatOptions } from '../IProvider.js';
 import type {
@@ -22,9 +23,19 @@ import type {
 import { isResolvedSubProfile } from '../LoadBalancingProvider.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
 
+export function normalizeLoadBalancerOptions(
+  options: GenerateChatOptions,
+): GenerateChatOptions {
+  const runtimeOptions: Partial<GenerateChatOptions> = options;
+  return runtimeOptions.contents === undefined
+    ? { ...options, contents: [] }
+    : options;
+}
+
 export interface OptionsBuildContext {
   lbProfileEphemeralSettings: Record<string, unknown> | undefined;
   lbProfileModelParams: Record<string, unknown> | undefined;
+  memberParameters?: AdmittedModelParameters;
   logger: DebugLogger;
   providerName: string;
   getEffectiveContextLimit: () => number | undefined;
@@ -135,20 +146,10 @@ function buildResolvedSubProfileOptions(
     ...extractUpstreamSessionEphemerals(options),
   };
 
-  const temperature = readNumericSetting(
-    mergedInvocationEphemerals,
-    'temperature',
-    'temperature',
-  );
-  const maxTokens = readNumericSetting(
-    mergedInvocationEphemerals,
-    'maxTokens',
-    'max_tokens',
-  );
-  const streaming = readBooleanSetting(
+  const { temperature, maxTokens, streaming } = resolveMemberNumericSettings(
     mergedEphemeralSettings,
-    'streaming',
-    'stream',
+    mergedInvocationEphemerals,
+    ctx.memberParameters,
   );
 
   // authToken isolation: strip parent resolved.authToken so a sub-profile that
@@ -158,6 +159,7 @@ function buildResolvedSubProfileOptions(
 
   const resolvedOptions: GenerateChatOptions = {
     ...options,
+    ...(ctx.memberParameters ? { modelParameters: ctx.memberParameters } : {}),
     resolved: {
       ...resolvedWithoutAuth,
       model: subProfile.model,
@@ -206,13 +208,12 @@ function createDelegateInvocation(
   ephemeralsSnapshot: Record<string, unknown>,
   ctx: OptionsBuildContext,
 ): GenerateChatOptions['invocation'] | undefined {
-  if (options.runtime === undefined || options.settings === undefined) {
-    return undefined;
-  }
-
   return createRuntimeInvocationContext({
-    runtime: options.runtime,
-    settings: options.settings,
+    runtimeId: options.invocation?.runtimeId,
+    runtimeMetadata: options.invocation?.metadata,
+
+    modelParams: ctx.memberParameters?.modelParams,
+    modelParamsProviderName: ctx.memberParameters?.providerName,
     providerName: subProfile.providerName,
     ephemeralsSnapshot,
     telemetry: options.resolved?.telemetry,
@@ -220,6 +221,19 @@ function createDelegateInvocation(
     signal: getRequestSignal(options),
     fallbackRuntimeId: `${ctx.providerName}:${subProfile.name}`,
   });
+}
+
+function resolveMemberNumericSettings(
+  ephemerals: Record<string, unknown>,
+  merged: Record<string, unknown>,
+  admitted: AdmittedModelParameters | undefined,
+): { temperature?: number; maxTokens?: number; streaming?: boolean } {
+  const parameters = admitted?.modelParams ?? merged;
+  return {
+    temperature: readNumericSetting(parameters, 'temperature', 'temperature'),
+    maxTokens: readNumericSetting(parameters, 'maxTokens', 'max_tokens'),
+    streaming: readBooleanSetting(ephemerals, 'streaming', 'stream'),
+  };
 }
 
 function readNumericSetting(

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { readInvocationPolicyRecord } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 /**
  * Anthropic Request Preparation Module
  * Encapsulates the full request preparation pipeline from content to API-ready request body
@@ -16,7 +17,10 @@ import type {
   IContent,
   SemanticMediaPurgeCacheWriteEvidence,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import {
+  parseOutputLimits,
+  type OutputLimitConfig,
+} from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type { IProviderConfig } from '../types/IProviderConfig.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { ProviderToolset } from '../IProvider.js';
@@ -83,7 +87,7 @@ export interface PrepareRequestParams {
   isOAuth: boolean;
   placement: SystemPromptPlacement;
   providerName: string;
-  config: Config | undefined;
+  config: OutputLimitConfig | undefined;
   getMaxTokensForModel: (model: string) => number;
   unprefixToolName: (name: string, isOAuth: boolean) => string;
   providerConfig: IProviderConfig | undefined;
@@ -103,7 +107,7 @@ function resolveCliSetting<T>(
     typeof options.invocation.getCliSetting === 'function'
       ? options.invocation.getCliSetting(key)
       : undefined;
-  return (fromCli ?? options.settings.get(key)) as T | undefined;
+  return (fromCli ?? options.invocation.getEphemeral(key)) as T | undefined;
 }
 
 /**
@@ -193,14 +197,20 @@ function resolveReasoningSettings(
   const nativeReasoning = readAnthropicReasoningSettings(
     readInvocationRecord(options.invocation.modelBehavior),
     {
-      enabled: options.settings.get('reasoning.enabled'),
-      effort: options.settings.get('reasoning.effort'),
-      budgetTokens: options.settings.get('reasoning.budgetTokens'),
-      adaptiveThinking: options.settings.get('reasoning.adaptiveThinking'),
-      effortWireFormat: options.settings.get('reasoning.effortWireFormat'),
-      enabledWireFormat: options.settings.get('reasoning.enabledWireFormat'),
-      effortMap: options.settings.get('reasoning.effortMap'),
-      enabledMap: options.settings.get('reasoning.enabledMap'),
+      enabled: options.invocation.getEphemeral('reasoning.enabled'),
+      effort: options.invocation.getEphemeral('reasoning.effort'),
+      budgetTokens: options.invocation.getEphemeral('reasoning.budgetTokens'),
+      adaptiveThinking: options.invocation.getEphemeral(
+        'reasoning.adaptiveThinking',
+      ),
+      effortWireFormat: options.invocation.getEphemeral(
+        'reasoning.effortWireFormat',
+      ),
+      enabledWireFormat: options.invocation.getEphemeral(
+        'reasoning.enabledWireFormat',
+      ),
+      effortMap: options.invocation.getEphemeral('reasoning.effortMap'),
+      enabledMap: options.invocation.getEphemeral('reasoning.enabledMap'),
     },
   );
   const stripFromContext = resolveCliSetting<'all' | 'allButLast' | 'none'>(
@@ -229,16 +239,17 @@ function resolveReasoningSettings(
  */
 function resolveRequestSettings(
   options: NormalizedGenerateChatOptions,
-  providerConfig: IProviderConfig | undefined,
   providerName: string,
 ): RequestSettings {
   // Get streaming setting from ephemeral settings (default: enabled)
-  const invocationEphemerals = options.invocation.ephemerals;
-  const providerEphemerals = providerConfig?.getEphemeralSettings?.();
   const streamingSetting =
-    (invocationEphemerals['streaming'] as string | undefined) ??
-    providerEphemerals?.['streaming'];
-  const streamingEnabled = streamingSetting !== 'disabled';
+    options.invocation.getCliSetting('streaming') ??
+    options.invocation.getEphemeral('streaming') ??
+    readInvocationPolicyRecord(options.invocation.providerDefaults.ephemerals)[
+      'streaming'
+    ];
+  const streamingEnabled =
+    options.resolved.streaming ?? streamingSetting !== 'disabled';
 
   // Get current model
   const currentModel = options.resolved.model;
@@ -249,7 +260,9 @@ function resolveRequestSettings(
   };
 
   // Translate generic maxOutputTokens ephemeral to Anthropic's max_tokens
-  const rawMaxOutput = options.settings.get('maxOutputTokens');
+  const rawMaxOutput = options.modelParameters
+    ? options.modelParameters.genericMaxOutputTokens
+    : options.invocation.getEphemeral('maxOutputTokens');
   const genericMaxOutput =
     typeof rawMaxOutput === 'number' &&
     Number.isFinite(rawMaxOutput) &&
@@ -263,16 +276,15 @@ function resolveRequestSettings(
     requestOverrides['max_tokens'] = genericMaxOutput;
   }
 
-  const configEphemerals = invocationEphemerals;
+  const configEphemerals = options.invocation.ephemerals;
 
   // Get caching setting from options.settings or provider settings
-  const providerSettings = options.settings.getProviderSettings(providerName);
+  const providerSettings =
+    options.invocation.getProviderOverrides<Record<string, unknown>>(
+      providerName,
+    ) ?? {};
   const cachingSetting =
-    (options.settings.get('prompt-caching') as
-      | 'off'
-      | '5m'
-      | '1h'
-      | undefined) ??
+    options.invocation.getEphemeral('prompt-caching') ??
     (providerSettings['prompt-caching'] as 'off' | '5m' | '1h' | undefined) ??
     '1h';
   const wantCaching = cachingSetting !== 'off';
@@ -512,7 +524,7 @@ function convertMessagesAndTools(params: {
   tools: ProviderToolset | undefined;
   isOAuth: boolean;
   reasoningSettings: ReasoningSettings;
-  config: Config | undefined;
+  config: OutputLimitConfig | undefined;
   currentModel: string;
   currentBaseURL: string | undefined;
   supportsUrlImages: boolean;
@@ -741,7 +753,9 @@ export async function prepareAnthropicRequest(
       `[AnthropicProvider] Reasoning settings from invocation.modelBehavior (fallback to options.settings): enabled=${String(reasoningSettings.enabled)}, budgetTokens=${String(reasoningSettings.budgetTokens)}, stripFromContext=${String(reasoningSettings.stripFromContext)}, includeInContext=${String(reasoningSettings.includeInContext)}`,
   );
 
-  const configForMessages = params.config ?? params.options.runtime?.config;
+  const configForMessages = parseOutputLimits(
+    params.options.invocation.ephemerals,
+  );
 
   // Issue #3216: proactively sanitize oversized image blocks from the neutral
   // history before conversion, so known-invalid bytes never reach the wire.
@@ -776,7 +790,6 @@ export async function prepareAnthropicRequest(
 
   const requestSettings = resolveRequestSettings(
     params.options,
-    params.providerConfig,
     params.providerName,
   );
 

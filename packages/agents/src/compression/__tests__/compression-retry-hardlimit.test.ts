@@ -20,7 +20,7 @@ import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Age
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
+  createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -31,9 +31,12 @@ import { makeHttpError } from './compression-retry-helpers.js';
 const original = { ...(await import('@vybestack/llxprt-code-settings')) };
 void vi.mock('@vybestack/llxprt-code-settings', () => ({
   ...original,
-  Storage: {
-    ...original.Storage,
-    getGlobalConfigDir: vi.fn(() => '/tmp/llxprt-test-config'),
+  // Subclass so every static Storage path helper (spreading a class drops its
+  // non-enumerable statics) stays available to Config construction.
+  Storage: class TestStorage extends original.Storage {
+    static override getGlobalConfigDir(): string {
+      return '/tmp/llxprt-test-config';
+    }
   },
 }));
 
@@ -124,10 +127,8 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
           target: null,
         },
       },
-      provider: createProviderAdapterFromManager(
-        runtimeSetup.config.getProviderManager(),
-      ),
-      telemetry: createTelemetryAdapterFromConfig(runtimeSetup.config),
+      provider: createProviderAdapterFromManager(runtimeSetup.providerManager),
+      telemetry: createTelemetryAdapter(runtimeSetup.config),
       tools: createToolRegistryViewFromRegistry(),
       providerRuntime: providerRuntimeSnapshot,
     });

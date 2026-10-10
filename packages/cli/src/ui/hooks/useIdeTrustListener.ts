@@ -6,7 +6,6 @@
 
 import { useCallback, useSyncExternalStore } from 'react';
 
-import { ideContext } from '@vybestack/llxprt-code-core';
 import type { IdeState } from '../cliUiRuntime.js';
 
 /**
@@ -28,8 +27,7 @@ export function useIdeTrustListener(ide: Pick<IdeState, 'getIdeClient'>) {
     [ide],
   );
 
-  const getSnapshot = () =>
-    ideContext.getIdeContext()?.workspaceState?.isTrusted;
+  const getSnapshot = () => ide.getIdeClient()?.getWorkspaceTrust();
 
   const isIdeTrusted = useSyncExternalStore(subscribe, getSnapshot);
 

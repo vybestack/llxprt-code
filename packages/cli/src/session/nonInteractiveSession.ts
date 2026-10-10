@@ -1,15 +1,17 @@
+import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
+  type SessionSettingsOwner,
+  type LlxprtExtension,
+  type WorkspaceSkillOperations,
   type Config,
   writeToStderr,
-  triggerSessionEndHook,
   SessionEndReason,
   OutputFormat,
+  type IContent,
 } from '@vybestack/llxprt-code-core';
-import {
-  debugLogger,
-  isTelemetrySdkInitialized,
-  shutdownTelemetry,
-} from '@vybestack/llxprt-code-telemetry';
+
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { type LoadedSettings } from '../config/settings.js';
 import {
@@ -18,7 +20,6 @@ import {
 } from '../utils/startupWarnings.js';
 import { getUserStartupWarnings } from '../utils/userStartupWarnings.js';
 import { runNonInteractive } from '../nonInteractiveCli.js';
-import type { SessionRecordingSetup } from '../cliSessionBootstrap.js';
 import { validateNonInteractiveAuth } from '../validateNonInteractiveAuth.js';
 import { runExitCleanup } from '../utils/cleanup.js';
 import { initializeOutputListenersAndFlush } from './outputListeners.js';
@@ -50,6 +51,11 @@ function writeRecordingStartupWarnings(warnings: readonly string[]): void {
 }
 
 export interface NonInteractiveSessionOptions {
+  readonly oauthManager?: OAuthManager;
+  readonly runtimeSettings: {
+    readonly owner: SessionSettingsOwner;
+    readonly store: SettingsService;
+  };
   config: Config;
   agent: Agent;
   settings: LoadedSettings;
@@ -58,6 +64,11 @@ export interface NonInteractiveSessionOptions {
 }
 
 export interface PipedOrPromptSessionOptions {
+  readonly oauthManager?: OAuthManager;
+  readonly runtimeSettings: {
+    readonly owner: SessionSettingsOwner;
+    readonly store: SettingsService;
+  };
   config: Config;
   agent: Agent;
   settings: LoadedSettings;
@@ -67,6 +78,16 @@ export interface PipedOrPromptSessionOptions {
 }
 
 export interface SessionDispatchOptions {
+  readonly oauthManager?: OAuthManager;
+  readonly runtimeSettings: {
+    readonly owner: SessionSettingsOwner;
+    readonly store: SettingsService;
+  };
+  restartExtension?: (extension: LlxprtExtension) => Promise<void>;
+  skillOperations?: Pick<
+    WorkspaceSkillOperations,
+    'list' | 'find' | 'reload' | 'isAdminEnabled'
+  >;
   config: Config;
   /**
    * The single session Agent created at the CLI composition root (#2378). It is
@@ -78,7 +99,10 @@ export interface SessionDispatchOptions {
   agent: Agent;
   settings: LoadedSettings;
   workspaceRoot: string;
-  recording: SessionRecordingSetup;
+  recordingOwner?: 'agent';
+  resumedHistory?: IContent[] | null;
+  /** Session-resume warnings the user must see (unreadable recordings, resume failures). */
+  recordingStartupWarnings?: readonly string[];
   hasPipedInput: boolean;
   readStdinData: () => Promise<string>;
   suppressStartupWelcome?: boolean;
@@ -89,14 +113,20 @@ export interface SessionDispatchOptions {
  * piped/prompt non-interactive session depending on the configured mode.
  */
 export async function dispatchInteractiveOrNonInteractive({
+  oauthManager,
+  skillOperations,
+  restartExtension,
   config,
   agent,
   settings,
   workspaceRoot,
-  recording,
+  recordingOwner,
+  resumedHistory,
+  recordingStartupWarnings = [],
   hasPipedInput,
   readStdinData,
   suppressStartupWelcome,
+  runtimeSettings,
 }: SessionDispatchOptions): Promise<void> {
   const input = config.getQuestion();
 
@@ -110,6 +140,8 @@ export async function dispatchInteractiveOrNonInteractive({
 
   // Render UI, passing necessary config values. Check that there is no command line question.
   if (typeof config.isInteractive === 'function' && config.isInteractive()) {
+    if (recordingOwner !== 'agent')
+      throw new Error('Interactive Agent recording owner was not initialized');
     // Startup warnings are only consumed by the interactive UI, so compute
     // them inside this branch — the non-interactive path avoids the wasted
     // I/O. The two warning sources are independent, so run them in parallel.
@@ -121,7 +153,7 @@ export async function dispatchInteractiveOrNonInteractive({
       ...(sandboxHandoffWarning !== undefined ? [sandboxHandoffWarning] : []),
       ...systemWarnings,
       ...userWarnings,
-      ...recording.startupWarnings,
+      ...recordingStartupWarnings,
     ];
 
     // The single interactive Agent was created at the composition root and is
@@ -135,12 +167,16 @@ export async function dispatchInteractiveOrNonInteractive({
       settings,
       startupWarnings,
       workspaceRoot,
-      sessionMessageBus,
-      recording.recordingIntegration,
-      recording.resumedHistory ?? undefined,
-      recording.recordingService,
-      recording.resumedLockHandle,
-      suppressStartupWelcome,
+      {
+        recordingOwner,
+        oauthManager,
+        runtimeSettings,
+        skillOperations,
+        restartExtension,
+        runtimeMessageBus: sessionMessageBus,
+        resumedHistory: resumedHistory ?? undefined,
+        suppressStartupWelcome,
+      },
     );
     return;
   }
@@ -156,9 +192,11 @@ export async function dispatchInteractiveOrNonInteractive({
     writeToStderr(sandboxHandoffWarning);
   }
 
-  writeRecordingStartupWarnings(recording.startupWarnings);
+  writeRecordingStartupWarnings(recordingStartupWarnings);
 
   await runPipedOrPromptSession({
+    oauthManager,
+    runtimeSettings,
     config,
     agent,
     settings,
@@ -173,12 +211,14 @@ export async function dispatchInteractiveOrNonInteractive({
  * run the non-interactive session, shut down telemetry, and exit the process.
  */
 async function runPipedOrPromptSession({
+  oauthManager,
   config,
   agent,
   settings,
   initialInput,
   hasPipedInput,
   readStdinData,
+  runtimeSettings,
 }: PipedOrPromptSessionOptions): Promise<never> {
   let input = initialInput;
   // If not a TTY, read from stdin
@@ -208,8 +248,12 @@ ${existingInput}`
   const prompt_id = Math.random().toString(16).slice(2);
 
   let nonInteractiveExitCode = 0;
+  let cleanupFailures: unknown[] = [];
+  const setupFailures: unknown[] = [];
   try {
     nonInteractiveExitCode = await runNonInteractiveSession({
+      runtimeSettings,
+      oauthManager,
       config,
       agent,
       settings,
@@ -217,6 +261,7 @@ ${existingInput}`
       prompt_id,
     });
   } catch (error) {
+    setupFailures.push(error);
     nonInteractiveExitCode = 1;
     debugLogger.error(
       `Non-interactive session setup failed (prompt_id=${prompt_id}):`,
@@ -224,13 +269,25 @@ ${existingInput}`
     );
     safeReportNonInteractiveError(config, error);
   } finally {
-    if (isTelemetrySdkInitialized()) {
-      await shutdownTelemetry(config);
-    }
-
-    // Call cleanup before process.exit, which causes cleanup to not run
-    await runExitCleanup();
+    const exportResult = await Promise.allSettled([
+      Promise.resolve().then(() => runtimeSettings.owner.telemetry.flush()),
+    ]);
+    const cleanupResult = await Promise.allSettled([
+      Promise.resolve().then(() => runExitCleanup()),
+    ]);
+    cleanupFailures = [...exportResult, ...cleanupResult].flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
+    );
   }
+  if (cleanupFailures.length > 0) {
+    const failures = [...setupFailures, ...cleanupFailures];
+    if (failures.length === 1) throw failures[0];
+    throw new AggregateError(
+      failures,
+      'Noninteractive telemetry and exit cleanup failed',
+    );
+  }
+
   process.exit(nonInteractiveExitCode);
 }
 
@@ -239,11 +296,13 @@ ${existingInput}`
  * inject any SessionStart context, run the prompt, and report the exit code.
  */
 async function runNonInteractiveSession({
+  oauthManager,
   config,
   agent,
   settings,
   input,
   prompt_id,
+  runtimeSettings,
 }: NonInteractiveSessionOptions): Promise<number> {
   // Validate auth BEFORE installing the SIGINT handler: on auth failure
   // validateNonInteractiveAuth calls process.exit, which bypasses the finally
@@ -257,6 +316,8 @@ async function runNonInteractiveSession({
       config,
       settings,
       runExitCleanup,
+      agent.providerManager,
+      (key, value) => agent.setEphemeralSetting(key, value),
     );
   } catch (error) {
     // validateNonInteractiveAuth reports its own auth errors (and calls
@@ -268,7 +329,7 @@ async function runNonInteractiveSession({
     // validateNonInteractiveAuth rejected before returning. This may differ
     // from what the run would have used if validateNonInteractiveAuth applied
     // partial mutations before rejecting.
-    await triggerSessionEndHook(config, SessionEndReason.Other);
+    await agent.hooks.triggerSessionEnd(SessionEndReason.Other);
     // Wrap only the reporting call so a secondary reporting failure does not
     // mask the original error or alter the exit code.
     safeReportNonInteractiveError(config, error);
@@ -294,6 +355,8 @@ ${finalInput}`;
     }
 
     await runNonInteractive({
+      oauthManager,
+      runtimeSettings,
       config: nonInteractiveConfig,
       // Reuse the composition-root Agent (#2378) instead of building a second
       // one; the session bus is the Agent's own bus.
@@ -306,7 +369,7 @@ ${finalInput}`;
     });
 
     // Fire SessionEnd hook on successful completion
-    await triggerSessionEndHook(nonInteractiveConfig, SessionEndReason.Exit);
+    await agent.hooks.triggerSessionEnd(SessionEndReason.Exit);
   } catch (error) {
     nonInteractiveExitCode = 1;
     debugLogger.error(
@@ -321,7 +384,7 @@ ${finalInput}`;
     // triggerSessionEndHook catches hook failures internally (documented
     // non-blocking contract in lifecycleHookTriggers.ts), so no wrapper is
     // needed here — it will never reject or mask the original error.
-    await triggerSessionEndHook(nonInteractiveConfig, SessionEndReason.Other);
+    await agent.hooks.triggerSessionEnd(SessionEndReason.Other);
 
     // Wrap only the reporting call so a secondary reporting failure does not
     // mask the original error or alter the exit code.

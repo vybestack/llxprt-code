@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
+
 import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import { tmpdir } from 'node:os';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
@@ -102,6 +104,7 @@ function createProps(): InlineContentProps {
         debugMode: false,
         model: 'test-model',
       }),
+      createUiSessionOwner(),
     ),
     showToolDescriptions: false,
     showAutoAcceptIndicator: ApprovalMode.DEFAULT,

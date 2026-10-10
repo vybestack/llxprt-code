@@ -14,13 +14,12 @@
  * GREEN phase: Phase 05 implements the actual runtime state.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach } from 'bun:test';
 import {
   createAgentRuntimeState,
   updateAgentRuntimeState,
   updateAgentRuntimeStateBatch,
   getAgentRuntimeStateSnapshot,
-  subscribeToAgentRuntimeState,
   getProvider,
   getModel,
   getBaseUrl,
@@ -30,7 +29,6 @@ import {
   RuntimeStateErrorCode,
   type AgentRuntimeState,
   type RuntimeStateParams,
-  type RuntimeStateChangedEvent,
 } from './AgentRuntimeState.js';
 
 describe('AgentRuntimeState - Constructor Validation', () => {
@@ -271,105 +269,6 @@ describe('AgentRuntimeState - Immutable Updates', () => {
   });
 });
 
-describe('AgentRuntimeState - Event Emission', () => {
-  /**
-   * @plan PLAN-20251027-STATELESS5.P04
-   * @requirement REQ-STAT5-001.2
-   * @pseudocode runtime-state.md lines 230-242
-   *
-   * Tests that state changes emit synchronous events with correct changesets.
-   */
-
-  let baseState: AgentRuntimeState;
-
-  beforeEach(() => {
-    const params: RuntimeStateParams = {
-      runtimeId: 'test-runtime',
-      provider: 'gemini',
-      model: 'gemini-2.0-flash',
-      sessionId: 'test-session',
-    };
-    baseState = createAgentRuntimeState(params);
-  });
-
-  it('should emit event with correct changeset on update', () => {
-    // @plan PLAN-20251027-STATELESS5.P04
-    // @requirement REQ-STAT5-001.2
-    // @pseudocode runtime-state.md lines 230-241
-
-    const callback = vi.fn();
-    subscribeToAgentRuntimeState('test-runtime', callback);
-
-    updateAgentRuntimeState(baseState, { model: 'gemini-2.5-flash' });
-
-    expect(callback).toHaveBeenCalledTimes(1);
-    const event = callback.mock.calls[0][0] as RuntimeStateChangedEvent;
-    expect(event.runtimeId).toBe('test-runtime');
-    expect(event.changes.model).toStrictEqual({
-      old: 'gemini-2.0-flash',
-      new: 'gemini-2.5-flash',
-    });
-  });
-
-  it('should emit event synchronously by default', () => {
-    // @plan PLAN-20251027-STATELESS5.P04
-    // @requirement REQ-STAT5-003.2
-    // @pseudocode runtime-state.md lines 319-325
-
-    let eventFired = false;
-    subscribeToAgentRuntimeState('test-runtime', () => {
-      eventFired = true;
-    });
-
-    updateAgentRuntimeState(baseState, { model: 'gemini-2.5-flash' });
-
-    expect(eventFired).toBe(true);
-  });
-
-  it('should include snapshot in emitted event', () => {
-    // @plan PLAN-20251027-STATELESS5.P04
-    // @requirement REQ-STAT5-001.2
-    // @pseudocode runtime-state.md lines 238-239
-
-    const callback = vi.fn();
-    subscribeToAgentRuntimeState('test-runtime', callback);
-
-    updateAgentRuntimeState(baseState, { model: 'gemini-2.5-flash' });
-
-    const event = callback.mock.calls[0][0] as RuntimeStateChangedEvent;
-    expect(event.snapshot).toBeDefined();
-    expect(event.snapshot.model).toBe('gemini-2.5-flash');
-    expect(event.snapshot.runtimeId).toBe('test-runtime');
-  });
-
-  it('should include timestamp in emitted event', () => {
-    // @plan PLAN-20251027-STATELESS5.P04
-    // @requirement REQ-STAT5-001.2
-    // @pseudocode runtime-state.md lines 240
-
-    const callback = vi.fn();
-    subscribeToAgentRuntimeState('test-runtime', callback);
-
-    const beforeUpdate = Date.now();
-    updateAgentRuntimeState(baseState, { model: 'gemini-2.5-flash' });
-    const afterUpdate = Date.now();
-
-    const event = callback.mock.calls[0][0] as RuntimeStateChangedEvent;
-    expect(event.timestamp).toBeGreaterThanOrEqual(beforeUpdate);
-    expect(event.timestamp).toBeLessThanOrEqual(afterUpdate);
-  });
-
-  it('should not emit event if no subscribers', () => {
-    // @plan PLAN-20251027-STATELESS5.P04
-    // @requirement REQ-STAT5-003.2
-    // Test that update completes successfully even without subscribers
-
-    expect(() =>
-      updateAgentRuntimeState(baseState, { model: 'gemini-2.5-flash' }),
-    ).not.toThrow();
-  });
-});
-
 describe('AgentRuntimeState - Batch Updates', () => {
   /**
    * @plan PLAN-20251027-STATELESS5.P04
@@ -407,40 +306,6 @@ describe('AgentRuntimeState - Batch Updates', () => {
     expect(newState.baseUrl).toBe('https://api.anthropic.com');
   });
 
-  it('should emit single event for batch update', () => {
-    // @plan PLAN-20251027-STATELESS5.P04
-    // @requirement REQ-STAT5-002.3
-    // @pseudocode runtime-state.md lines 264
-
-    const callback = vi.fn();
-    subscribeToAgentRuntimeState('test-runtime', callback);
-
-    updateAgentRuntimeStateBatch(baseState, {
-      provider: 'anthropic',
-      model: 'claude-3-5-sonnet-20241022',
-    });
-
-    expect(callback).toHaveBeenCalledTimes(1);
-  });
-
-  it('should include all changed fields in batch event changeset', () => {
-    // @plan PLAN-20251027-STATELESS5.P04
-    // @requirement REQ-STAT5-002.3
-    // @pseudocode runtime-state.md lines 263
-
-    const callback = vi.fn();
-    subscribeToAgentRuntimeState('test-runtime', callback);
-
-    updateAgentRuntimeStateBatch(baseState, {
-      provider: 'anthropic',
-      model: 'claude-3-5-sonnet-20241022',
-    });
-
-    const event = callback.mock.calls[0][0] as RuntimeStateChangedEvent;
-    expect(event.changes.provider).toBeDefined();
-    expect(event.changes.model).toBeDefined();
-  });
-
   it('should rollback without mutating state if validation fails', () => {
     // @plan PLAN-20251027-STATELESS5.P04
     // @requirement REQ-STAT5-002.3
@@ -458,140 +323,6 @@ describe('AgentRuntimeState - Batch Updates', () => {
 
     expect(baseState.provider).toBe(originalProvider);
     expect(baseState.model).toBe(originalModel);
-  });
-});
-
-describe('AgentRuntimeState - Event Subscription', () => {
-  /**
-   * @plan PLAN-20251027-STATELESS5.P04
-   * @requirement REQ-STAT5-003.2
-   * @pseudocode runtime-state.md lines 289-318
-   *
-   * Tests subscription lifecycle and callback invocation.
-   */
-
-  let baseState: AgentRuntimeState;
-
-  beforeEach(() => {
-    const params: RuntimeStateParams = {
-      runtimeId: 'test-runtime',
-      provider: 'gemini',
-      model: 'gemini-2.0-flash',
-      sessionId: 'test-session',
-    };
-    baseState = createAgentRuntimeState(params);
-  });
-
-  it('should invoke callback when state changes', () => {
-    // @plan PLAN-20251027-STATELESS5.P04
-    // @requirement REQ-STAT5-003.2
-    // @pseudocode runtime-state.md lines 289-306
-
-    const callback = vi.fn();
-    subscribeToAgentRuntimeState('test-runtime', callback);
-
-    updateAgentRuntimeState(baseState, { model: 'gemini-2.5-flash' });
-
-    expect(callback).toHaveBeenCalled();
-  });
-
-  it('should invoke callback synchronously by default', () => {
-    // @plan PLAN-20251027-STATELESS5.P04
-    // @requirement REQ-STAT5-003.2
-    // @pseudocode runtime-state.md lines 319-325
-
-    let callbackInvoked = false;
-    subscribeToAgentRuntimeState('test-runtime', () => {
-      callbackInvoked = true;
-    });
-
-    updateAgentRuntimeState(baseState, { model: 'gemini-2.5-flash' });
-
-    expect(callbackInvoked).toBe(true);
-  });
-
-  it('should invoke callback asynchronously when async option is true', async () => {
-    // @plan PLAN-20251027-STATELESS5.P04
-    // @requirement REQ-STAT5-003.2
-    // @pseudocode runtime-state.md lines 319-325
-
-    let callbackInvoked = false;
-    subscribeToAgentRuntimeState(
-      'test-runtime',
-      () => {
-        callbackInvoked = true;
-      },
-      { async: true },
-    );
-
-    updateAgentRuntimeState(baseState, { model: 'gemini-2.5-flash' });
-
-    expect(callbackInvoked).toBe(false); // Not yet invoked
-    await new Promise((resolve) => setTimeout(resolve, 0)); // Wait for microtask
-    expect(callbackInvoked).toBe(true); // Now invoked
-  });
-
-  it('should return unsubscribe function', () => {
-    // @plan PLAN-20251027-STATELESS5.P04
-    // @requirement REQ-STAT5-003.2
-    // @pseudocode runtime-state.md lines 304-306
-
-    const unsubscribe = subscribeToAgentRuntimeState('test-runtime', vi.fn());
-
-    expect(typeof unsubscribe).toBe('function');
-  });
-
-  it('should not invoke callback after unsubscribe', () => {
-    // @plan PLAN-20251027-STATELESS5.P04
-    // @requirement REQ-STAT5-003.2
-    // @pseudocode runtime-state.md lines 304-306
-
-    const callback = vi.fn();
-    const unsubscribe = subscribeToAgentRuntimeState('test-runtime', callback);
-
-    updateAgentRuntimeState(baseState, { model: 'gemini-2.5-flash' });
-    expect(callback).toHaveBeenCalledTimes(1);
-
-    unsubscribe();
-
-    updateAgentRuntimeState(baseState, { model: 'gemini-3.0-flash' });
-    expect(callback).toHaveBeenCalledTimes(1); // Still only called once
-  });
-
-  it('should support multiple subscribers for same runtimeId', () => {
-    // @plan PLAN-20251027-STATELESS5.P04
-    // @requirement REQ-STAT5-003.2
-    // @pseudocode runtime-state.md lines 289-325
-
-    const callback1 = vi.fn();
-    const callback2 = vi.fn();
-    subscribeToAgentRuntimeState('test-runtime', callback1);
-    subscribeToAgentRuntimeState('test-runtime', callback2);
-
-    updateAgentRuntimeState(baseState, { model: 'gemini-2.5-flash' });
-
-    expect(callback1).toHaveBeenCalledTimes(1);
-    expect(callback2).toHaveBeenCalledTimes(1);
-  });
-
-  it('should handle callback errors without cascade failure', () => {
-    // @plan PLAN-20251027-STATELESS5.P04
-    // @requirement REQ-STAT5-003.2
-    // @pseudocode runtime-state.md lines 315 (error handling comment)
-
-    const errorCallback = vi.fn(() => {
-      throw new Error('Callback error');
-    });
-    const successCallback = vi.fn();
-
-    subscribeToAgentRuntimeState('test-runtime', errorCallback);
-    subscribeToAgentRuntimeState('test-runtime', successCallback);
-
-    expect(() =>
-      updateAgentRuntimeState(baseState, { model: 'gemini-2.5-flash' }),
-    ).not.toThrow();
-
-    expect(successCallback).toHaveBeenCalledTimes(1);
   });
 });
 

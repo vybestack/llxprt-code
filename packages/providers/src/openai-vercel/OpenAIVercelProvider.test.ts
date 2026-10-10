@@ -199,7 +199,7 @@ describe('OpenAIVercelProvider', () => {
         const provider = new OpenAIVercelProvider(
           'live-key',
           'https://api.example.com/v1',
-          { settingsService },
+          undefined,
         );
 
         const fetchMock = vi.fn().mockResolvedValue({
@@ -248,7 +248,7 @@ describe('OpenAIVercelProvider', () => {
         const provider = new OpenAIVercelProvider(
           'live-key',
           'https://api.example.com/v1',
-          { settingsService },
+          undefined,
         );
 
         const fetchMock = vi.fn().mockRejectedValue(new Error('network'));
@@ -352,7 +352,7 @@ describe('OpenAIVercelProvider', () => {
       const provider = new OpenAIVercelProvider(
         'test-api-key',
         'https://portal.qwen.ai/v1',
-        { settingsService },
+        undefined,
       );
 
       let observedRoles: string[] | undefined;
@@ -413,9 +413,7 @@ describe('Authentication (REQ-OAV-003)', () => {
     const result = createProviderWithRuntime<OpenAIVercelProvider>(
       ({ settingsService: svc }) => {
         svc.set('activeProvider', 'openaivercel');
-        return new OpenAIVercelProvider(undefined, undefined, {
-          settingsService: svc,
-        });
+        return new OpenAIVercelProvider(undefined, undefined, undefined);
       },
     );
 
@@ -433,9 +431,7 @@ describe('Authentication (REQ-OAV-003)', () => {
       const provider = new OpenAIVercelProvider(
         'constructor-api-key',
         undefined,
-        {
-          settingsService,
-        },
+        {},
       );
 
       const token = await provider.getAuthToken();
@@ -447,18 +443,14 @@ describe('Authentication (REQ-OAV-003)', () => {
     it('should read API key from OPENAI_API_KEY environment variable', async () => {
       process.env.OPENAI_API_KEY = 'env-api-key';
 
-      const provider = new OpenAIVercelProvider(undefined, undefined, {
-        settingsService,
-      });
+      const provider = new OpenAIVercelProvider(undefined, undefined, {});
 
       const token = await provider.getAuthToken();
       expect(token).toBe('env-api-key');
     });
 
     it('should throw when attempting to generate without any API key', async () => {
-      const provider = new OpenAIVercelProvider(undefined, undefined, {
-        settingsService,
-      });
+      const provider = new OpenAIVercelProvider(undefined, undefined, {});
 
       const options = createProviderCallOptions({
         providerName: 'openaivercel',
@@ -491,9 +483,11 @@ describe('Authentication (REQ-OAV-003)', () => {
       settingsService.set('activeProvider', 'openaivercel');
       settingsService.set('auth-key', 'global-key');
 
-      const provider = new OpenAIVercelProvider('constructor-key', undefined, {
-        settingsService,
-      });
+      const provider = new OpenAIVercelProvider(
+        'constructor-key',
+        undefined,
+        {},
+      );
 
       const token = await provider.getAuthToken();
       expect(token).toBe('constructor-key');
@@ -510,9 +504,7 @@ describe('Authentication (REQ-OAV-003)', () => {
       const provider = new OpenAIVercelProvider(
         'constructor-api-key',
         undefined,
-        {
-          settingsService,
-        },
+        {},
       );
 
       const token = await provider.getAuthToken();
@@ -534,9 +526,7 @@ describe('Authentication (REQ-OAV-003)', () => {
       );
       settingsService.set('auth-key', 'keyfile-api-key');
 
-      const provider = new OpenAIVercelProvider(undefined, undefined, {
-        settingsService,
-      });
+      const provider = new OpenAIVercelProvider(undefined, undefined, {});
 
       provider.setRuntimeSettingsService(settingsService);
 
@@ -547,9 +537,7 @@ describe('Authentication (REQ-OAV-003)', () => {
     it('should use environment when no constructor key or keyfile', async () => {
       process.env.OPENAI_API_KEY = 'env-api-key';
 
-      const provider = new OpenAIVercelProvider(undefined, undefined, {
-        settingsService,
-      });
+      const provider = new OpenAIVercelProvider(undefined, undefined, {});
 
       const token = await provider.getAuthToken();
       expect(token).toBe('env-api-key');
@@ -559,9 +547,11 @@ describe('Authentication (REQ-OAV-003)', () => {
   describe('Base URL Configuration', () => {
     it('should accept custom base URL via constructor config', () => {
       const customBaseURL = 'https://custom-openai.example.com/v1';
-      const provider = new OpenAIVercelProvider('test-api-key', customBaseURL, {
-        settingsService,
-      });
+      const provider = new OpenAIVercelProvider(
+        'test-api-key',
+        customBaseURL,
+        {},
+      );
 
       // Since baseURL is a constructor option, we verify it's accepted
       // The actual usage will be tested in implementation phases
@@ -569,9 +559,7 @@ describe('Authentication (REQ-OAV-003)', () => {
     });
 
     it('should use default OpenAI base URL when none provided', () => {
-      const provider = new OpenAIVercelProvider('test-api-key', undefined, {
-        settingsService,
-      });
+      const provider = new OpenAIVercelProvider('test-api-key', undefined, {});
 
       // Default base URL should be used (verified in implementation)
       expect(provider).toBeInstanceOf(OpenAIVercelProvider);
@@ -580,17 +568,13 @@ describe('Authentication (REQ-OAV-003)', () => {
 
   describe('Authentication State', () => {
     it('should have hasNonOAuthAuthentication method', async () => {
-      const provider = new OpenAIVercelProvider('test-api-key', undefined, {
-        settingsService,
-      });
+      const provider = new OpenAIVercelProvider('test-api-key', undefined, {});
 
       expect(typeof provider.hasNonOAuthAuthentication).toBe('function');
     });
 
     it('should return true from hasNonOAuthAuthentication when API key is set via constructor', async () => {
-      const provider = new OpenAIVercelProvider('test-api-key', undefined, {
-        settingsService,
-      });
+      const provider = new OpenAIVercelProvider('test-api-key', undefined, {});
 
       const isAuthenticated = await provider.hasNonOAuthAuthentication();
       expect(isAuthenticated).toBe(true);
@@ -599,9 +583,7 @@ describe('Authentication (REQ-OAV-003)', () => {
     // Note: Settings-based auth-key is tested in BaseProvider.test.ts
     // The OpenAIVercelProvider inherits this behavior from BaseProvider
     it('should inherit authentication resolution from BaseProvider', async () => {
-      const provider = new OpenAIVercelProvider('test-api-key', undefined, {
-        settingsService,
-      });
+      const provider = new OpenAIVercelProvider('test-api-key', undefined, {});
 
       // Verify the provider has access to authentication methods
       expect(typeof provider.hasNonOAuthAuthentication).toBe('function');
@@ -611,18 +593,14 @@ describe('Authentication (REQ-OAV-003)', () => {
     it('should return true from hasNonOAuthAuthentication when API key is in environment', async () => {
       process.env.OPENAI_API_KEY = 'env-api-key';
 
-      const provider = new OpenAIVercelProvider(undefined, undefined, {
-        settingsService,
-      });
+      const provider = new OpenAIVercelProvider(undefined, undefined, {});
 
       const isAuthenticated = await provider.hasNonOAuthAuthentication();
       expect(isAuthenticated).toBe(true);
     });
 
     it('should return false from hasNonOAuthAuthentication when no API key is available', async () => {
-      const provider = new OpenAIVercelProvider(undefined, undefined, {
-        settingsService,
-      });
+      const provider = new OpenAIVercelProvider(undefined, undefined, {});
 
       const isAuthenticated = await provider.hasNonOAuthAuthentication();
       expect(isAuthenticated).toBe(false);

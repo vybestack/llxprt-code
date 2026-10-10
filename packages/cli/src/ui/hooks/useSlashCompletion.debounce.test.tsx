@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
+
 import { afterEach, beforeEach, describe, it, expect, vi } from 'bun:test';
 import { renderHook, waitFor } from '../../__tests__/render.js';
 import * as fs from 'fs/promises';
@@ -14,11 +16,13 @@ import { useSlashCompletion } from './useSlashCompletion.js';
 import { SCHEMA_COMPLETION_DEBOUNCE_MS } from './slashCompletionEffect.js';
 import type { CommandContext, SlashCommand } from '../commands/types.js';
 import type { Config } from '@vybestack/llxprt-code-core';
-import { FileDiscoveryService } from '@vybestack/llxprt-code-storage';
 import { useTextBuffer } from '../components/shared/text-buffer.js';
 
 describe('useSlashCompletion — schema completion debounce (issue #2620)', () => {
   let testRootDir: string;
+  const composeFixtureRuntime = installWorkspaceRuntimeFixture(
+    () => testRootDir,
+  );
   let mockConfig: Config;
   const mockCommandContext = {} as CommandContext;
   let testDirs: string[];
@@ -29,17 +33,15 @@ describe('useSlashCompletion — schema completion debounce (issue #2620)', () =
     );
     testDirs = [testRootDir];
     mockConfig = {
+      getMcpServers: () => undefined,
       getTargetDir: () => testRootDir,
-      getWorkspaceContext: () => ({
-        getDirectories: () => testDirs,
-      }),
+
       getProjectRoot: () => testRootDir,
       getFileFilteringOptions: vi.fn(() => ({
         respectGitIgnore: true,
         respectLlxprtIgnore: true,
       })),
       getEnableRecursiveFileSearch: vi.fn(() => true),
-      getFileService: vi.fn(() => new FileDiscoveryService(testRootDir)),
     } as unknown as Config;
 
     vi.useFakeTimers();
@@ -101,7 +103,7 @@ describe('useSlashCompletion — schema completion debounce (issue #2620)', () =
         slashCommands,
         mockCommandContext,
         false,
-        mockConfig,
+        composeFixtureRuntime(mockConfig),
       );
       return { completion, textBuffer };
     });
@@ -200,7 +202,7 @@ describe('useSlashCompletion — schema completion debounce (issue #2620)', () =
         slashCommands,
         mockCommandContext,
         false,
-        mockConfig,
+        composeFixtureRuntime(mockConfig),
       );
       return { completion, textBuffer };
     });

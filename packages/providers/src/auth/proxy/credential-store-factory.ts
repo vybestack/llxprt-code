@@ -11,7 +11,9 @@
  * **This module is the single entry point for obtaining TokenStore and
  * ProviderKeyStorage instances.** Direct instantiation of `KeyringTokenStore`
  * or calls to `getProviderKeyStorage()` from consumer code are prohibited.
- * Use `createTokenStore()` and `createProviderKeyStorage()` instead.
+ * Use `createOwnedTokenStore()` for runtime-owned credentials or
+ * `createTokenStore()` for existing process-level consumers; use
+ * `createProviderKeyStorage()` for provider keys.
  *
  * @plan PLAN-20250214-CREDPROXY.P32
  * @plan PLAN-20250214-CREDPROXY.P36
@@ -273,7 +275,8 @@ function cleanupProxySingletons(): void {
 
 /**
  * Creates or returns a singleton TokenStore appropriate for the current environment.
- * This is the ONLY sanctioned way to obtain a TokenStore instance.
+ * Existing process-level consumers use this singleton store; runtime owners
+ * use `createOwnedTokenStore()` instead.
  * - When LLXPRT_CREDENTIAL_SOCKET env var is set: returns ProxyTokenStore
  * - Otherwise: returns KeyringTokenStore (direct host access)
  *
@@ -315,6 +318,24 @@ export function createTokenStore(): TokenStore {
   cleanupProxySingletons();
   directTokenStore ??= createKeyringTokenStore();
   return directTokenStore;
+}
+
+export function createOwnedTokenStore(): TokenStore {
+  const socketPath = process.env.LLXPRT_CREDENTIAL_SOCKET;
+  if (!socketPath && process.env.LLXPRT_CAPABILITY_FD !== undefined) {
+    createTokenStore();
+    throw new Error('Capability transport requires LLXPRT_CREDENTIAL_SOCKET');
+  }
+  if (socketPath) {
+    return new ProxyTokenStore(socketPath, resolveCapabilityToken());
+  }
+  return createKeyringTokenStore();
+}
+
+export function closeOwnedTokenStore(store: TokenStore | undefined): void {
+  if (store instanceof ProxyTokenStore) {
+    store.getClient().close();
+  }
 }
 
 /**

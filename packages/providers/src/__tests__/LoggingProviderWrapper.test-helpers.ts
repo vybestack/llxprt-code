@@ -1,3 +1,5 @@
+import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
+const fixtureOwners = installRuntimeTestOwners();
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -9,10 +11,9 @@
 import type { CanonicalFinishReason } from '@vybestack/llxprt-code-core/llm-types/finishReasons.js';
 import type { GenerateChatOptions } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { vi } from 'bun:test';
 
 const TOKEN_USAGE = {
   promptTokens: 100,
@@ -125,28 +126,24 @@ export class StubRedactor {
 }
 
 export const createConfigStub = (loggingEnabled = false): Config =>
-  ({
-    getConversationLoggingEnabled: () => loggingEnabled,
-    getConversationLogPath: () => '/tmp/test',
-    getRedactionConfig: () => ({
-      redactApiKeys: false,
-      redactCredentials: false,
-      redactFilePaths: false,
-      redactUrls: false,
-      redactEmails: false,
-      redactPersonalInfo: false,
-    }),
-    getProviderManager: () => ({
-      accumulateSessionTokens: vi.fn(),
-    }),
-  }) as unknown as Config;
+  new Config({
+    sessionId: 'wrapper-test',
+    targetDir: process.cwd(),
+    cwd: process.cwd(),
+    model: 'stub-model',
+    debugMode: false,
+    telemetry: { enabled: false, logConversations: loggingEnabled },
+  });
 
 export const createRuntimeContext = (
   settings: SettingsService,
   config: Config,
-): ProviderRuntimeContext => ({
+): ProviderRuntimeContext & {
+  sessionSettings: ReturnType<typeof fixtureOwners.adopt>['settingsOwner'];
+} => ({
   runtimeId: 'test-runtime',
   settingsService: settings,
   config,
+  sessionSettings: fixtureOwners.adopt(config, settings).settingsOwner,
   metadata: { source: 'LoggingProviderWrapper.test-helpers' },
 });

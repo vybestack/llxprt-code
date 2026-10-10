@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import type { CredentialResolutionError } from '@vybestack/llxprt-code-auth';
+import { CredentialResolutionError } from '@vybestack/llxprt-code-auth';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { createCredentialResolutionError } from '../utils/credentialResolutionError.js';
 import { isAnthropicOAuthBaseURL } from './AnthropicEndpointUtils.js';
@@ -43,4 +43,49 @@ export function createAnthropicMissingCredentialError(
     remediation:
       'No Anthropic API key resolved. Set an API key with /key or /keyfile (or ANTHROPIC_API_KEY) to use the Anthropic API.',
   });
+}
+
+export async function resolveAnthropicCredential(input: {
+  options: NormalizedGenerateChatOptions;
+  providerName: string;
+  oauthProvider: string | undefined;
+  oauthEligible: boolean;
+  readToken: () => Promise<string | undefined> | string | undefined;
+  readFallback: () => Promise<string>;
+}): Promise<string> {
+  const { options, providerName } = input;
+  try {
+    const token = await input.readToken();
+    if (!token)
+      throw createCredentialResolutionError(options, providerName, {
+        kind: 'credential-not-found',
+      });
+    return token;
+  } catch (cause) {
+    if (!(cause instanceof CredentialResolutionError))
+      throw createCredentialResolutionError(options, providerName, {
+        kind: 'credential-source-failed',
+        cause,
+      });
+    if (cause.kind === 'no-credential-configured') {
+      const fallback = await input.readFallback().catch(emptyMissingCredential);
+      if (fallback) return fallback;
+    }
+    if (input.oauthEligible && input.oauthProvider) throw cause;
+    throw createAnthropicMissingCredentialError(
+      { ...options, resolved: { ...options.resolved, authFailure: cause } },
+      providerName,
+      options.resolved.baseURL,
+      input.oauthProvider,
+    );
+  }
+}
+
+function emptyMissingCredential(error: unknown): string {
+  if (
+    error instanceof CredentialResolutionError &&
+    error.kind === 'no-credential-configured'
+  )
+    return '';
+  throw error;
 }

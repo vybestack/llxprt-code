@@ -68,7 +68,8 @@ function buildEnforcerHarness(
     historyService,
     runtimeContext,
     generationConfig: {},
-    providerRuntimeNullable: undefined,
+    readCompletionBudgetSetting: () =>
+      runtimeContext.readCompletionBudgetSetting(),
     logger: makeLogger(),
     ensureDensityOptimized,
     performCompression,

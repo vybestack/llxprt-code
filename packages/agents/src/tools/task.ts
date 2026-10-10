@@ -1,8 +1,26 @@
+import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+/**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+import type { WorkspaceTrustControlPort } from '@vybestack/llxprt-code-core';
+
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';
+import type {
+  TaskExecutionPolicy,
+  SubagentRunPolicy,
+} from '@vybestack/llxprt-code-core/session/session-settings-policies.js';
+import type { ToolGovernance } from '@vybestack/llxprt-code-tools';
+import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
+import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
+import type { TaskLaunchOwner } from '../session/task-launch-owner.js';
 
 import {
   BaseDeclarativeTool,
@@ -19,16 +37,16 @@ import {
 } from '../core/subagentOrchestrator.js';
 import type { SubAgentScope } from '../core/subagent.js';
 import { ContextState } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import type { SubagentSchedulerFactory } from '../core/subagentScheduler.js';
-import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
-import type { ProfileManager } from '@vybestack/llxprt-code-settings';
-import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import type { AgentDisplayCallbacks } from '../api/agent.js';
+import type {
+  ProfileDefinitionReads,
+  SubagentDefinitionReads,
+} from '@vybestack/llxprt-code-core';
+import type { ToolSelection, ToolLookup } from '@vybestack/llxprt-code-tools';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import type { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import {
   requireEffectiveTimeoutSeconds,
-  validateTimeoutSeconds,
   type TimeoutResolution,
 } from '@vybestack/llxprt-code-tools/utils/timeoutResolution.js';
 import {
@@ -45,7 +63,7 @@ import {
   filterExcludedFromWhitelist,
   normalizeTaskParams,
   validateCanonicalTaskParamSpellings,
-  validateOutputParams,
+  validateTaskParamValues,
   type TaskToolInvocationParams,
 } from './taskToolGovernance.js';
 import {
@@ -63,22 +81,6 @@ import { taskToolSchema } from './taskSchema.js';
 
 const taskLogger = new DebugLogger('llxprt:task');
 
-/**
- * Boundary-validates a config accessor whose static type declares it required
- * but whose runtime value may be absent (partial mocks / lightweight configs).
- * Uses `typeof === 'function'` so the guard is real without tripping
- * `@typescript-eslint/no-unnecessary-condition`.
- */
-function resolveOptionalConfigMethod<T>(
-  config: Config,
-  methodName: 'getProfileManager' | 'getSubagentManager',
-): T | undefined {
-  const fn = (config as unknown as Record<string, unknown>)[methodName];
-  return typeof fn === 'function'
-    ? (fn as (this: Config) => T).call(config)
-    : undefined;
-}
-
 export interface TaskToolParams {
   subagent_name?: string;
   goal_prompt?: string;
@@ -93,19 +95,33 @@ export interface TaskToolParams {
 }
 
 export interface TaskToolDependencies {
+  readonly hookOwner?: SessionHookOwner;
+  readonly workspaceTrust?: WorkspaceTrustControlPort;
+  readRunPolicy: () => SubagentRunPolicy;
+  createChildSettings: () => SettingsService;
+  readonly telemetry?: RootTelemetry;
+  readTaskPolicy: () => TaskExecutionPolicy;
+  readGovernance: () => ToolGovernance;
+  instructions: InstructionReadOperations;
+  toolRegistry?: ToolSelection;
+  readMcpInstructions: () => string | undefined;
+  workspacePaths: WorkspacePathOperations;
   /**
    * Required session/runtime MessageBus threaded into the
    * SubagentOrchestrator so non-interactive subagent tool execution can satisfy
-   * Config.getOrCreateScheduler's explicit MessageBus dependency
+   * the child scheduler owner’s explicit MessageBus dependency
    * (Issue #2312).
    */
   messageBus: MessageBus;
   orchestratorFactory?: (messageBus: MessageBus) => SubagentOrchestrator;
-  profileManager?: ProfileManager;
-  subagentManager?: SubagentManager;
-  schedulerFactoryProvider?: () => SubagentSchedulerFactory | undefined;
+  profileManager?: Pick<ProfileDefinitionReads, 'loadProfile'>;
+  subagentManager?: Pick<
+    SubagentDefinitionReads,
+    'loadSubagent' | 'listSubagents'
+  >;
+  openChildDisplay?: () => AgentDisplayCallbacks;
   isInteractiveEnvironment?: () => boolean;
-  getAsyncTaskManager?: () => AsyncTaskManager | undefined;
+  taskLaunchOwner?: TaskLaunchOwner;
 }
 function launchRequestName(
   launchResult: Awaited<ReturnType<SubagentOrchestrator['launch']>>,
@@ -114,11 +130,13 @@ function launchRequestName(
 }
 
 interface TaskToolInvocationDeps {
+  readTaskPolicy: () => TaskExecutionPolicy;
+  readGovernance: () => ToolGovernance;
   createOrchestrator: () => SubagentOrchestrator;
-  getToolRegistry?: () => ToolRegistry | undefined;
-  getSchedulerFactory?: () => SubagentSchedulerFactory | undefined;
+  getToolRegistry?: () => ToolSelection | undefined;
+  openChildDisplay?: () => AgentDisplayCallbacks;
   isInteractiveEnvironment?: () => boolean;
-  getAsyncTaskManager?: () => AsyncTaskManager | undefined;
+  taskLaunchOwner?: TaskLaunchOwner;
 }
 
 class TaskToolInvocation extends BaseToolInvocation<
@@ -141,9 +159,13 @@ class TaskToolInvocation extends BaseToolInvocation<
 
   private buildGovernedToolWhitelist(
     candidateTools: string[] | undefined,
-    registry: ToolRegistry,
+    registry: ToolSelection,
   ): string[] | undefined {
-    return buildGovernedToolWhitelist(candidateTools, registry, this.config);
+    return buildGovernedToolWhitelist(
+      candidateTools,
+      registry,
+      this.deps.readGovernance(),
+    );
   }
 
   private filterExcludedFromWhitelist(
@@ -255,7 +277,7 @@ class TaskToolInvocation extends BaseToolInvocation<
     }
 
     const controllers = createTimeoutControllers(
-      this.config,
+      this.deps.readTaskPolicy(),
       signal,
       this.params.timeout_seconds,
     );
@@ -575,10 +597,9 @@ class TaskToolInvocation extends BaseToolInvocation<
       this.deps.isInteractiveEnvironment?.() ?? true;
 
     if (environmentInteractive && typeof scope.runInteractive === 'function') {
-      const schedulerFactory = this.deps.getSchedulerFactory?.();
-      const interactiveOptions = schedulerFactory
-        ? { schedulerFactory }
-        : undefined;
+      const interactiveOptions = {
+        displayCallbacks: this.deps.openChildDisplay?.(),
+      };
       await scope.runInteractive(contextState, interactiveOptions);
     } else {
       await scope.runNonInteractive(contextState);
@@ -701,12 +722,13 @@ class TaskToolInvocation extends BaseToolInvocation<
     return executeAsyncTask(
       {
         config: this.config,
+        readTaskPolicy: this.deps.readTaskPolicy,
         normalized: this.normalized,
         params: this.params,
         createOrchestrator: () => this.deps.createOrchestrator(),
-        getAsyncTaskManager: this.deps.getAsyncTaskManager,
+        taskLaunchOwner: this.deps.taskLaunchOwner,
         isInteractiveEnvironment: this.deps.isInteractiveEnvironment,
-        getSchedulerFactory: this.deps.getSchedulerFactory,
+        openChildDisplay: this.deps.openChildDisplay,
         buildLaunchRequest: (timeoutMs?: number) =>
           this.createLaunchRequest(timeoutMs),
         buildContextState: () => this.buildContextState(),
@@ -756,7 +778,27 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
       messageBus,
     );
     this.config = config;
-    this.dependencies = { ...dependencies, messageBus };
+    const readMcpInstructions = dependencies?.readMcpInstructions;
+    if (!readMcpInstructions) {
+      throw new Error('Task tool requires an explicit MCP instruction reader.');
+    }
+    this.dependencies = { ...dependencies, messageBus, readMcpInstructions };
+  }
+
+  withChildDisplay(
+    openChildDisplay: () => AgentDisplayCallbacks,
+    taskLaunchOwner?: TaskLaunchOwner,
+    lookup?: ToolLookup,
+  ): TaskTool {
+    return new TaskTool(this.config, {
+      ...this.dependencies,
+      openChildDisplay,
+      taskLaunchOwner,
+      toolRegistry:
+        this.dependencies.toolRegistry === undefined || lookup === undefined
+          ? this.dependencies.toolRegistry
+          : { ...this.dependencies.toolRegistry, ...lookup },
+    });
   }
 
   override validateToolParams(params: TaskToolParams): string | null {
@@ -770,33 +812,7 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
   protected override validateToolParamValues(
     params: TaskToolParams,
   ): string | null {
-    const spellingError = validateCanonicalTaskParamSpellings(params);
-    if (spellingError !== null) {
-      return spellingError;
-    }
-    const subagentName = params.subagent_name;
-    if (!subagentName || subagentName.trim().length === 0) {
-      return 'Task tool requires a subagent_name.';
-    }
-
-    const goalPrompt = params.goal_prompt;
-    if (!goalPrompt || goalPrompt.trim().length === 0) {
-      return 'Task tool requires a goal_prompt describing the assignment.';
-    }
-
-    if (params.max_turns !== undefined) {
-      const maxTurns = params.max_turns;
-      if (!Number.isInteger(maxTurns) || (maxTurns !== -1 && maxTurns < 1)) {
-        return 'Task tool max_turns must be a positive integer or -1 for unlimited.';
-      }
-    }
-
-    const timeoutError = validateTimeoutSeconds(params.timeout_seconds);
-    if (timeoutError !== null) {
-      return timeoutError;
-    }
-
-    return validateOutputParams(params);
+    return validateTaskParamValues(params);
   }
 
   protected createInvocation(
@@ -808,7 +824,6 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
         'TaskTool requires a concrete session/runtime MessageBus to build an invocation.',
       );
     }
-    const coreSchedulerMessageBus = this.dependencies.messageBus;
     const normalized = this.normalizeParams(params);
     return new TaskToolInvocation(
       this.config,
@@ -816,16 +831,15 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
       normalized,
       {
         createOrchestrator: () =>
-          this.ensureOrchestrator(coreSchedulerMessageBus),
-        getToolRegistry:
-          typeof this.config.getToolRegistry === 'function'
-            ? () => this.config.getToolRegistry()
-            : undefined,
-        getSchedulerFactory: this.dependencies.schedulerFactoryProvider,
+          this.ensureOrchestrator(this.dependencies.messageBus),
+        readTaskPolicy: this.dependencies.readTaskPolicy,
+        readGovernance: this.dependencies.readGovernance,
+        getToolRegistry: () => this.dependencies.toolRegistry,
+        openChildDisplay: this.dependencies.openChildDisplay,
         isInteractiveEnvironment:
           this.dependencies.isInteractiveEnvironment ??
           (() => this.config.isInteractive()),
-        getAsyncTaskManager: this.dependencies.getAsyncTaskManager,
+        taskLaunchOwner: this.dependencies.taskLaunchOwner,
       },
       toolMessageBus,
     );
@@ -840,12 +854,8 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
       return this.dependencies.orchestratorFactory(messageBus);
     }
 
-    const profileManager =
-      this.dependencies.profileManager ??
-      resolveOptionalConfigMethod(this.config, 'getProfileManager');
-    const subagentManager =
-      this.dependencies.subagentManager ??
-      resolveOptionalConfigMethod(this.config, 'getSubagentManager');
+    const profileManager = this.dependencies.profileManager;
+    const subagentManager = this.dependencies.subagentManager;
 
     if (!profileManager || !subagentManager) {
       throw new Error(
@@ -857,6 +867,15 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
       subagentManager,
       profileManager,
       foregroundConfig: this.config,
+      hookOwner: this.dependencies.hookOwner,
+      workspaceTrust: this.dependencies.workspaceTrust,
+      createChildSettings: this.dependencies.createChildSettings,
+      telemetry: this.dependencies.telemetry,
+      readRunPolicy: this.dependencies.readRunPolicy,
+      toolRegistry: this.dependencies.toolRegistry,
+      readMcpInstructions: this.dependencies.readMcpInstructions,
+      workspacePaths: this.dependencies.workspacePaths,
+      instructions: this.dependencies.instructions,
       messageBus,
     });
   }

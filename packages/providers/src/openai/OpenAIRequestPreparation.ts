@@ -23,7 +23,10 @@ import { buildMessagesWithReasoning } from './OpenAIRequestBuilder.js';
 import { extractModelParamsFromOptions } from './OpenAIClientFactory.js';
 import { sanitizePromptCacheKey } from '../openai-responses/sanitizePromptCacheKey.js';
 import { applyOpenAIChatReasoning } from './openai-chat-reasoning.js';
-import { type Config } from '@vybestack/llxprt-code-core/config/config.js';
+import {
+  parseOutputLimits,
+  type OutputLimitConfig,
+} from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { applyKimiCacheAffinity } from './kimiCacheAffinity.js';
 import {
   conservativeMediaTransportCapabilities,
@@ -212,14 +215,16 @@ interface OpenAIMessagePayload {
 function prepareMessagePayload(
   options: NormalizedGenerateChatOptions,
   model: string,
-  config: Config | undefined,
+  config: OutputLimitConfig | undefined,
   logger: DebugLogger,
   providerName: string,
 ): OpenAIMessagePayload {
   const detectedFormat = resolveToolFormat(
     model,
     providerName,
-    options.settings,
+    options.invocation.getProviderOverrides<Record<string, unknown>>(
+      providerName,
+    )?.toolFormat,
     logger,
   );
   logger.debug(
@@ -255,7 +260,7 @@ function prepareMessagePayload(
 export async function prepareRequest(
   options: NormalizedGenerateChatOptions,
   defaultModel: string,
-  config: Config | undefined,
+  _config: OutputLimitConfig | undefined,
   logger: DebugLogger,
   providerName?: string,
   mediaTransportCapabilities: ProviderMediaTransportCapabilities = conservativeMediaTransportCapabilities(),
@@ -264,7 +269,13 @@ export async function prepareRequest(
   const ephemeralSettings = readInvocationRecord(options.invocation.ephemerals);
   const resolvedProviderName = providerName ?? 'openai';
   const { detectedFormat, formattedTools, messagesWithSystem } =
-    prepareMessagePayload(options, model, config, logger, resolvedProviderName);
+    prepareMessagePayload(
+      options,
+      model,
+      parseOutputLimits(options.invocation.ephemerals),
+      logger,
+      resolvedProviderName,
+    );
   const streamingEnabled = ephemeralSettings['streaming'] !== 'disabled';
 
   // Build request

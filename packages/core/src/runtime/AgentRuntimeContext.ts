@@ -1,8 +1,20 @@
+import type { ProviderRequestDiagnostics } from './providerRequestDiagnostics.js';
+import type { RuntimeTokenizerFactory } from './contracts/RuntimeTokenizerFactory.js';
+import type { ProfileDefinitionReads } from '../services/workspace-definition-owner.js';
+import type { StreamTimeoutPolicy } from '../utils/streamIdleTimeout.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type {
+  ToolExecutionPolicy,
+  ToolGovernance,
+} from '@vybestack/llxprt-code-tools';
+import type { LoopDetectionPolicy } from '../services/loopDetectionService.js';
+import type { PromptPolicy } from '../core/prompts.js';
+import type { RuntimeInvocationContext } from './RuntimeInvocationContext.js';
+import type { AdmittedModelParameters } from './admittedModelParameters.js';
 
 /**
  * @plan PLAN-20251028-STATELESS6.P06
@@ -13,6 +25,14 @@
  * These settings can change frequently and are not part of core runtime state.
  */
 export interface ReadonlySettingsSnapshot {
+  toolExecutionPolicy?: ToolExecutionPolicy;
+  maxOutputTokens?: unknown;
+  promptCaching?: unknown;
+  streamTimeoutPolicy?: StreamTimeoutPolicy;
+  showCitations?: boolean;
+  loopDetection?: LoopDetectionPolicy;
+  tokenUsageLoggingEnabled?: boolean;
+  promptPolicy?: PromptPolicy;
   /** Compression threshold for history (0.0-1.0), default 0.8 */
   compressionThreshold?: number;
   /** Context window limit in tokens (provider default when unspecified) */
@@ -191,7 +211,27 @@ export interface ApiErrorEvent {
  * Provides all runtime data and adapters without Config dependency.
  * All nested objects are frozen for deep immutability.
  */
+export type PrepareProviderInvocation = (
+  providerName: string,
+  modelParameters?: AdmittedModelParameters,
+  signal?: AbortSignal,
+) => RuntimeInvocationContext;
+
 export interface AgentRuntimeContext {
+  readonly promptEstimator?: Pick<
+    RuntimeTokenizerFactory,
+    'estimatePrompt' | 'claimsModel' | 'getEstimatorFamily'
+  >;
+  readonly profileDefinitions?: Pick<ProfileDefinitionReads, 'loadProfile'>;
+  readonly readPromptPolicy: () => PromptPolicy;
+  readonly readCompletionBudgetSetting: () => unknown;
+  readonly readPromptCachingPolicy: () => unknown;
+  readonly readToolExecutionPolicy: () => ToolExecutionPolicy;
+  readonly readToolGovernance: () => ToolGovernance;
+  readonly readStreamTimeoutPolicy: () => StreamTimeoutPolicy;
+  readonly showCitations: () => boolean;
+  readonly tokenUsageLoggingEnabled: boolean;
+  readonly prepareProviderInvocation: PrepareProviderInvocation;
   /** Immutable runtime state (provider, model, auth, session) */
   readonly state: AgentRuntimeState;
 
@@ -255,6 +295,7 @@ export interface AgentRuntimeContext {
   };
 
   /** Telemetry logging adapter with metadata enrichment */
+  readonly requestDiagnostics?: ProviderRequestDiagnostics;
   readonly telemetry: AgentRuntimeTelemetryAdapter;
 
   /** Provider adapter (read-only or mutable based on context) */
@@ -264,7 +305,7 @@ export interface AgentRuntimeContext {
   readonly tools: ToolRegistryView;
 
   /** Provider runtime snapshot for downstream provider calls */
-  readonly providerRuntime: ProviderRuntimeContext;
+  readonly providerRuntime: ProviderRequestCollaborators;
 
   /** Project-owned local media store shared with session lifecycle services. */
   readonly mediaStore?: LocalMediaStore;
@@ -285,6 +326,12 @@ export interface AgentRuntimeContext {
  * Supports both foreground (Config-backed) and subagent (isolated) modes.
  */
 export interface AgentRuntimeContextFactoryOptions {
+  readonly promptEstimator?: Pick<
+    RuntimeTokenizerFactory,
+    'estimatePrompt' | 'claimsModel' | 'getEstimatorFamily'
+  >;
+  readonly readRuntimeSettings?: () => ReadonlySettingsSnapshot;
+  readonly prepareProviderInvocation: PrepareProviderInvocation;
   /** Required: immutable runtime state */
   state: AgentRuntimeState;
 
@@ -295,6 +342,7 @@ export interface AgentRuntimeContextFactoryOptions {
   provider: AgentRuntimeProviderAdapter;
 
   /** Required: telemetry adapter */
+  requestDiagnostics?: ProviderRequestDiagnostics;
   telemetry: AgentRuntimeTelemetryAdapter;
 
   /** Required: tools view */
@@ -304,7 +352,7 @@ export interface AgentRuntimeContextFactoryOptions {
   history?: HistoryService;
 
   /** Required: provider runtime context */
-  providerRuntime: ProviderRuntimeContext;
+  providerRuntime: ProviderRequestCollaborators;
 
   /** Optional project-owned local media store. */
   mediaStore?: LocalMediaStore;
@@ -323,7 +371,7 @@ import type { MediaAdmissionService } from '../storage/media-admission-service.j
 import type { LocalMediaStore } from '../storage/local-media-store.js';
 import type { RequestMediaResolver } from '../storage/request-media-resolver.js';
 import type { RuntimeProvider as IProvider } from './contracts/RuntimeProvider.js';
-import type { ProviderRuntimeContext } from './providerRuntimeContext.js';
+import type { ProviderRequestCollaborators } from './providerRuntimeContext.js';
 
 /**
  * Structural shape matching the usage-metadata fields consumed by the

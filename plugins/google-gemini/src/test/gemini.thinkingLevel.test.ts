@@ -6,9 +6,8 @@
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import { createRuntimeConfigStub } from './testSupport.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { IProviderConfig } from '@vybestack/llxprt-code-providers/types/IProviderConfig.js';
 import { GeminiProvider } from '../gemini/GeminiProvider.js';
 import {
   createProviderCallOptions,
@@ -20,35 +19,38 @@ void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
 }));
 
 const googleGenAIState = {
-  instances: [] as Array<{ options: Record<string, unknown> }>,
+  instances: [] as Array<{ options: GeminiApiClientOptions }>,
   streamCalls: [] as Array<{ request: Record<string, unknown> }>,
   nonStreamCalls: [] as Array<{ request: Record<string, unknown> }>,
   streamPlans: [] as Array<Array<Record<string, unknown>>>,
 };
 
 import type { CreateGeminiApiClient } from '../gemini/GeminiProvider.js';
+import type {
+  GeminiApiClient,
+  GeminiApiClientOptions,
+  GenerateContentParameters,
+} from '../gemini/geminiWireTypes.js';
 // Injected into GeminiProvider rather than module-mocked. `vi.mock` registers
 // process-wide and bun hoists it ahead of the whole run, so this stub used to
 // leak into every suite loaded alongside this one.
-const injectedClientFactory = (() => {
+const injectedClientFactory: CreateGeminiApiClient = (() => {
   class FakeGoogleGenAI {
-    readonly models: {
-      generateContentStream: ReturnType<typeof vi.fn>;
-    };
+    readonly models: GeminiApiClient['models'];
 
-    constructor(opts: Record<string, unknown>) {
+    constructor(opts: GeminiApiClientOptions) {
       googleGenAIState.instances.push({ options: opts });
       this.models = {
-        generateContentStream: vi.fn(async function* (
-          request: Record<string, unknown>,
-        ) {
-          googleGenAIState.streamCalls.push({ request });
-          const plan = googleGenAIState.streamPlans.shift() ?? [];
-          for (const response of plan) {
-            yield response;
-          }
-        }),
-        generateContent: vi.fn(async (request: Record<string, unknown>) => {
+        generateContentStream: vi.fn(
+          async (request: GenerateContentParameters) => {
+            googleGenAIState.streamCalls.push({ request });
+            const plan = googleGenAIState.streamPlans.shift() ?? [];
+            return (async function* () {
+              for (const response of plan) yield response;
+            })();
+          },
+        ),
+        generateContent: vi.fn(async (request: GenerateContentParameters) => {
           googleGenAIState.nonStreamCalls.push({ request });
           return {
             candidates: [],
@@ -62,11 +64,11 @@ const injectedClientFactory = (() => {
   const Type = { OBJECT: 'OBJECT' };
 
   return {
-    createGeminiApiClient: async (opts: Record<string, unknown>) =>
+    createGeminiApiClient: async (opts: GeminiApiClientOptions) =>
       new FakeGoogleGenAI(opts),
     Type,
   };
-})().createGeminiApiClient as unknown as CreateGeminiApiClient;
+})().createGeminiApiClient;
 
 const queueGoogleStream = (responses: Array<Record<string, unknown>>): void => {
   googleGenAIState.streamPlans.push(responses);
@@ -87,16 +89,6 @@ function buildCallOptions(
 class TestGeminiProvider extends GeminiProvider {
   constructor() {
     super(undefined, undefined, undefined, injectedClientFactory);
-  }
-
-  setEphemeralSettings(settings: Record<string, unknown>): void {
-    const currentConfig = (
-      this as unknown as { providerConfig?: IProviderConfig }
-    ).providerConfig;
-    (this as unknown as { providerConfig?: IProviderConfig }).providerConfig = {
-      ...(currentConfig ?? {}),
-      getEphemeralSettings: () => settings,
-    };
   }
 }
 
@@ -165,7 +157,7 @@ describe('Gemini provider thinkingLevel tests', () => {
     const settings = new SettingsService();
     settings.set('call-id', 'runtime-think-2x');
     const config = createRuntimeConfigStub(settings);
-    provider.setConfig(config);
+
     const runtime = createProviderRuntimeContext({
       runtimeId: 'runtime-think-2x',
       settingsService: settings,
@@ -214,7 +206,7 @@ describe('Gemini provider thinkingLevel tests', () => {
     const settings = new SettingsService();
     settings.set('call-id', 'runtime-think-3x');
     const config = createRuntimeConfigStub(settings);
-    provider.setConfig(config);
+
     const runtime = createProviderRuntimeContext({
       runtimeId: 'runtime-think-3x',
       settingsService: settings,
@@ -280,7 +272,7 @@ describe('Gemini provider thinkingLevel tests', () => {
       const settings = new SettingsService();
       settings.set('call-id', `runtime-effort-${effort}`);
       const config = createRuntimeConfigStub(settings);
-      provider.setConfig(config);
+
       const runtime = createProviderRuntimeContext({
         runtimeId: `runtime-effort-${effort}`,
         settingsService: settings,
@@ -331,7 +323,7 @@ describe('Gemini provider thinkingLevel tests', () => {
     const settings = new SettingsService();
     settings.set('call-id', 'runtime-think-3x-default');
     const config = createRuntimeConfigStub(settings);
-    provider.setConfig(config);
+
     const runtime = createProviderRuntimeContext({
       runtimeId: 'runtime-think-3x-default',
       settingsService: settings,
@@ -381,7 +373,7 @@ describe('Gemini provider thinkingLevel tests', () => {
     const settings = new SettingsService();
     settings.set('call-id', 'runtime-think-2x-budget');
     const config = createRuntimeConfigStub(settings);
-    provider.setConfig(config);
+
     const runtime = createProviderRuntimeContext({
       runtimeId: 'runtime-think-2x-budget',
       settingsService: settings,
@@ -431,7 +423,7 @@ describe('Gemini provider thinkingLevel tests', () => {
     const settings = new SettingsService();
     settings.set('call-id', 'runtime-think-2x-auto');
     const config = createRuntimeConfigStub(settings);
-    provider.setConfig(config);
+
     const runtime = createProviderRuntimeContext({
       runtimeId: 'runtime-think-2x-auto',
       settingsService: settings,

@@ -139,6 +139,7 @@ describe('AnthropicProvider — system prompt characterization (tripwire)', () =
         'prompt-caching',
         caching,
       );
+      settingsService.set('auth-key', 'sk-ant-oat-test-token');
       const provider = new AnthropicProvider(
         'sk-ant-oat-test-token',
         undefined,
@@ -171,7 +172,7 @@ describe('AnthropicProvider — system prompt characterization (tripwire)', () =
         SINGLE_MESSAGE,
         settingsService,
         setup,
-        { streaming: 'disabled' } as unknown as ProviderCallOptionsInit,
+        { resolved: { streaming: false } },
         'CALLER_INSTRUCTION',
       );
       const gen = provider.generateChatCompletion(options);
@@ -190,7 +191,7 @@ describe('AnthropicProvider — system prompt characterization (tripwire)', () =
         SINGLE_MESSAGE,
         settingsService,
         setup,
-        { streaming: 'disabled' } as unknown as ProviderCallOptionsInit,
+        { resolved: { streaming: false } },
         'CALLER_INSTRUCTION',
       );
       const gen = provider.generateChatCompletion(options);
@@ -215,7 +216,7 @@ describe('AnthropicProvider — system prompt characterization (tripwire)', () =
         SINGLE_MESSAGE,
         settingsService,
         setup,
-        { streaming: 'disabled' } as unknown as ProviderCallOptionsInit,
+        { resolved: { streaming: false } },
         'ASSEMBLED_PROMPT',
       );
       const gen = provider.generateChatCompletion(options);
@@ -237,7 +238,7 @@ describe('AnthropicProvider — system prompt characterization (tripwire)', () =
         SINGLE_MESSAGE,
         settingsService,
         setup,
-        { streaming: 'disabled' } as unknown as ProviderCallOptionsInit,
+        { resolved: { streaming: false } },
         'ASSEMBLED_PROMPT',
       );
       const gen = provider.generateChatCompletion(options);
@@ -259,7 +260,7 @@ describe('AnthropicProvider — system prompt characterization (tripwire)', () =
         SINGLE_MESSAGE,
         settingsService,
         setup,
-        { streaming: 'disabled' } as unknown as ProviderCallOptionsInit,
+        { resolved: { streaming: false } },
         'ASSEMBLED_PROMPT',
       );
       const gen = provider.generateChatCompletion(options);
@@ -282,7 +283,7 @@ describe('AnthropicProvider — system prompt characterization (tripwire)', () =
         SINGLE_MESSAGE,
         settingsService,
         setup,
-        { streaming: 'disabled' } as unknown as ProviderCallOptionsInit,
+        { resolved: { streaming: false } },
         'SUBAGENT_PERSONA',
       );
       const gen = provider.generateChatCompletion(options);
@@ -327,7 +328,7 @@ describe('AnthropicProvider — system prompt characterization (tripwire)', () =
         SINGLE_MESSAGE,
         settingsService,
         setup,
-        { streaming: 'disabled' } as unknown as ProviderCallOptionsInit,
+        { resolved: { streaming: false } },
         'ASSEMBLED_PROMPT',
       );
       const gen = provider.generateChatCompletion(options);
@@ -356,7 +357,7 @@ describe('AnthropicProvider — system prompt characterization (tripwire)', () =
         SINGLE_MESSAGE,
         settingsService,
         setup,
-        { streaming: 'disabled' } as unknown as ProviderCallOptionsInit,
+        { resolved: { streaming: false } },
         'ASSEMBLED_PROMPT',
       );
       const gen = provider.generateChatCompletion(options);
@@ -399,7 +400,7 @@ describe('AnthropicProvider — system prompt characterization (tripwire)', () =
         SINGLE_MESSAGE,
         settingsService,
         setup,
-        { streaming: 'disabled' } as unknown as ProviderCallOptionsInit,
+        { resolved: { streaming: false } },
         'EXTRA_DIRECTIVE',
       );
       const gen = provider.generateChatCompletion(options);

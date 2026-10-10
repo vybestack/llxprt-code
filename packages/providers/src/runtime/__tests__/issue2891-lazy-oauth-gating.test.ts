@@ -14,24 +14,15 @@
  *   - profile application and the same-provider early-return (explicit false).
  *
  * The DECISION is the new logic introduced by FIX 1. These tests exercise it
- * with real inputs (a real `isInteractive()` implementation and the REAL
- * runtime registry via `getActiveRuntimeKind()`), asserting observable return
+ * with real inputs and an explicitly supplied owner runtime kind, asserting observable return
  * values rather than mock call counts. The OAuth browser flow itself is
  * already covered end-to-end by issue2891-claudecode-stale-oauth.test.ts.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect } from 'bun:test';
 
 import { resolveLazyClaudeCodeOAuthDecision } from '../providerSwitch.js';
-import {
-  runtimeRegistry,
-  upsertRuntimeEntry,
-  resetCliRuntimeRegistryForTesting,
-  setDefaultCliRuntimeId,
-  clearDefaultCliRuntimeId,
-} from '../runtimeRegistry.js';
-import { getActiveRuntimeKind } from '../runtimeAccessors.js';
-import type { RuntimeKind } from '../runtimeRegistry.js';
+import type { RuntimeKind } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
 // A real config-shaped object whose isInteractive() returns the configured
 // value — this is exactly the contract readConfigInteractive() relies on.
@@ -178,73 +169,10 @@ describe('Issue #2891 FIX 1 — readConfigInteractive contract', () => {
   });
 });
 
-describe('Issue #2891 FIX 1 — getActiveRuntimeKind reads the REAL registry', () => {
-  beforeEach(() => {
-    resetCliRuntimeRegistryForTesting();
-  });
-
-  afterEach(() => {
-    resetCliRuntimeRegistryForTesting();
-  });
-
-  function registerForegroundRuntime(
-    runtimeId: string,
-    kind: RuntimeKind,
-  ): void {
-    upsertRuntimeEntry(runtimeId, { runtimeKind: kind });
-    clearDefaultCliRuntimeId();
-    setDefaultCliRuntimeId(runtimeId, { allowReplace: true });
-  }
-
-  it('returns the kind of the registered foreground cli-interactive runtime', () => {
-    registerForegroundRuntime('issue2891-cli', 'cli-interactive');
-    expect(runtimeRegistry.get('issue2891-cli')?.runtimeKind).toBe(
-      'cli-interactive',
-    );
-    expect(getActiveRuntimeKind()).toBe('cli-interactive');
-  });
-
-  it('returns "agent" for an agent runtime (would suppress lazy OAuth)', () => {
-    registerForegroundRuntime('issue2891-agent', 'agent');
-    expect(getActiveRuntimeKind()).toBe('agent');
-  });
-
-  it('returns "subagent" for a subagent runtime (would suppress lazy OAuth)', () => {
-    registerForegroundRuntime('issue2891-subagent', 'subagent');
-    expect(getActiveRuntimeKind()).toBe('subagent');
-  });
-
-  it('returns undefined and never throws when no runtime is registered', () => {
-    expect(getActiveRuntimeKind()).toBeUndefined();
-  });
-
-  it('wires through the decision: agent runtime suppresses even when interactive', () => {
-    registerForegroundRuntime('issue2891-agent-2', 'agent');
-    expect(
-      resolveLazyClaudeCodeOAuthDecision({
-        explicitAutoOAuth: undefined,
-        isInteractive: true,
-        runtimeKind: getActiveRuntimeKind(),
-      }),
-    ).toBe(false);
-  });
-
-  it('wires through the decision: cli-interactive runtime reaches the trigger when interactive', () => {
-    registerForegroundRuntime('issue2891-cli-2', 'cli-interactive');
-    expect(
-      resolveLazyClaudeCodeOAuthDecision({
-        explicitAutoOAuth: undefined,
-        isInteractive: true,
-        runtimeKind: getActiveRuntimeKind(),
-      }),
-    ).toBe(true);
-  });
-});
-
 /**
  * ITEM 3: the reporter's scenario, expressed at the decision level.
  *
- * `createProviderSwitchContext` is private and calls getCliRuntimeServices(),
+ * `createProviderSwitchContext` is private and calls the explicitly supplied owner Config,
  * so it is impractical to invoke directly in a unit test. The fix changed its
  * `autoOAuth` forwarding from `options.autoOAuth ?? false` to a verbatim
  * `options.autoOAuth`. That difference is decisive: the caller passes NO

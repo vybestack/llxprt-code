@@ -62,3 +62,18 @@ export function resolveFixturesDir(
   const moduleDir = fileURLToPath(new URL('.', moduleUrl));
   return stripSandboxSegment(resolve(moduleDir, ...relToFixtures));
 }
+
+export function resolveRepositoryFixture(
+  moduleUrl: string,
+  relativePath: string,
+): string {
+  return resolveFixturesDir(
+    moduleUrl,
+    '..',
+    '..',
+    '..',
+    '..',
+    '..',
+    relativePath,
+  );
+}

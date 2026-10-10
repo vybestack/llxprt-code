@@ -10,6 +10,8 @@
  * IMPORTANT: Tests public API behavior ONLY (generateChatCompletion).
  * Does NOT test private methods or implementation details (RULES.md lines 102-107).
  */
+
+import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
 import type {
@@ -130,37 +132,21 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
     settingsMap: Record<string, unknown>,
     contents: IContent[] = [],
     streaming: boolean = true,
-  ): import('../BaseProvider.js').GenerateChatOptions => {
-    const mockSettings = {
-      get: (key: string) => settingsMap[key],
-      getProviderSettings: () => ({}),
-      getAllGlobalSettings: () => ({}),
-    };
-
-    const mockConfig = {
-      getToolFormat: () => 'auto',
-      getAuthTokenPrecedence: () => ['constructor', 'settings', 'environment'],
-    };
-
-    const mockRuntime = {
-      config: mockConfig,
-    };
-
-    return {
-      contents,
-      settings:
-        mockSettings as unknown as import('@vybestack/llxprt-code-settings').SettingsService,
-      runtime:
-        mockRuntime as unknown as import('@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js').ProviderRuntimeContext,
-      resolved: {
-        model: 'gpt-4o',
-        authToken: 'test-token',
-        streaming,
-      },
-      systemInstruction: 'test system prompt',
-      metadata: {},
-    };
-  };
+  ): import('../BaseProvider.js').GenerateChatOptions => ({
+    contents,
+    invocation: createRuntimeInvocationContext({
+      runtimeId: 'vercel-reasoning',
+      providerName: 'openaivercel',
+      ephemeralsSnapshot: settingsMap,
+    }),
+    resolved: {
+      model: 'gpt-4o',
+      authToken: 'test-token',
+      streaming,
+    },
+    systemInstruction: 'test system prompt',
+    metadata: {},
+  });
 
   /**
    * Helper to create IContent with thinking block

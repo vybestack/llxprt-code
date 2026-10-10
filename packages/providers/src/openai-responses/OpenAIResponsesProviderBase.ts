@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { readInvocationPolicyRecord } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 /**
  * OpenAI Responses API Provider
  * This provider exclusively uses the OpenAI /responses endpoint
@@ -235,8 +236,9 @@ export abstract class OpenAIResponsesProviderBase extends BaseProvider {
 
   override getModelParams(): Record<string, unknown> | undefined {
     try {
-      const providerSettings =
-        this.resolveSettingsService().getProviderSettings(this.name);
+      const providerSettings = readInvocationPolicyRecord(
+        this.captureOwnerPolicy()[this.name],
+      );
 
       const {
         temperature,

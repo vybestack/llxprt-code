@@ -1,3 +1,4 @@
+import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -5,10 +6,13 @@
  * @plan PLAN-20250909-TOKTRACK.P08
  */
 
+import { bindProviderMediaAndFiles } from '@vybestack/llxprt-code-core/runtime/bindProviderMediaAndFiles.js';
+import { BaseProvider } from './BaseProvider.js';
 import { type IProvider, type GenerateChatOptions } from './IProvider.js';
 import { type IProviderManager } from './IProviderManager.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { HydratedModel } from '@vybestack/llxprt-code-core/models/hydration.js';
+import { captureProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
 import { LoggingProviderWrapper } from './LoggingProviderWrapper.js';
 import { RetryOrchestrator } from './RetryOrchestrator.js';
 import {
@@ -35,6 +39,7 @@ import {
   buildEphemeralsSnapshot,
   normalizeRuntimeInputs,
 } from './runtimeNormalizer.js';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import { resolveAvailableModels } from './modelResolver.js';
 
 const logger = new DebugLogger('llxprt:provider:manager');
@@ -46,6 +51,7 @@ function asSettingsService(
 }
 
 interface ProviderManagerInit {
+  readonly sessionSettings?: SessionSettingsOwner;
   runtime?: ProviderRuntimeContext;
   config?: Config;
   settingsService?: SettingsService;
@@ -75,9 +81,27 @@ function isBlankValue(value: unknown): boolean {
   return typeof value === 'number' && Number.isNaN(value);
 }
 
+import type { ProviderRetryOperations } from '@vybestack/llxprt-code-core/runtime/contracts/ProviderRetryOperations.js';
+
 export class ProviderManager implements IProviderManager {
+  private retryOperationsFactory?: (
+    providerName: string,
+    profileId?: string,
+  ) => ProviderRetryOperations;
+
+  setRetryOperationsFactory(
+    factory: (
+      providerName: string,
+      profileId?: string,
+    ) => ProviderRetryOperations,
+  ): void {
+    this.retryOperationsFactory = factory;
+  }
+
   private providers: Map<string, IProvider>;
   private config?: Config;
+  private stopSettingsLifecycle?: () => void;
+  private sessionSettings?: SessionSettingsOwner;
   private injectedTokenizerFactory?: RuntimeTokenizerFactory;
   /**
    * @plan PLAN-20250218-STATELESSPROVIDER.P05
@@ -89,6 +113,20 @@ export class ProviderManager implements IProviderManager {
   private providerCapabilities: Map<string, ProviderCapabilities> = new Map();
   private tokenUsageTracker: TokenUsageTracker = new TokenUsageTracker();
   private capabilitiesService: ProviderCapabilitiesService;
+  private aliasRefresher?: () => void;
+
+  registerAliasRefresher(refresh: () => void): void {
+    this.aliasRefresher = refresh;
+  }
+
+  refreshAliases(): void {
+    if (!this.aliasRefresher) {
+      throw new Error(
+        'Alias refresh requires an initialized provider manager.',
+      );
+    }
+    this.aliasRefresher();
+  }
 
   constructor(init?: ProviderManagerInit | ProviderRuntimeContext) {
     const resolved = this.resolveInit(init);
@@ -96,6 +134,8 @@ export class ProviderManager implements IProviderManager {
     this.settingsService = resolved.settingsService;
     this.config = resolved.config ?? this.config;
     this.runtime = resolved.runtime;
+    this.sessionSettings = resolved.sessionSettings;
+    this.bindSettingsLifecycle();
     this.capabilitiesService = new ProviderCapabilitiesService(
       this.providerCapabilities,
     );
@@ -112,6 +152,7 @@ export class ProviderManager implements IProviderManager {
   private resolveInit(init?: ProviderManagerInit | ProviderRuntimeContext): {
     settingsService: SettingsService;
     config?: Config;
+    sessionSettings?: SessionSettingsOwner;
     runtime?: ProviderRuntimeContext;
   } {
     // Identity/settings must be supplied explicitly by the caller. The manager
@@ -124,6 +165,7 @@ export class ProviderManager implements IProviderManager {
       return {
         settingsService: asSettingsService(init.settingsService),
         config: init.config,
+        sessionSettings: init.sessionSettings,
         runtime: init,
       };
     }
@@ -148,6 +190,7 @@ export class ProviderManager implements IProviderManager {
     }
 
     return {
+      sessionSettings: init?.sessionSettings ?? runtime?.sessionSettings,
       settingsService,
       config: init?.config ?? runtime?.config,
       runtime,
@@ -161,25 +204,80 @@ export class ProviderManager implements IProviderManager {
     return buildEphemeralsSnapshot(settingsService, providerName);
   }
 
-  setConfig(config: Config): void {
-    const hadConfig = Boolean(this.config);
-    const oldLoggingEnabled =
-      this.config?.getConversationLoggingEnabled() ?? false;
-    const newLoggingEnabled = config.getConversationLoggingEnabled();
+  private requireSessionSettings(): SessionSettingsOwner {
+    const owner = this.sessionSettings;
+    if (owner === undefined)
+      throw new Error('Provider diagnostics require selected session settings');
+    return owner;
+  }
 
+  private bindSettingsLifecycle(): void {
+    this.stopSettingsLifecycle?.();
+    const invalidate = (key: string): void => {
+      if (
+        ![
+          'auth-key',
+          'auth-keyfile',
+          'base-url',
+          'socket-timeout',
+          'socket-keepalive',
+          'socket-nodelay',
+          'streaming',
+        ].includes(key)
+      )
+        return;
+      let provider = this.getActiveProvider();
+      if (provider === undefined) return;
+      while (
+        provider instanceof LoggingProviderWrapper ||
+        provider instanceof RetryOrchestrator
+      )
+        provider = provider.wrappedProvider;
+      if (
+        'clearClientCache' in provider &&
+        typeof provider.clearClientCache === 'function'
+      )
+        provider.clearClientCache();
+      provider.clearAuthCache?.();
+    };
+    const owner = this.sessionSettings;
+    if (owner !== undefined) {
+      const releaseSettings = owner.subscribeProviderSettings(invalidate);
+      const releaseTelemetry = owner.onTelemetrySettingsChange(() =>
+        this.updateProviderWrapping(),
+      );
+      this.stopSettingsLifecycle = () => {
+        const failures: unknown[] = [];
+        for (const release of [releaseSettings, releaseTelemetry]) {
+          try {
+            release();
+          } catch (error) {
+            failures.push(error);
+          }
+        }
+        if (failures.length === 1) throw failures[0];
+        if (failures.length > 1)
+          throw new AggregateError(
+            failures,
+            'Provider settings release failed',
+          );
+      };
+    }
+  }
+
+  dispose(): void {
+    const release = this.stopSettingsLifecycle;
+    this.stopSettingsLifecycle = undefined;
+    release?.();
+  }
+
+  setConfig(config: Config): void {
     this.config = config;
     this.runtime = this.runtime
       ? { ...this.runtime, config }
       : { settingsService: this.settingsService, config };
 
-    // Always ensure providers are wrapped once config becomes available
-    if (!hadConfig || oldLoggingEnabled !== newLoggingEnabled) {
-      logger.debug(
-        () =>
-          `[provider-manager] Wrapping providers (hadConfig=${hadConfig}, loggingChanged=${oldLoggingEnabled !== newLoggingEnabled})`,
-      );
-      this.updateProviderWrapping();
-    }
+    this.updateProviderWrapping();
   }
 
   /**
@@ -193,7 +291,10 @@ export class ProviderManager implements IProviderManager {
   setRuntimeContext(runtime: ProviderRuntimeContext): void {
     const currentActiveProvider = this.getActiveProviderName();
     this.runtime = runtime;
+    this.sessionSettings = runtime.sessionSettings;
+    this.stopSettingsLifecycle?.();
     this.settingsService = asSettingsService(runtime.settingsService);
+    this.bindSettingsLifecycle();
     this.config = runtime.config ?? this.config;
     if (
       currentActiveProvider &&
@@ -230,6 +331,10 @@ export class ProviderManager implements IProviderManager {
         baseProvider = baseProvider.wrappedProvider as IProvider;
       }
 
+      if (baseProvider instanceof BaseProvider)
+        baseProvider = baseProvider.bindOwnerAuthentication(
+          this.settingsService,
+        );
       this.syncProviderRuntime(baseProvider);
 
       // Apply wrapping order (inner to outer):
@@ -242,11 +347,22 @@ export class ProviderManager implements IProviderManager {
 
       // Then wrap with LoggingProviderWrapper if config is available
       if (this.config) {
-        finalProvider = new LoggingProviderWrapper(finalProvider, this.config);
+        const ownerConfig = this.config;
+        finalProvider = new LoggingProviderWrapper(
+          finalProvider,
+          ownerConfig,
+          undefined,
+          () =>
+            captureProviderRequestDiagnostics(
+              ownerConfig,
+              this.requireSessionSettings(),
+              (name, usage) => this.accumulateSessionTokens(name, usage),
+            ),
+        );
       }
 
       this.syncProviderRuntime(finalProvider);
-      this.providers.set(name, finalProvider);
+      this.providers.set(name, this.bindRequestProvider(finalProvider));
     }
   }
 
@@ -292,6 +408,13 @@ export class ProviderManager implements IProviderManager {
         this.normalizeRuntimeInputs(options, providerName),
       );
     }
+  }
+
+  getAuthIdentity(): Pick<ProviderRuntimeContext, 'runtimeId' | 'runtimeKind'> {
+    return {
+      runtimeId: this.runtime?.runtimeId,
+      runtimeKind: this.runtime?.runtimeKind,
+    };
   }
 
   /**
@@ -359,6 +482,7 @@ export class ProviderManager implements IProviderManager {
       settingsService,
       config,
       runtimeId: callRuntimeId,
+      runtimeKind: baseRuntime.runtimeKind,
       metadata: callMetadata,
     };
   }
@@ -382,6 +506,21 @@ export class ProviderManager implements IProviderManager {
       {
         getActiveProviderName: () => this.getActiveProviderName(),
         getProvider: (name) => this.providers.get(name),
+        composeRetryOperations: this.retryOperationsFactory,
+        admitRequest: (options, name) => {
+          const owner = this.runtime ?? {
+            settingsService: this.settingsService,
+            config: this.config,
+          };
+          return {
+            ...options,
+            runtimeKind: options.runtimeKind ?? owner.runtimeKind,
+            userMemory: options.userMemory,
+            invocation:
+              options.invocation ??
+              captureProviderInvocation(owner, name, options.modelParameters),
+          };
+        },
       },
       providerName,
     );
@@ -394,6 +533,8 @@ export class ProviderManager implements IProviderManager {
    * @pseudocode base-provider-call-contract.md lines 3-5
    */
   registerProvider(provider: IProvider): void {
+    if (provider instanceof BaseProvider)
+      provider = provider.bindOwnerAuthentication(this.settingsService);
     this.syncProviderRuntime(provider);
 
     // Wrapping order (inner to outer):
@@ -411,12 +552,23 @@ export class ProviderManager implements IProviderManager {
 
     // Then wrap with LoggingProviderWrapper for token tracking
     if (this.config) {
-      finalProvider = new LoggingProviderWrapper(finalProvider, this.config);
+      const ownerConfig = this.config;
+      finalProvider = new LoggingProviderWrapper(
+        finalProvider,
+        ownerConfig,
+        undefined,
+        () =>
+          captureProviderRequestDiagnostics(
+            ownerConfig,
+            this.requireSessionSettings(),
+            (name, usage) => this.accumulateSessionTokens(name, usage),
+          ),
+      );
     }
 
     this.syncProviderRuntime(finalProvider);
 
-    this.providers.set(provider.name, finalProvider);
+    this.providers.set(provider.name, this.bindRequestProvider(finalProvider));
 
     // Capture provider capabilities
     const capabilities = this.capabilitiesService.captureProviderCapabilities(
@@ -427,7 +579,10 @@ export class ProviderManager implements IProviderManager {
     this.providerCapabilities.set(provider.name, capabilities);
 
     // Log provider capability information if logging enabled
-    if (this.config?.getConversationLoggingEnabled() === true) {
+    if (
+      this.sessionSettings?.readConversationLoggingEnabled() === true &&
+      this.config !== undefined
+    ) {
       const context = this.capabilitiesService.createProviderContext(
         provider,
         capabilities,
@@ -437,6 +592,7 @@ export class ProviderManager implements IProviderManager {
       logProviderCapability(
         this.config,
         new ProviderCapabilityEvent(provider.name, capabilities, context),
+        this.requireSessionSettings().telemetry,
       );
     }
   }
@@ -466,7 +622,8 @@ export class ProviderManager implements IProviderManager {
 
     // Log provider switch if conversation logging enabled
     if (
-      this.config?.getConversationLoggingEnabled() === true &&
+      this.config !== undefined &&
+      this.sessionSettings?.readConversationLoggingEnabled() === true &&
       previousProviderName &&
       previousProviderName !== name
     ) {
@@ -481,11 +638,19 @@ export class ProviderManager implements IProviderManager {
             name,
           ),
         ),
+        this.requireSessionSettings().telemetry,
       );
     }
 
     // Update SettingsService as the single source of truth
     this.settingsService.set('activeProvider', name);
+  }
+
+  checkpointProviderRegistry(): () => void {
+    const providers = new Map(this.providers);
+    return () => {
+      this.providers = new Map(providers);
+    };
   }
 
   clearActiveProvider(): void {
@@ -537,24 +702,24 @@ export class ProviderManager implements IProviderManager {
     return this.providers.get(name);
   }
 
+  private bindRequestProvider(provider: IProvider): IProvider {
+    const owner = this.runtime;
+    return bindProviderMediaAndFiles(
+      provider,
+      owner?.mediaResolver,
+      owner?.requestMediaBudgetBytes,
+      owner?.providerFileBindings,
+      owner?.providerFileLifecycle,
+      owner?.config?.getTargetDir(),
+    );
+  }
+
   setTokenizerFactory(factory: RuntimeTokenizerFactory | undefined): void {
     this.injectedTokenizerFactory = factory;
   }
 
   getTokenizerFactory(): RuntimeTokenizerFactory | undefined {
-    if (this.injectedTokenizerFactory) {
-      return this.injectedTokenizerFactory;
-    }
-
-    try {
-      return this.config?.getTokenizerFactory();
-    } catch (error) {
-      logger.warn(
-        () =>
-          `Runtime tokenizer factory unavailable from config: ${String(error)}`,
-      );
-      return undefined;
-    }
+    return this.injectedTokenizerFactory;
   }
 
   getActiveProviderName(): string | undefined {

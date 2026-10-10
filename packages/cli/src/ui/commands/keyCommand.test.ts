@@ -11,20 +11,16 @@ import type { CommandContext } from './types.js';
 
 const mockRuntime = {
   updateActiveProviderApiKey: vi.fn(),
-  getActiveProviderStatus: vi.fn(),
+  providerStatus: vi.fn(),
 };
-
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  getRuntimeApi: () => mockRuntime,
-}));
 
 describe('keyCommand', () => {
   let context: CommandContext;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    context = createMockCommandContext();
-    mockRuntime.getActiveProviderStatus.mockReturnValue({
+    context = createMockCommandContext({ runtimeApi: mockRuntime });
+    mockRuntime.providerStatus.mockReturnValue({
       providerName: 'test-provider',
       modelName: 'model-x',
       displayLabel: 'test-provider:model-x',

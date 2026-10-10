@@ -1,16 +1,20 @@
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
+import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { afterEach, describe, it, expect, vi, beforeEach } from 'bun:test';
 import {
   CoreToolScheduler,
   type CompletedToolCall,
 } from './coreToolScheduler.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import {
@@ -23,7 +27,11 @@ import {
   type ToolResult,
 } from '@vybestack/llxprt-code-tools';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
-import { getTestRuntimeMessageBus } from '@vybestack/llxprt-code-test-utils/core/config.js';
+
+const ownedFixtures: Array<{
+  config: Config;
+  policyOwner: RuntimePolicyOwner;
+}> = [];
 
 // Helper function to create a mock MessageBus
 function createMockMessageBus() {
@@ -38,12 +46,6 @@ function createMockMessageBus() {
 }
 
 // Helper function to create a mock PolicyEngine
-function createMockPolicyEngine() {
-  return {
-    evaluate: vi.fn().mockReturnValue(PolicyDecision.ALLOW),
-    checkDecision: vi.fn().mockReturnValue(PolicyDecision.ALLOW),
-  };
-}
 
 // Fast-completing tool invocation
 class FastToolInvocation extends BaseToolInvocation<
@@ -118,13 +120,22 @@ class FastTool extends BaseDeclarativeTool<
 }
 
 describe('CoreToolScheduler - Issue #987 Race Condition Tests', () => {
+  afterEach(async () => {
+    for (const fixture of ownedFixtures.splice(0)) {
+      await fixture.policyOwner.dispose();
+      await fixture.config.dispose();
+    }
+  });
+
   let onAllToolCallsComplete: ReturnType<typeof vi.fn>;
   let onToolCallsUpdate: ReturnType<typeof vi.fn>;
 
-  function createConfig(tools: Map<string, FastTool>): Config {
-    const mockMessageBus = createMockMessageBus();
-    const mockPolicyEngine = createMockPolicyEngine();
-
+  function createConfig(tools: Map<string, FastTool>): {
+    config: Config;
+    settingsOwner: SessionSettingsOwner;
+    policyOwner: RuntimePolicyOwner;
+    toolRegistry: ToolRegistry;
+  } {
     const mockToolRegistry = {
       getTool: (name: string) => tools.get(name) ?? null,
       getFunctionDeclarations: () => [],
@@ -140,20 +151,37 @@ describe('CoreToolScheduler - Issue #987 Race Condition Tests', () => {
       getAllToolNames: () => Array.from(tools.keys()),
     } as unknown as ToolRegistry;
 
-    return {
-      getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
-      getDebugMode: () => false,
-      getApprovalMode: () => ApprovalMode.YOLO,
-      getEphemeralSettings: () => ({}),
-      getAllowedTools: () => [],
-      getContentGeneratorConfig: () => ({
+    const config = Object.assign(
+      new Config({
+        sessionId: 'test-session-id',
+        cwd: process.cwd(),
+        targetDir: process.cwd(),
         model: 'test-model',
+        debugMode: false,
+        trustedFolder: true,
+        policyEngineConfig: { defaultDecision: PolicyDecision.ALLOW },
       }),
-      getToolRegistry: () => mockToolRegistry,
-      getMessageBus: () => mockMessageBus,
-      getPolicyEngine: () => mockPolicyEngine,
-    } as unknown as Config;
+      {
+        getSessionId: () => 'test-session-id',
+        getUsageStatisticsEnabled: () => true,
+        getDebugMode: () => false,
+        getApprovalMode: () => ApprovalMode.YOLO,
+
+        getAllowedTools: () => [],
+        getContentGeneratorConfig: () => ({
+          model: 'test-model',
+        }),
+      },
+    );
+    const policyOwner = new RuntimePolicyOwner(config);
+    const settingsRoot = createSessionSettingsFixture(config);
+    ownedFixtures.push({ config, policyOwner });
+    return {
+      ...settingsRoot,
+      config,
+      policyOwner,
+      toolRegistry: mockToolRegistry,
+    };
   }
 
   beforeEach(() => {
@@ -168,12 +196,29 @@ describe('CoreToolScheduler - Issue #987 Race Condition Tests', () => {
       // currentBatchSize is 0 but pendingResults has entries
 
       const tools = new Map([['fast_tool', new FastTool('fast_tool', 0)]]);
-      const config = createConfig(tools);
+      const {
+        config: config,
+        policyOwner,
+        toolRegistry,
+        settingsOwner: configSettingsOwner,
+      } = createConfig(tools);
 
       const scheduler = new CoreToolScheduler({
+        telemetry: RootTelemetry.prepare({
+          enabled: false,
+          sessionId: 'isolated-caller-fixture',
+          maxBytes: 1024,
+          maxFiles: 1,
+        }),
+        readExecutionPolicy: () =>
+          configSettingsOwner.readToolExecutionPolicy(),
+        getToolGovernance: () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
         config,
-        messageBus: getTestRuntimeMessageBus(config),
-        toolRegistry: config.getToolRegistry(),
+        messageBus: policyOwner.session.messageBus,
+        toolRegistry,
         onAllToolCallsComplete,
         onToolCallsUpdate,
         getPreferredEditor: () => 'vscode',
@@ -212,12 +257,29 @@ describe('CoreToolScheduler - Issue #987 Race Condition Tests', () => {
         ['fast_tool_2', new FastTool('fast_tool_2', 5)],
         ['fast_tool_3', new FastTool('fast_tool_3', 10)],
       ]);
-      const config = createConfig(tools);
+      const {
+        config: config,
+        policyOwner,
+        toolRegistry,
+        settingsOwner: configSettingsOwner,
+      } = createConfig(tools);
 
       const scheduler = new CoreToolScheduler({
+        telemetry: RootTelemetry.prepare({
+          enabled: false,
+          sessionId: 'isolated-caller-fixture',
+          maxBytes: 1024,
+          maxFiles: 1,
+        }),
+        readExecutionPolicy: () =>
+          configSettingsOwner.readToolExecutionPolicy(),
+        getToolGovernance: () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
         config,
-        messageBus: getTestRuntimeMessageBus(config),
-        toolRegistry: config.getToolRegistry(),
+        messageBus: policyOwner.session.messageBus,
+        toolRegistry,
         onAllToolCallsComplete,
         onToolCallsUpdate,
         getPreferredEditor: () => 'vscode',
@@ -276,12 +338,29 @@ describe('CoreToolScheduler - Issue #987 Race Condition Tests', () => {
         ['fast_second', new FastTool('fast_second', 10)],
         ['fastest_third', new FastTool('fastest_third', 0)],
       ]);
-      const config = createConfig(tools);
+      const {
+        config: config,
+        policyOwner,
+        toolRegistry,
+        settingsOwner: configSettingsOwner,
+      } = createConfig(tools);
 
       const scheduler = new CoreToolScheduler({
+        telemetry: RootTelemetry.prepare({
+          enabled: false,
+          sessionId: 'isolated-caller-fixture',
+          maxBytes: 1024,
+          maxFiles: 1,
+        }),
+        readExecutionPolicy: () =>
+          configSettingsOwner.readToolExecutionPolicy(),
+        getToolGovernance: () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
         config,
-        messageBus: getTestRuntimeMessageBus(config),
-        toolRegistry: config.getToolRegistry(),
+        messageBus: policyOwner.session.messageBus,
+        toolRegistry,
         onAllToolCallsComplete,
         onToolCallsUpdate,
         getPreferredEditor: () => 'vscode',
@@ -341,12 +420,29 @@ describe('CoreToolScheduler - Issue #987 Race Condition Tests', () => {
         // This test verifies the fix prevents the infinite loop described in issue #987
 
         const tools = new Map([['fast_tool', new FastTool('fast_tool', 0)]]);
-        const config = createConfig(tools);
+        const {
+          config: config,
+          policyOwner,
+          toolRegistry,
+          settingsOwner: configSettingsOwner,
+        } = createConfig(tools);
 
         const scheduler = new CoreToolScheduler({
+          telemetry: RootTelemetry.prepare({
+            enabled: false,
+            sessionId: 'isolated-caller-fixture',
+            maxBytes: 1024,
+            maxFiles: 1,
+          }),
+          readExecutionPolicy: () =>
+            configSettingsOwner.readToolExecutionPolicy(),
+          getToolGovernance: () =>
+            configSettingsOwner.readToolGovernance(
+              config.getExcludeTools() ?? [],
+            ),
           config,
-          messageBus: getTestRuntimeMessageBus(config),
-          toolRegistry: config.getToolRegistry(),
+          messageBus: policyOwner.session.messageBus,
+          toolRegistry,
           onAllToolCallsComplete,
           onToolCallsUpdate,
           getPreferredEditor: () => 'vscode',
@@ -396,12 +492,29 @@ describe('CoreToolScheduler - Issue #987 Race Condition Tests', () => {
     it('should handle cancellation before execution starts without hanging', async () => {
       // Create a slow tool that would hang if not cancelled properly
       const tools = new Map([['slow_tool', new FastTool('slow_tool', 5000)]]);
-      const config = createConfig(tools);
+      const {
+        config: config,
+        policyOwner,
+        toolRegistry,
+        settingsOwner: configSettingsOwner,
+      } = createConfig(tools);
 
       const scheduler = new CoreToolScheduler({
+        telemetry: RootTelemetry.prepare({
+          enabled: false,
+          sessionId: 'isolated-caller-fixture',
+          maxBytes: 1024,
+          maxFiles: 1,
+        }),
+        readExecutionPolicy: () =>
+          configSettingsOwner.readToolExecutionPolicy(),
+        getToolGovernance: () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
         config,
-        messageBus: getTestRuntimeMessageBus(config),
-        toolRegistry: config.getToolRegistry(),
+        messageBus: policyOwner.session.messageBus,
+        toolRegistry,
         onAllToolCallsComplete,
         onToolCallsUpdate,
         getPreferredEditor: () => 'vscode',
@@ -443,12 +556,29 @@ describe('CoreToolScheduler - Issue #987 Race Condition Tests', () => {
   describe('State Reset After Completion', () => {
     it('should properly reset state after batch completion for subsequent batches', async () => {
       const tools = new Map([['fast_tool', new FastTool('fast_tool', 0)]]);
-      const config = createConfig(tools);
+      const {
+        config: config,
+        policyOwner,
+        toolRegistry,
+        settingsOwner: configSettingsOwner,
+      } = createConfig(tools);
 
       const scheduler = new CoreToolScheduler({
+        telemetry: RootTelemetry.prepare({
+          enabled: false,
+          sessionId: 'isolated-caller-fixture',
+          maxBytes: 1024,
+          maxFiles: 1,
+        }),
+        readExecutionPolicy: () =>
+          configSettingsOwner.readToolExecutionPolicy(),
+        getToolGovernance: () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
         config,
-        messageBus: getTestRuntimeMessageBus(config),
-        toolRegistry: config.getToolRegistry(),
+        messageBus: policyOwner.session.messageBus,
+        toolRegistry,
         onAllToolCallsComplete,
         onToolCallsUpdate,
         getPreferredEditor: () => 'vscode',

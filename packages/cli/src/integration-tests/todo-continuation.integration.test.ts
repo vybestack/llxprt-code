@@ -4,7 +4,32 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
+
+import {
+  afterEach as afterFixtureTest,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+} from 'bun:test';
+afterFixtureTest(() => {
+  fixtureFilesystem = undefined;
+});
+import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
+const makeFixtureFilesystem = installTestWorkspaceFilesystem();
+let fixtureFilesystem: ReturnType<typeof makeFixtureFilesystem> | undefined;
+function fixturePaths() {
+  fixtureFilesystem ??= makeFixtureFilesystem({
+    targetDir: process.cwd(),
+    isTrusted: () => true,
+  });
+  return fixtureFilesystem.paths;
+}
+
+import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import {
   Config,
   TodoStore,
@@ -19,11 +44,12 @@ import {
   createAgentClient,
   type AgentClientContract,
 } from '@vybestack/llxprt-code-agents';
-import { SettingsService, Storage } from '@vybestack/llxprt-code-settings';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import {
   createTempDirectory,
   cleanupTempDirectory,
-  initializeTestConfig,
+  initializeTestSessionRoot,
+  type CliTestSessionRoot,
 } from './test-utils.js';
 import { testRegex } from '../__tests__/regex.js';
 
@@ -39,6 +65,7 @@ const TITLE_LIST_ITEM_LABEL = 'To' + 'do';
 describe('Task-list Continuation Integration Tests', () => {
   let tempDir: string;
   let config: Config;
+  let sessionRoot: CliTestSessionRoot;
   let agentClient: AgentClientContract;
   let todoStore: TodoStore;
   let sessionId: string;
@@ -102,19 +129,29 @@ describe('Task-list Continuation Integration Tests', () => {
     config = new Config({
       sessionId,
       targetDir: tempDir,
-      settingsService: new SettingsService(),
+      initialSettings: {},
       debugMode: false,
       model: 'gemini-2.0-flash-exp',
       cwd: tempDir,
     });
 
-    await initializeTestConfig(config);
+    sessionRoot = await initializeTestSessionRoot(config);
 
     const runtimeState = createRuntimeStateFromConfig(config, {
       runtimeId: `${sessionId}-todo-runtime`,
     });
 
-    agentClient = createAgentClient(config, runtimeState);
+    agentClient = createAgentClient(
+      config,
+      runtimeState,
+      () => undefined,
+      new LocalMediaStore({
+        rootDirectory: `/tmp/media-fixture-${crypto.randomUUID()}`,
+        quotaBytes: 1024 * 1024,
+      }),
+      fixturePaths(),
+      emptyInstructionReads,
+    );
   });
 
   afterEach(async () => {
@@ -130,46 +167,56 @@ describe('Task-list Continuation Integration Tests', () => {
   describe('Configuration Persistence', () => {
     it('@requirement REQ-004 should persist continuation setting in Config', async () => {
       // Given: Initially no setting
-      expect(config.getEphemeralSetting('todo-continuation')).toBeUndefined();
+      expect(
+        sessionRoot.agent.getEphemeralSetting('todo-continuation'),
+      ).toBeUndefined();
 
       // When: Set continuation setting to true
-      config.setEphemeralSetting('todo-continuation', true);
+      sessionRoot.agent.setEphemeralSetting('todo-continuation', true);
 
       // Then: Setting should be persisted
-      expect(config.getEphemeralSetting('todo-continuation')).toBe(true);
+      expect(sessionRoot.agent.getEphemeralSetting('todo-continuation')).toBe(
+        true,
+      );
 
       // When: Set to false
-      config.setEphemeralSetting('todo-continuation', false);
+      sessionRoot.agent.setEphemeralSetting('todo-continuation', false);
 
       // Then: Setting should be updated
-      expect(config.getEphemeralSetting('todo-continuation')).toBe(false);
+      expect(sessionRoot.agent.getEphemeralSetting('todo-continuation')).toBe(
+        false,
+      );
 
       // When: Remove setting
-      config.setEphemeralSetting('todo-continuation', undefined);
+      sessionRoot.agent.setEphemeralSetting('todo-continuation', undefined);
 
       // Then: Setting should be undefined
-      expect(config.getEphemeralSetting('todo-continuation')).toBeUndefined();
+      expect(
+        sessionRoot.agent.getEphemeralSetting('todo-continuation'),
+      ).toBeUndefined();
     });
 
     it('@requirement REQ-004 should not persist across Config instances by default', async () => {
       // Given: Set setting in first instance
-      config.setEphemeralSetting('todo-continuation', true);
-      expect(config.getEphemeralSetting('todo-continuation')).toBe(true);
+      sessionRoot.agent.setEphemeralSetting('todo-continuation', true);
+      expect(sessionRoot.agent.getEphemeralSetting('todo-continuation')).toBe(
+        true,
+      );
 
       // When: Create new Config instance
       const newConfig = new Config({
         sessionId: 'new-session',
         targetDir: tempDir,
-        settingsService: new SettingsService(),
+        initialSettings: {},
         debugMode: false,
         model: 'gemini-2.0-flash-exp',
         cwd: tempDir,
       });
-      await initializeTestConfig(newConfig);
+      const newSessionRoot = await initializeTestSessionRoot(newConfig);
 
       // Then: Setting should not be persisted
       expect(
-        newConfig.getEphemeralSetting('todo-continuation'),
+        newSessionRoot.agent.getEphemeralSetting('todo-continuation'),
       ).toBeUndefined();
     });
 
@@ -187,12 +234,12 @@ describe('Task-list Continuation Integration Tests', () => {
 
       for (const testCase of testCases) {
         // When: Set various types
-        config.setEphemeralSetting(testCase.key, testCase.value);
+        sessionRoot.agent.setEphemeralSetting(testCase.key, testCase.value);
 
         // Then: Should retrieve correctly
-        expect(config.getEphemeralSetting(testCase.key)).toStrictEqual(
-          testCase.value,
-        );
+        expect(
+          sessionRoot.agent.getEphemeralSetting(testCase.key),
+        ).toStrictEqual(testCase.value);
       }
     });
   });
@@ -354,12 +401,12 @@ describe('Task-list Continuation Integration Tests', () => {
       const yoloConfig = new Config({
         sessionId: 'yolo-session',
         targetDir: tempDir,
-        settingsService: new SettingsService(),
+        initialSettings: {},
         debugMode: false,
         model: 'gemini-2.0-flash-exp',
         cwd: tempDir,
       });
-      await initializeTestConfig(yoloConfig);
+      await initializeTestSessionRoot(yoloConfig);
 
       // When: Set YOLO mode
       yoloConfig.setApprovalMode(ApprovalMode.YOLO);
@@ -480,8 +527,8 @@ describe('Task-list Continuation Integration Tests', () => {
 
   describe('Real Component Data Flow', () => {
     function enableTodoContinuationForEndToEndDataFlow(): unknown {
-      config.setEphemeralSetting('todo-continuation', true);
-      return config.getEphemeralSetting('todo-continuation');
+      sessionRoot.agent.setEphemeralSetting('todo-continuation', true);
+      return sessionRoot.agent.getEphemeralSetting('todo-continuation');
     }
 
     it('@requirement REQ-001, REQ-002, REQ-003, REQ-004 should demonstrate end-to-end data flow', async () => {
@@ -611,18 +658,18 @@ describe('Task-list Continuation Integration Tests', () => {
 
       // When: Set all ephemeral settings
       for (const setting of testSettings) {
-        config.setEphemeralSetting(setting.key, setting.value);
+        sessionRoot.agent.setEphemeralSetting(setting.key, setting.value);
       }
 
       // Then: All should be retrievable
       for (const setting of testSettings) {
-        expect(config.getEphemeralSetting(setting.key)).toStrictEqual(
-          setting.value,
-        );
+        expect(
+          sessionRoot.agent.getEphemeralSetting(setting.key),
+        ).toStrictEqual(setting.value);
       }
 
       // When: Get all settings at once
-      const allSettings = config.getEphemeralSettings();
+      const allSettings = sessionRoot.agent.getEphemeralSettings();
 
       // Then: Should contain all set values
       expect(allSettings['todo-continuation']).toBe(true);
@@ -637,45 +684,51 @@ describe('Task-list Continuation Integration Tests', () => {
       const newConfig = new Config({
         sessionId: 'ephemeral-test',
         targetDir: tempDir,
-        settingsService: new SettingsService(),
+        initialSettings: {},
         debugMode: false,
         model: 'gemini-2.0-flash-exp',
         cwd: tempDir,
       });
-      await initializeTestConfig(newConfig);
+      const newSessionRoot = await initializeTestSessionRoot(newConfig);
 
       // Then: New instance should have empty ephemeral settings
-      const newSettings = newConfig.getEphemeralSettings();
+      const newSettings = newSessionRoot.agent.getEphemeralSettings();
       expect(Object.keys(newSettings)).toHaveLength(0);
     });
 
     it('@requirement REQ-004 should demonstrate configuration edge cases', async () => {
       // Test undefined values
-      config.setEphemeralSetting('undefined-test', undefined);
-      expect(config.getEphemeralSetting('undefined-test')).toBeUndefined();
+      sessionRoot.agent.setEphemeralSetting('undefined-test', undefined);
+      expect(
+        sessionRoot.agent.getEphemeralSetting('undefined-test'),
+      ).toBeUndefined();
 
       // Test null values
-      config.setEphemeralSetting('null-test', null);
-      expect(config.getEphemeralSetting('null-test')).toBeNull();
+      sessionRoot.agent.setEphemeralSetting('null-test', null);
+      expect(sessionRoot.agent.getEphemeralSetting('null-test')).toBeNull();
 
       // Test empty string
-      config.setEphemeralSetting('empty-string', '');
-      expect(config.getEphemeralSetting('empty-string')).toBe('');
+      sessionRoot.agent.setEphemeralSetting('empty-string', '');
+      expect(sessionRoot.agent.getEphemeralSetting('empty-string')).toBe('');
 
       // Test zero
-      config.setEphemeralSetting('zero', 0);
-      expect(config.getEphemeralSetting('zero')).toBe(0);
+      sessionRoot.agent.setEphemeralSetting('zero', 0);
+      expect(sessionRoot.agent.getEphemeralSetting('zero')).toBe(0);
 
       // Test false
-      config.setEphemeralSetting('false', false);
-      expect(config.getEphemeralSetting('false')).toBe(false);
+      sessionRoot.agent.setEphemeralSetting('false', false);
+      expect(sessionRoot.agent.getEphemeralSetting('false')).toBe(false);
 
       // Test overwriting values
-      config.setEphemeralSetting('overwrite-test', 'initial');
-      expect(config.getEphemeralSetting('overwrite-test')).toBe('initial');
+      sessionRoot.agent.setEphemeralSetting('overwrite-test', 'initial');
+      expect(sessionRoot.agent.getEphemeralSetting('overwrite-test')).toBe(
+        'initial',
+      );
 
-      config.setEphemeralSetting('overwrite-test', 'updated');
-      expect(config.getEphemeralSetting('overwrite-test')).toBe('updated');
+      sessionRoot.agent.setEphemeralSetting('overwrite-test', 'updated');
+      expect(sessionRoot.agent.getEphemeralSetting('overwrite-test')).toBe(
+        'updated',
+      );
     });
 
     it('@requirement REQ-001, REQ-002, REQ-003 should validate data and handle edge cases', async () => {
@@ -716,13 +769,13 @@ describe('Task-list Continuation Integration Tests', () => {
 
       // Test graceful handling of various configuration values
       expect(() => {
-        config.setEphemeralSetting('test-undefined', undefined);
-        config.setEphemeralSetting('test-null', null);
-        config.setEphemeralSetting('test-empty-string', '');
-        config.setEphemeralSetting('test-zero', 0);
-        config.setEphemeralSetting('test-false', false);
-        config.setEphemeralSetting('test-array', []);
-        config.setEphemeralSetting('test-object', {});
+        sessionRoot.agent.setEphemeralSetting('test-undefined', undefined);
+        sessionRoot.agent.setEphemeralSetting('test-null', null);
+        sessionRoot.agent.setEphemeralSetting('test-empty-string', '');
+        sessionRoot.agent.setEphemeralSetting('test-zero', 0);
+        sessionRoot.agent.setEphemeralSetting('test-false', false);
+        sessionRoot.agent.setEphemeralSetting('test-array', []);
+        sessionRoot.agent.setEphemeralSetting('test-object', {});
       }).not.toThrow();
     });
   });

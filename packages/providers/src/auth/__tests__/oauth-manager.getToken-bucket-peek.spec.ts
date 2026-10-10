@@ -12,6 +12,7 @@ import {
   createTestProvider,
 } from './behavioral/test-utils.js';
 import type { Config } from '@vybestack/llxprt-code-core';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 describe('Issue 1616: getToken bucket peek loop', () => {
   let tokenStore: MemoryTokenStore;
@@ -52,18 +53,9 @@ describe('Issue 1616: getToken bucket peek loop', () => {
       'getProfileBuckets',
     ).mockResolvedValue(['default', 'claudius', 'vybestack']);
 
-    const mockHandler = {
-      tryFailover: vi.fn().mockResolvedValue(false),
-      isEnabled: () => true,
-      getBuckets: () => ['default', 'claudius', 'vybestack'],
-      getCurrentBucket: () => 'default',
-      resetSession: vi.fn(),
-      reset: vi.fn(),
-      getLastFailoverReasons: vi.fn().mockReturnValue({}),
-    };
+    const settings = new SettingsService();
     const mockConfig = {
-      getBucketFailoverHandler: () => mockHandler,
-      setBucketFailoverHandler: vi.fn(),
+      getSettingsService: () => settings,
       getEphemeralSetting: () => undefined,
     } as unknown as Config;
 
@@ -99,19 +91,9 @@ describe('Issue 1616: getToken bucket peek loop', () => {
       'getProfileBuckets',
     ).mockResolvedValue(['default', 'claudius', 'vybestack']);
 
-    const tryFailoverSpy = vi.fn().mockResolvedValue(false);
-    const mockHandler = {
-      tryFailover: tryFailoverSpy,
-      isEnabled: () => true,
-      getBuckets: () => ['default', 'claudius', 'vybestack'],
-      getCurrentBucket: () => 'default',
-      resetSession: vi.fn(),
-      reset: vi.fn(),
-      getLastFailoverReasons: vi.fn().mockReturnValue({}),
-    };
+    const settings = new SettingsService();
     const mockConfig = {
-      getBucketFailoverHandler: () => mockHandler,
-      setBucketFailoverHandler: vi.fn(),
+      getSettingsService: () => settings,
       getEphemeralSetting: () => undefined,
     } as unknown as Config;
 
@@ -130,7 +112,7 @@ describe('Issue 1616: getToken bucket peek loop', () => {
 
     await managerWithConfig.getToken('anthropic');
 
-    expect(tryFailoverSpy).not.toHaveBeenCalled();
+    expect(managerWithConfig.getSessionBucket('anthropic')).toBe('claudius');
   });
 
   it('should skip expired tokens in peek loop and use valid one', async () => {
@@ -156,19 +138,9 @@ describe('Issue 1616: getToken bucket peek loop', () => {
       'getProfileBuckets',
     ).mockResolvedValue(['default', 'claudius', 'vybestack']);
 
-    const tryFailoverSpy = vi.fn().mockResolvedValue(false);
-    const mockHandler = {
-      tryFailover: tryFailoverSpy,
-      isEnabled: () => true,
-      getBuckets: () => ['default', 'claudius', 'vybestack'],
-      getCurrentBucket: () => 'default',
-      resetSession: vi.fn(),
-      reset: vi.fn(),
-      getLastFailoverReasons: vi.fn().mockReturnValue({}),
-    };
+    const settings = new SettingsService();
     const mockConfig = {
-      getBucketFailoverHandler: () => mockHandler,
-      setBucketFailoverHandler: vi.fn(),
+      getSettingsService: () => settings,
       getEphemeralSetting: () => undefined,
     } as unknown as Config;
 
@@ -204,19 +176,9 @@ describe('Issue 1616: getToken bucket peek loop', () => {
       'getProfileBuckets',
     ).mockResolvedValue(['default', 'claudius', 'vybestack']);
 
-    const tryFailoverSpy = vi.fn().mockResolvedValue(false);
-    const mockHandler = {
-      tryFailover: tryFailoverSpy,
-      isEnabled: () => true,
-      getBuckets: () => ['default', 'claudius', 'vybestack'],
-      getCurrentBucket: () => 'default',
-      resetSession: vi.fn(),
-      reset: vi.fn(),
-      getLastFailoverReasons: vi.fn().mockReturnValue({}),
-    };
+    const settings = new SettingsService();
     const mockConfig = {
-      getBucketFailoverHandler: () => mockHandler,
-      setBucketFailoverHandler: vi.fn(),
+      getSettingsService: () => settings,
       getEphemeralSetting: () => undefined,
     } as unknown as Config;
 
@@ -257,18 +219,9 @@ describe('Issue 1616: getToken bucket peek loop', () => {
       'getProfileBuckets',
     ).mockResolvedValue(['default', 'claudius', 'vybestack']);
 
-    const mockFailoverHandler = {
-      tryFailover: vi.fn().mockResolvedValue(false),
-      isEnabled: () => true,
-      getBuckets: () => ['default', 'claudius', 'vybestack'],
-      getCurrentBucket: () => 'default',
-      resetSession: vi.fn(),
-      reset: vi.fn(),
-      getLastFailoverReasons: vi.fn().mockReturnValue({}),
-    };
+    const settings = new SettingsService();
     const mockConfig = {
-      getBucketFailoverHandler: () => mockFailoverHandler,
-      setBucketFailoverHandler: vi.fn(),
+      getSettingsService: () => settings,
       getEphemeralSetting: () => undefined,
     } as unknown as Config;
 

@@ -1,3 +1,13 @@
+import type {
+  ToolCallResponseInfo,
+  AnyDeclarativeTool,
+  AnyToolInvocation,
+  Config,
+  AgentRequestInput,
+  EditorType,
+  ToolRegistry,
+} from '@vybestack/llxprt-code-core';
+type ToolResponsePart = ToolCallResponseInfo['responseParts'][number];
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -13,7 +23,7 @@ import {
   createFakeAgentFromMockClient,
 } from './__tests__/useAgentStream-test-helpers.js';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
-import React, { act } from 'react';
+import { act } from 'react';
 import { renderHook } from '../../__tests__/render.js';
 import { useAgentStream } from './agentStream/index.js';
 import { createStreamRuntimeForTest } from './agentStream/__tests__/streamRuntimeTestHelper.js';
@@ -25,15 +35,6 @@ import type {
   TrackedCancelledToolCall,
 } from './useReactToolScheduler.js';
 import { useReactToolScheduler } from './useReactToolScheduler.js';
-import type {
-  AnyDeclarativeTool,
-  AnyToolInvocation,
-  Config,
-  ContractPart,
-  ContractPartListUnion,
-  EditorType,
-  ToolRegistry,
-} from '@vybestack/llxprt-code-core';
 import { ApprovalMode, ToolErrorType } from '@vybestack/llxprt-code-core';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import type { SlashCommandProcessorResult } from '../types.js';
@@ -47,13 +48,11 @@ const realAtCommandProcessorModule = {
 const actualSchedulerModule = {
   ...(await import('./useReactToolScheduler.js')),
 };
+const mockUseReactToolScheduler = vi.fn<typeof useReactToolScheduler>();
 void vi.mock('./useReactToolScheduler.js', () => ({
   ...actualSchedulerModule,
-  useReactToolScheduler: vi.fn(),
+  useReactToolScheduler: mockUseReactToolScheduler,
 }));
-const mockUseReactToolScheduler = useReactToolScheduler as Mock<
-  (...args: never[]) => unknown
->;
 
 void vi.mock('./useKeypress.js', () => ({
   useKeypress: vi.fn(),
@@ -71,31 +70,6 @@ void vi.mock('./atCommandProcessor.js', () =>
 
 void vi.mock('../utils/markdownUtilities.js', () => ({
   findLastSafeSplitPoint: vi.fn((s: string) => s.length),
-}));
-
-void vi.mock('./useStateAndRef.js', () => ({
-  useStateAndRef: <T,>(
-    initial: T,
-  ): [
-    T,
-    React.MutableRefObject<T>,
-    React.Dispatch<React.SetStateAction<T>>,
-  ] => {
-    const [state, setState] = React.useState(initial);
-    const ref = React.useRef(initial);
-    const setStateInternal = React.useCallback(
-      (valueOrUpdater: React.SetStateAction<T>) => {
-        const nextValue =
-          typeof valueOrUpdater === 'function'
-            ? valueOrUpdater(ref.current)
-            : valueOrUpdater;
-        ref.current = nextValue;
-        setState(nextValue);
-      },
-      [],
-    );
-    return [state, ref, setStateInternal];
-  },
 }));
 
 void vi.mock('./useLogger.js', () => ({
@@ -122,25 +96,21 @@ void vi.mock('./slashCommandProcessor.js', () => ({
 
 // --- Tests for useAgentStream Hook ---
 describe('useAgentStream', () => {
-  let mockAddItem: Mock<(...args: never[]) => unknown>;
+  let mockAddItem: Mock<Parameters<typeof useAgentStream>[2]>;
   let mockConfig: Config;
-  let mockOnDebugMessage: Mock<(...args: never[]) => unknown>;
-  let mockHandleSlashCommand: Mock<(...args: never[]) => unknown>;
-  let mockScheduleToolCalls: Mock<(...args: never[]) => unknown>;
-  let mockCancelAllToolCalls: Mock<(...args: never[]) => unknown>;
-  let mockMarkToolsAsDisplayCleared: Mock<(...args: never[]) => unknown>;
+  let mockOnDebugMessage: Mock<(message: string) => void>;
+  let mockHandleSlashCommand: Mock<Parameters<typeof useAgentStream>[6]>;
+  let mockScheduleToolCalls: Mock<ReturnType<typeof useReactToolScheduler>[1]>;
+  let mockCancelAllToolCalls: Mock<ReturnType<typeof useReactToolScheduler>[3]>;
+  let mockMarkToolsAsDisplayCleared: Mock<
+    ReturnType<typeof useReactToolScheduler>[2]
+  >;
 
   beforeEach(() => {
     vi.clearAllMocks(); // Clear mocks before each test
 
-    mockAddItem = vi.fn();
+    mockAddItem = vi.fn<Parameters<typeof useAgentStream>[2]>(() => 0);
     // Define the mock for getAgentClient
-    const _mockGetAgentClient = vi.fn().mockImplementation(() => {
-      // MockedAgentClientClass is defined in the module scope by the previous change.
-      // It will use the mockStartChat and mockSendMessageStream that are managed within beforeEach.
-      const clientInstance = new MockedAgentClientClass(mockConfig);
-      return clientInstance;
-    });
 
     const contentGeneratorConfig = {
       model: 'test-model',
@@ -200,12 +170,14 @@ describe('useAgentStream', () => {
 
     // Default mock for useReactToolScheduler to prevent toolCalls being undefined initially
     mockUseReactToolScheduler.mockReturnValue([
-      [], // Default to empty array for toolCalls
+      [],
       mockScheduleToolCalls,
       mockMarkToolsAsDisplayCleared,
       mockCancelAllToolCalls,
       0,
       true,
+      vi.fn(),
+      vi.fn(),
     ]);
 
     // Reset mocks for AgentClient instance methods (startChat and sendMessageStream)
@@ -230,7 +202,7 @@ describe('useAgentStream', () => {
 
   const renderTestHook = (
     initialToolCalls: TrackedToolCall[] = [],
-    agentClient?: unknown,
+    agentClient?: Parameters<typeof createFakeAgentFromMockClient>[0],
   ) => {
     const client = createFakeAgentFromMockClient(
       agentClient ?? new MockedAgentClientClass(mockConfig),
@@ -243,7 +215,7 @@ describe('useAgentStream', () => {
       runtime: createStreamRuntimeForTest(mockConfig),
       onDebugMessage: mockOnDebugMessage,
       handleSlashCommand: mockHandleSlashCommand as unknown as (
-        cmd: ContractPartListUnion,
+        cmd: AgentRequestInput,
       ) => Promise<SlashCommandProcessorResult | false>,
       shellModeActive: false,
       loadedSettings: mockLoadedSettings,
@@ -253,9 +225,9 @@ describe('useAgentStream', () => {
     const { result, rerender } = renderHook(
       (props: typeof initialProps) => {
         // Create a stateful mock for cancellation that updates the toolCalls state.
-        const statefulCancelAllToolCalls = vi.fn((...args) => {
+        const statefulCancelAllToolCalls = vi.fn(() => {
           // Call the original spy so `toHaveBeenCalled` checks still work.
-          mockCancelAllToolCalls(...args);
+          mockCancelAllToolCalls();
 
           const newToolCalls = props.toolCalls.map((tc) => {
             // Only cancel tools that are in a cancellable state.
@@ -287,9 +259,11 @@ describe('useAgentStream', () => {
           props.toolCalls,
           mockScheduleToolCalls,
           mockMarkToolsAsDisplayCleared,
-          statefulCancelAllToolCalls, // Use the stateful mock
+          statefulCancelAllToolCalls,
           0,
           true,
+          vi.fn(),
+          vi.fn(),
         ]);
 
         return useAgentStream(
@@ -304,7 +278,6 @@ describe('useAgentStream', () => {
           () => 'vscode' as EditorType,
           () => {},
           () => Promise.resolve(),
-          false,
           () => {},
           () => {},
           () => {},
@@ -343,7 +316,7 @@ describe('useAgentStream', () => {
         displayCleared: false,
         response: {
           callId: 'call1',
-          responseParts: [{ text: 'tool 1 response' }],
+          responseParts: [{ type: 'text', text: 'tool 1 response' }],
           error: undefined,
           errorType: undefined, // FIX: Added missing property
           resultDisplay: 'Tool 1 success display',
@@ -358,6 +331,7 @@ describe('useAgentStream', () => {
           getDescription: () => `Mock description`,
         } as unknown as AnyToolInvocation,
         startTime: Date.now(),
+        durationMs: 0,
         endTime: Date.now(),
       } as TrackedCompletedToolCall,
       {
@@ -396,13 +370,15 @@ describe('useAgentStream', () => {
   const completePrimaryToolCalls = async (): Promise<{
     readonly sendMessageStream: ReturnType<typeof vi.fn>;
   }> => {
-    const toolCall1ResponseParts: ContractPart[] = [
-      { text: 'tool 1 final response' },
+    const toolCall1ResponseParts: ToolResponsePart[] = [
+      { type: 'text', text: 'tool 1 final response' },
     ];
-    const toolCall2ResponseParts: ContractPart[] = [
-      { text: 'tool 2 final response' },
+    const toolCall2ResponseParts: ToolResponsePart[] = [
+      { type: 'text', text: 'tool 2 final response' },
     ];
-    const completedToolCalls: TrackedToolCall[] = [
+    const completedToolCalls: Parameters<
+      Parameters<typeof useReactToolScheduler>[0]
+    >[1] = [
       {
         request: {
           callId: 'call1',
@@ -447,9 +423,11 @@ describe('useAgentStream', () => {
     let capturedOnComplete:
       | ((
           schedulerId: symbol,
-          completedTools: TrackedToolCall[],
+          completedTools: Parameters<
+            Parameters<typeof useReactToolScheduler>[0]
+          >[1],
           metadata: { isPrimary: boolean },
-        ) => Promise<void>)
+        ) => void | Promise<void>)
       | null = null;
 
     mockUseReactToolScheduler.mockImplementation((onComplete) => {
@@ -461,6 +439,8 @@ describe('useAgentStream', () => {
         mockCancelAllToolCalls,
         0,
         true,
+        vi.fn(),
+        vi.fn(),
       ];
     });
 
@@ -477,7 +457,6 @@ describe('useAgentStream', () => {
         () => 'vscode' as EditorType,
         () => {},
         () => Promise.resolve(),
-        false,
         () => {},
         () => {},
         () => {},
@@ -511,16 +490,18 @@ describe('useAgentStream', () => {
   const completeToolCallsWithFunctionResponses = async (): Promise<{
     readonly sendMessageStream: ReturnType<typeof vi.fn>;
   }> => {
-    const functionResponseParts: ContractPart[] = [
+    const functionResponseParts: ToolResponsePart[] = [
       {
-        functionResponse: {
-          name: 'toolFilter',
-          response: { result: 'filtered response' },
-        },
+        type: 'tool_response',
+        callId: 'call1',
+        toolName: 'toolFilter',
+        result: { result: 'filtered response' },
       },
-      { text: 'filtered response' },
+      { type: 'text', text: 'filtered response' },
     ];
-    const completedToolCalls: TrackedToolCall[] = [
+    const completedToolCalls: Parameters<
+      Parameters<typeof useReactToolScheduler>[0]
+    >[1] = [
       {
         request: {
           callId: 'call-filter',
@@ -548,9 +529,11 @@ describe('useAgentStream', () => {
     let capturedOnComplete:
       | ((
           schedulerId: symbol,
-          completedTools: TrackedToolCall[],
+          completedTools: Parameters<
+            Parameters<typeof useReactToolScheduler>[0]
+          >[1],
           metadata: { isPrimary: boolean },
-        ) => Promise<void>)
+        ) => void | Promise<void>)
       | null = null;
 
     mockUseReactToolScheduler.mockImplementation((onComplete) => {
@@ -562,6 +545,8 @@ describe('useAgentStream', () => {
         mockCancelAllToolCalls,
         0,
         true,
+        vi.fn(),
+        vi.fn(),
       ];
     });
 
@@ -578,8 +563,6 @@ describe('useAgentStream', () => {
         () => 'vscode' as EditorType,
         () => {},
         () => Promise.resolve(),
-        () => {},
-        false,
         () => {},
         () => {},
         () => {},

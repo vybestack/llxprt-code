@@ -26,6 +26,7 @@ import {
 import { syncAndRecordTurnUsage } from './tokenUsageActualLogger.js';
 
 interface CommitTurnHistoryOptions {
+  readonly origin?: object;
   readonly runtimeContext: AgentRuntimeContext;
   readonly historyService: HistoryService;
   readonly compressionHandler: CompressionHandler;
@@ -149,6 +150,7 @@ export async function commitTurnHistory(
     ];
     const mediaAdmissions = admitted.admissions;
     await options.historyService.addBatch(entries, options.currentModel, {
+      origin: options.origin,
       afterPublication: async () => {
         await syncAndRecordTurnUsage({
           history: options.historyService,

@@ -6,6 +6,8 @@
  * and logs the configuration.
  */
 
+import type { MemorySettings } from './configTypes.js';
+
 /**
  * @plan:PLAN-20260603-ISSUE1584.P12
  * @requirement:REQ-API-001
@@ -13,10 +15,10 @@
  */
 
 import * as path from 'node:path';
-import process from 'node:process';
 
 import {
   type ConfigParameters,
+  type LlxprtExtension,
   ApprovalMode,
   normalizeShellReplacement,
   DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD,
@@ -35,44 +37,21 @@ import {
   type ActiveExtension,
   type ShellReplacementMode,
 } from './configTypes.js';
-import { DEFAULT_FILE_FILTERING_OPTIONS } from './constants.js';
-import { UNCONFIGURED_PROVIDER } from './models.js';
-import { parseLspConfig, type LspState } from './lspIntegration.js';
-import { WorkspaceContext } from '../utils/workspaceContext.js';
+import {
+  DEFAULT_FILE_FILTERING_OPTIONS,
+  DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
+} from './constants.js';
+import { parseLspConfig } from './lspIntegration.js';
+import type { LspConfig } from '@vybestack/llxprt-code-ide-integration';
 import { Storage } from '@vybestack/llxprt-code-settings';
-import { FileExclusions } from '../utils/ignorePatterns.js';
-import { PolicyEngine } from '../policy/policy-engine.js';
+import type { PolicyEngineConfig } from '../policy/types.js';
 import { setGlobalProxy } from '../utils/fetch.js';
 import { coreEvents } from '../utils/events.js';
-import {
-  SimpleExtensionLoader,
-  type ExtensionLoader,
-} from '../utils/extensionLoader.js';
-import { SkillManager } from '../skills/skillManager.js';
-import { setLlxprtMdFilename } from '@vybestack/llxprt-code-tools';
-import type { GitHubBrokerClient } from '@vybestack/llxprt-code-tools';
-import { debugLogger } from '../utils/debugLogger.js';
-import { initializeTelemetry } from '../telemetry/index.js';
+import { DEFAULT_CONTEXT_FILENAME } from '@vybestack/llxprt-code-tools';
+
 import { OutputFormat } from '../utils/output-format.js';
-import { createAgentRuntimeStateFromConfig } from '../runtime/runtimeStateFactory.js';
-import {
-  StandardFileSystemService,
-  type FileSystemService,
-} from '../services/fileSystemService.js';
-import { createRuntimeSettingsService } from '../runtime/settingsRuntimeAdapter.js';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import { logCliConfiguration, StartSessionEvent } from '../telemetry/index.js';
-import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
-import type { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import type { EnvironmentSanitizationConfig } from '../services/environmentSanitization.js';
 import type { HookDefinition, HookEventName } from '../hooks/types.js';
-import type { RuntimeProviderManager } from '../runtime/contracts/RuntimeProviderManager.js';
-import type { EventEmitter } from 'node:events';
-import type { Config } from './config.js';
-import type { AgentClientFactory } from '../core/clientContract.js';
-import type { ToolSchedulerFactory } from '../core/toolSchedulerContract.js';
-import type { TaskToolRegistration } from './toolRegistryFactory.js';
-import type { PostSkillDiscoveryToolRegistrar } from './configTypes.js';
 
 /**
  * Typed target interface for applyConfigParams — lists every field
@@ -82,17 +61,15 @@ import type { PostSkillDiscoveryToolRegistrar } from './configTypes.js';
  * whose base class declares them as protected.
  */
 export interface ConfigConstructorTarget {
-  // Settings service
-  settingsService: SettingsService;
+  initialSettings: Readonly<Record<string, unknown>>;
+  provider: string | undefined;
 
   // Core identity and workspace
   sessionId: string;
   embeddingModel: string | undefined;
-  fileSystemService: FileSystemService;
   sandbox: SandboxConfig | undefined;
   targetDir: string;
   configuredIncludeDirectories: readonly string[];
-  workspaceContext: WorkspaceContext;
   debugMode: boolean;
   outputFormat: OutputFormat;
   question: string | undefined;
@@ -110,12 +87,11 @@ export interface ConfigConstructorTarget {
   blockedMcpServers: Array<{ name: string; extensionName: string }>;
 
   // LSP
-  _lspState: LspState;
+  lspConfig: LspConfig | undefined;
 
   // Memory and context
-  userMemory: string;
-  llxprtMdFileCount: number;
-  llxprtMdFilePaths: string[];
+  memorySettings: MemorySettings;
+  providedInstructions: string;
   approvalMode: ApprovalMode;
   showMemoryUsage: boolean;
   accessibility: AccessibilitySettings;
@@ -137,7 +113,6 @@ export interface ConfigConstructorTarget {
   dumpOnError: boolean;
   proxy: string | undefined;
   cwd: string;
-  fileDiscoveryService: FileDiscoveryService | null;
   bugCommand: BugCommandSettings | undefined;
   model: string;
   originalModel: string;
@@ -146,8 +121,7 @@ export interface ConfigConstructorTarget {
   experimentalZedIntegration: boolean;
   listExtensions: boolean;
   _activeExtensions: ActiveExtension[];
-  providerManager: RuntimeProviderManager | undefined;
-  _extensionLoader: ExtensionLoader;
+  extensions: LlxprtExtension[];
   noBrowser: boolean;
   summarizeToolOutput: Record<string, SummarizeToolOutputSettings> | undefined;
   folderTrust: boolean;
@@ -157,9 +131,8 @@ export interface ConfigConstructorTarget {
   chatCompression: ChatCompressionSettings | undefined;
   interactive: boolean;
   shellReplacement: ShellReplacementMode;
-  trustedFolder: boolean | undefined;
   useRipgrep: boolean;
-  githubBrokerClient: GitHubBrokerClient | undefined;
+
   shouldUseNodePtyShell: boolean;
   allowPtyThemeOverride: boolean;
   ptyScrollbackLimit: number;
@@ -175,14 +148,27 @@ export interface ConfigConstructorTarget {
   continueSession: boolean | string;
   extensionManagement: boolean;
   enableExtensionReloading: boolean;
-  storage: Storage;
-  fileExclusions: FileExclusions;
+  storageRoot: string;
+  globalConfigRoot: string;
+  globalDataRoot: string;
+  globalLogRoot: string;
+  globalAgentsRoot: string;
+  projectTempDir: string;
+  projectHistoryDir: string;
+  projectChatsDir: string;
+  projectCheckpointsDir: string;
+  historyFilePath: string;
+  projectCommandsDir: string;
+  projectSkillsDir: string;
+  projectAgentSkillsDir: string;
+  userCommandsDir: string;
+  userSkillsDir: string;
+  userAgentSkillsDir: string;
+  customExcludes: readonly string[];
   enablePromptCompletion: boolean;
-  eventEmitter: EventEmitter | undefined;
 
   // Policy engine and runtime state
-  policyEngine: PolicyEngine;
-  runtimeState: AgentRuntimeState;
+  policyEngineConfig: PolicyEngineConfig;
   disableYoloMode: boolean;
   enableHooks: boolean;
   jitContextEnabled: boolean | undefined;
@@ -191,61 +177,33 @@ export interface ConfigConstructorTarget {
     | ({ [K in HookEventName]?: HookDefinition[] } & { disabled?: string[] })
     | undefined;
   disabledHooks: string[];
-  skillManager: SkillManager;
   skillsSupport: boolean;
   disabledSkills: string[];
   enableHooksUI: boolean;
   adminSkillsEnabled: boolean;
   sanitizationConfig: EnvironmentSanitizationConfig | undefined;
-  _onReload:
-    | (() => Promise<{
-        disabledSkills?: string[];
-        adminSkillsEnabled?: boolean;
-      }>)
-    | undefined;
-  _onReloadMcpServers:
-    | (() => Promise<{
-        mcpServers: Record<string, MCPServerConfig>;
-        blockedMcpServers: Array<{ name: string; extensionName: string }>;
-        settingsMcpServers: Record<string, MCPServerConfig>;
-      }>)
-    | undefined;
   outputSettings: OutputSettings;
   introspectionAgentSettings: IntrospectionAgentSettings;
   useWriteTodos: boolean;
-
-  /**
-   * @plan PLAN-20260610-ISSUE1592.P01
-   * @requirement REQ-INV-001
-   */
-  agentClientFactory: AgentClientFactory | undefined;
-  /**
-   * @plan PLAN-20260610-ISSUE1592.P01
-   * @requirement REQ-INV-002
-   */
-  toolSchedulerFactory: ToolSchedulerFactory | undefined;
-  /**
-   * @plan PLAN-20260610-ISSUE1592.P01
-   * @requirement REQ-INV-003
-   */
-  taskToolRegistration: TaskToolRegistration | undefined;
-  postSkillDiscoveryToolRegistrar: PostSkillDiscoveryToolRegistrar | undefined;
 
   // Called at end of applyConfigParams
   getProxy(): string | undefined;
 }
 
-function applySettingsService(
+function freezeInitialSettings(value: unknown): void {
+  if (typeof value !== 'object' || value === null) return;
+  for (const child of Object.values(value)) freezeInitialSettings(child);
+  Object.freeze(value);
+}
+
+function applyInitialSettings(
   config: ConfigConstructorTarget,
   params: ConfigParameters,
 ): void {
-  // The settings service is supplied explicitly by the composition boundary
-  // (or a fresh isolated one is created). Constructing a Config never adopts
-  // ambient global runtime state — activating a runtime context and binding
-  // it to a settings service is the composition boundary's job
-  // (setCliRuntimeContext), not the constructor's (issue #2300).
-  config.settingsService =
-    params.settingsService ?? createRuntimeSettingsService();
+  const initial = structuredClone(params.initialSettings ?? {});
+  freezeInitialSettings(initial);
+  config.initialSettings = initial;
+  config.provider = params.provider;
 }
 
 function applyCoreIdentity(
@@ -254,14 +212,9 @@ function applyCoreIdentity(
 ): void {
   config.sessionId = params.sessionId;
   config.embeddingModel = params.embeddingModel;
-  config.fileSystemService = new StandardFileSystemService();
   config.sandbox = params.sandbox;
   config.targetDir = path.resolve(params.targetDir);
   config.configuredIncludeDirectories = [...(params.includeDirectories ?? [])];
-  config.workspaceContext = new WorkspaceContext(
-    config.targetDir,
-    params.includeDirectories ?? [],
-  );
   config.debugMode = params.debugMode;
   config.outputFormat = params.outputFormat ?? OutputFormat.TEXT;
   config.question = params.question;
@@ -281,7 +234,7 @@ function applyToolGovernance(
   config.mcpServers = params.mcpServers;
   config.allowedMcpServers = params.allowedMcpServers ?? [];
   config.blockedMcpServers = params.blockedMcpServers ?? [];
-  config._lspState.lspConfig = parseLspConfig(params.lsp);
+  config.lspConfig = parseLspConfig(params.lsp);
 }
 
 function applyTelemetryAndMemory(
@@ -297,9 +250,25 @@ function applyMemorySettings(
   config: ConfigConstructorTarget,
   params: ConfigParameters,
 ): void {
-  config.userMemory = params.userMemory ?? '';
-  config.llxprtMdFileCount = params.llxprtMdFileCount ?? 0;
-  config.llxprtMdFilePaths = params.llxprtMdFilePaths ?? [];
+  config.providedInstructions = params.userMemory ?? '';
+  const declaredFilenames =
+    params.memorySettings?.filenames ??
+    (Array.isArray(params.contextFileName)
+      ? params.contextFileName
+      : [params.contextFileName ?? DEFAULT_CONTEXT_FILENAME]);
+  const filenames = declaredFilenames
+    .map((name) => name.trim())
+    .filter((name) => name.length > 0);
+  config.memorySettings = {
+    importFormat: 'tree',
+    maxDirectories: 200,
+    ...params.memorySettings,
+    filenames: filenames.length > 0 ? filenames : [DEFAULT_CONTEXT_FILENAME],
+    filtering: {
+      ...DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
+      ...params.memorySettings?.filtering,
+    },
+  };
   config.approvalMode = params.approvalMode ?? ApprovalMode.DEFAULT;
   config.showMemoryUsage = params.showMemoryUsage ?? false;
   config.accessibility = params.accessibility ?? {};
@@ -459,7 +428,6 @@ function applyBasicRuntimeFlags(
   config.dumpOnError = params.dumpOnError ?? false;
   config.proxy = params.proxy;
   config.cwd = params.cwd;
-  config.fileDiscoveryService = params.fileDiscoveryService ?? null;
   config.bugCommand = params.bugCommand;
   // #2534 Domain C2: the constructor-seeded model feeds the store seeding in
   // applyExtensionFlags when a provider is supplied, and the per-instance
@@ -484,10 +452,8 @@ function applyBasicRuntimeFlags(
   config.chatCompression = params.chatCompression;
   config.interactive = params.interactive ?? false;
   config.shellReplacement = normalizeShellReplacement(params.shellReplacement);
-  config.trustedFolder = params.trustedFolder;
   config.useRipgrep = params.useRipgrep ?? false;
   // @plan PLAN-20260731-GHBROKER.P15
-  config.githubBrokerClient = params.githubBrokerClient;
 }
 
 function applyExtensionFlags(
@@ -496,64 +462,10 @@ function applyExtensionFlags(
 ): void {
   config.listExtensions = params.listExtensions ?? false;
   config._activeExtensions = params.activeExtensions ?? [];
-  config.providerManager = params.providerManager;
-  // #2534 Domain C1: activeProvider has one store (the settings global key).
-  // applySettingsService has already run, so the store exists. Seeding is
-  // restricted to Config-OWNED settings services: either applySettingsService
-  // created a provably fresh one (params.settingsService undefined), or the
-  // caller explicitly delegated ownership of the service it injected
-  // (params.settingsServiceOwnership === 'delegated' — the CLI bootstrap
-  // creates its service for this Config's exclusive use and declares it).
-  // A shared/injected service without that declaration — even one that merely
-  // lacks an activeProvider key — is never mutated as a constructor side
-  // effect: "no activeProvider" is not proof of freshness for an injected
-  // service, which may carry other state (global keys, provider records,
-  // profile selection) owned by its injector (#2300, #2534 review Finding 6).
-  // The UNCONFIGURED_PROVIDER sentinel is not a provider — seeding it would
-  // make provider managers resolve 'unconfigured' as active, so it never lands
-  // in the store (runtimeStateFactory/prompts re-derive the sentinel when the
-  // store is empty).
-  const seedProvider =
-    params.provider !== undefined &&
-    params.provider !== '' &&
-    params.provider !== UNCONFIGURED_PROVIDER
-      ? params.provider
-      : null;
-  const configOwnsSettingsService =
-    params.settingsService === undefined ||
-    params.settingsServiceOwnership === 'delegated';
-  if (
-    seedProvider !== null &&
-    configOwnsSettingsService &&
-    config.settingsService.get('activeProvider') === undefined
-  ) {
-    config.settingsService.set('activeProvider', seedProvider);
-    // #2534 Domain C2: constructor paths that seed a model must land in the
-    // store. The ownership guard above means this branch only runs on a
-    // Config-owned fresh service; the absence check still guards against a
-    // model seeded earlier in construction.
-    if (typeof params.model === 'string' && params.model.length > 0) {
-      const providerSettings =
-        config.settingsService.getProviderSettings(seedProvider);
-      if (
-        typeof providerSettings.model !== 'string' ||
-        providerSettings.model.length === 0
-      ) {
-        config.settingsService.setProviderSetting(
-          seedProvider,
-          'model',
-          params.model,
-        );
-      }
-    }
-  }
-  config._extensionLoader =
-    params.extensionLoader ??
-    new SimpleExtensionLoader(params.extensions ?? []);
+  config.extensions = [...(params.extensions ?? [])];
   config.extensionManagement = params.extensionManagement ?? false;
   config.enableExtensionReloading = params.enableExtensionReloading ?? false;
   config.enablePromptCompletion = params.enablePromptCompletion ?? false;
-  config.eventEmitter = params.eventEmitter;
 }
 
 function applyShellFlags(
@@ -595,33 +507,63 @@ function applySessionFlags(
       ? imagePayloadBudgetBytes
       : DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES;
   config.continueSession = params.continueSession ?? false;
-  config.storage = new Storage(config.targetDir);
-  config.fileExclusions = new FileExclusions(config as unknown as Config);
+  config.storageRoot = path.resolve(params.storageRoot ?? config.targetDir);
+  config.globalConfigRoot = Storage.getGlobalConfigDir();
+  config.globalDataRoot = Storage.getGlobalDataDir();
+  config.globalLogRoot = Storage.getGlobalLogDir();
+  config.globalAgentsRoot = Storage.getGlobalAgentsDir();
+  const projectKey = Storage.getProjectHistoryKey(config.storageRoot);
+  const projectConfigRoot = path.join(config.storageRoot, '.llxprt');
+  config.projectTempDir = path.join(config.globalLogRoot, 'tmp', projectKey);
+  config.projectHistoryDir = path.join(
+    config.globalDataRoot,
+    'history',
+    projectKey,
+  );
+  config.projectChatsDir = path.join(config.projectTempDir, 'chats');
+  config.projectCheckpointsDir = path.join(
+    config.projectTempDir,
+    'checkpoints',
+  );
+  config.historyFilePath = path.join(config.projectTempDir, 'shell_history');
+  config.projectCommandsDir = path.join(projectConfigRoot, 'commands');
+  config.projectSkillsDir = path.join(projectConfigRoot, 'skills');
+  config.projectAgentSkillsDir = path.join(
+    config.storageRoot,
+    '.agents',
+    'skills',
+  );
+  config.userCommandsDir = path.join(config.globalConfigRoot, 'commands');
+  config.userSkillsDir = path.join(config.globalConfigRoot, 'skills');
+  config.userAgentSkillsDir = path.join(config.globalAgentsRoot, 'skills');
+  config.customExcludes = Object.freeze([]);
 }
 
 function applyPolicyAndLifecycle(
   config: ConfigConstructorTarget,
   params: ConfigParameters,
 ): void {
-  config.policyEngine = new PolicyEngine(params.policyEngineConfig);
-  config.runtimeState = createAgentRuntimeStateFromConfig(
-    config as unknown as Config,
-  );
+  config.policyEngineConfig = {
+    ...params.policyEngineConfig,
+    rules: params.policyEngineConfig?.rules?.map((rule) => ({
+      ...rule,
+      modes: rule.modes?.slice(),
+      argsPattern: rule.argsPattern
+        ? new RegExp(rule.argsPattern.source, rule.argsPattern.flags)
+        : undefined,
+    })),
+  };
   config.disableYoloMode = params.disableYoloMode ?? false;
   config.enableHooks = params.enableHooks ?? false;
   config.jitContextEnabled = params.jitContextEnabled ?? true;
   config.hooks = params.hooks;
   config.projectHooks = params.projectHooks;
   config.disabledHooks = params.disabledHooks ?? [];
-  config.skillManager = new SkillManager();
   config.skillsSupport = params.skillsSupport ?? false;
   config.disabledSkills = params.disabledSkills ?? [];
   config.enableHooksUI = params.enableHooksUI ?? true;
   config.adminSkillsEnabled = params.adminSkillsEnabled ?? true;
-  config.skillManager.setAdminSettings(config.adminSkillsEnabled);
   config.sanitizationConfig = params.sanitizationConfig;
-  config._onReload = params.onReload;
-  config._onReloadMcpServers = params.onReloadMcpServers;
   config.outputSettings = params.outputSettings ?? {
     format: OutputFormat.TEXT,
   };
@@ -632,32 +574,6 @@ function applyPolicyAndLifecycle(
 
   // @plan PLAN-20260610-ISSUE1592.P01
   // @requirement REQ-INV-001, REQ-INV-002, REQ-INV-003
-  config.agentClientFactory = params.agentClientFactory;
-  config.toolSchedulerFactory = params.toolSchedulerFactory;
-  config.taskToolRegistration = params.taskToolRegistration;
-  config.postSkillDiscoveryToolRegistrar =
-    params.postSkillDiscoveryToolRegistrar;
-
-  if (params.contextFileName !== undefined && params.contextFileName !== '') {
-    setLlxprtMdFilename(params.contextFileName);
-  }
-
-  // Telemetry initialization (intentional cast — avoids circular dep with Config)
-  const isTestEnvironment = process.env.NODE_ENV === 'test';
-  if (process.env.VERBOSE === 'true' && isTestEnvironment === false) {
-    debugLogger.log(
-      `[CONFIG] Telemetry settings:`,
-      JSON.stringify(config.telemetrySettings),
-    );
-  }
-  if (config.telemetrySettings.enabled === true) {
-    if (process.env.VERBOSE === 'true' && isTestEnvironment === false) {
-      debugLogger.log(`[CONFIG] Initializing telemetry`);
-    }
-    initializeTelemetry(config as unknown as Config);
-  } else if (process.env.VERBOSE === 'true' && isTestEnvironment === false) {
-    debugLogger.log(`[CONFIG] Telemetry disabled`);
-  }
 
   const proxy = config.getProxy();
   if (proxy) {
@@ -671,11 +587,6 @@ function applyPolicyAndLifecycle(
       );
     }
   }
-
-  logCliConfiguration(
-    config as unknown as Config,
-    new StartSessionEvent(config as unknown as Config),
-  );
 }
 
 /**
@@ -689,7 +600,7 @@ export function applyConfigParams(
   config: ConfigConstructorTarget,
   params: ConfigParameters,
 ): void {
-  applySettingsService(config, params);
+  applyInitialSettings(config, params);
   applyCoreIdentity(config, params);
   applyToolGovernance(config, params);
   applyTelemetryAndMemory(config, params);

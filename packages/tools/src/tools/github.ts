@@ -32,6 +32,7 @@ import {
   type LiveOutputUpdate,
 } from './tools.js';
 import type { IToolMessageBus } from '../interfaces/IToolMessageBus.js';
+import type { GitHubReportOperations } from '../interfaces/github-report-operations.js';
 import {
   GITHUB_OP_SPECS,
   GITHUB_SUPPORTED_OPS,
@@ -382,7 +383,7 @@ export class GithubToolInvocation extends BaseToolInvocation<
   ToolResult
 > {
   constructor(
-    private readonly client: GitHubBrokerClient,
+    private readonly reports: GitHubReportOperations,
     params: GithubToolParams,
     messageBus?: IToolMessageBus,
   ) {
@@ -471,7 +472,10 @@ export class GithubToolInvocation extends BaseToolInvocation<
         ? this.startProgress(updateOutput)
         : undefined;
     try {
-      const data = await this.client.runOperation(op, rest, signal);
+      const execute = MUTATING_OPS.has(op)
+        ? this.reports.submitReport
+        : this.reports.readReport;
+      const data = await execute(op, rest, signal);
       const json = JSON.stringify(data, null, 2);
       return {
         llmContent: json,
@@ -521,7 +525,7 @@ export class GithubTool extends BaseDeclarativeTool<
   static readonly Name = 'github';
 
   constructor(
-    private readonly client: GitHubBrokerClient,
+    private readonly reports: GitHubReportOperations,
     messageBus?: IToolMessageBus,
   ) {
     super(
@@ -556,6 +560,6 @@ export class GithubTool extends BaseDeclarativeTool<
     params: GithubToolParams,
     messageBus?: IToolMessageBus,
   ): ToolInvocation<GithubToolParams, ToolResult> {
-    return new GithubToolInvocation(this.client, params, messageBus);
+    return new GithubToolInvocation(this.reports, params, messageBus);
   }
 }

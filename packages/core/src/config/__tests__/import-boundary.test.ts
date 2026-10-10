@@ -21,6 +21,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const configTsPath = join(__dirname, '..', 'config.ts');
+const configBaseTsPath = join(__dirname, '..', 'configBase.ts');
 const providerRegistryPath = join(
   __dirname,
   '..',
@@ -77,13 +78,14 @@ describe('import boundary guards @issue:2417', () => {
       expect(referencingLines).toHaveLength(0);
     });
 
-    it('allows type-only imports from @vybestack/llxprt-code-tools', () => {
-      // type-only imports are fine — they are elided at runtime.
-      const lines = source.split('\n');
-      const typeImportLines = lines.filter(isTypeImportFromTools);
+    it('does not import executable tool catalogs into ConfigBase', () => {
+      const baseSource = readFileSync(configBaseTsPath, 'utf-8');
+      const lines = baseSource.split('\n');
 
-      // There should be at least one (ToolRegistry)
-      expect(typeImportLines.length).toBeGreaterThan(0);
+      expect(lines.filter(isTypeImportFromTools).join('\n')).not.toContain(
+        'ToolRegistry',
+      );
+      expect(lines.filter(isValueImportFromTools)).toHaveLength(0);
     });
   });
 

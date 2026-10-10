@@ -1,3 +1,6 @@
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import { createLoopSettingsFixture } from '../../../core/agenticLoop/__tests__/loop-settings-fixture.js';
+import { CoreToolScheduler } from '../../../core/coreToolScheduler.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -19,6 +22,7 @@
  * lives under __tests__/helpers/ which is excluded from the P09 boundary scan.
  */
 
+import { ClientToolSelection } from '../../../core/client-tool-selection.js';
 import { FakeProvider } from '@vybestack/llxprt-code-providers';
 import {
   emptyModelOutput,
@@ -31,9 +35,8 @@ import {
   type ServerAgentStreamEvent,
 } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { AgenticLoopEvent } from '../../../core/agenticLoop/types.js';
+import { bindSchedulerOwner } from '../../../session/assembleSchedulerOwner.js';
 import { AgenticLoop } from '../../../core/agenticLoop/AgenticLoop.js';
-import { CoreToolScheduler } from '../../../core/coreToolScheduler.js';
-import { createSchedulerRegistryDelegate } from '../../../core/__tests__/scheduler-registry-test-helpers.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
@@ -46,7 +49,6 @@ import type {
   AgentClientContract,
   AgentChatContract,
 } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { ApprovalHandler } from '../../../core/agenticLoop/types.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
@@ -122,6 +124,7 @@ function makeScriptedChat(history: IContent[]): AgentChatContract {
     getHistoryService: () => null,
     wasRecentlyCompressed: () => false,
     performCompression: async () => PerformCompressionResult.COMPRESSED,
+    takeHistoryAdmissions: () => [],
     recordCompletedToolCalls: () => {},
   };
 }
@@ -131,7 +134,16 @@ function makeScriptedClientContract(
   chat: AgentChatContract,
   scriptQueue: TurnScript[],
 ): AgentClientContract {
+  const tools = new ClientToolSelection();
   return {
+    ...scriptedClientIdentity(),
+    get tools() {
+      return tools.read();
+    },
+    bindProviderInvocation: () => {},
+    bindRuntimeSettings: () => {},
+    bindTelemetry: () => {},
+    bindToolSelection: tools.bindToolSelection,
     async initialize() {},
     isInitialized: () => true,
     hasChatInitialized: () => true,
@@ -141,6 +153,7 @@ function makeScriptedClientContract(
     },
     getHistoryService: () => null,
     storeHistoryServiceForReuse: () => {},
+    prepareHistoryRebind: () => () => {},
     storeHistoryForLaterUse: async (h: IContent[]) => {
       history.push(...h);
     },
@@ -156,6 +169,7 @@ function makeScriptedClientContract(
     setHistory: async () => {},
     restoreHistory: async () => {},
     addDirectoryContext: async () => {},
+    getContentGeneratorConfig: () => undefined,
     getContentGenerator: () => {
       throw new Error('not used by AgenticLoop');
     },
@@ -196,60 +210,8 @@ function makeScriptedClientContract(
   };
 }
 
-function narrowConfig(fixture: Record<string, unknown>): Config {
-  return fixture as unknown as Config;
-}
-
 function narrowToolRegistry(fixture: Record<string, unknown>): ToolRegistry {
   return fixture as unknown as ToolRegistry;
-}
-
-function createTestConfig(opts: {
-  messageBus: MessageBus;
-  toolRegistry: ToolRegistry;
-  policyEngine: PolicyEngine;
-}): Config {
-  const { messageBus, toolRegistry, policyEngine } = opts;
-  const fixture = {
-    getSessionId: () => 'p10-harness-session',
-    getUsageStatisticsEnabled: () => false,
-    getDebugMode: () => false,
-    getImagePayloadBudgetBytes: () => DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
-    getApprovalMode: () => ApprovalMode.DEFAULT,
-    getEphemeralSettings: () => ({}),
-    getEphemeralSetting: () => undefined,
-    getAllowedTools: (): string[] => [],
-    getExcludeTools: (): string[] => [],
-    getContentGeneratorConfig: () => ({ model: 'test-model' }),
-    getModel: () => 'test-model',
-    getToolRegistry: () => toolRegistry,
-    getMessageBus: () => messageBus,
-    getPolicyEngine: () => policyEngine,
-    getTelemetryLogPromptsEnabled: () => false,
-    isInteractive: () => true,
-    getNonInteractive: () => false,
-    getToolSchedulerFactory:
-      () =>
-      (
-        o: ConstructorParameters<typeof CoreToolScheduler>[0],
-      ): CoreToolScheduler =>
-        new CoreToolScheduler(o),
-  };
-  const delegate = createSchedulerRegistryDelegate({
-    config: narrowConfig(fixture),
-    messageBus,
-    toolRegistry,
-    createScheduler: async (schedulerOptions) =>
-      fixture.getToolSchedulerFactory()({
-        config: narrowConfig(fixture),
-        messageBus,
-        toolRegistry,
-        toolContextInteractiveMode: schedulerOptions.interactiveMode ?? true,
-        getPreferredEditor: () => undefined,
-        onEditorClose: () => {},
-      }),
-  });
-  return narrowConfig({ ...fixture, ...delegate });
 }
 
 function createToolRegistry(tools: MockTool[]): ToolRegistry {
@@ -312,10 +274,10 @@ export async function runRealLoopExecuteTool(): Promise<
   });
   const toolRegistry = createToolRegistry([tool]);
   const messageBus = new MessageBus(createAskPolicyEngine(), false);
-  const config = createTestConfig({
-    messageBus,
-    toolRegistry,
-    policyEngine: createAskPolicyEngine(),
+  const { config, settingsOwner } = createLoopSettingsFixture({
+    interactive: true,
+    approvalMode: ApprovalMode.DEFAULT,
+    imagePayloadBudgetBytes: DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
   });
   const approvalHandler: ApprovalHandler = async () => ({
     outcome: ToolConfirmationOutcome.ProceedOnce,
@@ -327,7 +289,24 @@ export async function runRealLoopExecuteTool(): Promise<
     ],
     [streamContent('done'), streamFinished()],
   ]);
+  client.bindToolSelection(toolRegistry);
   const loop = new AgenticLoop({
+    createSchedulerOwner: bindSchedulerOwner(
+      config,
+      messageBus,
+      config.isInteractive(),
+      toolRegistry,
+      (options) => new CoreToolScheduler(options),
+      () => settingsOwner.readToolExecutionPolicy(),
+      () => settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
+      undefined,
+      RootTelemetry.prepare({
+        enabled: false,
+        sessionId: 'isolated-caller-fixture',
+        maxBytes: 1024,
+        maxFiles: 1,
+      }),
+    ),
     agentClient: client,
     config,
     messageBus,
@@ -349,16 +328,33 @@ export async function runRealLoopAbort(): Promise<readonly AgenticLoopEvent[]> {
   const tool = new MockTool({ name: 'abort_tool' });
   const toolRegistry = createToolRegistry([tool]);
   const messageBus = new MessageBus(createAllowPolicyEngine(), false);
-  const config = createTestConfig({
-    messageBus,
-    toolRegistry,
-    policyEngine: createAllowPolicyEngine(),
+  const { config, settingsOwner } = createLoopSettingsFixture({
+    interactive: true,
+    approvalMode: ApprovalMode.DEFAULT,
+    imagePayloadBudgetBytes: DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
   });
   const controller = new AbortController();
   const { client } = createScriptedAgentClient([
     [streamContent('partial...'), streamFinished()],
   ]);
+  client.bindToolSelection(toolRegistry);
   const loop = new AgenticLoop({
+    createSchedulerOwner: bindSchedulerOwner(
+      config,
+      messageBus,
+      config.isInteractive(),
+      toolRegistry,
+      (options) => new CoreToolScheduler(options),
+      () => settingsOwner.readToolExecutionPolicy(),
+      () => settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
+      undefined,
+      RootTelemetry.prepare({
+        enabled: false,
+        sessionId: 'isolated-caller-fixture',
+        maxBytes: 1024,
+        maxFiles: 1,
+      }),
+    ),
     agentClient: client,
     config,
     messageBus,
@@ -374,4 +370,18 @@ export async function runRealLoopAbort(): Promise<readonly AgenticLoopEvent[]> {
     events.push(event);
   }
   return events;
+}
+
+function scriptedClientIdentity(): Pick<
+  AgentClientContract,
+  'assertConfig' | 'assertProviderManager'
+> {
+  return {
+    assertConfig: () => {
+      throw new Error('Scripted loop client cannot be adopted');
+    },
+    assertProviderManager: () => {
+      throw new Error('Scripted loop client has no provider manager');
+    },
+  };
 }

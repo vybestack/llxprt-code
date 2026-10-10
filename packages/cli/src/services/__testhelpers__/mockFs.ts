@@ -213,6 +213,10 @@ export class FsMockContext {
     const MockStorage: MockStorageConstructor = class {
       constructor(public projectRoot?: string) {}
 
+      static getGlobalLogDir(): string {
+        return path.join(root, 'logs');
+      }
+
       static getUserCommandsDir(): string {
         return userCommandsDir;
       }

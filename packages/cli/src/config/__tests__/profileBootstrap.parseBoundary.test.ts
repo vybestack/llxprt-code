@@ -25,10 +25,6 @@ import {
 import { profileCommand } from '../../ui/commands/profileCommand.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 
-void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
-  registerCliProviderInfrastructure: vi.fn(),
-}));
-
 const runtimeMocks = {
   saveProfileSnapshot: vi.fn(),
   loadProfileByName: vi.fn(),
@@ -36,7 +32,7 @@ const runtimeMocks = {
   listSavedProfiles: vi.fn(),
   setDefaultProfileName: vi.fn(),
   getActiveProfileName: vi.fn(),
-  getActiveProviderStatus: vi.fn(),
+  providerStatus: vi.fn(),
   saveLoadBalancerProfile: vi.fn(),
   getEphemeralSettings: vi.fn(),
 };
@@ -165,7 +161,7 @@ describe('profile load-balancer save — interactive path still requires >= 2 me
 
   it('too few arguments produce the usage error, not the member-count error', async () => {
     const result = await saveProfile().action!(
-      createMockCommandContext(),
+      createMockCommandContext({ runtimeApi: runtimeMocks }),
       'loadbalancer lb roundrobin profile1',
     );
 
@@ -180,7 +176,7 @@ describe('profile load-balancer save — interactive path still requires >= 2 me
     // rule. Proves BOTH that the flag and its value are stripped rather than
     // counted as profile names, and that a lone member is then rejected.
     const result = await saveProfile().action!(
-      createMockCommandContext(),
+      createMockCommandContext({ runtimeApi: runtimeMocks }),
       'loadbalancer lb roundrobin --context-limit 150000 profile1',
     );
 
@@ -192,7 +188,7 @@ describe('profile load-balancer save — interactive path still requires >= 2 me
 
   it('--context-limit and its value are stripped, not counted as members', async () => {
     const result = await saveProfile().action!(
-      createMockCommandContext(),
+      createMockCommandContext({ runtimeApi: runtimeMocks }),
       'loadbalancer lb roundrobin --context-limit 150000 profile1 profile2',
     );
 
@@ -205,7 +201,7 @@ describe('profile load-balancer save — interactive path still requires >= 2 me
 
   it('two members save successfully', async () => {
     const result = await saveProfile().action!(
-      createMockCommandContext(),
+      createMockCommandContext({ runtimeApi: runtimeMocks }),
       'loadbalancer lb roundrobin profile1 profile2',
     );
 

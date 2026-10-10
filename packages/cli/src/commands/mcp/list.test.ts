@@ -11,7 +11,6 @@ import { DebugLogger } from '@vybestack/llxprt-code-core';
 import type { MCPServerConfig } from '@vybestack/llxprt-code-core';
 import type { McpAuthProvider } from '@vybestack/llxprt-code-mcp';
 import type { OAuthClientMetadata } from '@modelcontextprotocol/sdk/shared/auth.js';
-import { resetRegisteredMcpAuthFactories } from '@vybestack/llxprt-code-mcp/auth/mcp-auth-factory.js';
 import {
   buildProviderContributionRegistry,
   loadInstalledRuntimePlugins,
@@ -160,7 +159,6 @@ describe('mcp list command', () => {
     vi.resetAllMocks();
     // Each listMcpServers run registers MCP auth factories (startup-only
     // seam); reset between tests so every run starts unregistered.
-    resetRegisteredMcpAuthFactories();
     fakeAuthProviderConstructions = 0;
     mockedLoadInstalledRuntimePlugins.mockResolvedValue(
       buildProviderContributionRegistry([]),
@@ -186,7 +184,6 @@ describe('mcp list command', () => {
   });
 
   afterEach(() => {
-    resetRegisteredMcpAuthFactories();
     consoleSpy.mockRestore();
   });
 
@@ -399,7 +396,7 @@ describe('mcp list command', () => {
     warnSpy.mockRestore();
   });
 
-  it('should test plugin-backed authProviderType servers through the registered plugin factories', async () => {
+  it('should test plugin-backed authProviderType servers through the injected plugin factories', async () => {
     mockedLoadInstalledRuntimePlugins.mockResolvedValue(
       buildProviderContributionRegistry([
         googleAuthPlugin({

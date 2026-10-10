@@ -5,7 +5,7 @@
  */
 
 import { vi, describe, it, expect, beforeEach } from 'bun:test';
-import { helpCommand } from './helpCommand';
+import { helpCommand } from './helpCommand.js';
 import { type CommandContext } from './types.js';
 import { MessageType } from '../types.js';
 import { assertDefined } from '../../__tests__/assertions.js';
@@ -25,7 +25,7 @@ describe('helpCommand', () => {
 
   it("should add a HELP history item for '/help'", async () => {
     assertDefined(helpCommand.action);
-    await helpCommand.action!(mockContext, '');
+    await helpCommand.action(mockContext, '');
 
     expect(mockAddItem).toHaveBeenCalledTimes(1);
     const [historyItem] = mockAddItem.mock.calls[0];

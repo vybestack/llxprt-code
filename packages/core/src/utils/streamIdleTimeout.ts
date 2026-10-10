@@ -65,9 +65,10 @@ export const LLXPRT_STREAM_IDLE_TIMEOUT_MS_ENV =
  */
 export const STREAM_IDLE_TIMEOUT_SETTING_KEY = 'stream-idle-timeout-ms';
 
-const STREAM_IDLE_TIMEOUT_CONFIG_KEYS = [
-  STREAM_IDLE_TIMEOUT_SETTING_KEY,
-] as const;
+export interface StreamTimeoutPolicy {
+  readonly 'stream-idle-timeout-ms'?: unknown;
+  readonly 'stream-first-response-timeout-ms'?: unknown;
+}
 
 /**
  * Default first-response timeout in milliseconds (5 minutes).
@@ -97,10 +98,6 @@ export const LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS_ENV =
  */
 export const STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY =
   'stream-first-response-timeout-ms';
-
-const STREAM_FIRST_RESPONSE_CONFIG_KEYS = [
-  STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY,
-] as const;
 
 function parseTimeoutConfigValue(value: unknown): number {
   if (typeof value === 'number') {
@@ -155,23 +152,17 @@ export interface ResolvedStreamTimeout {
  */
 function resolveTimeoutSource(
   envName: string,
-  configKeys: readonly string[],
+  settingKey: keyof StreamTimeoutPolicy,
   fallbackDefault: number,
-  config?: { getEphemeralSetting?: (key: string) => unknown },
+  policy?: StreamTimeoutPolicy,
 ): ResolvedStreamTimeout {
   const envValue = normalizeTimeoutConfigValue(process.env[envName]);
   if (envValue !== undefined) {
     return { ms: envValue, source: 'env' };
   }
 
-  for (const settingKey of configKeys) {
-    const configValue = normalizeTimeoutConfigValue(
-      config?.getEphemeralSetting?.(settingKey),
-    );
-    if (configValue !== undefined) {
-      return { ms: configValue, source: settingKey };
-    }
-  }
+  const policyValue = normalizeTimeoutConfigValue(policy?.[settingKey]);
+  if (policyValue !== undefined) return { ms: policyValue, source: settingKey };
 
   return { ms: fallbackDefault, source: 'default' };
 }
@@ -190,14 +181,14 @@ function resolveTimeoutSource(
  * @param config - Optional Config instance to read ephemeral setting from
  * @returns Resolved timeout in ms, or 0 if watchdog should be disabled
  */
-export function resolveStreamIdleTimeoutMs(config?: {
-  getEphemeralSetting?: (key: string) => unknown;
-}): number {
+export function resolveStreamIdleTimeoutMs(
+  policy?: StreamTimeoutPolicy,
+): number {
   return resolveTimeoutSource(
     LLXPRT_STREAM_IDLE_TIMEOUT_MS_ENV,
-    STREAM_IDLE_TIMEOUT_CONFIG_KEYS,
+    STREAM_IDLE_TIMEOUT_SETTING_KEY,
     DEFAULT_STREAM_IDLE_TIMEOUT_MS,
-    config,
+    policy,
   ).ms;
 }
 
@@ -206,14 +197,14 @@ export function resolveStreamIdleTimeoutMs(config?: {
  * resolved ms value and the provenance ('env', a setting key, or 'default').
  * The `.ms` field is identical to {@link resolveStreamIdleTimeoutMs}.
  */
-export function resolveStreamIdleTimeoutMsSource(config?: {
-  getEphemeralSetting?: (key: string) => unknown;
-}): ResolvedStreamTimeout {
+export function resolveStreamIdleTimeoutMsSource(
+  policy?: StreamTimeoutPolicy,
+): ResolvedStreamTimeout {
   return resolveTimeoutSource(
     LLXPRT_STREAM_IDLE_TIMEOUT_MS_ENV,
-    STREAM_IDLE_TIMEOUT_CONFIG_KEYS,
+    STREAM_IDLE_TIMEOUT_SETTING_KEY,
     DEFAULT_STREAM_IDLE_TIMEOUT_MS,
-    config,
+    policy,
   );
 }
 
@@ -237,14 +228,14 @@ export function resolveStreamIdleTimeoutMsSource(config?: {
  * @param config - Optional Config instance to read ephemeral setting from
  * @returns Resolved timeout in ms, or 0 if watchdog should be disabled
  */
-export function resolveStreamFirstResponseTimeoutMs(config?: {
-  getEphemeralSetting?: (key: string) => unknown;
-}): number {
+export function resolveStreamFirstResponseTimeoutMs(
+  policy?: StreamTimeoutPolicy,
+): number {
   return resolveTimeoutSource(
     LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS_ENV,
-    STREAM_FIRST_RESPONSE_CONFIG_KEYS,
+    STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY,
     DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS,
-    config,
+    policy,
   ).ms;
 }
 
@@ -254,14 +245,14 @@ export function resolveStreamFirstResponseTimeoutMs(config?: {
  * 'default'). The `.ms` field is identical to
  * {@link resolveStreamFirstResponseTimeoutMs}.
  */
-export function resolveStreamFirstResponseTimeoutMsSource(config?: {
-  getEphemeralSetting?: (key: string) => unknown;
-}): ResolvedStreamTimeout {
+export function resolveStreamFirstResponseTimeoutMsSource(
+  policy?: StreamTimeoutPolicy,
+): ResolvedStreamTimeout {
   return resolveTimeoutSource(
     LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS_ENV,
-    STREAM_FIRST_RESPONSE_CONFIG_KEYS,
+    STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY,
     DEFAULT_STREAM_FIRST_RESPONSE_TIMEOUT_MS,
-    config,
+    policy,
   );
 }
 

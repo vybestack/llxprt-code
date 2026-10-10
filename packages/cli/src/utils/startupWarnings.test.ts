@@ -6,7 +6,7 @@
 
 import { automock } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
-import { getStartupWarnings } from './startupWarnings';
+import { getStartupWarnings } from './startupWarnings.js';
 import fs from 'fs/promises';
 import { getErrorMessage } from '@vybestack/llxprt-code-core';
 

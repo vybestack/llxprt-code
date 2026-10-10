@@ -53,7 +53,6 @@ describe('usePhraseCycler', () => {
     const { result } = renderHook(() => usePhraseCycler(true, false));
     // Initial phrase should be one of witty phrases
     expect(LLXPRT_PHRASES).toContain(result.current);
-    const _initialPhrase = result.current;
 
     act(() => {
       vi.advanceTimersByTime(PHRASE_CHANGE_INTERVAL_MS);
@@ -61,7 +60,6 @@ describe('usePhraseCycler', () => {
     // Phrase should change and be one of witty phrases
     expect(LLXPRT_PHRASES).toContain(result.current);
 
-    const _secondPhrase = result.current;
     act(() => {
       vi.advanceTimersByTime(PHRASE_CHANGE_INTERVAL_MS);
     });

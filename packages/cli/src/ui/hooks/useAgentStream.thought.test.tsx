@@ -14,7 +14,7 @@ import {
   createFakeAgentFromMockClient,
 } from './__tests__/useAgentStream-test-helpers.js';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
-import React, { act } from 'react';
+import { act } from 'react';
 import { renderHook } from '../../__tests__/render.js';
 import { waitFor } from '../../__tests__/async.js';
 import { useAgentStream } from './agentStream/index.js';
@@ -45,13 +45,11 @@ const realAtCommandProcessorModule = {
 const actualSchedulerModule = {
   ...(await import('./useReactToolScheduler.js')),
 };
+const mockUseReactToolScheduler = vi.fn<typeof useReactToolScheduler>();
 void vi.mock('./useReactToolScheduler.js', () => ({
   ...actualSchedulerModule,
-  useReactToolScheduler: vi.fn(),
+  useReactToolScheduler: mockUseReactToolScheduler,
 }));
-const mockUseReactToolScheduler = useReactToolScheduler as Mock<
-  (...args: never[]) => unknown
->;
 
 void vi.mock('./useKeypress.js', () => ({
   useKeypress: vi.fn(),
@@ -69,31 +67,6 @@ void vi.mock('./atCommandProcessor.js', () =>
 
 void vi.mock('../utils/markdownUtilities.js', () => ({
   findLastSafeSplitPoint: vi.fn((s: string) => s.length),
-}));
-
-void vi.mock('./useStateAndRef.js', () => ({
-  useStateAndRef: <T,>(
-    initial: T,
-  ): [
-    T,
-    React.MutableRefObject<T>,
-    React.Dispatch<React.SetStateAction<T>>,
-  ] => {
-    const [state, setState] = React.useState(initial);
-    const ref = React.useRef(initial);
-    const setStateInternal = React.useCallback(
-      (valueOrUpdater: React.SetStateAction<T>) => {
-        const nextValue =
-          typeof valueOrUpdater === 'function'
-            ? valueOrUpdater(ref.current)
-            : valueOrUpdater;
-        ref.current = nextValue;
-        setState(nextValue);
-      },
-      [],
-    );
-    return [state, ref, setStateInternal];
-  },
 }));
 
 void vi.mock('./useLogger.js', () => ({
@@ -120,25 +93,21 @@ void vi.mock('./slashCommandProcessor.js', () => ({
 
 // --- Tests for useAgentStream Hook ---
 describe('useAgentStream', () => {
-  let mockAddItem: Mock<(...args: never[]) => unknown>;
+  let mockAddItem: Mock<Parameters<typeof useAgentStream>[2]>;
   let mockConfig: Config;
-  let mockOnDebugMessage: Mock<(...args: never[]) => unknown>;
-  let mockHandleSlashCommand: Mock<(...args: never[]) => unknown>;
-  let mockScheduleToolCalls: Mock<(...args: never[]) => unknown>;
-  let mockCancelAllToolCalls: Mock<(...args: never[]) => unknown>;
-  let mockMarkToolsAsDisplayCleared: Mock<(...args: never[]) => unknown>;
+  let mockOnDebugMessage: Mock<(message: string) => void>;
+  let mockHandleSlashCommand: Mock<Parameters<typeof useAgentStream>[6]>;
+  let mockScheduleToolCalls: Mock<ReturnType<typeof useReactToolScheduler>[1]>;
+  let mockCancelAllToolCalls: Mock<ReturnType<typeof useReactToolScheduler>[3]>;
+  let mockMarkToolsAsDisplayCleared: Mock<
+    ReturnType<typeof useReactToolScheduler>[2]
+  >;
 
   beforeEach(() => {
     vi.clearAllMocks(); // Clear mocks before each test
 
-    mockAddItem = vi.fn();
+    mockAddItem = vi.fn<Parameters<typeof useAgentStream>[2]>(() => 0);
     // Define the mock for getAgentClient
-    const _mockGetAgentClient = vi.fn().mockImplementation(() => {
-      // MockedAgentClientClass is defined in the module scope by the previous change.
-      // It will use the mockStartChat and mockSendMessageStream that are managed within beforeEach.
-      const clientInstance = new MockedAgentClientClass(mockConfig);
-      return clientInstance;
-    });
 
     const contentGeneratorConfig = {
       model: 'test-model',
@@ -198,12 +167,14 @@ describe('useAgentStream', () => {
 
     // Default mock for useReactToolScheduler to prevent toolCalls being undefined initially
     mockUseReactToolScheduler.mockReturnValue([
-      [], // Default to empty array for toolCalls
+      [],
       mockScheduleToolCalls,
       mockMarkToolsAsDisplayCleared,
       mockCancelAllToolCalls,
       0,
       true,
+      vi.fn(),
+      vi.fn(),
     ]);
 
     // Reset mocks for AgentClient instance methods (startChat and sendMessageStream)
@@ -266,7 +237,6 @@ describe('useAgentStream', () => {
           () => 'vscode' as EditorType,
           () => {},
           () => Promise.resolve(),
-          false,
           () => {},
           () => {},
           () => {},
@@ -333,6 +303,8 @@ describe('useAgentStream', () => {
         mockCancelAllToolCalls,
         0,
         true,
+        vi.fn(),
+        vi.fn(),
       ]);
 
       const { result, rerender } = renderHook(() =>
@@ -348,7 +320,6 @@ describe('useAgentStream', () => {
           () => 'vscode' as EditorType,
           () => {},
           () => Promise.resolve(),
-          false,
           () => {},
           () => {},
           () => {},
@@ -386,6 +357,8 @@ describe('useAgentStream', () => {
         mockCancelAllToolCalls,
         0,
         true,
+        vi.fn(),
+        vi.fn(),
       ]);
 
       rerender();
@@ -419,6 +392,8 @@ describe('useAgentStream', () => {
         mockCancelAllToolCalls,
         0,
         true,
+        vi.fn(),
+        vi.fn(),
       ]);
 
       const { result } = renderHook(() =>
@@ -434,8 +409,6 @@ describe('useAgentStream', () => {
           () => 'vscode' as EditorType,
           () => {},
           () => Promise.resolve(),
-          false,
-          () => {},
           () => {},
           () => {},
           () => {},
@@ -484,7 +457,6 @@ describe('useAgentStream', () => {
           () => 'vscode' as EditorType,
           () => {},
           () => Promise.resolve(),
-          false,
           () => {},
           () => {},
           () => {},
@@ -541,7 +513,6 @@ describe('useAgentStream', () => {
           () => 'vscode' as EditorType,
           () => {},
           () => Promise.resolve(),
-          false,
           () => {},
           () => {},
           () => {},

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { configureCommandOptions } from '../command-configuration.js';
 import { type CommandModule } from 'yargs';
 import { FatalConfigError, getErrorMessage } from '@vybestack/llxprt-code-core';
 import { disableExtension } from '../../config/extension.js';
@@ -34,34 +35,36 @@ export const disableCommand: CommandModule = {
   command: 'disable [--scope] <name>',
   describe: 'Disables an extension.',
   builder: (yargs) =>
-    yargs
-      .positional('name', {
-        describe: 'The name of the extension to disable.',
-        type: 'string',
-      })
-      .option('scope', {
-        describe:
-          'The scope to disable the extension in. Defaults to user scope.',
-        type: 'string',
-        default: SettingScope.User,
-      })
-      .check((argv) => {
-        if (
-          argv.scope &&
-          !Object.values(SettingScope)
-            .map((s) => s.toLowerCase())
-            .includes(argv.scope.toLowerCase())
-        ) {
-          throw new Error(
-            `Invalid scope: ${argv.scope}. Please use one of ${Object.values(
-              SettingScope,
-            )
+    configureCommandOptions(yargs, (configuration) =>
+      configuration
+        .positional('name', {
+          describe: 'The name of the extension to disable.',
+          type: 'string',
+        })
+        .option('scope', {
+          describe:
+            'The scope to disable the extension in. Defaults to user scope.',
+          type: 'string',
+          default: SettingScope.User,
+        })
+        .check((argv) => {
+          if (
+            argv.scope &&
+            !Object.values(SettingScope)
               .map((s) => s.toLowerCase())
-              .join(', ')}.`,
-          );
-        }
-        return true;
-      }),
+              .includes(argv.scope.toLowerCase())
+          ) {
+            throw new Error(
+              `Invalid scope: ${argv.scope}. Please use one of ${Object.values(
+                SettingScope,
+              )
+                .map((s) => s.toLowerCase())
+                .join(', ')}.`,
+            );
+          }
+          return true;
+        }),
+    ),
   handler: async (argv) => {
     await handleDisable({
       name: argv['name'] as string,

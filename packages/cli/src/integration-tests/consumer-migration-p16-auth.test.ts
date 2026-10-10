@@ -244,7 +244,6 @@ describe('CLI auth compile-time contract verification', () => {
     const coreIndex = await import('@vybestack/llxprt-code-core');
     // These are re-exported from core index, which pulls from auth package
     expect('AuthPrecedenceResolver' in coreIndex).toBe(true);
-    expect('flushRuntimeAuthScope' in coreIndex).toBe(true);
     expect('KeyringTokenStore' in coreIndex).toBe(true);
     expect('createAuthPrecedenceResolver' in coreIndex).toBe(true);
     expect('createKeyringTokenStore' in coreIndex).toBe(true);

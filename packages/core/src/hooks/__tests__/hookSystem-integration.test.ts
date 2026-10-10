@@ -4,6 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  fixtureHookDefinitions,
+  fixtureHookRuntime,
+} from './hook-runtime-fixture.js';
 /**
  * @plan PLAN-20250218-HOOKSYSTEM.P15
  * @requirement DELTA-HSYS-001,DELTA-HSYS-002,DELTA-HEVT-004,DELTA-HBUS-002,
@@ -84,7 +88,9 @@ void vi.mock('../../debug/index.js', () => {
   // Create a constructor function that returns the mock
   const DebugLogger = vi.fn().mockImplementation(() => mockLogger);
   // Add getLogger as a static method
-  DebugLogger.getLogger = vi.fn().mockReturnValue(mockLogger);
+  Object.assign(DebugLogger, {
+    getLogger: vi.fn().mockReturnValue(mockLogger),
+  });
 
   return {
     DebugLogger,
@@ -170,12 +176,16 @@ describe('Integration: mediated path round-trip (DELTA-HSYS-001)', () => {
 
   beforeEach(async () => {
     bus = new FakeMessageBus();
-    system = new HookSystem(makeConfig(), bus as unknown as MessageBus);
+    system = new HookSystem(
+      fixtureHookDefinitions(makeConfig()),
+      fixtureHookRuntime(makeConfig()),
+      bus as unknown as MessageBus,
+    );
     await system.initialize();
   });
 
-  afterEach(() => {
-    system.dispose();
+  afterEach(async () => {
+    await system.dispose();
     bus.clear();
   });
 
@@ -231,12 +241,16 @@ describe('Integration: mediated path invalid payload (DELTA-HPAY-001)', () => {
 
   beforeEach(async () => {
     bus = new FakeMessageBus();
-    system = new HookSystem(makeConfig(), bus as unknown as MessageBus);
+    system = new HookSystem(
+      fixtureHookDefinitions(makeConfig()),
+      fixtureHookRuntime(makeConfig()),
+      bus as unknown as MessageBus,
+    );
     await system.initialize();
   });
 
-  afterEach(() => {
-    system.dispose();
+  afterEach(async () => {
+    await system.dispose();
     bus.clear();
   });
 
@@ -282,17 +296,23 @@ describe('Integration: direct path without MessageBus (DELTA-HBUS-002)', () => {
    * @then it returns an AggregatedHookResult with success=true
    */
   it('fireBeforeModelEvent works on direct path without MessageBus @plan:PLAN-20250218-HOOKSYSTEM.P15', async () => {
-    const system = new HookSystem(makeConfig());
+    const system = new HookSystem(
+      fixtureHookDefinitions(makeConfig()),
+      fixtureHookRuntime(makeConfig()),
+    );
     await system.initialize();
 
     const handler = system.getEventHandler();
-    const result = await handler.fireBeforeModelEvent({ messages: [] });
+    const result = await handler.fireBeforeModelEvent({
+      model: 'test-model',
+      contents: [],
+    });
 
     expect(result).toBeDefined();
     expect(result.success).toBe(true);
     expect(result.totalDuration).toBeGreaterThanOrEqual(0);
 
-    system.dispose();
+    await system.dispose();
   });
 
   /**
@@ -303,7 +323,10 @@ describe('Integration: direct path without MessageBus (DELTA-HBUS-002)', () => {
    * @then it returns an AggregatedHookResult with success=true
    */
   it('fireSessionStartEvent works on direct path without MessageBus @plan:PLAN-20250218-HOOKSYSTEM.P15', async () => {
-    const system = new HookSystem(makeConfig());
+    const system = new HookSystem(
+      fixtureHookDefinitions(makeConfig()),
+      fixtureHookRuntime(makeConfig()),
+    );
     await system.initialize();
 
     const result = await system
@@ -312,7 +335,7 @@ describe('Integration: direct path without MessageBus (DELTA-HBUS-002)', () => {
 
     expect(result.success).toBe(true);
 
-    system.dispose();
+    await system.dispose();
   });
 });
 
@@ -326,12 +349,15 @@ describe('Integration: management APIs (DELTA-HSYS-002)', () => {
   let system: HookSystem;
 
   beforeEach(async () => {
-    system = new HookSystem(makeConfigWithHook());
+    system = new HookSystem(
+      fixtureHookDefinitions(makeConfigWithHook()),
+      fixtureHookRuntime(makeConfigWithHook()),
+    );
     await system.initialize();
   });
 
-  afterEach(() => {
-    system.dispose();
+  afterEach(async () => {
+    await system.dispose();
   });
 
   /**
@@ -382,7 +408,11 @@ describe('Integration: dispose() / teardown (DELTA-HEVT-004)', () => {
    */
   it('after dispose(), bus messages are ignored @plan:PLAN-20250218-HOOKSYSTEM.P15', async () => {
     const bus = new FakeMessageBus();
-    const system = new HookSystem(makeConfig(), bus as unknown as MessageBus);
+    const system = new HookSystem(
+      fixtureHookDefinitions(makeConfig()),
+      fixtureHookRuntime(makeConfig()),
+      bus as unknown as MessageBus,
+    );
     await system.initialize();
 
     // Confirm handler works before dispose
@@ -391,7 +421,7 @@ describe('Integration: dispose() / teardown (DELTA-HEVT-004)', () => {
       type: HOOK_EXECUTION_REQUEST,
       payload: {
         eventName: HookEventName.BeforeModel,
-        input: { messages: [] },
+        input: { model: 'test-model', contents: [] },
         correlationId: correlationIdBefore,
       },
     });
@@ -402,7 +432,7 @@ describe('Integration: dispose() / teardown (DELTA-HEVT-004)', () => {
     ).toBe(true);
 
     // Dispose and clear recorded messages
-    system.dispose();
+    await system.dispose();
     bus.clear();
 
     // Publish after dispose – should produce no response
@@ -410,7 +440,7 @@ describe('Integration: dispose() / teardown (DELTA-HEVT-004)', () => {
       type: HOOK_EXECUTION_REQUEST,
       payload: {
         eventName: HookEventName.BeforeModel,
-        input: { messages: [] },
+        input: { model: 'test-model', contents: [] },
         correlationId: 'after-dispose',
       },
     });
@@ -436,16 +466,22 @@ describe('Integration: fireBeforeModelEvent payload translation (DELTA-HPAY-003)
    * @then it returns a well-formed AggregatedHookResult (translation does not crash)
    */
   it('fireBeforeModelEvent accepts arbitrary llmRequest without crashing @plan:PLAN-20250218-HOOKSYSTEM.P15', async () => {
-    const system = new HookSystem(makeConfig());
+    const system = new HookSystem(
+      fixtureHookDefinitions(makeConfig()),
+      fixtureHookRuntime(makeConfig()),
+    );
     await system.initialize();
 
-    const llmRequest = {
-      messages: [
-        { role: 'user', content: 'hi' },
-        { role: 'assistant', content: 'hello' },
+    const llmRequest: Omit<
+      import('../hookTranslator.js').HookLLMRequest,
+      'version'
+    > = {
+      contents: [
+        { speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] },
+        { speaker: 'ai', blocks: [{ type: 'text', text: 'hello' }] },
       ],
       model: 'gemini-pro',
-      temperature: 0.7,
+      settings: { temperature: 0.7 },
     };
 
     const result = await system
@@ -457,7 +493,7 @@ describe('Integration: fireBeforeModelEvent payload translation (DELTA-HPAY-003)
     expect(Array.isArray(result.errors)).toBe(true);
     expect(typeof result.totalDuration).toBe('number');
 
-    system.dispose();
+    await system.dispose();
   });
 });
 
@@ -476,7 +512,10 @@ describe('Integration: ProcessedHookResult stop semantics (DELTA-HAPP-001/002)',
    * @then shouldStop=false, stopReason=undefined, suppressOutput=false
    */
   it('empty result produces shouldStop=false via processCommonHookOutputFields @plan:PLAN-20250218-HOOKSYSTEM.P15', async () => {
-    const system = new HookSystem(makeConfig());
+    const system = new HookSystem(
+      fixtureHookDefinitions(makeConfig()),
+      fixtureHookRuntime(makeConfig()),
+    );
     await system.initialize();
     const handler = system.getEventHandler();
 
@@ -497,7 +536,7 @@ describe('Integration: ProcessedHookResult stop semantics (DELTA-HAPP-001/002)',
     expect(processed.stopReason).toBeUndefined();
     expect(processed.suppressOutput).toBe(false);
 
-    system.dispose();
+    await system.dispose();
   });
 
   /**
@@ -508,7 +547,10 @@ describe('Integration: ProcessedHookResult stop semantics (DELTA-HAPP-001/002)',
    * @then shouldStop=true and stopReason matches the value from the hook output (upstream parity)
    */
   it('hook output with stopReason surfaces as shouldStop=true @plan:PLAN-20250218-HOOKSYSTEM.P15', async () => {
-    const system = new HookSystem(makeConfig());
+    const system = new HookSystem(
+      fixtureHookDefinitions(makeConfig()),
+      fixtureHookRuntime(makeConfig()),
+    );
     await system.initialize();
     const handler = system.getEventHandler();
 
@@ -539,7 +581,7 @@ describe('Integration: ProcessedHookResult stop semantics (DELTA-HAPP-001/002)',
     expect(processed.shouldStop).toBe(true);
     expect(processed.stopReason).toBe('context limit reached');
 
-    system.dispose();
+    await system.dispose();
   });
 });
 
@@ -559,10 +601,17 @@ describe('Integration: DebugLogger receives hook telemetry (DELTA-HTEL-001/002)'
    */
   it('injected DebugLogger receives log calls during event firing @plan:PLAN-20250218-HOOKSYSTEM.P15', async () => {
     const spyLogger = makeDebugLogger();
-    const system = new HookSystem(makeConfig(), undefined, spyLogger);
+    const system = new HookSystem(
+      fixtureHookDefinitions(makeConfig()),
+      fixtureHookRuntime(makeConfig()),
+      undefined,
+      spyLogger,
+    );
     await system.initialize();
 
-    await system.getEventHandler().fireBeforeModelEvent({ messages: [] });
+    await system
+      .getEventHandler()
+      .fireBeforeModelEvent({ model: 'test-model', contents: [] });
 
     const logCalled =
       (spyLogger.log as ReturnType<typeof vi.fn>).mock.calls.length > 0;
@@ -570,7 +619,7 @@ describe('Integration: DebugLogger receives hook telemetry (DELTA-HTEL-001/002)'
       (spyLogger.debug as ReturnType<typeof vi.fn>).mock.calls.length > 0;
     expect(logOrDebugCalled(logCalled, debugCalled)).toBe(true);
 
-    system.dispose();
+    await system.dispose();
   });
 
   /**
@@ -585,13 +634,16 @@ describe('Integration: DebugLogger receives hook telemetry (DELTA-HTEL-001/002)'
     // Use a config with a BeforeModel hook so emitBatchSummary is called
     // (emitBatchSummary only fires when there are hooks to execute)
     const system = new HookSystem(
-      makeConfigWithModelHook(),
+      fixtureHookDefinitions(makeConfigWithModelHook()),
+      fixtureHookRuntime(makeConfigWithModelHook()),
       undefined,
       spyLogger,
     );
     await system.initialize();
 
-    await system.getEventHandler().fireBeforeModelEvent({ messages: [] });
+    await system
+      .getEventHandler()
+      .fireBeforeModelEvent({ model: 'test-model', contents: [] });
 
     const logMock = spyLogger.log as ReturnType<typeof vi.fn>;
     const batchSummaryCalls = logMock.mock.calls.filter(
@@ -606,7 +658,7 @@ describe('Integration: DebugLogger receives hook telemetry (DELTA-HTEL-001/002)'
     expect(record).toHaveProperty('failureCount');
     expect(record).toHaveProperty('totalDurationMs');
 
-    system.dispose();
+    await system.dispose();
   });
 });
 
@@ -625,7 +677,10 @@ describe('Integration: fireSessionStartEvent uses SessionStartSource enum (DELTA
    * @then all calls succeed without error and return success=true
    */
   it('accepts all SessionStartSource enum values @plan:PLAN-20250218-HOOKSYSTEM.P15', async () => {
-    const system = new HookSystem(makeConfig());
+    const system = new HookSystem(
+      fixtureHookDefinitions(makeConfig()),
+      fixtureHookRuntime(makeConfig()),
+    );
     await system.initialize();
     const handler = system.getEventHandler();
 
@@ -634,7 +689,7 @@ describe('Integration: fireSessionStartEvent uses SessionStartSource enum (DELTA
       expect(result.success).toBe(true);
     }
 
-    system.dispose();
+    await system.dispose();
   });
 
   /**
@@ -645,7 +700,10 @@ describe('Integration: fireSessionStartEvent uses SessionStartSource enum (DELTA
    * @then all calls succeed without error and return success=true
    */
   it('fireSessionEndEvent accepts all SessionEndReason enum values @plan:PLAN-20250218-HOOKSYSTEM.P15', async () => {
-    const system = new HookSystem(makeConfig());
+    const system = new HookSystem(
+      fixtureHookDefinitions(makeConfig()),
+      fixtureHookRuntime(makeConfig()),
+    );
     await system.initialize();
     const handler = system.getEventHandler();
 
@@ -654,7 +712,7 @@ describe('Integration: fireSessionStartEvent uses SessionStartSource enum (DELTA
       expect(result.success).toBe(true);
     }
 
-    system.dispose();
+    await system.dispose();
   });
 });
 
@@ -673,7 +731,10 @@ describe('Integration: failure envelope from buildFailureEnvelope (DELTA-HFAIL-0
    * @then returns a structured AggregatedHookResult with success=false and errors[]
    */
   it('buildFailureEnvelope produces structured error result @plan:PLAN-20250218-HOOKSYSTEM.P15', async () => {
-    const system = new HookSystem(makeConfig());
+    const system = new HookSystem(
+      fixtureHookDefinitions(makeConfig()),
+      fixtureHookRuntime(makeConfig()),
+    );
     await system.initialize();
     const handler = system.getEventHandler();
 
@@ -688,7 +749,7 @@ describe('Integration: failure envelope from buildFailureEnvelope (DELTA-HFAIL-0
     expect(envelope.errors[0].message).toContain('hook script crashed');
     expect(envelope.allOutputs).toStrictEqual([]);
 
-    system.dispose();
+    await system.dispose();
   });
 
   /**
@@ -699,7 +760,10 @@ describe('Integration: failure envelope from buildFailureEnvelope (DELTA-HFAIL-0
    * @then wraps it in an Error and returns success=false
    */
   it('buildFailureEnvelope wraps string errors @plan:PLAN-20250218-HOOKSYSTEM.P15', async () => {
-    const system = new HookSystem(makeConfig());
+    const system = new HookSystem(
+      fixtureHookDefinitions(makeConfig()),
+      fixtureHookRuntime(makeConfig()),
+    );
     await system.initialize();
     const handler = system.getEventHandler();
 
@@ -712,6 +776,6 @@ describe('Integration: failure envelope from buildFailureEnvelope (DELTA-HFAIL-0
     expect(envelope.errors.length).toBeGreaterThan(0);
     expect(envelope.errors[0]).toBeInstanceOf(Error);
 
-    system.dispose();
+    await system.dispose();
   });
 });

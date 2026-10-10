@@ -22,9 +22,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { AuthPrecedenceResolver } from '../auth-precedence-resolver.js';
 import type { OAuthManager } from '../precedence.js';
 import type { OAuthToken } from '../types.js';
-import { ensureRuntimeState, runtimeScopedStates } from '../precedence.js';
 import type { ISettingsService } from '../interfaces/settings-service.js';
-import type { IProviderRuntimeContext } from '../interfaces/runtime-context.js';
 
 // ─── In-memory fake OAuthManager ─────────────────────────────────────────────
 
@@ -106,33 +104,12 @@ function createInMemorySettingsService(
   };
 }
 
-function createTestRuntimeContext(
-  runtimeId: string,
-  settingsService?: ISettingsService,
-): IProviderRuntimeContext {
-  const context: IProviderRuntimeContext = {
-    settingsService: settingsService ?? createInMemorySettingsService(),
-    runtimeId,
-    metadata: {},
-  };
-  ensureRuntimeState(context);
-  return context;
-}
-
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe('AuthPrecedenceResolver with in-memory/fake OAuthManager', () => {
-  beforeEach(() => {
-    for (const key of [...runtimeScopedStates.keys()]) {
-      runtimeScopedStates.delete(key);
-    }
-  });
+  beforeEach(() => {});
 
-  afterEach(() => {
-    for (const key of [...runtimeScopedStates.keys()]) {
-      runtimeScopedStates.delete(key);
-    }
-  });
+  afterEach(() => {});
 
   describe('OAuth token resolution with InMemoryOAuthManager', () => {
     it('resolves OAuth token when includeOAuth=true and no higher-priority auth', async () => {
@@ -145,11 +122,6 @@ describe('AuthPrecedenceResolver with in-memory/fake OAuthManager', () => {
         expiry: Math.floor(Date.now() / 1000) + 3600,
       });
 
-      const runtimeContext = createTestRuntimeContext(
-        'runtime-behavioral-1',
-        settings,
-      );
-
       const resolver = new AuthPrecedenceResolver(
         {
           providerId: 'acme-provider',
@@ -160,7 +132,6 @@ describe('AuthPrecedenceResolver with in-memory/fake OAuthManager', () => {
         {
           settingsService: settings,
           oauthManager,
-          getActiveRuntimeContext: () => runtimeContext,
         },
       );
 
@@ -175,11 +146,6 @@ describe('AuthPrecedenceResolver with in-memory/fake OAuthManager', () => {
       const oauthManager = new InMemoryOAuthManager();
       // No token set — manager returns null
 
-      const runtimeContext = createTestRuntimeContext(
-        'runtime-behavioral-2',
-        settings,
-      );
-
       const resolver = new AuthPrecedenceResolver(
         {
           providerId: 'acme-provider',
@@ -190,7 +156,6 @@ describe('AuthPrecedenceResolver with in-memory/fake OAuthManager', () => {
         {
           settingsService: settings,
           oauthManager,
-          getActiveRuntimeContext: () => runtimeContext,
         },
       );
 
@@ -237,11 +202,6 @@ describe('AuthPrecedenceResolver with in-memory/fake OAuthManager', () => {
         expiry: Math.floor(Date.now() / 1000) + 3600,
       });
 
-      const runtimeContext = createTestRuntimeContext(
-        'runtime-behavioral-env',
-        settings,
-      );
-
       const resolver = new AuthPrecedenceResolver(
         {
           providerId: 'test-provider',
@@ -253,7 +213,6 @@ describe('AuthPrecedenceResolver with in-memory/fake OAuthManager', () => {
         {
           settingsService: settings,
           oauthManager,
-          getActiveRuntimeContext: () => runtimeContext,
         },
       );
 
@@ -262,50 +221,6 @@ describe('AuthPrecedenceResolver with in-memory/fake OAuthManager', () => {
         includeOAuth: true,
       });
       expect(result).toBe('test-oauth-token');
-    });
-
-    it('cached OAuth token is returned on subsequent resolution', async () => {
-      const settings = createInMemorySettingsService();
-      const oauthManager = new InMemoryOAuthManager();
-      oauthManager.setToken('cached-provider', 'initial-cached-token');
-      oauthManager.setOAuthToken('cached-provider', {
-        access_token: 'initial-cached-token',
-        token_type: 'Bearer',
-        expiry: Math.floor(Date.now() / 1000) + 3600,
-      });
-
-      const runtimeContext = createTestRuntimeContext(
-        'runtime-behavioral-cache',
-        settings,
-      );
-
-      const resolver = new AuthPrecedenceResolver(
-        {
-          providerId: 'cached-provider',
-          isOAuthEnabled: true,
-          supportsOAuth: true,
-          oauthProvider: 'cached-provider',
-        },
-        {
-          settingsService: settings,
-          oauthManager,
-          getActiveRuntimeContext: () => runtimeContext,
-        },
-      );
-
-      // First call — resolves and caches
-      const first = await resolver.resolveAuthentication({
-        includeOAuth: true,
-      });
-      expect(first).toBe('initial-cached-token');
-
-      // Change the underlying token — cached value should still be returned
-      oauthManager.setToken('cached-provider', 'new-uncached-token');
-
-      const second = await resolver.resolveAuthentication({
-        includeOAuth: true,
-      });
-      expect(second).toBe('initial-cached-token');
     });
   });
 
@@ -320,11 +235,6 @@ describe('AuthPrecedenceResolver with in-memory/fake OAuthManager', () => {
         expiry: Math.floor(Date.now() / 1000) + 3600,
       });
 
-      const runtimeContext = createTestRuntimeContext(
-        'runtime-swap-memory',
-        settings,
-      );
-
       const resolver = new AuthPrecedenceResolver(
         {
           providerId: 'test-provider',
@@ -335,7 +245,6 @@ describe('AuthPrecedenceResolver with in-memory/fake OAuthManager', () => {
         {
           settingsService: settings,
           oauthManager,
-          getActiveRuntimeContext: () => runtimeContext,
         },
       );
 
@@ -349,11 +258,6 @@ describe('AuthPrecedenceResolver with in-memory/fake OAuthManager', () => {
       const settings = createInMemorySettingsService();
       const oauthManager = new CustomOAuthManager();
 
-      const runtimeContext = createTestRuntimeContext(
-        'runtime-swap-custom',
-        settings,
-      );
-
       const resolver = new AuthPrecedenceResolver(
         {
           providerId: 'custom-provider',
@@ -364,7 +268,6 @@ describe('AuthPrecedenceResolver with in-memory/fake OAuthManager', () => {
         {
           settingsService: settings,
           oauthManager,
-          getActiveRuntimeContext: () => runtimeContext,
         },
       );
 
@@ -387,11 +290,6 @@ describe('AuthPrecedenceResolver with in-memory/fake OAuthManager', () => {
 
       const managerB = new CustomOAuthManager();
 
-      const runtimeContext = createTestRuntimeContext(
-        'runtime-swap-dynamic',
-        settings,
-      );
-
       const resolver = new AuthPrecedenceResolver(
         {
           providerId: 'swap-provider',
@@ -402,7 +300,6 @@ describe('AuthPrecedenceResolver with in-memory/fake OAuthManager', () => {
         {
           settingsService: settings,
           oauthManager: managerA,
-          getActiveRuntimeContext: () => runtimeContext,
         },
       );
 
@@ -412,9 +309,7 @@ describe('AuthPrecedenceResolver with in-memory/fake OAuthManager', () => {
       });
       expect(resultA).toBe('token-from-A');
 
-      // Swap to managerB — invalidate cache first
       resolver.updateOAuthManager(managerB);
-      resolver.invalidateCache();
 
       const resultB = await resolver.resolveAuthentication({
         includeOAuth: true,
@@ -489,11 +384,6 @@ describe('AuthPrecedenceResolver with in-memory/fake OAuthManager', () => {
         expiry: Math.floor(Date.now() / 1000) + 3600,
       });
 
-      const runtimeContext = createTestRuntimeContext(
-        'runtime-precedence-oauth',
-        settings,
-      );
-
       const resolver = new AuthPrecedenceResolver(
         {
           providerId: 'oauth-only-provider',
@@ -504,7 +394,6 @@ describe('AuthPrecedenceResolver with in-memory/fake OAuthManager', () => {
         {
           settingsService: settings,
           oauthManager,
-          getActiveRuntimeContext: () => runtimeContext,
         },
       );
 

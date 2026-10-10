@@ -45,9 +45,9 @@ function isTransportAttemptBudget(
   );
 }
 
-function getRequestContext(
-  options: GenerateChatOptions,
-): Record<string, unknown> | undefined {
+function getRequestContext(options: {
+  readonly metadata?: Record<string, unknown>;
+}): Record<string, unknown> | undefined {
   const value = options.metadata?.[RETRY_REQUEST_CONTEXT_KEY];
   return isRecord(value) ? value : undefined;
 }
@@ -137,22 +137,22 @@ export function readTransportAttemptBudgetFromRecord(
   return isTransportAttemptBudget(value) ? value : undefined;
 }
 
-export function getTransportAttemptBudget(
-  options: GenerateChatOptions,
-): TransportAttemptBudget | undefined {
+export function getTransportAttemptBudget(options: {
+  readonly metadata?: Record<string, unknown>;
+}): TransportAttemptBudget | undefined {
   return readTransportAttemptBudgetFromRecord(getRequestContext(options));
 }
 
-export function hasTransportAttemptRemaining(
-  options: GenerateChatOptions,
-): boolean {
+export function hasTransportAttemptRemaining(options: {
+  readonly metadata?: Record<string, unknown>;
+}): boolean {
   const budget = getTransportAttemptBudget(options);
   return budget === undefined || budget.used < budget.limit;
 }
 
-export function tryConsumeTransportAttempt(
-  options: GenerateChatOptions,
-): boolean {
+export function tryConsumeTransportAttempt(options: {
+  readonly metadata?: Record<string, unknown>;
+}): boolean {
   const budget = getTransportAttemptBudget(options);
   if (budget === undefined) return true;
   if (budget.used >= budget.limit) return false;

@@ -1,3 +1,6 @@
+import { createChatPolicyFixture } from './__tests__/session-policy-fixture.js';
+import { createTurnCitationPolicy } from './__tests__/session-policy-fixture.js';
+import { createTurnStreamPolicy } from './__tests__/session-policy-fixture.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -36,9 +39,11 @@ describe('Turn', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mockChatInstance = {
+      ...createChatPolicyFixture(),
       sendMessageStream: mockSendMessageStream,
       getHistory: mockGetHistory,
-      getConfig: () => undefined,
+      shouldShowCitations: createTurnCitationPolicy(),
+      getStreamTimeoutPolicy: createTurnStreamPolicy({}),
       getResolvedBaseUrl: () => undefined,
     };
     turn = new Turn(
@@ -78,10 +83,8 @@ describe('Turn', () => {
 
       const events = [];
       const reqParts: ContentBlock[] = [{ text: 'Hi' }];
-      for await (const event of turn.run(
-        reqParts,
-        new AbortController().signal,
-      )) {
+      const signal = new AbortController().signal;
+      for await (const event of turn.run(reqParts, signal)) {
         events.push(event);
       }
 
@@ -89,12 +92,14 @@ describe('Turn', () => {
         {
           message: reqParts,
           config: {
-            abortSignal: expect.any(AbortSignal),
+            abortSignal: signal,
             onProviderError: expect.any(Function),
             onStreamLiveness: expect.any(Function),
           },
+          modelParameters: undefined,
         },
         'prompt-id-1',
+        undefined,
       );
 
       expect(events).toStrictEqual([

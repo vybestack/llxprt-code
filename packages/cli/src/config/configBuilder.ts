@@ -1,3 +1,5 @@
+import { registerActivateSkillTool } from '@vybestack/llxprt-code-agents';
+import { loadSettings } from './settings.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -15,17 +17,13 @@ import {
   type PolicyEngineConfig,
   type MCPServerConfig,
 } from '@vybestack/llxprt-code-core';
-import { registerActivateSkillTool } from '@vybestack/llxprt-code-agents';
 import { getEnableHooks, getEnableHooksUI } from './settingsSchema.js';
-import { loadSettings } from './settings.js';
-import { appEvents } from '../utils/events.js';
 import type { Settings } from './settings.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { CliArgs } from './cliArgParser.js';
 import type { ContextResolutionResult } from './interactiveContext.js';
 import type { ProviderModelResult } from './providerModelResolver.js';
 import { firstNonEmptyString } from '../utils/coalesce.js';
-import { createGitHubBrokerClient } from './githubBrokerClient.js';
 
 // ─── DTOs ───────────────────────────────────────────────────────────────────
 
@@ -48,11 +46,6 @@ export interface ConfigBuildInput {
   readonly blockedMcpServers: ReadonlyArray<{
     name: string;
     extensionName: string;
-  }>;
-  readonly reloadMcpServers?: () => Promise<{
-    mcpServers: Record<string, MCPServerConfig>;
-    blockedMcpServers: Array<{ name: string; extensionName: string }>;
-    settingsMcpServers: Record<string, MCPServerConfig>;
   }>;
   readonly excludeTools: readonly string[];
   readonly memoryContent: string;
@@ -114,11 +107,7 @@ function buildSanitizationConfig(settings: Settings) {
   };
 }
 
-function buildHooksConfig(
-  settings: Settings,
-  adminSkillsEnabled: boolean,
-  cwd: string,
-) {
+function buildHooksConfig(settings: Settings) {
   const hooksConfig = settings.hooks ?? {};
   const { disabled: _disabled, ...eventHooks } = hooksConfig as {
     disabled?: string[];
@@ -129,14 +118,6 @@ function buildHooksConfig(
     enableHooks: getEnableHooks(settings),
     enableHooksUI: getEnableHooksUI(settings),
     hooks: eventHooks,
-    onReload: async () => {
-      const refreshedSettings = loadSettings(cwd);
-      return {
-        disabledSkills: refreshedSettings.merged.skills?.disabled,
-        adminSkillsEnabled:
-          refreshedSettings.merged.admin?.skills?.enabled ?? adminSkillsEnabled,
-      };
-    },
   };
 }
 
@@ -190,8 +171,6 @@ function buildSessionBaseArgs(
     providerModel,
     sandboxConfig,
     memoryContent,
-    fileCount,
-    filePaths,
     screenReader,
     outputFormat,
     quiet,
@@ -201,7 +180,7 @@ function buildSessionBaseArgs(
   } = input;
   return {
     sessionId,
-    settingsService,
+    initialSettings: settingsService.getAllGlobalSettings(),
     // #2534 review Finding 6: the service above is injected, but it was
     // created by this CLI bootstrap for this Config's exclusive use
     // (cliSessionBootstrap → runtimeOverrides → prepareRuntimeForProfile —
@@ -209,7 +188,6 @@ function buildSessionBaseArgs(
     // authorized to seed the activeProvider store (Domain C1). Without the
     // delegation declaration the ownership guard correctly refuses to seed,
     // and CLI/env provider precedence collapses to defaults.
-    settingsServiceOwnership: 'delegated',
     embeddingModel: undefined,
     sandbox: sandboxConfig,
     targetDir: cwd,
@@ -224,8 +202,13 @@ function buildSessionBaseArgs(
     extensionsEnabled,
     adminSkillsEnabled,
     userMemory: memoryContent,
-    llxprtMdFileCount: fileCount,
-    llxprtMdFilePaths: [...filePaths],
+    memorySettings: {
+      importFormat: profileSettingsWithTools.ui?.memoryImportFormat ?? 'tree',
+      maxDirectories:
+        profileSettingsWithTools.ui?.memoryDiscoveryMaxDirs ?? 200,
+      maxDepth: profileSettingsWithTools.ui?.memoryDiscoveryMaxDepth,
+      filtering: context.memoryFileFiltering,
+    },
     approvalMode,
     showMemoryUsage:
       argv.showMemoryUsage ??
@@ -246,7 +229,6 @@ function buildSessionBaseArgs(
     proxy: resolveProxy(argv.proxy),
 
     cwd,
-    fileDiscoveryService: context.fileService,
     bugCommand: profileSettingsWithTools.bugCommand,
     model: providerModel.model,
     provider: providerModel.provider,
@@ -266,6 +248,7 @@ function buildFeatureArgs(
     blockedMcpServers,
   } = input;
   return {
+    contextFileName: profileSettingsWithTools.ui?.contextFileName,
     extensionContextFilePaths: [...context.extensionContextFilePaths],
     maxSessionTurns: profileSettingsWithTools.ui?.maxSessionTurns ?? -1,
     experimentalZedIntegration: argv.experimentalAcp ?? false,
@@ -300,13 +283,12 @@ function buildFeatureArgs(
     useRipgrep: useRipgrepSetting,
     // @plan PLAN-20260731-GHBROKER.P15
     // @requirement REQ-003
-    githubBrokerClient: createGitHubBrokerClient(),
+
     shouldUseNodePtyShell: profileSettingsWithTools.shouldUseNodePtyShell,
     allowPtyThemeOverride: profileSettingsWithTools.allowPtyThemeOverride,
     ptyScrollbackLimit: profileSettingsWithTools.ptyScrollbackLimit,
     enablePromptCompletion:
       profileSettingsWithTools.enablePromptCompletion ?? false,
-    eventEmitter: appEvents,
     continueSession:
       argv.continue === '' || argv.continue === true
         ? true
@@ -330,17 +312,11 @@ export function buildConfig(input: ConfigBuildInput): Config {
     excludeTools,
     allowedTools,
     policyEngineConfig,
-    adminSkillsEnabled,
-    cwd,
   } = input;
 
   const telemetry = buildTelemetryConfig(argv, profileSettingsWithTools);
   const sanitizationConfig = buildSanitizationConfig(profileSettingsWithTools);
-  const hooksConfig = buildHooksConfig(
-    profileSettingsWithTools,
-    adminSkillsEnabled,
-    cwd,
-  );
+  const hooksConfig = buildHooksConfig(profileSettingsWithTools);
   const toolConfig = buildToolConfig(
     argv,
     profileSettingsWithTools,
@@ -354,8 +330,6 @@ export function buildConfig(input: ConfigBuildInput): Config {
   return new Config({
     ...buildSessionBaseArgs(input, toolConfig, telemetry, sanitizationConfig),
     ...buildFeatureArgs(input, hooksConfig),
-    onReloadMcpServers: input.reloadMcpServers,
-    postSkillDiscoveryToolRegistrar: registerActivateSkillTool,
   });
 }
 
@@ -374,4 +348,28 @@ function resolveProxy(cliProxy: string | undefined): string | undefined {
     process.env.http_proxy,
   );
   return firstNonEmptyString(cliProxy, httpsProxy, httpProxy);
+}
+
+export async function readCliSkillPolicy(
+  directory: string,
+  adminSkillsEnabled: boolean,
+): Promise<Pick<ConfigParameters, 'disabledSkills' | 'adminSkillsEnabled'>> {
+  const settings = loadSettings(directory).merged;
+  return {
+    disabledSkills: settings.skills?.disabled,
+    adminSkillsEnabled: settings.admin?.skills?.enabled ?? adminSkillsEnabled,
+  };
+}
+
+export function cliSkillOperations(
+  config: Pick<Config, 'getTargetDir' | 'isAdminSkillsEnabled'>,
+): {
+  readonly reloadPolicy: () => ReturnType<typeof readCliSkillPolicy>;
+  readonly registerTools: typeof registerActivateSkillTool;
+} {
+  return {
+    reloadPolicy: () =>
+      readCliSkillPolicy(config.getTargetDir(), config.isAdminSkillsEnabled()),
+    registerTools: registerActivateSkillTool,
+  };
 }

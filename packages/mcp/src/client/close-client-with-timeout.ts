@@ -12,25 +12,25 @@ export async function closeClientWithTimeout(
   client: Client,
   serverName: string,
 ): Promise<void> {
-  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new AbortController();
+  const timeout = setTimeout(
+    () =>
+      deadline.abort(
+        new Error(
+          `Timed out closing MCP client '${serverName}' after ${MCP_CLIENT_CLOSE_TIMEOUT_MS}ms`,
+        ),
+      ),
+    MCP_CLIENT_CLOSE_TIMEOUT_MS,
+  );
   try {
-    await Promise.race([
-      client.close(),
-      new Promise<never>((_resolve, reject) => {
-        timeout = setTimeout(
-          () =>
-            reject(
-              new Error(
-                `Timed out closing MCP client '${serverName}' after ${MCP_CLIENT_CLOSE_TIMEOUT_MS}ms`,
-              ),
-            ),
-          MCP_CLIENT_CLOSE_TIMEOUT_MS,
-        );
-      }),
-    ]);
-  } finally {
-    if (timeout !== undefined) {
-      clearTimeout(timeout);
+    try {
+      await client.close();
+    } catch (error) {
+      deadline.signal.throwIfAborted();
+      throw error;
     }
+    deadline.signal.throwIfAborted();
+  } finally {
+    clearTimeout(timeout);
   }
 }

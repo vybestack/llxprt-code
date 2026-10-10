@@ -1,3 +1,5 @@
+import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
+const fixtureOwners = installRuntimeTestOwners();
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -480,7 +482,12 @@ describe('issue #3473 F2: raw timing transport at retry and LB boundaries', () =
     ]);
     const settingsService = new SettingsService();
     const config: Config = createRuntimeConfigStub(settingsService);
-    const providerManager = new ProviderManager({ settingsService, config });
+    const providerManager = new ProviderManager({
+      sessionSettings: fixtureOwners.adopt(config, settingsService)
+        .settingsOwner,
+      settingsService,
+      config,
+    });
     providerManager.registerProvider(failing);
     providerManager.registerProvider(ok);
     const lb = new LoadBalancingProvider(makeFailoverConfig(), providerManager);

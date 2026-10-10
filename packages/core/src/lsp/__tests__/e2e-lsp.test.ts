@@ -1,3 +1,5 @@
+import { LspServiceClient } from '@vybestack/llxprt-code-ide-integration';
+import { createLspFixture } from '../../__tests__/lsp-runtime-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -19,7 +21,6 @@ import { initializeTestConfig } from '../../__tests__/config-test-helpers.js';
 
 import type { Diagnostic } from '@vybestack/llxprt-code-ide-integration';
 import * as lspServiceClientModule from '@vybestack/llxprt-code-ide-integration';
-import { LspServiceClient } from '@vybestack/llxprt-code-ide-integration';
 
 const bunIt = it;
 
@@ -128,10 +129,11 @@ void vi.mock('../../services/gitService.js', () => ({
 void vi.mock('@vybestack/llxprt-code-mcp', () => ({
   McpClientManager: vi.fn().mockImplementation(() => ({
     startConfiguredMcpServers: vi.fn().mockResolvedValue(undefined),
-    getMcpInstructions: vi.fn().mockReturnValue(''),
+    readInstructions: vi.fn().mockReturnValue(''),
   })),
   DiscoveredMCPTool: class DiscoveredMCPToolMock {
     constructor(
+      _approvalPolicy: unknown,
       _callableTool: unknown,
       serverName: string,
       serverToolName: string,
@@ -216,31 +218,13 @@ describe('LSP E2E integration (P36)', () => {
   function createBaseConfigParams(
     overrides?: Partial<ConfigParameters>,
   ): ConfigParameters {
-    const settingsService = {
-      get: vi.fn(),
-      set: vi.fn(),
-      clear: vi.fn(),
-      on: vi.fn(),
-      off: vi.fn(),
-      emit: vi.fn(),
-      getAllGlobalSettings: vi.fn().mockReturnValue({}),
-      getProviderSettings: vi.fn().mockReturnValue({}),
-      getProviderConfig: vi.fn().mockReturnValue({
-        includeDirectories: [],
-        mcpServers: {},
-        contextFileName: undefined,
-      }),
-      setProviderSetting: vi.fn(),
-    };
-
     return {
       sessionId: 'p36-session-id',
       targetDir,
       debugMode: false,
       cwd: targetDir,
       model: 'gemini-2.0-flash-exp',
-      settingsService:
-        settingsService as unknown as ConfigParameters['settingsService'],
+      initialSettings: {},
       ...overrides,
     };
   }
@@ -268,9 +252,13 @@ describe('LSP E2E integration (P36)', () => {
       const config = new Config(
         createBaseConfigParams({ lsp: { servers: [] } }),
       );
-      await initializeTestConfig(config);
+      const { lspService, lspRoot } = createLspFixture(config, {
+        isTrustedFolder: () => true,
+        getIdeTrust: () => undefined,
+      });
+      await initializeTestConfig(config, undefined, lspRoot);
 
-      const client = config.getLspServiceClient();
+      const client = lspService;
       expect(client).toBeDefined();
       expect(client!.isAlive()).toBe(true);
 
@@ -288,9 +276,13 @@ describe('LSP E2E integration (P36)', () => {
   // --- 2. Edit → No Errors When Disabled ---
   it('produces no diagnostics when lsp is false', async () => {
     const config = new Config(createBaseConfigParams({ lsp: false }));
-    await initializeTestConfig(config);
+    const { lspService, lspRoot } = createLspFixture(config, {
+      isTrustedFolder: () => true,
+      getIdeTrust: () => undefined,
+    });
+    await initializeTestConfig(config, undefined, lspRoot);
 
-    const client = config.getLspServiceClient();
+    const client = lspService;
     expect(client).toBeUndefined();
   });
 
@@ -322,9 +314,13 @@ describe('LSP E2E integration (P36)', () => {
       const config = new Config(
         createBaseConfigParams({ lsp: { servers: [] } }),
       );
-      await initializeTestConfig(config);
+      const { lspService, lspRoot } = createLspFixture(config, {
+        isTrustedFolder: () => true,
+        getIdeTrust: () => undefined,
+      });
+      await initializeTestConfig(config, undefined, lspRoot);
 
-      const client = config.getLspServiceClient()!;
+      const client = lspService!;
       expect(client.isAlive()).toBe(true);
 
       await client.checkFile('/tmp/file-a.ts');
@@ -381,7 +377,7 @@ describe('LSP E2E integration (P36)', () => {
   });
 
   // --- 6. Graceful: Service Start Failure ---
-  it('Config handles LSP start failure gracefully — tools still work', async () => {
+  it('activation rejects a thrown LSP start failure and closes the owned client', async () => {
     const spy = vi
       .spyOn(lspServiceClientModule.LspServiceClient.prototype, 'start')
       .mockRejectedValue(new Error('simulated crash'));
@@ -390,9 +386,14 @@ describe('LSP E2E integration (P36)', () => {
       const config = new Config(
         createBaseConfigParams({ lsp: { servers: [] } }),
       );
-      await expect(initializeTestConfig(config)).resolves.toBeUndefined();
-
-      expect(config.getLspServiceClient()).toBeUndefined();
+      const { lspService, lspRoot } = createLspFixture(config, {
+        isTrustedFolder: () => true,
+        getIdeTrust: () => undefined,
+      });
+      await expect(
+        initializeTestConfig(config, undefined, lspRoot),
+      ).rejects.toThrow('Fixture initialization cleanup failed');
+      expect(lspService?.isAlive()).toBe(false);
       expect(config.getLspConfig()).toStrictEqual({ servers: [] });
     } finally {
       spy.mockRestore();
@@ -402,19 +403,27 @@ describe('LSP E2E integration (P36)', () => {
   // --- 7. Config: lsp false ---
   it('Config with lsp:false creates no service and no config', async () => {
     const config = new Config(createBaseConfigParams({ lsp: false }));
-    await initializeTestConfig(config);
+    const { lspService, lspRoot } = createLspFixture(config, {
+      isTrustedFolder: () => true,
+      getIdeTrust: () => undefined,
+    });
+    await initializeTestConfig(config, undefined, lspRoot);
 
-    expect(config.getLspServiceClient()).toBeUndefined();
+    expect(lspService).toBeUndefined();
     expect(config.getLspConfig()).toBeUndefined();
   });
 
   // --- 8. Config: Default Enabled ---
   it('Config defaults to disabled when lsp key is absent', async () => {
     const config = new Config(createBaseConfigParams());
-    await initializeTestConfig(config);
+    const { lspService, lspRoot } = createLspFixture(config, {
+      isTrustedFolder: () => true,
+      getIdeTrust: () => undefined,
+    });
+    await initializeTestConfig(config, undefined, lspRoot);
 
     expect(config.getLspConfig()).toBeUndefined();
-    expect(config.getLspServiceClient()).toBeUndefined();
+    expect(lspService).toBeUndefined();
   });
 
   it('Config enables LSP when lsp is true', async () => {
@@ -427,11 +436,15 @@ describe('LSP E2E integration (P36)', () => {
 
     try {
       const config = new Config(createBaseConfigParams({ lsp: true }));
-      await initializeTestConfig(config);
+      const { lspService, lspRoot } = createLspFixture(config, {
+        isTrustedFolder: () => true,
+        getIdeTrust: () => undefined,
+      });
+      await initializeTestConfig(config, undefined, lspRoot);
 
       expect(config.getLspConfig()).toStrictEqual({ servers: [] });
-      expect(config.getLspServiceClient()).toBeDefined();
-      expect(config.getLspServiceClient()!.isAlive()).toBe(true);
+      expect(lspService).toBeDefined();
+      expect(lspService!.isAlive()).toBe(true);
     } finally {
       startSpy.mockRestore();
       isAliveSpy.mockRestore();
@@ -514,11 +527,15 @@ describe('LSP E2E integration (P36)', () => {
           lsp: { servers: [], navigationTools: true },
         }),
       );
-      await initializeTestConfig(config);
+      const { lspRoot } = createLspFixture(config, {
+        isTrustedFolder: () => true,
+        getIdeTrust: () => undefined,
+      });
+      const runtime = await initializeTestConfig(config, undefined, lspRoot);
 
-      const tools = config.getToolRegistry().getAllTools();
+      const tools = runtime.toolSelection.getAllTools();
       const lspNavTools = tools.filter(
-        (t: { serverName?: string }) => t.serverName === 'lsp-navigation',
+        (t) => 'serverName' in t && t.serverName === 'lsp-navigation',
       );
       expect(lspNavTools.length).toBeGreaterThan(0);
     } finally {
@@ -535,11 +552,15 @@ describe('LSP E2E integration (P36)', () => {
         lsp: { servers: [], navigationTools: false },
       }),
     );
-    await initializeTestConfig(config);
+    const { lspRoot } = createLspFixture(config, {
+      isTrustedFolder: () => true,
+      getIdeTrust: () => undefined,
+    });
+    const runtime = await initializeTestConfig(config, undefined, lspRoot);
 
-    const tools = config.getToolRegistry().getAllTools();
+    const tools = runtime.toolSelection.getAllTools();
     const lspNavTools = tools.filter(
-      (t: { serverName?: string }) => t.serverName === 'lsp-navigation',
+      (t) => 'serverName' in t && t.serverName === 'lsp-navigation',
     );
     expect(lspNavTools).toHaveLength(0);
   });
@@ -569,21 +590,25 @@ describe('LSP E2E integration (P36)', () => {
           lsp: { servers: [], navigationTools: true },
         }),
       );
-      await initializeTestConfig(config);
+      const { lspService, lspRoot } = createLspFixture(config, {
+        isTrustedFolder: () => true,
+        getIdeTrust: () => undefined,
+      });
+      const runtime = await initializeTestConfig(config, undefined, lspRoot);
 
-      expect(config.getLspServiceClient()).toBeDefined();
-      const toolsBefore = config.getToolRegistry().getAllTools();
+      expect(lspService).toBeDefined();
+      const toolsBefore = runtime.toolSelection.getAllTools();
       const navBefore = toolsBefore.filter(
-        (t: { serverName?: string }) => t.serverName === 'lsp-navigation',
+        (t) => 'serverName' in t && t.serverName === 'lsp-navigation',
       );
       expect(navBefore.length).toBeGreaterThan(0);
 
-      await config.shutdownLspService();
+      await lspRoot.dispose();
 
-      expect(config.getLspServiceClient()).toBeUndefined();
-      const toolsAfter = config.getToolRegistry().getAllTools();
+      await expect(lspRoot.inspection.read()).rejects.toThrow('stopped');
+      const toolsAfter = runtime.toolSelection.getAllTools();
       const navAfter = toolsAfter.filter(
-        (t: { serverName?: string }) => t.serverName === 'lsp-navigation',
+        (t) => 'serverName' in t && t.serverName === 'lsp-navigation',
       );
       expect(navAfter).toHaveLength(0);
     } finally {

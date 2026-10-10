@@ -40,13 +40,15 @@ export {
   executeProviderActivation,
   type ProviderActivationResult,
 } from './providerActivationExecutor.js';
-export {
-  preflightAgentActivation,
-  type AgentActivationPreflightResult,
-} from './preflightAgentActivation.js';
-export type { ActivationPreflightToken } from './activationPreflightState.js';
+export type {
+  AgentActivationOperation,
+  AgentActivationPreflightResult,
+  ActivationPreflight,
+  ActivationPreflightToken,
+} from './activationPreflightState.js';
 export * from './event-types.js';
 export * from './agent.js';
+export type { SessionRecordingEvent } from './control/recordSessionEvent.js';
 export * from './event-schema.js';
 export { createAgent } from './createAgent.js';
 export { fromConfig } from './fromConfig.js';
@@ -75,6 +77,7 @@ export {
   createToolScheduler,
   createTaskRegistration,
   createAgenticLoop,
+  TaskLaunchOwner,
 } from './runtimeFactories.js';
 export type {
   AgenticLoopRunner,
@@ -93,6 +96,8 @@ export type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clien
  * @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-004
  */
 export { PolicyDecision, ApprovalMode } from '@vybestack/llxprt-code-core';
+export { AgentBusyError } from './loop/agentBusyError.js';
+
 export type {
   PolicyRuleView,
   AgentTaskInfo,
@@ -128,3 +133,5 @@ export type {
   AgentProviderSwitchOptions,
   AgentProviderSwitchResult,
 } from './agent.js';
+
+export { McpRuntimeOwner } from './mcpRuntimeAssembly.js';

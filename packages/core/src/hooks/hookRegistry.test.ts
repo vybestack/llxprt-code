@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { HookRegistry as HookRegistryType } from './hookRegistry.js';
+import { fixtureHookDefinitions } from './__tests__/hook-runtime-fixture.js';
 import {
   describe,
   it,
@@ -27,18 +29,12 @@ void vi.mock('node:fs', () => ({
 }));
 
 // Mock DebugLogger using vi.hoisted
-const mockDebugLogger = {
-  log: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-  debug: vi.fn(),
-};
-
-void vi.mock('../debug/index.js', () => ({
-  DebugLogger: {
-    getLogger: vi.fn(() => mockDebugLogger),
-  },
-}));
+const { DebugLogger: ActualDebugLogger } = await import(
+  '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js'
+);
+const mockDebugLogger = ActualDebugLogger.getLogger(
+  'llxprt:core:hooks:registry',
+);
 
 // Mock TrustedHooksManager
 const mockTrustManager = {
@@ -74,12 +70,16 @@ function isInvalidEventWarning(payload: unknown): boolean {
 }
 
 describe('HookRegistry', () => {
-  let hookRegistry: HookRegistry;
+  let hookRegistry: HookRegistryType;
   let mockConfig: Config;
+  let trusted = true;
   let mockStorage: Storage;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(mockDebugLogger, 'log');
+    vi.spyOn(mockDebugLogger, 'warn');
+    vi.spyOn(mockDebugLogger, 'debug');
     // Re-establish hoisted mock return values that vi.resetAllMocks would clear
     mockTrustManager.getUntrustedHooks.mockReturnValue([]);
 
@@ -92,11 +92,13 @@ describe('HookRegistry', () => {
       getExtensions: vi.fn().mockReturnValue([]),
       getHooks: vi.fn().mockReturnValue({}),
       getDisabledHooks: vi.fn().mockReturnValue([]),
-      isTrustedFolder: vi.fn().mockReturnValue(true),
       getProjectHooks: vi.fn().mockReturnValue(undefined),
     } as unknown as Config;
 
-    hookRegistry = new HookRegistry(mockConfig);
+    hookRegistry = new HookRegistry(
+      fixtureHookDefinitions(mockConfig),
+      () => trusted,
+    );
   });
 
   afterEach(() => {
@@ -383,7 +385,10 @@ describe('HookRegistry', () => {
         mockConfig.getDisabledHooks as Mock<typeof mockConfig.getDisabledHooks>
       ).mockReturnValue(['./hooks/disabled.sh']);
 
-      const newRegistry = new HookRegistry(mockConfig);
+      const newRegistry = new HookRegistry(
+        fixtureHookDefinitions(mockConfig),
+        () => trusted,
+      );
       await newRegistry.initialize();
 
       const hooks = newRegistry.getHooksForEvent(HookEventName.BeforeTool);
@@ -414,7 +419,10 @@ describe('HookRegistry', () => {
         mockConfig.getDisabledHooks as Mock<typeof mockConfig.getDisabledHooks>
       ).mockReturnValue([]);
 
-      const newRegistry = new HookRegistry(mockConfig);
+      const newRegistry = new HookRegistry(
+        fixtureHookDefinitions(mockConfig),
+        () => trusted,
+      );
       await newRegistry.initialize();
 
       const hooks = newRegistry.getHooksForEvent(HookEventName.BeforeTool);
@@ -771,16 +779,8 @@ describe('HookRegistry', () => {
     beforeEach(() => {
       coreEventsSpy = vi.spyOn(coreEvents, 'emit');
       // Set up config for a trusted folder with project hooks
-      (
-        mockConfig as Record<string, unknown> as unknown as Mock<
-          (...args: never[]) => unknown
-        >
-      ).isTrustedFolder = vi.fn().mockReturnValue(true);
-      (
-        mockConfig as Record<string, unknown> as unknown as Mock<
-          (...args: never[]) => unknown
-        >
-      ).getProjectHooks = vi.fn().mockReturnValue({
+      trusted = true;
+      mockConfig.getProjectHooks = vi.fn().mockReturnValue({
         BeforeTool: [
           {
             hooks: [
@@ -852,11 +852,7 @@ describe('HookRegistry', () => {
     });
 
     it('does not warn or check trust when no project hooks exist', async () => {
-      (
-        mockConfig as Record<string, unknown> as unknown as Mock<
-          (...args: never[]) => unknown
-        >
-      ).getProjectHooks = vi.fn().mockReturnValue(undefined);
+      mockConfig.getProjectHooks = vi.fn().mockReturnValue(undefined);
 
       await hookRegistry.initialize();
 
@@ -868,11 +864,7 @@ describe('HookRegistry', () => {
     });
 
     it('skips trust check when folder is not trusted', async () => {
-      (
-        mockConfig as Record<string, unknown> as unknown as Mock<
-          (...args: never[]) => unknown
-        >
-      ).isTrustedFolder = vi.fn().mockReturnValue(false);
+      trusted = false;
 
       await hookRegistry.initialize();
 

@@ -29,7 +29,7 @@ export function assertBoundedPostClearRetention(
     throw new Error(
       `expected exactly 3 manual forced-GC samples, found ${manual.length}. ` +
         `Sample tags in order: [${seen}]. Each manual checkpoint is requested ` +
-        `by scripts/memory/request-cli.ts --wait; check probe.log in the same ` +
+        `by scripts/memory/request-cli-entry.ts --wait; check probe.log in the same ` +
         `directory for the matching "sample complete" lines.`,
     );
   }

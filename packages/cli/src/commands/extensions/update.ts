@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { configureCommandOptions } from '../command-configuration.js';
 import type { CommandModule } from 'yargs';
 import {
   loadExtensions,
@@ -170,26 +171,30 @@ export const updateCommand: CommandModule = {
   describe:
     'Updates all extensions or a named extension to the latest version.',
   builder: (yargs) =>
-    yargs
-      .positional('name', {
-        describe: 'The name of the extension to update.',
-        type: 'string',
-      })
-      .option('all', {
-        describe: 'Update all extensions.',
-        type: 'boolean',
-      })
-      .conflicts('name', 'all')
-      .check((argv) => {
-        // argv.all is boolean | undefined, argv.name is string | undefined
-        if (
-          argv.all !== true &&
-          (argv.name === undefined || argv.name === '')
-        ) {
-          throw new Error('Either an extension name or --all must be provided');
-        }
-        return true;
-      }),
+    configureCommandOptions(yargs, (configuration) =>
+      configuration
+        .positional('name', {
+          describe: 'The name of the extension to update.',
+          type: 'string',
+        })
+        .option('all', {
+          describe: 'Update all extensions.',
+          type: 'boolean',
+        })
+        .conflicts('name', 'all')
+        .check((argv) => {
+          // argv.all is boolean | undefined, argv.name is string | undefined
+          if (
+            argv.all !== true &&
+            (argv.name === undefined || argv.name === '')
+          ) {
+            throw new Error(
+              'Either an extension name or --all must be provided',
+            );
+          }
+          return true;
+        }),
+    ),
   handler: async (argv) => {
     await handleUpdate({
       name: argv['name'] as string | undefined,

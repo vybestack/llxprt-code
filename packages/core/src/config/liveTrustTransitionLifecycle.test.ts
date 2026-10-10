@@ -17,8 +17,7 @@ function createDependencies(
     downgradeApprovalMode: vi.fn(),
     removeTrustedPolicyRules: vi.fn(),
     updateTrustPolicy: vi.fn(),
-    transitionMcp: vi.fn().mockResolvedValue(undefined),
-    initializeHooks: vi.fn().mockResolvedValue(undefined),
+    notifyTrustTransition: vi.fn().mockResolvedValue(undefined),
     emitTrustChanged: vi.fn(),
     ...overrides,
   };
@@ -70,7 +69,7 @@ describe('LiveTrustTransitionLifecycle', () => {
   it('returns a settlement that rejects with its asynchronous transition failure', async () => {
     const transitionFailure = new Error('transition failed');
     const dependencies = createDependencies({
-      transitionMcp: vi.fn().mockRejectedValue(transitionFailure),
+      notifyTrustTransition: vi.fn().mockRejectedValue(transitionFailure),
     });
     const lifecycle = new LiveTrustTransitionLifecycle(dependencies);
 
@@ -91,8 +90,8 @@ describe('LiveTrustTransitionLifecycle', () => {
     const settlement = lifecycle.apply(false);
 
     await expect(settlement).rejects.toBe(downgradeFailure);
-    expect(dependencies.transitionMcp).toHaveBeenCalledWith(false);
-    expect(dependencies.initializeHooks).toHaveBeenCalledOnce();
+    expect(dependencies.notifyTrustTransition).toHaveBeenCalledWith(false);
+    expect(dependencies.updateTrustPolicy).toHaveBeenCalledWith(false);
     expect(dependencies.emitTrustChanged).toHaveBeenCalledWith(false);
   });
 
@@ -107,8 +106,8 @@ describe('LiveTrustTransitionLifecycle', () => {
     expect(dependencies.downgradeApprovalMode).not.toHaveBeenCalled();
     expect(dependencies.removeTrustedPolicyRules).not.toHaveBeenCalled();
     expect(dependencies.updateTrustPolicy).not.toHaveBeenCalled();
-    expect(dependencies.transitionMcp).not.toHaveBeenCalled();
-    expect(dependencies.initializeHooks).not.toHaveBeenCalled();
+    expect(dependencies.notifyTrustTransition).not.toHaveBeenCalled();
+    expect(dependencies.emitTrustChanged).not.toHaveBeenCalled();
     expect(dependencies.emitTrustChanged).not.toHaveBeenCalled();
   });
 
@@ -135,7 +134,7 @@ describe('LiveTrustTransitionLifecycle', () => {
     const firstTransition = createDeferred<void>();
     const transitionFailure = new Error('running transition failed');
     const dependencies = createDependencies({
-      transitionMcp: vi.fn(() => {
+      notifyTrustTransition: vi.fn(() => {
         firstTransitionStarted.resolve(undefined);
         return firstTransition.promise;
       }),
@@ -149,8 +148,8 @@ describe('LiveTrustTransitionLifecycle', () => {
     firstTransition.reject(transitionFailure);
 
     await expect(lifecycle.whenSettled()).rejects.toBe(transitionFailure);
-    expect(dependencies.transitionMcp).toHaveBeenCalledTimes(1);
-    expect(dependencies.initializeHooks).not.toHaveBeenCalled();
+    expect(dependencies.notifyTrustTransition).toHaveBeenCalledTimes(1);
+    expect(dependencies.emitTrustChanged).toHaveBeenCalledTimes(2);
   });
 
   it('reports a failed batch to concurrent waiters and releases it afterward', async () => {
@@ -158,7 +157,7 @@ describe('LiveTrustTransitionLifecycle', () => {
     const transition = createDeferred<void>();
     const transitionFailure = new Error('transition failed');
     const dependencies = createDependencies({
-      transitionMcp: vi.fn(() => {
+      notifyTrustTransition: vi.fn(() => {
         transitionStarted.resolve(undefined);
         return transition.promise;
       }),
@@ -184,18 +183,17 @@ describe('LiveTrustTransitionLifecycle', () => {
     const secondTransition = createDeferred<void>();
     const laterTransition = createDeferred<void>();
     const dependencies = createDependencies({
-      transitionMcp: vi
+      notifyTrustTransition: vi
         .fn()
-        .mockRejectedValueOnce(firstFailure)
+        .mockImplementationOnce(() => {
+          firstHooksStarted.resolve(undefined);
+          return Promise.reject(firstFailure);
+        })
         .mockImplementationOnce(() => {
           secondTransitionStarted.resolve(undefined);
           return secondTransition.promise;
         })
         .mockImplementationOnce(() => laterTransition.promise),
-      initializeHooks: vi.fn().mockImplementation(() => {
-        firstHooksStarted.resolve(undefined);
-        return Promise.resolve();
-      }),
     });
     const lifecycle = new LiveTrustTransitionLifecycle(dependencies);
 

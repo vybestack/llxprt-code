@@ -13,6 +13,7 @@ import type { AgentToolHandle } from '@vybestack/llxprt-code-agents';
 import * as path from 'path';
 import {
   createTestFile,
+  unexpectedResourceRead,
   setupAtCommandTest,
   teardownAtCommandTest,
   type AtCommandTestSetup,
@@ -83,6 +84,8 @@ describe('handleAtCommand (pasted terminal output)', () => {
     await createTestFile(path.join(testRootDir, 'quickstart.md'), 'hello');
 
     await handleAtCommand({
+      readResource: unexpectedResourceRead,
+      findResource: () => undefined,
       query: 'Look at @Q and @-- and @.. for details',
       config: setup.mockConfig,
       addItem: setup.mockAddItem,
@@ -99,6 +102,8 @@ describe('handleAtCommand (pasted terminal output)', () => {
     await createTestFile(path.join(testRootDir, 'present.txt'), 'hello');
 
     await handleAtCommand({
+      readResource: unexpectedResourceRead,
+      findResource: () => undefined,
       query: 'Check @alpha1 @bravo2 @charlie3 @delta4 @echo5 please',
       config: setup.mockConfig,
       addItem: setup.mockAddItem,
@@ -122,6 +127,8 @@ describe('handleAtCommand (pasted terminal output)', () => {
     ].join('\n');
 
     await handleAtCommand({
+      readResource: unexpectedResourceRead,
+      findResource: () => undefined,
       query: pastedPane,
       config: setup.mockConfig,
       addItem: setup.mockAddItem,

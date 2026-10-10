@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { DefaultHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 /**
  * @plan:PLAN-20260617-COREAPI.P23
  * @requirement:REQ-015
@@ -21,7 +22,7 @@
  *    instances (no mock theater — the control's real merge logic runs).
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import {
   MessageBusType,
@@ -51,15 +52,6 @@ export interface FakeLifecycleResult {
  * `initialize()` then `fireSessionStartEvent`/`fireSessionEndEvent`, reading
  * `result.finalOutput`. This fake returns the caller-supplied aggregate.
  */
-interface FakeHookSystem {
-  initialize(): Promise<void>;
-  fireSessionStartEvent(args: {
-    source: string;
-  }): Promise<{ finalOutput?: Partial<HookOutput> }>;
-  fireSessionEndEvent(args: {
-    reason: string;
-  }): Promise<{ finalOutput?: Partial<HookOutput> }>;
-}
 
 export interface HookControlDepsHandle {
   readonly control: HookControl;
@@ -103,35 +95,43 @@ export function createHookControlDeps(
 
   const messageBus = new MessageBus();
 
-  const hookSystem: FakeHookSystem = {
-    async initialize(): Promise<void> {
-      // no-op: the fake aggregates are static
+  let disabled: readonly string[] = [];
+  const aggregate = (output: Partial<HookOutput> | undefined) => ({
+    success: true,
+    finalOutput:
+      output === undefined ? undefined : new DefaultHookOutput(output),
+    allOutputs: output === undefined ? [] : [new DefaultHookOutput(output)],
+    errors: [],
+    totalDuration: 0,
+  });
+  const hookOperations = {
+    execution(
+      identity: Pick<
+        HookExecutionOwner,
+        'sessionId' | 'transcriptPath' | 'signal'
+      >,
+    ): HookExecutionOwner {
+      return {
+        ...identity,
+        sessionStart: async () =>
+          enableHooks && withHookSystem
+            ? aggregate(lifecycle.start)
+            : undefined,
+        sessionEnd: async () =>
+          enableHooks && withHookSystem ? aggregate(lifecycle.end) : undefined,
+      };
     },
-    async fireSessionStartEvent(): Promise<{
-      finalOutput?: Partial<HookOutput>;
-    }> {
-      return lifecycle.start !== undefined
-        ? { finalOutput: lifecycle.start }
-        : {};
-    },
-    async fireSessionEndEvent(): Promise<{
-      finalOutput?: Partial<HookOutput>;
-    }> {
-      return lifecycle.end !== undefined ? { finalOutput: lifecycle.end } : {};
-    },
-  };
-
-  const fakeConfig = {
-    getEnableHooks(): boolean {
-      return enableHooks;
-    },
-    getHookSystem(): FakeHookSystem | undefined {
-      return withHookSystem ? hookSystem : undefined;
+    closeAdmission: () => {},
+    finishSession: async () => aggregate(lifecycle.end),
+    listHooks: () => [],
+    getDisabledHooks: () => [...disabled],
+    setDisabledHooks: (names: readonly string[]) => {
+      disabled = [...names];
     },
   };
 
   const control = new HookControl({
-    config: fakeConfig as unknown as Config,
+    hookOperations,
     messageBus,
     sessionId: () => sessionId,
     cwd: () => cwd,

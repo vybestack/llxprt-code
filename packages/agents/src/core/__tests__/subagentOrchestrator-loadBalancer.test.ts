@@ -1,8 +1,17 @@
+import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
+import { fixtureToolSelection } from './subagentOrchestrator-test-helpers.js';
+
+import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
+const fixturePaths = installTestWorkspacePaths({
+  targetDir: process.cwd(),
+  isTrusted: () => true,
+});
 
 /**
  * Behavioral regression tests for Issue #2410 — Bug #1.
@@ -24,7 +33,6 @@ import { describe, expect, it, vi } from 'bun:test';
 import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SubAgentScope } from '../subagent.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { SubagentOrchestrator } from '../subagentOrchestrator.js';
@@ -117,10 +125,22 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
     const loadSubagent = vi.fn().mockResolvedValue(subagent);
     const runtimeLoader = vi.fn().mockResolvedValue(createRuntimeBundle());
     const scopeFactory = vi.fn<typeof SubAgentScope.create>();
+    const foregroundConfig1 = makeForegroundConfig();
+    const foregroundSettings1 = createSessionSettingsFixture(foregroundConfig1);
     const orchestrator = new SubagentOrchestrator({
+      workspaceTrust: foregroundSettings1.workspaceTrust,
+      createChildSettings: () =>
+        foregroundSettings1.settingsOwner.createChildStore(),
+      readRunPolicy: () =>
+        foregroundSettings1.settingsOwner.readSubagentRunPolicy(),
+
+      toolRegistry: fixtureToolSelection(),
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
       subagentManager: { loadSubagent } as unknown as SubagentManager,
       profileManager: { loadProfile } as unknown as ProfileManager,
-      foregroundConfig: makeForegroundConfig(),
+      foregroundConfig: foregroundConfig1,
       scopeFactory,
       runtimeLoader,
       messageBus: new MessageBus(),
@@ -142,10 +162,22 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
       .fn<typeof SubAgentScope.create>()
       .mockResolvedValue(scope);
 
+    const foregroundConfig2 = makeForegroundConfig();
+    const foregroundSettings2 = createSessionSettingsFixture(foregroundConfig2);
     const orchestrator = new SubagentOrchestrator({
+      workspaceTrust: foregroundSettings2.workspaceTrust,
+      createChildSettings: () =>
+        foregroundSettings2.settingsOwner.createChildStore(),
+      readRunPolicy: () =>
+        foregroundSettings2.settingsOwner.readSubagentRunPolicy(),
+
+      toolRegistry: fixtureToolSelection(),
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
       subagentManager: { loadSubagent } as unknown as SubagentManager,
       profileManager: { loadProfile } as unknown as ProfileManager,
-      foregroundConfig: makeForegroundConfig(),
+      foregroundConfig: foregroundConfig2,
       scopeFactory,
       runtimeLoader,
       messageBus: new MessageBus(),
@@ -181,10 +213,22 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
       .fn<typeof SubAgentScope.create>()
       .mockResolvedValue(scope);
 
+    const foregroundConfig3 = makeForegroundConfig();
+    const foregroundSettings3 = createSessionSettingsFixture(foregroundConfig3);
     const orchestrator = new SubagentOrchestrator({
+      workspaceTrust: foregroundSettings3.workspaceTrust,
+      createChildSettings: () =>
+        foregroundSettings3.settingsOwner.createChildStore(),
+      readRunPolicy: () =>
+        foregroundSettings3.settingsOwner.readSubagentRunPolicy(),
+
+      toolRegistry: fixtureToolSelection(),
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
       subagentManager: { loadSubagent } as unknown as SubagentManager,
       profileManager: { loadProfile } as unknown as ProfileManager,
-      foregroundConfig: makeForegroundConfig(),
+      foregroundConfig: foregroundConfig3,
       scopeFactory,
       runtimeLoader,
       messageBus: new MessageBus(),
@@ -224,10 +268,22 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
     const runtimeLoader = vi.fn().mockResolvedValue(createRuntimeBundle());
     const scopeFactory = vi.fn<typeof SubAgentScope.create>();
 
+    const foregroundConfig4 = makeForegroundConfig();
+    const foregroundSettings4 = createSessionSettingsFixture(foregroundConfig4);
     const orchestrator = new SubagentOrchestrator({
+      workspaceTrust: foregroundSettings4.workspaceTrust,
+      createChildSettings: () =>
+        foregroundSettings4.settingsOwner.createChildStore(),
+      readRunPolicy: () =>
+        foregroundSettings4.settingsOwner.readSubagentRunPolicy(),
+
+      toolRegistry: fixtureToolSelection(),
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
       subagentManager: { loadSubagent } as unknown as SubagentManager,
       profileManager: { loadProfile } as unknown as ProfileManager,
-      foregroundConfig: makeForegroundConfig(),
+      foregroundConfig: foregroundConfig4,
       scopeFactory,
       runtimeLoader,
       messageBus: new MessageBus(),
@@ -470,11 +526,9 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
         },
       };
 
-      const configWithForegroundCap = {
-        ...makeForegroundConfig(),
-        getEphemeralSetting: (key: string) =>
-          key === 'maxTurnsPerPrompt' ? 55 : undefined,
-      } as unknown as Config;
+      const configWithForegroundCap = makeForegroundConfig({
+        maxTurnsPerPrompt: 55,
+      });
 
       const { orchestrator, factory } = createOrchestratorForTurns({
         subagentName: 'lb-profile-turns-helper',

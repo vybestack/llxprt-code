@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { physicalFiles } from './helpers/physical-files.js';
+import { createToolHost } from './helpers/create-grep-tool-host.js';
+
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { chmodSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
@@ -45,6 +48,7 @@ function createTwoRootHost(root: string): {
   mkdirSync(rootA, { recursive: true });
   mkdirSync(rootB, { recursive: true });
   const host: IToolHost = {
+    ...physicalFiles,
     ...createToolHost(root),
     getWorkspaceRoots: () => [rootA, rootB],
   };
@@ -83,40 +87,6 @@ function initGitRepo(dir: string): void {
 
 function gitAdd(dir: string): void {
   execSync('git add -A', { cwd: dir, stdio: 'ignore' });
-}
-
-function createToolHost(targetDir: string): IToolHost {
-  return {
-    getTargetDir: () => targetDir,
-    getWorkspaceRoots: () => [targetDir],
-    getApprovalMode: () => 'auto',
-    setApprovalMode: () => {},
-    isInteractive: () => false,
-    hasFeatureFlag: () => false,
-    getFileService: () => ({
-      shouldGitIgnoreFile: () => false,
-      shouldLlxprtIgnoreFile: () => false,
-      shouldIgnoreFile: () => false,
-      filterFiles: (paths) => paths,
-    }),
-    getFileFilteringOptions: () => ({
-      respectGitIgnore: true,
-      respectLlxprtIgnore: true,
-    }),
-    getFileExclusions: () => [],
-    getReadManyFilesExclusions: () => [],
-    getFileFilteringRespectLlxprtIgnore: () => true,
-    getLlxprtIgnoreFilePath: () => null,
-    recordFileRead: () => {},
-    getFileSystemService: () => undefined,
-    getLlxprtIgnorePatterns: () => [],
-    getEphemeralSettings: () => ({
-      'tool-output-max-items': 50,
-      'tool-output-max-tokens': 50000,
-      'tool-output-item-size-limit': 524288,
-    }),
-    getDebugMode: () => false,
-  };
 }
 
 async function executeGrep(
@@ -409,6 +379,7 @@ describe('Ripgrep multi-root budget exhaustion stops further spawns (item 11)', 
         }
 
         const host: IToolHost = {
+          ...physicalFiles,
           ...createToolHost(tmp.dir),
           getWorkspaceRoots: () => dirs,
         };

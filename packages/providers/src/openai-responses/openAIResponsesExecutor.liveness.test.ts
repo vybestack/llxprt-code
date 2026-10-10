@@ -1,3 +1,7 @@
+import {
+  captureResponsesTestRequest,
+  type ResponsesTestDeps,
+} from './responses-request.test-helpers.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -22,10 +26,7 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as os from 'node:os';
-import {
-  executeOpenAIResponsesRequest,
-  type ResponsesExecutorDeps,
-} from './openAIResponsesExecutor.js';
+import { executeOpenAIResponsesRequest } from './openAIResponsesExecutor.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { StreamLivenessEvent } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -52,8 +53,9 @@ function buildNormalizedOptions(
   });
   const config = createRuntimeConfigStub(settings, {});
   const invocation = createRuntimeInvocationContext({
-    runtime,
-    settings,
+    runtimeId: runtime.runtimeId,
+    runtimeMetadata: runtime.metadata,
+
     providerName: 'openai-responses',
     ephemeralsSnapshot: ephemerals,
     fallbackRuntimeId: 'test-runtime',
@@ -85,19 +87,19 @@ function buildNormalizedOptions(
 }
 
 function buildDeps(
-  overrides: Partial<ResponsesExecutorDeps> = {},
-): ResponsesExecutorDeps {
+  overrides: Partial<ResponsesTestDeps> = {},
+): ResponsesTestDeps {
   return {
     providerName: 'openai-responses',
-    logger: { debug: vi.fn() } as unknown as ResponsesExecutorDeps['logger'],
-    getProviderBaseURL: () => 'https://api.openai.com/v1',
-    getCustomHeaders: () => undefined,
+    logger: { debug: vi.fn() } as unknown as ResponsesTestDeps['logger'],
+    requestBaseURL: 'https://api.openai.com/v1',
+    requestHeaders: undefined,
     isCodexMode: () => false,
     getCodexAccountId: async () => 'codex-account',
     resolveAuthTokenForPrompt: async () => '',
     shouldRetryOnError: () => false,
-    getDefaultModel: () => 'gpt-5',
-    getGlobalConfig: () => undefined,
+    defaultModel: 'gpt-5',
+
     getUnallowedModelParameters: () => new Set<string>(),
     ...overrides,
   };
@@ -140,7 +142,10 @@ describe('executeOpenAIResponsesRequest onStreamLiveness threading @issue:2607',
       onStreamLiveness: (event) => livenessEvents.push(event),
     });
 
-    const iterator = executeOpenAIResponsesRequest(options, buildDeps());
+    const iterator = executeOpenAIResponsesRequest(
+      captureResponsesTestRequest(options, buildDeps()),
+      buildDeps(),
+    );
     for await (const _chunk of iterator) {
       void _chunk;
     }
@@ -161,7 +166,10 @@ describe('executeOpenAIResponsesRequest onStreamLiveness threading @issue:2607',
     setGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, body: sseBody }));
 
     const options = buildNormalizedOptions();
-    const iterator = executeOpenAIResponsesRequest(options, buildDeps());
+    const iterator = executeOpenAIResponsesRequest(
+      captureResponsesTestRequest(options, buildDeps()),
+      buildDeps(),
+    );
     const messages: IContent[] = [];
     for await (const chunk of iterator) {
       messages.push(chunk);
@@ -372,7 +380,10 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
       },
     });
 
-    const iterator = executeOpenAIResponsesRequest(options, buildDeps());
+    const iterator = executeOpenAIResponsesRequest(
+      captureResponsesTestRequest(options, buildDeps()),
+      buildDeps(),
+    );
     for await (const _chunk of iterator) {
       void _chunk;
     }
@@ -411,7 +422,16 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
     };
 
     const iterator = executeOpenAIResponsesRequest(
-      options,
+      captureResponsesTestRequest(
+        options,
+        buildDeps({
+          isCodexMode: () => true,
+          getWebSocketTransport: () => wsTransport,
+          isWebSocketTransportActive: () => true,
+          getMediaTransportCapabilities: () =>
+            declaredMediaTransportCapabilities('codex'),
+        }),
+      ),
       buildDeps({
         isCodexMode: () => true,
         getWebSocketTransport: () => wsTransport,
@@ -478,7 +498,16 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
     };
 
     const iterator = executeOpenAIResponsesRequest(
-      options,
+      captureResponsesTestRequest(
+        options,
+        buildDeps({
+          isCodexMode: () => true,
+          getWebSocketTransport: () => wsTransport,
+          isWebSocketTransportActive: () => true,
+          getMediaTransportCapabilities: () =>
+            declaredMediaTransportCapabilities('codex'),
+        }),
+      ),
       buildDeps({
         isCodexMode: () => true,
         getWebSocketTransport: () => wsTransport,
@@ -564,7 +593,16 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
     };
 
     const iterator = executeOpenAIResponsesRequest(
-      options,
+      captureResponsesTestRequest(
+        options,
+        buildDeps({
+          isCodexMode: () => true,
+          getWebSocketTransport: () => wsTransport,
+          isWebSocketTransportActive: () => true,
+          getMediaTransportCapabilities: () =>
+            declaredMediaTransportCapabilities('codex'),
+        }),
+      ),
       buildDeps({
         isCodexMode: () => true,
         getWebSocketTransport: () => wsTransport,
@@ -630,7 +668,14 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
     let caught: unknown;
     try {
       const iterator = executeOpenAIResponsesRequest(
-        options,
+        captureResponsesTestRequest(
+          options,
+          buildDeps({
+            isCodexMode: () => true,
+            getWebSocketTransport: () => wsTransport,
+            isWebSocketTransportActive: () => true,
+          }),
+        ),
         buildDeps({
           isCodexMode: () => true,
           getWebSocketTransport: () => wsTransport,
@@ -680,7 +725,21 @@ describe('executeOpenAIResponsesRequest dump parity @issue:2253', () => {
     // handshake) succeeds so the request still goes over the WebSocket.
     let codexAccountIdCalls = 0;
     const iterator = executeOpenAIResponsesRequest(
-      options,
+      captureResponsesTestRequest(
+        options,
+        buildDeps({
+          isCodexMode: () => true,
+          getWebSocketTransport: () => wsTransport,
+          isWebSocketTransportActive: () => true,
+          getCodexAccountId: async () => {
+            codexAccountIdCalls += 1;
+            if (codexAccountIdCalls === 1) {
+              throw new Error('account id unavailable');
+            }
+            return 'codex-account';
+          },
+        }),
+      ),
       buildDeps({
         isCodexMode: () => true,
         getWebSocketTransport: () => wsTransport,

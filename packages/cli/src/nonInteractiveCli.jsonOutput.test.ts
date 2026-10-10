@@ -1,10 +1,11 @@
+import { createStreamSettingsFixture } from './__tests__/stream-settings-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type Config, uiTelemetryService } from '@vybestack/llxprt-code-core';
+import { uiTelemetryService } from '@vybestack/llxprt-code-core';
 import type { AgentEvent } from '@vybestack/llxprt-code-agents';
 import { processAgentStream } from './nonInteractiveCliSupport.js';
 
@@ -19,12 +20,7 @@ async function* streamFromEvents(
   }
 }
 
-function createMockConfig(): Config {
-  return {
-    getSessionId: () => 'test-session',
-    getEphemeralSetting: () => undefined,
-  } as unknown as Config;
-}
+const createMockConfig = createStreamSettingsFixture;
 
 interface JsonResponse {
   response: string;
@@ -71,7 +67,7 @@ describe('processAgentStream — JSON output mode (issue #3226)', () => {
 
   function createContext() {
     return {
-      config: createMockConfig(),
+      ...createMockConfig(),
       jsonOutput: true,
       streamJsonOutput: false,
       quiet: false,

@@ -1,3 +1,4 @@
+import type { ToolExecutionPolicy } from '../interfaces/tool-execution-policy.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -52,7 +53,7 @@ function findInlineImage(result: ToolResult): Buffer {
 }
 function createHostWithSettings(
   targetDir: string,
-  settings: Readonly<Record<string, unknown>>,
+  settings: ToolExecutionPolicy,
 ) {
   const baseHost = createRealHost(targetDir, {
     respectGitIgnore: true,
@@ -60,8 +61,8 @@ function createHostWithSettings(
   });
   return {
     ...baseHost,
-    getEphemeralSettings: () => ({
-      ...baseHost.getEphemeralSettings(),
+    readExecutionPolicy: () => ({
+      ...baseHost.readExecutionPolicy(),
       ...settings,
     }),
   };

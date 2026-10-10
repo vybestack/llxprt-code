@@ -2,7 +2,7 @@ import { DebugLogger, debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { SettingDefinition } from '../config/settingsSchema.js';
 
 interface DynamicToolSettingsSource {
-  getToolRegistryInfo(): {
+  describeToolConfiguration(): {
     registered: Array<{ displayName: string }>;
     unregistered: Array<{ displayName: string; reason?: string }>;
   };
@@ -145,7 +145,7 @@ export function generateDynamicToolSettings(
 
   try {
     const toolSettings: Record<string, SettingDefinition> = {};
-    const toolRegistryInfo = config.getToolRegistryInfo();
+    const toolRegistryInfo = config.describeToolConfiguration();
 
     logger.log(
       `Processing ${toolRegistryInfo.registered.length} registered and ${toolRegistryInfo.unregistered.length} unregistered tools`,

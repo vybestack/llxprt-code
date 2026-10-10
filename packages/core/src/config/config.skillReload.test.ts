@@ -1,311 +1,214 @@
+import type { WorkspaceSkillAssemblyOperations } from './skill-tool-sync.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
+import { WorkspaceFilesystemOwner } from '../services/workspace-filesystem-owner.js';
 
-/**
- * Issue #3379: `/skills reload` refreshed SkillManager but left the model's
- * view of the available skills frozen at whatever it was when the CLI started.
- * These tests pin the two steps that carry a reload through to the model:
- * rebuilding the skill activation tool, and pushing the refreshed tool
- * declarations into the live chat session.
- *
- * The mock harness mirrors config.d.test.ts so Config.initialize() can run
- * without touching the filesystem, git, telemetry or a real provider.
- */
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { Config, type ConfigParameters } from './config.js';
+import { WorkspaceToolCatalogOwner } from '../services/workspace-tool-catalog-owner.js';
+import { MessageBus } from '../confirmation-bus/message-bus.js';
+import { initializeTestMcpRuntime } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import type { WorkspaceSkillOwner } from '../skills/workspace-skill-owner.js';
 
-import { describe, it, expect, vi } from 'bun:test';
-import type { ConfigParameters } from './config.js';
-import { Config } from './config.js';
-import type { SkillDefinition } from '../skills/skillLoader.js';
-import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
-import { initializeTestConfig } from '../__tests__/config-test-helpers.js';
-import {
-  buildFsMockBody,
-  buildToolsMockBody,
-  buildContentGeneratorMockBody,
-  buildTelemetryMockBody,
-  buildGitServiceMockBody,
-  buildIdeIntegrationMockBody,
-  buildMemoryDiscoveryMockBody,
-  buildEventsMockBody,
-  buildFetchMockBody,
-  type HoistedConfigMocks,
-} from './__tests__/configTestHarness.js';
+interface RegistrarObservation {
+  readonly skills: string[];
+}
 
-// Hoisted mocks referenced by the mock factories below.
-const hoistedConfigMocks = {
-  loadJitSubdirectoryMemory: vi.fn(),
-  coreEvents: {
-    emitFeedback: vi.fn(),
-    emitModelChanged: vi.fn(),
-    emitConsoleLog: vi.fn(),
-  },
-  setGlobalProxy: vi.fn(),
-} as HoistedConfigMocks;
-const __actual = { ...(await import('@vybestack/llxprt-code-mcp')) };
-void vi.mock('@vybestack/llxprt-code-mcp', () => {
-  const actual = __actual as Record<string, unknown>;
-  return {
-    ...actual,
-    McpClientManager: vi.fn().mockImplementation(() => ({
-      getMcpServers: vi.fn().mockReturnValue({}),
-      getDiscoveryFailures: vi.fn().mockReturnValue(new Map<string, string>()),
-      getDiscoveryState: vi.fn().mockReturnValue(MCPDiscoveryState.NOT_STARTED),
-      whenDiscoverySettled: vi.fn().mockResolvedValue(undefined),
-      restart: vi.fn().mockResolvedValue(undefined),
-      restartServer: vi.fn().mockResolvedValue(undefined),
-      reconcileConfiguredMcpServers: vi.fn().mockResolvedValue(undefined),
-      getMcpInstructions: vi.fn().mockReturnValue(''),
-      startConfiguredMcpServers: vi.fn().mockResolvedValue(undefined),
-      onFolderTrustGained: vi.fn().mockResolvedValue(undefined),
-      onFolderTrustRevoked: vi.fn().mockResolvedValue(undefined),
-      quarantineForTrustRevocation: vi.fn(),
-      stop: vi.fn().mockResolvedValue(undefined),
-    })),
-  };
-});
+describe('workspace reload refreshes the model-facing skill surface @issue:3379', () => {
+  let directory: string;
+  let close: (() => Promise<void>) | undefined;
+  let owner: Pick<WorkspaceSkillOwner, 'operations' | 'refresh'>;
+  let observations: RegistrarObservation[];
+  let registrationFailure = false;
 
-const __actual2 = { ...(await import('fs')) };
-void vi.mock('fs', () => buildFsMockBody(__actual2));
+  beforeEach(async () => {
+    directory = await mkdtemp(join(tmpdir(), 'workspace-skill-reload-'));
+    observations = [];
+    registrationFailure = false;
+  });
 
-const __actual3 = { ...(await import('@vybestack/llxprt-code-tools')) };
-void vi.mock('@vybestack/llxprt-code-tools', () =>
-  buildToolsMockBody(__actual3),
-);
+  afterEach(async () => {
+    await close?.();
+    close = undefined;
+    await rm(directory, { recursive: true, force: true });
+  });
 
-const __actual4 = { ...(await import('../core/contentGenerator.js')) };
-void vi.mock('../core/contentGenerator.js', () =>
-  buildContentGeneratorMockBody(__actual4),
-);
-
-void vi.mock('../telemetry/index.js', () => buildTelemetryMockBody());
-
-void vi.mock('../services/gitService.js', () => buildGitServiceMockBody());
-
-const __actual5 = {
-  ...(await import('@vybestack/llxprt-code-ide-integration')),
-};
-void vi.mock('@vybestack/llxprt-code-ide-integration', () =>
-  buildIdeIntegrationMockBody(__actual5),
-);
-
-void vi.mock('../utils/memoryDiscovery.js', () =>
-  buildMemoryDiscoveryMockBody(hoistedConfigMocks),
-);
-
-const __actual6 = { ...(await import('../utils/events.js')) };
-void vi.mock('../utils/events.js', () =>
-  buildEventsMockBody(__actual6, hoistedConfigMocks),
-);
-
-void vi.mock('../utils/fetch.js', () => buildFetchMockBody(hoistedConfigMocks));
-
-/**
- * Issue #3379: the model only learns which skills exist from the skill
- * activation tool's declaration. Reloading skills has to rebuild that tool
- * and push the refreshed declarations into the live chat session, otherwise
- * a reloaded skill stays invisible to the model until the CLI restarts.
- */
-describe('reloadSkills refreshes the model-facing skill surface @issue:3379', () => {
-  interface RegistrarObservation {
-    readonly skills: string[];
+  async function writeSkill(name: string): Promise<void> {
+    const location = join(directory, '.agents', 'skills', name);
+    await mkdir(location, { recursive: true });
+    await writeFile(
+      join(location, 'SKILL.md'),
+      `---\nname: ${name}\ndescription: ${name} description\n---\nInstructions for ${name}`,
+    );
   }
 
-  function skillDefinition(name: string): SkillDefinition {
-    return {
-      name,
-      description: `${name} description`,
-      location: `/skills/${name}/SKILL.md`,
-      body: '',
-      source: 'project',
-    };
-  }
-
-  function buildParams(overrides: Partial<ConfigParameters>): ConfigParameters {
-    return {
-      sessionId: 'test-session',
-      targetDir: '/tmp/test',
-      debugMode: false,
+  async function build(
+    overrides: Partial<ConfigParameters> = {},
+    operations: Partial<WorkspaceSkillAssemblyOperations> = {},
+  ): Promise<Config> {
+    const config = new Config({
+      sessionId: 'skill-session',
+      targetDir: directory,
+      cwd: directory,
       model: 'test-model',
-      cwd: '/tmp/test',
+      debugMode: false,
       skillsSupport: true,
       ...overrides,
+    });
+    const runtime = await initializeTestMcpRuntime(
+      config,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        reloadPolicy: async () => ({}),
+        registerTools: (_registry, service) => {
+          if (registrationFailure) throw new Error('registration failed');
+          observations.push({
+            skills: service
+              .listSkills()
+              .map((skill) => skill.name)
+              .sort(),
+          });
+        },
+        ...operations,
+      },
+    );
+    owner = runtime.workspaceSkills;
+    close = async () => {
+      await runtime.dispose();
+      await config.dispose();
     };
+    observations.length = 0;
+    return config;
   }
 
   it('rebuilds the activation tool from the post-reload skill set', async () => {
-    const observations: RegistrarObservation[] = [];
-    const config = new Config(
-      buildParams({
-        postSkillDiscoveryToolRegistrar: (_registry, skillService) => {
-          observations.push({
-            skills: skillService.listSkills().map((skill) => skill.name),
-          });
-        },
-      }),
-    );
-    await initializeTestConfig(config);
-
-    const skillManager = config.getSkillManager();
-    vi.spyOn(skillManager, 'discoverSkills').mockResolvedValue(undefined);
-    vi.spyOn(skillManager, 'getSkills').mockReturnValue([
-      skillDefinition('alpha'),
-      skillDefinition('beta'),
-    ]);
-    observations.length = 0;
-
-    await config.reloadSkills();
-
+    await writeSkill('alpha');
+    await build();
+    await writeSkill('beta');
+    await owner.operations.reload();
     expect(observations).toStrictEqual([{ skills: ['alpha', 'beta'] }]);
   });
 
   it('rebuilds the activation tool even when no skills remain', async () => {
-    const observations: RegistrarObservation[] = [];
-    const config = new Config(
-      buildParams({
-        postSkillDiscoveryToolRegistrar: (_registry, skillService) => {
-          observations.push({
-            skills: skillService.listSkills().map((skill) => skill.name),
-          });
-        },
-      }),
-    );
-    await initializeTestConfig(config);
-
-    const skillManager = config.getSkillManager();
-    vi.spyOn(skillManager, 'discoverSkills').mockResolvedValue(undefined);
-    vi.spyOn(skillManager, 'getSkills').mockReturnValue([]);
-    observations.length = 0;
-
-    await config.reloadSkills();
-
+    await writeSkill('alpha');
+    await build();
+    await rm(join(directory, '.agents', 'skills', 'alpha'), {
+      recursive: true,
+    });
+    await owner.operations.reload();
     expect(observations).toStrictEqual([{ skills: [] }]);
   });
 
   it('does not rebuild the activation tool when skills support is off', async () => {
-    const observations: RegistrarObservation[] = [];
-    const config = new Config(
-      buildParams({
-        skillsSupport: false,
-        postSkillDiscoveryToolRegistrar: (_registry, skillService) => {
-          observations.push({
-            skills: skillService.listSkills().map((skill) => skill.name),
-          });
-        },
-      }),
-    );
-    await initializeTestConfig(config);
-
-    const skillManager = config.getSkillManager();
-    vi.spyOn(skillManager, 'discoverSkills').mockResolvedValue(undefined);
-
-    await config.reloadSkills();
-
+    await writeSkill('alpha');
+    await build({ skillsSupport: false });
+    await owner.operations.reload();
     expect(observations).toStrictEqual([]);
+    expect(owner.operations.list(true)).toStrictEqual([]);
   });
 
   it('hides a skill that the reload disabled', async () => {
-    const observations: RegistrarObservation[] = [];
-    const config = new Config(
-      buildParams({
-        onReload: async () => ({ disabledSkills: ['beta'] }),
-        postSkillDiscoveryToolRegistrar: (_registry, skillService) => {
-          observations.push({
-            skills: skillService.listSkills().map((skill) => skill.name),
-          });
-        },
-      }),
+    await writeSkill('alpha');
+    await writeSkill('beta');
+    await build(
+      {},
+      { reloadPolicy: async () => ({ disabledSkills: ['beta'] }) },
     );
-    await initializeTestConfig(config);
-
-    const skillManager = config.getSkillManager();
-    const discovered = [skillDefinition('alpha'), skillDefinition('beta')];
-    vi.spyOn(skillManager, 'discoverSkills').mockImplementation(async () => {
-      // Real discovery repopulates the manager's store; this stands in for it
-      // so the real setDisabledSkills has something to mark.
-      const store = skillManager.getAllSkills();
-      store.length = 0;
-      store.push(...discovered);
-    });
-    observations.length = 0;
-
-    await config.reloadSkills();
-
-    // Guard: the stand-in above depends on getAllSkills exposing the live
-    // store. If that ever returns a copy, the manager stays empty and the
-    // assertion below would pass for the wrong reason.
+    await owner.operations.reload();
     expect(
-      skillManager.getAllSkills().map((skill) => skill.name),
+      owner.operations
+        .list(true)
+        .map((skill) => skill.name)
+        .sort(),
     ).toStrictEqual(['alpha', 'beta']);
-    // The disabled list arrives via onReload and is applied before the tool is
-    // rebuilt, so the registrar must never see the disabled skill.
     expect(observations).toStrictEqual([{ skills: ['alpha'] }]);
   });
 
-  /**
-   * Ordering only. That the refreshed registry actually reaches the model is
-   * asserted end to end against a real ChatSession in the agents package, in
-   * skillReloadDeclaration.behavior.test.ts.
-   */
   it('pushes refreshed declarations to the chat session after rebuilding the tool', async () => {
     const sequence: string[] = [];
-    const config = new Config(
-      buildParams({
-        postSkillDiscoveryToolRegistrar: () => {
+    const config = await build(
+      {},
+      {
+        registerTools: () => {
           sequence.push('registrar');
         },
-      }),
+      },
     );
-    await initializeTestConfig(config);
-
-    const skillManager = config.getSkillManager();
-    vi.spyOn(skillManager, 'discoverSkills').mockResolvedValue(undefined);
-    vi.spyOn(config.getAgentClient(), 'setTools').mockImplementation(
-      async () => {
-        sequence.push('setTools');
+    const { composeWorkspaceSkills } = await import('./skill-tool-sync.js');
+    const trust = new WorkspaceTrustLifecycle({
+      localTrust: config.initialWorkspaceTrust,
+    });
+    const filesystem = new WorkspaceFilesystemOwner({
+      targetDir: config.getTargetDir(),
+      isTrusted: () => trust.isTrustedFolder(),
+    });
+    const bus = new MessageBus();
+    const tooling = new WorkspaceToolCatalogOwner(config, bus, trust);
+    const publishingOwner = composeWorkspaceSkills(
+      config,
+      (directory, approved) =>
+        filesystem.admitSkillDirectory(directory, approved),
+      () => filesystem.notifyTrustChanged(),
+      trust,
+      () => bus,
+      {
+        reloadPolicy: async () => ({}),
+        registerTools: () => {
+          sequence.push('registrar');
+        },
+      },
+      () => {
+        const lease = tooling.acceptSkillPublication();
+        return {
+          registry: lease.registry,
+          publish: async () => {
+            sequence.push('setTools');
+          },
+          release: lease.release,
+        };
       },
     );
     sequence.length = 0;
-
-    await config.reloadSkills();
-
-    expect(sequence).toStrictEqual(['registrar', 'setTools']);
+    try {
+      await publishingOwner.initialize();
+      expect(sequence).toStrictEqual(['registrar', 'setTools']);
+    } finally {
+      await publishingOwner.dispose();
+      await tooling.dispose();
+      await filesystem.dispose();
+      await trust.dispose();
+      await config.dispose();
+    }
   });
 
   it('completes without a chat session to refresh', async () => {
-    const config = new Config(
-      buildParams({
-        postSkillDiscoveryToolRegistrar: () => {},
-      }),
-    );
-    await initializeTestConfig(config);
-
-    const skillManager = config.getSkillManager();
-    vi.spyOn(skillManager, 'discoverSkills').mockResolvedValue(undefined);
-    vi.spyOn(config.getAgentClient(), 'isInitialized').mockReturnValue(false);
-
-    await expect(config.reloadSkills()).resolves.toBeUndefined();
+    await build();
+    await expect(owner.operations.reload()).resolves.toBeUndefined();
   });
 
   it('propagates a rebuild failure instead of reporting a successful reload', async () => {
-    let failOnRegister = false;
-    const config = new Config(
-      buildParams({
-        postSkillDiscoveryToolRegistrar: () => {
-          if (failOnRegister) {
-            throw new Error('registration failed');
-          }
-        },
-      }),
+    await writeSkill('alpha');
+    await build();
+    registrationFailure = true;
+    await writeSkill('beta');
+    await expect(owner.operations.reload()).rejects.toThrow(
+      'registration failed',
     );
-    await initializeTestConfig(config);
-    failOnRegister = true;
-
-    const skillManager = config.getSkillManager();
-    vi.spyOn(skillManager, 'discoverSkills').mockResolvedValue(undefined);
-
-    await expect(config.reloadSkills()).rejects.toThrow('registration failed');
+    expect(owner.operations.list().map((skill) => skill.name)).toStrictEqual([
+      'alpha',
+    ]);
+    registrationFailure = false;
   });
 });

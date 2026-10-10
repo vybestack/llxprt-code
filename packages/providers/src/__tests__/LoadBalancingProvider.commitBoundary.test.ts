@@ -1,3 +1,5 @@
+import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
+const fixtureOwners = installRuntimeTestOwners();
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -189,7 +191,12 @@ describe('LoadBalancingProvider commit boundary (issue #2532)', () => {
   beforeEach(() => {
     settingsService = new SettingsService();
     config = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager({ settingsService, config });
+    providerManager = new ProviderManager({
+      sessionSettings: fixtureOwners.adopt(config, settingsService)
+        .settingsOwner,
+      settingsService,
+      config,
+    });
   });
 
   function registerAndCreate(

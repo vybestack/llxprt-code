@@ -35,12 +35,14 @@ export async function handleRefreshLockMiss(
   thirtySecondsFromNow: number,
   tokenStore: TokenStore,
   proactiveRenewalManager: ProactiveRenewalManager,
+  signal?: AbortSignal,
 ): Promise<OAuthToken | null> {
   logger.debug(
     () =>
       `[FLOW] Failed to acquire refresh lock for ${providerName}, checking disk...`,
   );
   const reloadedToken = await tokenStore.getToken(providerName, bucketToUse);
+  signal?.throwIfAborted();
   if (reloadedToken && reloadedToken.expiry > thirtySecondsFromNow) {
     logger.debug(
       () => `[FLOW] Token was refreshed by another process for ${providerName}`,
@@ -72,9 +74,11 @@ export async function executeTokenRefresh(
   tokenStore: TokenStore,
   providerRegistry: ProviderRegistry,
   proactiveRenewalManager: ProactiveRenewalManager,
+  signal?: AbortSignal,
 ): Promise<OAuthToken | null> {
   try {
     const recheckToken = await tokenStore.getToken(providerName, bucketToUse);
+    signal?.throwIfAborted();
     if (recheckToken && recheckToken.expiry > thirtySecondsFromNow) {
       logger.debug(
         () =>
@@ -100,24 +104,18 @@ export async function executeTokenRefresh(
         () =>
           `[FLOW] Refresh token changed for ${providerName} — another process refreshed, skipping`,
       );
-      // Only return the disk token if it's still valid; otherwise return null
-      // so the caller can fall through to re-auth/failover.
-      if (recheckToken.expiry > thirtySecondsFromNow) {
-        proactiveRenewalManager.scheduleProactiveRenewal(
-          providerName,
-          bucketToUse,
-          recheckToken,
-        );
-        return recheckToken;
-      }
       return null;
     }
 
     const provider = providerRegistry.getProvider(providerName);
     if (!provider) return null;
 
-    const refreshedToken = await provider.refreshToken(recheckToken ?? token);
+    const refreshedToken = await provider.refreshToken(
+      recheckToken ?? token,
+      signal,
+    );
     if (!refreshedToken) {
+      signal?.throwIfAborted();
       logger.debug(
         () => `[FLOW] Token refresh returned null for ${providerName}`,
       );
@@ -132,6 +130,7 @@ export async function executeTokenRefresh(
       () => `[FLOW] Token refreshed for ${providerName}, saving to store...`,
     );
     await tokenStore.saveToken(providerName, mergedToken, bucketToUse);
+    signal?.throwIfAborted();
     proactiveRenewalManager.scheduleProactiveRenewal(
       providerName,
       bucketToUse,
@@ -139,6 +138,7 @@ export async function executeTokenRefresh(
     );
     return mergedToken;
   } catch (refreshError) {
+    if (signal) throw refreshError;
     logger.debug(
       () =>
         `[FLOW] Token refresh FAILED for ${providerName}: ${refreshError instanceof Error ? refreshError.message : refreshError}`,
@@ -228,4 +228,53 @@ export async function performDiskCheckUnderLock(
   }
 
   return undefined;
+}
+
+export async function refreshTokenUnderLock(
+  providerName: string,
+  bucketToUse: string | undefined,
+  token: OAuthToken,
+  thirtySecondsFromNow: number,
+  tokenStore: TokenStore,
+  providerRegistry: ProviderRegistry,
+  renewals: ProactiveRenewalManager,
+  signal?: AbortSignal,
+): Promise<OAuthToken | null> {
+  logger.debug(
+    () =>
+      `[FLOW] Token expired or expiring soon for ${providerName}, attempting refresh with lock...`,
+  );
+
+  const lockAcquired = await tokenStore.acquireRefreshLock(providerName, {
+    waitMs: 10000,
+    bucket: bucketToUse,
+  });
+
+  if (!lockAcquired) {
+    signal?.throwIfAborted();
+    return handleRefreshLockMiss(
+      providerName,
+      bucketToUse,
+      thirtySecondsFromNow,
+      tokenStore,
+      renewals,
+      signal,
+    );
+  }
+
+  try {
+    signal?.throwIfAborted();
+    return await executeTokenRefresh(
+      providerName,
+      bucketToUse,
+      token,
+      thirtySecondsFromNow,
+      tokenStore,
+      providerRegistry,
+      renewals,
+      signal,
+    );
+  } finally {
+    await tokenStore.releaseRefreshLock(providerName, bucketToUse);
+  }
 }

@@ -215,7 +215,7 @@ async function handleEnableLogging(
   });
 
   // Update the runtime state to reflect the new setting
-  context.config.updateTelemetrySettings({
+  await context.config.updateTelemetrySettings({
     ...context.config.getTelemetrySettings(),
     logConversations: true,
   });
@@ -236,7 +236,7 @@ async function handleDisableLogging(
   });
 
   // Update the runtime state to reflect the new setting
-  context.config.updateTelemetrySettings({
+  await context.config.updateTelemetrySettings({
     ...context.config.getTelemetrySettings(),
     logConversations: false,
   });

@@ -16,7 +16,7 @@ import {
 import { Config, coreEvents } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { initializeTestConfig } from '../integration-tests/test-utils.js';
+import { initializeTestSessionRoot } from '../integration-tests/test-utils.js';
 
 import type { LoadedSettings } from '../config/settings.js';
 import { setupTerminalAndTheme } from './terminalTheme.js';
@@ -70,9 +70,8 @@ describe('setupTerminalAndTheme', () => {
       userMemory: '',
       sessionId: 'test-session',
       model: 'test-model',
-      settingsService,
     });
-    await initializeTestConfig(config);
+    await initializeTestSessionRoot(config, undefined, settingsService);
 
     // Create a minimal mock LoadedSettings
     mockSettings = {

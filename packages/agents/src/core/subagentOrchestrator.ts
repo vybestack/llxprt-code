@@ -1,26 +1,45 @@
+import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { ApprovalMode } from '@vybestack/llxprt-code-core';
 
+import type { WorkspaceTrustControlPort } from '@vybestack/llxprt-code-core';
+
+import { assembleModelSelection } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
+
+import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
+
+import {
+  cleanupAfterFailure,
+  runCleanupSteps,
+  disposeHistoryLike,
+  firstDefinedHistory,
+} from './subagent-cleanup.js';
+import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
+import type { SessionClientOwner } from '../session/session-client-owner.js';
+
+import { createSubagentProviderRuntime } from './subagentRuntimeSetup.js';
+import type { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { randomUUID } from 'node:crypto';
+import type { SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
+import type {
+  ProfileDefinitionReads,
+  SubagentDefinitionReads,
+} from '@vybestack/llxprt-code-core';
 import {
   isLoadBalancerProfile,
   type Profile,
-  type ProfileManager,
 } from '@vybestack/llxprt-code-settings';
 import {
   resolveRuntimeProfile,
   buildActivationCliOverrides,
   type RuntimeProfileResolution,
 } from './subagentProfileResolution.js';
-import {
-  getNumberSetting,
-  getStringSetting,
-} from './subagentSettingsAccess.js';
+import { getStringSetting } from './subagentSettingsAccess.js';
 import {
   createSettingsSnapshot,
   normalizeDefaultToolSet,
@@ -37,15 +56,16 @@ import type {
   ToolConfig,
   OutputConfig,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import { UNLIMITED_OUTPUT_TOKENS_TOTAL } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import { buildResolvedRunConfig } from './subagent-run-policy.js';
+import type { SubagentRunPolicy } from '@vybestack/llxprt-code-core/session/session-settings-policies.js';
 
 import {
   createAgentRuntimeState,
   type AgentRuntimeState,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+import type { AgentRuntimeFactoryBindings } from '@vybestack/llxprt-code-core';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { createRuntimeSettingsService } from '@vybestack/llxprt-code-core/runtime/settingsRuntimeAdapter.js';
+
 import {
   loadAgentRuntime,
   type AgentRuntimeLoaderOptions,
@@ -53,24 +73,29 @@ import {
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
 import type { ReadonlySettingsSnapshot } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import type { ToolSelection } from '@vybestack/llxprt-code-tools';
 import type { ContentGeneratorConfig } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
-import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
+
 import {
   createIsolatedRuntimeContext,
-  runWithRuntimeScope,
-  type IsolatedRuntimeContextHandle,
-} from '@vybestack/llxprt-code-providers/runtime.js';
-import { applyProfileWithGuards } from '@vybestack/llxprt-code-providers/runtime/profileApplication.js';
-import { registerProvidersOntoManager } from '../api/createAgent.js';
+  createRuntimeActivationBindings,
+  type IsolatedRuntimeContextHandle as ProviderIsolatedRuntimeContextHandle,
+  type RuntimeActivationBindings,
+} from '@vybestack/llxprt-code-providers/runtime/runtimeActivationBindings.js';
+import { admitModelParameters } from '@vybestack/llxprt-code-providers/runtime/admitModelParameters.js';
+import { admitLoadBalancerModelParameters } from '@vybestack/llxprt-code-providers/runtime/admitLoadBalancerModelParameters.js';
+import { assembleProfileApplication } from '../api/profileApplicationAssembly.js';
+import { assembleSessionProviderSwitch } from '../api/providerSwitchAssembly.js';
 import { executeProviderActivation } from '../api/providerActivationExecutor.js';
 import {
+  disposeIsolatedMediaRuntime,
+  createIsolatedSessionClient,
+  closeIsolatedSessionRuntime,
   buildIsolatedAgentConfig,
-  cleanupFailedRuntimeBootstrap,
+  prepareIsolatedProviders,
 } from '../api/agentRuntimeAssembly.js';
-import { AggregateDisposeError } from '../api/disposeErrors.js';
 
 const LOAD_BALANCER_PROVIDER_NAME = 'load-balancer';
 
@@ -87,28 +112,6 @@ const createAbortError = (message: string): Error => {
 };
 
 export const DEFAULT_DISABLED_TOOLS = [] as const;
-
-/** Subagent-specific fallback when no valid max-turn setting is materialized. */
-const DEFAULT_UNCONFIGURED_MAX_TURNS = 1000;
-
-/**
- * Ceiling on the aggregate output tokens one subagent run may generate.
- *
- * Deriving this purely from `max_turns * modelMaxOutputTokens` reproduces the
- * bound that failed in #3335: the 1000-turn fallback times a 16,384-token model
- * ceiling is 16.4M tokens, and the incident run was still inside that budget at
- * turn 253. The derived value is therefore clamped to this ceiling.
- *
- * 2M output tokens is roughly 4,000 turns of ordinary 500-token responses, or
- * 122 consecutive maximum-length 16,384-token responses. A subagent still
- * generating maximum-length responses after 122 turns is looping, not working.
- * Ordinary runs generate well under 500k, so this leaves at least 4x headroom.
- */
-const MAX_OUTPUT_TOKENS_TOTAL_CEILING = 2_000_000;
-
-/** Subagent-specific fallback when no model output ceiling is resolvable. */
-const DEFAULT_UNCONFIGURED_MAX_OUTPUT_TOKENS_TOTAL =
-  MAX_OUTPUT_TOKENS_TOTAL_CEILING;
 
 export interface SubagentLaunchRequest {
   name: string;
@@ -129,16 +132,30 @@ export interface SubagentLaunchResult {
 }
 
 export interface SubagentOrchestratorOptions {
-  subagentManager: SubagentManager;
-  profileManager: ProfileManager;
+  instructions: InstructionReadOperations;
+  toolRegistry?: ToolSelection;
+  readMcpInstructions: () => string | undefined;
+  workspacePaths: WorkspacePathOperations;
+  subagentManager: Pick<
+    SubagentDefinitionReads,
+    'loadSubagent' | 'listSubagents'
+  >;
+  profileManager: Pick<ProfileDefinitionReads, 'loadProfile'>;
   foregroundConfig: Config;
+  readonly hookOwner?: SessionHookOwner;
+  readonly workspaceTrust?: WorkspaceTrustControlPort;
+  createChildSettings: () => SettingsService;
+  readonly telemetry?: RootTelemetry;
+  readRunPolicy: () => SubagentRunPolicy;
+  runtimeFactoryBindings?: AgentRuntimeFactoryBindings;
+  runtimeActivationBindings?: RuntimeActivationBindings;
   runtimeLoader?: RuntimeLoader;
   scopeFactory?: ScopeFactory;
   idFactory?: () => string;
   /**
    * Required session/runtime MessageBus threaded into the SubAgentScope so
    * non-interactive subagent tool execution can satisfy
-   * Config.getOrCreateScheduler's explicit MessageBus dependency (Issue #2312).
+   * the child scheduler owner’s explicit MessageBus dependency (Issue #2312).
    */
   messageBus: MessageBus;
 }
@@ -150,6 +167,11 @@ export interface SubagentOrchestratorOptions {
  * @plan PLAN-20251029-SUBAGENTORCHESTRATION
  * @requirement REQ-SUBAGENT-ORCH-001, REQ-SUBAGENT-ORCH-002
  */
+type IsolatedRuntimeContextHandle = ProviderIsolatedRuntimeContextHandle & {
+  readonly mediaOwner: SessionMediaOwner;
+  readonly sessionClient: SessionClientOwner;
+};
+
 export class SubagentOrchestrator {
   private readonly runtimeLoader: RuntimeLoader;
   private readonly scopeFactory: ScopeFactory;
@@ -163,23 +185,6 @@ export class SubagentOrchestrator {
     this.scopeFactory =
       options.scopeFactory ?? SubAgentScope.create.bind(SubAgentScope);
     this.idFactory = options.idFactory ?? randomUUID;
-  }
-
-  /**
-   * Disposes the orchestrator-constructed isolated Config (from
-   * buildIsolatedAgentConfig) AFTER its runtime handle cleanup — children
-   * first. The isolated runtime factory treats the Config as caller-owned
-   * and never disposes it (buildCleanupClosure only resets bindings), and
-   * SubAgentScope.dispose does not touch it, so this orchestrator is its
-   * only disposer: without this, the AgentClient constructed by the
-   * activation's refreshAuth leaks. Config.dispose() is idempotent here
-   * (AgentClient.dispose guards on its unsubscribe handle; the trust
-   * lifecycle tolerates a repeated beginDisposal), so re-entry is a no-op.
-   */
-  private disposeIsolatedConfig(
-    isolatedHandle: IsolatedRuntimeContextHandle,
-  ): Promise<void> {
-    return isolatedHandle.config.dispose();
   }
 
   private buildScopeDispose(
@@ -199,8 +204,7 @@ export class SubagentOrchestrator {
           }
         },
         () => disposeHistoryLike(history),
-        () => isolatedHandle.cleanup(),
-        () => this.disposeIsolatedConfig(isolatedHandle),
+        () => closeIsolatedSessionRuntime(isolatedHandle),
       ]);
     };
   }
@@ -212,6 +216,7 @@ export class SubagentOrchestrator {
     runConfig: RunConfig,
     request: SubagentLaunchRequest,
     runtimeResult: AgentRuntimeLoaderResult,
+    isolatedHandle: IsolatedRuntimeContextHandle,
     signal?: AbortSignal,
   ): Promise<SubAgentScope> {
     return this.scopeFactory(
@@ -224,9 +229,36 @@ export class SubagentOrchestrator {
       request.outputConfig,
       {
         runtimeBundle: runtimeResult,
+        readApprovalMode: () =>
+          this.options.workspaceTrust?.isTrustedFolder() === true
+            ? this.options.foregroundConfig.getApprovalMode()
+            : ApprovalMode.DEFAULT,
+        hookOwner: isolatedHandle.sessionClient.hookOperations.execution({
+          sessionId: () => runtimeResult.runtimeContext.state.sessionId,
+          transcriptPath: () => undefined,
+          signal,
+        }),
+        workspacePaths: this.options.workspacePaths,
+        instructions: this.options.instructions,
+        readMcpInstructions: this.options.readMcpInstructions,
         environmentContextLoader: async (_runtime) =>
-          getEnvironmentContext(this.options.foregroundConfig),
+          getEnvironmentContext(
+            this.options.instructions.snapshot().environmentMemory,
+            this.options.workspacePaths.directories(),
+          ),
         messageBus: this.options.messageBus,
+        admitModelParameters: () => {
+          const providerName = runtimeResult.runtimeContext.state.provider;
+          return providerName === LOAD_BALANCER_PROVIDER_NAME
+            ? admitLoadBalancerModelParameters(
+                isolatedHandle.providerManager.getActiveProvider(),
+                isolatedHandle.settingsService,
+              )
+            : admitModelParameters(
+                isolatedHandle.settingsService,
+                providerName,
+              );
+        },
       },
       signal,
     );
@@ -236,6 +268,17 @@ export class SubagentOrchestrator {
    * Launches a subagent by name, returning the created {@link SubAgentScope}
    * and associated agent metadata.
    */
+  private resolveRunConfig(
+    profile: Profile,
+    custom: RunConfig | undefined,
+  ): RunConfig {
+    return buildResolvedRunConfig(
+      profile,
+      custom,
+      this.options.readRunPolicy(),
+    );
+  }
+
   async launch(
     request: SubagentLaunchRequest,
     signal?: AbortSignal,
@@ -269,7 +312,7 @@ export class SubagentOrchestrator {
     const modelConfig = this.buildModelConfig(
       SubagentOrchestrator.getRuntimeStateProfile(runtimeProfile),
     );
-    const runConfig = this.buildResolvedRunConfig(profile, request.runConfig);
+    const runConfig = this.resolveRunConfig(profile, request.runConfig);
     this.throwIfAborted(
       signal,
       'Subagent launch aborted before runtime assembly.',
@@ -294,10 +337,10 @@ export class SubagentOrchestrator {
         runConfig,
         request,
         runtimeResult,
+        isolatedHandle,
         signal,
       );
       this.throwIfAborted(signal, 'Subagent launch aborted before completion.');
-
       const agentId =
         typeof scope.getAgentId === 'function'
           ? scope.getAgentId()
@@ -313,12 +356,9 @@ export class SubagentOrchestrator {
         dispose: this.buildScopeDispose(scope, runtimeResult, isolatedHandle),
       };
     } catch (error) {
-      await this.cleanupAfterLaunchFailure(
-        scope,
-        runtimeResult,
-        isolatedHandle,
+      return cleanupAfterFailure(error, () =>
+        this.cleanupAfterLaunchFailure(scope, runtimeResult, isolatedHandle),
       );
-      throw error;
     }
   }
 
@@ -327,20 +367,10 @@ export class SubagentOrchestrator {
     runtimeResult: AgentRuntimeLoaderResult,
     isolatedHandle: IsolatedRuntimeContextHandle,
   ): Promise<void> {
-    try {
-      if (scope !== undefined) {
-        await this.buildScopeDispose(scope, runtimeResult, isolatedHandle)();
-      } else {
-        await this.cleanupRuntimeArtifacts(runtimeResult, isolatedHandle);
-      }
-    } catch (disposeError) {
-      debugLogger.warn(
-        `SubagentOrchestrator: cleanup after launch failure also failed: ${
-          disposeError instanceof Error
-            ? disposeError.message
-            : String(disposeError)
-        }`,
-      );
+    if (scope !== undefined) {
+      await this.buildScopeDispose(scope, runtimeResult, isolatedHandle)();
+    } else {
+      await this.cleanupRuntimeArtifacts(runtimeResult, isolatedHandle);
     }
   }
 
@@ -354,39 +384,8 @@ export class SubagentOrchestrator {
     // AgentClient and needs the same children-first dispose.
     await runCleanupSteps([
       () => disposeHistoryLike(runtimeResult.history),
-      () => isolatedHandle.cleanup(),
-      () => this.disposeIsolatedConfig(isolatedHandle),
+      () => closeIsolatedSessionRuntime(isolatedHandle),
     ]);
-  }
-
-  private async cleanupIsolatedHandleAfterFailure(
-    isolatedHandle: IsolatedRuntimeContextHandle,
-  ): Promise<void> {
-    try {
-      await isolatedHandle.cleanup();
-    } catch (cleanupError) {
-      debugLogger.warn(
-        `SubagentOrchestrator: isolated runtime cleanup failed: ${
-          cleanupError instanceof Error
-            ? cleanupError.message
-            : String(cleanupError)
-        }`,
-      );
-    }
-    // The runtime loader failed after activation already ran, so the Config
-    // may hold a constructed AgentClient. Dispose even when the handle
-    // cleanup above failed — a leaked client is worse than a warn.
-    try {
-      await this.disposeIsolatedConfig(isolatedHandle);
-    } catch (configDisposeError) {
-      debugLogger.warn(
-        `SubagentOrchestrator: isolated config dispose failed: ${
-          configDisposeError instanceof Error
-            ? configDisposeError.message
-            : String(configDisposeError)
-        }`,
-      );
-    }
   }
 
   private throwIfAborted(signal: AbortSignal | undefined, message: string) {
@@ -483,144 +482,6 @@ export class SubagentOrchestrator {
       provider: LOAD_BALANCER_PROVIDER_NAME,
       model: LOAD_BALANCER_PROVIDER_NAME,
     };
-  }
-
-  private buildResolvedRunConfig(
-    profile: Profile,
-    custom: RunConfig | undefined,
-  ): RunConfig {
-    return this.buildRunConfig(
-      profile,
-      custom,
-      this.resolveModelMaxOutputTokens(profile),
-    );
-  }
-
-  private buildRunConfig(
-    profile: Profile,
-    custom: RunConfig | undefined,
-    resolvedModelMaxOutputTokens: number | undefined,
-  ): RunConfig {
-    const profileMaxTime = getNumberSetting(profile.ephemeralSettings, [
-      'subagent.max_time_minutes',
-      'max_time_minutes',
-    ]);
-
-    const runConfig: RunConfig = {
-      max_time_minutes:
-        custom?.max_time_minutes ?? profileMaxTime ?? Number.POSITIVE_INFINITY,
-    };
-
-    const profileMaxTurns = getNumberSetting(profile.ephemeralSettings, [
-      'maxTurnsPerPrompt',
-    ]);
-
-    const parentMaxTurns = this.getParentMaxTurns();
-
-    const maxTurns = custom?.max_turns ?? profileMaxTurns ?? parentMaxTurns;
-
-    if (maxTurns === undefined) {
-      runConfig.max_turns = DEFAULT_UNCONFIGURED_MAX_TURNS;
-    } else if (maxTurns > 0) {
-      runConfig.max_turns = Math.floor(maxTurns);
-    }
-
-    const profileMaxOutputTokensTotal = getNumberSetting(
-      profile.ephemeralSettings,
-      ['subagent-max-output-tokens-total'],
-    );
-    const parentMaxOutputTokensTotal = this.getParentLimit(
-      'subagent-max-output-tokens-total',
-    );
-    const configuredMaxOutputTokensTotal =
-      custom?.max_output_tokens_total ??
-      profileMaxOutputTokensTotal ??
-      parentMaxOutputTokensTotal;
-    // Proportional to the turn budget where the catalog gives us a model
-    // ceiling, but never above MAX_OUTPUT_TOKENS_TOTAL_CEILING — see the
-    // constant's comment for why the unclamped product is not a real bound.
-    const defaultMaxOutputTokensTotal =
-      runConfig.max_turns !== undefined &&
-      resolvedModelMaxOutputTokens !== undefined
-        ? Math.min(
-            runConfig.max_turns * resolvedModelMaxOutputTokens,
-            MAX_OUTPUT_TOKENS_TOTAL_CEILING,
-          )
-        : DEFAULT_UNCONFIGURED_MAX_OUTPUT_TOKENS_TOTAL;
-    const maxOutputTokensTotal =
-      configuredMaxOutputTokensTotal ?? defaultMaxOutputTokensTotal;
-
-    // -1 is the unlimited sentinel and is the only value that omits the budget.
-    // Testing `> 0` instead would silently discard a deliberate 0 (stop
-    // immediately) and turn it into no budget at all, which is its opposite.
-    // checkOutputBudget treats -1 the same way, and the two must agree.
-    // A non-finite value must not reach the budget. `checkOutputBudget` tests
-    // `total >= budget`, which is false for both Infinity and NaN, so either
-    // one silently disables enforcement entirely while looking configured.
-    // Falling back to the derived default keeps a bad explicit value from being
-    // more permissive than supplying none at all.
-    const usableMaxOutputTokensTotal = Number.isFinite(maxOutputTokensTotal)
-      ? maxOutputTokensTotal
-      : defaultMaxOutputTokensTotal;
-
-    if (usableMaxOutputTokensTotal !== UNLIMITED_OUTPUT_TOKENS_TOTAL) {
-      runConfig.max_output_tokens_total = Math.max(
-        0,
-        Math.floor(usableMaxOutputTokensTotal),
-      );
-    }
-
-    if (custom?.grace_period_seconds !== undefined) {
-      runConfig.grace_period_seconds = custom.grace_period_seconds;
-    }
-
-    return runConfig;
-  }
-
-  private getParentMaxTurns(): number | undefined {
-    return this.getParentLimit('maxTurnsPerPrompt');
-  }
-
-  private getParentLimit(key: string): number | undefined {
-    const config = this.options.foregroundConfig as Config & {
-      getEphemeralSetting?: (settingKey: string) => unknown;
-    };
-    if (typeof config.getEphemeralSetting !== 'function') {
-      return undefined;
-    }
-    const value = config.getEphemeralSetting(key);
-    if (
-      typeof value === 'number' &&
-      Number.isFinite(value) &&
-      (value === -1 || value > 0)
-    ) {
-      return value;
-    }
-    return undefined;
-  }
-
-  /**
-   * The model's declared per-response output ceiling, read from the profile.
-   *
-   * Deliberately does not consult the isolated runtime's SettingsService: doing
-   * so would force run-config resolution to happen after runtime assembly, and
-   * a launch that fails during assembly would then dereference a runtime that
-   * does not exist. The profile carries everything needed, and because the
-   * derived budget is clamped to MAX_OUTPUT_TOKENS_TOTAL_CEILING anyway, a
-   * catalog value would only matter for profiles whose ceiling is small enough
-   * to keep the product under the clamp.
-   */
-  private resolveModelMaxOutputTokens(profile: Profile): number | undefined {
-    const candidates = [
-      getNumberSetting(profile.ephemeralSettings, ['maxOutputTokens']),
-      profile.modelParams.max_tokens,
-    ];
-    for (const value of candidates) {
-      if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
-        return value;
-      }
-    }
-    return undefined;
   }
 
   private baseSessionId(): string {
@@ -722,9 +583,7 @@ export class SubagentOrchestrator {
       agentRuntimeId,
       subagent.name,
     );
-    const settingsService = createRuntimeSettingsService({
-      sessionSource: this.options.foregroundConfig.getSettingsService(),
-    });
+    const settingsService = this.options.createChildSettings();
     if (!isLoadBalancerActivation) {
       populatePreActivationSettings(
         settingsService,
@@ -749,7 +608,6 @@ export class SubagentOrchestrator {
       agentRuntimeId,
       isLoadBalancerActivation,
     );
-
     try {
       const runtimeResult = await this.loadRuntimeInIsolatedScope({
         subagentName: subagent.name,
@@ -762,8 +620,9 @@ export class SubagentOrchestrator {
       });
       return { runtimeResult, isolatedHandle };
     } catch (error) {
-      await this.cleanupIsolatedHandleAfterFailure(isolatedHandle);
-      throw error;
+      return cleanupAfterFailure(error, () =>
+        runCleanupSteps([() => closeIsolatedSessionRuntime(isolatedHandle)]),
+      );
     }
   }
 
@@ -776,15 +635,11 @@ export class SubagentOrchestrator {
     modelConfig: ModelConfig;
     signal?: AbortSignal;
   }): Promise<AgentRuntimeLoaderResult> {
-    const providerRuntime = createProviderRuntimeContext({
-      settingsService: params.isolatedHandle.settingsService,
-      config: params.isolatedHandle.config,
-      runtimeId: params.isolatedHandle.runtimeId,
-      metadata: {
-        source: 'SubagentOrchestrator',
-        subagent: params.subagentName,
-      },
-    });
+    const providerRuntime = createSubagentProviderRuntime(
+      params.isolatedHandle,
+      params.effectiveProfile.provider,
+      params.subagentName,
+    );
     const settingsSnapshot = createSettingsSnapshot(
       params.effectiveProfile,
       this.defaultDisabledTools,
@@ -793,8 +648,6 @@ export class SubagentOrchestrator {
       params.runtimeStateProfile,
       params.modelConfig,
     );
-    contentGeneratorConfig.providerManager =
-      params.isolatedHandle.providerManager;
     const loaderOptions = this.buildRuntimeLoaderOptions({
       isolatedHandle: params.isolatedHandle,
       runtimeState: params.runtimeState,
@@ -803,13 +656,20 @@ export class SubagentOrchestrator {
       contentGeneratorConfig,
       signal: params.signal,
     });
-    return runWithRuntimeScope(
-      {
-        runtimeId: params.isolatedHandle.runtimeId,
-        metadata: params.isolatedHandle.metadata,
-      },
-      () => this.runtimeLoader(loaderOptions),
+    await params.isolatedHandle.tokenizerFactory.prepareTokenizer?.(
+      params.runtimeState.provider,
+      params.runtimeState.model,
     );
+    const loaded = await this.runtimeLoader(loaderOptions);
+    loaded.history.setTokenizerFactory({
+      getTokenizer: (provider, model) =>
+        params.isolatedHandle.tokenizerFactory.getTokenizer(provider, model),
+    });
+    loaded.history.setActiveTokenizationTarget(
+      params.runtimeState.model,
+      params.runtimeState.provider,
+    );
+    return loaded;
   }
 
   private buildRuntimeLoaderOptions(params: {
@@ -820,18 +680,43 @@ export class SubagentOrchestrator {
     contentGeneratorConfig: ContentGeneratorConfig;
     signal?: AbortSignal;
   }): AgentRuntimeLoaderOptions {
-    const toolRegistry: ToolRegistry | undefined =
-      typeof this.options.foregroundConfig.getToolRegistry === 'function'
-        ? this.options.foregroundConfig.getToolRegistry()
-        : undefined;
+    const toolRegistry = this.options.toolRegistry;
 
     return {
+      mediaStore: params.isolatedHandle.mediaOwner.store,
       profile: {
         config: params.isolatedHandle.config,
+        telemetry: params.isolatedHandle.settingsOwner.telemetry,
         state: params.runtimeState,
+        prepareProviderInvocation: (provider, parameters, signal) =>
+          params.isolatedHandle.settingsOwner.prepareProviderInvocation(
+            params.runtimeState.runtimeId,
+            provider,
+            parameters,
+            signal,
+          ),
+        readRuntimeSettings: () =>
+          params.isolatedHandle.settingsOwner.readRuntimePolicy(),
+        readToolGovernance: () =>
+          params.isolatedHandle.settingsOwner.readToolGovernance(
+            params.isolatedHandle.config.getExcludeTools() ?? [],
+          ),
         settings: params.settingsSnapshot,
         providerRuntime: params.providerRuntime,
-        contentGeneratorConfig: params.contentGeneratorConfig,
+        promptEstimator: {
+          estimatePrompt: (request) =>
+            params.isolatedHandle.tokenizerFactory.estimatePrompt(request),
+          claimsModel: (model) =>
+            params.isolatedHandle.tokenizerFactory.claimsModel?.(model) ??
+            false,
+          getEstimatorFamily: (model) =>
+            params.isolatedHandle.tokenizerFactory.getEstimatorFamily?.(model),
+        },
+        contentGeneratorConfig: {
+          ...params.contentGeneratorConfig,
+          contentGeneratorFactory:
+            params.isolatedHandle.contentGeneratorFactory,
+        },
         toolRegistry,
         providerManager: params.isolatedHandle.providerManager,
       },
@@ -844,6 +729,40 @@ export class SubagentOrchestrator {
    * activation for an isolated runtime so the subagent uses its OWN provider
    * instead of the parent's active provider (Issue #2410).
    */
+  private bindChildTools(client: SessionClientOwner): void {
+    if (this.options.toolRegistry === undefined)
+      throw new Error('Missing explicit child tool selection');
+    client.bindInheritedTools(
+      this.options.toolRegistry,
+      this.options.messageBus,
+      this.options.workspaceTrust,
+    );
+  }
+
+  private async createChildClient(
+    handle: Parameters<typeof createIsolatedSessionClient>[0],
+    mediaOwner: SessionMediaOwner,
+  ): Promise<SessionClientOwner> {
+    const client = await createIsolatedSessionClient(
+      handle,
+      mediaOwner,
+      this.options.runtimeFactoryBindings?.agentClientFactory,
+      this.options.readMcpInstructions,
+      this.options.workspacePaths,
+    );
+    client.bindDefinitionReads(
+      this.options.profileManager,
+      this.options.subagentManager,
+    );
+    client.bindInheritedInstructions(this.options.instructions);
+    client.bindHooks(
+      this.options.hookOwner,
+      this.options.messageBus,
+      this.options.workspaceTrust,
+    );
+    return client;
+  }
+
   private async createIsolatedRuntime(
     settingsService: SettingsService,
     activationProfile: Profile,
@@ -858,148 +777,86 @@ export class SubagentOrchestrator {
     // parent's (Issue #2410). Load-balancer profiles intentionally activate via
     // the foreground profile-application path inside this isolated runtime so
     // the real load-balancer provider is registered and selected.
-    // The Config is built through the AGENT-owned assembly (issue #3222):
-    // providers no longer constructs one or stamps CLI-registered agent
-    // factories onto it, so in a process with no CLI import the subagent
-    // still gets working agent factories and runtime managers.
-    const isolatedConfig = buildIsolatedAgentConfig({
+    const { config: isolatedConfig, mediaOwner } = buildIsolatedAgentConfig({
       sessionId: agentRuntimeId,
       model: activationProfile.model,
+      runtimeFactoryBindings: this.options.runtimeFactoryBindings,
       settingsService,
-      profileManager: this.options.profileManager,
     });
-    const handle = createIsolatedRuntimeContext({
-      runtimeId: agentRuntimeId,
-      config: isolatedConfig,
-      messageBus: this.options.messageBus,
-      metadata: {
-        source: 'SubagentOrchestrator',
-        subagent: subagentName,
+    const handle = createIsolatedRuntimeContext(
+      {
+        runtimeId: agentRuntimeId,
+        config: isolatedConfig,
+        borrowedTelemetry: this.options.telemetry,
+        activationBindings:
+          this.options.runtimeActivationBindings ??
+          createRuntimeActivationBindings(),
+        messageBus: this.options.messageBus,
+        metadata: { source: 'SubagentOrchestrator', subagent: subagentName },
+        prepare: prepareIsolatedProviders,
       },
-      prepare: (context) => {
-        registerProvidersOntoManager(
-          context.providerManager,
-          {
-            settingsService: context.settingsService,
-            runtimeId: context.runtimeId,
-            metadata: context.metadata,
-          },
-          context.config,
-        );
-      },
-    });
+      settingsService,
+    );
 
+    let sessionClient: SessionClientOwner | undefined;
     try {
-      await handle.activate();
-
-      // Run provider activation INSIDE the isolated runtime's async scope.
-      // executeProviderActivation -> switchActiveProvider resolves the active
-      // runtime from AsyncLocalStorage (resolveActiveRuntimeIdentity). Because
-      // handle.activate() binds the scope via enterWith (a persistent, NOT
-      // callback-scoped mutation), two subagents launched in parallel (the task
-      // tool runs tool calls via Promise.all) would clobber each other's
-      // ambient scope, so one subagent would activate against the other's
-      // runtime and hang. Wrapping the activation in runWithRuntimeScope pins it
-      // to THIS subagent's runtime deterministically, regardless of interleaving
-      // (Issue #2410 — parallel subagents).
-      await runWithRuntimeScope(
-        { runtimeId: handle.runtimeId, metadata: handle.metadata },
-        async () => {
-          if (isLoadBalancerActivation) {
-            // applyProfileWithGuards reads getCliRuntimeServices(), which is
-            // scoped by runWithRuntimeScope above to this isolated runtime id.
-            await applyProfileWithGuards(activationProfile, {
-              profileName,
-              profileManager: this.options.profileManager,
-            });
-          } else {
-            await executeProviderActivation(handle.config, {
-              provider: activationProfile.provider,
-              model: activationProfile.model,
-              modelParams: activationProfile.modelParams,
-              // Carry the profile's credential/endpoint ephemerals into the
-              // activation so the isolated provider talks to the RIGHT endpoint
-              // with the RIGHT key. Without base-url, a profile like zai
-              // (provider 'anthropic', base-url https://api.z.ai/api/anthropic)
-              // would fall back to the provider default (api.anthropic.com) and
-              // its z.ai key would never authenticate — the request stalls until
-              // the 5-minute first-response timeout and the subagent returns an
-              // empty result. auth-key-name/auth-keyfile are resolved the same
-              // way the CLI bootstrap applies them (Issue #2410).
-              cliOverrides: buildActivationCliOverrides(activationProfile),
-            });
-          }
-          populatePostActivationSettings(
-            settingsService,
-            runtimeStateProfile,
-            profileName,
-            this.defaultDisabledTools,
-          );
-        },
-      );
-    } catch (error) {
-      // A cleanup failure must not replace the original bootstrap error. The
-      // isolated Config is agent-owned (built above) and the activation's
-      // refreshAuth may already have constructed an AgentClient on it —
-      // dispose it after the handle so a failed bootstrap leaks nothing.
-      return cleanupFailedRuntimeBootstrap(
+      const ownedSessionClient = await this.createChildClient(
         handle,
-        error,
-        'SubagentOrchestrator.createIsolatedRuntime',
-        { ownedConfig: isolatedConfig },
+        mediaOwner,
+      );
+      sessionClient = ownedSessionClient;
+      this.bindChildTools(ownedSessionClient);
+      await handle.activate();
+      const switchProvider = assembleSessionProviderSwitch(handle, () =>
+        ownedSessionClient.refreshAuth(),
+      );
+
+      if (isLoadBalancerActivation) {
+        await assembleProfileApplication(
+          handle.config,
+          handle.settingsService,
+          handle.providerManager,
+          handle.oauthManager,
+          switchProvider,
+          handle.settingsOwner,
+          this.options.profileManager,
+        ).applySnapshot(activationProfile, { profileName });
+      } else {
+        await executeProviderActivation(
+          handle.config,
+          {
+            provider: activationProfile.provider,
+            model: activationProfile.model,
+            modelParams: activationProfile.modelParams,
+            // Carry the profile's credential/endpoint ephemerals into the
+            // activation so the isolated provider talks to the RIGHT endpoint
+            // with the RIGHT key. Without base-url, a profile like zai
+            // (provider 'anthropic', base-url https://api.z.ai/api/anthropic)
+            // would fall back to the provider default (api.anthropic.com) and
+            // its z.ai key would never authenticate — the request stalls until
+            // the 5-minute first-response timeout and the subagent returns an
+            // empty result. auth-key-name/auth-keyfile are resolved the same
+            // way the CLI bootstrap applies them (Issue #2410).
+            cliOverrides: buildActivationCliOverrides(activationProfile),
+          },
+          switchProvider,
+          handle.settingsService,
+          handle.providerManager,
+          (method) => ownedSessionClient.refreshAuth(method),
+          assembleModelSelection(handle.settingsOwner),
+        );
+      }
+      populatePostActivationSettings(
+        settingsService,
+        runtimeStateProfile,
+        profileName,
+        this.defaultDisabledTools,
+      );
+      return { ...handle, mediaOwner, sessionClient: ownedSessionClient };
+    } catch (error) {
+      return cleanupAfterFailure(error, () =>
+        disposeIsolatedMediaRuntime(handle, mediaOwner, sessionClient),
       );
     }
-
-    return handle;
   }
-}
-
-async function runCleanupSteps(
-  steps: ReadonlyArray<() => unknown | Promise<unknown>>,
-): Promise<void> {
-  const errors: unknown[] = [];
-  for (const step of steps) {
-    try {
-      await step();
-    } catch (error) {
-      errors.push(error);
-    }
-  }
-  if (errors.length > 0) {
-    throw new AggregateDisposeError(errors);
-  }
-}
-
-/**
- * Boundary-validation helper: disposes (or clears) a history-like object that
- * may be `undefined`/`null` at runtime. Typed `unknown` so the guards are
- * genuinely necessary (no lint suppression directive needed).
- */
-function disposeHistoryLike(history: unknown): void {
-  if (history === undefined || history === null) {
-    return;
-  }
-  const disposable = (history as { dispose?: () => void }).dispose;
-  if (typeof disposable === 'function') {
-    disposable.call(history);
-    return;
-  }
-  const clearable = history as {
-    clear?: () => void;
-    removeAllListeners?: () => void;
-  };
-  if (typeof clearable.clear === 'function') {
-    clearable.clear();
-    if (typeof clearable.removeAllListeners === 'function') {
-      clearable.removeAllListeners();
-    }
-  }
-}
-
-/**
- * Boundary-validation helper: picks the first defined history source without
- * tripping `no-unnecessary-condition` (both args are statically required).
- */
-function firstDefinedHistory(primary: unknown, fallback: unknown): unknown {
-  return primary ?? fallback;
 }

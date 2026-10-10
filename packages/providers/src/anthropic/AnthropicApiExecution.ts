@@ -1,3 +1,4 @@
+import { hasHeaderName } from './AnthropicProviderInternals.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -351,4 +352,24 @@ export async function executeAnthropicApiCall(
     }
     throw error;
   }
+}
+
+/** #3159: the SDK generates the credential header (x-api-key for an API key,
+ * Authorization: Bearer for OAuth). Record the NAME in dump metadata;
+ * shared redaction replaces the value with [REDACTED]. A caller-supplied
+ * credential header always wins over the synthesized one.
+ */
+export function withCredentialHeader(
+  headers: Record<string, string> | undefined,
+  isOAuth: boolean,
+  authToken: string,
+): Record<string, string> | undefined {
+  const name = isOAuth ? 'Authorization' : 'x-api-key';
+  if (headers !== undefined && hasHeaderName(headers, name)) {
+    return headers;
+  }
+  const value = isOAuth ? `Bearer ${authToken}` : authToken;
+  return headers === undefined
+    ? { [name]: value }
+    : { ...headers, [name]: value };
 }

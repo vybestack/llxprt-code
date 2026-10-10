@@ -1,3 +1,5 @@
+import type { ProfileManager } from '@vybestack/llxprt-code-settings';
+import type { SessionAuthPolicy } from './types.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -14,16 +16,16 @@ import {
   type AuthCompletionOptions,
   type OAuthTokenRequestMetadata,
   type OAuthUICallback,
+  type ProfileOAuthWork,
 } from './types.js';
 import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
 import {
-  invalidateProviderRuntimeCache,
   type AuthLockStatus,
   type AuthLockRecoveryResult,
   type ForceRecoverOptions,
 } from '@vybestack/llxprt-code-auth';
+import type { ProviderRetryOperations } from '@vybestack/llxprt-code-core/runtime/contracts/ProviderRetryOperations.js';
 import { ProviderRegistry } from './provider-registry.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type {
   OAuthManager as AuthOAuthManagerInterface,
@@ -31,6 +33,7 @@ import type {
 } from '@vybestack/llxprt-code-auth';
 import { ProactiveRenewalManager } from './proactive-renewal-manager.js';
 import { OAuthBucketManager } from './OAuthBucketManager.js';
+import { createProfileManager } from './profile-utils.js';
 import { TokenAccessCoordinator } from './token-access-coordinator.js';
 import { AuthFlowOrchestrator } from './auth-flow-orchestrator.js';
 import { AuthStatusService } from './auth-status-service.js';
@@ -63,6 +66,76 @@ export type _AuthOAuthTokenRequestMetadataCompat =
  * @plan PLAN-20260608-ISSUE1586.P12 — structural compatibility with auth OAuthManager interface verified at compile time
  */
 export class OAuthManager implements BucketFailoverOAuthManagerLike {
+  composeRetryOperations(
+    providerName: string,
+    metadata?: OAuthTokenRequestMetadata,
+  ): ProviderRetryOperations {
+    const readHandler = () =>
+      this.bucketManager.readFailoverHandler(providerName, metadata);
+    return {
+      readRetryAuthToken: async () =>
+        (await this.getToken(providerName, metadata)) ?? '',
+      handleAuthError: async (context) => {
+        await this.forceRefreshToken(
+          providerName,
+          context.failedAccessToken,
+          this.getSessionBucket(providerName, metadata),
+        );
+      },
+      tryBucketFailover: async (context) =>
+        (await readHandler()?.tryFailover(context)) ?? false,
+      readFailoverBuckets: () => readHandler()?.getBuckets() ?? [],
+      readCurrentBucket: () => readHandler()?.getCurrentBucket(),
+      readFailoverReasons: () =>
+        readHandler()?.getLastFailoverReasons?.() ?? {},
+      resetBucketSession: () => readHandler()?.resetSession?.(),
+    };
+  }
+
+  configureBucketFailover(
+    providerName: string,
+    buckets: string[],
+    metadata?: OAuthTokenRequestMetadata,
+  ): void {
+    this.bucketManager.ensureFailoverHandler(
+      providerName,
+      buckets,
+      this,
+      metadata,
+    );
+  }
+
+  readFailoverBuckets(
+    provider: string,
+    metadata?: OAuthTokenRequestMetadata,
+  ): string[] {
+    return (
+      this.bucketManager
+        .readFailoverHandler(provider, metadata)
+        ?.getBuckets() ?? []
+    );
+  }
+
+  resetBuckets(provider: string, continuation: boolean): void {
+    const handler = this.bucketManager.readFailoverHandler(provider);
+    if (continuation) handler?.resetSession?.();
+    else handler?.reset?.();
+  }
+
+  async ensureBucketsAuthenticated(provider: string): Promise<void> {
+    await this.bucketManager
+      .readFailoverHandler(provider)
+      ?.ensureBucketsAuthenticated?.();
+  }
+
+  clearRetryHandlers(): void {
+    this.bucketManager.clearFailoverHandlers();
+  }
+
+  checkpointRetryHandlers(): () => void {
+    return this.bucketManager.checkpointFailoverHandlers();
+  }
+
   private providerRegistry: ProviderRegistry;
   private tokenStore: TokenStore;
   private settings?: IOAuthSettingsProvider;
@@ -72,7 +145,8 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
   private readonly authFlowOrchestrator: AuthFlowOrchestrator;
   private readonly authStatusService: AuthStatusService;
   private _runtimeMessageBus: MessageBus | undefined;
-  private readonly config?: Config;
+  private readonly readSessionAuthPolicy: () => SessionAuthPolicy;
+  private readonly profileReads: Pick<ProfileManager, 'loadProfile'>;
   private readonly browserProfileStore: BrowserProfileAssociationStore;
 
   /**
@@ -104,10 +178,27 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     settings?: IOAuthSettingsProvider,
     runtimeDeps?: OAuthManagerRuntimeMessageBusDeps,
   ) {
+    const directory = runtimeDeps?.config?.profileDirectory;
+    let profiles: ReturnType<typeof createProfileManager> | undefined;
+    this.profileReads = runtimeDeps?.profileReads ?? {
+      loadProfile: async (name) => {
+        profiles ??= createProfileManager(directory);
+        return (await profiles).loadProfile(name);
+      },
+    };
     this.providerRegistry = new ProviderRegistry(settings);
     this.tokenStore = tokenStore;
     this.settings = settings;
-    this.config = runtimeDeps?.config;
+    this.readSessionAuthPolicy =
+      runtimeDeps?.readSessionAuthPolicy ??
+      (() => ({
+        profileName: null,
+        bucketPrompt: undefined,
+        bucketDelay: undefined,
+        interactiveTimeoutMs: undefined,
+        noBrowser: false,
+        authOnly: false,
+      }));
     this.bucketManager = new OAuthBucketManager(tokenStore);
     this.proactiveRenewalManager = new ProactiveRenewalManager(
       tokenStore,
@@ -118,8 +209,13 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
       tokenStore,
       this.providerRegistry,
       this, // facadeRef — satisfies BucketFailoverOAuthManagerLike
-      runtimeDeps?.config,
       runtimeDeps?.messageBus,
+      (providerName, buckets, metadata) =>
+        this.configureBucketFailover(providerName, buckets, metadata),
+      () => ({
+        prompt: this.readSessionAuthPolicy().bucketPrompt,
+        delay: this.readSessionAuthPolicy().bucketDelay,
+      }),
     );
     // Assign AFTER authFlowOrchestrator exists so the setter can propagate the
     // bus to the orchestrator. Idempotent with the constructor argument above,
@@ -134,7 +230,11 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
       settings,
       // Pass a getter so the coordinator always reads the live config value,
       // even if tests mutate manager.config after construction.
-      () => this.config,
+      () => this.readSessionAuthPolicy().profileName,
+      () => Boolean(this.readSessionAuthPolicy().bucketPrompt),
+      runtimeDeps?.readAuthIdentity,
+      () => this.readSessionAuthPolicy().interactiveTimeoutMs,
+      { loadProfile: (name) => this.profileReads.loadProfile(name) },
     );
     // Wire getProfileBuckets delegate so that test spies on the private
     // manager.getProfileBuckets method correctly intercept internal calls
@@ -153,8 +253,13 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
       this.proactiveRenewalManager,
       this.bucketManager,
       this.tokenAccessCoordinator,
+      runtimeDeps?.invalidateAuthCaches,
     );
     this.browserProfileStore = new BrowserProfileAssociationStore();
+  }
+
+  isBrowserDisabled(): boolean {
+    return this.readSessionAuthPolicy().noBrowser;
   }
 
   /**
@@ -292,9 +397,48 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     );
   }
 
-  async configureProactiveRenewalsForProfile(profile: unknown): Promise<void> {
+  /**
+   * Retire the default proactive-renewal lifetime: cancel scheduled renewals
+   * and join in-flight ones. Later token reads no longer schedule renewals.
+   * Called by the owner of this manager before it releases the token store.
+   */
+  async dispose(): Promise<void> {
+    await this.proactiveRenewalManager.cancelAndJoin();
+  }
+
+  createProfileOAuthWork(signal: AbortSignal): ProfileOAuthWork {
+    const renewals = new ProactiveRenewalManager(
+      this.tokenStore,
+      (name) => this.providerRegistry.getProvider(name),
+      (name) => this.isOAuthEnabled(name),
+      signal,
+    );
+    return {
+      prepareRenewals: (profile, loadProfile) =>
+        renewals.prepareProactiveRenewalsForProfile(profile, loadProfile),
+      getToken: (request) =>
+        this.tokenAccessCoordinator.getProfileOAuthToken(request, renewals),
+      cancelAndJoin: () => renewals.cancelAndJoin(),
+    };
+  }
+
+  async prepareProactiveRenewalsForProfile(
+    profile: unknown,
+    loadProfile?: (name: string) => Promise<unknown>,
+  ): Promise<() => void> {
+    return this.proactiveRenewalManager.prepareProactiveRenewalsForProfile(
+      profile,
+      loadProfile,
+    );
+  }
+
+  async configureProactiveRenewalsForProfile(
+    profile: unknown,
+    loadProfile?: (name: string) => Promise<unknown>,
+  ): Promise<void> {
     return this.proactiveRenewalManager.configureProactiveRenewalsForProfile(
       profile,
+      loadProfile,
     );
   }
 
@@ -368,7 +512,7 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     return getHigherPriorityAuth(
       providerName,
       this.settings,
-      this.config?.getSettingsService(),
+      this.readSessionAuthPolicy().authOnly,
     );
   }
 
@@ -388,10 +532,13 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     provider: string,
     bucket: string,
   ): Promise<void> {
-    const context = await resolveCurrentProfileOAuthContext(provider);
+    const context = await resolveCurrentProfileOAuthContext(
+      provider,
+      this.readSessionAuthPolicy().profileName,
+      this.profileReads,
+    );
     if (context?.providerMatches === true && !context.hasExplicitBucketPolicy) {
       this.bucketManager.setSessionBucket(provider, bucket, context.metadata);
-      invalidateProviderRuntimeCache(provider, context.metadata.profileId);
     }
   }
 
@@ -516,7 +663,10 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
    * Returns a map of bucket name to usage info for all buckets that have valid OAuth tokens with account_id.
    */
   async getAllCodexUsageInfo(): Promise<Map<string, Record<string, unknown>>> {
-    return getAllCodexUsageInfo(this.tokenStore, this.config);
+    return getAllCodexUsageInfo(
+      this.tokenStore,
+      this.readSessionAuthPolicy().baseUrl,
+    );
   }
 
   /**
@@ -527,7 +677,10 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
   async getAllCodexRateLimitResetCredits(): ReturnType<
     typeof getAllCodexRateLimitResetCredits
   > {
-    return getAllCodexRateLimitResetCredits(this.tokenStore, this.config);
+    return getAllCodexRateLimitResetCredits(
+      this.tokenStore,
+      this.readSessionAuthPolicy().baseUrl,
+    );
   }
 
   private async getCurrentProfileSessionMetadata(

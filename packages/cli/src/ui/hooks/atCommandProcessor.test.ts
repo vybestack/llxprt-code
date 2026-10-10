@@ -8,12 +8,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { handleAtCommand } from './atCommandProcessor.js';
 import { type DiscoveredMCPResource } from '@vybestack/llxprt-code-core';
 import type { AgentToolHandle } from '@vybestack/llxprt-code-agents';
-import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { ToolCallStatus } from '../types.js';
 import * as path from 'path';
 import {
   createTestFile,
+  unexpectedResourceRead,
   setupAtCommandTest,
   teardownAtCommandTest,
   type AtCommandTestSetup,
@@ -75,30 +75,17 @@ describe('handleAtCommand', () => {
       ],
     });
 
-    const getClient = vi.fn().mockImplementation((name: string) => {
-      if (name === serverName) {
-        return { readResource };
-      }
-      return undefined;
-    });
-
     mockConfig = {
       ...mockConfig,
-      getResourceRegistry: () => ({
-        getAllResources: () => [],
-        findResourceByUri,
-      }),
-      getMcpClientManager: () =>
-        ({
-          getClient,
-          getDiscoveryState: () => MCPDiscoveryState.COMPLETED,
-          getMcpServerCount: () => 0,
-          restartServer: async () => {},
-        }) as ReturnType<CliUiRuntime['getMcpClientManager']>,
+      listResources: () => {
+        throw new Error('Catalog must be read through the Agent');
+      },
     };
 
     const result = await handleAtCommand({
       query,
+      readResource,
+      findResource: findResourceByUri,
       config: mockConfig,
       addItem: mockAddItem,
       onDebugMessage: mockOnDebugMessage,
@@ -120,9 +107,7 @@ describe('handleAtCommand', () => {
     expect(resource.findResourceByUri).toHaveBeenCalledWith(
       'docs:file:///docs/readme.md',
     );
-    expect(resource.readResource).toHaveBeenCalledWith(
-      'file:///docs/readme.md',
-    );
+
     expect(resource.addItem).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'tool_group',
@@ -150,6 +135,8 @@ describe('handleAtCommand', () => {
     const query = 'regular user query';
 
     const result = await handleAtCommand({
+      readResource: unexpectedResourceRead,
+      findResource: () => undefined,
       query,
       config: mockConfig,
       addItem: mockAddItem,
@@ -168,6 +155,8 @@ describe('handleAtCommand', () => {
     const queryWithSpaces = '  @  ';
 
     const result = await handleAtCommand({
+      readResource: unexpectedResourceRead,
+      findResource: () => undefined,
       query: queryWithSpaces,
       config: mockConfig,
       addItem: mockAddItem,
@@ -186,10 +175,8 @@ describe('handleAtCommand', () => {
   });
 
   it('tool registry should be properly configured', async () => {
-    const registry = mockConfig.getToolRegistry();
-    expect(registry).toBeDefined();
-    expect(registry.getTool('read_many_files')).toBeDefined();
-    expect(registry.getTool('glob')).toBeDefined();
+    expect(getToolHandle('read_many_files')).toBeDefined();
+    expect(getToolHandle('glob')).toBeDefined();
   });
 
   it('should process a valid text file path', async () => {
@@ -201,6 +188,8 @@ describe('handleAtCommand', () => {
     const query = `@${relativePath}`;
 
     const result = await handleAtCommand({
+      readResource: unexpectedResourceRead,
+      findResource: () => undefined,
       query,
       config: mockConfig,
       addItem: mockAddItem,
@@ -238,6 +227,8 @@ describe('handleAtCommand', () => {
     const resolvedGlob = `${relativeDirPath}${path.sep}**`;
 
     const result = await handleAtCommand({
+      readResource: unexpectedResourceRead,
+      findResource: () => undefined,
       query,
       config: mockConfig,
       addItem: mockAddItem,
@@ -270,6 +261,8 @@ describe('handleAtCommand', () => {
     const query = `${textBefore}@${relativePath}${textAfter}`;
 
     const result = await handleAtCommand({
+      readResource: unexpectedResourceRead,
+      findResource: () => undefined,
       query,
       config: mockConfig,
       addItem: mockAddItem,
@@ -298,6 +291,8 @@ describe('handleAtCommand', () => {
     const query = `@${escapedPath}`;
 
     const result = await handleAtCommand({
+      readResource: unexpectedResourceRead,
+      findResource: () => undefined,
       query,
       config: mockConfig,
       addItem: mockAddItem,
@@ -336,6 +331,8 @@ describe('handleAtCommand', () => {
     const query = `@${relativePath1} @${relativePath2}`;
 
     const result = await handleAtCommand({
+      readResource: unexpectedResourceRead,
+      findResource: () => undefined,
       query,
       config: mockConfig,
       addItem: mockAddItem,
@@ -371,6 +368,8 @@ describe('handleAtCommand', () => {
     const query = `${text1}@${relativePath1}${text2}@${relativePath2}${text3}`;
 
     const result = await handleAtCommand({
+      readResource: unexpectedResourceRead,
+      findResource: () => undefined,
       query,
       config: mockConfig,
       addItem: mockAddItem,
@@ -415,6 +414,8 @@ describe('handleAtCommand', () => {
     const query = `Look at @${relativePath1} then @${invalidFile} and also just @ symbol, then @${relativePath2}`;
 
     const result = await handleAtCommand({
+      readResource: unexpectedResourceRead,
+      findResource: () => undefined,
       query,
       config: mockConfig,
       addItem: mockAddItem,
@@ -490,6 +491,8 @@ describe('handleAtCommand', () => {
     const query = 'Check @nonexistent.txt and @ also';
 
     const result = await handleAtCommand({
+      readResource: unexpectedResourceRead,
+      findResource: () => undefined,
       query,
       config: mockConfig,
       addItem: mockAddItem,
@@ -517,6 +520,8 @@ describe('handleAtCommand', () => {
 
     // Act
     await handleAtCommand({
+      readResource: unexpectedResourceRead,
+      findResource: () => undefined,
       query,
       config: mockConfig,
       addItem: mockAddItem,

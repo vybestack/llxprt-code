@@ -1,0 +1,37 @@
+[
+  {
+    "file": "packages/providers/src/runtime/messages.ts",
+    "declaration": "MISSING_RUNTIME_REQUIREMENTS",
+    "reason": "Readonly as-const tuple of requirement tags, only read to format error messages."
+  },
+  {
+    "file": "packages/providers/src/runtime/messages.ts",
+    "declaration": "NORMALIZATION_REQUIREMENTS",
+    "reason": "Readonly as-const tuple of requirement tags, only read to format error messages."
+  },
+  {
+    "file": "packages/providers/src/runtime/profile-application/switchProfileProvider.ts",
+    "declaration": "PRESERVED_PROFILE_EPHEMERALS",
+    "reason": "Fixed list of ephemeral setting names consulted when switching profiles, never written."
+  },
+  {
+    "file": "packages/providers/src/runtime/promptEnvelopeProjections.ts",
+    "declaration": "STATEFUL_INCREMENTAL_PROMPT_KEYS",
+    "reason": "Readonly as-const tuple of prompt key names, only read."
+  },
+  {
+    "file": "packages/providers/src/runtime/promptEnvelopeProjections.ts",
+    "declaration": "PROMPT_KEYS",
+    "reason": "Readonly as-const map from protocol to prompt key names, only read."
+  },
+  {
+    "file": "packages/providers/src/runtime/providerSwitch.ts",
+    "declaration": "DEFAULT_PRESERVE_EPHEMERALS",
+    "reason": "Readonly as-const tuple of default ephemeral names preserved on provider switch, only read."
+  },
+  {
+    "file": "packages/providers/src/runtime/statelessHardening.ts",
+    "declaration": "STATELESS_METADATA_KEYS",
+    "reason": "Readonly as-const tuple of metadata key names, only read."
+  }
+]

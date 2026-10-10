@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
+
 /**
  * Rendering regression coverage for DefaultAppLayout (issue #2025).
  *
@@ -101,24 +103,6 @@ void vi.mock('../components/shared/ScrollableList.js', () => ({
 void vi.mock('../components/shared/VirtualizedList.js', () => ({
   SCROLL_TO_ITEM_END: -1,
 }));
-// The CLI runtime context is process-global infrastructure that the layout
-// only reads to hand a message bus to the (stubbed) bucket-auth confirmation.
-const providersRuntime = await import(
-  '@vybestack/llxprt-code-providers/runtime.js'
-);
-
-void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
-  ...providersRuntime,
-  getCliRuntimeContext: () => ({
-    messageBus: {
-      subscribe: vi.fn(),
-      publish: vi.fn(),
-      unsubscribe: vi.fn(),
-      requestBucketAuthConfirmation: vi.fn(),
-    },
-  }),
-}));
-
 const { DefaultAppLayout } = await import('./DefaultAppLayout.js');
 import { createDialogStore } from '../stores/dialog/dialogStore.js';
 import { TerminalProvider } from '../stores/terminal/TerminalContext.js';
@@ -231,9 +215,13 @@ function renderLayout({
         >
           <TurnProvider store={turnStore}>
             <DefaultAppLayout
-              uiRuntime={buildUiRuntimeFromSource(configSource as never)}
+              uiRuntime={buildUiRuntimeFromSource(
+                configSource as never,
+                createUiSessionOwner(),
+              )}
               slashCommandRuntime={buildSlashCommandRuntime(
                 configSource as never,
+                createUiSessionOwner(),
               )}
               settings={settings}
               startupWarnings={[]}

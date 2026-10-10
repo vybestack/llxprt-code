@@ -1,316 +1,208 @@
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
-/**
- * Integration coverage for the #2615 scheduler-registry dependency-binding
- * fix. Each subagent acquires its scheduler through its own
- * createToolExecutionConfig/createSchedulerConfig facade over a shared
- * foreground Config, and the registry must hand the PRODUCTION
- * CoreToolScheduler the messageBus and toolRegistry of the acquisition that
- * starts each entry. Before the fix every entry bound the first caller's
- * deps, so a later owner's confirmation bus and tool registry were wrong.
- */
+import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 
 import { describe, it, expect } from 'bun:test';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { SchedulerCallbacks } from '@vybestack/llxprt-code-core/config/config.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import {
   MessageBusType,
   type ToolConfirmationRequest,
-  type ToolConfirmationResponse,
 } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
-import type { ToolSchedulerFactoryOptions } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
-import type { SchedulerHandle } from '@vybestack/llxprt-code-core/session/sessionExecutionServices.js';
-import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
-import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
-import { waitFor } from '@vybestack/llxprt-code-test-utils';
-import { CoreToolScheduler } from '../coreToolScheduler.js';
-import type { ToolCall } from '../coreToolScheduler.js';
+import type { CompletedToolCall } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
 import {
-  createSchedulerConfig,
-  createToolExecutionConfig,
-} from '../subagentRuntimeSetup.js';
-import { createStatelessRuntimeBundle } from './subagent-test-helpers.js';
+  ToolRegistry,
+  ToolConfirmationOutcome,
+} from '@vybestack/llxprt-code-tools';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
+import { assembleSchedulerOwner } from '../../session/assembleSchedulerOwner.js';
+import {
+  createAskPolicyEngine,
+  createTestConfig,
+} from '../agenticLoop/__tests__/agenticLoop-test-helpers.js';
 
-interface ForegroundFixture {
-  config: Config;
-  constructionOptions: ToolSchedulerFactoryOptions[];
-  dispose: () => Promise<void>;
-}
-
-/**
- * One foreground Config whose toolSchedulerFactory records the options of
- * every construction before delegating to the production CoreToolScheduler.
- */
-function makeForegroundFixture(): ForegroundFixture {
-  const constructionOptions: ToolSchedulerFactoryOptions[] = [];
-  const config = new Config({
-    sessionId: `dep-binding-${crypto.randomUUID()}`,
-    targetDir: process.cwd(),
-    cwd: process.cwd(),
-    debugMode: false,
-    model: 'test-model',
-    // The behavioral test drives a real pending confirmation, and the
-    // confirmation prompt setup throws for non-interactive configs.
-    interactive: true,
-    toolSchedulerFactory: (options) => {
-      constructionOptions.push(options);
-      return new CoreToolScheduler(options);
-    },
-  });
-  return {
-    config,
-    constructionOptions,
-    dispose: () => config.dispose(),
-  };
-}
-
-/**
- * Registry stub mirroring the approval-outcomes test shape. The happy path
- * only needs getTool; the rest of the surface keeps the cast honest.
- */
-function makeRegistryStub(tool: MockTool): ToolRegistry {
-  const toolsByName = new Map([[tool.name, tool]]);
-  return {
-    getTool: (name: string) => toolsByName.get(name),
-    getFunctionDeclarations: () => [],
-    tools: new Map(),
-    discovery: {},
-    registerTool: () => {},
-    getToolByName: (name: string) => toolsByName.get(name),
-    getToolByDisplayName: (name: string) => toolsByName.get(name),
-    getTools: () => [],
-    discoverTools: async () => {},
-    getAllTools: () => [tool],
-    getToolsByServer: () => [],
-  } as unknown as ToolRegistry;
-}
-
-function makeConfirmableTool(name: string, executed: string[]): MockTool {
-  return new MockTool({
-    name,
-    shouldConfirmExecute: async () => ({
-      type: 'exec',
-      title: `Confirm ${name}`,
-      command: name,
-      rootCommand: name,
-      rootCommands: [name],
-      onConfirm: async () => {},
+function registry(
+  bus: MessageBus,
+  name: string,
+  effects: string[],
+): ToolRegistry {
+  const tools = new ToolRegistry(
+    {},
+    bus,
+    assembleTaskSchemaPolicy({
+      get: () => undefined,
+      getAllGlobalSettings: () => ({}),
     }),
-    execute: async () => {
-      executed.push(name);
-      return {
-        llmContent: `${name} ran`,
-        returnDisplay: `${name} ran`,
-      };
-    },
-  });
-}
-
-interface OwnerFacade {
-  schedulerConfig: Config;
-  owner: object;
-  acquire: (callbacks: SchedulerCallbacks) => Promise<SchedulerHandle>;
-  dispose: () => void;
-}
-
-/**
- * Acquisition facade over the shared foreground Config: the same
- * createToolExecutionConfig then createSchedulerConfig layering the subagent
- * runtime uses, carrying this owner's messageBus and toolRegistry defaults.
- */
-function makeOwnerFacade(
-  foregroundConfig: Config,
-  messageBus: MessageBus,
-  toolRegistry: ToolRegistry,
-): OwnerFacade {
-  const runtimeBundle = createStatelessRuntimeBundle();
-  const toolExecutorContext = createToolExecutionConfig(
-    runtimeBundle,
-    toolRegistry,
-    foregroundConfig,
-    messageBus,
   );
-  const schedulerConfig = createSchedulerConfig(
-    toolExecutorContext,
-    foregroundConfig,
-  );
-  const owner = { owner: 'scheduler-acquisition-owner' };
-  return {
-    schedulerConfig,
-    owner,
-    acquire: (callbacks) =>
-      schedulerConfig.getOrCreateScheduler(owner, 'subagent', callbacks),
-    dispose: () => {
-      schedulerConfig.disposeScheduler(owner, 'subagent');
-    },
-  };
-}
-
-interface StatusLog {
-  callbacks: SchedulerCallbacks;
-  latest: (callId: string) => ToolCall['status'] | undefined;
-}
-
-function makeStatusLog(): StatusLog {
-  const latestByCallId = new Map<string, ToolCall['status']>();
-  return {
-    callbacks: {
-      onToolCallsUpdate: (calls: ToolCall[]) => {
-        for (const call of calls) {
-          latestByCallId.set(call.request.callId, call.status);
-        }
+  tools.registerTool(
+    new MockTool({
+      name,
+      shouldConfirmExecute: async () => ({
+        type: 'exec',
+        title: `Confirm ${name}`,
+        command: name,
+        rootCommand: name,
+        rootCommands: [name],
+        onConfirm: async () => {},
+      }),
+      execute: async () => {
+        effects.push(name);
+        return { llmContent: 'executed', returnDisplay: 'executed' };
       },
+    }),
+  );
+  return tools;
+}
+
+describe('subagent scheduler dependency binding', () => {
+  it('routes each owner approval and execution through its captured bus and registry', async () => {
+    const policy = createAskPolicyEngine();
+    const busA = new MessageBus(policy, false);
+    const busB = new MessageBus(policy, false);
+    const effectsA: string[] = [];
+    const effectsB: string[] = [];
+    const toolsA = registry(busA, 'effect_a', effectsA);
+    const toolsB = registry(busB, 'effect_b', effectsB);
+    const { config: foreground, settingsOwner } = createTestConfig({
+      toolRegistry: toolsA,
+      policyEngine: policy,
+      messageBus: busA,
+      interactive: true,
+      approvalMode: ApprovalMode.DEFAULT,
+    });
+    const requestsB: ToolConfirmationRequest[] = [];
+    let received!: (request: ToolConfirmationRequest) => void;
+    const requestA = new Promise<ToolConfirmationRequest>((resolve) => {
+      received = resolve;
+    });
+    let finishA!: (calls: CompletedToolCall[]) => void;
+    const completionA = new Promise<CompletedToolCall[]>((resolve) => {
+      finishA = resolve;
+    });
+    let finishB!: (calls: CompletedToolCall[]) => void;
+    const completionB = new Promise<CompletedToolCall[]>((resolve) => {
+      finishB = resolve;
+    });
+    const ownerB = assembleSchedulerOwner('same-label', {
+      telemetry: RootTelemetry.prepare({
+        enabled: false,
+        sessionId: 'isolated-caller-fixture',
+        maxBytes: 1024,
+        maxFiles: 1,
+      }),
+      config: foreground,
+      readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        settingsOwner.readToolGovernance(foreground.getExcludeTools() ?? []),
+      messageBus: busB,
+      toolRegistry: toolsB,
+      toolContextInteractiveMode: true,
       getPreferredEditor: () => undefined,
       onEditorClose: () => {},
-    },
-    latest: (callId) => latestByCallId.get(callId),
-  };
-}
-
-async function waitForStatus(
-  statusLog: StatusLog,
-  callId: string,
-  status: ToolCall['status'],
-): Promise<void> {
-  await waitFor(() => {
-    const current = statusLog.latest(callId);
-    if (current !== status) {
-      throw new Error(
-        `Waiting for call "${callId}" to reach "${status}", saw "${current ?? 'nothing'}"`,
-      );
-    }
-  });
-}
-
-async function flushAsyncWork(): Promise<void> {
-  for (let i = 0; i < 3; i++) {
-    await Promise.resolve();
-  }
-  await new Promise((resolve) => setImmediate(resolve));
-}
-
-describe('subagent scheduler dependency binding (#2615 registry fix)', () => {
-  it('constructs each owner scheduler with the messageBus and toolRegistry of its own acquisition', async () => {
-    const foreground = makeForegroundFixture();
-    const busB = new MessageBus();
-    const registryB = { sentinel: 'registry-b' } as unknown as ToolRegistry;
-    const busA = new MessageBus();
-    const registryA = { sentinel: 'registry-a' } as unknown as ToolRegistry;
-
-    // B acquires first: before the fix both entries bound the first
-    // caller's deps, so A must not inherit B's bus or registry.
-    const facadeB = makeOwnerFacade(foreground.config, busB, registryB);
-    const facadeA = makeOwnerFacade(foreground.config, busA, registryA);
-    const handleB = await facadeB.acquire(makeStatusLog().callbacks);
-    const handleA = await facadeA.acquire(makeStatusLog().callbacks);
-
-    expect(foreground.constructionOptions).toHaveLength(2);
-    // The entry B started was built from B's acquisition deps.
-    expect(foreground.constructionOptions[0]?.messageBus).toBe(busB);
-    expect(foreground.constructionOptions[0]?.toolRegistry).toBe(registryB);
-    // The entry A started was built from A's acquisition deps, not B's.
-    expect(foreground.constructionOptions[1]?.messageBus).toBe(busA);
-    expect(foreground.constructionOptions[1]?.toolRegistry).toBe(registryA);
-    expect(foreground.constructionOptions[1]?.config).toBe(foreground.config);
-    // Distinct owners never share a scheduler instance.
-    expect(handleA).not.toBe(handleB);
-
-    facadeA.dispose();
-    facadeB.dispose();
-    await foreground.dispose();
-  });
-
-  it('binds each scheduler confirmation flow to its own acquisition bus', async () => {
-    const foreground = makeForegroundFixture();
-    const executedA: string[] = [];
-    const toolA = makeConfirmableTool('confirm_tool_a', executedA);
-    const registryA = makeRegistryStub(toolA);
-    const busA = new MessageBus(foreground.config.getPolicyEngine(), false);
-    const busB = new MessageBus(foreground.config.getPolicyEngine(), false);
-
-    // B first again, so a pre-fix first-caller dep binding would wire A's
-    // confirmation coordinator onto B's bus.
-    const facadeB = makeOwnerFacade(
-      foreground.config,
-      busB,
-      makeRegistryStub(makeConfirmableTool('confirm_tool_b', [])),
-    );
-    const facadeA = makeOwnerFacade(foreground.config, busA, registryA);
-    await facadeB.acquire(makeStatusLog().callbacks);
-    const statusLogA = makeStatusLog();
-    const handleA = await facadeA.acquire(statusLogA.callbacks);
-
-    expect(foreground.constructionOptions[1]?.messageBus).toBe(busA);
-    expect(foreground.constructionOptions[1]?.toolRegistry).toBe(registryA);
-
-    const requestsOnA: ToolConfirmationRequest[] = [];
-    const requestsOnB: ToolConfirmationRequest[] = [];
+      onAllToolCallsComplete: async (calls) => {
+        finishB(calls);
+      },
+    });
+    const ownerA = assembleSchedulerOwner('same-label', {
+      telemetry: RootTelemetry.prepare({
+        enabled: false,
+        sessionId: 'isolated-caller-fixture',
+        maxBytes: 1024,
+        maxFiles: 1,
+      }),
+      config: foreground,
+      readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        settingsOwner.readToolGovernance(foreground.getExcludeTools() ?? []),
+      messageBus: busA,
+      toolRegistry: toolsA,
+      toolContextInteractiveMode: true,
+      getPreferredEditor: () => undefined,
+      onEditorClose: () => {},
+      onAllToolCallsComplete: async (calls) => {
+        finishA(calls);
+      },
+    });
     const unsubscribeA = busA.subscribe<ToolConfirmationRequest>(
       MessageBusType.TOOL_CONFIRMATION_REQUEST,
-      (message) => {
-        requestsOnA.push(message);
-      },
+      received,
     );
     const unsubscribeB = busB.subscribe<ToolConfirmationRequest>(
       MessageBusType.TOOL_CONFIRMATION_REQUEST,
-      (message) => {
-        requestsOnB.push(message);
+      (request) => {
+        requestsB.push(request);
       },
     );
-
+    const leaseB = ownerB.acquire();
+    const leaseA = ownerA.acquire();
+    let unsubscribeApprovalB = (): void => {};
     try {
-      await handleA.schedule(
-        [
-          {
-            callId: 'call-a',
-            name: 'confirm_tool_a',
-            args: {},
-            isClientInitiated: false,
-            prompt_id: 'prompt-a',
-          },
-        ],
-        new AbortController().signal,
-      );
-      await waitForStatus(statusLogA, 'call-a', 'awaiting_approval');
-
-      // The awaiting scheduler published its confirmation request on its
-      // own construction bus, never on the other owner's bus.
-      expect(requestsOnB).toStrictEqual([]);
-      const correlationId = requestsOnA[requestsOnA.length - 1]?.correlationId;
-      expect(correlationId).toBeDefined();
-
-      // The identical ProceedOnce response on the foreign bus is a no-op:
-      // A's call keeps awaiting and the tool never executes.
+      await Promise.all([leaseB.ready, leaseA.ready]);
+      const executionA = leaseA.schedule({
+        callId: 'call-a',
+        name: 'effect_a',
+        args: {},
+        isClientInitiated: false,
+        prompt_id: 'prompt-a',
+        agentId: 'a',
+      });
+      const approvalA = await requestA;
+      expect(requestsB).toHaveLength(0);
       busB.publish({
         type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
-        correlationId,
+        correlationId: approvalA.correlationId,
         outcome: ToolConfirmationOutcome.ProceedOnce,
-      } satisfies ToolConfirmationResponse);
-      await flushAsyncWork();
-      expect(statusLogA.latest('call-a')).toBe('awaiting_approval');
-      expect(executedA).toStrictEqual([]);
-
-      // The same response on A's own bus resolves the confirmation and the
-      // call runs to success.
+      });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(effectsA).toHaveLength(0);
+      expect(effectsB).toHaveLength(0);
       busA.publish({
         type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
-        correlationId,
+        correlationId: approvalA.correlationId,
         outcome: ToolConfirmationOutcome.ProceedOnce,
-      } satisfies ToolConfirmationResponse);
-      await waitForStatus(statusLogA, 'call-a', 'success');
-      expect(executedA).toStrictEqual(['confirm_tool_a']);
+      });
+      await executionA;
+      expect((await completionA)[0]?.status).toBe('success');
+      expect(effectsA).toStrictEqual(['effect_a']);
+      await leaseA.release();
+      expect(
+        busA.listenerCount(MessageBusType.TOOL_CONFIRMATION_RESPONSE),
+      ).toBe(0);
+      expect(
+        busB.listenerCount(MessageBusType.TOOL_CONFIRMATION_RESPONSE),
+      ).toBe(1);
+      unsubscribeApprovalB = busB.subscribe<ToolConfirmationRequest>(
+        MessageBusType.TOOL_CONFIRMATION_REQUEST,
+        (request) => {
+          queueMicrotask(() =>
+            busB.publish({
+              type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
+              correlationId: request.correlationId,
+              outcome: ToolConfirmationOutcome.ProceedOnce,
+            }),
+          );
+        },
+      );
+      await leaseB.schedule({
+        callId: 'call-b',
+        name: 'effect_b',
+        args: {},
+        isClientInitiated: false,
+        prompt_id: 'prompt-b',
+        agentId: 'b',
+      });
+      expect((await completionB)[0]?.status).toBe('success');
+      expect(effectsB).toStrictEqual(['effect_b']);
+      expect(effectsA).toHaveLength(1);
     } finally {
+      await Promise.all([leaseA.release(), leaseB.release()]);
       unsubscribeA();
       unsubscribeB();
-      facadeA.dispose();
-      facadeB.dispose();
-      await foreground.dispose();
+      unsubscribeApprovalB();
     }
   });
 });

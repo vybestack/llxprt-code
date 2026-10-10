@@ -5,27 +5,22 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
-import type { Mock } from 'bun:test';
-import type { ContractContent } from '../core/clientContract.js';
-import type { IContent } from '../services/history/IContent.js';
-import { Config, DEFAULT_FILE_FILTERING_OPTIONS } from './config.js';
-import * as path from 'node:path';
-import { setLlxprtMdFilename as mockSetLlxprtMdFilename } from '@vybestack/llxprt-code-tools';
-import type { ContentGeneratorConfig } from '../core/contentGenerator.js';
-import { createContentGeneratorConfig } from '../core/contentGenerator.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { initializeTestConfig } from '../__tests__/config-test-helpers.js';
 import {
-  buildFsMockBody,
+  Config,
+  DEFAULT_FILE_FILTERING_OPTIONS,
+  type ConfigParameters,
+} from './config.js';
+import * as path from 'node:path';
+
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import {
   buildToolsMockBody,
-  buildContentGeneratorMockBody,
   buildTelemetryMockBody,
   buildGitServiceMockBody,
   buildIdeIntegrationMockBody,
   buildMemoryDiscoveryMockBody,
   buildEventsMockBody,
   buildFetchMockBody,
-  AgentClient,
   createBaseParams,
   resetAgentClientMock,
   sharedConfigTestConstants,
@@ -46,9 +41,6 @@ const hoistedConfigMocks = {
   setGlobalProxy: vi.fn(),
 } as HoistedConfigMocks;
 
-const __actual = { ...(await import('fs')) };
-void vi.mock('fs', () => buildFsMockBody(__actual));
-
 // Mock dependencies that might be called during Config construction or createServerConfig.
 const __actual2 = { ...(await import('@vybestack/llxprt-code-tools')) };
 void vi.mock('@vybestack/llxprt-code-tools', () =>
@@ -56,11 +48,6 @@ void vi.mock('@vybestack/llxprt-code-tools', () =>
 );
 
 // Mock individual tools if their constructors are complex or have side effects
-
-const __actual3 = { ...(await import('../core/contentGenerator.js')) };
-void vi.mock('../core/contentGenerator.js', () =>
-  buildContentGeneratorMockBody(__actual3),
-);
 
 void vi.mock('../telemetry/index.js', () => buildTelemetryMockBody());
 
@@ -89,553 +76,14 @@ describe('Server Config (config.ts)', () => {
 
   beforeEach(() => {
     resetAgentClientMock();
-  });
-  describe('refreshAuth', () => {
-    it('should refresh auth and update config', async () => {
-      const config = new Config(baseParams);
-      // Initialize config to create AgentClient instance
-      await initializeTestConfig(config);
-
-      const newModel = 'gemini-flash';
-      const mockContentConfig = {
-        model: newModel,
-        apiKey: 'test-key',
-      };
-
-      (
-        createContentGeneratorConfig as Mock<(...args: never[]) => unknown>
-      ).mockReturnValue(mockContentConfig);
-
-      // Set fallback mode to true to ensure it gets reset
-      config.setFallbackMode(true);
-      expect(config.isInFallbackMode()).toBe(true);
-
-      await config.refreshAuth();
-
-      expect(createContentGeneratorConfig).toHaveBeenCalledWith(config);
-      // Verify that contentGeneratorConfig is updated with the new model
-      expect(config.getContentGeneratorConfig()).toStrictEqual(
-        mockContentConfig,
-      );
-      expect(config.getContentGeneratorConfig()?.model).toBe(newModel);
-      expect(config.getModel()).toBe(newModel); // getModel() should return the updated model
-      expect(AgentClient).toHaveBeenCalledWith(
-        config,
-        expect.objectContaining({
-          provider: expect.any(String),
-          model: newModel,
-        }),
-      );
-      // Verify that fallback mode is reset
-      expect(config.isInFallbackMode()).toBe(false);
-    });
-
-    it('should preserve conversation history when refreshing auth', async () => {
-      const config = new Config(baseParams);
-      const mockContentConfig = {
-        model: 'gemini-pro',
-        apiKey: 'test-key',
-      };
-
-      (
-        createContentGeneratorConfig as Mock<(...args: never[]) => unknown>
-      ).mockReturnValue(mockContentConfig);
-
-      // Mock the existing client with some history
-      const mockExistingHistory = [
-        { role: 'user', parts: [{ text: 'Hello' }] },
-        { role: 'model', parts: [{ text: 'Hi there!' }] },
-        { role: 'user', parts: [{ text: 'How are you?' }] },
-      ];
-
-      const mockExistingClient = {
-        isInitialized: vi.fn().mockReturnValue(true),
-        getHistory: vi.fn().mockReturnValue(mockExistingHistory),
-        getHistoryService: vi.fn().mockReturnValue(null),
-      };
-
-      const mockNewClient = {
-        isInitialized: vi.fn().mockReturnValue(true),
-        getHistory: vi.fn().mockReturnValue([]),
-        getHistoryService: vi.fn().mockReturnValue(null),
-        setHistory: vi.fn(),
-        initialize: vi.fn().mockResolvedValue(undefined),
-        storeHistoryForLaterUse: vi.fn(),
-      };
-
-      // Set the existing client
-      (
-        config as unknown as { agentClient: typeof mockExistingClient }
-      ).agentClient = mockExistingClient;
-      AgentClient.mockImplementation(() => mockNewClient);
-
-      await config.refreshAuth();
-
-      // Verify that existing history was retrieved
-      expect(mockExistingClient.getHistory).toHaveBeenCalled();
-
-      // Verify that new client was created and initialized
-      expect(AgentClient).toHaveBeenCalledWith(
-        config,
-        expect.objectContaining({
-          provider: expect.any(String),
-        }),
-      );
-
-      // Verify that history was stored BEFORE initialize was called
-      expect(mockNewClient.storeHistoryForLaterUse).toHaveBeenCalledWith(
-        mockExistingHistory,
-      );
-
-      // Verify that initialize was called after storing history
-      expect(mockNewClient.initialize).toHaveBeenCalledWith(mockContentConfig);
-    });
-
-    it('preserves carried history when the previous client is not yet initialized (#2500)', async () => {
-      // Reproduces the --continue second-rebuild scenario: the previous
-      // client was created by an earlier refreshAuth + finalizeAgent. It
-      // holds restored conversation in `_previousHistory` (surfaced via
-      // getHistory()) but its chat/content generator were never lazily
-      // initialized (isInitialized() === false). The old `!isInitialized()`
-      // guard in extractExistingState discarded that history, so --continue
-      // lost model context. getHistory() must still be consulted.
-      const config = new Config(baseParams);
-      const mockContentConfig = {
-        model: 'gemini-pro',
-        apiKey: 'test-key',
-      };
-      (
-        createContentGeneratorConfig as Mock<(...args: never[]) => unknown>
-      ).mockReturnValue(mockContentConfig);
-
-      const carriedHistory: ContractContent[] = [
-        { role: 'user', parts: [{ text: 'Remember the passphrase' }] },
-        { role: 'model', parts: [{ text: 'PURPLE-TANGERINE-7741' }] },
-      ];
-
-      const mockExistingClient = {
-        isInitialized: vi.fn().mockReturnValue(false),
-        hasChatInitialized: vi.fn().mockReturnValue(false),
-        getHistory: vi.fn().mockResolvedValue(carriedHistory),
-        getHistoryService: vi.fn().mockReturnValue(null),
-      };
-
-      const mockNewClient = {
-        isInitialized: vi.fn().mockReturnValue(true),
-        getHistory: vi.fn().mockResolvedValue([]),
-        getHistoryService: vi.fn().mockReturnValue(null),
-        initialize: vi.fn().mockResolvedValue(undefined),
-        storeHistoryForLaterUse: vi.fn(),
-      };
-
-      (
-        config as unknown as { agentClient: typeof mockExistingClient }
-      ).agentClient = mockExistingClient;
-      AgentClient.mockImplementation(() => mockNewClient);
-
-      await config.refreshAuth();
-
-      // The carried history must be recovered despite !isInitialized().
-      expect(mockExistingClient.getHistory).toHaveBeenCalled();
-      expect(mockNewClient.storeHistoryForLaterUse).toHaveBeenCalledWith(
-        carriedHistory,
-      );
-    });
-
-    it('preserves committed chat history without waiting for an active turn to become idle', async () => {
-      const config = new Config(baseParams);
-      const mockContentConfig = {
-        model: 'gemini-pro',
-        apiKey: 'test-key',
-      };
-      const committedHistory: ContractContent[] = [
-        {
-          role: 'user',
-          parts: [{ text: 'Remember we are fixing issue 2049' }],
-        },
-        { role: 'model', parts: [{ text: 'We are preserving history.' }] },
-      ];
-      const partialInFlightHistory: ContractContent[] = [
-        ...committedHistory,
-        { role: 'user', parts: [{ text: 'This turn is still retrying' }] },
-      ];
-
-      (
-        createContentGeneratorConfig as Mock<(...args: never[]) => unknown>
-      ).mockReturnValue(mockContentConfig);
-
-      const chatGetHistory = vi.fn().mockReturnValue(committedHistory);
-      const mockHistoryService = { setTokenizerFactory: vi.fn() };
-      const mockExistingClient = {
-        isInitialized: vi.fn().mockReturnValue(true),
-        hasChatInitialized: vi.fn().mockReturnValue(true),
-        getChat: vi.fn().mockReturnValue({
-          getHistory: chatGetHistory,
-        }),
-        getHistory: vi.fn(async () => {
-          throw new Error('refreshAuth should not wait for idle history');
-        }),
-        getHistoryService: vi.fn().mockReturnValue(mockHistoryService),
-      };
-
-      const mockNewClient = {
-        isInitialized: vi.fn().mockReturnValue(true),
-        getHistory: vi.fn().mockReturnValue(committedHistory),
-        getHistoryService: vi.fn().mockReturnValue(null),
-        initialize: vi.fn().mockResolvedValue(undefined),
-        storeHistoryForLaterUse: vi.fn(),
-        storeHistoryServiceForReuse: vi.fn(),
-      };
-
-      (
-        config as unknown as { agentClient: typeof mockExistingClient }
-      ).agentClient = mockExistingClient;
-      AgentClient.mockImplementation(() => mockNewClient);
-
-      await config.refreshAuth();
-
-      expect(mockExistingClient.getHistory).not.toHaveBeenCalled();
-      expect(mockExistingClient.getChat).toHaveBeenCalled();
-      expect(chatGetHistory).toHaveBeenCalled();
-      expect(mockExistingClient.getHistoryService).not.toHaveBeenCalled();
-      expect(mockNewClient.storeHistoryServiceForReuse).not.toHaveBeenCalled();
-      expect(mockNewClient.storeHistoryForLaterUse).toHaveBeenCalledWith(
-        committedHistory,
-      );
-      expect(mockNewClient.storeHistoryForLaterUse).not.toHaveBeenCalledWith(
-        partialInFlightHistory,
-      );
-    });
-
-    it('should handle case when no existing client is initialized', async () => {
-      const config = new Config(baseParams);
-      const mockContentConfig = {
-        model: 'gemini-pro',
-        apiKey: 'test-key',
-      };
-
-      (
-        createContentGeneratorConfig as Mock<(...args: never[]) => unknown>
-      ).mockReturnValue(mockContentConfig);
-
-      const mockNewClient = {
-        isInitialized: vi.fn().mockReturnValue(true),
-        getHistory: vi.fn().mockReturnValue([]),
-        getHistoryService: vi.fn().mockReturnValue(null),
-        setHistory: vi.fn(),
-        initialize: vi.fn().mockResolvedValue(undefined),
-        storeHistoryForLaterUse: vi.fn(),
-      };
-
-      // No existing client
-      (config as unknown as { agentClient: null }).agentClient = null;
-      AgentClient.mockImplementation(() => mockNewClient);
-
-      await config.refreshAuth();
-
-      // Verify that new client was created and initialized
-      expect(AgentClient).toHaveBeenCalledWith(
-        config,
-        expect.objectContaining({
-          provider: expect.any(String),
-        }),
-      );
-      expect(mockNewClient.initialize).toHaveBeenCalledWith(mockContentConfig);
-
-      // Verify that setHistory was not called since there was no existing history
-      expect(mockNewClient.setHistory).not.toHaveBeenCalled();
-    });
-
-    it('should strip thought signatures when switching from GenAI to Vertex', async () => {
-      const config = new Config(baseParams);
-      const mockContentConfig = {
-        model: 'gemini-pro',
-        apiKey: 'test-key',
-        vertexai: false,
-      };
-      (
-        config as unknown as { contentGeneratorConfig: ContentGeneratorConfig }
-      ).contentGeneratorConfig = mockContentConfig;
-
-      (
-        createContentGeneratorConfig as Mock<(...args: never[]) => unknown>
-      ).mockReturnValue({
-        ...mockContentConfig,
-        vertexai: true,
-      });
-
-      const mockExistingHistory: IContent[] = [
-        {
-          speaker: 'ai',
-          blocks: [
-            {
-              type: 'thinking',
-              thought: 'Hidden reasoning',
-              signature: 'genai-signature',
-            },
-            { type: 'text', text: 'Visible response' },
-          ],
-        },
-      ];
-      const mockHistoryService = { setTokenizerFactory: vi.fn() };
-      const mockExistingClient = {
-        isInitialized: vi.fn().mockReturnValue(true),
-        getHistory: vi.fn().mockReturnValue(mockExistingHistory),
-        getHistoryService: vi.fn().mockReturnValue(mockHistoryService),
-      };
-      const mockNewClient = {
-        isInitialized: vi.fn().mockReturnValue(true),
-        getHistory: vi.fn().mockReturnValue([]),
-        getHistoryService: vi.fn().mockReturnValue(null),
-        setHistory: vi.fn(),
-        initialize: vi.fn().mockResolvedValue(undefined),
-        storeHistoryForLaterUse: vi.fn(),
-        storeHistoryServiceForReuse: vi.fn(),
-      };
-
-      (
-        config as unknown as { agentClient: typeof mockExistingClient }
-      ).agentClient = mockExistingClient;
-      AgentClient.mockImplementation(() => mockNewClient);
-
-      await config.refreshAuth();
-
-      expect(mockNewClient.storeHistoryServiceForReuse).not.toHaveBeenCalled();
-      expect(mockNewClient.storeHistoryForLaterUse).toHaveBeenCalled();
-
-      const storedHistory =
-        mockNewClient.storeHistoryForLaterUse.mock.calls[0][0];
-      expect(storedHistory).toStrictEqual([
-        {
-          speaker: 'ai',
-          blocks: [
-            {
-              type: 'thinking',
-              thought: 'Hidden reasoning',
-            },
-            { type: 'text', text: 'Visible response' },
-          ],
-        },
-      ]);
-    });
-
-    it('should not strip thoughts when switching from Vertex to GenAI', async () => {
-      const config = new Config(baseParams);
-      const mockContentConfig = {
-        model: 'gemini-pro',
-        apiKey: 'test-key',
-        vertexai: true,
-      };
-      (
-        config as unknown as { contentGeneratorConfig: ContentGeneratorConfig }
-      ).contentGeneratorConfig = mockContentConfig;
-
-      (
-        createContentGeneratorConfig as Mock<(...args: never[]) => unknown>
-      ).mockReturnValue({
-        ...mockContentConfig,
-        vertexai: false,
-      });
-
-      const mockExistingHistory = [
-        { role: 'user', parts: [{ text: 'Hello' }] },
-      ];
-      const mockExistingClient = {
-        isInitialized: vi.fn().mockReturnValue(true),
-        getHistory: vi.fn().mockReturnValue(mockExistingHistory),
-        getHistoryService: vi.fn().mockReturnValue(null),
-      };
-      const mockNewClient = {
-        isInitialized: vi.fn().mockReturnValue(true),
-        getHistory: vi.fn().mockReturnValue([]),
-        getHistoryService: vi.fn().mockReturnValue(null),
-        setHistory: vi.fn(),
-        initialize: vi.fn().mockResolvedValue(undefined),
-        storeHistoryForLaterUse: vi.fn(),
-      };
-
-      (
-        config as unknown as { agentClient: typeof mockExistingClient }
-      ).agentClient = mockExistingClient;
-      AgentClient.mockImplementation(() => mockNewClient);
-
-      await config.refreshAuth();
-
-      // When switching from Vertex to GenAI, thoughts should NOT be stripped
-      expect(mockNewClient.storeHistoryForLaterUse).toHaveBeenCalledWith(
-        mockExistingHistory,
-      );
-    });
-
-    it('should not trigger OAuth when refreshing authentication', async () => {
-      const config = new Config(baseParams);
-
-      // Mock OAuth manager that tracks if authenticate was called
-      const mockOAuthManager = {
-        authenticate: vi.fn().mockResolvedValue(undefined),
-        isAuthenticated: vi.fn().mockResolvedValue(false),
-        isOAuthEnabled: vi.fn().mockReturnValue(true),
-        toggleOAuthEnabled: vi.fn(),
-      };
-
-      // Mock provider manager with OAuth-enabled provider
-      const mockProviderManager = {
-        getProvider: vi.fn().mockReturnValue({
-          name: 'anthropic',
-          getAuthToken: vi.fn(),
-          hasNonOAuthAuthentication: vi.fn().mockResolvedValue(false),
-        }),
-        switchProvider: vi.fn(),
-      };
-
-      // Set up config with provider manager
-      (
-        config as unknown as { providerManager: typeof mockProviderManager }
-      ).providerManager = mockProviderManager;
-
-      const mockContentConfig = {
-        model: 'claude-3-5-sonnet-20241022',
-        oauthManager: mockOAuthManager,
-      };
-
-      (
-        createContentGeneratorConfig as Mock<(...args: never[]) => unknown>
-      ).mockReturnValue(mockContentConfig);
-
-      const mockNewClient = {
-        isInitialized: vi.fn().mockReturnValue(true),
-        getHistory: vi.fn().mockReturnValue([]),
-        getHistoryService: vi.fn().mockReturnValue(null),
-        initialize: vi.fn().mockResolvedValue(undefined),
-        storeHistoryForLaterUse: vi.fn(),
-        storeHistoryServiceForReuse: vi.fn(),
-      };
-
-      AgentClient.mockImplementation(() => mockNewClient);
-
-      // Call initializeContentGeneratorConfig - this should NOT trigger OAuth
-      await config.initializeContentGeneratorConfig();
-
-      // Verify OAuth authenticate was NOT called
-      expect(mockOAuthManager.authenticate).not.toHaveBeenCalled();
-
-      // Verify the client was initialized but OAuth was not triggered
-      expect(mockNewClient.initialize).toHaveBeenCalledWith(mockContentConfig);
-    });
-
-    it('should preserve all state after refresh without triggering OAuth', async () => {
-      const config = new Config(baseParams);
-      await initializeTestConfig(config);
-
-      // Create a client with history
-      const mockExistingHistory = [
-        { role: 'user', parts: [{ text: 'Previous conversation' }] },
-        { role: 'model', parts: [{ text: 'Previous response' }] },
-      ];
-
-      const mockHistoryService = {
-        addMessage: vi.fn(),
-        getMessages: vi.fn().mockReturnValue(mockExistingHistory),
-      };
-
-      const mockExistingClient = {
-        isInitialized: vi.fn().mockReturnValue(true),
-        getHistory: vi.fn().mockReturnValue(mockExistingHistory),
-        getHistoryService: vi.fn().mockReturnValue(mockHistoryService),
-      };
-
-      // Mock OAuth manager - should not be called
-      const mockOAuthManager = {
-        authenticate: vi.fn().mockResolvedValue(undefined),
-        isAuthenticated: vi.fn().mockResolvedValue(false),
-      };
-
-      (
-        config as unknown as { agentClient: typeof mockExistingClient }
-      ).agentClient = mockExistingClient;
-
-      const mockContentConfig = {
-        model: 'gemini-pro',
-        apiKey: 'test-key',
-        oauthManager: mockOAuthManager,
-      };
-
-      (
-        createContentGeneratorConfig as Mock<(...args: never[]) => unknown>
-      ).mockReturnValue(mockContentConfig);
-
-      const mockNewClient = {
-        isInitialized: vi.fn().mockReturnValue(true),
-        getHistory: vi.fn().mockReturnValue(mockExistingHistory),
-        getHistoryService: vi.fn().mockReturnValue(mockHistoryService),
-        initialize: vi.fn().mockResolvedValue(undefined),
-        storeHistoryForLaterUse: vi.fn(),
-        storeHistoryServiceForReuse: vi.fn(),
-      };
-
-      AgentClient.mockImplementation(() => mockNewClient);
-
-      // Refresh auth
-      await config.refreshAuth();
-
-      // Verify history was preserved
-      expect(mockExistingClient.getHistory).toHaveBeenCalled();
-      expect(mockNewClient.storeHistoryForLaterUse).toHaveBeenCalledWith(
-        mockExistingHistory,
-      );
-      expect(mockNewClient.storeHistoryServiceForReuse).not.toHaveBeenCalled();
-
-      // CRITICAL: Verify OAuth was NOT triggered during refresh
-      expect(mockOAuthManager.authenticate).not.toHaveBeenCalled();
-      expect(mockOAuthManager.isAuthenticated).not.toHaveBeenCalled();
-
-      // Verify client was initialized
-      expect(mockNewClient.initialize).toHaveBeenCalledWith(mockContentConfig);
-    });
-
-    it('should dispose the previous Gemini client before replacing it', async () => {
-      const config = new Config(baseParams);
-      const mockContentConfig = {
-        model: 'gemini-pro',
-        apiKey: 'test-key',
-      };
-
-      (
-        createContentGeneratorConfig as Mock<(...args: never[]) => unknown>
-      ).mockReturnValue(mockContentConfig);
-
-      const dispose = vi.fn();
-      const mockExistingClient = {
-        isInitialized: vi.fn().mockReturnValue(true),
-        getHistory: vi.fn().mockResolvedValue([]),
-        getHistoryService: vi.fn().mockReturnValue(null),
-        dispose,
-      };
-
-      const mockNewClient = {
-        isInitialized: vi.fn().mockReturnValue(true),
-        getHistory: vi.fn().mockReturnValue([]),
-        getHistoryService: vi.fn().mockReturnValue(null),
-        storeHistoryForLaterUse: vi.fn(),
-        initialize: vi.fn().mockResolvedValue(undefined),
-      };
-
-      (
-        config as unknown as { agentClient: typeof mockExistingClient }
-      ).agentClient = mockExistingClient;
-      AgentClient.mockImplementation(() => mockNewClient);
-
-      await config.refreshAuth();
-
-      expect(dispose).toHaveBeenCalledTimes(1);
-      expect(mockNewClient.initialize).toHaveBeenCalledWith(mockContentConfig);
+    hoistedConfigMocks.loadJitSubdirectoryMemory.mockResolvedValue({
+      files: [],
     });
   });
-
   it('Config constructor should store userMemory correctly', () => {
     const config = new Config(baseParams);
 
-    expect(config.getUserMemory()).toBe(USER_MEMORY);
+    expect(config.getProvidedInstructions()).toBe(USER_MEMORY);
     // Verify other getters if needed
     expect(config.getTargetDir()).toBe(path.resolve(TARGET_DIR)); // Check resolved path
   });
@@ -645,60 +93,64 @@ describe('Server Config (config.ts)', () => {
     delete paramsWithoutMemory.userMemory;
     const config = new Config(paramsWithoutMemory);
 
-    expect(config.getUserMemory()).toBe('');
+    expect(config.getProvidedInstructions()).toBe('');
   });
 
-  it('getCoreMemory should delegate to contextManager when JIT context is enabled', async () => {
-    const config = new Config({
+  it('retains declarative JIT settings without constructing memory state', () => {
+    const config = new Config({ ...baseParams, jitContextEnabled: true });
+    expect(config.isJitContextEnabled()).toBe(true);
+    expect(config.getProvidedInstructions()).toBe(USER_MEMORY);
+  });
+
+  it('retains externally supplied instructions with JIT disabled', () => {
+    const config = new Config({ ...baseParams, jitContextEnabled: false });
+    expect(config.getProvidedInstructions()).toBe(USER_MEMORY);
+  });
+
+  it('copies declarative memory settings on read', () => {
+    const config = new Config({ ...baseParams, contextFileName: 'PROJECT.md' });
+    const settings = config.getMemorySettings();
+    Reflect.set(settings.filenames, '0', 'OTHER.md');
+    Reflect.set(settings.filtering, 'respectGitIgnore', true);
+    expect(config.getMemorySettings().filtering.respectGitIgnore).toBe(false);
+    expect(settings.filenames).not.toStrictEqual(
+      config.getMemorySettings().filenames,
+    );
+    expect(config.getMemorySettings().filenames).toStrictEqual(['PROJECT.md']);
+  });
+
+  it('defaults blank instruction filenames and copies externally supplied filename declarations', () => {
+    const blank = new Config({ ...baseParams, contextFileName: '  ' });
+    expect(blank.getMemorySettings().filenames).toStrictEqual(['LLXPRT.md']);
+    const filenames = ['ALPHA.md'];
+    const isolated = new Config({
       ...baseParams,
-      jitContextEnabled: true,
+      memorySettings: {
+        filenames,
+        importFormat: 'tree',
+        maxDirectories: 200,
+        filtering: { respectGitIgnore: false, respectLlxprtIgnore: true },
+      },
     });
-    await initializeTestConfig(config);
-
-    const contextManager = config.getContextManager();
-    expect(contextManager).toBeDefined();
-
-    const expected = 'Always use TypeScript';
-    vi.spyOn(contextManager!, 'getCoreMemory').mockReturnValue(expected);
-
-    expect(config.getCoreMemory()).toBe(expected);
+    filenames.push('BETA.md');
+    expect(isolated.getMemorySettings().filenames).toStrictEqual(['ALPHA.md']);
   });
 
-  it('getCoreMemory should return undefined when JIT context is disabled', () => {
-    const config = new Config({
-      ...baseParams,
-      jitContextEnabled: false,
-    });
-
-    expect(config.getCoreMemory()).toBeUndefined();
-  });
-
-  it('getCoreMemory should return empty string when contextManager has no core memory files', async () => {
-    const config = new Config({
-      ...baseParams,
-      jitContextEnabled: true,
-    });
-    await initializeTestConfig(config);
-
-    const contextManager = config.getContextManager();
-    vi.spyOn(contextManager!, 'getCoreMemory').mockReturnValue('');
-
-    expect(config.getCoreMemory()).toBe('');
-  });
-
-  it('Config constructor should call setLlxprtMdFilename with contextFileName if provided', () => {
+  it('retains explicit context filename declarations', () => {
     const contextFileName = 'CUSTOM_AGENTS.md';
     const paramsWithContextFile: ConfigParameters = {
       ...baseParams,
       contextFileName,
     };
-    new Config(paramsWithContextFile);
-    expect(mockSetLlxprtMdFilename).toHaveBeenCalledWith(contextFileName);
+    const config = new Config(paramsWithContextFile);
+    expect(config.getMemorySettings().filenames).toStrictEqual([
+      contextFileName,
+    ]);
   });
 
-  it('Config constructor should not call setLlxprtMdFilename if contextFileName is not provided', () => {
-    new Config(baseParams); // baseParams does not have contextFileName
-    expect(mockSetLlxprtMdFilename).not.toHaveBeenCalled();
+  it('defaults the root-specific instruction filename declaration', () => {
+    const config = new Config(baseParams);
+    expect(config.getMemorySettings().filenames).toStrictEqual(['LLXPRT.md']);
   });
 
   it('should set default file filtering settings when not provided', () => {
@@ -744,9 +196,8 @@ describe('Server Config (config.ts)', () => {
     expect(config.getTelemetryEnabled()).toBe(TELEMETRY_SETTINGS.enabled);
   });
 
-  it('should have a getFileService method that returns FileDiscoveryService', () => {
+  it('retains the declared workspace root as data without constructing discovery', () => {
     const config = new Config(baseParams);
-    const fileService = config.getFileService();
-    expect(fileService).toBeDefined();
+    expect(config.getTargetDir()).toBe(baseParams.targetDir);
   });
 });

@@ -12,6 +12,7 @@ import { prepareRequest } from './OpenAIRequestPreparation.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('test system prompt'),
@@ -29,22 +30,25 @@ function createMockOptions(
   modelBehavior: Record<string, unknown> = {},
   modelParams: Record<string, unknown> = {},
 ): NormalizedGenerateChatOptions {
-  const settings = new SettingsService();
   return {
     contents: [],
     tools: undefined,
     metadata: {},
-    settings,
-    config: undefined,
-    invocation: {
-      requestId: 'test-request',
-      timestamp: Date.now(),
-      modelBehavior,
-      modelParams,
-    },
+    invocation: createRuntimeInvocationContext({
+      runtimeId: 'test-request',
+      providerName: 'openai',
+      ephemeralsSnapshot: {
+        ...overrides.invocation?.ephemerals,
+        ...modelBehavior,
+        openai: {
+          ...overrides.invocation?.getProviderOverrides('openai'),
+          ...modelParams,
+        },
+      },
+    }),
     resolved: {
       model: 'gpt-4o',
-      authToken: { token: 'test-token', type: 'api-key' },
+      authToken: 'test-token',
     },
     ...overrides,
   } as unknown as NormalizedGenerateChatOptions;
@@ -60,10 +64,14 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #1943)', () => {
   it('uses options.resolved.model for tool format detection when resolved model differs from default', async () => {
     const settings = new SettingsService();
     const options = createMockOptions({
-      settings,
+      invocation: createRuntimeInvocationContext({
+        runtimeId: 'format-admission',
+        providerName: 'openai',
+        ephemeralsSnapshot: { openai: settings.getProviderSettings('openai') },
+      }),
       resolved: {
         model: 'kimi-k2',
-        authToken: { token: 'test-token', type: 'api-key' },
+        authToken: 'test-token',
       },
     });
 
@@ -83,10 +91,14 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #1943)', () => {
   it('uses options.resolved.model for mistral model detection', async () => {
     const settings = new SettingsService();
     const options = createMockOptions({
-      settings,
+      invocation: createRuntimeInvocationContext({
+        runtimeId: 'format-admission',
+        providerName: 'openai',
+        ephemeralsSnapshot: { openai: settings.getProviderSettings('openai') },
+      }),
       resolved: {
         model: 'mistral-large-latest',
-        authToken: { token: 'test-token', type: 'api-key' },
+        authToken: 'test-token',
       },
     });
 
@@ -105,10 +117,14 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #1943)', () => {
   it('falls back to defaultModel when options.resolved.model is empty', async () => {
     const settings = new SettingsService();
     const options = createMockOptions({
-      settings,
+      invocation: createRuntimeInvocationContext({
+        runtimeId: 'format-admission',
+        providerName: 'openai',
+        ephemeralsSnapshot: { openai: settings.getProviderSettings('openai') },
+      }),
       resolved: {
         model: '',
-        authToken: { token: 'test-token', type: 'api-key' },
+        authToken: 'test-token',
       },
     });
 
@@ -128,10 +144,14 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #1943)', () => {
     const settings = new SettingsService();
     settings.setProviderSetting('openai', 'toolFormat', 'openai');
     const options = createMockOptions({
-      settings,
+      invocation: createRuntimeInvocationContext({
+        runtimeId: 'format-admission',
+        providerName: 'openai',
+        ephemeralsSnapshot: { openai: settings.getProviderSettings('openai') },
+      }),
       resolved: {
         model: 'moonshot-v1-kimi-k2',
-        authToken: { token: 'test-token', type: 'api-key' },
+        authToken: 'test-token',
       },
     });
 
@@ -151,10 +171,14 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #1943)', () => {
     const settings = new SettingsService();
     settings.setProviderSetting('openai', 'toolFormat', 'openai');
     const options = createMockOptions({
-      settings,
+      invocation: createRuntimeInvocationContext({
+        runtimeId: 'format-admission',
+        providerName: 'openai',
+        ephemeralsSnapshot: { openai: settings.getProviderSettings('openai') },
+      }),
       resolved: {
         model: 'mistral-large-latest',
-        authToken: { token: 'test-token', type: 'api-key' },
+        authToken: 'test-token',
       },
     });
 
@@ -174,10 +198,14 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #1943)', () => {
     const settings = new SettingsService();
     settings.setProviderSetting('openai', 'toolFormat', 'bogus-format');
     const options = createMockOptions({
-      settings,
+      invocation: createRuntimeInvocationContext({
+        runtimeId: 'format-admission',
+        providerName: 'openai',
+        ephemeralsSnapshot: { openai: settings.getProviderSettings('openai') },
+      }),
       resolved: {
         model: 'kimi-k2',
-        authToken: { token: 'test-token', type: 'api-key' },
+        authToken: 'test-token',
       },
     });
 
@@ -195,10 +223,14 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #1943)', () => {
   it('includes model in request body matching resolved model', async () => {
     const settings = new SettingsService();
     const options = createMockOptions({
-      settings,
+      invocation: createRuntimeInvocationContext({
+        runtimeId: 'format-admission',
+        providerName: 'openai',
+        ephemeralsSnapshot: { openai: settings.getProviderSettings('openai') },
+      }),
       resolved: {
         model: 'gpt-4-turbo',
-        authToken: { token: 'test-token', type: 'api-key' },
+        authToken: 'test-token',
       },
     });
 
@@ -216,10 +248,14 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #1943)', () => {
   it('includes system prompt message in messagesWithSystem', async () => {
     const settings = new SettingsService();
     const options = createMockOptions({
-      settings,
+      invocation: createRuntimeInvocationContext({
+        runtimeId: 'format-admission',
+        providerName: 'openai',
+        ephemeralsSnapshot: { openai: settings.getProviderSettings('openai') },
+      }),
       resolved: {
         model: 'gpt-4o',
-        authToken: { token: 'test-token', type: 'api-key' },
+        authToken: 'test-token',
       },
     });
 
@@ -238,10 +274,14 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #1943)', () => {
   it('detects qwen format for GLM-4 resolved model', async () => {
     const settings = new SettingsService();
     const options = createMockOptions({
-      settings,
+      invocation: createRuntimeInvocationContext({
+        runtimeId: 'format-admission',
+        providerName: 'openai',
+        ephemeralsSnapshot: { openai: settings.getProviderSettings('openai') },
+      }),
       resolved: {
         model: 'glm-4-plus',
-        authToken: { token: 'test-token', type: 'api-key' },
+        authToken: 'test-token',
       },
     });
 
@@ -259,10 +299,14 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #1943)', () => {
   it('detects deepseek format for deepseek-reasoner resolved model', async () => {
     const settings = new SettingsService();
     const options = createMockOptions({
-      settings,
+      invocation: createRuntimeInvocationContext({
+        runtimeId: 'format-admission',
+        providerName: 'openai',
+        ephemeralsSnapshot: { openai: settings.getProviderSettings('openai') },
+      }),
       resolved: {
         model: 'deepseek-reasoner',
-        authToken: { token: 'test-token', type: 'api-key' },
+        authToken: 'test-token',
       },
     });
 
@@ -281,10 +325,14 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #1943)', () => {
     const settings = new SettingsService();
     settings.setProviderSetting('openai', 'toolFormat', 'auto');
     const options = createMockOptions({
-      settings,
+      invocation: createRuntimeInvocationContext({
+        runtimeId: 'format-admission',
+        providerName: 'openai',
+        ephemeralsSnapshot: { openai: settings.getProviderSettings('openai') },
+      }),
       resolved: {
         model: 'kimi-k2',
-        authToken: { token: 'test-token', type: 'api-key' },
+        authToken: 'test-token',
       },
     });
 
@@ -300,14 +348,12 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #1943)', () => {
   });
 
   it('sets thinking enabled on request body when reasoning.enabled is true (z.ai dialect)', async () => {
-    const settings = new SettingsService();
     const options = createMockOptions(
       {
-        settings,
         resolved: {
           model: 'gpt-4o',
           baseURL: 'https://api.z.ai/api/paas/v4',
-          authToken: { token: 'test-token', type: 'api-key' },
+          authToken: 'test-token',
         },
       },
       { 'reasoning.enabled': true },
@@ -325,14 +371,12 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #1943)', () => {
   });
 
   it('sets thinking disabled on request body when reasoning.enabled is false (z.ai dialect)', async () => {
-    const settings = new SettingsService();
     const options = createMockOptions(
       {
-        settings,
         resolved: {
           model: 'gpt-4o',
           baseURL: 'https://api.z.ai/api/paas/v4',
-          authToken: { token: 'test-token', type: 'api-key' },
+          authToken: 'test-token',
         },
       },
       { 'reasoning.enabled': false },
@@ -350,13 +394,11 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #1943)', () => {
   });
 
   it('does not set thinking on request body when reasoning.enabled is undefined', async () => {
-    const settings = new SettingsService();
     const options = createMockOptions(
       {
-        settings,
         resolved: {
           model: 'gpt-4o',
-          authToken: { token: 'test-token', type: 'api-key' },
+          authToken: 'test-token',
         },
       },
       {},
@@ -374,13 +416,11 @@ describe('OpenAIRequestPreparation.prepareRequest (issue #1943)', () => {
   });
 
   it('does not overwrite reasoning_effort with thinking when reasoning_effort is already present', async () => {
-    const settings = new SettingsService();
     const options = createMockOptions(
       {
-        settings,
         resolved: {
           model: 'gpt-4o',
-          authToken: { token: 'test-token', type: 'api-key' },
+          authToken: 'test-token',
         },
       },
       { 'reasoning.enabled': true },

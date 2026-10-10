@@ -11,7 +11,8 @@
  * async-task-auto-trigger effect.
  */
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { createStreamEventAgent } from './streamEventAgent.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import {
@@ -71,9 +72,9 @@ export type SubmissionExecutor = (
  * Shared content-prefix identity resolver for the AgentEvent dispatcher. Reads
  * fresh runtime state at call time so a single stable reference can be reused.
  */
-function defaultGetContentPrefixIdentity(): string | null {
+function defaultGetContentPrefixIdentity(agent: Agent): string | null {
   try {
-    return resolveContentPrefixIdentity(createCliModelIdentityRuntime());
+    return resolveContentPrefixIdentity(createCliModelIdentityRuntime(agent));
   } catch {
     return null;
   }
@@ -93,6 +94,7 @@ export interface UseSubmitQueryDeps {
   onCancelSubmit: (shouldRestorePrompt?: boolean) => void;
   onAuthError: () => void;
   recordingIntegration?: RecordingIntegration;
+  recordingOwner?: 'agent' | 'raw';
   sanitizeContent: (text: string) => {
     text: string;
     blocked: boolean;
@@ -193,10 +195,14 @@ export interface UseSubmitQueryReturn {
 export function useSubmitQuery(deps: UseSubmitQueryDeps): UseSubmitQueryReturn {
   const { startNewPrompt, getPromptCount } = useSessionStats();
   const activeTurnRef = useRef(false);
+  const eventAgent = useMemo(
+    () => createStreamEventAgent(deps.agent),
+    [deps.agent],
+  );
 
   const handlers = useStreamEventHandlers({
     runtime: deps.runtime,
-    agent: deps.agent,
+    agent: eventAgent,
     settings: deps.settings,
     addItem: deps.addItem,
     removeItems: deps.removeItems,
@@ -326,7 +332,8 @@ function useProcessAgentEvent(
           setPendingHistoryItem: latestDeps.current.setPendingHistoryItem,
           setLastAgentActivityTime: latestDeps.current.setLastAgentActivityTime,
           setThought: latestDeps.current.setThought,
-          getContentPrefixIdentity: defaultGetContentPrefixIdentity,
+          getContentPrefixIdentity: () =>
+            defaultGetContentPrefixIdentity(latestDeps.current.agent),
           ...latestHandlers.current,
         },
         agentBufferRef.current,
@@ -343,7 +350,8 @@ function useSubmitQueryEffects(
   submitQuery: ReturnType<typeof useSubmitQueryCallback>,
   scheduleNextQueuedSubmission: () => void,
 ) {
-  const { submitQueryRef, streamingState, runtime, enqueueSubmission } = deps;
+  const { submitQueryRef, streamingState, runtime, agent, enqueueSubmission } =
+    deps;
   useEffect(() => {
     submitQueryRef.current = submitQuery;
   }, [submitQuery, submitQueryRef]);
@@ -372,7 +380,7 @@ function useSubmitQueryEffects(
       scheduleNextQueuedSubmission();
     };
 
-    const unsubscribe = runtime.asyncTasks.setupAsyncTaskAutoTrigger(
+    const unsubscribe = agent.tasks.subscribeNotifications(
       isAgentBusy,
       triggerAgentTurn,
     );
@@ -380,12 +388,7 @@ function useSubmitQueryEffects(
     return () => {
       unsubscribe();
     };
-  }, [
-    runtime,
-    streamingState,
-    scheduleNextQueuedSubmission,
-    enqueueSubmission,
-  ]);
+  }, [agent, streamingState, scheduleNextQueuedSubmission, enqueueSubmission]);
 }
 
 function useDrainCleanup(

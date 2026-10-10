@@ -1,3 +1,4 @@
+import { readFixtureSessionAuthPolicy } from './session-auth-policy-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -9,7 +10,8 @@ import { OAuthManager } from '../oauth-manager.js';
 import type { OAuthProvider, TokenStore, OAuthToken } from '../types.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
-import { oauthRuntimeBridge } from '../runtime-accessor-bridge.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 
 /**
  * Issue #828: User Declined Auth Prompt Tracking
@@ -19,7 +21,7 @@ import { oauthRuntimeBridge } from '../runtime-accessor-bridge.js';
  * and proceed directly.
  */
 
-const mockEphemeralSettings = new Map<string, unknown>();
+const mockEphemeralSettings = new SettingsService();
 
 function setMockEphemeralSetting<T>(key: string, value: T): void {
   mockEphemeralSettings.set(key, value);
@@ -119,26 +121,21 @@ describe('Issue #828: User Declined Auth Prompt Tracking', () => {
     vi.clearAllMocks();
     clearMockEphemeralSettings();
 
-    oauthRuntimeBridge.setAccessors({
-      getEphemeralSetting: (key: string) => mockEphemeralSettings.get(key),
-      getProviderManager: () => ({
-        getProviderByName: () => null,
-      }),
-      getRuntimeContext: () => ({
-        runtimeId: 'test-runtime',
-      }),
-      getCurrentProfileName: () => null,
-    });
-
     tokenStore = createMockTokenStore();
-    manager = new OAuthManager(tokenStore);
+    manager = new OAuthManager(tokenStore, undefined, {
+      readSessionAuthPolicy: readFixtureSessionAuthPolicy(
+        mockEphemeralSettings,
+      ),
+      config: createRuntimeConfigStub(new SettingsService(), {
+        getEphemeralSetting: (key: string) => mockEphemeralSettings.get(key),
+      }),
+    });
     mockProvider = createMockProvider('anthropic');
     manager.registerProvider(mockProvider);
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
-    oauthRuntimeBridge.setAccessors(undefined);
   });
 
   it('should still show confirmation on first attempt', async () => {
@@ -227,7 +224,14 @@ describe('Issue #828: User Declined Auth Prompt Tracking', () => {
     expect(firstManagerConfirmationCount).toBe(1);
 
     // Create a new OAuthManager (new session)
-    const newManager = new OAuthManager(tokenStore);
+    const newManager = new OAuthManager(tokenStore, undefined, {
+      readSessionAuthPolicy: readFixtureSessionAuthPolicy(
+        mockEphemeralSettings,
+      ),
+      config: createRuntimeConfigStub(new SettingsService(), {
+        getEphemeralSetting: (key: string) => mockEphemeralSettings.get(key),
+      }),
+    });
     const newMockProvider = createMockProvider('anthropic');
     newManager.registerProvider(newMockProvider);
 

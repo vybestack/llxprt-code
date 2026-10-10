@@ -1,12 +1,13 @@
 /**
- * @plan:PLAN-20260608-ISSUE1585.P10
- * @requirement:REQ-BEHAVIORAL-TDD, REQ-TEST-FIXTURE-COUPLING
- */
-
-/**
  * @license
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { physicalFiles } from './helpers/physical-files.js';
+/**
+ * @plan:PLAN-20260608-ISSUE1585.P10
+ * @requirement:REQ-BEHAVIORAL-TDD, REQ-TEST-FIXTURE-COUPLING
  */
 
 /**
@@ -66,12 +67,17 @@ describe('Edit / Apply-Patch / AST Tool Group Behavioral Tests @plan:PLAN-202606
   let tempDir: string;
   function createFakeToolHost(targetDir: string): IToolHost {
     return {
+      ...physicalFiles,
       getTargetDir: () => targetDir,
       getWorkspaceRoots: () => [targetDir],
       getApprovalMode: () => 'auto',
       setApprovalMode: () => {},
       isInteractive: () => false,
-      hasFeatureFlag: () => false,
+
+      runSearch: <T>(
+        _directories: readonly string[],
+        operation: () => Promise<T>,
+      ): Promise<T> => operation(),
       getFileService: () => ({
         shouldGitIgnoreFile: () => false,
         shouldLlxprtIgnoreFile: () => false,
@@ -88,7 +94,7 @@ describe('Edit / Apply-Patch / AST Tool Group Behavioral Tests @plan:PLAN-202606
       getLlxprtIgnoreFilePath: () => null,
       recordFileRead: () => {},
       getLlxprtIgnorePatterns: () => [],
-      getEphemeralSettings: () => ({}),
+      readExecutionPolicy: () => ({}),
       getDebugMode: () => false,
     };
   }

@@ -19,6 +19,7 @@
  */
 
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { IProviderConfig } from '@vybestack/llxprt-code-providers';
 
 /** Mirrors providers/src/composition/providerAliases.ts (subset used here). */
 export interface ProviderAliasConfig {
@@ -42,6 +43,7 @@ export interface ProviderAliasEntry {
 export interface ProviderFactoryContext {
   readonly openaiApiKey: string | undefined;
   readonly openaiBaseUrl: string | undefined;
+  readonly openaiProviderConfig: IProviderConfig;
   readonly oauthManager: unknown;
   readonly config: Config | undefined;
   readonly authOnlyEnabled: boolean;

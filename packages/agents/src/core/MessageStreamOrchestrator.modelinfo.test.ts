@@ -212,6 +212,7 @@ function buildOrchestrator(options: BuildOptions = {}): {
       shouldDeferStreamEvent: vi.fn().mockReturnValue(false),
     } as unknown as MessageStreamDeps['todoContinuationService'],
     ideContextTracker: {
+      isEnabled: () => false,
       getContextParts: vi.fn().mockReturnValue({
         contextParts: [],
         newIdeContext: undefined,

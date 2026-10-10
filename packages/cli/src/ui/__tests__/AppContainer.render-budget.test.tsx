@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
 
 /**
  * @plan project-plans/issue1576/TEST_PLAN.md - Test 8
@@ -32,13 +33,13 @@ interface MockConfig {
   getQuestion: () => string | undefined;
   getDebugMode: () => boolean;
   getSessionId: () => string;
-  getAgentClient: () => unknown;
+
   getWorkingDir: () => string;
   getIdeClient: () => unknown;
   getIdeMode: () => boolean;
   getScreenReader: () => boolean;
   getTerminalBackground: () => string | undefined;
-  getWorkspaceContext: () => { getDirectories: () => string[] };
+
   getExtensions: () => unknown[];
   getMcpServers: () => Record<string, unknown>;
   setPtyTerminalSize: () => void;
@@ -57,10 +58,7 @@ function createMockConfig(): MockConfig {
     getQuestion: vi.fn(() => undefined),
     getDebugMode: vi.fn(() => false),
     getSessionId: vi.fn(() => 'test-session-id'),
-    getAgentClient: vi.fn(() => ({
-      hasChatInitialized: vi.fn(() => false),
-      getHistoryService: vi.fn(),
-    })),
+
     getWorkingDir: vi.fn(() => '/test/dir'),
     getIdeClient: vi.fn(() => ({
       getCurrentIde: vi.fn(),
@@ -69,9 +67,7 @@ function createMockConfig(): MockConfig {
     getIdeMode: vi.fn(() => true),
     getScreenReader: vi.fn(() => false),
     getTerminalBackground: vi.fn(() => undefined),
-    getWorkspaceContext: vi.fn(() => ({
-      getDirectories: vi.fn(() => []),
-    })),
+
     getExtensions: vi.fn(() => []),
     getMcpServers: vi.fn(() => ({})),
     setPtyTerminalSize: vi.fn(),
@@ -342,7 +338,7 @@ void vi.mock('../contexts/VimModeContext.js', () => ({
 
 void vi.mock('../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: vi.fn(() => ({
-    getCliOAuthManager: vi.fn(),
+    oauthManager: vi.fn(),
     getActiveModelName: vi.fn(() => 'test-model'),
     getActiveProviderMetrics: vi.fn(() => ({})),
     getSessionTokenUsage: vi.fn(() => ({ inputTokens: 0, outputTokens: 0 })),
@@ -441,9 +437,11 @@ describe('AppContainer.render-budget', () => {
       const props = {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
+          createUiSessionOwner(),
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
+          createUiSessionOwner(),
         ),
         agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
@@ -478,9 +476,11 @@ describe('AppContainer.render-budget', () => {
       const props = {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
+          createUiSessionOwner(),
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
+          createUiSessionOwner(),
         ),
         agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
@@ -509,9 +509,11 @@ describe('AppContainer.render-budget', () => {
       const props = {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
+          createUiSessionOwner(),
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
+          createUiSessionOwner(),
         ),
         agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
@@ -534,9 +536,11 @@ describe('AppContainer.render-budget', () => {
       const props = {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
+          createUiSessionOwner(),
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
+          createUiSessionOwner(),
         ),
         agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
@@ -561,9 +565,11 @@ describe('AppContainer.render-budget', () => {
       const props = {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
+          createUiSessionOwner(),
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
+          createUiSessionOwner(),
         ),
         agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
@@ -586,9 +592,11 @@ describe('AppContainer.render-budget', () => {
       const props = {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
+          createUiSessionOwner(),
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
+          createUiSessionOwner(),
         ),
         agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
@@ -622,9 +630,11 @@ describe('AppContainer.render-budget', () => {
       const props = {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
+          createUiSessionOwner(),
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
+          createUiSessionOwner(),
         ),
         agent: createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,

@@ -1,8 +1,10 @@
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 
 /**
  * End-to-end CLI regression for issue #3236 — "Cancelled turn whose provider
@@ -72,12 +74,11 @@ import type { AgentRequestInput } from '@vybestack/llxprt-code-core/core/clientC
 import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core/core/turn.js';
 import { LocalTodoStore } from '@vybestack/llxprt-code-tools';
 import type { Todo } from '@vybestack/llxprt-code-tools';
-import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { Storage } from '@vybestack/llxprt-code-settings/storage/Storage.js';
-import { createIsolatedRuntimeContext } from '@vybestack/llxprt-code-providers/runtime.js';
-import type { IsolatedRuntimeContextHandle } from '@vybestack/llxprt-code-providers/runtime.js';
+import { createIsolatedRuntimeContext } from '@vybestack/llxprt-code-providers/runtime/runtimeActivationBindings.js';
+import type { IsolatedRuntimeContextHandle } from '@vybestack/llxprt-code-providers/runtime/runtimeActivationBindings.js';
 import type {
   GenerateChatOptions,
   IModel,
@@ -367,6 +368,7 @@ async function createEngineEnv(): Promise<EngineEnv> {
   let config: Config | undefined;
   let handle: IsolatedRuntimeContextHandle | undefined;
   let agent: Agent | undefined;
+  let policyOwner: RuntimePolicyOwner | undefined;
   try {
     const params = {
       ...toConfigParameters({
@@ -377,27 +379,33 @@ async function createEngineEnv(): Promise<EngineEnv> {
       }),
     };
     config = new Config(params);
-    const messageBus = new MessageBus(
-      config.getPolicyEngine(),
-      config.getDebugMode(),
-    );
-    handle = createIsolatedRuntimeContext({
-      runtimeId: SESSION_ID,
-      config,
-      messageBus,
-      prepare: (ctx) => {
-        ctx.providerManager.registerProvider(transport);
-        void ctx.providerManager.setActiveProvider(transport.name);
+    const settingsService = new SettingsService();
+    policyOwner = new RuntimePolicyOwner(config);
+    const messageBus = policyOwner.session.messageBus;
+    handle = createIsolatedRuntimeContext(
+      {
+        runtimeId: SESSION_ID,
+        config,
+        messageBus,
+        prepare: (ctx) => {
+          ctx.providerManager.registerProvider(transport);
+          void ctx.providerManager.setActiveProvider(transport.name);
+        },
       },
-    });
+      settingsService,
+    );
     await handle.activate();
     // No explicit config.initialize() here: fromConfig installs the default
     // agent runtime factories (agentClientFactory et al.) and runs
     // ensureInitialized during adoption — the factory-less Config idiom.
     agent = await fromConfig({
+      settingsService,
+      settingsOwner: handle.settingsOwner,
       config,
+      providerManager: handle.providerManager,
       sessionId: SESSION_ID,
       messageBus,
+      policyOwner,
       activation: { provider: 'fake', model: 'fake-model' },
     });
 
@@ -421,6 +429,7 @@ async function createEngineEnv(): Promise<EngineEnv> {
       dispose: async (): Promise<void> => {
         await builtAgent.dispose().catch(() => undefined);
         await Promise.resolve(builtHandle.cleanup()).catch(() => undefined);
+        await policyOwner?.dispose();
         await builtConfig.dispose().catch(() => undefined);
         restoreEnv();
       },
@@ -430,6 +439,7 @@ async function createEngineEnv(): Promise<EngineEnv> {
     if (handle !== undefined) {
       await Promise.resolve(handle.cleanup()).catch(() => undefined);
     }
+    await policyOwner?.dispose();
     await config?.dispose().catch(() => undefined);
     restoreEnv();
     throw error;

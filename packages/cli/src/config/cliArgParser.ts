@@ -6,6 +6,7 @@
  * @plan PLAN-20260214-SESSIONBROWSER.P29
  */
 
+import { configureCommandOptions } from '../commands/command-configuration.js';
 import yargs from 'yargs/yargs';
 import type { Argv } from 'yargs';
 import { hideBin } from 'yargs/helpers';
@@ -260,13 +261,15 @@ function configureLaunchCommand(yargsInstance: Argv): void {
       applyInnerOptions(innerYargs);
       applyDeprecations(innerYargs);
 
-      innerYargs
-        .positional('promptWords', {
-          describe: 'Prompt to run non-interactively',
-          type: 'string',
-          array: true,
-        })
-        .check(validateLaunchArgs);
+      configureCommandOptions(innerYargs, (configuration) =>
+        configuration
+          .positional('promptWords', {
+            describe: 'Prompt to run non-interactively',
+            type: 'string',
+            array: true,
+          })
+          .check(validateLaunchArgs),
+      );
     },
   );
 }

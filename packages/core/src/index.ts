@@ -3,6 +3,14 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+export {
+  WorkspaceDefinitionOwner,
+  type ProfileDefinitionListing,
+  type ProfileDefinitionReads,
+  type ProfileDefinitionWrites,
+  type SubagentDefinitionReads,
+  type SubagentDefinitionWrites,
+} from './services/workspace-definition-owner.js';
 
 // Export safety utilities
 export * from './safety/index.js';
@@ -67,6 +75,7 @@ export {
 } from './services/asyncTaskManager.js';
 export { AsyncTaskReminderService } from './services/asyncTaskReminderService.js';
 export { AsyncTaskAutoTrigger } from './services/asyncTaskAutoTrigger.js';
+export { resolveShellJobSettings } from './config/asyncTaskServices.js';
 export {
   ShellJobManager,
   type ShellJob,
@@ -108,11 +117,7 @@ export * from './core/logger.js';
 export * from './core/prompts.js';
 export * from './core/tokenLimits.js';
 export * from './core/turn.js';
-export {
-  type SubagentSchedulerFactory,
-  type InteractiveSubagentSchedulerHost,
-  hasInteractiveSubagentScheduler,
-} from './core/subagentTypes.js';
+export {} from './core/subagentTypes.js';
 export { buildContinuationDirective } from './core/compression/continuationDirective.js';
 export { buildTranscriptPathNotice } from './core/compression/transcriptPathNotice.js';
 
@@ -185,10 +190,6 @@ export {
   AuthPrecedenceResolver,
   type AuthPrecedenceConfig,
   type OAuthManager,
-  flushRuntimeAuthScope,
-  invalidateProviderRuntimeCache,
-  type RuntimeAuthScopeFlushResult,
-  type RuntimeAuthScopeCacheEntrySummary,
   type OAuthTokenRequestMetadata,
   type OAuthToken,
   type AuthStatus,
@@ -258,8 +259,11 @@ export * from './storage/media-lifecycle-metrics.js';
 // Export services
 export * from './services/fileDiscoveryService.js';
 export * from './services/gitService.js';
+export {
+  WorkspaceCheckpointOwner,
+  type WorkspaceCheckpointOperations,
+} from './services/workspace-checkpoint-owner.js';
 export * from './services/fileSystemService.js';
-export { ContextManager } from './services/contextManager.js';
 
 // Export IDE specific logic
 // IDE integration code now lives in @vybestack/llxprt-code-ide-integration.
@@ -491,13 +495,7 @@ export {
   MCPServerStatus,
   MCPDiscoveryState,
   McpClient,
-  getAllMCPServerStatuses,
-  getMCPServerStatus,
-  updateMCPServerStatus,
-  addMCPStatusChangeListener,
-  removeMCPStatusChangeListener,
   createTransport,
-  mcpServerRequiresOAuth,
   populateMcpServerCommand,
   hasNetworkTransport,
   MCP_DEFAULT_TIMEOUT_MSEC,
@@ -600,9 +598,6 @@ export type {
   AgentRuntimeState,
   RuntimeStateParams,
   RuntimeStateSnapshot,
-  RuntimeStateChangedEvent,
-  RuntimeStateChangeCallback,
-  UnsubscribeFunction,
   getBaseUrl,
   getSessionId,
   getModelParams,
@@ -612,7 +607,6 @@ export {
   updateAgentRuntimeState,
   updateAgentRuntimeStateBatch,
   getAgentRuntimeStateSnapshot,
-  subscribeToAgentRuntimeState,
 } from './runtime/AgentRuntimeState.js';
 export type { RuntimeStateFromConfigOptions } from './runtime/runtimeStateFactory.js';
 export { createAgentRuntimeStateFromConfig as createRuntimeStateFromConfig } from './runtime/runtimeStateFactory.js';
@@ -704,6 +698,7 @@ export * from './models/index.js';
 
 // --- Subagent Feature: PLAN-20250117-SUBAGENTCONFIG ---
 export { SubagentManager } from './config/subagentManager.js';
+export { parseSettingsSubagentDefinitions } from './config/subagentSettingsParser.js';
 export type { SubagentConfig } from './config/types.js';
 // --- End of Subagent Feature ---
 export {
@@ -716,3 +711,22 @@ export {
 // @plan PLAN-20260211-SESSIONRECORDING.P03
 // Export session recording module
 export * from './recording/index.js';
+
+export { assembleWorkspaceMemory } from './config/workspace-memory-assembly.js';
+export {
+  WorkspaceMemoryOwner,
+  type InstructionReadOperations,
+  type InstructionSnapshot,
+  type WorkspaceMemoryOperations,
+} from './services/workspace-memory-owner.js';
+
+export type { WorkspaceTrustControlPort } from './services/workspace-trust-ports.js';
+export type {
+  WorkspaceTrustReader,
+  WorkspaceTrustReadPort,
+} from './services/workspace-trust-reader.js';
+export type { WorkspaceTrustTransition } from './services/workspace-trust-transition.js';
+export type { WorkspaceIdePort } from './services/workspace-ide-owner.js';
+
+export { WorkspaceTrustLifecycle } from './services/workspace-trust-lifecycle.js';
+export { initializeParser } from './utils/shell-parser.js';

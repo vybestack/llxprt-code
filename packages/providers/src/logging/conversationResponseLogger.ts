@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderToolset } from '../IProvider.js';
 import { writeConversationLog } from './telemetryEmitter.js';
@@ -27,7 +27,7 @@ export interface ConversationLogContext {
  * Write a conversation response log entry to telemetry and disk (fail-open).
  */
 export async function writeResponseLog(
-  config: Config,
+  config: ProviderRequestDiagnostics,
   content: string,
   promptId: string,
   duration: number,
@@ -64,7 +64,7 @@ export async function writeResponseLog(
  * Log a conversation request entry (fail-open).
  */
 export async function logRequestEntry(
-  config: Config,
+  config: ProviderRequestDiagnostics,
   content: IContent[],
   tools: ProviderToolset | undefined,
   promptId: string | undefined,

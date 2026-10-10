@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
+const composeFixtureRuntime = installWorkspaceRuntimeFixture();
+
 import { describe, it, expect, vi, type Mock } from 'bun:test';
 import { HistoryItemDisplay } from './HistoryItemDisplay.js';
 import { type HistoryItem, MessageType, ToolCallStatus } from '../types.js';
@@ -22,7 +25,7 @@ const actual = { ...(await import('../contexts/RuntimeContext.js')) };
 void vi.mock('../contexts/RuntimeContext.js', () => ({
   ...actual,
   useRuntimeApi: () => ({
-    getActiveProviderStatus: () => ({ providerName: 'gemini' }),
+    providerStatus: () => ({ providerName: 'gemini' }),
     getEphemeralSetting: () => undefined,
   }),
 }));
@@ -33,13 +36,15 @@ void vi.mock('./messages/ToolGroupMessage.js', () => ({
 }));
 
 describe('<HistoryItemDisplay />', () => {
-  const mockConfig = {} as unknown as Config;
+  const mockConfig = { getMcpServers: () => undefined } as unknown as Config;
   const baseItem = {
     id: 1,
     timestamp: 12345,
     isPending: false,
     terminalWidth: 80,
-    config: mockConfig,
+    get config() {
+      return composeFixtureRuntime(mockConfig);
+    },
   };
 
   it('renders UserMessage for "user" type', () => {
@@ -156,7 +161,7 @@ describe('<HistoryItemDisplay />', () => {
         item={historyItem}
         terminalWidth={80}
         isPending={false}
-        config={mockConfig}
+        config={composeFixtureRuntime(mockConfig)}
       />,
     );
 
@@ -194,7 +199,7 @@ describe('<HistoryItemDisplay />', () => {
         item={historyItem}
         terminalWidth={80}
         isPending={false}
-        config={mockConfig}
+        config={composeFixtureRuntime(mockConfig)}
       />,
     );
 
@@ -228,7 +233,7 @@ describe('<HistoryItemDisplay />', () => {
         isPending={false}
         terminalWidth={80}
         availableTerminalHeight={10}
-        config={mockConfig}
+        config={composeFixtureRuntime(mockConfig)}
       />,
     );
 
@@ -248,7 +253,7 @@ describe('<HistoryItemDisplay />', () => {
         terminalWidth={80}
         availableTerminalHeight={10}
         availableTerminalHeightAi={Number.MAX_SAFE_INTEGER}
-        config={mockConfig}
+        config={composeFixtureRuntime(mockConfig)}
       />,
     );
 
@@ -324,7 +329,7 @@ describe('<HistoryItemDisplay />', () => {
         isPending={false}
         terminalWidth={80}
         availableTerminalHeight={10}
-        config={mockConfig}
+        config={composeFixtureRuntime(mockConfig)}
       />,
     );
 
@@ -344,7 +349,7 @@ describe('<HistoryItemDisplay />', () => {
         terminalWidth={80}
         availableTerminalHeight={10}
         availableTerminalHeightAi={Number.MAX_SAFE_INTEGER}
-        config={mockConfig}
+        config={composeFixtureRuntime(mockConfig)}
       />,
     );
 

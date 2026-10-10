@@ -1,3 +1,4 @@
+import { tmpdir } from 'node:os';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -20,13 +21,21 @@
  * without touching the filesystem, git, telemetry or a real provider.
  */
 
-import { describe, it, expect, vi, type Mock } from 'bun:test';
+import { describe, it, expect, vi } from 'bun:test';
+import { join } from 'node:path';
 import { Config } from './config.js';
+import type { WorkspaceSkillOwner } from '../skills/workspace-skill-owner.js';
 import type { SkillDefinition } from '../skills/skillLoader.js';
 import type { LlxprtExtension } from './configTypes.js';
-import { SimpleExtensionLoader } from '../utils/extensionLoader.js';
-import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
-import { initializeTestConfig } from '../__tests__/config-test-helpers.js';
+
+import {
+  MCPDiscoveryState,
+  McpClientManager,
+} from '@vybestack/llxprt-code-mcp';
+import {
+  createTestExtensionLoader,
+  initializeTestMcpRuntime,
+} from '@vybestack/llxprt-code-test-utils/core/config.js';
 import {
   buildFsMockBody,
   buildToolsMockBody,
@@ -50,6 +59,9 @@ const hoistedConfigMocks = {
   },
   setGlobalProxy: vi.fn(),
 } as HoistedConfigMocks;
+const startExtension = vi
+  .fn<() => Promise<void>>()
+  .mockResolvedValue(undefined);
 const __actual = { ...(await import('@vybestack/llxprt-code-mcp')) };
 void vi.mock('@vybestack/llxprt-code-mcp', () => {
   const actual = __actual as Record<string, unknown>;
@@ -63,10 +75,10 @@ void vi.mock('@vybestack/llxprt-code-mcp', () => {
       restart: vi.fn().mockResolvedValue(undefined),
       restartServer: vi.fn().mockResolvedValue(undefined),
       reconcileConfiguredMcpServers: vi.fn().mockResolvedValue(undefined),
-      getMcpInstructions: vi.fn().mockReturnValue(''),
+      readInstructions: vi.fn().mockReturnValue(''),
       startConfiguredMcpServers: vi.fn().mockResolvedValue(undefined),
       // ExtensionLoader drives these on every load/unload.
-      startExtension: vi.fn().mockResolvedValue(undefined),
+      startExtension,
       stopExtension: vi.fn().mockResolvedValue(undefined),
       onFolderTrustGained: vi.fn().mockResolvedValue(undefined),
       onFolderTrustRevoked: vi.fn().mockResolvedValue(undefined),
@@ -141,7 +153,8 @@ function skillExtension(
 
 interface Harness {
   readonly config: Config;
-  readonly loader: SimpleExtensionLoader;
+  readonly skills: Pick<WorkspaceSkillOwner, 'operations' | 'refresh'>;
+  readonly loader: ReturnType<typeof createTestExtensionLoader>;
   readonly observations: RegistrarObservation[];
 }
 
@@ -149,30 +162,36 @@ async function buildHarness(
   extensions: LlxprtExtension[] = [],
 ): Promise<Harness> {
   const observations: RegistrarObservation[] = [];
-  const loader = new SimpleExtensionLoader(extensions);
+  const loader = createTestExtensionLoader(extensions);
+  const testRoot = join(tmpdir(), 'llxprt-extension-skill-refresh');
   const config = new Config({
     sessionId: 'test-session',
-    targetDir: '/tmp/test',
+    targetDir: testRoot,
     debugMode: false,
     model: 'test-model',
-    cwd: '/tmp/test',
+    cwd: testRoot,
     skillsSupport: true,
     enableExtensionReloading: true,
-    extensionLoader: loader,
-    postSkillDiscoveryToolRegistrar: (_registry, skillService) => {
-      observations.push({
-        skills: skillService.listSkills().map((skill) => skill.name),
-      });
-    },
   });
-  await initializeTestConfig(config);
-  // Real discovery would walk the filesystem for builtin/user/project skills;
-  // the extension tier is the one under test, so only that is left live.
-  vi.spyOn(config.getSkillManager(), 'discoverBuiltinSkills').mockResolvedValue(
-    [],
+  const runtime = await initializeTestMcpRuntime(
+    config,
+    McpClientManager,
+    undefined,
+    loader,
+    undefined,
+    undefined,
+    undefined,
+    {
+      reloadPolicy: async () => ({}),
+      registerTools: (_registry, skillService) => {
+        observations.push({
+          skills: skillService.listSkills().map((skill) => skill.name),
+        });
+      },
+    },
   );
   observations.length = 0;
-  return { config, loader, observations };
+  return { config, skills: runtime.workspaceSkills, loader, observations };
 }
 
 /** The most recent skill list the activation tool was rebuilt from. */
@@ -183,34 +202,35 @@ function lastRebuiltFrom(observations: RegistrarObservation[]): string[] {
   return observations[observations.length - 1].skills;
 }
 
-function discoveredSkillNames(config: Config): string[] {
-  return config
-    .getSkillManager()
-    .getSkills()
+function discoveredSkillNames(
+  skills: Pick<WorkspaceSkillOwner, 'operations'>,
+): string[] {
+  return skills.operations
+    .list()
     .map((skill) => skill.name)
     .sort();
 }
 
 describe('extension load and unload refresh the skill surface @issue:3383', () => {
   it('discovers the skills an extension brings when it is loaded', async () => {
-    const { config, loader, observations } = await buildHarness();
+    const { skills, loader, observations } = await buildHarness();
 
     await loader.loadExtension(
       skillExtension('pack', [extensionSkill('alpha')]),
     );
 
-    expect(discoveredSkillNames(config)).toContain('alpha');
+    expect(discoveredSkillNames(skills)).toContain('alpha');
     expect(lastRebuiltFrom(observations)).toContain('alpha');
   });
 
   it('drops the skills an extension brought when it is unloaded', async () => {
     const extension = skillExtension('pack', [extensionSkill('alpha')]);
-    const { config, loader, observations } = await buildHarness([extension]);
-    expect(discoveredSkillNames(config)).toContain('alpha');
+    const { skills, loader, observations } = await buildHarness([extension]);
+    expect(discoveredSkillNames(skills)).toContain('alpha');
 
     await loader.unloadExtension(extension);
 
-    expect(discoveredSkillNames(config)).not.toContain('alpha');
+    expect(discoveredSkillNames(skills)).not.toContain('alpha');
     expect(lastRebuiltFrom(observations)).not.toContain('alpha');
   });
 
@@ -221,16 +241,16 @@ describe('extension load and unload refresh the skill surface @issue:3383', () =
 
     // Rediscovery is not free, so an extension with nothing to contribute must
     // not trigger one.
-    expect(observations).toStrictEqual([]);
+    expect(observations).toHaveLength(0);
   });
 
   it('leaves the skill available after a restart', async () => {
     const extension = skillExtension('pack', [extensionSkill('alpha')]);
-    const { config, observations } = await buildHarness([extension]);
+    const { loader, skills, observations } = await buildHarness([extension]);
 
-    await config.getExtensionLoader().restartExtension(extension);
+    await loader.restartExtension(extension);
 
-    expect(discoveredSkillNames(config)).toContain('alpha');
+    expect(discoveredSkillNames(skills)).toContain('alpha');
     // restartExtension awaits the stop before the start, so each transition
     // settles on its own and rediscovery runs twice; batching collapses
     // concurrent transitions, not sequential ones. The skill stays available
@@ -243,11 +263,8 @@ describe('extension load and unload refresh the skill surface @issue:3383', () =
   });
 
   it('still reconciles after a failed load, on the next transition', async () => {
-    const { config, loader, observations } = await buildHarness();
-    const manager = config.getMcpClientManager() as unknown as {
-      startExtension: Mock<(extension: LlxprtExtension) => Promise<void>>;
-    };
-    manager.startExtension.mockRejectedValueOnce(new Error('mcp exploded'));
+    const { skills, loader, observations } = await buildHarness();
+    startExtension.mockRejectedValueOnce(new Error('mcp exploded'));
 
     // loadExtension adds to the collection before starting, so the skill is
     // already discoverable even though the transition failed.
@@ -257,20 +274,20 @@ describe('extension load and unload refresh the skill surface @issue:3383', () =
 
     await loader.loadExtension(skillExtension('other', []));
 
-    expect(discoveredSkillNames(config)).toContain('alpha');
+    expect(discoveredSkillNames(skills)).toContain('alpha');
     expect(lastRebuiltFrom(observations)).toContain('alpha');
   });
 
   it('retries on the next transition when the refresh itself fails', async () => {
-    const { config, loader, observations } = await buildHarness();
-    vi.spyOn(config, 'refreshSkills').mockRejectedValueOnce(
+    const { skills, loader, observations } = await buildHarness();
+    vi.spyOn(skills, 'refresh').mockRejectedValueOnce(
       new Error('discovery exploded'),
     );
 
     await expect(
       loader.loadExtension(skillExtension('pack', [extensionSkill('alpha')])),
     ).rejects.toThrow('discovery exploded');
-    expect(observations).toStrictEqual([]);
+    expect(observations).toHaveLength(0);
 
     await loader.loadExtension(skillExtension('other', []));
 
@@ -280,14 +297,14 @@ describe('extension load and unload refresh the skill surface @issue:3383', () =
   });
 
   it('rediscovers once for a batch of concurrent loads', async () => {
-    const { config, loader, observations } = await buildHarness();
+    const { skills, loader, observations } = await buildHarness();
 
     await Promise.all([
       loader.loadExtension(skillExtension('one', [extensionSkill('alpha')])),
       loader.loadExtension(skillExtension('two', [extensionSkill('beta')])),
     ]);
 
-    expect(discoveredSkillNames(config)).toStrictEqual(['alpha', 'beta']);
+    expect(discoveredSkillNames(skills)).toStrictEqual(['alpha', 'beta']);
     expect(observations).toHaveLength(1);
   });
 });

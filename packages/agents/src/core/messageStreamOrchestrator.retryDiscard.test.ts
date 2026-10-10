@@ -184,6 +184,7 @@ function buildHarness(options: BuildOptions): Harness {
       ),
     } as unknown as MessageStreamDeps['todoContinuationService'],
     ideContextTracker: {
+      isEnabled: () => false,
       getContextParts: vi.fn().mockReturnValue({
         contextParts: [],
         newIdeContext: undefined,

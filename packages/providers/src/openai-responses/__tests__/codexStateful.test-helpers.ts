@@ -1,3 +1,4 @@
+import { type ResponsesTestDeps } from '../responses-request.test-helpers.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -31,7 +32,6 @@ import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runt
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ResponsesExecutorDeps } from '../openAIResponsesExecutor.js';
 import type { NormalizedGenerateChatOptions } from '../../BaseProvider.js';
 import type {
   OAuthManager,
@@ -118,8 +118,9 @@ export function buildOptions(
     runtimeId: TEST_RUNTIME_ID,
   });
   const invocation = createRuntimeInvocationContext({
-    runtime,
-    settings,
+    runtimeId: runtime.runtimeId,
+    runtimeMetadata: runtime.metadata,
+
     providerName: 'openai-responses',
     ephemeralsSnapshot: ephemerals,
   });
@@ -143,25 +144,25 @@ export function buildOptions(
 }
 
 export function buildDeps(
-  overrides: Partial<ResponsesExecutorDeps> = {},
-): ResponsesExecutorDeps {
+  overrides: Partial<ResponsesTestDeps> = {},
+): ResponsesTestDeps {
   return {
     providerName: 'openai-responses',
     logger: {
       debug: () => undefined,
-    } as unknown as ResponsesExecutorDeps['logger'],
-    getProviderBaseURL: () => CODEX_BASE_URL,
-    getCustomHeaders: () => ({ 'X-Provider': 'p' }),
+    } as unknown as ResponsesTestDeps['logger'],
+    requestBaseURL: CODEX_BASE_URL,
+    requestHeaders: { 'X-Provider': 'p' },
     isCodexMode: () => true,
     getCodexAccountId: async () => 'codex-account',
     resolveAuthTokenForPrompt: async () => 'codex-token',
     shouldRetryOnError: () => false,
-    getDefaultModel: () => 'gpt-5.6-sol',
+    defaultModel: 'gpt-5.6-sol',
     getMediaTransportCapabilities: () => ({
       ...declaredMediaTransportCapabilities('codex'),
       streamingRequestBody: false,
     }),
-    getGlobalConfig: () => undefined,
+
     getUnallowedModelParameters: () => new Set<string>(),
     // Codex statefulness is WS-bound; these harnesses exercise the WS path.
     isWebSocketTransportActive: () => true,

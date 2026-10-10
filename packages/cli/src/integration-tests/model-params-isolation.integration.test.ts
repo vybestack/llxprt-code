@@ -1,8 +1,21 @@
+import {
+  modelSelectionInputs,
+  providerSwitchInputs,
+  modelParamInputs,
+} from '../../../providers/src/runtime/__tests__/provider-switch-inputs.js';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { installDefinitionRuntimeFixture } from '../__tests__/definition-runtime-fixture.js';
+const definitionFixture = installDefinitionRuntimeFixture();
+
+import {
+  assembleProfileApplication,
+  assembleProviderSwitch,
+} from '@vybestack/llxprt-code-agents';
 
 /**
  * @plan:PLAN-20260603-ISSUE1584.P12
@@ -11,27 +24,27 @@
  */
 
 import { beforeEach, afterEach, describe, expect, it } from 'bun:test';
-import { Config, MessageBus } from '@vybestack/llxprt-code-core';
-import type { Profile, SettingsService } from '@vybestack/llxprt-code-settings';
-import { ProviderManager } from '@vybestack/llxprt-code-providers';
-import type { IProvider } from '@vybestack/llxprt-code-providers';
-import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import {
-  setCliRuntimeContext,
-  registerCliProviderInfrastructure,
-  resetCliProviderInfrastructure,
+  Config,
+  type RuntimeProviderManager,
+} from '@vybestack/llxprt-code-core';
+import { Profile, SettingsService } from '@vybestack/llxprt-code-settings';
+import type { IProvider } from '@vybestack/llxprt-code-providers';
+import {
   setActiveModelParam,
   clearActiveModelParam,
   getActiveModelParams,
   switchActiveProvider,
   buildRuntimeProfileSnapshot,
-  applyProfileSnapshot,
   setActiveModel,
 } from '@vybestack/llxprt-code-providers/runtime.js';
+import { assembleCliProviderRuntime } from '@vybestack/llxprt-code-providers/runtime/assembleCliProviderRuntime.js';
+import type { CliRuntimeRegistrationHandle } from '@vybestack/llxprt-code-providers/runtime/cliForegroundRuntime.js';
 import {
   createTempDirectory,
   cleanupTempDirectory,
-  initializeTestConfig,
+  initializeTestSessionRoot,
+  type CliTestSessionRoot,
 } from './test-utils.js';
 
 function createStubProvider(name: string): IProvider & { clearState(): void } {
@@ -65,8 +78,11 @@ function createStubProvider(name: string): IProvider & { clearState(): void } {
 describe('Runtime model parameter isolation', () => {
   let tempDir: string;
   let config: Config;
-  let providerManager: ProviderManager;
+  let sessionRoot: CliTestSessionRoot;
+  let providerManager: RuntimeProviderManager;
   let settingsService: SettingsService;
+  let registration: CliRuntimeRegistrationHandle;
+  let sessionClient: Pick<Agent['sessionClient'], 'refreshAuth'>;
 
   beforeEach(async () => {
     tempDir = await createTempDirectory();
@@ -77,61 +93,72 @@ describe('Runtime model parameter isolation', () => {
       cwd: tempDir,
       model: 'alpha-model',
     });
-    await initializeTestConfig(config);
-
-    settingsService = config.getSettingsService();
-    providerManager = new ProviderManager({ settingsService, config });
-
-    // Register stub providers used by the tests.
+    settingsService = new SettingsService();
+    const assembled = assembleCliProviderRuntime({
+      settingsService,
+      config,
+      runtimeId: 'model-params-isolation-test',
+      metadata: { source: 'model-params-isolation.integration.test.ts' },
+    });
+    providerManager = assembled.providerManager;
+    registration = assembled.registration;
+    sessionRoot = await initializeTestSessionRoot(
+      config,
+      providerManager,
+      settingsService,
+    );
+    sessionClient = sessionRoot.agent.sessionClient;
     providerManager.registerProvider(createStubProvider('alpha'));
     providerManager.registerProvider(createStubProvider('beta'));
     providerManager.registerProvider(createStubProvider('gamma'));
 
-    const runtimeMessageBus = new MessageBus(
-      config.getPolicyEngine(),
-      config.getDebugMode(),
+    await providerManager.setActiveProvider('alpha');
+    await setActiveModel(
+      'alpha-model',
+      ...(await modelSelectionInputs(sessionRoot)),
+      providerManager.getActiveProvider(),
     );
-    registerCliProviderInfrastructure(
-      providerManager,
-      {
-        runtimeMessageBus,
-        // applyProfileSnapshot schedules proactive OAuth renewals, so the stub
-        // has to expose the hook it calls.
-        configureProactiveRenewalsForProfile: async () => {},
-      } as unknown as OAuthManager,
-      {
-        messageBus: runtimeMessageBus,
-        runtimeId: 'model-params-isolation-test',
-      },
-    );
-    setCliRuntimeContext(settingsService, config, {
-      runtimeId: 'model-params-isolation-test',
-      metadata: { source: 'model-params-isolation.integration.test.ts' },
-    });
-
-    providerManager.setActiveProvider('alpha');
-    await setActiveModel('alpha-model');
   });
 
   afterEach(async () => {
-    resetCliProviderInfrastructure();
+    registration.dispose();
     await cleanupTempDirectory(tempDir);
   });
 
   it('keeps model parameters scoped to the active provider', async () => {
-    expect(getActiveModelParams()).toStrictEqual({});
+    expect(
+      getActiveModelParams(...modelParamInputs(sessionRoot, providerManager)),
+    ).toStrictEqual({});
 
-    setActiveModelParam('temperature', 0.8);
-    setActiveModelParam('max_tokens', 2048);
+    setActiveModelParam(
+      'temperature',
+      0.8,
+      ...modelParamInputs(sessionRoot, providerManager),
+    );
+    setActiveModelParam(
+      'max_tokens',
+      2048,
+      ...modelParamInputs(sessionRoot, providerManager),
+    );
 
-    expect(getActiveModelParams()).toStrictEqual({
+    expect(
+      getActiveModelParams(...modelParamInputs(sessionRoot, providerManager)),
+    ).toStrictEqual({
       temperature: 0.8,
       max_tokens: 2048,
     });
     expect(settingsService.getProviderSettings('alpha').temperature).toBe(0.8);
 
-    await switchActiveProvider('beta');
-    expect(getActiveModelParams()).toStrictEqual({});
+    await switchActiveProvider(
+      'beta',
+      {},
+      ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
+        sessionClient.refreshAuth(),
+      )),
+    );
+    expect(
+      getActiveModelParams(...modelParamInputs(sessionRoot, providerManager)),
+    ).toStrictEqual({});
     // Switching providers clears the previous provider's settings by design
     // (clearPreviousProviderSettings, PLAN-20260603-ISSUE1584.P14), so alpha no
     // longer retains its temperature.
@@ -139,11 +166,27 @@ describe('Runtime model parameter isolation', () => {
       settingsService.getProviderSettings('alpha').temperature,
     ).toBeUndefined();
 
-    setActiveModelParam('temperature', 0.35);
-    expect(getActiveModelParams()).toStrictEqual({ temperature: 0.35 });
+    setActiveModelParam(
+      'temperature',
+      0.35,
+      ...modelParamInputs(sessionRoot, providerManager),
+    );
+    expect(
+      getActiveModelParams(...modelParamInputs(sessionRoot, providerManager)),
+    ).toStrictEqual({
+      temperature: 0.35,
+    });
 
-    await switchActiveProvider('alpha');
-    expect(getActiveModelParams()).toStrictEqual({});
+    await switchActiveProvider(
+      'alpha',
+      {},
+      ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
+        sessionClient.refreshAuth(),
+      )),
+    );
+    expect(
+      getActiveModelParams(...modelParamInputs(sessionRoot, providerManager)),
+    ).toStrictEqual({});
     expect(
       settingsService.getProviderSettings('alpha').temperature,
     ).toBeUndefined();
@@ -154,10 +197,25 @@ describe('Runtime model parameter isolation', () => {
   });
 
   it('builds runtime profile snapshots with provider-scoped params', () => {
-    setActiveModelParam('top_p', 0.91);
-    setActiveModelParam('response_format', { type: 'json_object' });
+    setActiveModelParam(
+      'top_p',
+      0.91,
+      ...modelParamInputs(sessionRoot, providerManager),
+    );
+    setActiveModelParam(
+      'response_format',
+      { type: 'json_object' },
+      ...modelParamInputs(sessionRoot, providerManager),
+    );
 
-    const snapshot = buildRuntimeProfileSnapshot();
+    const snapshot = buildRuntimeProfileSnapshot({
+      providerName: providerManager.getActiveProviderName() ?? '',
+      modelName: sessionRoot.agent.getModel(),
+      providerSettings: settingsService.getProviderSettings(
+        providerManager.getActiveProviderName() ?? '',
+      ),
+      ephemeralSettings: sessionRoot.agent.getEphemeralSettings(),
+    });
     expect(snapshot.provider).toBe('alpha');
     expect(snapshot.model).toBe('alpha-model');
     expect(snapshot.modelParams).toStrictEqual({
@@ -180,20 +238,49 @@ describe('Runtime model parameter isolation', () => {
       },
     };
 
-    await applyProfileSnapshot(profile, { profileName: 'beta-profile' });
+    await assembleProfileApplication(
+      config,
+      settingsService,
+      providerManager,
+      null,
+      assembleProviderSwitch(
+        config,
+        settingsService,
+        providerManager,
+        null,
+        () => undefined,
+        () => sessionClient.refreshAuth(),
+        sessionRoot.settingsOwner,
+      ),
+      sessionRoot.settingsOwner,
+      definitionFixture().profileDefinitions,
+    ).applySnapshot(profile, { profileName: 'beta-profile' });
 
     expect(settingsService.get('activeProvider')).toBe('beta');
-    expect(config.getModel()).toBe('beta-model');
+    expect(sessionRoot.settingsOwner.readSelectedModel()).toBe('beta-model');
     expect(settingsService.getProviderSettings('beta').temperature).toBe(0.55);
     expect(settingsService.getProviderSettings('beta').top_p).toBe(0.88);
-    expect(config.getEphemeralSetting('context-limit')).toBe(64000);
+    expect(sessionRoot.agent.getEphemeralSetting('context-limit')).toBe(64000);
   });
 
   it('clears individual model params via helper', () => {
-    setActiveModelParam('temperature', 0.42);
-    expect(getActiveModelParams()).toStrictEqual({ temperature: 0.42 });
+    setActiveModelParam(
+      'temperature',
+      0.42,
+      ...modelParamInputs(sessionRoot, providerManager),
+    );
+    expect(
+      getActiveModelParams(...modelParamInputs(sessionRoot, providerManager)),
+    ).toStrictEqual({
+      temperature: 0.42,
+    });
 
-    clearActiveModelParam('temperature');
-    expect(getActiveModelParams()).toStrictEqual({});
+    clearActiveModelParam(
+      'temperature',
+      ...modelParamInputs(sessionRoot, providerManager),
+    );
+    expect(
+      getActiveModelParams(...modelParamInputs(sessionRoot, providerManager)),
+    ).toStrictEqual({});
   });
 });

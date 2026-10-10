@@ -4,107 +4,64 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
+import { formatMissingRuntimeMessage } from './messages.js';
 import {
-  configureCliStatelessHardening,
-  getCliStatelessHardeningOverride,
   getCliStatelessHardeningPreference,
   isCliStatelessProviderModeEnabled,
+  isStatelessProviderIntegrationEnabled,
+  resolveStatelessHardeningPreference,
 } from './statelessHardening.js';
-import { resetCliRuntimeRegistryForTesting } from './runtimeRegistry.js';
 
-/**
- * Test suite for stateless hardening preference resolution
- *
- * Tests behavioral contracts for:
- * - Preference normalization
- * - Override behavior
- * - Default behavior
- * - Metadata precedence
- */
 describe('statelessHardening', () => {
-  beforeEach(() => {
-    // Reset state before each test
-    configureCliStatelessHardening(null);
-    resetCliRuntimeRegistryForTesting();
+  it('resolves strict and legacy from independent owner metadata', () => {
+    const strictOwner = { statelessHardening: 'strict' };
+    const legacyOwner = { statelessHardening: 'legacy' };
+
+    expect([
+      isStatelessProviderIntegrationEnabled(strictOwner),
+      isStatelessProviderIntegrationEnabled(legacyOwner),
+      isStatelessProviderIntegrationEnabled(strictOwner),
+    ]).toStrictEqual([true, false, true]);
+    expect(isCliStatelessProviderModeEnabled(strictOwner)).toBe(true);
+    expect(isCliStatelessProviderModeEnabled(legacyOwner)).toBe(false);
+    expect(getCliStatelessHardeningPreference(strictOwner)).toBe('strict');
+    expect(getCliStatelessHardeningPreference(legacyOwner)).toBe('legacy');
   });
 
-  afterEach(() => {
-    // Clean up after each test
-    configureCliStatelessHardening(null);
-    resetCliRuntimeRegistryForTesting();
+  it('normalizes supported owner metadata aliases', () => {
+    expect(resolveStatelessHardeningPreference({ statelessMode: 'on' })).toBe(
+      'strict',
+    );
+    expect(
+      resolveStatelessHardeningPreference({ statelessGuards: false }),
+    ).toBe('legacy');
+    expect(
+      resolveStatelessHardeningPreference({ statelessProviderMode: 'enabled' }),
+    ).toBe('strict');
   });
 
-  describe('configureCliStatelessHardening', () => {
-    it('should set override to strict', () => {
-      configureCliStatelessHardening('strict');
-      expect(getCliStatelessHardeningOverride()).toBe('strict');
-    });
-
-    it('should set override to legacy', () => {
-      configureCliStatelessHardening('legacy');
-      expect(getCliStatelessHardeningOverride()).toBe('legacy');
-    });
-
-    it('should clear override when set to null', () => {
-      configureCliStatelessHardening('strict');
-      expect(getCliStatelessHardeningOverride()).toBe('strict');
-
-      configureCliStatelessHardening(null);
-      expect(getCliStatelessHardeningOverride()).toBeNull();
-    });
+  it('respects the first valid owner preference when metadata has aliases', () => {
+    expect(
+      resolveStatelessHardeningPreference({
+        statelessHardening: 'legacy',
+        statelessMode: 'strict',
+      }),
+    ).toBe('legacy');
   });
 
-  describe('getCliStatelessHardeningPreference', () => {
-    it('should return default strict preference when no override or metadata', () => {
-      // Default should be 'strict' when no override, no metadata, no scope, no runtime entry
-      const preference = getCliStatelessHardeningPreference();
-      expect(preference).toBe('strict');
-    });
-
-    it('should return strict when override is set to strict', () => {
-      configureCliStatelessHardening('strict');
-      expect(getCliStatelessHardeningPreference()).toBe('strict');
-    });
-
-    it('should return legacy when override is set to legacy', () => {
-      configureCliStatelessHardening('legacy');
-      expect(getCliStatelessHardeningPreference()).toBe('legacy');
-    });
+  it('rejects missing or unsupported owner preference instead of choosing a process default', () => {
+    expect(() => resolveStatelessHardeningPreference({})).toThrow(
+      /statelessHardening.*metadata/i,
+    );
+    expect(() =>
+      resolveStatelessHardeningPreference({ statelessHardening: 'unknown' }),
+    ).toThrow(/statelessHardening.*metadata/i);
   });
 
-  describe('isCliStatelessProviderModeEnabled', () => {
-    it('should return true when preference is strict', () => {
-      configureCliStatelessHardening('strict');
-      expect(isCliStatelessProviderModeEnabled()).toBe(true);
-    });
-
-    it('should return false when preference is legacy', () => {
-      configureCliStatelessHardening('legacy');
-      expect(isCliStatelessProviderModeEnabled()).toBe(false);
-    });
-
-    it('should return true by default (strict default)', () => {
-      // Default preference is 'strict'
-      expect(isCliStatelessProviderModeEnabled()).toBe(true);
-    });
-  });
-
-  describe('override behavior', () => {
-    it('should allow switching from strict to legacy', () => {
-      configureCliStatelessHardening('strict');
-      expect(isCliStatelessProviderModeEnabled()).toBe(true);
-
-      configureCliStatelessHardening('legacy');
-      expect(isCliStatelessProviderModeEnabled()).toBe(false);
-    });
-
-    it('should allow switching from legacy to strict', () => {
-      configureCliStatelessHardening('legacy');
-      expect(isCliStatelessProviderModeEnabled()).toBe(false);
-
-      configureCliStatelessHardening('strict');
-      expect(isCliStatelessProviderModeEnabled()).toBe(true);
-    });
+  it('directs missing runtime users to an explicit owner instead of a process setter', () => {
+    const message = formatMissingRuntimeMessage({ runtimeId: 'unowned' });
+    expect(message).toContain('Pass the owning Config');
+    expect(message).not.toContain('configureCliStatelessHardening');
   });
 });

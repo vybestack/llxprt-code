@@ -24,8 +24,11 @@ export class AcpTerminalShellHost implements IShellToolHost {
     return this.delegate.getTargetDir();
   }
 
-  getWorkspaceContext() {
-    return this.delegate.getWorkspaceContext();
+  workspaceDirectories() {
+    return this.delegate.workspaceDirectories();
+  }
+  containsWorkspacePath(filePath: string) {
+    return this.delegate.containsWorkspacePath(filePath);
   }
 
   isCommandAllowed(command: string) {
@@ -77,16 +80,8 @@ export class AcpTerminalShellHost implements IShellToolHost {
     return this.delegate.stripShellWrapper(command);
   }
 
-  validatePathWithinWorkspace(
-    workspaceContext: ReturnType<IShellToolHost['getWorkspaceContext']>,
-    dirPath: string,
-    label: string,
-  ): string | null {
-    return this.delegate.validatePathWithinWorkspace(
-      workspaceContext,
-      dirPath,
-      label,
-    );
+  validatePathWithinWorkspace(dirPath: string, label: string): string | null {
+    return this.delegate.validatePathWithinWorkspace(dirPath, label);
   }
 
   isPtyActive(pid: number): boolean {

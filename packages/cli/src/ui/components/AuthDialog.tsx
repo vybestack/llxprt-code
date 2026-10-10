@@ -12,7 +12,10 @@ import { RadioButtonSelect } from './shared/RadioButtonSelect.js';
 import type { LoadedSettings } from '../../config/settings.js';
 import { SettingScope } from '../../config/settings.js';
 import { useKeypress } from '../hooks/useKeypress.js';
-import { useRuntimeApi } from '../contexts/RuntimeContext.js';
+import {
+  useOAuthControl,
+  type OAuthControl,
+} from '../contexts/OAuthControlContext.js';
 import type { AuthStatus } from '@vybestack/llxprt-code-providers/auth.js';
 import { firstNonEmptyString } from '../../utils/coalesce.js';
 import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
@@ -160,7 +163,7 @@ function useMountedRef(): React.MutableRefObject<boolean> {
 
 function useAuthDialogState(
   settings: LoadedSettings,
-  runtime: ReturnType<typeof useRuntimeApi>,
+  control: OAuthControl,
   mountedRef: React.MutableRefObject<boolean>,
 ): AuthDialogState {
   const [enabledProviders, setEnabledProviders] = useState<Set<string>>(() =>
@@ -172,7 +175,7 @@ function useAuthDialogState(
 
   const reloadAuthStatuses = useCallback(async (): Promise<void> => {
     try {
-      const statuses = await runtime.getCliOAuthManager().getAuthStatus();
+      const statuses = await control.getAuthStatus();
       if (!mountedRef.current) return;
       setAuthStatuses(
         new Map(statuses.map((status) => [status.provider, status])),
@@ -181,7 +184,7 @@ function useAuthDialogState(
     } catch {
       if (mountedRef.current) setAuthStatuses(new Map());
     }
-  }, [mountedRef, runtime, setEnabledProviders]);
+  }, [mountedRef, control, setEnabledProviders]);
 
   useEffect(() => {
     setEnabledProviders(
@@ -237,7 +240,7 @@ export function AuthDialog({
   settings,
   initialErrorMessage,
 }: AuthDialogProps): React.JSX.Element {
-  const runtime = useRuntimeApi();
+  const control = useOAuthControl();
   const mountedRef = useMountedRef();
   const [errorMessage, setErrorMessage] = useState<string | null>(
     firstNonEmptyString(initialErrorMessage) ?? null,
@@ -247,7 +250,7 @@ export function AuthDialog({
     setEnabledProviders,
     authStatuses,
     reloadAuthStatuses,
-  } = useAuthDialogState(settings, runtime, mountedRef);
+  } = useAuthDialogState(settings, control, mountedRef);
   const items = useMemo(
     () => buildAuthItems(enabledProviders, authStatuses),
     [enabledProviders, authStatuses],
@@ -266,9 +269,7 @@ export function AuthDialog({
 
       void (async () => {
         try {
-          const enabled = await runtime
-            .getCliOAuthManager()
-            .toggleOAuthEnabled(providerName);
+          const enabled = await control.toggleOAuthEnabled(providerName);
           if (!mountedRef.current) return;
           setEnabledProviders((prev) => {
             const next = new Set(prev);
@@ -291,7 +292,7 @@ export function AuthDialog({
         }
       })();
     },
-    [mountedRef, onSelect, reloadAuthStatuses, runtime, setEnabledProviders],
+    [mountedRef, onSelect, reloadAuthStatuses, control, setEnabledProviders],
   );
 
   useCloseAuthDialogOnEscape(onSelect);

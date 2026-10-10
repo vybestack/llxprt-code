@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { PROFILE_EPHEMERAL_KEYS } from './runtimeSettings.js';
+import { PROFILE_EPHEMERAL_KEYS } from './index.js';
 
 describe('reasoning.summary profile save/load @issue:922', () => {
   it('should include reasoning.summary in PROFILE_EPHEMERAL_KEYS', () => {

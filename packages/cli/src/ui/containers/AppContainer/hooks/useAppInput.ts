@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { useOAuthControl } from '../../../contexts/OAuthControlContext.js';
 
 import {
   computeInputWidth,
@@ -73,7 +74,6 @@ export interface AppInputParams {
   slashCommandRuntime: SlashCommandRuntime;
   agent: AppBootstrapResult['agent'];
   settings: AppBootstrapResult['settings'];
-  runtime: AppBootstrapResult['runtime'];
   subagentManager?: UiSubagentManager;
   /**
    * Turn store; owns the committed history and the addItem/removeItems/
@@ -82,6 +82,7 @@ export interface AppInputParams {
    */
   turnStore: TurnStore;
   recordingIntegrationRef: AppBootstrapResult['recordingIntegrationRef'];
+  recordingOwner?: 'agent' | 'raw';
   recordingSwapCallbacks: AppBootstrapResult['recordingSwapCallbacks'];
   recordingIntegration: AppBootstrapResult['recordingIntegration'];
   runtimeMessageBus: AppBootstrapResult['runtimeMessageBus'];
@@ -236,8 +237,9 @@ function useSlashCommandSetup(
     extensions.extensionsUpdateState,
     true,
     todoContextForCommands,
-    recordingIntegrationRef.current ?? undefined,
+    recordingIntegrationRef?.current ?? undefined,
     recordingSwapCallbacks,
+    p.recordingOwner,
   );
 }
 
@@ -251,9 +253,14 @@ function useInputCoreProcessors(p: AppInputParams) {
       setQuittingMessagesRef.current(messages);
   }, []);
   const slashResult = useSlashCommandSetup(p, quitHandler, toggleVimEnabled);
+  const disposeAgentBeforeExit = useCallback(
+    () => p.agent.dispose(),
+    [p.agent],
+  );
   const exitResult = useExitHandling({
     handleSlashCommand: slashResult.handleSlashCommand,
     config: p.streamRuntime.hooks,
+    onBeforeExit: disposeAgentBeforeExit,
   });
   setQuittingMessagesRef.current = exitResult.setQuittingMessages;
   return {
@@ -274,7 +281,7 @@ function useInputBuffer(
   p: AppInputParams,
   core: ReturnType<typeof useInputCore>,
 ) {
-  const { runtime } = p;
+  const oauthControl = useOAuthControl();
   const { stdin, setRawMode } = useStdin();
   const shellModeActive = useStoreSelector(
     p.terminalStore.store,
@@ -293,7 +300,7 @@ function useInputBuffer(
     shellModeActive,
   });
   const inputHistoryStore = useInputHistoryStore();
-  const logger = useLogger(p.uiRuntime.storage);
+  const logger = useLogger(p.uiRuntime.projectTempDir);
   useInputHistoryBootstrap({ inputHistoryStore, logger });
   const lastSubmittedPromptRef = useRef<string | null>('');
   const handleOAuthCodeDialogClose = useCallback(() => {
@@ -303,13 +310,13 @@ function useInputBuffer(
     async (code: string) => {
       submitOAuthCode(
         {
-          getOAuthManager: () => runtime.getCliOAuthManager(),
+          submitCode: oauthControl.submitCode,
           getActiveProvider: getPendingOAuthProvider,
         },
         code,
       );
     },
-    [runtime],
+    [oauthControl],
   );
   const handleUserCancel = useCallback(
     (shouldRestorePrompt?: boolean) => {
@@ -382,6 +389,7 @@ function useInputStreamSetup(
     removeItems,
     p.operationLifecycle,
     core.cancelActiveSlashCommand,
+    p.recordingOwner,
   );
   return { ...bufferSetup, agentStreamResult };
 }

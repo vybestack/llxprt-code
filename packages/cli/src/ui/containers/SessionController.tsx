@@ -16,17 +16,14 @@ import {
 import type { HistoryItem } from '../types.js';
 import { MessageType } from '../types.js';
 import { useHistory } from '../hooks/useHistoryManager.js';
-import { useRuntimeApi, getRuntimeApi } from '../contexts/RuntimeContext.js';
+import { useRuntimeApi, type RuntimeApi } from '../contexts/RuntimeContext.js';
 
 import {
   getErrorMessage,
-  loadCoreMemoryContent,
   coreEvents,
   CoreEvent,
 } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
-import { loadHierarchicalLlxprtMemory } from '../../config/environmentLoader.js';
-import { loadSettings } from '../../config/settings.js';
 import { resolveModelIdentity } from '../utils/modelIdentity.js';
 import {
   SessionStateProvider,
@@ -86,7 +83,7 @@ export const SessionController: React.FC<SessionControllerProps> = ({
   turnStore,
 }) => {
   const runtime = useRuntimeApi();
-  const statusSnapshot = runtime.getActiveProviderStatus();
+  const statusSnapshot = runtime.providerStatus();
 
   const initialState: SessionState = {
     currentModel: resolveModelIdentity(runtime, config.getModel()),
@@ -114,6 +111,7 @@ function scheduleWarningClear(
 }
 
 function useCheckPaymentModeChange(
+  runtime: RuntimeApi,
   sessionState: SessionState,
   historyLength: number,
   dispatch: React.Dispatch<SessionAction>,
@@ -121,8 +119,7 @@ function useCheckPaymentModeChange(
 ): (forcePreviousProvider?: string) => void {
   return useCallback(
     (forcePreviousProvider?: string) => {
-      const runtime = getRuntimeApi();
-      const status = runtime.getActiveProviderStatus();
+      const status = runtime.providerStatus();
       const newPaymentMode = status.isPaidMode;
       const currentProviderName = status.providerName ?? undefined;
       const previousProvider =
@@ -159,6 +156,7 @@ function useCheckPaymentModeChange(
       }
     },
     [
+      runtime,
       sessionState.isPaidMode,
       sessionState.lastProvider,
       historyLength,
@@ -184,28 +182,7 @@ function usePerformMemoryRefresh(
       Date.now(),
     );
     try {
-      const settings = loadSettings(config.getWorkingDir());
-      const { memoryContent, fileCount } = await loadHierarchicalLlxprtMemory(
-        config.getWorkingDir(),
-        config.shouldLoadMemoryFromIncludeDirectories()
-          ? config.getWorkspaceContext().getDirectories()
-          : [],
-        config.getDebugMode(),
-        config.getFileService(),
-        settings.merged,
-        config.getExtensions(),
-        config.getFolderTrust(),
-        settings.merged.ui.memoryImportFormat ?? 'tree',
-        config.getFileFilteringOptions(),
-      );
-      config.setUserMemory(memoryContent);
-      config.setLlxprtMdFileCount(fileCount);
-      try {
-        const coreContent = await loadCoreMemoryContent(config.getWorkingDir());
-        config.setCoreMemory(coreContent);
-      } catch {
-        // Non-fatal: keep existing core memory
-      }
+      const { memoryContent, fileCount } = await config.refreshMemory();
       const charCount = memoryContent.length;
       const refreshDetails =
         charCount > 0
@@ -238,6 +215,7 @@ function usePerformMemoryRefresh(
 }
 
 function useModelChangeWatcher(
+  runtime: RuntimeApi,
   config: CliUiRuntime,
   sessionState: SessionState,
   historyLength: number,
@@ -247,8 +225,7 @@ function useModelChangeWatcher(
   useEffect(() => {
     const currentTimerRef = warningTimerRef;
     const checkModelChange = () => {
-      const runtime = getRuntimeApi();
-      const status = runtime.getActiveProviderStatus();
+      const status = runtime.providerStatus();
       const displayModel = resolveModelIdentity(runtime, config.getModel());
       if (displayModel !== sessionState.currentModel) {
         dispatch({ type: 'SET_CURRENT_MODEL', payload: displayModel });
@@ -286,6 +263,7 @@ function useModelChangeWatcher(
       if (currentTimerRef.current) clearTimeout(currentTimerRef.current);
     };
   }, [
+    runtime,
     config,
     sessionState.currentModel,
     sessionState.isPaidMode,
@@ -301,6 +279,7 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
   turnStore: turnStoreProp,
 }) => {
   const [sessionState, dispatch] = useSessionState();
+  const runtime = useRuntimeApi();
   const [appState, appDispatch] = useReducer(appReducer, initialAppState);
   const turnStoreRef = useRef<TurnStore | null>(null);
   const turnStore =
@@ -315,6 +294,7 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
   const warningTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const checkPaymentModeChange = useCheckPaymentModeChange(
+    runtime,
     sessionState,
     history.length,
     dispatch,
@@ -322,6 +302,7 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
   );
   const performMemoryRefresh = usePerformMemoryRefresh(config, addItem);
   useModelChangeWatcher(
+    runtime,
     config,
     sessionState,
     history.length,

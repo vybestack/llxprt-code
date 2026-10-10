@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { copyProviderRequestOptions } from '../requestAdmission.js';
 /**
  * Options normalization and runtime context validation helpers extracted
  * from LoggingProviderWrapper to keep the main wrapper file under the
@@ -14,7 +15,7 @@ import {
   type IContent,
   type UsageStats,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { GenerateChatOptions, ProviderToolset } from '../IProvider.js';
 import { MissingProviderRuntimeError } from '../errors.js';
@@ -40,37 +41,27 @@ export function normalizeChatCompletionOptions(
 ): GenerateChatOptions {
   let normalizedOptions: GenerateChatOptions = Array.isArray(contentOrOptions)
     ? { contents: contentOrOptions, tools: maybeTools }
-    : { ...contentOrOptions };
-  normalizedOptions.metadata = {
-    ...normalizedOptions.runtime?.metadata,
-    ...normalizedOptions.metadata,
-  };
+    : copyProviderRequestOptions(contentOrOptions);
 
   const injectedRuntime = ctx.runtimeContextResolver?.();
-  const providedRuntime = normalizedOptions.runtime;
 
   if (injectedRuntime) {
     const mergedMetadata: Record<string, unknown> = {
       ...(ctx.statelessRuntimeMetadata ?? {}),
       ...(injectedRuntime.metadata ?? {}),
-      ...(providedRuntime?.metadata ?? {}),
       ...(normalizedOptions.metadata ?? {}),
       source: 'LoggingProviderWrapper.generateChatCompletion',
       requirement: 'REQ-SP4-001',
     };
 
-    normalizedOptions.runtime = {
-      ...injectedRuntime,
-      ...providedRuntime,
-      settingsService:
-        providedRuntime?.settingsService ?? injectedRuntime.settingsService,
-      config: providedRuntime?.config ?? injectedRuntime.config,
-      metadata: mergedMetadata,
-    };
+    normalizedOptions.runtimeKind ??= injectedRuntime.runtimeKind;
+    normalizedOptions.invocation ??= captureProviderInvocation(
+      injectedRuntime,
+      ctx.providerName,
+      normalizedOptions.modelParameters,
+    );
+    applyInjectedRetryOperations(normalizedOptions, injectedRuntime);
 
-    normalizedOptions.settings =
-      normalizedOptions.settings ??
-      (normalizedOptions.runtime.settingsService as SettingsService);
     normalizedOptions.metadata = mergedMetadata;
   }
 
@@ -96,55 +87,15 @@ export function ensureRuntimeContext(
   providerName: string,
   debug: DebugLogger,
 ): void {
-  const runtime = normalizedOptions.runtime;
-  const runtimeId = runtime?.runtimeId ?? 'unknown';
-  debug.log(
-    () =>
-      `Checking runtime context: runtimeId=${runtimeId}, hasRuntime=${!!runtime}, hasSettings=${!!runtime?.settingsService}, hasConfig=${!!runtime?.config}`,
-  );
-  debug.log(
-    () => `Contents length at entry: ${normalizedOptions.contents.length}`,
-  );
-
-  if (!runtime) {
-    throw buildMissingRuntimeError(providerName, runtimeId, [
-      'runtime',
-      'settings',
-      'config',
-    ]);
-  }
-
-  const runtimeShape = runtime as { settingsService?: unknown };
-  if (runtimeShape.settingsService == null) {
-    debug.error(
-      () => `Missing settings in runtime context for runtimeId=${runtimeId}`,
+  debug.log(() => `Checking admitted invocation for ${providerName}`);
+  if (!normalizedOptions.invocation) {
+    throw buildMissingRuntimeError(
+      providerName,
+      typeof normalizedOptions.metadata?.runtimeId === 'string'
+        ? normalizedOptions.metadata.runtimeId
+        : 'unknown',
+      ['invocation'],
     );
-    throw new MissingProviderRuntimeError({
-      providerKey: `LoggingProviderWrapper[${providerName}]`,
-      missingFields: ['settings'],
-      requirement: 'REQ-SP4-004',
-      stage: 'generateChatCompletion',
-      metadata: {
-        hint: 'Runtime context must include settings for stateless hardening.',
-        runtimeId,
-      },
-    });
-  }
-
-  if (!runtime.config) {
-    debug.error(
-      () => `Missing config in runtime context for runtimeId=${runtimeId}`,
-    );
-    throw new MissingProviderRuntimeError({
-      providerKey: `LoggingProviderWrapper[${providerName}]`,
-      missingFields: ['config'],
-      requirement: 'REQ-SP4-004',
-      stage: 'generateChatCompletion',
-      metadata: {
-        hint: 'Runtime context must include config for stateless hardening.',
-        runtimeId,
-      },
-    });
   }
 }
 
@@ -167,3 +118,16 @@ export function buildMissingRuntimeError(
 
 // UsageStats re-export for type consumers
 export type { UsageStats };
+
+function applyInjectedRetryOperations(
+  options: GenerateChatOptions,
+  injectedRuntime: ProviderRuntimeContext,
+): void {
+  options.readRetryAuthToken ??= injectedRuntime.readRetryAuthToken;
+  options.handleAuthError ??= injectedRuntime.handleAuthError;
+  options.tryBucketFailover ??= injectedRuntime.tryBucketFailover;
+  options.readFailoverBuckets ??= injectedRuntime.readFailoverBuckets;
+  options.readCurrentBucket ??= injectedRuntime.readCurrentBucket;
+  options.readFailoverReasons ??= injectedRuntime.readFailoverReasons;
+  options.resetBucketSession ??= injectedRuntime.resetBucketSession;
+}

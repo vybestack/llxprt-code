@@ -6,7 +6,6 @@
 
 import { describe, expect, it } from 'bun:test';
 import {
-  mockGetCurrentProfileName,
   createIssue1468Fixture,
   mockLoadProfile,
 } from './__tests__/oauth-manager.issue1468.test-helpers.js';
@@ -20,9 +19,9 @@ describe('Issue #1468 getProfileBuckets case 16', () => {
    * @then Empty array should be returned
    */
   it('should return empty array when codex profile loaded but anthropic requested', async () => {
-    const { manager } = createIssue1468Fixture();
+    const { manager, settingsService } = createIssue1468Fixture();
 
-    mockGetCurrentProfileName.mockReturnValue('my-codex-profile');
+    settingsService.setCurrentProfileName('my-codex-profile');
     mockLoadProfile.mockResolvedValue({
       provider: 'codex',
       auth: {

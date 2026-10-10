@@ -4,10 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  type ContentGenerator,
-  type ContentGeneratorConfig,
-} from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import { type ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type {
   ModelGenerationRequest,
   ModelOutput,
@@ -19,31 +16,12 @@ import type {
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
 
 /**
- * Minimal structural contract for the provider-manager capability that
- * {@link ProviderContentGenerator} consumes. Both the concrete
- * `ProviderManager` (via `IProviderManager`) and the core-owned
- * `RuntimeProviderManager` satisfy this surface, so the composition root can
- * pass either without a cast bridge.
- */
-export interface ProviderContentGeneratorManager {
-  getActiveProvider(): { name: string } | undefined;
-}
-
-/**
  * ContentGenerator implementation that delegates to external providers.
  *
  * The actual generation goes through the IContent pipeline (not this class).
  * Only countTokens estimation and embedContent throwing are implemented here.
  */
 export class ProviderContentGenerator implements ContentGenerator {
-  constructor(
-    private providerManager: ProviderContentGeneratorManager,
-    private _config: ContentGeneratorConfig,
-  ) {
-    void this.providerManager;
-    void this._config;
-  }
-
   private throwDirectNotSupported(): never {
     throw new Error(
       'Provider-backed content generation uses the IContent pipeline; direct ContentGenerator generation is not supported',

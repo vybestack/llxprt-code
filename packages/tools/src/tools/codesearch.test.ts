@@ -267,20 +267,11 @@ describe('CodeSearchTool', () => {
       res.end(searchSse('capped'));
     });
     loopback.installFetchRouter(server);
-    const settingsService: NonNullable<
-      CodeSearchToolDependencies['settingsService']
-    > = {
-      get: (key: string): unknown => {
-        if (key === 'tool-output-max-tokens') {
-          return 2000;
-        }
-        return undefined;
-      },
-    };
-    tool = new CodeSearchTool({
+    const dependencies: CodeSearchToolDependencies = {
       keyStorage: createKeyStorage(),
-      settingsService,
-    });
+      readTokenLimit: () => 2000,
+    };
+    tool = new CodeSearchTool(dependencies);
 
     const result = await tool
       .build({ query: 'test', tokensNum: 4000 })

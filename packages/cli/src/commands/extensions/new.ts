@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { configureCommandOptions } from '../command-configuration.js';
 import { access, cp, mkdir, readdir } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import type { CommandModule } from 'yargs';
@@ -68,16 +69,18 @@ export const newCommand: CommandModule = {
   describe: 'Create a new extension from a boilerplate example.',
   builder: async (yargs) => {
     const choices = await getBoilerplateChoices();
-    return yargs
-      .positional('path', {
-        describe: 'The path to create the extension in.',
-        type: 'string',
-      })
-      .positional('template', {
-        describe: 'The boilerplate template to use.',
-        type: 'string',
-        choices,
-      });
+    return configureCommandOptions(yargs, (configuration) =>
+      configuration
+        .positional('path', {
+          describe: 'The path to create the extension in.',
+          type: 'string',
+        })
+        .positional('template', {
+          describe: 'The boilerplate template to use.',
+          type: 'string',
+          choices,
+        }),
+    );
   },
   handler: async (args) => {
     await handleNew({

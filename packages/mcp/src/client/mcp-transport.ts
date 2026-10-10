@@ -13,9 +13,11 @@ import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { AuthProviderType } from '@vybestack/llxprt-code-auth/mcp-auth-provider-type.js';
 import type { MCPServerConfig } from '../config/mcpServerConfig.js';
 import type { McpAuthProvider } from '../auth/auth-provider.js';
-import { getRegisteredMcpAuthFactoryRegistry } from '../auth/mcp-auth-factory.js';
+import type { McpAuthFactoryRegistry } from '../auth/mcp-auth-factory.js';
 import { MCPOAuthProvider } from '../auth/oauth-provider.js';
-import { MCPOAuthTokenStorage } from '../auth/oauth-token-storage.js';
+import type { MCPOAuthTokenStorage } from '../auth/oauth-token-storage.js';
+import { createJoiningTransport } from './mcp-connection-lifetime.js';
+import { awaitOAuthOperation } from '../auth/oauth-request.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 
 const debugLogger = DebugLogger.getLogger('llxprt:core:tools:mcp-client');
@@ -103,6 +105,7 @@ function isMcpAuthProvider(value: unknown): value is McpAuthProvider {
 function createAuthProvider(
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
+  getAuthProviderFactory?: McpAuthFactoryRegistry['getAuthProviderFactory'],
 ): McpAuthProvider | undefined {
   const authProviderType = mcpServerConfig.authProviderType;
   if (
@@ -112,10 +115,7 @@ function createAuthProvider(
     return undefined;
   }
 
-  const factory =
-    getRegisteredMcpAuthFactoryRegistry().getAuthProviderFactory(
-      authProviderType,
-    );
+  const factory = getAuthProviderFactory?.(authProviderType);
   if (factory === undefined) {
     throw new Error(
       unknownAuthProviderMessage(mcpServerName, authProviderType),
@@ -155,40 +155,58 @@ function createUrlTransport(
   transportOptions:
     | StreamableHTTPClientTransportOptions
     | SSEClientTransportOptions,
+  signal?: AbortSignal,
 ): StreamableHTTPClientTransport | SSEClientTransport {
+  const { url, httpUrl } = mcpServerConfig;
   // Priority 1: httpUrl (deprecated)
-  if (mcpServerConfig.httpUrl) {
-    if (mcpServerConfig.url) {
+  if (httpUrl) {
+    if (url) {
       debugLogger.warn(
         `MCP server '${mcpServerName}': Both 'httpUrl' and 'url' are configured. ` +
           `Using deprecated 'httpUrl'. Please migrate to 'url' with 'type: "http"'.`,
       );
     }
-    return new StreamableHTTPClientTransport(
-      new URL(mcpServerConfig.httpUrl),
-      transportOptions,
+    return createJoiningTransport(
+      (fetch) =>
+        new StreamableHTTPClientTransport(new URL(httpUrl), {
+          ...transportOptions,
+          fetch,
+        }),
+      signal,
     );
   }
 
   // Priority 2 & 3: url with explicit type
-  if (mcpServerConfig.url && mcpServerConfig.type) {
+  if (url && mcpServerConfig.type) {
     if (mcpServerConfig.type === 'sse') {
-      return new SSEClientTransport(
-        new URL(mcpServerConfig.url),
-        transportOptions,
+      return createJoiningTransport(
+        (fetch) =>
+          new SSEClientTransport(new URL(url), {
+            ...transportOptions,
+            fetch,
+          }),
+        signal,
       );
     }
-    return new StreamableHTTPClientTransport(
-      new URL(mcpServerConfig.url),
-      transportOptions,
+    return createJoiningTransport(
+      (fetch) =>
+        new StreamableHTTPClientTransport(new URL(url), {
+          ...transportOptions,
+          fetch,
+        }),
+      signal,
     );
   }
 
   // Priority 4: url without type (default to HTTP)
-  if (mcpServerConfig.url) {
-    return new StreamableHTTPClientTransport(
-      new URL(mcpServerConfig.url),
-      transportOptions,
+  if (url) {
+    return createJoiningTransport(
+      (fetch) =>
+        new StreamableHTTPClientTransport(new URL(url), {
+          ...transportOptions,
+          fetch,
+        }),
+      signal,
     );
   }
 
@@ -202,7 +220,9 @@ export async function createTransportWithOAuth(
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
   accessToken: string,
+  signal?: AbortSignal,
 ): Promise<StreamableHTTPClientTransport | SSEClientTransport | null> {
+  const { url, httpUrl } = mcpServerConfig;
   try {
     const headers: Record<string, string> = {
       ...mcpServerConfig.headers,
@@ -215,30 +235,46 @@ export async function createTransportWithOAuth(
       requestInit: { headers },
     };
 
-    if (mcpServerConfig.httpUrl) {
-      return new StreamableHTTPClientTransport(
-        new URL(mcpServerConfig.httpUrl),
-        transportOptions,
+    if (httpUrl) {
+      return createJoiningTransport(
+        (fetch) =>
+          new StreamableHTTPClientTransport(new URL(httpUrl), {
+            ...transportOptions,
+            fetch,
+          }),
+        signal,
       );
     }
 
-    if (mcpServerConfig.url && mcpServerConfig.type) {
+    if (url && mcpServerConfig.type) {
       if (mcpServerConfig.type === 'sse') {
-        return new SSEClientTransport(
-          new URL(mcpServerConfig.url),
-          transportOptions,
+        return createJoiningTransport(
+          (fetch) =>
+            new SSEClientTransport(new URL(url), {
+              ...transportOptions,
+              fetch,
+            }),
+          signal,
         );
       }
-      return new StreamableHTTPClientTransport(
-        new URL(mcpServerConfig.url),
-        transportOptions,
+      return createJoiningTransport(
+        (fetch) =>
+          new StreamableHTTPClientTransport(new URL(url), {
+            ...transportOptions,
+            fetch,
+          }),
+        signal,
       );
     }
 
-    if (mcpServerConfig.url) {
-      return new StreamableHTTPClientTransport(
-        new URL(mcpServerConfig.url),
-        transportOptions,
+    if (url) {
+      return createJoiningTransport(
+        (fetch) =>
+          new StreamableHTTPClientTransport(new URL(url), {
+            ...transportOptions,
+            fetch,
+          }),
+        signal,
       );
     }
 
@@ -255,14 +291,22 @@ export async function createTransportWithOAuth(
  * Get stored OAuth token for a server.
  */
 export async function getStoredOAuthToken(
+  tokenStorage: MCPOAuthTokenStorage,
   serverName: string,
+  signal?: AbortSignal,
 ): Promise<string | null> {
-  const tokenStorage = new MCPOAuthTokenStorage();
-  const credentials = await tokenStorage.getCredentials(serverName);
+  const credentials = await awaitOAuthOperation(signal, () =>
+    tokenStorage.getCredentials(serverName),
+  );
   if (!credentials) return null;
-  return MCPOAuthProvider.getValidToken(serverName, {
-    clientId: credentials.clientId,
-  });
+  return MCPOAuthProvider.getValidToken(
+    tokenStorage,
+    serverName,
+    {
+      clientId: credentials.clientId,
+    },
+    signal,
+  );
 }
 
 /**
@@ -271,6 +315,7 @@ export async function getStoredOAuthToken(
 export function createSSETransportWithAuth(
   config: MCPServerConfig,
   accessToken?: string | null,
+  signal?: AbortSignal,
 ): SSEClientTransport {
   const headers: Record<string, string> = {
     ...config.headers,
@@ -279,9 +324,16 @@ export function createSSETransportWithAuth(
     headers['Authorization'] = `Bearer ${accessToken}`;
   }
   const url = config.httpUrl ?? config.url!;
-  return new SSEClientTransport(new URL(url), {
-    requestInit: { headers },
-  });
+  return createJoiningTransport(
+    (fetch) =>
+      new SSEClientTransport(new URL(url), {
+        ...{
+          requestInit: { headers },
+        },
+        fetch,
+      }),
+    signal,
+  );
 }
 
 /**
@@ -314,21 +366,35 @@ function validateNoUrlAuthProvider(mcpServerConfig: MCPServerConfig): void {
 }
 
 async function resolveOAuthHeaders(
+  tokenStorage: MCPOAuthTokenStorage,
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
+  signal?: AbortSignal,
+  getAuthProviderFactory?: McpAuthFactoryRegistry['getAuthProviderFactory'],
 ): Promise<{
   headers: Record<string, string>;
   authProvider: McpAuthProvider | undefined;
 }> {
-  const authProvider = createAuthProvider(mcpServerName, mcpServerConfig);
+  const authProvider = createAuthProvider(
+    mcpServerName,
+    mcpServerConfig,
+    getAuthProviderFactory,
+  );
   const headers: Record<string, string> =
-    (await authProvider?.getRequestHeaders?.()) ?? {};
+    (await awaitOAuthOperation(signal, async () =>
+      authProvider?.getRequestHeaders?.(),
+    )) ?? {};
 
   if (authProvider !== undefined) {
     return { headers, authProvider };
   }
 
-  const oauthResult = await resolveAccessToken(mcpServerName, mcpServerConfig);
+  const oauthResult = await resolveAccessToken(
+    tokenStorage,
+    mcpServerName,
+    mcpServerConfig,
+    signal,
+  );
   if (oauthResult.hasOAuthConfig && oauthResult.accessToken) {
     headers['Authorization'] = `Bearer ${oauthResult.accessToken}`;
   }
@@ -337,16 +403,20 @@ async function resolveOAuthHeaders(
 }
 
 async function resolveAccessToken(
+  tokenStorage: MCPOAuthTokenStorage,
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
+  signal?: AbortSignal,
 ): Promise<{ accessToken: string | null; hasOAuthConfig: boolean }> {
   let accessToken: string | null = null;
   let hasOAuthConfig: boolean = mcpServerConfig.oauth?.enabled === true;
 
   if (hasOAuthConfig && mcpServerConfig.oauth) {
     accessToken = await MCPOAuthProvider.getValidToken(
+      tokenStorage,
       mcpServerName,
       mcpServerConfig.oauth,
+      signal,
     );
 
     if (
@@ -360,13 +430,19 @@ async function resolveAccessToken(
       );
     }
   } else {
-    const tokenStorage = new MCPOAuthTokenStorage();
-    const credentials = await tokenStorage.getCredentials(mcpServerName);
+    const credentials = await awaitOAuthOperation(signal, () =>
+      tokenStorage.getCredentials(mcpServerName),
+    );
 
     if (credentials) {
-      accessToken = await MCPOAuthProvider.getValidToken(mcpServerName, {
-        clientId: credentials.clientId,
-      });
+      accessToken = await MCPOAuthProvider.getValidToken(
+        tokenStorage,
+        mcpServerName,
+        {
+          clientId: credentials.clientId,
+        },
+        signal,
+      );
 
       if (
         accessToken !== null &&
@@ -385,12 +461,18 @@ async function resolveAccessToken(
 }
 
 async function createUrlBasedTransport(
+  tokenStorage: MCPOAuthTokenStorage,
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
+  signal?: AbortSignal,
+  getAuthProviderFactory?: McpAuthFactoryRegistry['getAuthProviderFactory'],
 ): Promise<Transport> {
   const { headers, authProvider } = await resolveOAuthHeaders(
+    tokenStorage,
     mcpServerName,
     mcpServerConfig,
+    signal,
+    getAuthProviderFactory,
   );
 
   const transportOptions:
@@ -400,7 +482,12 @@ async function createUrlBasedTransport(
     requestInit: createTransportRequestInit(mcpServerConfig, headers),
   };
 
-  return createUrlTransport(mcpServerName, mcpServerConfig, transportOptions);
+  return createUrlTransport(
+    mcpServerName,
+    mcpServerConfig,
+    transportOptions,
+    signal,
+  );
 }
 
 /**
@@ -408,9 +495,12 @@ async function createUrlBasedTransport(
  * Visible for Testing.
  */
 export async function createTransport(
+  tokenStorage: MCPOAuthTokenStorage,
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
   debugMode: boolean,
+  signal?: AbortSignal,
+  getAuthProviderFactory?: McpAuthFactoryRegistry['getAuthProviderFactory'],
 ): Promise<Transport> {
   const noUrl = !mcpServerConfig.url && !mcpServerConfig.httpUrl;
   if (noUrl) {
@@ -418,7 +508,13 @@ export async function createTransport(
   }
 
   if (mcpServerConfig.httpUrl || mcpServerConfig.url) {
-    return createUrlBasedTransport(mcpServerName, mcpServerConfig);
+    return createUrlBasedTransport(
+      tokenStorage,
+      mcpServerName,
+      mcpServerConfig,
+      signal,
+      getAuthProviderFactory,
+    );
   }
 
   if (mcpServerConfig.command) {

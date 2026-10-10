@@ -1,3 +1,5 @@
+import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
+const fixtureOwners = installRuntimeTestOwners();
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -184,7 +186,12 @@ describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () =>
   beforeEach(() => {
     settingsService = new SettingsService();
     config = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager({ settingsService, config });
+    providerManager = new ProviderManager({
+      sessionSettings: fixtureOwners.adopt(config, settingsService)
+        .settingsOwner,
+      settingsService,
+      config,
+    });
   });
 
   it('forwards the peeked sub-profile delegate projection as an estimate-only envelope', async () => {
@@ -775,6 +782,7 @@ describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () =>
       providerManager.registerProvider(delegate.provider);
 
       const projection = await projectNextSubProfilePromptEnvelope({
+        bindDelegateProvider: (provider) => provider,
         config: {
           profileName: 'unit-lb',
           strategy: 'round-robin',
@@ -805,6 +813,7 @@ describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () =>
       failoverState.setIfOwner(owner, 2);
 
       const projection = await projectNextSubProfilePromptEnvelope({
+        bindDelegateProvider: (provider) => provider,
         config: {
           profileName: 'unit-lb',
           strategy: 'failover',

@@ -7,17 +7,16 @@
 import { describe, expect, it, vi } from 'bun:test';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { computeStatefulConversation } from './openAIResponsesStateful.js';
 
 const CODEX_BASE_URL = 'https://chatgpt.com/backend-api/codex';
 
-function options(): NormalizedGenerateChatOptions {
+function options(): { invocation: { modelBehavior: Record<string, unknown> } } {
   return {
     invocation: {
-      getModelBehavior: () => undefined,
+      modelBehavior: {},
     },
-  } as unknown as NormalizedGenerateChatOptions;
+  };
 }
 
 function historyWithStoredParent(): IContent[] {

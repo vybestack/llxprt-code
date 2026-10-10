@@ -9,7 +9,6 @@ import { CommandKind } from './types.js';
 import { MessageType } from '../types.js';
 import * as os from 'os';
 import * as path from 'path';
-import { loadServerHierarchicalMemory } from '@vybestack/llxprt-code-core';
 import { loadTrustedFolders } from '../../config/trustedFolders.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 
@@ -32,7 +31,7 @@ function addDirectoriesToWorkspace(
   added: string[],
   errors: string[],
 ): void {
-  const workspaceContext = config.getWorkspaceContext();
+  const workspaceContext = config;
   const folderTrustEnabled = config.getFolderTrust();
   const trustedFolders = folderTrustEnabled ? loadTrustedFolders() : null;
 
@@ -71,25 +70,7 @@ async function refreshMemoryAfterAdd(
 
   try {
     if (config.shouldLoadMemoryFromIncludeDirectories()) {
-      const memoryImportFormat =
-        context.services.settings.merged.ui.memoryImportFormat;
-      const effectiveMemoryImportFormat =
-        memoryImportFormat === 'tree' || memoryImportFormat === 'flat'
-          ? memoryImportFormat
-          : 'tree';
-      const { memoryContent, fileCount } = await loadServerHierarchicalMemory(
-        config.getWorkingDir(),
-        [...config.getWorkspaceContext().getDirectories(), ...added],
-        config.getDebugMode(),
-        config.getFileService(),
-        config.getExtensions(),
-        config.getFolderTrust(),
-        effectiveMemoryImportFormat,
-        config.getFileFilteringOptions(),
-        context.services.settings.merged.ui.memoryDiscoveryMaxDirs,
-      );
-      config.setUserMemory(memoryContent);
-      config.setLlxprtMdFileCount(fileCount);
+      const { fileCount } = await config.refreshMemory();
       context.ui.setLlxprtMdFileCount(fileCount);
     }
     addItem(
@@ -133,7 +114,7 @@ export const directoryCommand: SlashCommand = {
           return undefined;
         }
 
-        const workspaceContext = config.getWorkspaceContext();
+        const workspaceContext = config;
 
         const pathsToAdd = rest
           .join(' ')
@@ -166,7 +147,9 @@ export const directoryCommand: SlashCommand = {
         await refreshMemoryAfterAdd(context, config, added, errors);
 
         if (added.length > 0) {
-          await config.getAgentClient().addDirectoryContext();
+          const agent = context.services.agent;
+          if (!agent) throw new Error('Session agent is unavailable');
+          await agent.agentClient.addDirectoryContext();
           addItem(
             {
               type: MessageType.INFO,
@@ -174,9 +157,17 @@ export const directoryCommand: SlashCommand = {
             },
             Date.now(),
           );
-          context.recordingIntegration?.recordDirectoriesChanged([
-            ...workspaceContext.getDirectories(),
-          ]);
+          const directories = [...workspaceContext.directories()];
+          if (context.recordingOwner === 'agent') {
+            const agent = context.services.agent;
+            if (!agent) throw new Error('Session agent is unavailable');
+            await agent.session.recordRecordingEvent({
+              type: 'directories_changed',
+              directories,
+            });
+          } else {
+            context.recordingIntegration?.recordDirectoriesChanged(directories);
+          }
         }
 
         if (errors.length > 0) {
@@ -207,8 +198,8 @@ export const directoryCommand: SlashCommand = {
           );
           return;
         }
-        const workspaceContext = config.getWorkspaceContext();
-        const directories = workspaceContext.getDirectories();
+        const workspaceContext = config;
+        const directories = workspaceContext.directories();
         const directoryList = directories.map((dir) => `- ${dir}`).join('\n');
         addItem(
           {

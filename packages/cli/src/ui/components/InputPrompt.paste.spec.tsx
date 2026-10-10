@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
+const composeFixtureRuntime = installWorkspaceRuntimeFixture();
+
 import { vi, describe, it, expect, beforeEach, type Mock } from 'bun:test';
 
 // Mock ink before any imports
@@ -44,6 +47,15 @@ void vi.mock('../hooks/useShellHistory.js', () => ({
 
 void vi.mock('../hooks/useCompletion.js', () => ({
   useCompletion: () => ({
+    setSuggestions: vi.fn(),
+    setVisibleStartIndex: vi.fn(),
+    setIsLoadingSuggestions: vi.fn(),
+    setIsPerfectMatch: vi.fn(),
+    setShowSuggestions: vi.fn(),
+    setActiveSuggestionIndex: vi.fn(),
+    isPerfectMatch: false,
+    navigateUp: vi.fn(),
+    navigateDown: vi.fn(),
     completionItems: [],
     selectedIndex: 0,
     moveSelection: vi.fn(),
@@ -101,31 +113,22 @@ void vi.mock('../hooks/useMouse.js', () => ({
 }));
 
 // Now import components after all mocks are set up
-import { render } from 'ink-testing-library';
+import { renderWithProviders as render } from '../../__tests__/render.js';
 import { act } from 'react-dom/test-utils';
 import { InputPrompt } from './InputPrompt.js';
 import { AppDispatchProvider } from '../contexts/AppDispatchContext.js';
 import type { TextBuffer } from './shared/text-buffer.js';
-import type { CommandContext } from '../commands/types.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import clipboardy from 'clipboardy';
 import * as clipboardUtils from '../utils/clipboardUtils.js';
 import { useMouse, type MouseEvent } from '../hooks/useMouse.js';
 import { assertDefined } from '../../__tests__/assertions.js';
 import { testRegex } from '../../__tests__/regex.js';
+import { pasteConfig } from './InputPrompt.paste.fixture.js';
 
 // Mock Config
-const mockConfig = {
-  apiKey: 'test-key',
-  model: 'test-model',
-  getProjectRoot: () => '/tmp/test',
-  getTargetDir: () => '/tmp/test',
-  getWorkspaceContext: () => ({
-    getDirectories: () => ['/tmp/test'],
-  }),
-  getEnablePromptCompletion: () => false,
-  getUtilityModel: () => undefined,
-} as unknown as Config;
+const mockConfig = pasteConfig as unknown as Config;
 
 describe('InputPrompt paste functionality', () => {
   let mockBuffer: TextBuffer;
@@ -215,9 +218,9 @@ describe('InputPrompt paste functionality', () => {
           onSubmit={mockOnSubmit}
           userMessages={[]}
           onClearScreen={mockOnClearScreen}
-          config={mockConfig}
+          config={composeFixtureRuntime(mockConfig)}
           slashCommands={[]}
-          commandContext={{} as unknown as CommandContext}
+          commandContext={createMockCommandContext()}
           placeholder="Type a message..."
           focus={true}
           inputWidth={80}
@@ -233,12 +236,8 @@ describe('InputPrompt paste functionality', () => {
 
     // Clear any initial calls that might have happened during mount
     mockOnSubmit.mockClear();
-    (
-      mockBuffer.setText as unknown as Mock<(...args: never[]) => unknown>
-    ).mockClear();
-    (
-      mockBuffer.insert as unknown as Mock<(...args: never[]) => unknown>
-    ).mockClear();
+    (mockBuffer.setText as Mock<typeof mockBuffer.setText>).mockClear();
+    (mockBuffer.insert as Mock<typeof mockBuffer.insert>).mockClear();
 
     await sendKey({
       name: 'paste',
@@ -271,9 +270,9 @@ describe('InputPrompt paste functionality', () => {
           onSubmit={mockOnSubmit}
           userMessages={[]}
           onClearScreen={mockOnClearScreen}
-          config={mockConfig}
+          config={composeFixtureRuntime(mockConfig)}
           slashCommands={[]}
-          commandContext={{} as unknown as CommandContext}
+          commandContext={createMockCommandContext()}
           placeholder="Type a message..."
           focus={true}
           inputWidth={80}
@@ -312,9 +311,9 @@ describe('InputPrompt paste functionality', () => {
           onSubmit={mockOnSubmit}
           userMessages={[]}
           onClearScreen={mockOnClearScreen}
-          config={mockConfig}
+          config={composeFixtureRuntime(mockConfig)}
           slashCommands={[]}
-          commandContext={{} as unknown as CommandContext}
+          commandContext={createMockCommandContext()}
           placeholder="Type a message..."
           focus={true}
           inputWidth={80}
@@ -360,9 +359,9 @@ describe('InputPrompt paste functionality', () => {
           onSubmit={mockOnSubmit}
           userMessages={[]}
           onClearScreen={mockOnClearScreen}
-          config={mockConfig}
+          config={composeFixtureRuntime(mockConfig)}
           slashCommands={[]}
-          commandContext={{} as unknown as CommandContext}
+          commandContext={createMockCommandContext()}
           placeholder="Type a message..."
           focus={true}
           inputWidth={80}
@@ -378,15 +377,9 @@ describe('InputPrompt paste functionality', () => {
 
     // Clear any initial calls that might have happened during mount
     mockOnSubmit.mockClear();
-    (
-      mockBuffer.setText as unknown as Mock<(...args: never[]) => unknown>
-    ).mockClear();
-    (
-      mockBuffer.insert as unknown as Mock<(...args: never[]) => unknown>
-    ).mockClear();
-    (
-      mockBuffer.handleInput as unknown as Mock<(...args: never[]) => unknown>
-    ).mockClear();
+    (mockBuffer.setText as Mock<typeof mockBuffer.setText>).mockClear();
+    (mockBuffer.insert as Mock<typeof mockBuffer.insert>).mockClear();
+    (mockBuffer.handleInput as Mock<typeof mockBuffer.handleInput>).mockClear();
 
     await sendKey({
       name: 'paste',
@@ -424,9 +417,9 @@ describe('InputPrompt paste functionality', () => {
           onSubmit={mockOnSubmit}
           userMessages={[]}
           onClearScreen={mockOnClearScreen}
-          config={mockConfig}
+          config={composeFixtureRuntime(mockConfig)}
           slashCommands={[]}
-          commandContext={{} as unknown as CommandContext}
+          commandContext={createMockCommandContext()}
           placeholder="Type a message..."
           focus={true}
           inputWidth={80}
@@ -502,9 +495,9 @@ describe('InputPrompt paste functionality', () => {
           onSubmit={mockOnSubmit}
           userMessages={[]}
           onClearScreen={mockOnClearScreen}
-          config={mockConfig}
+          config={composeFixtureRuntime(mockConfig)}
           slashCommands={[]}
-          commandContext={{} as unknown as CommandContext}
+          commandContext={createMockCommandContext()}
           placeholder="Type a message..."
           focus={true}
           inputWidth={80}
@@ -570,9 +563,9 @@ describe('InputPrompt paste functionality', () => {
           onSteer={mockOnSteer}
           userMessages={[]}
           onClearScreen={mockOnClearScreen}
-          config={mockConfig}
+          config={composeFixtureRuntime(mockConfig)}
           slashCommands={[]}
-          commandContext={{} as unknown as CommandContext}
+          commandContext={createMockCommandContext()}
           placeholder="Type a message..."
           focus={true}
           inputWidth={80}
@@ -624,9 +617,9 @@ describe('InputPrompt paste functionality', () => {
           onSteer={mockOnSteer}
           userMessages={[]}
           onClearScreen={mockOnClearScreen}
-          config={mockConfig}
+          config={composeFixtureRuntime(mockConfig)}
           slashCommands={[]}
-          commandContext={{} as unknown as CommandContext}
+          commandContext={createMockCommandContext()}
           placeholder="Type a message..."
           focus={true}
           inputWidth={80}
@@ -679,9 +672,9 @@ describe('InputPrompt paste functionality', () => {
           onSteer={mockOnSteer}
           userMessages={[]}
           onClearScreen={mockOnClearScreen}
-          config={mockConfig}
+          config={composeFixtureRuntime(mockConfig)}
           slashCommands={[]}
-          commandContext={{} as unknown as CommandContext}
+          commandContext={createMockCommandContext()}
           placeholder="Type a message..."
           focus={true}
           inputWidth={80}
@@ -735,9 +728,9 @@ describe('InputPrompt paste functionality', () => {
           onSteer={mockOnSteer}
           userMessages={[]}
           onClearScreen={mockOnClearScreen}
-          config={mockConfig}
+          config={composeFixtureRuntime(mockConfig)}
           slashCommands={[]}
-          commandContext={{} as unknown as CommandContext}
+          commandContext={createMockCommandContext()}
           placeholder="Type a message..."
           focus={true}
           inputWidth={80}
@@ -793,9 +786,9 @@ describe('InputPrompt paste functionality', () => {
           onSteer={mockOnSteer}
           userMessages={[]}
           onClearScreen={mockOnClearScreen}
-          config={mockConfig}
+          config={composeFixtureRuntime(mockConfig)}
           slashCommands={[]}
-          commandContext={{} as unknown as CommandContext}
+          commandContext={createMockCommandContext()}
           placeholder="Type a message..."
           focus={true}
           inputWidth={80}
@@ -822,13 +815,13 @@ describe('InputPrompt paste functionality', () => {
     // after the paste the cursor sits at the end of the placeholder, so
     // newline appends \n and advances the cursor one row — matching what a
     // real buffer would show after Ctrl+Enter falls through from declined steer.
-    (
-      mockBuffer.newline as unknown as Mock<(...args: never[]) => unknown>
-    ).mockImplementation(() => {
-      mockBuffer.text += '\n';
-      mockBuffer.lines = mockBuffer.text.split('\n');
-      mockBuffer.cursor = [mockBuffer.cursor[0] + 1, 0];
-    });
+    (mockBuffer.newline as Mock<typeof mockBuffer.newline>).mockImplementation(
+      () => {
+        mockBuffer.text += '\n';
+        mockBuffer.lines = mockBuffer.text.split('\n');
+        mockBuffer.cursor = [mockBuffer.cursor[0] + 1, 0];
+      },
+    );
 
     await sendKey({
       name: 'return',
@@ -871,9 +864,9 @@ describe('InputPrompt paste functionality', () => {
           onSteer={mockOnSteer}
           userMessages={[]}
           onClearScreen={mockOnClearScreen}
-          config={mockConfig}
+          config={composeFixtureRuntime(mockConfig)}
           slashCommands={[]}
-          commandContext={{} as unknown as CommandContext}
+          commandContext={createMockCommandContext()}
           placeholder="Type a message..."
           focus={true}
           inputWidth={80}
@@ -916,9 +909,9 @@ describe('InputPrompt paste functionality', () => {
           onSteer={mockOnSteer}
           userMessages={[]}
           onClearScreen={mockOnClearScreen}
-          config={mockConfig}
+          config={composeFixtureRuntime(mockConfig)}
           slashCommands={[]}
-          commandContext={{} as unknown as CommandContext}
+          commandContext={createMockCommandContext()}
           placeholder="Type a message..."
           focus={true}
           inputWidth={80}
@@ -935,7 +928,7 @@ describe('InputPrompt paste functionality', () => {
     // sequence into observable buffer state (sub-threshold pastes bypass
     // the placeholder mechanism and delegate to buffer.handleInput).
     (
-      mockBuffer.handleInput as unknown as Mock<(...args: never[]) => unknown>
+      mockBuffer.handleInput as Mock<typeof mockBuffer.handleInput>
     ).mockImplementation((key: { sequence: string }) => {
       mockBuffer.text += key.sequence;
       mockBuffer.lines = mockBuffer.text.split('\n');
@@ -975,9 +968,9 @@ describe('InputPrompt paste functionality', () => {
           onSteer={mockOnSteer}
           userMessages={[]}
           onClearScreen={mockOnClearScreen}
-          config={mockConfig}
+          config={composeFixtureRuntime(mockConfig)}
           slashCommands={[]}
-          commandContext={{} as unknown as CommandContext}
+          commandContext={createMockCommandContext()}
           placeholder="Type a message..."
           focus={true}
           inputWidth={80}

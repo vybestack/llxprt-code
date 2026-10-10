@@ -5,7 +5,7 @@
  */
 
 import type { ResponsesExecutorDeps } from './openAIResponsesExecutor.js';
-import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
+import type { ResponsesRequest } from './responses-request.js';
 import type {
   ContentBlock,
   IContent,
@@ -52,15 +52,8 @@ export function supportsStatefulResponsesTransport(
   return capabilities.transportScopedContinuation && webSocketActive;
 }
 
-export function resolveResponsesBaseURL(
-  options: NormalizedGenerateChatOptions,
-  deps: ResponsesExecutorDeps,
-): string {
-  return (
-    options.resolved.baseURL ??
-    deps.getProviderBaseURL(options) ??
-    'https://api.openai.com/v1'
-  );
+export function resolveResponsesBaseURL(options: ResponsesRequest): string {
+  return options.resolved.baseURL;
 }
 
 export function translateRequestOverrides(
@@ -100,20 +93,13 @@ export function translateRequestOverrides(
 }
 
 export function getGenericMaxOutput(
-  options: NormalizedGenerateChatOptions,
+  options: ResponsesRequest,
 ): number | undefined {
-  const rawMaxOutput = (
-    options as { settings?: { get: (key: string) => unknown } }
-  ).settings?.get('maxOutputTokens');
-  return typeof rawMaxOutput === 'number' &&
-    Number.isFinite(rawMaxOutput) &&
-    rawMaxOutput > 0
-    ? rawMaxOutput
-    : undefined;
+  return options.maxOutputTokens;
 }
 
 export function buildRequestOverrides(
-  options: NormalizedGenerateChatOptions,
+  options: ResponsesRequest,
   deps: ResponsesExecutorDeps,
 ): Record<string, unknown> {
   const mergedParams: Record<string, unknown> = {
@@ -152,14 +138,14 @@ export interface ResponsesRequestShape {
  * (#3219) and media capabilities that survive continuation (#3199).
  */
 export function resolveResponsesRequestShape(
-  options: NormalizedGenerateChatOptions,
+  options: ResponsesRequest,
   patchedContent: IContent[],
   invocationEphemerals: Record<string, unknown>,
   deps: ResponsesExecutorDeps,
   forceStateless: boolean,
   forceParentless = false,
 ): ResponsesRequestShape {
-  const rawBaseURL = resolveResponsesBaseURL(options, deps);
+  const rawBaseURL = resolveResponsesBaseURL(options);
   const isCodex = deps.isCodexMode();
   const requestOverrides = buildRequestOverrides(options, deps);
   const explicitUserStore = resolveExplicitUserStore(requestOverrides);

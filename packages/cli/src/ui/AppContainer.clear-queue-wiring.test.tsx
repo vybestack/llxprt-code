@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { installWorkspaceRuntimeFixture } from '../__tests__/workspace-runtime-fixture.js';
+const composeFixtureRuntime = installWorkspaceRuntimeFixture();
+
 import { describe, it, expect } from 'bun:test';
 import { act, memo, useEffect } from 'react';
 import { Config } from '@vybestack/llxprt-code-core';
@@ -135,7 +138,10 @@ function createHarness(initialQueueCommandsAvailable = true) {
           }}
         >
           <CommandConsumer />
-          <Composer config={config} settings={settings} />
+          <Composer
+            config={composeFixtureRuntime(config)}
+            settings={settings}
+          />
         </AppCommandsProvider>
       </TurnProvider>
     );

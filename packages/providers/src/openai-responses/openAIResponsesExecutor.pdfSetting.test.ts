@@ -4,92 +4,84 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * Behavioral test: `isResponsesPdfEnabled` reads the optional
- * `SettingsService.get` seam (issue #2817 remediation).
- *
- * `SettingsService.get` is declared optional on the structural settings
- * contract, so a settings object that omits `get` must not crash the
- * prompt-envelope projection path — the setting simply falls through to its
- * default. Projection now gates compression and hard context-window
- * enforcement, so a TypeError here would take down the whole send.
- */
-
 import { describe, expect, it } from 'bun:test';
-import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import { captureResponsesRequest } from './responses-request.js';
 import { isResponsesPdfEnabled } from './openAIResponsesExecutor.js';
+import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 
 function buildOptions(
-  settings: unknown,
+  setting?: boolean,
   ephemerals: Record<string, unknown> = {},
-  modelBehavior: unknown = undefined,
+  modelBehavior?: boolean,
 ): NormalizedGenerateChatOptions {
+  const settings = new SettingsService();
+  if (setting !== undefined) settings.set('media.pdf.enabled', setting);
+  const config = createRuntimeConfigStub(settings);
+  const runtime = createProviderRuntimeContext({
+    settingsService: settings,
+    config,
+    runtimeId: 'pdf-owner',
+  });
+  const invocation = createRuntimeInvocationContext({
+    runtimeId: runtime.runtimeId,
+    runtimeMetadata: runtime.metadata,
+
+    providerName: 'openai-responses',
+    ephemeralsSnapshot: { ...settings.getAllGlobalSettings(), ...ephemerals },
+  });
   return {
     contents: [],
-    settings,
+
     metadata: {},
     invocation: {
-      ephemerals,
-      getModelBehavior: () => modelBehavior,
+      ...invocation,
+      modelBehavior:
+        modelBehavior === undefined
+          ? {}
+          : { 'media.pdf.enabled': modelBehavior },
     },
     resolved: { model: 'gpt-5', authToken: 'token' },
-  } as unknown as NormalizedGenerateChatOptions;
+  };
 }
 
-function disabledPdfSetting(key: string): false | undefined {
-  return key === 'media.pdf.enabled' ? false : undefined;
+function pdfEnabled(options: NormalizedGenerateChatOptions): boolean {
+  return isResponsesPdfEnabled(
+    captureResponsesRequest(
+      options,
+      'openai-responses',
+      'https://api.openai.com/v1',
+      undefined,
+      'gpt-5',
+    ),
+  );
 }
 
-describe('isResponsesPdfEnabled optional settings seam (issue #2817)', () => {
-  it('defaults to enabled when settings omits the optional get method', () => {
-    const settingsWithoutGet = { set: () => {} };
-
-    expect(() =>
-      isResponsesPdfEnabled(buildOptions(settingsWithoutGet)),
-    ).not.toThrow();
-    expect(isResponsesPdfEnabled(buildOptions(settingsWithoutGet))).toBe(true);
+describe('Responses PDF policy capture', () => {
+  it('defaults to enabled when no PDF setting is supplied', () => {
+    expect(() => pdfEnabled(buildOptions())).not.toThrow();
+    expect(pdfEnabled(buildOptions())).toBe(true);
   });
-
-  it('honors an explicit disable from a settings service that implements get', () => {
-    const settings = { get: disabledPdfSetting };
-
-    expect(isResponsesPdfEnabled(buildOptions(settings))).toBe(false);
+  it('honors an explicit disable from the owner settings', () => {
+    expect(pdfEnabled(buildOptions(false))).toBe(false);
   });
-
-  it('prefers invocation ephemerals over the settings service', () => {
-    const settings = { get: () => true };
-
-    expect(
-      isResponsesPdfEnabled(
-        buildOptions(settings, { 'media.pdf.enabled': false }),
-      ),
-    ).toBe(false);
-  });
-
-  it('prefers model behavior over the settings service', () => {
-    const settings = { get: () => true };
-
-    expect(isResponsesPdfEnabled(buildOptions(settings, {}, false))).toBe(
+  it('prefers invocation ephemerals over owner settings', () => {
+    expect(pdfEnabled(buildOptions(true, { 'media.pdf.enabled': false }))).toBe(
       false,
     );
   });
-
-  it('prefers invocation ephemerals over model behavior when BOTH are set', () => {
-    // Precedence: ephemerals > modelBehavior > settings
-    const settings = { get: () => true };
-
-    // ephemerals=false wins over modelBehavior=true
+  it('prefers model behavior over owner settings', () => {
+    expect(pdfEnabled(buildOptions(true, {}, false))).toBe(false);
+  });
+  it('prefers invocation ephemerals over model behavior in both directions', () => {
     expect(
-      isResponsesPdfEnabled(
-        buildOptions(settings, { 'media.pdf.enabled': false }, true),
-      ),
+      pdfEnabled(buildOptions(true, { 'media.pdf.enabled': false }, true)),
     ).toBe(false);
-
-    // ephemerals=true wins over modelBehavior=false
     expect(
-      isResponsesPdfEnabled(
-        buildOptions(settings, { 'media.pdf.enabled': true }, false),
-      ),
+      pdfEnabled(buildOptions(true, { 'media.pdf.enabled': true }, false)),
     ).toBe(true);
   });
 });

@@ -6,6 +6,7 @@
  * MCPOAuthProvider authenticate tests.
  * Split from oauth-provider.test.ts during #2092 lint hardening.
  */
+import { createTestOAuthBinding } from '../client/test-support/index.js';
 
 import { automock } from '../../../test-utils/src/automock.js';
 import { vi, type Mock } from 'bun:test';
@@ -15,7 +16,7 @@ const realNodeCryptoModule = { ...(await import('node:crypto')) };
 const mockOpenBrowserSecurely = vi.fn();
 const mockHttpServer = {
   listen: vi.fn(),
-  close: vi.fn(),
+  close: vi.fn((callback?: (error?: Error) => void) => callback?.()),
   on: vi.fn(),
   address: vi.fn(() => ({ address: 'localhost', family: 'IPv4', port: 7777 })),
 };
@@ -35,10 +36,8 @@ import {
   mockTokenResponse,
   setupOAuthTestSpies,
 } from './__tests__/oauthProviderTestSetup.js';
-import { registerMcpHostServices } from '../host/hostServices.js';
 
 // Exercises the real host seam instead of mocking a module (#3305).
-registerMcpHostServices({ openBrowser: mockOpenBrowserSecurely });
 
 function runOAuthTimeoutImmediately(
   callback: () => void,
@@ -103,8 +102,15 @@ describe('MCPOAuthProvider', () => {
       );
 
       const result = await MCPOAuthProvider.authenticate(
+        {
+          tokenStorage: createTestOAuthBinding().tokenStorage,
+          openBrowser: mockOpenBrowserSecurely,
+        },
         'test-server',
         mockConfig,
+        undefined,
+        undefined,
+        undefined,
       );
 
       expect(result).toStrictEqual({
@@ -210,9 +216,15 @@ describe('MCPOAuthProvider', () => {
       );
 
       const result = await MCPOAuthProvider.authenticate(
+        {
+          tokenStorage: createTestOAuthBinding().tokenStorage,
+          openBrowser: mockOpenBrowserSecurely,
+        },
         'test-server',
         configWithoutAuth,
         'https://api.example.com',
+        undefined,
+        undefined,
       );
 
       expect(result).toBeDefined();
@@ -289,8 +301,15 @@ describe('MCPOAuthProvider', () => {
       );
 
       const result = await MCPOAuthProvider.authenticate(
+        {
+          tokenStorage: createTestOAuthBinding().tokenStorage,
+          openBrowser: mockOpenBrowserSecurely,
+        },
         'test-server',
         configWithoutClient,
+        undefined,
+        undefined,
+        undefined,
       );
 
       expect(result).toBeDefined();
@@ -378,8 +397,15 @@ describe('MCPOAuthProvider', () => {
       );
 
       const result = await MCPOAuthProvider.authenticate(
+        {
+          tokenStorage: createTestOAuthBinding().tokenStorage,
+          openBrowser: mockOpenBrowserSecurely,
+        },
         'test-server',
         configWithoutClient,
+        undefined,
+        undefined,
+        undefined,
       );
 
       expect(result).toBeDefined();
@@ -489,9 +515,15 @@ describe('MCPOAuthProvider', () => {
       );
 
       const result = await MCPOAuthProvider.authenticate(
+        {
+          tokenStorage: createTestOAuthBinding().tokenStorage,
+          openBrowser: mockOpenBrowserSecurely,
+        },
         'test-server',
         configWithoutClientAndAuthorizationUrl,
         'https://api.example.com',
+        undefined,
+        undefined,
       );
 
       expect(result).toBeDefined();
@@ -531,7 +563,17 @@ describe('MCPOAuthProvider', () => {
       });
 
       await expect(
-        MCPOAuthProvider.authenticate('test-server', mockConfig),
+        MCPOAuthProvider.authenticate(
+          {
+            tokenStorage: createTestOAuthBinding().tokenStorage,
+            openBrowser: mockOpenBrowserSecurely,
+          },
+          'test-server',
+          mockConfig,
+          undefined,
+          undefined,
+          undefined,
+        ),
       ).rejects.toThrow('OAuth error: access_denied');
     });
 
@@ -562,7 +604,17 @@ describe('MCPOAuthProvider', () => {
       });
 
       await expect(
-        MCPOAuthProvider.authenticate('test-server', mockConfig),
+        MCPOAuthProvider.authenticate(
+          {
+            tokenStorage: createTestOAuthBinding().tokenStorage,
+            openBrowser: mockOpenBrowserSecurely,
+          },
+          'test-server',
+          mockConfig,
+          undefined,
+          undefined,
+          undefined,
+        ),
       ).rejects.toThrow('State mismatch - possible CSRF attack');
     });
 
@@ -602,7 +654,17 @@ describe('MCPOAuthProvider', () => {
       );
 
       await expect(
-        MCPOAuthProvider.authenticate('test-server', mockConfig),
+        MCPOAuthProvider.authenticate(
+          {
+            tokenStorage: createTestOAuthBinding().tokenStorage,
+            openBrowser: mockOpenBrowserSecurely,
+          },
+          'test-server',
+          mockConfig,
+          undefined,
+          undefined,
+          undefined,
+        ),
       ).rejects.toThrow('Token exchange failed: invalid_grant - Invalid grant');
     });
 
@@ -623,7 +685,17 @@ describe('MCPOAuthProvider', () => {
       ) as unknown as typeof setTimeout;
 
       await expect(
-        MCPOAuthProvider.authenticate('test-server', mockConfig),
+        MCPOAuthProvider.authenticate(
+          {
+            tokenStorage: createTestOAuthBinding().tokenStorage,
+            openBrowser: mockOpenBrowserSecurely,
+          },
+          'test-server',
+          mockConfig,
+          undefined,
+          undefined,
+          undefined,
+        ),
       ).rejects.toThrow('OAuth callback timeout');
 
       global.setTimeout = originalSetTimeout;
@@ -674,7 +746,17 @@ describe('MCPOAuthProvider', () => {
         }),
       );
 
-      await MCPOAuthProvider.authenticate('test-server', configWithPort);
+      await MCPOAuthProvider.authenticate(
+        {
+          tokenStorage: createTestOAuthBinding().tokenStorage,
+          openBrowser: mockOpenBrowserSecurely,
+        },
+        'test-server',
+        configWithPort,
+        undefined,
+        undefined,
+        undefined,
+      );
 
       expect(mockHttpServer.listen).toHaveBeenCalledWith(
         12345,
@@ -722,7 +804,17 @@ describe('MCPOAuthProvider', () => {
         }),
       );
 
-      await MCPOAuthProvider.authenticate('test-server', configWithInvalidPort);
+      await MCPOAuthProvider.authenticate(
+        {
+          tokenStorage: createTestOAuthBinding().tokenStorage,
+          openBrowser: mockOpenBrowserSecurely,
+        },
+        'test-server',
+        configWithInvalidPort,
+        undefined,
+        undefined,
+        undefined,
+      );
 
       // Should be called with 0 (OS assigned) because the port was invalid
       expect(mockHttpServer.listen).toHaveBeenCalledWith(
@@ -771,7 +863,17 @@ describe('MCPOAuthProvider', () => {
         }),
       );
 
-      await MCPOAuthProvider.authenticate('test-server', configNoPort);
+      await MCPOAuthProvider.authenticate(
+        {
+          tokenStorage: createTestOAuthBinding().tokenStorage,
+          openBrowser: mockOpenBrowserSecurely,
+        },
+        'test-server',
+        configNoPort,
+        undefined,
+        undefined,
+        undefined,
+      );
 
       // Should be called with 0 (OS assigned), not 80
       expect(mockHttpServer.listen).toHaveBeenCalledWith(

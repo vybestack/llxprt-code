@@ -1,8 +1,14 @@
+import type { Agent } from '@vybestack/llxprt-code-agents';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+
+import {
+  overrideInputs,
+  providerSwitchInputs,
+} from '../../../providers/src/runtime/__tests__/provider-switch-inputs.js';
 
 /**
  * @plan:PLAN-20260603-ISSUE1584.P12
@@ -12,27 +18,25 @@
 
 import { beforeEach, afterEach, describe, expect, it } from 'bun:test';
 import * as path from 'node:path';
-import type { Profile, SettingsService } from '@vybestack/llxprt-code-settings';
-import { ProviderManager } from '@vybestack/llxprt-code-providers';
+import {
+  Profile,
+  SettingsService,
+  ProfileManager,
+} from '@vybestack/llxprt-code-settings';
 import type { IProvider } from '@vybestack/llxprt-code-providers';
 import {
   Config,
-  createProviderRuntimeContext,
-  MessageBus,
+  type RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
-import { ProfileManager } from '@vybestack/llxprt-code-settings';
+import { assembleCliProviderRuntime } from '@vybestack/llxprt-code-providers/runtime/assembleCliProviderRuntime.js';
+import type { CliRuntimeRegistrationHandle } from '@vybestack/llxprt-code-providers/runtime/cliForegroundRuntime.js';
 import {
   createTempDirectory,
   cleanupTempDirectory,
-  initializeTestConfig,
+  initializeTestSessionRoot,
+  type CliTestSessionRoot,
 } from './test-utils.js';
-import { createProviderManager } from '@vybestack/llxprt-code-providers/composition.js';
-import {
-  setCliRuntimeContext,
-  switchActiveProvider,
-  registerCliProviderInfrastructure,
-  resetCliProviderInfrastructure,
-} from '@vybestack/llxprt-code-providers/runtime.js';
+import { switchActiveProvider } from '@vybestack/llxprt-code-providers/runtime.js';
 import { setProviderBaseUrl } from '@vybestack/llxprt-code-providers/runtime/providerConfigUtils.js';
 
 /**
@@ -45,9 +49,12 @@ import { setProviderBaseUrl } from '@vybestack/llxprt-code-providers/runtime/pro
 describe('Base URL Runtime Helper Integration', () => {
   let tempDir: string;
   let config: Config;
-  let providerManager: ProviderManager;
+  let sessionRoot: CliTestSessionRoot;
+  let providerManager: RuntimeProviderManager;
   let profileManager: ProfileManager;
   let settingsService: SettingsService;
+  let registration: CliRuntimeRegistrationHandle;
+  let sessionClient: Pick<Agent['sessionClient'], 'refreshAuth'>;
 
   beforeEach(async () => {
     tempDir = await createTempDirectory();
@@ -59,34 +66,22 @@ describe('Base URL Runtime Helper Integration', () => {
       model: 'test-model',
       cwd: tempDir,
     });
-    await initializeTestConfig(config);
-
-    settingsService = config.getSettingsService();
+    settingsService = new SettingsService();
     const runtimeId = 'base-url-test-runtime';
-    const runtime = createProviderRuntimeContext({
+    const assembled = assembleCliProviderRuntime({
       settingsService,
       config,
       runtimeId,
       metadata: { source: 'base-url-test' },
     });
-    const runtimeMessageBus = new MessageBus(
-      config.getPolicyEngine(),
-      config.getDebugMode(),
-    );
-    const { manager, oauthManager } = createProviderManager(runtime, {
-      allowBrowserEnvironment: true,
+    providerManager = assembled.providerManager;
+    registration = assembled.registration;
+    sessionRoot = await initializeTestSessionRoot(
       config,
-      runtimeMessageBus,
-    });
-    providerManager = manager;
-    registerCliProviderInfrastructure(providerManager, oauthManager, {
-      messageBus: runtimeMessageBus,
-      runtimeId,
-    });
-    setCliRuntimeContext(settingsService, config, {
-      runtimeId,
-      metadata: { source: 'base-url-test' },
-    });
+      providerManager,
+      settingsService,
+    );
+    sessionClient = sessionRoot.agent.sessionClient;
 
     // Explicit per-test directory: the no-argument constructor resolves the
     // ambient global config root, which is the developer's own on a machine
@@ -95,46 +90,58 @@ describe('Base URL Runtime Helper Integration', () => {
   });
 
   afterEach(async () => {
-    resetCliProviderInfrastructure();
+    registration.dispose();
     await cleanupTempDirectory(tempDir);
   });
 
   it('applies custom base URL via runtime helper', async () => {
     const provider = createMockProvider('openai');
     providerManager.registerProvider(provider);
-    providerManager.setActiveProvider('openai');
+    await providerManager.setActiveProvider('openai');
 
     const customUrl = 'https://custom.openai.api/v1';
-    const result = await setProviderBaseUrl(customUrl);
+    const result = await setProviderBaseUrl(
+      customUrl,
+      ...(await overrideInputs(sessionRoot)),
+    );
 
     expect(result.success).toBe(true);
-    expect(
-      config.getSettingsService().getProviderSettings('openai')['base-url'],
-    ).toBe(customUrl);
-    expect(config.getEphemeralSetting('base-url')).toBe(customUrl);
+    expect(settingsService.getProviderSettings('openai')['base-url']).toBe(
+      customUrl,
+    );
+    expect(sessionRoot.agent.getEphemeralSetting('base-url')).toBe(customUrl);
   });
 
   it('clears base URL when helper receives empty or "none" values', async () => {
     const provider = createMockProvider('openai');
     providerManager.registerProvider(provider);
-    providerManager.setActiveProvider('openai');
+    await providerManager.setActiveProvider('openai');
 
-    await setProviderBaseUrl('https://custom.openai.api/v1');
-    expect(
-      config.getSettingsService().getProviderSettings('openai')['base-url'],
-    ).toBe('https://custom.openai.api/v1');
+    await setProviderBaseUrl(
+      'https://custom.openai.api/v1',
+      ...(await overrideInputs(sessionRoot)),
+    );
+    expect(settingsService.getProviderSettings('openai')['base-url']).toBe(
+      'https://custom.openai.api/v1',
+    );
 
-    const clearResult = await setProviderBaseUrl('none');
+    const clearResult = await setProviderBaseUrl(
+      'none',
+      ...(await overrideInputs(sessionRoot)),
+    );
     expect(clearResult.success).toBe(true);
     expect(
-      config.getSettingsService().getProviderSettings('openai')['base-url'],
+      settingsService.getProviderSettings('openai')['base-url'],
     ).toBeUndefined();
-    expect(config.getEphemeralSetting('base-url')).toBeUndefined();
+    expect(sessionRoot.agent.getEphemeralSetting('base-url')).toBeUndefined();
 
-    const emptyResult = await setProviderBaseUrl('');
+    const emptyResult = await setProviderBaseUrl(
+      '',
+      ...(await overrideInputs(sessionRoot)),
+    );
     expect(emptyResult.success).toBe(true);
     expect(
-      config.getSettingsService().getProviderSettings('openai')['base-url'],
+      settingsService.getProviderSettings('openai')['base-url'],
     ).toBeUndefined();
   });
 
@@ -142,13 +149,16 @@ describe('Base URL Runtime Helper Integration', () => {
     const provider = createMockProvider('gemini');
 
     providerManager.registerProvider(provider);
-    providerManager.setActiveProvider('gemini');
+    await providerManager.setActiveProvider('gemini');
 
-    const result = await setProviderBaseUrl('https://gemini.example/v1');
+    const result = await setProviderBaseUrl(
+      'https://gemini.example/v1',
+      ...(await overrideInputs(sessionRoot)),
+    );
     expect(result.success).toBe(true);
-    expect(
-      config.getSettingsService().getProviderSettings('gemini')['base-url'],
-    ).toBe('https://gemini.example/v1');
+    expect(settingsService.getProviderSettings('gemini')['base-url']).toBe(
+      'https://gemini.example/v1',
+    );
   });
 
   it('clears previous provider base URL when switching providers', async () => {
@@ -157,25 +167,34 @@ describe('Base URL Runtime Helper Integration', () => {
     providerManager.registerProvider(providerA);
     providerManager.registerProvider(providerB);
 
-    providerManager.setActiveProvider('openai');
-    await setProviderBaseUrl('https://provider-a.example');
-    expect(
-      config.getSettingsService().getProviderSettings('openai')['base-url'],
-    ).toBe('https://provider-a.example');
+    await providerManager.setActiveProvider('openai');
+    await setProviderBaseUrl(
+      'https://provider-a.example',
+      ...(await overrideInputs(sessionRoot)),
+    );
+    expect(settingsService.getProviderSettings('openai')['base-url']).toBe(
+      'https://provider-a.example',
+    );
 
-    await switchActiveProvider('anthropic');
+    await switchActiveProvider(
+      'anthropic',
+      {},
+      ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
+        sessionClient.refreshAuth(),
+      )),
+    );
     expect(
-      config.getSettingsService().getProviderSettings('openai')['base-url'],
+      settingsService.getProviderSettings('openai')['base-url'],
     ).toBeUndefined();
     expect(
-      config.getSettingsService().getProviderSettings('anthropic')['base-url'],
+      settingsService.getProviderSettings('anthropic')['base-url'],
     ).toBeUndefined();
   });
 
   it('preserves profile base URL when loading via ProfileManager', async () => {
     const provider = createMockProvider('openai');
     providerManager.registerProvider(provider);
-    providerManager.setActiveProvider('openai');
+    await providerManager.setActiveProvider('openai');
 
     const profile: Profile = {
       version: 1,
@@ -195,11 +214,12 @@ describe('Base URL Runtime Helper Integration', () => {
 
     const result = await setProviderBaseUrl(
       loaded.ephemeralSettings['base-url'] as string,
+      ...(await overrideInputs(sessionRoot)),
     );
     expect(result.success).toBe(true);
-    expect(
-      config.getSettingsService().getProviderSettings('openai')['base-url'],
-    ).toBe('https://profile.base.url');
+    expect(settingsService.getProviderSettings('openai')['base-url']).toBe(
+      'https://profile.base.url',
+    );
   });
 });
 

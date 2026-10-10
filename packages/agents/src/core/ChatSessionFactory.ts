@@ -1,164 +1,76 @@
+import type { ProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
+import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import type { ProviderRetryOperations } from '@vybestack/llxprt-code-core/runtime/contracts/ProviderRetryOperations.js';
+import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core';
+import type { SubagentDefinitionReads } from '@vybestack/llxprt-code-core';
+import type { ProfileDefinitionReads } from '@vybestack/llxprt-code-core';
 /**
  * @license
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { ToolGovernance } from '@vybestack/llxprt-code-tools';
+import type { PrepareProviderInvocation } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+
+import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
+
+import { assembleChatSystemPrompt } from './chat-system-prompt.js';
 
 import type { ModelGenerationSettings } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { ChatSessionConfig } from './chatSession.js';
-import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
-import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
-import {
-  getToolGovernanceEphemerals,
-  buildToolDeclarationsFromView,
-  getEnabledToolNamesForPrompt,
-  shouldIncludeSubagentDelegationForConfig,
-} from './clientToolGovernance.js';
+
+import { buildToolDeclarationsFromView } from './clientToolGovernance.js';
 import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
 import { ChatSession } from './chatSession.js';
-import { resolveModelForSystemPrompt } from './systemPromptModel.js';
 export { resolveModelForSystemPrompt } from './systemPromptModel.js';
 import type { SystemPromptAssembler } from './chatSession.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { MediaAdmissionService } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
+import type { AgentRuntimeProviderAdapter } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ReadonlySettingsSnapshot } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+
 import { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
 import { getErrorMessage } from '@vybestack/llxprt-code-core/utils/errors.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import { triggerPreCompressHook } from '@vybestack/llxprt-code-core/core/lifecycleHookTriggers.js';
-import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import type { ToolSelection } from '@vybestack/llxprt-code-tools';
 import { isThinkingSupported } from './clientHelpers.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { TodoContinuationService } from './TodoContinuationService.js';
-import { resolvePromptMemory } from './promptMemoryPolicy.js';
 
 /**
  * Assembles ephemeral settings into an immutable snapshot for the runtime.
  * Pure function — reads config, no side effects.
  */
-export function buildSettingsSnapshot(
-  config: Config,
-  getToolGovernance: typeof getToolGovernanceEphemerals = getToolGovernanceEphemerals,
-): ReadonlySettingsSnapshot {
-  const rawCompressionThreshold = config.getEphemeralSetting(
-    'compression-threshold',
-  );
-  const compressionThreshold =
-    typeof rawCompressionThreshold === 'number' &&
-    Number.isFinite(rawCompressionThreshold)
-      ? rawCompressionThreshold
-      : undefined;
-
-  const rawContextLimit = config.getEphemeralSetting('context-limit');
-  const contextLimit =
-    typeof rawContextLimit === 'number' &&
-    Number.isFinite(rawContextLimit) &&
-    rawContextLimit > 0
-      ? rawContextLimit
-      : undefined;
-
-  const rawPreserveThreshold = config.getEphemeralSetting(
-    'compression-preserve-threshold',
-  );
-  const preserveThreshold =
-    typeof rawPreserveThreshold === 'number' &&
-    Number.isFinite(rawPreserveThreshold)
-      ? rawPreserveThreshold
-      : undefined;
-
-  return {
-    compressionThreshold: compressionThreshold ?? 0.85,
-    contextLimit,
-    preserveThreshold: preserveThreshold ?? 0.2,
-    telemetry: { enabled: true, target: null },
-    tools: getToolGovernance(config),
-    'reasoning.enabled': config.getEphemeralSetting('reasoning.enabled') as
-      | boolean
-      | undefined,
-    'reasoning.includeInContext': config.getEphemeralSetting(
-      'reasoning.includeInContext',
-    ) as boolean | undefined,
-    'reasoning.includeInResponse': config.getEphemeralSetting(
-      'reasoning.includeInResponse',
-    ) as boolean | undefined,
-    'reasoning.format': config.getEphemeralSetting('reasoning.format') as
-      | 'native'
-      | 'field'
-      | undefined,
-    'reasoning.stripFromContext': config.getEphemeralSetting(
-      'reasoning.stripFromContext',
-    ) as 'all' | 'allButLast' | 'none' | undefined,
-    'reasoning.fieldName': config.getEphemeralSetting('reasoning.fieldName') as
-      | string
-      | undefined,
-    'reasoning.effort': config.getEphemeralSetting('reasoning.effort') as
-      | 'minimal'
-      | 'low'
-      | 'medium'
-      | 'high'
-      | 'xhigh'
-      | 'max'
-      | undefined,
-    'reasoning.maxTokens': config.getEphemeralSetting('reasoning.maxTokens') as
-      | number
-      | undefined,
-  };
-}
-
-/**
- * Builds the full system instruction: env context, core memory, JIT memory,
- * user memory, MCP instructions, subagent delegation.
- *
- * Memory sourcing is shared with the subagent builder via
- * {@link resolvePromptMemory} so both execution contexts apply the same JIT
- * policy (issue #3173). This is the FULL path used by startChat — it differs
- * from the lightweight path in clientLlmUtilities, which skips env context and
- * JIT memory; both paths pass core memory.
- */
-export async function buildSystemInstruction(
-  config: Config,
-  enabledToolNames: string[],
-  envParts: Array<{ text?: string }>,
-  provider: string | undefined,
-  model: string,
-): Promise<string> {
-  const { userMemory, coreMemory, mcpInstructions } =
-    await resolvePromptMemory(config);
-
-  const includeSubagentDelegation =
-    await shouldIncludeSubagentDelegationForConfig(config, enabledToolNames);
-  const interactionMode = config.isInteractive()
-    ? 'interactive'
-    : 'non-interactive';
-
-  let systemInstruction = await getCoreSystemPromptAsync({
-    userMemory,
-    coreMemory,
-    mcpInstructions,
-    model,
-    provider,
-    settings: config.getSettingsService(),
-    tools: enabledToolNames,
-    includeSubagentDelegation,
-    interactionMode,
-  });
-
-  const envContextText = envParts
-    .map((part) => ('text' in part && part.text ? part.text : ''))
-    .join('\n');
-  if (envContextText) {
-    systemInstruction = envContextText + '\n\n' + systemInstruction;
-  }
-
-  return systemInstruction;
-}
+export { buildSystemInstruction } from './system-instruction.js';
 
 export interface CreateChatSessionDeps {
+  readonly requestDiagnostics?: ProviderRequestDiagnostics;
+  readonly telemetry: RootTelemetry;
+  readonly providerFileLifecycle?: object;
+  readonly composeRetryOperations?: (
+    provider: string,
+  ) => ProviderRetryOperations;
+  readonly historyTokenization?: RuntimeTokenizerFactory['getTokenizer'];
+  readonly promptEstimator?: Pick<
+    RuntimeTokenizerFactory,
+    'estimatePrompt' | 'claimsModel' | 'getEstimatorFamily'
+  >;
+  profileDefinitions?: Pick<ProfileDefinitionReads, 'loadProfile'>;
+  subagentDefinitions?: Pick<SubagentDefinitionReads, 'listSubagents'>;
+  prepareProviderInvocation?: PrepareProviderInvocation;
+  readRuntimeSettings?: () => ReadonlySettingsSnapshot;
+  readToolGovernance?: () => ToolGovernance;
+  instructions: InstructionReadOperations;
+  providerSelection?: AgentRuntimeProviderAdapter;
+  readMcpInstructions: () => string | undefined;
+  workspaceDirectories: () => readonly string[];
   config: Config;
+  mediaStore: LocalMediaStore;
   runtimeState: AgentRuntimeState;
   contentGenerator: ContentGenerator;
   storedHistoryService: HistoryService | undefined;
@@ -166,7 +78,7 @@ export interface CreateChatSessionDeps {
   extraHistory?: readonly IContent[];
   generateContentConfig: ModelGenerationSettings;
   todoContinuationService: TodoContinuationService;
-  toolRegistry: ToolRegistry | undefined;
+  toolRegistry: ToolSelection | undefined;
   createHistoryService?: () => HistoryService;
   loadRuntime?: typeof loadAgentRuntime;
   createChatSessionInstance?: (
@@ -246,8 +158,10 @@ async function applySystemPromptTokenOffset(
 function buildGenerateContentConfig(
   baseConfig: ModelGenerationSettings,
   model: string,
+  systemInstruction: string,
+  tools: ChatSessionConfig['tools'],
 ): ChatSessionConfig {
-  return isThinkingSupported(model)
+  const reasoningConfig = isThinkingSupported(model)
     ? {
         ...baseConfig,
         reasoning: {
@@ -256,121 +170,136 @@ function buildGenerateContentConfig(
         },
       }
     : baseConfig;
+  return { ...reasoningConfig, systemInstruction, tools };
 }
 
 /**
  * Builds the runtime bundle, tool declarations, and ChatSession instance.
  */
+async function readActiveTodosPrompt(
+  service: TodoContinuationService,
+): Promise<string | undefined> {
+  const todos = await service.readTodoSnapshot();
+  const active = service.getActiveTodos(todos);
+  if (active.length === 0) return undefined;
+  return active.map((todo) => `- [${todo.status}] ${todo.content}`).join('\n');
+}
+
+function assembleChatProviderRuntime(
+  config: Config,
+  runtimeState: AgentRuntimeState,
+  lifecycle: object | undefined,
+  composeRetryOperations: CreateChatSessionDeps['composeRetryOperations'],
+) {
+  const retryOperations = composeRetryOperations?.(runtimeState.provider) ?? {};
+  return {
+    ...retryOperations,
+    config,
+    providerFileLifecycle: lifecycle,
+    runtimeId: runtimeState.runtimeId,
+    metadata: { source: 'AgentClient.startChat' },
+  };
+}
+
+function bindActiveTodos(
+  chat: ChatSession,
+  todos: TodoContinuationService,
+): ChatSession {
+  chat.setActiveTodosProvider(() => readActiveTodosPrompt(todos));
+  return chat;
+}
+
+function chatDeclarations(
+  view: Parameters<typeof buildToolDeclarationsFromView>[1],
+  registry: ToolSelection | undefined,
+  todos: TodoContinuationService,
+) {
+  const declarations = buildToolDeclarationsFromView(registry, view);
+  todos.updateTodoToolAvailabilityFromDeclarations(declarations);
+  return declarations;
+}
+
 async function buildChatFromRuntime(
   config: Config,
+  mediaStore: LocalMediaStore,
   runtimeState: AgentRuntimeState,
   contentGenerator: ContentGenerator,
   historyService: HistoryService,
   generateContentConfig: ModelGenerationSettings,
   todoContinuationService: TodoContinuationService,
-  toolRegistry: ToolRegistry | undefined,
+  toolRegistry: ToolSelection | undefined,
   systemInstruction: string,
   systemPromptAssembler: SystemPromptAssembler,
-  createChatSessionInstance: (
-    ...args: ConstructorParameters<typeof ChatSession>
-  ) => ChatSession,
-  loadRuntime: typeof loadAgentRuntime,
+  createChatSessionInstance: NonNullable<
+    CreateChatSessionDeps['createChatSessionInstance']
+  >,
+  loadRuntime: CreateChatSessionDeps['loadRuntime'],
+  providerSelection: CreateChatSessionDeps['providerSelection'],
+  prepareProviderInvocation: PrepareProviderInvocation,
+  readRuntimeSettings: () => ReadonlySettingsSnapshot,
+  readToolGovernance: () => ToolGovernance,
+  profileDefinitions: CreateChatSessionDeps['profileDefinitions'],
+  promptEstimator: CreateChatSessionDeps['promptEstimator'],
+  lifecycle: object | undefined,
+  composeRetryOperations: CreateChatSessionDeps['composeRetryOperations'],
+  telemetry: RootTelemetry,
+  requestDiagnostics: ProviderRequestDiagnostics | undefined,
 ): Promise<ChatSession> {
-  const model = runtimeState.model;
-  const generationConfigWithThinking = buildGenerateContentConfig(
-    generateContentConfig,
-    model,
-  );
-
-  const settings = buildSettingsSnapshot(config);
-  const providerRuntime = createProviderRuntimeContext({
-    settingsService: config.getSettingsService(),
-    config,
-    runtimeId: runtimeState.runtimeId,
-    metadata: { source: 'AgentClient.startChat' },
-  });
-
-  const runtimeBundle = await loadRuntime({
+  const runtimeBundle = await (loadRuntime ?? loadAgentRuntime)({
+    mediaStore,
     profile: {
       config,
+      telemetry,
+      requestDiagnostics,
       state: runtimeState,
-      settings,
-      providerRuntime,
-      contentGeneratorConfig: config.getContentGeneratorConfig(),
+      settings: readRuntimeSettings(),
+      promptEstimator,
+      providerRuntime: assembleChatProviderRuntime(
+        config,
+        runtimeState,
+        lifecycle,
+        composeRetryOperations,
+      ),
+      readRuntimeSettings,
+      readToolGovernance,
+      prepareProviderInvocation,
       toolRegistry,
-      providerManager: config.getProviderManager(),
     },
-    overrides: { historyService, contentGenerator },
+    overrides: {
+      historyService,
+      contentGenerator,
+      providerAdapter: providerSelection,
+    },
   });
 
-  const filteredDeclarations = buildToolDeclarationsFromView(
-    toolRegistry,
+  const tools = chatDeclarations(
     runtimeBundle.toolsView,
-  );
-  todoContinuationService.updateTodoToolAvailabilityFromDeclarations(
-    filteredDeclarations,
-  );
-  const tools = filteredDeclarations;
-
-  const chat = createChatSessionInstance(
-    runtimeBundle.runtimeContext,
-    runtimeBundle.contentGenerator,
-    { systemInstruction, ...generationConfigWithThinking, tools },
-    [],
-    triggerPreCompressHook,
-    systemPromptAssembler,
+    toolRegistry,
+    todoContinuationService,
   );
 
-  chat.setActiveTodosProvider(async () => {
-    const todos = await todoContinuationService.readTodoSnapshot();
-    const active = todoContinuationService.getActiveTodos(todos);
-    if (active.length === 0) return undefined;
-    return active.map((t) => `- [${t.status}] ${t.content}`).join('\n');
-  });
-
-  chat.setTranscriptPathProvider(() => resolveTranscriptPath(config));
-
-  return chat;
+  return bindActiveTodos(
+    createChatSessionInstance(
+      {
+        ...runtimeBundle.runtimeContext,
+        prepareProviderInvocation,
+        profileDefinitions,
+      },
+      runtimeBundle.contentGenerator,
+      buildGenerateContentConfig(
+        generateContentConfig,
+        runtimeState.model,
+        systemInstruction,
+        tools,
+      ),
+      [],
+      triggerPreCompressHook,
+      systemPromptAssembler,
+    ),
+    todoContinuationService,
+  );
 }
 
-/**
- * Where the session journal for this session is being written, or undefined
- * when there is nothing to point at (issue #2933).
- *
- * Read off Config on every call rather than captured once: recording is
- * optional, can be enabled part way through a session, and is replaced with a
- * different service by a resume. A recorder that has stopped — disposed, or
- * deactivated by a write failure — still remembers the path it used, so
- * liveness is decided by `isActive()`, not by the path alone.
- */
-export function resolveTranscriptPath(config: Config): string | undefined {
-  const recording = config.getSessionRecordingService();
-  if (!recording) {
-    return undefined;
-  }
-  if (!recording.isActive()) {
-    return undefined;
-  }
-  return recording.getFilePath() ?? undefined;
-}
-
-/**
- * Applies the config's tokenizer factory to a history service, if available.
- */
-function applyTokenizerFactory(
-  config: Config,
-  historyService: HistoryService,
-): void {
-  const getTokenizerFactory = (config as Config & Record<string, unknown>)[
-    'getTokenizerFactory'
-  ];
-  if (typeof getTokenizerFactory === 'function') {
-    const tokenizerFactory = getTokenizerFactory.call(config);
-    if (tokenizerFactory) {
-      historyService.setTokenizerFactory(tokenizerFactory);
-    }
-  }
-}
 function chatSessionFactoryAdmission(runtimeId: string): {
   readonly turnId: string;
   readonly source: string;
@@ -389,7 +318,7 @@ interface AdmittedInitialHistory {
 }
 
 async function admitInitialHistory(
-  config: Config,
+  mediaStore: LocalMediaStore,
   history: readonly IContent[] | undefined,
   runtimeId: string,
 ): Promise<AdmittedInitialHistory> {
@@ -406,7 +335,7 @@ async function admitInitialHistory(
   if (!hasLocalMedia) {
     return { history, release: () => Promise.resolve() };
   }
-  const admission = new MediaAdmissionService(config.getLocalMediaStore());
+  const admission = new MediaAdmissionService(mediaStore);
   const admissionContext = chatSessionFactoryAdmission(runtimeId);
   const admitted = await admission.admitContents(history, admissionContext);
   return {
@@ -429,7 +358,6 @@ async function buildAdmittedChatSession(
     todoContinuationService,
     toolRegistry,
     createHistoryService = () => new HistoryService(),
-    loadRuntime = loadAgentRuntime,
     createChatSessionInstance = (...args) => new ChatSession(...args),
   } = deps;
   const logger = new DebugLogger('llxprt:client:start');
@@ -439,29 +367,13 @@ async function buildAdmittedChatSession(
     runtimeState,
     createHistoryService,
   );
-  applyTokenizerFactory(config, historyService);
+  if (deps.historyTokenization !== undefined)
+    historyService.setTokenizerFactory({
+      getTokenizer: deps.historyTokenization,
+    });
 
-  const enabledToolNames = getEnabledToolNamesForPrompt(config);
-  const envParts = await getEnvironmentContext(config);
-  const model = resolveModelForSystemPrompt(config);
-  logger.debug(() => `DEBUG [client.startChat]: Model from config: ${model}`);
-  const systemInstruction = await buildSystemInstruction(
-    config,
-    enabledToolNames,
-    envParts,
-    runtimeState.provider,
-    model,
-  );
-  const systemPromptAssembler: SystemPromptAssembler = {
-    assemble: (request: { provider: string | undefined; model: string }) =>
-      buildSystemInstruction(
-        config,
-        enabledToolNames,
-        envParts,
-        request.provider,
-        request.model,
-      ),
-  };
+  const { model, systemInstruction, systemPromptAssembler } =
+    await assembleChatSystemPrompt(deps);
 
   historyService.setActiveTokenizationTarget(model, runtimeState.provider);
   if (reused) {
@@ -476,8 +388,17 @@ async function buildAdmittedChatSession(
       )}`,
   );
 
+  if (
+    deps.readRuntimeSettings === undefined ||
+    deps.readToolGovernance === undefined ||
+    deps.prepareProviderInvocation === undefined
+  )
+    throw new Error(
+      'Chat creation requires explicit session settings and invocation preparation',
+    );
   const chat = await buildChatFromRuntime(
     config,
+    deps.mediaStore,
     runtimeState,
     contentGenerator,
     historyService,
@@ -487,7 +408,17 @@ async function buildAdmittedChatSession(
     systemInstruction,
     systemPromptAssembler,
     createChatSessionInstance,
-    loadRuntime,
+    deps.loadRuntime,
+    deps.providerSelection,
+    deps.prepareProviderInvocation,
+    deps.readRuntimeSettings,
+    deps.readToolGovernance,
+    deps.profileDefinitions,
+    deps.promptEstimator,
+    deps.providerFileLifecycle,
+    deps.composeRetryOperations,
+    deps.telemetry,
+    deps.requestDiagnostics,
   );
   if (reused) clearStoredHistoryService();
   return chat;
@@ -502,7 +433,7 @@ export async function createChatSession(
   deps: CreateChatSessionDeps,
 ): Promise<ChatSession> {
   const admittedHistory = await admitInitialHistory(
-    deps.config,
+    deps.mediaStore,
     deps.extraHistory,
     deps.runtimeState.runtimeId,
   );

@@ -25,41 +25,62 @@ export interface HistoryServiceEventEmitter {
     event: 'tokensUpdated',
     listener: (eventData: TokensUpdatedEvent) => void,
   ): this;
-  on(event: 'contentAdded', listener: (content: IContent) => void): this;
+  on(
+    event: 'contentAdded',
+    listener: (content: IContent, origin?: object) => void,
+  ): this;
   on(
     event: 'contentBatchAdded',
     listener: (contents: readonly IContent[]) => void,
   ): this;
-  on(event: 'compressionStarted', listener: () => void): this;
-  on(event: 'compressionLockReleased', listener: () => void): this;
+  on(event: 'compressionStarted', listener: (origin?: object) => void): this;
+  on(
+    event: 'compressionLockReleased',
+    listener: (origin?: object) => void,
+  ): this;
   on(
     event: 'compressionEnded',
-    listener: (summary: IContent, itemsCompressed: number) => void,
+    listener: (
+      summary: IContent,
+      itemsCompressed: number,
+      origin?: object,
+    ) => void,
   ): this;
   emit(event: 'tokensUpdated', eventData: TokensUpdatedEvent): boolean;
-  emit(event: 'contentAdded', content: IContent): boolean;
+  emit(event: 'contentAdded', content: IContent, origin?: object): boolean;
   emit(event: 'contentBatchAdded', contents: readonly IContent[]): boolean;
-  emit(event: 'compressionStarted'): boolean;
-  emit(event: 'compressionLockReleased'): boolean;
+  emit(event: 'compressionStarted', origin?: object): boolean;
+  emit(event: 'compressionLockReleased', origin?: object): boolean;
   emit(
     event: 'compressionEnded',
     summary: IContent,
     itemsCompressed: number,
+    origin?: object,
   ): boolean;
   off(
     event: 'tokensUpdated',
     listener: (eventData: TokensUpdatedEvent) => void,
   ): this;
-  off(event: 'contentAdded', listener: (content: IContent) => void): this;
+  off(
+    event: 'contentAdded',
+    listener: (content: IContent, origin?: object) => void,
+  ): this;
   off(
     event: 'contentBatchAdded',
     listener: (contents: readonly IContent[]) => void,
   ): this;
-  off(event: 'compressionStarted', listener: () => void): this;
-  off(event: 'compressionLockReleased', listener: () => void): this;
+  off(event: 'compressionStarted', listener: (origin?: object) => void): this;
+  off(
+    event: 'compressionLockReleased',
+    listener: (origin?: object) => void,
+  ): this;
   off(
     event: 'compressionEnded',
-    listener: (summary: IContent, itemsCompressed: number) => void,
+    listener: (
+      summary: IContent,
+      itemsCompressed: number,
+      origin?: object,
+    ) => void,
   ): this;
 }
 

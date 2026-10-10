@@ -1,9 +1,16 @@
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
 
+import { SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';
+import {
+  hookSessionRuntime,
+  readHookDefinitions,
+} from '@vybestack/llxprt-code-core/hooks/hook-configuration.js';
 /**
  * @plan:PLAN-20260622-COREAPIGAP.P09
  * @requirement:REQ-004
@@ -29,7 +36,10 @@ import fc from 'fast-check';
 import { buildAgent, internalConfig } from './helpers/agentHarness.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import { HookEventName } from '@vybestack/llxprt-code-core/hooks/types.js';
+import {
+  HookEventName,
+  SessionStartSource,
+} from '@vybestack/llxprt-code-core/hooks/types.js';
 import { HookControl } from '../control/hooks.js';
 
 describe('agent.hooks hooks-administration control @plan:PLAN-20260622-COREAPIGAP.P09 @requirement:REQ-004', () => {
@@ -74,7 +84,7 @@ describe('agent.hooks hooks-administration control @plan:PLAN-20260622-COREAPIGA
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
       // The harness agent has enableHooks=false -> getHookSystem() is undefined.
-      expect(internalConfig(agent).getHookSystem()).toBeUndefined();
+      expect(internalConfig(agent).getEnableHooks()).toBe(false);
       const list = agent.hooks.listHooks();
       expect(list).toStrictEqual([]);
     } finally {
@@ -108,12 +118,34 @@ describe('agent.hooks hooks-administration control @plan:PLAN-20260622-COREAPIGA
     // Defensive guard (NOT a non-null `!` assertion on the value): the seeded
     // config has enableHooks:true so the system is present, but assert anyway
     // so a future regression fails clearly rather than passing silently.
-    const system = config.getHookSystem();
+    const bus = new MessageBus();
+    const system = new SessionHookOwner(
+      readHookDefinitions(config),
+      hookSessionRuntime(
+        config,
+        new WorkspaceTrustLifecycle({
+          localTrust: config.initialWorkspaceTrust,
+        }),
+        RootTelemetry.prepare({
+          enabled: false,
+          sessionId: 'isolated-caller-fixture',
+          maxBytes: 1024,
+          maxFiles: 1,
+        }),
+      ),
+      true,
+      bus,
+    );
     expect(system).toBeDefined();
-    await system!.initialize();
+    await system
+      .execution({
+        sessionId: () => config.getSessionId(),
+        transcriptPath: () => undefined,
+      })
+      .sessionStart?.(SessionStartSource.Startup);
     const control = new HookControl({
-      config,
-      messageBus: new MessageBus(),
+      hookOperations: system,
+      messageBus: bus,
       sessionId: () => 'hooks-admin-test',
       cwd: () => '/tmp',
     });
@@ -124,6 +156,8 @@ describe('agent.hooks hooks-administration control @plan:PLAN-20260622-COREAPIGA
     expect(entry!.name).toBe('fake-session-start');
     expect(entry!.eventName).toBe(HookEventName.SessionStart);
     expect(entry!.enabled).toBe(true);
+    control.detach();
+    await system.dispose();
   });
 
   it('PROP disabled-set round-trip: for a generated unique string[] (len 0..5), setDisabledHooks(arr) then getDisabledHooks() deep-equals arr @requirement:REQ-004 @scenario:property-round-trip @given:a real agent and a generated unique string[] of length 0..5 @when:setDisabledHooks(arr) then getDisabledHooks() @then:the result deep-equals arr (R-HOOKS-ROUNDTRIP); MIN-2 distinct cases exercised by the generator', async () => {

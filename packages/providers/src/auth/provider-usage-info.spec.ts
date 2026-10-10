@@ -46,7 +46,7 @@ describe('getHigherPriorityAuth explicit settings reader', () => {
     const result = await getHigherPriorityAuth(
       'test-provider',
       oauthSettings,
-      reader,
+      reader.get('authOnly') === true,
     );
 
     expect(result).toBe('API Key');
@@ -63,7 +63,7 @@ describe('getHigherPriorityAuth explicit settings reader', () => {
     const result = await getHigherPriorityAuth(
       'test-provider',
       oauthSettings,
-      reader,
+      reader.get('authOnly') === true,
     );
 
     expect(result).toBeNull();
@@ -97,7 +97,7 @@ describe('getHigherPriorityAuth explicit settings reader', () => {
       const result = await getHigherPriorityAuth(
         'test-provider-higher-priority',
         oauthSettings,
-        reader,
+        reader.get('authOnly') === true,
       );
       expect(result).toBe('Environment Variable');
     } finally {

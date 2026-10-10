@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach } from 'bun:test';
+import type { ToolExecutionPolicy } from '@vybestack/llxprt-code-tools';
 import {
   estimateTokens,
   getOutputLimits,
@@ -16,14 +17,11 @@ import {
 } from './toolOutputLimiter.js';
 
 describe('toolOutputLimiter', () => {
-  let mockConfig: {
-    getEphemeralSettings: ReturnType<typeof vi.fn>;
-  };
+  let policy: ToolExecutionPolicy;
+  const output = { readExecutionPolicy: (): ToolExecutionPolicy => policy };
 
   beforeEach(() => {
-    mockConfig = {
-      getEphemeralSettings: vi.fn().mockReturnValue({}),
-    };
+    policy = {};
   });
 
   describe('estimateTokens', () => {
@@ -75,7 +73,7 @@ TAIL`;
 
   describe('getOutputLimits', () => {
     it('should return default values when no settings are provided', () => {
-      const limits = getOutputLimits(mockConfig);
+      const limits = getOutputLimits(output);
       expect(limits).toStrictEqual({
         tokenLimit: { kind: 'limited', maxTokens: DEFAULT_MAX_TOKENS },
         truncateMode: DEFAULT_TRUNCATE_MODE,
@@ -83,12 +81,12 @@ TAIL`;
     });
 
     it('should return configured values from ephemeral settings', () => {
-      mockConfig.getEphemeralSettings.mockReturnValue({
+      policy = {
         'tool-output-max-tokens': 75000,
         'tool-output-truncate-mode': 'truncate',
-      });
+      };
 
-      const limits = getOutputLimits(mockConfig);
+      const limits = getOutputLimits(output);
       expect(limits).toStrictEqual({
         tokenLimit: { kind: 'limited', maxTokens: 75000 },
         truncateMode: 'truncate',
@@ -96,12 +94,12 @@ TAIL`;
     });
 
     it('should handle partial settings', () => {
-      mockConfig.getEphemeralSettings.mockReturnValue({
+      policy = {
         'tool-output-max-tokens': 100000,
         // truncateMode not set
-      });
+      };
 
-      const limits = getOutputLimits(mockConfig);
+      const limits = getOutputLimits(output);
       expect(limits).toStrictEqual({
         tokenLimit: { kind: 'limited', maxTokens: 100000 },
         truncateMode: DEFAULT_TRUNCATE_MODE,
@@ -118,7 +116,7 @@ TAIL`;
           (_, i) => `word${i}`,
         ).join(' ');
         const config = {
-          getEphemeralSettings: () => ({ 'tool-output-max-tokens': raw }),
+          readExecutionPolicy: () => ({ 'tool-output-max-tokens': raw }),
         };
         expect(estimateTokens(content)).toBeGreaterThan(DEFAULT_MAX_TOKENS);
 
@@ -130,7 +128,7 @@ TAIL`;
 
     it('should not truncate content within limits', () => {
       const content = 'This is a short message';
-      const result = limitOutputTokens(content, mockConfig, 'test-tool');
+      const result = limitOutputTokens(content, output, 'test-tool');
 
       expect(result).toStrictEqual({
         content,
@@ -144,11 +142,11 @@ TAIL`;
         ' ',
       );
       const content = words.repeat(10); // This should exceed the effective limit
-      mockConfig.getEphemeralSettings.mockReturnValue({
+      policy = {
         'tool-output-truncate-mode': 'warn',
-      });
+      };
 
-      const result = limitOutputTokens(content, mockConfig, 'test-tool');
+      const result = limitOutputTokens(content, output, 'test-tool');
 
       expect(result.wasTruncated).toBe(true);
       expect(result.content).toBe('');
@@ -167,11 +165,11 @@ TAIL`;
         ' ',
       );
       const content = words.repeat(10); // This should exceed the effective limit
-      mockConfig.getEphemeralSettings.mockReturnValue({
+      policy = {
         'tool-output-truncate-mode': 'truncate',
-      });
+      };
 
-      const result = limitOutputTokens(content, mockConfig, 'test-tool');
+      const result = limitOutputTokens(content, output, 'test-tool');
 
       expect(result.wasTruncated).toBe(true);
       expect(result.content.length).toBeLessThan(content.length);
@@ -189,12 +187,12 @@ TAIL`;
           `Line number ${i} with some additional content to exercise sampling behavior`,
       );
       const content = lines.join('\n');
-      mockConfig.getEphemeralSettings.mockReturnValue({
+      policy = {
         'tool-output-truncate-mode': 'sample',
         'tool-output-max-tokens': 200, // Force sampling on smaller content set
-      });
+      };
 
-      const result = limitOutputTokens(content, mockConfig, 'test-tool');
+      const result = limitOutputTokens(content, output, 'test-tool');
 
       expect(result.wasTruncated).toBe(true);
       expect(result.content).toContain('[Sampled');
@@ -210,12 +208,12 @@ TAIL`;
         (_, i) => `Line${i} ` + 'x'.repeat(35), // ~12 tokens each
       );
       const content = lines.join('\n');
-      mockConfig.getEphemeralSettings.mockReturnValue({
+      policy = {
         'tool-output-truncate-mode': 'sample',
         'tool-output-max-tokens': 100,
-      });
+      };
 
-      const result = limitOutputTokens(content, mockConfig, 'test-tool');
+      const result = limitOutputTokens(content, output, 'test-tool');
 
       expect(result.wasTruncated).toBe(true);
       // Verify the sampled content stays within reasonable bounds of the effective limit
@@ -232,11 +230,11 @@ TAIL`;
         ' ',
       );
       const content = words; // Single line, over effective limit with gpt-4o tokenization
-      mockConfig.getEphemeralSettings.mockReturnValue({
+      policy = {
         'tool-output-truncate-mode': 'sample',
-      });
+      };
 
-      const result = limitOutputTokens(content, mockConfig, 'test-tool');
+      const result = limitOutputTokens(content, output, 'test-tool');
 
       // Should fall back to truncate behavior for single lines
       expect(result.wasTruncated).toBe(true);
@@ -249,12 +247,12 @@ TAIL`;
 
     it('should respect custom max tokens setting', () => {
       const content = 'a'.repeat(1000); // 250 tokens
-      mockConfig.getEphemeralSettings.mockReturnValue({
+      policy = {
         'tool-output-max-tokens': 100,
         'tool-output-truncate-mode': 'warn',
-      });
+      };
 
-      const result = limitOutputTokens(content, mockConfig, 'test-tool');
+      const result = limitOutputTokens(content, output, 'test-tool');
 
       expect(result.wasTruncated).toBe(true);
       expect(result.content).toBe('');

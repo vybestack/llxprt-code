@@ -1,11 +1,20 @@
+import { cliSkillOperations } from './config/configBuilder.js';
+import { createGitHubBrokerClient } from './config/githubBrokerClient.js';
+import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createSessionModelCommand } from './runtime/session-model-command.js';
 
 import {
+  type SessionSettingsOwner,
+  type RuntimePolicyOwner,
   type Config,
+  type WorkspaceTrustReadPort,
   parseAndFormatApiError,
   ExitCodes,
   FatalInputError,
@@ -21,9 +30,16 @@ import {
   type AgentRequestInput,
   PLACEHOLDER_MODEL,
 } from '@vybestack/llxprt-code-core';
+
 import {
-  shutdownTelemetry,
-  isTelemetrySdkInitialized,
+  MCPOAuthTokenStorage,
+  KeychainTokenStorage,
+} from '@vybestack/llxprt-code-mcp';
+import { defaultBrowserLauncher } from '@vybestack/llxprt-code-mcp/host/hostServices.js';
+
+import { McpRuntimeOwner } from '@vybestack/llxprt-code-agents';
+
+import {
   uiTelemetryService,
   debugLogger,
 } from '@vybestack/llxprt-code-telemetry';
@@ -41,7 +57,10 @@ import type { LoadedSettings } from './config/settings.js';
 import type { BootstrapProfileArgs } from './config/profileBootstrap.js';
 
 import { handleSlashCommand } from './nonInteractiveCliCommands.js';
+import { createRuntimeApi } from './ui/contexts/RuntimeContext.js';
+import { createRuntimeOwnerFeatures } from './runtime/createRuntimeOwnerFeatures.js';
 import { ConsolePatcher } from './ui/utils/ConsolePatcher.js';
+import type { FindMcpResource } from './ui/hooks/atCommandProcessorHelpers.js';
 import { handleAtCommand } from './ui/hooks/atCommandProcessor.js';
 import { processAgentStream } from './nonInteractiveCliSupport.js';
 import {
@@ -60,11 +79,19 @@ import {
 import { runExitCleanup } from './utils/cleanup.js';
 
 interface RunNonInteractiveParams {
+  readonly oauthManager?: OAuthManager;
+  readonly providerFileLifecycle?: ProviderFileLifecycle;
+  runtimeSettings?: {
+    readonly owner: SessionSettingsOwner;
+    readonly store: SettingsService;
+  };
   config: Config;
   settings: LoadedSettings;
   input: string;
   prompt_id: string;
   runtimeMessageBus?: MessageBus;
+  policyOwner?: RuntimePolicyOwner;
+  providerManager?: Agent['providerManager'];
   deferTelemetryShutdown?: boolean;
   /**
    * The single session Agent created at the CLI composition root (#2378). When
@@ -79,29 +106,21 @@ interface RunNonInteractiveParams {
   agent?: Agent;
 }
 
+function requireRuntimeSettings(
+  params: RunNonInteractiveParams,
+): NonNullable<RunNonInteractiveParams['runtimeSettings']> {
+  if (params.runtimeSettings === undefined)
+    throw new Error(
+      'Noninteractive settings commands require the explicit session owner and store',
+    );
+  return params.runtimeSettings;
+}
+
 export function createProfileNameWriter(
-  config: Config,
   jsonOutput: boolean,
   streamFormatter: StreamJsonFormatter | null,
-  getIdentity: (() => string | null) | null = null,
+  resolveIdentity: () => string | null,
 ): () => void {
-  const resolveIdentity =
-    getIdentity ??
-    (() => {
-      try {
-        return resolveContentPrefixIdentity(createCliModelIdentityRuntime());
-      } catch (error) {
-        // Degraded path: fall back to the bare profile name (no model suffix)
-        // so the prefix is still shown. Log so the format divergence is
-        // observable to operators.
-        debugLogger.debug(
-          () =>
-            `[nonInteractiveCli] resolveContentPrefixIdentity failed; using bare profile name: ${error}`,
-        );
-        const settingsService = config.getSettingsService();
-        return settingsService.getCurrentProfileName();
-      }
-    });
   let firstEventInTurn = true;
   return () => {
     if (firstEventInTurn && !jsonOutput && !streamFormatter) {
@@ -198,10 +217,13 @@ function emitStreamInit(
   });
 }
 
-function createEmojiFilter(config: Config): EmojiFilter | undefined {
-  const configuredEmojiFilterMode = config.getEphemeralSetting(
-    'emojifilter',
-  ) as EmojiFilterMode | undefined;
+function createEmojiFilter(
+  params: RunNonInteractiveParams,
+): EmojiFilter | undefined {
+  const configuredEmojiFilterMode =
+    params.agent === undefined
+      ? requireRuntimeSettings(params).owner.readNamedParameter('emojifilter')
+      : params.agent.getEphemeralSetting('emojifilter');
   const emojiFilterMode: EmojiFilterMode =
     configuredEmojiFilterMode === 'allowed' ||
     configuredEmojiFilterMode === 'warn' ||
@@ -216,23 +238,51 @@ function createEmojiFilter(config: Config): EmojiFilter | undefined {
 /**
  * Resolves a slash command to its submitted prompt parts, or undefined when
  * the input is not a slash command (or the command produced no content).
- * Runs BEFORE Agent construction (matching the pre-#2376 ordering) so a
- * slash-only input that fails or exits never requires provider setup.
+ * A preconstructed Agent provides an owner API; commands without one cannot
+ * use runtime operations.
  */
 async function resolveSlashQuery(
   input: string,
   abortController: AbortController,
   config: Config,
   settings: LoadedSettings,
+  agent: Agent | undefined,
+  providerManager: Agent['providerManager'] | undefined,
+  runtimeSettings: RunNonInteractiveParams['runtimeSettings'],
+  trust: WorkspaceTrustReadPort | undefined,
+  oauthManager?: OAuthManager,
 ): Promise<AgentRequestInput | undefined> {
   if (!isSlashCommand(input)) {
     return undefined;
   }
+  if (runtimeSettings === undefined)
+    throw new Error(
+      'Slash command settings require the explicit session owner',
+    );
   const slashCommandResult = await handleSlashCommand(
     input,
     abortController,
     config,
     settings,
+    agent,
+    agent
+      ? createRuntimeApi(
+          agent,
+          createRuntimeOwnerFeatures(
+            config,
+            agent.providerManager,
+            () => agent.workspace.getDirectories(),
+            createSessionModelCommand(agent),
+            runtimeSettings.owner,
+            runtimeSettings.store,
+            agent.workspace,
+          ),
+        )
+      : undefined,
+    providerManager,
+    trust,
+    () => oauthManager,
+    runtimeSettings.owner,
   );
   if (
     slashCommandResult !== undefined &&
@@ -247,14 +297,25 @@ async function resolveAtQuery(
   input: string,
   abortController: AbortController,
   config: Config,
+  workspace: Agent['workspace'],
   getToolHandle: (name: string) => AgentToolHandle | undefined,
+  readResource: (server: string, uri: string) => Promise<unknown>,
+  findResource: FindMcpResource,
 ): Promise<AgentRequestInput> {
   const { processedQuery, error } = await handleAtCommand({
     query: input,
-    config,
+    config: {
+      getFileFilteringOptions: () => config.getFileFilteringOptions(),
+      ignore: workspace,
+      getEnableRecursiveFileSearch: () => config.getEnableRecursiveFileSearch(),
+      directories: () => workspace.getDirectories(),
+      contains: (filePath) => workspace.containsPath(filePath),
+    },
     // Tool lookups resolve through the public Agent.tools API (issue #2376):
     // the caller supplies getToolHandle from the already-created Agent.
     getToolHandle,
+    readResource,
+    findResource,
     addItem: (_item, _timestamp) => 0,
     onDebugMessage: () => {},
     messageId: Date.now(),
@@ -366,11 +427,14 @@ async function processQuery(
       quiet: params.config.getQuiet(),
       streamFormatter: options.streamFormatter,
       emojiFilter: options.emojiFilter,
+      includeThinking:
+        agent.getEphemeralSetting('reasoning.includeInResponse') !== false,
       createProfileNameWriter: () =>
         createProfileNameWriter(
-          params.config,
           options.jsonOutput,
           options.streamFormatter,
+          () =>
+            resolveContentPrefixIdentity(createCliModelIdentityRuntime(agent)),
         ),
     },
     options.startTime,
@@ -392,9 +456,7 @@ function buildNonInteractiveActivationIntent(
   const configProvider =
     params.config.getProvider() ?? bootstrapArgs?.providerOverride ?? undefined;
   const activeProvider =
-    configProvider === undefined
-      ? params.config.getProviderManager()?.getActiveProviderName()
-      : undefined;
+    configProvider === undefined ? params.config.getProvider() : undefined;
   return {
     ...(configProvider !== undefined ? { provider: configProvider } : {}),
     ...(activeProvider !== undefined
@@ -449,42 +511,104 @@ async function resolveAndStream(
     options.abortController,
     config,
     settings,
+    params.agent,
+    params.providerManager,
+    params.runtimeSettings,
+    params.policyOwner?.trust,
+    params.oauthManager,
   );
   // #2378: reuse the composition-root Agent when supplied. The composition
   // root owns its lifecycle (registerCleanup disposes it), so a reused Agent
   // must NOT be disposed here. Only an Agent this function built (the direct-
   // caller / test path) is disposed in the finally below.
   const reusedAgent = params.agent;
-  const agent =
-    reusedAgent ??
-    (await fromConfig({
-      config,
-      messageBus: params.runtimeMessageBus,
-      sessionId: config.getSessionId(),
-      activation: buildNonInteractiveActivationIntent(params),
-    }));
+  const agent = reusedAgent ?? (await createNonInteractiveAgent(params));
+  const failures: unknown[] = [];
   try {
     const query =
       slashQuery ??
-      (await resolveAtQuery(input, options.abortController, config, (name) =>
-        agent.tools.get(name),
+      (await resolveAtQuery(
+        input,
+        options.abortController,
+        config,
+        agent.workspace,
+        (name) => agent.tools.get(name),
+        (server, uri) => agent.mcp.readResource(server, uri),
+        (identifier) => agent.mcp.findResource(identifier),
       ));
     emitUserMessage(options.streamFormatter, input);
     await processQuery(query, agent, params, options);
+  } catch (primary) {
+    failures.push(primary);
   } finally {
-    if (reusedAgent === undefined) {
-      try {
-        await agent.dispose();
-      } catch (disposeError) {
-        debugLogger.error(
-          `Failed to dispose agent: ${
-            disposeError instanceof Error
-              ? disposeError.message
-              : String(disposeError)
-          }`,
-        );
-      }
-    }
+    if (reusedAgent === undefined)
+      await releaseNonInteractiveResources(failures, [() => agent.dispose()]);
+  }
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1)
+    throw new AggregateError(
+      failures,
+      'Noninteractive execution and Agent disposal failed',
+    );
+}
+
+async function createNonInteractiveAgent(
+  params: RunNonInteractiveParams,
+): Promise<Agent> {
+  const { config } = params;
+  return fromConfig({
+    githubBrokerClient: createGitHubBrokerClient(),
+    oauthManager: params.oauthManager,
+    providerFileLifecycle: params.providerFileLifecycle,
+    settingsService: requireRuntimeSettings(params).store,
+    settingsOwner: requireRuntimeSettings(params).owner,
+    providerManager: params.providerManager,
+    config,
+    mcpRuntime: await McpRuntimeOwner.create(
+      {
+        tokenStorage: new MCPOAuthTokenStorage(
+          new KeychainTokenStorage('llxprt-cli-mcp-oauth'),
+        ),
+        openBrowser: defaultBrowserLauncher,
+      },
+      config,
+      params.runtimeMessageBus,
+      undefined,
+      undefined,
+      undefined,
+      params.policyOwner,
+      'runtime',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      cliSkillOperations(config),
+    ),
+    mcpOwnership: 'agent',
+    messageBus: params.runtimeMessageBus,
+    sessionId: config.getSessionId(),
+    sessionIdentityOwnership: 'config',
+    activation: buildNonInteractiveActivationIntent(params),
+  });
+}
+
+async function releaseNonInteractiveResources(
+  failures: unknown[],
+  releases: ReadonlyArray<() => void | Promise<void>>,
+): Promise<void> {
+  for (const release of releases) {
+    const cleanup = await Promise.allSettled([Promise.resolve().then(release)]);
+    failures.push(
+      ...cleanup.flatMap((result) =>
+        result.status === 'rejected' ? [result.reason] : [],
+      ),
+    );
   }
 }
 
@@ -493,15 +617,17 @@ export async function runNonInteractive(
 ): Promise<void> {
   const { config, deferTelemetryShutdown = false } = params;
 
-  if (!isProviderConfigured(config)) {
+  if (
+    !isProviderConfigured(
+      params.agent?.providerManager ?? params.providerManager,
+    )
+  ) {
     reportUnconfiguredProviderError(config);
     try {
       await runExitCleanup();
-    } catch {
-      // Swallow cleanup errors on the unconfigured exit path so exit code 52
-      // is always reached (matches guardUnconfiguredProvider semantics).
+    } finally {
+      process.exit(ExitCodes.FATAL_CONFIG_ERROR);
     }
-    process.exit(ExitCodes.FATAL_CONFIG_ERROR);
   }
 
   const outputFormat = config.getOutputFormat();
@@ -516,6 +642,7 @@ export async function runNonInteractive(
   const handleUserFeedback = createUserFeedbackHandler(config);
   const abortController = new AbortController();
   const stdinCancellation = createStdinCancellation(abortController);
+  const failures: unknown[] = [];
   try {
     consolePatcher.patch();
     coreEvents.on(CoreEvent.UserFeedback, handleUserFeedback);
@@ -532,7 +659,7 @@ export async function runNonInteractive(
       jsonOutput,
       streamJsonOutput,
       streamFormatter,
-      emojiFilter: createEmojiFilter(config),
+      emojiFilter: createEmojiFilter(params),
       startTime,
     });
   } catch (error) {
@@ -546,13 +673,24 @@ export async function runNonInteractive(
         ),
       );
     }
-    throw error;
+    failures.push(error);
   } finally {
-    stdinCancellation.cleanup();
-    consolePatcher.cleanup();
-    coreEvents.off(CoreEvent.UserFeedback, handleUserFeedback);
-    if (!deferTelemetryShutdown && isTelemetrySdkInitialized()) {
-      await shutdownTelemetry(config);
-    }
+    await releaseNonInteractiveResources(failures, [
+      () => stdinCancellation.cleanup(),
+      () => consolePatcher.cleanup(),
+      () => {
+        coreEvents.off(CoreEvent.UserFeedback, handleUserFeedback);
+      },
+      () =>
+        deferTelemetryShutdown
+          ? undefined
+          : requireRuntimeSettings(params).owner.telemetry.flush(),
+    ]);
   }
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1)
+    throw new AggregateError(
+      failures,
+      'Noninteractive execution and cleanup failed',
+    );
 }

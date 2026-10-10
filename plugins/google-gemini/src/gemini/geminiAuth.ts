@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
-
 export type GeminiAuthMode = 'gemini-api-key' | 'vertex-ai' | 'none';
 
 export interface VertexAIAuthConfig {
@@ -14,10 +12,10 @@ export interface VertexAIAuthConfig {
 }
 
 function getNonEmptySetting(
-  settingsService: SettingsService | undefined,
+  settingsService: Readonly<Record<string, unknown>> | undefined,
   key: string,
 ): string | undefined {
-  const value = settingsService?.get(key);
+  const value = settingsService?.[key];
   if (typeof value !== 'string') {
     return undefined;
   }
@@ -26,7 +24,7 @@ function getNonEmptySetting(
 }
 
 export function getSettingOrEnv(
-  settingsService: SettingsService | undefined,
+  settingsService: Readonly<Record<string, unknown>> | undefined,
   key: string,
 ): string | undefined {
   const settingValue = getNonEmptySetting(settingsService, key);
@@ -38,7 +36,7 @@ export function getSettingOrEnv(
 }
 
 export function getVertexAIAuthConfig(
-  settingsService?: SettingsService,
+  settingsService?: Readonly<Record<string, unknown>>,
 ): VertexAIAuthConfig {
   return {
     project: getSettingOrEnv(settingsService, 'GOOGLE_CLOUD_PROJECT'),
@@ -56,7 +54,7 @@ export function getVertexAIAuthConfig(
  * (see eslint.config.js completedDirectiveCleanupScopes / legacy overrides).
  */
 export function hasVertexAICredentials(
-  settingsService?: SettingsService,
+  settingsService?: Readonly<Record<string, unknown>>,
 ): boolean {
   const vertexConfig = getVertexAIAuthConfig(settingsService);
   const hasProjectAndLocation =

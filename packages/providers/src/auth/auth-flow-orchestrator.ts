@@ -22,7 +22,6 @@ import {
 import { mergeRefreshedToken } from '@vybestack/llxprt-code-auth/token-merge.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type {
   AuthCompletionOptions,
@@ -32,9 +31,8 @@ import type {
   OAuthToken,
   TokenStore,
 } from './types.js';
-import { BucketFailoverHandlerImpl } from './BucketFailoverHandlerImpl.js';
+
 import type { ProviderRegistry } from './provider-registry.js';
-import { oauthRuntimeBridge } from './runtime-accessor-bridge.js';
 
 const logger = new DebugLogger('llxprt:oauth:auth-flow');
 
@@ -87,7 +85,7 @@ type MultiBucketAuthenticatorLike = {
     ): Promise<void>;
     onPrompt(provider: string, bucket: string): Promise<boolean>;
     onDelay(ms: number, bucket: string): Promise<void>;
-    getEphemeralSetting<T>(key: string): T | undefined;
+    readPolicy(): { readonly prompt?: unknown; readonly delay?: unknown };
   }): {
     authenticateMultipleBuckets(opts: {
       provider: string;
@@ -119,8 +117,16 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     private readonly tokenStore: TokenStore,
     private readonly providerRegistry: ProviderRegistry,
     private readonly facadeRef: BucketFailoverOAuthManagerLike,
-    private readonly config?: Config,
     private runtimeMessageBus?: MessageBus,
+    private readonly configureFailover: (
+      providerName: string,
+      buckets: string[],
+      metadata?: OAuthTokenRequestMetadata,
+    ) => void = () => {},
+    private readonly readBucketPolicy: () => {
+      readonly prompt?: unknown;
+      readonly delay?: unknown;
+    } = () => ({}),
   ) {}
 
   /**
@@ -128,6 +134,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
    * Called by OAuthManager when the messageBus field is replaced after construction
    * (e.g., during test setup via Object.assign).
    */
+
   setRuntimeMessageBus(bus: MessageBus | undefined): void {
     this.runtimeMessageBus = bus;
   }
@@ -783,11 +790,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     const { MultiBucketAuthenticator } = await import(
       './MultiBucketAuthenticator.js'
     );
-    const getEphemeralSetting = <T>(key: string): T | undefined =>
-      oauthRuntimeBridge.getEphemeralSetting(key) as T | undefined;
-
-    const rawBucketPrompt =
-      oauthRuntimeBridge.getEphemeralSetting('auth-bucket-prompt');
+    const rawBucketPrompt = this.readBucketPolicy().prompt;
     logger.debug('Checking auth-bucket-prompt setting', {
       rawValue: rawBucketPrompt,
       typeof: typeof rawBucketPrompt,
@@ -818,7 +821,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
       providerName,
       buckets,
       unauthenticatedBuckets,
-      getEphemeralSetting,
+      this.readBucketPolicy,
     );
 
     if (result.cancelled) {
@@ -848,13 +851,13 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     providerName: string,
     buckets: string[],
     unauthenticatedBuckets: string[],
-    getEphemeralSetting: <T>(key: string) => T | undefined,
+    readPolicy: () => { readonly prompt?: unknown; readonly delay?: unknown },
   ): Promise<MultiBucketAuthResult> {
     const onAuthBucket = this.buildOnAuthBucketCallback();
     const onPrompt = this.buildOnPromptCallback(
       providerName,
       unauthenticatedBuckets,
-      getEphemeralSetting,
+      readPolicy,
     );
     const onDelay = async (ms: number, bucket: string): Promise<void> => {
       debugLogger.log(
@@ -868,7 +871,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
       onAuthBucket,
       onPrompt,
       onDelay,
-      getEphemeralSetting,
+      readPolicy,
     });
 
     // Issue 913: Use unauthenticatedBuckets for the actual auth flow
@@ -886,28 +889,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     buckets: string[],
     requestMetadata?: OAuthTokenRequestMetadata,
   ): void {
-    // Set up bucket failover handler if we have multiple buckets and config is available
-    // @plan PLAN-20251213issue490
-    if (buckets.length > 1) {
-      const config = this.config;
-      if (config) {
-        const handler = new BucketFailoverHandlerImpl(
-          buckets,
-          providerName,
-          this.facadeRef,
-          requestMetadata,
-        );
-        config.setBucketFailoverHandler(handler);
-        logger.debug('Bucket failover handler configured', {
-          provider: providerName,
-          bucketCount: buckets.length,
-        });
-      } else {
-        logger.debug(
-          'Config not available, bucket failover handler not configured',
-        );
-      }
-    }
+    this.configureFailover(providerName, buckets, requestMetadata);
   }
 
   /**
@@ -986,7 +968,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
   private buildOnPromptCallback(
     providerName: string,
     buckets: string[],
-    getEphemeralSetting: <T>(key: string) => T | undefined,
+    readPolicy: () => { readonly prompt?: unknown; readonly delay?: unknown },
   ): (provider: string, bucket: string) => Promise<boolean> {
     return async (provider: string, bucket: string): Promise<boolean> => {
       if (this.userDismissedAuthPrompt) {
@@ -997,7 +979,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
         return true;
       }
 
-      const showPrompt = getEphemeralSetting<boolean>('auth-bucket-prompt');
+      const showPrompt = readPolicy().prompt;
       const messageBus = this.requireRuntimeMessageBus();
       logger.debug('Requesting bucket auth confirmation via message bus', {
         provider,
@@ -1039,7 +1021,8 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
 
       logger.debug('TUI not ready, falling back to delay-based prompt');
 
-      const delay = getEphemeralSetting<number>('auth-bucket-delay') ?? 5000;
+      const rawDelay = readPolicy().delay;
+      const delay = typeof rawDelay === 'number' ? rawDelay : 5000;
       debugLogger.log(`\nReady to authenticate bucket: ${bucket}`);
       debugLogger.log(
         `(waiting ${delay / 1000} seconds - switch browser window if needed...)\n`,

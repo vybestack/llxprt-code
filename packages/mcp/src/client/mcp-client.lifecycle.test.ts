@@ -3,6 +3,9 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createTestOAuthBinding } from './test-support/index.js';
+
+import { unsupportedApprovalPolicy } from './test-support/approval-policy.js';
 
 import { automock } from '../../../test-utils/src/automock.js';
 import { waitFor } from '../../../test-utils/src/wait-for.js';
@@ -17,19 +20,18 @@ import type { Config } from './test-support/mcpClientTestSupport.js';
 import type { PromptRegistry } from './test-support/mcpClientTestSupport.js';
 import type { ResourceRegistry } from './test-support/mcpClientTestSupport.js';
 import { WorkspaceContext } from './test-support/mcpClientTestSupport.js';
-import { registerMcpHostServices } from '../host/hostServices.js';
 import {
   ReadResourceResultSchema,
   ResourceListChangedNotificationSchema,
   ToolListChangedNotificationSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { McpClient } from './mcp-client.js';
+import { MCPServerStatus } from './mcp-status.js';
 import { MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE } from './mcp-errors.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 
 // Exercises the real host seam instead of mocking a module (#3305).
 const mockEmitFeedback = vi.fn();
-registerMcpHostServices({ emitFeedback: mockEmitFeedback });
 
 const realStdioModule = {
   ...(await import('@modelcontextprotocol/sdk/client/stdio.js')),
@@ -221,9 +223,6 @@ describe('mcp-client', () => {
     (
       ClientLib.Client as unknown as Mock<(...args: never[]) => unknown>
     ).mockReturnValue(sdkClient);
-    vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
-      {} as SdkClientStdioLib.StdioClientTransport,
-    );
   };
 
   /** Builds an McpClient with the suite's fixed server, command, and version. */
@@ -234,6 +233,8 @@ describe('mcp-client', () => {
     config: Config,
   ): McpClient =>
     new McpClient(
+      createTestOAuthBinding(),
+      unsupportedApprovalPolicy(),
       'test-server',
       { command: 'test-command' },
       toolRegistry,
@@ -243,13 +244,21 @@ describe('mcp-client', () => {
       config,
       false,
       '0.0.1',
+      undefined,
+      mockEmitFeedback,
     );
 
   describe('McpClient', () => {
-    it('promptly cancels a never-settling CONNECTING handshake', async () => {
+    it('starts transport cleanup immediately and joins an abort-ignoring CONNECTING handshake', async () => {
+      let finishConnect: (() => void) | undefined;
       const transport = { close: vi.fn().mockResolvedValue(undefined) };
       const sdkClient = {
-        connect: vi.fn(() => new Promise<void>(() => {})),
+        connect: vi.fn(
+          () =>
+            new Promise<void>((resolve) => {
+              finishConnect = resolve;
+            }),
+        ),
         close: vi.fn().mockResolvedValue(undefined),
         registerCapabilities: vi.fn(),
         setRequestHandler: vi.fn(),
@@ -276,11 +285,17 @@ describe('mcp-client', () => {
       const connectPromise = client.connect();
       await waitFor(() => expect(sdkClient.connect).toHaveBeenCalledOnce());
 
-      await client.disconnect();
-      await connectPromise;
+      let disconnected = false;
+      const disconnect = client.disconnect().then(() => {
+        disconnected = true;
+      });
+      await waitFor(() => expect(transport.close).toHaveBeenCalled());
+      expect(disconnected).toBe(false);
+      finishConnect?.();
+      await Promise.all([disconnect, connectPromise]);
 
       expect(transport.close).toHaveBeenCalled();
-      expect(client.getStatus()).toBe('disconnected');
+      expect(client.getStatus()).toBe(MCPServerStatus.DISCONNECTED);
     });
 
     it('should discover resources when a server only exposes resources', async () => {
@@ -436,6 +451,7 @@ describe('mcp-client', () => {
           params: { uri: 'file:///tmp/readme.txt' },
         },
         ReadResourceResultSchema,
+        { signal: undefined },
       );
     });
 
@@ -794,7 +810,7 @@ describe('mcp-client', () => {
       expect(
         mockedResourceRegistry.removeResourcesByServer,
       ).toHaveBeenCalledWith('test-server');
-      expect(client.getStatus()).toBe('disconnected');
+      expect(client.getStatus()).toBe(MCPServerStatus.DISCONNECTED);
     });
 
     it('does not resurrect a client when disconnected during connect', async () => {
@@ -821,12 +837,12 @@ describe('mcp-client', () => {
 
       const connectPromise = client.connect();
       await waitFor(() => expect(mockedClient.connect).toHaveBeenCalled());
-      await client.disconnect();
+      const disconnect = client.disconnect();
       resolveConnect?.();
-      await connectPromise;
+      await Promise.all([disconnect, connectPromise]);
 
       expect(mockedClient.close).toHaveBeenCalledOnce();
-      expect(client.getStatus()).toBe('disconnected');
+      expect(client.getStatus()).toBe(MCPServerStatus.DISCONNECTED);
     });
   });
 });

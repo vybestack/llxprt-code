@@ -3,6 +3,25 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { Agent } from './helpers/agentHarness.js';
+
+function activationSettings(agent: Agent): SettingsService {
+  if (
+    !('deps' in agent) ||
+    typeof agent.deps !== 'object' ||
+    agent.deps === null
+  ) {
+    throw new Error('Expected the actual adopted activation store');
+  }
+  if (
+    !('settingsService' in agent.deps) ||
+    !(agent.deps.settingsService instanceof SettingsService)
+  ) {
+    throw new Error('Expected the actual adopted activation store');
+  }
+  return agent.deps.settingsService;
+}
 
 import { describe, expect, it } from 'bun:test';
 import { canonicalProviderActivationIntent } from '../activationPreflightState.js';
@@ -12,24 +31,23 @@ import {
   buildAgent,
   createAgent,
   tempRoot,
-  internalConfig,
   type AgentConfig,
 } from './helpers/agentHarness.js';
 
 async function activationSnapshot(overrides: Partial<AgentConfig>) {
   const { agent, cleanup } = await buildAgent('plain-text.jsonl', overrides);
   try {
-    const config = internalConfig(agent);
+    const settings = activationSettings(agent);
     return {
       provider: agent.getProvider(),
       model: agent.getModel(),
-      activeProvider: config.getProviderManager()?.getActiveProviderName(),
-      activeModel: config.getModel(),
-      key: config.getEphemeralSetting('auth-key'),
-      keyfile: config.getEphemeralSetting('auth-keyfile'),
-      baseUrl: config.getEphemeralSetting('base-url'),
-      settings: config.getSettingsService().getProviderSettings('fake'),
-      clientReady: config.getContentGeneratorConfig() !== undefined,
+      activeProvider: agent.providerManager.getActiveProviderName(),
+      activeModel: settings.getProviderSettings('fake').model,
+      key: agent.getEphemeralSetting('auth-key'),
+      keyfile: agent.getEphemeralSetting('auth-keyfile'),
+      baseUrl: agent.getEphemeralSetting('base-url'),
+      settings: settings.getProviderSettings('fake'),
+      clientReady: agent.agentClient.getContentGeneratorConfig() !== undefined,
     };
   } finally {
     await cleanup();
@@ -88,14 +106,13 @@ describe('createAgent single activation transition (#2534)', () => {
         overrides,
       );
       try {
-        const config = internalConfig(agent);
-        const settings = config.getSettingsService();
+        const settings = activationSettings(agent);
         return {
-          activeProvider: config.getProviderManager()?.getActiveProviderName(),
+          activeProvider: agent.providerManager.getActiveProviderName(),
           activeScope: settings.getProviderSettings('fake'),
           requestedScope: settings.getProviderSettings('gemini'),
-          ephemeralKey: config.getEphemeralSetting('auth-key'),
-          ephemeralBaseUrl: config.getEphemeralSetting('base-url'),
+          ephemeralKey: agent.getEphemeralSetting('auth-key'),
+          ephemeralBaseUrl: agent.getEphemeralSetting('base-url'),
         };
       } finally {
         await cleanup();
@@ -216,16 +233,14 @@ describe('createAgent single activation transition (#2534)', () => {
           ...(explicit ? { activation: { provider, model } } : {}),
         });
         try {
-          const config = internalConfig(agent);
+          const settings = activationSettings(agent);
           expect(agent.getProvider()).toBe(provider);
           expect(agent.getModel()).toBe(model);
-          expect(config.getProviderManager()?.getActiveProviderName()).toBe(
-            active,
+          expect(agent.providerManager.getActiveProviderName()).toBe(active);
+          expect(agent.agentClient).toBeDefined();
+          expect(settings.getProviderSettings(provider).model).toBe(
+            storedModel,
           );
-          expect(config.getAgentClient()).toBeDefined();
-          expect(
-            config.getSettingsService().getProviderSettings(provider).model,
-          ).toBe(storedModel);
         } finally {
           await agent.dispose();
         }

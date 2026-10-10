@@ -1,3 +1,4 @@
+import type { ToolExecutionPolicy } from '@vybestack/llxprt-code-tools';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -15,7 +16,7 @@ import {
 export { DEFAULT_MAX_TOKENS } from '@vybestack/llxprt-code-tools/utils/toolOutputMaxTokens.js';
 
 export interface ToolOutputSettingsProvider {
-  getEphemeralSettings(): Record<string, unknown>;
+  readExecutionPolicy(): ToolExecutionPolicy;
 }
 
 // Default limits
@@ -184,8 +185,12 @@ export function clipMiddle(
 export function getOutputLimits(
   config: ToolOutputSettingsProvider,
 ): OutputLimitConfig {
-  const ephemeralSettings = config.getEphemeralSettings();
+  return parseOutputLimits(config.readExecutionPolicy());
+}
 
+export function parseOutputLimits(
+  ephemeralSettings: ToolExecutionPolicy,
+): OutputLimitConfig {
   return {
     tokenLimit: parseToolOutputMaxTokens(
       ephemeralSettings['tool-output-max-tokens'],
@@ -291,7 +296,19 @@ export function limitOutputTokens(
   config: ToolOutputSettingsProvider,
   toolName: string,
 ): TruncatedOutput {
-  const { tokenLimit, truncateMode } = getOutputLimits(config);
+  return limitOutputTokensWithLimits(
+    content,
+    getOutputLimits(config),
+    toolName,
+  );
+}
+
+export function limitOutputTokensWithLimits(
+  content: string,
+  limits: OutputLimitConfig,
+  toolName: string,
+): TruncatedOutput {
+  const { tokenLimit, truncateMode } = limits;
   if (tokenLimit.kind === 'disabled') {
     return { content, wasTruncated: false };
   }

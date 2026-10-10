@@ -1,3 +1,7 @@
+import {
+  captureResponsesTestRequest,
+  type ResponsesTestDeps,
+} from './responses-request.test-helpers.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -24,10 +28,7 @@ import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, beforeEach, afterEach, expect, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  executeOpenAIResponsesRequest,
-  type ResponsesExecutorDeps,
-} from './openAIResponsesExecutor.js';
+import { executeOpenAIResponsesRequest } from './openAIResponsesExecutor.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
@@ -53,8 +54,9 @@ function buildNormalizedOptions(
   });
   const config = createRuntimeConfigStub(settings, {});
   const invocation = createRuntimeInvocationContext({
-    runtime,
-    settings,
+    runtimeId: runtime.runtimeId,
+    runtimeMetadata: runtime.metadata,
+
     providerName: 'openai-responses',
     ephemeralsSnapshot: overrides.ephemerals ?? {},
     fallbackRuntimeId: 'test-runtime',
@@ -92,19 +94,19 @@ function buildNormalizedOptions(
 }
 
 function buildDeps(
-  overrides: Partial<ResponsesExecutorDeps> = {},
-): ResponsesExecutorDeps {
+  overrides: Partial<ResponsesTestDeps> = {},
+): ResponsesTestDeps {
   return {
     providerName: 'openai-responses',
-    logger: { debug: vi.fn() } as unknown as ResponsesExecutorDeps['logger'],
-    getProviderBaseURL: () => 'https://api.openai.com/v1',
-    getCustomHeaders: () => undefined,
+    logger: { debug: vi.fn() } as unknown as ResponsesTestDeps['logger'],
+    requestBaseURL: 'https://api.openai.com/v1',
+    requestHeaders: undefined,
     isCodexMode: () => false,
     getCodexAccountId: async () => 'codex-account',
     resolveAuthTokenForPrompt: async () => '',
     shouldRetryOnError: () => true,
-    getDefaultModel: () => 'gpt-5',
-    getGlobalConfig: () => undefined,
+    defaultModel: 'gpt-5',
+
     getUnallowedModelParameters: () => new Set<string>(),
     ...overrides,
   };
@@ -164,7 +166,12 @@ describe('executeOpenAIResponsesRequest abort-signal propagation @issue:2607', (
     const options = buildNormalizedOptions({
       invocationSignal: controller.signal,
     });
-    await drain(executeOpenAIResponsesRequest(options, buildDeps()));
+    await drain(
+      executeOpenAIResponsesRequest(
+        captureResponsesTestRequest(options, buildDeps()),
+        buildDeps(),
+      ),
+    );
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     const fetchCallInit = fetchSpy.mock.calls[0]?.[1] as RequestInit;
@@ -186,7 +193,12 @@ describe('executeOpenAIResponsesRequest abort-signal propagation @issue:2607', (
     const options = buildNormalizedOptions({
       metadataAbortSignal: controller.signal,
     });
-    await drain(executeOpenAIResponsesRequest(options, buildDeps()));
+    await drain(
+      executeOpenAIResponsesRequest(
+        captureResponsesTestRequest(options, buildDeps()),
+        buildDeps(),
+      ),
+    );
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     const fetchCallInit = fetchSpy.mock.calls[0]?.[1] as RequestInit;
@@ -210,7 +222,12 @@ describe('executeOpenAIResponsesRequest abort-signal propagation @issue:2607', (
       invocationSignal: invocationController.signal,
       metadataAbortSignal: metadataController.signal,
     });
-    await drain(executeOpenAIResponsesRequest(options, buildDeps()));
+    await drain(
+      executeOpenAIResponsesRequest(
+        captureResponsesTestRequest(options, buildDeps()),
+        buildDeps(),
+      ),
+    );
 
     const fetchCallInit = fetchSpy.mock.calls[0]?.[1] as RequestInit;
     expect(fetchCallInit.signal).toBe(invocationController.signal);
@@ -237,7 +254,10 @@ describe('executeOpenAIResponsesRequest abort-signal propagation @issue:2607', (
       invocationSignal: controller.signal,
       ephemerals: { retrywait: 10_000, retries: 5 },
     });
-    const iterator = executeOpenAIResponsesRequest(options, buildDeps());
+    const iterator = executeOpenAIResponsesRequest(
+      captureResponsesTestRequest(options, buildDeps()),
+      buildDeps(),
+    );
 
     // Drain into a promise we can assert rejects. Attach a no-op catch now so
     // the delayed rejection (after abort) never becomes an unhandled rejection.
@@ -274,7 +294,10 @@ describe('executeOpenAIResponsesRequest abort-signal propagation @issue:2607', (
       invocationSignal: controller.signal,
       ephemerals: { retrywait: 1_000, retries: 5 },
     });
-    const iterator = executeOpenAIResponsesRequest(options, buildDeps());
+    const iterator = executeOpenAIResponsesRequest(
+      captureResponsesTestRequest(options, buildDeps()),
+      buildDeps(),
+    );
 
     await expect(drain(iterator)).rejects.toBe(abortError);
     // AbortError must NOT trigger a retry — only one fetch call.

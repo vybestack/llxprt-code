@@ -13,7 +13,7 @@ import {
   SessionRecordingService,
   type SessionRecordingServiceConfig,
 } from '@vybestack/llxprt-code-core';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createUiSessionOwner } from './__tests__/uiSessionOwner.js';
 import { createOrResumeRecording } from './cliSessionBootstrap.js';
 
 const PROJECT_HASH = 'startup-recording-test';
@@ -72,11 +72,13 @@ describe('recording bootstrap checkpoint resolution', () => {
       model: 'test-model',
       provider: 'test-provider',
       continueSession: 'duplicate-name',
-      settingsService: new SettingsService(),
     });
 
     await expect(
-      createOrResumeRecording(config, PROJECT_HASH, chatsDir),
+      createOrResumeRecording(config, PROJECT_HASH, chatsDir, {
+        getAgentClient: () => createUiSessionOwner(config).agentClient,
+        workspaceDirectories: () => [root],
+      }),
     ).rejects.toThrow(/Ambiguous continue target name/);
   });
 });

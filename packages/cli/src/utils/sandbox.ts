@@ -93,6 +93,7 @@ export async function start_sandbox(
   nodeArgs: string[] = [],
   cliConfig?: Config,
   cliArgs: string[] = [],
+  directories?: () => readonly string[],
 ): Promise<number> {
   let credentialProxyBridgeCleanup: (() => void) | undefined;
   let portForwardingResult: PortForwardingResult | undefined;
@@ -104,13 +105,20 @@ export async function start_sandbox(
   let exitCode: number | undefined;
   try {
     if (config.command === 'sandbox-exec') {
-      exitCode = await runSeatbeltSandbox(config, nodeArgs, cliConfig, cliArgs);
+      exitCode = await runSeatbeltSandbox(
+        config,
+        nodeArgs,
+        cliConfig,
+        cliArgs,
+        directories,
+      );
     } else {
       const result = await runContainerSandbox(
         config,
         nodeArgs,
         cliConfig,
         cliArgs,
+        directories,
       );
       portForwardingResult = result.portForwardingResult;
       credentialProxyBridgeCleanup = result.credentialProxyBridgeCleanup;

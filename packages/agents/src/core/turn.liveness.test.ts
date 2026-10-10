@@ -1,3 +1,6 @@
+import { createChatPolicyFixture } from './__tests__/session-policy-fixture.js';
+import { createTurnCitationPolicy } from './__tests__/session-policy-fixture.js';
+import { createTurnStreamPolicy } from './__tests__/session-policy-fixture.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -63,23 +66,18 @@ function buildTurn(
   turn: Turn;
   mockChatInstance: MockedChatInstance;
 } {
-  const mockGetConfig = vi.fn().mockReturnValue({
-    getSettingsService: () => ({ get: () => undefined }),
-    getEphemeralSetting: (key: string) => {
-      if (key === 'stream-first-response-timeout-ms') {
-        return firstResponseMs;
-      }
-      if (key === 'stream-idle-timeout-ms') {
-        return idleMs;
-      }
-      return undefined;
-    },
+  const mockGetConfig = createTurnStreamPolicy({
+    'stream-first-response-timeout-ms': firstResponseMs,
+    'stream-idle-timeout-ms': idleMs,
   });
 
   const mockChatInstance = {
+    ...createChatPolicyFixture(),
+    getResolvedBaseUrl: () => undefined,
     sendMessageStream: mockSendMessageStream,
     getHistory: mockGetHistory,
-    getConfig: mockGetConfig,
+    shouldShowCitations: createTurnCitationPolicy(),
+    getStreamTimeoutPolicy: mockGetConfig,
   } as unknown as MockedChatInstance;
 
   const turn = new Turn(

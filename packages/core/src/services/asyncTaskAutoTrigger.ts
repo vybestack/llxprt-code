@@ -13,7 +13,10 @@
 import type { AsyncTaskManager, AsyncTaskInfo } from './asyncTaskManager.js';
 import type { AsyncTaskReminderService } from './asyncTaskReminderService.js';
 import type { ShellNotificationSource } from './shellNotificationSource.js';
-import { debugLogger } from '../utils/debugLogger.js';
+import {
+  AsyncNoticeSubscription,
+  type AsyncNoticeUnsubscribe,
+} from './async-notice-subscription.js';
 
 /**
  * Debounce window for coalescing rapid shell job completions into a single
@@ -38,10 +41,13 @@ export class AsyncTaskAutoTrigger {
   private isAgentBusy: () => boolean;
   private triggerAgentTurn: (message: string) => Promise<void>;
   private shellSource: ShellNotificationSource | undefined;
-  private shellDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly subscriptions = new Set<AsyncNoticeSubscription>();
 
   constructor(
-    private readonly taskManager: AsyncTaskManager,
+    private readonly taskManager: Pick<
+      AsyncTaskManager,
+      'onTaskCompleted' | 'onTaskFailed'
+    >,
     private readonly reminderService: AsyncTaskReminderService,
     isAgentBusy: () => boolean,
     triggerAgentTurn: (message: string) => Promise<void>,
@@ -77,9 +83,9 @@ export class AsyncTaskAutoTrigger {
    * Used by both onTaskCompleted and onTaskFailed.
    */
   private scheduleAutoTriggerCheck(): void {
-    setImmediate(() => {
-      void this.maybeAutoTrigger();
-    });
+    for (const subscription of this.subscriptions) {
+      subscription.schedule();
+    }
   }
 
   /**
@@ -103,26 +109,24 @@ export class AsyncTaskAutoTrigger {
    * cancelled). Coalesces rapid completions via a debounce timer so multiple
    * jobs finishing seconds apart produce a single notification.
    */
-  private onShellTerminal(): void {
-    if (this.shellDebounceTimer !== null) {
-      clearTimeout(this.shellDebounceTimer);
-    }
-    this.shellDebounceTimer = setTimeout(() => {
-      this.shellDebounceTimer = null;
-      void this.maybeAutoTrigger();
-    }, SHELL_COALESCE_DEBOUNCE_MS);
+  private onShellTerminal(subscription: AsyncNoticeSubscription): void {
+    subscription.debounce(SHELL_COALESCE_DEBOUNCE_MS);
   }
 
   /**
    * Set up subscriptions to AsyncTaskManager events and (if attached) shell
    * job events. Returns an unsubscribe function.
    */
-  subscribe(): () => void {
-    const unsubComplete = this.taskManager.onTaskCompleted((task) =>
-      this.onTaskCompleted(task),
+  subscribe(): AsyncNoticeUnsubscribe {
+    const subscription: AsyncNoticeSubscription = new AsyncNoticeSubscription(
+      (): Promise<void> => this.maybeAutoTrigger(subscription),
     );
-    const unsubFailed = this.taskManager.onTaskFailed((task) =>
-      this.onTaskFailed(task),
+    this.subscriptions.add(subscription);
+    const unsubComplete = this.taskManager.onTaskCompleted(() =>
+      subscription.schedule(),
+    );
+    const unsubFailed = this.taskManager.onTaskFailed(() =>
+      subscription.schedule(),
     );
 
     const localUnsubscribeFunctions: Array<() => void> = [
@@ -132,13 +136,13 @@ export class AsyncTaskAutoTrigger {
 
     if (this.shellSource !== undefined) {
       const unsubJobCompleted = this.shellSource.onJobCompleted(() =>
-        this.onShellTerminal(),
+        this.onShellTerminal(subscription),
       );
       const unsubJobFailed = this.shellSource.onJobFailed(() =>
-        this.onShellTerminal(),
+        this.onShellTerminal(subscription),
       );
       const unsubJobCancelled = this.shellSource.onJobCancelled(() =>
-        this.onShellTerminal(),
+        this.onShellTerminal(subscription),
       );
       localUnsubscribeFunctions.push(
         unsubJobCompleted,
@@ -147,15 +151,15 @@ export class AsyncTaskAutoTrigger {
       );
     }
 
-    return () => {
-      if (this.shellDebounceTimer !== null) {
-        clearTimeout(this.shellDebounceTimer);
-        this.shellDebounceTimer = null;
-      }
+    const unsubscribe = (): void => {
+      subscription.retire();
+      this.subscriptions.delete(subscription);
       for (const unsub of localUnsubscribeFunctions) {
         unsub();
       }
     };
+    unsubscribe.drain = (): Promise<void> => subscription.drain();
+    return unsubscribe;
   }
 
   /**
@@ -165,51 +169,25 @@ export class AsyncTaskAutoTrigger {
    * during the in-flight trigger are never stranded (#1995 slice 7).
    * @requirement REQ-ASYNC-010, REQ-ASYNC-011
    */
-  private async maybeAutoTrigger(): Promise<void> {
-    // Serialize: only one trigger in flight
-    if (this.isTriggering) {
-      return;
-    }
-
-    // Check if agent is busy
-    if (this.isAgentBusy()) {
-      // Will be picked up by next-turn reminder instead
-      return;
-    }
-
-    // Check if there are pending notifications
-    if (!this.reminderService.hasPendingNotifications()) {
-      return;
-    }
+  private async maybeAutoTrigger(
+    subscription: AsyncNoticeSubscription,
+  ): Promise<void> {
+    if (this.isTriggering) return;
 
     this.isTriggering = true;
-    let delivered = false;
-
     try {
-      await this.deliverPending();
-      delivered = true;
-    } catch (error) {
-      // FAILURE: Do NOT mark as notified
-      // @requirement REQ-ASYNC-011
-      // The notification will be included in the next turn's reminder
-      debugLogger.error(
-        '[AsyncTaskAutoTrigger] Failed to auto-trigger:',
-        error,
-      );
+      while (
+        subscription.active &&
+        !this.isAgentBusy() &&
+        this.reminderService.hasPendingNotifications()
+      ) {
+        await this.deliverPending();
+      }
     } finally {
       this.isTriggering = false;
     }
-
-    // RE-CHECK only after a successful delivery: events that arrived during
-    // the in-flight trigger may have created new pending notifications.
-    // On failure, the notification rides the next turn instead — re-checking
-    // would create an infinite retry loop (#1995 slice 7).
-    if (
-      delivered &&
-      !this.isAgentBusy() &&
-      this.reminderService.hasPendingNotifications()
-    ) {
-      void this.maybeAutoTrigger();
+    if (!subscription.active) {
+      this.scheduleAutoTriggerCheck();
     }
   }
 

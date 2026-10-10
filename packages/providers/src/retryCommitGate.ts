@@ -26,7 +26,7 @@ import {
   type RetryRequestContext,
 } from './retryRequestContext.js';
 import type { RetryFailure } from './retryFailureTaxonomy.js';
-import { getOnAuthErrorHandlerFromOptions } from './retryConfigHandlers.js';
+
 import { getRequestSignal } from './utils/abortSignal.js';
 
 export interface RetryDecision {
@@ -39,7 +39,7 @@ export type AuthRepairInvoker = (
   options: GenerateChatOptions,
   errorStatus: number | undefined,
   signal: AbortSignal | undefined,
-) => Promise<void>;
+) => Promise<void | boolean>;
 
 /**
  * Runs the one-shot prepare-future-only auth repair when the failure is an
@@ -54,7 +54,7 @@ async function repairAuthForFutureRequests(
 ): Promise<void> {
   if (getRequestCommitState(request).committed !== true) return;
   if (failure.kind !== 'auth') return;
-  if (getOnAuthErrorHandlerFromOptions(request.options) === undefined) return;
+  if (request.options.handleAuthError === undefined) return;
   if (!claimRequestAuthRepair(request.options)) return;
   try {
     await invoke(

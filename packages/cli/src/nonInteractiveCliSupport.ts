@@ -26,6 +26,7 @@ import { markMachineErrorReported } from './session/machineErrorReporting.js';
 import { REFUSAL_NOTICE_MESSAGE } from './utils/refusalNotice.js';
 
 type StreamConsumerContext = {
+  readonly includeThinking: boolean;
   config: Config;
   jsonOutput: boolean;
   streamJsonOutput: boolean;
@@ -633,7 +634,7 @@ export async function processAgentStream(
     !context.quiet &&
     !context.jsonOutput &&
     !context.streamJsonOutput &&
-    context.config.getEphemeralSetting('reasoning.includeInResponse') !== false;
+    context.includeThinking;
   const state: StreamState = {
     thoughtBuffer: [],
     responseText: '',

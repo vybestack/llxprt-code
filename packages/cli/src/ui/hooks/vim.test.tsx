@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { Key } from '../contexts/KeypressContext.js';
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import type React from 'react';
 import { act } from 'react';
@@ -12,9 +13,14 @@ import { useVim } from './vim.js';
 import type { TextBuffer } from '../components/shared/buffer-types.js';
 
 // Mock the VimModeContext
-const mockVimContext = {
+const mockVimContext: {
+  vimEnabled: boolean;
+  vimMode: ReturnType<typeof useVim>['mode'];
+  toggleVimEnabled: Mock<() => void>;
+  setVimMode: Mock<(mode: ReturnType<typeof useVim>['mode']) => void>;
+} = {
   vimEnabled: true,
-  vimMode: 'NORMAL' as const,
+  vimMode: 'NORMAL' satisfies ReturnType<typeof useVim>['mode'],
   toggleVimEnabled: vi.fn(),
   setVimMode: vi.fn(),
 };
@@ -26,29 +32,39 @@ void vi.mock('../contexts/VimModeContext.js', () => ({
 
 // Test constants
 const TEST_SEQUENCES = {
-  ESCAPE: { sequence: '\u001b', name: 'escape' },
-  LEFT: { sequence: 'h' },
-  RIGHT: { sequence: 'l' },
-  UP: { sequence: 'k' },
-  DOWN: { sequence: 'j' },
-  INSERT: { sequence: 'i' },
-  APPEND: { sequence: 'a' },
-  DELETE_CHAR: { sequence: 'x' },
-  DELETE: { sequence: 'd' },
-  CHANGE: { sequence: 'c' },
-  WORD_FORWARD: { sequence: 'w' },
-  WORD_BACKWARD: { sequence: 'b' },
-  WORD_END: { sequence: 'e' },
-  LINE_START: { sequence: '0' },
-  LINE_END: { sequence: '$' },
-  REPEAT: { sequence: '.' },
+  ESCAPE: {
+    ctrl: false,
+    meta: false,
+    shift: false,
+    sequence: '\u001b',
+    name: 'escape',
+  },
+  LEFT: vimKey('h'),
+  RIGHT: vimKey('l'),
+  UP: vimKey('k'),
+  DOWN: vimKey('j'),
+  INSERT: vimKey('i'),
+  APPEND: vimKey('a'),
+  DELETE_CHAR: vimKey('x'),
+  DELETE: vimKey('d'),
+  CHANGE: vimKey('c'),
+  WORD_FORWARD: vimKey('w'),
+  WORD_BACKWARD: vimKey('b'),
+  WORD_END: vimKey('e'),
+  LINE_START: vimKey('0'),
+  LINE_END: vimKey('$'),
+  REPEAT: vimKey('.'),
 } as const;
 
 // Helper to create complete initial state for reducer tests
 
+function vimKey(sequence: string): Key {
+  return { name: '', ctrl: false, meta: false, shift: false, sequence };
+}
+
 describe('useVim hook', () => {
   let mockBuffer: Partial<TextBuffer>;
-  let mockHandleFinalSubmit: Mock<(...args: never[]) => unknown>;
+  let mockHandleFinalSubmit: Mock<(value: string) => void>;
 
   const createMockBuffer = (
     text = 'hello world',
@@ -68,7 +84,7 @@ describe('useVim hook', () => {
       text,
       move: vi.fn().mockImplementation((direction: string) => {
         let [row, col] = cursorState.pos;
-        const _line = lines[row] || '';
+        const line = lines[row] || '';
         if (direction === 'left') {
           col = Math.max(0, col - 1);
         } else if (direction === 'right') {
@@ -111,7 +127,6 @@ describe('useVim hook', () => {
       vimAppendAtCursor: vi.fn().mockImplementation(() => {
         // Append moves cursor right (vim 'a' behavior - position after current char)
         const [row, col] = cursorState.pos;
-        const _line = lines[row] || '';
         // In vim, 'a' moves cursor to position after current character
         // This allows inserting at the end of the line
         cursorState.pos = [row, col + 1];
@@ -143,17 +158,23 @@ describe('useVim hook', () => {
 
   const exitInsertMode = (result: {
     current: {
-      handleInput: (input: { sequence: string; name: string }) => void;
+      handleInput: ReturnType<typeof useVim>['handleInput'];
     };
   }) => {
     act(() => {
-      result.current.handleInput({ sequence: '\u001b', name: 'escape' });
+      result.current.handleInput({
+        ctrl: false,
+        meta: false,
+        shift: false,
+        sequence: '\u001b',
+        name: 'escape',
+      });
     });
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockHandleFinalSubmit = vi.fn();
+    mockHandleFinalSubmit = vi.fn<(value: string) => void>();
     mockBuffer = createMockBuffer();
     // Reset mock context to default state
     mockVimContext.vimEnabled = true;
@@ -196,7 +217,7 @@ describe('useVim hook', () => {
       const { result } = renderVimHook(testBuffer);
 
       act(() => {
-        result.current.handleInput({ sequence: 'i' });
+        result.current.handleInput(vimKey('i'));
       });
       expect(result.current.mode).toBe('INSERT');
 
@@ -206,7 +227,7 @@ describe('useVim hook', () => {
       expect(result.current.mode).toBe('NORMAL');
 
       act(() => {
-        result.current.handleInput({ sequence: 'b' });
+        result.current.handleInput(vimKey('b'));
       });
 
       expect(testBuffer.vimMoveWordBackward).toHaveBeenCalledWith(1);
@@ -217,7 +238,7 @@ describe('useVim hook', () => {
       const { result } = renderVimHook();
 
       act(() => {
-        result.current.handleInput({ sequence: 'h' });
+        result.current.handleInput(vimKey('h'));
       });
 
       expect(mockBuffer.vimMoveLeft).toHaveBeenCalledWith(1);
@@ -227,7 +248,7 @@ describe('useVim hook', () => {
       const { result } = renderVimHook();
 
       act(() => {
-        result.current.handleInput({ sequence: 'l' });
+        result.current.handleInput(vimKey('l'));
       });
 
       expect(mockBuffer.vimMoveRight).toHaveBeenCalledWith(1);
@@ -238,7 +259,7 @@ describe('useVim hook', () => {
       const { result } = renderVimHook(testBuffer);
 
       act(() => {
-        result.current.handleInput({ sequence: 'j' });
+        result.current.handleInput(vimKey('j'));
       });
 
       expect(testBuffer.vimMoveDown).toHaveBeenCalledWith(1);
@@ -249,7 +270,7 @@ describe('useVim hook', () => {
       const { result } = renderVimHook(testBuffer);
 
       act(() => {
-        result.current.handleInput({ sequence: 'k' });
+        result.current.handleInput(vimKey('k'));
       });
 
       expect(testBuffer.vimMoveUp).toHaveBeenCalledWith(1);
@@ -259,7 +280,7 @@ describe('useVim hook', () => {
       const { result } = renderVimHook();
 
       act(() => {
-        result.current.handleInput({ sequence: '0' });
+        result.current.handleInput(vimKey('0'));
       });
 
       expect(mockBuffer.vimMoveToLineStart).toHaveBeenCalled();
@@ -269,7 +290,7 @@ describe('useVim hook', () => {
       const { result } = renderVimHook();
 
       act(() => {
-        result.current.handleInput({ sequence: '$' });
+        result.current.handleInput(vimKey('$'));
       });
 
       expect(mockBuffer.vimMoveToLineEnd).toHaveBeenCalled();
@@ -280,7 +301,7 @@ describe('useVim hook', () => {
       const { result } = renderVimHook();
 
       act(() => {
-        result.current.handleInput({ sequence: 'a' });
+        result.current.handleInput(vimKey('a'));
       });
 
       expect(mockBuffer.vimAppendAtCursor).toHaveBeenCalled();
@@ -291,7 +312,7 @@ describe('useVim hook', () => {
       const { result } = renderVimHook();
 
       act(() => {
-        result.current.handleInput({ sequence: 'A' });
+        result.current.handleInput(vimKey('A'));
       });
 
       expect(mockBuffer.vimAppendAtLineEnd).toHaveBeenCalled();
@@ -302,7 +323,7 @@ describe('useVim hook', () => {
       const { result } = renderVimHook();
 
       act(() => {
-        result.current.handleInput({ sequence: 'o' });
+        result.current.handleInput(vimKey('o'));
       });
 
       expect(mockBuffer.vimOpenLineBelow).toHaveBeenCalled();
@@ -313,7 +334,7 @@ describe('useVim hook', () => {
       const { result } = renderVimHook();
 
       act(() => {
-        result.current.handleInput({ sequence: 'O' });
+        result.current.handleInput(vimKey('O'));
       });
 
       expect(mockBuffer.vimOpenLineAbove).toHaveBeenCalled();
@@ -326,7 +347,7 @@ describe('useVim hook', () => {
       vi.clearAllMocks();
 
       act(() => {
-        result.current.handleInput({ sequence: 'x' });
+        result.current.handleInput(vimKey('x'));
       });
 
       expect(mockBuffer.vimDeleteChar).toHaveBeenCalledWith(1);
@@ -337,7 +358,7 @@ describe('useVim hook', () => {
       const { result } = renderVimHook(testBuffer);
 
       act(() => {
-        result.current.handleInput({ sequence: 'x' });
+        result.current.handleInput(vimKey('x'));
       });
 
       expect(testBuffer.vimDeleteChar).toHaveBeenCalledWith(1);
@@ -347,7 +368,7 @@ describe('useVim hook', () => {
       const { result } = renderVimHook();
 
       act(() => {
-        result.current.handleInput({ sequence: 'd' });
+        result.current.handleInput(vimKey('d'));
       });
 
       expect(mockBuffer.replaceRangeByOffset).not.toHaveBeenCalled();
@@ -358,12 +379,12 @@ describe('useVim hook', () => {
       const { result } = renderVimHook();
 
       act(() => {
-        const handled = result.current.handleInput({ sequence: '3' });
+        const handled = result.current.handleInput(vimKey('3'));
         expect(handled).toBe(true);
       });
 
       act(() => {
-        const handled = result.current.handleInput({ sequence: 'h' });
+        const handled = result.current.handleInput(vimKey('h'));
         expect(handled).toBe(true);
       });
 
@@ -375,7 +396,7 @@ describe('useVim hook', () => {
       const { result } = renderVimHook(testBuffer);
 
       act(() => {
-        result.current.handleInput({ sequence: 'x' });
+        result.current.handleInput(vimKey('x'));
       });
 
       expect(testBuffer.vimDeleteChar).toHaveBeenCalledWith(1);
@@ -410,7 +431,7 @@ describe('useVim hook', () => {
       const { result } = renderVimHook(testBuffer);
 
       act(() => {
-        result.current.handleInput({ sequence: 'w' });
+        result.current.handleInput(vimKey('w'));
       });
 
       expect(testBuffer.vimMoveWordForward).toHaveBeenCalledWith(1);
@@ -421,7 +442,7 @@ describe('useVim hook', () => {
       const { result } = renderVimHook(testBuffer);
 
       act(() => {
-        result.current.handleInput({ sequence: 'b' });
+        result.current.handleInput(vimKey('b'));
       });
 
       expect(testBuffer.vimMoveWordBackward).toHaveBeenCalledWith(1);
@@ -432,7 +453,7 @@ describe('useVim hook', () => {
       const { result } = renderVimHook(testBuffer);
 
       act(() => {
-        result.current.handleInput({ sequence: 'e' });
+        result.current.handleInput(vimKey('e'));
       });
 
       expect(testBuffer.vimMoveWordEnd).toHaveBeenCalledWith(1);
@@ -443,7 +464,7 @@ describe('useVim hook', () => {
       const { result } = renderVimHook(testBuffer);
 
       act(() => {
-        result.current.handleInput({ sequence: 'w' });
+        result.current.handleInput(vimKey('w'));
       });
 
       expect(testBuffer.vimMoveWordForward).toHaveBeenCalledWith(1);
@@ -453,7 +474,7 @@ describe('useVim hook', () => {
       const { result } = renderVimHook();
 
       act(() => {
-        result.current.handleInput({ sequence: 'c' });
+        result.current.handleInput(vimKey('c'));
       });
 
       expect(result.current.mode).toBe('NORMAL');
@@ -464,8 +485,8 @@ describe('useVim hook', () => {
       const { result } = renderVimHook();
 
       act(() => {
-        result.current.handleInput({ sequence: 'd' });
-        result.current.handleInput({ sequence: 'f' });
+        result.current.handleInput(vimKey('d'));
+        result.current.handleInput(vimKey('f'));
       });
 
       expect(mockBuffer.replaceRangeByOffset).not.toHaveBeenCalled();
@@ -476,7 +497,7 @@ describe('useVim hook', () => {
       const { result } = renderVimHook();
 
       act(() => {
-        result.current.handleInput({ sequence: 'd' });
+        result.current.handleInput(vimKey('d'));
       });
 
       exitInsertMode(result);
@@ -490,7 +511,7 @@ describe('useVim hook', () => {
       const { result } = renderVimHook(mockBuffer);
 
       act(() => {
-        result.current.handleInput({ sequence: 'h' });
+        result.current.handleInput(vimKey('h'));
       });
 
       expect(mockBuffer.move).not.toHaveBeenCalled();
@@ -502,14 +523,14 @@ describe('useVim hook', () => {
       const { result } = renderVimHook(testBuffer);
 
       act(() => {
-        result.current.handleInput({ sequence: 'x' });
+        result.current.handleInput(vimKey('x'));
       });
       expect(testBuffer.vimDeleteChar).toHaveBeenCalledWith(1);
 
       testBuffer.cursor = [1, 2];
 
       act(() => {
-        result.current.handleInput({ sequence: '.' });
+        result.current.handleInput(vimKey('.'));
       });
       expect(testBuffer.vimDeleteChar).toHaveBeenCalledWith(1);
     });
@@ -519,17 +540,17 @@ describe('useVim hook', () => {
       const { result } = renderVimHook(testBuffer);
 
       act(() => {
-        result.current.handleInput({ sequence: 'd' });
+        result.current.handleInput(vimKey('d'));
       });
       act(() => {
-        result.current.handleInput({ sequence: 'd' });
+        result.current.handleInput(vimKey('d'));
       });
       expect(testBuffer.vimDeleteLine).toHaveBeenCalledTimes(1);
 
       testBuffer.cursor = [0, 0];
 
       act(() => {
-        result.current.handleInput({ sequence: '.' });
+        result.current.handleInput(vimKey('.'));
       });
 
       expect(testBuffer.vimDeleteLine).toHaveBeenCalledTimes(2);
@@ -540,10 +561,10 @@ describe('useVim hook', () => {
       const { result } = renderVimHook(testBuffer);
 
       act(() => {
-        result.current.handleInput({ sequence: 'c' });
+        result.current.handleInput(vimKey('c'));
       });
       act(() => {
-        result.current.handleInput({ sequence: 'e' });
+        result.current.handleInput(vimKey('e'));
       });
       expect(testBuffer.vimChangeWordEnd).toHaveBeenCalledTimes(1);
 
@@ -553,7 +574,7 @@ describe('useVim hook', () => {
       testBuffer.cursor = [0, 2];
 
       act(() => {
-        result.current.handleInput({ sequence: '.' });
+        result.current.handleInput(vimKey('.'));
       });
 
       expect(testBuffer.vimChangeWordEnd).toHaveBeenCalledTimes(2);
@@ -564,10 +585,10 @@ describe('useVim hook', () => {
       const { result } = renderVimHook(testBuffer);
 
       act(() => {
-        result.current.handleInput({ sequence: 'c' });
+        result.current.handleInput(vimKey('c'));
       });
       act(() => {
-        result.current.handleInput({ sequence: 'c' });
+        result.current.handleInput(vimKey('c'));
       });
       expect(testBuffer.vimChangeLine).toHaveBeenCalledTimes(1);
 
@@ -577,7 +598,7 @@ describe('useVim hook', () => {
       testBuffer.cursor = [0, 1];
 
       act(() => {
-        result.current.handleInput({ sequence: '.' });
+        result.current.handleInput(vimKey('.'));
       });
 
       expect(testBuffer.vimChangeLine).toHaveBeenCalledTimes(2);
@@ -588,10 +609,10 @@ describe('useVim hook', () => {
       const { result } = renderVimHook(testBuffer);
 
       act(() => {
-        result.current.handleInput({ sequence: 'c' });
+        result.current.handleInput(vimKey('c'));
       });
       act(() => {
-        result.current.handleInput({ sequence: 'w' });
+        result.current.handleInput(vimKey('w'));
       });
       expect(testBuffer.vimChangeWordForward).toHaveBeenCalledTimes(1);
 
@@ -601,7 +622,7 @@ describe('useVim hook', () => {
       testBuffer.cursor = [0, 0];
 
       act(() => {
-        result.current.handleInput({ sequence: '.' });
+        result.current.handleInput(vimKey('.'));
       });
 
       expect(testBuffer.vimChangeWordForward).toHaveBeenCalledTimes(2);
@@ -612,7 +633,7 @@ describe('useVim hook', () => {
       const { result } = renderVimHook(testBuffer);
 
       act(() => {
-        result.current.handleInput({ sequence: 'D' });
+        result.current.handleInput(vimKey('D'));
       });
       expect(testBuffer.vimDeleteToEndOfLine).toHaveBeenCalledTimes(1);
 
@@ -620,7 +641,7 @@ describe('useVim hook', () => {
       vi.clearAllMocks(); // Clear all mocks instead of just one method
 
       act(() => {
-        result.current.handleInput({ sequence: '.' });
+        result.current.handleInput(vimKey('.'));
       });
 
       expect(testBuffer.vimDeleteToEndOfLine).toHaveBeenCalledTimes(1);
@@ -631,7 +652,7 @@ describe('useVim hook', () => {
       const { result } = renderVimHook(testBuffer);
 
       act(() => {
-        result.current.handleInput({ sequence: 'C' });
+        result.current.handleInput(vimKey('C'));
       });
       expect(testBuffer.vimChangeToEndOfLine).toHaveBeenCalledTimes(1);
 
@@ -641,7 +662,7 @@ describe('useVim hook', () => {
       testBuffer.cursor = [0, 2];
 
       act(() => {
-        result.current.handleInput({ sequence: '.' });
+        result.current.handleInput(vimKey('.'));
       });
 
       expect(testBuffer.vimChangeToEndOfLine).toHaveBeenCalledTimes(2);
@@ -652,14 +673,14 @@ describe('useVim hook', () => {
       const { result } = renderVimHook(testBuffer);
 
       act(() => {
-        result.current.handleInput({ sequence: 'x' });
+        result.current.handleInput(vimKey('x'));
       });
       expect(testBuffer.vimDeleteChar).toHaveBeenCalledWith(1);
 
       testBuffer.cursor = [0, 2];
 
       act(() => {
-        result.current.handleInput({ sequence: '.' });
+        result.current.handleInput(vimKey('.'));
       });
       expect(testBuffer.vimDeleteChar).toHaveBeenCalledWith(1);
     });
@@ -669,7 +690,7 @@ describe('useVim hook', () => {
       const { result } = renderVimHook(testBuffer);
 
       act(() => {
-        result.current.handleInput({ sequence: 'a' });
+        result.current.handleInput(vimKey('a'));
       });
       expect(result.current.mode).toBe('INSERT');
       expect(testBuffer.cursor).toStrictEqual([0, 11]);
@@ -685,7 +706,7 @@ describe('useVim hook', () => {
       const { result } = renderVimHook(testBuffer);
 
       act(() => {
-        result.current.handleInput({ sequence: '^' });
+        result.current.handleInput(vimKey('^'));
       });
 
       expect(testBuffer.vimMoveToFirstNonWhitespace).toHaveBeenCalled();
@@ -696,7 +717,7 @@ describe('useVim hook', () => {
       const { result } = renderVimHook(testBuffer);
 
       act(() => {
-        result.current.handleInput({ sequence: 'G' });
+        result.current.handleInput(vimKey('G'));
       });
 
       expect(testBuffer.vimMoveToLastLine).toHaveBeenCalled();
@@ -708,12 +729,12 @@ describe('useVim hook', () => {
 
       // First 'g' sets pending state
       act(() => {
-        result.current.handleInput({ sequence: 'g' });
+        result.current.handleInput(vimKey('g'));
       });
 
       // Second 'g' executes the command
       act(() => {
-        result.current.handleInput({ sequence: 'g' });
+        result.current.handleInput(vimKey('g'));
       });
 
       expect(testBuffer.vimMoveToFirstLine).toHaveBeenCalled();
@@ -724,7 +745,7 @@ describe('useVim hook', () => {
       const { result } = renderVimHook(testBuffer);
 
       act(() => {
-        result.current.handleInput({ sequence: '3' });
+        result.current.handleInput(vimKey('3'));
       });
 
       act(() => {

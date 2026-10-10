@@ -19,6 +19,7 @@ import reactRenderSafety from './eslint-rules/react-render-safety.js';
 import noInlineDeps from './eslint-rules/no-inline-deps.js';
 import inkTextColorRequired from './eslint-rules/ink-text-color-required.js';
 import noAliasProbes from './eslint-rules/no-alias-probes.js';
+import packageImportBoundary from './eslint-rules/package-import-boundary.ts';
 import path from 'node:path';
 import url from 'node:url';
 
@@ -463,6 +464,31 @@ export default tseslint.config(
         },
       ],
       'react/jsx-no-constructed-context-values': 'error',
+    },
+  },
+
+  // Source-adjacent JS makes same-package core imports appear to be internals.
+  // Restrict this allowance to core files resolving inside core itself.
+  {
+    files: ['packages/core/src/**/*.{ts,tsx}'],
+    rules: {
+      'custom/package-import-boundary': 'error',
+      'import/no-internal-modules': [
+        'error',
+        {
+          allow: [
+            'react-dom/test-utils',
+            'memfs/lib/volume.js',
+            'vscode-jsonrpc/node.js',
+            'yargs/**',
+            '@anthropic-ai/sdk/**',
+            'ajv/dist/2020.js',
+            '**/generated/**',
+            '**/prompts/**',
+            '**/packages/core/src/**',
+          ],
+        },
+      ],
     },
   },
 
@@ -1512,6 +1538,7 @@ export default tseslint.config(
           'no-inline-deps': noInlineDeps,
           'ink-text-color-required': inkTextColorRequired,
           'no-alias-probes': noAliasProbes,
+          'package-import-boundary': packageImportBoundary,
         },
       },
     },

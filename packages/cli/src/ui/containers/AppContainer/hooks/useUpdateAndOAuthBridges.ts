@@ -23,9 +23,9 @@ import {
 import {
   InteractiveAuthHostUnavailableError,
   interactiveAuthCoordinator,
-  type AuthCompletionOptions,
   type InteractiveAuthChallenge,
 } from '@vybestack/llxprt-code-providers/auth.js';
+import type { OAuthControl } from '../../../contexts/OAuthControlContext.js';
 import type { UpdateObject } from '../../../utils/updateCheck.js';
 
 type HistoryAddItem = (
@@ -33,38 +33,10 @@ type HistoryAddItem = (
   timestamp?: number,
 ) => number;
 
-interface OAuthProviderWithAddItem {
-  setAddItem?: (callback: OAuthUICallback) => void;
-}
-
-interface CliOAuthManagerWithProviders {
-  providers?: Map<string, unknown>;
-}
-
-interface InteractiveHostOAuthManager {
-  authenticate(
-    provider: string,
-    bucket?: string,
-    options?: AuthCompletionOptions,
-  ): Promise<void>;
-}
-
-function isInteractiveHostOAuthManager(
-  value: unknown,
-): value is InteractiveHostOAuthManager {
-  return (
-    value !== null &&
-    typeof value === 'object' &&
-    'authenticate' in value &&
-    typeof value.authenticate === 'function'
-  );
-}
-
 interface UseUpdateAndOAuthBridgesParams {
   addItem: HistoryAddItem;
   setUpdateInfo: Dispatch<SetStateAction<UpdateObject | null>>;
-  getCliOAuthManager: () => unknown;
-  runInInteractiveHostScope: <T>(callback: () => T) => T;
+  oauthControl: Pick<OAuthControl, 'authenticate' | 'attachProviderMessages'>;
 }
 
 function formatSettledOutcome(kind: OAuthInteractiveAuthOutcomeKind): string {
@@ -152,30 +124,28 @@ function makeOAuthCallback(addItem: HistoryAddItem): OAuthUICallback {
     addItem(eventToHistoryItem(event), timestamp);
 }
 
-function resolveInteractiveHostOAuthManager(
-  getCliOAuthManager: () => unknown,
+async function authenticateChallenge(
+  control: Pick<OAuthControl, 'authenticate'>,
   challenge: InteractiveAuthChallenge,
-): InteractiveHostOAuthManager {
-  let manager: unknown;
+  signal: AbortSignal,
+): Promise<void> {
+  let authentication: Promise<void>;
   try {
-    manager = getCliOAuthManager();
+    authentication = control.authenticate(
+      challenge.provider,
+      challenge.bucket,
+      { signal },
+    );
   } catch (error) {
     throw new InteractiveAuthHostUnavailableError(challenge, error);
   }
-
-  if (!isInteractiveHostOAuthManager(manager)) {
-    throw new InteractiveAuthHostUnavailableError(
-      challenge,
-      new Error('Registered OAuth manager does not support authentication'),
-    );
-  }
-  return manager;
+  await authentication;
 }
 
 /**
  * @hook useUpdateAndOAuthBridges
  * @description Wires update handler and OAuth UI event bridges
- * @inputs addItem, setUpdateInfo, getCliOAuthManager
+ * @inputs addItem, setUpdateInfo, oauthControl
  * @outputs void
  * @sideEffects Registers update callback, the global OAuth UI event bridge
  *   callback, and each OAuth provider's addItem callback
@@ -185,22 +155,19 @@ function resolveInteractiveHostOAuthManager(
 export function useUpdateAndOAuthBridges({
   addItem,
   setUpdateInfo,
-  getCliOAuthManager,
-  runInInteractiveHostScope,
+  oauthControl,
 }: UseUpdateAndOAuthBridgesParams): void {
   // The runtime bridge can hand out fresh function identities on every
   // render; the host binding must survive that churn and only tear down on
   // a real unmount, so the handlers always resolve through this ref.
   const latest = useRef({
     addItem,
-    getCliOAuthManager,
-    runInInteractiveHostScope,
+    oauthControl,
   });
   useEffect(() => {
     latest.current = {
       addItem,
-      getCliOAuthManager,
-      runInInteractiveHostScope,
+      oauthControl,
     };
   });
 
@@ -210,26 +177,11 @@ export function useUpdateAndOAuthBridges({
 
     const oauthCallback = makeOAuthCallback(currentAddItem);
 
-    const oauthManager = latest.current.getCliOAuthManager();
-    const providersMap =
-      oauthManager != null &&
-      typeof oauthManager === 'object' &&
-      'providers' in oauthManager
-        ? (oauthManager as CliOAuthManagerWithProviders).providers
-        : undefined;
-    const providers: OAuthProviderWithAddItem[] = [];
-    if (providersMap instanceof Map) {
-      for (const provider of providersMap.values()) {
-        const candidate = provider as OAuthProviderWithAddItem;
-        candidate.setAddItem?.(oauthCallback);
-        providers.push(candidate);
-      }
-    }
+    const control = latest.current.oauthControl;
+    control.attachProviderMessages(oauthCallback);
 
     return () => {
-      // Replace stale addItem references in providers with a safe no-op
-      // so callbacks that fire after unmount don't interact with stale closures.
-      providers.forEach((p) => p.setAddItem?.(() => -1));
+      control.attachProviderMessages(() => -1);
       cleanup();
     };
   }, [addItem, setUpdateInfo]);
@@ -243,18 +195,14 @@ export function useUpdateAndOAuthBridges({
     // @requirement REQ-2562-4
     // Bound exactly once per mounted host: identity churn of bridge-supplied
     // functions must not cancel active authentication. The handler resolves
-    // the manager and scope through `latest` so it always uses current values.
-    interactiveAuthCoordinator.bindHost((challenge, signal) =>
-      latest.current.runInInteractiveHostScope(async () => {
-        const oauthManager = resolveInteractiveHostOAuthManager(
-          latest.current.getCliOAuthManager,
-          challenge,
-        );
-        await oauthManager.authenticate(challenge.provider, challenge.bucket, {
-          signal,
-        });
-      }),
-    );
+    // the owner control through `latest` so it always uses the mounted root.
+    interactiveAuthCoordinator.bindHost(async (challenge, signal) => {
+      await authenticateChallenge(
+        latest.current.oauthControl,
+        challenge,
+        signal,
+      );
+    });
 
     return () => {
       interactiveAuthCoordinator.cancelActiveSessions();

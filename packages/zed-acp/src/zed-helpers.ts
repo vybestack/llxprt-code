@@ -1,3 +1,10 @@
+import type { DebugLogger } from '@vybestack/llxprt-code-core';
+import {
+  todoEvents,
+  DEFAULT_AGENT_ID,
+  debugLogger,
+  type TodoUpdateEvent,
+} from '@vybestack/llxprt-code-core';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -11,7 +18,6 @@ import {
   resolveEffectiveContextLimit,
   resolveProviderReportedLimit,
   resolveUserContextLimit,
-  type Config,
 } from '@vybestack/llxprt-code-core';
 import type {
   AgentEvent,
@@ -332,15 +338,13 @@ export function buildUsageUpdate(
  * shared core resolver so there is a single source of truth for the
  * user-override → provider-limit → model-name precedence (issues #2251 / #2815).
  */
-export function resolveZedContextWindowSize(config: Config): number {
+export function resolveZedContextWindowSize(
+  config: { getModel(): string; getEphemeralSetting(key: string): unknown },
+  readProviderLimit: () => number | undefined,
+): number {
   let providerLimit: number | undefined;
   try {
-    providerLimit = resolveProviderReportedLimit(
-      config
-        .getContentGeneratorConfig()
-        ?.providerManager?.getActiveProvider()
-        ?.getContextLimit?.(),
-    );
+    providerLimit = resolveProviderReportedLimit(readProviderLimit());
   } catch {
     providerLimit = undefined;
   }
@@ -349,4 +353,47 @@ export function resolveZedContextWindowSize(config: Config): number {
     resolveUserContextLimit(config.getEphemeralSetting('context-limit')),
     providerLimit,
   );
+}
+
+export function resolveZedMode(modeId: acp.SessionModeId): ApprovalMode {
+  const mode = buildAvailableModes().find(
+    (candidate) => candidate.id === modeId,
+  );
+  if (!mode) throw new Error(`Invalid or unavailable mode: ${modeId}`);
+  switch (mode.id) {
+    case ApprovalMode.DEFAULT:
+      return ApprovalMode.DEFAULT;
+    case ApprovalMode.AUTO_EDIT:
+      return ApprovalMode.AUTO_EDIT;
+    case ApprovalMode.YOLO:
+      return ApprovalMode.YOLO;
+    default:
+      throw new Error(`Invalid or unavailable mode: ${modeId}`);
+  }
+}
+
+export function subscribeSessionTodos(
+  sessionId: string,
+  send: (todos: TodoUpdateEvent['todos']) => Promise<void>,
+): () => void {
+  const listener = (event: TodoUpdateEvent): void => {
+    const eventAgentId = event.agentId ?? DEFAULT_AGENT_ID;
+    if (event.sessionId === sessionId && eventAgentId === DEFAULT_AGENT_ID) {
+      send(event.todos).catch((error: unknown) =>
+        debugLogger.error('Failed to send plan update to Zed:', error),
+      );
+    }
+  };
+  todoEvents.onTodoUpdated(listener);
+  return () => todoEvents.offTodoUpdated(listener);
+}
+
+export async function sendZedSessionUpdate(
+  connection: acp.AgentSideConnection,
+  sessionId: string,
+  update: acp.SessionUpdate,
+  logger: DebugLogger,
+): Promise<void> {
+  logger.debug(() => describeSessionUpdateForLog(update));
+  await connection.sessionUpdate({ sessionId, update });
 }

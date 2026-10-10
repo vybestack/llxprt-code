@@ -1,3 +1,7 @@
+import { Config as RealConfig } from '@vybestack/llxprt-code-core/config/config.js';
+import { SettingsService as RealSettingsService } from '@vybestack/llxprt-code-settings';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+let initializeClient = async (): Promise<void> => {};
 /**
  * @requirement:Issue-181 Issue-1769
  * Test suite for Claude Code OAuth default settings
@@ -11,6 +15,11 @@
  * - oauthManager.isOAuthEnabled('claudecode') returns true (OAuth is actively being used)
  */
 
+import { OAuthManager } from '../auth/oauth-manager.js';
+import {
+  MemoryTokenStore,
+  createTestProvider,
+} from '../auth/__tests__/behavioral/test-utils.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 
 const realLlxprtCodeCoreModule = {
@@ -27,107 +36,9 @@ const {
   StubConfig: StubConfigClass,
   StubProvider: StubProviderClass,
 } = (() => {
-  class StubSettingsService {
-    providers: Record<string, Record<string, unknown>> = {};
-    global: Record<string, unknown> = {};
+  const StubSettingsService = RealSettingsService;
 
-    set(key: string, value: unknown): void {
-      this.global[key] = value;
-    }
-
-    get(key: string): unknown {
-      return this.global[key];
-    }
-
-    setProviderSetting(provider: string, key: string, value: unknown): void {
-      this.providers[provider] ??= {};
-      if (value === undefined) {
-        delete this.providers[provider][key];
-      } else {
-        this.providers[provider][key] = value;
-      }
-    }
-
-    getProviderSettings(provider: string): Record<string, unknown> {
-      return this.providers[provider] ?? {};
-    }
-
-    switchProvider = vi.fn(async (provider: string) => {
-      this.set('activeProvider', provider);
-    });
-
-    updateSettings = vi.fn(
-      async (
-        providerOrChanges?: string | Record<string, unknown>,
-        maybeChanges?: Record<string, unknown>,
-      ) => {
-        if (
-          typeof providerOrChanges === 'string' &&
-          typeof maybeChanges === 'object'
-        ) {
-          for (const [key, value] of Object.entries(maybeChanges)) {
-            this.setProviderSetting(providerOrChanges, key, value);
-          }
-        }
-      },
-    );
-  }
-
-  class StubConfig {
-    private model: string | undefined = undefined;
-    private provider = 'openai';
-    private ephemeral: Record<string, unknown> = {};
-    private providerManager: unknown;
-    private settingsService: InstanceType<typeof StubSettingsService>;
-
-    constructor(settingsService: InstanceType<typeof StubSettingsService>) {
-      this.settingsService = settingsService;
-    }
-
-    getSettingsService(): unknown {
-      return this.settingsService;
-    }
-
-    setEphemeralSetting(key: string, value: unknown): void {
-      if (value === undefined) {
-        delete this.ephemeral[key];
-      } else {
-        this.ephemeral[key] = value;
-      }
-    }
-
-    getEphemeralSetting(key: string): unknown {
-      return this.ephemeral[key];
-    }
-
-    getEphemeralSettings(): Record<string, unknown> {
-      return { ...this.ephemeral };
-    }
-
-    getModel(): string | undefined {
-      return this.model;
-    }
-
-    setModel(model: string | undefined): void {
-      this.model = model;
-    }
-
-    setProvider(provider: string): void {
-      this.provider = provider;
-    }
-
-    getProvider(): string {
-      return this.provider;
-    }
-
-    setProviderManager(manager: unknown): void {
-      this.providerManager = manager;
-    }
-
-    getProviderManager(): unknown {
-      return this.providerManager;
-    }
-  }
+  const StubConfig = RealConfig;
 
   class StubProvider {
     name: string;
@@ -198,7 +109,6 @@ void vi.mock('@vybestack/llxprt-code-core', () => {
       runtimeId?: string;
       metadata?: Record<string, unknown>;
     }) => context,
-    getCurrentRuntimeScope: () => undefined,
   };
 });
 
@@ -213,54 +123,65 @@ void vi.mock(
   },
 );
 
-const {
-  switchActiveProvider,
-  setCliRuntimeContext,
-  registerCliProviderInfrastructure,
-} = await import('./runtimeSettings.js');
+const { switchActiveProvider } = await import('./index.js');
 
 let mockOAuthEnabledForClaudeCode = false;
 
-const mockOAuthManager = {
-  isOAuthEnabled: vi.fn((provider: string) => {
-    if (provider === 'claudecode') {
-      return mockOAuthEnabledForClaudeCode;
-    }
-    return false;
-  }),
-  toggleOAuthEnabled: vi.fn(),
-  authenticate: vi.fn(),
-  setMessageBus: vi.fn(),
-  setConfigGetter: vi.fn(),
-} as never;
+const mockOAuthManager = new OAuthManager(new MemoryTokenStore());
+mockOAuthManager.registerProvider(createTestProvider('claudecode'));
+vi.spyOn(mockOAuthManager, 'isOAuthEnabled').mockImplementation(
+  (provider) => provider === 'claudecode' && mockOAuthEnabledForClaudeCode,
+);
+
+function stubSwitchInputs(): [
+  Parameters<typeof switchActiveProvider>[2],
+  Parameters<typeof switchActiveProvider>[3],
+  Parameters<typeof switchActiveProvider>[4],
+  Parameters<typeof switchActiveProvider>[5],
+  undefined,
+  () => Promise<void>,
+  Parameters<typeof switchActiveProvider>[8],
+] {
+  return [
+    stubConfig,
+    stubSettingsService,
+    mockProviderManager as never,
+    mockOAuthManager as never,
+    undefined,
+    initializeClient,
+    settingsOwner,
+  ];
+}
 
 describe('Claude Code OAuth defaults (Issue #181)', () => {
+  afterEach(async () => {
+    const retiring = retainedRoots.splice(0);
+    await Promise.all(
+      retiring.map(async (root) => {
+        await root.settingsOwner.dispose();
+        await root.config.dispose();
+      }),
+    );
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
+    initializeClient = async () => {};
 
     stubSettingsService = new StubSettingsService();
-    stubConfig = new StubConfig(stubSettingsService);
+    stubConfig = new StubConfig({
+      sessionId: 'alias-defaults-fixture',
+      model: '',
+      provider: 'openai',
+      targetDir: process.cwd(),
+      cwd: process.cwd(),
+      debugMode: false,
+    });
+    settingsOwner = new SessionSettingsOwner(stubSettingsService);
+    settingsOwner.initializeProviderSelection('openai', '');
+    retainedRoots.push({ config: stubConfig, settingsOwner });
     activeProviderName = 'openai';
     mockOAuthEnabledForClaudeCode = false;
-
-    // Set up the runtime context so switchActiveProvider can find it
-    setCliRuntimeContext(stubSettingsService as never, stubConfig as never, {
-      runtimeId: 'test-runtime',
-    });
-
-    // Register the provider manager
-    const runtimeMessageBus = {} as never;
-    (
-      mockOAuthManager as unknown as { runtimeMessageBus?: unknown }
-    ).runtimeMessageBus = runtimeMessageBus;
-    registerCliProviderInfrastructure(
-      mockProviderManager as never,
-      mockOAuthManager,
-      {
-        messageBus: runtimeMessageBus,
-        runtimeId: 'test-runtime',
-      },
-    );
   });
 
   afterEach(() => {
@@ -269,71 +190,71 @@ describe('Claude Code OAuth defaults (Issue #181)', () => {
 
   describe('when switching to Claude Code with authOnly=true', () => {
     it('should NOT inject hardcoded context-limit default (Issue #1769)', async () => {
-      stubConfig.setEphemeralSetting('authOnly', true);
+      settingsOwner.writeUserParameter('authOnly', true);
 
-      await switchActiveProvider('claudecode');
+      await switchActiveProvider('claudecode', {}, ...stubSwitchInputs());
 
-      expect(stubConfig.getEphemeralSetting('context-limit')).toBeUndefined();
+      expect(settingsOwner.readNamedParameter('context-limit')).toBeUndefined();
     });
 
     it('should NOT inject hardcoded max_tokens default (Issue #1769)', async () => {
-      stubConfig.setEphemeralSetting('authOnly', true);
+      settingsOwner.writeUserParameter('authOnly', true);
 
-      await switchActiveProvider('claudecode');
+      await switchActiveProvider('claudecode', {}, ...stubSwitchInputs());
 
-      expect(stubConfig.getEphemeralSetting('max_tokens')).toBeUndefined();
+      expect(settingsOwner.readNamedParameter('max_tokens')).toBeUndefined();
     });
 
     it('should restore maxOutputTokens when previously set and no explicit max_tokens (Issue #1769)', async () => {
-      stubConfig.setEphemeralSetting('authOnly', true);
-      stubConfig.setEphemeralSetting('maxOutputTokens', 40000);
+      settingsOwner.writeUserParameter('authOnly', true);
+      settingsOwner.writeUserParameter('maxOutputTokens', 40000);
 
-      await switchActiveProvider('claudecode');
+      await switchActiveProvider('claudecode', {}, ...stubSwitchInputs());
 
-      expect(stubConfig.getEphemeralSetting('maxOutputTokens')).toBe(40000);
-      expect(stubConfig.getEphemeralSetting('max_tokens')).toBeUndefined();
+      expect(settingsOwner.readNamedParameter('maxOutputTokens')).toBe(40000);
+      expect(settingsOwner.readNamedParameter('max_tokens')).toBeUndefined();
     });
 
     it('should NOT override existing context_limit ephemeral setting', async () => {
-      stubConfig.setEphemeralSetting('authOnly', true);
-      stubConfig.setEphemeralSetting('context-limit', 150000);
+      settingsOwner.writeUserParameter('authOnly', true);
+      settingsOwner.writeUserParameter('context-limit', 150000);
 
-      await switchActiveProvider('claudecode');
+      await switchActiveProvider('claudecode', {}, ...stubSwitchInputs());
 
-      expect(stubConfig.getEphemeralSetting('context-limit')).toBe(150000);
+      expect(settingsOwner.readNamedParameter('context-limit')).toBe(150000);
     });
 
     it('should NOT override existing max_tokens ephemeral setting', async () => {
-      stubConfig.setEphemeralSetting('authOnly', true);
-      stubConfig.setEphemeralSetting('max_tokens', 8192);
+      settingsOwner.writeUserParameter('authOnly', true);
+      settingsOwner.writeUserParameter('max_tokens', 8192);
 
-      await switchActiveProvider('claudecode');
+      await switchActiveProvider('claudecode', {}, ...stubSwitchInputs());
 
-      expect(stubConfig.getEphemeralSetting('max_tokens')).toBe(8192);
+      expect(settingsOwner.readNamedParameter('max_tokens')).toBe(8192);
     });
   });
 
   describe('when switching to Claude Code with authOnly=false', () => {
     it('should NOT set default context_limit when authOnly is false', async () => {
       // Arrange: authOnly disabled (API key mode)
-      stubConfig.setEphemeralSetting('authOnly', false);
+      settingsOwner.writeUserParameter('authOnly', false);
 
       // Act: Switch to Claude Code provider
-      await switchActiveProvider('claudecode');
+      await switchActiveProvider('claudecode', {}, ...stubSwitchInputs());
 
       // Assert: context_limit should NOT be set
-      expect(stubConfig.getEphemeralSetting('context-limit')).toBeUndefined();
+      expect(settingsOwner.readNamedParameter('context-limit')).toBeUndefined();
     });
 
     it('should NOT set default max_tokens when authOnly is false', async () => {
       // Arrange: authOnly disabled (API key mode)
-      stubConfig.setEphemeralSetting('authOnly', false);
+      settingsOwner.writeUserParameter('authOnly', false);
 
       // Act: Switch to Claude Code provider
-      await switchActiveProvider('claudecode');
+      await switchActiveProvider('claudecode', {}, ...stubSwitchInputs());
 
       // Assert: max_tokens should NOT be set
-      expect(stubConfig.getEphemeralSetting('max_tokens')).toBeUndefined();
+      expect(settingsOwner.readNamedParameter('max_tokens')).toBeUndefined();
     });
   });
 
@@ -343,11 +264,11 @@ describe('Claude Code OAuth defaults (Issue #181)', () => {
       // (don't set authOnly at all)
 
       // Act: Switch to Claude Code provider
-      await switchActiveProvider('claudecode');
+      await switchActiveProvider('claudecode', {}, ...stubSwitchInputs());
 
       // Assert: No defaults should be applied
-      expect(stubConfig.getEphemeralSetting('context-limit')).toBeUndefined();
-      expect(stubConfig.getEphemeralSetting('max_tokens')).toBeUndefined();
+      expect(settingsOwner.readNamedParameter('context-limit')).toBeUndefined();
+      expect(settingsOwner.readNamedParameter('max_tokens')).toBeUndefined();
     });
   });
 
@@ -355,71 +276,79 @@ describe('Claude Code OAuth defaults (Issue #181)', () => {
     it('should NOT inject hardcoded context-limit default (Issue #1769)', async () => {
       mockOAuthEnabledForClaudeCode = true;
 
-      await switchActiveProvider('claudecode');
+      await switchActiveProvider('claudecode', {}, ...stubSwitchInputs());
 
-      expect(stubConfig.getEphemeralSetting('context-limit')).toBeUndefined();
+      expect(settingsOwner.readNamedParameter('context-limit')).toBeUndefined();
     });
 
     it('should NOT inject hardcoded max_tokens default (Issue #1769)', async () => {
       mockOAuthEnabledForClaudeCode = true;
 
-      await switchActiveProvider('claudecode');
+      await switchActiveProvider('claudecode', {}, ...stubSwitchInputs());
 
-      expect(stubConfig.getEphemeralSetting('max_tokens')).toBeUndefined();
+      expect(settingsOwner.readNamedParameter('max_tokens')).toBeUndefined();
     });
 
     it('should restore maxOutputTokens when previously set and no explicit max_tokens (Issue #1769)', async () => {
       mockOAuthEnabledForClaudeCode = true;
-      stubConfig.setEphemeralSetting('maxOutputTokens', 40000);
+      settingsOwner.writeUserParameter('maxOutputTokens', 40000);
 
-      await switchActiveProvider('claudecode');
+      await switchActiveProvider('claudecode', {}, ...stubSwitchInputs());
 
-      expect(stubConfig.getEphemeralSetting('maxOutputTokens')).toBe(40000);
-      expect(stubConfig.getEphemeralSetting('max_tokens')).toBeUndefined();
+      expect(settingsOwner.readNamedParameter('maxOutputTokens')).toBe(40000);
+      expect(settingsOwner.readNamedParameter('max_tokens')).toBeUndefined();
     });
 
     it('should NOT override existing context_limit when OAuth is enabled', async () => {
       mockOAuthEnabledForClaudeCode = true;
-      stubConfig.setEphemeralSetting('context-limit', 150000);
+      settingsOwner.writeUserParameter('context-limit', 150000);
 
-      await switchActiveProvider('claudecode');
+      await switchActiveProvider('claudecode', {}, ...stubSwitchInputs());
 
-      expect(stubConfig.getEphemeralSetting('context-limit')).toBe(150000);
+      expect(settingsOwner.readNamedParameter('context-limit')).toBe(150000);
     });
 
     it('should NOT override existing max_tokens when OAuth is enabled', async () => {
       mockOAuthEnabledForClaudeCode = true;
-      stubConfig.setEphemeralSetting('max_tokens', 8192);
+      settingsOwner.writeUserParameter('max_tokens', 8192);
 
-      await switchActiveProvider('claudecode');
+      await switchActiveProvider('claudecode', {}, ...stubSwitchInputs());
 
-      expect(stubConfig.getEphemeralSetting('max_tokens')).toBe(8192);
+      expect(settingsOwner.readNamedParameter('max_tokens')).toBe(8192);
     });
   });
 
   describe('when switching to non-Claude Code providers', () => {
     it('should NOT set defaults for OpenAI even with authOnly=true', async () => {
       // Arrange: authOnly enabled but switching to OpenAI
-      stubConfig.setEphemeralSetting('authOnly', true);
+      settingsOwner.writeUserParameter('authOnly', true);
       activeProviderName = 'claudecode'; // Start from claudecode
 
       // Act: Switch to OpenAI
-      await switchActiveProvider('openai');
+      await switchActiveProvider('openai', {}, ...stubSwitchInputs());
 
       // Assert: No Claude Code-specific defaults should be set
-      expect(stubConfig.getEphemeralSetting('context-limit')).toBeUndefined();
-      expect(stubConfig.getEphemeralSetting('max_tokens')).toBeUndefined();
+      expect(settingsOwner.readNamedParameter('context-limit')).toBeUndefined();
+      expect(settingsOwner.readNamedParameter('max_tokens')).toBeUndefined();
     });
 
     it('does not apply OAuth defaults to API-key-only anthropic', async () => {
       mockOAuthEnabledForClaudeCode = true;
       activeProviderName = 'claudecode';
 
-      await switchActiveProvider('anthropic');
+      await switchActiveProvider('anthropic', {}, ...stubSwitchInputs());
 
-      expect(stubConfig.getEphemeralSetting('context-limit')).toBeUndefined();
-      expect(stubConfig.getEphemeralSetting('max_tokens')).toBeUndefined();
-      expect(stubConfig.getEphemeralSetting('maxOutputTokens')).toBeUndefined();
+      expect(settingsOwner.readNamedParameter('context-limit')).toBeUndefined();
+      expect(settingsOwner.readNamedParameter('max_tokens')).toBeUndefined();
+      expect(
+        settingsOwner.readNamedParameter('maxOutputTokens'),
+      ).toBeUndefined();
     });
   });
 });
+
+let settingsOwner: SessionSettingsOwner;
+const retainedRoots: Array<{
+  config: RealConfig;
+  settingsOwner: SessionSettingsOwner;
+}> = [];

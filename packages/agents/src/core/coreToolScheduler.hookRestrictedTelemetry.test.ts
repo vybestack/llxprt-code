@@ -28,40 +28,10 @@ void vi.mock('@vybestack/llxprt-code-core/telemetry/loggers.js', () => {
 });
 
 import { CoreToolScheduler } from './coreToolScheduler.js';
+import { createSchedulerPolicyFixture } from './__tests__/scheduler-policy-fixture.js';
 import { ApprovalMode } from '../index.js';
 import { logToolCall } from '@vybestack/llxprt-code-core/telemetry/loggers.js';
-import type { Config, ToolRegistry } from '../index.js';
-import type { MessageBus } from '../confirmation-bus/message-bus.js';
-
-function createMessageBus(): MessageBus {
-  return {
-    subscribe: vi.fn().mockReturnValue(() => undefined),
-    publish: vi.fn(),
-    respondToConfirmation: vi.fn(),
-    requestConfirmation: vi.fn(),
-    removeAllListeners: vi.fn(),
-    listenerCount: vi.fn().mockReturnValue(0),
-  } as unknown as MessageBus;
-}
-
-function createConfig(): Config {
-  return {
-    getSessionId: () => 'hook-restricted-session',
-    getUsageStatisticsEnabled: () => true,
-    getDebugMode: () => false,
-    getApprovalMode: () => ApprovalMode.YOLO,
-    getEphemeralSettings: () => ({}),
-    getAllowedTools: () => [],
-    getContentGeneratorConfig: () => ({ model: 'test-model' }),
-    getMessageBus: () => createMessageBus(),
-    getPolicyEngine: () => undefined,
-    getEnableHooks: () => false,
-    getHookSystem: () => null,
-    getModel: () => 'test-model',
-    isInteractive: () => false,
-  } as unknown as Config;
-}
-
+import type { ToolRegistry } from '../index.js';
 function createToolRegistry(): ToolRegistry {
   return {
     getTool: vi.fn().mockReturnValue(null),
@@ -76,10 +46,19 @@ function createToolRegistry(): ToolRegistry {
 describe('CoreToolScheduler hook-restricted telemetry', () => {
   it('drops hook-restricted blocked calls before scheduler callbacks and telemetry', async () => {
     const onAllToolCallsComplete = vi.fn();
-    const config = createConfig();
+    const { config, settingsOwner, messageBus } = createSchedulerPolicyFixture({
+      getSessionId: () => 'hook-restricted-session',
+      getApprovalMode: () => ApprovalMode.YOLO,
+      getEnableHooks: () => false,
+      getModel: () => 'test-model',
+      isInteractive: () => false,
+    });
     const scheduler = new CoreToolScheduler({
       config,
-      messageBus: createMessageBus(),
+      telemetry: settingsOwner.telemetry,
+      readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () => settingsOwner.readToolGovernance([]),
+      messageBus,
       toolRegistry: createToolRegistry(),
       onAllToolCallsComplete,
       getPreferredEditor: () => undefined,
