@@ -166,7 +166,9 @@ describe('P05c child journal failure cleanup and isolation @plan:PLAN-20260917-I
 
   it('a mid-life write failure still cleans up on dispose', async () => {
     const chatsDir = await makeChatsDir();
-    const io = gatedWriterIo(1);
+    // Journal creation awaits durability of its start records, which take two
+    // appends, so both must pass for creation to succeed.
+    const io = gatedWriterIo(2);
     const journal = await createChildSessionJournal(
       journalOptions(chatsDir, io),
     );

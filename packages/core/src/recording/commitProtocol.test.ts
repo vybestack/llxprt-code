@@ -258,7 +258,11 @@ function passthroughWithDelay(delayMs: number): AppendBehavior {
   };
 }
 
-/** `successfulAppends` real appends, then every call fails with `code`. */
+/**
+ * `successfulAppends` real appends, then every call fails with `code`. The
+ * first commit on a fresh recording takes two appends (start record, then
+ * its own row), so tests that need one surviving commit pass two.
+ */
 function passthroughThenFail(
   code: string,
   successfulAppends: number,
@@ -566,7 +570,7 @@ describe('Awaitable commit protocol @plan:PLAN-20260917-ISSUE854.P05 @requiremen
   it('injected ENOSPC rejects the pending commit with the underlying error and poisons subsequent commits', async () => {
     const recording = new SessionRecordingService(
       makeConfig(chatsDir, {
-        io: new InjectedWriter(passthroughThenFail('ENOSPC', 1)).io,
+        io: new InjectedWriter(passthroughThenFail('ENOSPC', 2)).io,
       }),
     );
     const first = await recording.commit('content', {
@@ -630,7 +634,7 @@ describe('Awaitable commit protocol @plan:PLAN-20260917-ISSUE854.P05 @requiremen
   it('a failed append leaves the bytes before the failure point byte-identical (append-only preserved)', async () => {
     const recording = new SessionRecordingService(
       makeConfig(chatsDir, {
-        io: new InjectedWriter(passthroughThenFail('ENOSPC', 1)).io,
+        io: new InjectedWriter(passthroughThenFail('ENOSPC', 2)).io,
       }),
     );
     const watermark = await recording.commit('content', {
