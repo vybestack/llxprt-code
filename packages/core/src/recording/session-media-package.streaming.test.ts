@@ -9,6 +9,7 @@ import { createHash } from 'node:crypto';
 import {
   appendFile,
   mkdir,
+  open,
   mkdtemp,
   readFile,
   readdir,
@@ -22,7 +23,10 @@ import {
   importSessionMediaPackage,
   validateSessionMediaPackage,
 } from './session-media-package.js';
-import { readBoundedFile } from './session-media-package-validation.js';
+import {
+  HASH_CHUNK_BYTES,
+  readBoundedFile,
+} from './session-media-package-validation.js';
 
 const PROJECT_HASH = 'streaming-project';
 const ROW_TEXT = 'x'.repeat(4096);
@@ -90,6 +94,70 @@ async function peakExternalBuffers(work: () => Promise<void>): Promise<number> {
     clearInterval(sampler);
   }
   return peak;
+}
+
+interface FileReadCounts {
+  /** Largest single read request, in bytes, seen on any file handle. */
+  maxRequestBytes: number;
+  totalBytes: number;
+  reads: number;
+}
+
+type FileHandleReader = (...args: unknown[]) => Promise<unknown>;
+
+function requestedBytes(args: readonly unknown[]): number {
+  const [target, , length] = args;
+  if (ArrayBuffer.isView(target)) {
+    return typeof length === 'number' ? length : target.byteLength;
+  }
+  const options = target as { buffer?: ArrayBufferView; length?: number };
+  return options.length ?? options.buffer?.byteLength ?? 0;
+}
+
+/**
+ * Counting IO seam: wraps the file handle reads the package code goes through
+ * and records the largest single request and the bytes actually delivered.
+ * A whole-recording read shows up as one request the size of the file.
+ */
+async function countFileHandleReads(
+  work: () => Promise<void>,
+): Promise<FileReadCounts> {
+  const probe = await open(import.meta.path, 'r');
+  const proto = Object.getPrototypeOf(probe) as {
+    read: FileHandleReader;
+    readFile: FileHandleReader;
+  };
+  await probe.close();
+  const { read, readFile: readWhole } = proto;
+  const counts: FileReadCounts = {
+    maxRequestBytes: 0,
+    totalBytes: 0,
+    reads: 0,
+  };
+  proto.read = async function (this: unknown, ...args: unknown[]) {
+    counts.reads += 1;
+    counts.maxRequestBytes = Math.max(
+      counts.maxRequestBytes,
+      requestedBytes(args),
+    );
+    const result = (await read.apply(this, args)) as { bytesRead: number };
+    counts.totalBytes += result.bytesRead;
+    return result;
+  };
+  proto.readFile = async function (this: unknown, ...args: unknown[]) {
+    counts.reads += 1;
+    const bytes = (await readWhole.apply(this, args)) as { length: number };
+    counts.maxRequestBytes = Math.max(counts.maxRequestBytes, bytes.length);
+    counts.totalBytes += bytes.length;
+    return bytes;
+  };
+  try {
+    await work();
+  } finally {
+    proto.read = read;
+    proto.readFile = readWhole;
+  }
+  return counts;
 }
 
 describe('streamed portable session import', () => {
@@ -211,5 +279,46 @@ describe('streamed portable session import', () => {
       await importSessionMediaPackage(validated, chats, PROJECT_HASH, store);
     });
     expect(streamed).toBeLessThan(bytes / 4);
+  });
+
+  it('reads the recording only in bounded chunks and a whole-file read trips the same check', async () => {
+    const packageDirectory = join(tempDirectory, 'package');
+    const { bytes } = await writePackage(packageDirectory, 16_000);
+    const recordingPath = join(packageDirectory, 'session.jsonl');
+    const bounded = (counts: FileReadCounts) =>
+      counts.maxRequestBytes <= HASH_CHUNK_BYTES;
+
+    // Trap controls: each whole-file read style must fail the bounded check.
+    const wholeBuffer = await countFileHandleReads(async () => {
+      const handle = await open(recordingPath, 'r');
+      try {
+        await handle.read(Buffer.allocUnsafe(bytes), 0, bytes, null);
+      } finally {
+        await handle.close();
+      }
+    });
+    expect(wholeBuffer.maxRequestBytes).toBe(bytes);
+    expect(bounded(wholeBuffer)).toBe(false);
+    const wholeFile = await countFileHandleReads(async () => {
+      const handle = await open(recordingPath, 'r');
+      try {
+        await handle.readFile();
+      } finally {
+        await handle.close();
+      }
+    });
+    expect(bounded(wholeFile)).toBe(false);
+
+    const chats = join(tempDirectory, 'chats');
+    const streamed = await countFileHandleReads(async () => {
+      const validated = await validateSessionMediaPackage(packageDirectory);
+      await importSessionMediaPackage(validated, chats, PROJECT_HASH, store);
+    });
+    expect(bounded(streamed)).toBe(true);
+    // Validation and import each stream the whole recording once.
+    expect(streamed.totalBytes).toBeGreaterThanOrEqual(2 * bytes);
+    expect(streamed.reads).toBeGreaterThanOrEqual(
+      (2 * bytes) / HASH_CHUNK_BYTES,
+    );
   });
 });
