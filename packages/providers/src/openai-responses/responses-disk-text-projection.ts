@@ -7,7 +7,6 @@ import { getRequestSignal } from '../utils/abortSignal.js';
 import { requireAssembledSystemInstruction } from '../utils/systemPromptPlacement.js';
 import { finishMediaRequest } from '../utils/request-media-resolution.js';
 import { serializeResponsesPromptEnvelope } from '../runtime/responses-source-serializer.js';
-import { isSanctionedOpenAIO200kModel } from '../openai/openaiModelPolicy.js';
 import {
   responsesInputContext,
   resolveInvocationEphemerals,
@@ -76,14 +75,6 @@ export function assertDiskTextShape(
   )
     throw new Error(
       'Explicit Responses disk text route does not support request dumps',
-    );
-  if (
-    !isSanctionedOpenAIO200kModel(
-      options.resolved.model || deps.getDefaultModel(),
-    )
-  )
-    throw new Error(
-      'Explicit Responses disk text route requires a pinned o200k model',
     );
 }
 

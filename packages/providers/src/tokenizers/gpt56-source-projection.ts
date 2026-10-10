@@ -34,6 +34,11 @@ function ownedSource(
 export interface Gpt56SourceSegment {
   readonly promptKey: 'instructions' | 'input' | 'tools' | 'messages';
   readonly source: O200kDiskSource;
+  /**
+   * The file holds a raw string value (not a JSON document). Non-o200k
+   * families rebuild the legacy JSON prompt text from this.
+   */
+  readonly rawString?: true;
 }
 
 export interface Gpt56SourceProjectionOptions {
@@ -81,6 +86,7 @@ export class Gpt56SourceProjection {
         return Object.freeze({
           promptKey: segment.promptKey,
           source: ownedSource(this.#directory, segment.source),
+          ...(segment.rawString === true ? { rawString: true as const } : {}),
         });
       }),
     );

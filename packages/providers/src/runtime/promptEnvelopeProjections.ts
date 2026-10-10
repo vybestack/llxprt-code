@@ -302,7 +302,7 @@ function replaceAllBase64DataUris(
   );
 }
 
-function countPromptTokens(promptText: string): number {
+export function countPromptTokens(promptText: string): number {
   return promptText.trim() === '' ? 0 : estimateTokens(promptText);
 }
 

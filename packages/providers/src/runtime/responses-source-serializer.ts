@@ -64,11 +64,10 @@ async function segment(
   costs: string,
 ): Promise<{ segment: Gpt56SourceSegment; imageCount: number }> {
   const path = join(root, key);
-  const encoding =
+  const rawString =
     key === 'instructions' ||
-    (key === 'tools' && typeof options.tools === 'string')
-      ? 'utf16le'
-      : 'utf8';
+    (key === 'tools' && typeof options.tools === 'string');
+  const encoding = rawString ? 'utf16le' : 'utf8';
   const writer = new PromptKeyDiskWriter(
     path,
     costs,
@@ -96,7 +95,11 @@ async function segment(
         writer.string(options.tools, false);
       else writer.value(options.tools);
       return {
-        segment: { promptKey: key, source: { path, encoding } },
+        segment: {
+          promptKey: key,
+          source: { path, encoding },
+          ...(rawString ? { rawString: true as const } : {}),
+        },
         imageCount: writer.imageCount,
       };
     },

@@ -14,6 +14,7 @@ import type {
 import { estimateSelectedProviderPrompt } from './loadBalancerPromptEstimator.js';
 import {
   estimateRequestTokens,
+  estimateRowSourceTokens,
   type EstimationResult,
 } from './loadBalancerTokenEstimator.js';
 import { collectContents } from '../utils/collectContents.js';
@@ -51,6 +52,20 @@ export async function estimatePreparedPrompt(
         family: estimatorFamily,
       },
       'configure the selected provider to expose its finalized prompt projection',
+    );
+  }
+  const requestRows = options.requestRows;
+  if (requestRows !== undefined) {
+    // Fold the neutral selection from its repeatable reader; the request is
+    // never collected into an array just to be estimated.
+    return estimateRowSourceTokens(
+      {
+        count: requestRows.count,
+        open: () => requestRows.openReader(),
+      },
+      subProfile.providerName,
+      model,
+      { tokenizerFactory },
     );
   }
   return estimateRequestTokens(
