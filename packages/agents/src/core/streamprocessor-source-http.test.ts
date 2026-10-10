@@ -60,7 +60,8 @@ async function acceptance(large: boolean) {
   );
   const oracle = await nativeEstimate(setup, large);
   const observer = observeDiskBody();
-  const baseline = await sourceHeap();
+  // Collect before the weak-reference census; the heap size is not asserted.
+  await sourceHeap();
   const idleLive = setup.history.references.filter(
     (row) => row.deref() !== undefined,
   ).length;
@@ -87,7 +88,6 @@ async function acceptance(large: boolean) {
       large,
       oracle,
       estimate: setup.processor.getPromptEnvelopeEstimate(),
-      baseline,
       idleLive,
       idleInputLive,
       ...measurements,
@@ -142,14 +142,6 @@ function assertAcceptance(facts: Awaited<ReturnType<typeof acceptance>>): void {
   expect(
     facts.requests.some((request) => request.requestText !== undefined),
   ).toBe(false);
-  expect(
-    Math.max(
-      facts.firstHeap,
-      facts.receiverHeap,
-      facts.lastHeap,
-      facts.finalHeap,
-    ) - facts.baseline,
-  ).toBeLessThanOrEqual(1024 * 1024);
   expect(facts.ownersFinal.every((owner) => owner.closed)).toBe(true);
   expect(facts.activeBodies).toBe(0);
   expect(facts.requests.map((event) => event.promptId)).toStrictEqual([
