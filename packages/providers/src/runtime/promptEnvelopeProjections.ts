@@ -322,6 +322,44 @@ export function projectAnthropicPromptEnvelope(
   );
 }
 
+/**
+ * Projection over a body that stays owned by its transport. The prompt
+ * graph is derived from `readBody()` on every estimate access and is not
+ * kept, so only the transport's one request body is alive between estimates
+ * (issue #854). `readBody` throws once the body's lease was released.
+ */
+export function projectAnthropicPromptEnvelopeOnDemand(
+  readBody: () => unknown,
+  options: ProjectionOptions & {
+    readonly releaseIfUnsent: () => Promise<void>;
+  },
+): PromptEnvelopeProjection {
+  const identity: ProjectionIdentity = {
+    protocol: 'anthropic-messages',
+    method: 'messages/v1',
+    projectionRevision: PROJECTION_REVISION,
+  };
+  const estimation = () =>
+    buildEstimationProjection(
+      readBody(),
+      PROMPT_KEYS['anthropic-messages'],
+      identity.protocol,
+    );
+  return Object.freeze({
+    model: extractModelOrThrow(readBody(), identity),
+    protocol: identity.protocol,
+    method: identity.method,
+    projectionRevision: identity.projectionRevision,
+    unsupportedMedia: freezeUnsupportedMedia(options.unsupportedMedia),
+    transportToken: options.transportToken ?? EMPTY_TRANSPORT_TOKEN,
+    get finalizedProjection() {
+      return estimation().finalizedProjection;
+    },
+    legacyEstimate: () => estimation().legacyEstimate(),
+    releaseIfUnsent: options.releaseIfUnsent,
+  });
+}
+
 export function projectOpenAIChatPromptEnvelope(
   requestBody: unknown,
   options?: ProjectionOptions,

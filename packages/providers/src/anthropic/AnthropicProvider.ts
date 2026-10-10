@@ -61,7 +61,15 @@ import {
 import { findAnthropicToolSchema } from './AnthropicToolSchema.js';
 import { firstTruthyString } from '../utils/falsyFallback.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import { projectAnthropicPromptEnvelope } from '../runtime/promptEnvelopeProjections.js';
+import {
+  projectAnthropicPromptEnvelope,
+  projectAnthropicPromptEnvelopeOnDemand,
+} from '../runtime/promptEnvelopeProjections.js';
+import { readsRequestRowsAtTransport } from '../BaseProviderNormalization.js';
+import {
+  dropTransportRows,
+  openTransportRowsMedia,
+} from './AnthropicTransportRows.js';
 import {
   buildAnthropicRequestHeaders,
   createAnthropicApiCall,
@@ -70,16 +78,8 @@ import {
 import { collectUnsupportedMedia } from '../utils/mediaUtils.js';
 import { createCredentialResolutionError } from '../utils/credentialResolutionError.js';
 import { createAnthropicMissingCredentialError } from './AnthropicCredentialResolution.js';
-import {
-  isAnthropicImageDimensionLimitError,
-  parseAnthropicImageDimensionLimit,
-  sanitizeAnthropicRequestBodyImages,
-  resolveAnthropicImageBudget,
-  resolveRecoveryImageBudget,
-  getImageRecoveryState,
-  ensureImageRecoveryState,
-} from './AnthropicImageSanitizer.js';
-import { tryConsumeTransportAttempt } from '../transportAttemptBudget.js';
+import { getImageRecoveryState } from './AnthropicImageSanitizer.js';
+import { executeImageDimensionRecovery } from './AnthropicImageRecovery.js';
 import { findRequestCommitState } from '../retryRequestContext.js';
 
 import { registerAnthropicRequestCleanup } from './AnthropicRequestCleanup.js';
@@ -133,6 +133,31 @@ export class AnthropicProvider extends BaseProvider {
     // @requirement REQ-SP4-002: Eliminate constructor-captured config and user-memory
   }
 
+  /** The transport reads `requestRows` itself (issue #854 WP07). */
+  protected override ownsRequestRowsTransport(): boolean {
+    return true;
+  }
+
+  /**
+   * A source-route send is normalized with its prompt inputs blanked because
+   * the prepared body already carries them; the response path still needs the
+   * tool declarations and the transport the assembled instruction, so they
+   * come back from the one prepared envelope.
+   */
+  private restorePreparedSourceInputs(
+    options: NormalizedGenerateChatOptions,
+  ): NormalizedGenerateChatOptions {
+    const token = options.promptEnvelopeTransportToken;
+    if (token === undefined || !readsRequestRowsAtTransport(options)) {
+      return options;
+    }
+    const inputs = this.preparedPromptEnvelopes.get(token)?.sourceInputs;
+    if (inputs === undefined) {
+      throw new Error('Unknown Anthropic prompt-envelope transport token');
+    }
+    return { ...options, ...inputs };
+  }
+
   private async resolveTransportPreparation(
     options: NormalizedGenerateChatOptions,
   ): Promise<AnthropicTransportPreparation> {
@@ -144,11 +169,13 @@ export class AnthropicProvider extends BaseProvider {
     }
     const mediaRequest =
       prepared?.mediaRequest ??
-      (await resolveRequestMedia(
-        options.runtime,
-        options.contents,
-        options.invocation.signal,
-      ));
+      (readsRequestRowsAtTransport(options)
+        ? await openTransportRowsMedia(options)
+        : await resolveRequestMedia(
+            options.runtime,
+            options.contents,
+            options.invocation.signal,
+          ));
     try {
       return {
         prepared,
@@ -597,9 +624,10 @@ export class AnthropicProvider extends BaseProvider {
     // Issue #3136: the agent layer owns system-prompt assembly. Fail fast
     // before any request preparation so a missing instruction is never
     // silently transported as an empty prompt.
-    requireAssembledSystemInstruction(options.systemInstruction);
+    const sendOptions = this.restorePreparedSourceInputs(options);
+    requireAssembledSystemInstruction(sendOptions.systemInstruction);
 
-    const preparation = await this.resolveTransportPreparation(options);
+    const preparation = await this.resolveTransportPreparation(sendOptions);
     let outcome: MediaRequestOutcome = { status: 'succeeded' };
     try {
       yield* this.generatePreparedChat(preparation);
@@ -623,16 +651,21 @@ export class AnthropicProvider extends BaseProvider {
     const requestContext =
       prepared?.requestContext ??
       (await this.prepareRequestContext(effectiveOptions, isOAuth, authToken));
+    if (prepared === undefined && readsRequestRowsAtTransport(effectiveOptions))
+      dropTransportRows(mediaRequest);
     // Issue #854 P05b4: the wire body is owned by a request-scoped lease and
     // the media request's finish releases it, so the body arrays are spliced
     // once the transport call settles (any outcome) instead of outliving it.
-    const requestBodyLease = acquireRequestScopedBody(
-      'anthropic',
-      requestContext.requestBody,
-    );
-    mediaRequest.registerCleanup(() => {
-      void requestBodyLease.release();
-    });
+    // A source-route preparation already holds that lease for the one body.
+    if (prepared?.bodyLease === undefined) {
+      const requestBodyLease = acquireRequestScopedBody(
+        'anthropic',
+        requestContext.requestBody,
+      );
+      mediaRequest.registerCleanup(() => {
+        void requestBodyLease.release();
+      });
+    }
 
     const customHeaders = buildAnthropicRequestHeaders({
       baseHeaders: this.getCustomHeaders() ?? {},
@@ -724,7 +757,11 @@ export class AnthropicProvider extends BaseProvider {
       );
       return { response: result.response, rateLimitInfo: result.rateLimitInfo };
     } catch (error) {
-      const recovered = await this.executeImageDimensionRecovery(
+      const recovered = await executeImageDimensionRecovery(
+        {
+          execute: (...args) => this.executeApiCall(...args),
+          errorsLogger: this.getErrorsLogger(),
+        },
         error,
         requestContext,
         options,
@@ -738,97 +775,6 @@ export class AnthropicProvider extends BaseProvider {
       if (recovered === undefined) throw error;
       return recovered;
     }
-  }
-
-  /**
-   * Issue #3216: one-shot recovery from a 400 that specifically states an image
-   * dimension exceeded the many-image maximum. Sanitizes oversized base64 image
-   * blocks from an immutable copy of the request body and retries exactly once.
-   * Returns the retry result, or `undefined` when the error is not recoverable
-   * (unrelated 400, no parseable limit, no oversized blocks to remove, the
-   * request-scoped recovery was already used, or no transport attempt remains)
-   * so the caller rethrows the original error. Never loops.
-   *
-   * H2: the recovery is request-scoped — at most one recovery per logical
-   * request shared across outer RetryOrchestrator attempts — and the retry's
-   * physical transport call consumes a slot from the shared transport budget
-   * so outer attempt accounting stays exact. The sanitized body is stored in
-   * the shared request state so subsequent outer attempts reuse it instead of
-   * reconstructing and resending the poisoned original.
-   */
-  private async executeImageDimensionRecovery(
-    error: unknown,
-    requestContext: Awaited<ReturnType<typeof prepareAnthropicRequest>>,
-    options: NormalizedGenerateChatOptions,
-    initialClient: Parameters<typeof createAnthropicApiCall>[0],
-    customHeaders: Parameters<typeof createAnthropicApiCall>[2],
-    rateLimitLogger: { debug: (fn: () => string) => void },
-    isOAuth: boolean,
-    authToken: string,
-    mediaRequest: ResolvedMediaRequest,
-  ): Promise<
-    | {
-        response:
-          | Anthropic.Message
-          | AsyncIterable<Anthropic.MessageStreamEvent>;
-        rateLimitInfo: AnthropicRateLimitInfo | undefined;
-      }
-    | undefined
-  > {
-    if (!isAnthropicImageDimensionLimitError(error)) return undefined;
-    const state = ensureImageRecoveryState(options);
-    if (state.recoveryUsed) return undefined;
-    const configuredBudget = resolveAnthropicImageBudget(
-      requestContext.configEphemerals,
-    );
-    const errorLimit = parseAnthropicImageDimensionLimit(error);
-    const recoveryBudget = resolveRecoveryImageBudget(
-      configuredBudget,
-      errorLimit,
-    );
-    if (recoveryBudget === undefined) return undefined;
-    const sanitized = sanitizeAnthropicRequestBodyImages(
-      requestContext.requestBody,
-      recoveryBudget,
-    );
-    if (sanitized.replacedCount === 0) return undefined;
-    // A known-aborted request must not consume a transport slot on a recovery
-    // that can never produce a usable response. Check before accounting.
-    if (options.invocation.signal?.aborted === true) return undefined;
-    // H2: the retry is a physical transport call; account it in the shared
-    // budget. When no slot remains, the original error is final.
-    if (!tryConsumeTransportAttempt(options)) return undefined;
-    state.recoveryUsed = true;
-    state.sanitizedBody = sanitized.body;
-    const recoveryBodyLease = acquireRequestScopedBody(
-      'anthropic',
-      sanitized.body,
-    );
-    mediaRequest.registerCleanup(() => {
-      void recoveryBodyLease.release();
-    });
-    this.getErrorsLogger().debug(
-      () =>
-        '[AnthropicProvider] Image dimension 400: sanitized oversized image block(s), retrying once',
-    );
-    const retryResult = await this.executeApiCall(
-      options,
-      { ...requestContext, requestBody: sanitized.body },
-      createAnthropicApiCall(
-        initialClient,
-        sanitized.body,
-        customHeaders,
-        options.invocation.signal,
-      ),
-      rateLimitLogger,
-      customHeaders,
-      isOAuth,
-      authToken,
-    );
-    return {
-      response: retryResult.response,
-      rateLimitInfo: retryResult.rateLimitInfo,
-    };
   }
 
   private async prepareRequestContext(
@@ -874,11 +820,14 @@ export class AnthropicProvider extends BaseProvider {
     options: GenerateChatOptions,
   ): Promise<PromptEnvelopeProjection> {
     const normalized = await this.normalizeOptionsForProjection(options);
-    const mediaRequest = await resolveRequestMedia(
-      normalized.runtime,
-      normalized.contents,
-      normalized.invocation.signal,
-    );
+    const sourceRoute = readsRequestRowsAtTransport(normalized);
+    const mediaRequest = sourceRoute
+      ? await openTransportRowsMedia(normalized)
+      : await resolveRequestMedia(
+          normalized.runtime,
+          normalized.contents,
+          normalized.invocation.signal,
+        );
     const resolvedOptions = {
       ...normalized,
       contents: mediaRequest.withContents((contents) => contents),
@@ -891,8 +840,45 @@ export class AnthropicProvider extends BaseProvider {
         isOAuth,
         authToken,
       );
-      registerAnthropicRequestCleanup(mediaRequest, requestContext.requestBody);
       const transportToken = Object.freeze({});
+      // Issue #3693: on zai endpoints url-encoded image blocks are
+      // serialized as placeholders, so the projection must report them
+      // as unsupported alongside audio/video.
+      const projectionOptions = {
+        transportToken,
+        unsupportedMedia: collectUnsupportedMedia(
+          resolvedOptions.contents,
+          createMediaSupportPredicate(resolvedOptions.resolved.baseURL),
+        ),
+      };
+      if (sourceRoute) {
+        // The one SDK body is built; the transient neutral rows go away and
+        // the same lease serves estimation, send and retry.
+        dropTransportRows(mediaRequest);
+        const bodyLease = acquireRequestScopedBody(
+          'anthropic',
+          requestContext.requestBody,
+        );
+        mediaRequest.registerCleanup(() => {
+          void bodyLease.release();
+        });
+        this.preparedPromptEnvelopes.set(transportToken, {
+          requestContext,
+          isOAuth,
+          authToken,
+          mediaRequest,
+          bodyLease,
+          sourceInputs: {
+            systemInstruction: resolvedOptions.systemInstruction,
+            tools: resolvedOptions.tools,
+          },
+        });
+        return projectAnthropicPromptEnvelopeOnDemand(() => bodyLease.value, {
+          ...projectionOptions,
+          releaseIfUnsent: mediaRequest.release,
+        });
+      }
+      registerAnthropicRequestCleanup(mediaRequest, requestContext.requestBody);
       this.preparedPromptEnvelopes.set(transportToken, {
         requestContext,
         isOAuth,
@@ -901,16 +887,7 @@ export class AnthropicProvider extends BaseProvider {
       });
       const projection = projectAnthropicPromptEnvelope(
         requestContext.requestBody,
-        {
-          transportToken,
-          // Issue #3693: on zai endpoints url-encoded image blocks are
-          // serialized as placeholders, so the projection must report them
-          // as unsupported alongside audio/video.
-          unsupportedMedia: collectUnsupportedMedia(
-            resolvedOptions.contents,
-            createMediaSupportPredicate(resolvedOptions.resolved.baseURL),
-          ),
-        },
+        projectionOptions,
       );
       return {
         ...projection,

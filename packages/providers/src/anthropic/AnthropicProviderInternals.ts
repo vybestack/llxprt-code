@@ -9,6 +9,8 @@ import type { ClientOptions } from '@anthropic-ai/sdk';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { ProviderToolset } from '../IProvider.js';
+import type { RequestScopedBody } from '../utils/requestScopedBody.js';
 import type { prepareAnthropicRequest } from './AnthropicRequestPreparation.js';
 
 /**
@@ -28,6 +30,13 @@ export interface PreparedAnthropicPromptEnvelope {
   readonly isOAuth: boolean;
   readonly authToken: string;
   readonly mediaRequest: ResolvedMediaRequest;
+  /** Source route: the lease of the one prepared SDK body. */
+  readonly bodyLease?: RequestScopedBody<Record<string, unknown>>;
+  /** Source route: inputs the blanked send options must get back. */
+  readonly sourceInputs?: {
+    readonly systemInstruction: string | undefined;
+    readonly tools: ProviderToolset | undefined;
+  };
 }
 
 export interface AnthropicTransportPreparation {
