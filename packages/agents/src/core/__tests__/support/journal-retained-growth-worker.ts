@@ -11,7 +11,7 @@ import {
 
 /** Turns run before the baseline window so first compression and journal are warm. */
 const WARMUP_TURNS = 40;
-const CHECKPOINT_TURNS = [80, 120, 200] as const;
+const CHECKPOINT_TURNS = [100, 200, 300, 400] as const;
 /**
  * A checkpoint is the median of settled readings taken after each of the last
  * turns before it. Settled heap alternates between GC generations from turn to

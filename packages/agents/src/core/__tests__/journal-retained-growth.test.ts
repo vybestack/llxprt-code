@@ -18,7 +18,7 @@ const checkpointSchema = z.object({
 const resultSchema = z.object({
   mode: z.enum(['normal', 'trap']),
   baseline: checkpointSchema,
-  checkpoints: z.array(checkpointSchema).length(3),
+  checkpoints: z.array(checkpointSchema).length(4),
   requests: z.number(),
   retainedRows: z.number(),
   compressions: z.number(),
@@ -75,11 +75,11 @@ function report(result: Result): string {
 }
 
 function expectRealWorkload(result: Result): void {
-  expect(result.requests).toBe(200);
+  expect(result.requests).toBe(400);
   expect(result.compressions).toBeGreaterThanOrEqual(10);
   expect(result.journalBytes).toBeGreaterThan(0);
   expect(result.checkpoints.map((point) => point.turn)).toStrictEqual([
-    80, 120, 200,
+    100, 200, 300, 400,
   ]);
 }
 
@@ -107,7 +107,7 @@ describe('repeated-turn retained growth over the real journal-backed send path',
     const result = await trapRun;
     process.stdout.write(`${report(result)}\n`);
     expectRealWorkload(result);
-    expect(result.retainedRows).toBeGreaterThan(200);
+    expect(result.retainedRows).toBeGreaterThan(400);
     const verdict = evaluateRetainedGrowth(result.baseline, result.checkpoints);
     expect(verdict.pass).toBe(false);
     expect(verdict.retainedBytes).toBeGreaterThanOrEqual(
