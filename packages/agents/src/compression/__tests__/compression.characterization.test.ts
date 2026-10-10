@@ -12,7 +12,7 @@
  * internals to neutral types.
  *
  * Uses REAL HistoryService, REAL ConversationManager, and the REAL
- * ProviderContentEnforcer / compressionBudgeting helpers. Mocks ONLY the
+ * CompressionHandler source ladder / compressionBudgeting helpers. Mocks ONLY the
  * provider boundary where a provider would normally be consulted.
  *
  * @plan:PLAN-20260707-AGENTNEUTRAL.P26
@@ -49,14 +49,14 @@ import { prepareAtSendSeam } from '../../core/promptEnvelopeSendSeam.js';
 import { ContextOverflowError } from '../contextOverflowError.js';
 
 // ---------------------------------------------------------------------------
-// REQ-005.5c — providerContentEnforcement observable behavior
+// REQ-005.5c — provider source enforcement observable behavior
 // ---------------------------------------------------------------------------
 
-describe('P26: providerContentEnforcement characterization', () => {
+describe('P26: provider source enforcement characterization', () => {
   beforeEach(facadeCallback0);
 
   it(
-    'returns the original contents unchanged when projected tokens are under the compression threshold',
+    'returns the original rows unchanged when projected tokens are under the compression threshold',
     facadeCallback1,
   );
 
@@ -91,12 +91,12 @@ describe('P26: providerContentEnforcement characterization', () => {
   );
 
   it(
-    'throws an unrecoverable-boundary error when pendingContents is undefined and the projection is over the hard limit',
+    'throws an unrecoverable-boundary error when the pending boundary is unrecoverable and the projection is over the hard limit',
     facadeCallback8,
   );
 
   it(
-    'returns original contents when pendingContents is undefined but the projection is under the hard limit',
+    'returns the original rows when the pending boundary is unrecoverable but the projection is under the hard limit',
     facadeCallback9,
   );
 
@@ -228,8 +228,15 @@ function facadeCallback0(): void {
   vi.clearAllMocks();
 }
 
+function rowTexts(rows: IContent[]): string[] {
+  return rows
+    .flatMap((c) => c.blocks)
+    .filter((b): b is TextBlock => b.type === 'text')
+    .map((b) => b.text);
+}
+
 async function facadeCallback1(): Promise<void> {
-  const harness = buildEnforcerHarness();
+  const harness = buildCharacterizationHarness();
   const contents: IContent[] = [
     textContent('human', 'small prompt'),
     textContent('ai', 'small answer'),
@@ -243,16 +250,13 @@ async function facadeCallback1(): Promise<void> {
     undefined,
   );
 
-  const result = await harness.enforcer.enforce(
-    buildEnvelope(contents, contents),
-    'prompt-p26-1',
-  );
-  expect(result).toBe(contents);
+  const result = await harness.enforce(contents, 'prompt-p26-1');
+  expect(rowTexts(result)).toStrictEqual(['small prompt', 'small answer']);
   expect(harness.performCompression).not.toHaveBeenCalled();
 }
 
 async function facadeCallback2(): Promise<void> {
-  const harness = buildEnforcerHarness({
+  const harness = buildCharacterizationHarness({
     compressionThreshold: 0.1,
     contextLimit: 100000,
     generationConfig: { maxOutputTokens: 100 },
@@ -263,12 +267,10 @@ async function facadeCallback2(): Promise<void> {
     'estimateTokensForContents',
   ).mockResolvedValue(1);
   const finalizedEstimate = vi.fn(async () => 15000);
-  harness.deps.estimateFinalizedPromptTokens = finalizedEstimate;
 
-  await harness.enforcer.enforce(
-    buildEnvelope(contents, contents),
-    'prompt-finalized-envelope',
-  );
+  await harness.enforce(contents, 'prompt-finalized-envelope', {
+    estimateRows: finalizedEstimate,
+  });
 
   expect(finalizedEstimate).toHaveBeenCalled();
   expect(harness.performCompression).toHaveBeenCalled();
@@ -285,7 +287,7 @@ async function facadeCallback3(): Promise<void> {
     'https://api.openai.com/v1',
   );
 
-  const harness = buildEnforcerHarness({
+  const harness = buildCharacterizationHarness({
     compressionThreshold: 0.5,
     contextLimit: 20_000,
     generationConfig: { maxOutputTokens: 100 },
@@ -311,8 +313,6 @@ async function facadeCallback3(): Promise<void> {
     effectiveEstimates,
   );
 
-  harness.deps.estimateFinalizedPromptTokens = estimateAtSendSeam;
-
   harness.performCompression.mockImplementation(async () => {
     harness.historyService.clear();
     harness.historyService.add(
@@ -321,15 +321,13 @@ async function facadeCallback3(): Promise<void> {
     return PerformCompressionResult.COMPRESSED;
   });
 
-  const result = await harness.enforcer.enforce(
-    buildEnvelope(
-      await Array.fromAsync(
-        harness.historyService.getCuratedForProviderStream([pending]),
-      ),
-      [pending],
-    ),
+  const result = await harness.enforce(
+    [pending],
     'stateful-effective-threshold',
-    provider,
+    {
+      provider,
+      estimateRows: estimateAtSendSeam,
+    },
   );
 
   const initialStateful = requireStatefulEstimate(effectiveEstimates);
@@ -391,7 +389,7 @@ async function facadeCallback4(): Promise<void> {
     'https://api.openai.com/v1',
   );
 
-  const harness = buildEnforcerHarness({
+  const harness = buildCharacterizationHarness({
     compressionThreshold: 0.5,
     contextLimit: 2_000,
     generationConfig: { maxOutputTokens: 100 },
@@ -422,7 +420,7 @@ async function facadeCallback4(): Promise<void> {
 
   const estimates: PromptEnvelopeEstimate[] = [];
 
-  harness.deps.estimateFinalizedPromptTokens = createStatefulEstimator(
+  const estimateAtSendSeam = createStatefulEstimator(
     provider,
     settings,
     config,
@@ -434,21 +432,13 @@ async function facadeCallback4(): Promise<void> {
     PerformCompressionResult.COMPRESSED,
   );
 
-  harness.performFallbackCompression.mockResolvedValue(false);
-
   let overflow: unknown;
 
   try {
-    await harness.enforcer.enforce(
-      buildEnvelope(
-        await Array.fromAsync(
-          harness.historyService.getCuratedForProviderStream([pending]),
-        ),
-        [pending],
-      ),
-      'stateful-ineffective-overflow',
+    await harness.enforce([pending], 'stateful-ineffective-overflow', {
       provider,
-    );
+      estimateRows: estimateAtSendSeam,
+    });
   } catch (error) {
     overflow = error;
   }
@@ -473,7 +463,7 @@ async function facadeCallback4(): Promise<void> {
 async function facadeCallback5(): Promise<void> {
   // Use a tiny completion budget so the compression threshold is dominated
   // by the token estimate rather than the default 65_536 budget.
-  const harness = buildEnforcerHarness({
+  const harness = buildCharacterizationHarness({
     compressionThreshold: 0.1,
     contextLimit: 100000,
     generationConfig: { maxOutputTokens: 100 },
@@ -492,10 +482,7 @@ async function facadeCallback5(): Promise<void> {
   );
   harness.historyService.addAll(contents);
 
-  await harness.enforcer.enforce(
-    buildEnvelope(contents, contents),
-    'prompt-p26-2',
-  );
+  await harness.enforce(contents, 'prompt-p26-2');
   expect(harness.performCompression).toHaveBeenCalledTimes(1);
   expect(harness.performCompression).toHaveBeenCalledWith('prompt-p26-2', {
     bypassCooldown: true,
@@ -505,7 +492,7 @@ async function facadeCallback5(): Promise<void> {
 }
 
 async function facadeCallback6(): Promise<void> {
-  const harness = buildEnforcerHarness({
+  const harness = buildCharacterizationHarness({
     compressionThreshold: 0.1,
     contextLimit: 100000,
     generationConfig: { maxOutputTokens: 100 },
@@ -525,33 +512,24 @@ async function facadeCallback6(): Promise<void> {
   );
   harness.historyService.addAll(curatedAfterCompression);
 
-  const result = await harness.enforcer.enforce(
-    buildEnvelope(pendingContents, pendingContents),
-    'prompt-p26-3',
-  );
+  const result = await harness.enforce(pendingContents, 'prompt-p26-3');
   // After compression the projection (100 + completionBudget) must be under
-  // the safety-adjusted limit; the enforcer recomposes pending onto curated.
-  // Assert OBSERVABLE text content — the exact array shape is subject to
+  // the safety-adjusted limit; the ladder re-reads pending onto curated.
+  // Assert OBSERVABLE text content — the exact row shape is subject to
   // provider-content normalization (dedupe/adjacency), which is itself
   // behavior pinned elsewhere.
-  const allText = result
-    .flatMap((c) => c.blocks)
-    .filter((b): b is TextBlock => b.type === 'text')
-    .map((b) => b.text)
-    .join('');
+  const allText = rowTexts(result).join('');
   expect(allText).toContain('pending user prompt');
   expect(allText).toContain('pending ai text');
   estimateSpy.mockRestore();
 }
 
 async function facadeCallback7(): Promise<void> {
-  const harness = buildEnforcerHarness({
+  const harness = buildCharacterizationHarness({
     compressionThreshold: 0.1,
     contextLimit: 1000,
     performCompressionResult: PerformCompressionResult.FAILED,
   });
-  // Make the fallback fail too.
-  harness.performFallbackCompression.mockResolvedValue(false);
   const contents: IContent[] = [
     textContent('human', 'prompt'),
     textContent('ai', 'answer'),
@@ -567,19 +545,16 @@ async function facadeCallback7(): Promise<void> {
   harness.historyService.addAll(contents);
 
   await expect(
-    harness.enforcer.enforce(
-      buildEnvelope(contents, contents),
-      'prompt-p26-overflow',
-    ),
+    harness.enforce(contents, 'prompt-p26-overflow'),
   ).rejects.toThrow(/context limit/i);
 }
 
 async function facadeCallback8(): Promise<void> {
-  const harness = buildEnforcerHarness({
+  const harness = buildCharacterizationHarness({
     compressionThreshold: 0.1,
     contextLimit: 1000,
   });
-  const contents: IContent[] = [textContent('human', 'prompt')];
+  harness.historyService.add(textContent('human', 'prompt'));
   vi.spyOn(
     harness.historyService,
     'estimateTokensForContents',
@@ -589,16 +564,13 @@ async function facadeCallback8(): Promise<void> {
   );
 
   await expect(
-    harness.enforcer.enforce(
-      buildEnvelope(contents, undefined),
-      'prompt-p26-noboundary',
-    ),
+    harness.enforce([], 'prompt-p26-noboundary', { pendingRecoverable: false }),
   ).rejects.toThrow(/unrecoverable/i);
 }
 
 async function facadeCallback9(): Promise<void> {
-  const harness = buildEnforcerHarness();
-  const contents: IContent[] = [textContent('human', 'small')];
+  const harness = buildCharacterizationHarness();
+  harness.historyService.add(textContent('human', 'small'));
   // Over the compression threshold but UNDER the hard limit.
   vi.spyOn(
     harness.historyService,
@@ -608,11 +580,10 @@ async function facadeCallback9(): Promise<void> {
     undefined,
   );
 
-  const result = await harness.enforcer.enforce(
-    buildEnvelope(contents, undefined),
-    'prompt-p26-under-hard',
-  );
-  expect(result).toBe(contents);
+  const result = await harness.enforce([], 'prompt-p26-under-hard', {
+    pendingRecoverable: false,
+  });
+  expect(rowTexts(result)).toStrictEqual(['small']);
 }
 
 async function facadeCallback10(): Promise<void> {
@@ -620,7 +591,7 @@ async function facadeCallback10(): Promise<void> {
     fc.asyncProperty(
       fc.integer({ min: 0, max: 100 }),
       async (smallEstimate: number) => {
-        const harness = buildEnforcerHarness();
+        const harness = buildCharacterizationHarness();
         const contents: IContent[] = [
           textContent('human', 'q'),
           textContent('ai', 'a'),
@@ -634,11 +605,8 @@ async function facadeCallback10(): Promise<void> {
           'waitForTokenUpdates',
         ).mockResolvedValue(undefined);
 
-        const result = await harness.enforcer.enforce(
-          buildEnvelope(contents, contents),
-          'prompt-prop-1',
-        );
-        expect(result).toBe(contents);
+        const result = await harness.enforce(contents, 'prompt-prop-1');
+        expect(rowTexts(result)).toStrictEqual(['q', 'a']);
         expect(harness.performCompression).not.toHaveBeenCalled();
       },
     ),
@@ -795,8 +763,7 @@ async function facadeCallback30(): Promise<void> {
 import {
   toStream,
   textContent,
-  buildEnforcerHarness,
-  buildEnvelope,
+  buildCharacterizationHarness,
   createPromptTokenizerFactory,
   createAmplifyingPromptTokenizerFactory,
   recordPreparedEstimate,

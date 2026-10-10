@@ -5,19 +5,16 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
-import {
-  ProviderContentEnforcer,
-  type ProviderContentEnforcementDeps,
-} from '../providerContentEnforcement.js';
-import type { ProviderContentEnvelope } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
 import type {
   RuntimePromptEstimateRequest,
   RuntimeTokenizerFactory,
 } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { ContextOverflowError } from '../contextOverflowError.js';
+import { enforceProviderSourceForTest } from './support/enforce-provider-source.js';
+import { buildHandlerHarness } from './support/handler-harness.js';
 export function toStream(rows: readonly IContent[]): AsyncIterable<IContent> {
   return {
     async *[Symbol.asyncIterator]() {
@@ -26,16 +23,6 @@ export function toStream(rows: readonly IContent[]): AsyncIterable<IContent> {
       }
     },
   };
-}
-
-export function makeLogger(): DebugLogger {
-  return {
-    debug: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-    child: vi.fn().mockReturnThis(),
-  } as unknown as DebugLogger;
 }
 
 export function buildRuntimeContext(
@@ -79,68 +66,60 @@ export function textContent(
   return { speaker, blocks: [{ type: 'text', text }] };
 }
 
-export interface EnforcerHarness {
-  enforcer: ProviderContentEnforcer;
-  deps: ProviderContentEnforcementDeps;
+export interface CharacterizationHarness {
   historyService: HistoryService;
-  runtimeContext: AgentRuntimeContext;
-  performCompression: ReturnType<typeof vi.fn>;
-  performFallbackCompression: ReturnType<typeof vi.fn>;
-  ensureDensityOptimized: ReturnType<typeof vi.fn>;
+  performCompression: ReturnType<
+    typeof buildHandlerHarness
+  >['performCompression'];
+  /**
+   * Drives the handler's source ladder over the pending-aware snapshot of the
+   * history plus `pending`, measuring candidates with `estimateRows` (default:
+   * the history service's own estimator).
+   */
+  enforce: (
+    pending: IContent[],
+    promptId: string,
+    options?: {
+      provider?: RuntimeProvider;
+      estimateRows?: (rows: IContent[]) => Promise<number>;
+      pendingRecoverable?: boolean;
+    },
+  ) => Promise<IContent[]>;
 }
 
-export function buildEnforcerHarness(
+export function buildCharacterizationHarness(
   overrides: {
     compressionThreshold?: number;
     contextLimit?: number;
     generationConfig?: Record<string, unknown>;
     performCompressionResult?: PerformCompressionResult;
   } = {},
-): EnforcerHarness {
+): CharacterizationHarness {
   const historyService = new HistoryService();
   const runtimeContext = buildRuntimeContext(historyService, {
     compressionThreshold: overrides.compressionThreshold,
     contextLimit: overrides.contextLimit,
   });
-  const performCompression = vi
-    .fn()
-    .mockResolvedValue(
-      overrides.performCompressionResult ?? PerformCompressionResult.COMPRESSED,
-    );
-  const performFallbackCompression = vi.fn().mockResolvedValue(false);
-  const ensureDensityOptimized = vi.fn().mockResolvedValue(undefined);
-  const deps: ProviderContentEnforcementDeps = {
-    historyService,
-    runtimeContext,
-    generationConfig: overrides.generationConfig ?? {},
-    providerRuntimeNullable: undefined,
-    logger: makeLogger(),
-    ensureDensityOptimized,
-    performCompression,
-    performFallbackCompression,
-    getPromptTokenBaseline: () => null,
-    resetPromptTokenBaseline: () => {},
-    restorePromptTokenBaseline: () => {},
-  };
+  const harness = buildHandlerHarness(historyService, runtimeContext, {
+    generationConfig: overrides.generationConfig,
+  });
+  harness.performCompression.mockResolvedValue(
+    overrides.performCompressionResult ?? PerformCompressionResult.COMPRESSED,
+  );
   return {
-    enforcer: new ProviderContentEnforcer(deps),
-    deps,
     historyService,
-    runtimeContext,
-    performCompression,
-    performFallbackCompression,
-    ensureDensityOptimized,
+    performCompression: harness.performCompression,
+    enforce: (pending, promptId, options = {}) =>
+      enforceProviderSourceForTest(
+        harness.handler,
+        historyService,
+        pending,
+        promptId,
+        options.provider,
+        options.estimateRows,
+        options.pendingRecoverable,
+      ),
   };
-}
-
-export function buildEnvelope(
-  contents: IContent[],
-  pendingContents?: IContent[],
-): ProviderContentEnvelope {
-  return {
-    contents,
-    ...(pendingContents !== undefined ? { pendingContents } : {}),
-  } as ProviderContentEnvelope;
 }
 
 export function createPromptTokenizerFactory(): RuntimeTokenizerFactory {
