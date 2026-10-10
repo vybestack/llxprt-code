@@ -4,7 +4,6 @@ import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/Ag
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { HookEventName } from '@vybestack/llxprt-code-core/hooks/types.js';
 import type { RuntimeProviderToolset } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import { sourceBeforeModelHook } from './source-before-model-hook.js';
 import type { CompressionHandler } from '../compression/CompressionHandler.js';
@@ -20,27 +19,9 @@ import {
   type PendingAwareRequestSelection,
 } from './source-pending-selection.js';
 
-/** The registry is live; an enabled system with no model hooks needs no array input. */
-export async function assertNoSourceModelHooks(
-  config: AgentRuntimeContext['providerRuntime']['config'],
-  signal?: AbortSignal,
-): Promise<void> {
-  if (config?.getEnableHooks() !== true) return;
-  const system = config.getHookSystem();
-  if (system === undefined) return;
-  if (!system.isInitialized()) await system.initialize(signal);
-  const registry = system.getRegistry();
-  if (registry.getHooksForEvent(HookEventName.AfterModel).length > 0) {
-    throw new Error(
-      'Disk source model hooks: AfterModel requires full response mutation and snapshot lifetime contracts',
-    );
-  }
-}
-
 export async function assertSourceContracts(
   runtime: AgentRuntimeContext,
   compression: CompressionHandler,
-  signal?: AbortSignal,
 ): Promise<void> {
   const config = runtime.providerRuntime.config;
   if (config === undefined)
@@ -56,7 +37,6 @@ export async function assertSourceContracts(
     throw new Error(
       'Disk source token-usage shape logging requires a source-capable attribution contract',
     );
-  await assertNoSourceModelHooks(config, signal);
 }
 
 interface StreamDiskSourceInput {
@@ -96,7 +76,7 @@ async function rawPendingInput(
 export async function streamDiskSource(
   input: StreamDiskSourceInput,
 ): Promise<AsyncIterableIterator<IContent>> {
-  await assertSourceContracts(input.runtime, input.compression, input.signal);
+  await assertSourceContracts(input.runtime, input.compression);
   input.signal?.throwIfAborted();
   const preparedPending = preparePendingContents(
     input.userContent,

@@ -95,32 +95,24 @@ const malformed: ToolHookMode[] = [
   'malformed-specific',
   'unsupported-replacement',
 ];
-describe('actual source tool-hook fail-fast', () => {
-  it.each(malformed)(
-    'rejects genuine %s output before HTTP and source preparation',
+describe('actual tool-hook failures follow the eager route', () => {
+  it.each([...malformed, 'error' as const])(
+    'treats genuine %s output as non-blocking on both routes',
     async (mode) => {
-      const result = await toolHookWorker(root(), mode);
-      expect(result.hookInput).toMatchObject({
+      const source = await toolHookWorker(join(root(), 'source'), mode);
+      const array = await toolHookWorker(join(root(), 'array'), mode, false);
+      expect(source.hookInput).toMatchObject({
         hook_event_name: 'BeforeToolSelection',
       });
-      expect(result.hookOutput).toBeDefined();
-      expect(result.error).toContain('source tool-selection hook output');
-      expect(result.bodies).toHaveLength(0);
-      expect(result.owners).toHaveLength(0);
-      expect(result.estimate).toBeNull();
-      expect(result.activeBodies).toBe(0);
+      expect(source.error).toBeUndefined();
+      expect(array.error).toBeUndefined();
+      expect(source.bodies).toHaveLength(1);
+      expect(source.bodies).toStrictEqual(array.bodies);
+      expect(source.estimate).toStrictEqual(array.estimate);
+      expect(source.restrictions).toStrictEqual(array.restrictions);
+      expect(source.owners.every((owner) => owner.closed)).toBe(true);
+      expect(source.activeBodies).toBe(0);
     },
     60000,
   );
-  it('propagates genuine command failure before HTTP', async () => {
-    const result = await toolHookWorker(root(), 'error');
-    expect(result.hookStderr).toContain('required selection command failed');
-    expect(result.error).toContain(
-      'source tool-selection hook execution failed',
-    );
-    expect(result.error).toContain('required selection command failed');
-    expect(result.bodies).toHaveLength(0);
-    expect(result.owners).toHaveLength(0);
-    expect(result.estimate).toBeNull();
-  }, 60000);
 });

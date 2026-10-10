@@ -43,6 +43,9 @@ export interface AggregatedHookSnapshotResult {
 /** Field replacement matches the model-event reducer; ancestor objects stay on disk. */
 export class HookModelSnapshotOutput {
   private readonly control = new Map<string, unknown>();
+  private retained:
+    | { readonly response: unknown; readonly systemMessage: unknown }
+    | undefined;
   constructor(private readonly outputs: readonly HookOutputDocument[]) {
     for (const field of ['continue', 'decision', 'reason', 'stopReason'])
       this.control.set(field, this.readValue([field]));
@@ -76,6 +79,28 @@ export class HookModelSnapshotOutput {
     return this.selected(path)?.readValue(path);
   }
 
+  /** Copies the small decision payload before eager disposal closes the disk outputs. */
+  retainDecisionPayload(): void {
+    this.retained ??= {
+      response: this.readValue(['hookSpecificOutput', 'llm_response']),
+      systemMessage: this.readValue(['systemMessage']),
+    };
+  }
+
+  readLlmResponse(): unknown {
+    return this.retained === undefined
+      ? this.readValue(['hookSpecificOutput', 'llm_response'])
+      : this.retained.response;
+  }
+
+  readSystemMessage(): string | undefined {
+    const message =
+      this.retained === undefined
+        ? this.readValue(['systemMessage'])
+        : this.retained.systemMessage;
+    return typeof message === 'string' ? message : undefined;
+  }
+
   shouldStopExecution(): boolean {
     return this.control.get('continue') === false;
   }
@@ -90,9 +115,8 @@ export class HookModelSnapshotOutput {
       : 'No reason provided';
   }
 
-  assertTextRequest(target: HookModelRowsInput['llm_request']): void {
-    for (const output of this.outputs)
-      assertSnapshotTextRequest(output, target);
+  assertTextRequest(): void {
+    for (const output of this.outputs) assertSnapshotTextRequest(output);
   }
 
   applyRequestRows(
@@ -142,13 +166,11 @@ export function aggregateHookSnapshots(
       close,
     };
     signal?.addEventListener('abort', close, { once: true });
-    if (
-      signal?.aborted === true ||
-      !success ||
-      finalOutput?.shouldStopExecution() === true ||
-      finalOutput?.isBlockingDecision() === true
-    )
-      close();
+    const decided =
+      finalOutput !== undefined &&
+      (finalOutput.shouldStopExecution() || finalOutput.isBlockingDecision());
+    if (decided) finalOutput.retainDecisionPayload();
+    if (signal?.aborted === true || !success || decided) close();
     return aggregated;
   } catch (error) {
     close();

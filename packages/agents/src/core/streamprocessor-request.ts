@@ -25,6 +25,8 @@ import {
   type prepareAtSendSeam,
 } from './promptEnvelopeSendSeam.js';
 import { streamDiskSource } from './streamprocessor-disk-source.js';
+import type { SourceAfterModelRequest } from './source-after-model-hook.js';
+import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { withCompressionCallbackCleanup } from './streamCleanup.js';
 import { logApiError } from './turnLogging.js';
 
@@ -63,6 +65,7 @@ export interface StreamRequestInput {
     stream: AsyncIterable<IContent>,
     startTime: number,
     allowedTools: string[] | undefined,
+    afterModel: SourceAfterModelRequest,
   ) => Promise<AsyncGenerator<ModelStreamChunk>>;
   readonly setEstimate: (estimate: PromptEnvelopeEstimate | null) => void;
   readonly log: (message: string) => void;
@@ -75,7 +78,6 @@ async function selection(
     input.runtime.providerRuntime.config,
     selectRequestTools(input.params, input.fallbackTools),
     input.runtime.state.model,
-    input.params.config?.requestHistorySource === 'responses-disk-text',
   );
 }
 
@@ -136,6 +138,8 @@ async function diskRequest(
   const startTime = Date.now();
   try {
     const tools = await selection(input);
+    // Each attempt re-prepares its source; AfterModel reads the live one.
+    let pinned: ProviderRequestRows | undefined;
     const stream = await streamDiskSource({
       runtime: input.runtime,
       compression: input.compression,
@@ -163,6 +167,7 @@ async function diskRequest(
         );
       },
       onPrepared: async (prepared) => {
+        pinned = prepared.source;
         input.setEstimate(prepared.estimate);
         await input.runtime.telemetry.logApiRequest({
           model: input.runtime.state.model,
@@ -178,6 +183,15 @@ async function diskRequest(
       stream,
       startTime,
       tools.allowedFunctionNames,
+      {
+        rows: () => {
+          if (pinned === undefined)
+            throw new Error('Source AfterModel requires a prepared selection');
+          return pinned;
+        },
+        tools: tools.tools,
+        signal: input.params.config?.abortSignal,
+      },
     );
   } catch (error) {
     input.setEstimate(null);

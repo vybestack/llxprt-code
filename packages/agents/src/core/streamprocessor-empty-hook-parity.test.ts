@@ -18,6 +18,11 @@ const compatible: ModelHookMode[] = [
   'chain-edit-noop',
   'chain-edit-absent',
   'parallel-empty-none',
+  'empty',
+  'chain-edit-empty',
+  'chain-empty-noop',
+  'parallel-edit-empty',
+  'v1-request',
 ];
 
 describe('BeforeModel source compatibility with eager transport', () => {
@@ -67,35 +72,12 @@ describe('BeforeModel source compatibility with eager transport', () => {
   }, 120000);
 });
 
-const emptyModes: ModelHookMode[] = [
-  'empty',
-  'chain-edit-empty',
-  'chain-empty-noop',
-  'parallel-edit-empty',
-];
-describe('BeforeModel incompatible empty output', () => {
-  it.each(emptyModes)(
-    'rejects %s before estimation or HTTP instead of changing eager semantics',
-    async (mode) => {
-      const source = await modelHookWorker(root(), mode);
-      expect(source.error).toContain(
-        'empty contents replacement conflicts with eager request semantics',
-      );
-      expect(source.hooks.length).toBeGreaterThan(0);
-      expect(source.bodies).toStrictEqual([]);
-      expect(source.estimate).toBeNull();
-      expect(source.owners.every((owner) => owner.closed)).toBe(true);
-      expect(source.activeBodies).toBe(0);
-      expect(source.directories).toStrictEqual([]);
-    },
-    120000,
-  );
+describe('BeforeModel incompatible output', () => {
   it.each([
     'null-request',
     'null-contents',
     'bad-contents',
     'malformed-request',
-    'v1-request',
     'chain-edit-null',
   ] as const)(
     'keeps unsupported %s fail-fast rather than broadening admission',

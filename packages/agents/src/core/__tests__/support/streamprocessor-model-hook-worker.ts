@@ -60,7 +60,6 @@ function expectedRows(mode: ModelHookMode): IContent[] {
     ),
     sourcePending,
   ];
-  if (mode === 'empty') return [];
   if (['none', 'chain-empty-none', 'parallel-empty-none'].includes(mode))
     return [
       { speaker: 'human', blocks: [{ type: 'text', text: 'new context' }] },

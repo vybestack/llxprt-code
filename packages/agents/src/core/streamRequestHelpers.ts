@@ -27,7 +27,6 @@ import type { SendMessageParams } from './chatSession.js';
 import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
 import { sanitizeProviderContentForSerialization } from '@vybestack/llxprt-code-core/services/history/historyCloneUtils.js';
 import { logApiRequest } from './turnLogging.js';
-import { fireSourceToolSelectionHook } from './source-tool-selection-hook.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import {
   providerRequestRows,
@@ -195,7 +194,6 @@ export async function applyToolSelectionHook(
   configForHooks: AgentRuntimeContext['providerRuntime']['config'],
   tools: AgentClientGenerateConfig['tools'],
   model: string,
-  preserveRuntimeRegistry = false,
 ): Promise<ToolSelectionHookResult> {
   if (configForHooks === undefined) {
     return { tools, allowedFunctionNames: undefined };
@@ -218,17 +216,14 @@ export async function applyToolSelectionHook(
     return { tools, allowedFunctionNames: undefined };
   }
 
-  if (!preserveRuntimeRegistry || !hookSystem.isInitialized()) {
-    await hookSystem.initialize();
-  }
+  // Re-initializing would discard runtime enable/disable state of registered hooks.
+  if (!hookSystem.isInitialized()) await hookSystem.initialize();
   const toolsFromConfig = Array.isArray(tools) ? tools : [];
-  const toolSelectionResult = preserveRuntimeRegistry
-    ? await fireSourceToolSelectionHook(hookSystem, model, toolsFromConfig)
-    : await hookSystem.fireBeforeToolSelectionEvent({
-        model,
-        contents: [],
-        tools: toolsFromConfig,
-      });
+  const toolSelectionResult = await hookSystem.fireBeforeToolSelectionEvent({
+    model,
+    contents: [],
+    tools: toolsFromConfig,
+  });
   const modifiedConfig = toolSelectionResult?.applyToolChoiceModifications({
     tools: toolsFromConfig,
   });

@@ -49,17 +49,6 @@ describe('actual BeforeModel disk hook', () => {
     },
     120000,
   );
-  it('rejects deliberately empty replacement because eager transport does not apply it', async () => {
-    const source = await modelHookWorker(root(), 'empty');
-    expect(source.error).toContain(
-      'empty contents replacement conflicts with eager request semantics',
-    );
-    expect(source.bodies).toStrictEqual([]);
-    expect(source.estimate).toBeNull();
-    expect(source.owners.every((owner) => owner.closed)).toBe(true);
-    expect(source.activeBodies).toBe(0);
-    expect(source.directories).toStrictEqual([]);
-  }, 120000);
   it.each([
     ['edit', 'modified-pending', true],
     ['boundary', 'hook-metadata', true],
@@ -88,14 +77,36 @@ const rejected: ModelHookMode[] = [
   'bad-continue',
   'bad-decision',
   'bad-reason',
+  'error',
+  'cancel',
+];
+const ignoredByEagerRoute: ModelHookMode[] = [
   'model',
   'settings',
   'tools',
   'unknown',
-  'error',
-  'cancel',
   'denied-tool',
 ];
+describe('BeforeModel outputs the eager route ignores', () => {
+  it.each(ignoredByEagerRoute)(
+    'sends the same bytes and estimate as the eager route for %s',
+    async (mode) => {
+      const source = await modelHookWorker(join(root(), 'source'), mode);
+      const array = await modelHookWorker(join(root(), 'array'), mode, false);
+      expect(source.error).toBeUndefined();
+      expect(array.error).toBeUndefined();
+      expect(source.bodies).toHaveLength(1);
+      expect(source.bodies).toStrictEqual(array.bodies);
+      expect(source.estimate).toStrictEqual(array.estimate);
+      expect(source.estimate).toStrictEqual(source.oracle);
+      expect(source.owners.every((owner) => owner.closed)).toBe(true);
+      expect(source.activeBodies).toBe(0);
+      expect(source.directories).toStrictEqual([]);
+    },
+    120000,
+  );
+});
+
 describe('BeforeModel source enforcement', () => {
   it.each(rejected)(
     'rejects genuine %s without HTTP or owned scratch',

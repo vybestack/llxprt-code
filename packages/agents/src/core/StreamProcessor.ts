@@ -75,7 +75,10 @@ import {
   type PreparedUserTurn,
 } from './mediaAdmissionSeam.js';
 import { finalizeStreamResponse } from './streamResponseFinalizer.js';
-import { assertNoSourceModelHooks } from './streamprocessor-disk-source.js';
+import {
+  fireSourceAfterModelHook,
+  type SourceAfterModelRequest,
+} from './source-after-model-hook.js';
 
 function isPreparedUserTurn(
   value: IContent | IContent[] | PreparedUserTurn,
@@ -349,7 +352,7 @@ export class StreamProcessor {
           allowedTools,
           prepared,
         ),
-      consumeSource: (stream, startTime, allowedTools) =>
+      consumeSource: (stream, startTime, allowedTools, afterModel) =>
         this._consumeFirstChunkAndReturn(
           stream,
           undefined,
@@ -357,6 +360,7 @@ export class StreamProcessor {
           startTime,
           allowedTools,
           this.currentRawTokenDeltaBridge,
+          afterModel,
         ),
       setEstimate: (estimate) => {
         this.currentPromptEnvelopeEstimate = estimate;
@@ -538,6 +542,7 @@ export class StreamProcessor {
     startTime: number,
     hookRestrictedAllowedTools: string[] | undefined,
     rawTokenDeltaBridge: RawTokenDeltaBridge | null,
+    sourceRequest?: SourceAfterModelRequest,
   ): Promise<AsyncGenerator<ModelStreamChunk>> {
     const convertedStream = this._convertIContentStream(
       streamResponse,
@@ -545,6 +550,7 @@ export class StreamProcessor {
       { promptId, startTime, attemptIndex: this.currentAttemptIndex },
       hookRestrictedAllowedTools,
       rawTokenDeltaBridge,
+      sourceRequest,
     );
 
     const firstChunk = await convertedStream.next();
@@ -602,6 +608,7 @@ export class StreamProcessor {
     },
     hookRestrictedAllowedTools?: string[],
     rawTokenDeltaBridge?: RawTokenDeltaBridge | null,
+    sourceRequest?: SourceAfterModelRequest,
   ): AsyncGenerator<ModelStreamChunk> {
     let lastIContent: IContent | undefined;
     // Constructed at generator-body start (first pull — the provider call
@@ -633,6 +640,7 @@ export class StreamProcessor {
             requestPayload,
             chunk,
             hookRestrictedAllowedTools,
+            sourceRequest,
           )) ?? chunk;
         lastIContent = contentForTelemetryPreservingUsage(
           yieldedChunk,
@@ -680,12 +688,9 @@ export class StreamProcessor {
     requestPayload: PreparedRequest['requestPayload'] | undefined,
     chunk: ModelStreamChunk,
     hookRestrictedAllowedTools: string[] | undefined,
+    sourceRequest: SourceAfterModelRequest | undefined,
   ): Promise<ModelStreamChunk | undefined> {
     const hookConfig = this.runtimeContext.providerRuntime.config;
-    if (requestPayload === undefined) {
-      await assertNoSourceModelHooks(hookConfig);
-      return undefined;
-    }
     if (
       hookConfig === undefined ||
       typeof hookConfig.getEnableHooks !== 'function' ||
@@ -711,31 +716,42 @@ export class StreamProcessor {
     );
     const hookIContent = iContentFromBlocks(filteredBlocks, iContent.speaker);
 
-    const afterModelResult = await hookSystem.fireAfterModelEvent(
-      {
-        model: this.runtimeContext.state.model,
-        contents: requestPayload.contents,
-        ...(requestPayload.tools !== undefined &&
-        (requestPayload.tools.length > 0 ||
-          hookRestrictedAllowedTools === undefined)
-          ? {
-              tools: requestPayload.tools,
-            }
-          : {}),
-      },
-      {
-        content: hookIContent,
-        // finishReason/rawStopReason live only on terminal chunks; toModelStreamChunk
-        // already lifted them onto the chunk when the provider emitted them.
-        ...(chunk.finishReason !== undefined
-          ? { finishReason: chunk.finishReason }
-          : {}),
-        ...(chunk.rawStopReason !== undefined
-          ? { rawStopReason: chunk.rawStopReason }
-          : {}),
-        ...(chunk.usage !== undefined ? { usage: chunk.usage } : {}),
-      },
-    );
+    const response = {
+      content: hookIContent,
+      // finishReason/rawStopReason live only on terminal chunks; toModelStreamChunk
+      // already lifted them onto the chunk when the provider emitted them.
+      ...(chunk.finishReason !== undefined
+        ? { finishReason: chunk.finishReason }
+        : {}),
+      ...(chunk.rawStopReason !== undefined
+        ? { rawStopReason: chunk.rawStopReason }
+        : {}),
+      ...(chunk.usage !== undefined ? { usage: chunk.usage } : {}),
+    };
+    const requestTools = requestPayload?.tools ?? sourceRequest?.tools;
+    // A restricted selection that emptied the tool list is hidden from hooks.
+    const omitTools =
+      requestTools === undefined ||
+      (requestTools.length === 0 && hookRestrictedAllowedTools !== undefined);
+    const model = this.runtimeContext.state.model;
+    const afterModelResult =
+      requestPayload !== undefined
+        ? await hookSystem.fireAfterModelEvent(
+            {
+              model,
+              contents: requestPayload.contents,
+              ...(omitTools ? {} : { tools: requestTools }),
+            },
+            response,
+          )
+        : await fireSourceAfterModelHook({
+            system: hookSystem,
+            request: sourceRequest,
+            model,
+            response,
+            omitTools,
+            log: (message) => this.logger.debug(() => message),
+          });
 
     if (afterModelResult?.shouldStopExecution() === true) {
       throw new AgentExecutionStoppedError(

@@ -138,8 +138,12 @@ export interface BeforeModelSnapshotHookOptions
 function enforceSnapshotDecision(
   output: HookModelSnapshotOutput | undefined,
 ): void {
-  if (output?.shouldStopExecution() === true)
-    throw new AgentExecutionStoppedError(output.getEffectiveReason());
+  if (output?.shouldStopExecution() === true) {
+    throw new AgentExecutionStoppedError(
+      output.getEffectiveReason(),
+      output.readSystemMessage(),
+    );
+  }
   if (output?.isBlockingDecision() === true) {
     const reason = output.getEffectiveReason();
     throw new AgentExecutionBlockedError(reason, {
@@ -190,17 +194,17 @@ export async function fireBeforeModelSnapshotHook(
       contents: options.requestContents,
       ...(options.tools === undefined ? {} : { tools: options.tools }),
     };
-    hook.finalOutput?.assertTextRequest(target);
+    hook.finalOutput?.assertTextRequest();
     const request = hook.finalOutput?.applyRequestRows(target);
-    // The eager caller discards explicit empty contents despite the documented
-    // replacement contract. Reject that incompatible override before transport.
-    if (request?.contents.count === 0 && request.contents !== target.contents)
-      throw new Error(
-        'Unsupported source BeforeModel hook output: empty contents replacement conflicts with eager request semantics',
-      );
+    // The eager caller discards explicit empty contents: an empty array would
+    // erase the conversation, so it means "no modification" on both routes.
+    const replaced =
+      request === undefined || request.contents.count === 0
+        ? options.requestContents
+        : request.contents;
     resolved = await resolvePendingBoundarySnapshot({
       before: options.requestContents,
-      after: request?.contents ?? options.requestContents,
+      after: replaced,
       rawPending: options.rawPending,
       boundary: hook.finalOutput?.readValue([
         'hookSpecificOutput',

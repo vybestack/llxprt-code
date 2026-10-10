@@ -54,6 +54,11 @@ export const modelHookMode = z.enum([
   'chain-edit-null',
   'parallel-edit-empty',
   'parallel-empty-none',
+  'after-noop',
+  'after-modify',
+  'after-stop',
+  'after-block',
+  'after-error',
 ]);
 export type ModelHookMode = z.infer<typeof modelHookMode>;
 export const modelFactsSchema = z.object({
@@ -152,6 +157,12 @@ const actions: Record<ModelHookMode, string | readonly string[]> = {
   'chain-edit-null': [editAction, nullAction],
   'parallel-edit-empty': [editAction, emptyAction],
   'parallel-empty-none': [emptyAction, newContextAction],
+  'after-noop': 'const output={};',
+  'after-modify':
+    "const output={hookSpecificOutput:{llm_response:{content:{speaker:'ai',blocks:[{type:'text',text:'modified by hook'}]}}}};",
+  'after-stop': "const output={continue:false,stopReason:'after stop'};",
+  'after-block': "const output={decision:'deny',reason:'after block'};",
+  'after-error': "throw new Error('after command failed');",
 };
 
 function modelCommand(root: string, action: string): string {
@@ -169,7 +180,11 @@ export function registerModelHook(
   const commands = typeof selected === 'string' ? [selected] : selected;
   const hooks = config.getHooks();
   if (!hooks) throw new Error('Missing real hook configuration');
-  hooks[HookEventName.BeforeModel] = [
+  hooks[
+    mode.startsWith('after-')
+      ? HookEventName.AfterModel
+      : HookEventName.BeforeModel
+  ] = [
     {
       sequential: mode.startsWith('chain-'),
       hooks: commands.map((action, index) => ({
