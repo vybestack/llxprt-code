@@ -44,6 +44,8 @@ export class PromptKeyDiskWriter {
     model: string,
     signal?: AbortSignal,
     private readonly encoding: 'utf8' | 'utf16le' = 'utf8',
+    /** Wire mode keeps media bytes and writes no image costs. */
+    private readonly wire = false,
   ) {
     this.#fd = openSync(path, 'w', 0o600);
     try {
@@ -71,6 +73,7 @@ export class PromptKeyDiskWriter {
   }
 
   private image(base64: unknown): void {
+    if (this.wire) return;
     const dimensions =
       typeof base64 === 'string'
         ? parseImageDimensionsFromBase64(base64.slice(0, headerCharacters))
@@ -106,6 +109,11 @@ export class PromptKeyDiskWriter {
 
   string(value: string, quoted = true): void {
     if (quoted) this.append('"');
+    if (this.wire) {
+      this.textRange(value, 0, value.length, quoted);
+      if (quoted) this.append('"');
+      return;
+    }
     let offset = 0;
     for (let index = 0; index < value.length; index++) {
       const header = dataHeader(value, index);
@@ -151,7 +159,7 @@ export class PromptKeyDiskWriter {
     this.append('{');
     let separator = '';
     for (const key in value) {
-      const binary = key === 'data' && value.type === 'base64';
+      const binary = !this.wire && key === 'data' && value.type === 'base64';
       const child = value[key];
       if (
         Object.getOwnPropertyDescriptor(value, key) === undefined ||

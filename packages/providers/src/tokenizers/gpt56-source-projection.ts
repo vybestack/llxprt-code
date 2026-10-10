@@ -39,6 +39,12 @@ export interface Gpt56SourceSegment {
    * families rebuild the legacy JSON prompt text from this.
    */
   readonly rawString?: true;
+  /**
+   * Un-redacted request bytes for the transport. The estimator source above
+   * replaces binary media payloads with a placeholder; the wire source keeps
+   * them and is never read for token counting.
+   */
+  readonly wireSource?: O200kDiskSource;
 }
 
 export interface Gpt56SourceProjectionOptions {
@@ -87,6 +93,9 @@ export class Gpt56SourceProjection {
           promptKey: segment.promptKey,
           source: ownedSource(this.#directory, segment.source),
           ...(segment.rawString === true ? { rawString: true as const } : {}),
+          ...(segment.wireSource === undefined
+            ? {}
+            : { wireSource: ownedSource(this.#directory, segment.wireSource) }),
         });
       }),
     );

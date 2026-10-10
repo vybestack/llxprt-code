@@ -18,25 +18,17 @@ import {
   type ResponsesExecutorDeps,
 } from './openAIResponsesExecutor.js';
 
-async function* textRows(
+async function* countedRows(
   rows: ProviderRequestRows,
   signal?: AbortSignal,
 ): AsyncGenerator<IContent, void> {
   let count = 0;
   for await (const row of rows.openReader(signal)) {
     signal?.throwIfAborted();
-    if (
-      (row.speaker !== 'human' && row.speaker !== 'ai') ||
-      row.blocks.some((block) => block.type !== 'text') ||
-      row.metadata?.responsesStored === true
-    )
-      throw new Error(
-        'Explicit Responses disk text route requires stateless human/ai text rows',
-      );
     count++;
     yield row;
   }
-  if (count !== rows.count) throw new Error('Disk text row count changed');
+  if (count !== rows.count) throw new Error('Disk source row count changed');
 }
 
 export function assertDiskTextShape(
@@ -66,9 +58,8 @@ export function assertDiskTextShape(
     throw new Error(
       'Explicit Responses disk text route does not support stateful options',
     );
-  for (const key of ['input', 'instructions', 'tools'])
-    if (key in shape.requestOverrides)
-      throw new Error(`Explicit disk text route cannot override ${key}`);
+  if ('input' in shape.requestOverrides)
+    throw new Error('Explicit disk text route cannot override input');
   if (
     ephemerals['dumpcontext'] !== undefined &&
     ephemerals['dumpcontext'] !== 'off'
@@ -96,7 +87,7 @@ export async function buildDiskTextResponsesContext(
       model: prepared.request.model,
       instructions: prepared.request.instructions,
       tools: prepared.request.tools,
-      contents: textRows(rows, getRequestSignal(options)),
+      contents: countedRows(rows, getRequestSignal(options)),
       context: responsesInputContext(options, ephemerals, deps),
       signal: getRequestSignal(options),
     });

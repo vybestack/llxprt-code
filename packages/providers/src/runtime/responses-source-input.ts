@@ -23,7 +23,7 @@ import {
   resolvePdfFilename,
 } from '../utils/mediaUtils.js';
 import type { RequestScopedContents } from '../utils/requestScopedBody.js';
-import type { PromptKeyDiskWriter } from './prompt-key-disk-writer.js';
+import type { PromptKeySink } from './prompt-key-tee-writer.js';
 
 async function matching(
   owner: RequestScopedContents,
@@ -78,7 +78,7 @@ export class ResponsesSourceInput {
   #pdfBytes = 0;
 
   constructor(
-    private readonly writer: PromptKeyDiskWriter,
+    private readonly writer: PromptKeySink,
     private readonly context: ResponsesInputBuildContext,
     private readonly unsupportedPath: string,
     private readonly signal?: AbortSignal,

@@ -27,9 +27,12 @@ async function* segmentBytes(
   signal?: AbortSignal,
 ): AsyncGenerator<Uint8Array, void> {
   signal?.throwIfAborted();
-  const reader = await open(segment.source.path, 'r');
+  const wire = segment.wireSource;
+  if (wire === undefined)
+    throw new Error('Responses source segment has no wire bytes');
+  const reader = await open(wire.path, 'r');
   try {
-    const string = segment.source.encoding === 'utf16le';
+    const string = wire.encoding === 'utf16le';
     if (string) yield Buffer.from('"');
     let carry = '';
     for (;;) {

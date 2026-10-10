@@ -12,6 +12,7 @@ import {
 import type { O200kDiskSource } from '../tokenizers/o200k-disk-source.js';
 import { PROJECTION_REVISION } from './promptEnvelopeProjections.js';
 import { PromptKeyDiskWriter } from './prompt-key-disk-writer.js';
+import { PromptKeyTeeWriter } from './prompt-key-tee-writer.js';
 import { ResponsesSourceInput } from './responses-source-input.js';
 import {
   cancellableSerialization,
@@ -64,6 +65,7 @@ async function segment(
   costs: string,
 ): Promise<{ segment: Gpt56SourceSegment; imageCount: number }> {
   const path = join(root, key);
+  const wirePath = join(root, `${key}.wire`);
   const rawString =
     key === 'instructions' ||
     (key === 'tools' && typeof options.tools === 'string');
@@ -75,35 +77,59 @@ async function segment(
     options.signal,
     encoding,
   );
+  let wire: PromptKeyDiskWriter;
+  try {
+    wire = new PromptKeyDiskWriter(
+      wirePath,
+      costs,
+      options.model,
+      options.signal,
+      encoding,
+      true,
+    );
+  } catch (error) {
+    writer.close();
+    throw error;
+  }
   return withSerializationCleanup(
     async () => {
+      const sink = new PromptKeyTeeWriter([writer, wire]);
       if (key === 'input') {
         const owner = requestScopedContents(options.contents, options.signal);
         await withSerializationCleanup(
           () =>
             new ResponsesSourceInput(
-              writer,
+              sink,
               options.context,
               join(root, 'unsupported-media.jsonl'),
               options.signal,
             ).write(owner),
           () => owner.dispose(),
         );
-      } else if (key === 'instructions')
+      } else if (key === 'instructions') {
         writer.string(options.instructions ?? '', false);
-      else if (typeof options.tools === 'string')
+        wire.string(options.instructions ?? '', false);
+      } else if (typeof options.tools === 'string') {
         writer.string(options.tools, false);
-      else writer.value(options.tools);
+        wire.string(options.tools, false);
+      } else sink.value(options.tools);
       return {
         segment: {
           promptKey: key,
           source: { path, encoding },
+          wireSource: { path: wirePath, encoding },
           ...(rawString ? { rawString: true as const } : {}),
         },
         imageCount: writer.imageCount,
       };
     },
-    () => writer.close(),
+    () => {
+      try {
+        writer.close();
+      } finally {
+        wire.close();
+      }
+    },
   );
 }
 

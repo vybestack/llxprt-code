@@ -30,7 +30,9 @@ describe('actual prepared disk segment reader ownership', () => {
         (segment) => segment.promptKey === 'input',
       );
       if (input === undefined) throw new Error('Missing actual input segment');
-      unlinkSync(input.source.path);
+      if (input.wireSource === undefined)
+        throw new Error('Missing actual input wire segment');
+      unlinkSync(input.wireSource.path);
       await expect(failedBody(source)).rejects.toThrow('ENOENT');
       await projection.releaseIfUnsent?.();
       expect(

@@ -16,56 +16,6 @@ function rows(row: IContent): ProviderRequestSelection {
   });
 }
 
-describe('explicit disk text unsupported variants', () => {
-  it.each(['media', 'thinking', 'tool_call'] as const)(
-    'rejects %s before any actual send',
-    async (kind) => {
-      const setup = await projectionRuntime(
-        'http://127.0.0.1:1/v1',
-        process.cwd(),
-      );
-      const nonMediaRow: IContent =
-        kind === 'thinking'
-          ? {
-              speaker: 'ai',
-              blocks: [{ type: 'thinking', thought: 'reasoning' }],
-            }
-          : {
-              speaker: 'ai',
-              blocks: [
-                {
-                  type: 'tool_call',
-                  id: 'call_1',
-                  name: 'tool',
-                  parameters: {},
-                },
-              ],
-            };
-      const row: IContent =
-        kind === 'media'
-          ? {
-              speaker: 'human',
-              blocks: [
-                {
-                  type: 'media',
-                  mimeType: 'image/png',
-                  encoding: 'base64',
-                  data: 'AAAA',
-                },
-              ],
-            }
-          : nonMediaRow;
-      try {
-        await expect(
-          setup.provider.projectPromptEnvelope(setup.options(rows(row))),
-        ).rejects.toThrow('stateless human/ai text rows');
-      } finally {
-        await setup.config.dispose();
-      }
-    },
-  );
-});
-
 describe('disk text request option exclusion', () => {
   it('rejects Codex WebSocket-capable transport without scanning disk rows', async () => {
     const setup = await projectionRuntime(
