@@ -193,7 +193,25 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       throw new Error(
         'Disk text selection requires a source-backed prepared token',
       );
+    if (readsRequestRowsAtTransport(contentsOrOptions) && token === undefined)
+      return this.generateWithOwnProjection(contentsOrOptions);
     return super.generateChatCompletion(contentsOrOptions);
+  }
+
+  /**
+   * Callers outside the chat send seam (compression summaries) hand over
+   * request rows without a projection. The provider prepares the same
+   * projection the seam would, so the transport still reads one prepared
+   * envelope.
+   */
+  private async *generateWithOwnProjection(
+    options: GenerateChatOptions,
+  ): AsyncIterableIterator<IContent> {
+    const projection = await this.projectPromptEnvelope(options);
+    yield* super.generateChatCompletion({
+      ...options,
+      promptEnvelopeTransportToken: projection.transportToken,
+    });
   }
 
   protected override ownsRequestRowsTransport(): boolean {
