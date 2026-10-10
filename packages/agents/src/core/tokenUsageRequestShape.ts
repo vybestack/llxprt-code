@@ -6,7 +6,11 @@
 
 import { createHash } from 'node:crypto';
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
-import { assertSupportedTextSource } from './token-usage-source-admission.js';
+import {
+  BoundedToolCallNames,
+  fullRequestToolCallNames,
+  type ToolCallNames,
+} from './tokenUsageToolCallNames.js';
 import type {
   IContent,
   ContentBlock,
@@ -367,21 +371,6 @@ function countToolsSchemaTokens(
   return countTokens(toolsJson);
 }
 
-/** Build a tool-call id → name map from the request contents. */
-function buildToolCallNameMap(
-  requestContents: readonly IContent[],
-): Map<string, string> {
-  const map = new Map<string, string>();
-  for (const content of requestContents) {
-    for (const block of content.blocks) {
-      if (block.type === 'tool_call') {
-        map.set(block.id, block.name);
-      }
-    }
-  }
-  return map;
-}
-
 /**
  * Pure computation of the request shape.  Reads the session snapshots
  * (`previouslySentCallIds`, `previousFingerprint`) but never mutates them.
@@ -481,7 +470,7 @@ class RequestShapeAccumulator {
 
   constructor(
     private readonly input: Omit<RequestShapeInput, 'requestContents'>,
-    private readonly toolCallNames: ReadonlyMap<string, string>,
+    private readonly toolCallNames: ToolCallNames,
   ) {
     this.toolsJson = stableStringify(input.tools);
     this.fingerprint.update(`I:${input.instructionsText ?? ''}`);
@@ -495,6 +484,7 @@ class RequestShapeAccumulator {
       this.fingerprintBudget,
       this.input.measurementCache,
     );
+    this.toolCallNames.observe(content);
     const bucket = classifyContent(content);
     if (bucket === 'injected') this.injectedTokens += measurement.tokens;
     else if (bucket === 'media') this.mediaTokens += measurement.tokens;
@@ -557,7 +547,7 @@ export function computeRequestShape(
 ): RequestShapeResult {
   const accumulator = new RequestShapeAccumulator(
     input,
-    buildToolCallNameMap(input.requestContents),
+    fullRequestToolCallNames(input.requestContents),
   );
   for (const content of input.requestContents) accumulator.add(content);
   return accumulator.finish();
@@ -572,8 +562,10 @@ export interface SourceRequestShapeInput
 export async function computeSourceRequestShape(
   input: SourceRequestShapeInput,
 ): Promise<RequestShapeResult> {
-  await assertSupportedTextSource(input.requestRows, input.signal);
-  const accumulator = new RequestShapeAccumulator(input, new Map());
+  const accumulator = new RequestShapeAccumulator(
+    input,
+    new BoundedToolCallNames(DEFAULT_MAX_SENT_CALL_IDS),
+  );
   const reader = input.requestRows.openReader(input.signal);
   try {
     while (await addSourceRow(reader, accumulator, input.signal)) {
@@ -609,7 +601,7 @@ function addSourceRow(
 function resolveToolName(
   callId: string,
   blockToolName: string,
-  toolCallNames: ReadonlyMap<string, string>,
+  toolCallNames: ToolCallNames,
 ): string {
   const fromCall = toolCallNames.get(callId);
   if (fromCall !== undefined && fromCall.length > 0) return fromCall;
