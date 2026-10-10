@@ -4,7 +4,10 @@ import type {
   IContent,
   MediaBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
+import {
+  normalizeToHistoryToolId,
+  normalizeToOpenAIToolId,
+} from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
 import {
   buildOpenAIResponsesInput,
   type ResponsesInputBuildContext,
@@ -22,6 +25,7 @@ import {
   PDF_AGGREGATE_MAX_BYTES,
   resolvePdfFilename,
 } from '../utils/mediaUtils.js';
+import { SyntheticToolResponseHandler } from '../openai/syntheticToolResponses.js';
 import type { RequestScopedContents } from '../utils/requestScopedBody.js';
 import type { PromptKeySink } from './prompt-key-tee-writer.js';
 
@@ -52,6 +56,65 @@ async function matching(
   return false;
 }
 
+interface DanglingCalls {
+  /** Index of the last assistant row carrying tool calls; -1 when none. */
+  readonly lastCallRow: number;
+  /** History ids of calls that never receive a response, in call order. */
+  readonly missing: ReadonlyMap<string, string | undefined>;
+}
+
+function settleResponses(open: Set<string>, row: IContent): void {
+  if (row.speaker !== 'tool') return;
+  for (const block of row.blocks) {
+    if (block.type === 'tool_response')
+      open.delete(normalizeToHistoryToolId(block.callId));
+  }
+}
+
+/**
+ * Finds unanswered tool calls the way the array route's synthetic-response
+ * patching does, holding only the currently open calls and the last call row's
+ * names. Calls answered before they appear (rare) are settled by a second scan.
+ */
+async function findDanglingCalls(
+  owner: RequestScopedContents,
+  signal?: AbortSignal,
+): Promise<DanglingCalls> {
+  const open = new Set<string>();
+  let names = new Map<string, string>();
+  let lastCallRow = -1;
+  let index = 0;
+  for await (const row of owner.stream()) {
+    signal?.throwIfAborted();
+    const calls =
+      row.speaker === 'ai'
+        ? row.blocks.filter((block) => block.type === 'tool_call')
+        : [];
+    if (calls.length > 0) {
+      lastCallRow = index;
+      names = new Map();
+    }
+    for (const call of calls) {
+      if (!call.id) continue;
+      const id = normalizeToHistoryToolId(call.id);
+      open.add(id);
+      if (call.name) names.set(id, call.name);
+    }
+    settleResponses(open, row);
+    index++;
+  }
+  if (open.size > 0) {
+    for await (const row of owner.stream()) {
+      signal?.throwIfAborted();
+      settleResponses(open, row);
+    }
+  }
+  return {
+    lastCallRow,
+    missing: new Map([...open].map((id) => [id, names.get(id)])),
+  };
+}
+
 function mediaPart(media: MediaBlock, enabled: boolean): ResponsesContentPart {
   const kind = classifyMediaBlock(media);
   if (kind === 'image')
@@ -76,6 +139,7 @@ export class ResponsesSourceInput {
   #separator = '';
   #reasoning = 0;
   #pdfBytes = 0;
+  #dangling: DanglingCalls | undefined;
 
   constructor(
     private readonly writer: PromptKeySink,
@@ -167,8 +231,14 @@ export class ResponsesSourceInput {
     this.text(row);
     for (const block of row.blocks) {
       if (block.type !== 'tool_call') continue;
+      // Deferred so histories without tool calls never replay the source.
+      this.#dangling ??= await findDanglingCalls(owner, this.signal);
+      const missing = this.#dangling;
       const id = normalizeToOpenAIToolId(block.id);
-      if (await matching(owner, id, true, this.signal))
+      const dangling =
+        block.id !== '' &&
+        missing.missing.has(normalizeToHistoryToolId(block.id));
+      if (dangling || (await matching(owner, id, true, this.signal)))
         this.item({
           type: 'function_call',
           call_id: id,
@@ -220,8 +290,23 @@ export class ResponsesSourceInput {
         );
     }
   }
+  private cancelledResponses(missing: DanglingCalls): void {
+    const cancelled = [...missing.missing].map(([toolCallId, toolName]) => ({
+      toolCallId,
+      toolName,
+    }));
+    const rows =
+      SyntheticToolResponseHandler.createSyntheticResponses(cancelled);
+    for (const item of buildOpenAIResponsesInput(rows, {
+      ...this.context,
+      serverSideParentActive: true,
+    }))
+      this.item(item);
+  }
+
   async write(owner: RequestScopedContents): Promise<void> {
     this.writer.append('[');
+    let index = 0;
     for await (const row of owner.stream()) {
       this.signal?.throwIfAborted();
       this.unsupported(row);
@@ -231,6 +316,9 @@ export class ResponsesSourceInput {
         else this.text(row);
       } else if (row.speaker === 'ai') await this.assistant(row, owner);
       else await this.tool(row, owner);
+      if (index === this.#dangling?.lastCallRow)
+        this.cancelledResponses(this.#dangling);
+      index++;
     }
     this.writer.append(']');
     if (this.#pdfBytes > PDF_AGGREGATE_MAX_BYTES)

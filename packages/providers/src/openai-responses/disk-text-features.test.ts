@@ -119,6 +119,51 @@ const fixtures: Record<string, readonly IContent[]> = {
     },
     { speaker: 'human', blocks: [{ type: 'text', text: 'next' }] },
   ],
+  'dangling tool calls': [
+    { speaker: 'human', blocks: [{ type: 'text', text: 'go' }] },
+    {
+      speaker: 'ai',
+      blocks: [
+        {
+          type: 'tool_call',
+          id: 'hist_tool_call_early',
+          name: 'early',
+          parameters: { a: 1 },
+        },
+      ],
+    },
+    { speaker: 'human', blocks: [{ type: 'text', text: 'again' }] },
+    {
+      speaker: 'ai',
+      blocks: [
+        { type: 'text', text: 'two calls' },
+        {
+          type: 'tool_call',
+          id: 'toolu_answered',
+          name: 'answered',
+          parameters: {},
+        },
+        {
+          type: 'tool_call',
+          id: 'hist_tool_call_dangling',
+          name: 'dangling',
+          parameters: { b: 2 },
+        },
+      ],
+    },
+    {
+      speaker: 'tool',
+      blocks: [
+        {
+          type: 'tool_response',
+          callId: 'call_answered',
+          toolName: 'answered',
+          result: 'fine',
+        },
+      ],
+    },
+    { speaker: 'human', blocks: [{ type: 'text', text: 'continue' }] },
+  ],
   reasoning: [
     { speaker: 'human', blocks: [{ type: 'text', text: 'think' }] },
     {

@@ -15,6 +15,7 @@ import {
 import { estimateImageTokens } from '@vybestack/llxprt-code-tools/utils/imageTokenEstimation.js';
 import { requestScopedContents } from '../utils/requestScopedBody.js';
 import { collectUnsupportedMedia } from '../utils/mediaUtils.js';
+import { SyntheticToolResponseHandler } from '../openai/syntheticToolResponses.js';
 
 const context: ResponsesInputBuildContext = {
   includeReasoningInContext: true,
@@ -88,7 +89,10 @@ async function compare(
       model,
       instructions,
       tools,
-      input: buildOpenAIResponsesInput(rows, buildContext),
+      input: buildOpenAIResponsesInput(
+        SyntheticToolResponseHandler.patchMessageHistory(rows),
+        buildContext,
+      ),
     },
     { unsupportedMedia },
   );
