@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { getErrorMessage } from '@vybestack/llxprt-code-core';
 import type { Agent } from './agent.js';
 import { AgentActivationBootstrap } from './activationPreflightState.js';
 import type { FromConfigOptions } from './config-types.js';
@@ -14,6 +15,35 @@ type ImageConstruction = ReturnType<typeof prepareImageConstruction>;
 function rejections(results: ReadonlyArray<PromiseSettledResult<unknown>>) {
   return results.flatMap((result) =>
     result.status === 'rejected' ? [result.reason] : [],
+  );
+}
+
+function flattenFailures(failure: unknown): unknown[] {
+  return failure instanceof AggregateError
+    ? failure.errors.flatMap(flattenFailures)
+    : [failure];
+}
+
+/**
+ * Rethrows the primary bootstrap failure after cleanup. Cleanup operations
+ * that join an already-failed construction step re-report the primary error
+ * (possibly nested in an AggregateError); those are not cleanup failures and
+ * are dropped by identity. Genuine cleanup failures are reported together
+ * with the primary error, whose message leads the AggregateError message so
+ * a top-level printer that shows only the message still names the cause.
+ */
+export function rethrowPrimaryAfterCleanup(
+  primaryError: unknown,
+  cleanupFailures: readonly unknown[],
+  message: string,
+): never {
+  const independent = [
+    ...new Set(cleanupFailures.flatMap(flattenFailures)),
+  ].filter((failure) => failure !== primaryError);
+  if (independent.length === 0) throw primaryError;
+  throw new AggregateError(
+    [primaryError, ...independent],
+    `${message}: ${getErrorMessage(primaryError)}`,
   );
 }
 
@@ -48,12 +78,11 @@ export async function cleanupFailedFromConfig(
     closeActivationPreflight(options),
   ]);
   const failures = rejections([...ownerCleanup, ...preflightCleanup]);
-  if (failures.length > 0)
-    throw new AggregateError(
-      [primaryError, ...failures],
-      'fromConfig ownership cleanup failed',
-    );
-  throw primaryError;
+  return rethrowPrimaryAfterCleanup(
+    primaryError,
+    failures,
+    'fromConfig ownership cleanup failed',
+  );
 }
 
 /**

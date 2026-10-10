@@ -2,6 +2,7 @@ import { assertPreflightOwners } from './activationPreflightState.js';
 import {
   cleanupFailedFromConfig,
   closePreflightAfterAdoption,
+  rethrowPrimaryAfterCleanup,
 } from './fromConfig-cleanup.js';
 import {
   assembleSessionImages,
@@ -424,13 +425,11 @@ async function cleanupFailedAdoption(
   const failures = cleanup.flatMap((result) =>
     result.status === 'rejected' ? [result.reason] : [],
   );
-  if (failures.length > 0) {
-    throw new AggregateError(
-      [primaryError, ...failures],
-      'fromConfig bootstrap cleanup failed',
-    );
-  }
-  throw primaryError;
+  return rethrowPrimaryAfterCleanup(
+    primaryError,
+    failures,
+    'fromConfig bootstrap cleanup failed',
+  );
 }
 
 async function initializeAdoptedSession(

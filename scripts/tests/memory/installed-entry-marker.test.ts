@@ -41,6 +41,10 @@ function compile(
       join(repoRoot, 'scripts', 'memory', `${name}.ts`),
       '--target',
       'node',
+      // Workspace packages expose built output only under "import"; the "bun"
+      // condition resolves their sources so bundling works without a build.
+      '--conditions',
+      'bun',
       '--outfile',
       destination,
       ...external.flatMap((path) => ['--external', path]),
