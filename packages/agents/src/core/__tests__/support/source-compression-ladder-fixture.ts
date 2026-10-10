@@ -34,11 +34,40 @@ export async function ladderHistoryDigest(
   return hash.digest('hex');
 }
 
+type TracedStage =
+  | 'ensureDensityOptimized'
+  | 'performCompression'
+  | 'runDiskFallback';
+
+/** Records the ordered reduction stages both routes drive through the shared handler. */
+function traceStages(
+  compression: Awaited<ReturnType<typeof processorFixture>>['compression'],
+  stages: string[],
+): void {
+  const handler = compression as unknown as Record<
+    TracedStage,
+    (...args: unknown[]) => unknown
+  >;
+  const names: Array<[TracedStage, string]> = [
+    ['ensureDensityOptimized', 'density'],
+    ['performCompression', 'compress'],
+    ['runDiskFallback', 'fallback'],
+  ];
+  for (const [method, label] of names) {
+    const original = handler[method].bind(compression);
+    handler[method] = (...args) => {
+      stages.push(label);
+      return original(...args);
+    };
+  }
+}
+
 export async function ladderAttempt(
   root: string,
   disk: boolean,
   large: DiskTextTail,
   contextLimit = 4000,
+  preserveThreshold?: number,
 ) {
   const http = projectionEndpoint(false);
   http.readBody.release();
@@ -51,6 +80,10 @@ export async function ladderAttempt(
   setup.settings.set('compression.strategy', 'high-density');
   setup.settings.set('context-limit', contextLimit);
   setup.settings.set('maxOutputTokens', 128);
+  if (preserveThreshold !== undefined)
+    setup.settings.set('compression-preserve-threshold', preserveThreshold);
+  const stages: string[] = [];
+  traceStages(setup.compression, stages);
   const before = await ladderHistoryDigest(setup);
   let error: unknown;
   const output: unknown[] = [];
@@ -82,6 +115,7 @@ export async function ladderAttempt(
     cooldown: setup.compression.isCompressionInCooldown(),
     error: failureMessage(error),
     errorName: failureName(error),
+    stages,
   };
   setup.history.dispose();
   await http.server.stop(true);
