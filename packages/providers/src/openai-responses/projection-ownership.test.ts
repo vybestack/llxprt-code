@@ -348,10 +348,7 @@ describe('actual Responses projection disk ownership', () => {
   }, 60000);
 
   it('does not retain context-scale text or request graphs during prepared request, HTTP pause and response lifetime', async () => {
-    const facts = await runProjectionScenario(
-      true,
-      process.env.ISSUE854_RETAIN_REAL_PROJECTION === '1',
-    );
+    const facts = await runProjectionScenario(true, false);
     expect(
       Math.max(facts.preparedBytes, facts.uploadedBytes, facts.responseBytes),
     ).toBeLessThanOrEqual(1024 * 1024);
@@ -364,12 +361,9 @@ describe('actual Responses projection disk ownership', () => {
     );
   }, 60000);
 
-  if (process.env.ISSUE854_RETAIN_REAL_PROJECTION === '1') {
-    it('detects a deliberately retaining disk owner even while actual projection estimates and body remain correct', async () => {
-      const facts = await runProjectionScenario(false, true);
-      expect(facts.retainedRows).toBe(rowCount);
-      expect(facts.sourceLiveRows).toBe(0);
-      expect(facts.preparedBytes).toBeLessThanOrEqual(1024 * 1024);
-    }, 120000);
-  }
+  it('detects a deliberately retaining disk owner even while actual projection estimates and body remain correct', async () => {
+    const facts = await runProjectionScenario(false, true);
+    expect(facts.retainedRows).toBe(rowCount);
+    expect(facts.sourceLiveRows).toBe(rowCount);
+  }, 120000);
 });

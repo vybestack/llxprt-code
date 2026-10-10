@@ -47,7 +47,6 @@ export async function diskSource(root: string, count = 64, large = false) {
   });
   const rows = disk.selection('after');
   const references: Array<WeakRef<IContent>> = [];
-  const retained: IContent[] = [];
   const state = { closed: 0, opened: 0, pulled: 0, active: 0 };
   const source: PromptEnvelopeSource = {
     count: rows.count,
@@ -59,8 +58,6 @@ export async function diskSource(root: string, count = 64, large = false) {
       try {
         for await (const row of rows.openReader(signal)) {
           references.push(new WeakRef(row));
-          if (process.env.ISSUE854_RETAIN_SOURCE_SEAM === '1')
-            retained.push(row);
           state.pulled++;
           yield row;
         }
@@ -73,7 +70,7 @@ export async function diskSource(root: string, count = 64, large = false) {
       disk.close();
     },
   };
-  return { source, state, references, retained };
+  return { source, state, references };
 }
 
 export async function digest(rows: ProviderRequestRows): Promise<string> {

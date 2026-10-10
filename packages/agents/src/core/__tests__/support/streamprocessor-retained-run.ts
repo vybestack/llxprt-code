@@ -57,7 +57,6 @@ function requestFacts(input: RetainedSetup) {
   const { setup, census } = input;
   return {
     pid: process.pid,
-    retaining: process.env.ISSUE854_RETAIN_DERIVED_ROWS === '1',
     bodyShells: census.bodyShells.length,
     supportsCompressionCallback:
       'setCompressionCallback' in setup.provider &&
@@ -90,8 +89,9 @@ function requestFacts(input: RetainedSetup) {
   };
 }
 
-export async function runRetainedCensus() {
+export async function runRetainedCensus(retainDerivedRows = false) {
   const input = await retainedSetup();
+  input.census.retainDerivedRows = retainDerivedRows;
   try {
     const measured = await measure(input);
     const detached = await retainedCheckpoint(input.census);

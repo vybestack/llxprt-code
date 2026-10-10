@@ -22,7 +22,7 @@ async function liveRows(references: Array<WeakRef<IContent>>): Promise<number> {
   return references.filter((row) => row.deref() !== undefined).length;
 }
 
-function observeBoundary(): {
+function observeBoundary(retainRows: boolean): {
   references: Array<WeakRef<IContent>>;
   closed(): number;
   restore(): void;
@@ -35,8 +35,7 @@ function observeBoundary(): {
   BoundarySnapshotDisk.prototype.row = function (...args): IContent {
     const result = row.apply(this, args);
     references.push(new WeakRef(result));
-    if (process.env.ISSUE854_RETAIN_BOUNDARY_ROWS === '1')
-      retained.push(result);
+    if (retainRows) retained.push(result);
     return result;
   };
   BoundarySnapshotDisk.prototype.close = function (...args): void {
@@ -54,9 +53,12 @@ function observeBoundary(): {
   };
 }
 
-export function observeModelBody(history: ObservedHistory): ModelBodyObserver {
+export function observeModelBody(
+  history: ObservedHistory,
+  retainBoundaryRows = false,
+): ModelBodyObserver {
   const fetch = globalThis.fetch;
-  const boundary = observeBoundary();
+  const boundary = observeBoundary(retainBoundaryRows);
   let firstLive = -1;
   let lastLive = -1;
   let boundaryFirst = -1;

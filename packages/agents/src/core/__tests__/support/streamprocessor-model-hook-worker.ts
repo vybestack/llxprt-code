@@ -179,6 +179,7 @@ async function run(
   root: string,
   mode: ModelHookMode,
   source: boolean,
+  retainBoundaryRows: boolean,
 ): Promise<Record<string, unknown>> {
   const http = endpoint(mode);
   const setup = await processorFixture(
@@ -211,7 +212,7 @@ async function run(
     if (!system) throw new Error('Missing actual HookSystem');
     await system.initialize();
     const expected = await oracle(setup, mode);
-    if (source) observer = observeModelBody(setup.history);
+    if (source) observer = observeModelBody(setup.history, retainBoundaryRows);
     const facts = await consume(setup, mode);
     const path = join(root, 'model-hooks.jsonl');
     return {
@@ -249,10 +250,20 @@ async function run(
     await setup.config.dispose();
   }
 }
-const [root, mode, source, result] = z
-  .tuple([z.string(), modelHookMode, z.enum(['true', 'false']), z.string()])
+const [root, mode, source, retainBoundaryRows, result] = z
+  .tuple([
+    z.string(),
+    modelHookMode,
+    z.enum(['true', 'false']),
+    z.enum(['true', 'false']),
+    z.string(),
+  ])
   .parse(process.argv.slice(2));
 writeFileSync(
   result,
-  JSON.stringify(await run(root, mode, source === 'true'), null, 2),
+  JSON.stringify(
+    await run(root, mode, source === 'true', retainBoundaryRows === 'true'),
+    null,
+    2,
+  ),
 );

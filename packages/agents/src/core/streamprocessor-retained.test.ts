@@ -62,4 +62,10 @@ describe('actual StreamProcessor source retained owner census', () => {
     expect(facts.detachedDelta).toBeLessThan(1_048_576);
     expect(facts.gateDelta).toBeLessThan(1_048_576);
   }, 600000);
+  it('trap: derived rows held by the test survive the census', async () => {
+    const facts = await runRetainedCensus(true);
+    expect(facts.final.survivors['progressive.row-copy']?.live).toBeGreaterThan(
+      0,
+    );
+  }, 600000);
 });

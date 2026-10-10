@@ -24,7 +24,9 @@ function fixture(index: number, boundaryId: object, large: boolean): IContent {
 function census(references: Array<WeakRef<IContent>>): number {
   return references.filter((ref) => ref.deref() !== undefined).length;
 }
+type MemoryTrap = 'rows' | 'chunks' | undefined;
 function observeWrites(
+  trap: MemoryTrap,
   retained: string[],
   samples: Array<{ growth: number; live: number; chars: number }>,
   references: Array<WeakRef<IContent>>,
@@ -48,8 +50,7 @@ function observeWrites(
           state.maximumChunkChars,
           data.length,
         );
-        if (process.env.ISSUE854_BOUNDARY_MEMORY_TRAP === 'chunks')
-          retained.push(data);
+        if (trap === 'chunks') retained.push(data);
         if (data.length > 1024 && state.chunks % 257 === 0) {
           const heap = await sourceHeap();
           samples.push({
@@ -86,7 +87,7 @@ function verifyMemory(facts: {
     expect(sample.growth).toBeLessThan(2_097_152);
   }
 }
-async function measured(large: boolean): Promise<void> {
+async function measured(large: boolean, trap?: MemoryTrap): Promise<void> {
   const originals: Array<WeakRef<IContent>> = [];
   const readRows: Array<WeakRef<IContent>> = [];
   const retainedRows: IContent[] = [];
@@ -103,8 +104,7 @@ async function measured(large: boolean): Promise<void> {
         for (let index = 0; index < 64; index++) {
           const row = fixture(index, boundaryId, large);
           originals.push(new WeakRef(row));
-          if (process.env.ISSUE854_BOUNDARY_MEMORY_TRAP === 'rows')
-            retainedRows.push(row);
+          if (trap === 'rows') retainedRows.push(row);
           yield row;
         }
       },
@@ -113,15 +113,14 @@ async function measured(large: boolean): Promise<void> {
     new DebugLogger('boundary-memory'),
     { root: root() },
   );
-  const observer = observeWrites(retainedChunks, samples, readRows);
+  const observer = observeWrites(trap, retainedChunks, samples, readRows);
   observer.state.baseline = baseline;
   try {
     const artifact = await stageTurnRequestArtifact(root(), {
       async *[Symbol.asyncIterator]() {
         for await (const row of owner.openReader()) {
           readRows.push(new WeakRef(row));
-          if (process.env.ISSUE854_BOUNDARY_MEMORY_TRAP === 'rows')
-            retainedRows.push(row);
+          if (trap === 'rows') retainedRows.push(row);
           observer.state.activeRowBytes = row.blocks.reduce(
             (bytes, block) =>
               bytes + (block.type === 'text' ? block.text.length * 2 : 0),
@@ -172,6 +171,13 @@ describe('real normalized boundary writer memory contracts', () => {
       );
       expect(warm.row_count).toBe(1);
       await measured(large);
+    },
+    120000,
+  );
+  it.each(['rows', 'chunks'] as const)(
+    'trap: a test that retains %s fails the same memory gates',
+    async (trap) => {
+      await expect(measured(false, trap)).rejects.toThrow('expect(received)');
     },
     120000,
   );

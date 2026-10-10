@@ -87,6 +87,19 @@ const ignoredByEagerRoute: ModelHookMode[] = [
   'unknown',
   'denied-tool',
 ];
+describe('BeforeModel boundary row release trap', () => {
+  it('trap: boundary rows held by the test are visible to the live-row census', async () => {
+    const trapped = await modelHookWorker(
+      join(root(), 'trap'),
+      'noop',
+      true,
+      true,
+    );
+    expect(trapped.error).toBeUndefined();
+    expect(trapped.boundary?.first).toBeGreaterThan(0);
+    expect(trapped.boundary?.last).toBeGreaterThan(0);
+  }, 120000);
+});
 describe('BeforeModel outputs the eager route ignores', () => {
   it.each(ignoredByEagerRoute)(
     'sends the same bytes and estimate as the eager route for %s',

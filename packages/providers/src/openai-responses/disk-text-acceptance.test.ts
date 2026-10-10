@@ -182,11 +182,8 @@ function requireSource(value: unknown): Gpt56SourceProjection {
     throw new Error('Missing actual provider source projection');
   return value;
 }
-async function acceptance(large: boolean) {
-  const disk = diskTextFixture(
-    large,
-    process.env.ISSUE854_RETAIN_DISK_TEXT === '1',
-  );
+async function acceptance(large: boolean, retainRows = false) {
+  const disk = diskTextFixture(large, retainRows);
   const http = projectionEndpoint(true);
   const setup = await projectionRuntime(
     `http://127.0.0.1:${http.server.port}/v1`,
@@ -227,7 +224,6 @@ async function acceptance(large: boolean) {
     ).length;
     const facts = {
       large,
-      retain: process.env.ISSUE854_RETAIN_DISK_TEXT === '1',
       expected,
       oracle,
       estimate,
@@ -298,4 +294,9 @@ describe('actual stateless disk provider ownership acceptance', () => {
     },
     600000,
   );
+  it('trap: rows deliberately held by the test fail the live-row gate', async () => {
+    const facts = await acceptance(false, true);
+    expect(() => assertAcceptance(facts)).toThrow('expect(received)');
+    expect(facts.livePreparedRows).toBeGreaterThan(0);
+  }, 600000);
 });

@@ -275,49 +275,62 @@ describe('unsupported normalization identity inputs', () => {
   );
 });
 
+async function releaseNormalizedRows(trap?: 'rows' | 'chunks'): Promise<void> {
+  const warm = await snapshot('all', false);
+  await stageTurnRequestArtifact(root(), rows(warm, true));
+  warm.close();
+  const owner = await snapshot('all', true);
+  const baseline = await sourceHeap();
+  const references: Array<WeakRef<IContent>> = [];
+  const retained: IContent[] = [];
+  const chunks: string[] = [];
+  try {
+    const artifact = await stageTurnRequestArtifact(
+      root(),
+      (async function* () {
+        for await (const row of rows(owner, true)) {
+          references.push(new WeakRef(row));
+          if (trap === 'rows') retained.push(row);
+          if (trap === 'chunks') chunks.push(safeJsonStringify(row));
+          yield row;
+        }
+      })(),
+    );
+    owner.close();
+    const settled = await sourceHeap();
+    const facts = {
+      baseline,
+      settled,
+      delta: settled - baseline,
+      liveRows: references.filter((ref) => ref.deref() !== undefined).length,
+      retainedRows: retained.length,
+      retainedChunks: chunks.length,
+      retainedChars: chunks.reduce((sum, text) => sum + text.length, 0),
+      artifact,
+    };
+    expect(facts.liveRows).toBe(0);
+    expect(facts.delta).toBeLessThan(1_048_576);
+    expect(artifact.row_count).toBe(64);
+  } finally {
+    owner.close();
+  }
+}
+
 describe('boundary writer release and retaining adverse controls', () => {
   it('releases all normalized rows with no alias shadow growth below strict 1 MiB', async () => {
-    const warm = await snapshot('all', false);
-    await stageTurnRequestArtifact(root(), rows(warm, true));
-    warm.close();
-    const owner = await snapshot('all', true);
-    const baseline = await sourceHeap();
-    const references: Array<WeakRef<IContent>> = [];
-    const retained: IContent[] = [];
-    const chunks: string[] = [];
-    try {
-      const artifact = await stageTurnRequestArtifact(
-        root(),
-        (async function* () {
-          for await (const row of rows(owner, true)) {
-            references.push(new WeakRef(row));
-            if (process.env.ISSUE854_RETAIN_BOUNDARY === 'rows')
-              retained.push(row);
-            if (process.env.ISSUE854_RETAIN_BOUNDARY === 'chunks')
-              chunks.push(safeJsonStringify(row));
-            yield row;
-          }
-        })(),
-      );
-      owner.close();
-      const settled = await sourceHeap();
-      const facts = {
-        baseline,
-        settled,
-        delta: settled - baseline,
-        liveRows: references.filter((ref) => ref.deref() !== undefined).length,
-        retainedRows: retained.length,
-        retainedChunks: chunks.length,
-        retainedChars: chunks.reduce((sum, text) => sum + text.length, 0),
-        artifact,
-      };
-      expect(facts.liveRows).toBe(0);
-      expect(facts.delta).toBeLessThan(1_048_576);
-      expect(artifact.row_count).toBe(64);
-    } finally {
-      owner.close();
-    }
+    await expect(releaseNormalizedRows()).resolves.toBeUndefined();
   }, 60000);
+  it.each(['rows', 'chunks'] as const)(
+    'trap: a test that retains %s fails the same release gates',
+    async (trap) => {
+      await expect(releaseNormalizedRows(trap)).rejects.toThrow(
+        trap === 'rows'
+          ? 'expect(received).toBe(expected)'
+          : 'expect(received).toBeLessThan(expected)',
+      );
+    },
+    60000,
+  );
 });
 
 function runtimeConfig(cap: number): Config {

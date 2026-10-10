@@ -17,6 +17,7 @@ export class RetainedOwnerCensus {
     { seen: WeakSet<object>; refs: Array<WeakRef<object>> }
   >();
   readonly trap: object[] = [];
+  retainDerivedRows = false;
   readonly bodyShells: object[] = [];
   readonly peak = { heap: 0, external: 0, stringCharacters: 0 };
   readonly cleanup = {
@@ -133,8 +134,7 @@ function observeRowOwners(census: RetainedOwnerCensus): () => void {
     census.observe('progressive.owner', this);
     for await (const row of original.progressiveStream.call(this)) {
       census.row('progressive.row-copy', row);
-      if (process.env.ISSUE854_RETAIN_DERIVED_ROWS === '1')
-        census.trap.push(row);
+      if (census.retainDerivedRows) census.trap.push(row);
       yield row;
     }
   };

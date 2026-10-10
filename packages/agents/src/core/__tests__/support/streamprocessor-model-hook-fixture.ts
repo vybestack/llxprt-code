@@ -219,6 +219,7 @@ export async function modelHookWorker(
   root: string,
   mode: ModelHookMode,
   source = true,
+  retainBoundaryRows = false,
 ): Promise<ModelFacts> {
   mkdirSync(root, { recursive: true });
   const runtime = join(root, 'runtime');
@@ -229,7 +230,15 @@ export async function modelHookWorker(
     import.meta.url,
   );
   const child = Bun.spawn(
-    [process.execPath, worker.pathname, root, mode, String(source), result],
+    [
+      process.execPath,
+      worker.pathname,
+      root,
+      mode,
+      String(source),
+      String(retainBoundaryRows),
+      result,
+    ],
     {
       env: { ...process.env, TMPDIR: runtime },
       stdin: 'ignore',

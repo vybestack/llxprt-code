@@ -8,7 +8,6 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import {
   HookEventName,
   HookType,
@@ -50,8 +49,6 @@ class ObservedDiskHistory extends HistoryService {
   pulled = 0;
   activeReaders = 0;
   closedReaders = 0;
-  readonly retained: IContent[] = [];
-  readonly ownership = new RowOwnership();
   abortDuringRead: AbortController | undefined;
 
   private async *observedRows(signal?: AbortSignal): AsyncGenerator<IContent> {
@@ -59,10 +56,6 @@ class ObservedDiskHistory extends HistoryService {
     try {
       for await (const row of super.streamRawHistory(signal)) {
         this.pulled += 1;
-        if (process.env.ISSUE854_RETAIN_REQUEST_OWNER === '1') {
-          this.ownership.retain(row);
-          this.retained.push(row);
-        }
         this.abortDuringRead?.abort(new Error('disk request aborted'));
         yield row;
       }
@@ -423,17 +416,6 @@ describe('issue854 real StreamProcessor Responses BODY demand', () => {
       expect(fixture.history.activeReaders).toBe(0);
       expect(fixture.history.closedReaders).toBeGreaterThan(0);
       expect(fixture.history.pulled).toBeLessThan(rowCount);
-    } finally {
-      await fixture.dispose();
-    }
-  });
-
-  it('rejects an explicitly retained request owner after its disk reader closes', async () => {
-    const fixture = await createFixture();
-    try {
-      await runBodyFixture(fixture);
-      expect(fixture.history.activeReaders).toBe(0);
-      expect(fixture.history.ownership.snapshot().liveRows).toBe(0);
     } finally {
       await fixture.dispose();
     }
