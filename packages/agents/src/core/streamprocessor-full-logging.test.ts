@@ -364,22 +364,21 @@ function assertSourceWire(facts: Facts, attempts: number): void {
   );
 }
 
+// Bun 1.3.14 rewrites an array in the actual value to `{}` when toMatchObject
+// compares it with an asymmetric matcher such as expect.any(Array). Validate the
+// recorded hook input with a schema first and assert on the parsed copy.
+const recordedHookSchema = z.object({
+  input: z.object({
+    hook_event_name: z.string(),
+    llm_request: z.object({ contents: z.array(z.unknown()) }),
+  }),
+});
+
 function assertSourceHookReplacement(facts: Facts): void {
   expect(facts.hooks).toHaveLength(2);
-  expect(facts.hooks[0]).toMatchObject({
-    input: {
-      hook_event_name: 'BeforeModel',
-      llm_request: { contents: expect.any(Array) },
-    },
-  });
-  const hookInput = z
-    .object({
-      input: z.object({
-        llm_request: z.object({ contents: z.array(z.unknown()).min(1) }),
-      }),
-    })
-    .parse(facts.hooks[0]);
-  expect(hookInput.input.llm_request.contents).toHaveLength(65);
+  const recorded = recordedHookSchema.parse(facts.hooks[0]);
+  expect(recorded.input.hook_event_name).toBe('BeforeModel');
+  expect(recorded.input.llm_request.contents).toHaveLength(65);
   expect(facts.hooks[1]).toMatchObject({
     output: {
       hookSpecificOutput: {
@@ -395,6 +394,42 @@ function assertSourceHookReplacement(facts: Facts): void {
     },
   });
 }
+
+describe('recorded source hook assertions', () => {
+  it('keep the recorded hook contents an array after asserting them', () => {
+    const rows = Array.from({ length: 65 }, (_, index) => ({ index }));
+    const facts = {
+      hooks: [
+        {
+          input: {
+            hook_event_name: 'BeforeModel',
+            llm_request: { contents: rows },
+          },
+        },
+        {
+          output: {
+            hookSpecificOutput: {
+              llm_request: {
+                contents: [
+                  {
+                    speaker: 'human',
+                    blocks: [{ type: 'text', text: 'new context' }],
+                  },
+                ],
+              },
+            },
+          },
+        },
+      ],
+    } as Facts;
+    assertSourceHookReplacement(facts);
+    assertSourceHookReplacement(facts);
+    expect(Array.isArray(rows)).toBe(true);
+    expect(
+      recordedHookSchema.parse(facts.hooks[0]).input.llm_request.contents,
+    ).toHaveLength(65);
+  });
+});
 
 function registerRequiredSourceModes(entry: 'stream' | 'chat'): void {
   describe(`required logging-on source modes through ${entry}`, () => {
@@ -419,19 +454,12 @@ function registerRequiredSourceModes(entry: 'stream' | 'chat'): void {
       },
       600000,
     );
-    // Open WP14 defect: under `bun test` the source BeforeModel hook command
-    // receives `llm_request.contents` as `{}` instead of the 65-row array.
-    // it.failing turns red as soon as the hook input is fixed.
-    it.failing(
-      'delivers the source BeforeModel hook full-request contents and applies its replacement',
-      async () => {
-        const facts = await worker('hook', true, false, entry);
-        expect(facts.hooks).toHaveLength(2);
-        assertSourceHookReplacement(facts);
-        assertOwners(facts);
-      },
-      600000,
-    );
+    it('delivers the source BeforeModel hook full-request contents and applies its replacement', async () => {
+      const facts = await worker('hook', true, false, entry);
+      expect(facts.hooks).toHaveLength(2);
+      assertSourceHookReplacement(facts);
+      assertOwners(facts);
+    }, 600000);
   });
 }
 
