@@ -150,6 +150,17 @@ export type AgentRetryEvent = Readonly<{
   type: 'retry';
 }>;
 
+/**
+ * Marks where a later continuation attempt's visible output begins, after an
+ * earlier attempt of the same prompt already produced visible output (issue
+ * #3840). Presentation signal: consumers that join `text` events into one
+ * message should insert a paragraph break here. It is never part of the
+ * conversation history or the session recording.
+ */
+export type AgentAttemptBoundaryEvent = Readonly<{
+  type: 'attempt-boundary';
+}>;
+
 export type AgentCitationEvent = Readonly<{
   type: 'citation';
   citation: string;
@@ -198,6 +209,7 @@ export type AgentEvent =
   | AgentCompressionEvent
   | AgentContextWarningEvent
   | AgentRetryEvent
+  | AgentAttemptBoundaryEvent
   | AgentCitationEvent
   | AgentLoopDetectedEvent
   | AgentIdleTimeoutEvent

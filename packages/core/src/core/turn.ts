@@ -64,6 +64,7 @@ export enum AgentEventType {
   ModelInfo = 'model_info',
   AgentExecutionStopped = 'agent_execution_stopped',
   AgentExecutionBlocked = 'agent_execution_blocked',
+  AttemptBoundary = 'attempt_boundary',
 }
 
 export type ServerRetryEvent = {
@@ -72,6 +73,16 @@ export type ServerRetryEvent = {
 
 export type ServerInvalidStreamEvent = {
   type: AgentEventType.InvalidStream;
+};
+
+/**
+ * Marks where a continuation attempt's first visible output begins, when an
+ * earlier attempt of the same prompt already produced visible output (task-list
+ * continuation or thinking-only re-prompts). Presentation signal only: it is
+ * never written to conversation history or the session recording.
+ */
+export type ServerAttemptBoundaryEvent = {
+  type: AgentEventType.AttemptBoundary;
 };
 
 export type ServerContextWindowWillOverflowEvent = {
@@ -344,6 +355,7 @@ export type ServerAgentStreamEvent =
   | ServerCitationEvent
   | ServerRetryEvent
   | ServerInvalidStreamEvent
+  | ServerAttemptBoundaryEvent
   | ServerAgentExecutionStoppedEvent
   | ServerAgentExecutionBlockedEvent
   | ServerContextWindowWillOverflowEvent

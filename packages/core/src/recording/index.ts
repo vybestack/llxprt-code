@@ -74,11 +74,13 @@ export {
 export {
   listSessions,
   deleteSession,
+  deleteSessionWithDiagnostics,
   deleteSessionById,
   SESSION_NOT_FOUND_PREFIX,
   type ListSessionsResult,
   type DeleteSessionResult,
   type DeleteSessionError,
+  type DeleteSessionOutcome,
 } from './sessionManagement.js';
 export { CheckpointService, CheckpointLockError } from './CheckpointService.js';
 export {

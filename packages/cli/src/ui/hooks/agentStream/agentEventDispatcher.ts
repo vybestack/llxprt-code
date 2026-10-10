@@ -319,20 +319,15 @@ export function dispatchAgentEvent(
     case 'usage':
       return dispatchUsageEvent(event, deps, agentMessageBuffer);
     case 'model-info':
-      handleModelInfoEvent(deps, event.info, userMessageTimestamp);
-      return { agentMessageBuffer };
     case 'compression':
-      deps.handleChatCompressionEvent(event.info, userMessageTimestamp);
-      return resetBufferAfterTerminal(event.type, { agentMessageBuffer });
     case 'context-warning':
-      deps.handleContextWindowWillOverflowEvent(
-        event.estimatedRequestTokenCount,
-        event.remainingTokenCount,
-      );
-      return resetBufferAfterTerminal(event.type, { agentMessageBuffer });
     case 'citation':
-      deps.handleCitationEvent(event.citation, userMessageTimestamp);
-      return { agentMessageBuffer };
+      return dispatchInformationalEvent(
+        event,
+        deps,
+        agentMessageBuffer,
+        userMessageTimestamp,
+      );
     case 'loop-detected':
       deps.loopDetectedRef.current = true;
       return resetBufferAfterTerminal(event.type, { agentMessageBuffer });
@@ -344,15 +339,11 @@ export function dispatchAgentEvent(
         userMessageTimestamp,
       );
     case 'hook-blocked':
-      return resetBufferAfterTerminal(
-        event.type,
-        dispatchStopInfo(
-          event.info,
-          'Execution blocked by hook: ',
-          deps,
-          agentMessageBuffer,
-          userMessageTimestamp,
-        ),
+      return dispatchHookBlockedEvent(
+        event,
+        deps,
+        agentMessageBuffer,
+        userMessageTimestamp,
       );
     case 'error':
       return dispatchErrorEvent(
@@ -369,6 +360,12 @@ export function dispatchAgentEvent(
     case 'retry':
       deps.handleStreamAttemptDiscarded();
       return { agentMessageBuffer: '' };
+    case 'attempt-boundary':
+      return dispatchAttemptBoundary(
+        deps,
+        agentMessageBuffer,
+        userMessageTimestamp,
+      );
     case 'tool-call':
     case 'tool-result':
     case 'tool-confirmation':
@@ -381,6 +378,74 @@ export function dispatchAgentEvent(
     default:
       return { agentMessageBuffer };
   }
+}
+
+/**
+ * Continuation attempts of one prompt used to stream into the same pending
+ * assistant message (issue #3840). A message draws its thinking above its text,
+ * so a later attempt's thinking rendered above the earlier attempt's reply, and
+ * its first words ran onto the earlier last line. The boundary finishes the
+ * open assistant message, the same commit that precedes any non-assistant item,
+ * so the next attempt's thinking and text open a new message below it. Separate
+ * messages are separated by construction, so no text is inserted.
+ */
+function dispatchAttemptBoundary(
+  deps: AgentEventDeps,
+  agentMessageBuffer: string,
+  userMessageTimestamp: number,
+): DispatchResult {
+  const pending = deps.pendingHistoryItemRef.current;
+  if (pending?.type !== 'gemini' && pending?.type !== 'gemini_content') {
+    return { agentMessageBuffer };
+  }
+  deps.flushPendingHistoryItem(userMessageTimestamp);
+  return { agentMessageBuffer: '' };
+}
+
+function dispatchInformationalEvent(
+  event: Extract<
+    AgentEvent,
+    { type: 'model-info' | 'compression' | 'context-warning' | 'citation' }
+  >,
+  deps: AgentEventDeps,
+  agentMessageBuffer: string,
+  userMessageTimestamp: number,
+): DispatchResult {
+  if (event.type === 'model-info') {
+    handleModelInfoEvent(deps, event.info, userMessageTimestamp);
+    return { agentMessageBuffer };
+  }
+  if (event.type === 'compression') {
+    deps.handleChatCompressionEvent(event.info, userMessageTimestamp);
+    return resetBufferAfterTerminal(event.type, { agentMessageBuffer });
+  }
+  if (event.type === 'context-warning') {
+    deps.handleContextWindowWillOverflowEvent(
+      event.estimatedRequestTokenCount,
+      event.remainingTokenCount,
+    );
+    return resetBufferAfterTerminal(event.type, { agentMessageBuffer });
+  }
+  deps.handleCitationEvent(event.citation, userMessageTimestamp);
+  return { agentMessageBuffer };
+}
+
+function dispatchHookBlockedEvent(
+  event: Extract<AgentEvent, { type: 'hook-blocked' }>,
+  deps: AgentEventDeps,
+  agentMessageBuffer: string,
+  userMessageTimestamp: number,
+): DispatchResult {
+  return resetBufferAfterTerminal(
+    event.type,
+    dispatchStopInfo(
+      event.info,
+      'Execution blocked by hook: ',
+      deps,
+      agentMessageBuffer,
+      userMessageTimestamp,
+    ),
+  );
 }
 
 function dispatchTextEvent(
