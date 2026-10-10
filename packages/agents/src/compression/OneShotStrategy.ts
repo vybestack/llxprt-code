@@ -74,8 +74,10 @@ function destructureProviderResult(result: CompressionProviderResult): {
 import type { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { diskSummaryRequestSelection } from './middleOutDiskPlan.js';
-import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
-import { arrayRequestSelection } from './array-request-selection.js';
+import {
+  inMemoryRequestSelection,
+  type ProviderRequestSelection,
+} from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { adjustDiskToolBoundary } from './truncationDiskBoundary.js';
 
 const MINIMUM_COMPRESS_MESSAGES = 4;
@@ -200,7 +202,7 @@ export class OneShotStrategy implements CompressionStrategy {
       diagnostics,
     } = await this.callProvider(
       provider,
-      arrayRequestSelection(compressionRequest),
+      inMemoryRequestSelection(compressionRequest),
       context,
       resolvedRuntime,
       resolvedConfig,

@@ -151,7 +151,7 @@ describe('Finding 1: provider fallback failure propagation through real Compress
 
   /**
    * When the top-down-truncation fallback strategy throws during
-   * enforceProviderContents hard-limit enforcement, the error must propagate
+   * provider-source hard-limit enforcement, the error must propagate
    * as truncationFailure in the final overflow diagnostics.
    */
   it(

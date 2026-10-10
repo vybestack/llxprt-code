@@ -14,7 +14,7 @@ import {
   providerFarFixtureRow,
   providerPendingFixture,
 } from '../../packages/core/src/services/history/provider-curated-test-helpers.js';
-import { ProviderContentEnforcer } from '../../packages/agents/src/compression/providerContentEnforcement.js';
+import { enforceWithHandler } from '../../packages/agents/src/compression/__tests__/support/enforce-with-handler.js';
 import { buildRuntimeContext } from '../../packages/agents/src/core/__tests__/chatSession-density-helpers.js';
 import { createTruncationStub } from '../../packages/agents/src/compression/toolResultTruncator.js';
 import { captureCuratedBody } from './provider-curated-body-helpers.js';
@@ -46,29 +46,21 @@ async function hardlimitBodies(
     async (history) => {
       history.setTokenizerFactory(exactTokenizer());
       const pending = providerPendingFixture();
-      const enforcer = new ProviderContentEnforcer({
-        historyService: history,
+      const actualRows = await enforceWithHandler({
+        history,
         runtimeContext: buildRuntimeContext(history, {
           contextLimit: 30000,
           compressionThreshold: 0.8,
         }),
         generationConfig: { maxOutputTokens: 100 },
-        providerRuntimeNullable: undefined,
-        logger,
-        ensureDensityOptimized: async () => {},
+        pending,
+        promptId: 'hardlimit',
         performCompression: async () => {
           throw new Error('compression provider failed');
         },
-        performFallbackCompression: async () => false,
-        getPromptTokenBaseline: () => null,
-        resetPromptTokenBaseline: () => {},
-        restorePromptTokenBaseline: () => {},
-        estimateFinalizedPromptTokens: finalizedCount,
+        fallbackDeps: { performFallbackCompression: async () => false },
+        estimateRows: finalizedCount,
       });
-      const actualRows = await enforcer.enforce(
-        { contents: pending, pendingContents: pending },
-        'hardlimit',
-      );
       const block = pending[0].blocks[0];
       if (block.type !== 'tool_response')
         throw new Error('Invalid pending fixture');

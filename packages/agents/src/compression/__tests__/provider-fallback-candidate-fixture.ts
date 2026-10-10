@@ -3,10 +3,10 @@ import { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderFallbackCandidate } from '../providerFallbackCandidate.js';
 
-import type { ProviderContentEnforcementDeps } from '../providerContentEnforcement.js';
+import type { FallbackTransactionDeps } from '../providerFallbackTransaction.js';
 import { makeUserMessage } from '../../core/__tests__/chatSession-density-helpers.js';
 
-export const installRestoredFixture: ProviderContentEnforcementDeps['performFallbackCompression'] =
+export const installRestoredFixture: FallbackTransactionDeps['performFallbackCompression'] =
   async (_prompt, install): Promise<boolean> => {
     await installFixtureCandidate(install, [
       makeUserMessage('restored-1'),

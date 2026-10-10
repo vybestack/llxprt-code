@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, vi } from 'bun:test';
-import type { ProviderContentEnforcementDeps } from '../providerContentEnforcement.js';
+import type { FallbackTransactionDeps } from '../providerFallbackTransaction.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import {
   withFallbackFixture,
@@ -21,7 +21,7 @@ interface State {
 }
 interface RetryHandlerInternals {
   lastPromptTokenCount: number | null;
-  performProviderDiskFallback: ProviderContentEnforcementDeps['performFallbackCompression'];
+  performProviderDiskFallback: FallbackTransactionDeps['performFallbackCompression'];
 }
 function harnessFor(history: HistoryService, state: State): FallbackHarness {
   const { runtime, transport, handler } = middleoutSetup(

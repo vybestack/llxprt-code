@@ -20,7 +20,7 @@ import type {
 } from '../../packages/core/src/services/history/IContent.js';
 import type { ContextRange } from '../../packages/core/src/services/history/historyEventTypes.js';
 import type { ProviderFallbackCandidate } from '../../packages/agents/src/compression/providerFallbackCandidate.js';
-import { ProviderContentEnforcer } from '../../packages/agents/src/compression/providerContentEnforcement.js';
+import { enforceWithHandler } from '../../packages/agents/src/compression/__tests__/support/enforce-with-handler.js';
 import { applyPendingWindowFallback } from '../../packages/agents/src/compression/pendingWindowFallback.js';
 import { buildRuntimeContext } from '../../packages/agents/src/core/__tests__/chatSession-density-helpers.js';
 import { DebugLogger } from '../../packages/core/src/debug/index.js';
@@ -248,32 +248,30 @@ export async function runRejection(
         0,
       );
     }
-    const enforcer = new ProviderContentEnforcer({
-      historyService: history,
+    return await enforceWithHandler({
+      history,
       runtimeContext: buildRuntimeContext(history, {
         contextLimit: 30000,
         compressionThreshold: 0.8,
       }),
       generationConfig: { maxOutputTokens: 100 },
-      providerRuntimeNullable: undefined,
-      logger,
-      ensureDensityOptimized: async () => {},
+      pending,
+      promptId: 'reject',
       performCompression: async () => PerformCompressionResult.FAILED,
-      performFallbackCompression: install,
-      getPromptTokenBaseline: () => state.baseline,
-      resetPromptTokenBaseline: () => {
-        state.baseline = 0;
+      fallbackDeps: {
+        performFallbackCompression: install,
+        getPromptTokenBaseline: () => state.baseline,
+        resetPromptTokenBaseline: () => {
+          state.baseline = 0;
+        },
+        restorePromptTokenBaseline: restoreBaseline,
       },
-      restorePromptTokenBaseline: restoreBaseline,
-      estimateFinalizedPromptTokens: async (rows) => {
+      estimateRows: async (rows) => {
         if (state.installed) state.projectionsAfterInstall++;
-        return rows.length + (state.installed ? 0 : 200000);
+        // Every kind rejects the installed candidate, so nothing ever fits.
+        return rows.length + 200000;
       },
     });
-    return await enforcer.enforce(
-      { contents: pending, pendingContents: pending },
-      'reject',
-    );
   } catch (error) {
     return error;
   }

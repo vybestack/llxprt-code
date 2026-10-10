@@ -10,13 +10,9 @@ import type {
   IContent,
   ContentBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ProviderContentEnvelope } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import type {
-  RuntimeCompressionCallback,
-  RuntimeProvider as IProvider,
-} from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type {
   CompressionProviderResult,
   DensityConfig,
@@ -56,10 +52,7 @@ import {
   estimatePendingTokens,
   getCompletionBudget,
 } from './compressionBudgeting.js';
-import {
-  ProviderContentEnforcer,
-  type ProviderContentEnforcementDeps,
-} from './providerContentEnforcement.js';
+import { ProviderContentEnforcer } from './providerContentEnforcement.js';
 import {
   TOKEN_SAFETY_MARGIN,
   CONTEXT_LIMIT_FUDGE_FACTOR,
@@ -78,7 +71,6 @@ import {
   type SourceStageActions,
 } from './source-stage-ladder.js';
 import { SourceCandidate, type SourcePendingRows } from './source-candidate.js';
-import { arrayRequestSelection } from './array-request-selection.js';
 import { createSourceCompressionCallback } from './source-compression-callback.js';
 import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { truncateSourceToolResponses } from './source-tool-truncation.js';
@@ -376,47 +368,6 @@ export class CompressionHandler {
     return { completionBudget, limit, marginAdjustedLimit };
   }
 
-  private attachCompressionCallback(
-    provider: IProvider | undefined,
-    promptId: string,
-    enforcer: ProviderContentEnforcer,
-    pendingContents: IContent[] | undefined,
-  ): void {
-    if (!provider || typeof provider.setCompressionCallback !== 'function') {
-      return;
-    }
-
-    const callback: RuntimeCompressionCallback = async (guard) => {
-      if (pendingContents === undefined) {
-        throw new Error(
-          'Compression callback invoked but the pending-content boundary is ' +
-            'unrecoverable: a BeforeModel hook replaced or restructured the ' +
-            'conversation contents, and no usable llm_request_boundary ' +
-            'metadata was available, so compression cannot safely recompose ' +
-            'the pending region.',
-        );
-      }
-      try {
-        return arrayRequestSelection(
-          await enforcer.compressAndRecompose(
-            pendingContents,
-            promptId,
-            guard,
-            provider,
-          ),
-        );
-      } catch (error) {
-        this.logger.warn(
-          () => '[CompressionHandler] Compression callback failed',
-          error,
-        );
-        throw error;
-      }
-    };
-
-    provider.setCompressionCallback(callback);
-  }
-
   private pushSuppressDensityDirty(): void {
     this._suppressDensityDirtyDepth++;
     this._suppressDensityDirty = true;
@@ -445,7 +396,7 @@ export class CompressionHandler {
   }
 
   /**
-   * Public cleanup hook for callers that use enforceProviderContents and then
+   * Public cleanup hook for callers that use enforceProviderSource and then
    * invoke the provider while the compression callback remains attached.
    */
   clearProviderCompressionCallback(provider?: IProvider): void {
@@ -462,35 +413,15 @@ export class CompressionHandler {
     }
   }
 
-  private createProviderContentEnforcer(
-    estimateFinalizedPromptTokens?: (contents: IContent[]) => Promise<number>,
-  ): ProviderContentEnforcer {
+  sourceContextLimits(provider: IProvider): ProviderSourceLimits {
     return new ProviderContentEnforcer({
-      historyService: this.historyService,
       runtimeContext: this.runtimeContext,
       generationConfig: this.generationConfig,
       providerRuntimeNullable: this.providerRuntimeNullable,
-      logger: this.logger,
-      ensureDensityOptimized: () => this.ensureDensityOptimized(),
-      performCompression: (promptId, options) =>
-        this.performCompression(promptId, options),
-      estimateFinalizedPromptTokens,
-      getPromptTokenBaseline: () => this.lastPromptTokenCount,
-      resetPromptTokenBaseline: () => {
-        this.lastPromptTokenCount = null;
-      },
-      restorePromptTokenBaseline: (baseline) => {
-        this.lastPromptTokenCount = baseline;
-      },
-      performFallbackCompression: this.performSuppressedFallback,
-    });
+    }).sourceContextLimits(provider);
   }
 
-  sourceContextLimits(provider: IProvider): ProviderSourceLimits {
-    return this.createProviderContentEnforcer().sourceContextLimits(provider);
-  }
-
-  private readonly performSuppressedFallback: ProviderContentEnforcementDeps['performFallbackCompression'] =
+  private readonly performSuppressedFallback: FallbackTransactionDeps['performFallbackCompression'] =
     async (promptId, applyResult, targetTokenCount) => {
       this.pushSuppressDensityDirty();
       try {
@@ -605,38 +536,6 @@ export class CompressionHandler {
         pendingRecoverable,
       );
       return candidate.value;
-    } catch (error) {
-      this.clearProviderCompressionCallback(provider);
-      throw error;
-    }
-  }
-
-  /**
-   * Enforce provider content limits and return the provider-ready contents.
-   *
-   * On success, any attached compression callback intentionally remains on the
-   * provider for the immediately following provider call. Callers must invoke
-   * clearProviderCompressionCallback(provider) in a finally block after that
-   * provider call completes. On error, this method makes a best-effort attempt
-   * to detach the callback before rethrowing the original enforcement error.
-   */
-  async enforceProviderContents(
-    envelope: ProviderContentEnvelope,
-    promptId: string,
-    provider?: IProvider,
-    estimateFinalizedPromptTokens?: (contents: IContent[]) => Promise<number>,
-  ): Promise<IContent[]> {
-    const enforcer = this.createProviderContentEnforcer(
-      estimateFinalizedPromptTokens,
-    );
-    try {
-      this.attachCompressionCallback(
-        provider,
-        promptId,
-        enforcer,
-        envelope.pendingContents,
-      );
-      return await enforcer.enforce(envelope, promptId, provider);
     } catch (error) {
       this.clearProviderCompressionCallback(provider);
       throw error;
@@ -894,7 +793,7 @@ export class CompressionHandler {
   private async runDiskFallback(
     promptId: string,
     applyResult: Parameters<
-      ProviderContentEnforcementDeps['performFallbackCompression']
+      FallbackTransactionDeps['performFallbackCompression']
     >[1],
     targetTokenCount: number | undefined,
   ): Promise<boolean> {
@@ -920,7 +819,7 @@ export class CompressionHandler {
   private async performProviderDiskFallback(
     promptId: string,
     applyResult: Parameters<
-      ProviderContentEnforcementDeps['performFallbackCompression']
+      FallbackTransactionDeps['performFallbackCompression']
     >[1],
     targetTokenCount: number | undefined,
   ): Promise<boolean> {

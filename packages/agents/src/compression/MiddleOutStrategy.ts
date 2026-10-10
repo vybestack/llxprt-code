@@ -66,8 +66,10 @@ import {
   planDiskMiddleOut,
   diskSummaryRequestSelection,
 } from './middleOutDiskPlan.js';
-import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
-import { arrayRequestSelection } from './array-request-selection.js';
+import {
+  inMemoryRequestSelection,
+  type ProviderRequestSelection,
+} from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 
 const MINIMUM_MIDDLE_MESSAGES = 4;
 const LAST_PROMPT_TOKEN_THRESHOLD = 500;
@@ -197,7 +199,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
 
     const { finalSummary, capturedUsage } = await this.compressAndVerify(
       context,
-      arrayRequestSelection(compressionRequest),
+      inMemoryRequestSelection(compressionRequest),
       providerResult,
     );
 

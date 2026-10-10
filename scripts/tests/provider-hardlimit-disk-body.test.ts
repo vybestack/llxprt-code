@@ -16,7 +16,7 @@ import {
   providerFarFixtureRow,
   providerPendingFixture,
 } from '../../packages/core/src/services/history/provider-curated-test-helpers.js';
-import { ProviderContentEnforcer } from '../../packages/agents/src/compression/providerContentEnforcement.js';
+import { enforceWithHandler } from '../../packages/agents/src/compression/__tests__/support/enforce-with-handler.js';
 import { runDiskProviderFallback } from '../../packages/agents/src/compression/diskProviderFallback.js';
 import { buildCompressionMetadata } from '../../packages/agents/src/compression/compressionContextBuilder.js';
 import { TopDownTruncationStrategy } from '../../packages/agents/src/compression/TopDownTruncationStrategy.js';
@@ -86,41 +86,69 @@ async function oracle(
   );
 }
 
-function enforcerFor(
+function hasUntrimmedFarCall(rows: IContent[]): boolean {
+  return rows.some((row) =>
+    row.blocks.some(
+      (block) =>
+        block.type === 'tool_response' &&
+        block.callId === 'far-call' &&
+        block.providerMetadata?.contextTruncated !== true,
+    ),
+  );
+}
+
+function overLimit(
+  accepted: boolean,
+  attempted: boolean,
+  rows: IContent[],
+): boolean {
+  if (accepted) return !attempted;
+  return hasUntrimmedFarCall(rows);
+}
+
+function enforceFor(
   history: HistoryService,
   setup: Setup,
   accepted: boolean,
-): ProviderContentEnforcer {
+  pending: IContent[],
+): Promise<IContent[]> {
   const { runtime, transport } = setup;
   let attempted = false;
-  return new ProviderContentEnforcer({
-    historyService: history,
+  return enforceWithHandler({
+    history,
     runtimeContext: runtime,
     generationConfig: { maxOutputTokens: 100 },
-    providerRuntimeNullable: undefined,
-    logger,
-    ensureDensityOptimized: async () => {},
+    pending,
+    promptId: 'actual-hardlimit-body',
     performCompression: async () => PerformCompressionResult.FAILED,
-    performFallbackCompression: async (prompt, install, targetTokenCount) => {
-      const result = await runDiskProviderFallback(
-        install,
-        prompt,
-        runtime,
-        history,
-        async () => ({ provider: transport, runtime: runtime.providerRuntime }),
-        undefined,
-        undefined,
-        logger,
-        { targetTokenCount },
-      );
-      attempted = true;
-      return accepted && result.outcome === 'applied';
+    fallbackDeps: {
+      performFallbackCompression: async (prompt, install, targetTokenCount) => {
+        const result = await runDiskProviderFallback(
+          install,
+          prompt,
+          runtime,
+          history,
+          async () => ({
+            provider: transport,
+            runtime: runtime.providerRuntime,
+          }),
+          undefined,
+          undefined,
+          logger,
+          { targetTokenCount },
+        );
+        attempted = true;
+        return accepted && result.outcome === 'applied';
+      },
+      getPromptTokenBaseline: () => 123,
     },
-    getPromptTokenBaseline: () => 123,
-    resetPromptTokenBaseline: () => {},
-    restorePromptTokenBaseline: () => {},
-    estimateFinalizedPromptTokens: async (rows) =>
-      rows.length + (attempted ? 0 : history.getTotalTokens() + 200000),
+    // An accepted candidate fits once installed; a rejected one only fits
+    // after last-resort tool-response truncation.
+    estimateRows: async (rows) =>
+      rows.length +
+      (overLimit(accepted, attempted, rows)
+        ? history.getTotalTokens() + 200000
+        : 0),
   });
 }
 async function verify(
@@ -148,11 +176,7 @@ async function verify(
         pending,
         accepted,
       );
-      const enforcer = enforcerFor(history, setup, accepted);
-      const actualRows = await enforcer.enforce(
-        { contents: pending, pendingContents: pending },
-        'actual-hardlimit-body',
-      );
+      const actualRows = await enforceFor(history, setup, accepted, pending);
       const actualResponse: IContent[] = [];
       const expectedResponse: IContent[] = [];
       const actual = await captureCuratedBody(

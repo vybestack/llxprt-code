@@ -20,6 +20,22 @@ export interface ProviderRequestSelection extends ProviderRequestRows {
   close(): void | Promise<void>;
 }
 
+/** A selection over rows already resident in memory; closing it releases nothing. */
+export function inMemoryRequestSelection(
+  rows: readonly IContent[],
+): ProviderRequestSelection {
+  return {
+    count: rows.length,
+    async *openReader(signal) {
+      for (const row of rows) {
+        signal?.throwIfAborted();
+        yield row;
+      }
+    },
+    close: () => undefined,
+  };
+}
+
 export function providerRequestRows(
   snapshot: ProviderRequestSnapshot,
 ): ProviderRequestRows {

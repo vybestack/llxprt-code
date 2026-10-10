@@ -17,7 +17,7 @@ import {
   providerFarFixtureRow,
   providerPendingFixture,
 } from '../../packages/core/src/services/history/provider-curated-test-helpers.js';
-import { ProviderContentEnforcer } from '../../packages/agents/src/compression/providerContentEnforcement.js';
+import { enforceWithHandler } from '../../packages/agents/src/compression/__tests__/support/enforce-with-handler.js';
 import { buildRuntimeContext } from '../../packages/agents/src/core/__tests__/chatSession-density-helpers.js';
 import { captureCuratedBody } from './provider-curated-body-helpers.js';
 import { createTruncationStub } from '../../packages/agents/src/compression/toolResultTruncator.js';
@@ -35,6 +35,26 @@ const cases = [512, 8192].flatMap((size) =>
     ),
   ),
 );
+
+function hasUntrimmedFarCall(rows: IContent[]): boolean {
+  return rows.some((row) =>
+    row.blocks.some(
+      (block) =>
+        block.type === 'tool_response' &&
+        block.callId === 'far-call' &&
+        block.providerMetadata?.contextTruncated !== true,
+    ),
+  );
+}
+
+function overLimit(
+  accepted: boolean,
+  attempted: boolean,
+  rows: IContent[],
+): boolean {
+  if (accepted) return !attempted;
+  return hasUntrimmedFarCall(rows);
+}
 
 function fallbackOracle(
   size: number,
@@ -80,34 +100,32 @@ async function verifyFallbackBody(
         providerFarFixtureRow(2),
       ];
       const expectedRows = fallbackOracle(size, accepted, pending);
-      const enforcer = new ProviderContentEnforcer({
-        historyService: history,
+      const actualRows = await enforceWithHandler({
+        history,
         runtimeContext: buildRuntimeContext(history, {
           contextLimit: 30000,
           compressionThreshold: 0.8,
         }),
         generationConfig: { maxOutputTokens: 100 },
-        providerRuntimeNullable: undefined,
-        logger,
-        ensureDensityOptimized: async () => {},
+        pending,
+        promptId: 'fallback-body',
         performCompression: async () => {
           throw new Error('provider failed');
         },
-        performFallbackCompression: async (_promptId, install) => {
-          await installFixtureCandidate(install, candidate);
-          attempted = true;
-          return accepted;
+        fallbackDeps: {
+          performFallbackCompression: async (_promptId, install) => {
+            await installFixtureCandidate(install, candidate);
+            attempted = true;
+            return accepted;
+          },
+          getPromptTokenBaseline: () => 123,
         },
-        getPromptTokenBaseline: () => 123,
-        resetPromptTokenBaseline: () => {},
-        restorePromptTokenBaseline: () => {},
-        estimateFinalizedPromptTokens: async (contents) =>
-          contents.length + (attempted ? 0 : 200000),
+        // An accepted candidate fits once installed; a rejected one only fits
+        // after last-resort tool-response truncation.
+        estimateRows: async (contents) =>
+          contents.length +
+          (overLimit(accepted, attempted, contents) ? 200000 : 0),
       });
-      const actualRows = await enforcer.enforce(
-        { contents: pending, pendingContents: pending },
-        'fallback-body',
-      );
       const actual = await captureCuratedBody(
         provider,
         actualRows,

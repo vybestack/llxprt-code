@@ -277,8 +277,7 @@ function hasBoundaryStraddlingDuplicate(
  *  (b) pure prepend (whole original is a suffix of modified, H > 0) ->
  *      classification 'prepended' but pendingContents UNDEFINED. The prepended
  *      content lives on the HISTORY side of the boundary; compression
- *      recomposes from HistoryService.getCurated() + pendingContents
- *      (providerContentEnforcement.recomposeProviderContents), so the hook's
+ *      rebuilds the request from the durable history + pendingContents, so the hook's
  *      preamble would be SILENTLY DROPPED whenever compression runs. This is
  *      analogous to the modified-history case which is also unrecoverable.
  *      Hooks that need prepended/history-side content to survive should

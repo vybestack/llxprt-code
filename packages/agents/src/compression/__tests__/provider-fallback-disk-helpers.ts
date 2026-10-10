@@ -18,7 +18,7 @@ import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.
 import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { buildRuntimeContext } from '../../core/__tests__/chatSession-density-helpers.js';
-import type { ProviderContentEnforcementDeps } from '../providerContentEnforcement.js';
+import type { FallbackTransactionDeps } from '../providerFallbackTransaction.js';
 import { CompressionHandler } from '../CompressionHandler.js';
 import {
   pendingAwareRequestSelection,
@@ -33,7 +33,7 @@ import {
 interface FallbackHandlerInternals {
   logger: DebugLogger;
   lastPromptTokenCount: number | null;
-  performProviderDiskFallback: ProviderContentEnforcementDeps['performFallbackCompression'];
+  performProviderDiskFallback: FallbackTransactionDeps['performFallbackCompression'];
 }
 
 export interface FallbackHarness {
@@ -107,7 +107,7 @@ export async function withFallbackFixture(
 
 export function fallbackHarness(
   history: HistoryService,
-  fallback: ProviderContentEnforcementDeps['performFallbackCompression'],
+  fallback: FallbackTransactionDeps['performFallbackCompression'],
   options: { fits?: boolean; resetFails?: boolean; logger?: DebugLogger } = {},
 ): FallbackHarness {
   let attempted = false;

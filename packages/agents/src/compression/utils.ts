@@ -45,7 +45,7 @@ import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { buildCompressionChatOptions } from './compressionSystemPrompt.js';
-import { arrayRequestSelection } from './array-request-selection.js';
+import { inMemoryRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 
 /**
  * Aggregate text from content blocks, handling spacing between text and
@@ -290,7 +290,7 @@ export async function runVerificationPass(
       resolvedRuntime ?? context.runtimeContext.providerRuntime;
     const stream = provider.generateChatCompletion(
       await buildCompressionChatOptions({
-        requestRows: arrayRequestSelection(verificationRequest),
+        requestRows: inMemoryRequestSelection(verificationRequest),
         providerRuntime,
         resolvedConfig,
         fallbackConfig: context.config,
