@@ -374,9 +374,7 @@ function chatCommandCase14(): void {
         content('ai', 'D'),
       ];
       await installHistory(history);
-      recording.recordContent(content('human', 'C'));
-      recording.recordContent(content('ai', 'D'));
-      await recording.flush();
+      await mutationHistory?.attachJournal(recording, true);
 
       const result = await command('restore').action?.(context, '1');
 
@@ -420,9 +418,7 @@ function chatCommandCase15(): void {
         content('ai', 'D'),
       ];
       await installHistory(history);
-      recording.recordContent(content('human', 'C'));
-      recording.recordContent(content('ai', 'D'));
-      await recording.flush();
+      await mutationHistory?.attachJournal(recording, true);
 
       const result = await command('restore').action?.(context, '1');
 

@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { stat } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { accountingRow } from '@vybestack/llxprt-code-core/services/history/token-accounting-stream-test-helpers.js';
 import { foldDurableRows } from '@vybestack/llxprt-code-core/recording/durableRowFold.js';
 import { chatCommand } from './chatCommand.js';
@@ -38,6 +38,12 @@ for (const size of [512, 8192]) {
             expect(reader.snapshot().peakRows).toBeLessThanOrEqual(440);
             const path = recording.getFilePath();
             if (path === null) throw new Error('Missing recording path');
+            const cuts = (await readFile(path, 'utf8'))
+              .split('\n')
+              .filter((line) => line.includes('"type":"rewind"'))
+              .map((line) => JSON.parse(line).payload.itemsRemoved as number)
+              .filter((removed) => removed > 0);
+            expect(cuts).toStrictEqual([size - expectedCount]);
             const fold = await foldDurableRows({
               filePath: path,
               maxBytes: (await stat(path)).size,

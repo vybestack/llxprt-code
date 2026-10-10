@@ -110,23 +110,17 @@ async function displayPrefix(
   }
 }
 
-async function persistCut(
+/**
+ * The publication that follows writes the single cut rewind through the
+ * journal attached to this recording, so the cut is not recorded here. This
+ * only proves the recorder is healthy before live history is touched.
+ */
+async function assertRecordingWritable(
   recording: SessionRecordingService,
-  rows: HistoryDensityRows,
-  cut: number,
 ): Promise<void> {
-  const seq = rows.readRow(cut).metadata?.chronology?.seq;
-  const cutSeq =
-    typeof seq === 'number' && Number.isSafeInteger(seq) && seq >= 0
-      ? seq
-      : undefined;
   if (!recording.isActive()) throw new Error('Recording is not active');
   await recording.flush();
-  if (!recording.isActive()) throw new Error('Recording is not active');
-  recording.recordRewind(rows.length - cut, cutSeq);
-  await recording.flush();
-  if (!recording.isActive())
-    throw new Error('Recording failed during rewind persistence');
+  if (!recording.isActive()) throw new Error('Recording failed before the cut');
 }
 
 async function preflightPrefix(
@@ -223,7 +217,7 @@ export async function mutateChatHistory(
       };
     await preflightPrefix(rows, cut, media.store, context.signal);
     context.signal.throwIfAborted();
-    await persistCut(recording, rows, cut);
+    await assertRecordingWritable(recording);
     await publishPrefix(client, rows, cut);
     client.getHistoryService()?.resetCacheAnchorSeq();
     await displayPrefix(context, rows, cut, turns !== undefined);

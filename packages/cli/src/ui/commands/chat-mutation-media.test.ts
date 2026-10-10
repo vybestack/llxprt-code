@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { stat, readFile } from 'node:fs/promises';
+import { stat } from 'node:fs/promises';
 import type {
   IContent,
   AgentClientContract,
@@ -78,7 +78,7 @@ async function mediaReference(
 
 for (const name of ['clear', 'restore']) {
   describe(`chat ${name} media rollback`, () => {
-    it('restores original bytes, chronology, tokens and media ownership after admission failure following the durable rewind', async () => {
+    it('restores original bytes, chronology, tokens and media ownership after a failure following the durable cut', async () => {
       await withChatMutationFixture(
         4,
         async ({ context, history, client, recording }) => {
@@ -89,26 +89,17 @@ for (const name of ['clear', 'restore']) {
           history.setCacheAnchorSeq(1);
           const store = context.services.config?.getLocalMediaStore();
           if (store === undefined) throw new Error('Missing media store');
-          const recordingPath = recording.getFilePath();
-          if (recordingPath === null) throw new Error('Missing recording');
-          const rewindFrontier = (await stat(recordingPath)).size;
-          const reserve = store.reserveAndReadVerified.bind(store);
-          let failNextAdmission = true;
+          const settle = history.settleMediaOwnership.bind(history);
+          let failNextSettle = true;
           const fault = spyOn(
-            store,
-            'reserveAndReadVerified',
-          ).mockImplementation(async (reference, owner) => {
-            if (
-              failNextAdmission &&
-              owner.startsWith('history:') &&
-              (await readFile(recordingPath))
-                .subarray(rewindFrontier)
-                .includes('"type":"rewind"')
-            ) {
-              failNextAdmission = false;
-              throw new Error('media reservation I/O failure');
+            history,
+            'settleMediaOwnership',
+          ).mockImplementation(async () => {
+            if (failNextSettle) {
+              failNextSettle = false;
+              throw new Error('media ownership settle I/O failure');
             }
-            return reserve(reference, owner);
+            return settle();
           });
           try {
             const result = await chatCommand.subCommands
@@ -116,7 +107,9 @@ for (const name of ['clear', 'restore']) {
               ?.action?.(context, name === 'restore' ? '1' : '');
             expect(result).toMatchObject({
               messageType: 'error',
-              content: expect.stringContaining('source=deferred-source:'),
+              content: expect.stringContaining(
+                'media ownership settle I/O failure',
+              ),
             });
             await recording.flush();
             const file = recording.getFilePath();
