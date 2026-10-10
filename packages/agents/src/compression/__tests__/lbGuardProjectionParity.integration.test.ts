@@ -10,9 +10,9 @@
  * - a REAL LoadBalancingProvider whose delegate implements a REAL
  *   projectPromptEnvelope whose estimate (contents tokens + serialized
  *   tool-schema tokens) CHANGES after contents reduction;
- * - the REAL enforcement machinery (real ChatSession CompressionHandler →
- *   real ProviderContentEnforcer → real TopDownTruncationStrategy over a
- *   real HistoryService) attached as the LB compression callback;
+ * - the REAL enforcement machinery (real CompressionHandler source ladder →
+ *   real TopDownTruncationStrategy over a real HistoryService) attached as
+ *   the LB compression callback;
  * - the projection-aware seam estimator built on prepareAtSendSeam
  *   (issue #3507 AC2).
  *
@@ -31,7 +31,7 @@
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
+import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import {
@@ -52,11 +52,12 @@ import type {
   ProviderToolset,
 } from '@vybestack/llxprt-code-providers/IProvider.js';
 import { computeMarginAdjustedLimit } from '../contextLimitPolicy.js';
+import { buildRuntimeContext } from '../../core/__tests__/chatSession-density-helpers.js';
+import { enforceProviderSourceForTest } from './support/enforce-provider-source.js';
 import {
-  buildMockContentGenerator,
-  buildRuntimeContext,
-} from '../../core/__tests__/chatSession-density-helpers.js';
-import { ChatSession } from '../../core/chatSession.js';
+  buildHandlerHarness,
+  type HandlerHarness,
+} from './support/handler-harness.js';
 import { prepareAtSendSeam } from '../../core/promptEnvelopeSendSeam.js';
 
 const MODEL = 'test-model';
@@ -287,30 +288,21 @@ async function consume(
 }
 
 /**
- * The #3499 session shape: real history, real ChatSession handler with the
+ * The #3499 session shape: real history, real CompressionHandler with the
  * real enforcement ladder, performCompression pinned to NOOP so the
  * truncation stage does the reduction deterministically.
  */
 function createEnforcementSession(options: {
   historyService: HistoryService;
   contextLimit: number;
-}): { handler: ChatSession['compressionHandler'] } {
+}): HandlerHarness {
   const runtimeContext = buildRuntimeContext(options.historyService, {
     contextLimit: options.contextLimit,
     compressionThreshold: 0.8,
   });
-  const chat = new ChatSession(
-    runtimeContext,
-    buildMockContentGenerator(),
-    {},
-    [],
-  );
-  const handler = chat['compressionHandler'];
-  vi.spyOn(handler, 'performCompression').mockImplementation(async () => {
-    await Promise.resolve();
-    return PerformCompressionResult.NOOP;
+  return buildHandlerHarness(options.historyService, runtimeContext, {
+    realDiskFallback: true,
   });
-  return { handler };
 }
 
 describe('LB guard projection parity through real pre-send enforcement (issue #3507)', () => {
@@ -360,15 +352,17 @@ async function facadeCallback1(): Promise<void> {
     delegate: delegate.provider,
   });
   const recorder = recordGuardCallback(lb);
-  const { handler } = createEnforcementSession({
+  const session = createEnforcementSession({
     historyService,
     contextLimit: GUARD_CASE_SESSION_LIMIT,
   });
 
-  await handler.enforceProviderContents(
-    { contents, pendingContents: [pending] },
+  await enforceProviderSourceForTest(
+    session.handler,
+    historyService,
+    [pending],
     'prompt-3507-constant',
-    lb,
+    lb as unknown as RuntimeProvider,
   );
 
   // Precondition: the envelope estimate (tools included) is over the LB
@@ -432,15 +426,17 @@ async function facadeCallback2(): Promise<void> {
   });
   const recorder = recordGuardCallback(lb);
   const historyTokensBefore = historyService.getTotalTokens();
-  const { handler } = createEnforcementSession({
+  const session = createEnforcementSession({
     historyService,
     contextLimit: GUARD_CASE_SESSION_LIMIT,
   });
 
-  await handler.enforceProviderContents(
-    { contents, pendingContents: [pending] },
+  await enforceProviderSourceForTest(
+    session.handler,
+    historyService,
+    [pending],
     'prompt-3507-growing-gap',
-    lb,
+    lb as unknown as RuntimeProvider,
   );
 
   let thrown: unknown = undefined;
@@ -499,7 +495,7 @@ async function facadeCallback3(): Promise<void> {
     delegate: delegate.provider,
   });
   const recorder = recordGuardCallback(lb);
-  const { handler } = createEnforcementSession({
+  const session = createEnforcementSession({
     historyService,
     contextLimit,
   });
@@ -520,10 +516,12 @@ async function facadeCallback3(): Promise<void> {
       await prepared.releaseIfUnsent?.();
     }
   };
-  const reduced = await handler.enforceProviderContents(
-    { contents, pendingContents: [pending] },
+  const reduced = await enforceProviderSourceForTest(
+    session.handler,
+    historyService,
+    [pending],
     'prompt-3507-parity',
-    lb,
+    lb as unknown as RuntimeProvider,
     estimateCandidate,
   );
 
