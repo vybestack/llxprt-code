@@ -659,6 +659,20 @@ function createFrameRequest(
   return frame;
 }
 
+/**
+ * `retries` counts retries, so `0` still makes the one initial attempt (the
+ * same reading RetryOrchestrator applies). A budget of zero attempts would end
+ * the stream without ever sending the request.
+ */
+function streamingAttemptBudget(retries: unknown): number {
+  if (retries === undefined) return 6;
+  if (typeof retries !== 'number' || !Number.isInteger(retries) || retries < 0)
+    throw new Error(
+      `The retries setting must be a non-negative integer, received ${String(retries)}`,
+    );
+  return Math.max(1, retries);
+}
+
 function buildStreamParams(
   requestContext: RequestContext,
   abortSignal: AbortSignal | undefined,
@@ -689,8 +703,9 @@ function buildStreamParams(
             ),
         }),
     abortSignal,
-    maxStreamingAttempts:
-      (invocationEphemerals['retries'] as number | undefined) ?? 6,
+    maxStreamingAttempts: streamingAttemptBudget(
+      invocationEphemerals['retries'],
+    ),
     streamRetryInitialDelayMs:
       (invocationEphemerals['retrywait'] as number | undefined) ?? 4000,
     normalizedOptions: options,

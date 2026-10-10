@@ -13,6 +13,7 @@ import { createRuntimeInvocationContext } from '../../packages/core/src/runtime/
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { OpenAIProvider } from '../../packages/providers/src/openai/OpenAIProvider.js';
+import { OpenAIResponsesProvider } from '../../packages/providers/src/openai-responses/OpenAIResponsesProvider.js';
 import { OpenAIVercelProvider } from '../../packages/providers/src/openai-vercel/OpenAIVercelProvider.js';
 import { AnthropicProvider } from '../../packages/providers/src/anthropic/AnthropicProvider.js';
 import { GeminiProvider } from '../../plugins/google-gemini/src/gemini/GeminiProvider.js';
@@ -28,10 +29,16 @@ import { CompressionLoadBalancingProvider } from '../../packages/agents/src/core
 
 const SUMMARY = '<state_snapshot>kept details</state_snapshot>';
 
-type Family = 'openai' | 'openaivercel' | 'anthropic' | 'gemini';
+type Family =
+  | 'openai'
+  | 'openai-responses'
+  | 'openaivercel'
+  | 'anthropic'
+  | 'gemini';
 
 const FAMILIES: readonly Family[] = [
   'openai',
+  'openai-responses',
   'openaivercel',
   'anthropic',
   'gemini',
@@ -39,6 +46,7 @@ const FAMILIES: readonly Family[] = [
 
 const MODELS: Record<Family, string> = {
   openai: 'gpt-4o',
+  'openai-responses': 'gpt-4o',
   openaivercel: 'gpt-4o',
   anthropic: 'claude-opus-5',
   gemini: 'gemini-2.5-flash',
@@ -48,6 +56,11 @@ function makeProvider(family: Family): IProvider {
   switch (family) {
     case 'openai':
       return new OpenAIProvider('test-key', 'https://api.openai.com/v1');
+    case 'openai-responses':
+      return new OpenAIResponsesProvider(
+        'test-key',
+        'https://api.openai.com/v1',
+      );
     case 'openaivercel':
       return new OpenAIVercelProvider('test-key', 'https://api.openai.com/v1');
     case 'anthropic':
@@ -101,6 +114,18 @@ function reply(family: Family, url: string, body: string): Response {
         headers: { 'content-type': 'text/event-stream' },
       });
     }
+    case 'openai-responses':
+      return sse([
+        { type: 'response.output_text.delta', delta: SUMMARY },
+        {
+          type: 'response.completed',
+          response: {
+            id: 'resp_summary',
+            status: 'completed',
+            usage: { input_tokens: 7, output_tokens: 3, total_tokens: 10 },
+          },
+        },
+      ]);
     case 'openai':
     case 'openaivercel':
       return streaming

@@ -308,6 +308,10 @@ async function* fetchStreamWithRetries(
   params: FetchStreamParams,
   deps: ResponsesExecutorDeps,
 ): AsyncIterableIterator<IContent> {
+  if (!(params.maxStreamingAttempts >= 1))
+    throw new Error(
+      `Responses streaming needs at least one attempt, received ${String(params.maxStreamingAttempts)}`,
+    );
   let streamingAttempt = 0;
   let currentDelay = params.streamRetryInitialDelayMs;
   let lastError: unknown;
@@ -393,10 +397,10 @@ async function* parseSuccessfulResponse(
   yieldedMarker: { value: boolean },
 ): AsyncIterableIterator<IContent> {
   if (!response.ok) await throwApiError(response, deps);
-  if (!response.body) {
-    deps.logger.debug(() => 'Response body missing, returning early');
-    return;
-  }
+  if (!response.body)
+    throw new Error(
+      'OpenAI Responses returned a successful response with no body',
+    );
 
   const streamOptions: ParseResponsesStreamOptions = {
     includeThinkingInResponse: params.includeThinkingInResponse,
