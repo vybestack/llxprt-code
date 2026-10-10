@@ -30,6 +30,10 @@ import * as path from 'node:path';
 import * as readline from 'node:readline';
 import { readBoundedFirstLine } from './boundedHeaderReader.js';
 import { scanSessionMetadata } from './boundedSessionScan.js';
+import {
+  scanFirstUserMessage,
+  type FirstUserMessageScanOptions,
+} from './firstUserMessageScan.js';
 import { readMetadataJsonLines } from './metadataJsonLines.js';
 import { MetadataJsonProjection } from './metadataJsonProjection.js';
 import {
@@ -483,20 +487,9 @@ export class SessionDiscovery {
   static async readFirstUserMessage(
     filePath: string,
     maxLength: number = SESSION_TITLE_MAX_LENGTH,
+    options: FirstUserMessageScanOptions = {},
   ): Promise<string | null> {
-    try {
-      const fileContent = await fs.readFile(filePath, 'utf-8');
-      const lines = fileContent.split('\n');
-      for (const line of lines) {
-        const text = extractUserMessageText(line);
-        if (text !== null) {
-          return text.length > maxLength ? text.slice(0, maxLength) : text;
-        }
-      }
-      return null;
-    } catch {
-      return null;
-    }
+    return scanFirstUserMessage(filePath, maxLength, options);
   }
 
   /**
@@ -570,49 +563,6 @@ async function readSessionSummary(
       ? { createdAt: header.startTime }
       : {}),
   };
-}
-
-function extractUserMessageText(line: string): string | null {
-  if (!line.trim()) {
-    return null;
-  }
-  let event: Record<string, unknown>;
-  try {
-    event = JSON.parse(line) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-  if (event.type !== 'content') {
-    return null;
-  }
-
-  const payload = event.payload as Record<string, unknown> | undefined;
-  if (!payload || typeof payload !== 'object') {
-    return null;
-  }
-
-  const contentObj = payload.content as Record<string, unknown> | undefined;
-  if (!contentObj || typeof contentObj !== 'object') {
-    return null;
-  }
-
-  if (contentObj.speaker !== 'human') {
-    return null;
-  }
-
-  const blocks = contentObj.blocks as
-    | Array<Record<string, unknown>>
-    | undefined;
-  if (!Array.isArray(blocks)) {
-    return null;
-  }
-
-  const text = blocks
-    .filter((block) => block.type === 'text' && typeof block.text === 'string')
-    .map((block) => block.text as string)
-    .join('');
-
-  return text || null;
 }
 
 /**
