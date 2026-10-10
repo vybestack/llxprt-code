@@ -5,7 +5,10 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { deserialize, serialize } from 'node:v8';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import type {
+  ProviderRequestRows,
+  ProviderRequestSelection,
+} from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
@@ -42,8 +45,9 @@ export interface ProjectionRuntime {
   readonly config: Config;
   readonly provider: OpenAIResponsesProvider;
   readonly factory: RuntimeTokenizerFactory;
+  /** A selection (rows with a close owner) is sent as neutral requestRows; plain rows use the stream path. */
   readonly options: (
-    rows: ProviderRequestRows,
+    rows: ProviderRequestRows | ProviderRequestSelection,
     signal?: AbortSignal,
   ) => GenerateChatOptions;
 }
@@ -223,11 +227,13 @@ export async function projectionRuntime(
     ephemeralsSnapshot: { 'prompt-caching': 'off', retries: 2, retrywait: 0 },
   });
   const options = (
-    rows: ProviderRequestRows,
+    rows: ProviderRequestRows | ProviderRequestSelection,
     signal?: AbortSignal,
   ): GenerateChatOptions => ({
     contents: { [Symbol.asyncIterator]: () => rows.openReader(signal) },
-    requestRows: rows,
+    ...('close' in rows
+      ? { requestRows: rows, readRequestRowsAtTransport: true as const }
+      : {}),
     contentCount: rows.count,
     config,
     runtime,

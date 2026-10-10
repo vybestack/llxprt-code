@@ -17,6 +17,7 @@
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-auth';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
+import { readsRequestRowsAtTransport } from '../BaseProviderNormalization.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { projectOpenAIResponsesPromptEnvelope } from '../runtime/promptEnvelopeProjections.js';
 import { OpenAIResponsesProviderBase } from './OpenAIResponsesProviderBase.js';
@@ -36,7 +37,6 @@ import { declaredMediaTransportCapabilities } from '../providerMediaTransportCap
 import type { IProviderConfig } from '../types/IProviderConfig.js';
 import type { ModelDefaultRule } from '../composition/providerAliases.js';
 import { finishMediaRequest } from '../utils/request-media-resolution.js';
-import { ResponsesDiskTextRows } from './responses-disk-text-rows.js';
 import {
   buildDiskTextResponsesContext,
   diskTextProjection,
@@ -181,11 +181,11 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       token === undefined ? undefined : this.preparedPromptEnvelopes.get(token);
     if (
       prepared?.sourcePrompt !== undefined &&
-      !(contentsOrOptions.requestRows instanceof ResponsesDiskTextRows)
+      !readsRequestRowsAtTransport(contentsOrOptions)
     )
-      throw new Error('Source token requires its branded disk selection');
+      throw new Error('Source token requires its transport-read request rows');
     if (
-      contentsOrOptions.requestRows instanceof ResponsesDiskTextRows &&
+      readsRequestRowsAtTransport(contentsOrOptions) &&
       prepared !== undefined &&
       prepared.sourcePrompt === undefined
     )
@@ -195,14 +195,14 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
     return super.generateChatCompletion(contentsOrOptions);
   }
 
-  protected override supportsDiskTextRows(): boolean {
+  protected override ownsRequestRowsTransport(): boolean {
     return true;
   }
 
   protected override async releaseUnstartedOptions(
     options: NormalizedGenerateChatOptions,
   ): Promise<void> {
-    if (!(options.requestRows instanceof ResponsesDiskTextRows)) return;
+    if (!readsRequestRowsAtTransport(options)) return;
     const token = options.promptEnvelopeTransportToken;
     if (token === undefined) return;
     const prepared = this.preparedPromptEnvelopes.get(token);
@@ -219,7 +219,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
   protected override async *generateChatCompletionWithOptions(
     options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
-    if (options.requestRows instanceof ResponsesDiskTextRows) {
+    if (readsRequestRowsAtTransport(options)) {
       assertDiskTextShape(options, this.buildExecutorDeps());
       if (options.promptEnvelopeTransportToken === undefined)
         throw new Error(
@@ -259,7 +259,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
     options: GenerateChatOptions,
   ): Promise<PromptEnvelopeProjection> {
     const normalized = await this.normalizeOptionsForProjection(options);
-    if (normalized.requestRows instanceof ResponsesDiskTextRows) {
+    if (readsRequestRowsAtTransport(normalized)) {
       const prepared = await buildDiskTextResponsesContext(
         normalized,
         this.buildExecutorDeps(),

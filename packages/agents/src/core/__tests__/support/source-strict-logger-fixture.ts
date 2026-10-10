@@ -20,12 +20,12 @@ import { createTelemetryAdapterFromConfig } from '@vybestack/llxprt-code-core/ru
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
 import { getRequestSignal } from '@vybestack/llxprt-code-providers/utils/abortSignal.js';
 import {
+  buildTransportSourceOptions,
   preflightDisk,
   preflightRuntime,
   preflightInstructions,
 } from './source-preflight-fixture.js';
 import {
-  buildSourceProviderChatOptions,
   enforceAndStreamSourcePromptEnvelopeRetries,
   type PreparedSourcePromptEnvelopeSend,
 } from '../../prompt-envelope-source-send.js';
@@ -231,7 +231,7 @@ export async function strictProbe(
           source: fixture.source,
           signal: controller.signal,
           buildOptions: (rows) => ({
-            ...buildSourceProviderChatOptions(
+            ...buildTransportSourceOptions(
               rows,
               undefined,
               setup.context,

@@ -11,7 +11,7 @@ import { join } from 'node:path';
 import { ProviderNormalizationDisk } from '@vybestack/llxprt-code-core/services/history/provider-normalization-disk.js';
 import {
   NormalizedProviderRequestSnapshot,
-  type ProviderRequestRows,
+  type ProviderRequestSelection,
 } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -273,9 +273,10 @@ async function verifyIngressLog(
 function observeIngressRows(
   snapshot: NormalizedProviderRequestSnapshot,
   observation: IngressObservation,
-): ProviderRequestRows {
+): ProviderRequestSelection {
   return {
     count: snapshot.count,
+    close: () => snapshot.close(),
     async *openReader(
       signal?: AbortSignal,
     ): AsyncGenerator<IContent, void, unknown> {

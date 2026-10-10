@@ -6,7 +6,8 @@ import type { ProviderRequestSnapshot } from '@vybestack/llxprt-code-core/servic
 import type { RuntimeProviderToolset } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import { HookEventName } from '@vybestack/llxprt-code-core/hooks/types.js';
 import {
-  PendingAwareResponsesDiskTextRows,
+  pendingAwareRequestSelection,
+  type PendingAwareRequestSelection,
   sourcePendingMembership,
 } from './source-pending-selection.js';
 import { fireBeforeModelSnapshotHook } from './beforeModelHookFire.js';
@@ -24,7 +25,7 @@ export interface SourceBeforeModelInput {
 /** Takes ownership of the input snapshot, even when a command or boundary fails. */
 export async function sourceBeforeModelHook(
   input: SourceBeforeModelInput,
-): Promise<PendingAwareResponsesDiskTextRows> {
+): Promise<PendingAwareRequestSelection> {
   const system =
     input.config?.getEnableHooks() === true
       ? input.config.getHookSystem()
@@ -34,7 +35,7 @@ export async function sourceBeforeModelHook(
     system.getRegistry().getHooksForEvent(HookEventName.BeforeModel).length ===
       0
   )
-    return new PendingAwareResponsesDiskTextRows(
+    return pendingAwareRequestSelection(
       input.snapshot,
       sourcePendingMembership(input.snapshot),
     );
@@ -60,7 +61,7 @@ export async function sourceBeforeModelHook(
       signal: input.signal,
       log: input.log,
     });
-    return new PendingAwareResponsesDiskTextRows(
+    return pendingAwareRequestSelection(
       {
         count: boundary.contents.count,
         openReader: (signal) => boundary.contents.openReader(signal),

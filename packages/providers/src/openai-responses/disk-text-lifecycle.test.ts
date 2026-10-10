@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { existsSync } from 'node:fs';
-import { ResponsesDiskTextRows } from './responses-disk-text-rows.js';
+import { requestSelection } from './__tests__/support/request-selection.js';
 import { Gpt56SourceProjection } from '../tokenizers/gpt56-source-projection.js';
 import { activeRequestBodyCount } from '../utils/requestScopedBody.js';
 import {
@@ -20,10 +20,7 @@ async function lifecycle(
     disk.root,
   );
   const controller = new AbortController();
-  const options = setup.options(
-    new ResponsesDiskTextRows(disk.rows),
-    controller.signal,
-  );
+  const options = setup.options(requestSelection(disk.rows), controller.signal);
   const projection = await setup.provider.projectPromptEnvelope(options);
   const source = projection.finalizedProjection;
   const stream = setup.provider.generateChatCompletion({
@@ -84,7 +81,7 @@ describe('actual disk source send lifetime', () => {
       `http://127.0.0.1:${http.server.port}/v1`,
       disk.root,
     );
-    const options = setup.options(new ResponsesDiskTextRows(disk.rows));
+    const options = setup.options(requestSelection(disk.rows));
     const projection = await setup.provider.projectPromptEnvelope(options);
     const source = projection.finalizedProjection;
     const stream = setup.provider.generateChatCompletion({

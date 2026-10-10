@@ -27,7 +27,7 @@ import type { RuntimeInvocationContext } from '@vybestack/llxprt-code-core/runti
 import type { StructuredError } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { StreamLivenessEvent } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import type { SystemPromptPlacement } from './utils/systemPromptPlacement.js';
-import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { RequestScopedContents } from './utils/requestScopedBody.js';
 import type {
   ProviderTelemetryContext,
@@ -55,8 +55,15 @@ export interface GenerateChatOptions {
    * providers collect it request-scoped at the entry point.
    */
   contents: AsyncIterable<IContent>;
-  requestRows?: ProviderRequestRows;
+  requestRows?: ProviderRequestSelection;
   contentCount?: number;
+  /**
+   * Transitional (issue #854): ask a provider that owns its request-rows
+   * transport to read `requestRows` itself (restricted source route). Without
+   * it the selection is just the authoritative history source. WP06/WP16
+   * remove this option once the source route is the default.
+   */
+  readRequestRowsAtTransport?: true;
   tools?: ProviderToolset;
   settings?: SettingsService;
   config?: Config;

@@ -10,6 +10,16 @@ export interface ProviderRequestRows {
   ) => AsyncGenerator<IContent, void, unknown>;
 }
 
+/**
+ * The provider-neutral request selection: immutable count/membership, a
+ * repeatable `openReader(signal)` and an explicit close owner. The party that
+ * hands it to the send seam transfers the close obligation; providers and
+ * wrappers only read it.
+ */
+export interface ProviderRequestSelection extends ProviderRequestRows {
+  close(): void | Promise<void>;
+}
+
 export function providerRequestRows(
   snapshot: ProviderRequestSnapshot,
 ): ProviderRequestRows {
@@ -19,7 +29,7 @@ export function providerRequestRows(
   });
 }
 
-export interface ProviderRequestSnapshot extends ProviderRequestRows {
+export interface ProviderRequestSnapshot extends ProviderRequestSelection {
   /** Pending output may be reordered, so firstOutputIndex is not a suffix boundary. */
   readonly pending: {
     readonly inputCount: number;

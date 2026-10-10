@@ -3,7 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import { existsSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import { ResponsesDiskTextRows } from './responses-disk-text-rows.js';
+import { requestSelection } from './__tests__/support/request-selection.js';
 import { withGpt56DiskSources } from '../tokenizers/gpt56-disk-tokenizer-factory.js';
 import { Gpt56SourceProjection } from '../tokenizers/gpt56-source-projection.js';
 import {
@@ -28,10 +28,11 @@ describe('explicit actual provider disk text route', () => {
     const setup = await projectionRuntime('http://127.0.0.1:1/v1', disk.root);
     const before = new Set(readdirSync(tmpdir()));
     try {
-      const rows = new ResponsesDiskTextRows(disk.rows);
+      const rows = requestSelection(disk.rows);
       const projection = await setup.provider.projectPromptEnvelope({
         ...setup.options(rows),
         requestRows: rows,
+        readRequestRowsAtTransport: true as const,
       });
       const finalized = projection.finalizedProjection;
       expect(finalized).toBeInstanceOf(Gpt56SourceProjection);
@@ -63,7 +64,7 @@ describe('actual source HTTP replay', () => {
       `http://127.0.0.1:${http.server.port}/v1`,
       disk.root,
     );
-    const rows = new ResponsesDiskTextRows(disk.rows);
+    const rows = requestSelection(disk.rows);
     const options = setup.options(rows);
     const projection = await setup.provider.projectPromptEnvelope(options);
     const source = projection.finalizedProjection;
@@ -120,7 +121,7 @@ describe('actual source pinned estimate', () => {
     let release: (() => Promise<void>) | undefined;
     try {
       const eager = await setup.provider.projectPromptEnvelope({
-        ...setup.options(disk.rows),
+        ...setup.options(requestSelection(disk.rows)),
         requestRows: undefined,
       });
       const oracle = await estimatePromptEnvelope(
@@ -129,7 +130,7 @@ describe('actual source pinned estimate', () => {
         setup.factory,
       );
       await eager.releaseIfUnsent?.();
-      const rows = new ResponsesDiskTextRows(disk.rows);
+      const rows = requestSelection(disk.rows);
       const projection = await setup.provider.projectPromptEnvelope(
         setup.options(rows),
       );

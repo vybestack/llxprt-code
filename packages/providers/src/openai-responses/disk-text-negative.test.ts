@@ -2,12 +2,13 @@
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { ResponsesDiskTextRows } from './responses-disk-text-rows.js';
+import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import { requestSelection } from './__tests__/support/request-selection.js';
 import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
 import { projectionRuntime } from './__tests__/support/projection-ownership-fixture.js';
 
-function rows(row: IContent): ResponsesDiskTextRows {
-  return new ResponsesDiskTextRows({
+function rows(row: IContent): ProviderRequestSelection {
+  return requestSelection({
     count: 1,
     async *openReader() {
       yield row;
@@ -72,7 +73,7 @@ describe('disk text request option exclusion', () => {
       process.cwd(),
     );
     let reads = 0;
-    const source = new ResponsesDiskTextRows({
+    const source = requestSelection({
       count: 1,
       async *openReader(): AsyncGenerator<IContent, void> {
         reads++;

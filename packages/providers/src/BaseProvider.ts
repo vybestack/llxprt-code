@@ -22,8 +22,10 @@ import {
 import { type IModel } from './IModel.js';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { firstTruthyString } from './utils/falsyFallback.js';
-import { isOneShotContentsSource } from './utils/collectContents.js';
-import { ResponsesDiskTextRows } from './openai-responses/responses-disk-text-rows.js';
+import {
+  isAsyncIterableContents,
+  isOneShotContentsSource,
+} from './utils/collectContents.js';
 import { type RequestScopedContents } from './utils/requestScopedBody.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
@@ -44,6 +46,7 @@ import {
   assertProviderRuntimeContext,
   materializeCallOptions,
   normalizeProviderGenerateChatOptions,
+  readsRequestRowsAtTransport,
   resolveGenerateChatSettings,
 } from './BaseProviderNormalization.js';
 import { getProviderCustomHeaders } from './customHeaders.js';
@@ -736,7 +739,12 @@ export abstract class BaseProvider implements IProvider {
     return false;
   }
 
-  protected supportsDiskTextRows(): boolean {
+  /**
+   * Whether this provider's concrete transport can read `requestRows` itself
+   * when a call sets `readRequestRowsAtTransport`. Other providers always get
+   * the selection's rows through the normal `contents` history path.
+   */
+  protected ownsRequestRowsTransport(): boolean {
     return false;
   }
 
@@ -835,18 +843,16 @@ export abstract class BaseProvider implements IProvider {
     const lazyWireContents =
       this.materializesContentsAtTransport() &&
       isOneShotContentsSource(contentsOrOptions);
-    const diskTextSource =
-      'requestRows' in contentsOrOptions &&
-      contentsOrOptions.requestRows instanceof ResponsesDiskTextRows;
-    if (diskTextSource && !this.supportsDiskTextRows())
-      throw new Error(
-        'This provider does not support explicit Responses disk text rows',
-      );
+    const readsRowsAtTransport =
+      !isAsyncIterableContents(contentsOrOptions) &&
+      readsRequestRowsAtTransport(contentsOrOptions);
+    if (readsRowsAtTransport && !this.ownsRequestRowsTransport())
+      throw new Error('This provider does not read request rows at transport');
     const providedOptions = await materializeCallOptions(
       contentsOrOptions,
       maybeTools,
       lazyWireContents,
-      diskTextSource,
+      readsRowsAtTransport,
     );
     const settings = resolveGenerateChatSettings(
       providedOptions,

@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { getErrorStatus } from '@vybestack/llxprt-code-core/utils/retry.js';
-import { ResponsesDiskTextRows } from '@vybestack/llxprt-code-providers/openai-responses/responses-disk-text-rows.js';
+import { requestSelection } from './__tests__/support/request-selection.js';
 import { withGpt56DiskSources } from '@vybestack/llxprt-code-providers/tokenizers/gpt56-disk-tokenizer-factory.js';
 import {
   diskTextFixture,
@@ -35,6 +35,7 @@ function buildRetryOptions(
       ephemeralsSnapshot: { retries: 1, retrywait: 0, 'prompt-caching': 'off' },
     }),
     requestRows: candidate,
+    readRequestRowsAtTransport: true as const,
     contentCount: candidate.count,
   };
 }
@@ -43,7 +44,7 @@ describe('agent source enforcement with the actual disk Responses provider', () 
   it('enforces the exact projected estimate and replaces the prepared owner on an outer HTTP 503 retry', async () => {
     const disk = diskTextFixture(false, false);
     const rows = { ...disk.rows, close: () => disk.close() };
-    const source = new ResponsesDiskTextRows(rows);
+    const source = requestSelection(rows);
     const http = projectionEndpoint(true);
     const setup = await projectionRuntime(
       `http://127.0.0.1:${http.server.port}/v1`,

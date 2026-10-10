@@ -1,13 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { ResponsesDiskTextRows } from '@vybestack/llxprt-code-providers/openai-responses/responses-disk-text-rows.js';
+import { requestSelection } from './__tests__/support/request-selection.js';
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
-import {
-  buildSourceProviderChatOptions,
-  enforceAndStreamSourcePromptEnvelopeRetries,
-} from './prompt-envelope-source-send.js';
+import { enforceAndStreamSourcePromptEnvelopeRetries } from './prompt-envelope-source-send.js';
 import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import {
+  buildTransportSourceOptions,
   preflightDisk,
   preflightRuntime,
   preflightEndpoint,
@@ -25,7 +23,7 @@ describe('source prepared transactional cleanup failure', () => {
     );
     const failed = new Error('preflight synchronous failure');
     const cleanupFailed = new Error('source close failure');
-    const source = new ResponsesDiskTextRows({
+    const source = requestSelection({
       count: fixture.source.count,
       openReader: (signal) => fixture.source.openReader(signal),
       async close(): Promise<void> {
@@ -39,7 +37,7 @@ describe('source prepared transactional cleanup failure', () => {
       provider: setup.provider,
       source,
       buildOptions: (rows) =>
-        buildSourceProviderChatOptions(
+        buildTransportSourceOptions(
           rows,
           undefined,
           setup.context,

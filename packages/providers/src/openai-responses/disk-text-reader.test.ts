@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { existsSync, unlinkSync } from 'node:fs';
-import { ResponsesDiskTextRows } from './responses-disk-text-rows.js';
+import { requestSelection } from './__tests__/support/request-selection.js';
 import { Gpt56SourceProjection } from '../tokenizers/gpt56-source-projection.js';
 import { diskResponsesBodyBytes } from './responses-disk-body.js';
 import { diskTextFixture } from './__tests__/support/disk-text-fixture.js';
@@ -20,7 +20,7 @@ describe('actual prepared disk segment reader ownership', () => {
     const disk = diskTextFixture(false, false);
     const setup = await projectionRuntime('http://127.0.0.1:1/v1', disk.root);
     const projection = await setup.provider.projectPromptEnvelope(
-      setup.options(new ResponsesDiskTextRows(disk.rows)),
+      setup.options(requestSelection(disk.rows)),
     );
     const source = projection.finalizedProjection;
     if (!(source instanceof Gpt56SourceProjection))

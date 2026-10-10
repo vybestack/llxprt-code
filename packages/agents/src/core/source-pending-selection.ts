@@ -1,10 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type {
   ProviderRequestRows,
+  ProviderRequestSelection,
   ProviderRequestSnapshot,
 } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { ResponsesDiskTextRows } from '@vybestack/llxprt-code-providers/openai-responses/responses-disk-text-rows.js';
 
 export interface SourcePendingSelection {
   /** Normalized output membership must not be mistaken for raw recomposition input. */
@@ -35,19 +35,20 @@ export function sourcePendingMembership(
   });
 }
 
+/** Neutral request selection plus the pending membership sharing its lifetime. */
+export interface PendingAwareRequestSelection extends ProviderRequestSelection {
+  readonly pendingSelection: SourcePendingSelection | undefined;
+}
+
 /** Pending readers share exactly the full source's lifetime; neither owns rows. */
-export class PendingAwareResponsesDiskTextRows extends ResponsesDiskTextRows {
-  readonly #pendingSelection: SourcePendingSelection | undefined;
-
-  constructor(
-    rows: ProviderRequestRows & { close: () => void | Promise<void> },
-    pendingSelection: SourcePendingSelection | undefined,
-  ) {
-    super(rows);
-    this.#pendingSelection = pendingSelection;
-  }
-
-  get pendingSelection(): SourcePendingSelection | undefined {
-    return this.#pendingSelection;
-  }
+export function pendingAwareRequestSelection(
+  rows: ProviderRequestSelection,
+  pendingSelection: SourcePendingSelection | undefined,
+): PendingAwareRequestSelection {
+  return Object.freeze({
+    count: rows.count,
+    openReader: (signal?: AbortSignal) => rows.openReader(signal),
+    close: () => rows.close(),
+    pendingSelection,
+  });
 }

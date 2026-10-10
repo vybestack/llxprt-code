@@ -3,7 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import { readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import { ResponsesDiskTextRows } from './responses-disk-text-rows.js';
+import { requestSelection } from './__tests__/support/request-selection.js';
 import { withGpt56DiskSources } from '../tokenizers/gpt56-disk-tokenizer-factory.js';
 import { diskTextFixture } from './__tests__/support/disk-text-fixture.js';
 import { projectionRuntime } from './__tests__/support/projection-ownership-fixture.js';
@@ -14,7 +14,7 @@ describe('actual request source estimation cancellation', () => {
     const setup = await projectionRuntime('http://127.0.0.1:1/v1', disk.root);
     const controller = new AbortController();
     const projection = await setup.provider.projectPromptEnvelope(
-      setup.options(new ResponsesDiskTextRows(disk.rows), controller.signal),
+      setup.options(requestSelection(disk.rows), controller.signal),
     );
     const before = new Set(readdirSync(tmpdir()));
     try {

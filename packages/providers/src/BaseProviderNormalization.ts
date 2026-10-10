@@ -23,7 +23,7 @@ import type {
   ProviderSettings,
 } from './BaseProvider.js';
 import type { ResolvedAuthToken } from './types/providerRuntime.js';
-import { isAbortSignal } from './utils/abortSignal.js';
+import { getRequestSignal, isAbortSignal } from './utils/abortSignal.js';
 import {
   collectContents,
   isAsyncIterableContents,
@@ -128,6 +128,38 @@ function resolveRuntimeId(
 }
 
 /**
+ * True when the call asks the provider's concrete transport to read its
+ * `requestRows` itself instead of receiving them through `contents`.
+ */
+export function readsRequestRowsAtTransport(
+  options: Pick<
+    GenerateChatOptions,
+    'requestRows' | 'readRequestRowsAtTransport'
+  >,
+): boolean {
+  return (
+    options.requestRows !== undefined &&
+    options.readRequestRowsAtTransport === true
+  );
+}
+
+/**
+ * The single history source of a call. A neutral `requestRows` selection is
+ * authoritative and read once through a reader bound to the request signal;
+ * otherwise the caller's `contents` stream is the source.
+ */
+function historySourceOf(
+  contentsOrOptions: AsyncIterable<IContent> | GenerateChatOptions,
+): AsyncIterable<IContent> {
+  if (isAsyncIterableContents(contentsOrOptions)) return contentsOrOptions;
+  const rows = contentsOrOptions.requestRows;
+  if (rows === undefined) return contentsOrOptions.contents;
+  const signal = getRequestSignal(contentsOrOptions);
+  signal?.throwIfAborted();
+  return { [Symbol.asyncIterator]: () => rows.openReader(signal) };
+}
+
+/**
  * Materialize the caller's history source for provider use (issue #854
  * P05b4). One-shot streams defer the drain to the transport's
  * request-scoped lease; arrays and replayable streams collect eagerly
@@ -137,9 +169,9 @@ export async function materializeCallOptions(
   contentsOrOptions: AsyncIterable<IContent> | GenerateChatOptions,
   maybeTools: ProviderToolset | undefined,
   lazyWireContents: boolean,
-  diskTextSource = false,
+  readsRowsAtTransport = false,
 ): Promise<MaterializedGenerateChatOptions> {
-  if (diskTextSource && !isAsyncIterableContents(contentsOrOptions)) {
+  if (readsRowsAtTransport && !isAsyncIterableContents(contentsOrOptions)) {
     return {
       ...contentsOrOptions,
       contents: [],
@@ -153,12 +185,13 @@ export async function materializeCallOptions(
           }),
     };
   }
-  const historySource: AsyncIterable<IContent> = isAsyncIterableContents(
-    contentsOrOptions,
-  )
-    ? contentsOrOptions
-    : contentsOrOptions.contents;
+  const historySource = historySourceOf(contentsOrOptions);
   const contents = lazyWireContents ? [] : await collectContents(historySource);
+  const rows = isAsyncIterableContents(contentsOrOptions)
+    ? undefined
+    : contentsOrOptions.requestRows;
+  if (rows !== undefined && !lazyWireContents && contents.length !== rows.count)
+    throw new Error('Provider request rows count changed');
   const providedOptions: MaterializedGenerateChatOptions =
     isAsyncIterableContents(contentsOrOptions)
       ? { contents, tools: maybeTools }

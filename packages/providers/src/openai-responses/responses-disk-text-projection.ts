@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
@@ -7,7 +8,6 @@ import { requireAssembledSystemInstruction } from '../utils/systemPromptPlacemen
 import { finishMediaRequest } from '../utils/request-media-resolution.js';
 import { serializeResponsesPromptEnvelope } from '../runtime/responses-source-serializer.js';
 import { isSanctionedOpenAIO200kModel } from '../openai/openaiModelPolicy.js';
-import { ResponsesDiskTextRows } from './responses-disk-text-rows.js';
 import {
   responsesInputContext,
   resolveInvocationEphemerals,
@@ -20,7 +20,7 @@ import {
 } from './openAIResponsesExecutor.js';
 
 async function* textRows(
-  rows: ResponsesDiskTextRows,
+  rows: ProviderRequestRows,
   signal?: AbortSignal,
 ): AsyncGenerator<IContent, void> {
   let count = 0;
@@ -94,10 +94,7 @@ export async function buildDiskTextResponsesContext(
   requireAssembledSystemInstruction(options.systemInstruction);
   assertDiskTextShape(options, deps);
   const rows = options.requestRows;
-  if (
-    !(rows instanceof ResponsesDiskTextRows) ||
-    options.contentCount !== rows.count
-  )
+  if (rows === undefined || options.contentCount !== rows.count)
     throw new Error(
       'Explicit Responses disk text selection identity/count is required',
     );

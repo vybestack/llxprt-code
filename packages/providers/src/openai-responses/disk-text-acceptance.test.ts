@@ -9,7 +9,7 @@ import {
   estimatePromptEnvelope,
   type PromptEnvelopeEstimate,
 } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import { ResponsesDiskTextRows } from './responses-disk-text-rows.js';
+import { requestSelection } from './__tests__/support/request-selection.js';
 import { withGpt56DiskSources } from '../tokenizers/gpt56-disk-tokenizer-factory.js';
 import { Gpt56SourceProjection } from '../tokenizers/gpt56-source-projection.js';
 import {
@@ -44,7 +44,7 @@ async function nativeEstimate(
     },
   };
   const projection = await setup.provider.projectPromptEnvelope({
-    ...setup.options(rows),
+    ...setup.options(requestSelection(rows)),
     requestRows: undefined,
   });
   try {
@@ -88,7 +88,7 @@ async function warmRuntime(setup: Setup): Promise<void> {
       );
     },
   });
-  const rows = new ResponsesDiskTextRows({
+  const rows = requestSelection({
     count: 1,
     async *openReader() {
       yield diskTextRow(0, false);
@@ -207,7 +207,7 @@ async function acceptance(large: boolean) {
   const largestRowBytes = largestRowSize(large);
   await warmRuntime(setup);
   const baseline = await heap();
-  const options = setup.options(new ResponsesDiskTextRows(disk.rows));
+  const options = setup.options(requestSelection(disk.rows));
   const projection = await setup.provider.projectPromptEnvelope(options);
   const source = requireSource(projection.finalizedProjection);
   const estimate = await estimatePromptEnvelope(

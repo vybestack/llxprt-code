@@ -1,6 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import type {
+  ProviderRequestRows,
+  ProviderRequestSelection,
+} from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
@@ -17,12 +20,10 @@ import {
 } from './promptEnvelopeSendSeam.js';
 
 /** An immutable disk selection whose enclosing owner transfers to this seam. */
-export interface PromptEnvelopeSource extends ProviderRequestRows {
-  close(): void | Promise<void>;
-}
+export type PromptEnvelopeSource = ProviderRequestSelection;
 
 export interface SourceProviderChatOptions extends RuntimeGenerateChatOptions {
-  readonly requestRows: ProviderRequestRows;
+  readonly requestRows: ProviderRequestSelection;
   readonly contentCount: number;
 }
 

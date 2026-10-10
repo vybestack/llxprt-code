@@ -24,6 +24,7 @@ import type { ProviderRuntimeContext } from '../providerRuntimeContext.js';
 import type { RuntimeInvocationContext } from '../RuntimeInvocationContext.js';
 import type { TelemetryContext } from './TelemetryContext.js';
 import type { StructuredError } from '../../core/turn.js';
+import type { ProviderRequestSelection } from '../../services/history/provider-request-snapshot.js';
 import type { StreamLivenessListener } from '../../utils/streamIdleTimeout.js';
 
 export interface RuntimeProviderTool {
@@ -78,6 +79,22 @@ export interface RuntimeGenerateChatOptions {
    * @plan PLAN-20260917-ISSUE854.P05b3
    */
   contents: AsyncIterable<IContent>;
+  /**
+   * Provider-neutral request selection (issue #854): immutable membership,
+   * repeatable `openReader(signal)` and an explicit close owner. When present
+   * it is authoritative; `contents` is its single-pass reader view. Providers
+   * and wrappers receive it without any shared-layer collection.
+   */
+  requestRows?: ProviderRequestSelection;
+  /** Row count of {@link requestRows}; must equal `requestRows.count`. */
+  contentCount?: number;
+  /**
+   * Transitional (issue #854): ask a provider that owns its request-rows
+   * transport to read `requestRows` itself (restricted source route). Without
+   * it the selection is just the authoritative history source. WP06/WP16
+   * remove this option once the source route is the default.
+   */
+  readRequestRowsAtTransport?: true;
   tools?: RuntimeProviderToolset;
   settings?: SettingsService;
   config?: Config;

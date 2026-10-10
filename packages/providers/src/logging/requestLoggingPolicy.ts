@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { GenerateChatOptions } from '../IProvider.js';
-import { ResponsesDiskTextRows } from '../openai-responses/responses-disk-text-rows.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { readsRequestRowsAtTransport } from '../BaseProviderNormalization.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
 
 export interface RequestLoggingPolicy {
@@ -15,7 +15,7 @@ export function requestLoggingPolicy(
   options: GenerateChatOptions,
   config: Config,
 ): RequestLoggingPolicy {
-  const source = options.requestRows instanceof ResponsesDiskTextRows;
+  const source = readsRequestRowsAtTransport(options);
   return Object.freeze({
     strictPreSend: source,
     strictDurableResponse: source,

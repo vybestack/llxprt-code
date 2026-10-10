@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { ResponsesDiskTextRows } from './responses-disk-text-rows.js';
+import { requestSelection } from './__tests__/support/request-selection.js';
 import { withGpt56DiskSources } from '../tokenizers/gpt56-disk-tokenizer-factory.js';
 import { diskTextFixture } from './__tests__/support/disk-text-fixture.js';
 import { projectionRuntime } from './__tests__/support/projection-ownership-fixture.js';
@@ -67,7 +67,10 @@ describe('source projection finalized options parity', () => {
       `http://127.0.0.1:${server.port}/v1`,
       disk.root,
     );
-    const options = richOptions(setup.options(disk.rows), setup.provider.name);
+    const options = richOptions(
+      setup.options(requestSelection(disk.rows)),
+      setup.provider.name,
+    );
     try {
       const eager = await setup.provider.projectPromptEnvelope({
         ...options,
@@ -84,11 +87,12 @@ describe('source projection finalized options parity', () => {
         promptEnvelopeTransportToken: eager.transportToken,
       }))
         speakers.push(row.speaker);
-      const rows = new ResponsesDiskTextRows(disk.rows);
+      const rows = requestSelection(disk.rows);
       const sourceOptions = {
         ...options,
         contents: { [Symbol.asyncIterator]: () => rows.openReader() },
         requestRows: rows,
+        readRequestRowsAtTransport: true as const,
       };
       const source = await setup.provider.projectPromptEnvelope(sourceOptions);
       const estimate = await estimatePromptEnvelope(
@@ -122,7 +126,7 @@ describe('source prepared options rejection', () => {
   it('rejects incompatible options added after preparing the source token rather than ignoring them', async () => {
     const disk = diskTextFixture(false, false);
     const setup = await projectionRuntime('http://127.0.0.1:1/v1', disk.root);
-    const options = setup.options(new ResponsesDiskTextRows(disk.rows));
+    const options = setup.options(requestSelection(disk.rows));
     const projection = await setup.provider.projectPromptEnvelope(options);
     if (options.runtime === undefined || options.settings === undefined)
       throw new Error('Missing fixture runtime');
@@ -157,10 +161,10 @@ describe('source prepared options rejection', () => {
     }
   });
 
-  it('rejects a source token without its branded selection before normalization reads any rows', async () => {
+  it('rejects a source token without its transport-read request rows before normalization reads any rows', async () => {
     const disk = diskTextFixture(false, false);
     const setup = await projectionRuntime('http://127.0.0.1:1/v1', disk.root);
-    const options = setup.options(new ResponsesDiskTextRows(disk.rows));
+    const options = setup.options(requestSelection(disk.rows));
     const projection = await setup.provider.projectPromptEnvelope(options);
     let reads = 0;
     const contents = {
@@ -180,7 +184,7 @@ describe('source prepared options rejection', () => {
           contents,
           promptEnvelopeTransportToken: projection.transportToken,
         }),
-      ).toThrow('Source token requires its branded disk selection');
+      ).toThrow('Source token requires its transport-read request rows');
       expect(reads).toBe(0);
     } finally {
       await projection.releaseIfUnsent?.();
