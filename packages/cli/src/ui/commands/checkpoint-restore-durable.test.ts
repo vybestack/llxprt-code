@@ -16,18 +16,33 @@ function gateDurableWrite(
   gate: ReturnType<typeof deferred>,
   entered: ReturnType<typeof deferred>,
 ): void {
-  const wait = SessionRecordingService.prototype.waitForCommit;
+  // Durable acknowledgement is awaited by sequence; remember the sequence of
+  // the enqueued checkpoint row and pause only that row's acknowledgement.
+  const enqueue = SessionRecordingService.prototype.enqueue;
+  const waitForSequence =
+    SessionRecordingService.prototype.waitForCommitSequence;
+  let rowSeq: number | null = null;
+  vi.spyOn(SessionRecordingService.prototype, 'enqueue').mockImplementation(
+    function (this: SessionRecordingService, ...args) {
+      const line = enqueue.call(this, ...args);
+      if (
+        line !== null &&
+        rowSeq === null &&
+        JSON.stringify(args[1]).includes('acknowledged checkpoint row')
+      )
+        rowSeq = line.seq;
+      return line;
+    },
+  );
   vi.spyOn(
     SessionRecordingService.prototype,
-    'waitForCommit',
-  ).mockImplementation(async function (this: SessionRecordingService, ...args) {
-    if (
-      JSON.stringify(args[0].payload).includes('acknowledged checkpoint row')
-    ) {
+    'waitForCommitSequence',
+  ).mockImplementation(async function (this: SessionRecordingService, seq) {
+    if (rowSeq !== null && seq === rowSeq) {
       entered.resolve();
       await gate.promise;
     }
-    return wait.call(this, ...args);
+    return waitForSequence.call(this, seq);
   });
 }
 
@@ -89,9 +104,11 @@ async function pausedRestore(
       expect(result?.type).toBe(cancel ? 'message' : 'tool');
       if (cancel) expect(fixture.history.getTotalTokens()).toBe(previousTokens);
       else
-        expect(fixture.history.getTotalTokens()).toBe(
-          'acknowledged checkpoint row'.length,
-        );
+        // A restore into an inactive chat publishes a replacement journal and
+        // disposes the fixture's original one, so read the live history.
+        expect(
+          fixture.config.getAgentClient().getHistoryService()?.getTotalTokens(),
+        ).toBe('acknowledged checkpoint row'.length);
       return uiPublished;
     } finally {
       gate.resolve();
