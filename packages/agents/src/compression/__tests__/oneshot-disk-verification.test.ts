@@ -21,13 +21,9 @@ async function verification(size: number, fail: boolean): Promise<number> {
       const snapshot = await history.openDumpSnapshot();
       const source = new HistoryDensityRows();
       const candidate = new HistoryDensityRows();
-      let duringVerification = 0;
       transport.beforeSend = async () => {
-        if (transport.requests.length === 2) {
-          duringVerification =
-            strategy.summaryRequestOwnership.snapshot().liveRows;
-          if (fail) throw new Error('verification transport failed');
-        }
+        if (transport.requests.length === 2 && fail)
+          throw new Error('verification transport failed');
       };
       try {
         for await (const row of snapshot.rows())
@@ -57,7 +53,7 @@ async function verification(size: number, fail: boolean): Promise<number> {
         ]);
         expect(strategy.summaryRequestOwnership.snapshot().liveRows).toBe(0);
         expect(transport.requests).toHaveLength(2);
-        return duringVerification;
+        return strategy.summaryRequestOwnership.snapshot().peakRows;
       } finally {
         candidate.close();
         source.close();
@@ -73,16 +69,16 @@ async function verification(size: number, fail: boolean): Promise<number> {
 
 describe('one-shot disk verification lifetime', () => {
   it.each([512, 8192])(
-    'owns the full %i-row summary request until successful verification completes',
+    'verifies a summary of the %i-row request without owning more than one row at a time',
     async (size) => {
-      expect(await verification(size, false)).toBeGreaterThan(size * 0.4);
+      expect(await verification(size, false)).toBe(1);
     },
     180_000,
   );
   it.each([512, 8192])(
     'keeps best-effort verification semantics and releases %i-row owners on failure',
     async (size) => {
-      expect(await verification(size, true)).toBeGreaterThan(size * 0.4);
+      expect(await verification(size, true)).toBe(1);
     },
     180_000,
   );

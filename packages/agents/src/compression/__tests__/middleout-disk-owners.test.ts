@@ -61,13 +61,6 @@ async function charge(size: number): Promise<number> {
       const source = new HistoryDensityRows();
       const candidate = new HistoryDensityRows(candidateOwners);
       const snapshot = await history.openDumpSnapshot();
-      let liveRows = 0;
-      let liveBytes = 0;
-      transport.beforeSend = async () => {
-        const stats = strategy.summaryRequestOwnership.snapshot();
-        liveRows = stats.liveRows;
-        liveBytes = stats.liveSerializedBytes;
-      };
       try {
         for await (const row of snapshot.rows())
           if (isCuratedContent(row)) source.append(row);
@@ -104,8 +97,10 @@ async function charge(size: number): Promise<number> {
         for (const _row of candidate) {
           /* exercise the disk row reader owners */
         }
-        expect(liveRows).toBeGreaterThan(size * 0.4);
-        expect(liveBytes).toBeGreaterThan(size * 300);
+        const summaryOwners = strategy.summaryRequestOwnership.snapshot();
+        expect(summaryOwners.peakRows).toBeLessThanOrEqual(1);
+        expect(summaryOwners.peakSerializedBytes).toBeLessThan(16 * 1024);
+        expect(summaryOwners.acquisitions).toBeGreaterThan(size * 0.4);
         expect(strategy.summaryRequestOwnership.snapshot().liveRows).toBe(0);
         expect(candidateOwners.within(diskBound)).toBe(true);
         expect(sourceOwners.within(diskBound)).toBe(true);
@@ -113,7 +108,7 @@ async function charge(size: number): Promise<number> {
           candidateOwners.snapshot().liveRows +
             sourceOwners.snapshot().liveRows,
         ).toBe(0);
-        return liveRows;
+        return summaryOwners.acquisitions;
       } finally {
         candidate.close();
         source.close();
@@ -173,7 +168,7 @@ const trapCases: Array<[number, string]> = [
 ];
 describe('disk middle-out registered owners', () => {
   it.each([512, 8192])(
-    'charges the whole %i-row summary request before send while disk rows remain bounded',
+    'streams the %i-row summary request one owned row at a time while disk rows remain bounded',
     async (size) => {
       expect(await charge(size)).toBeGreaterThan(size * 0.4);
     },

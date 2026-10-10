@@ -14,17 +14,11 @@ import {
   OneshotDiskHistory,
 } from './oneshot-disk-helpers.js';
 
-function expectedCharge(request: string): { rows: number; bytes: number } {
+function expectedCharge(request: string): { rows: number } {
   const expected: unknown = JSON.parse(request);
   if (!Array.isArray(expected) || !expected.every(isSpeakerContent))
     throw new Error('Invalid independent summary oracle');
-  return {
-    rows: expected.length,
-    bytes: expected.reduce(
-      (bytes, row) => bytes + Buffer.byteLength(JSON.stringify(row)),
-      0,
-    ),
-  };
+  return { rows: expected.length };
 }
 
 async function charge(size: number): Promise<number> {
@@ -38,13 +32,6 @@ async function charge(size: number): Promise<number> {
       const snapshot = await history.openDumpSnapshot();
       const source = new HistoryDensityRows();
       const candidate = new HistoryDensityRows();
-      let observedBytes = 0;
-      transport.beforeSend = async () => {
-        const owners = strategy.summaryRequestOwnership.snapshot();
-        expect(owners.liveRows).toBe(expected.rows);
-        expect(owners.liveSerializedBytes).toBe(expected.bytes);
-        observedBytes = owners.liveSerializedBytes;
-      };
       try {
         for await (const row of snapshot.rows())
           if (isCuratedContent(row)) source.append(row);
@@ -89,7 +76,15 @@ async function charge(size: number): Promise<number> {
         expect(
           strategy.summaryRequestOwnership.snapshot().liveSerializedBytes,
         ).toBe(0);
-        return observedBytes;
+        const owners = strategy.summaryRequestOwnership.snapshot();
+        // Both attempts stream the journal rows: each row is owned only until
+        // the next pull, never all at once, and every history row is charged.
+        expect(owners.peakRows).toBeLessThanOrEqual(1);
+        expect(owners.acquisitions).toBeGreaterThanOrEqual(
+          2 * (expected.rows - 6),
+        );
+        expect(owners.acquisitions).toBeLessThanOrEqual(2 * expected.rows);
+        return owners.peakSerializedBytes;
       } finally {
         candidate.close();
         source.close();
@@ -104,9 +99,10 @@ async function charge(size: number): Promise<number> {
 }
 describe('complete one-shot disk summary request charge', () => {
   it.each([512, 8192])(
-    'charges every model-facing byte from the independent %i-row oracle and releases cancellation and success',
+    'streams the independent %i-row oracle request one owned row at a time and releases cancellation and success',
     async (size) => {
-      expect(await charge(size)).toBeGreaterThan(size * 300);
+      // One 2 KiB fixture row at a time, not the whole range.
+      expect(await charge(size)).toBeLessThan(16 * 1024);
     },
     180_000,
   );

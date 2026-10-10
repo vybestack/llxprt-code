@@ -3,6 +3,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { HistoryIndexedRows } from '@vybestack/llxprt-code-core/services/history/historyMutationSnapshot.js';
 import type { CompressionContext } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
+import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import {
   adjustDiskToolBoundary,
@@ -112,55 +113,69 @@ function preserveLastPrompt(
   return { top, bottom, lastPromptContext, injection };
 }
 
-export async function withDiskSummaryRequest<T>(
+const SUMMARY_FRAME_ROWS = 3;
+
+/**
+ * The complete summarization request as a repeatable selection: the security
+ * preamble, the compression prompt, the sanitized journal rows in
+ * [plan.top, plan.bottom), the context injections and the trigger instruction.
+ * Only the small framing rows live in memory; journal rows are read one at a
+ * time while a reader advances and each is owned only until the next pull.
+ */
+export function diskSummaryRequestSelection(
   rows: HistoryIndexedRows,
   plan: MiddleOutDiskPlan,
   prompt: string,
   injections: IContent[],
   ownership: RowOwnership,
-  send: (request: IContent[]) => Promise<T>,
-): Promise<T> {
-  const request: IContent[] = [];
-  const append = (row: IContent): void => {
-    ownership.retain(row);
-    request.push(row);
+): ProviderRequestSelection {
+  const tail = [...injections, ...plan.injection];
+  const promptRow: IContent = {
+    speaker: 'human',
+    blocks: [{ type: 'text', text: prompt }],
   };
-  try {
-    append(COMPRESSION_SECURITY_PREAMBLE);
-    append({ speaker: 'human', blocks: [{ type: 'text', text: prompt }] });
-    let priorSnapshot = false;
-    for (let index = plan.top; index < plan.bottom; index++) {
-      const row = rows.readRow(index);
-      priorSnapshot ||= row.blocks.some(
-        (block) =>
-          block.type === 'text' && block.text.includes('<state_snapshot>'),
-      );
-      append(sanitizeHistoryForCompression([row])[0]);
-    }
-    for (const row of injections) append(row);
-    for (const row of plan.injection) append(row);
-    append({
-      speaker: 'human',
-      blocks: [
-        {
-          type: 'text',
-          text: buildTriggerInstruction(
-            priorSnapshot
-              ? [
-                  {
-                    speaker: 'human',
-                    blocks: [{ type: 'text', text: '<state_snapshot>' }],
-                  },
-                ]
-              : [],
-          ),
-        },
-      ],
-    });
-    // This complete model request grows with the compressed range. Every row is
-    // charged before options construction and transport, not counted as bounded history.
-    return await send(request);
-  } finally {
-    for (const row of request) ownership.release(row);
-  }
+  return {
+    count: SUMMARY_FRAME_ROWS + (plan.bottom - plan.top) + tail.length,
+    async *openReader(signal) {
+      signal?.throwIfAborted();
+      yield COMPRESSION_SECURITY_PREAMBLE;
+      yield promptRow;
+      let priorSnapshot = false;
+      for (let index = plan.top; index < plan.bottom; index++) {
+        signal?.throwIfAborted();
+        const row = rows.readRow(index);
+        priorSnapshot ||= row.blocks.some(
+          (block) =>
+            block.type === 'text' && block.text.includes('<state_snapshot>'),
+        );
+        const sanitized = sanitizeHistoryForCompression([row])[0];
+        ownership.retain(sanitized);
+        try {
+          yield sanitized;
+        } finally {
+          ownership.release(sanitized);
+        }
+      }
+      yield* tail;
+      yield {
+        speaker: 'human',
+        blocks: [
+          {
+            type: 'text',
+            text: buildTriggerInstruction(
+              priorSnapshot
+                ? [
+                    {
+                      speaker: 'human',
+                      blocks: [{ type: 'text', text: '<state_snapshot>' }],
+                    },
+                  ]
+                : [],
+            ),
+          },
+        ],
+      };
+    },
+    close: () => undefined,
+  };
 }

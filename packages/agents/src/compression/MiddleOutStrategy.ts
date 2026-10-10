@@ -64,8 +64,10 @@ import type { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/hi
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import {
   planDiskMiddleOut,
-  withDiskSummaryRequest,
+  diskSummaryRequestSelection,
 } from './middleOutDiskPlan.js';
+import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import { arrayRequestSelection } from './array-request-selection.js';
 
 const MINIMUM_MIDDLE_MESSAGES = 4;
 const LAST_PROMPT_TOKEN_THRESHOLD = 500;
@@ -118,13 +120,16 @@ export class MiddleOutStrategy implements CompressionStrategy {
         context.runtimeContext.ephemerals.compressionProfile(),
       ),
     );
-    const { finalSummary, capturedUsage } = await withDiskSummaryRequest(
-      context.history,
-      plan,
-      this.resolvePrompt(context),
-      this.buildContextInjections(context),
-      this.summaryRequestOwnership,
-      (request) => this.compressAndVerify(context, request, providerResult),
+    const { finalSummary, capturedUsage } = await this.compressAndVerify(
+      context,
+      diskSummaryRequestSelection(
+        context.history,
+        plan,
+        this.resolvePrompt(context),
+        this.buildContextInjections(context),
+        this.summaryRequestOwnership,
+      ),
+      providerResult,
     );
     for (let index = 0; index < plan.top; index++)
       candidate.append(context.history.readRow(index));
@@ -192,7 +197,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
 
     const { finalSummary, capturedUsage } = await this.compressAndVerify(
       context,
-      compressionRequest,
+      arrayRequestSelection(compressionRequest),
       providerResult,
     );
 
@@ -429,7 +434,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
    */
   private async compressAndVerify(
     context: Omit<CompressionContext, 'history'>,
-    request: IContent[],
+    request: ProviderRequestSelection,
     providerResult: ReturnType<typeof destructureProviderResult>,
   ): Promise<{ finalSummary: string; capturedUsage: UsageStats | undefined }> {
     const {
@@ -473,7 +478,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
 
   private async callProvider(
     provider: IProvider,
-    request: IContent[],
+    request: ProviderRequestSelection,
     context: Omit<CompressionContext, 'history'>,
     resolvedRuntime: ProviderRuntimeContext,
     resolvedConfig: Config | undefined,
@@ -501,7 +506,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
     try {
       const stream = provider.generateChatCompletion(
         await buildCompressionChatOptions({
-          contents: request,
+          requestRows: request,
           providerRuntime,
           resolvedConfig,
           fallbackConfig: context.config,

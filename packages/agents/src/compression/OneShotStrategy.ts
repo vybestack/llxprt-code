@@ -73,7 +73,9 @@ function destructureProviderResult(result: CompressionProviderResult): {
 
 import type { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
-import { withDiskSummaryRequest } from './middleOutDiskPlan.js';
+import { diskSummaryRequestSelection } from './middleOutDiskPlan.js';
+import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import { arrayRequestSelection } from './array-request-selection.js';
 import { adjustDiskToolBoundary } from './truncationDiskBoundary.js';
 
 const MINIMUM_COMPRESS_MESSAGES = 4;
@@ -114,39 +116,35 @@ export class OneShotStrategy implements CompressionStrategy {
         context.runtimeContext.ephemerals.compressionProfile(),
       ),
     );
-    const { finalSummary, usage } = await withDiskSummaryRequest(
+    const request = diskSummaryRequestSelection(
       context.history,
       { top: 0, bottom, injection: [] },
       this.resolvePrompt(context),
       this.buildContextInjections(context),
       this.summaryRequestOwnership,
-      async (request) => {
-        const {
-          text: summary,
-          usage,
-          diagnostics,
-        } = await this.callProvider(
-          result.provider,
-          request,
-          context,
-          result.resolvedRuntime,
-          result.resolvedConfig,
-          result.resolvedOptions,
-          result.invocation,
-        );
-        if (!summary.trim())
-          throw new EmptySummaryError('one-shot', diagnostics);
-        const finalSummary = await this.maybeVerifySummary(
-          context,
-          result.provider,
-          summary,
-          result.resolvedRuntime,
-          result.resolvedConfig,
-          result.resolvedOptions,
-          result.invocation,
-        );
-        return { finalSummary, usage };
-      },
+    );
+    const {
+      text: summary,
+      usage,
+      diagnostics,
+    } = await this.callProvider(
+      result.provider,
+      request,
+      context,
+      result.resolvedRuntime,
+      result.resolvedConfig,
+      result.resolvedOptions,
+      result.invocation,
+    );
+    if (!summary.trim()) throw new EmptySummaryError('one-shot', diagnostics);
+    const finalSummary = await this.maybeVerifySummary(
+      context,
+      result.provider,
+      summary,
+      result.resolvedRuntime,
+      result.resolvedConfig,
+      result.resolvedOptions,
+      result.invocation,
     );
     const assembled = this.assembleResult(
       [],
@@ -202,7 +200,7 @@ export class OneShotStrategy implements CompressionStrategy {
       diagnostics,
     } = await this.callProvider(
       provider,
-      compressionRequest,
+      arrayRequestSelection(compressionRequest),
       context,
       resolvedRuntime,
       resolvedConfig,
@@ -380,7 +378,7 @@ export class OneShotStrategy implements CompressionStrategy {
 
   private async callProvider(
     provider: IProvider,
-    request: IContent[],
+    request: ProviderRequestSelection,
     context: Omit<CompressionContext, 'history'>,
     resolvedRuntime: ProviderRuntimeContext,
     resolvedConfig: Config | undefined,
@@ -408,7 +406,7 @@ export class OneShotStrategy implements CompressionStrategy {
     try {
       const stream = provider.generateChatCompletion(
         await buildCompressionChatOptions({
-          contents: request,
+          requestRows: request,
           providerRuntime,
           resolvedConfig,
           fallbackConfig: context.config,
