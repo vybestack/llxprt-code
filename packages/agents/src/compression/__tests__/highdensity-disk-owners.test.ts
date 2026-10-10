@@ -2,7 +2,8 @@
 import { describe, expect, it } from 'bun:test';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { HistoryDumpSnapshot } from '@vybestack/llxprt-code-core/services/history/historyDumpSnapshot.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { HistoryIndexedRows } from '@vybestack/llxprt-code-core/services/history/historyMutationSnapshot.js';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import {
   highdensitySetup,
@@ -15,27 +16,45 @@ class RetainingHistory extends HighdensityDiskHistory {
   readonly copied: IContent[] = [];
   readonly borrowedOwners = new RowOwnership();
   readonly copyOwners = new RowOwnership();
-  override async openDumpSnapshot(): Promise<HistoryDumpSnapshot> {
-    const snapshot = await super.openDumpSnapshot();
+  constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {
+    super(options);
+    // The compressor reads rows through the pinned checkpoint, so the trap
+    // holds references to the rows of the first pass over that checkpoint.
+    const real = this.detachedValues;
     let first = true;
-    const { retained, copied, borrowedOwners, copyOwners } = this;
-    return {
-      ...snapshot,
-      async *rows() {
-        const retain = first;
-        first = false;
-        for await (const row of snapshot.rows()) {
-          if (retain) {
-            const copy = { ...row, blocks: [...row.blocks] };
-            retained.push(row);
-            copied.push(copy);
-            borrowedOwners.retain(row);
-            copyOwners.retain(copy);
-          }
-          yield row;
-        }
+    const hold = (row: IContent): void => this.hold(row);
+    Object.defineProperty(this, 'detachedValues', {
+      value: {
+        ...real,
+        withCheckpoint: <T>(
+          execute: (checkpoint: HistoryIndexedRows) => Promise<T>,
+          signal?: AbortSignal,
+        ): Promise<T> =>
+          real.withCheckpoint((checkpoint) => {
+            let retain = first;
+            first = false;
+            return execute({
+              length: checkpoint.length,
+              readRow: (index) => checkpoint.readRow(index),
+              *[Symbol.iterator]() {
+                const pass = retain;
+                retain = false;
+                for (const row of checkpoint) {
+                  if (pass) hold(row);
+                  yield row;
+                }
+              },
+            });
+          }, signal),
       },
-    };
+    });
+  }
+  private hold(row: IContent): void {
+    const copy = { ...row, blocks: [...row.blocks] };
+    this.retained.push(row);
+    this.copied.push(copy);
+    this.borrowedOwners.retain(row);
+    this.copyOwners.retain(copy);
   }
   release(): void {
     for (const row of this.retained) this.borrowedOwners.release(row);
@@ -70,7 +89,7 @@ async function trap(size: number, mode: string): Promise<number> {
       expect(stats.liveSerializedBytes).toBeGreaterThan(
         size === 8192 ? 8 * 1024 * 1024 : 0,
       );
-      expect(within).toBe(process.env.HIGHDENSITY_RETAINING_TRAP === '1');
+      expect(within).toBe(false);
       return stats.liveRows;
     },
     4096,

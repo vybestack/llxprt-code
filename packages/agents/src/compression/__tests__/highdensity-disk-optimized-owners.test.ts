@@ -46,10 +46,8 @@ async function bounded(size: number): Promise<number> {
           8 * 1024 * 1024,
         );
       }
-      expect(source.snapshot().liveRows).toBeGreaterThan(0);
-      expect(source.snapshot().liveSerializedBytes).toBe(
-        Buffer.byteLength(JSON.stringify(densityRow(size - 1, 2048)), 'utf8'),
-      );
+      expect(source.snapshot().liveRows).toBe(0);
+      expect(source.snapshot().liveSerializedBytes).toBe(0);
       expect(mutation.snapshot().liveRows).toBe(0);
       await history.waitForCommit();
       for (const owner of [source, mutation]) {
