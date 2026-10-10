@@ -33,24 +33,19 @@ import {
   makeUserMessage,
   buildRuntimeContext,
 } from '../../core/__tests__/chatSession-density-helpers.js';
-import {
-  ProviderContentEnforcer,
-  type ProviderContentEnforcementDeps,
-} from '../providerContentEnforcement.js';
+import { enforceProviderSourceForTest } from './support/enforce-provider-source.js';
+import { buildHandlerHarness } from './support/handler-harness.js';
 import { CompressionHandler } from '../CompressionHandler.js';
 import { TopDownTruncationStrategy } from '../TopDownTruncationStrategy.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import { type CompressionProviderResult } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ProviderContentEnvelope } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
 import {
-  makeFallbackFacadeLogger as makeLogger,
   makeStoredAi,
   makeCompressionSnapshot,
   estimateBookkeepingProjection,
-  restoredPromptTokenBaseline,
   seedFallbackCooldown,
   installProviderDiskFixture,
 } from './compression-provider-fallback-test-helpers.js';
@@ -79,33 +74,51 @@ let suite0Handler: CompressionHandler;
 
 let suite1HistoryService: HistoryService;
 
-interface EnforcerHarness {
-  enforcer: ProviderContentEnforcer;
-  deps: ProviderContentEnforcementDeps;
+interface LadderHarness {
+  handler: CompressionHandler;
+  setDiskFallback: ReturnType<typeof buildHandlerHarness>['setDiskFallback'];
+  performCompression: ReturnType<
+    typeof buildHandlerHarness
+  >['performCompression'];
 }
 
-function suite1BuildEnforcerHarness(
-  overrides: Partial<ProviderContentEnforcementDeps> = {},
-): EnforcerHarness {
+/** Makes the handler's prompt-baseline reset fail the way a throwing setter would. */
+function failBaselineReset(handler: CompressionHandler, message: string): void {
+  let baseline = handler.getLastPromptTokenCount();
+  Object.defineProperty(handler, 'lastPromptTokenCount', {
+    configurable: true,
+    get: () => baseline,
+    set: (value: number | null) => {
+      if (value === null) throw new Error(message);
+      baseline = value;
+    },
+  });
+}
+
+function suite1BuildHarness(): LadderHarness {
   const runtimeContext = buildRuntimeContext(suite1HistoryService, {
     contextLimit: 200_000,
     compressionThreshold: 0.8,
   });
-  const deps: ProviderContentEnforcementDeps = {
-    historyService: suite1HistoryService,
-    runtimeContext,
-    generationConfig: {},
-    providerRuntimeNullable: undefined,
-    logger: makeLogger(),
-    ensureDensityOptimized: vi.fn().mockResolvedValue(undefined),
-    performCompression: vi.fn(),
-    performFallbackCompression: vi.fn().mockResolvedValue(false),
-    getPromptTokenBaseline: () => null,
-    resetPromptTokenBaseline: () => {},
-    restorePromptTokenBaseline: () => {},
-    ...overrides,
-  };
-  return { enforcer: new ProviderContentEnforcer(deps), deps };
+  return buildHandlerHarness(suite1HistoryService, runtimeContext);
+}
+
+function enforceSuite1(
+  harness: LadderHarness,
+  pending: IContent[],
+  promptId: string,
+  estimateRows?: (rows: IContent[]) => Promise<number>,
+  pendingRecoverable = true,
+): Promise<IContent[]> {
+  return enforceProviderSourceForTest(
+    harness.handler,
+    suite1HistoryService,
+    pending,
+    promptId,
+    undefined,
+    estimateRows,
+    pendingRecoverable,
+  );
 }
 
 describe('Finding 1: provider fallback failure propagation through real CompressionHandler (Issue #2588)', () => {
@@ -190,10 +203,10 @@ describe('Finding 1: provider fallback failure propagation through real Compress
 });
 
 // ---------------------------------------------------------------------------
-// Finding 2: Stage-aware projection errors in ProviderContentEnforcer
+// Finding 2: Stage-aware projection errors in the source ladder
 // ---------------------------------------------------------------------------
 
-describe('Finding 2: stage-aware projection errors in ProviderContentEnforcer (Issue #2588)', () => {
+describe('Finding 2: stage-aware projection errors in the CompressionHandler source ladder (Issue #2588)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     suite1HistoryService = new HistoryService();
@@ -289,13 +302,6 @@ async function testBody0(): Promise<void> {
   suite0HistoryService.add(makeStoredAi('resp-preserved-on-failure'));
 
   const pending = makeUserMessage('pending request');
-  const envelope: ProviderContentEnvelope = {
-    contents: await Array.fromAsync(
-      suite0HistoryService.getCuratedForProviderStream([pending]),
-    ),
-    pendingContents: [pending],
-  };
-
   vi.spyOn(suite0HistoryService, 'estimateTokensForContents').mockResolvedValue(
     150_000,
   );
@@ -311,7 +317,13 @@ async function testBody0(): Promise<void> {
 
   let thrownError: Error | undefined;
   try {
-    await suite0Handler.enforceProviderContents(envelope, 'test-prompt');
+    await enforceProviderSourceForTest(
+      suite0Handler,
+      suite0HistoryService,
+      [pending],
+      'test-prompt',
+      undefined,
+    );
   } catch (error) {
     thrownError = error as Error;
   }
@@ -334,13 +346,6 @@ async function testBody1(): Promise<void> {
   suite0HistoryService.add(makeUserMessage('established history'));
 
   const pending = makeUserMessage('pending request');
-  const envelope: ProviderContentEnvelope = {
-    contents: await Array.fromAsync(
-      suite0HistoryService.getCuratedForProviderStream([pending]),
-    ),
-    pendingContents: [pending],
-  };
-
   vi.spyOn(suite0HistoryService, 'estimateTokensForContents').mockResolvedValue(
     150_000,
   );
@@ -355,7 +360,13 @@ async function testBody1(): Promise<void> {
 
   let thrownError: Error | undefined;
   try {
-    await suite0Handler.enforceProviderContents(envelope, 'test-prompt');
+    await enforceProviderSourceForTest(
+      suite0Handler,
+      suite0HistoryService,
+      [pending],
+      'test-prompt',
+      undefined,
+    );
   } catch (error) {
     thrownError = error as Error;
   }
@@ -371,13 +382,6 @@ async function testBody2(): Promise<void> {
   suite0HistoryService.add(makeUserMessage('established history'));
 
   const pending = makeUserMessage('pending request');
-  const envelope: ProviderContentEnvelope = {
-    contents: await Array.fromAsync(
-      suite0HistoryService.getCuratedForProviderStream([pending]),
-    ),
-    pendingContents: [pending],
-  };
-
   // contextLimit = 200_000, completionBudget = 65_536
   // marginAdjustedLimit = 199_995 → over-limit when projected > 199_995
   // estimate + 65_536 > 199_995 → estimate > 134_459
@@ -418,9 +422,12 @@ async function testBody2(): Promise<void> {
     incrementalPublications += 1;
   });
 
-  const result = await suite0Handler.enforceProviderContents(
-    envelope,
+  const result = await enforceProviderSourceForTest(
+    suite0Handler,
+    suite0HistoryService,
+    [pending],
     'test-prompt',
+    undefined,
   );
 
   // The truncated summary content must appear in the returned provider
@@ -492,13 +499,10 @@ async function testBody4(): Promise<void> {
   const pending = makeUserMessage('pending request');
 
   await expect(
-    suite0Handler.enforceProviderContents(
-      {
-        contents: await Array.fromAsync(
-          suite0HistoryService.getCuratedForProviderStream([pending]),
-        ),
-        pendingContents: [pending],
-      },
+    enforceProviderSourceForTest(
+      suite0Handler,
+      suite0HistoryService,
+      [pending],
       'provider-rejected-commit',
       undefined,
       estimateBookkeepingProjection,
@@ -550,13 +554,10 @@ async function testBody6(): Promise<void> {
   control.activateCandidateAfter(1);
   const pending = makeUserMessage('pending request');
 
-  const contents = await suite0Handler.enforceProviderContents(
-    {
-      contents: await Array.fromAsync(
-        suite0HistoryService.getCuratedForProviderStream([pending]),
-      ),
-      pendingContents: [pending],
-    },
+  const contents = await enforceProviderSourceForTest(
+    suite0Handler,
+    suite0HistoryService,
+    [pending],
     'provider-successful-commit',
     undefined,
     estimateBookkeepingProjection,
@@ -583,44 +584,24 @@ async function testBody7(): Promise<void> {
   const originalHistory = [...(await collectRawHistory(suite1HistoryService))];
   const originalHistoryTokens =
     await suite1HistoryService.estimateTokensForContents(originalHistory);
-  let promptTokenBaseline = 123;
-
-  const harness = suite1BuildEnforcerHarness({
-    estimateFinalizedPromptTokens: async () => 150_000,
-    getPromptTokenBaseline: () => promptTokenBaseline,
-    resetPromptTokenBaseline: () => {
-      promptTokenBaseline = 0;
-    },
-    restorePromptTokenBaseline: (baseline) => {
-      promptTokenBaseline = restoredPromptTokenBaseline(baseline);
-    },
-  });
-  harness.deps.performCompression.mockResolvedValue(
+  const harness = suite1BuildHarness();
+  harness.handler.setLastPromptTokenCount(123);
+  harness.performCompression.mockResolvedValue(
     PerformCompressionResult.COMPRESSED,
   );
-  harness.deps.performFallbackCompression.mockImplementation(
-    async (_promptId, applyResult) => {
-      await installFixtureCandidate(applyResult, [
-        makeStoredAi('resp-candidate'),
-      ]);
-      return true;
-    },
-  );
+  harness.setDiskFallback(async (_promptId, applyResult) => {
+    await installFixtureCandidate(applyResult, [
+      makeStoredAi('resp-candidate'),
+    ]);
+    return true;
+  });
   suite1HistoryService.on('tokensUpdated', () => {
     throw new Error('injected candidate installation failure');
   });
   const pending = makeUserMessage('pending request');
 
   await expect(
-    harness.enforcer.enforce(
-      {
-        contents: await Array.fromAsync(
-          suite1HistoryService.getCuratedForProviderStream([pending]),
-        ),
-        pendingContents: [pending],
-      },
-      'failed-candidate',
-    ),
+    enforceSuite1(harness, [pending], 'failed-candidate', async () => 150_000),
   ).rejects.toThrow('injected candidate installation failure');
 
   expect(await collectRawHistory(suite1HistoryService)).toStrictEqual(
@@ -631,7 +612,7 @@ async function testBody7(): Promise<void> {
   );
   expect(suite1HistoryService.getBaseTokenOffset()).toBe(37);
   expect(suite1HistoryService.getCacheAnchorSeq()).toBe(anchorEntry.seq);
-  expect(promptTokenBaseline).toBe(123);
+  expect(harness.handler.getLastPromptTokenCount()).toBe(123);
   expect(
     (await collectRawHistory(suite1HistoryService))[0].metadata,
   ).toMatchObject({
@@ -654,40 +635,25 @@ async function testBody8(): Promise<void> {
   const originalTokens =
     (await suite1HistoryService.estimateTokensForContents(originalHistory)) +
     37;
-  let promptTokenBaseline = 123;
-
-  const harness = suite1BuildEnforcerHarness({
-    estimateFinalizedPromptTokens: async () => 150_000,
-    getPromptTokenBaseline: () => promptTokenBaseline,
-    resetPromptTokenBaseline: () => {
-      promptTokenBaseline = 0;
-    },
-    restorePromptTokenBaseline: (baseline) => {
-      promptTokenBaseline = restoredPromptTokenBaseline(baseline);
-    },
-  });
-  harness.deps.performCompression.mockResolvedValue(
+  const harness = suite1BuildHarness();
+  harness.handler.setLastPromptTokenCount(123);
+  harness.performCompression.mockResolvedValue(
     PerformCompressionResult.COMPRESSED,
   );
-  harness.deps.performFallbackCompression.mockImplementation(
-    async (_promptId, applyResult) => {
-      await installFixtureCandidate(applyResult, [
-        makeStoredAi('resp-candidate'),
-      ]);
-      throw new Error('fallback bookkeeping failed');
-    },
-  );
+  harness.setDiskFallback(async (_promptId, applyResult) => {
+    await installFixtureCandidate(applyResult, [
+      makeStoredAi('resp-candidate'),
+    ]);
+    throw new Error('fallback bookkeeping failed');
+  });
   const pending = makeUserMessage('pending request');
 
   await expect(
-    harness.enforcer.enforce(
-      {
-        contents: await Array.fromAsync(
-          suite1HistoryService.getCuratedForProviderStream([pending]),
-        ),
-        pendingContents: [pending],
-      },
+    enforceSuite1(
+      harness,
+      [pending],
       'rejected-after-commit',
+      async () => 150_000,
     ),
   ).rejects.toThrow('fallback bookkeeping failed');
 
@@ -697,7 +663,7 @@ async function testBody8(): Promise<void> {
   expect(suite1HistoryService.getTotalTokens()).toBe(originalTokens);
   expect(suite1HistoryService.getBaseTokenOffset()).toBe(37);
   expect(suite1HistoryService.getCacheAnchorSeq()).toBe(anchorEntry.seq);
-  expect(promptTokenBaseline).toBe(123);
+  expect(harness.handler.getLastPromptTokenCount()).toBe(123);
 }
 
 async function testBody9(): Promise<void> {
@@ -713,41 +679,26 @@ async function testBody9(): Promise<void> {
   const originalTokens =
     (await suite1HistoryService.estimateTokensForContents(originalHistory)) +
     37;
-  let promptTokenBaseline = 123;
-
-  const harness = suite1BuildEnforcerHarness({
-    estimateFinalizedPromptTokens: async () => 150_000,
-    getPromptTokenBaseline: () => promptTokenBaseline,
-    resetPromptTokenBaseline: () => {
-      promptTokenBaseline = 0;
-      throw new Error('prompt baseline reset failed');
-    },
-    restorePromptTokenBaseline: (baseline) => {
-      promptTokenBaseline = restoredPromptTokenBaseline(baseline);
-    },
-  });
-  harness.deps.performCompression.mockResolvedValue(
+  const harness = suite1BuildHarness();
+  harness.handler.setLastPromptTokenCount(123);
+  failBaselineReset(harness.handler, 'prompt baseline reset failed');
+  harness.performCompression.mockResolvedValue(
     PerformCompressionResult.COMPRESSED,
   );
-  harness.deps.performFallbackCompression.mockImplementation(
-    async (_promptId, applyResult) => {
-      await installFixtureCandidate(applyResult, [
-        makeStoredAi('resp-candidate'),
-      ]);
-      return true;
-    },
-  );
+  harness.setDiskFallback(async (_promptId, applyResult) => {
+    await installFixtureCandidate(applyResult, [
+      makeStoredAi('resp-candidate'),
+    ]);
+    return true;
+  });
   const pending = makeUserMessage('pending request');
 
   await expect(
-    harness.enforcer.enforce(
-      {
-        contents: await Array.fromAsync(
-          suite1HistoryService.getCuratedForProviderStream([pending]),
-        ),
-        pendingContents: [pending],
-      },
+    enforceSuite1(
+      harness,
+      [pending],
       'failed-baseline-reset',
+      async () => 150_000,
     ),
   ).rejects.toThrow('prompt baseline reset failed');
 
@@ -757,21 +708,13 @@ async function testBody9(): Promise<void> {
   expect(suite1HistoryService.getTotalTokens()).toBe(originalTokens);
   expect(suite1HistoryService.getBaseTokenOffset()).toBe(37);
   expect(suite1HistoryService.getCacheAnchorSeq()).toBe(anchorEntry.seq);
-  expect(promptTokenBaseline).toBe(123);
+  expect(harness.handler.getLastPromptTokenCount()).toBe(123);
 }
 
 async function testBody10(): Promise<void> {
   suite1HistoryService.add(makeUserMessage('established history'));
   const pending = makeUserMessage('pending request');
-  const contents: IContent[] = await Array.fromAsync(
-    suite1HistoryService.getCuratedForProviderStream([pending]),
-  );
-  const envelope: ProviderContentEnvelope = {
-    contents,
-    pendingContents: [pending],
-  };
-
-  const harness = suite1BuildEnforcerHarness();
+  const harness = suite1BuildHarness();
   const estimateSpy = vi.spyOn(
     suite1HistoryService,
     'estimateTokensForContents',
@@ -782,13 +725,13 @@ async function testBody10(): Promise<void> {
     .mockResolvedValueOnce(200_000)
     .mockRejectedValue(new Error('estimation infrastructure down'));
 
-  harness.deps.performCompression.mockResolvedValue(
+  harness.performCompression.mockResolvedValue(
     PerformCompressionResult.COMPRESSED,
   );
 
   let thrownError: Error | undefined;
   try {
-    await harness.enforcer.enforce(envelope, 'test-prompt');
+    await enforceSuite1(harness, [pending], 'test-prompt');
   } catch (error) {
     thrownError = error as Error;
   }
@@ -801,15 +744,7 @@ async function testBody10(): Promise<void> {
 async function testBody11(): Promise<void> {
   suite1HistoryService.add(makeUserMessage('established history'));
   const pending = makeUserMessage('pending request');
-  const contents: IContent[] = await Array.fromAsync(
-    suite1HistoryService.getCuratedForProviderStream([pending]),
-  );
-  const envelope: ProviderContentEnvelope = {
-    contents,
-    pendingContents: [pending],
-  };
-
-  const harness = suite1BuildEnforcerHarness();
+  const harness = suite1BuildHarness();
   const estimateSpy = vi.spyOn(
     suite1HistoryService,
     'estimateTokensForContents',
@@ -821,13 +756,13 @@ async function testBody11(): Promise<void> {
     .mockResolvedValueOnce(199_000)
     .mockRejectedValue(new Error('estimation infrastructure down'));
 
-  harness.deps.performCompression.mockResolvedValue(
+  harness.performCompression.mockResolvedValue(
     PerformCompressionResult.COMPRESSED,
   );
 
   let thrownError: Error | undefined;
   try {
-    await harness.enforcer.enforce(envelope, 'test-prompt');
+    await enforceSuite1(harness, [pending], 'test-prompt');
   } catch (error) {
     thrownError = error as Error;
   }
@@ -840,15 +775,7 @@ async function testBody11(): Promise<void> {
 async function testBody12(): Promise<void> {
   suite1HistoryService.add(makeUserMessage('established history'));
   const pending = makeUserMessage('pending request');
-  const contents: IContent[] = await Array.fromAsync(
-    suite1HistoryService.getCuratedForProviderStream([pending]),
-  );
-  const envelope: ProviderContentEnvelope = {
-    contents,
-    pendingContents: [pending],
-  };
-
-  const harness = suite1BuildEnforcerHarness();
+  const harness = suite1BuildHarness();
   const estimateSpy = vi.spyOn(
     suite1HistoryService,
     'estimateTokensForContents',
@@ -861,22 +788,20 @@ async function testBody12(): Promise<void> {
     .mockResolvedValueOnce(199_000)
     .mockRejectedValue(new Error('estimation infrastructure down'));
 
-  harness.deps.performCompression.mockResolvedValue(
+  harness.performCompression.mockResolvedValue(
     PerformCompressionResult.COMPRESSED,
   );
 
-  harness.deps.performFallbackCompression.mockImplementation(
-    async (_promptId, applyResult) => {
-      await installFixtureCandidate(applyResult, [
-        makeUserMessage('truncated history'),
-      ]);
-      return true;
-    },
-  );
+  harness.setDiskFallback(async (_promptId, applyResult) => {
+    await installFixtureCandidate(applyResult, [
+      makeUserMessage('truncated history'),
+    ]);
+    return true;
+  });
 
   let thrownError: Error | undefined;
   try {
-    await harness.enforcer.enforce(envelope, 'test-prompt');
+    await enforceSuite1(harness, [pending], 'test-prompt');
   } catch (error) {
     thrownError = error as Error;
   }
@@ -888,22 +813,14 @@ async function testBody12(): Promise<void> {
 
 async function testBody13(): Promise<void> {
   suite1HistoryService.add(makeUserMessage('established history'));
-  const contents: IContent[] = await Array.fromAsync(
-    suite1HistoryService.getCuratedForProviderStream(),
-  );
-  const envelope: ProviderContentEnvelope = {
-    contents,
-    pendingContents: undefined,
-  };
-
-  const harness = suite1BuildEnforcerHarness();
+  const harness = suite1BuildHarness();
   vi.spyOn(suite1HistoryService, 'estimateTokensForContents').mockRejectedValue(
     new Error('estimation infrastructure down'),
   );
 
   let thrownError: Error | undefined;
   try {
-    await harness.enforcer.enforce(envelope, 'test-prompt');
+    await enforceSuite1(harness, [], 'test-prompt', undefined, false);
   } catch (error) {
     thrownError = error as Error;
   }
@@ -916,15 +833,7 @@ async function testBody13(): Promise<void> {
 async function testBody14(): Promise<void> {
   suite1HistoryService.add(makeUserMessage('established history'));
   const pending = makeUserMessage('pending request');
-  const contents: IContent[] = await Array.fromAsync(
-    suite1HistoryService.getCuratedForProviderStream([pending]),
-  );
-  const envelope: ProviderContentEnvelope = {
-    contents,
-    pendingContents: [pending],
-  };
-
-  const harness = suite1BuildEnforcerHarness();
+  const harness = suite1BuildHarness();
   const estimateSpy = vi.spyOn(
     suite1HistoryService,
     'estimateTokensForContents',
@@ -941,13 +850,18 @@ async function testBody14(): Promise<void> {
   // 4+. Any subsequent call would succeed (never reached)
   estimateSpy.mockResolvedValueOnce(50_000);
 
-  harness.deps.performCompression.mockResolvedValue(
+  let fallbackReached = false;
+  harness.setDiskFallback(async () => {
+    fallbackReached = true;
+    return false;
+  });
+  harness.performCompression.mockResolvedValue(
     PerformCompressionResult.COMPRESSED,
   );
 
   let thrownError: Error | undefined;
   try {
-    await harness.enforcer.enforce(envelope, 'test-prompt');
+    await enforceSuite1(harness, [pending], 'test-prompt');
   } catch (error) {
     thrownError = error as Error;
   }
@@ -959,5 +873,5 @@ async function testBody14(): Promise<void> {
 
   // Fallback must NOT be reached — the projection error surfaced before
   // truncation.
-  expect(harness.deps.performFallbackCompression).not.toHaveBeenCalled();
+  expect(fallbackReached).toBe(false);
 }
