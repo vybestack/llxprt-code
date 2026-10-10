@@ -62,7 +62,7 @@ async function paused(size: number): Promise<number> {
           return result.outcome === 'applied';
         },
       );
-      const operation = enforceFallback(harness.enforcer).catch(
+      const operation = enforceFallback(harness).catch(
         (error: unknown) => error,
       );
       await ready.promise;

@@ -67,7 +67,7 @@ async function enforceRollback(
       if (failure === 'missing')
         message = 'without providing candidate history';
       if (failure === 'duplicate') message = 'only be installed once';
-      await expect(enforceFallback(harness.enforcer)).rejects.toThrow(message);
+      await expect(enforceFallback(harness)).rejects.toThrow(message);
       expect(await detachedDurableDigest(recorder)).toStrictEqual(before);
       expect(await detachedDigest(history.streamRawHistory())).toStrictEqual(
         before,

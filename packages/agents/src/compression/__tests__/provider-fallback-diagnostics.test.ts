@@ -34,18 +34,19 @@ describe('provider fallback rejection diagnostics', () => {
         },
         { logger },
       );
-      await expect(enforceFallback(harness.enforcer)).rejects.toThrow(
-        /post-truncation stage/,
+      const rollback = await enforceFallback(harness).then(
+        () => undefined,
+        (error: unknown) => error,
       );
-      const rollback = logger.failures.find(
-        (failure): failure is AggregateError =>
-          failure instanceof AggregateError,
-      );
-      expect(rollback?.message).toBe(
+      expect(rollback).toBeInstanceOf(AggregateError);
+      expect((rollback as AggregateError).message).toBe(
         'Provider truncation fallback failed and its state rollback also failed',
       );
-      expect(rollback?.errors).toStrictEqual([rejection, recorder.failure]);
-      expect(harness.baseline()).toBe(0);
+      expect((rollback as AggregateError).errors).toStrictEqual([
+        rejection,
+        recorder.failure,
+      ]);
+      expect(harness.baseline()).toBeNull();
       const blocks: unknown[] = [];
       for await (const row of history.streamRawHistory())
         blocks.push(row.blocks);

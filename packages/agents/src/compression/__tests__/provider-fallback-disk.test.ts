@@ -39,7 +39,7 @@ describe('provider fallback durable snapshot and compensation', () => {
             },
             { resetFails: failure === 'baseline' },
           );
-          await expect(enforceFallback(harness.enforcer)).rejects.toThrow(
+          await expect(enforceFallback(harness)).rejects.toThrow(
             /post-truncation stage/,
           );
           expect(await digestRows(history.streamRawHistory())).toBe(before);
@@ -72,15 +72,15 @@ describe('provider fallback successful installation', () => {
           },
           { fits: true },
         );
-        const result = await enforceFallback(harness.enforcer);
+        const result = await enforceFallback(harness);
         expect(result.map((row) => row.blocks)).toStrictEqual([
           candidate.blocks,
           [{ type: 'text', text: 'pending' }],
         ]);
         await recorder.flush();
         expect(history.getCacheAnchorSeq()).toBe(0);
-        expect(harness.baseline()).toBe(0);
-        expect(candidate.metadata?.chronology?.seq).toBe(size + 1);
+        expect(harness.baseline()).toBeNull();
+        expect(result[0].metadata?.chronology?.seq).toBe(size + 1);
       });
     },
   );
@@ -96,7 +96,7 @@ describe('provider fallback successful installation', () => {
         },
         { fits: true },
       );
-      const result = await enforceFallback(harness.enforcer);
+      const result = await enforceFallback(harness);
       expect(result[0].blocks).toStrictEqual(candidate.blocks);
       expect(JSON.stringify(result[0]).length).toBeGreaterThan(8 * 1024 * 1024);
     });

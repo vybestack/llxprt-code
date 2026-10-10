@@ -60,7 +60,7 @@ describe('actual disk provider candidate compensation', () => {
             },
             { resetFails: failure === 'baseline' },
           );
-          await expect(enforceFallback(harness.enforcer)).rejects.toThrow(
+          await expect(enforceFallback(harness)).rejects.toThrow(
             'post-truncation stage',
           );
           expect(installed).toBe(

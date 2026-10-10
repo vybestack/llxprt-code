@@ -37,7 +37,7 @@ describe('provider disk callback invariants', () => {
           },
           { logger },
         );
-        await expect(enforceFallback(harness.enforcer)).rejects.toThrow(
+        await expect(enforceFallback(harness)).rejects.toThrow(
           failure === 'missing'
             ? 'Fallback compression succeeded without providing candidate history'
             : 'Fallback candidate may only be installed once',

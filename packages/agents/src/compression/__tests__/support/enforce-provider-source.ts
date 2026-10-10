@@ -26,7 +26,7 @@ export async function collectSelection(
  * over its materialised rows. Returns the surviving rows and leaves the
  * provider compression callback attached, as the product does on success.
  */
-export async function enforceProviderSourceForTest(
+export function enforceProviderSourceForTest(
   handler: CompressionHandler,
   history: HistoryService,
   pendingContents: IContent[],
@@ -35,8 +35,35 @@ export async function enforceProviderSourceForTest(
   estimateRows: (rows: IContent[]) => Promise<number> = (rows) =>
     history.estimateTokensForContents(rows),
 ): Promise<IContent[]> {
+  return enforceProviderSourceSelectionForTest(
+    handler,
+    history,
+    pendingContents,
+    promptId,
+    provider,
+    async (candidate) => estimateRows(await collectSelection(candidate)),
+  );
+}
+
+/**
+ * Same ladder as enforceProviderSourceForTest, but the estimator receives the
+ * candidate selection itself so tests over large histories can stream it
+ * instead of materialising every row. `openSelection` may substitute the
+ * snapshot opened for a stage whose rows the test never inspects.
+ */
+export async function enforceProviderSourceSelectionForTest(
+  handler: CompressionHandler,
+  history: HistoryService,
+  pendingContents: IContent[],
+  promptId: string,
+  provider: RuntimeProvider | undefined,
+  estimateSelection: (candidate: ProviderRequestSelection) => Promise<number>,
+  openSelection: (
+    realOpen: () => Promise<PendingAwareRequestSelection>,
+  ) => Promise<PendingAwareRequestSelection> = (realOpen) => realOpen(),
+): Promise<IContent[]> {
   let pendingRows = pendingContents;
-  const open = async (): Promise<PendingAwareRequestSelection> => {
+  const realOpen = async (): Promise<PendingAwareRequestSelection> => {
     const snapshot =
       await history.prepareCuratedForProviderSnapshot(pendingRows);
     return pendingAwareRequestSelection(
@@ -44,6 +71,8 @@ export async function enforceProviderSourceForTest(
       sourcePendingMembership(snapshot),
     );
   };
+  const open = (): Promise<PendingAwareRequestSelection> =>
+    openSelection(realOpen);
   const pending: SourcePendingRows = {
     read: async () => pendingRows,
     replace: (rows) => {
@@ -55,7 +84,7 @@ export async function enforceProviderSourceForTest(
     provider ?? ({ name: 'test-provider' } as unknown as RuntimeProvider),
     promptId,
     source,
-    async (candidate) => estimateRows(await collectSelection(candidate)),
+    estimateSelection,
     open,
     true,
     pending,

@@ -1,10 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
-import { ProviderContentEnforcer } from '../providerContentEnforcement.js';
+import { describe, expect, it, vi } from 'bun:test';
+import type { ProviderContentEnforcementDeps } from '../providerContentEnforcement.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import {
   withFallbackFixture,
   enforceFallback,
+  type FallbackHarness,
 } from './provider-fallback-disk-helpers.js';
 import { middleoutSetup } from './middleout-disk-helpers.js';
 import { runDiskProviderFallback } from '../diskProviderFallback.js';
@@ -18,62 +19,64 @@ interface State {
   baseline: number | null;
   events: string[];
 }
-function enforcerFor(
-  history: HistoryService,
-  state: State,
-): ProviderContentEnforcer {
-  const { runtime, transport } = middleoutSetup(history, undefined, undefined, {
-    contextLimit: 200000,
-  });
+interface RetryHandlerInternals {
+  lastPromptTokenCount: number | null;
+  performProviderDiskFallback: ProviderContentEnforcementDeps['performFallbackCompression'];
+}
+function harnessFor(history: HistoryService, state: State): FallbackHarness {
+  const { runtime, transport, handler } = middleoutSetup(
+    history,
+    undefined,
+    undefined,
+    { contextLimit: 200000 },
+  );
   const logger = new DebugLogger('test:disk-provider-retry');
-  return new ProviderContentEnforcer({
-    historyService: history,
-    runtimeContext: runtime,
-    generationConfig: {},
-    providerRuntimeNullable: undefined,
-    logger,
-    ensureDensityOptimized: async () => {
-      state.events.push('optimize');
-    },
-    performCompression: async () => {
-      state.events.push('primary');
-      return PerformCompressionResult.COMPRESSED;
-    },
-    performFallbackCompression: async (prompt, install, targetTokenCount) => {
-      state.events.push('fallback');
-      const result = await runDiskProviderFallback(
-        install,
-        prompt,
-        runtime,
-        history,
-        async () => ({ provider: transport, runtime: runtime.providerRuntime }),
-        undefined,
-        undefined,
-        logger,
-        { targetTokenCount },
-      );
-      if (state.rejectNext) {
-        state.rejectNext = false;
-        state.stop = true;
-        state.events.push('reject');
-        throw new Error('provider rejected first installed candidate');
-      }
-      state.accepted = result.outcome === 'applied';
-      state.events.push('accept');
-      return state.accepted;
-    },
-    getPromptTokenBaseline: () => state.baseline,
-    resetPromptTokenBaseline: () => {
-      state.baseline = 0;
-    },
-    restorePromptTokenBaseline: (value) => {
-      state.baseline = value;
-    },
-    estimateFinalizedPromptTokens: async () => {
+  const internals = handler as unknown as RetryHandlerInternals;
+  internals.lastPromptTokenCount = state.baseline;
+  vi.spyOn(handler, 'ensureDensityOptimized').mockImplementation(async () => {
+    state.events.push('optimize');
+  });
+  vi.spyOn(handler, 'performCompression').mockImplementation(async () => {
+    state.events.push('primary');
+    return PerformCompressionResult.COMPRESSED;
+  });
+  internals.performProviderDiskFallback = async (
+    prompt,
+    install,
+    targetTokenCount,
+  ) => {
+    state.events.push('fallback');
+    const result = await runDiskProviderFallback(
+      install,
+      prompt,
+      runtime,
+      history,
+      async () => ({ provider: transport, runtime: runtime.providerRuntime }),
+      undefined,
+      undefined,
+      logger,
+      { targetTokenCount },
+    );
+    if (state.rejectNext) {
+      state.rejectNext = false;
+      state.stop = true;
+      state.events.push('reject');
+      throw new Error('provider rejected first installed candidate');
+    }
+    state.accepted = result.outcome === 'applied';
+    state.events.push('accept');
+    return state.accepted;
+  };
+  return {
+    handler,
+    history,
+    estimate: async () => {
       if (state.stop) throw new Error('stop after restored first rejection');
       return state.accepted ? 1 : 190000;
     },
-  });
+    openSelection: (realOpen) => realOpen(),
+    baseline: () => internals.lastPromptTokenCount,
+  };
 }
 async function retry(size: number): Promise<number> {
   let remaining = 0;
@@ -85,16 +88,16 @@ async function retry(size: number): Promise<number> {
       baseline: 123,
       events: [],
     };
-    const enforcer = enforcerFor(history, state);
+    const harness = harnessFor(history, state);
     const tokens = history.getTotalTokens();
-    await expect(enforceFallback(enforcer)).rejects.toThrow(
+    await expect(enforceFallback(harness)).rejects.toThrow(
       'post-truncation stage',
     );
     expect(await digestRows(history.streamRawHistory())).toBe(before);
     expect(history.getTotalTokens() - tokens).toBe(0);
-    expect(state.baseline).toBe(123);
+    expect(harness.baseline()).toBe(123);
     state.stop = false;
-    expect(await enforceFallback(enforcer)).not.toHaveLength(0);
+    expect(await enforceFallback(harness)).not.toHaveLength(0);
     expect(state.events).toStrictEqual([
       'optimize',
       'primary',
@@ -107,7 +110,7 @@ async function retry(size: number): Promise<number> {
       'fallback',
       'accept',
     ]);
-    expect(state.baseline).toBe(0);
+    expect(harness.baseline()).toBe(null);
     expect(history.getTotalTokens() - history.getBaseTokenOffset()).toBe(
       await history.estimateTokensForContents(history.streamRawHistory()),
     );

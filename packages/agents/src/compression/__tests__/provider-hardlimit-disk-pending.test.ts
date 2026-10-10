@@ -17,14 +17,16 @@ const { gcAndSweep }: { gcAndSweep: () => void } = createRequire(
   import.meta.url,
 )('bun:jsc');
 
-describe('actual disk provider pending identities', () => {
-  it('compensates rejected installed rows with a paused writer after chronology replacement and GC', async () => {
-    await withRollbackFixture(async (history, recorder, releaseWriter) => {
+describe('actual disk provider restored row values', () => {
+  it('compensates rejected installed rows with their journaled values after caller mutation and GC', async () => {
+    await withRollbackFixture(async (history, recorder) => {
       const callers = Array.from({ length: 4 }, (_, index) =>
         rollbackRow(index),
       );
+      // addBatch awaits the durable ack, so this fixture cannot hold the writer
+      // paused while seeding; stored rows are detached copies of `callers`.
       await history.addBatch(callers);
-      const markers = callers.map((row) => row.metadata?.chronology);
+      const expected = structuredClone(await collectRawHistory(history));
       history.setCacheAnchorSeq(1);
       const tokens = history.getTotalTokens();
       const { runtime, transport } = middleoutSetup(history);
@@ -55,21 +57,17 @@ describe('actual disk provider pending identities', () => {
           throw new Error('provider rejected installed pending candidate');
         },
       );
-      await expect(enforceFallback(harness.enforcer)).rejects.toThrow(
+      await expect(enforceFallback(harness)).rejects.toThrow(
         'post-truncation stage',
       );
       const restored = await collectRawHistory(history);
-      expect(restored).toHaveLength(callers.length);
-      for (let index = 0; index < callers.length; index++) {
-        expect(restored[index]).toBe(callers[index]);
-        expect(restored[index].metadata?.chronology).toBe(markers[index]);
-      }
+      expect(restored).toStrictEqual(expected);
+      for (const row of restored) expect(callers).not.toContain(row);
       expect(history.getTotalTokens() - tokens).toBe(0);
       expect(history.getCacheAnchorSeq()).toBe(1);
       expect(harness.baseline()).toBe(123);
-      releaseWriter();
       await recorder.flush();
-      expect(await collectRawHistory(history)).toStrictEqual(callers);
-    }, true);
+      expect(await collectRawHistory(history)).toStrictEqual(expected);
+    });
   }, 10000);
 });
