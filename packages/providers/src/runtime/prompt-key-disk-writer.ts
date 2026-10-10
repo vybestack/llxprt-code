@@ -2,6 +2,7 @@
 import { closeSync, openSync, writeSync } from 'node:fs';
 import { parseImageDimensionsFromBase64 } from '@vybestack/llxprt-code-tools/utils/imageDimensions.js';
 import { estimateImageTokens } from '@vybestack/llxprt-code-tools/utils/imageTokenEstimation.js';
+import { mediaDiagnostic, shouldOmitKey } from '../utils/mediaDiagnostics.js';
 import { base64Code, dataHeader } from './prompt-data-uri-scanner.js';
 
 const omitted = '[binary media bytes omitted]';
@@ -30,6 +31,13 @@ function imageMime(value: unknown): boolean {
   return typeof value === 'string' && value.toLowerCase().startsWith('image/');
 }
 
+/**
+ * `estimator` replaces binary media with a placeholder and records image costs;
+ * `wire` keeps the request bytes; `dump` writes the diagnostic-sanitized form
+ * (media summarized, sensitive keys omitted) the array route dumps.
+ */
+export type PromptKeyMode = 'estimator' | 'wire' | 'dump';
+
 /** A request-local writer, retaining only scalar file handles and counters. */
 export class PromptKeyDiskWriter {
   readonly #fd: number;
@@ -44,8 +52,8 @@ export class PromptKeyDiskWriter {
     model: string,
     signal?: AbortSignal,
     private readonly encoding: 'utf8' | 'utf16le' = 'utf8',
-    /** Wire mode keeps media bytes and writes no image costs. */
-    private readonly wire = false,
+    /** Non-estimator modes keep text raw and write no image costs. */
+    private readonly mode: PromptKeyMode = 'estimator',
   ) {
     this.#fd = openSync(path, 'w', 0o600);
     try {
@@ -73,7 +81,7 @@ export class PromptKeyDiskWriter {
   }
 
   private image(base64: unknown): void {
-    if (this.wire) return;
+    if (this.mode !== 'estimator') return;
     const dimensions =
       typeof base64 === 'string'
         ? parseImageDimensionsFromBase64(base64.slice(0, headerCharacters))
@@ -109,7 +117,7 @@ export class PromptKeyDiskWriter {
 
   string(value: string, quoted = true): void {
     if (quoted) this.append('"');
-    if (this.wire) {
+    if (this.mode !== 'estimator') {
       this.textRange(value, 0, value.length, quoted);
       if (quoted) this.append('"');
       return;
@@ -156,16 +164,20 @@ export class PromptKeyDiskWriter {
   }
 
   private object(value: Record<string, unknown>): void {
+    if (this.mode === 'dump') {
+      const diagnostic = mediaDiagnostic(value, 'full');
+      if (diagnostic !== undefined) {
+        this.append(JSON.stringify(diagnostic));
+        return;
+      }
+    }
     this.append('{');
     let separator = '';
     for (const key in value) {
-      const binary = !this.wire && key === 'data' && value.type === 'base64';
+      const binary =
+        this.mode === 'estimator' && key === 'data' && value.type === 'base64';
       const child = value[key];
-      if (
-        Object.getOwnPropertyDescriptor(value, key) === undefined ||
-        (!binary && absent(child))
-      )
-        continue;
+      if (this.skipped(value, key, binary)) continue;
       this.append(separator);
       this.append(`${JSON.stringify(key)}:`);
       if (binary) {
@@ -175,6 +187,16 @@ export class PromptKeyDiskWriter {
       separator = ',';
     }
     this.append('}');
+  }
+
+  private skipped(
+    value: Record<string, unknown>,
+    key: string,
+    binary: boolean,
+  ): boolean {
+    if (Object.getOwnPropertyDescriptor(value, key) === undefined) return true;
+    if (this.mode === 'dump' && shouldOmitKey(key)) return true;
+    return !binary && absent(value[key]);
   }
 
   close(): void {

@@ -22,8 +22,8 @@ function utf16Chunk(
   };
 }
 
-/** `wire` carries media bytes for transport; `redacted` is the dump-safe form. */
-export type DiskBodyMedia = 'wire' | 'redacted';
+/** `wire` carries media bytes for transport; `dump` is the diagnostic form. */
+export type DiskBodyMedia = 'wire' | 'dump';
 
 async function* segmentBytes(
   segment: Gpt56SourceSegment,
@@ -31,9 +31,9 @@ async function* segmentBytes(
   signal?: AbortSignal,
 ): AsyncGenerator<Uint8Array, void> {
   signal?.throwIfAborted();
-  const wire = media === 'wire' ? segment.wireSource : segment.source;
+  const wire = media === 'wire' ? segment.wireSource : segment.dumpSource;
   if (wire === undefined)
-    throw new Error('Responses source segment has no wire bytes');
+    throw new Error(`Responses source segment has no ${media} bytes`);
   const reader = await open(wire.path, 'r');
   try {
     const string = wire.encoding === 'utf16le';

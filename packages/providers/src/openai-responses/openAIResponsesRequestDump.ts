@@ -148,7 +148,7 @@ function dumpRequest(
       baseURL,
       metadata,
     );
-  // Stream the redacted disk body; the request object holds empty placeholders.
+  // Stream the sanitized disk body; the request object holds empty placeholders.
   return dumpSDKRequestContextBodyBytes(
     deps.providerName,
     '/responses',
@@ -156,7 +156,7 @@ function dumpRequest(
       requestContext.request,
       source.toEstimatorProjection(),
       signal,
-      'redacted',
+      'dump',
     ),
     baseURL,
     metadata,

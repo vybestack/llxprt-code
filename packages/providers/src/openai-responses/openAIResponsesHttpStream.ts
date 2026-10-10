@@ -40,6 +40,7 @@ import { getDelayDuration, hasRetryAfterHeader } from '../retryDelayPolicy.js';
 import {
   shouldDumpSDKContext,
   dumpSDKRequestContext,
+  dumpSDKRequestContextBodyBytes,
   dumpSDKResponseContext,
   dumpSDKErrorRequestResponse,
   bestEffortDump,
@@ -95,6 +96,11 @@ export interface StreamResponsesParams {
    */
   materializeRequestBody?: () => Promise<void>;
   streamRequestBody?: () => AsyncIterable<Uint8Array>;
+  /**
+   * Disk source route: the request as a diagnostic dump records it, because
+   * `request` holds empty placeholders for input, instructions and tools.
+   */
+  streamDumpBody?: () => AsyncIterable<Uint8Array>;
   /** Disk source route: the complete WebSocket `response.create` frame bytes. */
   streamWebSocketFrame?: () => AsyncIterable<Uint8Array>;
 }
@@ -242,7 +248,6 @@ export async function* streamOverHttp(
       }
     }
   } catch (error) {
-    await dumpErrorOnFailure(error, params, deps, headers);
     if (disposalFailed) {
       throw transportCleanupError(
         error,
@@ -531,7 +536,7 @@ async function dumpErrorOnFailure(
       params.request,
       payload,
       params.baseURL,
-      dumpSDKRequestContext,
+      dumpParamsRequest(params),
       dumpSDKResponseContext,
       { headers, transport: { type: 'http' } },
     );
@@ -554,7 +559,7 @@ export async function dumpFallbackHttpRequest(
     return undefined;
   }
   const result = await bestEffortDump('request', deps.providerName, async () =>
-    dumpSDKRequestContext(
+    dumpParamsRequest(params)(
       deps.providerName,
       '/responses',
       params.request,
@@ -563,4 +568,21 @@ export async function dumpFallbackHttpRequest(
     ),
   );
   return result?.baseId;
+}
+
+/** Dumps the request the transport carries, not the disk route's placeholders. */
+function dumpParamsRequest(
+  params: StreamResponsesParams,
+): typeof dumpSDKRequestContext {
+  const streamDumpBody = params.streamDumpBody;
+  if (streamDumpBody === undefined) return dumpSDKRequestContext;
+  return (providerName, endpoint, _request, baseURL, metadata) =>
+    dumpSDKRequestContextBodyBytes(
+      providerName,
+      endpoint,
+      streamDumpBody(),
+      baseURL,
+      metadata,
+      params.abortSignal,
+    );
 }

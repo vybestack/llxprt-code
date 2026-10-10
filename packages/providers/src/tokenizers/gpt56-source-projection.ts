@@ -45,6 +45,11 @@ export interface Gpt56SourceSegment {
    * them and is never read for token counting.
    */
   readonly wireSource?: O200kDiskSource;
+  /**
+   * Request bytes in the form a diagnostic dump records (media summarized,
+   * sensitive keys omitted). Never read for token counting or transport.
+   */
+  readonly dumpSource?: O200kDiskSource;
 }
 
 export interface Gpt56SourceProjectionOptions {
@@ -96,6 +101,9 @@ export class Gpt56SourceProjection {
           ...(segment.wireSource === undefined
             ? {}
             : { wireSource: ownedSource(this.#directory, segment.wireSource) }),
+          ...(segment.dumpSource === undefined
+            ? {}
+            : { dumpSource: ownedSource(this.#directory, segment.dumpSource) }),
         });
       }),
     );

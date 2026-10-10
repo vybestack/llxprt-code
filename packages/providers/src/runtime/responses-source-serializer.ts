@@ -65,42 +65,61 @@ export interface ResponsesSourcePrompt {
   dispose(): Promise<void>;
 }
 
+/** Estimator, wire and dump forms of one prompt key, written in a single pass. */
+function openSegmentWriters(
+  options: ResponsesSourceOptions,
+  root: string,
+  key: Gpt56SourceSegment['promptKey'],
+  costs: string,
+  encoding: 'utf8' | 'utf16le',
+): readonly PromptKeyDiskWriter[] {
+  const opened: PromptKeyDiskWriter[] = [];
+  try {
+    for (const [suffix, mode] of [
+      ['', 'estimator'],
+      ['.wire', 'wire'],
+      ['.dump', 'dump'],
+    ] as const)
+      opened.push(
+        new PromptKeyDiskWriter(
+          join(root, `${key}${suffix}`),
+          costs,
+          options.model,
+          options.signal,
+          encoding,
+          mode,
+        ),
+      );
+  } catch (error) {
+    for (const open of opened) open.close();
+    throw error;
+  }
+  return opened;
+}
+
+function closeAll(writers: readonly PromptKeyDiskWriter[]): void {
+  const [first, ...rest] = writers;
+  try {
+    first.close();
+  } finally {
+    if (rest.length > 0) closeAll(rest);
+  }
+}
+
 async function segment(
   options: ResponsesSourceOptions,
   key: Gpt56SourceSegment['promptKey'],
   root: string,
   costs: string,
 ): Promise<{ segment: Gpt56SourceSegment; imageCount: number }> {
-  const path = join(root, key);
-  const wirePath = join(root, `${key}.wire`);
   const rawString =
     key === 'instructions' ||
     (key === 'tools' && typeof options.tools === 'string');
   const encoding = rawString ? 'utf16le' : 'utf8';
-  const writer = new PromptKeyDiskWriter(
-    path,
-    costs,
-    options.model,
-    options.signal,
-    encoding,
-  );
-  let wire: PromptKeyDiskWriter;
-  try {
-    wire = new PromptKeyDiskWriter(
-      wirePath,
-      costs,
-      options.model,
-      options.signal,
-      encoding,
-      true,
-    );
-  } catch (error) {
-    writer.close();
-    throw error;
-  }
+  const writers = openSegmentWriters(options, root, key, costs, encoding);
   return withSerializationCleanup(
     async () => {
-      const sink = new PromptKeyTeeWriter([writer, wire]);
+      const sink = new PromptKeyTeeWriter(writers);
       if (key === 'input' && options.inputOverride !== undefined) {
         sink.value(options.inputOverride.value);
       } else if (key === 'input') {
@@ -116,30 +135,23 @@ async function segment(
             ).write(owner),
           () => owner.dispose(),
         );
-      } else if (key === 'instructions') {
-        writer.string(options.instructions ?? '', false);
-        wire.string(options.instructions ?? '', false);
-      } else if (typeof options.tools === 'string') {
-        writer.string(options.tools, false);
-        wire.string(options.tools, false);
+      } else if (rawString) {
+        const text =
+          key === 'instructions' ? options.instructions : options.tools;
+        for (const writer of writers) writer.string(String(text ?? ''), false);
       } else sink.value(options.tools);
       return {
         segment: {
           promptKey: key,
-          source: { path, encoding },
-          wireSource: { path: wirePath, encoding },
+          source: { path: join(root, key), encoding },
+          wireSource: { path: join(root, `${key}.wire`), encoding },
+          dumpSource: { path: join(root, `${key}.dump`), encoding },
           ...(rawString ? { rawString: true as const } : {}),
         },
-        imageCount: writer.imageCount,
+        imageCount: writers[0].imageCount,
       };
     },
-    () => {
-      try {
-        writer.close();
-      } finally {
-        wire.close();
-      }
-    },
+    () => closeAll(writers),
   );
 }
 

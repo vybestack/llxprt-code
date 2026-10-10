@@ -680,6 +680,13 @@ function buildStreamParams(
               source,
               abortSignal,
             ),
+          streamDumpBody: () =>
+            diskResponsesBodyBytes(
+              requestContext.request,
+              source,
+              abortSignal,
+              'dump',
+            ),
         }),
     abortSignal,
     maxStreamingAttempts:
