@@ -8,11 +8,14 @@ import {
   readFileSync,
   writeFileSync,
 } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { deserialize } from 'node:v8';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import {
+  getScratchRoot,
+  removeScratchRoot,
+} from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import type { GenerateChatOptions } from '../../../IProvider.js';
 import {
@@ -51,12 +54,16 @@ export function registerProjectionWorkspace(): () => string {
     mkdirSync(join(root, 'config'));
     process.env.TMPDIR = root;
     process.env.LLXPRT_CONFIG_HOME = join(root, 'config');
+    // Snapshot workspaces live in the process scratch root; start a fresh one
+    // under this test's TMPDIR.
+    removeScratchRoot();
   });
   afterEach(() => {
     writeFileSync(
       join(root, 'remaining.json'),
       JSON.stringify(snapshotWorkspaces(root)),
     );
+    removeScratchRoot();
     if (previousTmpdir === undefined) delete process.env.TMPDIR;
     else process.env.TMPDIR = previousTmpdir;
     if (previousConfig === undefined) delete process.env.LLXPRT_CONFIG_HOME;
@@ -65,8 +72,9 @@ export function registerProjectionWorkspace(): () => string {
   return () => root;
 }
 
-export function snapshotWorkspaces(root = tmpdir()): string[] {
-  return readdirSync(root).filter((name) =>
+/** Lists request snapshot workspaces in the process scratch root. */
+export function snapshotWorkspaces(_fixtureRoot?: string): string[] {
+  return readdirSync(getScratchRoot()).filter((name) =>
     name.startsWith('responses-request-snapshot-'),
   );
 }
@@ -75,7 +83,7 @@ export function reopenSnapshot(
   root: string,
   name: string,
 ): readonly IContent[] {
-  const bytes = readFileSync(join(root, name, 'rows'));
+  const bytes = readFileSync(join(getScratchRoot(), name, 'rows'));
   const rows: IContent[] = [];
   for (let offset = 0; offset < bytes.length; ) {
     const length = bytes.readDoubleLE(offset);
