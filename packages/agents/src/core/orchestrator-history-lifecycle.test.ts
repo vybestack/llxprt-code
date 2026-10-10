@@ -84,19 +84,30 @@ for (const size of [512, 8192]) {
       });
     }, 120_000);
 
-    it('closes the pin and preserves abort identity after a paused producer resumes', async () => {
+    it('closes the pin and ends the turn as aborted after a paused producer resumes', async () => {
       await withOrchestratorHistory(size, async (client, history, reader) => {
         const controller = new AbortController();
         const reason = new Error('abort paused history');
         history.pauseAfter = 31;
-        const result = sendHistoryTurn(client, controller.signal).then(
+        const types: string[] = [];
+        const result = (async () => {
+          for await (const event of client.sendMessageStream(
+            'reply plainly',
+            controller.signal,
+            'stream-history-turn',
+            1,
+          ))
+            types.push(event.type);
+        })().then(
           () => undefined,
           (error: unknown) => error,
         );
         await history.paused.promise;
         controller.abort(reason);
         history.release.resolve();
-        expect(await result).toBe(reason);
+        expect(await result).toBeUndefined();
+        expect(types).toStrictEqual(['model_info', 'user_cancelled']);
+        expect(controller.signal.reason).toBe(reason);
         expect(reader.snapshot().liveRows).toBe(0);
       });
     }, 120_000);
