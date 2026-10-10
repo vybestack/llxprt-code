@@ -41,6 +41,7 @@ import {
   buildDiskTextResponsesContext,
   diskTextProjection,
   assertDiskTextShape,
+  assertPreparedStatefulUnchanged,
 } from './responses-disk-text-projection.js';
 import {
   createUnallowedModelParametersResolver,
@@ -232,6 +233,15 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
         : this.preparedPromptEnvelopes.get(
             options.promptEnvelopeTransportToken,
           );
+    if (
+      preparedRequestContext?.sourcePrompt !== undefined &&
+      readsRequestRowsAtTransport(options)
+    )
+      assertPreparedStatefulUnchanged(
+        options,
+        this.buildExecutorDeps(),
+        preparedRequestContext,
+      );
     if (
       options.promptEnvelopeTransportToken !== undefined &&
       preparedRequestContext === undefined

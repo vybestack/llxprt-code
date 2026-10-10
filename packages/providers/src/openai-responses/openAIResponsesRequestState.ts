@@ -12,7 +12,11 @@ import type {
   MediaReferenceBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { sanitizePromptCacheKey } from './sanitizePromptCacheKey.js';
-import { computeStatefulConversation } from './openAIResponsesStateful.js';
+import {
+  computeStatefulConversation,
+  planStatefulConversation,
+  type StatefulPlan,
+} from './openAIResponsesStateful.js';
 import { OPENAI_TRANSPORT_SELECTOR_KEYS } from '../openai/openaiModelPolicy.js';
 import {
   conservativeMediaTransportCapabilities,
@@ -244,4 +248,38 @@ function estimationPlaceholder(block: MediaReferenceBlock): ContentBlock {
     // byte of the referenced object is read to produce it.
     data: 'A'.repeat(normalizedBase64Length),
   };
+}
+
+/**
+ * The stateful decision for a turn whose history is read from disk rows:
+ * the same inputs {@link resolveResponsesRequestShape} feeds
+ * `computeStatefulConversation`, stopping before the history scan.
+ */
+export function resolveResponsesStatefulPlan(
+  options: NormalizedGenerateChatOptions,
+  invocationEphemerals: Record<string, unknown>,
+  deps: ResponsesExecutorDeps,
+  forceStateless: boolean,
+  forceParentless: boolean,
+): StatefulPlan {
+  const rawBaseURL = resolveResponsesBaseURL(options, deps);
+  const isCodex = deps.isCodexMode();
+  const explicitUserStore = resolveExplicitUserStore(
+    buildRequestOverrides(options, deps),
+  );
+  return planStatefulConversation(
+    options,
+    invocationEphemerals,
+    explicitUserStore,
+    isCodex,
+    rawBaseURL,
+    (responseId) => deps.isRejectedStatefulParent?.(responseId) ?? false,
+    supportsStatefulResponsesTransport(
+      forceStateless,
+      resolveMediaCapabilities(deps, isCodex),
+      deps.isWebSocketTransportActive?.() ?? false,
+    ),
+    deps.logger,
+    forceParentless,
+  );
 }

@@ -11,24 +11,84 @@ import {
   responsesInputContext,
   resolveInvocationEphemerals,
 } from './responses-request-fields.js';
-import { resolveResponsesRequestShape } from './openAIResponsesRequestState.js';
+import {
+  resolveResponsesRequestShape,
+  resolveResponsesStatefulPlan,
+  toEstimationContents,
+} from './openAIResponsesRequestState.js';
+import {
+  parentHitOf,
+  selectStatefulParent,
+  type StatefulConversation,
+  type StatefulParentHit,
+} from './openAIResponsesStateful.js';
 import {
   buildRequestContext,
+  type RebuildMode,
   type PreparedResponsesRequestContext,
   type ResponsesExecutorDeps,
 } from './openAIResponsesExecutor.js';
 
+/** Every row is read and counted; rows before `skipRows` are not yielded. */
 async function* countedRows(
   rows: ProviderRequestRows,
   signal?: AbortSignal,
+  skipRows = 0,
 ): AsyncGenerator<IContent, void> {
   let count = 0;
   for await (const row of rows.openReader(signal)) {
     signal?.throwIfAborted();
-    count++;
-    yield row;
+    if (count++ >= skipRows) yield row;
   }
   if (count !== rows.count) throw new Error('Disk source row count changed');
+}
+
+/**
+ * Selects the newest usable stored parent while streaming the rows once; only
+ * that row's id and observed usage are retained, never the history.
+ */
+async function selectRowsStateful(
+  options: NormalizedGenerateChatOptions,
+  deps: ResponsesExecutorDeps,
+  ephemerals: Record<string, unknown>,
+  rows: ProviderRequestRows,
+  mode: RebuildMode,
+): Promise<{ stateful: StatefulConversation; skipRows: number }> {
+  const plan = resolveResponsesStatefulPlan(
+    options,
+    ephemerals,
+    deps,
+    mode.forceStateless,
+    mode.forceParentless,
+  );
+  if (plan.kind === 'settled')
+    return {
+      stateful: { enabled: plan.enabled, parentId: undefined, content: [] },
+      skipRows: 0,
+    };
+  let hit: StatefulParentHit | undefined;
+  let index = 0;
+  for await (const row of countedRows(rows, getRequestSignal(options))) {
+    hit = parentHitOf(row, index++, plan) ?? hit;
+  }
+  const selection = selectStatefulParent(hit, rows.count, deps.logger);
+  return {
+    skipRows: selection.skipRows,
+    stateful: {
+      enabled: true,
+      parentId: selection.parentId,
+      content: [],
+      ...(selection.parentRetainedTokens === undefined
+        ? {}
+        : { parentRetainedTokens: selection.parentRetainedTokens }),
+    },
+  };
+}
+
+async function* estimationRows(
+  rows: AsyncIterable<IContent>,
+): AsyncGenerator<IContent, void> {
+  for await (const row of rows) yield* toEstimationContents([row]);
 }
 
 export function assertDiskTextShape(
@@ -47,23 +107,32 @@ export function assertDiskTextShape(
     throw new Error(
       'Explicit Responses disk text route does not support Codex or WebSocket',
     );
-  const stateful =
-    ephemerals['responses-stateful'] ??
-    options.invocation.getModelBehavior('responses-stateful');
-  const requestedStateful = stateful === true || stateful === 'true';
-  const hasStoredParent =
-    shape.explicitUserStore === true ||
-    shape.requestOverrides['previous_response_id'] !== undefined;
-  if (shape.stateful.enabled || requestedStateful || hasStoredParent)
-    throw new Error(
-      'Explicit Responses disk text route does not support stateful options',
-    );
   return shape.requestOverrides;
+}
+
+/** A source token's stateful decision must still hold when it is sent. */
+export function assertPreparedStatefulUnchanged(
+  options: NormalizedGenerateChatOptions,
+  deps: ResponsesExecutorDeps,
+  prepared: PreparedResponsesRequestContext,
+): void {
+  const plan = resolveResponsesStatefulPlan(
+    options,
+    resolveInvocationEphemerals(options),
+    deps,
+    false,
+    false,
+  );
+  if ((plan.kind === 'scan' || plan.enabled) !== prepared.statefulEnabled)
+    throw new Error(
+      'Explicit Responses disk text stateful options changed after the source token was prepared',
+    );
 }
 
 export async function buildDiskTextResponsesContext(
   options: NormalizedGenerateChatOptions,
   deps: ResponsesExecutorDeps,
+  mode: RebuildMode = { forceStateless: false, forceParentless: false },
 ): Promise<PreparedResponsesRequestContext> {
   requireAssembledSystemInstruction(options.systemInstruction);
   const overrides = assertDiskTextShape(options, deps);
@@ -73,24 +142,62 @@ export async function buildDiskTextResponsesContext(
       'Explicit Responses disk text selection identity/count is required',
     );
   const ephemerals = resolveInvocationEphemerals(options);
-  const prepared = await buildRequestContext(options, [], ephemerals, deps);
+  const signal = getRequestSignal(options);
+  const { stateful, skipRows } = await selectRowsStateful(
+    options,
+    deps,
+    ephemerals,
+    rows,
+    mode,
+  );
+  const prepared = await buildRequestContext(
+    options,
+    [],
+    ephemerals,
+    deps,
+    mode.forceStateless,
+    mode.forceParentless,
+    stateful,
+  );
   try {
     const prompt = await serializeResponsesPromptEnvelope({
       model: prepared.request.model,
       instructions: prepared.request.instructions,
       tools: prepared.request.tools,
-      contents: countedRows(rows, getRequestSignal(options)),
+      contents: countedRows(rows, signal, skipRows),
       ...('input' in overrides
         ? { inputOverride: { value: overrides['input'] } }
         : {}),
+      ...(stateful.parentId === undefined
+        ? {}
+        : {
+            stateful: {
+              statefulParentUsed: true,
+              retainedBaselineTokens: stateful.parentRetainedTokens,
+              incrementalContents: countedRows(rows, signal, skipRows),
+              ...(stateful.parentRetainedTokens === undefined
+                ? {
+                    fullHistoryContents: estimationRows(
+                      countedRows(rows, signal),
+                    ),
+                  }
+                : {}),
+            },
+          }),
       context: responsesInputContext(options, ephemerals, deps),
-      signal: getRequestSignal(options),
+      signal,
     });
     prepared.mediaRequest.registerCleanup(() => prompt.dispose());
     if (prepared.request.instructions !== undefined)
       prepared.request.instructions = '';
     if (prepared.request.tools !== undefined) prepared.request.tools = [];
-    return { ...prepared, sourcePrompt: prompt };
+    return {
+      ...prepared,
+      sourcePrompt: prompt,
+      statefulEnabled: stateful.enabled,
+      rebuildFromRows: (rebuild) =>
+        buildDiskTextResponsesContext(options, deps, rebuild),
+    };
   } catch (error) {
     return finishMediaRequest(prepared.mediaRequest, {
       status: 'failed',

@@ -152,6 +152,74 @@ export function computeStatefulConversation(
   logger: DebugLogger,
   forceParentless = false,
 ): StatefulConversation {
+  const plan = planStatefulConversation(
+    options,
+    invocationEphemerals,
+    explicitUserStore,
+    isCodex,
+    rawBaseURL,
+    isRejectedParent,
+    statefulTransportSupported,
+    logger,
+    forceParentless,
+  );
+  if (plan.kind === 'settled') {
+    return { enabled: plan.enabled, parentId: undefined, content };
+  }
+  // Scan from the newest entry backwards for the most recent stored AI turn.
+  let hit: StatefulParentHit | undefined;
+  for (let index = content.length - 1; index >= 0 && hit === undefined; index--)
+    hit = parentHitOf(content[index], index, plan);
+  const selection = selectStatefulParent(hit, content.length, logger);
+  return {
+    enabled: true,
+    parentId: selection.parentId,
+    content:
+      selection.parentId === undefined
+        ? content
+        : content.slice(selection.skipRows),
+    ...(selection.parentRetainedTokens === undefined
+      ? {}
+      : { parentRetainedTokens: selection.parentRetainedTokens }),
+  };
+}
+
+export type StatefulPlan =
+  | { readonly kind: 'settled'; readonly enabled: boolean }
+  | {
+      readonly kind: 'scan';
+      readonly isUsableParent: (e: IContent) => boolean;
+    };
+
+/** The newest usable stored parent row, reduced to what chaining needs. */
+export interface StatefulParentHit {
+  readonly index: number;
+  readonly id: string;
+  readonly retainedTokens: number | undefined;
+}
+
+export interface StatefulSelection {
+  readonly parentId: string | undefined;
+  /** Rows up to and including the parent are replayed server-side. */
+  readonly skipRows: number;
+  readonly parentRetainedTokens?: number;
+}
+
+/**
+ * Decides, before any history is read, whether this turn is not stateful,
+ * stateful without a parent, or needs the history scanned for a parent.
+ */
+export function planStatefulConversation(
+  options: NormalizedGenerateChatOptions,
+  invocationEphemerals: Record<string, unknown>,
+  explicitUserStore: boolean | undefined,
+  isCodex: boolean,
+  rawBaseURL: string,
+  isRejectedParent: (responseId: string) => boolean,
+  statefulTransportSupported: boolean,
+  logger: DebugLogger,
+  forceParentless = false,
+): StatefulPlan {
   // Codex statefulness is bound to the WebSocket transport. The ChatGPT
   // backend rejects `store: true` (400 "Store must be set to false"), so a
   // parent id only resolves on the socket that produced it; sending one over
@@ -161,7 +229,7 @@ export function computeStatefulConversation(
       () =>
         'responses-stateful skipped: the active transport cannot resolve a previous_response_id.',
     );
-    return { enabled: false, parentId: undefined, content };
+    return { kind: 'settled', enabled: false };
   }
 
   const ephemeralValue = invocationEphemerals[RESPONSES_STATEFUL_KEY];
@@ -177,7 +245,7 @@ export function computeStatefulConversation(
     ? explicitStateful !== false
     : explicitStateful === true;
   if (!requested || explicitUserStore === false) {
-    return { enabled: false, parentId: undefined, content };
+    return { kind: 'settled', enabled: false };
   }
 
   // #3446: the one-shot parent-not-found recovery over the WebSocket skips
@@ -189,55 +257,60 @@ export function computeStatefulConversation(
       () =>
         'responses-stateful recovery: sending full history with no parent (#3446).',
     );
-    return { enabled: true, parentId: undefined, content };
+    return { kind: 'settled', enabled: true };
   }
 
-  // Scan from the newest entry backwards for the most recent stored AI turn
-  // from the SAME endpoint. Capturing `parentId` inside the loop guarantees
-  // it is a non-empty string, removing the need for a `!== undefined`
-  // re-check on the trimmed return (#3134 Fix 8b).
   // A parent the backend already refused is dead, so it is not a candidate;
   // skipping it lets the scan fall through to an older parent, or to none, and
   // keeps a resumed session from re-sending it forever (#3134 Fix 1).
-  const isUsableParent = (entry: IContent): boolean =>
-    isEligibleParent(entry, rawBaseURL) &&
-    !isRejectedParent(entry.metadata!.id as string);
+  return {
+    kind: 'scan',
+    isUsableParent: (entry) =>
+      isEligibleParent(entry, rawBaseURL) &&
+      !isRejectedParent(entry.metadata!.id as string),
+  };
+}
 
-  let parentId: string | undefined = undefined;
-  let parentIndex = -1;
-  for (let index = content.length - 1; index >= 0; index -= 1) {
-    if (isUsableParent(content[index])) {
-      parentId = content[index].metadata!.id;
-      parentIndex = index;
-      break;
-    }
-  }
+export function parentHitOf(
+  entry: IContent,
+  index: number,
+  plan: Extract<StatefulPlan, { kind: 'scan' }>,
+): StatefulParentHit | undefined {
+  if (!plan.isUsableParent(entry)) return undefined;
+  return {
+    index,
+    id: entry.metadata!.id as string,
+    retainedTokens: readObservedRetainedTokens(entry),
+  };
+}
 
-  if (parentIndex === -1) {
+/** `totalRows` is the full history length the hit was found in. */
+export function selectStatefulParent(
+  hit: StatefulParentHit | undefined,
+  totalRows: number,
+  logger: DebugLogger,
+): StatefulSelection {
+  if (hit === undefined) {
     logger.debug(
       () => 'responses-stateful starting a new stored conversation.',
     );
-    return { enabled: true, parentId: undefined, content };
+    return { parentId: undefined, skipRows: 0 };
   }
-
-  const trimmedContent = content.slice(parentIndex + 1);
-  if (trimmedContent.length === 0) {
+  if (hit.index + 1 >= totalRows) {
     logger.debug(
       () =>
         'responses-stateful has no content after its parent; using full history.',
     );
-    // Fix 7: return enabled: true so store is set — the asymmetry with the
-    // no-parent branch was unjustified (both send full history, no parent
-    // id). With store=true this response can become a future parent.
-    return { enabled: true, parentId: undefined, content };
+    // Fix 7: stay enabled so store is set; with store=true this response can
+    // become a future parent.
+    return { parentId: undefined, skipRows: 0 };
   }
-
-  const parentRetainedTokens = readObservedRetainedTokens(content[parentIndex]);
   return {
-    enabled: true,
-    parentId,
-    content: trimmedContent,
-    ...(parentRetainedTokens === undefined ? {} : { parentRetainedTokens }),
+    parentId: hit.id,
+    skipRows: hit.index + 1,
+    ...(hit.retainedTokens === undefined
+      ? {}
+      : { parentRetainedTokens: hit.retainedTokens }),
   };
 }
 

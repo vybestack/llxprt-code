@@ -184,6 +184,20 @@ export interface PreparedResponsesRequestContext {
   readonly projectionContext: OpenAIResponsesProjectionContext;
   readonly mediaRequest: ResolvedMediaRequest;
   readonly sourcePrompt?: ResponsesSourcePrompt;
+  /** Disk-row requests: whether the stateful plan was enabled when prepared. */
+  readonly statefulEnabled?: boolean;
+  /**
+   * Disk-row requests rebuild themselves for the stateful retries (rejected
+   * parent, WebSocket->HTTP fallback), since their history is not in memory.
+   */
+  readonly rebuildFromRows?: (
+    mode: RebuildMode,
+  ) => Promise<PreparedResponsesRequestContext>;
+}
+
+export interface RebuildMode {
+  readonly forceStateless: boolean;
+  readonly forceParentless: boolean;
 }
 
 export interface RequestContext extends PreparedResponsesRequestContext {
@@ -370,23 +384,7 @@ async function prepareResponsesExecution(
       deps,
       options,
     );
-    const source = requestContext.sourcePrompt?.toEstimatorProjection();
-    return {
-      abortSignal,
-      invocationEphemerals,
-      requestContext,
-      dumpResult,
-      ...(source === undefined
-        ? {}
-        : {
-            streamRequestBody: () =>
-              diskResponsesBodyBytes(
-                requestContext.request,
-                source,
-                abortSignal,
-              ),
-          }),
-    };
+    return { abortSignal, invocationEphemerals, requestContext, dumpResult };
   } catch (error) {
     return finishMediaRequest(requestContext.mediaRequest, {
       status: 'failed',
@@ -436,7 +434,7 @@ async function* executeResponsesRequest(
         options,
         deps,
         invocationEphemerals,
-        abortSignal,
+        requestContext.rebuildFromRows,
       );
     },
   };
@@ -494,6 +492,7 @@ async function* executeResponsesRequest(
     abortSignal,
     rejectedParentId,
     recoverParentless,
+    requestContext.rebuildFromRows,
   );
 }
 
@@ -522,6 +521,7 @@ async function* retryWithoutStatefulness(
   abortSignal: AbortSignal | undefined,
   rejectedParentId: string,
   recoverParentless: boolean,
+  rebuildFromRows: PreparedResponsesRequestContext['rebuildFromRows'],
 ): AsyncIterableIterator<IContent> {
   // Retire only the dead id, then rebuild. The retry therefore sends full
   // history with no parent, and — because the parent scan takes the NEWEST
@@ -533,13 +533,19 @@ async function* retryWithoutStatefulness(
   // to a WebSocket connection that no longer exists, so the first turn of a
   // resumed session always spends one rejected request here.
   deps.markStatefulParentRejected?.(rejectedParentId);
-  const recoveryPrepared = await buildResponsesRequestContextForProjection(
-    options,
-    deps,
-    invocationEphemerals,
-    /* forceStateless */ false,
-    /* forceParentless */ recoverParentless,
-  );
+  const recoveryPrepared =
+    rebuildFromRows === undefined
+      ? await buildResponsesRequestContextForProjection(
+          options,
+          deps,
+          invocationEphemerals,
+          /* forceStateless */ false,
+          /* forceParentless */ recoverParentless,
+        )
+      : await rebuildFromRows({
+          forceStateless: false,
+          forceParentless: recoverParentless,
+        });
   const recoveryContext = await resolveResponsesTransportContext(
     options,
     recoveryPrepared,
@@ -602,14 +608,17 @@ async function buildStatelessTurn(
   options: NormalizedGenerateChatOptions,
   deps: ResponsesExecutorDeps,
   invocationEphemerals: Record<string, unknown>,
-  abortSignal: AbortSignal | undefined,
+  rebuildFromRows: PreparedResponsesRequestContext['rebuildFromRows'],
 ): Promise<StreamResponsesParams> {
-  const prepared = await buildResponsesRequestContextForProjection(
-    options,
-    deps,
-    invocationEphemerals,
-    /* forceStateless */ true,
-  );
+  const prepared =
+    rebuildFromRows === undefined
+      ? await buildResponsesRequestContextForProjection(
+          options,
+          deps,
+          invocationEphemerals,
+          /* forceStateless */ true,
+        )
+      : await rebuildFromRows({ forceStateless: true, forceParentless: false });
   const context = await resolveResponsesTransportContext(
     options,
     prepared,
@@ -633,7 +642,7 @@ async function buildStatelessTurn(
   }
   return buildStreamParams(
     context,
-    abortSignal,
+    getRequestSignal(options),
     invocationEphemerals,
     options,
     dumpResult,
@@ -647,8 +656,15 @@ function buildStreamParams(
   options: NormalizedGenerateChatOptions,
   dumpResult: Awaited<ReturnType<typeof dumpFinalizedRequest>>,
 ): StreamResponsesParams {
+  const source = requestContext.sourcePrompt?.toEstimatorProjection();
   return {
     ...requestContext,
+    ...(source === undefined
+      ? {}
+      : {
+          streamRequestBody: () =>
+            diskResponsesBodyBytes(requestContext.request, source, abortSignal),
+        }),
     abortSignal,
     maxStreamingAttempts:
       (invocationEphemerals['retries'] as number | undefined) ?? 6,
@@ -705,15 +721,9 @@ export async function buildRequestContext(
   deps: ResponsesExecutorDeps,
   forceStateless = false,
   forceParentless = false,
+  rowsStateful?: ReturnType<typeof computeStatefulConversation>,
 ): Promise<PreparedResponsesRequestContext> {
-  const {
-    rawBaseURL,
-    isCodex,
-    systemPrompt,
-    requestOverrides,
-    explicitUserStore,
-    stateful,
-  } = resolveResponsesRequestShape(
+  const shape = resolveResponsesRequestShape(
     options,
     patchedContent,
     invocationEphemerals,
@@ -721,6 +731,10 @@ export async function buildRequestContext(
     forceStateless,
     forceParentless,
   );
+  const { rawBaseURL, isCodex, systemPrompt, requestOverrides } = shape;
+  const { explicitUserStore } = shape;
+  // Disk-row requests selected their parent while streaming the rows.
+  const stateful = rowsStateful ?? shape.stateful;
   const mediaRequest = await resolveRequestMedia(
     options.runtime,
     stateful.content,

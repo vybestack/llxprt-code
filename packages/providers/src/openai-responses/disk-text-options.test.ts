@@ -143,7 +143,7 @@ describe('source prepared options rejection', () => {
     });
     try {
       await expect(stream.next()).rejects.toThrow(
-        'does not support stateful options',
+        'stateful options changed after the source token was prepared',
       );
       const source = projection.finalizedProjection;
       if (!(source instanceof Gpt56SourceProjection))
