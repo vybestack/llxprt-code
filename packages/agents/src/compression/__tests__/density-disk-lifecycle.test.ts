@@ -55,14 +55,14 @@ describe('disk density publication and lifetime', () => {
       const result = await admissionRollback(size);
       expect(result.after).not.toBe(result.before);
     }, 600_000);
-  it('preserves pending caller row and chronology marker identity on rejected publication', async () => {
+  it('restores detached rows and chronology markers when publication is rejected', async () => {
     await withRollbackFixture(async (history) => {
       const before = Array.from({ length: 12 }, (_, index) =>
         densityRow(index, 0),
       );
       await history.addBatch(before);
       const first = before[0];
-      const marker = first.metadata?.chronology;
+      const marker = structuredClone(first.metadata?.chronology);
       const failure = new Error('density publication rejected');
       history.once('tokensUpdated', () => {
         first.metadata = {
@@ -77,10 +77,10 @@ describe('disk density publication and lifetime', () => {
       );
       const restored = await rowsOf(history);
       expect(restored).toHaveLength(before.length);
-      expect(restored[0]).toBe(first);
-      expect(restored[0].metadata?.chronology).toBe(marker);
+      expect(restored[0]).not.toBe(first);
+      expect(restored[0].metadata?.chronology).toStrictEqual(marker);
       expect(handler.densityDirty).toBe(false);
-    }, true);
+    });
   });
   it('retries a transient candidate token estimate over the same pinned disk rows', async () => {
     await withSuffixFixture(
