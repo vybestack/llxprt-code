@@ -126,20 +126,25 @@ export function buildOptions(
   // `ephemerals` is the real ProviderCallOptionsInit key; `ephemeralSettings`
   // is silently dropped as an excess property (test files are not typechecked,
   // so the mistake is invisible there — this module IS typechecked).
-  return createProviderCallOptions({
-    providerName: 'openai-responses',
-    settings,
-    config: createRuntimeConfigStub(settings),
-    runtime,
-    invocation,
+  // The executor runs after request normalization, when `contents` is the
+  // materialized row array rather than the caller's cold stream.
+  return {
+    ...createProviderCallOptions({
+      providerName: 'openai-responses',
+      settings,
+      config: createRuntimeConfigStub(settings),
+      runtime,
+      invocation,
+      contents,
+      ephemerals,
+      resolved: {
+        model: 'gpt-5.6-sol',
+        baseURL: CODEX_BASE_URL,
+        authToken: 'test-token',
+      },
+    }),
     contents,
-    ephemerals,
-    resolved: {
-      model: 'gpt-5.6-sol',
-      baseURL: CODEX_BASE_URL,
-      authToken: 'test-token',
-    },
-  }) as unknown as NormalizedGenerateChatOptions;
+  } as unknown as NormalizedGenerateChatOptions;
 }
 
 export function buildDeps(
