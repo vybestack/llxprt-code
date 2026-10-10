@@ -21,6 +21,23 @@ import {
   type ProviderRequestSnapshot,
 } from './provider-request-snapshot.js';
 
+/** Rows of synchronous scratch work between event-loop yields. */
+const ROWS_PER_YIELD = 32;
+
+/** Yields to the event loop every ROWS_PER_YIELD rows and checks scratch and abort state on each row. */
+class RowPacer {
+  private rows = 0;
+  constructor(
+    private readonly disk: ProviderNormalizationDisk,
+    private readonly signal?: AbortSignal,
+  ) {}
+  async next(): Promise<void> {
+    if (this.rows++ % ROWS_PER_YIELD === 0) await setImmediate();
+    this.signal?.throwIfAborted();
+    this.disk.verify();
+  }
+}
+
 export interface ProviderCuratedStreamOptions {
   readonly signal?: AbortSignal;
   readonly root?: string;
@@ -151,9 +168,9 @@ async function completeResponses(
   signal?: AbortSignal,
 ): Promise<void> {
   const length = disk.number('length:normalized') ?? 0;
+  const pacer = new RowPacer(disk, signal);
   for (let index = 0; index < length; index++) {
-    await setImmediate();
-    signal?.throwIfAborted();
+    await pacer.next();
     const row = disk.row('normalized', index);
     appendCompleted(disk, row, index);
     appendMissingResponses(
@@ -247,9 +264,9 @@ async function indexResponses(
   signal?: AbortSignal,
 ): Promise<void> {
   const length = disk.number('length:completed') ?? 0;
+  const pacer = new RowPacer(disk, signal);
   for (let index = 0; index < length; index++) {
-    await setImmediate();
-    signal?.throwIfAborted();
+    await pacer.next();
     indexRowResponses(disk, disk.row('completed', index), index, logger);
   }
 }
@@ -363,9 +380,9 @@ async function logContinuity(
   signal?: AbortSignal,
 ): Promise<void> {
   const length = disk.number('length:normalized') ?? 0;
+  const pacer = new RowPacer(disk, signal);
   for (let index = 0; index < length; index++) {
-    await setImmediate();
-    signal?.throwIfAborted();
+    await pacer.next();
     if (disk.number(`warn:reconstructed:${index}`) === undefined) continue;
     logReconstructedCalls(logger, disk.row('normalized', index).blocks);
   }
@@ -378,9 +395,9 @@ async function stageOutput(
   signal?: AbortSignal,
 ): Promise<void> {
   const length = disk.number('length:completed') ?? 0;
+  const pacer = new RowPacer(disk, signal);
   for (let index = 0; index < length; index++) {
-    await setImmediate();
-    signal?.throwIfAborted();
+    await pacer.next();
     const row = stripped(disk.row('completed', index));
     if (row !== undefined) {
       appendOrdered(disk, row, disk.number(`pending:completed:${index}`) === 1);
@@ -444,9 +461,9 @@ export async function prepareProviderContentSnapshot(
   const disk = new ProviderNormalizationDisk(options.root);
   const anchors = new ProviderAnchorDiagnostics();
   try {
+    const pacer = new RowPacer(disk, options.signal);
     for await (const { row, tailIndex } of combinedRows(curated, tail)) {
-      await setImmediate();
-      options.signal?.throwIfAborted();
+      await pacer.next();
       anchors.input(row.metadata?.cacheAnchor === true);
       for (const split of HistoryToolNormalization.splitToolCallsOutOfToolMessages(
         [row],

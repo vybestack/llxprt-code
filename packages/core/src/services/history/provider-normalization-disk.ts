@@ -17,6 +17,8 @@ export class ProviderNormalizationDisk {
   private readonly directory: string;
   private readonly storage: ProviderNormalizationStorage;
   private semanticBoundaryIdentity: object | undefined;
+  /** One counter per stage; the row payloads stay on disk. */
+  private readonly lengths = new Map<string, number>();
 
   constructor(root = getScratchRoot()) {
     this.directory = mkdtempSync(join(root, 'provider-normalization-'));
@@ -28,8 +30,14 @@ export class ProviderNormalizationDisk {
     }
   }
 
-  private read(key: string): unknown {
+  /** Fails when the scratch directory was removed; call once per unit of row work. */
+  verify(): void {
+    this.storage.verify();
+  }
+
+  private read(key: string, verify = false): unknown {
     try {
+      if (verify) this.verify();
       return this.storage.get(key);
     } catch (error) {
       if (error instanceof Error && 'code' in error && error.code === 'ENOENT')
@@ -43,6 +51,7 @@ export class ProviderNormalizationDisk {
   }
 
   number(key: string): number | undefined {
+    if (key.startsWith('length:')) return this.lengths.get(key);
     const value = this.read(key);
     return value === undefined
       ? undefined
@@ -50,6 +59,10 @@ export class ProviderNormalizationDisk {
   }
 
   setNumber(key: string, value: number): void {
+    if (key.startsWith('length:')) {
+      this.lengths.set(key, value);
+      return;
+    }
     this.write(key, value);
   }
 
@@ -73,7 +86,7 @@ export class ProviderNormalizationDisk {
   }
 
   row(stage: string, index: number): IContent {
-    const row = this.read(`row:${stage}:${index}`);
+    const row = this.read(`row:${stage}:${index}`, true);
     if (!isSpeakerContent(row))
       throw new Error('Missing or invalid provider normalization row');
     const boundary = row.metadata?.semanticMediaPurgeBoundary;

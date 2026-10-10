@@ -13,6 +13,8 @@ import { join } from 'node:path';
 import { isRecord } from './historyJournalGuards.js';
 
 const WIDTH = 48;
+/** Appended values are batched into one sequential write of at most this many bytes. */
+const VALUE_BUFFER_BYTES = 256 * 1024;
 
 function transfer(
   fd: number,
@@ -38,6 +40,9 @@ export class ProviderNormalizationStorage {
   private capacity = 256;
   private count = 0;
   private end = 0;
+  /** Bytes below this offset are on disk; [flushed, end) are in `pending`. */
+  private flushed = 0;
+  private readonly pending = Buffer.allocUnsafe(VALUE_BUFFER_BYTES);
   private closed = false;
 
   constructor(private readonly directory: string) {
@@ -54,8 +59,51 @@ export class ProviderNormalizationStorage {
   private check(): void {
     if (this.closed)
       throw new Error('Provider normalization storage is closed');
-    // Unix FDs survive unlink; missing scratch must fail reads as well as writes.
+  }
+
+  /**
+   * Unix FDs survive unlink, so callers verify the scratch directory still
+   * exists once per row of work instead of once per key operation.
+   */
+  verify(): void {
+    this.check();
     statSync(this.directory);
+  }
+
+  private flush(): void {
+    const length = this.end - this.flushed;
+    if (length === 0) return;
+    transfer(this.values, this.pending.subarray(0, length), this.flushed, true);
+    this.flushed = this.end;
+  }
+
+  private append(bytes: Buffer): void {
+    if (bytes.length > VALUE_BUFFER_BYTES) {
+      this.flush();
+      transfer(this.values, bytes, this.end, true);
+      this.end += bytes.length;
+      this.flushed = this.end;
+      return;
+    }
+    if (this.end - this.flushed + bytes.length > VALUE_BUFFER_BYTES)
+      this.flush();
+    bytes.copy(this.pending, this.end - this.flushed);
+    this.end += bytes.length;
+  }
+
+  private readValue(start: number, length: number): Buffer {
+    const bytes = Buffer.alloc(length);
+    if (start >= this.flushed) {
+      this.pending.copy(
+        bytes,
+        0,
+        start - this.flushed,
+        start - this.flushed + length,
+      );
+      return bytes;
+    }
+    transfer(this.values, bytes, start, false);
+    return bytes;
   }
 
   private entry(index: number, fd = this.index): Buffer {
@@ -65,8 +113,10 @@ export class ProviderNormalizationStorage {
   }
 
   private value(address: Buffer): { key: string; value: unknown } {
-    const bytes = Buffer.alloc(address.readDoubleLE(40));
-    transfer(this.values, bytes, address.readDoubleLE(32) - 1, false);
+    const bytes = this.readValue(
+      address.readDoubleLE(32) - 1,
+      address.readDoubleLE(40),
+    );
     const record: unknown = JSON.parse(bytes.toString('utf8'));
     if (!isRecord(record) || typeof record.key !== 'string')
       throw new Error('Invalid provider normalization storage value');
@@ -104,12 +154,12 @@ export class ProviderNormalizationStorage {
     const { slot, address } = this.locate(key, hash);
     const inserted = address.readDoubleLE(32) === 0;
     const bytes = Buffer.from(JSON.stringify({ key, value }));
-    transfer(this.values, bytes, this.end, true);
+    const start = this.end;
+    this.append(bytes);
     hash.copy(address, 0);
-    address.writeDoubleLE(this.end + 1, 32);
+    address.writeDoubleLE(start + 1, 32);
     address.writeDoubleLE(bytes.length, 40);
     transfer(this.index, address, slot * WIDTH, true);
-    this.end += bytes.length;
     if (inserted) this.count++;
   }
 
