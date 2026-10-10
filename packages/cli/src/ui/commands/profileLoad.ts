@@ -6,6 +6,7 @@
 
 import type { CommandContext, MessageActionReturn } from './types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
+import { recordActiveProviderSwitch } from '../utils/recordActiveProviderSwitch.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 
 const logger = new DebugLogger('llxprt:ui:profile-command');
@@ -159,17 +160,17 @@ export function recordProviderSwitch(
   context: CommandContext,
   result: { providerName?: string },
   profileLoadResult: ProfileLoadResultView,
+  reportFailure: (message: string) => void,
 ): void {
-  try {
-    const runtime = getRuntimeApi();
-    const statusAfter = runtime.getActiveProviderStatus();
-    context.recordingIntegration?.recordProviderSwitch(
-      statusAfter.providerName ?? result.providerName ?? '',
-      statusAfter.modelName ?? profileLoadResult.modelName ?? 'unknown',
-    );
-  } catch {
-    // Best-effort recording -- don't let it block profile loading
-  }
+  recordActiveProviderSwitch(
+    context.recordingIntegration,
+    getRuntimeApi(),
+    reportFailure,
+    {
+      providerName: result.providerName,
+      modelName: profileLoadResult.modelName,
+    },
+  );
 }
 
 export function schedulePaymentModeCheck(

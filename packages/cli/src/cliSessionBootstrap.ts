@@ -14,10 +14,14 @@ import {
   SessionDiscovery,
   SessionTransitionService,
   resumeSession,
+  describeUnreadableRecording,
+  matchUnreadableRecordings,
+  CONTINUE_LATEST,
   listSessions,
   deleteSession,
   getProjectHash,
   type ContinueTarget,
+  type UnreadableRecording,
   type IContent,
   type LockHandle,
 } from '@vybestack/llxprt-code-core';
@@ -98,6 +102,12 @@ export interface ResolvedRecording {
   resumedLockHandle: LockHandle | null;
   /** The resumed session's ID, or null for new/fallback sessions. */
   resumedSessionId: string | null;
+  /**
+   * Plain-text warnings raised while resuming (unreadable recordings skipped,
+   * resume failures, history-restore fallback). The caller surfaces them to the
+   * user; they must not depend on debug logging being enabled.
+   */
+  startupWarnings: string[];
 }
 
 export interface SessionRecordingSetup extends ResolvedRecording {
@@ -179,6 +189,16 @@ export async function bootstrapRuntimeAndConfig(
   });
 
   return { config, extensions, runtimeSettingsService };
+}
+
+/**
+ * Record a startup warning for the caller to show the user, and mirror it to
+ * the debug log. DebugLogger.warn is silent unless debug logging is enabled, so
+ * the collected string is the user-visible path.
+ */
+function recordStartupWarning(sink: string[], message: string): void {
+  sink.push(message);
+  debugLogger.warn(chalk.yellow(message));
 }
 
 /**
@@ -304,6 +324,7 @@ export async function setupSessionRecording(
     resumedHistory,
     resumedLockHandle,
     resumedSessionId,
+    startupWarnings,
   } = await createOrResumeRecording(config, projectHash, chatsDir);
 
   let activeRecordingService = recordingService;
@@ -322,11 +343,10 @@ export async function setupSessionRecording(
       }
     } catch (err) {
       const messageText = err instanceof Error ? err.message : String(err);
-      debugLogger.warn(
-        chalk.yellow(
-          `Could not restore conversation history (session ${resumedSessionId ?? 'unknown'}): ${messageText}. ` +
-            'Falling back to a new session.',
-        ),
+      recordStartupWarning(
+        startupWarnings,
+        `Could not restore conversation history (session ${resumedSessionId ?? 'unknown'}): ${messageText}. ` +
+          'Falling back to a new session.',
       );
       // Release resources FIRST so cleanup runs even if resetChat or
       // buildNewRecordingService throw (issue #1873).
@@ -385,6 +405,7 @@ export async function setupSessionRecording(
     resumedHistory: didFallback ? null : resumedHistory,
     resumedLockHandle: activeLockHandle,
     resumedSessionId: didFallback ? null : resumedSessionId,
+    startupWarnings,
   };
 }
 
@@ -401,6 +422,12 @@ export function buildNewRecordingService(
     workspaceDirs: [...config.getWorkspaceContext().getDirectories()],
     provider: config.getProvider() ?? 'unknown',
     model: config.getModel(),
+    // The provider can change (profile load, model picker) before the first
+    // message materializes the file, so the header reads the live Config then.
+    resolveProviderModel: () => ({
+      provider: config.getProvider() ?? 'unknown',
+      model: config.getModel(),
+    }),
     mediaStore: config.getLocalMediaStore(),
     maxQueueBytes: config.getSessionRecordingQueueByteLimit(),
   });
@@ -450,49 +477,94 @@ async function forkStartupCheckpoint(
     resumedHistory: result.history,
     resumedLockHandle: result.lockHandle,
     resumedSessionId: result.metadata.sessionId,
+    startupWarnings: [],
   };
 }
 
+function describeUnreadableRecordings(
+  unreadableRecordings: readonly UnreadableRecording[],
+): string {
+  return unreadableRecordings
+    .map((recording) => `  ${describeUnreadableRecording(recording)}`)
+    .join('\n');
+}
+
+/** One visible warning naming every unreadable recording discovery skipped. */
+function warnSkippedRecordings(
+  unreadableRecordings: readonly UnreadableRecording[],
+  startupWarnings: string[],
+): void {
+  if (unreadableRecordings.length === 0) return;
+  recordStartupWarning(
+    startupWarnings,
+    `Skipped ${unreadableRecordings.length} unreadable session recording(s):\n` +
+      describeUnreadableRecordings(unreadableRecordings),
+  );
+}
+
 /**
- * Resume a recording session if --continue was supplied, otherwise create a
- * new one. Falls back to a new session when resume fails.
+ * Where a startup --continue reference lands once unreadable recordings are
+ * accounted for: a readable session id to resume, the unreadable recordings the
+ * reference names (nothing readable matches it), or neither.
  */
-export async function createOrResumeRecording(
+function classifyContinueRef(
+  continueRef: string,
+  targets: readonly ContinueTarget[],
+  unreadableRecordings: readonly UnreadableRecording[],
+): {
+  resumeRef: string;
+  namedUnreadable: readonly UnreadableRecording[];
+} {
+  if (continueRef === CONTINUE_LATEST) {
+    return { resumeRef: continueRef, namedUnreadable: [] };
+  }
+  const resolved = SessionDiscovery.resolveContinueRef(continueRef, targets);
+  if ('target' in resolved) {
+    // Pin the readable session's id so an index or name cannot be re-resolved
+    // against a listing that still contains the unreadable recordings.
+    const sessionId =
+      resolved.target.kind === 'session'
+        ? resolved.target.session.sessionId
+        : continueRef;
+    return { resumeRef: sessionId, namedUnreadable: [] };
+  }
+  const namedUnreadable = matchUnreadableRecordings(
+    continueRef,
+    resolved.error,
+    unreadableRecordings,
+  );
+  return { resumeRef: continueRef, namedUnreadable };
+}
+
+async function buildFallbackRecording(
   config: Config,
   projectHash: string,
   chatsDir: string,
+  startupWarnings: string[],
 ): Promise<ResolvedRecording> {
-  const continueRef = config.getContinueSessionRef();
-  if (!continueRef) {
-    return {
-      recordingService: await buildNewRecordingService(
-        config,
-        projectHash,
-        chatsDir,
-      ),
-      resumedHistory: null,
-      resumedLockHandle: null,
-      resumedSessionId: null,
-    };
-  }
-
-  const targets = await SessionDiscovery.listContinueTargets(
-    chatsDir,
-    projectHash,
-    config.getLocalMediaStore(),
-  );
-  const checkpointTarget = startupCheckpointTarget(continueRef, targets);
-  if (checkpointTarget !== null) {
-    return forkStartupCheckpoint(
-      checkpointTarget,
+  return {
+    recordingService: await buildNewRecordingService(
       config,
       projectHash,
       chatsDir,
-    );
-  }
+    ),
+    resumedHistory: null,
+    resumedLockHandle: null,
+    resumedSessionId: null,
+    startupWarnings,
+  };
+}
 
+/** Resume the readable session a startup --continue reference resolved to. */
+async function resumeReadableSession(
+  config: Config,
+  projectHash: string,
+  chatsDir: string,
+  refs: { continueRef: string; resumeRef: string },
+  startupWarnings: string[],
+): Promise<ResolvedRecording> {
   const resumeResult = await resumeSession({
-    continueRef,
+    continueRef: refs.resumeRef,
     projectHash,
     chatsDir,
     currentProvider: config.getProvider() ?? 'unknown',
@@ -503,30 +575,94 @@ export async function createOrResumeRecording(
   });
 
   if (!resumeResult.ok) {
-    debugLogger.warn(
-      chalk.yellow(
-        `Could not resume session (ref: ${continueRef}): ${resumeResult.error}`,
-      ),
+    recordStartupWarning(
+      startupWarnings,
+      `Could not resume session (ref: ${refs.continueRef}): ${resumeResult.error}`,
     );
-    return {
-      recordingService: await buildNewRecordingService(
-        config,
-        projectHash,
-        chatsDir,
-      ),
-      resumedHistory: null,
-      resumedLockHandle: null,
-      resumedSessionId: null,
-    };
+    return buildFallbackRecording(
+      config,
+      projectHash,
+      chatsDir,
+      startupWarnings,
+    );
   }
 
   for (const warning of resumeResult.warnings) {
-    debugLogger.warn(chalk.yellow(warning));
+    recordStartupWarning(startupWarnings, warning);
   }
   return {
     recordingService: resumeResult.recording,
     resumedHistory: resumeResult.history,
     resumedLockHandle: resumeResult.lockHandle,
     resumedSessionId: resumeResult.metadata.sessionId,
+    startupWarnings,
   };
+}
+
+/**
+ * Resume a recording session if --continue was supplied, otherwise create a
+ * new one. Falls back to a new session when resume fails. Recordings that
+ * cannot be replayed never block healthy sessions; they are reported in one
+ * warning (or, when the reference names one, in the resume failure warning).
+ */
+export async function createOrResumeRecording(
+  config: Config,
+  projectHash: string,
+  chatsDir: string,
+): Promise<ResolvedRecording> {
+  const continueRef = config.getContinueSessionRef();
+  if (!continueRef) {
+    return buildFallbackRecording(config, projectHash, chatsDir, []);
+  }
+  const startupWarnings: string[] = [];
+
+  const { targets, unreadableRecordings } =
+    await SessionDiscovery.listContinueTargetsDetailed(
+      chatsDir,
+      projectHash,
+      config.getLocalMediaStore(),
+    );
+  const { resumeRef, namedUnreadable } = classifyContinueRef(
+    continueRef,
+    targets,
+    unreadableRecordings,
+  );
+  warnSkippedRecordings(
+    unreadableRecordings.filter(
+      (recording) => !namedUnreadable.includes(recording),
+    ),
+    startupWarnings,
+  );
+  if (namedUnreadable.length > 0) {
+    recordStartupWarning(
+      startupWarnings,
+      `Could not resume session (ref: ${continueRef}): the recording is unreadable:\n` +
+        describeUnreadableRecordings(namedUnreadable),
+    );
+    return buildFallbackRecording(
+      config,
+      projectHash,
+      chatsDir,
+      startupWarnings,
+    );
+  }
+
+  const checkpointTarget = startupCheckpointTarget(continueRef, targets);
+  if (checkpointTarget !== null) {
+    const forked = await forkStartupCheckpoint(
+      checkpointTarget,
+      config,
+      projectHash,
+      chatsDir,
+    );
+    return { ...forked, startupWarnings };
+  }
+
+  return resumeReadableSession(
+    config,
+    projectHash,
+    chatsDir,
+    { continueRef, resumeRef },
+    startupWarnings,
+  );
 }

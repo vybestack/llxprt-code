@@ -6,14 +6,27 @@
 
 import { useCallback } from 'react';
 import type { HydratedModel } from '@vybestack/llxprt-code-core';
-import type { useRuntimeApi } from '../contexts/RuntimeContext.js';
 import type { DialogStore } from '../stores/dialog/dialogStore.js';
 import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
+import { recordProviderSwitchReportingFailure } from '../utils/recordActiveProviderSwitch.js';
 
 interface ModelDialogCommandContext {
   recordingIntegration?: {
-    recordProviderSwitch: (provider: string, model: string) => void;
+    recordProviderSwitch(provider: string, model: string): void;
   };
+}
+
+/** The part of the runtime API a model selection uses. */
+interface ModelSwitchRuntime {
+  setProvider(provider: string): Promise<{
+    nextProvider: string;
+    infoMessages: readonly string[];
+  }>;
+  setActiveModel(model: string): Promise<{
+    nextModel: string;
+    providerName: string;
+  }>;
+  getActiveProviderStatus(): { providerName: string | null };
 }
 
 function buildCrossProviderMessages(
@@ -41,32 +54,39 @@ function buildCrossProviderMessages(
   return messages;
 }
 
-function recordSwitchSideEffects(
-  messages: string[],
+/** An info-message failure must not mask a successful switch or the other messages. */
+function addInfoItem(
   addItem: UseHistoryManagerReturn['addItem'],
-  recorder: ((provider: string, model: string) => void) | undefined,
-  provider: string,
-  modelId: string,
+  text: string,
 ): void {
-  for (const msg of messages) {
-    try {
-      addItem({ type: 'info', text: msg });
-    } catch {
-      // A single info-message failure must not mask a successful switch
-      // or suppress the remaining switch-info messages.
-    }
+  try {
+    addItem({ type: 'info', text });
+  } catch {
+    // History rendering failure is isolated from the switch itself.
   }
-  recorder?.(provider, modelId);
+}
+
+/** A failure report must not turn a successful switch into a failed one. */
+function addErrorItem(
+  addItem: UseHistoryManagerReturn['addItem'],
+  text: string,
+): void {
+  try {
+    addItem({ type: 'error', text });
+  } catch {
+    // History rendering failure is isolated from the switch itself.
+  }
 }
 
 /**
  * Handler invoked when a user selects a model in the ModelsDialog browser.
  * Performs the provider/model switch, records it, and opens the
- * ModelConfigDialog on success. Recording/history failures are isolated
- * so they never suppress the config dialog after a successful switch.
+ * ModelConfigDialog on success. History rendering failures are isolated;
+ * a recording failure is reported as its own error item and never turns a
+ * successful switch into a failed one.
  */
 export function useModelDialogHandler(
-  runtime: ReturnType<typeof useRuntimeApi>,
+  runtime: ModelSwitchRuntime,
   addItem: UseHistoryManagerReturn['addItem'],
   store: DialogStore,
   currentProvider: string | null,
@@ -78,41 +98,39 @@ export function useModelDialogHandler(
         let switchSucceeded = false;
         try {
           const selectedProvider = model.provider;
-          const recorder =
-            commandContext.recordingIntegration?.recordProviderSwitch;
+          const recordingIntegration = commandContext.recordingIntegration;
           if (selectedProvider !== currentProvider) {
             const switchResult = await runtime.setProvider(selectedProvider);
             await runtime.setActiveModel(model.id);
             switchSucceeded = true;
-            try {
-              const messages = buildCrossProviderMessages(
-                currentProvider,
-                switchResult,
-                model.id,
-                selectedProvider,
-              );
-              recordSwitchSideEffects(
-                messages,
-                addItem,
-                recorder,
-                selectedProvider,
-                model.id,
-              );
-            } catch {
-              // Recording failure must not mask a successful switch
+            for (const message of buildCrossProviderMessages(
+              currentProvider,
+              switchResult,
+              model.id,
+              selectedProvider,
+            )) {
+              addInfoItem(addItem, message);
             }
+            recordProviderSwitchReportingFailure(
+              recordingIntegration,
+              () => ({ provider: selectedProvider, model: model.id }),
+              (text) => addErrorItem(addItem, text),
+            );
           } else {
             const result = await runtime.setActiveModel(model.id);
             switchSucceeded = true;
-            try {
-              addItem({
-                type: 'info',
-                text: `Active model is '${result.nextModel}' for provider '${result.providerName}'.`,
-              });
-              recorder?.(result.providerName, result.nextModel);
-            } catch {
-              // Recording failure must not mask a successful switch
-            }
+            addInfoItem(
+              addItem,
+              `Active model is '${result.nextModel}' for provider '${result.providerName}'.`,
+            );
+            recordProviderSwitchReportingFailure(
+              recordingIntegration,
+              () => ({
+                provider: result.providerName,
+                model: result.nextModel,
+              }),
+              (text) => addErrorItem(addItem, text),
+            );
           }
         } catch (e) {
           let providerName: string | null | undefined;

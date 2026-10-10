@@ -8,10 +8,18 @@
  */
 
 import { assertNotNull } from '@vybestack/llxprt-code-test-utils';
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import * as fc from 'fast-check';
 import { randomUUID } from 'node:crypto';
-import { appendFile, mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import {
+  appendFile,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { continueCommand } from '../continueCommand.js';
@@ -36,6 +44,7 @@ import type {
   LiteralArgument,
 } from '../schema/types.js';
 import { assertDefined, assertType } from '../../../__tests__/assertions.js';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 
 /**
  * Helper to narrow a command argument to the ValueArgument variant.
@@ -415,6 +424,81 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
         expect(values).toContain('release-ready');
         expect(values).toContain(sessionId);
       } finally {
+        try {
+          await recording.dispose();
+        } finally {
+          await rm(root, { recursive: true, force: true });
+        }
+      }
+    });
+  });
+
+  describe('Tab completion with an unreadable recording (issue #3732)', () => {
+    it('still completes healthy sessions and reports the skipped recording on the debug log', async () => {
+      const root = await mkdtemp(join(tmpdir(), 'continue-completion-bad-'));
+      const projectTempDir = join(root, 'completion-project');
+      const chatsDir = join(projectTempDir, 'chats');
+      const recording = new SessionRecordingService({
+        sessionId: randomUUID(),
+        projectHash: 'completion-project',
+        chatsDir,
+        workspaceDirs: [root],
+        provider: 'test-provider',
+        model: 'test-model',
+      });
+      const warnings: string[] = [];
+      const warn = vi
+        .spyOn(debugLogger, 'warn')
+        .mockImplementation((...args: unknown[]) => {
+          warnings.push(args.map(String).join(' '));
+        });
+
+      try {
+        recording.recordContent({
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'healthy content' }],
+        });
+        await recording.flush();
+        await mkdir(chatsDir, { recursive: true });
+        const brokenPath = join(
+          chatsDir,
+          'session-2026-10-08T21-18-08-broken000001.jsonl',
+        );
+        await writeFile(brokenPath, '', 'utf-8');
+
+        ctx = createMockCommandContext({
+          services: {
+            config: {
+              isInteractive: () => true,
+              storage: {
+                getProjectChatsDir: () => chatsDir,
+                getProjectTempDir: () => projectTempDir,
+              },
+              getLocalMediaStore: () => undefined,
+            },
+          },
+        });
+        const schema = continueCommand.schema;
+        assertDefined(schema);
+        const firstArg = schema[0];
+        assertDefined(firstArg);
+        assertType(firstArg, isValueArgument);
+        assertDefined(firstArg.completer);
+
+        const completions = await firstArg.completer(ctx, '', mockTokenInfo());
+        const values = completions.map((completion) =>
+          typeof completion === 'string' ? completion : completion.value,
+        );
+
+        expect({
+          values,
+          warnings: warnings.map((text) => text.includes(brokenPath)),
+        }).toStrictEqual({
+          values: ['latest', recording.getSessionId()],
+          warnings: [true],
+        });
+      } finally {
+        warn.mockRestore();
         try {
           await recording.dispose();
         } finally {

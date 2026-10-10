@@ -35,6 +35,7 @@ import { MessageType } from '../types.js';
 import { type CommandArgumentSchema } from './schema/types.js';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
+import { warnUnreadableRecordings } from '../utils/warnUnreadableRecordings.js';
 
 function getProjectHashForContext(context: CommandContext): string | null {
   const recording = getRecording(context);
@@ -88,12 +89,13 @@ async function listProjectCheckpoints(
   if (projectHash === null) return [];
   const chatsDir = getChatsDir(context);
   if (chatsDir === null) return [];
-  const targets = await SessionDiscovery.listContinueTargets(
+  const detailed = await SessionDiscovery.listContinueTargetsDetailed(
     chatsDir,
     projectHash,
     context.services.config?.getLocalMediaStore(),
   );
-  return targets.filter(
+  warnUnreadableRecordings('/chat checkpoints', detailed.unreadableRecordings);
+  return detailed.targets.filter(
     (target): target is Extract<ContinueTarget, { kind: 'checkpoint' }> =>
       target.kind === 'checkpoint',
   );

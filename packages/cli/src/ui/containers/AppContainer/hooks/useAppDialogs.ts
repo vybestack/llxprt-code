@@ -330,11 +330,13 @@ function useDialogsProfiles(p: AppDialogsParams) {
   const loadProfile = useLoadProfileDialog({
     addMessage,
     dialogs,
+    recordingIntegrationRef: p.recordingIntegrationRef,
   });
   const createProfile = useCreateProfileDialog({ dialogs });
   const profileMgmt = useProfileManagement({
     addMessage,
     dialogs,
+    recordingIntegrationRef: p.recordingIntegrationRef,
   });
   const toolsRaw = useToolsDialog({
     addMessage,

@@ -24,12 +24,25 @@
  */
 
 import { type IContent } from '../services/history/IContent.js';
-import { type SessionMetadata, type SessionSummary } from './types.js';
+import {
+  type ReplayResult,
+  type SessionMetadata,
+  type SessionSummary,
+  type UnreadableRecording,
+} from './types.js';
 import { SessionRecordingService } from './SessionRecordingService.js';
 import { SessionDiscovery } from './SessionDiscovery.js';
-import { SessionLockManager, type LockHandle } from './SessionLockManager.js';
+import {
+  SessionLockManager,
+  SessionLockedError,
+  type LockHandle,
+} from './SessionLockManager.js';
 import { replaySession } from './ReplayEngine.js';
 import { RESUME_NO_SESSIONS_FOUND } from './resumeNotFoundMessages.js';
+import {
+  describeUnreadableRecording,
+  matchUnreadableRecordings,
+} from './unreadableRecordings.js';
 import type { LocalMediaStore } from '../storage/local-media-store.js';
 
 /**
@@ -66,12 +79,16 @@ export interface ResumeResult {
   recording: SessionRecordingService;
   lockHandle: LockHandle;
   warnings: string[];
+  /** Recordings in the project that could not be read and were passed over. */
+  skippedRecordings: readonly UnreadableRecording[];
 }
 
 /** Failed resume result — contains an error message. */
 export interface ResumeError {
   ok: false;
   error: string;
+  /** Recordings in the project that could not be read and were passed over. */
+  skippedRecordings?: readonly UnreadableRecording[];
 }
 
 type LockedSession = { targetFilePath: string; lockHandle: LockHandle };
@@ -79,17 +96,29 @@ type LockedSession = { targetFilePath: string; lockHandle: LockHandle };
 /**
  * Resolve a specific continueRef to a locked session.
  * Returns the locked session info, or a ResumeError if resolution/locking fails.
+ * A reference that matches only an unreadable recording reports that
+ * recording's reason rather than a bare "not found".
  */
 async function resolveAndLockSession(
   request: ResumeRequest,
   sessions: SessionSummary[],
+  unreadable: readonly UnreadableRecording[],
 ): Promise<LockedSession | ResumeError> {
   const resolved = SessionDiscovery.resolveSessionRef(
     request.continueRef,
     sessions,
   );
   if ('error' in resolved) {
-    return { ok: false, error: resolved.error };
+    const named = matchUnreadableRecordings(
+      request.continueRef,
+      resolved.error,
+      unreadable,
+    );
+    if (named.length === 0) return { ok: false, error: resolved.error };
+    const details = named
+      .map((recording) => `${recording.reason} (${recording.filePath})`)
+      .join('; ');
+    return { ok: false, error: `Failed to replay session: ${details}` };
   }
 
   const targetFilePath = resolved.session.filePath;
@@ -100,8 +129,11 @@ async function resolveAndLockSession(
       resolved.session.sessionId,
     );
     return { targetFilePath, lockHandle };
-  } catch {
-    return { ok: false, error: 'Session is in use by another process' };
+  } catch (error: unknown) {
+    if (error instanceof SessionLockedError) {
+      return { ok: false, error: 'Session is in use by another process' };
+    }
+    throw error;
   }
 }
 
@@ -157,46 +189,22 @@ function initializeRecordingForResume(
   return recording;
 }
 
+type ReplaySuccess = Extract<ReplayResult, { ok: true }>;
+type ReplayFailure = { ok: false; reason: string };
+
+function replayFailureError(failure: ReplayFailure): ResumeError {
+  return { ok: false, error: `Failed to replay session: ${failure.reason}` };
+}
+
 /**
- * Resume a previously recorded session.
- *
- * Discovers sessions, resolves the target, acquires a lock, replays the
- * event log to reconstruct history, and initializes recording for append.
- *
- * @pseudocode resume-flow.md lines 50-124
+ * Replay a locked session. A session that cannot be replayed releases its lock
+ * before the failure is returned, so callers never inherit a lock on a session
+ * they are not resuming.
  */
-export async function resumeSession(
+async function replayLockedSession(
+  lockedSession: LockedSession,
   request: ResumeRequest,
-): Promise<ResumeResult | ResumeError> {
-  // Step 1: Discover sessions
-  const sessions = await SessionDiscovery.listSessions(
-    request.chatsDir,
-    request.projectHash,
-  );
-
-  if (sessions.length === 0) {
-    return { ok: false, error: RESUME_NO_SESSIONS_FOUND };
-  }
-
-  // Step 2: Resolve which session to resume
-  let lockedSession: LockedSession | null = null;
-
-  if (request.continueRef === CONTINUE_LATEST) {
-    lockedSession = await findFirstUnlockedSession(request.chatsDir, sessions);
-
-    if (!lockedSession) {
-      return {
-        ok: false,
-        error: 'All sessions for this project are in use',
-      };
-    }
-  } else {
-    const result = await resolveAndLockSession(request, sessions);
-    if (!('targetFilePath' in result)) return result;
-    lockedSession = result;
-  }
-
-  // Step 4: Replay session
+): Promise<ReplaySuccess | ReplayFailure> {
   const replayResult = await replaySession(
     lockedSession.targetFilePath,
     request.projectHash,
@@ -204,17 +212,113 @@ export async function resumeSession(
   );
   if (!replayResult.ok) {
     await lockedSession.lockHandle.release();
-    return {
-      ok: false,
-      error: `Failed to replay session: ${replayResult.error}`,
-    };
+    return { ok: false, reason: replayResult.error };
   }
   if (replayResult.sequenceCorrupt) {
     await lockedSession.lockHandle.release();
     return {
       ok: false,
-      error: 'Failed to replay session: recording has non-monotonic sequences',
+      reason: 'recording has non-monotonic sequences',
     };
+  }
+  return replayResult;
+}
+
+/**
+ * Bare continue: lock and replay the newest unlocked session that is readable.
+ * Candidates that fail replay are skipped (their lock already released) and
+ * appended to `skipped`; if none is readable the newest candidate's replay
+ * error is returned.
+ */
+async function replayNewestReadableSession(
+  request: ResumeRequest,
+  sessions: SessionSummary[],
+  skipped: UnreadableRecording[],
+): Promise<
+  { lockedSession: LockedSession; replay: ReplaySuccess } | ResumeError
+> {
+  let firstFailure: ReplayFailure | null = null;
+  for (const session of sessions) {
+    const lockedSession = await tryLockSession(request.chatsDir, session);
+    if (lockedSession === null) continue;
+    const replay = await replayLockedSession(lockedSession, request);
+    if (replay.ok) return { lockedSession, replay };
+    skipped.push({
+      sessionId: session.sessionId,
+      filePath: session.filePath,
+      reason: replay.reason,
+    });
+    firstFailure ??= replay;
+  }
+  return firstFailure === null
+    ? { ok: false, error: 'All sessions for this project are in use' }
+    : replayFailureError(firstFailure);
+}
+
+/** The error for a project whose only recordings have unreadable headers. */
+function noReadableSessionsError(
+  skipped: readonly UnreadableRecording[],
+): string {
+  return skipped.length === 0
+    ? RESUME_NO_SESSIONS_FOUND
+    : `${RESUME_NO_SESSIONS_FOUND}; skipped unreadable recordings: ${skipped.map(describeUnreadableRecording).join('; ')}`;
+}
+
+/**
+ * Resume a previously recorded session.
+ *
+ * Discovers sessions, resolves the target, acquires a lock, replays the
+ * event log to reconstruct history, and initializes recording for append.
+ * Recordings that cannot be read never block the others; they are returned
+ * in `skippedRecordings` on success and failure alike.
+ *
+ * @pseudocode resume-flow.md lines 50-124
+ */
+export async function resumeSession(
+  request: ResumeRequest,
+): Promise<ResumeResult | ResumeError> {
+  // Step 1: Discover sessions
+  const { sessions, unreadableRecordings } =
+    await SessionDiscovery.listSessionsDetailed(
+      request.chatsDir,
+      request.projectHash,
+    );
+  const skipped: UnreadableRecording[] = [...unreadableRecordings];
+
+  if (sessions.length === 0 && request.continueRef === CONTINUE_LATEST) {
+    return {
+      ok: false,
+      error: noReadableSessionsError(skipped),
+      skippedRecordings: skipped,
+    };
+  }
+
+  // Steps 2-4: Resolve, lock, and replay the session to resume
+  let lockedSession: LockedSession;
+  let replayResult: ReplaySuccess;
+  if (request.continueRef === CONTINUE_LATEST) {
+    const newest = await replayNewestReadableSession(
+      request,
+      sessions,
+      skipped,
+    );
+    if ('error' in newest) return { ...newest, skippedRecordings: skipped };
+    ({ lockedSession, replay: replayResult } = newest);
+  } else {
+    const locked = await resolveAndLockSession(
+      request,
+      sessions,
+      unreadableRecordings,
+    );
+    if (!('targetFilePath' in locked)) {
+      return { ...locked, skippedRecordings: skipped };
+    }
+    const replay = await replayLockedSession(locked, request);
+    if (!replay.ok) {
+      return { ...replayFailureError(replay), skippedRecordings: skipped };
+    }
+    lockedSession = locked;
+    replayResult = replay;
   }
 
   // Steps 5-7: Initialize recording for append
@@ -232,12 +336,13 @@ export async function resumeSession(
     recording,
     lockHandle: lockedSession.lockHandle,
     warnings: replayResult.warnings,
+    skippedRecordings: skipped,
   };
 }
 
 /**
- * Helper function to try acquiring a lock.
- * Returns the lock handle on success, null on failure.
+ * Acquire a session's lock. Returns null only when another process holds it;
+ * any other failure (permissions, I/O) is a real error and propagates.
  */
 async function tryAcquireLock(
   chatsDir: string,
@@ -245,30 +350,25 @@ async function tryAcquireLock(
 ): Promise<LockHandle | null> {
   try {
     return await SessionLockManager.acquire(chatsDir, lockId);
-  } catch {
-    return null;
+  } catch (error: unknown) {
+    if (error instanceof SessionLockedError) return null;
+    throw error;
   }
 }
 
 /**
- * Find the first unlocked session and acquire its lock.
- * Returns the locked session info, or null if all sessions are locked.
+ * Acquire the lock on a session unless another process holds it.
+ * Returns the locked session, or null when the session is in use.
  */
-async function findFirstUnlockedSession(
+async function tryLockSession(
   chatsDir: string,
-  sessions: SessionSummary[],
-): Promise<{ targetFilePath: string; lockHandle: LockHandle } | null> {
-  for (const session of sessions) {
-    const locked = await SessionLockManager.isLocked(
-      chatsDir,
-      session.sessionId,
-    );
-    if (locked) continue;
-
-    const result = await tryAcquireLock(chatsDir, session.sessionId);
-    if (result !== null) {
-      return { targetFilePath: session.filePath, lockHandle: result };
-    }
+  session: SessionSummary,
+): Promise<LockedSession | null> {
+  if (await SessionLockManager.isLocked(chatsDir, session.sessionId)) {
+    return null;
   }
-  return null;
+  const lockHandle = await tryAcquireLock(chatsDir, session.sessionId);
+  return lockHandle === null
+    ? null
+    : { targetFilePath: session.filePath, lockHandle };
 }

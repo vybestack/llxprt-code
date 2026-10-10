@@ -17,6 +17,7 @@ import { SessionDiscovery } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { basename } from 'node:path';
 import { handleContinuePackageAction } from './continuePackageActions.js';
+import { warnUnreadableRecordings } from '../utils/warnUnreadableRecordings.js';
 
 /**
  * Schema for /continue command tab completion
@@ -48,11 +49,16 @@ const continueSchema: CommandArgumentSchema = [
         ReturnType<typeof SessionDiscovery.listContinueTargets>
       >;
       try {
-        targets = await SessionDiscovery.listContinueTargets(
+        const detailed = await SessionDiscovery.listContinueTargetsDetailed(
           storage.getProjectChatsDir(),
           basename(storage.getProjectTempDir()),
           config.getLocalMediaStore(),
         );
+        warnUnreadableRecordings(
+          '/continue completions',
+          detailed.unreadableRecordings,
+        );
+        targets = detailed.targets;
       } catch (error: unknown) {
         debugLogger.warn('Failed to discover /continue completions:', error);
         return [latest];

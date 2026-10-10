@@ -246,6 +246,17 @@ function createFakeAgent(): unknown {
   };
 }
 
+/** The resolved-recording argument dispatch receives when nothing was resumed. */
+function emptyRecording(startupWarnings: string[] = []): never {
+  return {
+    recordingIntegration: undefined,
+    resumedHistory: undefined,
+    recordingService: undefined,
+    startupWarnings,
+    resumedLockHandle: null,
+  } as never;
+}
+
 // ---------------------------------------------------------------------------
 // Suite 1: Dispatch branch selection
 // ---------------------------------------------------------------------------
@@ -295,12 +306,7 @@ describe('session-dispatch characterization', () => {
         agent: createFakeAgent() as never,
         settings: settings as never,
         workspaceRoot: '/tmp/test',
-        recording: {
-          recordingIntegration: undefined,
-          resumedHistory: undefined,
-          recordingService: undefined,
-          resumedLockHandle: null,
-        } as never,
+        recording: emptyRecording(),
         hasPipedInput: false,
         readStdinData: async () => '',
       });
@@ -329,12 +335,7 @@ describe('session-dispatch characterization', () => {
           agent: createFakeAgent() as never,
           settings: settings as never,
           workspaceRoot: '/tmp/test',
-          recording: {
-            recordingIntegration: undefined,
-            resumedHistory: undefined,
-            recordingService: undefined,
-            resumedLockHandle: null,
-          } as never,
+          recording: emptyRecording(),
           hasPipedInput: false,
           readStdinData: async () => '',
         }),
@@ -643,12 +644,7 @@ describe('session-dispatch characterization', () => {
           agent: createFakeAgent() as never,
           settings: settings as never,
           workspaceRoot: '/tmp/test',
-          recording: {
-            recordingIntegration: undefined,
-            resumedHistory: undefined,
-            recordingService: undefined,
-            resumedLockHandle: null,
-          } as never,
+          recording: emptyRecording(),
           hasPipedInput: true,
           readStdinData: async () => {
             readStdinCalls++;
@@ -679,12 +675,7 @@ describe('session-dispatch characterization', () => {
           agent: createFakeAgent() as never,
           settings: settings as never,
           workspaceRoot: '/tmp/test',
-          recording: {
-            recordingIntegration: undefined,
-            resumedHistory: undefined,
-            recordingService: undefined,
-            resumedLockHandle: null,
-          } as never,
+          recording: emptyRecording(),
           hasPipedInput: true,
           readStdinData: async () => '',
         });
@@ -728,12 +719,7 @@ describe('session-dispatch characterization', () => {
           agent: createFakeAgent() as never,
           settings: settings as never,
           workspaceRoot: '/tmp/test',
-          recording: {
-            recordingIntegration: undefined,
-            resumedHistory: undefined,
-            recordingService: undefined,
-            resumedLockHandle: null,
-          } as never,
+          recording: emptyRecording(),
           hasPipedInput: false,
           readStdinData: async () => {
             readStdinCalls++;
@@ -1020,18 +1006,17 @@ describe('session-dispatch characterization', () => {
     });
 
     /** Runs dispatch with the fixed recording/stdin arguments these cases share. */
-    function runDispatch(config: unknown, settings: unknown) {
+    function runDispatch(
+      config: unknown,
+      settings: unknown,
+      recordingStartupWarnings: string[] = [],
+    ) {
       return dispatchInteractiveOrNonInteractive({
         config: config as never,
         agent: createFakeAgent() as never,
         settings: settings as never,
         workspaceRoot: '/tmp/test',
-        recording: {
-          recordingIntegration: undefined,
-          resumedHistory: undefined,
-          recordingService: undefined,
-          resumedLockHandle: null,
-        } as never,
+        recording: emptyRecording(recordingStartupWarnings),
         hasPipedInput: false,
         readStdinData: async () => '',
       });
@@ -1105,6 +1090,43 @@ describe('session-dispatch characterization', () => {
       // The warning was the only event on the timeline when it was written:
       // runNonInteractive had not run yet, and it did run afterwards.
       expect(order).toStrictEqual(['warning']);
+      expect(dispatchTrace).toContain('runNonInteractive');
+    });
+
+    const RESUME_WARNING =
+      'Skipped 1 unreadable session recording(s):\n  /x: bad';
+
+    it('interactive: appends the session-resume warnings to the startup warnings rendered by the TUI', async () => {
+      delete process.env.LLXPRT_SANDBOX_SSH_AGENT_EMPTY;
+
+      await runDispatch(
+        createMinimalConfig({ interactive: true }),
+        createMinimalSettings({ hideWindowTitle: true }),
+        [RESUME_WARNING],
+      );
+
+      expect(renderedStartupWarnings()).toStrictEqual([RESUME_WARNING]);
+    });
+
+    it('non-interactive: writes each session-resume warning to stderr before the session runs and nothing to stdout', async () => {
+      delete process.env.LLXPRT_SANDBOX_SSH_AGENT_EMPTY;
+      const stdoutWrite = vi.spyOn(process.stdout, 'write');
+      const order: string[] = [];
+      stderrWriteSpy.mockImplementation((chunk: unknown) => {
+        order.push(...dispatchTrace, String(chunk));
+        return true;
+      });
+
+      await expect(
+        runDispatch(
+          createMinimalConfig({ interactive: false, question: 'prompt' }),
+          createMinimalSettings(),
+          [RESUME_WARNING, 'second'],
+        ),
+      ).rejects.toThrow('process.exit');
+
+      expect(order).toStrictEqual([`${RESUME_WARNING}\n`, 'second\n']);
+      expect(stdoutWrite).not.toHaveBeenCalled();
       expect(dispatchTrace).toContain('runNonInteractive');
     });
 

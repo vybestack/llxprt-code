@@ -270,6 +270,13 @@ export interface SessionRecordingServiceConfig {
   cwd?: string;
   provider: string;
   model: string;
+  /**
+   * Reads the provider/model in effect right now. Called once, when the
+   * recording materializes, so the written `session_start` header carries the
+   * provider/model actually in use rather than the construction-time values
+   * (the provider can change between startup and the first message).
+   */
+  resolveProviderModel?: () => { provider: string; model: string };
   /** Hard bound for serialized records waiting for durable write. */
   maxQueueBytes?: number;
   /** Project-owned store used to verify referenced media during lifecycle replay. */
@@ -385,4 +392,15 @@ export type ContinueTarget =
 
 export interface ContinueResolution {
   target: ContinueTarget;
+}
+
+/**
+ * A recording that discovery found on disk but could not replay. Reported to
+ * callers instead of being thrown so one bad file cannot hide healthy sessions.
+ */
+export interface UnreadableRecording {
+  /** Only present when the header carried a valid string session id. */
+  sessionId?: string;
+  filePath: string;
+  reason: string;
 }

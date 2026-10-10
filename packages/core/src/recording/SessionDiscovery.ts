@@ -35,13 +35,19 @@ import {
   type ContinueTarget,
   type SessionSummary,
   type SessionStartPayload,
+  type UnreadableRecording,
 } from './types.js';
 import { readSessionHeader, replaySession } from './ReplayEngine.js';
+import {
+  INVALID_SESSION_START_MESSAGE,
+  isSessionStartHeader,
+} from './sessionStartHeader.js';
 import {
   resumeSessionIndexOutOfRangeMessage,
   resumeSessionNotFoundMessage,
 } from './resumeNotFoundMessages.js';
 import { debugLogger } from '../utils/debugLogger.js';
+import { describeUnreadableRecording } from './unreadableRecordings.js';
 import type { LocalMediaStore } from '../storage/local-media-store.js';
 
 /**
@@ -58,32 +64,80 @@ export interface SessionResolutionError {
   error: string;
 }
 
+type FirstLineResult =
+  | { readonly ok: true; readonly payload: object }
+  | { readonly ok: false; readonly reason: string };
+
 /**
- * Read the first line from a file using the canonical bounded header reader.
+ * Read and parse the first line of a recording with the canonical bounded
+ * header reader, saying why when it is not a `session_start` event. The
+ * payload is returned unvalidated; {@link isSessionStartHeader} is the
+ * contract for a usable header.
  *
  * This is the single shared reader used by session discovery, resume, and the
  * session-recording janitor.  It handles UTF-8 BOM and first-line headers of
  * any size up to a documented maximum, classifying no-newline/malformed huge
  * files as unreadable without whole-file buffering.
  */
+async function readSessionStartLine(
+  filePath: string,
+): Promise<FirstLineResult> {
+  const firstLine = await readBoundedFirstLine(filePath);
+  if (firstLine === null || firstLine.trim() === '') {
+    return { ok: false, reason: 'Empty file or unreadable first line' };
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(firstLine);
+  } catch {
+    return {
+      ok: false,
+      reason:
+        'Missing or corrupt session_start event: first line is not valid JSON',
+    };
+  }
+  if (
+    typeof parsed !== 'object' ||
+    parsed === null ||
+    Reflect.get(parsed, 'type') !== 'session_start'
+  ) {
+    return {
+      ok: false,
+      reason:
+        'Missing or corrupt session_start event: first line is not a session_start event',
+    };
+  }
+  const payload: unknown = Reflect.get(parsed, 'payload');
+  if (typeof payload !== 'object' || payload === null) {
+    return { ok: false, reason: INVALID_SESSION_START_MESSAGE };
+  }
+  return { ok: true, payload };
+}
+
+/**
+ * The first line's `session_start` payload, unvalidated, or null when the
+ * first line is not a session_start event. Used by the session-recording
+ * janitor, which applies its own retention rules to the fields.
+ */
 export async function readFirstLineFromFile(
   filePath: string,
 ): Promise<SessionStartPayload | null> {
-  const firstLine = await readBoundedFirstLine(filePath);
-  if (firstLine === null || firstLine.trim() === '') return null;
-  try {
-    const parsed = JSON.parse(firstLine) as Record<string, unknown>;
-    if (parsed.type !== 'session_start') return null;
-    if (
-      parsed.payload === undefined ||
-      parsed.payload === null ||
-      typeof parsed.payload !== 'object'
-    )
-      return null;
-    return parsed.payload as SessionStartPayload;
-  } catch {
-    return null;
-  }
+  const result = await readSessionStartLine(filePath);
+  return result.ok ? (result.payload as SessionStartPayload) : null;
+}
+
+type SessionScan = {
+  sessions: SessionSummary[];
+  unreadableRecordings: UnreadableRecording[];
+};
+
+/** Sort newest-first by modification time; ids are validated strings. */
+function sortNewestFirst(summaries: SessionSummary[]): void {
+  summaries.sort((a, b) => {
+    const mtimeDiff = b.lastModified.getTime() - a.lastModified.getTime();
+    if (mtimeDiff !== 0) return mtimeDiff;
+    return b.sessionId.localeCompare(a.sessionId);
+  });
 }
 
 /**
@@ -104,37 +158,13 @@ export class SessionDiscovery {
     chatsDir: string,
     projectHash: string,
   ): Promise<SessionSummary[]> {
-    let entries: string[];
-    try {
-      entries = await fs.readdir(chatsDir);
-    } catch (error: unknown) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        return [];
-      }
-      throw error;
-    }
-
-    const sessionFiles = entries.filter(
-      (f) => f.startsWith('session-') && f.endsWith('.jsonl'),
-    );
-
-    const summaries: SessionSummary[] = [];
-    for (const fileName of sessionFiles) {
-      const summary = await readSessionSummary(path.join(chatsDir, fileName));
-      if (summary?.projectHash === projectHash) {
-        summaries.push(summary);
-      }
-    }
-
-    summaries.sort((a, b) => {
-      const mtimeDiff = b.lastModified.getTime() - a.lastModified.getTime();
-      if (mtimeDiff !== 0) return mtimeDiff;
-      return b.sessionId.localeCompare(a.sessionId);
-    });
-
-    return summaries;
+    return (await scanSessions(chatsDir, projectHash)).sessions;
   }
 
+  /**
+   * Readable continue targets. Recordings that fail replay are left out; use
+   * {@link listContinueTargetsDetailed} to learn which ones and why.
+   */
   static async listContinueTargets(
     chatsDir: string,
     projectHash: string,
@@ -145,11 +175,6 @@ export class SessionDiscovery {
       projectHash,
       mediaStore,
     );
-    if (detailed.recordingErrors.length > 0) {
-      throw new Error(
-        `Cannot discover continue targets: ${detailed.recordingErrors.join('; ')}`,
-      );
-    }
     return detailed.targets;
   }
 
@@ -161,6 +186,7 @@ export class SessionDiscovery {
     targets: ContinueTarget[];
     skippedCount: number;
     recordingErrors: readonly string[];
+    unreadableRecordings: readonly UnreadableRecording[];
   }> {
     const detailed = await this.listSessionsDetailed(chatsDir, projectHash);
     const sessionTargets: Array<ContinueTarget | null> = Array.from(
@@ -171,12 +197,11 @@ export class SessionDiscovery {
       { length: detailed.sessions.length },
       () => [],
     );
-    const recordingErrors: Array<string | null> = Array.from(
+    const unreadable: Array<UnreadableRecording | null> = Array.from(
       { length: detailed.sessions.length },
       () => null,
     );
     let nextIndex = 0;
-    let skippedCount = detailed.skippedCount;
     const worker = async (): Promise<void> => {
       while (nextIndex < detailed.sessions.length) {
         const index = nextIndex;
@@ -186,12 +211,15 @@ export class SessionDiscovery {
           mediaStore,
         });
         if (!replay.ok || replay.sequenceCorrupt) {
-          const detail = replay.ok ? 'non-monotonic sequences' : replay.error;
+          const reason = replay.ok ? 'non-monotonic sequences' : replay.error;
           debugLogger.debug(
-            `Skipping unreadable session recording ${summary.filePath}: ${detail}`,
+            `Skipping unreadable session recording ${summary.filePath}: ${reason}`,
           );
-          recordingErrors[index] = `${summary.filePath}: ${detail}`;
-          skippedCount += 1;
+          unreadable[index] = {
+            sessionId: summary.sessionId,
+            filePath: summary.filePath,
+            reason,
+          };
           continue;
         }
         const namedSummary = { ...summary, name: replay.sessionName };
@@ -209,6 +237,12 @@ export class SessionDiscovery {
     };
     const workerCount = Math.min(8, detailed.sessions.length);
     await Promise.all(Array.from({ length: workerCount }, worker));
+    const unreadableRecordings = [
+      ...detailed.unreadableRecordings,
+      ...unreadable.filter(
+        (recording): recording is UnreadableRecording => recording !== null,
+      ),
+    ];
     return {
       targets: [
         ...sessionTargets.filter(
@@ -216,10 +250,9 @@ export class SessionDiscovery {
         ),
         ...checkpointTargets.flat(),
       ],
-      skippedCount,
-      recordingErrors: recordingErrors.filter(
-        (error): error is string => error !== null,
-      ),
+      skippedCount: unreadableRecordings.length,
+      recordingErrors: unreadableRecordings.map(describeUnreadableRecording),
+      unreadableRecordings,
     };
   }
 
@@ -362,41 +395,20 @@ export class SessionDiscovery {
   static async listSessionsDetailed(
     chatsDir: string,
     projectHash: string,
-  ): Promise<{ sessions: SessionSummary[]; skippedCount: number }> {
-    let entries: string[];
-    try {
-      entries = await fs.readdir(chatsDir);
-    } catch (error: unknown) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        return { sessions: [], skippedCount: 0 };
-      }
-      throw error;
-    }
-
-    const sessionFiles = entries.filter(
-      (f) => f.startsWith('session-') && f.endsWith('.jsonl'),
+  ): Promise<{
+    sessions: SessionSummary[];
+    skippedCount: number;
+    unreadableRecordings: UnreadableRecording[];
+  }> {
+    const { sessions, unreadableRecordings } = await scanSessions(
+      chatsDir,
+      projectHash,
     );
-
-    const summaries: SessionSummary[] = [];
-    let skippedCount = 0;
-
-    for (const fileName of sessionFiles) {
-      const filePath = path.join(chatsDir, fileName);
-      const summary = await readSessionSummary(filePath);
-      if (summary?.projectHash === projectHash) {
-        summaries.push(summary);
-      } else if (summary === null) {
-        skippedCount++;
-      }
-    }
-
-    summaries.sort((a, b) => {
-      const mtimeDiff = b.lastModified.getTime() - a.lastModified.getTime();
-      if (mtimeDiff !== 0) return mtimeDiff;
-      return b.sessionId.localeCompare(a.sessionId);
-    });
-
-    return { sessions: summaries, skippedCount };
+    return {
+      sessions,
+      skippedCount: unreadableRecordings.length,
+      unreadableRecordings,
+    };
   }
 
   /**
@@ -483,34 +495,95 @@ export class SessionDiscovery {
   }
 }
 
+/**
+ * Scan the chats directory. Session files whose header is not a valid
+ * `session_start` are reported as unreadable (file and reason) instead of
+ * being dropped; I/O failures on the directory itself still propagate.
+ */
+async function scanSessions(
+  chatsDir: string,
+  projectHash: string,
+): Promise<SessionScan> {
+  let entries: string[];
+  try {
+    entries = await fs.readdir(chatsDir);
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return { sessions: [], unreadableRecordings: [] };
+    }
+    throw error;
+  }
+
+  const sessions: SessionSummary[] = [];
+  const unreadableRecordings: UnreadableRecording[] = [];
+  const sessionFiles = entries.filter(
+    (f) => f.startsWith('session-') && f.endsWith('.jsonl'),
+  );
+  for (const fileName of sessionFiles) {
+    const filePath = path.join(chatsDir, fileName);
+    const result = await readSessionSummary(filePath);
+    if (!result.ok) {
+      unreadableRecordings.push(result.unreadable);
+    } else if (result.summary.projectHash === projectHash) {
+      sessions.push(result.summary);
+    }
+  }
+  sortNewestFirst(sessions);
+  return { sessions, unreadableRecordings };
+}
+
 async function readSessionSummary(
   filePath: string,
-): Promise<SessionSummary | null> {
+): Promise<
+  | { ok: true; summary: SessionSummary }
+  | { ok: false; unreadable: UnreadableRecording }
+> {
   let stat: Awaited<ReturnType<typeof fs.stat>>;
   try {
     stat = await fs.stat(filePath);
-  } catch {
-    return null;
+  } catch (error: unknown) {
+    return {
+      ok: false,
+      unreadable: {
+        filePath,
+        reason: `Cannot stat recording: ${error instanceof Error ? error.message : String(error)}`,
+      },
+    };
   }
 
-  const header = await readFirstLineFromFile(filePath);
-  if (header === null) {
-    return null;
+  const first = await readSessionStartLine(filePath);
+  if (!first.ok) {
+    return { ok: false, unreadable: { filePath, reason: first.reason } };
+  }
+  const header = first.payload;
+  if (!isSessionStartHeader(header)) {
+    const sessionId: unknown = Reflect.get(header, 'sessionId');
+    return {
+      ok: false,
+      unreadable: {
+        filePath,
+        reason: INVALID_SESSION_START_MESSAGE,
+        ...(typeof sessionId === 'string' && sessionId !== ''
+          ? { sessionId }
+          : {}),
+      },
+    };
   }
 
   return {
-    sessionId: header.sessionId,
-    filePath,
-    projectHash: header.projectHash,
-    startTime: header.startTime,
-    lastModified: stat.mtime,
-    fileSize: stat.size,
-    provider: header.provider,
-    model: header.model,
-    ...(typeof header.cwd === 'string' ? { cwd: header.cwd } : {}),
-    ...(typeof header.startTime === 'string'
-      ? { createdAt: header.startTime }
-      : {}),
+    ok: true,
+    summary: {
+      sessionId: header.sessionId,
+      filePath,
+      projectHash: header.projectHash,
+      startTime: header.startTime,
+      lastModified: stat.mtime,
+      fileSize: stat.size,
+      provider: header.provider,
+      model: header.model,
+      ...(typeof header.cwd === 'string' ? { cwd: header.cwd } : {}),
+      createdAt: header.startTime,
+    },
   };
 }
 
