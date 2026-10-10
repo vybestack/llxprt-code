@@ -59,6 +59,11 @@ export const modelHookMode = z.enum([
   'after-stop',
   'after-block',
   'after-error',
+  'after-partial',
+  'after-multi',
+  'after-restrict',
+  'after-omit-tools',
+  'after-cancel',
 ]);
 export type ModelHookMode = z.infer<typeof modelHookMode>;
 export const modelFactsSchema = z.object({
@@ -102,6 +107,8 @@ const editAction =
   'input.llm_request.contents.at(-1).blocks[0].text=input.llm_request.contents.at(-1).blocks[0].text.toUpperCase();const output={hookSpecificOutput:{llm_request:input.llm_request}};';
 const absentAction = 'const output={hookSpecificOutput:{llm_request:{}}};';
 const nullAction = 'const output={hookSpecificOutput:{llm_request:null}};';
+const afterModifyAction =
+  "const output={hookSpecificOutput:{llm_response:{content:{speaker:'ai',blocks:[{type:'text',text:'modified by hook'}]}}}};";
 const actions: Record<ModelHookMode, string | readonly string[]> = {
   noop: 'const output={};',
   edit: 'input.llm_request.contents.at(-1).blocks[0].text=input.llm_request.contents.at(-1).blocks[0].text.toUpperCase();const output={hookSpecificOutput:{llm_request:input.llm_request}};',
@@ -158,11 +165,23 @@ const actions: Record<ModelHookMode, string | readonly string[]> = {
   'parallel-edit-empty': [editAction, emptyAction],
   'parallel-empty-none': [emptyAction, newContextAction],
   'after-noop': 'const output={};',
-  'after-modify':
-    "const output={hookSpecificOutput:{llm_response:{content:{speaker:'ai',blocks:[{type:'text',text:'modified by hook'}]}}}};",
+  'after-modify': afterModifyAction,
   'after-stop': "const output={continue:false,stopReason:'after stop'};",
   'after-block': "const output={decision:'deny',reason:'after block'};",
   'after-error': "throw new Error('after command failed');",
+  'after-partial': [
+    afterModifyAction,
+    "throw new Error('after command failed');",
+  ],
+  'after-multi': [
+    afterModifyAction,
+    'const output={};',
+    "const output={systemMessage:'after note'};",
+  ],
+  'after-restrict': afterModifyAction,
+  'after-omit-tools': afterModifyAction,
+  'after-cancel':
+    'await new Promise(resolve=>setTimeout(resolve,30000));const output={};',
 };
 
 function modelCommand(root: string, action: string): string {

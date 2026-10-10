@@ -53,6 +53,21 @@ function endpoint(mode: ModelHookMode): {
   return { server, bodies };
 }
 
+/** Tool-selection hook the mode runs under, so a restriction is in effect. */
+function selectionMode(mode: ModelHookMode): 'restrict' | 'none' | undefined {
+  if (['restrict', 'denied-tool', 'after-restrict'].includes(mode))
+    return 'restrict';
+  return mode === 'after-omit-tools' ? 'none' : undefined;
+}
+
+function oracleTools(mode: ModelHookMode): typeof toolHookTools {
+  const selected = selectionMode(mode);
+  if (selected === 'none') return [];
+  return selected === undefined
+    ? toolHookTools
+    : toolHookTools.filter((tool) => tool.name === 'weather');
+}
+
 function expectedRows(mode: ModelHookMode): IContent[] {
   const rows = [
     ...Array.from({ length: mode === 'large' ? 64 : 1 }, (_, index) =>
@@ -96,10 +111,7 @@ async function oracle(
         } else yield* expectedRows(mode);
       },
     },
-    tools:
-      mode === 'restrict' || mode === 'denied-tool'
-        ? toolHookTools.filter((tool) => tool.name === 'weather')
-        : toolHookTools,
+    tools: oracleTools(mode),
     config: setup.config,
     runtime: setup.runtime.providerRuntime,
     settings: setup.settings,
@@ -123,7 +135,7 @@ async function consume(
 ): Promise<Record<string, unknown>> {
   const controller = new AbortController();
   const timer =
-    mode === 'cancel'
+    mode === 'cancel' || mode === 'after-cancel'
       ? setInterval(() => {
           if (
             existsSync(join(setup.config.getTargetDir(), 'model-hooks.jsonl'))
@@ -194,8 +206,9 @@ async function run(
   let observer: ModelBodyObserver | undefined;
   try {
     registerModelHook(setup.config, root, mode);
-    if (mode === 'restrict' || mode === 'denied-tool')
-      registerToolHook(setup.config, root, 'restrict');
+    const selection = selectionMode(mode);
+    if (selection !== undefined)
+      registerToolHook(setup.config, root, selection);
     const system = setup.config.getHookSystem();
     if (!system) throw new Error('Missing actual HookSystem');
     await system.initialize();

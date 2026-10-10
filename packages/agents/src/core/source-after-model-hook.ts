@@ -29,7 +29,7 @@ export interface SourceAfterModelInput {
  * Fires AfterModel against the pinned selection. The hook sees the same request
  * rows the provider received, streamed from disk for the one invocation; its
  * output is released before this returns. Execution failures are non-blocking,
- * as on the eager route.
+ * as on the eager route, and the surviving outputs of a partly failed event apply.
  */
 export async function fireSourceAfterModelHook(
   input: SourceAfterModelInput,
@@ -55,13 +55,12 @@ export async function fireSourceAfterModelHook(
     request.signal,
   );
   try {
-    // A failed command closes every output of the event, so nothing can apply.
-    if (!hook.success) {
+    // Matches the eager route: outputs of commands that succeeded still apply
+    // when a sibling command failed.
+    if (!hook.success)
       input.log(
         `AfterModel hook failed (non-blocking): ${hook.errors.map((error) => error.message).join('; ')}`,
       );
-      return undefined;
-    }
     const output = hook.finalOutput;
     if (output === undefined) return undefined;
     const llmResponse = output.readLlmResponse();

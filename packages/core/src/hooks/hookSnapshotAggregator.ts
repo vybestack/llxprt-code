@@ -14,10 +14,17 @@ export type HookModelSnapshotRequest = Omit<
 > & {
   readonly contents: ProviderRequestRows;
 };
+/**
+ * A HookSystem subclass overrode the full-request model callback. The source
+ * route never builds that request, so the subclass must supply the snapshot
+ * callback as well; running its override would need a whole-request copy.
+ */
 export class MissingSnapshotHookCallbackError extends Error {
   override readonly name = 'MissingSnapshotHookCallbackError';
   constructor(method: keyof HookModelSnapshotCallbacks) {
-    super(`Missing snapshot callback: ${method}`);
+    super(
+      `Missing snapshot callback: ${method}; the full-request override is not used on the source route`,
+    );
   }
 }
 
@@ -170,7 +177,7 @@ export function aggregateHookSnapshots(
       finalOutput !== undefined &&
       (finalOutput.shouldStopExecution() || finalOutput.isBlockingDecision());
     if (decided) finalOutput.retainDecisionPayload();
-    if (signal?.aborted === true || !success || decided) close();
+    if (signal?.aborted === true || decided) close();
     return aggregated;
   } catch (error) {
     close();

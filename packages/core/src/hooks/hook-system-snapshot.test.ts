@@ -447,7 +447,8 @@ describe('real HookSystem snapshot array callback', () => {
         }),
       ).rejects.toMatchObject({
         name: 'MissingSnapshotHookCallbackError',
-        message: 'Missing snapshot callback: fireBeforeModelSnapshotEvent',
+        message:
+          'Missing snapshot callback: fireBeforeModelSnapshotEvent; the full-request override is not used on the source route',
       });
       expect(scratch(root)).toStrictEqual([]);
       hooksSystem.dispose();
@@ -739,7 +740,8 @@ describe('AfterModel snapshot callback contract', () => {
         ),
       ).rejects.toMatchObject({
         name: 'MissingSnapshotHookCallbackError',
-        message: 'Missing snapshot callback: fireAfterModelSnapshotEvent',
+        message:
+          'Missing snapshot callback: fireAfterModelSnapshotEvent; the full-request override is not used on the source route',
       });
       expect(scratch(root)).toStrictEqual([]);
       hooksSystem.dispose();

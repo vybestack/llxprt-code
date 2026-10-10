@@ -68,3 +68,79 @@ describe('AfterModel on the source route matches the eager route', () => {
     expect(source.output).toBe('finished');
   }, 120000);
 });
+
+/** Drops per-run row metadata (ids, timestamps) so the two routes can be compared. */
+function withoutMetadata(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(withoutMetadata);
+  if (typeof value !== 'object' || value === null) return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => key !== 'metadata')
+      .map(([key, entry]) => [key, withoutMetadata(entry)]),
+  );
+}
+
+function hookRequests(facts: Awaited<ReturnType<typeof modelHookWorker>>) {
+  return facts.hooks.flatMap((record) => {
+    const input = (record as { input?: Record<string, unknown> }).input;
+    return input === undefined
+      ? []
+      : [
+          {
+            request: withoutMetadata(input.llm_request),
+            response: withoutMetadata(input.llm_response),
+          },
+        ];
+  });
+}
+
+describe('AfterModel with several commands and tool restrictions', () => {
+  it.each(['after-partial', 'after-multi'] as const)(
+    'applies the surviving outputs of %s exactly as the eager route does',
+    async (mode) => {
+      const source = await modelHookWorker(join(root(), 'source'), mode);
+      const array = await modelHookWorker(join(root(), 'array'), mode, false);
+      expect(array.error).toBeUndefined();
+      expect(array.output).toContain('modified by hook');
+      expect(source.error).toBe(array.error);
+      expect(source.output).toBe(array.output);
+      expect(source.bodies).toStrictEqual(array.bodies);
+      expect(hookRequests(source)).toStrictEqual(hookRequests(array));
+      expect(source.hooks.length).toBe(array.hooks.length);
+      expect(source.owners.every((owner) => owner.closed)).toBe(true);
+      expect(source.activeBodies).toBe(0);
+      expect(source.directories).toStrictEqual([]);
+    },
+    120000,
+  );
+  it.each<[ModelHookMode, string[] | undefined]>([
+    ['after-restrict', ['weather']],
+    ['after-omit-tools', undefined],
+  ])(
+    'shows %s hooks the same tools as the eager route',
+    async (mode, names) => {
+      const source = await modelHookWorker(join(root(), 'source'), mode);
+      const array = await modelHookWorker(join(root(), 'array'), mode, false);
+      expect(source.error).toBeUndefined();
+      expect(source.output).toBe(array.output);
+      expect(source.restrictions).toStrictEqual(array.restrictions);
+      expect(source.bodies).toStrictEqual(array.bodies);
+      expect(hookRequests(source)).toStrictEqual(hookRequests(array));
+      const tools = (hookRequests(source)[0].request as { tools?: unknown[] })
+        .tools as Array<{ name: string }> | undefined;
+      expect(tools?.map((tool) => tool.name)).toStrictEqual(names);
+      expect(source.owners.every((owner) => owner.closed)).toBe(true);
+      expect(source.activeBodies).toBe(0);
+      expect(source.directories).toStrictEqual([]);
+    },
+    120000,
+  );
+  it('releases every owner and scratch file when the request aborts inside the hook', async () => {
+    const source = await modelHookWorker(root(), 'after-cancel');
+    expect(source.hooks.length).toBeGreaterThan(0);
+    expect(source.error).toContain('required cancellation');
+    expect(source.owners.every((owner) => owner.closed)).toBe(true);
+    expect(source.activeBodies).toBe(0);
+    expect(source.directories).toStrictEqual([]);
+  }, 120000);
+});
