@@ -19,60 +19,50 @@ import {
   packageBlobPath,
   pathExists,
   type MediaPackageManifest,
-  type PortablePersistedState,
-  type PortableRecording,
 } from './session-media-package-validation.js';
 
-export interface SessionMediaPackageWriteInput {
+export interface SessionMediaPackageManifestInput {
   readonly temporaryDirectory: string;
-  readonly mediaStore: LocalMediaStore;
-  readonly recording: PortableRecording;
-  readonly persistedStates: readonly PortablePersistedState[];
+  readonly persistedStateFiles: readonly string[];
   readonly references: readonly MediaReferenceBlock[];
   readonly objects: readonly MediaStoredObject[];
 }
 
-export async function stageSessionMediaPackage(
-  input: SessionMediaPackageWriteInput,
+export async function prepareSessionMediaPackageStaging(
+  temporaryDirectory: string,
 ): Promise<void> {
-  await mkdir(join(input.temporaryDirectory, 'blobs', 'sha256'), {
+  await mkdir(join(temporaryDirectory, 'blobs', 'sha256'), {
     recursive: true,
     mode: 0o700,
   });
-  if (input.persistedStates.length > 0) {
-    await mkdir(join(input.temporaryDirectory, 'state'), {
-      recursive: true,
-      mode: 0o700,
-    });
-  }
-  for (const object of input.objects) {
-    const bytes = await input.mediaStore.readObjectVerified(object);
+}
+
+export async function stageSessionMediaPackageBlobs(
+  temporaryDirectory: string,
+  mediaStore: LocalMediaStore,
+  objects: readonly MediaStoredObject[],
+): Promise<void> {
+  for (const object of objects) {
+    const bytes = await mediaStore.readObjectVerified(object);
     await writeFile(
-      packageBlobPath(input.temporaryDirectory, object.contentId),
+      packageBlobPath(temporaryDirectory, object.contentId),
       bytes,
-      { mode: 0o600, flag: 'wx' },
-    );
-  }
-  await writeFile(
-    join(input.temporaryDirectory, RECORDING_FILE),
-    input.recording.bytes,
-    { mode: 0o600, flag: 'wx' },
-  );
-  for (const state of input.persistedStates) {
-    await writeFile(
-      join(input.temporaryDirectory, state.file),
-      state.serialized,
       {
         mode: 0o600,
         flag: 'wx',
       },
     );
   }
+}
+
+export async function writeSessionMediaPackageManifest(
+  input: SessionMediaPackageManifestInput,
+): Promise<void> {
   const manifest: MediaPackageManifest = {
     version: PACKAGE_VERSION,
     recording: RECORDING_FILE,
-    persistedStates: input.persistedStates.map((state) => ({
-      file: state.file,
+    persistedStates: input.persistedStateFiles.map((file) => ({
+      file,
       version: SUPPORTED_PERSISTED_SESSION_VERSION,
     })),
     references: input.references,

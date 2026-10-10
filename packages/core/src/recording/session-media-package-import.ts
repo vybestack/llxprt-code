@@ -5,7 +5,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { mkdir, rename, rm, rmdir, writeFile } from 'node:fs/promises';
+import { mkdir, rename, rm, rmdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { LocalMediaStore } from '../storage/local-media-store.js';
 import { pathExists } from './session-media-package-validation.js';
@@ -13,10 +13,11 @@ import { pathExists } from './session-media-package-validation.js';
 export interface ImportPublication {
   readonly destinationChatsDirectory: string;
   readonly recordingPath: string;
-  readonly recordingBytes: Uint8Array;
+  /** Streams the portable recording into the staging file at outputPath. */
+  readonly writeRecording: (outputPath: string) => Promise<void>;
   readonly persistedStates: ReadonlyArray<{
     readonly fileName: string;
-    readonly serialized: string;
+    readonly write: (outputPath: string) => Promise<void>;
   }>;
 }
 
@@ -68,16 +69,9 @@ export async function publishImportedSession(
     });
     await mkdir(stagingDirectory, { mode: 0o700 });
     const stagedRecording = join(stagingDirectory, 'recording.jsonl');
-    await writeFile(stagedRecording, input.recordingBytes, {
-      mode: 0o600,
-      flag: 'wx',
-    });
+    await input.writeRecording(stagedRecording);
     for (const state of input.persistedStates) {
-      await writeFile(
-        join(stagingDirectory, state.fileName),
-        state.serialized,
-        { mode: 0o600, flag: 'wx' },
-      );
+      await state.write(join(stagingDirectory, state.fileName));
     }
     await rename(stagedRecording, input.recordingPath);
     published.push(input.recordingPath);
@@ -87,18 +81,21 @@ export async function publishImportedSession(
       published.push(destination);
     }
   } catch (error) {
-    const rollbackFailures = [
-      ...(await rollbackImportedFiles(
-        published,
-        input.destinationChatsDirectory,
-        !destinationExisted,
-      )),
-    ];
+    // The staging directory lives inside the destination, so it must go
+    // before the destination directory can be removed.
+    const rollbackFailures: unknown[] = [];
     try {
       await rm(stagingDirectory, { recursive: true, force: true });
     } catch (cleanupError) {
       rollbackFailures.push(cleanupError);
     }
+    rollbackFailures.push(
+      ...(await rollbackImportedFiles(
+        published,
+        input.destinationChatsDirectory,
+        !destinationExisted,
+      )),
+    );
     if (rollbackFailures.length > 0) {
       throw new AggregateError(
         [error, ...rollbackFailures],

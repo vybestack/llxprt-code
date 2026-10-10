@@ -5,44 +5,33 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { readdir, rm, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { rm } from 'node:fs/promises';
+import { join } from 'node:path';
 import {
-  type IContent,
   type MediaReferenceBlock,
   type MediaStoredObject,
 } from '../services/history/IContent.js';
 import type { LocalMediaStore } from '../storage/local-media-store.js';
 import { MediaAdmissionService } from '../storage/media-admission-service.js';
-import { collectMediaReferences } from '../storage/media-reference-lifecycle.js';
-import { replaySession } from './ReplayEngine.js';
-
+import {
+  collectMediaReferences,
+  verifyHistoryMedia,
+} from '../storage/media-reference-lifecycle.js';
+import { replaySessionRows } from './ReplayEngine.js';
 import {
   MANIFEST_FILE,
-  MAX_HISTORY_CONTENTS,
   MAX_MANIFEST_BYTES,
   MAX_OBJECT_AGGREGATE_BYTES,
   MAX_OBJECT_BYTES,
-  MAX_PERSISTED_STATES,
-  MAX_PERSISTED_STATE_AGGREGATE_BYTES,
-  MAX_PERSISTED_STATE_BYTES,
-  MAX_RECORDING_BYTES,
-  PERSISTED_SESSION_PREFIX,
-  SUPPORTED_PERSISTED_SESSION_VERSION,
+  RECORDING_FILE,
   boundedAggregate,
-  boundedFileSize,
-  isContent,
-  isRecord,
   parseManifest,
   readBoundedFile,
   requiredObjects,
-  requirePortableMediaContent,
-  requireRecordingLine,
   uniqueReferences,
   verifyManifestObjectSet,
   type MediaPackageManifest,
-  type PortablePersistedState,
-  type PortableRecording,
+  type PinnedPackageFile,
   type VerifiedPackageBlob,
 } from './session-media-package-validation.js';
 import { verifyPackageBlobs } from './session-media-package-blobs.js';
@@ -51,18 +40,26 @@ import {
   publishImportedSession,
   releaseImportReservations,
   rollbackImport,
+  type ImportPublication,
   type ImportReservation,
   type PublishedImportedSession,
 } from './session-media-package-import.js';
+import { ReservationLedger } from './session-media-package-ledger.js';
+import { streamPortableRecording } from './session-media-package-recording.js';
 import {
-  capturePersistedStates,
-  rewrittenPersistedStates,
-  verifyHistoryReferences,
-  type CapturedPersistedState,
+  MediaReferenceIndex,
+  createReferenceVerifier,
+  exportPersistedStates,
+  importedStateFileName,
+  pinPersistedStates,
+  writeRewrittenPersistedState,
+  type PinnedPersistedState,
 } from './session-media-package-state.js';
 import {
+  prepareSessionMediaPackageStaging,
   publishStagedSessionMediaPackage,
-  stageSessionMediaPackage,
+  stageSessionMediaPackageBlobs,
+  writeSessionMediaPackageManifest,
 } from './session-media-package-writer.js';
 
 export interface ImportedSessionMediaPackage {
@@ -71,323 +68,40 @@ export interface ImportedSessionMediaPackage {
   readonly contentIds: readonly string[];
 }
 
-interface ExportReservation {
-  readonly contents: readonly IContent[];
-  readonly context: {
-    readonly turnId: string;
-    readonly source: string;
-  };
-  readonly mode: 'content' | 'contents';
-}
-
-interface PortableLineContext {
-  readonly admission: MediaAdmissionService | undefined;
-  readonly reservations: ExportReservation[] | undefined;
-  readonly histories: IContent[][];
-  readonly destinationProjectHash: string | undefined;
-  readonly destinationSessionId: string | undefined;
-}
-
-type PortableLineResult =
-  | {
-      readonly kind: 'session-start';
-      readonly payload: Record<string, unknown>;
-      readonly sessionId: string;
-    }
-  | {
-      readonly kind: 'event';
-      readonly payload: Record<string, unknown>;
-    };
-
-function parseRecordingLine(serialized: string, lineNumber: number) {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(serialized);
-  } catch (error) {
-    throw new Error(`Invalid recording JSON at line ${lineNumber}`, {
-      cause: error,
-    });
-  }
-  return requireRecordingLine(parsed, lineNumber);
-}
-
-async function preparePortableContent(
-  content: IContent,
-  context: PortableLineContext,
-  lineNumber: number,
-): Promise<IContent> {
-  if (context.destinationProjectHash !== undefined) {
-    return requirePortableMediaContent(content);
-  }
-  if (context.admission === undefined) {
-    throw new Error('Media store is required when exporting a session package');
-  }
-  const admissionContext = {
-    turnId: `session-package-line-${lineNumber}`,
-    source: 'session-package-export',
-  };
-  const admitted = await context.admission.admitContent(
-    content,
-    admissionContext,
-  );
-  context.reservations?.push({
-    contents: [admitted],
-    context: admissionContext,
-    mode: 'content',
-  });
-  return admitted;
-}
-
-async function processPortableLine(
-  line: Record<string, unknown>,
-  lineNumber: number,
-  context: PortableLineContext,
-): Promise<PortableLineResult> {
-  const payload = line['payload'];
-  if (!isRecord(payload))
-    throw new Error(`Invalid recording line ${lineNumber}`);
-  if (line['type'] === 'session_start') {
-    const sessionId = payload['sessionId'];
-    if (typeof sessionId !== 'string' || sessionId.length === 0) {
-      throw new Error('Invalid recording session identifier');
-    }
-    const nextPayload: Record<string, unknown> = {
-      ...payload,
-      sessionId: context.destinationSessionId ?? sessionId,
-      projectHash: context.destinationProjectHash ?? payload['projectHash'],
-      workspaceDirs: [],
-    };
-    delete nextPayload['cwd'];
-    return { kind: 'session-start', payload: nextPayload, sessionId };
-  }
-  if (line['type'] === 'content' || line['type'] === 'compressed') {
-    const key = line['type'] === 'content' ? 'content' : 'summary';
-    const content = payload[key];
-    if (!isContent(content)) {
-      throw new Error(
-        `Invalid ${String(line['type'])} recording at line ${lineNumber}`,
-      );
-    }
-    const admitted = await preparePortableContent(content, context, lineNumber);
-    context.histories.push([admitted]);
-    return { kind: 'event', payload: { ...payload, [key]: admitted } };
-  }
-  if (line['type'] === 'semantic_media_purge') {
-    const history = payload['history'];
-    if (!Array.isArray(history) || !history.every(isContent)) {
-      throw new Error(`Invalid semantic purge recording at line ${lineNumber}`);
-    }
-    let admitted: IContent[];
-    if (context.destinationProjectHash === undefined) {
-      if (context.admission === undefined) {
-        throw new Error(
-          'Media store is required when exporting a session package',
-        );
-      }
-      const admissionContext = {
-        turnId: `session-package-line-${lineNumber}`,
-        source: 'session-package-export',
-      };
-      admitted = await context.admission.admitContents(
-        history,
-        admissionContext,
-      );
-      context.reservations?.push({
-        contents: admitted,
-        context: admissionContext,
-        mode: 'contents',
-      });
-    } else {
-      admitted = history.map(requirePortableMediaContent);
-    }
-    context.histories.push(admitted);
-    return { kind: 'event', payload: { ...payload, history: admitted } };
-  }
-  return { kind: 'event', payload };
-}
-
-async function portableRecording(
-  recordingBytes: Uint8Array,
-  mediaStore: LocalMediaStore | undefined,
-  destinationProjectHash?: string,
-  destinationSessionId?: string,
-  admission?: MediaAdmissionService,
-  reservations?: ExportReservation[],
-): Promise<PortableRecording> {
-  const rawLines = Buffer.from(recordingBytes)
-    .toString('utf8')
-    .trim()
-    .split('\n');
-  if (rawLines.length === 0 || rawLines[0] === '') {
-    throw new Error('Invalid empty session recording');
-  }
-  const histories: IContent[][] = [];
-  const context: PortableLineContext = {
-    admission:
-      mediaStore === undefined
-        ? undefined
-        : (admission ?? new MediaAdmissionService(mediaStore)),
-    reservations,
-    histories,
-    destinationProjectHash,
-    destinationSessionId,
-  };
-  const portableLines: string[] = [];
-  let sourceSessionId: string | undefined;
-  for (let index = 0; index < rawLines.length; index += 1) {
-    const line = parseRecordingLine(rawLines[index], index + 1);
-    const result = await processPortableLine(line, index + 1, context);
-    if (result.kind === 'session-start') sourceSessionId = result.sessionId;
-    portableLines.push(JSON.stringify({ ...line, payload: result.payload }));
-  }
-  if (sourceSessionId === undefined) {
-    throw new Error('Recording does not contain session_start');
-  }
-  return {
-    bytes: Buffer.from(`${portableLines.join('\n')}\n`, 'utf8'),
-    sessionId: destinationSessionId ?? sourceSessionId,
-    histories,
-  };
-}
-
-async function readPersistedState(
-  recordingPath: string,
-  entry: string,
-  sessionId: string,
-  projectHash: string,
-  stateIndex: number,
-  admission: MediaAdmissionService,
-  reservations: ExportReservation[],
-): Promise<PortablePersistedState | undefined> {
-  if (!entry.startsWith(PERSISTED_SESSION_PREFIX) || !entry.endsWith('.json')) {
-    return undefined;
-  }
-  const parsed: unknown = JSON.parse(
-    (
-      await readBoundedFile(
-        join(dirname(recordingPath), entry),
-        MAX_PERSISTED_STATE_BYTES,
-        'Persisted session state',
-      )
-    ).toString('utf8'),
-  );
-  if (!isRecord(parsed)) throw new Error(`Invalid persisted session ${entry}`);
-  if (
-    parsed['sessionId'] !== sessionId ||
-    parsed['projectHash'] !== projectHash
-  ) {
-    return undefined;
-  }
-  if (parsed['version'] !== SUPPORTED_PERSISTED_SESSION_VERSION) {
-    throw new Error(
-      `Unsupported persisted session version ${String(parsed['version'])}`,
-    );
-  }
-  const history = parsed['history'];
-  if (
-    !Array.isArray(history) ||
-    !history.every(isContent) ||
-    history.length > MAX_HISTORY_CONTENTS
-  ) {
-    throw new Error(`Invalid persisted session history ${entry}`);
-  }
-  const admissionContext = {
-    turnId: `session-package-persisted-${stateIndex}`,
-    source: 'session-package-export',
-  };
-  const admitted = await admission.admitContents(history, admissionContext);
-  reservations.push({
-    contents: admitted,
-    context: admissionContext,
-    mode: 'contents',
-  });
-  return {
-    file: `state/persisted-${stateIndex}.json`,
-    history: admitted,
-    serialized: JSON.stringify({ ...parsed, history: admitted }),
-  };
-}
-
-async function readPersistedStates(
-  recordingPath: string,
-  sessionId: string,
-  projectHash: string,
-  admission: MediaAdmissionService,
-  reservations: ExportReservation[],
-): Promise<readonly PortablePersistedState[]> {
-  const entries = (await readdir(dirname(recordingPath)))
-    .filter(
-      (entry) =>
-        entry.startsWith(PERSISTED_SESSION_PREFIX) && entry.endsWith('.json'),
-    )
-    .sort();
-  if (entries.length > MAX_PERSISTED_STATES) {
-    throw new Error('Export persisted state count exceeds limit');
-  }
-  const sizes: number[] = [];
-  for (const entry of entries) {
-    sizes.push(
-      await boundedFileSize(
-        join(dirname(recordingPath), entry),
-        MAX_PERSISTED_STATE_BYTES,
-        'Persisted session state',
-      ),
-    );
-  }
-  boundedAggregate(
-    sizes,
-    MAX_PERSISTED_STATE_AGGREGATE_BYTES,
-    'Persisted session states',
-  );
-  const states: PortablePersistedState[] = [];
-  for (const entry of entries) {
-    const state = await readPersistedState(
-      recordingPath,
-      entry,
-      sessionId,
-      projectHash,
-      states.length,
-      admission,
-      reservations,
-    );
-    if (state !== undefined) states.push(state);
-  }
-  return states;
-}
-
-async function replayPortableRecording(
-  recordingPath: string,
-  recordingBytes: Uint8Array,
+/**
+ * Replays the staged recording row by row. Each row is admitted, verified
+ * against the media store, and released before the next row is resolved.
+ */
+async function verifyStagedReplay(
+  stagedRecording: string,
   projectHash: string,
   mediaStore: LocalMediaStore,
-): Promise<readonly IContent[]> {
-  const replayPath = `${recordingPath}.${randomUUID()}.portable.tmp`;
-  let history: readonly IContent[] | undefined;
-  let failure: unknown;
-  try {
-    await writeFile(replayPath, recordingBytes, { mode: 0o600, flag: 'wx' });
-    const replay = await replaySession(replayPath, projectHash, { mediaStore });
-    if (!replay.ok) {
-      throw new Error(`Cannot export session media: ${replay.error}`);
-    }
-    history = replay.history;
-  } catch (error) {
-    failure = error;
+  admission: MediaAdmissionService,
+  index: MediaReferenceIndex,
+): Promise<void> {
+  const context = {
+    turnId: 'session-package-replay',
+    source: 'session-package-export',
+    preserveLegacyMimeParameters: true,
+  };
+  const replay = await replaySessionRows(
+    stagedRecording,
+    projectHash,
+    async (row) => {
+      const [admitted] = await admission.admitContents([row], context);
+      try {
+        await verifyHistoryMedia([admitted], mediaStore, 'session-replay');
+      } catch (error) {
+        await admission.releaseContents([admitted], context);
+        throw error;
+      }
+      await admission.releaseContents([admitted], context);
+      index.add([admitted]);
+    },
+  );
+  if (!replay.ok) {
+    throw new Error(`Cannot export session media: ${replay.error}`);
   }
-  try {
-    await rm(replayPath, { force: true });
-  } catch (cleanupError) {
-    failure =
-      failure === undefined
-        ? cleanupError
-        : new AggregateError(
-            [failure, cleanupError],
-            'Portable session replay and cleanup failed',
-          );
-  }
-  if (failure !== undefined) throw failure;
-  if (history === undefined) throw new Error('Portable session replay failed');
-  return history;
 }
 
 async function writeSessionMediaPackage(
@@ -396,57 +110,45 @@ async function writeSessionMediaPackage(
   mediaStore: LocalMediaStore,
   temporaryDirectory: string,
   admission: MediaAdmissionService,
-  reservations: ExportReservation[],
+  ledger: ReservationLedger,
 ): Promise<void> {
-  const sourceBytes = await readBoundedFile(
+  const index = new MediaReferenceIndex();
+  const onContents = (contents: Parameters<MediaReferenceIndex['add']>[0]) =>
+    index.add(contents);
+  await prepareSessionMediaPackageStaging(temporaryDirectory);
+  const stagedRecording = join(temporaryDirectory, RECORDING_FILE);
+  const recording = await streamPortableRecording({
+    source: recordingPath,
+    label: 'Session recording',
+    outputPath: stagedRecording,
+    exportAdmission: { service: admission, ledger },
+    onContents,
+  });
+  const persistedStateFiles = await exportPersistedStates({
     recordingPath,
-    MAX_RECORDING_BYTES,
-    'Session recording',
-  );
-  const recording = await portableRecording(
-    sourceBytes,
-    mediaStore,
-    undefined,
-    undefined,
-    admission,
-    reservations,
-  );
-  const persistedStates = await readPersistedStates(
-    recordingPath,
-    recording.sessionId,
+    stateDirectory: join(temporaryDirectory, 'state'),
+    sessionId: recording.sessionId,
     projectHash,
     admission,
-    reservations,
-  );
-  const replayHistory = await replayPortableRecording(
-    recordingPath,
-    recording.bytes,
+    ledger,
+    onContents,
+  });
+  await verifyStagedReplay(
+    stagedRecording,
     projectHash,
     mediaStore,
+    admission,
+    index,
   );
-  const references = uniqueReferences(
-    collectMediaReferences([
-      ...recording.histories.flat(),
-      ...persistedStates.flatMap((state) => state.history),
-      ...replayHistory,
-    ]),
-  );
+  const references = index.references();
   const objects = requiredObjects(references);
-  await stageSessionMediaPackage({
+  await stageSessionMediaPackageBlobs(temporaryDirectory, mediaStore, objects);
+  await writeSessionMediaPackageManifest({
     temporaryDirectory,
-    mediaStore,
-    recording,
-    persistedStates,
+    persistedStateFiles,
     references,
     objects,
   });
-}
-
-async function releaseExportReservations(
-  admission: MediaAdmissionService,
-  reservations: readonly ExportReservation[],
-): Promise<void> {
-  await admission.releaseAdmissions(reservations);
 }
 
 async function cleanupFailedExport(
@@ -471,8 +173,11 @@ export async function exportSessionMediaPackage(
   packageDirectory: string,
 ): Promise<void> {
   const admission = new MediaAdmissionService(mediaStore);
-  const reservations: ExportReservation[] = [];
   const temporaryDirectory = `${packageDirectory}.${randomUUID()}.tmp`;
+  const ledger = new ReservationLedger(
+    `${temporaryDirectory}.reservations`,
+    admission,
+  );
   try {
     await writeSessionMediaPackage(
       recordingPath,
@@ -480,11 +185,11 @@ export async function exportSessionMediaPackage(
       mediaStore,
       temporaryDirectory,
       admission,
-      reservations,
+      ledger,
     );
   } catch (error) {
     try {
-      await releaseExportReservations(admission, reservations);
+      await ledger.releaseAll();
     } catch (releaseError) {
       await cleanupFailedExport(
         temporaryDirectory,
@@ -499,7 +204,7 @@ export async function exportSessionMediaPackage(
     );
   }
   try {
-    await releaseExportReservations(admission, reservations);
+    await ledger.releaseAll();
   } catch (releaseError) {
     await cleanupFailedExport(
       temporaryDirectory,
@@ -527,8 +232,9 @@ export interface ValidatedSessionMediaPackage {
   readonly references: readonly MediaReferenceBlock[];
   readonly objects: readonly MediaStoredObject[];
   readonly blobs: readonly VerifiedPackageBlob[];
-  readonly recordingBytes: Uint8Array;
-  readonly persistedStates: readonly CapturedPersistedState[];
+  /** The recording as pinned at validation; import streams from this path. */
+  readonly recording: PinnedPackageFile;
+  readonly persistedStates: readonly PinnedPersistedState[];
 }
 
 export async function validateSessionMediaPackage(
@@ -556,37 +262,18 @@ export async function validateSessionMediaPackage(
     MAX_OBJECT_AGGREGATE_BYTES,
     'Session media package objects',
   );
-  const recordingBytes = new Uint8Array(
-    await readBoundedFile(
-      join(packageDirectory, manifest.recording),
-      MAX_RECORDING_BYTES,
-      'Session media package recording',
-    ),
-  );
-  const persistedStates = await capturePersistedStates(
+  const verifyRecording = createReferenceVerifier('recording', references);
+  const recording = await streamPortableRecording({
+    source: join(packageDirectory, manifest.recording),
+    label: 'Session media package recording',
+    destinationProjectHash: 'package-validation-project',
+    destinationSessionId: 'package-validation-session',
+    onContents: (contents) => verifyRecording(collectMediaReferences(contents)),
+  });
+  const persistedStates = await pinPersistedStates(
     packageDirectory,
     manifest.persistedStates,
-  );
-  const portable = await portableRecording(
-    recordingBytes,
-    undefined,
-    'package-validation-project',
-    'package-validation-session',
-  );
-  if (portable.histories.length > MAX_HISTORY_CONTENTS) {
-    throw new Error('Session media package history count exceeds limit');
-  }
-  verifyHistoryReferences(
-    'recording',
-    uniqueReferences(collectMediaReferences(portable.histories.flat())),
-    references,
-  );
-  verifyHistoryReferences(
-    'persisted history',
-    uniqueReferences(
-      collectMediaReferences(persistedStates.flatMap((state) => state.history)),
-    ),
-    references,
+    createReferenceVerifier('persisted history', references),
   );
   const blobs = await verifyPackageBlobs(packageDirectory, objects);
   return {
@@ -595,8 +282,36 @@ export async function validateSessionMediaPackage(
     references,
     objects,
     blobs,
-    recordingBytes,
+    recording: recording.pinned,
     persistedStates,
+  };
+}
+
+function importPublication(
+  validated: ValidatedSessionMediaPackage,
+  destinationChatsDirectory: string,
+  recordingPath: string,
+  projectHash: string,
+  sessionId: string,
+): ImportPublication {
+  return {
+    destinationChatsDirectory,
+    recordingPath,
+    writeRecording: async (outputPath) => {
+      await streamPortableRecording({
+        source: validated.recording,
+        label: 'Session media package recording',
+        outputPath,
+        destinationProjectHash: projectHash,
+        destinationSessionId: sessionId,
+        onContents: () => undefined,
+      });
+    },
+    persistedStates: validated.persistedStates.map((state, index) => ({
+      fileName: importedStateFileName(sessionId, index),
+      write: (outputPath: string) =>
+        writeRewrittenPersistedState(state, outputPath, projectHash, sessionId),
+    })),
   };
 }
 
@@ -626,17 +341,6 @@ export async function importSessionMediaPackage<T>(
       : packageSource;
   await mediaStore.preflightObjects(validated.objects);
   const importedSessionId = randomUUID();
-  const portable = await portableRecording(
-    validated.recordingBytes,
-    undefined,
-    projectHash,
-    importedSessionId,
-  );
-  const persistedStates = rewrittenPersistedStates(
-    validated.persistedStates,
-    projectHash,
-    importedSessionId,
-  );
   const recordingPath = join(
     destinationChatsDirectory,
     `session-imported-${importedSessionId}.jsonl`,
@@ -655,12 +359,15 @@ export async function importSessionMediaPackage<T>(
       await mediaStore.reserve(reference, ownerId);
       reservations.push({ contentId: reference.contentId, ownerId });
     }
-    published = await publishImportedSession({
-      destinationChatsDirectory,
-      recordingPath,
-      recordingBytes: portable.bytes,
-      persistedStates,
-    });
+    published = await publishImportedSession(
+      importPublication(
+        validated,
+        destinationChatsDirectory,
+        recordingPath,
+        projectHash,
+        importedSessionId,
+      ),
+    );
     const releaseFailures = await releaseImportReservations(
       mediaStore,
       reservations,

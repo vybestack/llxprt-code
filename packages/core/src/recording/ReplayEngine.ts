@@ -61,6 +61,38 @@ export async function replaySessionThroughSequence(
   );
 }
 
+/**
+ * Replays a recording row by row without retaining rows. The returned ok
+ * result carries replay metadata with an empty `history`; every resolved row
+ * goes to `onRow` and is released after it returns.
+ */
+export async function replaySessionRows(
+  filePath: string,
+  expectedProjectHash: string,
+  onRow: (row: IContent) => Promise<void>,
+): Promise<ReplayResult> {
+  const acc = createAccumulators();
+  let resolver: JournalResolver | undefined;
+  try {
+    resolver = await JournalResolver.open(filePath, {
+      replayObserver: new ResolverReplayMetadata(acc, expectedProjectHash),
+    });
+    for await (const entry of resolver.resolve()) {
+      await onRow(entry.content);
+    }
+    return finalizeReplay(acc);
+  } catch (error) {
+    if (error instanceof ReplayMetadataFailure) return error.result;
+    return {
+      ok: false,
+      error: `Failed to read file: ${error instanceof Error ? error.message : String(error)}`,
+      warnings: acc.warnings,
+    };
+  } finally {
+    await resolver?.close();
+  }
+}
+
 // This compatibility API explicitly owns an eager result. Continuation uses
 // cursor boot instead; the collector must never become a resume fallback.
 async function collectReplay(

@@ -699,9 +699,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
           result.sessionPackage,
           'Expected a validated session package',
         );
-        expect(result.sessionPackage.recordingBytes.byteLength).toBeGreaterThan(
-          0,
-        );
+        expect(result.sessionPackage.recording.byteLength).toBeGreaterThan(0);
         expect(
           await SessionDiscovery.listSessions(
             destinationChats,
