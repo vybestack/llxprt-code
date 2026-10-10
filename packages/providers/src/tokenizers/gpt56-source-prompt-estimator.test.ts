@@ -361,7 +361,9 @@ function testFailures(): void {
     });
 
     it('propagates workspace I/O failure and still releases the source owner', async () => {
-      const owner = projection();
+      // A piece beyond the in-memory heap BPE bound is the only text that
+      // needs the workspace.
+      const owner = projection('a'.repeat(300000));
       const invalid = join(root, 'not-directory');
       writeFileSync(invalid, 'occupied');
       const pending = estimateGpt56PromptFromSources(request(owner), {

@@ -62,7 +62,7 @@ describe('source adapter readiness, assets and I/O cleanup', () => {
       disposed: true,
       workspace: [],
       openFiles: [],
-      openedReaders: 1,
+      openedReaders: 2, // the piece source plus its token writer
     });
   }, 30000);
 

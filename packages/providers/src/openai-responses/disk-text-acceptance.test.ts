@@ -25,12 +25,22 @@ import { activeRequestBodyCount } from '../utils/requestScopedBody.js';
 
 type Setup = Awaited<ReturnType<typeof projectionRuntime>>;
 type BodyObservation = ReturnType<typeof observeDiskBody>;
-async function heap(): Promise<number> {
+async function settledHeap(): Promise<number> {
   for (let index = 0; index < 8; index++) {
     await Bun.sleep(0);
     Bun.gc(true);
   }
   return heapSize();
+}
+// The median of three settled readings keeps allocator jitter of a few
+// hundred KiB, which is unrelated to what is retained, out of the 1 MiB gate.
+async function heap(): Promise<number> {
+  const readings = [
+    await settledHeap(),
+    await settledHeap(),
+    await settledHeap(),
+  ];
+  return readings.sort((left, right) => left - right)[1];
 }
 async function nativeEstimate(
   setup: Setup,
@@ -87,10 +97,13 @@ async function warmRuntime(setup: Setup): Promise<void> {
       );
     },
   });
+  // The second row carries pieces beyond the WASM bound so that one-time
+  // state of the large-piece estimator path exists before the baseline.
   const rows = requestSelection({
-    count: 1,
+    count: 2,
     async *openReader() {
       yield diskTextRow(0, false);
+      yield diskTextRow(63, 2);
     },
   });
   const options = {

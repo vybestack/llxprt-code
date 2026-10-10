@@ -61,7 +61,10 @@ await mock.module('node:fs', () => ({
     length: number,
     position: number | null,
   ): number {
-    if (mode === 'reader-io' && openFiles.get(fd)?.endsWith('/utf8') === true)
+    if (
+      mode === 'reader-io' &&
+      openFiles.get(fd)?.includes('/o200k-piece-') === true
+    )
       throw fault;
     return realRead(fd, buffer, offset, length, position);
   },
@@ -73,7 +76,12 @@ const workspaceDirectory = join(root, 'workspace');
 fs.mkdirSync(directory);
 fs.mkdirSync(workspaceDirectory);
 const path = join(directory, 'input');
-fs.writeFileSync(path, 'secret-private-prompt');
+// reader-io needs a piece beyond the in-memory heap BPE bound so the source
+// reaches the workspace disk counter whose reader the fault interrupts.
+fs.writeFileSync(
+  path,
+  mode === 'reader-io' ? 'a'.repeat(300000) : 'secret-private-prompt',
+);
 if (mode === 'cancel-reader') {
   fs.writeFileSync(path, '');
   for (let index = 0; index < 512; index++)

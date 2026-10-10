@@ -19,12 +19,17 @@ import {
   type Gpt56SourceLease,
 } from './gpt56-source-projection.js';
 import { ModelPromptEstimatorError } from './ModelPromptEstimatorError.js';
+import { countO200kBaseTokensChunked } from './o200k-chunked-source.js';
+import { getO200kBaseEncoder } from './o200kBaseCounter.js';
 import type {
   O200kDiskCountOptions,
-  countO200kBaseTokensFromDiskSource,
+  O200kDiskSource,
 } from './o200k-disk-source.js';
 
-type DiskCounter = typeof countO200kBaseTokensFromDiskSource;
+type DiskCounter = (
+  source: O200kDiskSource,
+  options: O200kDiskCountOptions,
+) => Promise<number>;
 
 function failure(
   request: RuntimePromptEstimateRequest,
@@ -56,10 +61,9 @@ async function prepareSourceAssets(
   try {
     const { diskAssets } = await import('./o200k-disk-assets.js');
     diskAssets();
-    const { countO200kBaseTokensFromDiskSource } = await import(
-      './o200k-disk-source.js'
-    );
-    return countO200kBaseTokensFromDiskSource;
+    const encoder = await getO200kBaseEncoder();
+    return (source, options) =>
+      countO200kBaseTokensChunked(source, encoder, options);
   } catch (error) {
     throw failure(request, 'asset-unavailable', error);
   }
