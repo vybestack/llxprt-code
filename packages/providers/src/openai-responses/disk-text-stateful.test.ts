@@ -30,6 +30,14 @@ const parent = (id: string, usage?: UsageStats): IContent => ({
   },
 });
 
+const withCall = (row: IContent, id: string): IContent => ({
+  ...row,
+  blocks: [
+    ...row.blocks,
+    { type: 'tool_call', id, name: 'shell', parameters: { command: 'ls' } },
+  ],
+});
+
 const usage: UsageStats = {
   promptTokens: 10,
   completionTokens: 5,
@@ -55,6 +63,38 @@ const histories: Record<string, readonly IContent[]> = {
     text('human', 'three'),
   ],
   'a parent as the last row': [text('human', 'one'), parent('resp_parent')],
+  'a parent row ending in dangling tool calls': [
+    text('human', 'one'),
+    withCall(parent('resp_parent', usage), 'hist_call_1'),
+  ],
+  'a dangling parent row followed by more rows': [
+    text('human', 'one'),
+    withCall(parent('resp_parent', usage), 'hist_call_1'),
+    text('human', 'two'),
+  ],
+  'an unanswered call before the parent and answered calls after it': [
+    text('human', 'one'),
+    withCall(text('ai', 'early'), 'hist_call_0'),
+    parent('resp_parent', usage),
+    text('human', 'two'),
+    withCall(text('ai', 'late'), 'hist_call_2'),
+    {
+      speaker: 'tool',
+      blocks: [
+        {
+          type: 'tool_response',
+          callId: 'hist_call_2',
+          toolName: 'shell',
+          result: 'ok',
+        },
+      ],
+    },
+  ],
+  'a dangling call row before the parent': [
+    text('human', 'one'),
+    withCall(text('ai', 'early'), 'hist_call_0'),
+    parent('resp_parent', usage),
+  ],
   'no parent': [
     text('human', 'one'),
     text('ai', 'plain'),
@@ -223,6 +263,21 @@ describe('Responses source route stateful accounting', () => {
     };
     expect(body.previous_response_id).toBeUndefined();
     expect(body.input).toHaveLength(2);
+  }, 60000);
+
+  it('chains a parent that ends in dangling tool calls with synthetic outputs', async () => {
+    const [sent] = await bothRoutes(
+      histories['a parent row ending in dangling tool calls'],
+      { 'responses-stateful': true },
+    );
+    const body = JSON.parse(sent) as {
+      previous_response_id?: string;
+      input: Array<{ type?: string }>;
+    };
+    expect(body.previous_response_id).toBe('resp_parent');
+    expect(body.input.map((item) => item.type)).toStrictEqual([
+      'function_call_output',
+    ]);
   }, 60000);
 
   it('stays stateless without the responses-stateful option', async () => {

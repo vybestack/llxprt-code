@@ -56,7 +56,7 @@ async function matching(
   return false;
 }
 
-interface DanglingCalls {
+export interface DanglingCalls {
   /** Index of the last assistant row carrying tool calls; -1 when none. */
   readonly lastCallRow: number;
   /** History ids of calls that never receive a response, in call order. */
@@ -76,15 +76,15 @@ function settleResponses(open: Set<string>, row: IContent): void {
  * patching does, holding only the currently open calls and the last call row's
  * names. Calls answered before they appear (rare) are settled by a second scan.
  */
-async function findDanglingCalls(
-  owner: RequestScopedContents,
+export async function findDanglingCalls(
+  rows: () => AsyncIterable<IContent>,
   signal?: AbortSignal,
 ): Promise<DanglingCalls> {
   const open = new Set<string>();
   let names = new Map<string, string>();
   let lastCallRow = -1;
   let index = 0;
-  for await (const row of owner.stream()) {
+  for await (const row of rows()) {
     signal?.throwIfAborted();
     const calls =
       row.speaker === 'ai'
@@ -104,7 +104,7 @@ async function findDanglingCalls(
     index++;
   }
   if (open.size > 0) {
-    for await (const row of owner.stream()) {
+    for await (const row of rows()) {
       signal?.throwIfAborted();
       settleResponses(open, row);
     }
@@ -134,19 +134,33 @@ function mediaPart(media: MediaBlock, enabled: boolean): ResponsesContentPart {
   };
 }
 
+/**
+ * Dangling calls found over the whole stored history when the written rows
+ * start after a stateful parent; indices in `calls` are whole-history indices.
+ */
+export interface HistoryDangling {
+  readonly calls: DanglingCalls;
+  readonly skipRows: number;
+}
+
 /** Scans pair membership on disk instead of retaining IDs or counterpart rows. */
 export class ResponsesSourceInput {
   #separator = '';
   #reasoning = 0;
   #pdfBytes = 0;
   #dangling: DanglingCalls | undefined;
+  readonly #skipRows: number;
 
   constructor(
     private readonly writer: PromptKeySink,
     private readonly context: ResponsesInputBuildContext,
     private readonly unsupportedPath: string,
     private readonly signal?: AbortSignal,
-  ) {}
+    history?: HistoryDangling,
+  ) {
+    this.#dangling = history?.calls;
+    this.#skipRows = history?.skipRows ?? 0;
+  }
 
   private start(): void {
     this.writer.append(this.#separator);
@@ -232,7 +246,10 @@ export class ResponsesSourceInput {
     for (const block of row.blocks) {
       if (block.type !== 'tool_call') continue;
       // Deferred so histories without tool calls never replay the source.
-      this.#dangling ??= await findDanglingCalls(owner, this.signal);
+      this.#dangling ??= await findDanglingCalls(
+        () => owner.stream(),
+        this.signal,
+      );
       const missing = this.#dangling;
       const id = normalizeToOpenAIToolId(block.id);
       const dangling =
@@ -306,6 +323,10 @@ export class ResponsesSourceInput {
 
   async write(owner: RequestScopedContents): Promise<void> {
     this.writer.append('[');
+    // Synthetic outputs for the stateful parent row itself precede every
+    // written row.
+    if (this.#dangling?.lastCallRow === this.#skipRows - 1)
+      this.cancelledResponses(this.#dangling);
     let index = 0;
     for await (const row of owner.stream()) {
       this.signal?.throwIfAborted();
@@ -316,7 +337,7 @@ export class ResponsesSourceInput {
         else this.text(row);
       } else if (row.speaker === 'ai') await this.assistant(row, owner);
       else await this.tool(row, owner);
-      if (index === this.#dangling?.lastCallRow)
+      if (index + this.#skipRows === this.#dangling?.lastCallRow)
         this.cancelledResponses(this.#dangling);
       index++;
     }

@@ -8,6 +8,10 @@ import { requireAssembledSystemInstruction } from '../utils/systemPromptPlacemen
 import { finishMediaRequest } from '../utils/request-media-resolution.js';
 import { serializeResponsesPromptEnvelope } from '../runtime/responses-source-serializer.js';
 import {
+  findDanglingCalls,
+  type HistoryDangling,
+} from '../runtime/responses-source-input.js';
+import {
   responsesInputContext,
   resolveInvocationEphemerals,
 } from './responses-request-fields.js';
@@ -53,7 +57,11 @@ async function selectRowsStateful(
   ephemerals: Record<string, unknown>,
   rows: ProviderRequestRows,
   mode: RebuildMode,
-): Promise<{ stateful: StatefulConversation; skipRows: number }> {
+): Promise<{
+  stateful: StatefulConversation;
+  skipRows: number;
+  historyDangling?: HistoryDangling;
+}> {
   const plan = resolveResponsesStatefulPlan(
     options,
     ephemerals,
@@ -71,9 +79,29 @@ async function selectRowsStateful(
   for await (const row of countedRows(rows, getRequestSignal(options))) {
     hit = parentHitOf(row, index++, plan) ?? hit;
   }
-  const selection = selectStatefulParent(hit, rows.count, deps.logger);
+  // The array route patches synthetic outputs before choosing the parent, so
+  // dangling calls on the parent row itself leave content after it.
+  const calls =
+    hit === undefined
+      ? undefined
+      : await findDanglingCalls(
+          () => countedRows(rows, getRequestSignal(options)),
+          getRequestSignal(options),
+        );
+  const syntheticRows =
+    hit !== undefined && calls?.lastCallRow === hit.index
+      ? calls.missing.size
+      : 0;
+  const selection = selectStatefulParent(
+    hit,
+    rows.count + syntheticRows,
+    deps.logger,
+  );
   return {
     skipRows: selection.skipRows,
+    ...(calls === undefined || selection.parentId === undefined
+      ? {}
+      : { historyDangling: { calls, skipRows: selection.skipRows } }),
     stateful: {
       enabled: true,
       parentId: selection.parentId,
@@ -143,7 +171,7 @@ export async function buildDiskTextResponsesContext(
     );
   const ephemerals = resolveInvocationEphemerals(options);
   const signal = getRequestSignal(options);
-  const { stateful, skipRows } = await selectRowsStateful(
+  const { stateful, skipRows, historyDangling } = await selectRowsStateful(
     options,
     deps,
     ephemerals,
@@ -165,6 +193,7 @@ export async function buildDiskTextResponsesContext(
       instructions: prepared.request.instructions,
       tools: prepared.request.tools,
       contents: countedRows(rows, signal, skipRows),
+      ...(historyDangling === undefined ? {} : { historyDangling }),
       ...('input' in overrides
         ? { inputOverride: { value: overrides['input'] } }
         : {}),

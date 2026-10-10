@@ -13,7 +13,10 @@ import type { O200kDiskSource } from '../tokenizers/o200k-disk-source.js';
 import { PROJECTION_REVISION } from './promptEnvelopeProjections.js';
 import { PromptKeyDiskWriter } from './prompt-key-disk-writer.js';
 import { PromptKeyTeeWriter } from './prompt-key-tee-writer.js';
-import { ResponsesSourceInput } from './responses-source-input.js';
+import {
+  ResponsesSourceInput,
+  type HistoryDangling,
+} from './responses-source-input.js';
 import {
   cancellableSerialization,
   withSerializationCleanup,
@@ -28,6 +31,8 @@ export interface ResponsesSourceOptions {
   readonly context: ResponsesInputBuildContext;
   /** Request-override `input` replaces the rows entirely, as in the array route. */
   readonly inputOverride?: { readonly value: unknown };
+  /** Set when `contents` starts after a stateful parent (see HistoryDangling). */
+  readonly historyDangling?: HistoryDangling;
   readonly signal?: AbortSignal;
   readonly stateful?: {
     readonly statefulParentUsed: boolean;
@@ -107,6 +112,7 @@ async function segment(
               options.context,
               join(root, 'unsupported-media.jsonl'),
               options.signal,
+              options.historyDangling,
             ).write(owner),
           () => owner.dispose(),
         );
@@ -257,7 +263,11 @@ async function buildResponsesPromptEnvelope(
       stateful.fullHistoryContents !== undefined
     )
       fullHistory = await prompt(
-        { ...options, contents: stateful.fullHistoryContents },
+        {
+          ...options,
+          contents: stateful.fullHistoryContents,
+          historyDangling: undefined,
+        },
         false,
       );
     const ownedIncremental = incremental;
