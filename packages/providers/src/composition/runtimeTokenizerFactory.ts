@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { tmpdir } from 'node:os';
 import type {
   RuntimeTokenizer,
   RuntimeTokenizerFactory,
@@ -19,6 +20,7 @@ import {
   ModelPromptEstimatorRegistry,
 } from '../tokenizers/ModelPromptEstimatorRegistry.js';
 import { OpenAITokenizer } from '../tokenizers/OpenAITokenizer.js';
+import { withGpt56DiskSources } from '../tokenizers/gpt56-disk-tokenizer-factory.js';
 import {
   CLAUDE_5_PROMPT_ESTIMATOR_REGISTRATIONS,
   createClaudeRuntimeTokenizer,
@@ -111,7 +113,7 @@ export function createRuntimeTokenizerFactory(
     ...CLAUDE_5_PROMPT_ESTIMATOR_REGISTRATIONS,
   ]);
 
-  return {
+  const registryFactory: RuntimeTokenizerFactory = {
     async prepareTokenizer(providerName, model): Promise<void> {
       const resolvedModel = model ?? providerName;
       if (isSanctionedOpenAIO200kModel(resolvedModel)) {
@@ -172,4 +174,7 @@ export function createRuntimeTokenizerFactory(
       return undefined;
     },
   };
+  // Sends project a sealed disk owner rather than a context-sized string, so
+  // the production factory itself must estimate disk sources for every family.
+  return withGpt56DiskSources(registryFactory, tmpdir());
 }

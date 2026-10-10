@@ -69,7 +69,7 @@ export class ObservedHistory extends HistoryService {
   }
 }
 
-class ObservedResponsesProvider extends OpenAIResponsesProvider {
+export class ObservedResponsesProvider extends OpenAIResponsesProvider {
   readonly tokens: object[] = [];
   override async projectPromptEnvelope(
     options: GenerateChatOptions,
@@ -127,13 +127,14 @@ export async function processorFixture(
   );
 }
 
-function assembleProcessorFixture(
+export function assembleProcessorFixture(
   config: Config,
   settings: SettingsService,
   nativeFactory: RuntimeTokenizerFactory,
   provider: ObservedResponsesProvider,
   history: ObservedHistory,
   baseURL: string,
+  model = 'gpt-5.6',
 ) {
   const requests: ApiRequestEvent[] = [];
   const providerRuntime = {
@@ -146,7 +147,7 @@ function assembleProcessorFixture(
       runtimeId: providerRuntime.runtimeId,
       sessionId: config.getSessionId(),
       provider: provider.name,
-      model: 'gpt-5.6',
+      model,
       updatedAt: Date.now(),
       baseUrl: baseURL,
     },
