@@ -237,6 +237,11 @@ export class MediaAdmissionService {
     return this.releaseAdmissions([{ contents, context, mode: 'contents' }]);
   }
 
+  /** Releases the reservation one admitted reference holds under the given owner scope. */
+  async releaseReference(contentId: string, scope?: string): Promise<void> {
+    await this.store.release(contentId, historyOwnerIdFor(contentId, scope));
+  }
+
   async releaseAdmissions(
     admissions: readonly MediaAdmissionRelease[],
   ): Promise<void> {

@@ -6,7 +6,6 @@
 
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
-import { MediaAdmissionService } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
 
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { DeferredHistorySourceOptions } from '@vybestack/llxprt-code-core/core/clientContract.js';
@@ -79,9 +78,8 @@ async function publishDeferredArray(
   }
 }
 
+/** Ownership handle only: media reservations live in the disk index behind `release`. */
 export interface RetainedHistoryAdmission {
-  readonly detached?: true;
-  readonly history: readonly IContent[];
   readonly release: () => Promise<void>;
 }
 
@@ -113,11 +111,7 @@ export class RetainedHistoryAdmissions {
   private retainDeferredArray(
     admitted: DeferredArrayAdmission,
   ): DeferredRetainedArrayAdmission {
-    const retained = this.register({
-      detached: true,
-      history: [],
-      release: admitted.release,
-    });
+    const retained = this.register({ release: admitted.release });
     const rows = admitted.rows;
     admitted.rows = undefined;
     return {
@@ -133,50 +127,6 @@ export class RetainedHistoryAdmissions {
           );
       },
     };
-  }
-
-  async admitRetainedHistory(
-    history: readonly IContent[],
-    source: string,
-  ): Promise<RetainedHistoryAdmission | undefined> {
-    if (!hasLocalMedia(history)) return undefined;
-    this.sequence += 1;
-    const admissionScope = `${source}:${this.sequence}`;
-    const context = {
-      turnId: admissionScope,
-      source: admissionScope,
-      reservationOwnerScope: `retained-history:${admissionScope}`,
-    };
-    const admission = new MediaAdmissionService(this.getStore());
-    const admitted = await admission.admitContents(history, context);
-    return this.register({
-      history: admitted,
-      release: () => admission.releaseContents(admitted, context),
-    });
-  }
-
-  async replaceRetainedHistory(
-    history: readonly IContent[],
-    prior: RetainedHistoryAdmission | undefined,
-    source: string,
-  ): Promise<RetainedHistoryAdmission | undefined> {
-    const retained = await this.admitRetainedHistory(history, source);
-    const replacementFailures = await this.release(
-      prior === undefined ? [] : [prior],
-    );
-    if (replacementFailures.length === 0) return retained;
-    const replacementError = new AggregateError(
-      replacementFailures,
-      'Deferred history replacement cleanup failed',
-    );
-    if (retained !== undefined) {
-      await this.releaseAfterFailure(
-        replacementError,
-        [retained],
-        'Deferred history replacement and admitted media cleanup failed',
-      );
-    }
-    throw replacementError;
   }
 
   async release(
@@ -233,14 +183,4 @@ export async function releaseDeferredArray(
 ): Promise<void> {
   const failures = await admissions.release(prior ? [prior] : []);
   if (failures.length > 0) throw new AggregateError(failures, message);
-}
-
-function hasLocalMedia(history: readonly IContent[]): boolean {
-  return history.some((content) =>
-    content.blocks.some(
-      (block) =>
-        block.type === 'media' &&
-        (block.encoding === 'base64' || block.encoding === 'reference'),
-    ),
-  );
 }

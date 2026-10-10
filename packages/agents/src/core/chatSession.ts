@@ -79,7 +79,11 @@ import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime
 import { triggerPreCompressHook } from '@vybestack/llxprt-code-core/core/lifecycleHookTriggers.js';
 import { PreCompressTrigger } from '@vybestack/llxprt-code-core/hooks/types.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import type { MediaAdmissionContext } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
+import {
+  admitSessionHistory,
+  hasLocalMedia,
+  type SessionHistoryAdmission,
+} from './sessionHistoryAdmission.js';
 
 // Decomposed modules
 import { CompressionHandler } from '../compression/CompressionHandler.js';
@@ -200,11 +204,6 @@ export class AgentExecutionBlockedError extends Error {
  * Delegates to focused modules: CompressionHandler, ConversationManager,
  * TurnProcessor, StreamProcessor, DirectMessageProcessor.
  */
-interface SessionHistoryAdmission {
-  readonly history: readonly IContent[];
-  readonly release: () => Promise<void>;
-}
-
 export class ChatSession {
   private logger = new DebugLogger('llxprt:gemini:chat');
   private readonly runtimeState: AgentRuntimeState;
@@ -750,28 +749,18 @@ export class ChatSession {
     return this.conversationManager.getHistory(curated, signal);
   }
 
-  private async admitSetHistory(
+  private beginSetHistoryAdmission(
     history: readonly IContent[],
-  ): Promise<SessionHistoryAdmission | undefined> {
+  ): SessionHistoryAdmission | undefined {
     const mediaAdmission = this.runtimeContext.mediaAdmission;
-    const hasLocalMedia = history.some((content) =>
-      content.blocks.some(
-        (block) =>
-          block.type === 'media' &&
-          (block.encoding === 'base64' || block.encoding === 'reference'),
-      ),
-    );
-    if (mediaAdmission === undefined || !hasLocalMedia) return undefined;
+    if (mediaAdmission === undefined || !hasLocalMedia(history))
+      return undefined;
     this.historyAdmissionSequence += 1;
-    const context: MediaAdmissionContext = {
-      turnId: `set-history:${this.historyAdmissionSequence}`,
-      source: `set-history:${this.historyAdmissionSequence}`,
-    };
-    const admitted = await mediaAdmission.admitContents(history, context);
-    const ownership: SessionHistoryAdmission = {
-      history: admitted,
-      release: () => mediaAdmission.releaseContents(admitted, context),
-    };
+    const ownership = admitSessionHistory(
+      history,
+      mediaAdmission,
+      `set-history:${this.historyAdmissionSequence}`,
+    );
     this.retainedHistoryAdmissions = [
       ...this.retainedHistoryAdmissions,
       ownership,
@@ -833,10 +822,9 @@ export class ChatSession {
   }
 
   async setHistory(history: readonly IContent[]): Promise<void> {
-    const ownership = await this.admitSetHistory(history);
-    const admitted = ownership?.history ?? history;
+    const ownership = this.beginSetHistoryAdmission(history);
     try {
-      await this.conversationManager.setHistory(admitted);
+      await this.conversationManager.setHistory(ownership?.rows ?? history);
     } catch (error: unknown) {
       if (ownership === undefined) throw error;
       const cleanupFailures = await this.releaseSessionHistoryAdmissions([

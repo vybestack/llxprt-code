@@ -750,11 +750,7 @@ export class AgentClient implements AgentClientContract {
   async startChat(extraHistory?: readonly IContent[]): Promise<ChatSession> {
     this.ideContextTracker.resetContext();
     await this.lazyInitialize();
-    const deferredAdmission =
-      this._deferredHistoryAdmission?.detached === true ||
-      extraHistory === this._deferredHistoryAdmission?.history
-        ? this._deferredHistoryAdmission
-        : undefined;
+    const deferredAdmission = this._deferredHistoryAdmission;
 
     let chat: ChatSession;
     try {
@@ -769,8 +765,7 @@ export class AgentClient implements AgentClientContract {
         },
         extraHistory:
           deferredAdmission === undefined ||
-          (deferredAdmission.detached === true &&
-            this._storedHistoryService?.isEmpty() === true)
+          this._storedHistoryService?.isEmpty() === true
             ? extraHistory
             : [],
         generateContentConfig: this.generateContentConfig,
@@ -792,9 +787,7 @@ export class AgentClient implements AgentClientContract {
 
     if (deferredAdmission !== undefined) {
       try {
-        if (deferredAdmission.detached === true)
-          await chat.getHistoryService().settleMediaOwnership();
-        else await chat.setHistory(deferredAdmission.history);
+        await chat.getHistoryService().settleMediaOwnership();
       } catch (error: unknown) {
         this._deferredHistoryAdmission = undefined;
         this._previousHistory = undefined;

@@ -17,11 +17,11 @@ import {
   clientArrayRows,
   forbidClientArrayRollback,
 } from './client-array-test-helpers.js';
-import { RetainedHistoryAdmissions } from './retainedHistoryAdmissions.js';
+import { LegacyArrayAdmissions } from './legacy-array-admission-oracle.js';
 
 async function legacyRestore(
   history: HistoryService,
-  admissions: RetainedHistoryAdmissions,
+  admissions: LegacyArrayAdmissions,
   rows: readonly IContent[],
 ): Promise<void> {
   const retained = await admissions.replaceRetainedHistory(
@@ -101,7 +101,7 @@ async function outcome(
           ? client.storeHistoryForLaterUse(input)
           : legacyRestore(
               history,
-              new RetainedHistoryAdmissions(() => store),
+              new LegacyArrayAdmissions(() => store),
               input,
             ),
       );

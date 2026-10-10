@@ -14,39 +14,35 @@ interface RestoreHistoryHost {
   getHistory(): HistoryService | null;
 }
 interface RestoreSubmission {
-  rows: readonly IContent[];
-  retained: RetainedHistoryAdmission | undefined;
+  rows: AsyncIterable<IContent> | undefined;
+  readonly retained: RetainedHistoryAdmission;
   readonly count: number;
+  discardInput(): void;
 }
 
 export function restoreClientHistory(
   host: RestoreHistoryHost,
   rows: readonly IContent[],
 ): Promise<void> {
-  return host.admissions
-    .admitRetainedHistory(rows, 'restore-history')
-    .then((retained) =>
-      publishRestoredHistory(host, {
-        rows: retained?.history ?? rows,
-        retained,
-        count: rows.length,
-      }),
-    );
+  const admitted = host.admissions.prepareDeferredArray(rows, {});
+  return publishRestoredHistory(host, {
+    rows: admitted.rows,
+    retained: admitted.retained,
+    count: rows.length,
+    discardInput: admitted.discardInput,
+  });
 }
 
 async function releaseRestoredAdmission(
   host: RestoreHistoryHost,
   submission: RestoreSubmission,
 ): Promise<void> {
-  const failures = await host.admissions.release(
-    submission.retained === undefined ? [] : [submission.retained],
-  );
+  const failures = await host.admissions.release([submission.retained]);
   if (failures.length > 0)
     throw new AggregateError(
       failures,
       'Restored history publication cleanup failed',
     );
-  submission.retained = undefined;
 }
 
 async function publishRestoredHistory(
@@ -62,6 +58,8 @@ async function publishRestoredHistory(
       );
     try {
       history.validateAndFix();
+      if (submission.rows === undefined)
+        throw new Error('Restored history rows already submitted');
       const operation = history.detachedValues.replace(
         submission.rows,
         undefined,
@@ -70,7 +68,7 @@ async function publishRestoredHistory(
           afterPublication: () => releaseRestoredAdmission(host, submission),
         },
       );
-      submission.rows = [];
+      submission.rows = undefined;
       await operation;
       history.resetCacheAnchorSeq();
       host.logger.debug('History restored successfully', {
@@ -84,8 +82,10 @@ async function publishRestoredHistory(
   } catch (error: unknown) {
     await host.admissions.releaseAfterFailure(
       error,
-      submission.retained === undefined ? [] : [submission.retained],
+      [submission.retained],
       'History restoration failed and admitted media cleanup was incomplete',
     );
+  } finally {
+    submission.discardInput();
   }
 }

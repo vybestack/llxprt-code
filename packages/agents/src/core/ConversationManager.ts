@@ -517,24 +517,38 @@ export class ConversationManager {
   /**
    * Sets the full chat history, replacing any existing history.
    */
-  async setHistory(history: readonly IContent[]): Promise<void> {
+  async setHistory(
+    history: Iterable<IContent> | AsyncIterable<IContent>,
+  ): Promise<void> {
     // The second argument to historyService.add is only a logging/token-
     // estimation hint, not attribution. This is a restore path that may run
     // before any provider is active, so read the runtime-state model directly
     // rather than resolving the active provider (issue #2511).
     const generatingModel = this.runtimeContext.state.model;
-    const restored = history.map((content) => {
-      // Keep stamped prefix rows byte-identical for journal-backed truncation.
-      if (content.metadata?.chronology !== undefined) return content;
-      const turnKey = this.historyService.generateTurnKey();
-      return {
-        ...content,
-        metadata: { ...content.metadata, turnId: turnKey },
-      };
-    });
     return this.historyService.detachedValues
-      .replace(restored, generatingModel, { publishBatch: true })
+      .replace(this.stampRestoredRows(history), generatingModel, {
+        publishBatch: true,
+      })
       .then(() => this.historyService.resetCacheAnchorSeq());
+  }
+
+  private async *stampRestoredRows(
+    history: Iterable<IContent> | AsyncIterable<IContent>,
+  ): AsyncGenerator<IContent, void, unknown> {
+    for await (const content of history) {
+      // Keep stamped prefix rows byte-identical for journal-backed truncation.
+      if (content.metadata?.chronology !== undefined) {
+        yield content;
+        continue;
+      }
+      yield {
+        ...content,
+        metadata: {
+          ...content.metadata,
+          turnId: this.historyService.generateTurnKey(),
+        },
+      };
+    }
   }
 
   /**
