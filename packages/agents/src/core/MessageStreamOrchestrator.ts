@@ -277,7 +277,7 @@ export class MessageStreamOrchestrator {
     const earlyTurn = yield* this._checkSessionLimits(ctx);
     if (earlyTurn) return earlyTurn;
 
-    await this._injectIdeContext(signal);
+    await this._injectIdeContext();
     return yield* this._runRetryLoop(request, signal, ctx);
   }
 
@@ -401,11 +401,11 @@ export class MessageStreamOrchestrator {
    * @plan:PLAN-20260707-AGENTNEUTRAL.P15
    * @requirement:REQ-005.4
    */
-  private async _injectIdeContext(signal: AbortSignal): Promise<void> {
+  private async _injectIdeContext(): Promise<void> {
     const { config, ideContextTracker, getChat, streamHistory } = this.deps;
     let empty = true;
     let hasPendingToolCall = false;
-    for await (const row of streamHistory(signal)) {
+    for await (const row of streamHistory()) {
       empty = false;
       hasPendingToolCall =
         row.speaker === 'ai' &&

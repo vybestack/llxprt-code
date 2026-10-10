@@ -124,6 +124,7 @@ export class AgentClient implements AgentClientContract {
    * @pseudocode gemini-runtime.md lines 21-42
    */
   private readonly runtimeState: AgentRuntimeState;
+  private _historyService?: HistoryService;
   private _unsubscribe?: () => void;
 
   /**
@@ -160,7 +161,7 @@ export class AgentClient implements AgentClientContract {
     this.historyAdmissions = new RetainedHistoryAdmissions(() =>
       this.config.getLocalMediaStore(),
     );
-    void historyService;
+    this._historyService = historyService;
     this.logger = new DebugLogger('llxprt:core:client');
 
     this._unsubscribe = subscribeToAgentRuntimeState(
