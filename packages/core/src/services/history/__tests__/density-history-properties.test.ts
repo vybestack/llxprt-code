@@ -18,9 +18,9 @@ describe('HistoryService — Density Extensions', () => {
      * @requirement REQ-HD-003.5
      * @pseudocode history-service.md lines 10-15
      */
-    it('returns the raw history array', async () => {
+    it('returns the raw history rows as equal values', async () => {
       const { actual, expected0 } = await observeDensityCase14();
-      expect(actual).toBe(expected0);
+      expect(actual).toStrictEqual(expected0);
     });
 
     /**

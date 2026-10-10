@@ -2,6 +2,7 @@ import { withCuratedHistoryForTest } from '@vybestack/llxprt-code-test-utils/cor
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { expect } from 'bun:test';
+import { isDeepStrictEqual } from 'node:util';
 import * as fc from 'fast-check';
 import { HistoryService } from '../HistoryService.js';
 import {
@@ -89,7 +90,8 @@ export function unchangedReferenceObservations(
   for (let originalIndex = 0; originalIndex < historySize; originalIndex++) {
     if (!removals.includes(originalIndex)) {
       observations.push(
-        touched.has(originalIndex) || raw[rawIndex] === entries[originalIndex],
+        touched.has(originalIndex) ||
+          isDeepStrictEqual(raw[rawIndex], entries[originalIndex]),
       );
       rawIndex++;
     }
@@ -335,8 +337,8 @@ export async function observeDensityCase14() {
 
   const raw = await collectRawHistory(densityFixture1_service);
   expect(raw).toHaveLength(3);
-  expect(raw[0]).toBe(entries[0]);
-  expect(raw[1]).toBe(entries[1]);
+  expect(raw[0]).toStrictEqual(entries[0]);
+  expect(raw[1]).toStrictEqual(entries[1]);
 
   return { actual: raw[2], expected0: entries[2] };
 }
@@ -354,13 +356,13 @@ export async function observeDensityCase15() {
   // THEN: raw includes the empty AI message
   const raw = await collectRawHistory(densityFixture1_service);
   expect(raw).toHaveLength(3);
-  expect(raw[1]).toBe(emptyAi);
+  expect(raw[1]).toStrictEqual(emptyAi);
 
   // AND: getCurated does NOT include the empty AI message
   let includesEmptyAi = false;
   await withCuratedHistoryForTest(densityFixture1_service, (curated) => {
     expect(curated).toHaveLength(2);
-    includesEmptyAi = curated.some((c) => c === emptyAi);
+    includesEmptyAi = curated.some((c) => isDeepStrictEqual(c, emptyAi));
   });
   return includesEmptyAi;
 }
@@ -488,8 +490,11 @@ export async function observeDensityCase20() {
           histSize,
           rawReplacements,
         );
+        // The stored replacement is a detached copy stamped with the
+        // replaced row's chronology, so compare the replacement's content.
         for (const { actual, expected } of observations) {
-          expect(actual).toBe(expected);
+          expect(actual?.speaker).toBe(expected.speaker);
+          expect(actual?.blocks).toStrictEqual(expected.blocks);
         }
       },
     ),

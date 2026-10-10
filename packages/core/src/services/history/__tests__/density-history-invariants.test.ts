@@ -27,7 +27,7 @@ describe('HistoryService — Density Extensions', () => {
     /**
      * @requirement REQ-HD-003.1
      */
-    it('non-removed non-replaced entries are unchanged (same reference)', async () => {
+    it('non-removed non-replaced entries are unchanged (equal values)', async () => {
       const { property0, property1 } = await observeDensityCase19();
       await fc.assert(property0, property1);
     }, 60_000);
