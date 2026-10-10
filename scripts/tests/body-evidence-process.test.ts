@@ -1,19 +1,25 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
+import { afterAll, describe, expect, it } from 'bun:test';
 import {
   existsSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   readdirSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
 import { initializeEvidenceLane } from '../../packages/test-utils/src/body-evidence-writer.js';
 
+const scratch = realpathSync(
+  mkdtempSync(join(tmpdir(), 'body-evidence-process-')),
+);
+afterAll(() => rmSync(scratch, { recursive: true, force: true }));
+
 function rootForProcess(): string {
-  const scratch = process.env.BODY_EVIDENCE_TEST_SCRATCH;
-  if (!scratch) throw new Error('Declare evidence test scratch');
   const parent = mkdtempSync(join(scratch, 'process-'));
   const root = join(parent, 'evidence');
   initializeEvidenceLane(root);

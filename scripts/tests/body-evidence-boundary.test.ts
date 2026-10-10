@@ -1,6 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
-import { mkdtempSync, readFileSync, readdirSync } from 'node:fs';
+import { afterAll, describe, expect, it } from 'bun:test';
+import {
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { initializeEvidenceLane } from '../../packages/test-utils/src/body-evidence-writer.js';
@@ -12,10 +19,13 @@ function receiptBodies(root: string): Buffer[] {
     .map((name) => gunzipSync(readFileSync(join(root, name))));
 }
 
+const scratch = realpathSync(
+  mkdtempSync(join(tmpdir(), 'body-evidence-boundary-')),
+);
+afterAll(() => rmSync(scratch, { recursive: true, force: true }));
+
 describe('real BODY capture evidence boundary', () => {
   it('saves both real transport attempts before the simulated retry failure', async () => {
-    const scratch = process.env.BODY_EVIDENCE_TEST_SCRATCH;
-    if (!scratch) throw new Error('Declare evidence scratch');
     const parent = mkdtempSync(join(scratch, 'capture-'));
     const root = join(parent, 'evidence');
     initializeEvidenceLane(root);

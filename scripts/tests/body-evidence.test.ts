@@ -1,7 +1,15 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
+import { afterAll, describe, expect, it } from 'bun:test';
 import { createHash, randomBytes } from 'node:crypto';
-import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import {
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import {
@@ -12,10 +20,12 @@ import {
 } from '../../packages/test-utils/src/body-evidence-writer.js';
 import { laneFootprint } from '../../packages/test-utils/src/body-evidence-budget.js';
 
+const scratch = realpathSync(
+  mkdtempSync(join(tmpdir(), 'body-evidence-test-')),
+);
+afterAll(() => rmSync(scratch, { recursive: true, force: true }));
+
 function freshLane(cap = 100 * 1024 * 1024): string {
-  const scratch = process.env.BODY_EVIDENCE_TEST_SCRATCH;
-  if (!scratch)
-    throw new Error('Declare evidence test scratch inside this lane');
   const parent = mkdtempSync(join(scratch, 'case-'));
   const root = join(parent, 'evidence');
   initializeEvidenceLane(root, cap);
