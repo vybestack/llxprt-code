@@ -99,7 +99,7 @@ describe('telemetry outfile boundary (REQ-3315.7)', () => {
 
     for (let i = 0; i < 50; i++) {
       // Large unique body so any leak of request_text would be verbatim and huge.
-      logApiRequest(
+      await logApiRequest(
         config,
         new ApiRequestEvent(
           'test-model',
@@ -172,7 +172,7 @@ describe('telemetry outfile boundary (REQ-3315.7)', () => {
     // Redacted records are a few hundred bytes each; with a 2 KiB cap this
     // drives multiple rotations and exercises retention pruning.
     for (let i = 0; i < 30; i++) {
-      logApiRequest(
+      await logApiRequest(
         config,
         new ApiRequestEvent(
           'test-model',

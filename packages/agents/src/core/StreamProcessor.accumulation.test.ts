@@ -81,7 +81,21 @@ function createUserInput(): IContent {
 
 let processor: StreamProcessor;
 
-function registerStreamCase1(): void {
+describe('StreamProcessor.processStreamResponse — accumulation efficiency (#2852)', () => {
+  beforeEach(() => {
+    processor = Object.create(StreamProcessor.prototype);
+    Object.assign(processor, {
+      runtimeContext: createMockRuntimeContext(),
+      compressionHandler: createMockCompressionHandler(),
+      conversationManager: createMockConversationManager(),
+      historyService: createMockHistoryService(),
+      logger: new DebugLogger('test'),
+      eagerlyRecordedToolResponseCallIds: new Set<string>(),
+    });
+    (processor as unknown as Record<string, unknown>)[
+      '_finalizeStreamProcessing'
+    ] = vi.fn().mockResolvedValue(undefined);
+  });
   it('produces correct final accumulated output with many text chunks', async () => {
     const { yielded, words } =
       await observeProducesCorrectFinalAccumulatedOutputWithManyTextChunks();
@@ -117,9 +131,6 @@ function registerStreamCase1(): void {
 
       return { yielded, words };
     };
-}
-
-function registerStreamCase2(): void {
   it('accumulates metadata from later chunks (finishReason, usage)', async () => {
     const usageChunk: ModelStreamChunk = {
       content: { speaker: 'ai', blocks: [] },
@@ -153,9 +164,6 @@ function registerStreamCase2(): void {
       totalTokens: 300,
     });
   });
-}
-
-function registerStreamCase3(): void {
   it('does not grow quadratically — large stream completes in bounded time', async () => {
     // The O(N²) defect: accumulateModelStreamChunk creates a new blocks
     // array containing ALL prior blocks plus the new chunk on every call.
@@ -194,9 +202,6 @@ function registerStreamCase3(): void {
     // rejecting O(N²) behavior.
     expect(elapsed).toBeLessThan(500);
   });
-}
-
-function registerStreamCase4(): void {
   it('preserves block order across mixed block types', async () => {
     const textChunk = makeChunk('before');
     const toolCallChunk: ModelStreamChunk = toModelStreamChunk({
@@ -231,9 +236,6 @@ function registerStreamCase4(): void {
 
     expect(types).toStrictEqual(['text', 'tool_call', 'text', 'text']);
   });
-}
-
-function registerStreamCase5(): void {
   it('passes includeThoughts flag to finalize', async () => {
     processor = Object.create(StreamProcessor.prototype);
     Object.assign(processor, {
@@ -271,26 +273,4 @@ function registerStreamCase5(): void {
     const thirdArg = finalizeMock.mock.calls[0]?.[2];
     expect(thirdArg).toBe(true);
   });
-}
-
-describe('StreamProcessor.processStreamResponse — accumulation efficiency (#2852)', () => {
-  beforeEach(() => {
-    processor = Object.create(StreamProcessor.prototype);
-    Object.assign(processor, {
-      runtimeContext: createMockRuntimeContext(),
-      compressionHandler: createMockCompressionHandler(),
-      conversationManager: createMockConversationManager(),
-      historyService: createMockHistoryService(),
-      logger: new DebugLogger('test'),
-      eagerlyRecordedToolResponseCallIds: new Set<string>(),
-    });
-    (processor as unknown as Record<string, unknown>)[
-      '_finalizeStreamProcessing'
-    ] = vi.fn().mockResolvedValue(undefined);
-  });
-  registerStreamCase1();
-  registerStreamCase2();
-  registerStreamCase3();
-  registerStreamCase4();
-  registerStreamCase5();
 });

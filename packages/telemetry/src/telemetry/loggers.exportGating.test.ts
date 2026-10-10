@@ -53,7 +53,7 @@ describe('api_request / api_response export gating (REQ-3315.1..3)', () => {
     mockLogger.emit.mockClear();
   });
 
-  it('default config emits *_chars, never request_text/response_text', () => {
+  it('default config emits *_chars, never request_text/response_text', async () => {
     const config = makeConfig();
     const req = new ApiRequestEvent(
       'test-model',
@@ -68,7 +68,7 @@ describe('api_request / api_response export gating (REQ-3315.1..3)', () => {
       'secret response body',
     );
 
-    logApiRequest(config, req);
+    await logApiRequest(config, req);
     logApiResponse(config, resp);
 
     const requestAttrs = mockLogger.emit.mock.calls[0][0].attributes;
@@ -80,14 +80,14 @@ describe('api_request / api_response export gating (REQ-3315.1..3)', () => {
     expect(responseAttrs.response_text).toBeUndefined();
   });
 
-  it('logApiBodies:true + logPrompts:true emits a truncated body (default 4000 cap)', () => {
+  it('logApiBodies:true + logPrompts:true emits a truncated body (default 4000 cap)', async () => {
     const longBody = 'X'.repeat(5000);
     const config = makeConfig({
       getTelemetryLogApiBodiesEnabled: () => true,
       getTelemetryLogPromptsEnabled: () => true,
     });
 
-    logApiRequest(config, new ApiRequestEvent('m', 'p', longBody));
+    await logApiRequest(config, new ApiRequestEvent('m', 'p', longBody));
     logApiResponse(config, new ApiResponseEvent('m', 10, 'p', {}, longBody));
 
     const requestAttrs = mockLogger.emit.mock.calls[0][0].attributes;
@@ -99,20 +99,20 @@ describe('api_request / api_response export gating (REQ-3315.1..3)', () => {
     expect(responseAttrs.response_text).toBe('X'.repeat(4000));
   });
 
-  it('custom logApiBodyMaxChars cap is honored', () => {
+  it('custom logApiBodyMaxChars cap is honored', async () => {
     const body = 'Y'.repeat(200);
     const config = makeConfig({
       getTelemetryLogApiBodiesEnabled: () => true,
       getTelemetryLogApiBodyMaxChars: () => 50,
     });
 
-    logApiRequest(config, new ApiRequestEvent('m', 'p', body));
+    await logApiRequest(config, new ApiRequestEvent('m', 'p', body));
     const requestAttrs = mockLogger.emit.mock.calls[0][0].attributes;
     expect(requestAttrs.request_chars).toBe(200);
     expect(requestAttrs.request_text).toBe('Y'.repeat(50));
   });
 
-  it('a body exactly at the cap is emitted whole (no truncation at the boundary)', () => {
+  it('a body exactly at the cap is emitted whole (no truncation at the boundary)', async () => {
     const body = 'Z'.repeat(50);
     const config = makeConfig({
       getTelemetryLogApiBodiesEnabled: () => true,
@@ -120,19 +120,22 @@ describe('api_request / api_response export gating (REQ-3315.1..3)', () => {
       getTelemetryLogApiBodyMaxChars: () => 50,
     });
 
-    logApiRequest(config, new ApiRequestEvent('m', 'p', body));
+    await logApiRequest(config, new ApiRequestEvent('m', 'p', body));
     const requestAttrs = mockLogger.emit.mock.calls[0][0].attributes;
     expect(requestAttrs.request_chars).toBe(50);
     expect(requestAttrs.request_text).toBe(body);
   });
 
-  it('logApiBodies:true + logPrompts:false never emits a body', () => {
+  it('logApiBodies:true + logPrompts:false never emits a body', async () => {
     const config = makeConfig({
       getTelemetryLogApiBodiesEnabled: () => true,
       getTelemetryLogPromptsEnabled: () => false,
     });
 
-    logApiRequest(config, new ApiRequestEvent('m', 'p', 'private prompt text'));
+    await logApiRequest(
+      config,
+      new ApiRequestEvent('m', 'p', 'private prompt text'),
+    );
     logApiResponse(
       config,
       new ApiResponseEvent('m', 10, 'p', {}, 'private response text'),

@@ -380,8 +380,8 @@ async function verifyRuntimeIsolationCase3(): Promise<void> {
     requestText: '{"prompt": "subagent query"}',
   };
 
-  foregroundContext.telemetry.logApiRequest(foregroundRequest);
-  subagentContext.telemetry.logApiRequest(subagentRequest);
+  await foregroundContext.telemetry.logApiRequest(foregroundRequest);
+  await subagentContext.telemetry.logApiRequest(subagentRequest);
 
   // THEN: Verify spies were called
   expect(foregroundRequestSpy).toHaveBeenCalledOnce();
@@ -446,8 +446,8 @@ async function verifyRuntimeIsolationCase4(): Promise<void> {
     timestamp: Date.now(),
   };
 
-  context1.telemetry.logApiRequest(request1);
-  context2.telemetry.logApiRequest(request2);
+  await context1.telemetry.logApiRequest(request1);
+  await context2.telemetry.logApiRequest(request2);
 
   // THEN: Each event has correct model metadata
   const call1 = spy1.mock.calls[0][0];

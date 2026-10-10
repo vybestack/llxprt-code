@@ -203,7 +203,7 @@ export class DirectMessageProcessor {
       return emptyModelOutput();
     }
 
-    logApiRequest(
+    await logApiRequest(
       this.runtimeContext,
       this.runtimeContext.state,
       userIContents,

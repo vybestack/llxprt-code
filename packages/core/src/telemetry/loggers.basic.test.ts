@@ -372,14 +372,14 @@ describe('loggers', () => {
       getTelemetryOutfileMaxFiles: () => 10,
     } as Config;
 
-    it('should log an API request with request_text', () => {
+    it('should log an API request with request_text', async () => {
       const event = new ApiRequestEvent(
         'test-model',
         'prompt-id-7',
         'This is a test request',
       );
 
-      logApiRequest(mockConfig, event);
+      await logApiRequest(mockConfig, event);
 
       expect(mockLogger.emit).toHaveBeenCalledWith({
         body: 'API request to test-model.',
@@ -394,7 +394,7 @@ describe('loggers', () => {
       });
     });
 
-    it('should log an API request with body when logApiBodies is enabled', () => {
+    it('should log an API request with body when logApiBodies is enabled', async () => {
       const mockConfig = {
         getSessionId: () => 'test-session-id',
         getTargetDir: () => 'target-dir',
@@ -413,7 +413,7 @@ describe('loggers', () => {
         'This is a test request',
       );
 
-      logApiRequest(mockConfig, event);
+      await logApiRequest(mockConfig, event);
 
       expect(mockLogger.emit).toHaveBeenCalledWith({
         body: 'API request to test-model.',
@@ -429,10 +429,10 @@ describe('loggers', () => {
       });
     });
 
-    it('should log an API request without request_text', () => {
+    it('should log an API request without request_text', async () => {
       const event = new ApiRequestEvent('test-model', 'prompt-id-6');
 
-      logApiRequest(mockConfig, event);
+      await logApiRequest(mockConfig, event);
 
       expect(mockLogger.emit).toHaveBeenCalledWith({
         body: 'API request to test-model.',
