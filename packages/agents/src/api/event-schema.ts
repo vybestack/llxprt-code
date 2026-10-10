@@ -137,6 +137,7 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
     remainingTokenCount: z.number(),
   }),
   z.object({ type: z.literal('retry') }),
+  z.object({ type: z.literal('attempt-boundary') }),
   z.object({ type: z.literal('citation'), citation: z.string() }),
   z.object({ type: z.literal('loop-detected') }),
   z.object({ type: z.literal('idle-timeout'), error: StructuredErrorSchema }),

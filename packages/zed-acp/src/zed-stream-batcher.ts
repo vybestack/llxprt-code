@@ -34,7 +34,19 @@ const BATCH_INTERVAL_MS = 100;
 export const STREAM_BLOCKED_MESSAGE =
   '[Error: Response blocked due to emoji detection]';
 
+type Channel = 'text' | 'thought';
+
 export class StreamBatcher {
+  /** Last two characters queued per channel for the current model call. */
+  private readonly callTail: Record<Channel, string> = {
+    text: '',
+    thought: '',
+  };
+  /** Channels whose next chunk starts a later attempt (issue #3840). */
+  private readonly breakOwed: Record<Channel, boolean> = {
+    text: false,
+    thought: false,
+  };
   private pendingChunks: Array<{ kind: 'text' | 'thought'; text: string }> = [];
   private batchTimer: ReturnType<typeof setTimeout> | null = null;
   private flushChain: Promise<void> = Promise.resolve();
@@ -53,21 +65,19 @@ export class StreamBatcher {
       logger ?? new DebugLogger('llxprt:zed-integration:stream-batcher');
   }
 
-  append(text: string, isThought: boolean): void {
+  append(rawText: string, isThought: boolean): void {
     if (this.disposed) {
       return;
     }
     const filterResult = isThought
-      ? this.emojiFilter.filterText(text)
-      : this.emojiFilter.filterStreamChunk(text);
+      ? this.emojiFilter.filterText(rawText)
+      : this.emojiFilter.filterStreamChunk(rawText);
     if (filterResult.blocked) {
       // filterText() is stateless, so a blocked thought must not clear partial
       // text held by filterStreamChunk() for a later streaming boundary.
       if (!isThought) {
         const residual = this.emojiFilter.flushBuffer();
-        if (residual.length > 0) {
-          this.appendPendingChunk('text', residual);
-        }
+        this.queueVisible('text', residual);
       }
       // FINDING E1: clear any pending batch timer BEFORE building the blocked
       // chain (exactly as flush() does). Otherwise a timer armed by a prior
@@ -98,14 +108,37 @@ export class StreamBatcher {
     }
     const filteredText =
       typeof filterResult.filtered === 'string' ? filterResult.filtered : '';
-    if (filteredText.length === 0) {
+    if (this.queueVisible(isThought ? 'thought' : 'text', filteredText)) {
+      this.armBatchTimer();
+    }
+  }
+
+  /**
+   * A later attempt of the same prompt starts. Text and thinking reach the
+   * client as separate concatenating streams, so each stream that already
+   * carried output this model call gets a paragraph break in front of its next
+   * chunk. A stream with nothing yet shown is left clean, so output the emoji
+   * filter removed, hidden thinking or absent output never produces a leading
+   * or doubled break. The text the filter still holds from the earlier attempt
+   * is queued first, so it stays ahead of the break.
+   */
+  markAttemptBoundary(): void {
+    if (this.disposed) {
       return;
     }
-    this.appendPendingChunk(isThought ? 'thought' : 'text', filteredText);
-    this.batchTimer ??= setTimeout(() => {
-      this.batchTimer = null;
-      void this.flush().catch(() => undefined);
-    }, BATCH_INTERVAL_MS);
+    if (this.queueVisible('text', this.emojiFilter.flushBuffer())) {
+      this.armBatchTimer();
+    }
+    this.breakOwed.text = this.callTail.text !== '';
+    this.breakOwed.thought = this.callTail.thought !== '';
+  }
+
+  /** The model call ended (its tool result arrived); later breaks start fresh. */
+  endModelCall(): void {
+    for (const channel of ['text', 'thought'] as const) {
+      this.callTail[channel] = '';
+      this.breakOwed[channel] = false;
+    }
   }
 
   async flush(): Promise<void> {
@@ -157,21 +190,49 @@ export class StreamBatcher {
     if (this.disposed) {
       return;
     }
-    const remaining = this.emojiFilter.flushBuffer();
-    if (remaining.length === 0) {
-      return;
+    if (this.queueVisible('text', this.emojiFilter.flushBuffer())) {
+      await this.doFlush();
     }
-    this.appendPendingChunk('text', remaining);
-    await this.doFlush();
   }
 
-  private appendPendingChunk(kind: 'text' | 'thought', text: string): void {
+  private armBatchTimer(): void {
+    this.batchTimer ??= setTimeout(() => {
+      this.batchTimer = null;
+      void this.flush().catch(() => undefined);
+    }, BATCH_INTERVAL_MS);
+  }
+
+  /**
+   * Queues text that passed the emoji filter, behind the paragraph break its
+   * channel owes. Channel state follows what is actually queued, so text the
+   * filter removed leaves it untouched. Returns whether anything was queued.
+   */
+  private queueVisible(kind: Channel, filteredText: string): boolean {
+    if (filteredText.length === 0) {
+      return false;
+    }
+    this.appendPendingChunk(kind, this.withOwedBreak(kind, filteredText));
+    return true;
+  }
+
+  private appendPendingChunk(kind: Channel, text: string): void {
     const lastChunk = this.pendingChunks.at(-1);
     if (lastChunk?.kind === kind) {
       lastChunk.text += text;
       return;
     }
     this.pendingChunks.push({ kind, text });
+  }
+
+  private withOwedBreak(kind: Channel, text: string): string {
+    const tail = this.callTail[kind];
+    let sent = text;
+    if (this.breakOwed[kind]) {
+      this.breakOwed[kind] = false;
+      sent = paragraphBreakAfter(tail) + text;
+    }
+    this.callTail[kind] = (tail + sent).slice(-2);
+    return sent;
   }
 
   private async doFlush(): Promise<void> {
@@ -233,4 +294,12 @@ export class StreamBatcher {
       );
     });
   }
+}
+
+/** What tops text ending in `tail` up to a blank line. */
+function paragraphBreakAfter(tail: string): string {
+  if (tail.endsWith('\n\n')) {
+    return '';
+  }
+  return tail.endsWith('\n') ? '\n' : '\n\n';
 }

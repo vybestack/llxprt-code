@@ -24,9 +24,16 @@ import type {
 import { MAX_TURNS_MESSAGE } from './utils/errors.js';
 import { markMachineErrorReported } from './session/machineErrorReporting.js';
 import { REFUSAL_NOTICE_MESSAGE } from './utils/refusalNotice.js';
+import { AttemptSeparator } from './nonInteractiveAttemptSeparator.js';
+
+/** The slice of Config the printer reads, so callers need no full Config. */
+export type StreamConsumerConfig = Pick<
+  Config,
+  'getSessionId' | 'getEphemeralSetting'
+>;
 
 type StreamConsumerContext = {
-  config: Config;
+  config: StreamConsumerConfig;
   jsonOutput: boolean;
   streamJsonOutput: boolean;
   quiet: boolean;
@@ -71,44 +78,86 @@ type ThoughtBufferEntry = {
 
 type ThoughtBuffer = ThoughtBufferEntry[];
 
+/**
+ * Whether assistant text is accumulated in a buffer that a later discard can
+ * empty (quiet and plain-JSON output). Plain text and stream-JSON output are
+ * already out the moment they are written.
+ */
+function buffersAssistantText(context: StreamConsumerContext): boolean {
+  return (
+    context.quiet || (context.jsonOutput && context.streamFormatter === null)
+  );
+}
+
+/**
+ * Shows already filtered assistant text the way the output mode displays it.
+ * `shown` is passed through the separator first, so attempt breaks and
+ * held-back trailing newlines follow what is actually displayed.
+ */
+function publishAssistantText(
+  shown: string,
+  context: StreamConsumerContext,
+  state: StreamState,
+  writeEmpty: boolean,
+): void {
+  const displayed = state.separator.display(shown);
+  if (context.quiet) {
+    state.quietTextBuffer += displayed;
+    return;
+  }
+  if (context.streamFormatter) {
+    if (displayed !== '') {
+      context.streamFormatter.emitEvent({
+        type: JsonStreamEventType.MESSAGE,
+        timestamp: new Date().toISOString(),
+        role: 'assistant',
+        content: displayed,
+        delta: true,
+      });
+    }
+    return;
+  }
+  if (context.jsonOutput) {
+    state.responseText += displayed;
+    return;
+  }
+  if (writeEmpty || displayed !== '') {
+    process.stdout.write(displayed);
+  }
+}
+
+/**
+ * Displays whatever the emoji filter still holds, in stream order. Called
+ * before output that must not overtake earlier text (a thought block, an
+ * attempt boundary) and when the stream ends.
+ */
+function flushEmojiBuffer(
+  context: StreamConsumerContext,
+  state: StreamState,
+): void {
+  const remainingBuffered = context.emojiFilter?.flushBuffer();
+  if (remainingBuffered) {
+    publishAssistantText(remainingBuffered, context, state, false);
+  }
+}
+
 function flushThoughtBuffer(
-  thoughtBuffer: ThoughtBuffer,
+  state: StreamState,
+  context: StreamConsumerContext,
   includeThinking: boolean,
-): ThoughtBuffer {
-  const thoughtText = thoughtBuffer
+): void {
+  const thoughtText = state.thoughtBuffer
     .map((entry) => entry.text.trim())
     .filter(Boolean)
     .join(' ');
+  state.thoughtBuffer = [];
   if (!includeThinking || !thoughtText) {
-    return [];
+    return;
   }
-  process.stdout.write(`<think>${thoughtText}</think>\n`);
-  return [];
-}
-
-function flushEmojiBuffer(
-  context: StreamConsumerContext,
-  responseText: string,
-): string {
-  const remainingBuffered = context.emojiFilter?.flushBuffer();
-  if (!remainingBuffered) {
-    return responseText;
-  }
-  if (context.streamFormatter) {
-    context.streamFormatter.emitEvent({
-      type: JsonStreamEventType.MESSAGE,
-      timestamp: new Date().toISOString(),
-      role: 'assistant',
-      content: remainingBuffered,
-      delta: true,
-    });
-    return responseText;
-  }
-  if (context.jsonOutput) {
-    return responseText + remainingBuffered;
-  }
-  process.stdout.write(remainingBuffered);
-  return responseText;
+  flushEmojiBuffer(context, state);
+  process.stdout.write(
+    state.separator.display(`<think>${thoughtText}</think>\n`),
+  );
 }
 
 function handleThinking(
@@ -163,47 +212,29 @@ function handleText(
   text: string,
   context: StreamConsumerContext,
   writeProfileName: () => void,
-  responseText: string,
-): string {
+  state: StreamState,
+): void {
   writeProfileName();
-  let outputValue = text;
+  let shown = text;
   if (context.emojiFilter) {
-    const filterResult = context.emojiFilter.filterStreamChunk(outputValue);
+    const filterResult = context.emojiFilter.filterStreamChunk(text);
     if (filterResult.blocked) {
-      if (!context.jsonOutput) {
+      if (context.quiet) {
+        state.quietBlocked = true;
+      } else if (!context.jsonOutput) {
         process.stderr.write(
           '[Error: Response blocked due to emoji detection]\n',
         );
       }
-      return responseText;
+      return;
     }
-    outputValue =
+    shown =
       typeof filterResult.filtered === 'string' ? filterResult.filtered : '';
-    if (filterResult.systemFeedback && !context.jsonOutput) {
+    if (filterResult.systemFeedback && !context.jsonOutput && !context.quiet) {
       process.stderr.write(`Warning: ${filterResult.systemFeedback}\n`);
     }
   }
-  if (context.streamFormatter) {
-    if (outputValue !== '') {
-      context.streamFormatter.emitEvent({
-        type: JsonStreamEventType.MESSAGE,
-        timestamp: new Date().toISOString(),
-        role: 'assistant',
-        content: outputValue,
-        delta: true,
-      });
-    }
-    return responseText;
-  }
-  if (context.jsonOutput) {
-    return responseText + outputValue;
-  }
-  process.stdout.write(outputValue);
-  return responseText;
-}
-
-function handleQuietText(text: string, state: StreamState): void {
-  state.quietTextBuffer += text;
+  publishAssistantText(shown, context, state, true);
 }
 
 function emitToolUse(
@@ -261,6 +292,7 @@ function shouldDisplayToolResult(
 function displayToolResult(
   result: AgentToolResult,
   context: StreamConsumerContext,
+  separator: AttemptSeparator,
 ): void {
   if (result.isError === true) {
     if (!context.jsonOutput && !context.streamJsonOutput) {
@@ -274,7 +306,7 @@ function displayToolResult(
     return;
   }
   if (shouldDisplayToolResult(result, context)) {
-    process.stdout.write(`${result.display}\n`);
+    process.stdout.write(separator.display(`${result.display}\n`));
   }
 }
 
@@ -434,64 +466,63 @@ function handleDone(
 }
 
 function finalizeStream(
-  thoughtBuffer: ThoughtBuffer,
-  responseText: string,
-  quietTextBuffer: string,
-  pendingDone: Extract<AgentEvent, { type: 'done' }> | null,
+  state: StreamState,
   context: StreamConsumerContext,
   includeThinking: boolean,
   startTime: number,
   getMetrics: () => SessionMetrics,
 ): void {
-  flushThoughtBuffer(thoughtBuffer, includeThinking);
-  const finalText = context.quiet
-    ? filterQuietText(quietTextBuffer, context)
-    : flushEmojiBuffer(context, responseText);
-  if (pendingDone !== null) {
-    handleDone(pendingDone, context, finalText, startTime, getMetrics);
+  flushThoughtBuffer(state, context, includeThinking);
+  flushEmojiBuffer(context, state);
+  let finalText = state.responseText;
+  if (context.quiet) {
+    finalText = state.quietBlocked ? '' : state.quietTextBuffer;
+  }
+  if (state.pendingDone !== null) {
+    handleDone(state.pendingDone, context, finalText, startTime, getMetrics);
   } else {
     emitFinalResult(context, finalText, startTime, getMetrics());
   }
-}
-
-/**
- * Applies the emoji filter to the fully accumulated quiet-mode text buffer.
- * Uses filterText (not filterStreamChunk) because the buffer is complete text,
- * not a partial streaming chunk — filterText handles full-string matching which
- * is correct for finalized content.
- */
-function filterQuietText(text: string, context: StreamConsumerContext): string {
-  if (!context.emojiFilter) {
-    return text;
-  }
-  const result = context.emojiFilter.filterText(text);
-  if (result.blocked) {
-    return '';
-  }
-  return typeof result.filtered === 'string' ? result.filtered : '';
 }
 
 interface StreamState {
   thoughtBuffer: ThoughtBuffer;
   responseText: string;
   quietTextBuffer: string;
+  /** The emoji filter blocked quiet output (error mode); the response is empty. */
+  quietBlocked: boolean;
   pendingDone: Extract<AgentEvent, { type: 'done' }> | null;
+  separator: AttemptSeparator;
 }
 
-function handleQuietEvent(event: AgentEvent, state: StreamState): boolean {
+function handleQuietEvent(
+  event: AgentEvent,
+  state: StreamState,
+  context: StreamConsumerContext,
+  writeProfileName: () => void,
+): boolean {
   switch (event.type) {
     case 'text':
       // Buffer text instead of writing immediately; only the final turn's
       // text (after the last tool call) is emitted at stream completion.
-      handleQuietText(event.text, state);
+      handleText(event.text, context, writeProfileName, state);
+      return true;
+    case 'attempt-boundary':
+      flushEmojiBuffer(context, state);
+      state.separator.markBoundary();
       return true;
     case 'tool-call':
       // Discard intermediate talk before tool calls so only the final
-      // response remains in the buffer (issue #728).
+      // response remains in the buffer (issue #728). What the emoji filter
+      // still holds belongs to that discarded talk.
+      context.emojiFilter?.flushBuffer();
       state.quietTextBuffer = '';
+      state.quietBlocked = false;
+      state.separator.reset();
       return true;
     case 'tool-result':
       // Suppress all tool result display in quiet mode.
+      state.separator.endCall();
       return true;
     case 'loop-detected':
       // Suppress non-essential stream warnings/errors in quiet mode.
@@ -520,7 +551,23 @@ function discardAbandonedAttempt(
   context.emojiFilter?.flushBuffer();
   state.responseText = '';
   state.quietTextBuffer = '';
+  state.quietBlocked = false;
   state.thoughtBuffer = [];
+  // Quiet and plain-JSON output keep the text in a buffer that was just
+  // emptied; stdout and stream-JSON deltas are already out and stay.
+  if (buffersAssistantText(context)) {
+    state.separator.reset();
+  }
+}
+
+function writeHookBlockedWarning(info: {
+  reason: string;
+  systemMessage?: string;
+}): void {
+  const blockMessage = `Agent execution blocked: ${
+    info.systemMessage?.trim() ?? info.reason
+  }`;
+  process.stderr.write(`[WARNING] ${blockMessage}\n`);
 }
 
 function dispatchAgentEvent(
@@ -530,7 +577,12 @@ function dispatchAgentEvent(
   writeProfileName: () => void,
   includeThinking: boolean,
 ): void {
-  if (context.quiet && handleQuietEvent(event, state)) return;
+  if (
+    context.quiet &&
+    handleQuietEvent(event, state, context, writeProfileName)
+  ) {
+    return;
+  }
   switch (event.type) {
     case 'thinking':
       state.thoughtBuffer = handleThinking(
@@ -542,22 +594,18 @@ function dispatchAgentEvent(
       );
       return;
     case 'text':
-      state.thoughtBuffer = flushThoughtBuffer(
-        state.thoughtBuffer,
-        includeThinking,
-      );
-      state.responseText = handleText(
-        event.text,
-        context,
-        writeProfileName,
-        state.responseText,
-      );
+      flushThoughtBuffer(state, context, includeThinking);
+      handleText(event.text, context, writeProfileName, state);
+      return;
+    case 'attempt-boundary':
+      // The earlier attempt's buffered thinking is displayed first, so each
+      // attempt's <think> block stays in order and apart from the next one.
+      flushThoughtBuffer(state, context, includeThinking);
+      flushEmojiBuffer(context, state);
+      state.separator.markBoundary();
       return;
     case 'tool-call':
-      state.thoughtBuffer = flushThoughtBuffer(
-        state.thoughtBuffer,
-        includeThinking,
-      );
+      flushThoughtBuffer(state, context, includeThinking);
       // Discard intermediate talk emitted before a tool call so only the
       // final iteration's answer remains in responseText — the JSON-mode
       // counterpart of quiet mode's quietTextBuffer discard (issue #728).
@@ -567,12 +615,10 @@ function dispatchAgentEvent(
       emitToolUse(event.call, context.streamFormatter);
       return;
     case 'tool-result':
-      state.thoughtBuffer = flushThoughtBuffer(
-        state.thoughtBuffer,
-        includeThinking,
-      );
+      flushThoughtBuffer(state, context, includeThinking);
       emitToolResult(event.result, context.streamFormatter);
-      displayToolResult(event.result, context);
+      displayToolResult(event.result, context, state.separator);
+      state.separator.endCall();
       return;
     case 'loop-detected':
       emitStreamError(
@@ -581,14 +627,9 @@ function dispatchAgentEvent(
         'Loop detected, stopping execution',
       );
       return;
-    case 'hook-blocked': {
-      const info = event.info;
-      const blockMessage = `Agent execution blocked: ${
-        info.systemMessage?.trim() ?? info.reason
-      }`;
-      process.stderr.write(`[WARNING] ${blockMessage}\n`);
+    case 'hook-blocked':
+      writeHookBlockedWarning(event.info);
       return;
-    }
     case 'idle-timeout':
       if (context.quiet) throw reconstructError(event.error);
       return throwStructuredStreamError(
@@ -639,6 +680,11 @@ export async function processAgentStream(
     responseText: '',
     quietTextBuffer: '',
     pendingDone: null,
+    quietBlocked: false,
+    separator: new AttemptSeparator(
+      context.quiet ||
+        (!context.jsonOutput && context.streamFormatter === null),
+    ),
   };
   for await (const event of events) {
     dispatchAgentEvent(
@@ -649,14 +695,5 @@ export async function processAgentStream(
       includeThinking,
     );
   }
-  finalizeStream(
-    state.thoughtBuffer,
-    state.responseText,
-    state.quietTextBuffer,
-    state.pendingDone,
-    context,
-    includeThinking,
-    startTime,
-    getMetrics,
-  );
+  finalizeStream(state, context, includeThinking, startTime, getMetrics);
 }
