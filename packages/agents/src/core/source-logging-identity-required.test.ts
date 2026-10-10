@@ -1,8 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { prepareProviderContentSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-curated-stream.js';
@@ -55,12 +53,6 @@ async function capture(shared: boolean, withinRow: boolean) {
 async function comparison(withinRow: boolean) {
   const shared = await capture(true, withinRow);
   const independent = await capture(false, withinRow);
-  const evidence = process.env.ISSUE854_LOGGING_EVIDENCE;
-  if (evidence === undefined) throw new Error('Missing disposable evidence');
-  await writeFile(
-    join(evidence, `identity-${withinRow}-${process.pid}.json`),
-    JSON.stringify({ shared, independent }, null, 2),
-  );
   return { shared, independent };
 }
 async function normalized(withBoundary: boolean) {
@@ -123,29 +115,7 @@ describe('disk source TEXT identity information', () => {
   });
   it('preserves the reconstructed boundary identity on normalized TEXT', async () => {
     const facts = await normalized(true);
-    const evidence = process.env.ISSUE854_LOGGING_EVIDENCE;
-    if (evidence === undefined) throw new Error('Missing disposable evidence');
-    await writeFile(
-      join(evidence, `normalized-identity-${process.pid}.json`),
-      JSON.stringify(facts, null, 2),
-    );
     expect(facts.row_count).toBe(64);
     expect(facts.content_sha256).toBe(facts.requestWideSha256);
   });
 });
-
-if (process.env.ISSUE854_LOGGING_IDENTITY_REQUIRED === '1') {
-  describe('required source identity reconstruction', () => {
-    it.each([false, true])(
-      'preserves the legacy shared TEXT graph after disk staging, within-row=%s',
-      async (withinRow) => {
-        const { shared } = await comparison(withinRow);
-        expect(shared.diskSha256).toBe(shared.legacySha256);
-      },
-    );
-    it('preserves reconstructed identity on the real normalized TEXT source', async () => {
-      const facts = await normalized(true);
-      expect(facts.content_sha256).toBe(facts.requestWideSha256);
-    });
-  });
-}

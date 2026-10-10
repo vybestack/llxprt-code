@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { readFile, writeFile, readdir } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -187,14 +187,6 @@ async function oracle(
   append(']');
   return { sha256: hash.digest('hex'), bytes, chars };
 }
-async function receipt(name: string, facts: unknown): Promise<void> {
-  const evidence = process.env.ISSUE854_LOGGING_EVIDENCE;
-  if (evidence === undefined) throw new Error('Missing disposable evidence');
-  await writeFile(
-    join(evidence, `${name}-${process.pid}.json`),
-    JSON.stringify(facts, null, 2),
-  );
-}
 async function parity(
   position: Position,
   large: boolean,
@@ -208,10 +200,6 @@ async function parity(
       rows(owner, sameRow),
     );
     const bytes = await readFile(artifact.artifact_path);
-    await receipt(`boundary-${position}-${large}-${sameRow}`, {
-      expected,
-      artifact,
-    });
     expect(artifact.row_count).toBe(64);
     expect(artifact.content_sha256).toBe(expected.sha256);
     expect(artifact.content_bytes).toBe(expected.bytes);
@@ -323,10 +311,6 @@ describe('boundary writer release and retaining adverse controls', () => {
         retainedChars: chunks.reduce((sum, text) => sum + text.length, 0),
         artifact,
       };
-      await receipt(
-        `boundary-release-${process.env.ISSUE854_RETAIN_BOUNDARY ?? 'normal'}`,
-        facts,
-      );
       expect(facts.liveRows).toBe(0);
       expect(facts.delta).toBeLessThan(1_048_576);
       expect(artifact.row_count).toBe(64);
@@ -443,14 +427,6 @@ async function capped(
       const settled = await sourceHeap();
       const records = await runtimeRecords();
       verifyRuntime(records, visible, source);
-      await receipt(`boundary-runtime-${requested}-${large}`, {
-        cap,
-        source,
-        records,
-        baseline,
-        settled,
-        delta: settled - baseline,
-      });
       expect(settled - baseline).toBeLessThan(1_048_576);
       return source;
     } finally {

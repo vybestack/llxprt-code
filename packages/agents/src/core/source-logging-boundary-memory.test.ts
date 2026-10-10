@@ -2,7 +2,6 @@
 import { describe, expect, it, spyOn } from 'bun:test';
 import { heapSize } from 'bun:jsc';
 import { promises as fs } from 'node:fs';
-import { join } from 'node:path';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { prepareProviderContentSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-curated-stream.js';
@@ -24,17 +23,6 @@ function fixture(index: number, boundaryId: object, large: boolean): IContent {
 }
 function census(references: Array<WeakRef<IContent>>): number {
   return references.filter((ref) => ref.deref() !== undefined).length;
-}
-async function persist(facts: unknown, large: boolean): Promise<void> {
-  const evidence = process.env.ISSUE854_LOGGING_EVIDENCE;
-  if (evidence === undefined) throw new Error('Missing disposable evidence');
-  await fs.writeFile(
-    join(
-      evidence,
-      `boundary-memory-${process.env.ISSUE854_BOUNDARY_MEMORY_TRAP ?? 'normal'}-${large}-${process.pid}.json`,
-    ),
-    JSON.stringify(facts, null, 2),
-  );
 }
 function observeWrites(
   retained: string[],
@@ -166,7 +154,6 @@ async function measured(large: boolean): Promise<void> {
       artifact,
       heap: heapSize(),
     };
-    await persist(facts, large);
     verifyMemory(facts);
   } finally {
     observer.restore();
