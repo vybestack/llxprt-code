@@ -76,7 +76,7 @@ describe('clientContract: history round-trip with array isolation', () => {
     });
   });
 
-  it('returns array isolation with shared entry references (no deep clone)', async () => {
+  it('returns array isolation with equal entry values (disk round trip)', async () => {
     const harness = createFullLoopHarness(
       vi.fn(async function* () {
         yield {
@@ -94,16 +94,16 @@ describe('clientContract: history round-trip with array isolation', () => {
     const raw2 = await collectHistoryFixture(chat.getHistory());
     expect(raw1).not.toBe(raw2);
 
-    // But the entries are shared by reference (no deep clone)
+    // Each read decodes detached copies from the disk journal, so entries are
+    // equal by value rather than shared by reference.
     expect(raw1.length).toBe(raw2.length);
     for (let i = 0; i < raw1.length; i++) {
-      expect(raw1[i]).toBe(raw2[i]);
+      expect(raw1[i]).toStrictEqual(raw2[i]);
     }
 
     // Array-level isolation only: getAll()/getCurated() each build a fresh
     // array, so pushing or splicing the result cannot reach live history.
-    // This says nothing about entry contents — those are SHARED by reference
-    // (asserted above), so it does NOT show that entry.blocks is protected.
+    // This says nothing about entry contents.
     // See the contract comment on ConversationManager.getHistory.
     raw1.push(makeModelContent('injected'));
     const raw3 = await collectHistoryFixture(chat.getHistory());
