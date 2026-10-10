@@ -270,8 +270,11 @@ describe('Density Optimization Integration (P19)', () => {
     it('ensureDensityOptimized is only called from ensureCompressionBeforeSend and enforceContextWindow', async () => {
       const { directAwaitCalls, injectedSequentialCalls } =
         await densityFixture5_observeEnsureDensityOptimizedIsOnlyCalledFromEnsureCompressionBeforeSendAndEnforceContextWindow();
-      expect(directAwaitCalls.length).toBe(1);
-      expect(injectedSequentialCalls.length).toBe(2);
+      // ensureCompressionBeforeSend and the source-stage optimizeDensity action
+      // (the source path of enforceContextWindow) await it directly; the one
+      // injected call serves the pending-window enforcement path.
+      expect(directAwaitCalls.length).toBe(2);
+      expect(injectedSequentialCalls.length).toBe(1);
     });
   });
 });
